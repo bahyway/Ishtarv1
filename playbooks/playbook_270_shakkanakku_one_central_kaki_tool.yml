@@ -1,0 +1,123 @@
+# =============================================================================
+# PB-270 -- Shakkanakku becomes the one central tool: every real element of
+# BahyWay.Ecosystem (playbooks, workspace crates, and .akk/.way/.tmpl
+# tablets) gets a real KAKIv4.0 Identity and lands in EnkiMDB from a single
+# Corpus run. BahyWay.Ecosystem v4.0 -- 2026-07-30
+#
+# WHY THIS EXISTS: the Architect's own instruction this session -- "all the
+# elements of bahyWay.Ecosystem will be in one central tool: Shakkanakku
+# Engine be executed and got its Kakiv4.0 Identity and be saved in EnkiMDB
+# or EnkiDDB." Before this playbook, Shakkanakku's Corpus tab minted only
+# playbooks (via `pb_mint`, ADR-014), and its Uruinimgina tab minted only
+# documents (via `docpulse`, into EnkiDDB) -- workspace crates and
+# .akk/.way/.tmpl tablets had no path through Shakkanakku at all. Crates
+# were only reachable via the separate `enkimdb-write-server` binary
+# (SCAN_CRATES over TCP); tablets only via the separate `girsu-mint` CLI
+# invoked from Girsu IDE's "mark as final" task. Three different tools for
+# three different element kinds -- not the "one central tool" asked for.
+#
+# WHAT WAS BUILT, two new real, tested scanners wired into Shakkanakku's
+# existing Corpus-run sequence (crates/shakkanakku/src/runner.rs), alongside
+# the pre-existing `pb_mint` call, all three now running on every real
+# Corpus execution:
+#
+#  1. crates/shakkanakku/src/crate_mint.rs -- scans
+#     workspace/bahyway_v4/crates/*/Cargo.toml via the real
+#     `enkimdb::scan_crates`, mints any workspace crate not already in a
+#     durable JSONL registry (chronicle/crate_kaki_registry.jsonl, keyed by
+#     manifest path) via `enkimdb::WriteNode::ingest_artifact`, under the
+#     newly-centralized `enkimdb::ARTIFACT_TRIBE_ID` (0xFF01 -- previously
+#     only a private default inside enkimdb-write-server's own `tribe_id()`
+#     function; that server now references the same exported constant, so
+#     a crate catalogued by either tool shares one identity space). 2
+#     tests; verified end-to-end against this real repo (181 real
+#     workspace crates minted on first run, 0 on the idempotent re-run).
+#
+#  2. crates/shakkanakku/src/tablet_mint.rs -- recursively finds every real
+#     .akk/.way/.tmpl file under the repo root (skipping .git/target/
+#     node_modules), mints any not already in
+#     chronicle/tablet_kaki_registry.jsonl via `enkimdb::profile_tablet` +
+#     `enkimdb::WriteNode::ingest_tablet`, grouped by TabletKind so each
+#     kind mints under its own fixed tribe (0x7162/63/64) rather than one
+#     kind's tribe leaking onto another's files in a mixed batch. Uses the
+#     *same* registry filename `girsu-mint` (Girsu IDE's per-file "mark as
+#     final" CLI, PB-268-era work) defaults to, so a tablet already minted
+#     from inside Girsu is recognized here too -- one shared "already
+#     minted" ledger regardless of which tool saw the file first. 4 tests;
+#     verified end-to-end against this real repo, which turned out to
+#     already hold 16 real .akk policy/template files under
+#     crates/pollution-engine/policies/, workspace/bahyway_v4/policies/,
+#     templates/automation/, and templates/sovereign/ -- all 16 minted
+#     correctly on first run, 0 on the idempotent re-run, zero false
+#     positives from target/ or .git/.
+#
+# THIS PLAYBOOK DELIBERATELY DOES NOT:
+#   - Touch `girsu-mint` or the Girsu IDE VS Code task -- unchanged; it
+#     remains the per-file, human-triggered "mark as final" path, and now
+#     shares its registry with Shakkanakku's corpus-wide pass rather than
+#     being replaced by it.
+#   - Expand `enkimdb::scan_crates` to cover `bin/*/Cargo.toml` -- that
+#     scanner's scope (`crates/` only) predates this playbook and is a
+#     separate decision; PB-270 only wires the *existing* scanner in, it
+#     does not widen what it scans.
+#   - Merge EnkiMDB and EnkiDDB into one store -- the Architect's own
+#     "EnkiMDB or EnkiDDB" phrasing matches the existing, deliberate split
+#     (ADR-014): playbooks/crates/tablets -> EnkiMDB (Euphrates);
+#     documents -> EnkiDDB (Tigris), via docpulse, already wired via the
+#     Uruinimgina tab and untouched here.
+#   - Change what a "Euphrates generation" is -- each scanner's materialize
+#     call still produces a delta snapshot (this run's newly-minted
+#     entries only), matching `pb_mint`'s pre-existing behavior; querying
+#     the full catalog still means listing/comparing generations via
+#     `enkimdb::list_versions`, not a change introduced here.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_270_shakkanakku_one_central_kaki_tool.yml
+# =============================================================================
+- name: "PB-270 -- Shakkanakku: one central tool for every BahyWay.Ecosystem element's KAKIv4.0 Identity"
+  hosts: eriduous-vdi
+  connection: local
+  vars:
+    forge_root: "{{ playbook_dir }}/.."
+    bw4_root: "{{ forge_root }}/workspace/bahyway_v4"
+
+  tasks:
+    - name: build shakkanakku headless (no gui/web features -- what the Corpus-scan logic itself needs)
+      ansible.builtin.command: cargo build -p shakkanakku --no-default-features
+      args:
+        chdir: "{{ bw4_root }}"
+      register: build_result
+      changed_when: false
+
+    - name: run shakkanakku's test suite (covers crate_mint + tablet_mint alongside the pre-existing pb_mint tests)
+      ansible.builtin.command: cargo test -p shakkanakku --no-default-features
+      args:
+        chdir: "{{ bw4_root }}"
+      register: test_result
+      changed_when: false
+      failed_when: "'test result: FAILED' in test_result.stdout or test_result.rc != 0"
+
+    - name: report test summary
+      ansible.builtin.debug:
+        msg: "{{ test_result.stdout_lines | select('match', '^test result:') | list }}"
+
+    - name: confirm the three corpus-scan modules exist in this checkout
+      ansible.builtin.stat:
+        path: "{{ bw4_root }}/crates/shakkanakku/src/{{ item }}"
+      register: mint_modules
+      loop:
+        - pb_mint.rs
+        - crate_mint.rs
+        - tablet_mint.rs
+      failed_when: not mint_modules.stat.exists
+
+    - name: final report
+      ansible.builtin.debug:
+        msg: >-
+          Shakkanakku is now the one central tool: every real Corpus run mints
+          playbooks (pb_mint, chronicle/pb_kaki_registry.jsonl), workspace crates
+          (crate_mint, chronicle/crate_kaki_registry.jsonl, tribe 0xFF01), and
+          .akk/.way/.tmpl tablets (tablet_mint, chronicle/tablet_kaki_registry.jsonl,
+          tribes 0x7162/63/64 -- shared with girsu-mint's own registry) into real,
+          HeptaScript-queryable EnkiMDB Euphrates generations. Documents remain
+          Uruinimgina/docpulse's job, into EnkiDDB, unchanged by this playbook.

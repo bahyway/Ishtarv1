@@ -1,0 +1,330 @@
+---
+# Playbook 24 — Complete nav bar rewrite
+# Removes upper banner entirely
+# Three clean dropdowns: Enterprise Apps | AI Agents | Web Show
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/24_complete_navbar_rewrite.yml -v
+
+- name: "𒁾 Complete nav bar rewrite"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_24.py"
+
+  tasks:
+
+    - name: "Write fix script"
+      ansible.builtin.copy:
+        dest:    "{{ fix_script }}"
+        mode:    "0755"
+        content: |
+          import re
+
+          app_path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+          with open(app_path, 'r') as f:
+              app = f.read()
+
+          # ── Step 1: Find the ENTIRE update() function body ───────────────────
+          # We will replace everything between the TopBottomPanels
+          # Strategy: replace the entire nav_bar + status_bar panels
+          # with a single clean nav bar
+
+          # Remove status_bar panel entirely
+          app = re.sub(
+              r'egui::TopBottomPanel::top\("status_bar"\).*?\.show\(ctx, \|ui\| \{.*?\}\);',
+              '',
+              app, flags=re.DOTALL
+          )
+          print("status_bar removed:", '"status_bar"' not in app)
+
+          # Replace the nav_bar panel with complete new version
+          old_nav = re.search(
+              r'egui::TopBottomPanel::top\("nav_bar"\).*?\.show\(ctx, \|ui\| \{.*?\}\);(\s*egui::CentralPanel)',
+              app, re.DOTALL
+          )
+
+          if not old_nav:
+              print("ERROR: nav_bar not found")
+              exit(1)
+
+          new_nav = '''egui::TopBottomPanel::top("nav_bar")
+              .exact_height(40.0)
+              .frame(egui::Frame::none()
+                  .fill(egui::Color32::from_rgb(14, 16, 22))
+                  .stroke(egui::Stroke::new(1.0,
+                      egui::Color32::from_rgb(40, 50, 70))))
+              .show(ctx, |ui| {
+                  ui.horizontal_centered(|ui| {
+                      ui.add_space(10.0);
+
+                      // 𒁾 BahyWay main button
+                      let is_bw = self.panel == ActivePanel::BahywayMain;
+                      if ui.add(egui::Button::new(
+                          egui::RichText::new("𒁾  BahyWay")
+                              .color(if is_bw {
+                                  egui::Color32::from_rgb(200,160,40)
+                              } else {
+                                  egui::Color32::from_rgb(140,150,170)
+                              })
+                              .size(14.0).strong())
+                          .fill(if is_bw {
+                              egui::Color32::from_rgb(30,28,14)
+                          } else {
+                              egui::Color32::TRANSPARENT
+                          })
+                          .rounding(egui::Rounding::same(4.0))
+                      ).clicked() {
+                          self.panel = ActivePanel::BahywayMain;
+                      }
+
+                      ui.add_space(8.0);
+                      ui.separator();
+                      ui.add_space(8.0);
+
+                      // Enterprise Apps dropdown
+                      let ent_panels: &[(ActivePanel, &str)] = &[
+                          (ActivePanel::EriduOS,        "EriduOS"),
+                          (ActivePanel::Hepta,           "Hepta 7D"),
+                          (ActivePanel::Particles,       "Particles"),
+                          (ActivePanel::Wpd,             "Baghdad WPD"),
+                          (ActivePanel::Najaf,           "Najaf"),
+                          (ActivePanel::EtlFlow,         "ETL Flow"),
+                          (ActivePanel::EtlTransparency, "ETL 3D"),
+                          (ActivePanel::EtlSim,          "ETL Sim"),
+                          (ActivePanel::Nergal,          "Nergal AV"),
+                      ];
+                      let ent_active = ent_panels.iter().any(|(p,_)| *p == self.panel);
+                      let ent_id = ui.make_persistent_id("dd_ent");
+                      let ent_r = ui.add(egui::Button::new(
+                          egui::RichText::new(if ent_active {
+                              "Enterprise Apps *"
+                          } else {
+                              "Enterprise Apps v"
+                          })
+                          .color(if ent_active {
+                              egui::Color32::from_rgb(200,160,40)
+                          } else {
+                              egui::Color32::from_rgb(140,150,170)
+                          })
+                          .size(13.0))
+                          .fill(if ent_active {
+                              egui::Color32::from_rgb(24,22,10)
+                          } else {
+                              egui::Color32::TRANSPARENT
+                          })
+                          .rounding(egui::Rounding::same(4.0)));
+                      if ent_r.clicked() {
+                          ui.memory_mut(|m| {
+                              let v = m.data.get_temp_mut_or_default::<bool>(ent_id);
+                              *v = !*v;
+                          });
+                      }
+                      if ui.memory(|m| m.data.get_temp::<bool>(ent_id).unwrap_or(false)) {
+                          egui::popup_below_widget(ui, ent_id, &ent_r,
+                              egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+                              ui.set_min_width(180.0);
+                              for (panel, label) in ent_panels {
+                                  let active = self.panel == *panel;
+                                  if ui.selectable_label(active,
+                                      egui::RichText::new(*label)
+                                          .color(if active {
+                                              egui::Color32::from_rgb(200,160,40)
+                                          } else {
+                                              egui::Color32::from_rgb(160,170,185)
+                                          })
+                                          .size(12.0)).clicked() {
+                                      self.panel = *panel;
+                                      ui.memory_mut(|m| m.data.insert_temp(ent_id, false));
+                                  }
+                              }
+                          });
+                      }
+
+                      ui.add_space(6.0);
+                      ui.separator();
+                      ui.add_space(6.0);
+
+                      // AI Agents dropdown
+                      let ai_panels: &[(ActivePanel, &str)] = &[
+                          (ActivePanel::TamuzAI, "TamuzAI  𒀭"),
+                          (ActivePanel::EaAgent, "EaAgent  𒂗𒆠"),
+                      ];
+                      let ai_active = ai_panels.iter().any(|(p,_)| *p == self.panel);
+                      let ai_id = ui.make_persistent_id("dd_ai");
+                      let ai_r = ui.add(egui::Button::new(
+                          egui::RichText::new(if ai_active {
+                              "AI Agents *"
+                          } else {
+                              "AI Agents v"
+                          })
+                          .color(if ai_active {
+                              egui::Color32::from_rgb(200,160,40)
+                          } else {
+                              egui::Color32::from_rgb(140,150,170)
+                          })
+                          .size(13.0))
+                          .fill(egui::Color32::TRANSPARENT)
+                          .rounding(egui::Rounding::same(4.0)));
+                      if ai_r.clicked() {
+                          ui.memory_mut(|m| {
+                              let v = m.data.get_temp_mut_or_default::<bool>(ai_id);
+                              *v = !*v;
+                          });
+                      }
+                      if ui.memory(|m| m.data.get_temp::<bool>(ai_id).unwrap_or(false)) {
+                          egui::popup_below_widget(ui, ai_id, &ai_r,
+                              egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+                              ui.set_min_width(160.0);
+                              for (panel, label) in ai_panels {
+                                  let active = self.panel == *panel;
+                                  if ui.selectable_label(active,
+                                      egui::RichText::new(*label)
+                                          .color(if active {
+                                              egui::Color32::from_rgb(200,160,40)
+                                          } else {
+                                              egui::Color32::from_rgb(160,170,185)
+                                          })
+                                          .size(12.0)).clicked() {
+                                      self.panel = *panel;
+                                      ui.memory_mut(|m| m.data.insert_temp(ai_id, false));
+                                  }
+                              }
+                          });
+                      }
+
+                      ui.add_space(6.0);
+                      ui.separator();
+                      ui.add_space(6.0);
+
+                      // Web Show dropdown — launches Firefox HTML dashboards
+                      let ws_id = ui.make_persistent_id("dd_ws");
+                      let ws_r = ui.add(egui::Button::new(
+                          egui::RichText::new("Web Show v")
+                              .color(egui::Color32::from_rgb(100,160,180))
+                              .size(13.0))
+                          .fill(egui::Color32::TRANSPARENT)
+                          .rounding(egui::Rounding::same(4.0)));
+                      if ws_r.clicked() {
+                          ui.memory_mut(|m| {
+                              let v = m.data.get_temp_mut_or_default::<bool>(ws_id);
+                              *v = !*v;
+                          });
+                      }
+                      if ui.memory(|m| m.data.get_temp::<bool>(ws_id).unwrap_or(false)) {
+                          egui::popup_below_widget(ui, ws_id, &ws_r,
+                              egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+                              ui.set_min_width(220.0);
+                              ui.label(egui::RichText::new("Web Show — HTML Dashboards")
+                                  .color(egui::Color32::from_rgb(100,160,180))
+                                  .size(11.0).strong());
+                              ui.separator();
+                              let etl_label = egui::RichText::new(
+                                  "ETL — Tribe Orbits + 7 Gates")
+                                  .color(egui::Color32::from_rgb(160,170,185))
+                                  .size(12.0);
+                              if ui.selectable_label(false, etl_label).clicked() {
+                                  let _ = std::process::Command::new("firefox")
+                                      .arg("/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/01_Data_Steward_Station_Explorer_v4.html")
+                                      .spawn();
+                                  ui.memory_mut(|m| m.data.insert_temp(ws_id, false));
+                              }
+                              let nrg_label = egui::RichText::new(
+                                  "Nergal — 7 Sectors Irkalla Show")
+                                  .color(egui::Color32::from_rgb(160,100,110))
+                                  .size(12.0);
+                              if ui.selectable_label(false, nrg_label).clicked() {
+                                  let _ = std::process::Command::new("firefox")
+                                      .arg("/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/nergal_av_dashboard_v2.html")
+                                      .spawn();
+                                  ui.memory_mut(|m| m.data.insert_temp(ws_id, false));
+                              }
+                              let ring_label = egui::RichText::new(
+                                  "BigRing — Particle Universe")
+                                  .color(egui::Color32::from_rgb(140,160,180))
+                                  .size(12.0);
+                              if ui.selectable_label(false, ring_label).clicked() {
+                                  let _ = std::process::Command::new("firefox")
+                                      .arg("/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/00_BIGRING.html")
+                                      .spawn();
+                                  ui.memory_mut(|m| m.data.insert_temp(ws_id, false));
+                              }
+                          });
+                      }
+
+                      // Right side: live status
+                      ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                          ui.add_space(10.0);
+                          if let Ok(b) = self.bus.read() {
+                              let b11 = b.fuzzy.b11;
+                              let b11_col = if b11 >= 200 {
+                                  egui::Color32::from_rgb(200,160,40)
+                              } else if b11 >= 140 {
+                                  egui::Color32::from_rgb(60,160,180)
+                              } else {
+                                  egui::Color32::from_rgb(160,80,90)
+                              };
+                              ui.label(egui::RichText::new(
+                                  format!("B11:{}/240  Gold:{}  Proc:{}",
+                                      b11, b.total_golden, b.total_processed))
+                                  .color(egui::Color32::from_rgb(100,110,130))
+                                  .size(10.0));
+                              ui.separator();
+                              ui.label(egui::RichText::new(
+                                  format!("B11:{}", b11))
+                                  .color(b11_col).size(11.0).strong());
+                              ui.separator();
+                              ui.label(egui::RichText::new("𒁾 BahyWay.Ecosystem v4.0")
+                                  .color(egui::Color32::from_rgb(160,130,50))
+                                  .size(11.0));
+                          }
+                      });
+                  });
+              });
+
+          '''
+
+          app = app[:old_nav.start()] + new_nav + old_nav.group(1) + app[old_nav.end():]
+
+          with open(app_path, 'w') as f:
+              f.write(app)
+
+          print("Nav bar completely rewritten")
+          print("status_bar gone:", '"status_bar"' not in app)
+          print("Web Show present:", 'Web Show' in app)
+          print("Enterprise Apps present:", 'Enterprise Apps' in app)
+
+    - name: "Run fix script"
+      ansible.builtin.command:
+        cmd: python3 {{ fix_script }}
+      register: py_out
+      changed_when: true
+      failed_when:  py_out.rc != 0
+
+    - name: "Show output"
+      ansible.builtin.debug:
+        msg: "{{ py_out.stdout_lines }}"
+
+    - name: "Force clean rebuild"
+      ansible.builtin.shell:
+        cmd: |
+          cd /home/bahyway/Forge/bahyway_v4
+          cargo clean -p dubsar-visualizer
+          cargo build -p dubsar-visualizer 2>&1 | grep -E "Compiling|error|Finished"
+      register: build
+      changed_when: true
+      failed_when:  "'error' in build.stdout"
+
+    - name: "Build output"
+      ansible.builtin.debug:
+        msg: "{{ build.stdout_lines }}"
+
+    - name: "𒁾 Complete"
+      ansible.builtin.debug:
+        msg:
+          - "Nav bar: [𒁾 BahyWay] [Enterprise Apps v] [AI Agents v] [Web Show v]"
+          - "Web Show launches Firefox HTML dashboards directly"
+          - "Status removed — B11 + Gold + Proc shown in nav bar right side"
+          - "Run: cargo run -p dubsar-visualizer"

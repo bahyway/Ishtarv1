@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ŠALA — PDM editor, enriched (rehearsal)</title>
+<!-- ════════════════════════════════════════════════════════════════
+     ŠALA TAB — PDM EDITOR ENRICHED
+     BahyWay.Ecosystem v4.0 · rehearsal only (Way-of-Work rule 5)
+     The Shape Operator canvas with four editor-UX patterns applied,
+     each scouted (UX only) from NiFi & BPMN, each presentation-tier:
+       1 LIVE-NODE-TELEMETRY   — each node shows cooked/dwell/β/rejects
+                                 on its face while "running"
+       2 QUEUE-DEPTH-ON-EDGE   — wires show particles-in-flight; a
+                                 bottleneck wire glows
+       3 TYPED-GLYPH-VOCABULARY— each operator class has its own glyph
+                                 + colour (Seal ≠ TribeSource at a glance)
+       4 COLLAPSIBLE-SUBPROCESS— a proven sub-graph collapses to one
+                                 node (= recipe-as-particle, sealed)
+     Runtime semantics NOT borrowed — cooking law, G4, CSR-08 unchanged.
+     SPLICE between SHALA-SPLICE-BEGIN / END.
+     ════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022; --bg-deep:#18191B;
+  --bg-hover:#383A3E; --bg-selected:#404349; --stroke:#3D3F43;
+  --gold:#D6A44C; --teal:#4FB8A8; --orange:#D98E3E; --crimson:#C34A3F;
+  --purple:#9B7FC7; --pale:#C9CDD4;
+  --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+  --serif:"Iowan Old Style",Palatino,Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:"Inter","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:baseline;gap:16px;padding:14px 22px;border-bottom:1px solid var(--stroke)}
+header h1{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:.24em;color:var(--gold)}
+header .sub{font-size:12px;color:var(--dim)}
+.bar{display:flex;gap:8px;align-items:center;padding:10px 22px;flex-wrap:wrap}
+button{background:var(--bg-widget);color:var(--ink);border:1px solid var(--stroke);border-radius:6px;padding:7px 12px;font-size:12.5px;cursor:pointer}
+button:hover{background:var(--bg-hover)}
+button.gold{border-color:var(--gold);color:var(--gold)}
+button.on{background:var(--bg-selected);border-color:var(--gold);color:var(--gold)}
+.bar .stat{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+.legendbar{display:flex;gap:14px;flex-wrap:wrap;padding:0 22px 8px;font-size:11px;color:var(--muted)}
+.legendbar .gl{display:inline-flex;align-items:center;gap:5px}
+.gl .sw{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-family:var(--mono)}
+#stage{position:relative;flex:1;margin:0 22px 16px;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:10px;overflow:hidden;min-height:540px}
+#wires{position:absolute;inset:0;pointer-events:none}
+.node{position:absolute;width:150px;background:var(--bg-panel);border:1px solid var(--stroke);border-radius:9px;user-select:none;cursor:grab;overflow:hidden}
+.node .nh{display:flex;align-items:center;gap:7px;padding:6px 8px;border-bottom:1px solid var(--stroke);background:var(--bg-widget)}
+.node .glyph{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:600;flex-shrink:0;color:#151515}
+.node .nm{font-family:var(--mono);font-size:11px;color:var(--ink);line-height:1.1}
+.node .tel{padding:6px 8px;font-family:var(--mono);font-size:9.5px;color:var(--muted);line-height:1.6;display:none}
+.node.run .tel{display:block}
+.node .tel .k{color:var(--dim)}
+.node .tel .v{color:var(--teal);float:right}
+.node .tel .v.warn{color:var(--crimson)}
+.node.sub{border-color:var(--purple);border-style:dashed}
+.node.sub .nh{background:rgba(155,127,199,.14)}
+.node.sub .subhint{padding:5px 8px;font-size:9.5px;color:var(--purple);border-top:1px dashed var(--stroke)}
+.port{position:absolute;width:11px;height:11px;border-radius:50%;background:var(--gold);border:2px solid var(--bg-deep);top:16px}
+.port.in{left:-6px}.port.out{right:-6px}
+.wlabel{position:absolute;font-family:var(--mono);font-size:9px;color:var(--muted);background:var(--bg-deep);padding:1px 4px;border-radius:8px;border:1px solid var(--stroke);pointer-events:none;transform:translate(-50%,-50%)}
+.wlabel.hot{color:var(--crimson);border-color:var(--crimson)}
+footer{padding:10px 22px;font-family:var(--serif);font-style:italic;font-size:12px;color:var(--dim);text-align:center}
+</style>
+</head>
+<body>
+<header><h1>Š A L A</h1><span class="sub">PDM editor, enriched — four borrowed patterns, sovereign runtime</span></header>
+
+<!-- ══ SHALA-SPLICE-BEGIN ══ -->
+<div class="bar">
+  <button class="gold" id="runBtn">▶ Run (live telemetry + queues)</button>
+  <button id="collapseBtn">⊟ Collapse cleanse sub-graph</button>
+  <span class="stat" id="stat">idle — press Run to see the node faces come alive</span>
+</div>
+<div class="legendbar">
+  <span class="gl"><span class="sw" style="background:var(--gold)">◈</span>Source</span>
+  <span class="gl"><span class="sw" style="background:var(--teal)">≈</span>Transform</span>
+  <span class="gl"><span class="sw" style="background:var(--orange)">△</span>Cleanse</span>
+  <span class="gl"><span class="sw" style="background:var(--purple)">⬡</span>Probe</span>
+  <span class="gl"><span class="sw" style="background:var(--crimson)">⚖</span>Seal</span>
+  <span class="gl"><span class="sw" style="background:var(--purple);border:1px dashed var(--pale)">▣</span>Sub-process (recipe)</span>
+  <span style="margin-left:auto;color:var(--dim)">glyph+colour = type at a glance (BPMN) · face telemetry &amp; wire queues (NiFi)</span>
+</div>
+<div id="stage"><svg id="wires"></svg></div>
+<!-- ══ SHALA-SPLICE-END ══ -->
+
+<footer>Rehearsal only. Borrowed: node-face telemetry &amp; edge queues (NiFi), typed glyphs &amp; collapsible sub-process (BPMN). Not borrowed: their runtime — cooking law, G4, CSR-08 stand. — inscribed for DUB.SAR 𒁾</footer>
+
+<script>
+"use strict";
+const GLYPH={source:['◈','#D6A44C'],transform:['≈','#4FB8A8'],cleanse:['△','#D98E3E'],
+  probe:['⬡','#9B7FC7'],seal:['⚖','#C34A3F']};
+/* node model: id,x,y,name,type, telemetry seed, sub? */
+let NODES=[
+ {id:1,x:40,y:60,nm:'TribeSource',type:'source',cooked:150,dwell:0,beta:'—',rej:0},
+ {id:2,x:250,y:60,nm:'CleanseOp',type:'cleanse',cooked:147,dwell:2,beta:'—',rej:3,inSub:true},
+ {id:3,x:250,y:200,nm:'NormalizeOp',type:'cleanse',cooked:147,dwell:1,beta:'—',rej:0,inSub:true},
+ {id:4,x:250,y:340,nm:'DedupeOp',type:'cleanse',cooked:145,dwell:3,beta:'—',rej:2,inSub:true},
+ {id:5,x:470,y:120,nm:'ShapeMerge',type:'transform',cooked:145,dwell:1,beta:'—',rej:0},
+ {id:6,x:470,y:280,nm:'BettiProbe',type:'probe',cooked:145,dwell:0,beta:'(1,0,0)',rej:0},
+ {id:7,x:680,y:200,nm:'ShapeTablet',type:'transform',cooked:145,dwell:0,beta:'(1,0,0)',rej:0},
+ {id:8,x:880,y:200,nm:'Seal',type:'seal',cooked:145,dwell:0,beta:'sealed',rej:0},
+];
+let WIRES=[
+ {from:1,to:2,q:150},{from:2,to:3,q:147},{from:3,to:4,q:147},{from:4,to:5,q:145},
+ {from:1,to:5,q:150,hot:true},{from:5,to:6,q:145},{from:6,to:7,q:145},{from:7,to:8,q:145},
+];
+let collapsed=false,running=false,frame=0;
+const stage=document.getElementById('stage'),svg=document.getElementById('wires');
+function visibleNodes(){return collapsed?NODES.filter(n=>!n.inSub).concat([SUBNODE]):NODES;}
+const SUBNODE={id:99,x:250,y:180,nm:'CleanseRecipe',type:'sub',cooked:145,dwell:6,beta:'—',rej:5,sub:true};
+function nodeById(id){if(id===99)return SUBNODE;return NODES.find(n=>n.id===id);}
+function render(){
+  [...stage.querySelectorAll('.node,.wlabel')].forEach(e=>e.remove());
+  const list=visibleNodes();
+  list.forEach(n=>{
+    const g=GLYPH[n.type]||['▣','#9B7FC7'];
+    const el=document.createElement('div');
+    el.className='node'+(running?' run':'')+(n.sub?' sub':'');
+    el.style.left=n.x+'px';el.style.top=n.y+'px';el.dataset.id=n.id;
+    const warn=n.rej>2?' warn':'';
+    el.innerHTML=
+      '<div class="nh"><span class="glyph" style="background:'+g[1]+'">'+g[0]+'</span>'
+      +'<span class="nm">'+n.nm+'</span></div>'
+      +'<span class="port in"></span><span class="port out"></span>'
+      +'<div class="tel">'
+      +'<div><span class="k">cooked</span><span class="v">'+n.cooked+'</span></div>'
+      +'<div><span class="k">dwell</span><span class="v">'+n.dwell+'d</span></div>'
+      +'<div><span class="k">β</span><span class="v">'+n.beta+'</span></div>'
+      +'<div><span class="k">rejects</span><span class="v'+warn+'">'+n.rej+'</span></div>'
+      +'</div>'
+      +(n.sub?'<div class="subhint">▣ 3 ops collapsed · sealed recipe · click ⊟ to expand</div>':'');
+    stage.appendChild(el);
+  });
+  drawWires();
+}
+function center(n){return [n.x+75,n.y+16];}
+function drawWires(){
+  let h='';const labels=[];
+  const shown=collapsed
+    ? WIRES.filter(w=>!isSub(w.from)&&!isSub(w.to))
+        .concat([{from:1,to:99,q:150},{from:99,to:5,q:145}])
+    : WIRES;
+  shown.forEach(w=>{
+    const a=nodeById(w.from),b=nodeById(w.to);if(!a||!b)return;
+    const [ax,ay]=center(a),[bx,by]=center(b);
+    const ox=ax+75,oy=ay,ix=bx-75,iy=by;
+    const dx=Math.max(30,Math.abs(ix-ox)*.5);
+    const flow=running?(Math.sin(frame*.08+w.from)*.5+.5):0;
+    const col=w.hot?'#C34A3F':'#4FB8A8';
+    h+='<path d="M'+ox+' '+oy+' C'+(ox+dx)+' '+oy+','+(ix-dx)+' '+iy+','+ix+' '+iy
+      +'" fill="none" stroke="'+col+'" stroke-width="'+(w.hot?2.4:1.6)+'" opacity="'+(w.hot?.9:.6)+'"/>';
+    if(running){ /* flowing dot */
+      const t=flow;const px=ox+(ix-ox)*t,py=oy+(iy-oy)*t;
+      h+='<circle cx="'+px+'" cy="'+py+'" r="2.4" fill="'+col+'"/>';}
+    labels.push({x:(ox+ix)/2,y:(oy+iy)/2-2,q:w.q,hot:w.hot});
+  });
+  svg.innerHTML=h;
+  if(running)labels.forEach(l=>{const d=document.createElement('div');
+    d.className='wlabel'+(l.hot?' hot':'');d.style.left=l.x+'px';d.style.top=l.y+'px';
+    d.textContent=l.q+(l.hot?' ⚠':'');stage.appendChild(d);});
+}
+function isSub(id){const n=NODES.find(x=>x.id===id);return n&&n.inSub;}
+/* drag */
+let drag=null,off=[0,0];
+stage.addEventListener('mousedown',e=>{const el=e.target.closest('.node');if(!el)return;
+  drag=nodeById(+el.dataset.id);const r=el.getBoundingClientRect();off=[e.clientX-r.left,e.clientY-r.top];});
+addEventListener('mousemove',e=>{if(!drag)return;const r=stage.getBoundingClientRect();
+  drag.x=Math.max(0,Math.min(r.width-150,e.clientX-r.left-off[0]));
+  drag.y=Math.max(0,Math.min(r.height-90,e.clientY-r.top-off[1]));render();});
+addEventListener('mouseup',()=>drag=null);
+/* run + collapse */
+document.getElementById('runBtn').addEventListener('click',function(){
+  running=!running;this.className=running?'gold on':'gold';
+  this.textContent=running?'⏸ Pause':'▶ Run (live telemetry + queues)';
+  document.getElementById('stat').textContent=running
+    ?'running — node faces show cooked/dwell/β/rejects · wires show queue depth · hot wire flagged (NiFi patterns)'
+    :'paused';
+  render();});
+document.getElementById('collapseBtn').addEventListener('click',function(){
+  collapsed=!collapsed;
+  this.textContent=collapsed?'⊞ Expand cleanse sub-graph':'⊟ Collapse cleanse sub-graph';
+  document.getElementById('stat').textContent=collapsed
+    ?'3 cleanse ops collapsed into one sealed recipe particle (BPMN sub-process = your recipe-as-particle law)'
+    :'sub-graph expanded';
+  render();});
+/* animate */
+function tick(){frame++;if(running)drawWires();requestAnimationFrame(tick);}
+render();requestAnimationFrame(tick);
+document.getElementById('stat').textContent='idle — press Run to see the node faces come alive, then Collapse to fold the cleanse ops into a recipe';
+</script>
+</body>
+</html>

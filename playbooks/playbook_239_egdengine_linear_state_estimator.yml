@@ -1,0 +1,92 @@
+# =============================================================================
+# PB-239 -- EGDEngine: first-slice linear state estimator.
+# BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHAT THIS ADDS: egd-engine::state_estimate::solve_voltages. Every
+# other function in this crate (sweep, exclusion, dispatch) takes `phi`
+# (nodal voltage phasors) as a caller-supplied input -- nothing
+# computed it from topology and measurements, which is the single
+# largest gap flagged in the original EGDEngine commercial evaluation
+# ("the largest piece separating this from something you could point
+# at real Iraqi feeder data"). Gibil's KCL model is linear in V
+# (I = Y * (Vf - Vt)), so unlike full nonlinear AC power flow, solving
+# for unknown nodal voltages given known ones is standard linear nodal
+# analysis: build the bus admittance matrix from the network topology,
+# then Gaussian-eliminate for the unknowns. Correctness is checked by
+# ROUND-TRIP, not a hand-derived answer: the estimated voltages, fed
+# back into the already-tested KCL residual sweep, must show near-zero
+# residual everywhere.
+#
+# HONEST SCOPE: this is an EXACT solve, not the weighted-least-squares
+# bad-data-rejecting estimator real SCADA/EMS systems run against
+# REDUNDANT (more measurements than unknowns) telemetry. It requires
+# exactly one known value (voltage or injection) per node -- no
+# redundancy, no King-plot separation. That harder estimator remains
+# real, separate, deferred future work -- see the "Update (playbook_239)"
+# section added to docs/GL-EGD-001.md.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Depends on
+# PB-235 (fdd-core, egd-engine already present). Running this playbook
+# = CSR-08 Architect confirmation.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms egd-engine's state_estimate module is present
+#      (committed source).
+#   2. `cargo test --release -p egd-engine` (all 21 tests: the 16 from
+#      PB-235/237 plus 1 Phasor division test plus 4 state-estimation
+#      tests, including the round-trip residual check).
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_239_egdengine_linear_state_estimator.yml
+# =============================================================================
+
+- name: "PB-239 -- EGDEngine first-slice linear state estimator"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    build_log: "/tmp/pb239_build.log"
+
+  tasks:
+    - name: "Confirm egd-engine's state_estimate module is present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/crates/egd-engine/src/state_estimate.rs"
+      register: state_estimate_check
+
+    - name: "Fail clearly if state_estimate.rs is missing"
+      ansible.builtin.fail:
+        msg: >-
+          crates/egd-engine/src/state_estimate.rs not found at
+          {{ repo_root }}. Run
+          `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- this is committed source, this playbook only builds
+          and verifies it.
+      when: not state_estimate_check.stat.exists
+
+    - name: "cargo test egd-engine (release) -- linear state estimator + round-trip check"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p egd-engine > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-239 complete -- exact linear state estimation is real and
+          tested (21/21 egd-engine tests pass), verified by round-trip
+          through the KCL residual sweep rather than a hand-derived
+          answer. sweep()/horizon()/exclusion()/dispatch() can now be
+          fed estimated voltages from a feeder-head measurement instead
+          of requiring the full state to already be known. Still open:
+          weighted least squares over redundant, possibly-noisy
+          measurements with King-plot bad-data rejection -- see
+          docs/GL-EGD-001.md.

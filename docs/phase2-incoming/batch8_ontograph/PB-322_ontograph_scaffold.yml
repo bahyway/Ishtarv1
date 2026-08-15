@@ -1,0 +1,427 @@
+---
+# ============================================================
+#  PB-322 — OntoGraph Crate Scaffold (Nasaru instrument)
+#  BahyWay.Ecosystem v4.0 — Law GL-ONT-001
+#  Run from HOST → dubsar-workstation (Way of Work rule 1)
+#
+#  ansible-playbook -i inventory PB-322_ontograph_scaffold.yml
+#
+#  Running this playbook is the CSR-08 confirmation point.
+# ============================================================
+- name: PB-322 OntoGraph scaffold
+  hosts: dubsar_workstation
+  gather_facts: false
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    nasaru_dir: "{{ v4_root }}/tools/nasaru"
+    crate_dir: "{{ nasaru_dir }}/ontograph"
+    crate_name: ontograph
+    tablet_src: "GL-ONT-001_OntoGraph_Unified_Pattern_Law.md"
+    tablets_dir: "{{ v4_root }}/tablets"
+
+  tasks:
+
+    - name: Ensure directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crate_dir }}/src/rites"
+        - "{{ crate_dir }}/tests"
+        - "{{ tablets_dir }}"
+
+    - name: Deposit GL-ONT-001 tablet
+      ansible.builtin.copy:
+        src: "{{ tablet_src }}"
+        dest: "{{ tablets_dir }}/{{ tablet_src }}"
+        mode: "0644"
+
+    - name: Cargo.toml (pure Rust, zero dependencies)
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name = "{{ crate_name }}"
+          version = "0.1.0"
+          edition = "2021"
+          description = "OntoGraph — Nasaru instrument. Ontology + Topology -> FCA hypergraph -> Unified Pattern Nebuchadnezzar (GL-ONT-001)"
+          license = "LicenseRef-BahyWay-Sovereign"
+
+          [dependencies]
+
+          [lib]
+          name = "{{ crate_name }}"
+          path = "src/lib.rs"
+
+    - name: src/lib.rs
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! OntoGraph — Nasaru instrument (GL-ONT-001).
+          //! Three rites: Reading -> Closure -> Minting.
+          //! Law: KAKI is address only; Mandatory EAV is spine; Optional EAV is harvest.
+          #![forbid(unsafe_code)]
+
+          pub mod kaki;
+          pub mod eav;
+          pub mod rites;
+
+          pub use eav::{Layer, Attribute, MANDATORY_FACETS, ONTO_OPTIONAL, DMBOK_OPTIONAL};
+          pub use kaki::Kaki;
+          pub use rites::{reading::FormalContext, closure::{Concept, Lattice}, minting::Nebuchadnezzar};
+
+    - name: src/kaki.rs (KAKI v4.0 — address only, locked layout)
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/kaki.rs"
+        mode: "0644"
+        content: |
+          //! KAKI v4.0 canonical byte layout (locked permanently).
+          //! κ[0..3] uuid_hash | κ[4..5] tribe_id | κ[6] kaki_type | κ[7] kaki_role
+          //! κ[8..11] reserved | κ[12..13] timestamp | κ[14..15] CRC-16/CCITT
+          //! OntoGraph reads identity/tribe/type/role only. It NEVER writes KAKI.
+
+          #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+          pub struct Kaki(pub [u8; 16]);
+
+          pub const KAKI_TYPE_TEMPLATE: u8 = 0x10;
+
+          impl Kaki {
+              pub fn uuid_hash(&self) -> u32 { u32::from_be_bytes([self.0[0], self.0[1], self.0[2], self.0[3]]) }
+              pub fn tribe_id(&self) -> u16 { u16::from_be_bytes([self.0[4], self.0[5]]) }
+              pub fn kaki_type(&self) -> u8 { self.0[6] }
+              pub fn kaki_role(&self) -> u8 { self.0[7] }
+              pub fn timestamp(&self) -> u16 { u16::from_be_bytes([self.0[12], self.0[13]]) }
+              pub fn crc(&self) -> u16 { u16::from_be_bytes([self.0[14], self.0[15]]) }
+
+              /// CRC-16/CCITT-FALSE over κ[0..14].
+              pub fn compute_crc(bytes: &[u8; 16]) -> u16 {
+                  let mut crc: u16 = 0xFFFF;
+                  for &b in &bytes[..14] {
+                      crc ^= (b as u16) << 8;
+                      for _ in 0..8 {
+                          crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
+                      }
+                  }
+                  crc
+              }
+
+              pub fn verify(&self) -> bool { Self::compute_crc(&self.0) == self.crc() }
+          }
+
+    - name: src/eav.rs (three-layer attribute contract)
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/eav.rs"
+        mode: "0644"
+        content: |
+          //! Three-Layer Attribute Law (GL-ONT-001 §3).
+          //! Mandatory: sealed set, mutable values, guaranteed present — READ ONLY for OntoGraph.
+          //! Optional: open set — the only layer OntoGraph may WRITE.
+
+          #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+          pub enum Layer { Mandatory, Optional }
+
+          #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+          pub struct Attribute { pub layer: Layer, pub name: &'static str }
+
+          /// Mandatory facets read by OntoGraph as the invariant spine of the formal context.
+          pub const MANDATORY_FACETS: &[&str] = &[
+              "w5h2.who", "w5h2.what", "w5h2.when", "w5h2.where", "w5h2.why", "w5h2.how", "w5h2.howmuch",
+              "sowa.agnt", "sowa.thme", "sowa.ptim", "sowa.loc", "sowa.rson", "sowa.manr", "sowa.meas",
+              "state.class",      // GOLDEN | FUZZY | DEAD
+              "colour.id",        // via PASHIRU, never from KAKI bytes
+              "freshness",
+              "domain",
+          ];
+
+          /// Optional attributes minted by OntoGraph (harvest).
+          pub const ONTO_OPTIONAL: &[&str] = &[
+              "onto.concept_id", "onto.lattice_rank", "onto.hyperedge_ids", "onto.betti_signature",
+              "onto.extent_size", "onto.intent_size", "onto.stability",
+          ];
+
+          /// Optional attributes an organization brings (DMBOK semantics).
+          pub const DMBOK_OPTIONAL: &[&str] = &[
+              "dmbok.glossary_term", "dmbok.steward", "dmbok.data_domain", "dmbok.lineage_ref",
+              "dmbok.classification", "dmbok.retention", "dmbok.quality_dimension",
+          ];
+
+          /// Guard: OntoGraph may only write Optional attributes. Mandatory writes are a law breach.
+          pub fn assert_writable(attr: &Attribute) -> Result<(), &'static str> {
+              match attr.layer {
+                  Layer::Optional => Ok(()),
+                  Layer::Mandatory => Err("GL-ONT-001 §3.3: OntoGraph may not write Mandatory EAV"),
+              }
+          }
+
+    - name: src/rites/mod.rs
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/rites/mod.rs"
+        mode: "0644"
+        content: |
+          pub mod reading;
+          pub mod closure;
+          pub mod minting;
+
+    - name: src/rites/reading.rs (Rite I — formal context)
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/rites/reading.rs"
+        mode: "0644"
+        content: |
+          //! Rite I — Reading. Assemble the FCA formal context <G, M, I>.
+          //! G = particles (KAKI), M = Mandatory facets ∪ topological classes ∪ Optional DMBOK facets.
+          use crate::kaki::Kaki;
+
+          #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+          pub enum TopoClass { Golden, Fuzzy, Dead }
+
+          impl TopoClass {
+              pub fn attribute_name(self) -> &'static str {
+                  match self { TopoClass::Golden => "topo.golden", TopoClass::Fuzzy => "topo.fuzzy", TopoClass::Dead => "topo.dead" }
+              }
+          }
+
+          /// One row per particle; incidence as a bitset over attribute indices.
+          #[derive(Clone, Debug, Default)]
+          pub struct FormalContext {
+              pub objects: Vec<Kaki>,
+              pub attributes: Vec<String>,
+              pub rows: Vec<Vec<u64>>,   // bitset words per object
+          }
+
+          impl FormalContext {
+              pub fn new() -> Self { Self::default() }
+
+              pub fn attribute_index(&mut self, name: &str) -> usize {
+                  if let Some(i) = self.attributes.iter().position(|a| a == name) { return i; }
+                  self.attributes.push(name.to_string());
+                  let words = (self.attributes.len() + 63) / 64;
+                  for r in &mut self.rows { r.resize(words, 0); }
+                  self.attributes.len() - 1
+              }
+
+              /// Add a particle with the attribute names it satisfies (facets present, topo class, DMBOK facets).
+              pub fn add_particle(&mut self, kaki: Kaki, satisfied: &[&str]) -> Result<(), &'static str> {
+                  if !kaki.verify() { return Err("KAKI CRC-16 verification failed"); }
+                  let idxs: Vec<usize> = satisfied.iter().map(|a| self.attribute_index(a)).collect();
+                  let words = (self.attributes.len() + 63) / 64;
+                  let mut row = vec![0u64; words];
+                  for i in idxs { row[i / 64] |= 1u64 << (i % 64); }
+                  self.objects.push(kaki);
+                  self.rows.push(row);
+                  Ok(())
+              }
+
+              pub fn has(&self, obj: usize, attr: usize) -> bool {
+                  self.rows[obj].get(attr / 64).map_or(false, |w| w & (1u64 << (attr % 64)) != 0)
+              }
+          }
+
+    - name: src/rites/closure.rs (Rite II — NextClosure, hyperedges)
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/rites/closure.rs"
+        mode: "0644"
+        content: |
+          //! Rite II — Closure. Ganter's NextClosure over the formal context.
+          //! Every formal concept is a node; every extent is a hyperedge. No pairwise edges.
+          use super::reading::FormalContext;
+
+          #[derive(Clone, Debug, PartialEq, Eq)]
+          pub struct Concept {
+              pub id: usize,
+              pub extent: Vec<usize>,   // object indices — this IS the hyperedge
+              pub intent: Vec<usize>,   // attribute indices
+          }
+
+          #[derive(Clone, Debug, Default)]
+          pub struct Lattice {
+              pub concepts: Vec<Concept>,
+              /// rank = |intent| (depth from top); used for onto.lattice_rank
+              pub ranks: Vec<usize>,
+          }
+
+          fn extent_of(ctx: &FormalContext, intent: &[bool]) -> Vec<usize> {
+              (0..ctx.objects.len()).filter(|&g| (0..intent.len()).all(|m| !intent[m] || ctx.has(g, m))).collect()
+          }
+
+          fn intent_of(ctx: &FormalContext, extent: &[usize]) -> Vec<bool> {
+              (0..ctx.attributes.len()).map(|m| extent.iter().all(|&g| ctx.has(g, m))).collect()
+          }
+
+          fn closure(ctx: &FormalContext, a: &[bool]) -> Vec<bool> { intent_of(ctx, &extent_of(ctx, a)) }
+
+          fn next_closure(ctx: &FormalContext, a: &[bool]) -> Option<Vec<bool>> {
+              let n = a.len();
+              for i in (0..n).rev() {
+                  if a[i] { continue; }
+                  let mut b: Vec<bool> = a.iter().enumerate().map(|(j, &v)| v && j < i).collect();
+                  b[i] = true;
+                  let c = closure(ctx, &b);
+                  if (0..i).all(|j| !(c[j] && !a[j])) { return Some(c); }
+              }
+              None
+          }
+
+          impl Lattice {
+              /// Compute all formal concepts in lectic order.
+              pub fn compute(ctx: &FormalContext) -> Lattice {
+                  let n = ctx.attributes.len();
+                  let mut lat = Lattice::default();
+                  let mut cur = closure(ctx, &vec![false; n]);
+                  loop {
+                      let intent: Vec<usize> = (0..n).filter(|&m| cur[m]).collect();
+                      let extent = extent_of(ctx, &cur);
+                      let id = lat.concepts.len();
+                      lat.ranks.push(intent.len());
+                      lat.concepts.push(Concept { id, extent, intent });
+                      match next_closure(ctx, &cur) { Some(nx) => cur = nx, None => break }
+                  }
+                  lat
+              }
+
+              /// Structural check (validation ladder step 1): every extent is closed.
+              pub fn is_closed(&self, ctx: &FormalContext) -> bool {
+                  self.concepts.iter().all(|c| {
+                      let ib = intent_of(ctx, &c.extent);
+                      extent_of(ctx, &ib) == c.extent
+                  })
+              }
+
+              /// Hyperedges of the OntoGraph: one per non-empty extent.
+              pub fn hyperedges(&self) -> Vec<&Concept> { self.concepts.iter().filter(|c| !c.extent.is_empty()).collect() }
+          }
+
+    - name: src/rites/minting.rs (Rite III — Nebuchadnezzar template, Optional-only writes)
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/rites/minting.rs"
+        mode: "0644"
+        content: |
+          //! Rite III — Minting. Nebuchadnezzar = lattice + hyperedges, minted as a template particle
+          //! (GL-TPL-001) with Hepta Space coordinates. Writes back Optional EAV only.
+          //! KISPU commit and NĀRU witness are performed by the caller (PB-324).
+          use super::closure::Lattice;
+          use super::reading::FormalContext;
+          use crate::eav::{assert_writable, Attribute, Layer};
+          use crate::kaki::Kaki;
+
+          /// Optional EAV write intent for one member particle.
+          #[derive(Clone, Debug, PartialEq, Eq)]
+          pub struct OptionalWrite { pub kaki: Kaki, pub attribute: &'static str, pub value: String }
+
+          #[derive(Clone, Debug)]
+          pub struct Nebuchadnezzar {
+              pub name: &'static str,                 // "Nebuchadnezzar" — NL-001 §6b Landmark Pattern Clause
+              pub lattice: Lattice,
+              pub writes: Vec<OptionalWrite>,        // Optional-only, checked
+              pub hepta_position: (f64, f64, f64),   // OrbitalPosition (r, θ, φ) — assigned by GeoEngine at mint
+          }
+
+          impl Nebuchadnezzar {
+              pub fn mint(ctx: &FormalContext, lattice: Lattice) -> Result<Self, &'static str> {
+                  let mut writes = Vec::new();
+                  for c in lattice.hyperedges() {
+                      for &g in &c.extent {
+                          for (attr, val) in [
+                              ("onto.concept_id", c.id.to_string()),
+                              ("onto.lattice_rank", lattice.ranks[c.id].to_string()),
+                              ("onto.extent_size", c.extent.len().to_string()),
+                              ("onto.intent_size", c.intent.len().to_string()),
+                          ] {
+                              assert_writable(&Attribute { layer: Layer::Optional, name: attr })?;
+                              writes.push(OptionalWrite { kaki: ctx.objects[g], attribute: attr, value: val });
+                          }
+                      }
+                  }
+                  Ok(Nebuchadnezzar { name: "Nebuchadnezzar", lattice, writes, hepta_position: (0.0, 0.0, 0.0) })
+              }
+
+              /// Universality proposal only — promotion is design-time at Gate G4 (GL-ONT-001 §3.4).
+              pub fn propose_universal(&self, ctx: &FormalContext) -> Vec<String> {
+                  let n = ctx.objects.len();
+                  self.lattice.concepts.iter()
+                      .filter(|c| c.extent.len() == n && n > 0)
+                      .flat_map(|c| c.intent.iter().map(|&m| ctx.attributes[m].clone()))
+                      .collect()
+              }
+          }
+
+    - name: tests/law_tests.rs
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/law_tests.rs"
+        mode: "0644"
+        content: |
+          use ontograph::*;
+          use ontograph::rites::reading::TopoClass;
+
+          fn kaki(seq: u8, tribe: u16) -> Kaki {
+              let mut b = [0u8; 16];
+              b[3] = seq; b[4..6].copy_from_slice(&tribe.to_be_bytes()); b[6] = 0x01; b[7] = 0x01;
+              let c = Kaki::compute_crc(&b); b[14..16].copy_from_slice(&c.to_be_bytes());
+              Kaki(b)
+          }
+
+          #[test]
+          fn kaki_crc_verifies_and_rejects_tamper() {
+              let k = kaki(1, 7);
+              assert!(k.verify());
+              let mut t = k.0; t[8] ^= 0xFF;   // reserved byte tampered
+              assert!(!Kaki(t).verify());
+          }
+
+          #[test]
+          fn mandatory_write_is_a_law_breach() {
+              let m = Attribute { layer: Layer::Mandatory, name: "state.class" };
+              assert!(eav::assert_writable(&m).is_err());
+              let o = Attribute { layer: Layer::Optional, name: "onto.concept_id" };
+              assert!(eav::assert_writable(&o).is_ok());
+          }
+
+          #[test]
+          fn lattice_has_stable_spine_and_closed_extents() {
+              let mut ctx = FormalContext::new();
+              ctx.add_particle(kaki(1, 7), &["w5h2.who", "state.class", TopoClass::Golden.attribute_name(), "dmbok.steward"]).unwrap();
+              ctx.add_particle(kaki(2, 7), &["w5h2.who", "state.class", TopoClass::Golden.attribute_name()]).unwrap();
+              ctx.add_particle(kaki(3, 7), &["w5h2.who", "state.class", TopoClass::Fuzzy.attribute_name()]).unwrap();
+              let lat = Lattice::compute(&ctx);
+              assert!(lat.is_closed(&ctx));
+              assert!(lat.concepts.len() >= 3);
+              // spine: the top concept holds all particles
+              assert!(lat.concepts.iter().any(|c| c.extent.len() == 3));
+          }
+
+          #[test]
+          fn nebuchadnezzar_writes_optional_only_and_proposes_universals() {
+              let mut ctx = FormalContext::new();
+              ctx.add_particle(kaki(1, 7), &["w5h2.who", "state.class", "topo.golden"]).unwrap();
+              ctx.add_particle(kaki(2, 7), &["w5h2.who", "state.class", "topo.dead"]).unwrap();
+              let lat = Lattice::compute(&ctx);
+              let neb = Nebuchadnezzar::mint(&ctx, lat).unwrap();
+              assert_eq!(neb.name, "Nebuchadnezzar");
+              assert!(neb.writes.iter().all(|w| w.attribute.starts_with("onto.")));
+              let uni = neb.propose_universal(&ctx);
+              assert!(uni.contains(&"w5h2.who".to_string()));
+              assert!(!uni.contains(&"topo.golden".to_string()));
+          }
+
+    - name: cargo build (verification)
+      ansible.builtin.command:
+        cmd: cargo build --release
+        chdir: "{{ crate_dir }}"
+      register: build
+      changed_when: false
+
+    - name: cargo test (law tests)
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ crate_dir }}"
+      register: test
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          - "PB-322 complete — OntoGraph crate at {{ crate_dir }}"
+          - "GL-ONT-001 tablet at {{ tablets_dir }}/{{ tablet_src }}"
+          - "{{ test.stdout_lines[-3:] }}"

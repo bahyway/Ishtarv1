@@ -1,0 +1,104 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_105_sumuukin_routing.yml
+#  BahyWay.Ecosystem v4.0 — ŠUMU-UKIN Routing Engine — Targeted Tests
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_105_sumuukin_routing.yml
+#
+#  This playbook runs ONLY the ŠUMU-UKIN routing tests (E-008 group)
+#  in isolation, with verbose output so you can see each routing decision.
+#
+#  Routing tests:
+#    E-008-a  empty tribes → resolve all 4 targets
+#    E-008-b  FanOutPolicy::FirstOnly → contacted=1
+#    E-008-c  FanOutPolicy::AllParallel → contacted=4
+#    E-008-d  FanOutPolicy::AllSerial → contacted=4
+#    E-008-e  unknown tribe=999 → contacted=0
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-105 | ŠUMU-UKIN Routing — Isolated Routing Tests"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    crate:        "heptascript"
+    results_dir:  "{{ forge_root }}/test_results"
+
+  tasks:
+
+    - name: "SETUP | Results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Run only e008 routing tests ───────────────────────────────────────
+    - name: "TEST  | ŠUMU-UKIN routing tests (e008_*)"
+      ansible.builtin.command:
+        cmd: >
+          {{ cargo }} test -p {{ crate }} --test playbook_heptascript
+          e008_ -- --nocapture 2>&1
+        chdir: "{{ workspace }}"
+      register: route_out
+      changed_when: false
+
+    - name: "SAVE  | Write routing log"
+      ansible.builtin.copy:
+        content: "{{ route_out.stdout }}\n{{ route_out.stderr }}"
+        dest: "{{ results_dir }}/pb105_sumuukin_routing.log"
+        mode: "0644"
+
+    - name: "PRINT | Routing test output"
+      ansible.builtin.debug:
+        msg: "{{ route_out.stdout_lines }}"
+
+    # ── Also run the full suite for confirmation ──────────────────────────
+    - name: "TEST  | Full heptascript suite (all 29)"
+      ansible.builtin.command:
+        cmd: >
+          {{ cargo }} test -p {{ crate }} --test playbook_heptascript
+          -- --nocapture 2>&1
+        chdir: "{{ workspace }}"
+      register: full_out
+      changed_when: false
+
+    - name: "PARSE | Full result line"
+      ansible.builtin.set_fact:
+        result_line: >-
+          {{ full_out.stdout_lines
+             | select('match', '^test result')
+             | list | last | default('no result line') }}
+
+    - name: "PRINT | Final summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌─────────────────────────────────────────────────────────────────┐
+          │  PB-105  ŠUMU-UKIN Routing                                      │
+          ├─────────────────────────────────────────────────────────────────┤
+          │  Routing topology:                                              │
+          │    enkidb-node1  192.168.122.101:7001  tribe_id=1               │
+          │    enkidb-node2  192.168.122.102:7001  tribe_id=2               │
+          │    enkidw-node1  192.168.122.103:7002  tribe_id=1               │
+          │    enkidb-node3  192.168.122.104:7001  tribe_id=3               │
+          │                                                                 │
+          │  E-008-a  empty tribes → all 4 targets                         │
+          │  E-008-b  FirstOnly    → contacted=1                            │
+          │  E-008-c  AllParallel  → contacted=4                            │
+          │  E-008-d  AllSerial    → contacted=4                            │
+          │  E-008-e  tribe=999    → contacted=0                            │
+          ├─────────────────────────────────────────────────────────────────┤
+          │  Full suite:  {{ result_line }}
+          └─────────────────────────────────────────────────────────────────┘
+
+    - name: "FAIL  | Routing tests failed"
+      ansible.builtin.fail:
+        msg: "ŠUMU-UKIN routing tests FAILED"
+      when: route_out.rc != 0 or full_out.rc != 0
+
+    - name: "DONE  | PB-105 ŠUMU-UKIN Routing COMPLETE → Run PB-106 next"
+      ansible.builtin.debug:
+        msg: "ŠUMU-UKIN PASS ✓ — Run playbook_106_corpus_50files.yml next"

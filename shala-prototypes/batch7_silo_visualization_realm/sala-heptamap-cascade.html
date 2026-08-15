@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · HeptaMap Seven-Depth Cascade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#02030a; --ink:#eaf0fb; --ink-dim:#9aa6c8; --ink-faint:#5a6488;
+  --gold:#E3B458; --signal:#4fd6c4; --line:#1c2440; --fact:#8fe6b0;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button,select{font-family:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;z-index:5}
+.hud-title{top:14px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:19px;letter-spacing:.1em;color:var(--ink);text-shadow:0 0 30px rgba(79,214,196,.35)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:10px;letter-spacing:.18em;color:var(--ink-faint);margin-top:5px}
+.panel{background:rgba(6,10,24,.84);border:1px solid var(--line);border-radius:8px;padding:13px 15px;backdrop-filter:blur(10px)}
+/* depth ladder (left) */
+.hud-depth{top:82px;left:18px;width:250px;font-family:var(--f-data)}
+.hud-depth h3{font-size:10px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:10px}
+.depth-step{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:6px;margin:2px 0;cursor:pointer;border:1px solid transparent}
+.depth-step:hover{background:rgba(79,214,196,.06)}
+.depth-step.active{background:rgba(79,214,196,.12);border-color:var(--signal)}
+.depth-step .num{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--ink-faint);flex:none}
+.depth-step.active .num{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.depth-step .nm{font-size:11px;color:var(--ink-dim)}
+.depth-step.active .nm{color:var(--ink)}
+.depth-step .ct{margin-left:auto;font-size:9px;color:var(--ink-faint)}
+/* mode toggle + info (right) */
+.hud-info{top:82px;right:18px;width:262px;font-family:var(--f-data)}
+.hud-info h3{font-size:10px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:8px}
+.mode-row{display:flex;gap:6px;margin-bottom:10px}
+.mode-row button{flex:1;background:rgba(4,7,18,.9);border:1px solid var(--line);color:var(--ink-dim);border-radius:5px;padding:7px;font-size:10px;cursor:pointer}
+.mode-row button.on{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.info-body{font-size:11px;color:var(--ink-dim);line-height:1.55}
+.info-body b{color:var(--ink)}
+.vl-tag{display:inline-block;font-size:9px;color:var(--gold);border:1px solid var(--gold);border-radius:100px;padding:1px 8px;margin-top:8px}
+/* controls */
+.hud-ctl{bottom:52px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:8px;padding:9px 13px;font-family:var(--f-data)}
+.hud-ctl button{background:rgba(4,7,18,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;font-size:12px;padding:8px 15px;cursor:pointer}
+.hud-ctl button:disabled{opacity:.35;cursor:default}
+.hud-ctl .dlabel{font-size:11px;color:var(--signal);min-width:130px;text-align:center}
+/* selected particle */
+.hud-sel{bottom:110px;left:50%;transform:translateX(-50%);width:min(460px,90vw);font-family:var(--f-data);display:none;text-align:center}
+.hud-sel .sn{font-family:var(--f-display);font-size:15px;color:var(--gold)}
+.hud-sel .sb{font-size:11px;color:var(--ink-dim);margin-top:5px;line-height:1.5}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(2,3,10,.9);border-top:1px solid var(--line);font-family:var(--f-data);font-size:9px;color:var(--ink-faint);padding:5px 18px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">𒁾</span> HEPTAMAP · <em>seven-depth cascade</em></h1>
+  <div class="sub">7D FIELD → ZOOM DISSOLVES DENSITY IN DEPTH → DISTINCT SELECTABLE PARTICLES</div>
+</div>
+
+<div class="hud hud-depth panel">
+  <h3>Depth ladder · 7 snapshots</h3>
+  <div id="ladder"></div>
+</div>
+
+<div class="hud hud-info panel">
+  <h3>Transition mode</h3>
+  <div class="mode-row">
+    <button id="m-dissolve" class="on">DISSOLVE</button>
+    <button id="m-snapshot">SNAPSHOT</button>
+  </div>
+  <div class="info-body" id="info">…</div>
+</div>
+
+<div class="hud hud-sel panel" id="sel"></div>
+
+<div class="hud hud-ctl">
+  <button id="d-up" disabled>▲ ascend</button>
+  <div class="dlabel" id="d-label">D1 · Cosmic Web</div>
+  <button id="d-down">descend ▼</button>
+</div>
+
+<footer>Way-of-Work rule 5 — HTML prototype; production body Godot/WGPU. This shows the LOD CASCADE, not billion-scale: each depth renders only its shell (~a few ×10⁴ points here). In production the billion particles live in EnkiDW; WGPU streams each depth-snapshot on demand. Field→particle is level-of-detail, not all-at-once. Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* seven depths — each peels one layer of the 7D HeptaMap */
+const DEPTHS=[
+  {n:'Cosmic Web', desc:'The whole HeptaMap as a density <b>field</b>. A billion particles seen as structure, not points — filaments, knots, voids. You read shape, not individuals.', count:'~1e9 (field)', cam:1400, cloud:'field'},
+  {n:'Region', desc:'One dense <b>zone</b> resolves out of the field; the rest fades to context. You have chosen where to look.', count:'~1e7 shown as haze', cam:900, cloud:'region'},
+  {n:'Filament', desc:'Follow one glowing <b>thread</b> — a single chain of grounded dependencies — down its length.', count:'~1e6 along the thread', cam:620, cloud:'filament'},
+  {n:'Cluster', desc:'The filament resolves into a few bright <b>knots</b> — entities that co-occur in the GOLDEN store.', count:'~1e5 in knots', cam:420, cloud:'cluster'},
+  {n:'Knot', desc:'One knot opens into its member <b>sub-groups</b> — tribes within the entity.', count:'~1e4 sub-groups', cam:280, cloud:'knot'},
+  {n:'Neighborhood', desc:'The sub-group resolves into <b>individual particles</b>, still densely packed.', count:'~1e3 particles', cam:170, cloud:'neighborhood'},
+  {n:'Particle', desc:'Distinct and <b>selectable</b>. The BahyWay Visual Language applies to each one — click a particle to read it.', count:'≤120 distinct', cam:95, cloud:'particle', vl:true},
+];
+let depth=0, mode='dissolve';
+
+/* ---- three.js ---- */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(60,2,0.1,8000); camera.position.set(0,0,1400);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x02030a,1);
+stage.appendChild(renderer.domElement);
+
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.55)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+const rng=(s=>()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff))(12345);
+
+/* one big particle buffer we recolor/reposition per depth (LOD shell) */
+const MAX=120000;
+const posArr=new Float32Array(MAX*3), colArr=new Float32Array(MAX*3);
+const geo=new THREE.BufferGeometry();
+geo.setAttribute('position',new THREE.BufferAttribute(posArr,3));
+geo.setAttribute('color',new THREE.BufferAttribute(colArr,3));
+const mat=new THREE.PointsMaterial({size:2.4,vertexColors:true,transparent:true,opacity:0.9,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX});
+const cloud=new THREE.Points(geo,mat); scene.add(cloud);
+let activeCount=0;
+
+/* distinct particle markers (only at D7) */
+const distinctGroup=new THREE.Group(); scene.add(distinctGroup);
+let distinctParticles=[];
+
+/* build the point-cloud for a given depth */
+function cosmicFilament(i,scale,spread){
+  // pseudo-filament: points along a few random 3D curves + noise → web look
+  const strand=(i*2654435761)%7;
+  const t=rng();
+  const base=strand/7*6.28;
+  const x=Math.cos(base+t*2)*scale*(0.4+t*0.6)+ (rng()-.5)*spread;
+  const y=Math.sin(base*1.7+t*3)*scale*0.5*(0.4+t) + (rng()-.5)*spread;
+  const z=Math.cos(base*0.7+t*4)*scale*0.6 + (rng()-.5)*spread;
+  return [x,y,z];
+}
+function buildDepth(d){
+  const D=DEPTHS[d];
+  // count + spatial scale shrink as we descend
+  const counts=[110000,90000,70000,52000,32000,14000,120];
+  const scales=[820,560,380,260,170,110,70];
+  const spreads=[120,90,60,40,26,16,8];
+  const n=counts[d], scale=scales[d], spread=spreads[d];
+  activeCount=n;
+  // color palette warms as we descend (blue field → warm particle)
+  for(let i=0;i<n;i++){
+    let p;
+    if(d<=1) p=cosmicFilament(i,scale,spread);       // web/region: filament structure
+    else if(d===2){ // filament: a single dominant thread
+      const t=rng(); p=[(t-0.5)*scale*1.4+(rng()-.5)*spread, Math.sin(t*6)*40+(rng()-.5)*spread, (rng()-.5)*spread]; }
+    else { // cluster/knot/neighborhood: gaussian blobs around a few centers
+      const nc=[5,4,3,2,1][d-3]||3;
+      const ci=(rng()*nc)|0; const ca=ci/nc*6.28;
+      const cx=Math.cos(ca)*scale*0.5, cy=Math.sin(ca)*scale*0.4, cz=Math.sin(ca*1.3)*scale*0.3;
+      p=[cx+(rng()-.5)*spread*2,cy+(rng()-.5)*spread*2,cz+(rng()-.5)*spread*2];
+    }
+    posArr[i*3]=p[0];posArr[i*3+1]=p[1];posArr[i*3+2]=p[2];
+    // color: depth 0-1 cool blue, warming toward gold/teal deeper
+    const warm=d/6;
+    const r=0.30+warm*0.55, g=0.55+warm*0.30, b=1.0-warm*0.55;
+    const br=0.4+rng()*0.6;
+    colArr[i*3]=r*br;colArr[i*3+1]=g*br;colArr[i*3+2]=b*br;
+  }
+  geo.setDrawRange(0,n);
+  geo.attributes.position.needsUpdate=true;
+  geo.attributes.color.needsUpdate=true;
+  mat.size = [2.0,2.2,2.6,3.2,4.5,7,0][d]; // points grow as they thin out
+  mat.opacity = d===6?0:0.9; // hide cloud at particle depth; show distinct markers instead
+  // distinct particles only at D7
+  buildDistinct(d===6);
+}
+
+const VL_PRIMS=['Hubble Dolly','Fractal Descent','Decay Colour','ε-Jitter','τ-Membrane','Outward Drift','Golden Ascent','Uniqueness Bounce'];
+const STATES=[['GOLDEN',0x8fe6b0],['FUZZY',0xe3b458],['DEAD',0x8a94b4],['UNKNOWN',0xb083e0]];
+function buildDistinct(show){
+  distinctParticles.forEach(m=>distinctGroup.remove(m)); distinctParticles=[];
+  distinctGroup.visible=show; if(!show)return;
+  const N=48;
+  for(let i=0;i<N;i++){
+    const a=i/N*6.28, r=40+((i*37)%40);
+    const st=STATES[i%STATES.length];
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX,color:st[1],transparent:true,opacity:0.95,depthWrite:false,blending:THREE.AdditiveBlending}));
+    s.scale.set(14,14,1);
+    s.position.set(Math.cos(a)*r,Math.sin(a)*r*0.7,Math.sin(a*2.1)*30);
+    s.userData={idx:i,state:st[0],prim:VL_PRIMS[i%VL_PRIMS.length],base:s.position.clone(),phase:rng()*6.28};
+    distinctGroup.add(s); distinctParticles.push(s);
+  }
+}
+
+/* camera state (declared before first goDepth so camDistT exists) */
+let az=0.4,el=0.2,camDist=1400,camDistT=1400,dragging=false,lx=0,ly=0,spin=!reduced;
+let dissolving=false,dissolveT=0;
+
+/* depth transitions */
+function goDepth(d,instant){
+  d=Math.max(0,Math.min(6,d)); depth=d; const D=DEPTHS[d];
+  buildDepth(d);
+  camDistT=D.cam;
+  // UI
+  document.getElementById('d-label').textContent=`D${d+1} · ${D.n}`;
+  document.getElementById('d-up').disabled=(d===0);
+  document.getElementById('d-down').disabled=(d===6);
+  document.querySelectorAll('.depth-step').forEach((el,i)=>el.classList.toggle('active',i===d));
+  const info=document.getElementById('info');
+  info.innerHTML=`<b>D${d+1} · ${D.n}</b><br>${D.desc}<br><span style="color:var(--ink-faint)">rendered this shell: ${D.count}</span>`+
+    (D.vl?`<br><span class="vl-tag">◆ BahyWay Visual Language active</span>`:'');
+  document.getElementById('sel').style.display='none';
+  if(mode==='dissolve'&&!instant){ dissolveT=0; dissolving=true; } else { dissolving=false; cloud.material.opacity=(d===6?0:0.9); }
+}
+
+/* ladder UI */
+const ladder=document.getElementById('ladder');
+DEPTHS.forEach((D,i)=>{
+  const el=document.createElement('div'); el.className='depth-step'+(i===0?' active':'');
+  el.innerHTML=`<div class="num">${i+1}</div><div class="nm">${D.n}</div><div class="ct">${D.count.replace(' (field)','').replace(' shown as haze','').replace(' along the thread','').replace(' in knots','').replace(' sub-groups','').replace(' particles','').replace(' distinct','')}</div>`;
+  el.onclick=()=>goDepth(i);
+  ladder.appendChild(el);
+});
+document.getElementById('d-down').onclick=()=>goDepth(depth+1);
+document.getElementById('d-up').onclick=()=>goDepth(depth-1);
+document.getElementById('m-dissolve').onclick=()=>{mode='dissolve';document.getElementById('m-dissolve').classList.add('on');document.getElementById('m-snapshot').classList.remove('on');};
+document.getElementById('m-snapshot').onclick=()=>{mode='snapshot';document.getElementById('m-snapshot').classList.add('on');document.getElementById('m-dissolve').classList.remove('on');};
+
+/* click a distinct particle at D7 */
+renderer.domElement.addEventListener('click',e=>{
+  if(depth!==6)return; const r=renderer.domElement.getBoundingClientRect();
+  let best=null,bd=22;
+  distinctParticles.forEach(s=>{const v=s.position.clone().project(camera);if(v.z>=1)return;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(e.clientX-r.left-sx,e.clientY-r.top-sy);if(d<bd){bd=d;best=s;}});
+  const sel=document.getElementById('sel');
+  if(best){sel.style.display='block';
+    sel.innerHTML=`<div class="sn">◉ Particle ${best.userData.idx} · ${best.userData.state}</div>
+      <div class="sb">Visual-Language primitive applied: <b style="color:var(--gold)">${best.userData.prim}</b><br>This is the depth where P-1…P-13 motion primitives animate each distinct particle. State = ${best.userData.state}.</div>`;
+  } else sel.style.display='none';
+});
+
+goDepth(0,true);
+
+/* camera + render */
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();
+  camDistT=Math.max(60,Math.min(2000,camDistT*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{if(!dragging)return;az-=(e.clientX-lx)*0.005;el=Math.max(-1.4,Math.min(1.4,el+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;});
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin)az+=dt*0.04;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.2);
+  // dissolve fade-in
+  if(dissolving){dissolveT+=dt*1.5;const target=(depth===6?0:0.9);cloud.material.opacity=Math.min(target,dissolveT*target);if(dissolveT>=1)dissolving=false;}
+  // VL primitives on distinct particles (D7): ε-jitter + uniqueness bounce + drift
+  if(distinctGroup.visible){distinctParticles.forEach(s=>{const u=s.userData;
+    s.position.x=u.base.x+Math.sin(ts/400+u.phase)*3;
+    s.position.y=u.base.y+Math.cos(ts/500+u.phase)*3;
+    const b=1+Math.sin(ts/300+u.phase)*0.15;s.scale.set(14*b,14*b,1);});}
+  camera.position.set(Math.cos(az)*Math.cos(el)*camDist,Math.sin(el)*camDist,Math.sin(az)*Math.cos(el)*camDist);
+  camera.lookAt(0,0,0);
+  // gentle rotation of the cloud for depth feel
+  cloud.rotation.y+=dt*0.02;
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

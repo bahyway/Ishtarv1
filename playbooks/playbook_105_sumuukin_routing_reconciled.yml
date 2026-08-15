@@ -1,0 +1,129 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_105_sumuukin_routing_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-105 Reconciled: ŠUMU-UKIN routing, real test path
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_105_sumuukin_routing_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_105_sumuukin_routing.yml):
+#    Targets `--test playbook_heptascript e008_` (named integration binary,
+#    never written — same issue as the whole PB-100..104 batch).
+#
+#    The good news: the routing API itself is real and matches exactly —
+#    verified directly against crates/heptascript/src/sumuukin.rs:
+#      SumuUkinContext::new(Vec<RoutingTarget>), RoutingTarget{session_id,
+#      host, port, tribe_id}, .route(&query, FanOutPolicy), FanOutPolicy::
+#      {AllParallel, FirstOnly, AllSerial} — field-for-field match.
+#
+#    Real inline tests (4, not the claimed 5 E-008 sub-cases):
+#      empty_tribes_routes_to_all      (E-008-a)
+#      tribe_filter_routes_to_subset   (not in original's E-008 list — extra)
+#      first_only_policy_contacts_one  (E-008-b)
+#      all_serial_policy_contacts_all  (covers E-008-c and E-008-d — the
+#        current route() implementation treats AllParallel and AllSerial
+#        identically, both just return targets.len(), so one test covers
+#        both policies' logic)
+#    Missing vs. original's claim: no dedicated "unknown tribe=999 ->
+#    contacted=0" test (E-008-e). Not fabricated here — flagged as a real
+#    gap below.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-105 (Reconciled) | ŠUMU-UKIN routing — real test path"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB105_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | sumuukin.rs exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/heptascript/src/sumuukin.rs"
+      register: sumuukin_file
+
+    - name: "FAIL | sumuukin.rs not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/heptascript/src/sumuukin.rs not found after sync."
+      when: not sumuukin_file.stat.exists
+
+    - name: "TEST | cargo test -p heptascript sumuukin -- --nocapture"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p heptascript sumuukin -- --nocapture"
+        chdir: "{{ workspace }}"
+      register: route_out
+      changed_when: false
+      failed_when: route_out.rc != 0
+
+    - name: "PARSE | route_out passed-test count"
+      ansible.builtin.set_fact:
+        route_out_passed_count: "{{ (route_out.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | sumuukin routing reports 4 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in route_out.stdout"
+          - route_out_passed_count >= 4
+        fail_msg: >-
+          Expected at least 4 passed, 0 failed. Got {{ route_out_passed_count }}
+          passed. Full output: {{ route_out.stdout }}
+        success_msg: >-
+          sumuukin routing: {{ route_out_passed_count }} passed, 0 failed (>= baseline 4).
+
+    - name: "PRINT | Routing test output"
+      ansible.builtin.debug:
+        msg: "{{ route_out.stdout_lines }}"
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-105 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-105 targeted `--test playbook_heptascript e008_`
+          (never written). Routing API is real and matches exactly
+          (SumuUkinContext, RoutingTarget, FanOutPolicy).
+
+          Verified this run:
+            sumuukin routing tests : 4/4 PASS
+            (empty_tribes_routes_to_all, tribe_filter_routes_to_subset,
+             first_only_policy_contacts_one, all_serial_policy_contacts_all)
+
+          GAP (not fabricated): no dedicated "unknown tribe=999 ->
+          contacted=0" test exists today. resolve() returns an empty Vec
+          for an unmatched tribe by construction (filter with no match),
+          so the behavior is very likely correct, but it is untested —
+          real follow-up work, not claimed as done here.
+
+    - name: "DONE | PB-105 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-105 reconciled. Report: {{ report_file }}"

@@ -1,0 +1,223 @@
+# =============================================================================
+# PB-289 — Multi-location playbook catalog: gather every real playbook
+# across every known historical/backup location into one real, graph-
+# navigable EnkiDDB catalog. BahyWay.Ecosystem v4.0 — 2026-08-02
+#
+# WHY THIS EXISTS: this session confirmed the same playbook corpus has
+# spread across at least six locations over months of daily work --
+# this repo's own `playbooks/`, an older `workspace/bahyway_v4/ansible/
+# playbooks/` corpus already inside this repo, the Architect's DailyWork
+# repo (`bahyway-ansible/playbooks` + its own `Playbooks_Backups`), the
+# retired eriduous-vdi's rsynced mirror (`EriduOS-EnkiDB`), and 40+ dated
+# daily-backup snapshots (~/Downloads/AllDays_Backups AND the VMLAB
+# external drive) -- 832 playbook files, 261 unique names, real number
+# collisions confirmed live (PB-88/89/90/91/94/95/97 meaning different
+# things in different locations). The Architect's own words: "I do not
+# want you [Claude] to decide what I need to include" -- this playbook
+# builds the catalog only; every disposition decision stays theirs,
+# reviewed visually in DubSar Theater's Graph Explorer (Ctrl+K).
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Builds `pb-catalog-cli` (crates/shakkanakku/src/bin/
+#      pb_catalog_cli.rs, engine: crates/shakkanakku/src/pb_catalog.rs).
+#   2. Discovers dated snapshot subfolders under the two known backup
+#      archive roots at RUN TIME (never hardcodes a fixed list of 40+
+#      dates -- new daily backups keep appearing) -- each dated folder
+#      becomes its own named catalog location.
+#   3. Checks the VMLAB external drive is actually mounted BEFORE
+#      generating its locations -- reports clearly and continues with
+#      everything else if it isn't, never silently drops it from the
+#      catalog without saying so.
+#   4. Writes a TOML config listing every location (static + discovered),
+#      runs `pb-catalog-cli` against it.
+#   5. `pb_catalog::catalog_playbooks` mints each DISTINCT playbook
+#      content once (sha256-deduped across all locations) into EnkiDDB's
+#      `PLAYBOOK_CATALOG_TRIBE_ID` -- deliberately NOT the sealed
+#      `PB_TRIBE_ID`/`PB_DOCS_TRIBE_ID` corpus -- with a real graph:
+#      one marker document per location ("found-in" links), and a
+#      neutral `same-PB-number-as (unreconciled)` link between any two
+#      files that share a PB number but differ in content. Never picks a
+#      winner. Materializes into `~/Forge/enkiddb_local` -- the SAME
+#      local EnkiDDB data root Graph Explorer already reads from, so the
+#      result is queryable immediately, no separate wiring step.
+#   6. Safe to re-run any time a new backup location appears: content
+#      already catalogued mints nothing new, only new sightings/links.
+#
+# HOW TO REVIEW THE RESULT:
+#   Open DubSar Theater, press Ctrl+K (Graph Explorer), type the exact
+#   title of a location marker (e.g. "Playbook catalog location:
+#   in-repo/playbooks") or a playbook's own title, press Expand, and
+#   follow the `found-in`/`same-PB-number-as` links from there.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_289_multi_location_playbook_catalog.yml
+#   ansible-playbook playbooks/playbook_289_multi_location_playbook_catalog.yml -e skip_build=true
+# =============================================================================
+---
+- name: "PB-289 | Multi-location playbook catalog into EnkiDDB"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    enkidb_root: "{{ (playbook_dir + '/..') | realpath }}"
+    home_dir: "{{ lookup('env', 'HOME') }}"
+    # Same local EnkiDDB data root uruinimgina-cli's own real config
+    # already uses (crates/shakkanakku/src/bin/uruinimgina_cli.rs's own
+    # doctest fixture: enkiddb_root = "/home/bfadam/Forge/enkiddb_local")
+    # -- landing here, not a separate root, is what makes the new catalog
+    # immediately visible to Graph Explorer without a second wiring step.
+    enkiddb_output_root: "{{ home_dir }}/Forge/enkiddb_local"
+    registry_path: "{{ home_dir }}/Forge/pb_catalog_registry.jsonl"
+    config_path: "/tmp/pb_catalog_289.toml"
+    skip_build: false
+    build_log: "/tmp/pb_catalog_cli_build.log"
+
+    # FIXED locations -- confirmed real paths, 2026-08-02.
+    static_locations:
+      - name: "in-repo/playbooks"
+        root: "{{ enkidb_root }}/playbooks"
+      - name: "in-repo/ansible-playbooks"
+        root: "{{ enkidb_root }}/workspace/bahyway_v4/ansible/playbooks"
+      - name: "DailyWork/bahyway-ansible-playbooks"
+        root: "/home/bfadam/Forge/bahyway_v4/bahyway-ansible/playbooks"
+      - name: "DailyWork/Playbooks_Backups"
+        root: "/home/bfadam/Forge/bahyway_v4/bahyway-ansible/Playbooks_Backups"
+      - name: "EriduOS-EnkiDB/playbooks"
+        root: "/home/bfadam/Forge/EriduOS-EnkiDB/playbooks"
+      - name: "EriduOS-EnkiDB/ansible-playbooks"
+        root: "/home/bfadam/Forge/EriduOS-EnkiDB/workspace/bahyway_v4/ansible/playbooks"
+
+    # Archive roots to discover DATED subfolders under, at run time --
+    # never a hardcoded date list. daily_backups_root is an ASSUMPTION
+    # (the Architect's own `Backups_Contents.txt` tree was rooted one
+    # level above a `Downloads/AllDays_Backups/<date>/...` shape; if this
+    # run reports 0 discovered DailyBackup locations, that assumption is
+    # wrong and the real root needs to be passed via
+    # -e daily_backups_root=/the/real/path).
+    daily_backups_root: "{{ home_dir }}/Downloads/AllDays_Backups"
+    vmlab_mount: "/run/media/bfadam/VMLAB"
+    vmlab_backups_root: "{{ vmlab_mount }}/__All_BahyWay/Forge_Daily_Backups"
+
+  tasks:
+
+    - name: "Build pb-catalog-cli"
+      ansible.builtin.shell: >-
+        cd {{ enkidb_root }}/workspace/bahyway_v4 &&
+        cargo build --release -p shakkanakku --bin pb-catalog-cli
+        > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: "FAIL | build failed"
+      ansible.builtin.fail:
+        msg: "cargo build --release -p shakkanakku --bin pb-catalog-cli failed (rc={{ build_result.rc }}). Full output: {{ build_log }}"
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: "Confirm pb-catalog-cli binary exists"
+      ansible.builtin.stat:
+        path: "{{ enkidb_root }}/workspace/bahyway_v4/target/release/pb-catalog-cli"
+      register: bin_check
+
+    - name: "FAIL | pb-catalog-cli binary missing"
+      ansible.builtin.fail:
+        msg: "pb-catalog-cli not found. Run without -e skip_build=true first, or check {{ build_log }}."
+      when: not bin_check.stat.exists
+
+    - name: "Check the DailyWork Backups archive root exists"
+      ansible.builtin.stat:
+        path: "{{ daily_backups_root }}"
+      register: daily_root_check
+
+    - name: "WARN | daily_backups_root not found -- see this playbook's header on the daily_backups_root assumption"
+      ansible.builtin.debug:
+        msg: "⚠ {{ daily_backups_root }} does not exist -- skipping dated-snapshot discovery there. Pass -e daily_backups_root=/the/real/path if it lives elsewhere."
+      when: not daily_root_check.stat.exists
+
+    - name: "Discover dated snapshot subfolders under daily_backups_root"
+      ansible.builtin.find:
+        paths: "{{ daily_backups_root }}"
+        file_type: directory
+        recurse: false
+      register: daily_backup_dirs
+      when: daily_root_check.stat.exists
+
+    - name: "Check whether the VMLAB external drive is actually mounted"
+      ansible.builtin.stat:
+        path: "{{ vmlab_mount }}"
+      register: vmlab_check
+
+    - name: "WARN | VMLAB drive not mounted -- reported, not silently skipped"
+      ansible.builtin.debug:
+        msg: "⚠ {{ vmlab_mount }} is not mounted -- the VMLAB backup snapshots will be MISSING from this run's catalog. Mount the drive and re-run to add them (re-running is safe and cheap, see this playbook's header)."
+      when: not vmlab_check.stat.exists
+
+    - name: "Discover dated snapshot subfolders under the VMLAB backups root"
+      ansible.builtin.find:
+        paths: "{{ vmlab_backups_root }}"
+        file_type: directory
+        recurse: false
+      register: vmlab_backup_dirs
+      when: vmlab_check.stat.exists
+
+    # Ansible's own filters can't cleanly zip two derived lists into named
+    # dicts without the community.general collection (not assumed
+    # present) -- built explicitly with a loop instead, no extra
+    # collection dependency.
+    - name: "Start the combined location list from the static locations"
+      ansible.builtin.set_fact:
+        all_locations: "{{ static_locations }}"
+
+    - name: "Append one location per discovered DailyBackup dated folder"
+      ansible.builtin.set_fact:
+        all_locations: "{{ all_locations + [{'name': 'DailyBackup/' + (item.path | basename), 'root': item.path}] }}"
+      loop: "{{ daily_backup_dirs.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    - name: "Append one location per discovered VMLAB dated folder"
+      ansible.builtin.set_fact:
+        all_locations: "{{ all_locations + [{'name': 'VMLAB/' + (item.path | basename), 'root': item.path}] }}"
+      loop: "{{ vmlab_backup_dirs.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    - name: "Report the final location count before scanning"
+      ansible.builtin.debug:
+        msg: "𒁾 {{ all_locations | length }} location(s) to scan ({{ static_locations | length }} fixed + {{ daily_backup_dirs.files | default([]) | length }} DailyBackup + {{ vmlab_backup_dirs.files | default([]) | length }} VMLAB)."
+
+    - name: "Write the pb-catalog-cli TOML config"
+      ansible.builtin.copy:
+        dest: "{{ config_path }}"
+        mode: "0644"
+        content: |
+          registry_path = "{{ registry_path }}"
+          enkiddb_output_root = "{{ enkiddb_output_root }}"
+
+          {% for loc in all_locations %}
+          [[locations]]
+          name = "{{ loc.name }}"
+          root = "{{ loc.root }}"
+
+          {% endfor %}
+
+    - name: "Run pb-catalog-cli"
+      ansible.builtin.command: "{{ enkidb_root }}/workspace/bahyway_v4/target/release/pb-catalog-cli {{ config_path }}"
+      register: catalog_result
+      changed_when: true
+
+    - name: "Show pb-catalog-cli output"
+      ansible.builtin.debug:
+        msg: "{{ catalog_result.stdout_lines }}"
+
+    - name: "DONE | PB-289 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 Multi-location playbook catalog run complete. Registry:
+          {{ registry_path }}. EnkiDDB data: {{ enkiddb_output_root }}.
+          Open DubSar Theater, press Ctrl+K (Graph Explorer), and type
+          "Playbook catalog location: in-repo/playbooks" (or any other
+          location name above) to start exploring. Re-run this playbook
+          any time a new backup location shows up -- already-catalogued
+          content mints nothing new.

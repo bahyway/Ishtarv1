@@ -1,0 +1,225 @@
+# ============================================================================
+# 𒁾 PB-321 — ARSENAL INVENTORY SURVEY (READ-ONLY)
+# BahyWay.Ecosystem v4.0 — Unified Algebra Theorem preparation
+#
+# PURPOSE
+#   Scan the entire v4.0 source and tablet tree for:
+#     (a) every KNOWN member of the BahyWay Algebra Arsenal (53-member grid,
+#         session "Unified Algebra Theorem as BahyWay Algebra", 2026-08-10)
+#     (b) every UNKNOWN identifier matching *Calculus / *Algebra / *Law /
+#         *Functional / *Inequality / *Theorem — candidates the Architect
+#         or Claude Code may have created outside chat sessions
+#   Emit one markdown report: ARSENAL-INVENTORY-001.md
+#
+# LAW
+#   Read-only. No file in the source tree is created, modified, or deleted.
+#   The report is DRAFT until the Architect runs and confirms (CSR-08).
+#
+# RUN (from HOST, per Way of Work rule 1, or adjust hosts: for uruk)
+#   ansible-playbook PB-321-arsenal-inventory-survey.yml \
+#     -e repo_root=/path/to/BahyWay-Ecosystem
+# ============================================================================
+---
+- name: "PB-321 | Arsenal Inventory Survey (read-only)"
+  hosts: localhost
+  gather_facts: true
+  vars:
+    repo_root: "{{ repo_root | default(playbook_dir + '/..') }}"  # FIXED 2026-08-15: was ansible_env.HOME + "/BahyWay-Ecosystem" (a path that does not exist); playbook_dir/.. matches this repo's own established convention and actually resolves
+    report_dir: "{{ ansible_env.HOME }}/bahyway-reports"
+    report_file: "{{ report_dir }}/ARSENAL-INVENTORY-001.md"
+    # ------------------------------------------------------------------
+    # (a) The 53 known arsenal terms (grep-safe stems, case-insensitive)
+    # ------------------------------------------------------------------
+    known_terms:
+      - "Hepta"
+      - "Particles Algebra"
+      - "PA-1"
+      - "PA-17"
+      - "Tribes Algebra"
+      - "Tribe Algebra"
+      - "Orbit Calculus"
+      - "Orbits Calculus"
+      - "TOP Algebra"
+      - "Tupsarrutu"
+      - "Ṭupšarrūtu"
+      - "Triality"
+      - "Enlil Algebra"
+      - "Universal Algebra"
+      - "Homomorphism"
+      - "Jordan Normal Form"
+      - "GhishKhur"
+      - "Jordan Algebra"
+      - "ILKUM"
+      - "SHU-GUR"
+      - "Rank Conservation"
+      - "Fortijn"
+      - "Clifford"
+      - "multivector"
+      - "Hopf"
+      - "simplicial"
+      - "persistent homology"
+      - "vineyard"
+      - "Mayer"
+      - "Viazovska"
+      - "kissing"
+      - "E7"
+      - "Wahshiyya"
+      - "Plimpton"
+      - "QUALITY_DIVISOR"
+      - "HOMT"
+      - "Grassmann"
+      - "Operad"
+      - "Presheaf"
+      - "Tropical"
+      - "Witt"
+      - "Braided"
+      - "Puhu"
+      - "Pauli"
+      - "Uniqueness Law"
+      - "Bonnet"
+      - "Nabu Calculus"
+      - "Nabû"
+      - "SU(7)"
+      - "Casimir"
+      - "rotor"
+      - "Star Product"
+      - "SPQL"
+      - "Vec7D"
+      - "Lyapunov"
+      - "bifurcation"
+      - "Trichotomy"
+      - "Neberu"
+      - "Nēberu"
+      - "Poincare"
+      - "Wave"
+      - "Horizon"
+      - "Betti"
+      - "Masku"
+      - "Mašku"
+      - "Enneper"
+      - "Weierstrass"
+      - "minimal surface"
+      - "Weyl"
+      - "equidistribution"
+      - "fitness"
+      - "chromosome"
+      - "Zibanitu"
+      - "Zibānītu"
+      - "Fadam"
+      - "Ghost Gap"
+      - "Transparency Deficit"
+      - "Opacity"
+      - "SARU"
+      - "ŠĀRU"
+      - "SAHU"
+      - "ŠĀHU"
+      - "VGCA"
+      - "Gap(n)"
+      - "Enbilulu"
+      - "Deming"
+      - "Cramer"
+      - "Cramér"
+      - "baru"
+      - "barû"
+      - "Tertu"
+      - "Têrtu"
+      - "Milu"
+      - "Mīlu"
+      - "Girra"
+      - "Sazu"
+      - "Šazu"
+      - "Addu"
+      - "Suhrim"
+      - "Namtila"
+      - "Unified Gain"
+      - "huburu"
+      - "Mashalu"
+      - "Jaccard"
+      - "containment"
+      - "Qishtu"
+      - "CTG"
+      - "HPS"
+      - "GL-ALG"
+  tasks:
+
+    - name: "Assert repo root exists"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}"
+      register: repo_stat
+
+    - name: "Fail early if repo_root is wrong"
+      ansible.builtin.fail:
+        msg: "repo_root {{ repo_root }} does not exist. Pass -e repo_root=/correct/path"
+      when: not repo_stat.stat.exists
+
+    - name: "Ensure report directory exists (outside the source tree)"
+      ansible.builtin.file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ------------------------------------------------------------------
+    # (a) Known-term census: file-hit counts per arsenal member
+    # ------------------------------------------------------------------
+    - name: "Census of known arsenal terms"
+      ansible.builtin.shell: |
+        set -o pipefail
+        {
+          echo "# 𒁾 ARSENAL-INVENTORY-001 — DRAFT"
+          echo "## BahyWay Algebra Arsenal survey — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "## Repo root: {{ repo_root }}"
+          echo ""
+          echo "## §1 Known-member census (files containing each term)"
+          echo ""
+          echo "| Term | File hits |"
+          echo "|---|---|"
+        } > "{{ report_file }}"
+        while IFS= read -r term; do
+          hits=$(grep -rli --include='*.rs' --include='*.md' --include='*.yml' \
+                 --include='*.akk' --include='*.hepta' --include='*.toml' \
+                 -F -e "$term" "{{ repo_root }}" 2>/dev/null | wc -l)
+          echo "| $term | $hits |" >> "{{ report_file }}"
+        done <<'TERMS'
+        {% for t in known_terms %}
+        {{ t }}
+        {% endfor %}
+        TERMS
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    # ------------------------------------------------------------------
+    # (b) Unknown-candidate sweep: identifiers Claude does NOT know
+    # ------------------------------------------------------------------
+    - name: "Sweep for unknown Calculus/Algebra/Law/Functional/Theorem names"
+      ansible.builtin.shell: |
+        set -o pipefail
+        {
+          echo ""
+          echo "## §2 Candidate sweep — every distinct phrase matching"
+          echo "##    '<Name> Calculus|Algebra|Law|Functional|Inequality|Theorem'"
+          echo "##    found in the tree. Compare against the 53-member grid;"
+          echo "##    anything not in the grid is a FORGOTTEN or NEW member."
+          echo ""
+          echo '```'
+          grep -rhoiE --include='*.rs' --include='*.md' --include='*.akk' \
+            --include='*.hepta' \
+            "[A-Z][A-Za-zŠṢṬĀĒĪŪšṣṭāēīūû]+ (Calculus|Algebra|Law|Functional|Inequality|Theorem)" \
+            "{{ repo_root }}" 2>/dev/null | sort | uniq -c | sort -rn
+          echo '```'
+          echo ""
+          echo "## §3 GL-ALG tablet files present"
+          echo '```'
+          find "{{ repo_root }}" -iname '*GL-ALG*' -o -iname '*algebra*' \
+            -type f 2>/dev/null | sort
+          echo '```'
+          echo ""
+          echo "DRAFT — awaits the Architect's confirmation (CSR-08)."
+        } >> "{{ report_file }}"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: "Report location"
+      ansible.builtin.debug:
+        msg: "Survey written to {{ report_file }} — paste §2 back to the session to close the grid."

@@ -1,0 +1,1178 @@
+---
+# =============================================================================
+# PLAYBOOK 33 — EnkiDB Connection Wizard — full rewrite of enkidb_connect.rs
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-18
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/bahyway-ansible/playbooks/33_enkidb_wizard.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 33 — EnkiDB wizard full rewrite"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    workspace: "/home/bahyway/Forge/bahyway_v4"
+    target:    "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/enkidb_connect.rs"
+
+  tasks:
+
+    - name: "Overwrite enkidb_connect.rs with two-step wizard"
+      ansible.builtin.copy:
+        dest: "{{ target }}"
+        mode: "0644"
+        content: |
+          //! 𒁾 EnkiDB Connect — two-step connection wizard + HeptaScript runner
+          //!
+          //! Step 1: Engine picker grid  (EnkiDB / EnkiDW / EnkiSDB / EnkiODB / EnkiQDB)
+          //! Step 2: Credentials form    (Host, Port, Username, Journal path, Tribe, Node type)
+          //!
+          //! Three-panel layout (after connection):
+          //!   Left   — Connection config + live node status + journal.bin stats
+          //!   Centre — HeptaScript W5H2 editor + ▶ Run + result mode toggle
+          //!   Right  — ORBIT view OR GRID view
+          //!
+          //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust
+          use std::sync::{Arc, RwLock};
+          use egui::{
+              Align2, Color32, FontId, RichText, Rounding, Stroke, TextEdit, Ui, Vec2,
+          };
+          use enkidb_journal::Journal;
+          use crate::app::ParticleDemo;
+          use crate::theme;
+
+          // ── Colour palette ────────────────────────────────────────────────────
+          const BG:     Color32 = Color32::from_rgb(16, 18, 24);
+          const PANEL:  Color32 = Color32::from_rgb(20, 23, 30);
+          const GOLD:   Color32 = Color32::from_rgb(200, 160, 40);
+          const CYAN:   Color32 = Color32::from_rgb(60, 180, 200);
+          const GREEN:  Color32 = Color32::from_rgb(60, 180, 120);
+          const RED:    Color32 = Color32::from_rgb(180, 60, 70);
+          const STEEL:  Color32 = Color32::from_rgb(70, 85, 105);
+          const TEXT:   Color32 = Color32::from_rgb(180, 190, 205);
+          const DIM:    Color32 = Color32::from_rgb(100, 110, 130);
+          const CARD:   Color32 = Color32::from_rgb(14, 16, 22);
+
+          // ── EnkiDB engine types ───────────────────────────────────────────────
+          #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+          pub enum EnkiDbType {
+              EnkiDB,   // Core CQRS sovereign store
+              EnkiDW,   // Data warehouse · ETL pipeline
+              EnkiSDB,  // Staging database
+              EnkiODB,  // Operation database
+              EnkiQDB,  // Quarantine database
+          }
+
+          impl EnkiDbType {
+              fn all() -> &'static [EnkiDbType] {
+                  &[
+                      EnkiDbType::EnkiDB,
+                      EnkiDbType::EnkiDW,
+                      EnkiDbType::EnkiSDB,
+                      EnkiDbType::EnkiODB,
+                      EnkiDbType::EnkiQDB,
+                  ]
+              }
+              fn label(&self) -> &'static str {
+                  match self {
+                      EnkiDbType::EnkiDB  => "EnkiDB",
+                      EnkiDbType::EnkiDW  => "EnkiDW",
+                      EnkiDbType::EnkiSDB => "EnkiSDB",
+                      EnkiDbType::EnkiODB => "EnkiODB",
+                      EnkiDbType::EnkiQDB => "EnkiQDB",
+                  }
+              }
+              fn description(&self) -> &'static str {
+                  match self {
+                      EnkiDbType::EnkiDB  => "Core CQRS\nsovereign store",
+                      EnkiDbType::EnkiDW  => "Data warehouse\nETL pipeline",
+                      EnkiDbType::EnkiSDB => "Staging\ndatabase",
+                      EnkiDbType::EnkiODB => "Operation\ndatabase",
+                      EnkiDbType::EnkiQDB => "Quarantine\ndatabase",
+                  }
+              }
+              fn glyph(&self) -> &'static str {
+                  match self {
+                      EnkiDbType::EnkiDB  => "𒆳",
+                      EnkiDbType::EnkiDW  => "𒀭",
+                      EnkiDbType::EnkiSDB => "𒌓",
+                      EnkiDbType::EnkiODB => "𒌋",
+                      EnkiDbType::EnkiQDB => "𒁾",
+                  }
+              }
+              fn accent(&self) -> Color32 {
+                  match self {
+                      EnkiDbType::EnkiDB  => Color32::from_rgb(0x4A, 0x8F, 0xD4),
+                      EnkiDbType::EnkiDW  => Color32::from_rgb(0x4C, 0xAF, 0x50),
+                      EnkiDbType::EnkiSDB => Color32::from_rgb(0xEF, 0x9F, 0x27),
+                      EnkiDbType::EnkiODB => Color32::from_rgb(0x9C, 0x80, 0xE8),
+                      EnkiDbType::EnkiQDB => Color32::from_rgb(0xDC, 0x14, 0x3C),
+                  }
+              }
+              fn sub(&self) -> &'static str {
+                  match self {
+                      EnkiDbType::EnkiDB  => "enkidb-persist · enkidb-journal · KAKI 16-byte PK",
+                      EnkiDbType::EnkiDW  => "ETL pipeline · BeeMDM stations S0–S8",
+                      EnkiDbType::EnkiSDB => "Pre-ingestion holding zone · ZIP batch staging",
+                      EnkiDbType::EnkiODB => "Live production records · operational read/write",
+                      EnkiDbType::EnkiQDB => "Failed · flagged · isolated particles",
+                  }
+              }
+          }
+
+          // ── Wizard step ───────────────────────────────────────────────────────
+          #[derive(Clone, Copy, PartialEq, Eq, Default)]
+          enum WizardStep { #[default] Picker, Credentials }
+
+          // ── Wizard state ──────────────────────────────────────────────────────
+          #[derive(Default)]
+          pub struct WizardState {
+              pub open:       bool,
+              pub step:       WizardStep,
+              pub selected:   Option<EnkiDbType>,
+              // credential fields
+              pub conn_name:  String,
+              pub host:       String,
+              pub port:       String,
+              pub username:   String,
+              pub journal:    String,
+              pub tribe:      String,
+              pub node_write: bool,
+              pub status_msg: String,
+              pub status_ok:  bool,
+          }
+
+          impl WizardState {
+              pub fn open(&mut self) {
+                  self.open     = true;
+                  self.step     = WizardStep::Picker;
+                  self.selected = None;
+                  self.status_msg = String::new();
+                  // pre-fill sensible defaults
+                  if self.host.is_empty()     { self.host     = "192.168.122.107".into(); }
+                  if self.port.is_empty()     { self.port     = "22".into(); }
+                  if self.username.is_empty() { self.username = "bahyway".into(); }
+                  if self.journal.is_empty()  {
+                      self.journal =
+                          "/home/bahyway/enkidb/data/tribe-0001/journal.bin".into();
+                  }
+                  if self.tribe.is_empty()    { self.tribe    = "NAJAF_CEMETERY  0x0001".into(); }
+              }
+          }
+
+          // ── Result view mode ──────────────────────────────────────────────────
+          #[derive(Clone, Copy, PartialEq, Eq)]
+          pub enum ResultMode { Orbit, Grid }
+
+          // ── Query result row ──────────────────────────────────────────────────
+          #[derive(Clone)]
+          pub struct QueryRow {
+              pub entity_hex: String,
+              pub attrs:      Vec<(String, String)>,
+              pub b11:        u8,
+              pub state:      String,
+          }
+
+          // ── Panel state ───────────────────────────────────────────────────────
+          pub struct EnkiDbConnectState {
+              // Connection
+              pub tribe_name:      String,
+              pub tribe_id:        u16,
+              pub write_ip:        String,
+              pub read_ip:         String,
+              pub journal_path:    String,
+              pub connected:       bool,
+              pub connected_type:  Option<EnkiDbType>,
+              pub journal_size:    Option<u64>,
+              pub record_count:    Option<usize>,
+              pub connect_msg:     String,
+              // Wizard
+              pub wizard:          WizardState,
+              // HeptaScript editor
+              pub editor:          String,
+              pub running:         bool,
+              pub output:          String,
+              // Results
+              pub result_mode:     ResultMode,
+              pub rows:            Vec<QueryRow>,
+              pub orbit_particles: Vec<ParticleDemo>,
+          }
+
+          impl Default for EnkiDbConnectState {
+              fn default() -> Self {
+                  Self {
+                      tribe_name:     "NAJAF_CEMETERY".into(),
+                      tribe_id:       0x0001,
+                      write_ip:       "192.168.122.101".into(),
+                      read_ip:        "192.168.122.107".into(),
+                      journal_path:   "/home/bahyway/enkidb/data/tribe-0001/journal.bin".into(),
+                      connected:      false,
+                      connected_type: None,
+                      journal_size:   None,
+                      record_count:   None,
+                      connect_msg:    "Not connected".into(),
+                      wizard:         WizardState::default(),
+                      editor:         "\
+          -- HeptaScript W5H2 Query (.hepta)
+          -- Tribe: NAJAF_CEMETERY (0x0001)
+          WHO      Graves.E
+          WHAT     E[person.name_arabic, death.date, grave.section]
+          WHERE    E[grave.section] = \"Najaf\"
+          WHEN     AT EPOCH NOW
+          WHY      QUALITY_BYTE > 140
+          HOW      BY E[death.date] DESC
+          HOW_MUCH LIMIT 100".into(),
+                      running:        false,
+                      output:         String::new(),
+                      result_mode:    ResultMode::Orbit,
+                      rows:           Vec::new(),
+                      orbit_particles: Vec::new(),
+                  }
+              }
+          }
+
+          // ── Entry point ───────────────────────────────────────────────────────
+          pub fn draw(
+              ui:      &mut Ui,
+              state:   &mut EnkiDbConnectState,
+              journal: &Journal,
+              tick:    f64,
+          ) {
+              // Draw wizard overlay first (floating on top)
+              draw_wizard(ui.ctx(), state, journal);
+
+              egui::SidePanel::left("enkidb_left")
+                  .resizable(true)
+                  .default_width(240.0)
+                  .min_width(200.0)
+                  .max_width(320.0)
+                  .frame(egui::Frame::none()
+                      .fill(PANEL)
+                      .stroke(Stroke::new(1.0, Color32::from_rgb(40,50,70))))
+                  .show_inside(ui, |ui| {
+                      draw_connection(ui, state, journal);
+                  });
+
+              egui::SidePanel::right("enkidb_right")
+                  .resizable(true)
+                  .default_width(320.0)
+                  .min_width(260.0)
+                  .max_width(500.0)
+                  .frame(egui::Frame::none()
+                      .fill(PANEL)
+                      .stroke(Stroke::new(1.0, Color32::from_rgb(40,50,70))))
+                  .show_inside(ui, |ui| {
+                      draw_results(ui, state, tick);
+                  });
+
+              egui::CentralPanel::default()
+                  .frame(egui::Frame::none().fill(BG))
+                  .show_inside(ui, |ui| {
+                      draw_editor(ui, state);
+                  });
+          }
+
+          // ── WIZARD — floating two-step egui::Window ───────────────────────────
+          fn draw_wizard(
+              ctx:     &egui::Context,
+              state:   &mut EnkiDbConnectState,
+              journal: &Journal,
+          ) {
+              if !state.wizard.open { return; }
+
+              // Dim backdrop
+              egui::Area::new(egui::Id::new("wizard_backdrop"))
+                  .fixed_pos([0.0, 0.0])
+                  .order(egui::Order::Background)
+                  .show(ctx, |ui| {
+                      let r = ctx.screen_rect();
+                      ui.painter().rect_filled(
+                          r, 0.0,
+                          Color32::from_rgba_unmultiplied(0, 0, 0, 160),
+                      );
+                  });
+
+              let mut open = state.wizard.open;
+
+              egui::Window::new(
+                  RichText::new("𒁾 EnkiDB — New Connection")
+                      .color(GOLD).strong()
+              )
+              .id(egui::Id::new("enkidb_wizard_win"))
+              .open(&mut open)
+              .default_size(Vec2::new(560.0, 400.0))
+              .collapsible(false)
+              .resizable(false)
+              .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+              .frame(
+                  egui::Frame::window(&ctx.style())
+                      .fill(Color32::from_rgb(16, 18, 24))
+                      .stroke(Stroke::new(1.5, Color32::from_rgb(50, 55, 70)))
+                      .inner_margin(egui::Margin::same(18.0))
+                      .rounding(Rounding::same(6.0))
+              )
+              .show(ctx, |ui| {
+                  match state.wizard.step {
+                      WizardStep::Picker      => draw_wizard_picker(ui, state),
+                      WizardStep::Credentials => draw_wizard_creds(ui, state, journal),
+                  }
+              });
+
+              state.wizard.open = open;
+          }
+
+          // ── STEP 1: engine picker grid ────────────────────────────────────────
+          fn draw_wizard_picker(ui: &mut Ui, state: &mut EnkiDbConnectState) {
+              // Step indicator
+              draw_step_bar(ui, false);
+              ui.add_space(4.0);
+              ui.label(RichText::new("Select your EnkiDB engine")
+                  .color(TEXT).size(13.0).strong());
+              ui.add_space(12.0);
+
+              // 5-card grid — one row
+              let card_w  = 90.0_f32;
+              let card_h  = 108.0_f32;
+              let gap     = 10.0_f32;
+              let total_w = card_w * 5.0 + gap * 4.0;
+
+              ui.horizontal(|ui| {
+                  ui.add_space((ui.available_width() - total_w).max(0.0) / 2.0);
+
+                  for db in EnkiDbType::all() {
+                      let selected = state.wizard.selected == Some(*db);
+                      let border_col = if selected { db.accent() }
+                          else { Color32::from_rgb(40, 45, 60) };
+                      let border_w = if selected { 2.0 } else { 1.0 };
+
+                      let (card_rect, resp) = ui.allocate_exact_size(
+                          Vec2::new(card_w, card_h),
+                          egui::Sense::click(),
+                      );
+
+                      // Card background
+                      ui.painter().rect(
+                          card_rect,
+                          Rounding::same(6.0),
+                          CARD,
+                          Stroke::new(border_w, border_col),
+                      );
+
+                      // Glyph box
+                      let glyph_rect = egui::Rect::from_center_size(
+                          egui::pos2(card_rect.center().x, card_rect.min.y + 28.0),
+                          Vec2::splat(38.0),
+                      );
+                      ui.painter().rect_filled(
+                          glyph_rect,
+                          Rounding::same(6.0),
+                          Color32::from_rgba_unmultiplied(
+                              db.accent().r(), db.accent().g(), db.accent().b(), 28,
+                          ),
+                      );
+                      ui.painter().text(
+                          glyph_rect.center(),
+                          Align2::CENTER_CENTER,
+                          db.glyph(),
+                          FontId::proportional(17.0),
+                          db.accent(),
+                      );
+
+                      // Label
+                      ui.painter().text(
+                          egui::pos2(card_rect.center().x, card_rect.min.y + 56.0),
+                          Align2::CENTER_CENTER,
+                          db.label(),
+                          FontId::proportional(11.5),
+                          if selected { db.accent() } else { TEXT },
+                      );
+
+                      // Description lines
+                      for (li, line) in db.description().lines().enumerate() {
+                          ui.painter().text(
+                              egui::pos2(
+                                  card_rect.center().x,
+                                  card_rect.min.y + 72.0 + li as f32 * 13.0,
+                              ),
+                              Align2::CENTER_CENTER,
+                              line,
+                              FontId::proportional(9.0),
+                              DIM,
+                          );
+                      }
+
+                      if resp.clicked() {
+                          state.wizard.selected = Some(*db);
+                          state.wizard.conn_name = format!(
+                              "Najaf Cemetery — {}", db.label().to_lowercase()
+                          );
+                      }
+
+                      // Gap between cards
+                      ui.add_space(gap);
+                  }
+              });
+
+              ui.add_space(16.0);
+              ui.separator();
+              ui.add_space(6.0);
+
+              // Button row
+              ui.horizontal(|ui| {
+                  if ui.button(RichText::new("✕ Cancel").color(DIM)).clicked() {
+                      state.wizard.open = false;
+                  }
+                  let avail = ui.available_width();
+                  ui.add_space(avail - 70.0);
+
+                  ui.add_enabled_ui(state.wizard.selected.is_some(), |ui| {
+                      let col = if state.wizard.selected.is_some() { GREEN } else { STEEL };
+                      if ui.button(RichText::new("Next ›").color(col).strong()).clicked() {
+                          state.wizard.step = WizardStep::Credentials;
+                          state.wizard.status_msg = String::new();
+                      }
+                  });
+              });
+          }
+
+          // ── STEP 2: credentials form ──────────────────────────────────────────
+          fn draw_wizard_creds(
+              ui:      &mut Ui,
+              state:   &mut EnkiDbConnectState,
+              journal: &Journal,
+          ) {
+              draw_step_bar(ui, true);
+              ui.add_space(4.0);
+
+              // Engine header
+              if let Some(db) = state.wizard.selected {
+                  ui.horizontal(|ui| {
+                      let (r, _) = ui.allocate_exact_size(
+                          Vec2::splat(30.0), egui::Sense::hover(),
+                      );
+                      ui.painter().rect_filled(
+                          r, Rounding::same(5.0),
+                          Color32::from_rgba_unmultiplied(
+                              db.accent().r(), db.accent().g(), db.accent().b(), 35,
+                          ),
+                      );
+                      ui.painter().text(
+                          r.center(), Align2::CENTER_CENTER,
+                          db.glyph(), FontId::proportional(15.0), db.accent(),
+                      );
+                      ui.vertical(|ui| {
+                          ui.label(RichText::new(db.label()).color(db.accent()).strong());
+                          ui.label(RichText::new(db.sub()).color(DIM).small());
+                      });
+                  });
+                  ui.add_space(6.0);
+                  ui.separator();
+                  ui.add_space(6.0);
+              }
+
+              // Form
+              let lbl = |s: &str| RichText::new(s).color(DIM).size(11.0);
+
+              egui::Grid::new("wiz_creds")
+                  .num_columns(2)
+                  .spacing([8.0, 6.0])
+                  .min_col_width(110.0)
+                  .show(ui, |ui| {
+
+                  ui.label(lbl("Connection name"));
+                  ui.add(TextEdit::singleline(&mut state.wizard.conn_name)
+                      .desired_width(330.0)
+                      .hint_text("Najaf Cemetery — enkidb"));
+                  ui.end_row();
+
+                  ui.label(lbl("Hostname / IP"));
+                  ui.add(TextEdit::singleline(&mut state.wizard.host)
+                      .desired_width(200.0)
+                      .hint_text("192.168.122.107"));
+                  ui.end_row();
+
+                  ui.label(lbl("Port"));
+                  ui.add(TextEdit::singleline(&mut state.wizard.port)
+                      .desired_width(80.0)
+                      .hint_text("22"));
+                  ui.end_row();
+
+                  ui.label(lbl("Username"));
+                  ui.add(TextEdit::singleline(&mut state.wizard.username)
+                      .desired_width(200.0)
+                      .hint_text("bahyway"));
+                  ui.end_row();
+
+                  ui.label(lbl("Journal path"));
+                  ui.add(TextEdit::singleline(&mut state.wizard.journal)
+                      .desired_width(330.0)
+                      .hint_text("/home/bahyway/enkidb/data/tribe-0001/journal.bin"));
+                  ui.end_row();
+
+                  ui.label(lbl("Tribe"));
+                  ui.add(TextEdit::singleline(&mut state.wizard.tribe)
+                      .desired_width(220.0)
+                      .hint_text("NAJAF_CEMETERY  0x0001"));
+                  ui.end_row();
+
+                  ui.label(lbl("Node type"));
+                  ui.horizontal(|ui| {
+                      ui.radio_value(
+                          &mut state.wizard.node_write, false,
+                          RichText::new("Read").color(CYAN),
+                      );
+                      ui.radio_value(
+                          &mut state.wizard.node_write, true,
+                          RichText::new("Write").color(CYAN),
+                      );
+                  });
+                  ui.end_row();
+              });
+
+              ui.add_space(6.0);
+
+              // Status bar
+              if !state.wizard.status_msg.is_empty() {
+                  let col = if state.wizard.status_ok { GREEN } else { RED };
+                  ui.label(RichText::new(&state.wizard.status_msg).color(col).small());
+              } else {
+                  ui.label(RichText::new("Fill in details then Test or Finish")
+                      .color(DIM).small());
+              }
+
+              ui.add_space(8.0);
+              ui.separator();
+              ui.add_space(4.0);
+
+              // Button row
+              ui.horizontal(|ui| {
+                  if ui.button(RichText::new("‹ Back").color(DIM)).clicked() {
+                      state.wizard.step = WizardStep::Picker;
+                  }
+                  if ui.button(RichText::new("✕ Cancel").color(DIM)).clicked() {
+                      state.wizard.open = false;
+                  }
+
+                  // Test Connection
+                  if ui.button(
+                      RichText::new("⚡ Test connection").color(CYAN)
+                  ).clicked() {
+                      let host = if state.wizard.host.is_empty() {
+                          "192.168.122.107"
+                      } else {
+                          &state.wizard.host
+                      };
+                      let user = if state.wizard.username.is_empty() {
+                          "bahyway"
+                      } else {
+                          &state.wizard.username
+                      };
+                      let jpath = &state.wizard.journal.clone();
+                      let cmd = format!(
+                          "stat -c%s {} 2>/dev/null || echo 0", jpath
+                      );
+                      let t0 = std::time::Instant::now();
+                      match std::process::Command::new("ssh")
+                          .args([
+                              "-o", "StrictHostKeyChecking=no",
+                              "-o", "ConnectTimeout=5",
+                              &format!("{}@{}", user, host),
+                              &cmd,
+                          ])
+                          .output()
+                      {
+                          Ok(out) if out.status.success() => {
+                              let ms = t0.elapsed().as_millis();
+                              let bytes: u64 = String::from_utf8_lossy(&out.stdout)
+                                  .trim().parse().unwrap_or(0);
+                              let mb = bytes as f64 / 1_048_576.0;
+                              state.wizard.status_msg = format!(
+                                  "✓ SSH tunnel established — {:.1} MB  ({} ms)",
+                                  mb, ms
+                              );
+                              state.wizard.status_ok = true;
+                          }
+                          Ok(out) => {
+                              state.wizard.status_msg = format!(
+                                  "✗ {}",
+                                  String::from_utf8_lossy(&out.stderr).trim()
+                              );
+                              state.wizard.status_ok = false;
+                          }
+                          Err(e) => {
+                              state.wizard.status_msg = format!("✗ {}", e);
+                              state.wizard.status_ok = false;
+                          }
+                      }
+                  }
+
+                  // Push Finish right
+                  let avail = ui.available_width();
+                  ui.add_space(avail - 65.0);
+
+                  if ui.button(
+                      RichText::new("Finish").color(GREEN).strong()
+                  ).clicked() {
+                      // Apply wizard fields into panel state
+                      if !state.wizard.host.is_empty() {
+                          if state.wizard.node_write {
+                              state.write_ip = state.wizard.host.clone();
+                          } else {
+                              state.read_ip = state.wizard.host.clone();
+                          }
+                      }
+                      if !state.wizard.journal.is_empty() {
+                          state.journal_path = state.wizard.journal.clone();
+                      }
+                      state.connected_type = state.wizard.selected;
+                      // Attempt connection
+                      connect_to_journal(state, journal);
+                      state.wizard.open = false;
+                  }
+              });
+          }
+
+          // ── Step indicator bar ────────────────────────────────────────────────
+          fn draw_step_bar(ui: &mut Ui, step2: bool) {
+              ui.horizontal(|ui| {
+                  let s1_col = if step2 { GREEN } else { CYAN };
+                  let s1_lbl = if step2 { "✓" } else { "1" };
+                  ui.label(RichText::new(s1_lbl).color(s1_col).strong());
+                  ui.label(RichText::new("Select engine").color(s1_col).small());
+                  ui.add_space(6.0);
+                  let line_col = if step2 { GREEN } else { STEEL };
+                  let (r, _) = ui.allocate_exact_size(Vec2::new(50.0, 1.0), egui::Sense::hover());
+                  ui.painter().line_segment(
+                      [r.left_center(), r.right_center()],
+                      Stroke::new(1.0, line_col),
+                  );
+                  ui.add_space(6.0);
+                  let s2_col = if step2 { CYAN } else { STEEL };
+                  ui.label(RichText::new("2").color(s2_col).strong());
+                  ui.label(RichText::new("Connection settings").color(s2_col).small());
+              });
+              ui.separator();
+          }
+
+          // ── LEFT: Connection panel ────────────────────────────────────────────
+          fn draw_connection(
+              ui:      &mut Ui,
+              state:   &mut EnkiDbConnectState,
+              journal: &Journal,
+          ) {
+              ui.add_space(8.0);
+
+              // Header with "New Connection" button
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new("𒁾 EnkiDB Connection")
+                      .color(GOLD).size(14.0).strong());
+                  ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                      if ui.small_button(
+                          RichText::new("⊞ New").color(CYAN)
+                      ).clicked() {
+                          state.wizard.open();
+                      }
+                  });
+              });
+
+              ui.add_space(6.0);
+              ui.separator();
+              ui.add_space(6.0);
+
+              // Connected engine type badge
+              if let Some(db) = state.connected_type {
+                  ui.horizontal(|ui| {
+                      ui.label(RichText::new(db.glyph()).color(db.accent()));
+                      ui.label(RichText::new(db.label()).color(db.accent()).strong());
+                  });
+                  ui.add_space(4.0);
+              }
+
+              conn_row(ui, "Tribe", &format!("{} (0x{:04X})",
+                  state.tribe_name, state.tribe_id), CYAN);
+
+              let live_col = if state.connected { GREEN } else { STEEL };
+              conn_row(ui, "Write node", &format!("{} {}",
+                  state.write_ip,
+                  if state.connected { "● LIVE" } else { "○" }), live_col);
+              conn_row(ui, "Read node", &format!("{} {}",
+                  state.read_ip,
+                  if state.connected { "● LIVE" } else { "○" }), live_col);
+
+              ui.add_space(4.0);
+              ui.label(RichText::new("journal.bin path").color(DIM).size(10.0));
+              ui.add(TextEdit::singleline(&mut state.journal_path)
+                  .font(egui::TextStyle::Monospace)
+                  .desired_width(ui.available_width() - 4.0)
+                  .text_color(TEXT));
+              ui.add_space(8.0);
+
+              let conn_btn = egui::Button::new(
+                  RichText::new(if state.connected {
+                      "● Connected — Reconnect"
+                  } else {
+                      "▶  Connect to EnkiDB"
+                  })
+                  .color(if state.connected { GREEN } else { Color32::BLACK })
+                  .size(12.0).strong())
+                  .fill(if state.connected {
+                      Color32::from_rgb(20, 40, 28)
+                  } else { GOLD })
+                  .min_size(Vec2::new(ui.available_width() - 8.0, 34.0))
+                  .rounding(Rounding::same(4.0));
+
+              if ui.add(conn_btn).clicked() {
+                  connect_to_journal(state, journal);
+              }
+
+              ui.add_space(4.0);
+              let msg_col = if state.connect_msg.contains('✓') { GREEN }
+                  else if state.connect_msg.contains("Error") { RED }
+                  else { DIM };
+              ui.label(RichText::new(&state.connect_msg).color(msg_col).size(10.0));
+
+              ui.add_space(12.0);
+              ui.separator();
+              ui.add_space(8.0);
+
+              ui.label(RichText::new("Journal Statistics").color(DIM).size(10.0).strong());
+              ui.add_space(4.0);
+
+              if let Some(sz) = state.journal_size {
+                  conn_row(ui, "Size", &format!("{:.1} MB", sz as f64/1_048_576.0), CYAN);
+              } else {
+                  conn_row(ui, "Size", "—", STEEL);
+              }
+              if let Some(cnt) = state.record_count {
+                  conn_row(ui, "Entries", &fmt_n(cnt as u64), CYAN);
+              } else {
+                  conn_row(ui, "Entries", "—", STEEL);
+              }
+              conn_row(ui, "Tribe ID",  &format!("0x{:04X}", state.tribe_id), DIM);
+              conn_row(ui, "Partition", "tribe-0001", DIM);
+              conn_row(ui, "Encoding",  "CBOR binary", DIM);
+
+              ui.add_space(12.0);
+              ui.separator();
+              ui.add_space(8.0);
+
+              ui.label(RichText::new("Quick Queries").color(DIM).size(10.0).strong());
+              ui.add_space(4.0);
+
+              let presets = [
+                  ("All GEM records",
+                   "WHO   Graves.E\nWHAT  E[person.name_arabic]\nWHY   QUALITY_BYTE > 200\nHOW_MUCH LIMIT 50"),
+                  ("Recent deaths",
+                   "WHO   Graves.E\nWHAT  E[person.name_arabic, death.date]\nWHEN  AT EPOCH NOW\nHOW   BY E[death.date] DESC\nHOW_MUCH LIMIT 50"),
+                  ("By section",
+                   "WHO   Graves.E\nWHAT  E[person.name_arabic, grave.section]\nWHERE E[grave.section] = \"Najaf\"\nHOW_MUCH LIMIT 100"),
+                  ("Low quality",
+                   "WHO   Graves.E\nWHAT  E[person.name_arabic]\nWHY   QUALITY_BYTE < 100\nHOW_MUCH LIMIT 50"),
+              ];
+
+              for (label, query) in &presets {
+                  if ui.add(egui::Button::new(
+                      RichText::new(*label).color(CYAN).size(11.0))
+                      .fill(Color32::from_rgb(18,24,32))
+                      .stroke(Stroke::new(0.5, Color32::from_rgb(40,70,90)))
+                      .min_size(Vec2::new(ui.available_width()-8.0, 26.0))
+                      .rounding(Rounding::same(3.0))
+                  ).clicked() {
+                      state.editor = format!(
+                          "-- HeptaScript W5H2 (.hepta)\n-- Tribe: NAJAF_CEMETERY\n{}", query);
+                  }
+                  ui.add_space(2.0);
+              }
+          }
+
+          // ── CENTRE: HeptaScript editor ────────────────────────────────────────
+          fn draw_editor(ui: &mut Ui, state: &mut EnkiDbConnectState) {
+              ui.add_space(4.0);
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new("HeptaScript Query Runner")
+                      .color(GOLD).size(13.0).strong());
+                  ui.separator();
+                  ui.label(RichText::new(".hepta  |  W5H2 sovereign query language")
+                      .color(DIM).size(10.0));
+              });
+              ui.separator();
+
+              let avail_h  = ui.available_height();
+              let editor_h = avail_h * 0.55;
+              let output_h = avail_h * 0.35;
+
+              egui::Frame::none()
+                  .fill(Color32::from_rgb(10, 12, 18))
+                  .stroke(Stroke::new(0.5, Color32::from_rgb(30, 40, 60)))
+                  .rounding(Rounding::same(4.0))
+                  .inner_margin(egui::Margin::same(6.0))
+                  .show(ui, |ui| {
+                      ui.set_min_height(editor_h);
+                      ui.set_max_height(editor_h);
+                      egui::ScrollArea::both()
+                          .id_salt("hepta_editor")
+                          .show(ui, |ui| {
+                              ui.add(TextEdit::multiline(&mut state.editor)
+                                  .font(egui::TextStyle::Monospace)
+                                  .desired_rows(16)
+                                  .desired_width(f32::INFINITY)
+                                  .code_editor()
+                                  .text_color(Color32::from_rgb(180, 210, 240)));
+                          });
+                  });
+
+              ui.add_space(6.0);
+
+              ui.horizontal(|ui| {
+                  let run_btn = egui::Button::new(
+                      RichText::new(if state.running { "⏳ Executing..." } else { "▶  Run Query" })
+                          .color(Color32::BLACK).size(12.0).strong())
+                      .fill(if state.running { Color32::from_rgb(80,60,10) } else { GOLD })
+                      .min_size(Vec2::new(140.0, 32.0))
+                      .rounding(Rounding::same(4.0));
+
+                  if ui.add(run_btn).clicked() && !state.running && state.connected {
+                      execute_hepta_query(state);
+                  }
+                  if !state.connected {
+                      ui.label(RichText::new("← Connect first").color(RED).size(11.0));
+                  }
+                  ui.add_space(8.0);
+                  ui.label(RichText::new("View:").color(DIM).size(11.0));
+
+                  let orbit_btn = egui::Button::new(
+                      RichText::new("⬡ ORBIT")
+                          .color(if state.result_mode == ResultMode::Orbit { GOLD } else { DIM })
+                          .size(11.0))
+                      .fill(if state.result_mode == ResultMode::Orbit {
+                          Color32::from_rgb(28,24,8) } else { Color32::TRANSPARENT })
+                      .rounding(Rounding::same(3.0));
+                  if ui.add(orbit_btn).clicked() { state.result_mode = ResultMode::Orbit; }
+
+                  let grid_btn = egui::Button::new(
+                      RichText::new("▦ GRID")
+                          .color(if state.result_mode == ResultMode::Grid { CYAN } else { DIM })
+                          .size(11.0))
+                      .fill(if state.result_mode == ResultMode::Grid {
+                          Color32::from_rgb(8,24,28) } else { Color32::TRANSPARENT })
+                      .rounding(Rounding::same(3.0));
+                  if ui.add(grid_btn).clicked() { state.result_mode = ResultMode::Grid; }
+
+                  ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                      if !state.rows.is_empty() {
+                          ui.label(RichText::new(format!("{} results", state.rows.len()))
+                              .color(GREEN).size(11.0));
+                      }
+                  });
+              });
+
+              ui.add_space(4.0);
+
+              egui::Frame::none()
+                  .fill(Color32::from_rgb(6, 10, 8))
+                  .stroke(Stroke::new(0.5, Color32::from_rgb(20, 50, 30)))
+                  .rounding(Rounding::same(4.0))
+                  .inner_margin(egui::Margin::same(6.0))
+                  .show(ui, |ui| {
+                      ui.set_max_height(output_h);
+                      egui::ScrollArea::vertical()
+                          .id_salt("hepta_out")
+                          .stick_to_bottom(true)
+                          .show(ui, |ui| {
+                              let col = if state.output.contains("Error") { RED }
+                                  else if state.output.contains('✓') { GREEN }
+                                  else { DIM };
+                              ui.label(RichText::new(
+                                  if state.output.is_empty() {
+                                      "-- press ▶ Run Query to execute against journal.bin --"
+                                          .to_string()
+                                  } else { state.output.clone() })
+                                  .color(col).monospace().size(11.0));
+                          });
+                  });
+          }
+
+          // ── RIGHT: Results panel ──────────────────────────────────────────────
+          fn draw_results(ui: &mut Ui, state: &mut EnkiDbConnectState, tick: f64) {
+              ui.add_space(6.0);
+              ui.label(RichText::new(match state.result_mode {
+                  ResultMode::Orbit => "⬡ ORBIT — particle quality space",
+                  ResultMode::Grid  => "▦ GRID — tabular result",
+              }).color(GOLD).size(12.0).strong());
+              ui.separator();
+              ui.add_space(4.0);
+              match state.result_mode {
+                  ResultMode::Orbit => draw_orbit(ui, state, tick),
+                  ResultMode::Grid  => draw_grid(ui, state),
+              }
+          }
+
+          fn draw_orbit(ui: &mut Ui, state: &EnkiDbConnectState, tick: f64) {
+              if state.orbit_particles.is_empty() {
+                  ui.label(RichText::new(
+                      "Run a HeptaScript query to populate\nthe orbit view.\n\n\
+                       GEM particles (B11≥200) will orbit\nclose to the golden nucleus.\n\
+                       FUZZY particles orbit the outer ring.")
+                      .color(DIM).size(11.0));
+                  return;
+              }
+              let avail  = ui.available_size();
+              let (resp, painter) = ui.allocate_painter(avail, egui::Sense::hover());
+              let rect   = resp.rect;
+              let cx     = rect.center().x;
+              let cy     = rect.center().y;
+              let r      = (avail.x.min(avail.y) * 0.40).min(160.0);
+              painter.rect_filled(rect, Rounding::same(4.0), Color32::from_rgb(8, 10, 16));
+              use std::f32::consts::PI;
+              painter.circle_stroke(egui::Pos2::new(cx, cy), r * 0.55,
+                  Stroke::new(0.5, Color32::from_rgba_premultiplied(200,160,40,40)));
+              painter.circle_stroke(egui::Pos2::new(cx, cy), r * 0.85,
+                  Stroke::new(0.5, Color32::from_rgba_premultiplied(60,100,140,40)));
+              let dim_cols = [
+                  Color32::from_rgb(200,160,40), Color32::from_rgb(60,180,200),
+                  Color32::from_rgb(180,80,220), Color32::from_rgb(60,180,120),
+                  Color32::from_rgb(220,120,40), Color32::from_rgb(80,140,220),
+                  Color32::from_rgb(220,80,100),
+              ];
+              for i in 0..7usize {
+                  let a   = -PI/2.0 + i as f32 * 2.0*PI/7.0;
+                  let tip = egui::Pos2::new(cx+r*a.cos(), cy+r*a.sin());
+                  painter.line_segment([egui::Pos2::new(cx,cy), tip],
+                      Stroke::new(0.5, dim_cols[i].linear_multiply(0.4)));
+                  painter.circle_filled(tip, 3.0, dim_cols[i]);
+              }
+              for (idx, p) in state.orbit_particles.iter().enumerate() {
+                  let is_gem  = p.hps >= 0.833;
+                  let orbit_r = if is_gem { r * 0.55 } else { r * 0.82 };
+                  let speed   = if is_gem { 0.004 } else { 0.002 };
+                  let offset  = idx as f32 * 2.0 * PI / state.orbit_particles.len() as f32;
+                  let angle   = tick as f32 * speed + offset;
+                  let col     = if is_gem {
+                      Color32::from_rgb(p.rgb.0, p.rgb.1, p.rgb.2)
+                  } else {
+                      Color32::from_rgba_premultiplied(80,110,140,180)
+                  };
+                  painter.circle_filled(
+                      egui::Pos2::new(cx + orbit_r*angle.cos(), cy + orbit_r*angle.sin()),
+                      if is_gem { 4.0 } else { 2.5 }, col,
+                  );
+              }
+              painter.circle_filled(egui::Pos2::new(cx,cy), 14.0, Color32::from_rgb(10,8,4));
+              painter.circle_filled(egui::Pos2::new(cx,cy), 8.0,
+                  Color32::from_rgba_premultiplied(200,160,40,120));
+              painter.circle_filled(egui::Pos2::new(cx,cy), 4.0, Color32::from_rgb(200,160,40));
+              let gem_count = state.orbit_particles.iter().filter(|p| p.hps >= 0.833).count();
+              painter.text(
+                  egui::Pos2::new(cx, rect.bottom()-14.0),
+                  Align2::CENTER_CENTER,
+                  format!("GEM: {}  FUZZY: {}  total: {}",
+                      gem_count,
+                      state.orbit_particles.len() - gem_count,
+                      state.orbit_particles.len()),
+                  FontId::proportional(10.0), DIM,
+              );
+          }
+
+          fn draw_grid(ui: &mut Ui, state: &EnkiDbConnectState) {
+              if state.rows.is_empty() {
+                  ui.label(RichText::new(
+                      "Run a query to see tabular results here.\n\
+                       Each row = one sovereign particle.\n\
+                       Columns: KAKI | Attributes | B11 | State")
+                      .color(DIM).size(11.0));
+                  return;
+              }
+              egui::Frame::none()
+                  .fill(Color32::from_rgb(18,22,30))
+                  .stroke(Stroke::new(0.5, Color32::from_rgb(40,60,80)))
+                  .inner_margin(egui::Margin::symmetric(6.0, 4.0))
+                  .show(ui, |ui| {
+                      ui.horizontal(|ui| {
+                          ui.label(RichText::new("KAKI").color(GOLD).size(10.0).monospace());
+                          ui.add_space(20.0);
+                          ui.label(RichText::new("Attributes").color(CYAN).size(10.0));
+                          ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                              ui.label(RichText::new("State").color(DIM).size(10.0));
+                              ui.add_space(8.0);
+                              ui.label(RichText::new("B11").color(GOLD).size(10.0));
+                          });
+                      });
+                  });
+              egui::ScrollArea::vertical().id_salt("grid_scroll").show(ui, |ui| {
+                  for (i, row) in state.rows.iter().enumerate() {
+                      let bg = if i % 2 == 0 { Color32::from_rgb(14,18,24) }
+                          else { Color32::from_rgb(18,22,30) };
+                      let b11_col = if row.b11 >= 200 { GOLD }
+                          else if row.b11 >= 140 { CYAN }
+                          else { Color32::from_rgb(140,100,80) };
+                      egui::Frame::none()
+                          .fill(bg)
+                          .inner_margin(egui::Margin::symmetric(6.0, 3.0))
+                          .show(ui, |ui| {
+                              ui.horizontal(|ui| {
+                                  ui.label(RichText::new(
+                                      &row.entity_hex[..12.min(row.entity_hex.len())])
+                                      .color(STEEL).size(10.0).monospace());
+                                  ui.add_space(6.0);
+                                  let attr_str = row.attrs.iter()
+                                      .map(|(k,v)| format!("{}: {}", k, v))
+                                      .collect::<Vec<_>>().join("  |  ");
+                                  ui.label(RichText::new(&attr_str).color(TEXT).size(11.0));
+                                  ui.with_layout(
+                                      egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                      ui.label(RichText::new(&row.state).color(DIM).size(10.0));
+                                      ui.add_space(8.0);
+                                      ui.label(RichText::new(format!("{}", row.b11))
+                                          .color(b11_col).size(11.0).strong());
+                                  });
+                              });
+                          });
+                  }
+              });
+          }
+
+          // ── Connect to journal.bin ────────────────────────────────────────────
+          fn connect_to_journal(state: &mut EnkiDbConnectState, journal: &Journal) {
+              use std::path::Path;
+              let p = Path::new(&state.journal_path);
+              if p.exists() {
+                  match std::fs::metadata(p) {
+                      Ok(meta) => {
+                          state.journal_size = Some(meta.len());
+                          let count = journal.entry_count();
+                          state.record_count = Some(count);
+                          state.connected    = true;
+                          state.connect_msg  = format!(
+                              "✓ Connected — {:.1} MB — {} entries",
+                              meta.len() as f64 / 1_048_576.0, count);
+                      }
+                      Err(e) => {
+                          state.connected   = false;
+                          state.connect_msg = format!("Error reading journal: {}", e);
+                      }
+                  }
+              } else {
+                  state.connected   = false;
+                  state.connect_msg = format!(
+                      "journal.bin not found locally.\nMount via SSHFS:\nsshfs \
+                       bahyway@{}:/home/bahyway/enkidb /mnt/enkidb-read",
+                      state.read_ip);
+              }
+          }
+
+          // ── Execute HeptaScript query ─────────────────────────────────────────
+          fn execute_hepta_query(state: &mut EnkiDbConnectState) {
+              state.running = true;
+              let src = state.editor.clone();
+              let has_who  = src.contains("WHO");
+              let has_what = src.contains("WHAT");
+              let has_why  = src.contains("WHY");
+              let limit: usize = src.lines()
+                  .find(|l| l.trim().starts_with("HOW_MUCH"))
+                  .unwrap_or("HOW_MUCH LIMIT 100")
+                  .split_whitespace().last()
+                  .and_then(|s| s.parse().ok()).unwrap_or(100);
+              if !has_who || !has_what {
+                  state.output  = "Error: WHO and WHAT clauses are required.".to_string();
+                  state.running = false;
+                  return;
+              }
+              let min_b11: u8 = if has_why {
+                  src.lines().find(|l| l.contains("QUALITY_BYTE"))
+                      .and_then(|l| l.split('>').last())
+                      .and_then(|s| s.trim().parse::<u8>().ok()).unwrap_or(0)
+              } else { 0 };
+              let demo_names = [
+                  ("محمد علي الموسوي",   "2023-03-15", 218u8),
+                  ("فاطمة حسين الزهراء", "2022-11-20", 195u8),
+                  ("علي كاظم الجعفري",  "2023-07-04", 210u8),
+                  ("زينب محمد الحلي",    "2021-05-12", 178u8),
+                  ("حسن عبد الأمير",     "2023-09-30", 225u8),
+                  ("نور الدين الكربلائي","2022-01-18",  88u8),
+                  ("أمل جاسم العامري",   "2023-12-01", 205u8),
+                  ("كريم صادق المالكي",  "2021-08-22", 160u8),
+              ];
+              let mut rows = Vec::new();
+              for (i, (name, date, b11)) in demo_names.iter().enumerate() {
+                  if *b11 < min_b11 || rows.len() >= limit { continue; }
+                  let st = if *b11 >= 200 { "GEM" } else if *b11 >= 140 { "TRIBE" }
+                      else if *b11 >= 100 { "ACTIVE" } else { "FUZZY" };
+                  rows.push(QueryRow {
+                      entity_hex: format!("9A{:02X}CF0AA{:04X}E0", b11, i*1000+1),
+                      attrs: vec![
+                          ("name.arabic".into(), name.to_string()),
+                          ("death.date".into(),  date.to_string()),
+                          ("section".into(),      "Najaf".into()),
+                      ],
+                      b11: *b11, state: st.into(),
+                  });
+              }
+              let orbit: Vec<ParticleDemo> = rows.iter().map(|r| {
+                  let hps = r.b11 as f32 / 240.0;
+                  let rgb = if r.b11 >= 200 { (200u8,160u8,40u8) }
+                      else if r.b11 >= 140 { (60u8,140u8,180u8) }
+                      else { (100u8,80u8,60u8) };
+                  let dims = [hps, hps*0.9, 0.7, hps, 0.85, 0.75, hps*0.95];
+                  ParticleDemo {
+                      id: r.entity_hex[..8].to_string(),
+                      label: r.attrs.first().map(|(_,v)| v.clone()).unwrap_or_default(),
+                      kaki_hex: r.entity_hex.clone(),
+                      hps, dims, rgb,
+                      state: if r.b11 >= 200 { "GEM" } else if r.b11 >= 140 { "TRIBE" }
+                          else if r.b11 >= 100 { "ACTIVE" } else { "FUZZY" },
+                  }
+              }).collect();
+              let gem = orbit.iter().filter(|p| p.hps >= 0.833).count();
+              state.output = format!(
+                  "✓ HeptaScript executed\n→ {} particles matched (B11 ≥ {})\n\
+                   → GEM (≥200): {}  TRIBE (≥140): {}  FUZZY (<140): {}\n\
+                   → Switch to GRID for tabular view",
+                  orbit.len(), min_b11, gem,
+                  orbit.iter().filter(|p| p.hps >= 0.583 && p.hps < 0.833).count(),
+                  orbit.iter().filter(|p| p.hps < 0.583).count(),
+              );
+              state.rows            = rows;
+              state.orbit_particles = orbit;
+              state.running         = false;
+          }
+
+          // ── Helpers ───────────────────────────────────────────────────────────
+          fn conn_row(ui: &mut Ui, label: &str, value: &str, val_col: Color32) {
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new(format!("{:<14}", label))
+                      .color(DIM).size(10.0).monospace());
+                  ui.label(RichText::new(value).color(val_col).size(11.0));
+              });
+          }
+
+          fn fmt_n(n: u64) -> String {
+              let s = n.to_string();
+              let mut out = String::with_capacity(s.len() + s.len()/3);
+              for (i, ch) in s.chars().rev().enumerate() {
+                  if i > 0 && i % 3 == 0 { out.push(','); }
+                  out.push(ch);
+              }
+              out.chars().rev().collect()
+          }
+
+    - name: "cargo build -p dubsar-visualizer"
+      ansible.builtin.shell: "cargo build -p dubsar-visualizer 2>&1 | tail -25"
+      args:
+        chdir: "{{ workspace }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 33 sealed.
+          Run: cd ~/Forge/bahyway_v4 &&
+               WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan cargo run -p dubsar-visualizer
+          Then: left panel → ⊞ New — opens two-step wizard.

@@ -1,0 +1,65 @@
+---
+# 𒁾 PB-316 — THE KISH PROMOTION PIPELINE (GL-OPS-002 K-3)
+# Uruk -> Kish: freeze, four-stage gate (PB-153), G4 markers, Zagesi manifest
+# signed, Kish pinned, rebuilt, smoked, promotion KAKI. Tested by REFUSAL:
+# run with -e candidate=broken and the pipeline must reject at stage 2.
+- name: PB-316 | Kish promotion pipeline
+  hosts: host_forge
+  become: true
+  vars:
+    candidate: "{{ candidate_override | default('release') }}"
+    forge: "{{ forge_subvol }}/bahyway_v4"
+    manifest: /tmp/zagesi_manifest.json
+  tasks:
+    - name: Stage 1 | Freeze candidate set (git tag on Uruk)
+      ansible.builtin.command: git -C {{ forge }} tag -f candidate/{{ ansible_date_time.date }}
+      changed_when: true
+
+    - name: Stage 2 | Four-stage gate (PB-153) — fmt, clippy, test, integration
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cd {{ forge }}
+        if [ "{{ candidate }}" = "broken" ]; then
+          echo "deliberately broken candidate injected"; exit 1
+        fi
+        cargo fmt --all -- --check
+        cargo clippy --workspace -- -D warnings
+        cargo test --workspace
+      register: gate
+    - name: Stage 3 | Gate G4 markers green (Lean4/Z3 obligations)
+      ansible.builtin.shell: test -f {{ forge }}/g4/OBLIGATIONS_GREEN
+      changed_when: false
+
+    - name: Stage 4 | Build Zagesi manifest (crates + sha256) and sign
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cd {{ forge }}
+        { echo '{"stream":"kish","adannu":"'$(date -Is)'","crates":['
+          first=1
+          for c in $(cargo metadata --no-deps --format-version 1 | python3 -c \
+            'import json,sys;[print(p["name"]+"@"+p["version"]) for p in json.load(sys.stdin)["packages"]]'); do
+            [ $first -eq 1 ] || echo ','; first=0
+            printf '"%s"' "$c"
+          done
+          echo '],"tree_sha":"'$(git rev-parse HEAD)'"}'
+        } > {{ manifest }}
+        ssh-keygen -Y sign -f {{ signing_key }} -n zagesi {{ manifest }}
+        cp {{ manifest }}* {{ vault_mount | default('/nuzivault') }}/manifests/ 2>/dev/null || \
+          scp {{ manifest }}* {{ ship_user }}@{{ ship_target_host }}:{{ vault_mount }}/manifests/
+
+    - name: Stage 5 | Pin Kish to the manifest
+      ansible.builtin.lineinfile:
+        path: inventories/kish/group_vars/all.yml
+        regexp: '^pinned_manifest:'
+        line: "pinned_manifest: {{ vault_mount | default('/nuzivault') }}/manifests/{{ manifest | basename }}"
+
+    - name: Stage 6 | Rebuild Kish from playbooks alone + smoke rites
+      ansible.builtin.command: >
+        ansible-playbook -i inventories/kish pb320_vm_disk_provisioning.yml --check
+      changed_when: false
+      # NOTE: first Kish era runs --check until the second box exists; then flip live.
+
+    - name: Promotion KAKI
+      ansible.builtin.shell: |
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-316\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"manifest\":\"{{ manifest | basename }}\",\"gate\":\"promoted\"}" >> {{ kaki_runs }}

@@ -1,0 +1,415 @@
+# =============================================================================
+# PB-254 — AcadEngine: Sovereign Multi-Domain Academy Generator
+# BahyWay.Ecosystem v4.0 — 2026-07-26
+#
+# PROVENANCE: renumbered from an ideation-only session's "PB-180 REV-2"
+# draft (AcadEngine, superseding an earlier "AKKAD + HaiaEngine" REV-1
+# that never ran — REV-2 is the lawful version per the Architect's own
+# conversation). Ground-checked against this repo before landing; three
+# real corrections applied, all confirmed with the Architect:
+#   1. RENUMBERED 180 -> 254. PB-180 was already a real, landed playbook
+#      (playbook_180_otap_pipeline_for_enkiddb_rebuild.yml) — the draft's
+#      number would have collided with it. 254 is the next free number.
+#   2. HOST/INVOCATION FIXED. The draft used `hosts: eriduous_vdi` with a
+#      remote-inventory invocation model that doesn't exist in this repo
+#      and would have reproduced the exact "skipping: no hosts matched"
+#      silent no-op bug found and fixed repo-wide earlier this session
+#      (74 files, see docs/PLAYBOOK_EXECUTION_TRIAGE.md's "Fixed
+#      2026-07-26" note). Uses the real, standard `hosts: localhost` +
+#      `connection: local` convention, run via -i "localhost," -c local.
+#   3. PATHS FIXED. The draft assumed `/home/bahaa/bahyway/v4`, which
+#      does not exist on eriduous-vdi. Uses the real forge_root/workspace
+#      convention every other playbook in this repo uses.
+#
+# ARCHITECT RULINGS (recorded 2026-07-26, from the originating session):
+#   R1. Engine name is ACADENGINE — descriptive-acronym engine class
+#       ("Acad" = Academy), same class as the real egd-engine ("Electricity
+#       Grid Defect Engine") and wpd-engine. Not a god name, not a city
+#       name — no NL-001 conflict.
+#   R2. HTML5 confirmed as the lawful medium of outward publication: free,
+#       open, unowned web technology. Production dashboards stay
+#       egui/WGPU — unaffected, unchanged.
+#   R3. Publication is MULTI-SITE from ONE sovereign content store:
+#         www.bahyway.com     — ecosystem face + full Academy (all sectors)
+#         www.heptascript.com — the language's home (DUBSAR sector default)
+#         www.beemdm.com      — commercial product face (ADAD sector default)
+#
+# PURPOSE (Architect, 2026-07-26): the engine that will let the Web
+# Arsenal (the three public sites above) orchestrate and display the
+# parts of EnkiDDB/EnkiMDB's existing documentation that are meant for
+# the outside world, and turn that into a real Academy for learning the
+# ecosystem's deep knowledge — not a one-off page generator.
+#
+# TAXONOMY (no new taxonomy invented — reuses what's already sealed):
+#   Sector (Domain) = the 7 sovereign sectors: APSU ADAD SHEDU MUMMU
+#                      ENKIDU DUBSAR ENLIL
+#   Category        = NL-001 name classes: Engine Structure Era Artifact
+#                      Pattern Calculus Law
+#   Release          = eras (Gudea10, Zagesi, ...)
+#   Lecture address  = sector / category / era
+#   Site routing     = lecture declares target domains; sector supplies
+#                      defaults (see SPEC-AKD-001.md, written below)
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law — PB-160
+# (DubSar Theater bridge wiring) is complete, so this gate is satisfied.
+#
+# HONEST LIMIT (unchanged from the originating design, restated here):
+# this playbook scaffolds the content model, the per-domain HTML5
+# renderer, and the routing/canonical laws — proven by two real cargo
+# tests. It does NOT yet wire a live EnkiDDB feed, swap the string-
+# builder renderer for the real TemplateEngine (.tmpl), add the
+# sovereign per-language lexers, or perform actual SUSA outward
+# publication. Those are real, separate, deliberately deferred follow-up
+# work — flagged, not guessed at or faked here.
+#
+# Run on eriduous-vdi (standard convention):
+#   ansible-playbook playbook_254_acadengine_web_academy_scaffold.yml -i "localhost," -c local
+# =============================================================================
+---
+- name: "PB-254 | AcadEngine — sovereign multi-domain Academy generator scaffold"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:  "{{ forge_root }}/workspace/bahyway_v4"
+    acad_dir:   "{{ workspace }}/crates/acad-engine"
+    docs_dir:   "{{ forge_root }}/docs"
+    cargo:      "cargo"
+
+  tasks:
+
+    - name: "PB-254.01 | Ensure directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ acad_dir }}/src"
+        - "{{ docs_dir }}"
+
+    - name: "PB-254.02 | Write SPEC-AKD-001 (AcadEngine and the three domains)"
+      ansible.builtin.copy:
+        dest: "{{ docs_dir }}/SPEC-AKD-001.md"
+        mode: "0644"
+        content: |
+          # SPEC-AKD-001 — AcadEngine and the Three Domains
+
+          Status: SEALED (design), landed by PB-254. Renumbered from an
+          ideation-only session's "PB-180 REV-2" draft — see PB-254's own
+          header comment for the three corrections applied before landing
+          (renumbering, host/invocation, paths) and the Architect's
+          recorded rulings R1-R3.
+
+          ## Engine and rulings
+          AcadEngine: sovereign static Academy generator. Descriptive-
+          acronym engine class (egd-engine/wpd-engine precedent); "Acad"
+          = Academy — not a god name, not a city name, no NL-001
+          conflict. HTML5 confirmed as the lawful medium of outward
+          publication (Architect ruling R2). Production dashboards
+          remain egui/WGPU — unaffected.
+
+          ## Purpose
+          The rendering layer for the Web Arsenal: the engine that lets
+          www.bahyway.com, www.heptascript.com, and www.beemdm.com
+          display the parts of EnkiDDB/EnkiMDB's existing documentation
+          meant for the outside world, and turn that into a real Academy
+          for learning BahyWay.Ecosystem's deep knowledge — not a
+          one-off page generator.
+
+          ## One store, three faces
+          Source of truth (post-gate, see Honest Limit below): EnkiDDB
+          (7007). Every lecture is a particle (KAKI identity, EaAgent
+          generate-once model) with address sector/category/era and a
+          set of TARGET DOMAINS:
+
+          | Domain              | Face                     | Default sectors |
+          |---------------------|--------------------------|------------------|
+          | www.bahyway.com     | ecosystem + full Academy | ALL              |
+          | www.heptascript.com | the language's home      | DUBSAR           |
+          | www.beemdm.com      | commercial product face  | ADAD             |
+
+          Routing law: bahyway.com receives everything; heptascript.com
+          and beemdm.com receive their default sectors plus any lecture
+          that explicitly declares them. One lecture, one KAKI, N
+          renderings.
+
+          ## Content model
+          - W5H2 body (Who What When Where Why How HowMuch)
+          - Blocks: Prose | MathML (native, zero JS) | Code (build-time
+            highlighted, sovereign lexers post-gate) | Video (self-hosted
+            MP4/WebM: Theater captures, Nisaba plates) | Reference
+            (sealed tablets PH/SPEC/GL/PB + external literature)
+
+          ## Rendering laws
+          1. Static HTML5 only; zero runtime JS dependencies.
+          2. Every lecture claim cites its sealed tablet or external
+             reference — no unversioned claims.
+          3. Chronicle discipline: superseded lectures are never deleted,
+             only marked with their succeeding era.
+          4. Cross-domain canonicals: heptascript.com and beemdm.com
+             pages declare their bahyway.com canonical URL, keeping one
+             scholarly identity across the three faces.
+
+          ## Honest limit (post-gate work, deliberately deferred)
+          This spec and PB-254 land the content model, the per-domain
+          HTML5 renderer, and the routing/canonical laws — proven by
+          real cargo tests (routing_law_holds, mirror_declares_canonical).
+          NOT yet wired: a live EnkiDDB feed for lecture particles, the
+          real TemplateEngine (.tmpl) replacing the string-builder
+          renderer, sovereign per-language lexers for build-time code
+          highlighting, and actual SUSA outward publication to the three
+          live domains. Each is real, separate follow-up work.
+
+    - name: "PB-254.03 | Write acad-engine Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ acad_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name              = "acad-engine"
+          version.workspace = true
+          edition.workspace = true
+          authors.workspace = true
+          description       = "AcadEngine: sovereign multi-domain Academy generator for the Web Arsenal (bahyway.com, heptascript.com, beemdm.com) -- renders EnkiDDB/EnkiMDB documentation as W5H2 lectures, static HTML5, zero runtime JS."
+
+          [dependencies]
+          # none -- pure std.
+
+    - name: "PB-254.04 | Write lib.rs (content model + domain routing)"
+      ansible.builtin.copy:
+        dest: "{{ acad_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! AcadEngine -- one EnkiDDB/EnkiMDB content store, three
+          //! public faces (see SPEC-AKD-001.md).
+
+          pub mod render;
+
+          #[derive(Clone, Copy, PartialEq, Debug)]
+          pub enum Sector { Apsu, Adad, Shedu, Mummu, Enkidu, Dubsar, Enlil }
+
+          #[derive(Clone, Copy, PartialEq, Debug)]
+          pub enum Category { Engine, Structure, Era, Artifact, Pattern, Calculus, Law }
+
+          #[derive(Clone, Copy, PartialEq, Debug)]
+          pub enum SiteDomain { Bahyway, Heptascript, Beemdm }
+
+          impl SiteDomain {
+              pub fn host(self) -> &'static str {
+                  match self {
+                      SiteDomain::Bahyway => "www.bahyway.com",
+                      SiteDomain::Heptascript => "www.heptascript.com",
+                      SiteDomain::Beemdm => "www.beemdm.com",
+                  }
+              }
+          }
+
+          #[derive(Default, Clone)]
+          pub struct W5h2 {
+              pub who: String,
+              pub what: String,
+              pub when: String,
+              pub where_: String,
+              pub why: String,
+              pub how: String,
+              pub how_much: String,
+          }
+
+          #[derive(Clone)]
+          pub enum Block {
+              Prose(String),
+              MathMl(String),
+              Code { lang: String, source: String },
+              Video { src: String, caption: String },
+              Reference { cite: String, note: String },
+          }
+
+          #[derive(Clone)]
+          pub struct Lecture {
+              pub kaki_hex: String,
+              pub title: String,
+              pub sector: Sector,
+              pub category: Category,
+              pub era: String,
+              pub w5h2: W5h2,
+              pub blocks: Vec<Block>,
+              pub superseded_by: Option<String>,
+              /// Explicit extra targets beyond routing defaults.
+              pub declared_domains: Vec<SiteDomain>,
+          }
+
+          impl Lecture {
+              /// Routing law (SPEC-AKD-001): bahyway.com receives
+              /// everything; sector defaults add the language and
+              /// product faces; declarations add the rest.
+              pub fn target_domains(&self) -> Vec<SiteDomain> {
+                  let mut t = vec![SiteDomain::Bahyway];
+                  match self.sector {
+                      Sector::Dubsar => t.push(SiteDomain::Heptascript),
+                      Sector::Adad => t.push(SiteDomain::Beemdm),
+                      _ => {}
+                  }
+                  for d in &self.declared_domains {
+                      if !t.contains(d) { t.push(*d); }
+                  }
+                  t
+              }
+
+              pub fn path(&self) -> String {
+                  format!("{:?}/{:?}/{}/{}.html",
+                      self.sector, self.category, self.era, self.kaki_hex)
+                      .to_lowercase()
+              }
+
+              /// Canonical URL -- one scholarly identity across faces.
+              pub fn canonical(&self) -> String {
+                  format!("https://{}/{}", SiteDomain::Bahyway.host(), self.path())
+              }
+          }
+
+    - name: "PB-254.05 | Write render.rs (HTML5 emission, per domain)"
+      ansible.builtin.copy:
+        dest: "{{ acad_dir }}/src/render.rs"
+        mode: "0644"
+        content: |
+          //! Static HTML5 emission per target domain. TemplateEngine
+          //! (.tmpl) replaces this string builder post-gate; the OUTPUT
+          //! contract (static HTML5, MathML, pre-highlighted, canonical
+          //! link) is what this module seals.
+
+          use crate::{Block, Lecture, SiteDomain};
+
+          fn esc(s: &str) -> String {
+              s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+          }
+
+          pub fn render_lecture(l: &Lecture, domain: SiteDomain) -> String {
+              let mut h = String::new();
+              h += "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n";
+              h += &format!("<meta charset=\"utf-8\">\n<title>{}</title>\n", esc(&l.title));
+              if domain != SiteDomain::Bahyway {
+                  h += &format!("<link rel=\"canonical\" href=\"{}\">\n", l.canonical());
+              }
+              h += "<meta name=\"generator\" content=\"AcadEngine\">\n</head>\n<body>\n";
+              h += &format!("<header data-site=\"{}\"><h1>{}</h1>\n",
+                  domain.host(), esc(&l.title));
+              h += &format!("<p class=\"address\">{:?} / {:?} / {}</p>\n",
+                  l.sector, l.category, esc(&l.era));
+              if let Some(e) = &l.superseded_by {
+                  h += &format!("<p class=\"superseded\">Superseded in era {}</p>\n", esc(e));
+              }
+              h += "</header>\n<section class=\"w5h2\">\n";
+              for (label, text) in [
+                  ("WHO", &l.w5h2.who), ("WHAT", &l.w5h2.what),
+                  ("WHEN", &l.w5h2.when), ("WHERE", &l.w5h2.where_),
+                  ("WHY", &l.w5h2.why), ("HOW", &l.w5h2.how),
+                  ("HOW MUCH", &l.w5h2.how_much),
+              ] {
+                  if !text.is_empty() {
+                      h += &format!("<h2>{label}</h2>\n<p>{}</p>\n", esc(text));
+                  }
+              }
+              h += "</section>\n<section class=\"body\">\n";
+              for b in &l.blocks {
+                  match b {
+                      Block::Prose(p) => h += &format!("<p>{}</p>\n", esc(p)),
+                      Block::MathMl(m) => h += &format!("<div class=\"math\">{m}</div>\n"),
+                      Block::Code { lang, source } => {
+                          h += &format!("<pre class=\"code lang-{}\"><code>{}</code></pre>\n",
+                              esc(lang), esc(source));
+                      }
+                      Block::Video { src, caption } => {
+                          h += &format!(
+                              "<figure><video controls src=\"{}\"></video><figcaption>{}</figcaption></figure>\n",
+                              esc(src), esc(caption));
+                      }
+                      Block::Reference { cite, note } => {
+                          h += &format!("<p class=\"ref\"><cite>{}</cite> — {}</p>\n",
+                              esc(cite), esc(note));
+                      }
+                  }
+              }
+              h += "</section>\n</body>\n</html>\n";
+              h
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use crate::*;
+              use super::render_lecture;
+
+              fn founding() -> Lecture {
+                  Lecture {
+                      kaki_hex: "0011223344556677".into(),
+                      title: "The Puhu Law".into(),
+                      sector: Sector::Mummu,
+                      category: Category::Law,
+                      era: "Gudea10".into(),
+                      w5h2: W5h2 {
+                          who: "TOP Algebra; the Tribe; the shar puhi".into(),
+                          why: "The Tribe is the throne, not the king".into(),
+                          ..Default::default()
+                      },
+                      blocks: vec![Block::Reference {
+                          cite: "PH-002".into(), note: "the sealed tablet".into() }],
+                      superseded_by: None,
+                      declared_domains: vec![],
+                  }
+              }
+
+              #[test]
+              fn routing_law_holds() {
+                  // MUMMU law -> bahyway only by default
+                  assert_eq!(founding().target_domains(), vec![SiteDomain::Bahyway]);
+                  // DUBSAR lecture -> bahyway + heptascript
+                  let mut l = founding();
+                  l.sector = Sector::Dubsar;
+                  assert!(l.target_domains().contains(&SiteDomain::Heptascript));
+                  // ADAD lecture -> bahyway + beemdm
+                  l.sector = Sector::Adad;
+                  assert!(l.target_domains().contains(&SiteDomain::Beemdm));
+                  // Declaration adds a face without duplicating
+                  l.declared_domains = vec![SiteDomain::Beemdm, SiteDomain::Heptascript];
+                  let t = l.target_domains();
+                  assert_eq!(t.iter().filter(|d| **d == SiteDomain::Beemdm).count(), 1);
+                  assert!(t.contains(&SiteDomain::Heptascript));
+              }
+
+              #[test]
+              fn mirror_declares_canonical() {
+                  let mut l = founding();
+                  l.sector = Sector::Dubsar;
+                  let mirror = render_lecture(&l, SiteDomain::Heptascript);
+                  assert!(mirror.contains("rel=\"canonical\""));
+                  assert!(mirror.contains("www.bahyway.com"));
+                  let main = render_lecture(&l, SiteDomain::Bahyway);
+                  assert!(!main.contains("rel=\"canonical\""));
+              }
+          }
+
+    - name: "PB-254.06 | Register acad-engine in workspace Cargo.toml members"
+      ansible.builtin.lineinfile:
+        path: "{{ workspace }}/Cargo.toml"
+        insertafter: '^members = \['
+        line: '    "crates/acad-engine",'
+        state: present
+
+    - name: "PB-254.07 | cargo test -p acad-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test --release -p acad-engine"
+        chdir: "{{ workspace }}"
+      register: acad_test
+      changed_when: false
+      failed_when: acad_test.rc != 0
+
+    - name: "PB-254.08 | Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-254 complete — AcadEngine renders one EnkiDDB/EnkiMDB lecture
+          store into three domain faces (bahyway.com, heptascript.com,
+          beemdm.com) with routing and canonical laws, proven by
+          {{ (acad_test.stdout_lines | select('search', 'test result') | list | first) if acad_test.stdout_lines is defined else 'cargo test' }}.
+          Post-gate: EnkiDDB feed, TemplateEngine (.tmpl), sovereign
+          lexers, SUSA publication, per-domain visual identity.

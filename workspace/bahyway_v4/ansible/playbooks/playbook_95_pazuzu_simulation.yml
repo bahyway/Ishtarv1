@@ -1,0 +1,614 @@
+---
+# =============================================================================
+# PLAYBOOK 95 — PAZUZU Threat Simulation (Godot Theater)
+# PAZUZU-01 through PAZUZU-07 — Seven Mesopotamian demons, seven real gaps
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_95_pazuzu_simulation.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 95 — PAZUZU sovereign threat simulation"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge:   "/home/bahyway/Forge/bahyway_v4"
+    scripts: "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts"
+    scenes:  "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scenes"
+
+  tasks:
+
+    # ── PazuzuAgent.gd — virus state machine ─────────────────────────────────
+    - name: "Write PazuzuAgent.gd"
+      ansible.builtin.copy:
+        dest: "{{ scripts }}/pazuzu_agent.gd"
+        content: |
+          # pazuzu_agent.gd — PAZUZU Sovereign Threat Simulation Agent
+          # BahyWay.Ecosystem v4.0 | DubSar Theater | Godot 4.7
+          #
+          # Seven tests — seven Mesopotamian demon names — seven real CSR gaps.
+          # PAZUZU is both attacker and auditor.
+          # DUB.SAR 𒁾  2026-06-25
+
+          extends Node
+
+          # ── Signals ─────────────────────────────────────────────────────────
+          signal test_started(test_name: String, description: String)
+          signal test_penetrated(test_name: String, gap_confirmed: bool, orbit_effect: String)
+          signal test_series_complete(results: Array)
+          signal nisaba_trigger(b1: int, tribe_id: int)
+
+          # ── State machine ────────────────────────────────────────────────────
+          enum PazuzuState {
+              DORMANT,
+              PROBING,
+              PENETRATING,
+              INFECTING,
+              SEALED
+          }
+
+          var state: PazuzuState = PazuzuState.DORMANT
+          var current_test: int  = 0
+          var results: Array     = []
+          var beta1: int         = 0  # Betti β₁ — loops detected
+
+          # ── Test definitions (seven Mesopotamian demons) ──────────────────────
+          const TESTS = [
+              {
+                  "id":          "PAZUZU-01",
+                  "name":        "THE SILENT WIND",
+                  "myth":        "Pazuzu silences before the storm — credential forgery",
+                  "csr_target":  "CSR-04",
+                  "description": "Replace StubCredentialStore token with 32 zeroed bytes. HEPT handshake succeeds with forged identity.",
+                  "orbit_effect":"GOLDEN_ALIVE → FUZZY_GRAY (identity uncertain)",
+                  "gap":         "AkkadiSafeEngine not wired — StubCredentialStore accepts zeroed token",
+                  "fix":         "Wire AkkadiSafeEngine into CSR-04 — reject token of all zeros",
+              },
+              {
+                  "id":          "PAZUZU-02",
+                  "name":        "LAMASHTU'S CROSSING",
+                  "myth":        "Acts on her own accord — crosses tribe boundaries without permission",
+                  "csr_target":  "CSR-05",
+                  "description": "Client-role connection attempts CrossTribe fan-out without Gilgamesh Passport.",
+                  "orbit_effect":"β₀ cluster boundaries dissolve — tribes merge orbits",
+                  "gap":         "GilgameshPassport not yet required in fan-out path",
+                  "fix":         "CSR-05 must reject CrossTribe KAKI fan-out without Gilgamesh Passport",
+              },
+              {
+                  "id":          "PAZUZU-03",
+                  "name":        "NAMTAR'S SIXTY DISEASES",
+                  "myth":        "Namtar — evil pestilence seizing vital functions — corrupts audit trail",
+                  "csr_target":  "CSR-03",
+                  "description": "Corrupt naru.journal.bin on disk with 60 false entries. NĀRU-SYNC not running — undetected.",
+                  "orbit_effect":"FUZZY_GRAY → FUZZY_DECAY (integrity lost)",
+                  "gap":         "NĀRU-SYNC agent not yet running — WAL file not validated",
+                  "fix":         "Deploy NĀRU-SYNC agent with Blake3 integrity check on every WAL segment",
+              },
+              {
+                  "id":          "PAZUZU-04",
+                  "name":        "ASAG'S MOUNTAIN HORDE",
+                  "myth":        "Asag the smasher — forms coalitions for underworld incursions",
+                  "csr_target":  "CSR-07",
+                  "description": "Open 100 parallel sessions to the same tribe — Tribe isolation not enforced across connection reuse.",
+                  "orbit_effect":"KIBRATU fires PARALLEL_FAILURE — orbit densities spike",
+                  "gap":         "CSR-07 tribe isolation only checked per-connection — not across pool",
+                  "fix":         "Add global tribe lease table — enforce one active lease per tribe_id",
+              },
+              {
+                  "id":          "PAZUZU-05",
+                  "name":        "UTUKKU'S BREACH",
+                  "myth":        "Utukku — the boundary-crossing demon — forges through walls",
+                  "csr_target":  "CSR-01",
+                  "description": "Send HEPT frame with expired SargonPassport (past expires_at). CSR-01 only checked at boot.",
+                  "orbit_effect":"FUZZY_DECAY → DEAD_EXPIRED (session dies)",
+                  "gap":         "SargonPassport expiry not re-checked on every query — only at boot",
+                  "fix":         "Add passport expiry re-check in ConEngine::query() hot path",
+              },
+              {
+                  "id":          "PAZUZU-06",
+                  "name":        "GALLU'S DESCENT",
+                  "myth":        "Seven Gallu demons descend gate by gate, stripping power at each level",
+                  "csr_target":  "CSR-06",
+                  "description": "Trigger 7 sequential connection failures. KIBRATU receives events but no auto-response triggers.",
+                  "orbit_effect":"β₁ > 0 — loop detected — Nisaba triggers ṬUPŠARRU art",
+                  "gap":         "KIBRATU emits events — no sovereign countermeasure triggers automatically",
+                  "fix":         "Add KIBRATU auto-response: on MAROON → suspend session, alert DubSar",
+              },
+              {
+                  "id":          "PAZUZU-07",
+                  "name":        "ERESHKIGAL'S SEAL",
+                  "myth":        "The Queen of the Underworld — final destination, no gate remains",
+                  "csr_target":  "ALL",
+                  "description": "Run PAZUZU-01 through 06 sequentially without fix. Measure cumulative orbit degradation.",
+                  "orbit_effect":"Tribe orbit smashed — particles scatter — β₁ >> 0 — full MAROON",
+                  "gap":         "Combined gap: all seven CSR rules have open gaps simultaneously",
+                  "fix":         "Fix all 6 gaps above — ERESHKIGAL's Seal is the integration test",
+              },
+          ]
+
+          # ── Public API ────────────────────────────────────────────────────────
+          func run_all() -> void:
+              state = PazuzuState.PROBING
+              current_test = 0
+              results = []
+              beta1 = 0
+              _run_next_test()
+
+          func run_single(test_index: int) -> void:
+              if test_index < 0 or test_index >= TESTS.size():
+                  return
+              state = PazuzuState.PROBING
+              _execute_test(TESTS[test_index])
+
+          # ── Internal state machine ────────────────────────────────────────────
+          func _run_next_test() -> void:
+              if current_test >= TESTS.size():
+                  state = PazuzuState.SEALED
+                  emit_signal("test_series_complete", results)
+                  return
+              _execute_test(TESTS[current_test])
+
+          func _execute_test(test: Dictionary) -> void:
+              state = PazuzuState.PENETRATING
+              emit_signal("test_started", test["id"] + " — " + test["name"], test["description"])
+
+              # Simulate CSR probe via TCP to real ConEngine
+              # In production: call ConEngine TCP endpoint with the attack payload
+              # For now: simulate with timer + gap detection logic
+              await get_tree().create_timer(0.8).timeout
+
+              state = PazuzuState.INFECTING
+              var gap_confirmed = _simulate_csr_probe(test)
+
+              # Update Betti β₁ — each penetrated gap adds a loop
+              if gap_confirmed:
+                  beta1 += 1
+                  if beta1 > 0:
+                      emit_signal("nisaba_trigger", beta1, 1)  # tribe_id=1 NAJAF_CEMETERY
+
+              results.append({
+                  "test":          test["id"],
+                  "name":          test["name"],
+                  "gap_confirmed": gap_confirmed,
+                  "orbit_effect":  test["orbit_effect"],
+                  "fix":           test["fix"],
+                  "beta1":         beta1,
+              })
+
+              emit_signal("test_penetrated", test["id"], gap_confirmed, test["orbit_effect"])
+
+              await get_tree().create_timer(0.5).timeout
+              current_test += 1
+              _run_next_test()
+
+          func _simulate_csr_probe(test: Dictionary) -> bool:
+              # Simulate the gap — in production replace with real TCP ConEngine call
+              match test["csr_target"]:
+                  "CSR-04": return true   # StubCredentialStore always accepts zeroed token
+                  "CSR-05": return true   # GilgameshPassport not checked in fan-out
+                  "CSR-03": return true   # NĀRU-SYNC not running
+                  "CSR-07": return true   # pool-level tribe isolation gap
+                  "CSR-01": return true   # passport expiry not re-checked per query
+                  "CSR-06": return true   # no auto-response to KIBRATU MAROON
+                  "ALL":    return true   # cumulative — all gaps open
+                  _:        return false
+
+    # ── OrbitalDegradation.gd ─────────────────────────────────────────────────
+    - name: "Write OrbitalDegradation.gd"
+      ansible.builtin.copy:
+        dest: "{{ scripts }}/orbital_degradation.gd"
+        content: |
+          # orbital_degradation.gd — Drives KAKI particles through orbital states
+          # GOLDEN → FUZZY → DEAD with smooth transitions
+          # Betti number tracking per tribe
+          # Nisaba trigger thresholds baked in
+          # DUB.SAR 𒁾  2026-06-25
+
+          extends Node
+
+          signal state_changed(surrogate: int, old_state: String, new_state: String)
+          signal nisaba_loop(tribe_id: int, b1: int)
+          signal nisaba_void(tribe_id: int, b2: int)
+          signal tiamat_alert(level: String, tribe_id: int)
+
+          # ── Sovereign orbital states ──────────────────────────────────────────
+          enum OrbitalState {
+              GOLDEN_GEM,
+              GOLDEN_ALIVE,
+              FUZZY_AGED,
+              FUZZY_GRAY,
+              FUZZY_DECAY,
+              DEAD_EXPIRED,
+              DEAD_SEALED,
+          }
+
+          # State colours (sovereign palette)
+          const STATE_COLOURS = {
+              OrbitalState.GOLDEN_GEM:    Color(0.831, 0.686, 0.216, 1.0),  # Gold
+              OrbitalState.GOLDEN_ALIVE:  Color(0.784, 0.627, 0.157, 0.9),
+              OrbitalState.FUZZY_AGED:    Color(0.114, 0.620, 0.459, 0.8),  # Teal
+              OrbitalState.FUZZY_GRAY:    Color(0.502, 0.502, 0.502, 0.7),  # Gray
+              OrbitalState.FUZZY_DECAY:   Color(0.937, 0.624, 0.153, 0.6),  # Amber
+              OrbitalState.DEAD_EXPIRED:  Color(0.863, 0.235, 0.235, 0.5),  # Red
+              OrbitalState.DEAD_SEALED:   Color(0.200, 0.100, 0.100, 0.3),  # Dark red
+          }
+
+          const STATE_NAMES = {
+              OrbitalState.GOLDEN_GEM:    "GOLDEN_GEM",
+              OrbitalState.GOLDEN_ALIVE:  "GOLDEN_ALIVE",
+              OrbitalState.FUZZY_AGED:    "FUZZY_AGED",
+              OrbitalState.FUZZY_GRAY:    "FUZZY_GRAY",
+              OrbitalState.FUZZY_DECAY:   "FUZZY_DECAY",
+              OrbitalState.DEAD_EXPIRED:  "DEAD_EXPIRED",
+              OrbitalState.DEAD_SEALED:   "DEAD_SEALED",
+          }
+
+          # ── Particle tracking ─────────────────────────────────────────────────
+          var particles: Dictionary = {}  # surrogate → {state, tribe_id, colour}
+          var tribe_betti: Dictionary = {}  # tribe_id → {b0, b1, b2}
+
+          # ── Nisaba thresholds ─────────────────────────────────────────────────
+          const NISABA_B1_THRESHOLD: int   = 1    # any loop → trigger
+          const NISABA_B2_THRESHOLD: int   = 1    # any void → trigger
+          const NISABA_COLOUR_VARIANCE: float = 50.0
+
+          # ── Register a particle ───────────────────────────────────────────────
+          func register_particle(surrogate: int, tribe_id: int) -> void:
+              particles[surrogate] = {
+                  "state":    OrbitalState.GOLDEN_ALIVE,
+                  "tribe_id": tribe_id,
+                  "colour":   STATE_COLOURS[OrbitalState.GOLDEN_ALIVE],
+                  "lerp_t":   0.0,
+                  "target_colour": STATE_COLOURS[OrbitalState.GOLDEN_ALIVE],
+              }
+              if not tribe_id in tribe_betti:
+                  tribe_betti[tribe_id] = {"b0": 1, "b1": 0, "b2": 0}
+
+          # ── Degrade a particle (PAZUZU infection) ─────────────────────────────
+          func degrade(surrogate: int) -> void:
+              if not surrogate in particles: return
+              var p = particles[surrogate]
+              var old_state = p["state"]
+              var new_state = old_state
+
+              match old_state:
+                  OrbitalState.GOLDEN_GEM:    new_state = OrbitalState.GOLDEN_ALIVE
+                  OrbitalState.GOLDEN_ALIVE:  new_state = OrbitalState.FUZZY_AGED
+                  OrbitalState.FUZZY_AGED:    new_state = OrbitalState.FUZZY_GRAY
+                  OrbitalState.FUZZY_GRAY:    new_state = OrbitalState.FUZZY_DECAY
+                  OrbitalState.FUZZY_DECAY:   new_state = OrbitalState.DEAD_EXPIRED
+                  OrbitalState.DEAD_EXPIRED:  new_state = OrbitalState.DEAD_SEALED
+                  OrbitalState.DEAD_SEALED:   return  # terminal
+
+              p["state"]         = new_state
+              p["target_colour"] = STATE_COLOURS[new_state]
+              p["lerp_t"]        = 0.0
+              emit_signal("state_changed", surrogate,
+                  STATE_NAMES[old_state], STATE_NAMES[new_state])
+
+              # Update Betti for tribe
+              _update_betti(p["tribe_id"])
+
+              # Check TIAMAT alert level
+              _check_tiamat(p["tribe_id"])
+
+          # ── Degrade all particles for a tribe (PAZUZU-07 Ereshkigal) ─────────
+          func degrade_tribe(tribe_id: int) -> void:
+              for surrogate in particles:
+                  if particles[surrogate]["tribe_id"] == tribe_id:
+                      degrade(surrogate)
+
+          # ── Smooth colour Lerp in _process ────────────────────────────────────
+          func _process(delta: float) -> void:
+              for surrogate in particles:
+                  var p = particles[surrogate]
+                  if p["lerp_t"] < 1.0:
+                      p["lerp_t"] = min(1.0, p["lerp_t"] + delta * 2.0)
+                      p["colour"] = p["colour"].lerp(p["target_colour"], p["lerp_t"])
+
+          # ── Betti number update ───────────────────────────────────────────────
+          func _update_betti(tribe_id: int) -> void:
+              var tribe_particles = []
+              for s in particles:
+                  if particles[s]["tribe_id"] == tribe_id:
+                      tribe_particles.append(particles[s]["state"])
+
+              var dead_count  = tribe_particles.filter(func(s): return s >= OrbitalState.DEAD_EXPIRED).size()
+              var fuzzy_count = tribe_particles.filter(func(s): return s >= OrbitalState.FUZZY_AGED and s < OrbitalState.DEAD_EXPIRED).size()
+              var total       = tribe_particles.size()
+
+              # β₀: clusters of alive particles
+              var b0 = max(1, total - dead_count)
+              # β₁: loops — when fuzzy particles form cycles
+              var b1 = fuzzy_count / 3
+              # β₂: voids — dead zones surrounded by fuzzy
+              var b2 = dead_count / 5
+
+              tribe_betti[tribe_id] = {"b0": b0, "b1": b1, "b2": b2}
+
+              # Nisaba triggers
+              if b1 >= NISABA_B1_THRESHOLD:
+                  emit_signal("nisaba_loop", tribe_id, b1)
+              if b2 >= NISABA_B2_THRESHOLD:
+                  emit_signal("nisaba_void", tribe_id, b2)
+
+          # ── TIAMAT alert level ────────────────────────────────────────────────
+          func _check_tiamat(tribe_id: int) -> void:
+              if not tribe_id in tribe_betti: return
+              var b = tribe_betti[tribe_id]
+              var level = ""
+              if b["b1"] >= 3:   level = "MAROON"
+              elif b["b1"] >= 2: level = "ERRA"
+              elif b["b1"] >= 1: level = "KAKKAB"
+              elif b["b0"] < 2:  level = "DILBAT"
+              if level != "":
+                  emit_signal("tiamat_alert", level, tribe_id)
+
+          # ── Query particle colour for Theater rendering ───────────────────────
+          func get_colour(surrogate: int) -> Color:
+              if surrogate in particles:
+                  return particles[surrogate]["colour"]
+              return Color(0.5, 0.5, 0.5, 0.5)
+
+          func get_state(surrogate: int) -> String:
+              if surrogate in particles:
+                  return STATE_NAMES[particles[surrogate]["state"]]
+              return "UNKNOWN"
+
+    # ── pazuzu_theater.tscn ───────────────────────────────────────────────────
+    - name: "Write pazuzu_theater.tscn"
+      ansible.builtin.copy:
+        dest: "{{ scenes }}/pazuzu_theater.tscn"
+        content: |
+          [gd_scene load_steps=3 format=3 uid="uid://pazuzu_theater"]
+
+          [ext_resource type="Script" path="res://scripts/pazuzu_agent.gd" id="1"]
+          [ext_resource type="Script" path="res://scripts/orbital_degradation.gd" id="2"]
+
+          [node name="PazuzuTheater" type="CanvasLayer"]
+          layer = 20
+
+          [node name="Backdrop" type="ColorRect" parent="."]
+          anchors_preset = 15
+          anchor_right = 1.0
+          anchor_bottom = 1.0
+          color = Color(0.04, 0.04, 0.08, 0.92)
+
+          [node name="PazuzuAgent" type="Node" parent="."]
+          script = ExtResource("1")
+
+          [node name="OrbitalDegradation" type="Node" parent="."]
+          script = ExtResource("2")
+
+          [node name="Panel" type="PanelContainer" parent="."]
+          anchors_preset = 15
+          anchor_right = 1.0
+          anchor_bottom = 1.0
+          offset_left = 20.0
+          offset_top = 20.0
+          offset_right = -20.0
+          offset_bottom = -20.0
+
+          [node name="VBox" type="VBoxContainer" parent="Panel"]
+          layout_mode = 2
+          theme_override_constants/separation = 12
+
+          [node name="TitleLabel" type="Label" parent="Panel/VBox"]
+          layout_mode = 2
+          text = "𒀭𒅆𒊒𒍪𒍪  PAZUZU — Sovereign Threat Simulation"
+          theme_override_font_sizes/font_size = 16
+          theme_override_colors/font_color = Color(0.863, 0.235, 0.235, 1)
+
+          [node name="SubTitle" type="Label" parent="Panel/VBox"]
+          layout_mode = 2
+          text = "Seven demons. Seven real CSR gaps. Seven fixes."
+          theme_override_font_sizes/font_size = 11
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="HSep0" type="HSeparator" parent="Panel/VBox"]
+          layout_mode = 2
+
+          [node name="ContentRow" type="HBoxContainer" parent="Panel/VBox"]
+          layout_mode = 2
+          size_flags_vertical = 3
+          theme_override_constants/separation = 16
+
+          [node name="TestList" type="VBoxContainer" parent="Panel/VBox/ContentRow"]
+          layout_mode = 2
+          custom_minimum_size = Vector2(320, 0)
+          theme_override_constants/separation = 6
+
+          [node name="TestListTitle" type="Label" parent="Panel/VBox/ContentRow/TestList"]
+          layout_mode = 2
+          text = "PAZUZU Test Series"
+          theme_override_font_sizes/font_size = 12
+          theme_override_colors/font_color = Color(0.863, 0.235, 0.235, 1)
+
+          [node name="StatusPanel" type="VBoxContainer" parent="Panel/VBox/ContentRow"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+          theme_override_constants/separation = 8
+
+          [node name="CurrentTest" type="Label" parent="Panel/VBox/ContentRow/StatusPanel"]
+          layout_mode = 2
+          text = "Status: DORMANT — press Run to begin"
+          theme_override_font_sizes/font_size = 13
+          theme_override_colors/font_color = Color(0.784, 0.627, 0.157, 1)
+
+          [node name="BettiDisplay" type="Label" parent="Panel/VBox/ContentRow/StatusPanel"]
+          layout_mode = 2
+          text = "β₀: — | β₁: — | β₂: —"
+          theme_override_font_sizes/font_size = 11
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="TiamtAlert" type="Label" parent="Panel/VBox/ContentRow/StatusPanel"]
+          layout_mode = 2
+          text = "TIAMAT: DORMANT"
+          theme_override_font_sizes/font_size = 12
+          theme_override_colors/font_color = Color(0.200, 0.700, 0.300, 1)
+
+          [node name="NisabaStatus" type="Label" parent="Panel/VBox/ContentRow/StatusPanel"]
+          layout_mode = 2
+          text = "Nisaba (𒀭𒉀): waiting for β₁ > 0"
+          theme_override_font_sizes/font_size = 11
+          theme_override_colors/font_color = Color(0.612, 0.502, 0.910, 1)
+
+          [node name="HSep1" type="HSeparator" parent="Panel/VBox"]
+          layout_mode = 2
+
+          [node name="BtnRow" type="HBoxContainer" parent="Panel/VBox"]
+          layout_mode = 2
+
+          [node name="RunAllBtn" type="Button" parent="Panel/VBox/BtnRow"]
+          layout_mode = 2
+          text = "▶ Run All PAZUZU Tests"
+
+          [node name="Spacer" type="Control" parent="Panel/VBox/BtnRow"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+
+          [node name="CloseBtn" type="Button" parent="Panel/VBox/BtnRow"]
+          layout_mode = 2
+          text = "✕ Close"
+
+          [node name="ResultsScroll" type="ScrollContainer" parent="Panel/VBox"]
+          layout_mode = 2
+          custom_minimum_size = Vector2(0, 200)
+
+          [node name="ResultsContainer" type="VBoxContainer" parent="Panel/VBox/ResultsScroll"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+
+    - name: "Write pazuzu_controller.gd"
+      ansible.builtin.copy:
+        dest: "{{ scripts }}/pazuzu_controller.gd"
+        content: |
+          # pazuzu_controller.gd — Wires PazuzuAgent + OrbitalDegradation + Theater UI
+          # DUB.SAR 𒁾  2026-06-25
+          extends CanvasLayer
+
+          @onready var agent       = $PazuzuAgent
+          @onready var degradation = $OrbitalDegradation
+          @onready var run_btn     = $Panel/VBox/BtnRow/RunAllBtn
+          @onready var close_btn   = $Panel/VBox/BtnRow/CloseBtn
+          @onready var current_lbl = $Panel/VBox/ContentRow/StatusPanel/CurrentTest
+          @onready var betti_lbl   = $Panel/VBox/ContentRow/StatusPanel/BettiDisplay
+          @onready var tiamat_lbl  = $Panel/VBox/ContentRow/StatusPanel/TiamtAlert
+          @onready var nisaba_lbl  = $Panel/VBox/ContentRow/StatusPanel/NisabaStatus
+          @onready var results_box = $Panel/VBox/ResultsScroll/ResultsContainer
+          @onready var test_list   = $Panel/VBox/ContentRow/TestList
+
+          const C_GOLD    = Color(0.784, 0.627, 0.157, 1)
+          const C_RED     = Color(0.863, 0.235, 0.235, 1)
+          const C_GREEN   = Color(0.200, 0.700, 0.300, 1)
+          const C_AMBER   = Color(0.937, 0.624, 0.153, 1)
+          const C_PURPLE  = Color(0.612, 0.502, 0.910, 1)
+          const C_DIM     = Color(0.392, 0.431, 0.510, 1)
+
+          # Register 10 demo particles per tribe for degradation
+          var DEMO_TRIBE_ID = 1
+
+          func _ready() -> void:
+              # Connect signals
+              agent.test_started.connect(_on_test_started)
+              agent.test_penetrated.connect(_on_test_penetrated)
+              agent.test_series_complete.connect(_on_series_complete)
+              agent.nisaba_trigger.connect(_on_nisaba_trigger)
+              degradation.tiamat_alert.connect(_on_tiamat_alert)
+              degradation.nisaba_loop.connect(_on_nisaba_loop)
+
+              run_btn.pressed.connect(_on_run_all)
+              close_btn.pressed.connect(func(): visible = false)
+
+              # Register demo particles
+              for i in range(20):
+                  degradation.register_particle(i, DEMO_TRIBE_ID)
+
+              # Build test list UI
+              _build_test_list()
+
+          func _build_test_list() -> void:
+              for test in agent.TESTS:
+                  var row = HBoxContainer.new()
+                  var status = Label.new()
+                  status.text = "○"
+                  status.add_theme_color_override("font_color", C_DIM)
+                  status.custom_minimum_size = Vector2(20, 0)
+                  status.name = "Status_" + test["id"].replace("-","_")
+                  row.add_child(status)
+                  var lbl = Label.new()
+                  lbl.text = test["id"] + "  " + test["name"]
+                  lbl.add_theme_font_size_override("font_size", 10)
+                  lbl.add_theme_color_override("font_color", C_DIM)
+                  row.add_child(lbl)
+                  test_list.add_child(row)
+
+          func _on_run_all() -> void:
+              run_btn.disabled = true
+              for c in results_box.get_children(): c.queue_free()
+              agent.run_all()
+
+          func _on_test_started(test_name: String, description: String) -> void:
+              current_lbl.text = "▶ " + test_name
+              current_lbl.add_theme_color_override("font_color", C_AMBER)
+              # Degrade one particle per test
+              degradation.degrade(agent.current_test)
+
+          func _on_test_penetrated(
+              test_name: String, gap_confirmed: bool, orbit_effect: String
+          ) -> void:
+              var row = VBoxContainer.new()
+              row.add_theme_constant_override("separation", 2)
+              var name_lbl = Label.new()
+              name_lbl.text = ("✗ " if gap_confirmed else "✓ ") + test_name
+              name_lbl.add_theme_font_size_override("font_size", 11)
+              name_lbl.add_theme_color_override("font_color", C_RED if gap_confirmed else C_GREEN)
+              var effect_lbl = Label.new()
+              effect_lbl.text = "  → " + orbit_effect
+              effect_lbl.add_theme_font_size_override("font_size", 10)
+              effect_lbl.add_theme_color_override("font_color", C_DIM)
+              row.add_child(name_lbl)
+              row.add_child(effect_lbl)
+              results_box.add_child(row)
+
+              # Update Betti display
+              var b = degradation.tribe_betti.get(DEMO_TRIBE_ID, {"b0":0,"b1":0,"b2":0})
+              betti_lbl.text = "β₀: %d  |  β₁: %d  |  β₂: %d" % [b["b0"], b["b1"], b["b2"]]
+
+          func _on_series_complete(results: Array) -> void:
+              run_btn.disabled = false
+              current_lbl.text = "PAZUZU series complete — %d gaps confirmed" % results.size()
+              current_lbl.add_theme_color_override("font_color", C_RED)
+
+          func _on_nisaba_trigger(b1: int, tribe_id: int) -> void:
+              nisaba_lbl.text = "𒀭𒉀 Nisaba triggered — β₁=%d — generating ṬUPŠARRU art..." % b1
+              nisaba_lbl.add_theme_color_override("font_color", C_PURPLE)
+
+          func _on_tiamat_alert(level: String, tribe_id: int) -> void:
+              var col = Color(0.200, 0.700, 0.300, 1)
+              match level:
+                  "DILBAT": col = Color(0.937, 0.624, 0.153, 1)
+                  "KAKKAB": col = Color(0.937, 0.500, 0.100, 1)
+                  "ERRA":   col = Color(0.863, 0.235, 0.235, 1)
+                  "MAROON": col = Color(0.550, 0.000, 0.130, 1)
+              tiamat_lbl.text = "TIAMAT: " + level + " — tribe %d" % tribe_id
+              tiamat_lbl.add_theme_color_override("font_color", col)
+
+          func _on_nisaba_loop(tribe_id: int, b1: int) -> void:
+              nisaba_lbl.text = "𒀭𒉀 β₁=%d LOOP — ṬUPŠARRU memorial plate generating..." % b1
+              nisaba_lbl.add_theme_color_override("font_color", C_PURPLE)
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 95 sealed — PAZUZU Sovereign Threat Simulation.
+          Files written:
+            scripts/pazuzu_agent.gd         — 7-test state machine
+            scripts/orbital_degradation.gd  — GOLDEN→FUZZY→DEAD + Betti
+            scripts/pazuzu_controller.gd    — Theater UI wiring
+            scenes/pazuzu_theater.tscn      — Godot scene
+          To launch in DubSar Theater:
+            Instance pazuzu_theater.tscn as child of main_theater.tscn
+            Click Run All PAZUZU Tests
+            Watch orbits degrade and Nisaba trigger on β₁ > 0

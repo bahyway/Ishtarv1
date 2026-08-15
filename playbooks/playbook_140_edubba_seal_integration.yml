@@ -1,0 +1,55 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_140_edubba_seal_integration.yml
+#  PB-140 edubba_seal_integration — BLOCKED, tracked honestly
+#
+#  Run: ansible-playbook playbook_140_edubba_seal_integration.yml -i "localhost," -c local -v
+#
+#  Blocked on: live EnkiDB read+write nodes, a real test corpus, and
+#  ashnan-kaki (PB-117). Checks all three conditions; does not fake a pass.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-140 | É-DUBBA Seal Integration (blocked — see conditions)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    forge_root: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:  "{{ forge_root }}/workspace/bahyway_v4"
+    read_host:  "192.168.122.107"
+    write_host: "192.168.122.101"
+    node_port:  7001
+    session_date: "{{ ansible_date_time.date }}"
+    report_file: "{{ forge_root }}/docs/PB140_REPORT_{{ session_date }}.txt"
+
+  tasks:
+    - name: "CHECK | ashnan-kaki exists (PB-117)"
+      ansible.builtin.stat: {path: "{{ workspace }}/crates/ashnan-kaki/Cargo.toml"}
+      register: kaki_stat
+
+    - name: "CHECK | Read node live"
+      ansible.builtin.wait_for: {host: "{{ read_host }}", port: "{{ node_port }}", timeout: 3}
+      register: read_live
+      ignore_errors: true
+
+    - name: "CHECK | Write node live"
+      ansible.builtin.wait_for: {host: "{{ write_host }}", port: "{{ node_port }}", timeout: 3}
+      register: write_live
+      ignore_errors: true
+
+    - name: "PRINT | PB-140 blocker status"
+      ansible.builtin.debug:
+        msg: |
+          ashnan-kaki present : {{ kaki_stat.stat.exists }}
+          Read node live      : {{ read_live is succeeded }}
+          Write node live     : {{ write_live is succeeded }}
+          VERDICT: {{ 'READY' if (kaki_stat.stat.exists and read_live is succeeded and write_live is succeeded) else 'BLOCKED' }}
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          PB-140 — {{ session_date }} — {{ ansible_hostname }}
+          ashnan-kaki: {{ kaki_stat.stat.exists }}  read: {{ read_live is succeeded }}  write: {{ write_live is succeeded }}
+
+    - {name: "DONE", ansible.builtin.debug: {msg: "PB-140 status recorded — report at {{ report_file }}"}}

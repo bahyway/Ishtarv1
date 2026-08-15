@@ -1,0 +1,81 @@
+# =============================================================================
+# PB-159 — TPL-001 AMENDMENT §D: JOURNAL SHARING REALITY (was:
+#          "Cross-Engine Federation Consistency EnkiDB x EnkiODB")
+# BahyWay.Ecosystem v4.0 — CORRECTED 2026-07-10
+#
+# MAJOR CORRECTION: the original §D was built on the premise "StoryEngine
+# persists its Event-KAKIs and particle journal in EnkiODB (CQRS: 2
+# separate journals, 2 separate watermarks)". Checked directly against
+# crates/story-engine/src/story_engine.rs: StoryEngine imports
+# `enkidb_journal::Journal`, `enkidb_kaki::{IdentityKaki, EventKaki}`,
+# and `enkidb_snapshot::SnapshotRecord` — the SAME shared journal crate
+# every other engine uses, NOT a separate EnkiODB-hosted journal. The
+# premise is false as of 2026-07-10: there is only one journal, one
+# watermark, no skew scenario exists today.
+#
+# The federation *pattern* (min-watermark freshness, FUZZY-on-skew) is
+# still architecturally sound and worth keeping sealed as forward design
+# for whenever engines genuinely do split onto separate journals — but
+# it describes a hypothetical, not the current EnkiDB/StoryEngine
+# relationship. This amendment is rewritten to say that plainly.
+#
+# TARGET: eriduous-vdi.
+# =============================================================================
+---
+- name: "PB-159 | Correct TPL-001 §D — journal sharing reality, not EnkiODB split"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    repo_path: "{{ bahyway_repo | default(ansible_env.HOME + '/Forge/EnkiDB/workspace/bahyway_v4') }}"
+    tpl_doc: "{{ repo_path }}/docs/enkidb/TPL-001_templates_and_projections.md"
+
+  tasks:
+    - name: "PB-159.1 | Append corrected §D to TPL-001"
+      ansible.builtin.blockinfile:
+        path: "{{ tpl_doc }}"
+        marker: "<!-- {mark} PB-159 §D -->"
+        block: |
+          ## D. Journal Sharing Reality (corrected 2026-07-10)
+          1. CONFIRMED (not assumed): StoryEngine does NOT persist in a
+             separate EnkiODB journal. crates/story-engine/src/
+             story_engine.rs imports enkidb_journal::Journal and
+             enkidb_kaki::{IdentityKaki, EventKaki} directly — the same
+             shared journal every other real engine (EnkiDB included)
+             reads and writes. There is one journal, one watermark. No
+             cross-engine skew scenario exists in the current
+             architecture.
+          2. The federation law below (min-watermark freshness,
+             FUZZY-on-skew) is kept SEALED as forward design, dormant
+             until it applies: if a future architectural decision does
+             split an engine (e.g. StoryEngine) onto its own journal,
+             this is the law that governs the resulting join. It is not
+             active law today because its precondition (two journals)
+             does not hold.
+          3. Symmetry law (dormant): every federated engine follows the
+             same CQRS shape (write=journal, read=projected segments).
+             TPL-001 §A-§C apply per engine with no per-engine exceptions
+             — once there is more than one engine to federate.
+          4. Join law: cross-engine joins occur ONLY on the KAKI surrogate
+             pair (uuid_hash, tribe_id) — this part is unconditionally
+             true today too, single-journal or not, since it's just the
+             lawful identity comparison rule.
+          5. Min-watermark law (dormant): a federated result's freshness
+             would be MIN(watermark_i) over all participating engines,
+             the PROVE FRESH(., delta_t_max) predicate evaluating against
+             that minimum. Inapplicable while there is one watermark.
+          6. Skew-window law (dormant): a joined row whose components
+             would straddle watermark skew is returned FUZZY, never
+             GOLDEN. Inapplicable today for the same reason.
+          7. Before this section is ever activated: re-verify against
+             CAT-001 (or whatever the current architecture doc is) that
+             an engine split has actually happened — don't reactivate
+             §D.5/§D.6 from a recollection again without checking source.
+
+    - name: "PB-159.2 | Seal note"
+      ansible.builtin.debug:
+        msg: >-
+          TPL-001 §D corrected: StoryEngine shares the single real
+          enkidb-journal with EnkiDB — no cross-engine watermark skew
+          exists today. The federation law is retained as dormant
+          forward design, not active law.

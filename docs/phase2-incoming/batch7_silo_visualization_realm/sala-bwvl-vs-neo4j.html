@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala · BWVL vs Neo4j</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{--void:#05070f;--ink:#eaf0fb;--ink-dim:#9aa6c8;--ink-faint:#5a6488;--gold:#E3B458;--signal:#4fd6c4;--line:#1c2440;
+--f-display:'Fraunces',Georgia,serif;--f-body:'Inter',system-ui,sans-serif;--f-data:'IBM Plex Mono',monospace;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;z-index:5}
+.hud-title{top:12px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:18px;letter-spacing:.09em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:9px;letter-spacing:.15em;color:var(--ink-faint);margin-top:4px}
+.side-label{position:fixed;top:78px;font-family:var(--f-data);font-size:12px;letter-spacing:.1em;z-index:5;pointer-events:none}
+.side-neo{left:11%;color:#8a94ac}
+.side-bwvl{right:9%;color:var(--signal)}
+.hud-legend{top:104px;right:12px;font-family:var(--f-data);font-size:9.5px;color:var(--ink-faint);line-height:1.7;max-width:232px;background:rgba(8,12,26,.8);border:1px solid var(--line);border-radius:6px;padding:9px 11px}
+.hud-legend .sw{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:6px}
+.hud-ctl{bottom:64px;left:50%;transform:translateX(-50%);display:flex;gap:7px;background:rgba(8,12,26,.9);border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-family:var(--f-data)}
+.hud-ctl button{background:rgba(5,7,15,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;font-size:10px;padding:6px 11px;cursor:pointer}
+.hud-ctl button.on{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.hud-hover{position:fixed;font-family:var(--f-data);font-size:10px;background:rgba(5,7,15,.96);border:1px solid var(--signal);border-radius:5px;padding:6px 9px;color:var(--ink);pointer-events:none;z-index:8;display:none;max-width:250px;line-height:1.5}
+.hud-read{bottom:16px;left:50%;transform:translateX(-50%);width:min(780px,94vw);font-family:var(--f-data);font-size:11px;color:var(--ink-dim);line-height:1.6;text-align:center}
+.hud-read .neo{color:#8a94ac}.hud-read .bw{color:var(--signal)}.hud-read b{color:var(--ink)}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(5,7,15,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8.5px;color:var(--ink-faint);padding:4px 16px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="hud hud-title"><h1><span class="glyph">&#x12079;</span> BWVL <em>vs</em> NEO4J</h1>
+<div class="sub">SAME SCALE &middot; NEO4J: THE DOT IS AN ADDRESS &middot; BWVL: THE PARTICLE IS THE MEANING</div></div>
+<div class="side-label side-neo">NEO4J &mdash; topology only</div>
+<div class="side-label side-bwvl">BWVL &mdash; self-describing particles</div>
+<div class="hud hud-legend">
+<div style="color:var(--ink-dim);margin-bottom:5px">BWVL side &middot; read WITHOUT clicking:</div>
+<div><span class="sw" style="background:#74d6b0"></span>tribe hue = lineage</div>
+<div><span class="sw" style="background:#e0a24a"></span>another tribe</div>
+<div><span class="sw" style="background:#8f9ce8"></span>another tribe</div>
+<div style="margin-top:4px">shade-degree = the individual particle</div>
+<div>brightness = state / certainty</div>
+<div>position &amp; density = grounding</div>
+<div style="margin-top:5px;color:#8a94ac">Neo4j side: every dot identical grey &mdash; content lives in a panel you must click.</div>
+</div>
+<div class="hud hud-ctl"><button id="hover-btn" class="on">HOVER READ</button><button id="spin-btn" class="on">ORBIT</button></div>
+<div class="hud-hover" id="hover"></div>
+<div class="hud hud-read"><span class="neo">Neo4j</span>: you learn what a dot is by <b>clicking</b> it &mdash; at a billion, that is a billion clicks. The picture is <b>mute about content</b>. &nbsp;&middot;&nbsp; <span class="bw">BWVL</span>: every particle already shows its <b>tribe (hue)</b>, its <b>identity (shade-degree)</b>, its <b>state (brightness)</b> &mdash; you read the field by <b>looking</b>. Hover the right side to prove it.</div>
+<footer>Way-of-Work rule 5 &mdash; HTML prototype; production body Godot/WGPU. The difference at 1B+ scale: Neo4j visualizes a graph ABOUT data (dots are addresses; meaning in panels). BWVL visualizes data AS particles (colour/shade/brightness/position ARE the meaning). Read by looking, not clicking. Pending CSR-08.</footer>
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(58,2,0.1,6000);camera.position.set(0,0,760);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x05070f,1);
+stage.appendChild(renderer.domElement);
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.5)');rad.addColorStop(1,'rgba(255,255,255,0)');
+g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+
+/* TRIBES for the BWVL side: each a root hue */
+const TRIBES=[[0.45,0.84,0.69],[0.88,0.63,0.29],[0.56,0.61,0.91],[0.85,0.5,0.62],[0.5,0.8,0.85]];
+const TRIBE_NAMES=['Clostridial','Bacillus','Symptom','Vascular','Fungal'];
+const N=9000; // per side (prototype stand-in for "a billion")
+
+/* NEO4J side (left): every dot the SAME grey, meaning absent */
+let neoData=[];
+function buildNeo(){
+  const pos=new Float32Array(N*3),col=new Float32Array(N*3);const cx=-260;
+  for(let i=0;i<N;i++){
+    // clustered blob + a couple satellite rings (echoing the ref images)
+    let x,y,z;const r=Math.random();
+    if(r<0.7){const rr=Math.pow(Math.random(),0.5)*150;const a=Math.random()*6.28,ph=Math.acos(2*Math.random()-1);
+      x=Math.cos(a)*Math.sin(ph)*rr;y=Math.sin(a)*Math.sin(ph)*rr;z=Math.cos(ph)*rr*0.5;}
+    else{const a=Math.random()*6.28,rr=170+Math.random()*40;x=Math.cos(a)*rr;y=Math.sin(a)*rr;z=(Math.random()-.5)*30;}
+    pos[i*3]=cx+x;pos[i*3+1]=y;pos[i*3+2]=z;
+    const g=0.55+Math.random()*0.12; // ALL grey — identical, mute
+    col[i*3]=g;col[i*3+1]=g;col[i*3+2]=g*1.05;
+    neoData.push({x:cx+x,y,z});
+  }
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  scene.add(new THREE.Points(geo,new THREE.PointsMaterial({size:2.4,vertexColors:true,transparent:true,opacity:0.75,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+}
+
+/* BWVL side (right): each particle carries tribe hue + unique shade-degree + brightness=state */
+let bwvlData=[];
+function buildBwvl(){
+  const pos=new Float32Array(N*3),col=new Float32Array(N*3);const cx=260;
+  for(let i=0;i<N;i++){
+    const tribe=(Math.random()*TRIBES.length)|0;const base=TRIBES[tribe];
+    // tribes occupy distinct sub-regions (position also carries meaning)
+    const ta=tribe/TRIBES.length*6.28;
+    const clusterCx=Math.cos(ta)*90,clusterCy=Math.sin(ta)*90;
+    const rr=Math.pow(Math.random(),0.6)*70;const a=Math.random()*6.28,ph=Math.acos(2*Math.random()-1);
+    const x=clusterCx+Math.cos(a)*Math.sin(ph)*rr, y=clusterCy+Math.sin(a)*Math.sin(ph)*rr, z=Math.cos(ph)*rr*0.6;
+    pos[i*3]=cx+x;pos[i*3+1]=y;pos[i*3+2]=z;
+    // shade-degree: unique within the tribe band
+    const sd=0.55+Math.random()*0.45;
+    // brightness = state/certainty
+    const state=Math.random();const bright=0.4+state*0.6;
+    col[i*3]=Math.min(1,base[0]*sd*bright+0.05);col[i*3+1]=Math.min(1,base[1]*sd*bright+0.05);col[i*3+2]=Math.min(1,base[2]*sd*bright+0.05);
+    bwvlData.push({x:cx+x,y,z,tribe,sd:sd.toFixed(3),state:state>0.66?'GOLDEN':state>0.33?'FUZZY':'faint',bright});
+  }
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  scene.add(new THREE.Points(geo,new THREE.PointsMaterial({size:2.8,vertexColors:true,transparent:true,opacity:0.92,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+}
+buildNeo();buildBwvl();
+
+/* divider line */
+(function(){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-260,0),new THREE.Vector3(0,260,0)]);
+scene.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:0x26304e,transparent:true,opacity:0.6})));})();
+
+/* hover read — works on BWVL side to PROVE the particle is self-describing */
+let hoverOn=true;
+const hoverEl=document.getElementById('hover');
+renderer.domElement.addEventListener('mousemove',e=>{
+  if(dragging){az-=(e.clientX-lx)*0.004;el=Math.max(-1,Math.min(1,el+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;}
+  if(!hoverOn){hoverEl.style.display='none';return;}
+  const r=renderer.domElement.getBoundingClientRect();let best=null,bd=16;
+  for(const p of bwvlData){const v=new THREE.Vector3(p.x,p.y,p.z).project(camera);if(v.z>=1)continue;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(e.clientX-r.left-sx,e.clientY-r.top-sy);if(d<bd){bd=d;best=p;}}
+  // also check neo side to contrast
+  let neoHit=null;bd=16;
+  for(const p of neoData){const v=new THREE.Vector3(p.x,p.y,p.z).project(camera);if(v.z>=1)continue;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(e.clientX-r.left-sx,e.clientY-r.top-sy);if(d<bd){bd=d;neoHit=p;}}
+  if(best){hoverEl.style.display='block';hoverEl.style.left=(e.clientX+14)+'px';hoverEl.style.top=(e.clientY+14)+'px';
+    hoverEl.style.borderColor='#4fd6c4';
+    hoverEl.innerHTML=`<b style="color:#4fd6c4">read by looking:</b><br>tribe: <b>${TRIBE_NAMES[best.tribe]}</b> (hue)<br>shade-degree: ${best.sd} (this particle)<br>state: <b>${best.state}</b> (brightness)`;
+  } else if(neoHit){hoverEl.style.display='block';hoverEl.style.left=(e.clientX+14)+'px';hoverEl.style.top=(e.clientY+14)+'px';
+    hoverEl.style.borderColor='#8a94ac';
+    hoverEl.innerHTML=`<b style="color:#8a94ac">Neo4j dot:</b><br>grey. identical to every other.<br>content? <b>click to open a panel</b><br>the picture tells you nothing.`;
+  } else hoverEl.style.display='none';
+});
+document.getElementById('hover-btn').onclick=()=>{hoverOn=!hoverOn;document.getElementById('hover-btn').classList.toggle('on',hoverOn);};
+let spin=!reduced;document.getElementById('spin-btn').onclick=()=>{spin=!spin;document.getElementById('spin-btn').classList.toggle('on',spin);};
+
+let az=0,el=0,camDist=760,camDistT=760,dragging=false,lx=0,ly=0;
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(260,Math.min(1400,camDistT*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin&&!dragging)az+=dt*0.04;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.5);
+  camera.position.set(Math.sin(az)*camDist*0.25,Math.sin(el)*camDist*0.25,Math.cos(az)*camDist);
+  camera.lookAt(0,0,0);renderer.render(scene,camera);}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

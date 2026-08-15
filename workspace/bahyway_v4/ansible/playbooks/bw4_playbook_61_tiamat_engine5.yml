@@ -1,0 +1,246 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_61_tiamat_engine5.yml
+# TIAMAT ENGINE 5 — SLA Predictive Pre-Configuration
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# Before a stakeholder opens the SLA layer, TIAMAT has
+# already computed what the SLA SHOULD look like — based on:
+#   - Current orbital trajectories (Engine 2 kinematic data)
+#   - NĀMZITUM semantic corpus
+#   - DATASTRUCTUUR / DATA STEWARD facts
+#   - Historical ŠĀRU accumulation patterns
+#   - Tribe coherence trends (Engine 3)
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 61 — TIAMAT ENGINE 5 SLA Predictive Pre-Configuration"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_61_tiamat_e5.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_61_tiamat_e5.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # TIAMAT Engine 5 — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/tiamat"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+
+          # ── Add engine5.rs to existing tiamat crate ────────────────────
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{SRC}/engine5.rs", textwrap.dedent("""\
+          //! TIAMAT Engine 5 — SLA Predictive Pre-Configuration
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Before a stakeholder opens the SLA layer,
+          //! TIAMAT predicts the optimal SLA configuration.
+          //!
+          //! Input sources:
+          //!   - Engine 2 kinematic data (orbital trajectories)
+          //!   - NĀMZITUM corpus (governance facts from documents)
+          //!   - ŠĀRU accumulation history
+          //!   - Tribe coherence trends (Engine 3)
+          //!
+          //! Output: SLA recommendation with evidence
+          //! The stakeholder validates or overrides.
+          //! An override becomes ŠĀRU-measurable transparency debt.
+
+          #![forbid(unsafe_code)]
+
+          use crate::snapshot::ParticleSnapshot;
+          use crate::attractor::KUR_THRESHOLD;
+
+          /// One SLA dimension recommendation
+          #[derive(Debug, Clone)]
+          pub struct SlaRecommendation {
+              /// The SLA metric being predicted
+              pub metric:          String,
+              /// Predicted optimal threshold (0.0–1.0 or domain-specific)
+              pub threshold:       f32,
+              /// Confidence in this prediction (0.0–1.0)
+              pub confidence:      f32,
+              /// Evidence supporting this threshold
+              pub evidence:        Vec<String>,
+              /// Predicted ŠĀRU debt if stakeholder sets threshold lower
+              pub sharu_if_lower:  f32,
+              /// Predicted ŠĀRU debt if stakeholder sets threshold higher
+              pub sharu_if_higher: f32,
+              /// Source of prediction
+              pub source:          PredictionSource,
+          }
+
+          #[derive(Debug, Clone)]
+          pub enum PredictionSource {
+              KinematicTrajectory,  // from Engine 2 orbital decay rate
+              SharuHistory,         // from historical ŠĀRU accumulation
+              CoherencePattern,     // from Engine 3 tribe coherence
+              DocumentCorpus,       // from NĀMZITUM governance facts
+              Combined,             // from multiple sources
+          }
+
+          /// TIAMAT Engine 5 — SLA Predictor
+          pub struct SlaPredictor;
+
+          impl SlaPredictor {
+              /// Predict optimal SLA thresholds from particle history.
+              /// Called before stakeholder opens SLA configuration.
+              /// Quality reads from EAV (ParticleSnapshot.eav_quality).
+              /// NEVER from KAKI bytes.
+              pub fn predict(
+                  tribe_id:  u16,
+                  snapshots: &[ParticleSnapshot],
+              ) -> Vec<SlaRecommendation> {
+                  let mut recs = Vec::new();
+
+                  if snapshots.is_empty() { return recs; }
+
+                  // ── Kinematic recommendation ──────────────────────────
+                  // Based on actual observed quality trajectory
+                  let qualities: Vec<f32> = snapshots.iter()
+                      .map(|s| s.eav_quality)  // EAV — never KAKI bytes
+                      .collect();
+
+                  let mean_q = qualities.iter().sum::<f32>() / qualities.len() as f32;
+                  let min_q  = qualities.iter().cloned().fold(f32::INFINITY, f32::min);
+                  let max_q  = qualities.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+
+                  // Quality threshold recommendation
+                  // Set just above observed minimum + safety margin
+                  let recommended_threshold = (min_q + (mean_q - min_q) * 0.3).max(KUR_THRESHOLD);
+
+                  recs.push(SlaRecommendation {
+                      metric:    format!("tribe_0x{:04X}_quality_threshold", tribe_id),
+                      threshold: recommended_threshold,
+                      confidence: 0.80,
+                      evidence: vec![
+                          format!("Observed quality range: {:.2}–{:.2}", min_q, max_q),
+                          format!("Mean quality: {:.2}", mean_q),
+                          format!("Safety margin: 30% above minimum"),
+                      ],
+                      sharu_if_lower:  (KUR_THRESHOLD - recommended_threshold).max(0.0) * 100.0,
+                      sharu_if_higher: (recommended_threshold - mean_q).max(0.0) * 50.0,
+                      source: PredictionSource::KinematicTrajectory,
+                  });
+
+                  // ── ŠĀRU-based recommendation ─────────────────────────
+                  let tau_values: Vec<f32> = snapshots.iter()
+                      .map(|s| s.tau())  // 1.0 - eav_quality (EAV)
+                      .collect();
+                  let sharu_rate = tau_values.iter().sum::<f32>() / tau_values.len() as f32;
+
+                  recs.push(SlaRecommendation {
+                      metric:    format!("tribe_0x{:04X}_sharu_limit", tribe_id),
+                      threshold: (sharu_rate * 30.0).max(1.0),  // 30-day SLA window
+                      confidence: 0.75,
+                      evidence: vec![
+                          format!("Mean daily τ deficit: {:.3}", sharu_rate),
+                          format!("Projected 30-day ŠĀRU: {:.2}", sharu_rate * 30.0),
+                      ],
+                      sharu_if_lower:  sharu_rate * 10.0,
+                      sharu_if_higher: 0.0,
+                      source: PredictionSource::SharuHistory,
+                  });
+
+                  recs
+              }
+
+              /// Format predictions for stakeholder display
+              pub fn format_for_display(recs: &[SlaRecommendation]) -> String {
+                  let mut out = vec!["TIAMAT ENGINE 5 — SLA PRE-CONFIGURATION".to_string(),
+                      "Before you configure — here is what the data says:".to_string(),
+                      String::new()];
+
+                  for rec in recs {
+                      out.push(format!("  METRIC:     {}", rec.metric));
+                      out.push(format!("  PREDICTION: {:.3} (confidence: {:.0}%)",
+                          rec.threshold, rec.confidence * 100.0));
+                      for ev in &rec.evidence {
+                          out.push(format!("  EVIDENCE:   {}", ev));
+                      }
+                      if rec.sharu_if_lower > 0.1 {
+                          out.push(format!("  WARNING:    Setting lower → ŠĀRU debt {:.2}",
+                              rec.sharu_if_lower));
+                      }
+                      out.push(String::new());
+                  }
+                  out.join("\n")
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use crate::snapshot::ParticleSnapshot;
+
+              fn snap(q: f32, day: u64) -> ParticleSnapshot {
+                  ParticleSnapshot::new("test", 1, q, day)
+              }
+
+              #[test]
+              fn test_predicts_above_kur_threshold() {
+                  let history: Vec<_> = (0..14).map(|i| snap(0.65 - i as f32 * 0.01, i)).collect();
+                  let recs = SlaPredictor::predict(1, &history);
+                  assert!(!recs.is_empty());
+                  // Prediction must be above KUR threshold
+                  assert!(recs[0].threshold >= KUR_THRESHOLD);
+              }
+
+              #[test]
+              fn test_quality_from_eav_not_kaki() {
+                  let s = snap(0.75, 0);
+                  // eav_quality is the source — tau() uses it
+                  assert!((s.tau() - 0.25).abs() < 0.001);
+                  // κ[6] = kaki_type, κ[7] = kaki_role — not quality
+              }
+
+              #[test]
+              fn test_empty_history_returns_empty() {
+                  let recs = SlaPredictor::predict(1, &[]);
+                  assert!(recs.is_empty());
+              }
+          }
+          """))
+
+          # Add engine5 module to tiamat lib.rs
+          lib_path = f"{SRC}/lib.rs"
+          if os.path.exists(lib_path):
+              with open(lib_path) as f: lib = f.read()
+              if "pub mod engine5" not in lib:
+                  lib = lib.replace(
+                      "pub mod sharu;",
+                      "pub mod sharu;\npub mod engine5;"
+                  )
+                  lib += "\npub use engine5::{SlaPredictor, SlaRecommendation};\n"
+                  open(lib_path, "w").write(lib)
+                  print("✓ engine5 module added to tiamat lib.rs")
+
+          r = subprocess.run(["cargo", "build", "-p", "tiamat"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+
+          t = subprocess.run(["cargo", "test", "-p", "tiamat", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ TIAMAT ENGINE 5 — SLA predictive pre-configuration")
+          print("✓ PLAYBOOK 61 — TIAMAT ENGINE 5 COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p61_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p61_out.stdout_lines }}"

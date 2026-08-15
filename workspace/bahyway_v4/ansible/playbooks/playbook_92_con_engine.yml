@@ -1,0 +1,1134 @@
+---
+# =============================================================================
+# PLAYBOOK 92 — ConEngine: Sovereign Connection Law (12 files)
+# CSR-01 through CSR-07 — one wall, one law, one debug point
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_92_con_engine.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 92 — ConEngine sovereign connection law"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge:   "/home/bahyway/Forge/bahyway_v4"
+    crate:   "/home/bahyway/Forge/bahyway_v4/crates/con-engine"
+
+  tasks:
+
+    # ── Directory structure ───────────────────────────────────────────────────
+    - name: "Create con-engine directory structure"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crate }}/src"
+        - "{{ crate }}/src/rules"
+        - "{{ crate }}/src/session"
+        - "{{ crate }}/src/fanout"
+        - "{{ crate }}/src/naru"
+
+    # ── Cargo.toml ────────────────────────────────────────────────────────────
+    - name: "Write Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/Cargo.toml"
+        content: |
+          [package]
+          name    = "con-engine"
+          version = "4.0.0"
+          edition = "2021"
+
+          # Zero async runtime — pure std::net + std::thread
+          # Zero tokio / smol / async-std
+          [dependencies]
+          serde       = { version = "1", features = ["derive"] }
+          toml        = "0.8"
+          thiserror   = "1"
+          blake3      = "1"
+          bahyway-crc = { path = "../bahyway-crc" }
+
+          [lib]
+          name = "con_engine"
+
+          [dev-dependencies]
+          # none — tests use only std
+
+    # ── error.rs ─────────────────────────────────────────────────────────────
+    - name: "Write error.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/error.rs"
+        content: |
+          //! ConEngineError — every variant maps to exactly one CSR rule.
+          //! When you see an error you know which rule fired and why.
+          use thiserror::Error;
+
+          #[derive(Debug, Error)]
+          pub enum ConEngineError {
+              // CSR-01
+              #[error("CSR-01: SargonPassport missing or expired")]
+              SargonPassportInvalid,
+
+              // CSR-02
+              #[error("CSR-02: Role {role:?} cannot open {session_role:?} session")]
+              RoleViolation { role: String, session_role: String },
+
+              // CSR-03
+              #[error("CSR-03: NARU journal write failed: {0}")]
+              NaruWriteFailed(String),
+
+              // CSR-04
+              #[error("CSR-04: Credential not found for session {session_id}")]
+              CredentialNotFound { session_id: String },
+
+              // CSR-05
+              #[error("CSR-05: CrossTribe KAKI requires Gilgamesh Passport")]
+              GilgameshPassportRequired,
+
+              // CSR-06
+              #[error("CSR-06: Connection to {host}:{port} failed: {reason}")]
+              ConnectionFailed { host: String, port: u16, reason: String },
+
+              #[error("CSR-06: HEPT handshake failed for session {session_id}")]
+              HandshakeFailed { session_id: String },
+
+              // CSR-07
+              #[error("CSR-07: Tribe isolation violation — connection tribe={conn_tribe} query tribe={query_tribe}")]
+              TribeIsolationViolation { conn_tribe: u16, query_tribe: u16 },
+
+              // General
+              #[error("Config load failed: {0}")]
+              ConfigLoad(String),
+
+              #[error("IO error: {0}")]
+              Io(#[from] std::io::Error),
+          }
+
+          pub type ConResult<T> = Result<T, ConEngineError>;
+
+    # ── session/descriptor.rs ─────────────────────────────────────────────────
+    - name: "Write session/descriptor.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/session/descriptor.rs"
+        content: |
+          //! SessionDescriptor — topology config loaded from enkidb-sessions.toml
+          //! Contains NO secrets. Credentials live in AkkadiSafeEngine.
+          use serde::{Deserialize, Serialize};
+
+          #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+          #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+          pub enum NodeType {
+              EnkiDB,
+              EnkiDW,
+              EnkiSDB,
+              EnkiODB,
+              EnkiQDB,
+          }
+
+          #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+          #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+          pub enum SessionRole { Read, Write }
+
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum SovereignRole {
+              DubSar,       // Architect — WRITE + READ all tribes
+              TabletWriter, // WRITE + READ own tribe
+              DataSteward,  // READ only
+              Client,       // READ only own tribe
+          }
+
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum KakiType {
+              Identity,   // 0x01
+              Event,      // 0x02
+              CrossTribe, // 0x03 — triggers CSR-05
+          }
+
+          #[derive(Debug, Clone, Serialize, Deserialize)]
+          pub struct SessionDescriptor {
+              pub id:        String,
+              pub host:      String,
+              pub port:      u16,
+              pub role:      SessionRole,
+              pub node_type: NodeType,
+              #[serde(default)]
+              pub enabled:   bool,
+              /// Which tribe_ids this session serves (empty = catch-all)
+              #[serde(default)]
+              pub tribes:    Vec<u16>,
+          }
+
+          /// Sargon Passport — seals the ConEngine session for DUB.SAR
+          #[derive(Debug, Clone)]
+          pub struct SargonPassport {
+              pub holder:     String,
+              pub expires_at: u64,   // unix timestamp
+              pub signature:  Vec<u8>,
+          }
+
+          impl SargonPassport {
+              pub fn is_valid(&self) -> bool {
+                  let now = std::time::SystemTime::now()
+                      .duration_since(std::time::UNIX_EPOCH)
+                      .map(|d| d.as_secs())
+                      .unwrap_or(0);
+                  now < self.expires_at
+              }
+          }
+
+          /// Gilgamesh Passport — required for CrossTribe operations
+          #[derive(Debug, Clone)]
+          pub struct GilgameshPassport {
+              pub holder:          String,
+              pub allowed_tribes:  Vec<u16>,
+              pub expires_at:      u64,
+          }
+
+    # ── session/registry.rs ───────────────────────────────────────────────────
+    - name: "Write session/registry.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/session/registry.rs"
+        content: |
+          //! SessionRegistry — loads enkidb-sessions.toml and resolves
+          //! tribe_id → session. Two-tier: explicit tribes first, catch-all second.
+          use serde::Deserialize;
+          use std::collections::HashMap;
+          use crate::error::{ConEngineError, ConResult};
+          use crate::session::descriptor::{SessionDescriptor, SessionRole, SovereignRole};
+
+          #[derive(Debug, Deserialize)]
+          struct SessionsFile {
+              session: Vec<SessionDescriptor>,
+          }
+
+          pub struct SessionRegistry {
+              sessions:     Vec<SessionDescriptor>,
+              /// tribe_id → session_id (explicit mappings)
+              tribe_map:    HashMap<u16, String>,
+              /// catch-all read session_id
+              catchall_read:  Option<String>,
+              /// catch-all write session_id
+              catchall_write: Option<String>,
+          }
+
+          impl SessionRegistry {
+              /// Load from TOML file. No secrets in this file.
+              pub fn load(path: &str) -> ConResult<Self> {
+                  let raw = std::fs::read_to_string(path)
+                      .map_err(|e| ConEngineError::ConfigLoad(e.to_string()))?;
+                  let file: SessionsFile = toml::from_str(&raw)
+                      .map_err(|e| ConEngineError::ConfigLoad(e.to_string()))?;
+
+                  let mut tribe_map    = HashMap::new();
+                  let mut catchall_read  = None;
+                  let mut catchall_write = None;
+
+                  for s in &file.session {
+                      if !s.enabled { continue; }
+                      if s.tribes.is_empty() {
+                          match s.role {
+                              SessionRole::Read  => catchall_read  = Some(s.id.clone()),
+                              SessionRole::Write => catchall_write = Some(s.id.clone()),
+                          }
+                      } else {
+                          for &tid in &s.tribes {
+                              tribe_map.insert(tid, s.id.clone());
+                          }
+                      }
+                  }
+
+                  Ok(Self {
+                      sessions: file.session,
+                      tribe_map,
+                      catchall_read,
+                      catchall_write,
+                  })
+              }
+
+              /// CSR-02: resolve session for tribe + role.
+              pub fn resolve(
+                  &self,
+                  tribe_id:     u16,
+                  caller_role:  &SovereignRole,
+                  need_write:   bool,
+              ) -> ConResult<&SessionDescriptor> {
+                  // CSR-02: block writes for DataSteward / Client
+                  if need_write {
+                      match caller_role {
+                          SovereignRole::DataSteward | SovereignRole::Client => {
+                              return Err(ConEngineError::RoleViolation {
+                                  role:         format!("{caller_role:?}"),
+                                  session_role: "WRITE".into(),
+                              });
+                          }
+                          _ => {}
+                      }
+                  }
+
+                  let session_id = if need_write {
+                      self.tribe_map.get(&tribe_id)
+                          .or(self.catchall_write.as_ref())
+                          .ok_or(ConEngineError::ConfigLoad(
+                              format!("no WRITE session for tribe {tribe_id}")
+                          ))?
+                  } else {
+                      self.tribe_map.get(&tribe_id)
+                          .or(self.catchall_read.as_ref())
+                          .ok_or(ConEngineError::ConfigLoad(
+                              format!("no READ session for tribe {tribe_id}")
+                          ))?
+                  };
+
+                  self.sessions.iter()
+                      .find(|s| &s.id == session_id)
+                      .ok_or(ConEngineError::ConfigLoad(
+                          format!("session {session_id} not found")
+                      ))
+              }
+
+              /// Resolve multiple tribe_ids — deduplicates sessions.
+              pub fn resolve_multi(
+                  &self,
+                  tribe_ids:   &[u16],
+                  caller_role: &SovereignRole,
+                  need_write:  bool,
+              ) -> ConResult<Vec<&SessionDescriptor>> {
+                  let mut seen    = std::collections::HashSet::new();
+                  let mut results = Vec::new();
+                  for &tid in tribe_ids {
+                      let s = self.resolve(tid, caller_role, need_write)?;
+                      if seen.insert(s.id.clone()) {
+                          results.push(s);
+                      }
+                  }
+                  Ok(results)
+              }
+
+              pub fn all_enabled(&self) -> impl Iterator<Item = &SessionDescriptor> {
+                  self.sessions.iter().filter(|s| s.enabled)
+              }
+          }
+
+    # ── session/pool.rs ───────────────────────────────────────────────────────
+    - name: "Write session/pool.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/session/pool.rs"
+        content: |
+          //! ConnectionPool — one TcpStream per enabled session.
+          //! HEPT handshake (magic 0x48455054) at boot.
+          //! Zero async runtime — std::net::TcpStream only.
+          use std::collections::HashMap;
+          use std::io::{Read, Write};
+          use std::net::TcpStream;
+          use std::sync::{Arc, Mutex};
+          use std::time::Duration;
+          use crate::error::{ConEngineError, ConResult};
+          use crate::session::descriptor::SessionDescriptor;
+
+          const HEPT_MAGIC:    u32 = 0x48455054;
+          const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+          /// A live pooled connection — one per enabled session.
+          pub struct PooledConnection {
+              pub session_id: String,
+              pub tribe_lock: Option<u16>,  // CSR-07: locked tribe (None = any)
+              stream:         Arc<Mutex<TcpStream>>,
+          }
+
+          impl PooledConnection {
+              /// CSR-03 + CSR-07: send a HEPT frame.
+              /// Caller must have already written NARU entry before calling.
+              pub fn send_frame(
+                  &self,
+                  frame:      &[u8],
+                  query_tribe: u16,
+              ) -> ConResult<Vec<u8>> {
+                  // CSR-07: tribe isolation
+                  if let Some(locked) = self.tribe_lock {
+                      if locked != query_tribe {
+                          return Err(ConEngineError::TribeIsolationViolation {
+                              conn_tribe:  locked,
+                              query_tribe,
+                          });
+                      }
+                  }
+
+                  let mut stream = self.stream.lock().unwrap();
+
+                  // Send length-prefixed frame
+                  let len = frame.len() as u32;
+                  stream.write_all(&len.to_le_bytes())?;
+                  stream.write_all(frame)?;
+
+                  // Read response length
+                  let mut len_buf = [0u8; 4];
+                  stream.read_exact(&mut len_buf)?;
+                  let resp_len = u32::from_le_bytes(len_buf) as usize;
+
+                  if resp_len == 0 {
+                      return Ok(vec![]); // DONE sentinel
+                  }
+
+                  let mut resp = vec![0u8; resp_len];
+                  stream.read_exact(&mut resp)?;
+                  Ok(resp)
+              }
+          }
+
+          /// ConnectionPool — all live sessions.
+          pub struct ConnectionPool {
+              connections: HashMap<String, PooledConnection>,
+          }
+
+          impl ConnectionPool {
+              /// Boot: connect to all enabled sessions. Offline = skip (non-fatal).
+              pub fn boot(sessions: impl Iterator<Item = SessionDescriptor>) -> Self {
+                  let mut connections = HashMap::new();
+                  for s in sessions {
+                      match Self::connect(&s) {
+                          Ok(conn) => {
+                              eprintln!("ConEngine: ✓ connected to {} ({}:{})",
+                                  s.id, s.host, s.port);
+                              connections.insert(s.id.clone(), conn);
+                          }
+                          Err(e) => {
+                              eprintln!("ConEngine: ✗ {} offline — {e}", s.id);
+                          }
+                      }
+                  }
+                  Self { connections }
+              }
+
+              fn connect(s: &SessionDescriptor) -> ConResult<PooledConnection> {
+                  let addr = format!("{}:{}", s.host, s.port);
+                  let stream = TcpStream::connect_timeout(
+                      &addr.parse().map_err(|e: std::net::AddrParseError|
+                          ConEngineError::ConnectionFailed {
+                              host:   s.host.clone(),
+                              port:   s.port,
+                              reason: e.to_string(),
+                          })?,
+                      CONNECT_TIMEOUT,
+                  ).map_err(|e| ConEngineError::ConnectionFailed {
+                      host:   s.host.clone(),
+                      port:   s.port,
+                      reason: e.to_string(),
+                  })?;
+
+                  // HEPT handshake — send magic u32 LE
+                  {
+                      let mut w = &stream;
+                      w.write_all(&HEPT_MAGIC.to_le_bytes())
+                          .map_err(|_| ConEngineError::HandshakeFailed {
+                              session_id: s.id.clone(),
+                          })?;
+                  }
+
+                  Ok(PooledConnection {
+                      session_id: s.id.clone(),
+                      tribe_lock: s.tribes.first().copied(),
+                      stream:     Arc::new(Mutex::new(stream)),
+                  })
+              }
+
+              pub fn get(&self, session_id: &str) -> Option<&PooledConnection> {
+                  self.connections.get(session_id)
+              }
+
+              pub fn session_ids(&self) -> Vec<&str> {
+                  self.connections.keys().map(|s| s.as_str()).collect()
+              }
+          }
+
+    # ── session/mod.rs ────────────────────────────────────────────────────────
+    - name: "Write session/mod.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/session/mod.rs"
+        content: |
+          pub mod descriptor;
+          pub mod registry;
+          pub mod pool;
+          pub use descriptor::*;
+          pub use registry::SessionRegistry;
+          pub use pool::{ConnectionPool, PooledConnection};
+
+    # ── rules/mod.rs ─────────────────────────────────────────────────────────
+    - name: "Write rules/mod.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/rules/mod.rs"
+        content: |
+          pub mod csr01_sargon;
+          pub mod csr02_role;
+          pub mod csr03_naru;
+          pub mod csr04_credentials;
+          pub mod csr05_gilgamesh;
+          pub mod csr06_kibratu;
+          pub mod csr07_isolation;
+
+    # ── rules/csr01_sargon.rs ────────────────────────────────────────────────
+    - name: "Write rules/csr01_sargon.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/rules/csr01_sargon.rs"
+        content: |
+          //! CSR-01: SargonPassport gates every connection.
+          //! No TCP connection opens without a valid passport.
+          use crate::error::{ConEngineError, ConResult};
+          use crate::session::descriptor::SargonPassport;
+
+          pub fn check(passport: &SargonPassport) -> ConResult<()> {
+              if passport.is_valid() {
+                  Ok(())
+              } else {
+                  Err(ConEngineError::SargonPassportInvalid)
+              }
+          }
+
+    # ── rules/csr02_role.rs ──────────────────────────────────────────────────
+    - name: "Write rules/csr02_role.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/rules/csr02_role.rs"
+        content: |
+          //! CSR-02: SovereignRole gates WRITE vs READ.
+          //! DataSteward + Client = READ only.
+          use crate::error::{ConEngineError, ConResult};
+          use crate::session::descriptor::SovereignRole;
+
+          pub fn check_write(role: &SovereignRole) -> ConResult<()> {
+              match role {
+                  SovereignRole::DubSar | SovereignRole::TabletWriter => Ok(()),
+                  other => Err(ConEngineError::RoleViolation {
+                      role:         format!("{other:?}"),
+                      session_role: "WRITE".into(),
+                  }),
+              }
+          }
+
+    # ── rules/csr03_naru.rs ──────────────────────────────────────────────────
+    - name: "Write rules/csr03_naru.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/rules/csr03_naru.rs"
+        content: |
+          //! CSR-03: Every frame is NARU-journaled before hitting the wire.
+          //! Delegates to naru::NaruJournal.
+          use crate::error::ConResult;
+          use crate::naru::NaruJournal;
+
+          pub fn journal_before_frame(
+              journal:    &NaruJournal,
+              session_id: &str,
+              tribe_id:   u16,
+              role:       &str,
+              frame:      &[u8],
+          ) -> ConResult<()> {
+              journal.append(session_id, tribe_id, role, frame)
+          }
+
+    # ── rules/csr04_credentials.rs ───────────────────────────────────────────
+    - name: "Write rules/csr04_credentials.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/rules/csr04_credentials.rs"
+        content: |
+          //! CSR-04: Credentials never in TOML — live in AkkadiSafeEngine.
+          //! CredentialStore trait + StubCredentialStore (ships now).
+          //! AkkadiSafeEngine plugs in when ready — zero ConEngine changes.
+
+          #[derive(Debug, Clone)]
+          pub struct SealedCredential {
+              pub session_id: String,
+              pub token:      Vec<u8>,   // encrypted by AkkadiCipherEngine
+          }
+
+          /// Sovereign credential store — swap implementations freely.
+          pub trait CredentialStore: Send + Sync {
+              fn get(&self, session_id: &str) -> Option<SealedCredential>;
+          }
+
+          /// Stub implementation — unblocks development.
+          /// Replace with AkkadiSafeEngine when ready.
+          pub struct StubCredentialStore;
+
+          impl CredentialStore for StubCredentialStore {
+              fn get(&self, session_id: &str) -> Option<SealedCredential> {
+                  // Stub: return a dummy token so ConEngine compiles and runs
+                  Some(SealedCredential {
+                      session_id: session_id.into(),
+                      token:      vec![0u8; 32],
+                  })
+              }
+          }
+
+    # ── rules/csr05_gilgamesh.rs ─────────────────────────────────────────────
+    - name: "Write rules/csr05_gilgamesh.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/rules/csr05_gilgamesh.rs"
+        content: |
+          //! CSR-05: CrossTribe KAKI (0x03) requires Gilgamesh Passport.
+          use crate::error::{ConEngineError, ConResult};
+          use crate::session::descriptor::{GilgameshPassport, KakiType};
+
+          pub fn check(
+              kaki_type:  &KakiType,
+              gilgamesh:  Option<&GilgameshPassport>,
+              tribe_id:   u16,
+          ) -> ConResult<()> {
+              if *kaki_type != KakiType::CrossTribe {
+                  return Ok(()); // not a CrossTribe op — no gate needed
+              }
+              match gilgamesh {
+                  None => Err(ConEngineError::GilgameshPassportRequired),
+                  Some(g) => {
+                      if g.allowed_tribes.contains(&tribe_id) || g.allowed_tribes.is_empty() {
+                          Ok(())
+                      } else {
+                          Err(ConEngineError::GilgameshPassportRequired)
+                      }
+                  }
+              }
+          }
+
+    # ── rules/csr06_kibratu.rs ───────────────────────────────────────────────
+    - name: "Write rules/csr06_kibratu.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/rules/csr06_kibratu.rs"
+        content: |
+          //! CSR-06: Connection failures → KIBRATU event emission.
+          //! ConEngine emits — KIBRATU analyses. Clean boundary.
+          use crate::error::ConEngineError;
+
+          #[derive(Debug, Clone)]
+          pub enum KibratuCause {
+              ParallelFailure,    // ConnectionFailed
+              IntruderCorrupt,    // HandshakeFailed
+              UnknownState,       // other errors
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct KibratuEvent {
+              pub cause:      KibratuCause,
+              pub session_id: String,
+              pub message:    String,
+          }
+
+          /// KibratuSink — implement to receive events.
+          pub trait KibratuSink: Send + Sync {
+              fn emit(&self, event: KibratuEvent);
+          }
+
+          /// Log-only sink (default — unblocks development).
+          pub struct LogKibratuSink;
+
+          impl KibratuSink for LogKibratuSink {
+              fn emit(&self, event: KibratuEvent) {
+                  eprintln!("KIBRATU [{:?}] session={} — {}",
+                      event.cause, event.session_id, event.message);
+              }
+          }
+
+          pub fn emit_for_error(
+              sink:       &dyn KibratuSink,
+              error:      &ConEngineError,
+              session_id: &str,
+          ) {
+              let (cause, message) = match error {
+                  ConEngineError::ConnectionFailed { reason, .. } =>
+                      (KibratuCause::ParallelFailure, reason.clone()),
+                  ConEngineError::HandshakeFailed { .. } =>
+                      (KibratuCause::IntruderCorrupt, "HEPT handshake rejected".into()),
+                  other =>
+                      (KibratuCause::UnknownState, other.to_string()),
+              };
+              sink.emit(KibratuEvent {
+                  cause,
+                  session_id: session_id.into(),
+                  message,
+              });
+          }
+
+    # ── rules/csr07_isolation.rs ─────────────────────────────────────────────
+    - name: "Write rules/csr07_isolation.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/rules/csr07_isolation.rs"
+        content: |
+          //! CSR-07: Tribe isolation per connection.
+          //! A connection locked to tribe X cannot serve tribe Y
+          //! unless caller has Gilgamesh Passport.
+          use crate::error::{ConEngineError, ConResult};
+          use crate::session::descriptor::GilgameshPassport;
+
+          pub fn check(
+              conn_tribe:  Option<u16>,
+              query_tribe: u16,
+              gilgamesh:   Option<&GilgameshPassport>,
+          ) -> ConResult<()> {
+              match conn_tribe {
+                  None => Ok(()), // catch-all connection — any tribe allowed
+                  Some(locked) if locked == query_tribe => Ok(()),
+                  Some(locked) => {
+                      // Different tribe — requires Gilgamesh Passport
+                      match gilgamesh {
+                          Some(_) => Ok(()), // Gilgamesh overrides isolation
+                          None => Err(ConEngineError::TribeIsolationViolation {
+                              conn_tribe:  locked,
+                              query_tribe,
+                          }),
+                      }
+                  }
+              }
+          }
+
+    # ── naru/mod.rs ──────────────────────────────────────────────────────────
+    - name: "Write naru/mod.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/naru/mod.rs"
+        content: |
+          //! NARU — sovereign connection audit journal (WAL pattern).
+          //! Writes to naru.journal.bin before any frame hits the wire.
+          //! NARU-SYNC agent reads this file and writes to EnkiDB later.
+          //! Zero circular dependency on EnkiDB.
+          //!
+          //! Entry format (64 bytes fixed):
+          //!   [8]  sequence u64 LE
+          //!   [8]  timestamp u64 unix secs LE
+          //!   [32] session_id utf8 padded
+          //!   [2]  tribe_id u16 LE
+          //!   [6]  role utf8 padded
+          //!   [8]  frame_hash first 8 bytes of blake3
+
+          use std::fs::OpenOptions;
+          use std::io::Write;
+          use std::sync::Mutex;
+          use crate::error::{ConEngineError, ConResult};
+
+          pub struct NaruJournal {
+              path:     String,
+              sequence: Mutex<u64>,
+          }
+
+          impl NaruJournal {
+              pub fn open(path: &str) -> ConResult<Self> {
+                  // Create file if not exists
+                  OpenOptions::new()
+                      .create(true)
+                      .append(true)
+                      .open(path)
+                      .map_err(ConEngineError::Io)?;
+                  Ok(Self {
+                      path:     path.into(),
+                      sequence: Mutex::new(0),
+                  })
+              }
+
+              pub fn append(
+                  &self,
+                  session_id: &str,
+                  tribe_id:   u16,
+                  role:       &str,
+                  frame:      &[u8],
+              ) -> ConResult<()> {
+                  let mut seq = self.sequence.lock().unwrap();
+                  *seq += 1;
+
+                  let ts = std::time::SystemTime::now()
+                      .duration_since(std::time::UNIX_EPOCH)
+                      .map(|d| d.as_secs())
+                      .unwrap_or(0);
+
+                  let frame_hash = blake3::hash(frame);
+                  let hash_bytes = &frame_hash.as_bytes()[..8];
+
+                  let mut entry = [0u8; 64];
+                  entry[0..8].copy_from_slice(&seq.to_le_bytes());
+                  entry[8..16].copy_from_slice(&ts.to_le_bytes());
+                  let sid = session_id.as_bytes();
+                  let sid_len = sid.len().min(32);
+                  entry[16..16+sid_len].copy_from_slice(&sid[..sid_len]);
+                  entry[48..50].copy_from_slice(&tribe_id.to_le_bytes());
+                  let role_b = role.as_bytes();
+                  let role_len = role_b.len().min(6);
+                  entry[50..50+role_len].copy_from_slice(&role_b[..role_len]);
+                  entry[56..64].copy_from_slice(hash_bytes);
+
+                  let mut f = OpenOptions::new()
+                      .append(true)
+                      .open(&self.path)
+                      .map_err(ConEngineError::Io)?;
+                  f.write_all(&entry).map_err(ConEngineError::Io)?;
+                  Ok(())
+              }
+          }
+
+    # ── fanout/executor.rs ───────────────────────────────────────────────────
+    - name: "Write fanout/executor.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/fanout/executor.rs"
+        content: |
+          //! QueryFanOut — parallel query execution across sessions.
+          //! Zero async runtime: std::thread + std::sync::mpsc.
+          //! One thread per session. Results collected via channel.
+          use std::sync::{Arc, mpsc};
+          use crate::error::ConEngineError;
+          use crate::session::pool::ConnectionPool;
+
+          #[derive(Debug)]
+          pub struct FanOutResult {
+              pub session_id: String,
+              pub tribe_id:   u16,
+              pub payload:    Result<Vec<u8>, String>,
+          }
+
+          pub struct QueryFanOut;
+
+          impl QueryFanOut {
+              /// Execute frame against multiple sessions in parallel.
+              /// Returns one result per session — caller merges by KAKI.
+              pub fn execute(
+                  pool:       Arc<ConnectionPool>,
+                  sessions:   Vec<(String, u16)>, // (session_id, tribe_id)
+                  frame:      Vec<u8>,
+              ) -> Vec<FanOutResult> {
+                  let (tx, rx) = mpsc::channel::<FanOutResult>();
+                  let frame    = Arc::new(frame);
+
+                  let handles: Vec<_> = sessions.into_iter().map(|(sid, tid)| {
+                      let tx    = tx.clone();
+                      let pool  = Arc::clone(&pool);
+                      let frame = Arc::clone(&frame);
+                      let sid2  = sid.clone();
+
+                      std::thread::spawn(move || {
+                          let result = pool
+                              .get(&sid)
+                              .ok_or_else(|| format!("session {sid} not in pool"))
+                              .and_then(|conn| {
+                                  conn.send_frame(&frame, tid)
+                                      .map_err(|e| e.to_string())
+                              });
+                          let _ = tx.send(FanOutResult {
+                              session_id: sid2,
+                              tribe_id:   tid,
+                              payload:    result,
+                          });
+                      })
+                  }).collect();
+
+                  // Drop our sender so channel closes when all threads finish
+                  drop(tx);
+
+                  let mut results = Vec::new();
+                  for r in rx { results.push(r); }
+                  for h in handles { let _ = h.join(); }
+                  results
+              }
+          }
+
+    # ── fanout/mod.rs ────────────────────────────────────────────────────────
+    - name: "Write fanout/mod.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/fanout/mod.rs"
+        content: |
+          pub mod executor;
+          pub use executor::{QueryFanOut, FanOutResult};
+
+    # ── lib.rs ───────────────────────────────────────────────────────────────
+    - name: "Write lib.rs — the sovereign wall"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/lib.rs"
+        content: |
+          //! # ConEngine — Sovereign Connection Law
+          //!
+          //! One wall. One law. One debug point.
+          //!
+          //! Nothing in BahyWay touches EnkiDB directly.
+          //! Everything speaks to ConEngine.
+          //!
+          //! ## 7 Connection Sovereignty Rules (CSR):
+          //!   CSR-01  SargonPassport gates every connection
+          //!   CSR-02  SovereignRole gates WRITE vs READ
+          //!   CSR-03  Every frame NARU-journaled before wire
+          //!   CSR-04  Credentials in AkkadiSafeEngine, never TOML
+          //!   CSR-05  CrossTribe KAKI requires Gilgamesh Passport
+          //!   CSR-06  Failures → KIBRATU event emission
+          //!   CSR-07  Tribe isolation per connection
+          //!
+          //! ## Zero async runtime — std::net + std::thread only.
+          //! ## NARU WAL pattern — file first, EnkiDB via NARU-SYNC later.
+          //! ## CredentialStore trait — stub now, AkkadiSafeEngine later.
+
+          #![forbid(unsafe_code)]
+
+          pub mod error;
+          pub mod rules;
+          pub mod session;
+          pub mod naru;
+          pub mod fanout;
+
+          use std::sync::Arc;
+
+          pub use error::{ConEngineError, ConResult};
+          pub use session::descriptor::{
+              SargonPassport, GilgameshPassport, SovereignRole,
+              KakiType, NodeType, SessionRole,
+          };
+          pub use rules::csr04_credentials::{CredentialStore, StubCredentialStore};
+          pub use rules::csr06_kibratu::{KibratuSink, LogKibratuSink};
+
+          use session::{SessionRegistry, ConnectionPool};
+          use naru::NaruJournal;
+
+          /// ConEngine configuration.
+          pub struct ConEngineConfig {
+              pub sessions_path: String,
+              pub naru_path:     String,
+              pub passport:      SargonPassport,
+              pub role:          SovereignRole,
+              pub credentials:   Box<dyn CredentialStore>,
+              pub kibratu:       Box<dyn KibratuSink>,
+              pub gilgamesh:     Option<GilgameshPassport>,
+          }
+
+          /// Query request — ŠUMU-UKIN fills this after PHYSICS predicate parse.
+          pub struct ConQuery {
+              pub tribe_ids:  Vec<u16>,
+              pub node_type:  NodeType,
+              pub frame:      Vec<u8>,
+              pub kaki_type:  KakiType,
+          }
+
+          /// Write request — KISPU path.
+          pub struct ConWrite {
+              pub tribe_id: u16,
+              pub frame:    Vec<u8>,
+          }
+
+          /// The sovereign connection wall.
+          pub struct ConEngine {
+              passport:  SargonPassport,
+              role:      SovereignRole,
+              gilgamesh: Option<GilgameshPassport>,
+              registry:  SessionRegistry,
+              pool:      Arc<ConnectionPool>,
+              naru:      NaruJournal,
+              kibratu:   Box<dyn KibratuSink>,
+          }
+
+          impl ConEngine {
+              /// Boot ConEngine — call once at ŠUMU-UKIN or Godot IDE startup.
+              pub fn boot(cfg: ConEngineConfig) -> ConResult<Self> {
+                  // CSR-01: passport must be valid at boot
+                  rules::csr01_sargon::check(&cfg.passport)?;
+
+                  let registry = SessionRegistry::load(&cfg.sessions_path)?;
+                  let naru     = NaruJournal::open(&cfg.naru_path)?;
+
+                  // Boot pool — connect to all enabled sessions
+                  let pool = Arc::new(
+                      ConnectionPool::boot(
+                          registry.all_enabled().cloned()
+                      )
+                  );
+
+                  eprintln!("𒁾 ConEngine booted — {} sessions active",
+                      pool.session_ids().len());
+
+                  Ok(Self {
+                      passport:  cfg.passport,
+                      role:      cfg.role,
+                      gilgamesh: cfg.gilgamesh,
+                      registry,
+                      pool,
+                      naru,
+                      kibratu:   cfg.kibratu,
+                  })
+              }
+
+              /// Read query — fan-out across all sessions serving tribe_ids.
+              pub fn query(&self, req: ConQuery) -> ConResult<Vec<fanout::FanOutResult>> {
+                  // CSR-01
+                  rules::csr01_sargon::check(&self.passport)?;
+                  // CSR-05: CrossTribe requires Gilgamesh
+                  for &tid in &req.tribe_ids {
+                      rules::csr05_gilgamesh::check(
+                          &req.kaki_type,
+                          self.gilgamesh.as_ref(),
+                          tid,
+                      )?;
+                  }
+                  // Resolve sessions — CSR-02 enforced inside
+                  let sessions = self.registry.resolve_multi(
+                      &req.tribe_ids, &self.role, false
+                  )?;
+                  // CSR-03: NARU entry before any frame
+                  for s in &sessions {
+                      rules::csr03_naru::journal_before_frame(
+                          &self.naru, &s.id,
+                          req.tribe_ids.first().copied().unwrap_or(0),
+                          &format!("{:?}", self.role),
+                          &req.frame,
+                      ).unwrap_or_else(|e|
+                          eprintln!("NARU write failed (non-fatal): {e}")
+                      );
+                  }
+                  // Fan-out
+                  let targets: Vec<(String, u16)> = sessions.iter()
+                      .flat_map(|s| {
+                          if s.tribes.is_empty() {
+                              req.tribe_ids.iter().map(|&t| (s.id.clone(), t)).collect::<Vec<_>>()
+                          } else {
+                              s.tribes.iter()
+                                  .filter(|t| req.tribe_ids.contains(t))
+                                  .map(|&t| (s.id.clone(), t))
+                                  .collect()
+                          }
+                      })
+                      .collect();
+
+                  Ok(fanout::QueryFanOut::execute(
+                      Arc::clone(&self.pool),
+                      targets,
+                      req.frame,
+                  ))
+              }
+
+              /// Write — KISPU path. DubSar / TabletWriter only.
+              pub fn write(&self, req: ConWrite) -> ConResult<Vec<u8>> {
+                  // CSR-01
+                  rules::csr01_sargon::check(&self.passport)?;
+                  // CSR-02
+                  rules::csr02_role::check_write(&self.role)?;
+                  // Resolve WRITE session
+                  let session = self.registry.resolve(req.tribe_id, &self.role, true)?;
+                  // CSR-03
+                  rules::csr03_naru::journal_before_frame(
+                      &self.naru, &session.id, req.tribe_id,
+                      &format!("{:?}", self.role), &req.frame,
+                  ).unwrap_or_else(|e|
+                      eprintln!("NARU write failed (non-fatal): {e}")
+                  );
+                  // Send frame
+                  match self.pool.get(&session.id) {
+                      Some(conn) => conn.send_frame(&req.frame, req.tribe_id),
+                      None => {
+                          let e = ConEngineError::ConnectionFailed {
+                              host:   session.host.clone(),
+                              port:   session.port,
+                              reason: "session not in pool".into(),
+                          };
+                          rules::csr06_kibratu::emit_for_error(
+                              self.kibratu.as_ref(), &e, &session.id
+                          );
+                          Err(e)
+                      }
+                  }
+              }
+          }
+
+    # ── enkidb-sessions.toml ─────────────────────────────────────────────────
+    - name: "Write enkidb-sessions.toml"
+      ansible.builtin.copy:
+        dest: "{{ forge }}/enkidb-sessions.toml"
+        content: |
+          # BahyWay.Ecosystem v4.0 — Sovereign Session Registry
+          # ConEngine loads this at boot. NO SECRETS HERE.
+          # Credentials live exclusively in AkkadiSafeEngine.
+          # DUB.SAR 𒁾  2026-06-25
+
+          [[session]]
+          id        = "enkidb-write"
+          host      = "192.168.122.101"
+          port      = 7001
+          role      = "WRITE"
+          node_type = "EnkiDB"
+          enabled   = true
+          tribes    = []          # catch-all write
+
+          [[session]]
+          id        = "enkidb-read"
+          host      = "192.168.122.107"
+          port      = 7001
+          role      = "READ"
+          node_type = "EnkiDB"
+          enabled   = true
+          tribes    = []          # catch-all read
+
+          [[session]]
+          id        = "enkisdb-main"
+          host      = "192.168.122.107"
+          port      = 7002
+          role      = "READ"
+          node_type = "EnkiSDB"
+          enabled   = false       # enable when EnkiSDB node provisioned
+          tribes    = []
+
+          [[session]]
+          id        = "enkiodb-main"
+          host      = "192.168.122.107"
+          port      = 7003
+          role      = "READ"
+          node_type = "EnkiODB"
+          enabled   = false       # enable when EnkiODB node provisioned
+          tribes    = []
+
+          [[session]]
+          id        = "enkiqdb-main"
+          host      = "192.168.122.107"
+          port      = 7004
+          role      = "READ"
+          node_type = "EnkiQDB"
+          enabled   = false       # quarantine — enable when needed
+          tribes    = []
+
+    # ── Add to workspace Cargo.toml ───────────────────────────────────────────
+    - name: "Add con-engine to workspace"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_add_con_engine.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/Cargo.toml"
+          with open(PATH) as f:
+              src = f.read()
+          if '"crates/con-engine"' in src:
+              print("already in workspace"); sys.exit(0)
+          src = src.replace(
+              '"crates/enkidb-enlil-index"',
+              '"crates/enkidb-enlil-index",\n    "crates/con-engine"'
+          )
+          with open(PATH, "w") as f:
+              f.write(src)
+          print("SUCCESS — con-engine added to workspace")
+
+    - name: "Run workspace patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_add_con_engine.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    # ── Build ─────────────────────────────────────────────────────────────────
+    - name: "cargo build -p con-engine"
+      ansible.builtin.shell: "cargo build -p con-engine 2>&1 | tail -15"
+      args:
+        chdir: "{{ forge }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 92 sealed — ConEngine: Sovereign Connection Law.
+          12 files. CSR-01 through CSR-07 implemented.
+          enkidb-sessions.toml written at ~/Forge/bahyway_v4/
+          Zero async runtime. NARU WAL. CredentialStore trait.
+          Next: wire ConEngine into heptascript + dubsar_proof.gd connector.

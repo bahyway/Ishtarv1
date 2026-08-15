@@ -1,0 +1,118 @@
+# =============================================================================
+# PB-204 — akkadi debug-capture: real EnkiDDB query execution, closing the
+# gap in AkkadiKernel's stub, for the Architect's client-debug-delivery
+# workflow
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: the Architect described a real support workflow for EnkiDDB
+# sold as DBaaS/standalone: a client's complex query crashes, degrades,
+# or fails silently; the Architect reproduces it privately, then sends
+# the client TWO files instead of environment access -- a config file
+# and a "Godot(DubSar) Notebook." Research (two Explore passes) found:
+# the Godot HeptaScript editor is real but has zero save/export
+# capability and no `project.godot` exists anywhere in the repo, so
+# nothing there is currently openable at all -- a separate, larger gap.
+# But `bin/akkadi-cli`'s own notebook subsystem (`AkkadiNotebook::save/
+# load`, real JSON via serde_json, `.akknb` extension, `akkadi notebook
+# --run/--new` already wired) IS real -- with one critical hole: its
+# `AkkadiKernel::execute` dispatch was ALL STUBS. `run_sql_query`
+# literally returned `Ok(format!("[SqlQuery -> EnkiDB] {src}"))` --
+# labeled "-> EnkiDB" but never opened a socket. No cell kind ever
+# actually ran a query against a live server; none of the 10 existing
+# `CellKind` variants did real network I/O.
+#
+# WHAT WAS BUILT, the real network-executing half plus the "config file"
+# half, both file formats the Architect can send today (Godot packaging
+# is tracked separately, not done here):
+#
+#  1. bin/akkadi-cli/src/notebook/enkiddb_client.rs -- NEW. A real,
+#     pure-std TCP client (`send_query(host, port, payload) ->
+#     Result<EnkiddbResponse, String>`) speaking EnkiDDB's actual
+#     length-prefixed wire protocol -- the exact framing this session's
+#     own `frame_client.py` verification harness used against the
+#     Architect's live eriduous-vdi deployment. Times the round trip.
+#
+#  2. bin/akkadi-cli/src/notebook/cell.rs -- added `CellKind::EnkiddbQuery`
+#     (additive; the pre-existing `SqlQuery` variant and its stub are
+#     untouched, since renaming sealed enum variants ripples further
+#     than this change needs to).
+#
+#  3. bin/akkadi-cli/src/notebook/kernel.rs -- `run_enkiddb_query`, the
+#     first REAL (non-stub) cell executor in this kernel: calls
+#     `enkiddb_client::send_query`, returns the server's actual response
+#     text plus elapsed time. A server-side `ERR:...` still round-trips
+#     as `Ok` at the transport layer -- a debug-capture tool needs that
+#     text preserved verbatim, not swallowed into a generic failure.
+#
+#  4. bin/akkadi-cli/src/notebook/manifest.rs -- NEW. `ReproManifest` --
+#     the "configuration file" half: title, issue (free text, the
+#     client's own words), target host:port, the exact request frame
+#     sent, RFC 3339 timestamp, elapsed_ms, optional dataset generation
+#     tag, and the companion notebook's filename. Confirmed via direct
+#     search this is a genuine first: no `SessionConfig`/
+#     `EnvironmentManifest` struct existed anywhere in this ecosystem
+#     before this.
+#
+#  5. bin/akkadi-cli/src/config.rs -- `AkkadiConfig` gained
+#     `enkiddb_read_host`/`enkiddb_read_port` (default 127.0.0.1:7102,
+#     matching this fleet's real deployed port), the actual target the
+#     new kernel path dials -- distinct from the pre-existing
+#     `enkidb_url` field, which remains unused for any real connection
+#     (an honest note left in the doc comment, not silently fixed by
+#     repurposing it).
+#
+#  6. bin/akkadi-cli/src/main.rs -- new `akkadi debug-capture --query
+#     <Q> --issue <text> [--title <t>] [--target host:port] [--out
+#     <file>]` command: runs the query for real, writes a `.akknb`
+#     notebook (Markdown cell = issue description, EnkiddbQuery cell =
+#     query + real captured output/state) and a companion
+#     `.repro.json` manifest, ready to hand to a client.
+#
+# VERIFIED FOR REAL, not just compiled -- every claim is a command
+# actually run this session:
+#   - Started real `enkiddb-write-server`/`enkiddb-read-server`
+#     processes, ingested a real document, synced + reloaded the Read
+#     Node (`[reload] entities=2 rag_sections=1` in its own log).
+#   - `akkadi debug-capture` against that live Read Node produced a real
+#     `.akknb` whose `EnkiddbQuery` cell's `output` is the server's
+#     actual JSON response (`"Widget Guide"`, the real document just
+#     ingested) and a `.repro.json` with `elapsed_ms: 1`, matching.
+#   - Ran it again against an unreachable port -- captured the real OS
+#     connection-refused error text verbatim in the notebook, state
+#     `error`.
+#   - Ran it a third time with a deliberately malformed HeptaScript
+#     query -- captured the real server-side `ERR:query: Parse(...)`
+#     text verbatim, state `done` (the wire round-trip itself
+#     succeeded; the server's own error is the payload, exactly what a
+#     client debug report needs to show).
+#   - `cargo test --workspace`: 3521 passed, 0 failed (2 new manifest
+#     round-trip tests; no regressions from PB-203's 3519 baseline).
+#
+# WHAT THIS DOES NOT CLAIM: this does not make anything in
+# `godot/dubsar-theater/` openable, saveable, or exportable -- that gap
+# (no `project.godot`, no `export_presets.cfg`, no save path in
+# `heptascript_editor.gd`) is real, confirmed, and untouched by this
+# playbook. The Architect's "Godot(DubSar) Notebook" framing may still
+# want that visual layer; this closes the execution + config-file half
+# first because it was the smaller, independently valuable, and
+# immediately verifiable piece.
+# =============================================================================
+---
+- name: "PB-204 | Record — akkadi debug-capture landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-204.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. New: bin/akkadi-cli/src/notebook/{enkiddb_client,manifest}.rs.
+          Changed: bin/akkadi-cli/src/{config,main}.rs,
+          bin/akkadi-cli/src/notebook/{cell,kernel,mod,renderer}.rs.
+          Usage: akkadi debug-capture --query "QUERY:..." --target
+          host:port --issue "..." --title "..." --out
+          <name>.akknb. Produces <name>.akknb + <name>.repro.json,
+          client-shareable. Godot-side packaging (project.godot,
+          export presets, save/load in heptascript_editor.gd) is a
+          separate, larger, not-yet-started gap.

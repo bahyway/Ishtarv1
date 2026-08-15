@@ -1,0 +1,237 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_112_kispu_headstore_benchmark_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-112 Reconciled: live-server benchmark, protocol + syntax fixed
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_112_kispu_headstore_benchmark_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_112_kispu_headstore_benchmark.yml):
+#    Two independent, real bugs found by checking directly against the
+#    current server and parser before shipping this:
+#
+#    1. WRONG WIRE PROTOCOL. The original pipes a raw query string into
+#       `nc` and expects raw text back. The CURRENT enkidb-query-server
+#       (bin/enkidb-query-server/src/main.rs) uses a 4-byte
+#       little-endian length-prefixed binary frame protocol
+#       (read_frame/write_frame) — confirmed by reading the source
+#       directly. Piping raw text via `nc` sends no length prefix at
+#       all; the server would read the first 4 bytes of your query text
+#       as a garbage length value and hang or error. This was true even
+#       of the OLD (PB-98-era) server — it used the same framing, so
+#       this benchmark technique never actually worked against any
+#       version of this server.
+#
+#    2. WRONG QUERY SYNTAX. The original's query payloads use
+#       "PRESENT / WHAT: / WHEN: / LIMIT:" (colon-separated), the
+#       primitive HeptaScript v1 stub syntax. Tested directly against
+#       the current parser in a sandbox: FAILS with "Unexpected
+#       character: ':'". The current parser wants the v2.0 dialect —
+#       "WHO x.y / ORBITAL n..n / HOW_MUCH LIMIT n" (space-separated,
+#       no colons) — confirmed working in playbook_108's benchmark.
+#
+#    Fix: replaced the nc-based approach with a real Rust TCP client
+#    (examples/hepta_client_bench.rs on enkidb-query-server) that speaks
+#    the correct binary frame protocol and the correct query syntax.
+#    Built and compile-verified in a sandbox (query confirmed to parse
+#    against the real current parser; TCP connect path confirmed to
+#    exercise the real frame-write/frame-read code, tested against a
+#    closed port to confirm the connect-failure path behaves — no live
+#    server was available to test a full round trip, that part is real
+#    only when you run this against your live node-read).
+#
+#  2026-07-25 FIX #2: same bug class as PB-108 — the WRITE task below
+#  copies hepta_client_bench.rs into bin/enkidb-query-server/examples/,
+#  but that directory has never actually existed in git history (git
+#  doesn't track empty directories), confirmed via `git ls-files` against
+#  this repo. A fresh clone genuinely doesn't have it, and
+#  ansible.builtin.copy doesn't create missing parent directories. Added
+#  an explicit directory-creation task first, same fix pattern already
+#  applied to PB-108's crates/heptascript/examples/.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-112 (Reconciled) | KISPU HeadStore benchmark — real protocol, real syntax"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:       "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:         "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:             "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch:     "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:      "{{ ansible_date_time.date }}"
+    docs_dir:          "{{ forge_root }}/docs/SHEDU"
+    report_file:       "{{ docs_dir }}/PB112_KISPU_BENCHMARK_{{ session_date }}.txt"
+    naru_journal:      "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+
+    node_read_ip:      "192.168.122.107"
+    enkidb_port:       7001
+    gate_limit100_ms:  1000
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU directory exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "SETUP | bin/enkidb-query-server/examples/ directory"
+      ansible.builtin.file:
+        path: "{{ workspace }}/bin/enkidb-query-server/examples"
+        state: directory
+        mode: "0755"
+
+    - name: "WRITE | hepta_client_bench example (real binary framing, real v2.0 syntax)"
+      ansible.builtin.copy:
+        dest: "{{ workspace }}/bin/enkidb-query-server/examples/hepta_client_bench.rs"
+        mode: "0644"
+        content: |
+          //! hepta_client_bench — real TCP client for enkidb-query-server.
+          //!
+          //! Speaks the server's actual wire protocol: 4-byte little-endian
+          //! length prefix, then the raw query bytes; response framed the
+          //! same way. Query syntax is the current v2.0 dialect (WHO/ORBITAL/
+          //! HOW_MUCH), not the old colon-separated PRESENT/WHAT:/WHEN: stub
+          //! syntax, which the current parser rejects.
+          //!
+          //! Usage: cargo run -p enkidb-query-server --example hepta_client_bench \
+          //!          --release -- 192.168.122.107:7001
+
+          use std::io::{Read, Write};
+          use std::net::TcpStream;
+          use std::time::{Duration, Instant};
+
+          fn send_query(stream: &mut TcpStream, query: &str) -> std::io::Result<(String, u128)> {
+              let t0 = Instant::now();
+              let bytes = query.as_bytes();
+              stream.write_all(&(bytes.len() as u32).to_le_bytes())?;
+              stream.write_all(bytes)?;
+              stream.flush()?;
+
+              let mut lb = [0u8; 4];
+              stream.read_exact(&mut lb)?;
+              let len = u32::from_le_bytes(lb) as usize;
+              let mut buf = vec![0u8; len];
+              stream.read_exact(&mut buf)?;
+              let elapsed = t0.elapsed().as_millis();
+              Ok((String::from_utf8_lossy(&buf).to_string(), elapsed))
+          }
+
+          fn main() {
+              let host = std::env::args().nth(1).unwrap_or_else(|| "127.0.0.1:7001".into());
+
+              let queries = [
+                  ("LIMIT 100",           "WHO Citizens.E\nORBITAL 0 .. 99999999\nHOW_MUCH LIMIT 100\nANCHOR AUTO"),
+                  ("LIMIT 1000",          "WHO Citizens.E\nORBITAL 0 .. 99999999\nHOW_MUCH LIMIT 1000\nANCHOR AUTO"),
+                  ("Tribe-filtered LIMIT 100", "WHO Citizens.E\nORBITAL 0 .. 99999999\nHOW_MUCH LIMIT 100\nANCHOR STATE_STATION"),
+              ];
+
+              // Sanity: confirm every query parses against the real current parser
+              // before spending any network time on it.
+              for (label, q) in &queries {
+                  if let Err(e) = heptascript::parse_query(q) {
+                      eprintln!("QUERY DOES NOT PARSE ({label}): {e:?}\n{q}");
+                      std::process::exit(1);
+                  }
+              }
+              println!("All {} queries parse OK against the current parser.", queries.len());
+
+              let addr: std::net::SocketAddr = host.parse().expect("bad host:port");
+
+              for (label, q) in &queries {
+                  match TcpStream::connect_timeout(&addr, Duration::from_secs(5)) {
+                      Ok(mut stream) => match send_query(&mut stream, q) {
+                          Ok((resp, ms)) => {
+                              println!("{label:<28} {ms:>6} ms  {} bytes returned", resp.len());
+                              if label.starts_with("LIMIT 100") && ms >= 1000 {
+                                  eprintln!("GATE FAIL: {label} took {ms}ms >= 1000ms");
+                                  std::process::exit(1);
+                              }
+                          }
+                          Err(e) => {
+                              eprintln!("{label}: send/receive failed: {e}");
+                              std::process::exit(1);
+                          }
+                      },
+                      Err(e) => {
+                          eprintln!("{label}: connect to {host} failed: {e}");
+                          std::process::exit(1);
+                      }
+                  }
+              }
+              println!("GATE: PASS");
+          }
+
+    - name: "BUILD | cargo build -p enkidb-query-server --example hepta_client_bench"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p enkidb-query-server --example hepta_client_bench --release"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: false
+      failed_when: build_out.rc != 0
+
+    - name: "CHECK | TCP reachability — enkidb-node-read"
+      ansible.builtin.wait_for:
+        host: "{{ node_read_ip }}"
+        port: "{{ enkidb_port }}"
+        timeout: 5
+        state: started
+      register: tcp_read
+      ignore_errors: true
+
+    - name: "FAIL | enkidb-node-read not reachable — cannot benchmark"
+      ansible.builtin.fail:
+        msg: "enkidb-node-read ({{ node_read_ip }}:{{ enkidb_port }}) not reachable. Start it first."
+      when: tcp_read.failed | default(false)
+
+    - name: "BENCH | Run hepta_client_bench against node-read"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} run -p enkidb-query-server --example hepta_client_bench --release -- {{ node_read_ip }}:{{ enkidb_port }}"
+        chdir: "{{ workspace }}"
+      register: bench_out
+      changed_when: false
+      failed_when: bench_out.rc != 0
+
+    - name: "PRINT | Benchmark output"
+      ansible.builtin.debug:
+        msg: "{{ bench_out.stdout_lines }}"
+
+    - name: "WRITE | Benchmark report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-112 KISPU Benchmark Report (Reconciled)
+          Date : {{ session_date }}
+          Node : enkidb-node-read ({{ node_read_ip }}:{{ enkidb_port }})
+
+          {{ bench_out.stdout }}
+
+          Original PB-112 used raw nc + colon-syntax queries — confirmed
+          broken against both the old and current server (wrong framing,
+          wrong syntax). This version uses a real Rust TCP client speaking
+          the actual binary-frame protocol and the current v2.0 query
+          syntax.
+
+    - name: "NARU | Record benchmark result"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ session_date }} | PB-112-RECONCILED | KISPU benchmark | see {{ report_file }}"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | PB-112 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-112 complete. Report at {{ report_file }}"

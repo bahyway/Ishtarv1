@@ -1,0 +1,125 @@
+---
+# Playbook 23 — Fix auto-switch + persistent banner height
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+#
+# Fixes:
+#   1. Remove auto-switch to Nergal panel (was overriding BahyWay on every frame)
+#   2. Increase nav_bar height so BahyWay/Enterprise/AI text is fully visible
+#   3. Status bar confirmed present — verify it shows correctly
+#
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/23_fix_autoswitch_banner.yml -v
+
+- name: "𒁾 Fix auto-switch + banner"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_23.py"
+
+  tasks:
+
+    - name: "Write fix script"
+      ansible.builtin.copy:
+        dest:    "{{ fix_script }}"
+        mode:    "0755"
+        content: |
+          import re
+
+          app_path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+          with open(app_path, 'r') as f:
+              app = f.read()
+
+          # ── Fix 1: Remove auto-switch to Nergal ──────────────────────────────
+          # This was forcing panel = Nergal every frame when g7>0
+          # Replace with: only switch if panel is BahywayMain (let it handle freeze)
+          app = re.sub(
+              r'// Auto-switch to Nergal panel on first threat detection\s*'
+              r'if let Ok\(bus_state\) = self\.bus\.read\(\) \{[^}]+\}\s*\}',
+              '// Nergal freeze handled inside BahywayMain panel',
+              app
+          )
+
+          # Also try inline version (all on one line)
+          app = re.sub(
+              r'// Auto-switch to Nergal panel.*?self\.panel = ActivePanel::Nergal;\s*\}\s*\}',
+              '// Nergal freeze handled inside BahywayMain panel',
+              app, flags=re.DOTALL
+          )
+
+          print("Auto-switch removed:", 'self.panel = ActivePanel::Nergal' not in app)
+
+          # ── Fix 2: Nav bar height — increase to 48px so text shows fully ──────
+          app = app.replace(
+              '.min_height(44.0)',
+              '.min_height(48.0)'
+          )
+          # Also ensure exact_height is not overriding
+          app = app.replace(
+              '.exact_height(32.0)\n            .frame(egui::Frame::none()\n                .fill(egui::Color32::from_rgb(8, 6, 2))',
+              '.exact_height(36.0)\n            .frame(egui::Frame::none()\n                .fill(egui::Color32::from_rgb(10, 12, 18))'
+          )
+
+          # ── Fix 3: Status bar — make it more visible ──────────────────────────
+          app = app.replace(
+              '.fill(egui::Color32::from_rgb(8, 6, 2))\n                .stroke(egui::Stroke::new(0.5,\n                    egui::Color32::from_rgb(80, 60, 10)))',
+              '.fill(egui::Color32::from_rgb(14, 18, 24))\n                .stroke(egui::Stroke::new(0.5,\n                    egui::Color32::from_rgb(50, 70, 90)))'
+          )
+
+          # ── Fix 4: Make BahyWay.Ecosystem label more prominent ────────────────
+          app = app.replace(
+              'ui.label(egui::RichText::new("𒁾 BahyWay.Ecosystem v4.0")\n                        .color(theme::GOLD).size(12.0).strong());',
+              'ui.label(egui::RichText::new("𒁾  BahyWay.Ecosystem v4.0")\n                        .color(egui::Color32::from_rgb(200,160,40)).size(13.0).strong());'
+          )
+
+          with open(app_path, 'w') as f:
+              f.write(app)
+
+          # Verify
+          print("nav_bar height:", '.min_height(48' in app)
+          print("status_bar present:", '"status_bar"' in app)
+          print("Nergal auto-switch removed:", 'self.panel = ActivePanel::Nergal' not in app)
+
+          # Show the update() function start to confirm
+          idx = app.find('fn update(')
+          print("\nupdate() start:")
+          print(app[idx:idx+300])
+
+    - name: "Run fix script"
+      ansible.builtin.command:
+        cmd: python3 {{ fix_script }}
+      register: py_out
+      changed_when: true
+      failed_when:  py_out.rc != 0
+
+    - name: "Show output"
+      ansible.builtin.debug:
+        msg: "{{ py_out.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 3 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-3:] }}"
+
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "𒁾 Fix complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Auto-switch to Nergal removed — BahyWay panel stays visible"
+          - "✓ Nav bar height increased — labels fully visible"
+          - "✓ Status bar: cool dark blue tone"
+          - "✓ Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "Run: cargo run -p dubsar-visualizer"

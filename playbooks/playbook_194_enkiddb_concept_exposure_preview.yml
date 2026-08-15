@@ -1,0 +1,110 @@
+# =============================================================================
+# PB-194 — EnkiDDB concept registry + access-grant exposure preview
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: the Architect asked for NISABA to eventually talk (voice) about
+# stakeholder groups requesting access to internal documentation, with a
+# yes/no approval flow, but paired it with a harder requirement first: "an
+# Interface that shows me if I grant access to for example Gates
+# Categories; what kind of sequence impact will reveal itself and enclose
+# the intention hidden Internal Code or Concept Build?" -- i.e., before
+# approving any access grant, see what it would actually expose.
+#
+# Two things were flagged honestly before any code was written:
+#   1. Real voice I/O (speech synthesis/recognition) cannot be built or
+#      tested in this cloud sandbox -- no audio hardware exists here. Not
+#      attempted; the decision logic underneath it is what's buildable.
+#   2. EnkiDDB's existing `DocOrbit::Link` mechanism was, before this
+#      pass, only auto-populated for section-to-parent-document structure
+#      (`emit_sections`), never for cross-document conceptual references.
+#      An "exposure preview" needed that gap closed for real, not glossed
+#      over.
+# Three scoping questions were answered before building: "Gates Categories"
+# = BeeMDM's real G1-G7 ETL gates; the exposure basis = build real
+# semantic cross-referencing (not stop at structural-only); build the
+# access-request queue itself = WAIT, this pass is the exposure preview
+# only.
+#
+# WHAT WAS BUILT, three new modules in `crates/enkiddb`, wired together:
+#
+#  1. `concepts.rs` -- `ConceptRegistry` + a deterministic, pure-std,
+#     whole-word text scanner (`scan_mentions`). Seeded with the two
+#     BeeMDM Hepta gates that have a real, code-confirmed name today
+#     (`bee_mdm_bus::GateLoads::g1_adad`/`g7_nergal` -> "Adad"/"Nergal").
+#     G2..G6 have no canonical name anywhere in this codebase --
+#     deliberately not invented; the registry is generically extensible
+#     (`extend_crates`, `extend_sovereign_names`) so a caller can seed it
+#     from EnkiMDB's real crate catalog without this crate taking on a
+#     hard dependency on `enkimdb`. 6 tests, including a substring-vs-
+#     whole-word boundary test ("irkallastation" must not match "IRKALLA").
+#
+#  2. `emitter.rs` gained `emit_concept_mentions` -- mints one child
+#     Identity-Kaki per detected mention, linked back to its parent
+#     document via `emit_link` tagged "mentioned-in". Deliberately
+#     mirrors `emit_sections`'s already-proven one-child-entity-per-item
+#     pattern rather than inventing a new multi-valued-attribute scheme
+#     (checked first: this Ecosystem's EAV/materialize path has no
+#     established multi-value-per-attribute convention to build on).
+#
+#  3. `writenode.rs` gained `WriteNode::ingest_document_with_concepts`
+#     (additive -- `ingest_document_categorized`/`ingest_document_from_path`
+#     are untouched) and a `concept_graph: ConceptGraph` field, populated
+#     as a side effect of ingestion using the emitter's already-typed
+#     `Particle`/`ConceptEntry` data -- not by decoding raw Journal EAV
+#     bytes after the fact.
+#
+#  4. `exposure.rs` (new) -- `ConceptGraph::exposure_preview(collection)`
+#     -> `ExposureReport { documents, revealed_concepts, .. }` plus
+#     `.narrate()` for a human-readable summary. Built as a plain
+#     in-memory index, NOT a HeptaScript query, for a real, checked
+#     reason: `link.target` particles carry `AkkValue::KakiPk`, and
+#     `heptascript::engine::compare_val` (checked directly) has no match
+#     arm for comparing a stored `KakiPk` against a literal -- "which
+#     entities link to KAKI X" is not a query HeptaScript's WHERE clause
+#     supports today. Rather than bolt that on speculatively, the index
+#     sidesteps it: it has the typed data in hand at ingest time already.
+#
+# VERIFIED END TO END: `ingest_document_with_concepts_populates_the_
+#   exposure_preview` ingests two "gates" documents (mentioning Adad,
+#   Nergal, and the enkiddb crate) and one unrelated "glossary" document,
+#   then asserts the exposure preview for "gates" lists exactly the two
+#   gate documents and exactly the three concepts they actually mention --
+#   critically, confirming the glossary document's concept (Tigris) does
+#   NOT leak into the gates preview. `concept_mentions_are_journaled_as_
+#   their_own_linked_entries` confirms the mention entity is a real,
+#   separate journal entry, not a side-channel value.
+#
+# WHAT THIS DOES NOT DO, and why: the access-request queue (NISABA
+# proposes a stakeholder grant, Architect approves/denies yes/no) is NOT
+# built in this pass -- the Architect's own answer was "wait, design the
+# exposure preview first." Voice I/O is not attempted, for the hard
+# feasibility reason stated above -- a text-based UI wired to this
+# exposure preview and to NISABA's existing propose-not-ratify pattern
+# (NisabaOrchestrator, sealed grants) is the natural next step, and voice
+# is a client-side layer on top of that text flow once it exists,
+# verifiable only on the Architect's own desktop hardware, not here.
+#
+# VERIFICATION: cargo build --workspace clean. cargo test --workspace:
+#   3496 passed, 0 failed (up from PB-193's baseline of 3481 by the 15
+#   new tests across concepts.rs/exposure.rs/emitter.rs/writenode.rs;
+#   zero regressions to any pre-existing enkiddb test).
+# =============================================================================
+---
+- name: "PB-194 | Record — EnkiDDB concept registry + exposure preview landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-194.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. New: crates/enkiddb/src/concepts.rs,
+          crates/enkiddb/src/exposure.rs. Changed:
+          crates/enkiddb/src/emitter.rs (emit_concept_mentions),
+          crates/enkiddb/src/writenode.rs
+          (ingest_document_with_concepts, exposure_preview,
+          known_collections), crates/enkiddb/src/lib.rs (module
+          registration). Run `cargo test -p enkiddb` for the standing
+          proof: 56 passed, 0 failed. Full workspace:
+          `cargo test --workspace`: 3496 passed, 0 failed.

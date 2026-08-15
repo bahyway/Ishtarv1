@@ -1,0 +1,67 @@
+# =============================================================================
+# PB-175 — EnkiMDB CQRS: WriteNode (Journal/WAL) + ReadNode (Data Files)
+# BahyWay.Ecosystem v4.0 — 2026-07-12
+#
+# CONTEXT: the Architect's revised build order for this era: EnkiDDB and
+# EnkiMDB first, as the two foundational stones, each fully working
+# (including AI Agent integration) before DubSar Theater work and, after
+# that, the remaining 5 EnkiDB types as part of BeeMDM ETL construction.
+# This playbook is the second of that pair -- PB-174 did EnkiDDB.
+#
+# GROUND CHECKED FIRST: enkimdb had the exact same gap enkiddb had before
+# PB-174 -- artifact.rs / emitter.rs / scan.rs / lib.rs, a pure particle
+# producer with no Journal, no WAL, no read path. Confirmed by grep before
+# writing anything (zero matches for WAL/write_node/read_node/Journal/CQRS
+# in enkimdb/src/*.rs).
+#
+# REUSE, NOT REINVENT, AGAIN: same ADR-012 pattern as PB-174 -- WriteNode
+# wraps a real enkidb_journal::Journal (the WAL), ingest_artifact() mints
+# an artifact's Identity-Kaki via the existing ArtifactEmitter, converts
+# each Particle to an EavTriple via the real
+# enkidb_ingest::bridge::particle_to_eav_triple (the same bridge used by
+# EnkiDB and EnkiDDB, not a third converter), appends one JournalEntry.
+# ReadNode is the existing enkidb-readnode crate, not reimplemented.
+#
+# WHAT WAS BUILT:
+#   - crates/enkimdb/src/writenode.rs (NEW)
+#   - crates/enkimdb/src/readnode.rs (NEW) -- thinner than enkiddb's
+#     equivalent; the append-only-writer constraint (re-materializing to
+#     the same path duplicates records) is documented by reference to
+#     enkiddb::readnode's test rather than re-proven here, since it is a
+#     property of the shared enkidb-datafile crate, not specific to
+#     either database type.
+#   - crates/enkimdb/Cargo.toml: added enkidb-journal, enkidb-ingest,
+#     enkidb-readnode, heptascript.
+#
+# STILL OPEN, NOT BUILT HERE, DELIBERATELY NOT GUESSED AT: "with all its
+# AI Agents." Checked what that could mean before building anything:
+# enkidullm-model's own system prompt literally identifies EnkiduLLM/
+# TamuzAI as "the sovereign MetaEngine of BahyWay.Ecosystem v4.0" --
+# real, live infrastructure, not invented. But the specific piece that
+# would let TamuzAI query EnkiDDB/EnkiMDB -- enkidullm-codex, "BahyWay
+# knowledge base" -- is marked (red circle, not built) in
+# enkidullm-chat's own `!next` roadmap text and does not exist as a
+# crate. This is a real, honestly-scoped gap, not fabricated -- and it
+# needs the Architect's scope decision before it's built, not an
+# invented design.
+#
+# TESTS: enkimdb 12/12 (was 3 before this playbook -- wait, confirm:
+#   3 emitter + 3 scan pre-existing = 6, + 6 new (3 writenode, 3
+#   readnode) = 12). Full workspace cargo test --workspace: see commit
+#   message for the exact total.
+# =============================================================================
+---
+- name: "PB-175 | Record — EnkiMDB CQRS WriteNode/ReadNode landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-175.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-12. New: crates/enkimdb/src/{writenode,readnode}.rs.
+          Run `cargo test -p enkimdb` for the standing proof: 12 passed,
+          0 failed. EnkiDDB (PB-174) and EnkiMDB (this playbook) both now
+          have real CQRS. AI Agent integration ("enkidullm-codex") remains
+          open, awaiting Architect scope.

@@ -1,0 +1,87 @@
+# =============================================================================
+# PB-185 — Anu Index Pre-Build Readiness Audit, before building EnkiDDB (Tigris)
+# BahyWay.Ecosystem v4.0 — 2026-07-13
+#
+# CONTEXT: companion to PB-184 (Storage). The Architect asked for an Indexes
+# playbook to run before building EnkiDDB. The full 13-module W5H2 reference
+# for the Anu Index Stack already exists (PB-182 tree audit, PB-183 sovereign
+# rename, docs/components/ANU_INDEX_STACK.md) — this playbook does not repeat
+# that work. It narrows the question to exactly what the Architect needs
+# before building EnkiDDB specifically: of Anu's 13 modules, which ones does
+# EnkiDDB's own code actually call?
+#
+# METHOD: same as PB-184 — grep for real call sites in crates/enkiddb/src
+# and its direct/transitive dependency chain, not doc-comment claims.
+#
+# FINDING: EnkiDDB's query path is crates/enkiddb/src/rag.rs and
+# crates/enkiddb/src/readnode.rs, both routed through `heptascript`. The only
+# index type heptascript actually builds is `HeptaIndexes`
+# (crates/heptascript/src/indexed.rs, `build_indexes()`), which contains
+# exactly two fields:
+#
+#   surrogates: SurrogateMap    — KAKI uuid <-> u32 surrogate, sorted-array
+#                                  binary search, immutable after build.
+#   eav:        EavExactIndex   — (attr_hash, value, surrogate) exact match,
+#                                  Xor8 fingerprint filter + binary search.
+#
+# These are the ONLY two of Anu's 13 modules EnkiDDB queries actually touch.
+# Confirmed tree-free, confirmed live, 58/58 enkidb-indexes tests pass
+# (covering all 13 modules, not just these two).
+#
+# THE OTHER 11 MODULES, for EnkiDDB specifically:
+#
+#   BUNDLED BUT UNREACHABLE FROM ENKIDDB (PB-184 Tier 2 finding): identity,
+#   sovereignty, typerole, temporal, colorid, eav, snapshot_idx are all
+#   bundled into `enkidb-engine::EnkiDb`, which IS in enkiddb's Cargo
+#   dependency graph (via enkidb-ingest) but is never instantiated by any
+#   code in crates/enkiddb/src -- enkiddb only uses
+#   `enkidb_ingest::bridge`'s plain conversion functions. These seven
+#   indexes compile into the EnkiDDB binary and do nothing for it today.
+#
+#   NOT REACHABLE BY ANY PATH TODAY: radix_spline, hepta_shell, nairu_index,
+#   bloom have zero consumers anywhere in the whole workspace (confirmed in
+#   PB-183 / ANU_INDEX_STACK.md), EnkiDDB included.
+#
+# WHAT THIS MEANS FOR THE BUILD: EnkiDDB's actual query performance today
+# rests entirely on SurrogateMap (KAKI lookup) and EavExactIndex (exact
+# attribute-value match). Range queries, temporal queries, spatial/ColorID
+# drift queries, and 7D orbital queries are NOT accelerated by any index for
+# EnkiDDB — heptascript would have to fall back to a full scan, or those
+# capabilities are simply not exposed by EnkiDDB's query surface yet (not
+# verified here; out of scope for this playbook, flagged for the Architect
+# to decide whether EnkiDDB needs them before or after first build).
+#
+# NO TREE IN THE ORBITS: re-confirmed for the two live modules specifically
+# -- SurrogateMap is a flat sorted `Vec<([u8;16], u32)>`, EavExactIndex is a
+# flat `Vec<(u32,u32,u32)>` + Xor8 FingerprintTable. Neither is a tree.
+#
+# CAPACITY, per ANU_INDEX_STACK.md's own numbers, for the two live modules
+# at 1B particles (the only capacity figures that matter for EnkiDDB today):
+#   SurrogateMap (sorted array)         ~20GB   (PTHash MPHF target: ~750MB,
+#                                                 not yet built)
+#   EavExactIndex (cold/archive tier)   ~48GB at 4 attrs/particle
+#                                        ~480MB at the 10M-particle hot tier
+#
+# VERDICT: GO, for EnkiDDB's actual query shape (KAKI lookup + exact EAV
+# match). NOT yet GO for range/temporal/spatial/orbital query acceleration
+# under EnkiDDB specifically -- those seven indexes exist, are tested, and
+# are tree-free, but are not wired to anything EnkiDDB calls. This is an
+# explicit, honest scope boundary, not a defect discovered late.
+# =============================================================================
+---
+- name: "PB-185 | Record — Anu Index pre-build readiness audit for EnkiDDB"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-185.1 | Verdict"
+      ansible.builtin.debug:
+        msg: >-
+          GO for EnkiDDB's real query shape. heptascript::HeptaIndexes
+          (SurrogateMap + EavExactIndex only) is what EnkiDDB actually
+          queries through -- tree-free, 58/58 enkidb-indexes tests pass.
+          The other 11 Anu modules (7 bundled-but-unreachable via
+          enkidb-engine, 4 with zero consumers anywhere) do not accelerate
+          any EnkiDDB query today. See docs/components/ANU_INDEX_STACK.md
+          for the full 13-module reference and PB-184 for the companion
+          Storage audit.

@@ -1,0 +1,106 @@
+# =============================================================================
+# PB-191 — NISABA's bounded self-decision: a sealed, Architect-only autonomy
+# grant, Watch-band only, environment-locked
+# BahyWay.Ecosystem v4.0 — 2026-07-18
+#
+# CONTEXT: after PB-190 landed NISABA's Internal Interface role (real TDA,
+# real StoryEngine alert bridge, real orchestrator), the Architect asked
+# whether NISABA could act as a genuine AI agent -- taking "intelligent
+# decisions on small details" herself while leaving "High Priority-Major
+# Effects changes" for the Architect to approve, with more autonomy in Test
+# than in Dev/Prod, and an explicit non-negotiable: "it will NEVER means
+# that the client itself can configure Nisaba as it wish, it will always
+# be my authority to grant Nisaba any more roles and permissions."
+#
+# Two clarifying questions were asked and answered before any code was
+# written, since this is the first autonomous-write-adjacent capability
+# built in this Ecosystem (everything before this was strictly propose-only
+# by the absence of any write path):
+#   1. Autonomy scope: Watch-band only, no writes. NISABA may auto-resolve
+#      Watch-severity StoryEngine findings (the "small details" tier) --
+#      she still never submits an Event-Kaki through AdadGate, never mints
+#      a Kaki, never mutates ecosystem storage. Warning/Critical
+#      (HighPriority) findings always reach the Architect, with or without
+#      a grant.
+#   2. Grant mechanism: reuse `kupru::akkadian_seal` (the Ecosystem's real,
+#      already-sealed Ed25519 signature layer), rather than inventing a new
+#      trust primitive for this one purpose.
+#
+# WHAT WAS BUILT, two pieces:
+#
+#  1. crates/nisaba/src/autonomy.rs (new module) — `NisabaEnvironment`
+#     (Test/Dev/Prod), `AutonomyClass` (WatchBandOnly, the only variant --
+#     deliberately, so there is no way to widen scope by adding fields to
+#     an existing grant), `GrantClaim` (environment + class + issued_at,
+#     canonically encoded with a domain-separation tag), and `NisabaGrant`
+#     (the claim plus an Architect-signed `kupru::AkkadianSeal` signature).
+#     `NisabaGrant::issue` requires the Architect's `SealKeyPair` signing
+#     key -- never shipped anywhere this code runs. `NisabaGrant::verify`
+#     only needs the public `SovereignVerifier`, safe to embed anywhere,
+#     including in a client build. This is the whole safety argument: "the
+#     client can never configure Nisaba" is not a policy this module
+#     enforces by convention, it is a fact about what an Ed25519 signature
+#     makes possible to forge without the private key -- nothing. 4 tests,
+#     including an explicit forgery attempt (a second, "impostor" key signs
+#     a grant; it does not verify against the Architect's real key) and a
+#     tamper attempt (editing a signed claim's environment after the fact
+#     breaks verification).
+#
+#  2. crates/nisaba/src/orchestrator.rs (extended) — `NisabaOrchestrator`
+#     now carries its own `NisabaEnvironment` (set at construction, never
+#     changes) and an `Option<GrantClaim>` installed only via
+#     `grant_autonomy()`, which verifies the signature AND that the
+#     grant's environment matches the orchestrator's own before installing
+#     anything -- a Test-signed grant presented to a Prod orchestrator
+#     is rejected, even though the signature itself is genuine.
+#     `observe_story_projections` now checks `can_autonomously_resolve`
+#     (Watch band AND an active WatchBandOnly grant) per finding: if true,
+#     the finding is narrated and logged to a new `autonomous_resolutions`
+#     audit trail instead of being enqueued on the StewardStation; if
+#     false -- which includes every HighPriority finding, unconditionally,
+#     since `can_autonomously_resolve` only ever matches the Watch band --
+#     behaviour is exactly what PB-190 shipped: narrate + enqueue for the
+#     Architect. `revoke_autonomy()` always works without a signature
+#     (narrowing needs no proof); `clear()` resets the observation logs
+#     but deliberately never touches the active grant, so a routine digest
+#     review can't accidentally silently revoke it. 6 new tests on top of
+#     PB-190's 5, including the two safety-critical ones: a valid grant
+#     still sends a Dead-state (HighPriority) finding to the steward, and
+#     a wrong-environment grant installs nothing and Watch-band findings
+#     keep going to the steward as before.
+#
+# WHAT THIS DOES NOT DO, still, by the same CSR-08 discipline as PB-190:
+# auto-resolution only changes which in-memory queue a finding lands in --
+# it does not touch `StewardStation`, `alert-engine`, `diagnosis-templates`,
+# or any storage/journal crate, none of which were modified. There is still
+# no method anywhere in `nisaba` that mints a Kaki or submits an Event-Kaki.
+# The desktop `dubsar-visualizer` UI (PB-190's live panel) never installs a
+# grant, so it continues to run fully propose-only regardless of this
+# change -- the panel now also shows an explicit "No autonomy grant" /
+# "Autonomy grant active: <env>, Watch-band only" line plus a
+# "Self-resolved" counter, so the state is never ambiguous to read.
+#
+# VERIFICATION: cargo build --workspace clean. cargo test --workspace:
+#   3481 passed, 0 failed (up from the PB-190 baseline of 3471 by the 10
+#   new tests across autonomy.rs and orchestrator.rs; zero regressions).
+# =============================================================================
+---
+- name: "PB-191 | Record — NISABA bounded autonomy grant (sealed, Watch-band only)"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-191.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-18. New: crates/nisaba/src/autonomy.rs (+lib.rs
+          registration). Changed: crates/nisaba/src/orchestrator.rs
+          (grant_autonomy/revoke_autonomy/active_autonomy,
+          autonomous_resolutions audit trail, NisabaOrchestrator::new now
+          takes a NisabaEnvironment). Changed: crates/nisaba/Cargo.toml
+          (kupru dependency). Changed:
+          crates/dubsar-visualizer/src/panels/eridu_layout.rs (updated
+          NisabaOrchestrator::new call, live grant-state + self-resolved
+          count in the digest bar). Run `cargo test --workspace` for the
+          standing proof: 3481 passed, 0 failed.

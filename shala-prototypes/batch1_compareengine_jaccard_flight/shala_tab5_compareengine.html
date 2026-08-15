@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · Tab 5 — CompareEngine</title>
+<style>
+  /* ════════════════════════════════════════════════════════════
+     ŠALA Prototype Workbench — Sovereign Dark Charter
+     BG_BASE #2B2D31 · BG_PANEL #232527 · BG_WIDGET #1E2022
+     BG_DEEP #18191B · STROKE #3D3F43 · HOVER #383A3E · SEL #404349
+     ════════════════════════════════════════════════════════════ */
+  :root{
+    --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022;
+    --bg-deep:#18191B; --bg-hover:#383A3E; --bg-selected:#404349;
+    --stroke:#3D3F43;
+    --gold:#D6A44C; --teal:#4FB8A8; --crimson:#C34A3F;
+    --orange:#D98E3E; --purple:#9B7FC7;
+    --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+    --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --sans:-apple-system,"Segoe UI","Noto Sans",Ubuntu,Cantarell,sans-serif;
+    --mono:"JetBrains Mono","Fira Code",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+  button,input,select{font-family:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  /* ── Masthead ─────────────────────────────────────────────── */
+  header{border-bottom:1px solid var(--stroke);background:var(--bg-panel)}
+  .mast{max-width:1240px;margin:0 auto;padding:18px 24px 0;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  .mast h1{font-family:var(--serif);font-weight:600;font-size:24px;letter-spacing:.04em}
+  .mast h1 .glyph{color:var(--gold);margin-right:8px}
+  .mast .sub{color:var(--muted);font-size:13px}
+  .mast .rt{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .tabs{max-width:1240px;margin:0 auto;padding:12px 24px 0;display:flex;gap:4px}
+  .tab{padding:8px 18px 10px;font-size:13px;letter-spacing:.03em;color:var(--dim);
+       border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;
+       background:transparent;cursor:default;user-select:none}
+  .tab.reserved{font-style:italic}
+  .tab.active{background:var(--bg-base);border-color:var(--stroke);color:var(--gold);
+       font-weight:600;position:relative;top:1px;cursor:default}
+  .tab.active .n{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:6px}
+
+  /* ── Frame ────────────────────────────────────────────────── */
+  main{max-width:1240px;margin:0 auto;padding:22px 24px 60px}
+  .brief{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-bottom:18px}
+  .brief h2{font-family:var(--serif);font-size:19px;font-weight:600}
+  .brief p{color:var(--muted);font-size:13.5px;max-width:70ch}
+  .scenario{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .scenario select{background:var(--bg-widget);border:1px solid var(--stroke);border-radius:6px;
+       padding:6px 10px;font-size:13px;cursor:pointer}
+  .scenario select:hover{background:var(--bg-hover)}
+
+  /* ── Judgment stage: File A · Stele · File B ─────────────── */
+  .stage{display:grid;grid-template-columns:1fr 232px 1fr;gap:18px;align-items:start}
+  @media(max-width:980px){.stage{grid-template-columns:1fr}.stele{order:-1}}
+
+  .fileCard{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:10px;overflow:hidden}
+  .fileHead{display:flex;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--stroke)}
+  .fileHead .tag{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:4px}
+  .fileA .tag{background:rgba(79,184,168,.14);color:var(--teal);border:1px solid rgba(79,184,168,.35)}
+  .fileB .tag{background:rgba(217,142,62,.14);color:var(--orange);border:1px solid rgba(217,142,62,.35)}
+  .fileHead .name{font-family:var(--serif);font-size:15.5px}
+  .fileHead .meta{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .attrHead,.attrRow{display:grid;grid-template-columns:34px 1fr 1.1fr 26px;gap:8px;align-items:center;padding:6px 14px}
+  .attrHead{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+       border-bottom:1px solid var(--stroke);padding-top:10px;padding-bottom:8px}
+  .attrRow{border-bottom:1px solid rgba(61,63,67,.45)}
+  .attrRow:last-of-type{border-bottom:none}
+  .attrRow.off{opacity:.38}
+  .attrRow input[type=checkbox]{width:15px;height:15px;accent-color:var(--gold);cursor:pointer;justify-self:center}
+  .attrRow .aname{font-family:var(--mono);font-size:12.5px;color:var(--ink);word-break:break-all}
+  .attrRow input[type=text]{background:var(--bg-widget);border:1px solid var(--stroke);border-radius:5px;
+       padding:5px 8px;font-family:var(--mono);font-size:12px;width:100%;color:var(--ink)}
+  .attrRow input[type=text]:hover{background:var(--bg-hover)}
+  .attrRow .del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;border-radius:4px;padding:2px 4px}
+  .attrRow .del:hover{color:var(--crimson);background:var(--bg-hover)}
+  .attrRow.conflict .aname::after{content:"≠";color:var(--crimson);margin-left:7px;font-weight:700}
+  .attrRow.agree .aname::after{content:"=";color:var(--gold);margin-left:7px;font-weight:700}
+  .addRow{padding:10px 14px 12px}
+  .addRow button{background:var(--bg-widget);border:1px dashed var(--stroke);color:var(--muted);
+       width:100%;padding:7px;border-radius:6px;font-size:12.5px;cursor:pointer}
+  .addRow button:hover{background:var(--bg-hover);color:var(--ink)}
+
+  /* ── The Boundary Stele (signature) ──────────────────────── */
+  .stele{background:linear-gradient(178deg,#26282C 0%,#1E2023 58%,#1A1B1E 100%);
+       border:1px solid var(--stroke);border-radius:120px 120px 14px 14px;
+       padding:26px 18px 20px;text-align:center;position:relative;
+       box-shadow:inset 0 1px 0 rgba(232,230,225,.05), 0 10px 28px rgba(0,0,0,.35)}
+  .stele::before{content:"";position:absolute;inset:8px;border:1px solid rgba(214,164,76,.16);
+       border-radius:112px 112px 9px 9px;pointer-events:none}
+  .stele .rite{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+  .stele .deity{font-family:var(--serif);font-size:15px;color:var(--gold);margin:3px 0 14px;letter-spacing:.05em}
+  .verdict{font-family:var(--serif);font-size:21px;font-weight:600;padding:9px 6px;border-radius:8px;margin:0 4px 6px}
+  .verdict.golden{color:#F0D08A;background:rgba(214,164,76,.12);border:1px solid rgba(214,164,76,.45)}
+  .verdict.fuzzy{color:#F0B27A;background:rgba(217,142,62,.10);border:1px solid rgba(217,142,62,.45)}
+  .verdict.dead{color:#E08A80;background:rgba(195,74,63,.10);border:1px solid rgba(195,74,63,.45)}
+  .verdict small{display:block;font-family:var(--sans);font-size:10px;letter-spacing:.14em;
+       text-transform:uppercase;opacity:.75;margin-top:2px}
+  .gauge{margin:16px auto 4px;width:120px;height:120px;position:relative}
+  .gauge svg{transform:rotate(-90deg)}
+  .gauge .val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .gauge .val b{font-family:var(--mono);font-size:23px;font-weight:600}
+  .gauge .val span{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .steleStats{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:7px;text-align:left}
+  .ss{background:rgba(30,32,34,.7);border:1px solid var(--stroke);border-radius:7px;padding:7px 9px}
+  .ss b{display:block;font-family:var(--mono);font-size:15px}
+  .ss span{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+  .ss.wide{grid-column:1/-1}
+  .ss .gold{color:var(--gold)} .ss .teal{color:var(--teal)}
+  .ss .orange{color:var(--orange)} .ss .crimson{color:var(--crimson)}
+
+  /* ── Ledger ──────────────────────────────────────────────── */
+  .ledger{margin-top:20px;display:grid;grid-template-columns:1.35fr 1fr;gap:18px}
+  @media(max-width:980px){.ledger{grid-template-columns:1fr}}
+  .panel{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:10px;padding:16px 18px}
+  .panel h3{font-family:var(--serif);font-size:15.5px;font-weight:600;margin-bottom:10px}
+  .panel h3 .sig{font-family:var(--mono);font-size:11px;color:var(--dim);font-weight:400;margin-left:8px}
+  .chipSet{margin-bottom:12px}
+  .chipSet .lbl{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;min-height:24px}
+  .chip{font-family:var(--mono);font-size:11.5px;padding:3px 9px;border-radius:20px;border:1px solid}
+  .chip.gold{color:var(--gold);border-color:rgba(214,164,76,.4);background:rgba(214,164,76,.08)}
+  .chip.teal{color:var(--teal);border-color:rgba(79,184,168,.4);background:rgba(79,184,168,.08)}
+  .chip.orange{color:var(--orange);border-color:rgba(217,142,62,.4);background:rgba(217,142,62,.08)}
+  .chip.crimson{color:var(--crimson);border-color:rgba(195,74,63,.4);background:rgba(195,74,63,.08)}
+  .chip.none{color:var(--dim);border-color:var(--stroke);background:none;font-style:italic}
+  .formula{font-family:var(--mono);font-size:12.5px;background:var(--bg-widget);
+       border:1px solid var(--stroke);border-radius:7px;padding:9px 12px;margin-top:6px;
+       color:var(--muted);overflow-x:auto;white-space:nowrap}
+  .formula b{color:var(--ink);font-weight:600}
+  .formula .g{color:var(--gold)} .formula .t{color:var(--teal)} .formula .c{color:var(--crimson)}
+
+  /* ── HeptaScript tablet ──────────────────────────────────── */
+  .hepta{background:var(--bg-deep);border:1px solid var(--stroke);border-radius:10px;padding:14px 18px 16px}
+  .hepta h3{font-family:var(--serif);font-size:15.5px;margin-bottom:8px}
+  .hepta h3 .glyph{color:var(--gold)}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.75;overflow-x:auto;color:#C9C7C2}
+  .kw{color:var(--gold);font-weight:600}.nn{color:var(--teal)}.vv{color:var(--orange)}
+  .cm{color:var(--dim);font-style:italic}.pu{color:var(--purple)}
+
+  footer{max-width:1240px;margin:0 auto;padding:0 24px 40px;color:var(--dim);font-size:12px}
+  footer b{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mast">
+    <h1><span class="glyph">𒀭</span>ŠALA <span style="color:var(--dim);font-weight:400">·</span> <span style="font-size:16px;color:var(--muted)">Prototype Workbench</span></h1>
+    <span class="sub">BahyWay.Ecosystem v4.0 — HTML rehearsal stage · stage, never truth</span>
+    <span class="rt">DUB.SAR 𒁾</span>
+  </div>
+  <nav class="tabs" aria-label="Shala tabs">
+    <span class="tab reserved">Tab 1 · —</span>
+    <span class="tab reserved">Tab 2 · —</span>
+    <span class="tab reserved">Tab 3 · —</span>
+    <span class="tab reserved">Tab 4 · —</span>
+    <span class="tab active" aria-current="page"><span class="n">Tab 5</span>CompareEngine</span>
+  </nav>
+</header>
+
+<main>
+  <div class="brief">
+    <div>
+      <h2>CompareEngine — ETL Judgment Station</h2>
+      <p>Two files from the same source stand before the boundary. Schema-level Jaccard rules on
+         attribute presence; value-level Sigmoid similarity rules on the attributes both files carry.
+         Toggle presence, edit values — the stele re-judges on every change.</p>
+    </div>
+    <label class="scenario">Scenario
+      <select id="scenarioSel" aria-label="Load scenario">
+        <option value="najaf">Najaf plot registry — v1 vs v2</option>
+        <option value="baghdad">Baghdad water sector — telemetry drift</option>
+        <option value="twin">Twin tablets — identical</option>
+        <option value="foreign">Foreign tablets — no kinship</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- ═══ Judgment stage ═══ -->
+  <section class="stage">
+
+    <!-- File A -->
+    <div class="fileCard fileA">
+      <div class="fileHead">
+        <span class="tag">FILE A</span>
+        <span class="name" id="nameA">—</span>
+        <span class="meta" id="metaA"></span>
+      </div>
+      <div class="attrHead"><span>ᴏɴ</span><span>Attribute</span><span>Value</span><span></span></div>
+      <div id="rowsA"></div>
+      <div class="addRow"><button type="button" onclick="addAttr('A')">＋ Add attribute to File A</button></div>
+    </div>
+
+    <!-- Boundary Stele -->
+    <aside class="stele" aria-live="polite">
+      <div class="rite">Boundary Judgment</div>
+      <div class="deity">the stele between two tablets</div>
+      <div class="verdict golden" id="verdictBox">—<small id="verdictSub">awaiting tablets</small></div>
+      <div class="gauge">
+        <svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Combined similarity gauge">
+          <circle cx="60" cy="60" r="52" fill="none" stroke="#3D3F43" stroke-width="8"/>
+          <circle id="gaugeArc" cx="60" cy="60" r="52" fill="none" stroke="#D6A44C" stroke-width="8"
+                  stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+        </svg>
+        <div class="val"><b id="gaugeVal">0.000</b><span>Sigmoid sim</span></div>
+      </div>
+      <div class="steleStats">
+        <div class="ss"><b class="teal" id="stJs">0.000</b><span>J schema</span></div>
+        <div class="ss"><b class="orange" id="stJv">0.000</b><span>J value</span></div>
+        <div class="ss"><b class="gold" id="stCf">0</b><span>cf — common</span></div>
+        <div class="ss"><b class="crimson" id="stDf">0</b><span>df — distinct</span></div>
+        <div class="ss wide"><b id="stBound" style="color:var(--muted)">≤ 1.000</b><span>Jaccard upper bound |T|∕|S|</span></div>
+      </div>
+    </aside>
+
+    <!-- File B -->
+    <div class="fileCard fileB">
+      <div class="fileHead">
+        <span class="tag">FILE B</span>
+        <span class="name" id="nameB">—</span>
+        <span class="meta" id="metaB"></span>
+      </div>
+      <div class="attrHead"><span>ᴏɴ</span><span>Attribute</span><span>Value</span><span></span></div>
+      <div id="rowsB"></div>
+      <div class="addRow"><button type="button" onclick="addAttr('B')">＋ Add attribute to File B</button></div>
+    </div>
+  </section>
+
+  <!-- ═══ Ledger ═══ -->
+  <section class="ledger">
+    <div class="panel">
+      <h3>Judgment ledger <span class="sig">sets, live</span></h3>
+      <div class="chipSet"><div class="lbl">Shared schema — A ∩ B</div><div class="chips" id="chipsShared"></div></div>
+      <div class="chipSet"><div class="lbl">Only in File A — A ∖ B</div><div class="chips" id="chipsOnlyA"></div></div>
+      <div class="chipSet"><div class="lbl">Only in File B — B ∖ A</div><div class="chips" id="chipsOnlyB"></div></div>
+      <div class="chipSet"><div class="lbl">Value conflicts on shared attributes</div><div class="chips" id="chipsConflict"></div></div>
+      <div class="formula" id="fSchema"></div>
+      <div class="formula" id="fValue"></div>
+      <div class="formula" id="fSigmoid"></div>
+    </div>
+
+    <div class="hepta">
+      <h3><span class="glyph">𒁾</span> HeptaScript — the same judgment, spoken sovereignly</h3>
+<pre id="heptaCode"></pre>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <b>Charter notes.</b> Šala is rehearsal scaffolding only — Way-of-Work rule 5 holds: no HTML in
+  production; the sealed CompareEngine lives in pure Rust behind the engines, and Godot/egui carry
+  the stage. Naming: <b>CompareEngine</b> is lawful descriptive class under NL-001. Kish is a city
+  and may name only a structure; if a god-name is desired, Ishtaran — judge of the Umma–Lagash
+  boundary — stands ready. Verdict thresholds map to the EAV trichotomy:
+  GOLDEN ≥ 0.75 · FUZZY 0.35–0.75 · DEAD &lt; 0.35 (value-level Jaccard, schema-gated).
+</footer>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   CompareEngine — Tab 5 rehearsal logic
+   Schema Jaccard  : J_s = |A∩B| / |A∪B|      (attribute presence)
+   Value  Jaccard  : J_v = cf / (cf + dfA + dfB)  over shared attrs
+   Sigmoid sim     : (e^cf − 1) / ((e^cf + 1)(dfA + dfB + 1))
+                     (Likavec–Lombardi–Cena, consistently best)
+   ══════════════════════════════════════════════════════════════ */
+
+const SCENARIOS = {
+  najaf: {
+    nameA:"najaf_plots_v1.csv", nameB:"najaf_plots_v2.csv",
+    A:[["plot_id","NJF-80211",1],["sector","W-14",1],["burial_date","2019-03-04",1],
+       ["depth_m","1.8",1],["family_name","al-Musawi",1],["status","occupied",1]],
+    B:[["plot_id","NJF-80211",1],["sector","W-14",1],["burial_date","2019-03-04",1],
+       ["family_name","al-Moussawi",1],["gps_lat","31.9954",1],["gps_lon","44.3140",1],
+       ["status","occupied",1]]
+  },
+  baghdad: {
+    nameA:"sector_D_flow_v3.json", nameB:"sector_D_flow_v4.json",
+    A:[["sensor_id","BGW-D-071",1],["pressure_bar","3.42",1],["flow_lps","118.5",1],
+       ["valve_state","open",1],["reading_ts","2026-08-01T06:00Z",1]],
+    B:[["sensor_id","BGW-D-071",1],["pressure_bar","3.38",1],["flow_lps","118.5",1],
+       ["valve_state","open",1],["reading_ts","2026-08-01T06:00Z",1],
+       ["turbidity_ntu","4.1",1],["chlorine_mgl","0.42",1]]
+  },
+  twin: {
+    nameA:"tablet_alpha.akk", nameB:"tablet_beta.akk",
+    A:[["tribe_id","0x1A2B",1],["kaki_role","event",1],["epoch","44121",1],["seal","ed25519:9f…",1]],
+    B:[["tribe_id","0x1A2B",1],["kaki_role","event",1],["epoch","44121",1],["seal","ed25519:9f…",1]]
+  },
+  foreign: {
+    nameA:"cemetery_plots.csv", nameB:"grid_feeders.csv",
+    A:[["plot_id","NJF-1",1],["sector","E-2",1],["family_name","al-Hakim",1]],
+    B:[["feeder_id","EGD-9917",1],["substation","Karbala-S",1],["load_mw","14.2",1],["phase","3",1]]
+  }
+};
+
+let attrsA=[], attrsB=[];   // [name, value, on]
+
+function loadScenario(key){
+  const s=SCENARIOS[key];
+  attrsA=s.A.map(r=>[...r]); attrsB=s.B.map(r=>[...r]);
+  document.getElementById('nameA').textContent=s.nameA;
+  document.getElementById('nameB').textContent=s.nameB;
+  render();
+}
+
+function addAttr(side){
+  const list = side==='A'?attrsA:attrsB;
+  list.push(["new_attr_"+(list.length+1),"",1]);
+  render();
+}
+
+function bindRow(side,i,field,val){
+  const list = side==='A'?attrsA:attrsB;
+  if(field==='name') list[i][0]=val;
+  if(field==='value') list[i][1]=val;
+  if(field==='on') list[i][2]=val?1:0;
+  compute();          // recompute without full re-render (keeps focus)
+}
+function delRow(side,i){
+  (side==='A'?attrsA:attrsB).splice(i,1);
+  render();
+}
+
+function activeMap(list){
+  const m=new Map();
+  for(const [n,v,on] of list){ const k=n.trim(); if(on&&k) m.set(k,(v??"").trim()); }
+  return m;
+}
+const norm = v => v.toLowerCase();
+
+function judge(){
+  const A=activeMap(attrsA), B=activeMap(attrsB);
+  const shared=[], onlyA=[], onlyB=[], conflicts=[];
+  for(const k of A.keys()) (B.has(k)?shared:onlyA).push(k);
+  for(const k of B.keys()) if(!A.has(k)) onlyB.push(k);
+  let cf=0, dfA=0, dfB=0;
+  for(const k of shared){
+    if(norm(A.get(k))===norm(B.get(k))) cf++;
+    else { dfA++; dfB++; conflicts.push(k); }
+  }
+  const inter=shared.length, uni=inter+onlyA.length+onlyB.length;
+  const Js = uni? inter/uni : 1;
+  const Jv = (cf+dfA+dfB)? cf/(cf+dfA+dfB) : (inter?1:0);
+  const sig = (Math.exp(cf)-1)/((Math.exp(cf)+1)*(dfA+dfB+1));
+  const sza=A.size, szb=B.size;
+  const bound = (sza&&szb)? Math.min(sza,szb)/Math.max(sza,szb) : 1;
+  return {A,B,shared,onlyA,onlyB,conflicts,cf,dfA,dfB,inter,uni,Js,Jv,sig,bound};
+}
+
+function verdictOf(r){
+  if(r.Js < 0.30) return ["dead","FOREIGN","no schema kinship — different tribes"];
+  if(r.Jv >= 0.75) return ["golden","SAME ORBIT","stable limit cycle — golden match"];
+  if(r.Jv >= 0.35) return ["fuzzy","DRIFTED","bifurcation edge — fuzzy kinship"];
+  return ["dead","DEAD MATCH","stable fixed point — kinship lost"];
+}
+
+function chips(el, arr, cls, decorate){
+  el.innerHTML = arr.length
+    ? arr.map(k=>`<span class="chip ${cls}">${esc(k)}${decorate?decorate(k):""}</span>`).join("")
+    : `<span class="chip none">∅ empty set</span>`;
+}
+const esc = s => s.replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function compute(){
+  const r=judge();
+  // stele
+  const [vc,vt,vs]=verdictOf(r);
+  const vb=document.getElementById('verdictBox');
+  vb.className='verdict '+vc;
+  vb.innerHTML=`${vt}<small>${vs}</small>`;
+  const C=326.7;
+  document.getElementById('gaugeArc').style.strokeDashoffset = C*(1-Math.min(r.sig,1));
+  document.getElementById('gaugeArc').style.stroke =
+      vc==='golden' ? '#D6A44C' : vc==='fuzzy' ? '#D98E3E' : '#C34A3F';
+  document.getElementById('gaugeVal').textContent=r.sig.toFixed(3);
+  document.getElementById('stJs').textContent=r.Js.toFixed(3);
+  document.getElementById('stJv').textContent=r.Jv.toFixed(3);
+  document.getElementById('stCf').textContent=r.cf;
+  document.getElementById('stDf').textContent=r.dfA+r.dfB;
+  document.getElementById('stBound').textContent="≤ "+r.bound.toFixed(3);
+  // ledger
+  chips(document.getElementById('chipsShared'), r.shared, 'gold');
+  chips(document.getElementById('chipsOnlyA'), r.onlyA, 'teal');
+  chips(document.getElementById('chipsOnlyB'), r.onlyB, 'orange');
+  chips(document.getElementById('chipsConflict'), r.conflicts, 'crimson',
+        k=>` <span style="opacity:.7">${esc(r.A.get(k))} ≠ ${esc(r.B.get(k))}</span>`);
+  document.getElementById('fSchema').innerHTML =
+    `J<sub>schema</sub> = |A∩B| / |A∪B| = <span class="g">${r.inter}</span> / <b>${r.uni}</b> = <b>${r.Js.toFixed(3)}</b>`;
+  document.getElementById('fValue').innerHTML =
+    `J<sub>value</sub> = cf / (cf + df<sub>A</sub> + df<sub>B</sub>) = <span class="g">${r.cf}</span> / (<span class="g">${r.cf}</span> + <span class="c">${r.dfA}</span> + <span class="c">${r.dfB}</span>) = <b>${r.Jv.toFixed(3)}</b>`;
+  document.getElementById('fSigmoid').innerHTML =
+    `sim<sub>S</sub> = (e<sup>cf</sup>−1) / ((e<sup>cf</sup>+1)(df+1)) = <b>${r.sig.toFixed(4)}</b> &nbsp;<span class="t">← ruling metric</span>`;
+  // hepta tablet
+  const [ , vt2 ]=verdictOf(r);
+  document.getElementById('heptaCode').innerHTML =
+`<span class="cm">-- CompareEngine judgment · CrossTribe 0x03 pairing</span>
+<span class="kw">PRESENT</span> <span class="nn">PAIR</span> (fileA, fileB) <span class="kw">FROM SOURCE</span> <span class="vv">same-origin</span>
+<span class="kw">ORBIT PAIR</span> <span class="kw">ON</span> schema.attributes
+  <span class="kw">WITH</span> <span class="nn">RESONANCE</span> jaccard    <span class="cm">-- J_schema = ${r.Js.toFixed(3)}</span>
+<span class="kw">ORBIT PAIR</span> <span class="kw">ON</span> eav.values <span class="kw">WHERE</span> attribute <span class="pu">IN</span> (A ∩ B)
+  <span class="kw">WITH</span> <span class="nn">RESONANCE</span> sigmoid    <span class="cm">-- sim_S  = ${r.sig.toFixed(3)}</span>
+<span class="kw">PROVE PAIR</span> <span class="nn">TOLERANCE</span> <span class="vv">0.75</span> <span class="vv">0.35</span>
+<span class="kw">EMIT</span> verdict <span class="kw">AS</span> <span class="vv">${vt2}</span>
+<span class="kw">WITNESS</span> seal <span class="kw">BY</span> AkkadianSeal(<span class="nn">ed25519</span>)`;
+}
+
+function render(){
+  for(const side of ['A','B']){
+    const list = side==='A'?attrsA:attrsB;
+    const host = document.getElementById('rows'+side);
+    const r=judge();
+    host.innerHTML = list.map((row,i)=>{
+      const [n,v,on]=row; const k=n.trim();
+      let cls=''; 
+      if(on&&r.shared.includes(k)) cls = r.conflicts.includes(k)?'conflict':'agree';
+      return `<div class="attrRow ${on?'':'off'} ${cls}">
+        <input type="checkbox" ${on?'checked':''} aria-label="attribute active"
+               onchange="bindRow('${side}',${i},'on',this.checked);render()">
+        <span class="aname">${esc(n)}</span>
+        <input type="text" value="${esc(v)}" aria-label="value of ${esc(n)}"
+               oninput="bindRow('${side}',${i},'value',this.value)"
+               onchange="render()">
+        <button class="del" title="remove attribute" onclick="delRow('${side}',${i})">✕</button>
+      </div>`;
+    }).join('');
+    document.getElementById('meta'+side).textContent =
+      list.filter(r=>r[2]).length+" attrs on";
+  }
+  compute();
+}
+
+document.getElementById('scenarioSel').addEventListener('change',e=>loadScenario(e.target.value));
+loadScenario('najaf');
+</script>
+</body>
+</html>

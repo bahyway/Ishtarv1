@@ -1,0 +1,65 @@
+# =====================================================================
+# PB-324 — GulaFederationEngine · Offline OSM tile bundler
+# Suite: GulaFederation (PB-321..PB-326) · Run FROM Fedora 44 HOST.
+# Sovereignty: no Google Maps dependency in the phone client. City
+# geometry comes from an OpenStreetMap extract, simplified to a compact
+# GeoJSON bundle shipped INSIDE the apk (offline-first — the Iraqi
+# patient at night with degraded connectivity still gets map + route).
+# This playbook scaffolds the bundler; the .osm.pbf extract itself is a
+# one-time sovereign download by DUB.SAR (same model as Godot / Z3).
+# =====================================================================
+---
+- name: PB-324 offline OSM tile bundler
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    bahyway_root: "{{ playbook_dir }}/../workspace/bahyway_v4"  # FIXED 2026-08-15: was ansible_env.HOME + "/BahyWay.Ecosystem", a path that does not exist -- would have silently scaffolded an orphaned crate tree disconnected from the real Cargo workspace
+    tools_dir: "{{ bahyway_root }}/tools/gula-tile-bundler"
+    tiles_out: "{{ bahyway_root }}/apps/gula-mobile/assets/tiles"
+  tasks:
+    - name: Ensure directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ tools_dir }}"
+        - "{{ tiles_out }}"
+
+    - name: Write bundler script
+      ansible.builtin.copy:
+        dest: "{{ tools_dir }}/bundle_tiles.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Usage: ./bundle_tiles.sh <extract.osm.pbf> <bbox: minlon,minlat,maxlon,maxlat>
+          # Example (Baghdad core): ./bundle_tiles.sh iraq-latest.osm.pbf 44.25,33.20,44.60,33.55
+          # Example (Amsterdam demo): ./bundle_tiles.sh nl-noord-holland.osm.pbf 4.78,52.32,4.98,52.42
+          set -euo pipefail
+          PBF="${1:?need .osm.pbf extract}"
+          BBOX="${2:?need bbox minlon,minlat,maxlon,maxlat}"
+          OUT="{{ tiles_out }}"
+          command -v osmium >/dev/null || { echo "install osmium-tool (dnf install osmium-tool)"; exit 1; }
+          osmium extract -b "$BBOX" "$PBF" -o /tmp/gula_bbox.osm.pbf --overwrite
+          # Buildings (extruded in Godot city LOD) and the drivable/walkable graph
+          osmium tags-filter /tmp/gula_bbox.osm.pbf a/building -o /tmp/gula_buildings.osm.pbf --overwrite
+          osmium tags-filter /tmp/gula_bbox.osm.pbf w/highway -o /tmp/gula_roads.osm.pbf --overwrite
+          osmium export /tmp/gula_buildings.osm.pbf -o "$OUT/buildings.geojson" --overwrite
+          osmium export /tmp/gula_roads.osm.pbf -o "$OUT/roads.geojson" --overwrite
+          echo "Bundled: $OUT/buildings.geojson + roads.geojson"
+          echo "roads.geojson also feeds the pure-Rust route core (contraction-hierarchy sibling of the Wadi al-Salam navigator)."
+
+    - name: Write README
+      ansible.builtin.copy:
+        dest: "{{ tools_dir }}/README.md"
+        mode: "0644"
+        content: |
+          # gula-tile-bundler
+          One-time sovereign inputs (downloaded by DUB.SAR, never at runtime):
+          - Geofabrik extract for Iraq or Noord-Holland (.osm.pbf)
+          Outputs (bundled into apk assets):
+          - buildings.geojson — extruded in the Godot CITY LOD
+          - roads.geojson — routing graph source for the pure-Rust route core
+          The phone never calls a map API. ODbL attribution for OSM data must
+          appear in the app's about screen.

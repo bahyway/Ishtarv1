@@ -1,0 +1,135 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BahyWay.Ecosystem v4.0 — Sovereign Network Security Pillar
+-- NetworkDevice Particle Template
+--     network_device.akk
+--
+-- Purpose:
+--   Sovereign network device / node particle. Used by HeptaSec NajafEngine
+--   to assign, track, and quality-score every device observed on sovereign
+--   network segments — including routers, switches, firewalls, servers,
+--   IoT sensors, SCADA endpoints, and unclassified client nodes.
+--
+--   Each particle is anchored to one device_kaki that NajafEngine assigns
+--   on first-seen detection. Devices whose device_kaki is absent or whose
+--   particle has drifted to DEAD lane are treated as unknown / rogue and
+--   trigger an immediate ZeroWay alert for SOC triage.
+--
+-- VGCA-beam enforcement (completeness=1.0 blocks ingestion if absent):
+--   device_kaki, device_type, ip_address, mac_address, first_seen_epoch
+--
+-- Quality-scored optional fields (enrich hepta score, never block):
+--   hostname, vendor, os_version, location_kaki, operator_kaki,
+--   firmware_version, last_seen_epoch, open_ports, risk_score
+--
+-- Tribe weights (NetworkDeviceMDM, 7-component Heptagonal):
+--   accuracy=0.30     — IP, MAC, and device_type must match physical reality
+--   completeness=0.25 — first_seen_epoch and device classification mandatory
+--   consistency=0.15  — first_seen_epoch <= last_seen_epoch; MAC format valid
+--   timeliness=0.15   — last_seen_epoch freshness; stale telemetry penalised
+--   uniqueness=0.10   — one device_kaki per MAC; no duplicate IPs in subnet
+--   validity=0.05     — IP address format, MAC format, risk_score 0–100 range
+--   integrity=0.00    — cross-tribe referential checks handled by policy layer
+--
+-- QUALITY_DIVISOR: 240.0 (ADR-001)
+--
+-- Drop this file at: shard/profiles/{batch_name}.template.akk
+-- bee-watchdog loads it automatically and enforces this schema for every
+-- arriving batch named {batch_name}.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+PARTICLE NetworkDevice {
+    -- ── Required device identity fields (VGCA-beam enforced) ──────────────
+    device_kaki:          KAKI                                      -- sovereign device identifier assigned by NajafEngine; primary key
+    device_type:          TEXT(completeness=1.0)                    -- ROUTER | SWITCH | FIREWALL | SERVER | WORKSTATION | IOT | SCADA | UNKNOWN
+    ip_address:           TEXT(accuracy=1.0, completeness=1.0)      -- primary IP address (IPv4 or IPv6)
+    mac_address:          TEXT(accuracy=1.0, completeness=1.0)      -- hardware MAC address (EUI-48 or EUI-64, colon-separated)
+    first_seen_epoch:     TEXT(completeness=1.0)                    -- Unix epoch when NajafEngine first observed this device
+
+    -- ── Optional device enrichment ─────────────────────────────────────────
+    hostname:             TEXT(accuracy=0.95)                       -- DNS hostname or NetBIOS name if resolved
+    vendor:               TEXT(accuracy=0.90)                       -- hardware vendor (from OUI lookup)
+    os_version:           TEXT(accuracy=0.90)                       -- OS fingerprint string (e.g. "Linux 5.15", "Windows Server 2022")
+    location_kaki:        KAKI                                      -- physical location KAKI (rack, building, site)
+    operator_kaki:        KAKI                                      -- responsible ministry or agency KAKI
+    firmware_version:     TEXT(accuracy=0.90)                       -- firmware or BIOS version string
+    last_seen_epoch:      TEXT(accuracy=0.95)                       -- Unix epoch of most recent telemetry heartbeat
+    open_ports:           TEXT                                       -- comma-separated list of open TCP/UDP ports observed
+    risk_score:           TEXT(accuracy=0.95)                       -- 0–100 composite risk index from NajafEngine scoring
+
+    TRIBE: NetworkDeviceMDM
+}
+
+-- ── Tribe definition — 7-weight Heptagonal ────────────────────────────────
+-- Weights must sum to exactly 1.0
+-- [accuracy, completeness, consistency, timeliness, uniqueness, validity, integrity]
+TRIBE NetworkDeviceMDM {
+    WEIGHTS: [0.30, 0.25, 0.15, 0.15, 0.10, 0.05, 0.00]
+    IDEAL:   [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0]
+}
+
+-- ── Rule: Unknown / rogue device alert ────────────────────────────────────
+-- Triggers when a particle arrives without a valid device_kaki assignment
+-- (KAKI field absent or particle has drifted to DEAD lane post-ingestion).
+-- This covers two cases:
+--   1. NajafEngine received a MAC it has never seen and could not assign a KAKI
+--      before the batch was committed — device_kaki is genuinely missing.
+--   2. A previously known device's particle decayed to DEAD due to data
+--      quality collapse (e.g. MAC collision, spoofed IP, stale identity).
+-- Both cases represent an unknown actor on sovereign infrastructure and
+-- must be escalated to the SOC immediately via ZeroWay.
+RULE alert_unknown_device {
+    WHEN particle.hepta.health < 0.200
+    AND  particle.tribe = NetworkDeviceMDM
+    THEN
+        LANE = DEAD
+        ORBIT = outer
+        EMIT ZeroWay("unknown_device_alert")
+}
+
+-- ── Rule: High-risk device flagging ───────────────────────────────────────
+-- Devices whose hepta score has degraded below the suspicious threshold
+-- but remain partially identifiable. These may represent misconfigured
+-- endpoints, devices with conflicting telemetry, or stale KAKI bindings.
+-- Routed to ACTIVE/outer for SOC analyst review without hard blocking.
+RULE flag_risky_device {
+    WHEN particle.hepta.health >= 0.200
+    AND  particle.hepta.health <  0.416
+    AND  particle.tribe = NetworkDeviceMDM
+    THEN
+        LANE = ACTIVE
+        ORBIT = outer
+        EMIT ZeroWay("network_device_risk_review")
+}
+
+-- ── Rule: Golden device record ────────────────────────────────────────────
+-- Fully characterised, recently seen, spatially located device with a
+-- clean risk profile. Promotes to GEM for priority rendering in HeptaSec
+-- NajafEngine topology dashboards and sovereign asset correlation.
+RULE promote_device_golden {
+    WHEN particle.hepta.health >= 0.833
+    AND  particle.tribe = NetworkDeviceMDM
+    THEN
+        LANE = GEM
+        ORBIT = inner
+        EMIT StoryWay("network_device_golden")
+}
+
+-- ── Observe: Active sovereign network inventory ────────────────────────────
+-- All health-qualified devices available for topology queries, routing
+-- audits, and cross-tribe asset correlation with InfrastructureAsset.
+OBSERVE active_network_devices {
+    FROM: TRIBE NetworkDeviceMDM
+    WHERE: health >= 0.416
+    SORT: orbital_radius ASC
+    LIMIT: 100000
+}
+
+-- ── Observe: Devices requiring SOC investigation ──────────────────────────
+-- Surfaces low-quality, rogue, or stale device records for triage.
+-- Worst orbital stability first so highest-risk unknowns surface at top.
+OBSERVE devices_requiring_investigation {
+    FROM: TRIBE NetworkDeviceMDM
+    WHERE: health < 0.416
+    SORT: orbital_radius DESC
+    LIMIT: 10000
+}

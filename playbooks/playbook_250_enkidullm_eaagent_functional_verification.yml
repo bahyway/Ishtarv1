@@ -1,0 +1,180 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_250_enkidullm_eaagent_functional_verification.yml
+#  BahyWay.Ecosystem v4.0 — PB-250: EnkiduLLM + EaAgent real functional gate
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_250_enkidullm_eaagent_functional_verification.yml -i "localhost," -c local -v
+#
+#  Context: same root cause as playbook_249 — playbook_248 gave the 8
+#  EnkiduLLM/EaAgent crates (enkidullm-core/-memory/-audit/-ingest,
+#  zikru-embed, ea-agent-core/-chat/-oracle) a build+test baseline, but
+#  `cargo test` alone only proves each crate's synthetic unit fixtures pass,
+#  not that real documents, real conversation flows, or the real deployed
+#  EnkiDDB Read Node behave correctly when actually used.
+#
+#  Research done before writing this playbook:
+#    - ea-agent-chat already has real network code (EaChatEngine::chat's
+#      `!enkiddb` command calls enkiddb_rag_client::search) defaulting to
+#      192.168.122.107:7102 — the real PB-212 CQRS-split Read Node — but the
+#      crate's own tests only ever pointed it at a dead port to test the
+#      *failure* path. Nothing had ever run it against the live node.
+#    - enkidullm-ingest's PDF/EPUB extraction was only ever tested against
+#      synthetic byte literals, never a real file.
+#    - zikru-embed's train_epoch was only ever tested against hand-built
+#      token hashes, never tokens produced by ingesting a real document.
+#    - enkidullm-memory's MemorySearch was only ever tested against
+#      hand-built ConversationParticles, bypassing MemoryStore/Session
+#      entirely (the actual path TamuzAI/EaAgent use).
+#    - Found and corrected a real doc/reality mismatch while researching
+#      this: enkidullm-memory's crate-level doc comment claimed "memory
+#      persists across restarts via the journal," but memory_store.rs's own
+#      doc comment already said persistence is "planned for v4.1" — there
+#      is no file I/O anywhere in the crate today. Fixed the misleading
+#      top-level claim; the test added here does NOT claim to verify
+#      persistence, because none exists yet.
+#    - enkidullm-audit already had solid unit coverage including a full
+#      pipeline test — no new live test added for it, to avoid manufacturing
+#      busywork over a crate that's already genuinely well-verified.
+#
+#  New tests added (not duplicates of existing unit suites):
+#    - crates/zikru-embed/tests/real_document_training_chain.rs — ingests a
+#      real PDF fixture (tests/fixtures/sample.pdf), tokenizes the extracted
+#      text, builds a real TrainingSample, and runs train_epoch end to end.
+#      Documents an honest limitation found along the way: the native PDF
+#      parser doesn't yet resolve font/glyph encoding, so extracted text
+#      from a real PDF isn't always human-readable — the test asserts the
+#      pipeline completes and produces finite, non-negative loss, not that
+#      the text is legible (a separate, much larger effort).
+#    - crates/enkidullm-memory/tests/real_session_search_chain.rs — drives
+#      MemoryStore -> new_session -> add_user/add_assistant ->
+#      all_particles() -> MemorySearch::semantic_search(), plus
+#      Session::context_window() token-budget behavior, through the real
+#      store instead of hand-built fixtures.
+#    - crates/ea-agent-chat/tests/real_enkiddb_node_search.rs — `#[ignore]`d
+#      by default (it dials a real internal VM IP that only exists on the
+#      Architect's actual infra). This playbook runs it explicitly with
+#      `--ignored` only after confirming the node is reachable, so a down
+#      node fails fast with a clear message instead of the test's own 30s
+#      client-side timeout.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-250 | EnkiduLLM + EaAgent — real functional verification"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:     "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:      "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:          "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    session_date:   "{{ ansible_date_time.date }}"
+    docs_dir:       "{{ forge_root }}/docs/SHEDU"
+    report_file:    "{{ docs_dir }}/PB250_ENKIDULLM_EAAGENT_VERIFICATION_{{ session_date }}.txt"
+    naru_journal:   "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+    enkiddb_host:   "192.168.122.107"
+    enkiddb_port:   7102
+    node_reachable_timeout: 10
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU directory exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced"
+      ansible.builtin.fail:
+        msg: "{{ workspace }}/Cargo.toml not found. Sync the workspace from the laptop first."
+      when: not ws_check.stat.exists
+
+    - name: "TEST | cargo test across all 8 EnkiduLLM + EaAgent crates (unit + new integration suites)"
+      ansible.builtin.command:
+        cmd: >
+          {{ cargo }} test
+          -p enkidullm-core -p enkidullm-memory -p enkidullm-audit -p enkidullm-ingest
+          -p zikru-embed -p ea-agent-core -p ea-agent-chat -p ea-agent-oracle
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "ASSERT | New real-document / real-session integration suites actually ran"
+      ansible.builtin.assert:
+        that:
+          - "'Running tests/real_document_training_chain.rs' in test_out.stderr"
+          - "'Running tests/real_session_search_chain.rs' in test_out.stderr"
+          - "'real_pdf_to_trained_embedding_full_chain' in test_out.stdout"
+          - "'real_store_session_search_round_trip' in test_out.stdout"
+        fail_msg: >
+          One or both new integration suites (zikru-embed's real PDF chain,
+          enkidullm-memory's real session/search chain) did not run — a
+          green cargo test here without them running is a false pass.
+        success_msg: "Real-document and real-session integration suites confirmed to have run."
+
+    - name: "CHECK | Is the real PB-212 EnkiDDB Read Node reachable from this host?"
+      ansible.builtin.wait_for:
+        host: "{{ enkiddb_host }}"
+        port: "{{ enkiddb_port }}"
+        timeout: "{{ node_reachable_timeout }}"
+      register: node_check
+      ignore_errors: true
+
+    - name: "TEST | !enkiddb against the real live Read Node (only if reachable)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p ea-agent-chat -- --ignored enkiddb_command_returns_real_hits_from_the_live_node"
+        chdir: "{{ workspace }}"
+      register: live_test_out
+      changed_when: false
+      failed_when: live_test_out.rc != 0
+      when: node_check is succeeded
+
+    - name: "WARN | Node unreachable — live !enkiddb test skipped, not silently passed"
+      ansible.builtin.debug:
+        msg: >
+          {{ enkiddb_host }}:{{ enkiddb_port }} was not reachable from this
+          host within {{ node_reachable_timeout }}s — the real-network
+          !enkiddb test was SKIPPED, not passed. If this playbook is running
+          on eriduous-vdi and the node should be up, check PB-212 (deploy)
+          and PB-214/PB-215 (Read Node not-ready diagnosis / bootstrap).
+      when: node_check is failed
+
+    - name: "WRITE | Verification report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-250 EnkiduLLM + EaAgent Verification
+          Date : {{ session_date }}
+
+          {{ test_out.stdout }}
+
+          Live EnkiDDB Read Node ({{ enkiddb_host }}:{{ enkiddb_port }}) check:
+          {{ 'REACHABLE — real !enkiddb test ran, see live_test_out below' if node_check is succeeded else 'UNREACHABLE from this host — real !enkiddb test skipped, not passed' }}
+          {{ live_test_out.stdout | default('') }}
+
+          Corrected during this verification: enkidullm-memory's crate-level
+          doc comment claimed persistence across restarts already worked;
+          it does not (memory_store.rs's own comment already said so —
+          "planned for v4.1"). No file I/O exists in the crate yet. Doc
+          comment fixed to stop asserting a capability that isn't real.
+
+    - name: "NARU | Record EnkiduLLM+EaAgent verification result"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ session_date }} | PB-250 | EnkiduLLM+EaAgent functional verification | real PDF+session integration PASS | live node test {{ 'PASS' if node_check is succeeded else 'SKIPPED (node unreachable)' }} | see {{ report_file }}"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | PB-250 COMPLETE"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════
+          PB-250  ENKIDULLM + EAAGENT VERIFICATION  {{ 'PASS (full, incl. live node)' if node_check is succeeded else 'PASS (live node check skipped — see report)' }}
+          Real PDF -> tokenize -> train chain: verified
+          Real MemoryStore -> search chain: verified
+          Doc/reality mismatch fixed: enkidullm-memory persistence claim
+          Report: {{ report_file }}
+          ═══════════════════════════════════════════════════

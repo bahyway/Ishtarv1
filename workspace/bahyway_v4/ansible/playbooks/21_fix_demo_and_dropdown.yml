@@ -1,0 +1,113 @@
+---
+# Playbook 21 — Fix demo threat data + dropdown arrow
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+#
+# Fixes:
+#   1. Demo bus: sdb_malware_hits 2→0, counts[6] 0→0 (no Nergal freeze in demo)
+#   2. Nav bar: ▾ → v (font rendering fix)
+#
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/21_fix_demo_and_dropdown.yml -v
+
+- name: "𒁾 Fix demo threat data + dropdown arrow"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_21.py"
+
+  tasks:
+
+    - name: "Write fix script to /tmp/bw_fix_21.py"
+      ansible.builtin.copy:
+        dest:    "{{ fix_script }}"
+        mode:    "0755"
+        content: |
+          import re, os
+
+          bus_lib = '/home/bahyway/Forge/bahyway_v4/crates/bee-mdm-bus/src/lib.rs'
+          app_rs  = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+
+          # ── Fix 1: Zero out malware hits in demo data ─────────────────────────
+          with open(bus_lib, 'r') as f:
+              src = f.read()
+
+          # sdb_malware_hits: 2 → 0
+          src = src.replace('sdb_malware_hits: 2,', 'sdb_malware_hits: 0,')
+
+          # Also zero out counts[6] (G7 Nergal gate) in demo data
+          # Find the counts array initialisation in populate_demo
+          # Pattern: counts: [n, n, n, n, n, n, N] where N is last value
+          src = re.sub(
+              r'(counts:\s*\[)(\d+,\s*\d+,\s*\d+,\s*\d+,\s*\d+,\s*\d+,\s*)(\d+)(\])',
+              lambda m: m.group(1) + m.group(2) + '0' + m.group(4),
+              src
+          )
+
+          with open(bus_lib, 'w') as f:
+              f.write(src)
+
+          # Verify
+          for i, line in enumerate(src.split('\n'), 1):
+              if 'malware_hits' in line or 'counts:' in line:
+                  print(f"bus_lib {i}: {line.strip()}")
+
+          print("Demo threats zeroed")
+
+          # ── Fix 2: Replace ▾ with v in nav bar dropdowns ──────────────────────
+          with open(app_rs, 'r') as f:
+              app = f.read()
+
+          app = app.replace('"Enterprise Apps  \u25be"', '"Enterprise Apps  v"')
+          app = app.replace('"AI Agents  \u25be"',       '"AI Agents  v"')
+
+          with open(app_rs, 'w') as f:
+              f.write(app)
+
+          # Verify
+          for i, line in enumerate(app.split('\n'), 1):
+              if 'Enterprise Apps' in line or 'AI Agents' in line:
+                  if 'RichText' in line:
+                      print(f"app.rs {i}: {line.strip()}")
+
+          print("Dropdown arrows fixed")
+
+    - name: "Run fix script"
+      ansible.builtin.command:
+        cmd: python3 {{ fix_script }}
+      register: py_out
+      changed_when: true
+      failed_when:  py_out.rc != 0
+
+    - name: "Show fix output"
+      ansible.builtin.debug:
+        msg: "{{ py_out.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 3 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-3:] }}"
+
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "𒁾 Fix complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Demo: sdb_malware_hits=0, G7 Nergal=0"
+          - "✓ No Nergal freeze in demo mode"
+          - "✓ Dropdown: Enterprise Apps v / AI Agents v"
+          - "✓ Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "Run: cargo run -p dubsar-visualizer"
+          - "You will now see cool dark grey palette + working dropdowns"

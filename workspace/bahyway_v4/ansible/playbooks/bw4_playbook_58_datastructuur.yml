@@ -1,0 +1,286 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_58_datastructuur.yml
+# DATASTRUCTUUR AGENT — Document Structure Extractor
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# Reads client documentation (PDF/Word/Excel schema docs)
+# Extracts structural facts → mints KAKI particles
+# Feeds NĀMZITUM fact corpus
+# Fires at BeeMDM S1 dataStructure Station
+#
+# CORRECTIONS vs iPhone PB55:
+#   C1: inventory vdi.ini → vdi.yml
+#   C2: KAKI minting uses correct byte layout (κ[6]=type, κ[7]=role)
+#   C3: EAV quality derived from discovery confidence — not KAKI bytes
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 58 — DATASTRUCTUUR AGENT Document Structure Extractor"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_58_datastructuur.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_58_datastructuur.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # DATASTRUCTUUR Agent — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/datastructuur-agent"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "datastructuur-agent"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          [dependencies]
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          serde       = { version = "1", features = ["derive"] }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! DATASTRUCTUUR AGENT — Document Structure Extractor
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Reads client documentation → extracts structural facts
+          //! → mints KAKI particles → feeds NĀMZITUM fact corpus
+          //!
+          //! Fires at BeeMDM S1 (dataStructure Station)
+          //! Works with: PDF data dictionaries, Word schema docs,
+          //!             Excel column mapping sheets
+          //!
+          //! KAKI v4.0:
+          //!   κ[6] = 0x02 Event-KAKI (agent discovery event)
+          //!   κ[7] = 0x04 STRUCTURAL_FACT role
+          //!   eav_quality = discovery confidence (0.0–1.0)
+          //!   Quality in EAV — NEVER in KAKI bytes
+
+          #![forbid(unsafe_code)]
+
+          use enkidb_kaki::Kaki;
+
+          // ── Structural Fact (one discovered fact from document) ────────
+
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub struct StructuralFact {
+              /// The fact itself
+              pub fact_type:     FactType,
+              /// Source document reference
+              pub source_doc:    String,
+              /// Page/section in source document
+              pub source_loc:    String,
+              /// Discovery confidence (0.0–1.0) — becomes eav_quality
+              /// Derived from: multiple mentions, explicit definition, example data
+              pub confidence:    f32,
+              /// Candidate EAV attribute name
+              pub attribute_name: Option<String>,
+              /// Candidate tribe_id assignment
+              pub tribe_candidate: Option<u16>,
+          }
+
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub enum FactType {
+              FieldDefinition   { name: String, data_type: String, required: bool },
+              EntityDefinition  { name: String, description: String },
+              Relationship      { from_entity: String, to_entity: String, cardinality: String },
+              SampleValue       { field: String, value: String },
+              BusinessRule      { rule: String },
+          }
+
+          // ── DataStructuurReport ────────────────────────────────────────
+
+          #[derive(Debug, Clone)]
+          pub struct DataStructuurReport {
+              /// KAKI for this report particle
+              /// κ[6]=0x02 Event | κ[7]=0x04 STRUCTURAL_FACT
+              pub report_kaki:    Kaki,
+              /// All extracted facts
+              pub facts:          Vec<StructuralFact>,
+              /// Discovered tribe candidates
+              pub tribe_candidates: Vec<String>,
+              /// Discovered field count
+              pub field_count:    usize,
+              /// Overall report confidence (mean of all fact confidences)
+              pub eav_quality:    f32,  // EAV — not KAKI bytes
+          }
+
+          // ── DATASTRUCTUUR Agent ────────────────────────────────────────
+
+          pub struct DataStructuurAgent {
+              pub tribe_id: u16,
+          }
+
+          impl DataStructuurAgent {
+              pub fn new(tribe_id: u16) -> Self { Self { tribe_id } }
+
+              /// Process a text document and extract structural facts.
+              /// Production: integrates with TamuzAI (DeepSeek-Coder-6.7B)
+              /// MVP: keyword-based extraction from text.
+              pub fn process_document(&self, doc_name: &str, content: &str) -> DataStructuurReport {
+                  let facts = self.extract_facts(content, doc_name);
+                  let mean_q = if facts.is_empty() { 0.0 } else {
+                      facts.iter().map(|f| f.confidence).sum::<f32>() / facts.len() as f32
+                  };
+                  let tribe_candidates = self.discover_tribes(&facts);
+
+                  // Mint Event-KAKI for this report
+                  // κ[6] = 0x02 Event, κ[7] = 0x04 STRUCTURAL_FACT role
+                  let report_kaki = Kaki::mint(
+                      enkidb_kaki::fnv1a_u32(doc_name.as_bytes()),
+                      self.tribe_id,
+                      enkidb_kaki::KakiType::Event,
+                      0x04,  // STRUCTURAL_FACT role
+                  );
+
+                  let field_count = facts.iter().filter(|f|
+                      matches!(f.fact_type, FactType::FieldDefinition { .. }))
+                      .count();
+
+                  DataStructuurReport {
+                      report_kaki,
+                      field_count,
+                      tribe_candidates,
+                      eav_quality: mean_q,  // confidence in EAV — never KAKI bytes
+                      facts,
+                  }
+              }
+
+              fn extract_facts(&self, content: &str, source: &str) -> Vec<StructuralFact> {
+                  let mut facts = Vec::new();
+                  let lines: Vec<&str> = content.lines().collect();
+
+                  for (i, line) in lines.iter().enumerate() {
+                      let loc = format!("line {}", i + 1);
+
+                      // Detect field definitions
+                      if line.contains(':') {
+                          let parts: Vec<&str> = line.splitn(2, ':').collect();
+                          if parts.len() == 2 {
+                              let name  = parts[0].trim().to_string();
+                              let dtype = parts[1].trim().to_string();
+                              if !name.is_empty() && !dtype.is_empty() {
+                                  facts.push(StructuralFact {
+                                      fact_type:     FactType::FieldDefinition {
+                                          name:     name.clone(),
+                                          data_type: dtype,
+                                          required: line.contains("required") || line.contains("mandatory"),
+                                      },
+                                      source_doc:    source.to_string(),
+                                      source_loc:    loc,
+                                      confidence:    0.75,
+                                      attribute_name:  Some(name.to_lowercase().replace(' ', "_")),
+                                      tribe_candidate: None,
+                                  });
+                              }
+                          }
+                      }
+
+                      // Detect entity definitions
+                      if line.to_lowercase().contains("entity") ||
+                         line.to_lowercase().contains("table") {
+                          facts.push(StructuralFact {
+                              fact_type: FactType::EntityDefinition {
+                                  name: line.trim().to_string(),
+                                  description: String::new(),
+                              },
+                              source_doc:      source.to_string(),
+                              source_loc:      format!("line {}", i + 1),
+                              confidence:      0.70,
+                              attribute_name:  None,
+                              tribe_candidate: None,
+                          });
+                      }
+                  }
+                  facts
+              }
+
+              fn discover_tribes(&self, facts: &[StructuralFact]) -> Vec<String> {
+                  facts.iter().filter_map(|f| {
+                      if let FactType::EntityDefinition { name, .. } = &f.fact_type {
+                          Some(name.clone())
+                      } else { None }
+                  }).collect()
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              const TEST_DOC: &str = "
+          Patient: string required
+          PatientID: integer required
+          DateOfBirth: date
+          Entity: Medication table
+          BatchNumber: string
+          ExpiryDate: date required
+          ";
+
+              #[test]
+              fn test_extracts_field_definitions() {
+                  let agent  = DataStructuurAgent::new(1);
+                  let report = agent.process_document("test.txt", TEST_DOC);
+                  let fields = report.facts.iter().filter(|f|
+                      matches!(f.fact_type, FactType::FieldDefinition { .. }))
+                      .count();
+                  assert!(fields >= 4, "Expected at least 4 fields, got {}", fields);
+              }
+
+              #[test]
+              fn test_eav_quality_from_confidence_not_kaki() {
+                  let agent  = DataStructuurAgent::new(1);
+                  let report = agent.process_document("test.txt", TEST_DOC);
+                  // eav_quality is in EAV — never KAKI bytes
+                  assert!(report.eav_quality > 0.0 && report.eav_quality <= 1.0);
+                  // κ[6] is kaki_type (0x02 Event) — not quality
+                  assert_eq!(report.report_kaki.bytes[6], 0x02);
+                  // κ[7] is role (0x04 STRUCTURAL_FACT) — not quality
+                  assert_eq!(report.report_kaki.bytes[7], 0x04);
+              }
+
+              #[test]
+              fn test_discovers_tribe_candidates() {
+                  let agent  = DataStructuurAgent::new(1);
+                  let report = agent.process_document("test.txt", TEST_DOC);
+                  assert!(!report.tribe_candidates.is_empty());
+              }
+          }
+          """))
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/datastructuur-agent"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/datastructuur-agent",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "datastructuur-agent"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+
+          t = subprocess.run(["cargo", "test", "-p", "datastructuur-agent", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ DATASTRUCTUUR AGENT — document reader → KAKI facts")
+          print("✓ PLAYBOOK 58 — DATASTRUCTUUR COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p58_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p58_out.stdout_lines }}"

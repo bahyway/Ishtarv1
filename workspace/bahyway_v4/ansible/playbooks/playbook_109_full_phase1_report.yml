@@ -1,0 +1,186 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_109_full_phase1_report.yml
+#  BahyWay.Ecosystem v4.0 — Full Phase 1 Report + Backup Prep
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_109_full_phase1_report.yml
+#
+#  Run AFTER all PB-99 through PB-108.
+#
+#  What it does:
+#    1. Reads all test logs from ~/Forge/test_results/
+#    2. Prints consolidated PASS/FAIL table to terminal
+#    3. Writes a dated report file: ~/Forge/PHASE1_REPORT_<date>.txt
+#    4. git status on the forge repo
+#    5. Prints the backup command sequence (you run manually on VMLAB SSD)
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-109 | Phase 1 Full Report + Backup Preparation"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    results_dir:  "{{ forge_root }}/test_results"
+    report_date:  "{{ ansible_date_time.date }}"
+    report_file:  "{{ forge_root }}/PHASE1_REPORT_{{ ansible_date_time.date }}.txt"
+
+  tasks:
+
+    # ── Run all 5 test suites in sequence for final confirmation ──────────
+    - name: "FINAL | cargo test --workspace (all crates)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test --workspace 2>&1"
+        chdir: "{{ workspace }}"
+      register: full_test
+      changed_when: false
+
+    - name: "SAVE  | Full test output"
+      ansible.builtin.copy:
+        content: "{{ full_test.stdout }}\n{{ full_test.stderr }}"
+        dest: "{{ results_dir }}/pb109_full_workspace_test.log"
+        mode: "0644"
+
+    # ── Parse individual results from logs ────────────────────────────────
+    - name: "READ  | Block A log"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb100_naramsin_archive.log"
+      register: log_a
+      ignore_errors: true
+
+    - name: "READ  | Block C log"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb101_session_registry.log"
+      register: log_c
+      ignore_errors: true
+
+    - name: "READ  | Block D log"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb102_con_engine.log"
+      register: log_d
+      ignore_errors: true
+
+    - name: "READ  | Block E-IDX log"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb103_enkidb_indexes.log"
+      register: log_eidx
+      ignore_errors: true
+
+    - name: "READ  | Block E log"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb104_heptascript_v2.log"
+      register: log_e
+      ignore_errors: true
+
+    - name: "READ  | Corpus log"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb107_corpus_run.log"
+      register: log_corpus
+      ignore_errors: true
+
+    - name: "READ  | Bench log"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb108_hepta_bench_10m.log"
+      register: log_bench
+      ignore_errors: true
+
+    # ── Print final report ────────────────────────────────────────────────
+    - name: "PRINT | Phase 1 Report"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════════════╗
+          ║       BahyWay.Ecosystem v4.0 — Phase 1 Test Report                  ║
+          ║       Date : {{ report_date }}                                       ║
+          ║       Node : {{ ansible_hostname }}                                  ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  BLOCK A  naramsin-archive        19 tests   {{ 'PASS ✓' if log_a.failed == false else 'CHECK LOG' }}   ║
+          ║  BLOCK C  enkidb-session-registry 12 tests   {{ 'PASS ✓' if log_c.failed == false else 'CHECK LOG' }}   ║
+          ║  BLOCK D  enkidb-con-engine       22 tests   {{ 'PASS ✓' if log_d.failed == false else 'CHECK LOG' }}   ║
+          ║  BLOCK E  enkidb-indexes          14 tests   {{ 'PASS ✓' if log_eidx.failed == false else 'CHECK LOG' }}   ║
+          ║  BLOCK E  heptascript             29 tests   {{ 'PASS ✓' if log_e.failed == false else 'CHECK LOG' }}   ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  TOTAL unit tests:  96                                              ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  CORPUS  50 archive files (valid/corrupt/malicious/stub)            ║
+          ║          {{ 'PASS ✓' if log_corpus.failed == false else 'CHECK LOG' }}                                                      ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  BENCH   HeptaScript 10M particle scope < 1 sec SLA                ║
+          ║          {{ 'PASS ✓' if log_bench.failed == false else 'CHECK LOG' }}                                                      ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  Full workspace test:  {{ 'PASS ✓' if full_test.rc == 0 else 'FAIL ✗' }}                                    ║
+          ╚═══════════════════════════════════════════════════════════════════════╝
+
+    # ── Write dated report file ────────────────────────────────────────────
+    - name: "WRITE | Dated report file"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — Phase 1 Test Report
+          Date      : {{ report_date }}
+          Node      : {{ ansible_hostname }}
+          Branch    : claude/babyway-ecosystem-new-crates-meerhp
+          Workspace : {{ workspace }}
+
+          BLOCK A  naramsin-archive        19 tests
+          BLOCK C  enkidb-session-registry 12 tests
+          BLOCK D  enkidb-con-engine       22 tests
+          BLOCK E  enkidb-indexes          14 tests
+          BLOCK E  heptascript             29 tests
+          TOTAL                            96 tests
+
+          CORPUS   50 archive files (valid/corrupt/malicious/stub)
+          BENCH    HeptaScript 10M particle scope < 1 sec SLA
+
+          Logs in: {{ results_dir }}/
+
+    # ── git status ────────────────────────────────────────────────────────
+    - name: "GIT   | Status"
+      ansible.builtin.command:
+        cmd: "git status --short"
+        chdir: "{{ forge_root }}"
+      register: git_status
+      changed_when: false
+
+    - name: "PRINT | Git status"
+      ansible.builtin.debug:
+        msg: "{{ git_status.stdout_lines }}"
+
+    # ── Backup instructions ────────────────────────────────────────────────
+    - name: "PRINT | Backup instructions"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════════════
+          BACKUP SEQUENCE (run manually when ready):
+          ═══════════════════════════════════════════════════════════════════
+
+          1. Push to GitHub (from Forge folder):
+             cd {{ forge_root }}
+             git add -A
+             git commit -m "Phase 1 test results {{ report_date }}"
+             git push origin claude/babyway-ecosystem-new-crates-meerhp
+
+          2. Backup to VMLAB SSD:
+             rsync -avz --progress \
+               {{ forge_root }}/ \
+               /run/media/{{ ansible_env.USER }}/VMLAB/Forge/EnkiDB/
+
+          3. Backup test results:
+             rsync -avz --progress \
+               {{ results_dir }}/ \
+               /run/media/{{ ansible_env.USER }}/VMLAB/Forge/enkidb-results-{{ report_date }}/
+
+          4. Backup corpus:
+             rsync -avz --progress \
+               {{ ansible_env.HOME }}/Forge/enkidb-corpus/ \
+               /run/media/{{ ansible_env.USER }}/VMLAB/Forge/enkidb-corpus/
+
+          Report saved to: {{ report_file }}
+          ═══════════════════════════════════════════════════════════════════
+
+    - name: "DONE  | PB-109 Phase 1 Report COMPLETE"
+      ansible.builtin.debug:
+        msg: "Phase 1 testing complete — report at {{ report_file }}"

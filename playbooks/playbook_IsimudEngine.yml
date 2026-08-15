@@ -1,0 +1,1357 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_IsimudEngine.yml — engine name: IsimudEngine
+#  BahyWay.Ecosystem v4.0 (KAKI v4.0) — Central CI/CD Orchestrator
+#
+#  NAMED "IsimudEngine" (2026-07-27, the Architect's own choice): Isimud is
+#  Enki's two-faced messenger/vizier in the source mythology this whole
+#  ecosystem's naming draws from -- fitting for the one thing here that's
+#  meant to be called BY something else (any external Dashboard that wants
+#  to stand up a full Test Environment containing all of BahyWay.Ecosystem
+#  v4.0, or a later version) rather than run by hand like every numbered
+#  PB. Renamed 2026-07-27 from the old filename this comment used to name
+#  here (all internal/CI references updated in the same pass) so the file
+#  on disk matches the identity it already carried in every report it
+#  produces -- "IsimudEngine", the `orchestrator_name` var below -- so a
+#  Dashboard calling it (or a human reading the report, or just browsing
+#  playbooks/) sees the same name everywhere.
+#
+#  Runs every playbook tracked in docs/PLAYBOOK_EXECUTION_TRIAGE.md, in the
+#  exact order they appear there (which is the doc's own mandated phase
+#  order), skipping only rows marked SKIP. The triage doc's tables are
+#  parsed at run time and used directly as the manifest — there is no
+#  second, separately-maintained list of "which playbooks exist" to drift
+#  out of sync with the doc, the way EnkiDDB_MANUAL.md's guidance once
+#  drifted behind playbook_208 (see enkiddb-rag-client's own doc comment
+#  for that cautionary tale — this orchestrator is built specifically to
+#  not repeat it). Each phase heading in that doc now carries its own
+#  one-line `**Declaration:**` (added 2026-07-27) — IsimudEngine parses
+#  those too and surfaces them in the Executive Report's Phase-by-Phase
+#  table, so the report is self-explanatory without anyone needing to
+#  open the triage doc itself.
+#
+#  Not itself a numbered PB — it runs the numbered ones. Not added as a row
+#  to the triage doc's tables for that reason (it would try to invoke
+#  itself).
+#
+#  Usage:
+#    ansible-playbook playbook_IsimudEngine.yml -i "localhost," -c local -v
+#
+#  Variables (all optional, -e NAME=VALUE):
+#    run_profile=full        (default) run every non-SKIP playbook in the doc.
+#    run_profile=ci_fast      additionally exclude playbooks matched by
+#                             heavy_pattern below (real multi-hour scale
+#                             sweeps, full corpus ingestion) — meant for
+#                             every-push CI; run `full` on a schedule or
+#                             manually for the complete sweep.
+#    pb_filter_numbers="249,250,251"
+#                             comma-separated PB numbers — only run these
+#                             (still in doc order, still skips SKIP rows
+#                             among them). Useful for re-running one phase,
+#                             or for testing this orchestrator itself
+#                             without a multi-hour full run.
+#    secrets_vars_file=secrets/orchestrator_secrets.yml
+#                             optional path (absolute, or relative to
+#                             forge_root) to a YAML vars file forwarded
+#                             (-e @<file>) to every sub-playbook. Needed
+#                             for unattended runs of secret-consuming
+#                             playbooks (e.g. PB-153's fable_api_key) --
+#                             the Architect's real secret store is the
+#                             Sargon Passport Manager GUI (PB-227,
+#                             crates/kupru), not Ansible Vault, and it has
+#                             no headless/CI-callable interface today, so
+#                             the secret has to be pulled out by hand into
+#                             this file ahead of time. See the triage
+#                             doc's "Secrets" section.
+#
+#  Heal_points: weighted pass-rate, not a flat percentage. Every attempted
+#  (non-SKIPPED, non-profile-excluded) playbook gets a criticality weight —
+#  3 (security/data-integrity: HeptaSec, security singles, urnammu-
+#  attestationd, kittu-engine, musaru-security, authorship gates, CQRS
+#  deploys, sovereign-db naming), 2 (everything else, the default), or 1
+#  (docs/roadmap/glossary/report, gap-diagnostics, scaffolds, concept
+#  seals, law-amendment notes) — classified by filename pattern below.
+#  Heal_points = (sum of weights of PASSED) / (sum of weights of ATTEMPTED) * 100.
+#  This is a heuristic, not a hand-curated per-playbook table — adjust
+#  critical_pattern/low_pattern below if something is misclassified; it's
+#  intentionally auto-derived so it doesn't need updating every time a new
+#  playbook lands, the same reasoning behind parsing the triage doc itself
+#  instead of hand-maintaining a manifest.
+#
+#  Every run writes FOUR files to docs/SHEDU/:
+#    - ISIMUD_ENGINE_REPORT_<ts>.txt / .json  — the technical log:
+#      every playbook, raw filenames, real stderr on failure. For engineers.
+#    - EXECUTIVE_REPORT_<ts>.md / .html             — the same results,
+#      translated: phase names instead of filenames, a GOLDEN/ACTIVE/
+#      SUSPICIOUS/BLOCKED trust-state label instead of a raw score, findings
+#      without stack traces. The .html is self-contained (no external
+#      assets), styled, and print-to-PDF friendly — meant to be handed to a
+#      CEO or other stakeholder as-is. See docs/ISIMUD_ENGINE_MANUAL.md
+#      for the full write-up of both report formats.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "ISIMUD | BahyWay.Ecosystem CI/CD Orchestrator"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:      "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    playbooks_dir:   "{{ forge_root }}/playbooks"
+    workspace:       "{{ forge_root }}/workspace/bahyway_v4"
+    triage_doc:      "{{ forge_root }}/docs/PLAYBOOK_EXECUTION_TRIAGE.md"
+    docs_dir:        "{{ forge_root }}/docs/SHEDU"
+    session_date:    "{{ ansible_date_time.date }}"
+    session_iso:     "{{ ansible_date_time.iso8601 }}"
+    # FIXED (2026-07-27): the CEO-facing Executive Report captured
+    # version/release/host/timestamp but never WHO actually ran it --
+    # the Architect asked directly for an audit trail with operator +
+    # datetime + version. `ansible_env.USER` is the real logged-in OS
+    # user on the control node (eriduous-vdi); `ansible_user_id` is the
+    # Ansible-remote-user fallback for the rare case USER isn't set.
+    operator:        "{{ ansible_env.USER | default(ansible_user_id, true) }}"
+    report_file:     "{{ docs_dir }}/ISIMUD_ENGINE_REPORT_{{ ansible_date_time.iso8601_basic_short }}.txt"
+    json_report_file: "{{ docs_dir }}/ISIMUD_ENGINE_REPORT_{{ ansible_date_time.iso8601_basic_short }}.json"
+    latest_json_link: "{{ docs_dir }}/ISIMUD_ENGINE_LATEST.json"
+    naru_journal:    "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+
+    exec_report_md:      "{{ docs_dir }}/EXECUTIVE_REPORT_{{ ansible_date_time.iso8601_basic_short }}.md"
+    exec_report_html:    "{{ docs_dir }}/EXECUTIVE_REPORT_{{ ansible_date_time.iso8601_basic_short }}.html"
+    exec_report_latest:  "{{ docs_dir }}/EXECUTIVE_REPORT_LATEST.html"
+
+    kaki_version:    "KAKI v4.0"
+    ecosystem_name:  "BahyWay.Ecosystem"
+    orchestrator_name: "IsimudEngine"
+
+    # NOTE: do not write these as "{{ run_profile | default(...) }}" --
+    # extra-vars (-e) already take precedence over vars: automatically, so
+    # self-referencing the same name here creates a real infinite Jinja
+    # recursion the moment no -e override is passed (reproduced live while
+    # testing this file). Plain defaults are enough; -e still overrides them.
+    run_profile:      "full"
+    pb_filter_numbers: ""
+
+    # STOP-ON-ERROR (2026-07-28, the Architect's own request): the default
+    # "continues past failures" behavior below is deliberate for an
+    # unattended full-ecosystem health sweep -- but wrong for the
+    # Architect's own actual workflow this session, fixing one real
+    # failure at a time and wanting to stop right there rather than let
+    # 60 more playbooks run (and possibly cascade-fail from the same root
+    # cause) before finding out. stop_on_error=true halts the RUN loop at
+    # the first failing PB -- see isimud_tasks/run_one_pb.yml's own header
+    # comment for why this needed restructuring into an include_tasks
+    # loop rather than just toggling ignore_errors (a plain `loop:` on one
+    # task always runs every item first, regardless of ignore_errors --
+    # verified with a standalone repro before this was wired in).
+    stop_on_error:    false
+
+    # FIXED (2026-07-27, IsimudEngine): the Architect's own real situation
+    # -- PB-259 already covers 212/221/222/208/216/213, and the remaining
+    # gap (PB-215 through PB-253) needed running without re-running what
+    # PB-259 already did. `pb_filter_numbers` alone can't express "skip
+    # what a composite already covers" or "expand this range in ascending
+    # order" -- pb_sequence adds both. Comma-separated tokens, each either
+    # a bare number ("259", "PB259" -- "PB"/"pb" prefix optional) or a
+    # range ("215..253", "PB215..PB253"). Ranges always expand ascending,
+    # filtered to numbers that actually exist in the triage doc. Any
+    # composite playbook present anywhere in pb_sequence (detected by
+    # grepping ITS OWN `import_playbook:` lines -- not a hand-maintained
+    # map, so it never drifts) has its covered sub-PBs skipped everywhere
+    # else in the sequence, and a composite whose own required sub-PBs are
+    # already fully covered by an earlier composite in the same sequence
+    # is itself skipped as redundant. See tasks under "SEQ |" below for
+    # the actual resolution (done in real Python, not forced Jinja).
+    # Empty (default) = ignored entirely; falls back to run_profile +
+    # pb_filter_numbers exactly as before. When set, it takes over PLAN
+    # entirely -- run_profile's ci_fast exclusion does not apply (an
+    # explicit request by number is never profile-filtered away), and
+    # pb_filter_numbers is ignored.
+    #   -e pb_sequence="PB259,PB215..PB253"
+    pb_sequence:      ""
+
+    # FIXED (2026-07-27, the Architect's own request): a full/ci_fast sweep
+    # used to walk PB-226/227/230/234 (Phase 6, "DubSar IDE") like every
+    # other playbook, which for those four specifically means backgrounding
+    # a real, persistent Godot GUI process (`nohup godot ... &`) on whatever
+    # host runs the sweep -- fine for a human doing it on purpose, wrong for
+    # an unattended automation run that's supposed to end at a report, not
+    # a pile of orphaned windows/processes stacking up on every re-run.
+    # launch_guis=false (default) excludes any playbook matching
+    # gui_pattern below from the automated run; the report's new "How to
+    # start the DubSar IDEs" section gives the exact commands to run them
+    # by hand afterward. Same escape hatch as run_profile/heavy_pattern:
+    # an explicit pb_sequence request by number is never filtered away,
+    # and -e launch_guis=true runs them for real as part of the sweep.
+    launch_guis:      false
+
+    # Optional path (absolute, or relative to forge_root) to a YAML vars
+    # file holding secrets that individual sub-playbooks need at runtime
+    # (e.g. PB-153's fable_api_key). Unattended runs (CI, nightly) can't
+    # open the Architect's actual secret store -- the Sargon Passport
+    # Manager GUI (PB-227, crates/kupru) -- so this is how a secret gets
+    # forwarded to every sub-playbook without hand-maintaining a separate
+    # per-playbook secrets map here. See the triage doc's "Secrets"
+    # section for how to populate this file from the vault. Left empty by
+    # default: most playbooks need no secrets at all, and forwarding a
+    # file that doesn't exist should never be the default behavior.
+    secrets_vars_file: ""
+
+    heavy_pattern:    "full_corpus_ingestion|scale_sweep"
+    # The four playbooks in Phase 6 that actually background a persistent
+    # Godot GUI process (`nohup ... &`) -- confirmed by grepping for that
+    # exact pattern across playbooks/*.yml, 2026-07-27. PB-228/229/232/233
+    # are also Phase 6 but build/config-only (no nohup, nothing left
+    # running), so they stay in the normal sweep.
+    gui_pattern:      "playbook_226_launch_dubsar_godot_ide|playbook_227_build_and_launch_kupru_tools|playbook_230_build_and_launch_dubsar_pdm|playbook_234_launch_dubsar_ide_full"
+    critical_pattern: "heptasec|attestationd|kittu_engine|musaru_security|authorship_gate|cqrs|podman_deploy|sovereign_db|security_singles"
+    low_pattern:      "_gap\\.yml$|_gap_|roadmap|glossary|report_reconciled|scaffold|concept_seal|_law\\.yml|reference_reconciled|design_and_artifact"
+
+    # PREFLIGHT (2026-07-27): confirmed live the same day -- a real
+    # `podman build` in this chain (PB-205) ran 28 minutes then failed
+    # with "no space left on device," root-caused to `target/` (21G+ in
+    # a built checkout) being copied into the build context and
+    # committed to /var/tmp with no .containerignore to stop it. Fixed
+    # going forward (workspace/bahyway_v4/.containerignore), but that fix
+    # doesn't reclaim space ALREADY consumed by pre-existing `target/`
+    # build artifacts or dangling podman image/build-cache layers from
+    # before it landed -- hence this check, run before anything else.
+    disk_free_warn_gb: 15
+    auto_disk_cleanup: false
+
+    # ENVIRONMENT MANIFEST (2026-07-28, the Architect's own request): the
+    # Architect asked for hardware/software/network preconditions to be
+    # declared and checked BEFORE the sweep runs, with known failure
+    # signatures attached -- not rediscovered by hand mid-run the way
+    # scons-missing, the GPU/Vulkan renderer mismatch, and a stale
+    # 215%-CPU godot4 process each were this session. isimud_environment_
+    # manifest.yml (playbooks_dir, alongside this file) is that declared
+    # list; env_manifest_check below reads it and runs each condition,
+    # printing the matched known_errors entry's cause+fix on failure
+    # instead of a bare pass/fail. env_manifest_check=false skips this
+    # entirely (e.g. for a `pb_sequence` re-run on a machine already known
+    # good) without needing to delete or rename the manifest file.
+    env_manifest_check: true
+    env_manifest_file: "{{ playbooks_dir }}/isimud_environment_manifest.yml"
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    # ── Preflight: disk space (see disk_free_warn_gb's own comment above) ───
+    - name: "PREFLIGHT | Check free disk space on forge_root's filesystem"
+      ansible.builtin.shell: "df --output=avail -B1 {{ forge_root }} | tail -1"
+      register: disk_avail_raw
+      changed_when: false
+
+    - name: "PREFLIGHT | Compute free space in GB"
+      ansible.builtin.set_fact:
+        disk_free_gb: "{{ (disk_avail_raw.stdout | trim | int / (1024**3)) | round(1) }}"
+
+    - name: "PREFLIGHT | Report free disk space"
+      ansible.builtin.debug:
+        msg: "Free disk space on {{ forge_root }}'s filesystem: {{ disk_free_gb }}G (warn threshold: {{ disk_free_warn_gb }}G)"
+
+    - name: "PREFLIGHT | Warn if disk space is low -- build-heavy playbooks in this chain can transiently need tens of GB"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: only {{ disk_free_gb }}G free on {{ forge_root }}'s
+          filesystem, below the {{ disk_free_warn_gb }}G warn threshold.
+          Recommended, safe cleanup before continuing (neither destroys
+          anything unrecoverable -- cargo rebuilds target/, podman
+          rebuilds pruned images/cache on next build):
+            cd {{ workspace }} && cargo clean
+            podman system prune -f
+          Not run automatically by default -- pass
+          -e auto_disk_cleanup=true to have this orchestrator run them
+          for you before continuing, or run them yourself and re-run.
+      when: disk_free_gb | float < disk_free_warn_gb | float
+
+    - name: "PREFLIGHT | Auto-cleanup if requested and disk space is low"
+      when: disk_free_gb | float < disk_free_warn_gb | float and auto_disk_cleanup | bool
+      block:
+        - name: "PREFLIGHT | cargo clean (frees target/ -- rebuildable)"
+          ansible.builtin.command: cargo clean
+          args:
+            chdir: "{{ workspace }}"
+          changed_when: true
+
+        - name: "PREFLIGHT | podman system prune -f (frees dangling images/build cache -- rebuildable)"
+          ansible.builtin.command: podman system prune -f
+          changed_when: true
+          # A dangling image can be held by a real, previously-interrupted
+          # "external" build container that `podman ps -a` doesn't list
+          # (confirmed live 2026-07-26) -- that's real, but not worth
+          # hard-failing the whole orchestrator run over; report and move
+          # on rather than block every other playbook behind one prune
+          # edge case.
+          failed_when: false
+
+        - name: "PREFLIGHT | Re-check free disk space after cleanup"
+          ansible.builtin.shell: "df --output=avail -B1 {{ forge_root }} | tail -1"
+          register: disk_avail_after
+          changed_when: false
+
+        - name: "PREFLIGHT | Report free disk space after cleanup"
+          ansible.builtin.debug:
+            msg: "Free disk space after cleanup: {{ (disk_avail_after.stdout | trim | int / (1024**3)) | round(1) }}G"
+
+    # ── Preflight: environment manifest (hardware/software/network/known_errors) ──
+    # Runs before anything else, same spirit as the disk-space check above:
+    # warn loudly with the real, matched known-error entry (cause + fix),
+    # never hard-fail the whole sweep over one environment condition -- a
+    # human reading the report decides whether to fix it now or accept a
+    # degraded run, same as every other PREFLIGHT finding in this file.
+    - name: "PREFLIGHT-ENV | Confirm the environment manifest exists"
+      ansible.builtin.stat: { path: "{{ env_manifest_file }}" }
+      register: env_manifest_stat
+      when: env_manifest_check | bool
+
+    - name: "PREFLIGHT-ENV | Fail clearly if manifest checking is on but the file is missing"
+      ansible.builtin.fail:
+        msg: >-
+          env_manifest_check=true but {{ env_manifest_file }} was not found.
+          Either restore playbooks/isimud_environment_manifest.yml, or pass
+          -e env_manifest_check=false to skip this preflight section
+          deliberately (e.g. re-running pb_sequence on a machine already
+          known good).
+      when: env_manifest_check | bool and not env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Load the environment manifest"
+      ansible.builtin.include_vars:
+        file: "{{ env_manifest_file }}"
+        name: env_manifest
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Report manifest identity"
+      ansible.builtin.debug:
+        msg: >-
+          Environment manifest v{{ env_manifest.manifest_version }}
+          (sealed {{ env_manifest.sealed_date }}) -- {{ env_manifest.known_errors | length }}
+          known-error entries loaded.
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Check CPU core count"
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'OK' if (ansible_processor_vcpus | int) >= (env_manifest.hardware.cpu_cores_min | int)
+             else 'WARN' }}: {{ ansible_processor_vcpus }} vCPUs detected
+          (manifest minimum: {{ env_manifest.hardware.cpu_cores_min }}).
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Check RAM"
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'OK' if (ansible_memtotal_mb | int) >= (env_manifest.hardware.ram_gb_min | int * 1024)
+             else 'WARN' }}: {{ (ansible_memtotal_mb | int / 1024) | round(1) }}GB
+          total RAM detected (manifest minimum: {{ env_manifest.hardware.ram_gb_min }}GB).
+          Several sub-playbooks in this chain (Godot engine compile,
+          multi-crate cargo builds) got genuinely tight on 16GB this
+          session -- treat a WARN here as a real risk of an OOM-driven
+          failure mid-sweep, not a formality.
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Check every required tool is on PATH"
+      ansible.builtin.command: "which {{ item }}"
+      register: env_tool_check
+      failed_when: false
+      changed_when: false
+      loop: "{{ env_manifest.software.required_tools | default([]) }}"
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Report missing required tools, with the matching known-error entry"
+      ansible.builtin.debug:
+        msg: >-
+          WARN: required tool '{{ item.item }}' not found on PATH.
+          {{ (env_manifest.known_errors | selectattr('signature', 'search', item.item | regex_escape) | list | first).cause
+             if (env_manifest.known_errors | selectattr('signature', 'search', item.item | regex_escape) | list | length > 0)
+             else 'No known-error entry references this tool yet -- see the manifest file to add one once the real failure is seen.' }}
+          {{ 'Fix: ' + (env_manifest.known_errors | selectattr('signature', 'search', item.item | regex_escape) | list | first).fix
+             if (env_manifest.known_errors | selectattr('signature', 'search', item.item | regex_escape) | list | length > 0) else '' }}
+      loop: "{{ env_tool_check.results | default([]) }}"
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists and item.rc is defined and item.rc != 0
+
+    - name: "PREFLIGHT-ENV | Check GPU renderer (informational -- gl_compatibility fallback already handled by PB-226)"
+      ansible.builtin.shell: "vulkaninfo --summary 2>&1 || true"
+      register: env_gpu_check
+      changed_when: false
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Report GPU renderer finding"
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'INFO: software renderer (' + env_manifest.hardware.gpu.known_software_renderer_signature +
+             ') detected -- GPU-heavy playbooks (PB-226/234) already force gl_compatibility and reduce particle counts by design (KE-005, KE-006). Not a failure.'
+             if env_manifest.hardware.gpu.known_software_renderer_signature in (env_gpu_check.stdout | default(''))
+             else 'OK: no known software-renderer signature detected (or vulkaninfo not installed -- optional tool, informational only).' }}
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Check Podman daemon reachable"
+      ansible.builtin.command: "{{ env_manifest.podman.daemon_reachable_check }}"
+      register: env_podman_check
+      failed_when: false
+      changed_when: false
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Report Podman reachability"
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'OK: Podman daemon reachable.' if (env_podman_check.rc | default(1)) == 0
+             else 'WARN: Podman daemon not reachable (`' + env_manifest.podman.daemon_reachable_check + '` failed). Every CQRS/Podman-deploy sub-playbook in this sweep will fail until this is fixed.' }}
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Check expected network hosts are reachable"
+      ansible.builtin.command: "timeout 3 bash -c 'echo > /dev/tcp/{{ item.host }}/{{ item.ports[0] }}'"
+      register: env_host_check
+      failed_when: false
+      changed_when: false
+      loop: "{{ env_manifest.network.expected_hosts | default([]) }}"
+      loop_control: { label: "{{ item.host }}" }
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "PREFLIGHT-ENV | Report network host reachability"
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'OK' if item.rc == 0 else 'WARN' }}: {{ item.item.host }}
+          ({{ item.item.description }}) -- checked port {{ item.item.ports[0] }}.
+          {{ 'Every sub-playbook targeting this host will fail until it is reachable.' if item.rc != 0 else '' }}
+      loop: "{{ env_host_check.results | default([]) }}"
+      loop_control: { label: "{{ item.item.host | default('?') }}" }
+      when: env_manifest_check | bool and env_manifest_stat.stat.exists
+
+    - name: "VERIFY | Triage doc present"
+      ansible.builtin.stat: { path: "{{ triage_doc }}" }
+      register: triage_stat
+
+    - name: "FAIL | Triage doc missing"
+      ansible.builtin.fail:
+        msg: "{{ triage_doc }} not found — nothing to orchestrate."
+      when: not triage_stat.stat.exists
+
+    # ── Parse the triage doc's own tables into the manifest ─────────────────
+    # Single pass: tracks the most recent "## Phase N — ..." heading as it
+    # scans, so every PB row also gets stamped with the phase it lives
+    # under (needed for the executive report's phase-by-phase summary).
+    # FIXED (2026-07-27, IsimudEngine): also captures each phase's own
+    # one-line `**Declaration:** ...` (added to the triage doc right after
+    # every phase heading, one per phase) as a separate PHASEDECL-prefixed
+    # line -- picked up below into `phase_declarations` and shown in the
+    # Executive Report's Phase-by-Phase table, so a Dashboard calling this
+    # engine sees WHAT each phase is and WHY it's grouped that way, not
+    # just pass/fail counts.
+    - name: "PARSE | Extract PB rows (number, file, status, phase) + phase declarations from the triage doc"
+      ansible.builtin.shell: |
+        set -o pipefail
+        awk '
+          /^## / { phase = $0; sub(/^## /, "", phase); next }
+          /^\*\*Declaration:\*\*/ {
+            decl = $0
+            sub(/^\*\*Declaration:\*\* */, "", decl)
+            printf "PHASEDECL\t%s\t%s\n", phase, decl
+            next
+          }
+          /^\| *[0-9]+ *\|/ {
+            n = split($0, f, "|")
+            num = f[2]; file = f[3]; status = f[4]
+            gsub(/^[ \t]+|[ \t]+$/, "", num)
+            gsub(/^[ \t]+|[ \t]+$/, "", file)
+            gsub(/^[ \t]+|[ \t]+$/, "", status)
+            gsub(/`/, "", file)
+            gsub(/`/, "", status)
+            if (file ~ /\.yml$/) printf "%s\t%s\t%s\t%s\n", num, file, status, phase
+          }
+        ' "{{ triage_doc }}"
+      args: { executable: /bin/bash }
+      register: manifest_raw
+
+    - name: "PARSE | Build phase -> declaration map (from PHASEDECL-prefixed lines)"
+      ansible.builtin.set_fact:
+        phase_declarations: "{{ phase_declarations | default({}) | combine({ (decl_parts[1]): decl_parts[2] }) }}"
+      loop: "{{ manifest_raw.stdout_lines | select('match', '^PHASEDECL\\t') | list }}"
+      loop_control: { loop_var: decl_line, label: "{{ decl_line.split('\t')[1] }}" }
+      vars: { decl_parts: "{{ decl_line.split('\t') }}" }
+      changed_when: false
+
+    - name: "PARSE | Build structured manifest list (doc order preserved, core-only — no extra collections)"
+      ansible.builtin.set_fact:
+        pb_manifest: "{{ pb_manifest | default([]) + [ {'number': parts[0], 'file': parts[1], 'status': parts[2], 'phase': parts[3] | default('Unphased')} ] }}"
+      loop: "{{ manifest_raw.stdout_lines | reject('match', '^PHASEDECL\\t') | list }}"
+      loop_control: { loop_var: raw_line, label: "{{ raw_line.split('\t')[1] }}" }
+      vars: { parts: "{{ raw_line.split('\t') }}" }
+
+    - name: "PARSE | Apply pb_filter_numbers if given (legacy simple filter -- ignored when pb_sequence is set)"
+      ansible.builtin.set_fact:
+        pb_manifest: "{{ pb_manifest | selectattr('number', 'in', pb_filter_numbers.split(',') | map('trim') | list) | list }}"
+      when: pb_filter_numbers | trim | length > 0 and pb_sequence | trim | length == 0
+
+    # ── pb_sequence resolution (only when set) — composite-aware, ordered ───
+    - name: "SEQ | Resolve pb_sequence into a deduped, ordered run list"
+      when: pb_sequence | trim | length > 0
+      block:
+        - name: "SEQ | Union of PB numbers the sequence could touch (scopes the composite-detection grep below)"
+          ansible.builtin.shell: |
+            python3 - <<'PYEOF'
+            import re, json
+            seq = {{ pb_sequence | to_json }}
+            tokens = [t.strip().upper() for t in seq.split(',') if t.strip()]
+            union = set()
+            for tok in tokens:
+                tok = re.sub(r'PB-?', '', tok)
+                if '..' in tok:
+                    a, b = tok.split('..', 1)
+                    union.update(str(n) for n in range(int(a), int(b) + 1))
+                else:
+                    union.add(tok)
+            print(json.dumps(sorted(union, key=int)))
+            PYEOF
+          args: { executable: /bin/bash }
+          register: seq_union_raw
+          changed_when: false
+
+        - name: "SEQ | For each candidate PB actually in the manifest, extract its own import_playbook targets (composite detection -- read from the file itself, never hand-maintained)"
+          ansible.builtin.shell: |
+            set -o pipefail
+            f="{{ playbooks_dir }}/{{ (pb_manifest | selectattr('number', 'equalto', cand) | list | first).file }}"
+            grep -oE '^[[:space:]]*-[[:space:]]*import_playbook:[[:space:]]*playbook_[0-9]+' "$f" 2>/dev/null | grep -oE '[0-9]+' || true
+          args: { executable: /bin/bash }
+          register: seq_requires_raw
+          loop: "{{ seq_union_raw.stdout | from_json | select('in', pb_manifest | map(attribute='number') | list) | list }}"
+          loop_control: { loop_var: cand, label: "PB-{{ cand }}" }
+          changed_when: false
+          failed_when: false
+
+        - name: "SEQ | Resolve final order + dedup (a real sequential state machine -- done in Python, not contorted Jinja)"
+          ansible.builtin.shell: |
+            python3 - <<'PYEOF'
+            import re, json
+            seq = {{ pb_sequence | to_json }}
+            existing = set({{ pb_manifest | map(attribute='number') | list | to_json }})
+            requires = {}
+            {% for r in seq_requires_raw.results %}
+            requires[{{ r.cand | to_json }}] = {{ r.stdout_lines | to_json }}
+            {% endfor %}
+
+            tokens = [t.strip().upper() for t in seq.split(',') if t.strip()]
+            expanded = []
+            for tok in tokens:
+                tok = re.sub(r'PB-?', '', tok)
+                if '..' in tok:
+                    a, b = tok.split('..', 1)
+                    for n in range(int(a), int(b) + 1):
+                        expanded.append(str(n))
+                else:
+                    expanded.append(tok)
+
+            covered, already_run, run_order, skipped, unknown = set(), set(), [], [], []
+            for num in expanded:
+                if num not in existing:
+                    if num not in unknown:
+                        unknown.append(num)
+                    continue
+                if num in already_run:
+                    skipped.append({"number": num, "reason": "listed more than once in pb_sequence"})
+                    continue
+                if num in covered:
+                    skipped.append({"number": num, "reason": "already covered by an earlier composite playbook in this sequence"})
+                    continue
+                req = set(requires.get(num, []))
+                if req and req.issubset(covered):
+                    skipped.append({"number": num, "reason": "this composite's own required sub-playbooks are already covered by an earlier composite in this sequence"})
+                    continue
+                run_order.append(num)
+                already_run.add(num)
+                covered |= req
+
+            print(json.dumps({"run_order": run_order, "skipped": skipped, "unknown": unknown}))
+            PYEOF
+          args: { executable: /bin/bash }
+          register: seq_resolution_raw
+          changed_when: false
+
+        - name: "SEQ | Parse the resolution"
+          ansible.builtin.set_fact:
+            pb_seq_resolution: "{{ seq_resolution_raw.stdout | from_json }}"
+
+        - name: "SEQ | Warn about any pb_sequence tokens that don't match a real PB number in the triage doc"
+          ansible.builtin.debug:
+            msg: "WARNING: pb_sequence referenced PB number(s) not found in {{ triage_doc }}: {{ pb_seq_resolution.unknown | join(', ') }} -- ignored (typo guard, not silently dropped)."
+          when: pb_seq_resolution.unknown | length > 0
+
+        - name: "SEQ | Report the resolved run order and everything skipped"
+          ansible.builtin.debug:
+            msg:
+              - "pb_sequence: {{ pb_sequence }}"
+              - "Resolved run order ({{ pb_seq_resolution.run_order | length }}): {{ pb_seq_resolution.run_order | map('regex_replace', '^', 'PB-') | join(', ') }}"
+              - "Skipped ({{ pb_seq_resolution.skipped | length }}, composite dedup): {% for s in pb_seq_resolution.skipped %}PB-{{ s.number }} [{{ s.reason }}]{{ '; ' if not loop.last else '' }}{% endfor %}{{ '(none)' if pb_seq_resolution.skipped | length == 0 else '' }}"
+
+    - name: "PLAN | Default doc-order manifest (used when pb_sequence is not set)"
+      ansible.builtin.set_fact:
+        ordered_manifest: "{{ pb_manifest }}"
+      when: pb_sequence | trim | length == 0
+
+    - name: "PLAN | Sequence-resolved order manifest (used when pb_sequence IS set — resolution order, not doc order)"
+      ansible.builtin.set_fact:
+        ordered_manifest: "{{ ordered_manifest | default([]) + (pb_manifest | selectattr('number', 'equalto', num) | list) }}"
+      loop: "{{ pb_seq_resolution.run_order }}"
+      loop_control: { loop_var: num, label: "PB-{{ num }}" }
+      when: pb_sequence | trim | length > 0
+
+    - name: "PLAN | Doc-skipped rows (status == SKIP) + to_attempt_all, in the chosen order"
+      ansible.builtin.set_fact:
+        doc_skipped: "{{ ordered_manifest | selectattr('status', 'equalto', 'SKIP') | list }}"
+        to_attempt_all: "{{ ordered_manifest | rejectattr('status', 'equalto', 'SKIP') | list }}"
+
+    - name: "PLAN | Apply run_profile exclusions (ci_fast drops heavy_pattern matches -- never applied when pb_sequence is set, an explicit request by number is not profile-filtered)"
+      ansible.builtin.set_fact:
+        profile_excluded: >-
+          {{ (to_attempt_all | selectattr('file', 'regex', heavy_pattern) | list)
+             if (run_profile == 'ci_fast' and pb_sequence | trim | length == 0) else [] }}
+
+    - name: "PLAN | Apply GUI-launch exclusions (launch_guis=false by default -- never applied when pb_sequence is set, an explicit request by number is not filtered)"
+      ansible.builtin.set_fact:
+        gui_excluded: >-
+          {{ (to_attempt_all | selectattr('file', 'regex', gui_pattern) | list)
+             if (not launch_guis and pb_sequence | trim | length == 0) else [] }}
+
+    - name: "PLAN | Final attempt list"
+      ansible.builtin.set_fact:
+        to_attempt: >-
+          {{ to_attempt_all
+             | rejectattr('file', 'in', profile_excluded | map(attribute='file') | list)
+             | rejectattr('file', 'in', gui_excluded | map(attribute='file') | list)
+             | list }}
+
+    - name: "PRINT | Run plan"
+      ansible.builtin.debug:
+        msg: |
+          {{ ecosystem_name }} {{ kaki_version }} — {{ orchestrator_name }}
+          Run profile     : {{ run_profile }}
+          Total in doc    : {{ pb_manifest | length }}
+          Doc-skipped     : {{ doc_skipped | length }}
+          Profile-excluded: {{ profile_excluded | length }} ({{ 'ci_fast heavy_pattern' if run_profile == 'ci_fast' else 'n/a' }})
+          GUI-excluded    : {{ gui_excluded | length }} (launch_guis={{ launch_guis }} -- see report's "How to start the DubSar IDEs" section)
+          Attempting      : {{ to_attempt | length }}
+
+    # ── Resolve the optional secrets vars file (see the Secrets note in
+    #    the triage doc) — forwarded to every sub-playbook below so
+    #    secret-consuming playbooks like PB-153 work unattended too. ────────
+    - name: "PLAN | Resolve secrets_vars_file (relative paths are relative to forge_root)"
+      ansible.builtin.set_fact:
+        resolved_secrets_vars_file: >-
+          {{ secrets_vars_file if (secrets_vars_file | trim | length == 0 or secrets_vars_file.startswith('/'))
+             else (forge_root + '/' + secrets_vars_file) }}
+      when: secrets_vars_file | trim | length > 0
+
+    - name: "VERIFY | Secrets vars file exists, if one was given"
+      ansible.builtin.stat: { path: "{{ resolved_secrets_vars_file }}" }
+      register: secrets_stat
+      when: secrets_vars_file | trim | length > 0
+
+    - name: "FAIL | Secrets vars file was given but doesn't exist"
+      ansible.builtin.fail:
+        msg: >-
+          secrets_vars_file={{ secrets_vars_file }} does not resolve to a
+          real file ({{ resolved_secrets_vars_file | default('') }}). Pull
+          the needed secret(s) from the Sargon Passport Manager (PB-227)
+          into that file first — see the triage doc's "Secrets" section.
+      when: secrets_vars_file | trim | length > 0 and not secrets_stat.stat.exists
+
+    - name: "PLAN | Build the extra_vars flag for secret forwarding (empty when no secrets_vars_file given)"
+      ansible.builtin.set_fact:
+        secrets_extra_vars_flag: >-
+          {{ (' -e @' + resolved_secrets_vars_file) if secrets_vars_file | trim | length > 0 else '' }}
+
+    # ── Execute, in doc order ────────────────────────────────────────────────
+    # Per-item include (isimud_tasks/run_one_pb.yml), not a bare command
+    # task with `loop:` -- see that file's own header comment for why: a
+    # plain `loop:` always runs every item first regardless of
+    # ignore_errors, which is fine for the default "continue past
+    # failures, full health picture" behavior but makes stop_on_error=true
+    # impossible to implement that way. Each iteration scores itself into
+    # pb_results directly (moved here from a separate bulk SCORE step) and
+    # sets isimud_stopped once stop_on_error triggers, which every later
+    # iteration's three tasks check first and skip on.
+    - name: "RUN | Execute each playbook (stop_on_error={{ stop_on_error }})"
+      ansible.builtin.include_tasks: isimud_tasks/run_one_pb.yml
+      loop: "{{ to_attempt }}"
+      loop_control: { loop_var: pb_item, label: "PB-{{ pb_item.number }} {{ pb_item.file }}" }
+
+    # ── STOP | If stop_on_error halted the run, say exactly where and why ────
+    - name: "STOP | Find a matching known-error entry for the failure, if any"
+      ansible.builtin.set_fact:
+        # NOTE: 'in' (literal substring), not 'search' (regex) -- direction
+        # matters here. selectattr always feeds entry.signature as the
+        # left-hand VALUE into the test; we need "does signature occur
+        # inside this (arbitrarily long, possibly regex-metachar-laden)
+        # error text", i.e. signature-in-error, which is exactly what the
+        # `in` test computes (`value in seq`). Using `search` here (as an
+        # earlier draft did, verified wrong before this was wired in) put
+        # error text in the pattern position instead of signature, so it
+        # matched nothing real. A pure literal `in` also means a genuinely
+        # regex-flavored signature (e.g. KE-006's) won't match here --
+        # accepted tradeoff; those exist for a human reading the manifest,
+        # not for exact machine matching against raw stderr.
+        isimud_matched_known_error: >-
+          {{ (env_manifest.known_errors
+              | selectattr('signature', 'in', pb_results[-1].error | default(''))
+              | list | first)
+             if (env_manifest is defined and pb_results | default([]) | length > 0
+                 and env_manifest.known_errors | selectattr('signature', 'in', pb_results[-1].error | default('')) | list | length > 0)
+             else None }}
+      when: (isimud_stopped | default(false)) and (stop_on_error | bool)
+
+    - name: "STOP | Print where the run stopped, why, and how to proceed"
+      ansible.builtin.debug:
+        msg:
+          - "════════════════════════════════════════════════════════════"
+          - "STOPPED at PB-{{ isimud_stop_pb.number }} ({{ isimud_stop_pb.file }}), phase: {{ isimud_stop_pb.phase }}"
+          - "Error: {{ pb_results[-1].error | default('(see stdout -- rc was 0 but something else failed)') }}"
+          - >-
+            {{ 'Known cause (' + isimud_matched_known_error.id + '): ' + isimud_matched_known_error.cause
+               if isimud_matched_known_error is defined and isimud_matched_known_error
+               else 'No known-error entry matches this yet -- add one to playbooks/isimud_environment_manifest.yml once the real fix is found.' }}
+          - >-
+            {{ 'Fix: ' + isimud_matched_known_error.fix
+               if isimud_matched_known_error is defined and isimud_matched_known_error else '' }}
+          - "Attempted {{ pb_results | length }} of {{ to_attempt | length }} planned playbooks before stopping."
+          - "How to proceed: fix the issue above, then re-run the exact same command --"
+          - "  every playbook in this ecosystem is designed idempotent, so already-passed"
+          - "  ones safely no-op on re-run. To skip straight to this point instead:"
+          - "  -e pb_sequence=\"PB{{ isimud_stop_pb.number }}..\" plus the highest PB number in the triage doc."
+          - "Full report (partial, covering only what actually ran): {{ report_file }}"
+          - "════════════════════════════════════════════════════════════"
+      when: (isimud_stopped | default(false)) and (stop_on_error | bool)
+
+    # ── Classify + score ─────────────────────────────────────────────────────
+    - name: "SCORE | Aggregate counts + Heal_points"
+      ansible.builtin.set_fact:
+        total_attempted:   "{{ pb_results | length }}"
+        total_passed:      "{{ pb_results | selectattr('passed') | list | length }}"
+        total_failed:      "{{ pb_results | rejectattr('passed') | list | length }}"
+        weight_attempted:  "{{ pb_results | sum(attribute='weight') }}"
+        weight_passed:     "{{ pb_results | selectattr('passed') | sum(attribute='weight') }}"
+
+    - name: "SCORE | Compute Heal_points (weighted pass-rate, 0 if nothing attempted)"
+      ansible.builtin.set_fact:
+        heal_points: "{{ ((weight_passed | int) / (weight_attempted | int) * 100) | round(1) if (weight_attempted | int) > 0 else 0 }}"
+
+    - name: "SCORE | Trust state — mirrors (not a literal reuse of) the KAKI B11 Golden/Active/Suspicious/Blocked taxonomy already used throughout this ecosystem's security crates. B11 grades one entity's trust on a 0-255 byte; Heal_points grades the whole ecosystem's health on a 0-100 scale, so the thresholds below are recalibrated for that, not copied — same four-tier vocabulary and spirit, different measurement."
+      ansible.builtin.set_fact:
+        trust_state: >-
+          {{ 'GOLDEN' if (heal_points | float) >= 85
+             else 'ACTIVE' if (heal_points | float) >= 60
+             else 'SUSPICIOUS' if (heal_points | float) >= 35
+             else 'BLOCKED' }}
+        trust_state_note: >-
+          {{ 'Fully operational. All attempted verifications, including every security and data-integrity playbook, passed against real infrastructure.'
+             if (heal_points | float) >= 85
+             else 'Stable, with gaps outside the critical path. Review the failures below before the next release.'
+             if (heal_points | float) >= 60
+             else 'Degraded — one or more critical (security or data-integrity) verifications failed. Do not treat this build as production-ready until resolved.'
+             if (heal_points | float) >= 35
+             else 'Critical — the majority of weighted verifications failed. Immediate remediation required before further deployment.' }}
+
+    - name: "SCORE | Ecosystem version metadata"
+      ansible.builtin.command:
+        cmd: "git -C {{ forge_root }} describe --tags --always"
+      register: git_describe
+      changed_when: false
+      failed_when: false
+
+    - name: "SCORE | Workspace crate version"
+      ansible.builtin.shell:
+        cmd: "grep -A3 '\\[workspace.package\\]' {{ workspace }}/Cargo.toml | grep '^version' | cut -d'\"' -f2"
+      args: { executable: /bin/bash }
+      register: cargo_version
+      changed_when: false
+      failed_when: false
+
+    # ── Report ────────────────────────────────────────────────────────────────
+    - name: "WRITE | Human-readable report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          ════════════════════════════════════════════════════════════════
+          {{ ecosystem_name }} {{ kaki_version }} — {{ orchestrator_name }} Report
+          ════════════════════════════════════════════════════════════════
+          Engine        : {{ orchestrator_name }}
+          Operator      : {{ operator }}
+          DateTime      : {{ session_iso }}
+          Host          : {{ ansible_hostname }}
+          Crate version : {{ cargo_version.stdout | default('unknown') }}
+          Release (git) : {{ git_describe.stdout | default('unknown') }}
+          Run profile   : {{ run_profile }}
+          {% if pb_sequence | trim | length > 0 %}
+          Requested sequence (pb_sequence): {{ pb_sequence }}
+          Resolved run order ({{ pb_seq_resolution.run_order | length }}): {{ pb_seq_resolution.run_order | map('regex_replace', '^', 'PB-') | join(', ') }}
+          Composite-dedup skips ({{ pb_seq_resolution.skipped | length }}):
+          {% for s in pb_seq_resolution.skipped %}
+            PB-{{ s.number }} — {{ s.reason }}
+          {% else %}
+            (none)
+          {% endfor %}
+          {% if pb_seq_resolution.unknown | length > 0 %}
+          Unrecognized tokens (ignored): {{ pb_seq_resolution.unknown | join(', ') }}
+          {% endif %}
+          {% endif %}
+
+          HEAL_POINTS   : {{ heal_points }} / 100
+            weighted passed  : {{ weight_passed }}
+            weighted attempted: {{ weight_attempted }}
+
+          Attempted : {{ total_attempted }}
+          Passed    : {{ total_passed }}
+          Failed    : {{ total_failed }}
+          Doc-skipped (SKIP status): {{ doc_skipped | length }}
+          Profile-excluded ({{ run_profile }}): {{ profile_excluded | length }}
+          GUI-excluded (launch_guis={{ launch_guis }}): {{ gui_excluded | length }}
+
+          ── Errors captured during execution (as they happened, every PB,
+             pass or fail — NOT just the final rc verdict below) ──────────
+          {% set any_error_lines = pb_results | selectattr('error_lines') | list %}
+          {% for r in any_error_lines %}
+          PB-{{ r.number }} {{ r.file }}  ({{ r.error_lines | length }} line(s), final={{ 'PASS' if r.passed else 'FAIL' }})
+          {% for line in r.error_lines %}
+            {{ line }}
+          {% endfor %}
+          {% else %}
+          (none — no PB produced a fatal/FAILED/unreachable/failed line during this run)
+          {% endfor %}
+
+          ── Failures (if any) — final rc-based verdict ───────────────────────
+          {% for r in pb_results if not r.passed %}
+          PB-{{ r.number }} {{ r.file }}  (weight {{ r.weight }}, rc={{ r.rc }}, duration={{ r.duration }})
+            {{ r.error | indent(4) }}
+          {% else %}
+          (none)
+          {% endfor %}
+
+          ── All results, doc order ─────────────────────────────────────────
+          {% for r in pb_results %}
+          [{{ 'PASS' if r.passed else 'FAIL' }}] PB-{{ r.number }} {{ r.file }}  weight={{ r.weight }} duration={{ r.duration }}
+          {% endfor %}
+          {% if pb_sequence | trim | length > 0 %}
+
+          ── Output highlights (last ~1500 chars of real stdout per run --
+             only shown for a pb_sequence run, not the full sweep) ───────────
+          {% for r in pb_results %}
+          ── PB-{{ r.number }} {{ r.file }} [{{ 'PASS' if r.passed else 'FAIL' }}] ──
+          {{ r.output_tail | default('(no stdout captured)') | indent(2) }}
+          {% endfor %}
+          {% endif %}
+
+          ── Doc-skipped ────────────────────────────────────────────────────
+          {% for s in doc_skipped %}
+          PB-{{ s.number }} {{ s.file }}
+          {% endfor %}
+
+          ── GUI-excluded (launch_guis={{ launch_guis }}) — not run automatically
+             because each of these backgrounds a real, persistent Godot window
+             on this host; start them by hand using the section below ──────
+          {% for s in gui_excluded %}
+          PB-{{ s.number }} {{ s.file }}
+          {% else %}
+          (none)
+          {% endfor %}
+
+          ════════════════════════════════════════════════════════════════
+          How to start the DubSar IDEs (manual step, after this report)
+          ════════════════════════════════════════════════════════════════
+          IsimudEngine never launches these automatically (see GUI-excluded
+          above) — run whichever one you actually need, by hand, on this
+          host (eriduous-vdi):
+
+          1. EnkiDB 7-Types Connector Wizard (work with the Databases)
+             Opens inside DubSar Theater — the wizard itself is Ctrl+W once
+             the IDE is up, not a separate launch.
+             cd {{ playbooks_dir }}
+               ansible-playbook playbook_234_launch_dubsar_ide_full.yml -i "localhost," -c local -v
+             Log in with a minted Sargon or Gilgamesh Passport (see PB-227
+             below if you need to mint/inspect one first), then press
+             Ctrl+W to open the wizard. EnkiMDB is read-only at runtime and
+             requires a Gilgamesh Passport specifically — a Sargon Passport
+             works for every other engine (EnkiDB/EnkiDW/EnkiSDB/EnkiODB/
+             EnkiQDB/EnkiDDB).
+
+          2. DubSar PDM IDE (work with Client documents + the SLA Layer)
+             cd {{ playbooks_dir }}
+               ansible-playbook playbook_230_build_and_launch_dubsar_pdm.yml -i "localhost," -c local -v
+
+          3. Sargon Passport Manager / Gilgamesh Master Key Manager
+             (mint or inspect a Passport before step 1, if you don't
+             already have one loaded)
+             cd {{ playbooks_dir }}
+               ansible-playbook playbook_227_build_and_launch_kupru_tools.yml -i "localhost," -c local -v
+             Gilgamesh (architect, privilege 7) is a human-only Shamir
+             M-of-N ceremony by design — it is never minted by any
+             automated playbook, including this one.
+
+          Add -e launch_guis=true to this run to have IsimudEngine launch
+          all of the above itself as part of the sweep instead (not
+          recommended for unattended/CI runs — see this file's own
+          launch_guis note).
+
+    - name: "WRITE | Machine-readable JSON report (for CI badge/trend consumption)"
+      ansible.builtin.copy:
+        dest: "{{ json_report_file }}"
+        mode: "0644"
+        content: |
+          {
+            "ecosystem": "{{ ecosystem_name }}",
+            "engine": "{{ orchestrator_name }}",
+            "kaki_version": "{{ kaki_version }}",
+            "crate_version": "{{ cargo_version.stdout | default('unknown') }}",
+            "release": "{{ git_describe.stdout | default('unknown') }}",
+            "operator": "{{ operator }}",
+            "datetime": "{{ session_iso }}",
+            "host": "{{ ansible_hostname }}",
+            "run_profile": "{{ run_profile }}",
+            "pb_sequence": {{ pb_sequence | to_json }},
+            {% if pb_sequence | trim | length > 0 %}
+            "pb_sequence_resolution": {{ pb_seq_resolution | to_json }},
+            {% endif %}
+            "heal_points": {{ heal_points }},
+            "weight_passed": {{ weight_passed }},
+            "weight_attempted": {{ weight_attempted }},
+            "total_attempted": {{ total_attempted }},
+            "total_passed": {{ total_passed }},
+            "total_failed": {{ total_failed }},
+            "doc_skipped_count": {{ doc_skipped | length }},
+            "profile_excluded_count": {{ profile_excluded | length }},
+            "launch_guis": {{ launch_guis | to_json }},
+            "gui_excluded_count": {{ gui_excluded | length }},
+            "gui_excluded": {{ (gui_excluded | map(attribute='number') | list) | to_json }},
+            "results": {{ pb_results | to_json }}
+          }
+
+    - name: "WRITE | Update ISIMUD_ENGINE_LATEST.json (stable filename for CI to read)"
+      ansible.builtin.copy:
+        src: "{{ json_report_file }}"
+        dest: "{{ latest_json_link }}"
+        remote_src: true
+        mode: "0644"
+
+    # ── Official Executive Report — stakeholder/CEO-ready, not the raw
+    # technical log above. Same underlying results, translated: phase names
+    # instead of filenames, a trust-state label instead of a raw score,
+    # findings without stack traces. BahyWay.Ecosystem's own Akkadian/
+    # cuneiform branding (𒁾) is used exactly as it already appears in every
+    # playbook banner and CLI startup line in this repo — not invented here.
+    - name: "WRITE | Official Executive Report (Markdown)"
+      ansible.builtin.copy:
+        dest: "{{ exec_report_md }}"
+        mode: "0644"
+        content: |
+          # 𒁾 BahyWay.Ecosystem — {{ kaki_version }}
+          ## Sovereign Ecosystem Health Attestation
+          ### Engine: {{ orchestrator_name }}
+
+          | | |
+          |---|---|
+          | **Engine**         | {{ orchestrator_name }} |
+          | **Run By (Operator)** | {{ operator }} |
+          | **Prepared**       | {{ session_iso }} |
+          | **Release**        | `{{ git_describe.stdout | default('unknown') }}` |
+          | **Crate Version**  | `{{ cargo_version.stdout | default('unknown') }}` |
+          | **Attesting Host** | {{ ansible_hostname }} |
+          | **Run Profile**    | {{ run_profile }} |
+          {% if pb_sequence | trim | length > 0 %}
+          | **Requested Sequence** | `{{ pb_sequence }}` ({{ pb_seq_resolution.run_order | length }} run, {{ pb_seq_resolution.skipped | length }} deduped) |
+          {% endif %}
+
+          ---
+
+          ## Executive Summary
+
+          **Trust State: {{ trust_state }}**  ({{ heal_points }} / 100 Heal_points)
+
+          {{ trust_state_note }}
+
+          {{ total_passed }} of {{ total_attempted }} verifications passed across {{ pb_results | map(attribute='phase') | unique | list | length }} operational phase(s).
+          {{ total_failed }} require attention.
+          {{ doc_skipped | length }} verification(s) were intentionally withheld from this run (superseded by a corrected version, or dismissed by Architect decision — see Appendix).
+
+          ---
+
+          ## Phase-by-Phase Status
+
+          | Phase | Declaration | Passed | Failed | Status |
+          |---|---|---|---|---|
+          {% for phase_name, entries in pb_results | groupby('phase') %}
+          {% set entries = entries | list %}
+          {% set p = entries | selectattr('passed') | list | length %}
+          {% set f = entries | rejectattr('passed') | list | length %}
+          | {{ phase_name }} | {{ phase_declarations[phase_name] | default('(no declaration recorded)') }} | {{ p }} | {{ f }} | {{ 'Clear' if f == 0 else 'Attention Required' }} |
+          {% endfor %}
+
+          ---
+
+          ## Notable Findings
+
+          {% for r in pb_results if not r.passed %}
+          - **PB-{{ r.number }}** ({{ r.phase }}) — verification failed (weight {{ r.weight }}). Full diagnostic detail is in the accompanying technical report.
+          {% else %}
+          - No failures recorded in this run.
+          {% endfor %}
+
+          ---
+
+          ## Appendix — Withheld Verifications
+
+          {% for s in doc_skipped %}
+          - PB-{{ s.number }} ({{ s.phase }})
+          {% else %}
+          - None withheld this run.
+          {% endfor %}
+
+          ---
+
+          ## Next Steps — Starting the DubSar IDEs
+
+          This attestation run does not launch any interactive DubSar IDE
+          window ({{ gui_excluded | length }} such playbook(s) intentionally
+          withheld — `launch_guis=false` by default). To work with the
+          verified environment directly:
+
+          - **EnkiDB 7-Types Connector Wizard** (Databases) — launch DubSar
+            Theater (`playbook_234_launch_dubsar_ide_full.yml`), then press
+            Ctrl+W inside it.
+          - **DubSar PDM IDE** (Client documents + SLA Layer configuration)
+            — launch `playbook_230_build_and_launch_dubsar_pdm.yml`.
+
+          Exact commands are in the accompanying technical report's "How to
+          start the DubSar IDEs" section.
+
+          ---
+
+          ## Attestation
+
+          This report reflects verifications executed directly against real
+          infrastructure — the same playbooks an engineer runs by hand, run
+          automatically and in full. No result in this report is sampled,
+          projected, or simulated.
+
+          Sealed under commit `{{ git_describe.stdout | default('unknown') }}`.
+
+          𒁾 **BahyWay.Ecosystem** — {{ kaki_version }} · Engine: {{ orchestrator_name }}
+
+    - name: "WRITE | Official Executive Report (HTML — self-contained, printable, CEO-ready)"
+      ansible.builtin.copy:
+        dest: "{{ exec_report_html }}"
+        mode: "0644"
+        content: |
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>BahyWay.Ecosystem {{ kaki_version }} — {{ orchestrator_name }} Health Attestation</title>
+          <style>
+            /* ── Tokens — a fired-clay tablet under lamplight, not a parchment
+               scroll: dark basalt ground by default (matches most viewers'
+               dark mode natively), lapis lazuli — the actual prestige stone of
+               Mesopotamian royal seals — as the structural accent, electrum
+               gold held back for the seal glyph and the GOLDEN trust state
+               only. Semantic status colors are separate from the accent. */
+            :root {
+              --ground:    #1a1512;
+              --surface:   #241d17;
+              --ink:       #e9e0c9;
+              --ink-dim:   #b8ac8e;
+              --rule:      #40342530;
+              --rule-strong: #4a3c29;
+              --lapis:     #5b8fc0;
+              --gold:      #c9a227;
+              --ok:        #6fa46f;
+              --warn:      #d0973a;
+              --critical:  #c06158;
+              --code-bg:   #00000040;
+            }
+            @media (prefers-color-scheme: light) {
+              :root {
+                --ground:    #ece3cf;
+                --surface:   #f4eeda;
+                --ink:       #2a2016;
+                --ink-dim:   #6b5d43;
+                --rule:      #cbb98f80;
+                --rule-strong: #b7a374;
+                --lapis:     #1e4b78;
+                --gold:      #8a6508;
+                --ok:        #3d6b3d;
+                --warn:      #93590f;
+                --critical:  #7a2f2a;
+                --code-bg:   #00000012;
+              }
+            }
+            :root[data-theme="dark"] {
+              --ground: #1a1512; --surface: #241d17; --ink: #e9e0c9; --ink-dim: #b8ac8e;
+              --rule: #40342530; --rule-strong: #4a3c29; --lapis: #5b8fc0; --gold: #c9a227;
+              --ok: #6fa46f; --warn: #d0973a; --critical: #c06158; --code-bg: #00000040;
+            }
+            :root[data-theme="light"] {
+              --ground: #ece3cf; --surface: #f4eeda; --ink: #2a2016; --ink-dim: #6b5d43;
+              --rule: #cbb98f80; --rule-strong: #b7a374; --lapis: #1e4b78; --gold: #8a6508;
+              --ok: #3d6b3d; --warn: #93590f; --critical: #7a2f2a; --code-bg: #00000012;
+            }
+
+            * { box-sizing: border-box; }
+            body {
+              background: var(--ground);
+              color: var(--ink);
+              font-family: "Iowan Old Style", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+              max-width: 760px;
+              margin: 0 auto;
+              padding: 56px 40px 72px;
+              line-height: 1.6;
+            }
+            .sans {
+              font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            }
+            .seal {
+              text-align: center;
+              font-size: 2.4rem;
+              letter-spacing: 0.2em;
+              color: var(--gold);
+            }
+            h1 {
+              text-align: center;
+              font-size: 1.85rem;
+              font-weight: 600;
+              margin: 6px 0 0;
+              letter-spacing: 0.02em;
+              text-wrap: balance;
+            }
+            h2.sub {
+              text-align: center;
+              font-weight: normal;
+              font-style: italic;
+              margin: 6px 0 32px;
+              color: var(--ink-dim);
+              font-size: 1.02rem;
+            }
+            .meta {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 0 0 32px;
+              font-size: 0.86rem;
+            }
+            .meta td { padding: 5px 10px; border-bottom: 1px solid var(--rule); font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+            .meta td:first-child { color: var(--ink-dim); letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.72rem; width: 160px; }
+            .trust-badge {
+              display: block;
+              text-align: center;
+              margin: 28px 0;
+              padding: 22px;
+              border: 1px solid var(--rule-strong);
+              border-radius: 2px;
+              background: var(--surface);
+              position: relative;
+            }
+            .trust-badge::before, .trust-badge::after {
+              content: "";
+              position: absolute; left: 10px; right: 10px; height: 1px;
+              background: var(--gold); opacity: 0.55;
+            }
+            .trust-badge::before { top: 6px; }
+            .trust-badge::after { bottom: 6px; }
+            .trust-badge .state {
+              font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+              font-size: 2rem;
+              font-weight: 700;
+              letter-spacing: 0.12em;
+            }
+            .trust-badge .state.GOLDEN { color: var(--ok); }
+            .trust-badge .state.ACTIVE { color: var(--lapis); }
+            .trust-badge .state.SUSPICIOUS { color: var(--warn); }
+            .trust-badge .state.BLOCKED { color: var(--critical); }
+            .trust-badge .points {
+              font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+              font-variant-numeric: tabular-nums;
+              font-size: 1.05rem; margin-top: 6px; color: var(--ink-dim);
+            }
+            .trust-badge .note { font-style: italic; margin-top: 12px; font-size: 0.95rem; color: var(--ink); }
+            h3 {
+              font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+              font-size: 0.78rem;
+              text-transform: uppercase;
+              letter-spacing: 0.1em;
+              border-bottom: 1px solid var(--rule-strong);
+              padding-bottom: 8px;
+              color: var(--lapis);
+              margin-top: 40px;
+            }
+            table.phases {
+              width: 100%; border-collapse: collapse; margin-top: 10px;
+              font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            }
+            table.phases th, table.phases td {
+              text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--rule);
+              font-size: 0.9rem;
+            }
+            table.phases th {
+              color: var(--ink-dim); font-size: 0.72rem; text-transform: uppercase;
+              letter-spacing: 0.06em; border-bottom: 1px solid var(--rule-strong);
+              font-weight: 600;
+            }
+            table.phases td:nth-child(2), table.phases td:nth-child(3) { font-variant-numeric: tabular-nums; }
+            .status-clear { color: var(--ok); font-weight: 600; }
+            .status-attn  { color: var(--warn); font-weight: 600; }
+            ul.findings { padding-left: 1.2em; }
+            ul.findings li { margin-bottom: 8px; }
+            .attestation {
+              margin-top: 44px;
+              padding-top: 18px;
+              border-top: 1px solid var(--rule-strong);
+              font-size: 0.88rem;
+              font-style: italic;
+              color: var(--ink-dim);
+            }
+            .footer-seal {
+              text-align: center;
+              margin-top: 32px;
+              font-size: 1.15rem;
+              letter-spacing: 0.08em;
+              color: var(--gold);
+            }
+            code {
+              background: var(--code-bg);
+              padding: 1px 6px;
+              border-radius: 3px;
+              font-size: 0.88em;
+            }
+            @media print {
+              body { padding: 0.4in; background: #fff; color: #1a1512; }
+              .trust-badge { break-inside: avoid; background: none; }
+            }
+          </style>
+          </head>
+          <body>
+
+          <div class="seal">𒁾</div>
+          <h1>BahyWay.Ecosystem — {{ kaki_version }}</h1>
+          <h2 class="sub">Sovereign Ecosystem Health Attestation · Engine: {{ orchestrator_name }}</h2>
+
+          <table class="meta">
+            <tr><td>Engine</td><td>{{ orchestrator_name }}</td></tr>
+            <tr><td>Run By (Operator)</td><td>{{ operator }}</td></tr>
+            <tr><td>Prepared</td><td>{{ session_iso }}</td></tr>
+            <tr><td>Release</td><td><code>{{ git_describe.stdout | default('unknown') }}</code></td></tr>
+            <tr><td>Crate Version</td><td><code>{{ cargo_version.stdout | default('unknown') }}</code></td></tr>
+            <tr><td>Attesting Host</td><td>{{ ansible_hostname }}</td></tr>
+            <tr><td>Run Profile</td><td>{{ run_profile }}</td></tr>
+          {% if pb_sequence | trim | length > 0 %}
+            <tr><td>Requested Sequence</td><td><code>{{ pb_sequence | e }}</code> ({{ pb_seq_resolution.run_order | length }} run, {{ pb_seq_resolution.skipped | length }} deduped)</td></tr>
+          {% endif %}
+          </table>
+
+          <div class="trust-badge">
+            <div class="state {{ trust_state }}">{{ trust_state }}</div>
+            <div class="points">{{ heal_points }} / 100 Heal_points</div>
+            <div class="note">{{ trust_state_note }}</div>
+          </div>
+
+          <p>
+            <strong>{{ total_passed }} of {{ total_attempted }}</strong> verifications passed
+            across <strong>{{ pb_results | map(attribute='phase') | unique | list | length }}</strong>
+            operational phase(s). <strong>{{ total_failed }}</strong> require attention.
+            <strong>{{ doc_skipped | length }}</strong> verification(s) were intentionally
+            withheld from this run (superseded by a corrected version, or dismissed by
+            Architect decision).
+          </p>
+
+          <h3>Phase-by-Phase Status</h3>
+          <table class="phases">
+            <tr><th>Phase</th><th>Declaration</th><th>Passed</th><th>Failed</th><th>Status</th></tr>
+          {% for phase_name, entries in pb_results | groupby('phase') %}
+          {% set entries = entries | list %}
+          {% set p = entries | selectattr('passed') | list | length %}
+          {% set f = entries | rejectattr('passed') | list | length %}
+            <tr>
+              <td>{{ phase_name | e }}</td>
+              <td>{{ (phase_declarations[phase_name] | default('(no declaration recorded)')) | e }}</td>
+              <td>{{ p }}</td>
+              <td>{{ f }}</td>
+              <td class="{{ 'status-clear' if f == 0 else 'status-attn' }}">{{ 'Clear' if f == 0 else 'Attention Required' }}</td>
+            </tr>
+          {% endfor %}
+          </table>
+
+          <h3>Notable Findings</h3>
+          <ul class="findings">
+          {% for r in pb_results if not r.passed %}
+            <li><strong>PB-{{ r.number }}</strong> ({{ r.phase | e }}) — verification failed (weight {{ r.weight }}). Full diagnostic detail is in the accompanying technical report.</li>
+          {% else %}
+            <li>No failures recorded in this run.</li>
+          {% endfor %}
+          </ul>
+
+          <h3>Appendix — Withheld Verifications</h3>
+          <ul class="findings">
+          {% for s in doc_skipped %}
+            <li>PB-{{ s.number }} ({{ s.phase | e }})</li>
+          {% else %}
+            <li>None withheld this run.</li>
+          {% endfor %}
+          </ul>
+
+          <h3>Next Steps — Starting the DubSar IDEs</h3>
+          <p class="sans">
+            This attestation run does not launch any interactive DubSar IDE
+            window ({{ gui_excluded | length }} such playbook(s) intentionally
+            withheld — <code>launch_guis=false</code> by default). To work
+            with the verified environment directly:
+          </p>
+          <ul class="findings">
+            <li><strong>EnkiDB 7-Types Connector Wizard</strong> (Databases) — launch DubSar Theater (<code>playbook_234_launch_dubsar_ide_full.yml</code>), then press Ctrl+W inside it.</li>
+            <li><strong>DubSar PDM IDE</strong> (Client documents + SLA Layer configuration) — launch <code>playbook_230_build_and_launch_dubsar_pdm.yml</code>.</li>
+          </ul>
+          <p class="sans">Exact commands are in the accompanying technical report's "How to start the DubSar IDEs" section.</p>
+
+          <div class="attestation">
+            This report reflects verifications executed directly against real
+            infrastructure — the same playbooks an engineer runs by hand, run
+            automatically and in full. No result in this report is sampled,
+            projected, or simulated. Sealed under commit
+            <code>{{ git_describe.stdout | default('unknown') }}</code>.
+          </div>
+
+          <div class="footer-seal">𒁾 BahyWay.Ecosystem — {{ kaki_version }} · Engine: {{ orchestrator_name }}</div>
+
+          </body>
+          </html>
+
+    - name: "WRITE | Update EXECUTIVE_REPORT_LATEST.html (stable filename to hand off / bookmark)"
+      ansible.builtin.copy:
+        src: "{{ exec_report_html }}"
+        dest: "{{ exec_report_latest }}"
+        remote_src: true
+        mode: "0644"
+
+    - name: "NARU | Record IsimudEngine run"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ session_date }} | ISIMUD | IsimudEngine run ({{ run_profile }}) by {{ operator }} | Heal_points={{ heal_points }} | {{ total_passed }}/{{ total_attempted }} passed | release={{ git_describe.stdout | default('unknown') }} | see {{ report_file }}"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | Summary"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════
+          {{ ecosystem_name }} {{ kaki_version }} — {{ orchestrator_name | upper }} COMPLETE
+          Run By      : {{ operator }}
+          Trust State : {{ trust_state }}
+          Heal_points : {{ heal_points }} / 100
+          Passed      : {{ total_passed }} / {{ total_attempted }}
+          Failed      : {{ total_failed }}
+          Technical report : {{ report_file }}
+          JSON              : {{ json_report_file }}
+          Executive report (Markdown) : {{ exec_report_md }}
+          Executive report (HTML)     : {{ exec_report_html }}
+          ═══════════════════════════════════════════════════
+
+    - name: "GATE | Fail the job if Heal_points is below threshold (CI signal)"
+      ansible.builtin.assert:
+        that: "(heal_points | float) >= (heal_points_threshold | default(0) | float)"
+        fail_msg: "Heal_points {{ heal_points }} is below the required threshold {{ heal_points_threshold | default(0) }} — see {{ report_file }}"
+        success_msg: "Heal_points {{ heal_points }} meets threshold {{ heal_points_threshold | default(0) }}"

@@ -1,0 +1,282 @@
+---
+# =============================================================================
+# PLAYBOOK 87 — Replace icon rail with named sidebar (full text labels)
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_87_named_sidebar.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 87 — Named sidebar replacing icon rail"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    workspace: "/home/bahyway/Forge/bahyway_v4"
+    app_rs:    "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+
+  tasks:
+
+    - name: "Patch draw_left_rail with named sidebar"
+      ansible.builtin.shell: |
+        python3 - << 'EOF'
+        path = "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+        with open(path) as f:
+            src = f.read()
+
+        # Find the entire draw_left_rail function and replace it
+        OLD = """    // ── LEFT ICON RAIL ────────────────────────────────────────────────────
+    fn draw_left_rail(&mut self, ctx: &Context) {
+        let panels = [
+            ActivePanel::Theater,
+            ActivePanel::Hepta,
+            ActivePanel::Particles,
+            ActivePanel::Wpd,
+            ActivePanel::Najaf,
+            ActivePanel::EtlFlow,
+            ActivePanel::TamuzAI,
+            ActivePanel::EaAgent,
+            ActivePanel::EnkiDbConnector,
+        ];
+        egui::SidePanel::left("icon_rail")
+            .exact_width(ICON_RAIL_W)
+            .resizable(false)
+            .frame(egui::Frame::none()
+                .fill(Color32::from_rgb(14, 12, 24))
+                .stroke(egui::Stroke::new(
+                    1.0, Color32::from_rgb(42, 36, 64)
+                )))
+            .show(ctx, |ui| {
+                ui.add_space(6.0);
+                for p in &panels {
+                    let is_active = self.panel == *p;
+                    let col = if is_active {
+                        theme::GOLD
+                    } else {
+                        Color32::from_rgb(58, 52, 96)
+                    };
+                    let bg = if is_active {
+                        Color32::from_rgb(26, 22, 40)
+                    } else {
+                        Color32::TRANSPARENT
+                    };
+                    let border = if is_active {
+                        Color32::from_rgb(201, 160, 44)
+                    } else {
+                        Color32::TRANSPARENT
+                    };
+                    let resp = ui.add(
+                        egui::Button::new(
+                            RichText::new(p.rail_icon())
+                                .color(col)
+                                .size(14.0)
+                        )
+                        .fill(bg)
+                        .stroke(egui::Stroke::new(1.0, border))
+                        .min_size(Vec2::new(44.0, 28.0))
+                    ).on_hover_text(p.rail_tooltip());
+                    if resp.clicked() {
+                        self.panel = *p;
+                    }
+                    ui.add_space(3.0);
+                    // Divider after Theater
+                    if *p == ActivePanel::Theater {
+                        ui.add(egui::Separator::default()
+                            .horizontal()
+                            .shrink(4.0));
+                        ui.add_space(3.0);
+                    }
+                    // Divider before EnkiDB Connector
+                    if *p == ActivePanel::EaAgent {
+                        ui.add_space(3.0);
+                        ui.add(egui::Separator::default()
+                            .horizontal()
+                            .shrink(4.0));
+                        ui.add_space(3.0);
+                    }
+                }
+                // Divider before pending panels
+                ui.add_space(4.0);
+                ui.add(egui::Separator::default()
+                    .horizontal()
+                    .shrink(4.0));
+                ui.add_space(3.0);
+                // Pending panels (greyed out)
+                for p in &[
+                    ActivePanel::SlaConfig,
+                ] {
+                    ui.add(
+                        egui::Button::new(
+                            RichText::new(p.rail_icon())
+                                .color(Color32::from_rgb(40, 36, 60))
+                                .size(11.0)
+                        )
+                        .fill(Color32::TRANSPARENT)
+                        .stroke(egui::Stroke::NONE)
+                        .min_size(Vec2::new(20.0, 20.0))
+                    ).on_hover_text(
+                        format!("{} — coming next", p.rail_tooltip())
+                    );
+                    ui.add_space(3.0);
+                }
+            });
+    }"""
+
+        NEW = """    // ── LEFT NAMED SIDEBAR ───────────────────────────────────────────────
+    fn draw_left_rail(&mut self, ctx: &Context) {
+        // Named entries: (panel, icon, label, accent_colour)
+        let entries: &[(ActivePanel, &str, &str, Color32)] = &[
+            (ActivePanel::Theater,        "□",  "Theater",      Color32::from_rgb(201, 160, 44)),
+            (ActivePanel::Hepta,          "H",  "Hepta 7D",     Color32::from_rgb(120, 180, 220)),
+            (ActivePanel::Particles,      "□",  "Particles",    Color32::from_rgb(120, 180, 220)),
+            (ActivePanel::Wpd,            "□",  "Baghdad WPD",  Color32::from_rgb(120, 180, 220)),
+            (ActivePanel::Najaf,          "□",  "Najaf",        Color32::from_rgb(120, 180, 220)),
+            (ActivePanel::EtlFlow,        "□",  "ETL Flow",     Color32::from_rgb(120, 180, 220)),
+            (ActivePanel::TamuzAI,        "𒀭", "TamuzAI",      Color32::from_rgb(180, 120, 220)),
+            (ActivePanel::EaAgent,        "𒂗", "EaAgent",      Color32::from_rgb(180, 120, 220)),
+            (ActivePanel::EnkiDbConnector,"𒆳", "EnkiDB",       Color32::from_rgb(74, 143, 212)),
+        ];
+
+        egui::SidePanel::left("icon_rail")
+            .exact_width(ICON_RAIL_W)
+            .resizable(true)
+            .frame(egui::Frame::none()
+                .fill(Color32::from_rgb(14, 12, 24))
+                .stroke(egui::Stroke::new(
+                    1.0, Color32::from_rgb(42, 36, 64)
+                )))
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("named_sidebar_scroll")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.add_space(8.0);
+
+                        for (panel, icon, label, accent) in entries {
+                            let is_active = self.panel == *panel;
+
+                            let bg = if is_active {
+                                Color32::from_rgb(26, 22, 40)
+                            } else {
+                                Color32::TRANSPARENT
+                            };
+                            let text_col = if is_active {
+                                *accent
+                            } else {
+                                Color32::from_rgb(100, 95, 130)
+                            };
+                            let border_col = if is_active {
+                                *accent
+                            } else {
+                                Color32::TRANSPARENT
+                            };
+
+                            let btn_text = format!("{} {}", icon, label);
+                            let resp = ui.add(
+                                egui::Button::new(
+                                    RichText::new(&btn_text)
+                                        .color(text_col)
+                                        .size(11.5)
+                                )
+                                .fill(bg)
+                                .stroke(egui::Stroke::new(1.0, border_col))
+                                .min_size(Vec2::new(
+                                    ui.available_width() - 4.0,
+                                    28.0,
+                                ))
+                                .rounding(egui::Rounding::same(3.0))
+                            );
+
+                            if resp.clicked() {
+                                self.panel = *panel;
+                            }
+
+                            ui.add_space(2.0);
+
+                            // Divider after Theater
+                            if *panel == ActivePanel::Theater {
+                                ui.add(egui::Separator::default()
+                                    .horizontal().shrink(6.0));
+                                ui.add_space(4.0);
+                            }
+                            // Divider before EnkiDB
+                            if *panel == ActivePanel::EaAgent {
+                                ui.add_space(4.0);
+                                ui.add(egui::Separator::default()
+                                    .horizontal().shrink(6.0));
+                                ui.add_space(4.0);
+                            }
+                        }
+
+                        // Pending section
+                        ui.add_space(8.0);
+                        ui.add(egui::Separator::default()
+                            .horizontal().shrink(6.0));
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new("PENDING")
+                                .color(Color32::from_rgb(50, 45, 70))
+                                .size(9.0)
+                        );
+                        ui.add_space(4.0);
+                        ui.add(
+                            egui::Button::new(
+                                RichText::new("□ SLA Config")
+                                    .color(Color32::from_rgb(50, 45, 70))
+                                    .size(11.0)
+                            )
+                            .fill(Color32::TRANSPARENT)
+                            .stroke(egui::Stroke::NONE)
+                            .min_size(Vec2::new(ui.available_width() - 4.0, 26.0))
+                        );
+                    });
+            });
+    }"""
+
+        if OLD in src:
+            src = src.replace(OLD, NEW, 1)
+            # Also widen the rail constant
+            src = src.replace(
+                "const ICON_RAIL_W:  f32 = 48.0;",
+                "const ICON_RAIL_W:  f32 = 120.0;"
+            )
+            src = src.replace(
+                "const ICON_RAIL_W:  f32 = 28.0;",
+                "const ICON_RAIL_W:  f32 = 120.0;"
+            )
+            with open(path, "w") as f:
+                f.write(src)
+            print("SUCCESS — named sidebar written, rail width set to 120px")
+        else:
+            print("ERROR — OLD block not found")
+            import sys; sys.exit(1)
+        EOF
+      register: patch_out
+      changed_when: true
+
+    - name: "Show patch output"
+      ansible.builtin.debug:
+        msg: "{{ patch_out.stdout_lines }}"
+
+    - name: "cargo build -p dubsar-visualizer"
+      ansible.builtin.shell: "cargo build -p dubsar-visualizer 2>&1 | tail -10"
+      args:
+        chdir: "{{ workspace }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 87 sealed — named sidebar installed.
+          Run: cd ~/Forge/bahyway_v4 &&
+               WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan cargo run -p dubsar-visualizer
+          Left sidebar now shows: Theater | Hepta 7D | Particles | Baghdad WPD |
+          Najaf | ETL Flow | TamuzAI | EaAgent | EnkiDB  — all clickable with full text.

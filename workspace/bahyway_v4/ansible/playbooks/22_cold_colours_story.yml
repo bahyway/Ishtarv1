@@ -1,0 +1,136 @@
+---
+# Playbook 22 — Cold colours for StoryEngine + diagnose banner
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/22_cold_colours_story.yml -v
+
+- name: "𒁾 Cold colours + diagnose banner"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_22.py"
+
+  tasks:
+
+    - name: "Write fix script"
+      ansible.builtin.copy:
+        dest:    "{{ fix_script }}"
+        mode:    "0755"
+        content: |
+          import re
+
+          bw_path  = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/bahyway_main.rs'
+          app_path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+
+          # ── Fix 1: Add TEXT_MAIN const ──────────────────────────────────────
+          with open(bw_path, 'r') as f:
+              src = f.read()
+
+          if 'const TEXT_MAIN' not in src:
+              src = src.replace(
+                  'const STEEL:      Color32 = Color32::from_rgb(70, 85, 105);',
+                  'const STEEL:      Color32 = Color32::from_rgb(70, 85, 105);\nconst TEXT_MAIN:  Color32 = Color32::from_rgb(170, 178, 190);'
+              )
+              print("TEXT_MAIN added")
+          else:
+              print("TEXT_MAIN already present")
+
+          # ── Fix 2: Cool down StoryEngine demo log fills ─────────────────────
+          # Replace hot colour fills in story log frames
+          # Demo entries use RED/AMBER/GREEN — replace with cool steel/slate
+          src = src.replace(
+              '(RED,   "⛔", "10:02", "New files detected: 17 entries")',
+              '(Color32::from_rgb(80,120,160), ".", "10:02", "New files detected: 17")'
+          )
+          src = src.replace(
+              '(AMBER, "⚠ ", "10:14", "Schema: 3 schemas normalised")',
+              '(Color32::from_rgb(100,130,110), "~", "10:14", "Schema: 3 normalised")'
+          )
+          src = src.replace(
+              '(GREEN, "✓ ", "10:31", "Dedup: +1,307 records clustered")',
+              '(Color32::from_rgb(80,140,120), ".", "10:31", "Dedup: +1,307 clustered")'
+          )
+          src = src.replace(
+              '(WHITE, "◉ ", "11:26", "KAKI minted: batch_003.zip")',
+              '(Color32::from_rgb(100,140,150), ".", "11:26", "KAKI minted: batch_003")'
+          )
+          src = src.replace(
+              '(GOLD,  "⊛ ", "11:37", "B11 score: 218 — GEM threshold")',
+              '(Color32::from_rgb(140,130,80), "~", "11:37", "B11 score: 178 — below GEM")'
+          )
+          src = src.replace(
+              '(CYAN,  "◈ ", "12:01", "Snapshot: DubSar state saved")',
+              '(Color32::from_rgb(80,120,160), ".", "12:01", "Snapshot: state saved")'
+          )
+
+          # Cool down the story frame fills
+          src = src.replace(
+              'Color32::from_rgba_premultiplied(\n                                      col.r()/4, col.g()/4, col.b()/4, 60)',
+              'Color32::from_rgb(20, 24, 30)'
+          )
+
+          # Cool down filter toggle buttons
+          src = src.replace(
+              'filter_toggle(ui, "⛔ Critical", RED,    &mut state.log_filter_critical);',
+              'filter_toggle(ui, "Critical", Color32::from_rgb(140,80,90), &mut state.log_filter_critical);'
+          )
+          src = src.replace(
+              'filter_toggle(ui, "⚠ Errors",   AMBER,  &mut state.log_filter_errors);',
+              'filter_toggle(ui, "Errors", Color32::from_rgb(130,110,70), &mut state.log_filter_errors);'
+          )
+          src = src.replace(
+              'filter_toggle(ui, "✓ Warnings",  GREEN,  &mut state.log_filter_warnings);',
+              'filter_toggle(ui, "Warnings", Color32::from_rgb(70,130,110), &mut state.log_filter_warnings);'
+          )
+
+          with open(bw_path, 'w') as f:
+              f.write(src)
+          print("StoryEngine colours cooled")
+
+          # ── Fix 3: Diagnose banner + nav bar ────────────────────────────────
+          with open(app_path, 'r') as f:
+              app = f.read()
+
+          print("\n=== Window title ===")
+          idx = app.find('with_title')
+          print(app[idx:idx+100])
+
+          print("\n=== nav_bar panel ===")
+          idx2 = app.find('"nav_bar"')
+          print(app[idx2:idx2+300])
+
+          print("\n=== status_bar exists:", '"status_bar"' in app)
+          print("=== Enterprise Apps in app.rs:", 'Enterprise Apps' in app)
+          print("=== BahywayMain in app.rs:", 'BahywayMain' in app)
+
+    - name: "Run fix script"
+      ansible.builtin.command:
+        cmd: python3 {{ fix_script }}
+      register: py_out
+      changed_when: true
+      failed_when:  py_out.rc != 0
+
+    - name: "Show output"
+      ansible.builtin.debug:
+        msg: "{{ py_out.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 3 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-3:] }}"
+
+    - name: "𒁾 Done"
+      ansible.builtin.debug:
+        msg:
+          - "StoryEngine: cold steel/slate colours"
+          - "Run: cargo run -p dubsar-visualizer"

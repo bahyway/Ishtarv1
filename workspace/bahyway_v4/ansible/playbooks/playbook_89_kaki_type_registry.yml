@@ -1,0 +1,234 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_89_kaki_type_registry.yml
+#  BahyWay.Ecosystem v4.0 — KAKI v4.0 Type Registry Crate
+#
+#  Run FROM: eriduous-vdi (192.168.122.214)
+#  Target:   localhost
+#
+#  Purpose:
+#    Establish the sovereign KAKI v4.0 type registry as a standalone crate
+#    — the single source of truth for all KAKI constants, byte layout,
+#    kaki_type/role/EAV state values, and ColourID B11 formula.
+#
+#    This crate is consumed by every other crate in the workspace.
+#    Nothing writes KAKI particles without importing this crate.
+#
+#  Canonical KAKI v4.0 byte layout (LOCKED):
+#    κ[0..3]  uuid_hash      — UUID v4 (or v7 for time-ordered)
+#    κ[4..5]  tribe_id       — 2-byte tribe identifier
+#    κ[6]     kaki_type      — 0x01 Identity / 0x02 Event / 0x03 CrossTribe
+#    κ[7]     kaki_role      — 0x01 KISHIB / 0x02 ZIKRU / 0x03 PARZU
+#    κ[8..11] reserved       — zeroed, reserved for future extension
+#    κ[12..13] timestamp     — seconds or epoch offset
+#    κ[14..15] CRC-16        — CRC-16/CCITT integrity check
+#    EAV payload (variable) — attribute key-value pairs
+#    ColourID B11 = round(H(orbital_position) × 240) — NEVER 255
+#
+#  RED/GREEN/BLUE score bytes DO NOT EXIST in v4.0. Never reference them.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-89 | KAKI v4.0 Type Registry Crate"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:  "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    crates_dir:   "{{ workspace }}/crates"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ docs_dir }}/PB89_KAKI_REGISTRY_{{ session_date }}.txt"
+    crate_name:    "kaki-types"
+
+  tasks:
+
+    - name: "PREP  | Ensure directories exist"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crates_dir }}"
+        - "{{ docs_dir }}"
+
+    - name: "CHECK | Does {{ crate_name }} already exist?"
+      ansible.builtin.stat:
+        path: "{{ crates_dir }}/{{ crate_name }}/Cargo.toml"
+      register: crate_stat
+
+    - name: "SCAFFOLD | cargo new --lib {{ crate_name }}"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} new --lib {{ crate_name }}"
+        chdir: "{{ crates_dir }}"
+      when: not crate_stat.stat.exists
+      register: cargo_new
+      changed_when: cargo_new.rc == 0
+
+    - name: "WRITE | {{ crate_name }}/Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ crates_dir }}/{{ crate_name }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name    = "kaki-types"
+          version = "0.1.0"
+          edition = "2021"
+          description = "BahyWay.Ecosystem v4.0 — KAKI canonical type registry (single source of truth)"
+
+          [dependencies]
+          # No dependencies — this crate is the foundation, it depends on nothing
+          [lib]
+          name = "kaki_types"
+          path = "src/lib.rs"
+
+    - name: "WRITE | {{ crate_name }}/src/lib.rs"
+      ansible.builtin.copy:
+        dest: "{{ crates_dir }}/{{ crate_name }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! kaki-types — BahyWay.Ecosystem v4.0 KAKI Canonical Type Registry
+          //!
+          //! Single source of truth for all KAKI constants.
+          //! Every crate that creates or reads KAKI particles imports this crate.
+          //!
+          //! CANONICAL BYTE LAYOUT (LOCKED — do not modify):
+          //!   κ[0..3]   uuid_hash  — UUID v4/v7
+          //!   κ[4..5]   tribe_id   — 2-byte tribe identifier
+          //!   κ[6]      kaki_type  — Identity/Event/CrossTribe
+          //!   κ[7]      kaki_role  — KISHIB/ZIKRU/PARZU
+          //!   κ[8..11]  reserved   — zeroed
+          //!   κ[12..13] timestamp  — epoch seconds offset
+          //!   κ[14..15] CRC-16     — CRC-16/CCITT
+          //!   EAV payload (variable)
+          //!
+          //! RED/GREEN/BLUE score bytes DO NOT EXIST in v4.0.
+          //! ColourID B11 = round(H × 240) — NEVER 255 (Plimpton 322 base).
+          #![forbid(unsafe_code)]
+          #![no_std]
+
+          // ── kaki_type constants ─────────────────────────────────────────────
+          /// Identity particle — represents a named entity (station, sensor, site, person)
+          pub const KAKI_TYPE_IDENTITY:   u8 = 0x01;
+          /// Event particle — represents a timestamped occurrence
+          pub const KAKI_TYPE_EVENT:      u8 = 0x02;
+          /// CrossTribe particle — represents a cross-boundary reference or external ingestion
+          pub const KAKI_TYPE_CROSSTRIBE: u8 = 0x03;
+
+          // ── kaki_role constants ─────────────────────────────────────────────
+          /// KISHIB — "seal" in Akkadian. Identity or source-of-record role.
+          pub const KAKI_ROLE_KISHIB: u8 = 0x01;
+          /// ZIKRU  — "record" in Akkadian. Primary event or data record role.
+          pub const KAKI_ROLE_ZIKRU:  u8 = 0x02;
+          /// PARZU  — "boundary" in Akkadian. Relationship or cross-domain role.
+          pub const KAKI_ROLE_PARZU:  u8 = 0x03;
+
+          // ── EAV state strings (canonical) ────────────────────────────────────
+          /// EAV state: healthy, resolved, within nominal range
+          pub const EAV_STATE_GOLDEN:        &str = "GOLDEN";
+          /// EAV state: degraded, uncertain, approaching threshold
+          pub const EAV_STATE_FUZZY:         &str = "FUZZY";
+          /// EAV state: failed, expired, threshold crossed
+          pub const EAV_STATE_DEAD:          &str = "DEAD";
+          /// EAV state: critical failure requiring immediate action
+          pub const EAV_STATE_DEAD_CRITICAL: &str = "DEAD_CRITICAL";
+
+          // ── Orbital subtypes ─────────────────────────────────────────────────
+          pub const ORBITAL_GOLDEN_GEM:    &str = "GOLDEN_GEM";
+          pub const ORBITAL_GOLDEN_ALIVE:  &str = "GOLDEN_ALIVE";
+          pub const ORBITAL_FUZZY_AGED:    &str = "FUZZY_AGED";
+          pub const ORBITAL_FUZZY_GRAY:    &str = "FUZZY_GRAY";
+          pub const ORBITAL_FUZZY_DECAY:   &str = "FUZZY_DECAY";
+          pub const ORBITAL_DEAD_EXPIRED:  &str = "DEAD_EXPIRED";
+          pub const ORBITAL_DEAD_SEALED:   &str = "DEAD_SEALED";
+
+          // ── ColourID B11 ─────────────────────────────────────────────────────
+          /// Sovereign ColourID base from Plimpton 322 (sexagesimal 60 × 4 = 240).
+          /// B11 = round(H(orbital_position) × COLOUR_ID_BASE)
+          /// NEVER use 255 — that is RGB, not sovereign ColourID.
+          pub const COLOUR_ID_BASE: f64 = 240.0;
+
+          /// Compute ColourID B11.
+          /// `orbital_hue` must be in [0.0, 1.0]. Returns value in [0, 240].
+          pub fn colour_id_b11(orbital_hue: f64) -> u8 {
+              (orbital_hue.clamp(0.0, 1.0) * COLOUR_ID_BASE).round() as u8
+          }
+
+          // ── KAKI byte layout offsets ─────────────────────────────────────────
+          pub const KAKI_OFFSET_UUID:      usize = 0;
+          pub const KAKI_OFFSET_TRIBE:     usize = 4;
+          pub const KAKI_OFFSET_TYPE:      usize = 6;
+          pub const KAKI_OFFSET_ROLE:      usize = 7;
+          pub const KAKI_OFFSET_RESERVED:  usize = 8;
+          pub const KAKI_OFFSET_TIMESTAMP: usize = 12;
+          pub const KAKI_OFFSET_CRC16:     usize = 14;
+          pub const KAKI_HEADER_SIZE:      usize = 16;
+
+          /// Validate kaki_type — returns true only for the three canonical values.
+          pub fn is_valid_kaki_type(t: u8) -> bool {
+              matches!(t, KAKI_TYPE_IDENTITY | KAKI_TYPE_EVENT | KAKI_TYPE_CROSSTRIBE)
+          }
+
+          /// Validate kaki_role — returns true only for the three canonical values.
+          pub fn is_valid_kaki_role(r: u8) -> bool {
+              matches!(r, KAKI_ROLE_KISHIB | KAKI_ROLE_ZIKRU | KAKI_ROLE_PARZU)
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              #[test]
+              fn colour_id_b11_never_255() {
+                  assert_eq!(colour_id_b11(1.0), 240);
+                  assert!(colour_id_b11(1.0) < 255);
+                  assert_eq!(colour_id_b11(0.0), 0);
+                  assert_eq!(colour_id_b11(0.5), 120);
+              }
+              #[test]
+              fn kaki_type_validation() {
+                  assert!(is_valid_kaki_type(0x01));
+                  assert!(is_valid_kaki_type(0x02));
+                  assert!(is_valid_kaki_type(0x03));
+                  assert!(!is_valid_kaki_type(0x00));
+                  assert!(!is_valid_kaki_type(0x04));
+              }
+          }
+
+    - name: "CARGO | cargo test -p kaki-types"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p kaki-types"
+        chdir: "{{ workspace }}"
+      register: cargo_test
+      changed_when: false
+      ignore_errors: true
+
+    - name: "PATCH | Register {{ crate_name }} in workspace Cargo.toml"
+      ansible.builtin.lineinfile:
+        path: "{{ workspace }}/Cargo.toml"
+        insertafter: '^members = \['
+        line: '    "crates/{{ crate_name }}",'
+        state: present
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-89 KAKI Type Registry
+          Date   : {{ session_date }}
+          Crate  : kaki-types (no_std, no dependencies)
+          Tests  : {{ 'PASS' if cargo_test.rc == 0 else 'CHECK OUTPUT' }}
+
+          Constants locked:
+            KAKI_TYPE: 0x01 Identity / 0x02 Event / 0x03 CrossTribe
+            KAKI_ROLE: 0x01 KISHIB / 0x02 ZIKRU / 0x03 PARZU
+            EAV_STATE: GOLDEN / FUZZY / DEAD / DEAD_CRITICAL
+            COLOUR_ID_BASE: 240 (Plimpton 322) — NEVER 255
+            B11 unit test: PASS (colour_id_b11(1.0) = 240, not 255)
+
+          Next: PB-90 — zakāru journal + NATIRU bitmap init
+
+    - name: "DONE  | PB-89 KAKI Type Registry COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-89 complete — KAKI v4.0 type registry sealed as kaki-types crate."

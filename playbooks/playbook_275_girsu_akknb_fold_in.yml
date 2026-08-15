@@ -1,0 +1,94 @@
+# =============================================================================
+# PB-275 — Fold .akknb notebook support into the real bahyway-akkadian
+# Girsu extension (BahyWay.Ecosystem v4.0)
+#
+# Corrects an uploaded "akkadian-aol" extension proposal that would have
+# shipped as a SECOND, competing extension (language id "akk", scope
+# "source.akk", version 0.1.0, MIT license, a new Ansible+vsce+VSIX
+# deploy pipeline) alongside the repo's real, already-installed
+# extension (.vscode/extensions/bahyway-akkadian: id "akkadian", scope
+# "source.akkadian", version 4.0.0, Proprietary, installed via the
+# existing install-extensions.sh symlink script). Instead:
+#   - .akknb notebook support (container serializer only, no language
+#     logic -- real, honestly-scoped code, kept from the upload) is
+#     folded into the REAL extension.
+#   - The real extension's own keyword vocabulary and comment syntax
+#     (both stale relative to crates/aaol/src/token.rs -- "#" line
+#     comments only, no "//"; particle/tribe/rule/equation/guard/... not
+#     CONTEXT/IDENTITY/STORAGE/...) are corrected.
+#   - No new Ansible/vsce/VSIX pipeline: the existing symlink installer
+#     already covers this.
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# =============================================================================
+---
+- name: "PB-275 | Fold .akknb into bahyway-akkadian, correct vocabulary/comment-syntax"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    ext_dir:   "{{ repo_root }}/.vscode/extensions/bahyway-akkadian"
+
+  tasks:
+
+    - name: "VERIFY | real extension files exist"
+      ansible.builtin.stat:
+        path: "{{ ext_dir }}/{{ item }}"
+      register: ext_files
+      loop:
+        - "package.json"
+        - "extension.js"
+        - "language-configuration.akkadian.json"
+        - "syntaxes/akkadian.tmLanguage.json"
+
+    - name: "FAIL | a required extension file is missing"
+      ansible.builtin.fail:
+        msg: "{{ item.item }} not found under {{ ext_dir }}."
+      when: not item.stat.exists
+      loop: "{{ ext_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "VERIFY | package.json is valid JSON and declares the akknb notebook"
+      ansible.builtin.command:
+        cmd: "python3 -c \"import json,sys; d=json.load(open('{{ ext_dir }}/package.json')); sys.exit(0 if any(n.get('type')=='akknb' for n in d.get('contributes',{}).get('notebooks',[])) else 1)\""
+      register: pkg_check
+      changed_when: false
+      failed_when: pkg_check.rc != 0
+
+    - name: "VERIFY | akkadian grammar uses the real crates/aaol/src/token.rs vocabulary (particle/tribe/rule), not the stale CONTEXT/IDENTITY set"
+      ansible.builtin.command:
+        cmd: "grep -c 'particle|rule|equation|guard' {{ ext_dir }}/syntaxes/akkadian.tmLanguage.json"
+      register: vocab_check
+      changed_when: false
+      failed_when: vocab_check.rc != 0
+
+    - name: "VERIFY | akkadian language-configuration uses # line comments, not //"
+      ansible.builtin.command:
+        cmd: "python3 -c \"import json; d=json.load(open('{{ ext_dir }}/language-configuration.akkadian.json')); assert d['comments']['lineComment']=='#'\""
+      register: comment_check
+      changed_when: false
+      failed_when: comment_check.rc != 0
+
+    - name: "VERIFY | extension.js syntax is valid"
+      ansible.builtin.command:
+        cmd: "node -c {{ ext_dir }}/extension.js"
+      register: js_check
+      changed_when: false
+      failed_when: js_check.rc != 0
+
+    - name: "REINSTALL | re-run the existing symlink installer (no new pipeline)"
+      ansible.builtin.command:
+        cmd: "bash {{ repo_root }}/.vscode/install-extensions.sh"
+      register: install_out
+      changed_when: "'✓' in install_out.stdout"
+
+    - name: "DONE | PB-275 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          bahyway-akkadian now covers .ak/.akk/.akknb with real
+          particle/tribe/rule/equation/guard vocabulary and correct
+          # line comments. No second extension, no new deploy pipeline.

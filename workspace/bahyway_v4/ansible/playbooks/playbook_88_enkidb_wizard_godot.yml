@@ -1,0 +1,591 @@
+---
+# =============================================================================
+# PLAYBOOK 88 — EnkiDB Connection Wizard for DubSar Theater (Godot 4.7)
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_88_enkidb_wizard_godot.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 88 — EnkiDB Wizard Godot scene + script"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    godot_dir: "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot"
+    scenes:    "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scenes"
+    scripts:   "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts"
+
+  tasks:
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 1 — Write enkidb_wizard.gd
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "Write enkidb_wizard.gd"
+      ansible.builtin.copy:
+        dest: "{{ scripts }}/enkidb_wizard.gd"
+        mode: "0644"
+        content: |
+          # enkidb_wizard.gd — Two-step EnkiDB Connection Wizard
+          # Step 1: Engine picker  (EnkiDB / EnkiDW / EnkiSDB / EnkiODB / EnkiQDB)
+          # Step 2: Credentials    (Host, Port, Username, Journal path, Tribe, Node type)
+          # DUB.SAR 𒁾  BahyWay.Ecosystem v4.0  2026-06-25
+          extends CanvasLayer
+
+          # ── Signals ────────────────────────────────────────────────────────
+          signal connection_confirmed(profile: Dictionary)
+          signal wizard_cancelled
+
+          # ── Sovereign colour palette ────────────────────────────────────────
+          const C_BG       = Color(0.063, 0.071, 0.094, 0.96)
+          const C_PANEL    = Color(0.078, 0.086, 0.110, 1.00)
+          const C_BORDER   = Color(0.196, 0.196, 0.267, 1.00)
+          const C_GOLD     = Color(0.784, 0.627, 0.157, 1.00)
+          const C_CYAN     = Color(0.235, 0.706, 0.784, 1.00)
+          const C_GREEN    = Color(0.235, 0.706, 0.471, 1.00)
+          const C_RED      = Color(0.706, 0.235, 0.275, 1.00)
+          const C_DIM      = Color(0.392, 0.431, 0.510, 1.00)
+          const C_TEXT     = Color(0.706, 0.745, 0.804, 1.00)
+          const C_DISABLED = Color(0.220, 0.220, 0.267, 1.00)
+
+          # ── EnkiDB engine definitions ───────────────────────────────────────
+          const ENGINES = [
+              {
+                  "id":    "EnkiDB",
+                  "glyph": "𒆳",
+                  "label": "EnkiDB",
+                  "desc":  "Core CQRS\nsovereign store",
+                  "sub":   "enkidb-persist · enkidb-journal · KAKI 16-byte PK",
+                  "color": Color(0.290, 0.561, 0.831),
+              },
+              {
+                  "id":    "EnkiDW",
+                  "glyph": "𒀭",
+                  "label": "EnkiDW",
+                  "desc":  "Data warehouse\nETL pipeline",
+                  "sub":   "ETL pipeline · BeeMDM stations S0–S8",
+                  "color": Color(0.298, 0.686, 0.314),
+              },
+              {
+                  "id":    "EnkiSDB",
+                  "glyph": "𒌓",
+                  "label": "EnkiSDB",
+                  "desc":  "Staging\ndatabase",
+                  "sub":   "Pre-ingestion holding zone · ZIP batch staging",
+                  "color": Color(0.937, 0.624, 0.153),
+              },
+              {
+                  "id":    "EnkiODB",
+                  "glyph": "𒌋",
+                  "label": "EnkiODB",
+                  "desc":  "Operation\ndatabase",
+                  "sub":   "Live production records · operational read/write",
+                  "color": Color(0.612, 0.502, 0.910),
+              },
+              {
+                  "id":    "EnkiQDB",
+                  "glyph": "𒁾",
+                  "label": "EnkiQDB",
+                  "desc":  "Quarantine\ndatabase",
+                  "sub":   "Failed · flagged · isolated particles",
+                  "color": Color(0.863, 0.078, 0.235),
+              },
+          ]
+
+          # ── State ───────────────────────────────────────────────────────────
+          var _step: int = 1          # 1 = picker, 2 = credentials
+          var _selected_engine = null  # Dict from ENGINES
+
+          # Credential fields (defaults)
+          var _conn_name   := ""
+          var _host        := "192.168.122.107"
+          var _port        := "7001"
+          var _username    := "bahyway"
+          var _journal     := "/home/bahyway/enkidb/data/tribe-0001/journal.bin"
+          var _tribe       := "NAJAF_CEMETERY  0x0001"
+          var _node_write  := false
+          var _status_msg  := ""
+          var _status_ok   := false
+
+          # ── Node references (set in _ready) ────────────────────────────────
+          @onready var _backdrop        = $Backdrop
+          @onready var _panel           = $Panel
+          @onready var _step_label      = $Panel/VBox/StepBar/StepLabel
+          @onready var _title_label     = $Panel/VBox/TitleLabel
+
+          # Step 1
+          @onready var _picker_box      = $Panel/VBox/PickerBox
+          @onready var _next_btn        = $Panel/VBox/BtnRow1/NextBtn
+          @onready var _cancel_btn1     = $Panel/VBox/BtnRow1/CancelBtn
+
+          # Step 2
+          @onready var _creds_box       = $Panel/VBox/CredsBox
+          @onready var _hdr_glyph       = $Panel/VBox/CredsBox/HdrRow/GlyphLabel
+          @onready var _hdr_name        = $Panel/VBox/CredsBox/HdrRow/NameLabel
+          @onready var _hdr_sub         = $Panel/VBox/CredsBox/HdrRow/SubLabel
+          @onready var _field_name      = $Panel/VBox/CredsBox/FormGrid/NameEdit
+          @onready var _field_host      = $Panel/VBox/CredsBox/FormGrid/HostEdit
+          @onready var _field_port      = $Panel/VBox/CredsBox/FormGrid/PortEdit
+          @onready var _field_user      = $Panel/VBox/CredsBox/FormGrid/UserEdit
+          @onready var _field_journal   = $Panel/VBox/CredsBox/FormGrid/JournalEdit
+          @onready var _field_tribe     = $Panel/VBox/CredsBox/FormGrid/TribeEdit
+          @onready var _radio_read      = $Panel/VBox/CredsBox/FormGrid/NodeTypeRow/ReadBtn
+          @onready var _radio_write     = $Panel/VBox/CredsBox/FormGrid/NodeTypeRow/WriteBtn
+          @onready var _status_label    = $Panel/VBox/CredsBox/StatusLabel
+          @onready var _back_btn        = $Panel/VBox/BtnRow2/BackBtn
+          @onready var _cancel_btn2     = $Panel/VBox/BtnRow2/CancelBtn
+          @onready var _test_btn        = $Panel/VBox/BtnRow2/TestBtn
+          @onready var _finish_btn      = $Panel/VBox/BtnRow2/FinishBtn
+
+          # ── Lifecycle ───────────────────────────────────────────────────────
+          func _ready() -> void:
+              _go_step1()
+
+          # ── Public API ──────────────────────────────────────────────────────
+          func open() -> void:
+              _step = 1
+              _selected_engine = null
+              _status_msg = ""
+              visible = true
+              _go_step1()
+
+          func close() -> void:
+              visible = false
+
+          # ── Step navigation ─────────────────────────────────────────────────
+          func _go_step1() -> void:
+              _step = 1
+              _title_label.text   = "Select your EnkiDB engine"
+              _step_label.text    = "Step 1 of 2  —  Select engine"
+              _picker_box.visible = true
+              _creds_box.visible  = false
+              _next_btn.get_parent().visible  = true
+              _back_btn.get_parent().visible  = false
+              _next_btn.disabled = (_selected_engine == null)
+              _rebuild_picker()
+
+          func _go_step2() -> void:
+              _step = 2
+              var e = _selected_engine
+              _title_label.text   = e["label"] + "  —  Connection settings"
+              _step_label.text    = "✓ Engine selected  →  Step 2 of 2  —  Credentials"
+              _picker_box.visible = false
+              _creds_box.visible  = true
+              _next_btn.get_parent().visible  = false
+              _back_btn.get_parent().visible  = true
+              # Populate header
+              _hdr_glyph.text            = e["glyph"]
+              _hdr_glyph.add_theme_color_override("font_color", e["color"])
+              _hdr_name.text             = e["label"]
+              _hdr_name.add_theme_color_override("font_color", e["color"])
+              _hdr_sub.text              = e["sub"]
+              # Populate fields
+              if _conn_name.is_empty():
+                  _conn_name = "Najaf Cemetery — " + e["label"].to_lower()
+              _field_name.text    = _conn_name
+              _field_host.text    = _host
+              _field_port.text    = _port
+              _field_user.text    = _username
+              _field_journal.text = _journal
+              _field_tribe.text   = _tribe
+              _radio_read.button_pressed  = !_node_write
+              _radio_write.button_pressed = _node_write
+              _status_label.text  = "Fill in details then Test or Finish"
+              _status_label.add_theme_color_override("font_color", C_DIM)
+
+          # ── Picker grid ─────────────────────────────────────────────────────
+          func _rebuild_picker() -> void:
+              # Clear existing cards
+              for child in _picker_box.get_children():
+                  child.queue_free()
+
+              for e in ENGINES:
+                  var card = _make_engine_card(e)
+                  _picker_box.add_child(card)
+
+          func _make_engine_card(e: Dictionary) -> PanelContainer:
+              var card = PanelContainer.new()
+              card.custom_minimum_size = Vector2(100, 110)
+
+              var style = StyleBoxFlat.new()
+              style.bg_color       = Color(0.055, 0.063, 0.086)
+              style.border_color   = C_BORDER
+              style.set_border_width_all(1)
+              style.set_corner_radius_all(6)
+              if _selected_engine != null and _selected_engine["id"] == e["id"]:
+                  style.border_color = e["color"]
+                  style.set_border_width_all(2)
+              card.add_theme_stylebox_override("panel", style)
+
+              var vbox = VBoxContainer.new()
+              vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+              vbox.add_theme_constant_override("separation", 4)
+              card.add_child(vbox)
+
+              # Glyph
+              var glyph_lbl = Label.new()
+              glyph_lbl.text = e["glyph"]
+              glyph_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+              glyph_lbl.add_theme_font_size_override("font_size", 22)
+              glyph_lbl.add_theme_color_override("font_color", e["color"])
+              vbox.add_child(glyph_lbl)
+
+              # Label
+              var name_lbl = Label.new()
+              name_lbl.text = e["label"]
+              name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+              name_lbl.add_theme_font_size_override("font_size", 12)
+              name_lbl.add_theme_color_override("font_color", C_TEXT)
+              vbox.add_child(name_lbl)
+
+              # Description
+              var desc_lbl = Label.new()
+              desc_lbl.text = e["desc"]
+              desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+              desc_lbl.add_theme_font_size_override("font_size", 9)
+              desc_lbl.add_theme_color_override("font_color", C_DIM)
+              desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+              vbox.add_child(desc_lbl)
+
+              # Click area
+              var btn = Button.new()
+              btn.flat = true
+              btn.text = ""
+              btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+              # Stretch over the card
+              btn.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+              card.add_child(btn)
+
+              var engine_id = e["id"]
+              btn.pressed.connect(func():
+                  for eng in ENGINES:
+                      if eng["id"] == engine_id:
+                          _selected_engine = eng
+                          break
+                  _next_btn.disabled = false
+                  _rebuild_picker()
+              )
+              return card
+
+          # ── Button signals ──────────────────────────────────────────────────
+          func _on_next_pressed() -> void:
+              if _selected_engine != null:
+                  _go_step2()
+
+          func _on_back_pressed() -> void:
+              _go_step1()
+
+          func _on_cancel_pressed() -> void:
+              close()
+              emit_signal("wizard_cancelled")
+
+          func _on_test_pressed() -> void:
+              _host     = _field_host.text
+              _port     = _field_port.text
+              _username = _field_user.text
+              _status_label.text = "⟳ Testing connection to %s:%s …" % [_host, _port]
+              _status_label.add_theme_color_override("font_color", C_CYAN)
+
+              var port_int = int(_port)
+              var ok = EnkiDbTcp.test_connection(_host, port_int)
+              if ok:
+                  _status_label.text = "✓ Connection established — %s:%s reachable" % [_host, _port]
+                  _status_label.add_theme_color_override("font_color", C_GREEN)
+                  _status_ok = true
+              else:
+                  _status_label.text = "✗ Cannot reach %s:%s — check host and port" % [_host, _port]
+                  _status_label.add_theme_color_override("font_color", C_RED)
+                  _status_ok = false
+
+          func _on_finish_pressed() -> void:
+              # Collect all field values
+              var profile = {
+                  "engine":       _selected_engine["id"],
+                  "conn_name":    _field_name.text,
+                  "host":         _field_host.text,
+                  "port":         int(_field_port.text),
+                  "username":     _field_user.text,
+                  "journal_path": _field_journal.text,
+                  "tribe":        _field_tribe.text,
+                  "node_write":   _radio_write.button_pressed,
+              }
+              close()
+              emit_signal("connection_confirmed", profile)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 2 — Write enkidb_wizard.tscn
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "Write enkidb_wizard.tscn"
+      ansible.builtin.copy:
+        dest: "{{ scenes }}/enkidb_wizard.tscn"
+        mode: "0644"
+        content: |
+          [gd_scene load_steps=2 format=3 uid="uid://enkidb_wizard"]
+
+          [ext_resource type="Script" path="res://scripts/enkidb_wizard.gd" id="1"]
+
+          [node name="EnkiDbWizard" type="CanvasLayer"]
+          script = ExtResource("1")
+          layer = 10
+
+          [node name="Backdrop" type="ColorRect" parent="."]
+          anchors_preset = 15
+          anchor_right = 1.0
+          anchor_bottom = 1.0
+          color = Color(0, 0, 0, 0.6)
+
+          [node name="Panel" type="PanelContainer" parent="."]
+          anchors_preset = 8
+          anchor_left = 0.5
+          anchor_top = 0.5
+          anchor_right = 0.5
+          anchor_bottom = 0.5
+          offset_left = -300.0
+          offset_top = -280.0
+          offset_right = 300.0
+          offset_bottom = 280.0
+
+          [node name="VBox" type="VBoxContainer" parent="Panel"]
+          layout_mode = 2
+          theme_override_constants/separation = 10
+
+          [node name="TitleLabel" type="Label" parent="Panel/VBox"]
+          layout_mode = 2
+          text = "Select your EnkiDB engine"
+          theme_override_font_sizes/font_size = 16
+          theme_override_colors/font_color = Color(0.784, 0.627, 0.157, 1)
+
+          [node name="StepBar" type="HBoxContainer" parent="Panel/VBox"]
+          layout_mode = 2
+
+          [node name="StepLabel" type="Label" parent="Panel/VBox/StepBar"]
+          layout_mode = 2
+          text = "Step 1 of 2  —  Select engine"
+          theme_override_font_sizes/font_size = 10
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="HSep0" type="HSeparator" parent="Panel/VBox"]
+          layout_mode = 2
+
+          [node name="PickerBox" type="HBoxContainer" parent="Panel/VBox"]
+          layout_mode = 2
+          theme_override_constants/separation = 10
+
+          [node name="CredsBox" type="VBoxContainer" parent="Panel/VBox"]
+          layout_mode = 2
+          visible = false
+          theme_override_constants/separation = 8
+
+          [node name="HdrRow" type="HBoxContainer" parent="Panel/VBox/CredsBox"]
+          layout_mode = 2
+
+          [node name="GlyphLabel" type="Label" parent="Panel/VBox/CredsBox/HdrRow"]
+          layout_mode = 2
+          text = "𒆳"
+          theme_override_font_sizes/font_size = 20
+
+          [node name="VBox2" type="VBoxContainer" parent="Panel/VBox/CredsBox/HdrRow"]
+          layout_mode = 2
+
+          [node name="NameLabel" type="Label" parent="Panel/VBox/CredsBox/HdrRow/VBox2"]
+          layout_mode = 2
+          text = "EnkiDB"
+          theme_override_font_sizes/font_size = 14
+
+          [node name="SubLabel" type="Label" parent="Panel/VBox/CredsBox/HdrRow/VBox2"]
+          layout_mode = 2
+          text = ""
+          theme_override_font_sizes/font_size = 10
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="HSep1" type="HSeparator" parent="Panel/VBox/CredsBox"]
+          layout_mode = 2
+
+          [node name="FormGrid" type="GridContainer" parent="Panel/VBox/CredsBox"]
+          layout_mode = 2
+          columns = 2
+
+          [node name="NameLbl" type="Label" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          text = "Connection name"
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="NameEdit" type="LineEdit" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+          placeholder_text = "Najaf Cemetery — enkidb"
+
+          [node name="HostLbl" type="Label" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          text = "Hostname / IP"
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="HostEdit" type="LineEdit" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+          text = "192.168.122.107"
+
+          [node name="PortLbl" type="Label" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          text = "Port"
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="PortEdit" type="LineEdit" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+          text = "7001"
+
+          [node name="UserLbl" type="Label" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          text = "Username"
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="UserEdit" type="LineEdit" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+          text = "bahyway"
+
+          [node name="JournalLbl" type="Label" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          text = "Journal path"
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="JournalEdit" type="LineEdit" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+          placeholder_text = "/home/bahyway/enkidb/data/tribe-0001/journal.bin"
+
+          [node name="TribeLbl" type="Label" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          text = "Tribe"
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="TribeEdit" type="LineEdit" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+          placeholder_text = "NAJAF_CEMETERY  0x0001"
+
+          [node name="NodeTypeLbl" type="Label" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+          text = "Node type"
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="NodeTypeRow" type="HBoxContainer" parent="Panel/VBox/CredsBox/FormGrid"]
+          layout_mode = 2
+
+          [node name="ReadBtn" type="CheckBox" parent="Panel/VBox/CredsBox/FormGrid/NodeTypeRow"]
+          layout_mode = 2
+          button_pressed = true
+          text = "Read"
+          button_group = SubResource("ButtonGroup_read_write")
+
+          [node name="WriteBtn" type="CheckBox" parent="Panel/VBox/CredsBox/FormGrid/NodeTypeRow"]
+          layout_mode = 2
+          text = "Write"
+          button_group = SubResource("ButtonGroup_read_write")
+
+          [node name="StatusLabel" type="Label" parent="Panel/VBox/CredsBox"]
+          layout_mode = 2
+          text = "Fill in details then Test or Finish"
+          theme_override_font_sizes/font_size = 11
+          theme_override_colors/font_color = Color(0.392, 0.431, 0.510, 1)
+
+          [node name="BtnRow1" type="HBoxContainer" parent="Panel/VBox"]
+          layout_mode = 2
+
+          [node name="CancelBtn" type="Button" parent="Panel/VBox/BtnRow1"]
+          layout_mode = 2
+          text = "✕ Cancel"
+
+          [node name="Spacer1" type="Control" parent="Panel/VBox/BtnRow1"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+
+          [node name="NextBtn" type="Button" parent="Panel/VBox/BtnRow1"]
+          layout_mode = 2
+          disabled = true
+          text = "Next ›"
+
+          [node name="BtnRow2" type="HBoxContainer" parent="Panel/VBox"]
+          layout_mode = 2
+          visible = false
+
+          [node name="BackBtn" type="Button" parent="Panel/VBox/BtnRow2"]
+          layout_mode = 2
+          text = "‹ Back"
+
+          [node name="CancelBtn" type="Button" parent="Panel/VBox/BtnRow2"]
+          layout_mode = 2
+          text = "✕ Cancel"
+
+          [node name="Spacer2" type="Control" parent="Panel/VBox/BtnRow2"]
+          layout_mode = 2
+          size_flags_horizontal = 3
+
+          [node name="TestBtn" type="Button" parent="Panel/VBox/BtnRow2"]
+          layout_mode = 2
+          text = "⚡ Test connection"
+
+          [node name="FinishBtn" type="Button" parent="Panel/VBox/BtnRow2"]
+          layout_mode = 2
+          text = "Finish"
+
+          [sub_resource type="ButtonGroup" id="ButtonGroup_read_write"]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 3 — Wire signals in theater_controller.gd
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "Wire wizard into theater_controller.gd"
+      ansible.builtin.shell: |
+        python3 - << 'EOF'
+        path = "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts/theater_controller.gd"
+        with open(path) as f:
+            src = f.read()
+
+        ADD_ONREADY = '@onready var _enkidb_wizard = $EnkiDbWizard\n'
+        WIRE_SIGNALS = '''
+        func _on_enkidb_wizard_confirmed(profile: Dictionary) -> void:
+            print("EnkiDB connected: ", profile["engine"], " @ ", profile["host"])
+
+        func _on_enkidb_wizard_cancelled() -> void:
+            print("EnkiDB wizard cancelled")
+
+        func open_enkidb_wizard() -> void:
+            if _enkidb_wizard:
+                _enkidb_wizard.open()
+        '''
+
+        if '_enkidb_wizard' not in src:
+            src = src.replace(
+                '@onready var center_stage',
+                ADD_ONREADY + '@onready var center_stage'
+            )
+            src = src + WIRE_SIGNALS
+            with open(path, "w") as f:
+                f.write(src)
+            print("SUCCESS — wizard wired into theater_controller.gd")
+        else:
+            print("already wired — no change")
+        EOF
+      register: wire_out
+      changed_when: true
+
+    - name: "Show wire output"
+      ansible.builtin.debug:
+        msg: "{{ wire_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 88 sealed.
+          Files written:
+            dubsar-theater/godot/scripts/enkidb_wizard.gd
+            dubsar-theater/godot/scenes/enkidb_wizard.tscn
+          theater_controller.gd patched with open_enkidb_wizard().
+
+          Next step in Godot editor:
+            1. Open main_theater.tscn
+            2. Instance enkidb_wizard.tscn as child of root
+            3. Connect signals: connection_confirmed -> _on_enkidb_wizard_confirmed
+                                wizard_cancelled    -> _on_enkidb_wizard_cancelled
+            4. Call open_enkidb_wizard() from your UI button

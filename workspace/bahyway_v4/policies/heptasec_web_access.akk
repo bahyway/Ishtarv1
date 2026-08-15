@@ -1,0 +1,99 @@
+-- HeptaSec Web Access Policy
+-- Governs all HTTP traffic entering the HeptaScript website gateway.
+-- Dead Axiom: every request MUST carry X-Kaki-Hash or it does not exist.
+--
+-- Maps to: hepta-sec-web::WebSentinelGuard, hepta-sec-policy::PolicyEngine
+-- Template variable: {GATEWAY_KAKI} = FNV-1a("WebGateway")
+
+NAMESPACE bahyway.heptasec.web.v4
+
+IMPORT bahyway.enki_way.v4   AS ENKI
+IMPORT bahyway.kaki_way.v4   AS KAKI
+IMPORT bahyway.heptasec.v4   AS SEC
+
+-- ── Constants ──────────────────────────────────────────────────────────────
+
+CONSTANT MAX_REQUEST_BYTES     := 1_048_576     -- 1 MiB hard ceiling per request
+CONSTANT RATE_LIMIT_READS_PPS  := 120           -- read KAKIs: 120 requests/second
+CONSTANT RATE_LIMIT_WRITES_PPS := 20            -- write KAKIs: 20 requests/second
+CONSTANT SESSION_SATTATU       := 54            -- hours (SATTATU_MAX)
+
+-- ── Roles ──────────────────────────────────────────────────────────────────
+
+ROLE WebReadKaki  { SCOPE: read   DOMAIN: heptascript.nl }
+ROLE WebWriteKaki { SCOPE: write  DOMAIN: heptascript.nl  REQUIRE: passport.valid }
+ROLE AdminKaki    { SCOPE: admin  DOMAIN: heptascript.nl  REQUIRE: passport.b11 >= 200 }
+
+-- ── Policies ───────────────────────────────────────────────────────────────
+
+POLICY dead_axiom_enforce
+    -- The Dead Axiom: any request without a valid KAKI header is Dead.
+    WHEN  request.kaki_hash IS ABSENT
+    DENY  request.forward
+    ALARM "DEAD_AXIOM_VIOLATION" severity=CRITICAL sensor=request.source_ip
+
+POLICY block_revoked_kaki
+    WHEN  request.kaki_state == KAKI.REVOKED
+    DENY  request.forward
+    ALARM "REVOKED_KAKI_ATTEMPT" severity=HIGH sensor=request.kaki_hash
+
+POLICY block_dead_b11
+    WHEN  request.kaki_b11 < 59
+    DENY  request.forward
+    ALARM "DEAD_B11_BLOCKED" severity=HIGH sensor=request.kaki_hash
+
+POLICY rate_limit_reads
+    -- Protect against credential-stuffing and enumeration attacks.
+    WHEN  request.kaki_role == WebReadKaki
+    AND   request.rate_pps  >  RATE_LIMIT_READS_PPS
+    DENY  request.forward
+    ALARM "READ_RATE_EXCEEDED" severity=MEDIUM sensor=request.kaki_hash
+
+POLICY rate_limit_writes
+    WHEN  request.kaki_role == WebWriteKaki
+    AND   request.rate_pps  >  RATE_LIMIT_WRITES_PPS
+    DENY  request.forward
+    ALARM "WRITE_RATE_EXCEEDED" severity=HIGH sensor=request.kaki_hash
+
+POLICY oversized_request_block
+    WHEN  request.size_bytes > MAX_REQUEST_BYTES
+    DENY  request.forward
+    ALARM "OVERSIZED_REQUEST" severity=MEDIUM sensor=request.kaki_hash
+
+POLICY quarantine_unknown_kaki
+    -- First-seen KAKIs go to steward review, not denied outright.
+    -- This lets legitimate new users register without exposing an error path.
+    WHEN  request.kaki_state == KAKI.UNKNOWN
+    ALLOW request.forward -> SEC.quarantine_queue
+    ALARM "UNKNOWN_KAKI_HELD" severity=LOW sensor=request.kaki_hash
+
+POLICY permit_golden_read
+    WHEN  request.kaki_state == KAKI.GOLDEN
+    AND   request.kaki_role  == WebReadKaki
+    ALLOW request.forward -> ENKI.read_pod
+
+POLICY permit_active_write
+    WHEN  request.kaki_state  IN [KAKI.ACTIVE, KAKI.GOLDEN]
+    AND   request.kaki_role   == WebWriteKaki
+    AND   request.passport    IS VALID
+    ALLOW request.forward -> ENKI.write_pod
+
+POLICY default_deny
+    -- Catch-all: anything not explicitly permitted is denied.
+    DENY  request.forward
+    ALARM "DEFAULT_DENY" severity=LOW sensor=request.kaki_hash
+
+-- ── Firewall rules (compile to PolicyRule structs) ─────────────────────────
+
+FIREWALL web_gateway_rules {
+    PRIORITY 1: dead_axiom_enforce
+    PRIORITY 2: block_revoked_kaki
+    PRIORITY 2: block_dead_b11
+    PRIORITY 3: rate_limit_reads
+    PRIORITY 3: rate_limit_writes
+    PRIORITY 3: oversized_request_block
+    PRIORITY 4: quarantine_unknown_kaki
+    PRIORITY 5: permit_golden_read
+    PRIORITY 5: permit_active_write
+    PRIORITY 9: default_deny
+}

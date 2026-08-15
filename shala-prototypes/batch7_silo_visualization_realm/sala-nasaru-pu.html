@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala · naṣāru — PU-honest relations (E. coli)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{--void:#04060e;--ink:#eaf0fb;--ink-dim:#9aa6c8;--ink-faint:#5a6488;
+--gold:#E3B458;--signal:#4fd6c4;--line:#1c2440;
+--f-display:'Fraunces',Georgia,serif;--f-body:'Inter',system-ui,sans-serif;--f-data:'IBM Plex Mono',monospace;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit}
+#stage{position:fixed;inset:0;cursor:grab}#stage:active{cursor:grabbing}
+.hud{position:fixed;z-index:5}
+.hud-title{top:12px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:18px;letter-spacing:.09em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:9px;letter-spacing:.14em;color:var(--ink-faint);margin-top:4px}
+.panel{background:rgba(6,10,24,.92);border:1px solid var(--line);border-radius:8px;padding:11px 13px;backdrop-filter:blur(10px)}
+.hud-links{top:70px;left:14px;width:250px;font-family:var(--f-data);max-height:calc(100vh - 150px);overflow:auto}
+.hud-links h3{font-size:9px;letter-spacing:.12em;color:var(--gold);text-transform:uppercase;margin-bottom:6px}
+.hud-links .subj{font-size:11px;color:var(--signal);margin-bottom:7px}
+.lk{display:flex;justify-content:space-between;gap:6px;padding:5px 7px;border-radius:5px;margin:2px 0;cursor:pointer;font-size:10px;color:var(--ink-dim);border:1px solid transparent}
+.lk:hover{background:rgba(79,214,196,.07)}
+.lk.active{background:rgba(79,214,196,.13);border-color:var(--signal);color:var(--ink)}
+.lk .pu{color:var(--gold);font-weight:500}
+.lk .rel{color:var(--ink-faint);font-size:9px}
+.hud-links .tot{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:10px;color:var(--ink-dim)}
+.hud-links .tot b{color:var(--gold)}
+.hud-insp{bottom:16px;left:14px;width:290px;font-family:var(--f-data);display:none}
+.hud-insp .it{font-family:var(--f-display);font-size:14px;color:var(--gold)}
+.hud-insp .ik{font-size:9px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.1em;margin:2px 0 6px}
+.hud-insp .ib{font-size:10px;color:var(--ink-dim);line-height:1.55}
+.hud-insp .ib b{color:var(--ink)}
+.hud-insp .sw{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:middle;margin:0 4px}
+.hud-ctl{bottom:16px;right:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;font-family:var(--f-data)}
+.hud-ctl button{background:rgba(6,10,24,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;font-size:10px;padding:7px 12px;cursor:pointer}
+.hud-ctl button.on{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.hud-ctl .hint{font-size:9px;color:var(--ink-faint);max-width:220px;text-align:right;line-height:1.5}
+/* context menu (right-click) — NEVER empty */
+.ctxmenu{position:fixed;z-index:20;background:rgba(6,10,24,.98);border:1px solid var(--signal);border-radius:7px;padding:8px 0;font-family:var(--f-data);font-size:10.5px;color:var(--ink);min-width:210px;display:none;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.ctxmenu .hd{padding:3px 12px 7px;border-bottom:1px solid var(--line);margin-bottom:5px}
+.ctxmenu .hd .t{color:var(--gold);font-family:var(--f-display);font-size:13px}
+.ctxmenu .hd .s{font-size:9px;color:var(--ink-faint)}
+.ctxmenu .row{padding:5px 12px;line-height:1.5}
+.ctxmenu .row b{color:var(--ink)}
+.ctxmenu .act{padding:6px 12px;cursor:pointer;color:var(--signal)}
+.ctxmenu .act:hover{background:rgba(79,214,196,.1)}
+.ctxmenu .sw{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:middle;margin-right:5px}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,6,14,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8.5px;color:var(--ink-faint);padding:4px 16px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="hud hud-title"><h1><span class="glyph">&#x12079;</span> na&#7779;&#257;ru <em>&mdash; PU-HONEST RELATIONS</em></h1>
+<div class="sub">EnkiDDB &middot; EACH RELATION = ITS REAL PU COUNT OF PARTICLES (EVEN IF 1) &middot; EVERY PARTICLE SELECTABLE &middot; RIGHT-CLICK = ITS CONTEXT</div></div>
+
+<div class="hud hud-links panel">
+  <h3>&#9670; Links / dependencies · by PU</h3>
+  <div class="subj" id="subj">Escherichia coli</div>
+  <div id="lk-list"></div>
+  <div class="tot" id="tot"></div>
+</div>
+
+<div class="hud hud-insp panel" id="insp"></div>
+<div class="ctxmenu" id="ctx"></div>
+
+<div class="hud hud-ctl">
+  <div class="hint">drag=orbit · scroll=zoom · <b>left-click a particle</b>=select+bounce+origin colour · <b>right-click</b>=its context</div>
+  <button id="spin-btn" class="on">ORBIT</button>
+</div>
+
+<footer>Way-of-Work rule 5 &mdash; HTML prototype (Sala rehearsal); production body Godot/WGPU. PU-HONEST: each relation renders EXACTLY its real PU count of particles (1 PU → 1 particle). Category PU = aggregate of its links. Every particle selectable (bounces, shows Birth Root Shade if origin ≠ GOLDEN). Right-click never empty. Data = real E. coli triples (STEC/Shiga/HUS/ExPEC/UTI). Pending CSR-08.</footer>
+
+<script>
+/* ===== STATE UP FRONT (no TDZ) ===== */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let az=0.2, elev=0.16, camDist=760, camDistT=760;
+let dragging=false, lx=0, ly=0, dragMoved=false, spin=!reduced;
+let selected=null;        // selected particle {ref}
+let activeRel=null;
+
+/* ===== REAL E. coli GOLDEN triples (from the provided document) =====
+ * Each link carries a real PU count = number of GOLDEN records/particles grounding it.
+ * (PU values are the countable Particle Units the relation holds with the subject.) */
+const SUBJECT={id:'ecoli', name:'Escherichia coli', tribe:'Enterobacteria', hue:[0.45,0.84,0.62]};
+/* origin tribes (for Birth Root Shade — some objects come from other tribes/colours) */
+const TRIBEHUE={
+  Enterobacteria:[0.45,0.84,0.62], Toxin:[0.86,0.45,0.42], Disease:[0.90,0.63,0.32],
+  Anatomy:[0.60,0.66,0.95], Strain:[0.75,0.55,0.88], Nutrient:[0.55,0.82,0.55]
+};
+/* rel: predicate; obj; objTribe (origin); pu = real Particle Unit count grounding this relation */
+const LINKS=[
+  {rel:'has_variant', obj:'Pathogenic Strains', tribe:'Strain', pu:8},
+  {rel:'has_variant', obj:'Commensal Strains', tribe:'Strain', pu:5},
+  {rel:'includes', obj:'STEC (O157:H7)', tribe:'Strain', pu:6},
+  {rel:'includes', obj:'ExPEC', tribe:'Strain', pu:4},
+  {rel:'produces', obj:'Shiga Toxin', tribe:'Toxin', pu:7},
+  {rel:'causes', obj:'HUS (kidney injury)', tribe:'Disease', pu:3},
+  {rel:'causes', obj:'UTIs', tribe:'Disease', pu:3},
+  {rel:'causes', obj:'Bloody Diarrhea', tribe:'Disease', pu:2},
+  {rel:'colonizes', obj:'Urinary Tract', tribe:'Anatomy', pu:2},
+  {rel:'synthesizes', obj:'Vitamin K2', tribe:'Nutrient', pu:1},   /* only 1 PU — must show exactly 1 particle */
+];
+const TOTAL_PU=LINKS.reduce((a,l)=>a+l.pu,0);
+
+/* ===== three.js ===== */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(58,2,0.1,9000); camera.position.set(0,0,760);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x04060e,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8090c0,0.9));
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.5)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+function label(center,text,color,sc){const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+  g.font='600 24px "IBM Plex Mono"';g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';g.shadowColor='rgba(0,0,0,.95)';g.shadowBlur=8;
+  g.fillText(text,256,34);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
+  s.scale.set(sc||150,(sc||150)/8,1);s.position.set(center.x,center.y+18,center.z);scene.add(s);return s;}
+function rgb(c){return`rgb(${c[0]*255|0},${c[1]*255|0},${c[2]*255|0})`;}
+function goldenize(hue){ // bounded GOLDEN surface colour: paler/yellowish, never brown/black, keeps hue family
+  return [Math.min(1,hue[0]*0.7+0.4), Math.min(1,hue[1]*0.8+0.45), Math.min(1,hue[2]*0.5+0.25)];
+}
+
+/* ===== BUILD: subject + one filament per link, each with EXACTLY pu particles ===== *
+ * Every particle is an individually tracked object so it can be selected/bounced/right-clicked. */
+const PARTS=[];          // all particles: {mesh, base:{x,y,z}, birthHue, goldenCol, link, kaki, bounce}
+let subjNode=null;
+
+function shortKaki(seed){let h=0;for(const c of seed)h=(h*131+c.charCodeAt(0))&0xffffffff;const hex=(h>>>0).toString(16).padStart(8,'0');return hex.slice(0,4)+'…'+hex.slice(4,8);}
+
+function makeParticle(x,y,z,birthHue,link,idx){
+  const goldenCol=goldenize(birthHue);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX,color:new THREE.Color(goldenCol[0],goldenCol[1],goldenCol[2]),transparent:true,opacity:0.95,depthWrite:false,blending:THREE.AdditiveBlending}));
+  spr.scale.set(11,11,1);spr.position.set(x,y,z);scene.add(spr);
+  const p={mesh:spr,base:{x,y,z},birthHue,goldenCol,link,idx,
+    kaki:shortKaki((link?link.rel+link.obj:'ecoli')+idx),
+    tribe:link?link.tribe:SUBJECT.tribe, obj:link?link.obj:SUBJECT.name, rel:link?link.rel:null,
+    bounce:0, showOrigin:false};
+  PARTS.push(p);return p;
+}
+
+function build(){
+  // clear
+  PARTS.forEach(p=>scene.remove(p.mesh));PARTS.length=0;
+  while(scene.children.length>1){const c=scene.children[scene.children.length-1];if(c.type==='Sprite'||c.type==='Points')scene.remove(c);else break;}
+  // subject cluster at center — its particle count = aggregate PU (representative sample capped for the browser, but labelled with true total)
+  const subjCount=Math.min(TOTAL_PU,TOTAL_PU); // true total PU (small here, so render all)
+  for(let i=0;i<subjCount;i++){const a=Math.random()*6.28,ph=Math.acos(2*Math.random()-1),r=26*Math.pow(Math.random(),0.6);
+    makeParticle(Math.cos(a)*Math.sin(ph)*r,Math.sin(a)*Math.sin(ph)*r*0.7,Math.cos(ph)*r*0.7,SUBJECT.hue,null,i);}
+  subjNode={x:0,y:0,z:0};
+  label(subjNode,SUBJECT.name+' · PU '+TOTAL_PU,rgb(SUBJECT.hue),200);
+  // each link: a filament of EXACTLY link.pu particles ending in the object node
+  LINKS.forEach((lk,li)=>{
+    const ang=li/LINKS.length*6.28; const dist=230+ (li%2)*40;
+    const O={x:Math.cos(ang)*dist,y:Math.sin(ang)*dist*0.72,z:Math.sin(ang*1.7)*50};
+    const birthHue=TRIBEHUE[lk.tribe]||SUBJECT.hue;
+    // filament particles: EXACTLY lk.pu of them, strung from subject to object
+    for(let i=0;i<lk.pu;i++){const t=(i+1)/(lk.pu+1);
+      const x=subjNode.x+(O.x-subjNode.x)*t+Math.sin(t*3.14)*14+(Math.random()-.5)*6;
+      const y=subjNode.y+(O.y-subjNode.y)*t+(Math.random()-.5)*6;
+      const z=subjNode.z+(O.z-subjNode.z)*t+(Math.random()-.5)*6;
+      const p=makeParticle(x,y,z,birthHue,lk,i);
+    }
+    // object node marker (a few particles in its own tribe hue, GOLDEN surface)
+    for(let i=0;i<3;i++){makeParticle(O.x+(Math.random()-.5)*14,O.y+(Math.random()-.5)*14,O.z+(Math.random()-.5)*14,birthHue,lk,100+i);}
+    label(O,lk.obj+' · '+lk.pu+' PU',rgb(goldenize(birthHue)),160);
+    label({x:(subjNode.x+O.x)/2,y:(subjNode.y+O.y)/2,z:(subjNode.z+O.z)/2},lk.rel,'#7f8aa8',120);
+  });
+}
+build();
+
+/* ===== link list panel ===== */
+function fillList(){
+  const el=document.getElementById('lk-list');
+  el.innerHTML=LINKS.map((l,i)=>`<div class="lk" data-i="${i}"><span><span class="rel">${l.rel}</span><br>${l.obj}</span><span class="pu">${l.pu} PU</span></div>`).join('');
+  el.querySelectorAll('.lk').forEach(d=>d.onclick=()=>highlightLink(+d.dataset.i));
+  document.getElementById('tot').innerHTML=`Total E. coli PU = <b>${TOTAL_PU}</b> (sum of all links)<br><span style="color:var(--ink-faint)">density of each filament = its real PU count</span>`;
+}
+fillList();
+function highlightLink(i){activeRel=i;document.querySelectorAll('.lk').forEach((d,j)=>d.classList.toggle('active',j===i));
+  // brighten that link's particles, dim others
+  PARTS.forEach(p=>{const on=p.link&&LINKS.indexOf(p.link)===i;p.mesh.material.opacity=on?1.0:(p.link?0.25:0.5);});}
+
+/* ===== selection + bounce + origin colour (left-click) ===== */
+function selectParticle(p){
+  if(selected){selected.mesh.material.color.setRGB(selected.goldenCol[0],selected.goldenCol[1],selected.goldenCol[2]);selected.showOrigin=false;}
+  selected=p;p.bounce=1.0;
+  // show origin Birth Root Shade if the origin tribe colour differs from golden
+  const differs=Math.abs(p.birthHue[0]-p.goldenCol[0])+Math.abs(p.birthHue[1]-p.goldenCol[1])+Math.abs(p.birthHue[2]-p.goldenCol[2])>0.15;
+  if(differs){p.showOrigin=true;p.mesh.material.color.setRGB(p.birthHue[0],p.birthHue[1],p.birthHue[2]);}
+  // inspector
+  const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">${p.rel?p.rel+' → '+p.obj:SUBJECT.name}</div>
+    <div class="ik">${p.rel?'relation particle':'subject particle'} · selected</div>
+    <div class="ib"><b>KAKI</b> κ ${p.kaki} · tribe ${p.tribe}${p.link?` · this relation = <b>${p.link.pu} PU</b>`:` · subject PU <b>${TOTAL_PU}</b>`}</div>
+    <div class="ib">surface (GOLDEN): <span class="sw" style="background:${rgb(p.goldenCol)}"></span>${differs?`origin (Birth Root Shade): <span class="sw" style="background:${rgb(p.birthHue)}"></span> ${p.tribe}`:'born in this tribe (no colour shift)'}</div>
+    <div class="ib" style="color:var(--ink-faint)">${differs?'This particle came from another tribe — its birth colour differs from the golden surface.':''}</div>`;
+}
+
+/* ===== right-click context menu — NEVER empty ===== */
+const ctx=document.getElementById('ctx');
+function openContext(p,cx,cy){
+  const differs=p.showOrigin||(Math.abs(p.birthHue[0]-p.goldenCol[0])+Math.abs(p.birthHue[1]-p.goldenCol[1])+Math.abs(p.birthHue[2]-p.goldenCol[2])>0.15);
+  ctx.style.display='block';ctx.style.left=Math.min(cx,innerWidth-230)+'px';ctx.style.top=Math.min(cy,innerHeight-200)+'px';
+  ctx.innerHTML=`
+    <div class="hd"><div class="t">${p.rel?p.obj:SUBJECT.name}</div><div class="s">${p.rel?('relation: '+p.rel):'subject'} · κ ${p.kaki}</div></div>
+    <div class="row">tribe: <b>${p.tribe}</b></div>
+    <div class="row">${p.link?`this relation: <b>${p.link.pu} PU</b>`:`subject PU: <b>${TOTAL_PU}</b>`}</div>
+    <div class="row">surface <span class="sw" style="background:${rgb(p.goldenCol)}"></span>GOLDEN ${differs?`&nbsp; origin <span class="sw" style="background:${rgb(p.birthHue)}"></span>${p.tribe}`:''}</div>
+    <div class="act" data-a="select">◉ select &amp; bounce</div>
+    <div class="act" data-a="origin">◐ show Birth Root Shade</div>
+    <div class="act" data-a="trace">⟲ trace provenance (Event-KAKI)</div>
+    <div class="act" data-a="isolate">⊙ isolate this relation</div>`;
+  ctx.querySelectorAll('.act').forEach(a=>a.onclick=()=>{const act=a.dataset.a;
+    if(act==='select')selectParticle(p);
+    else if(act==='origin'){p.showOrigin=true;p.mesh.material.color.setRGB(p.birthHue[0],p.birthHue[1],p.birthHue[2]);p.bounce=1.0;}
+    else if(act==='trace'){selectParticle(p);document.getElementById('insp').innerHTML+=`<div class="ib" style="color:var(--signal);margin-top:5px">⟲ provenance: born in ${p.tribe} → Event-KAKI chain → GOLDEN. Birth Root Shade preserved.</div>`;}
+    else if(act==='isolate'&&p.link)highlightLink(LINKS.indexOf(p.link));
+    ctx.style.display='none';});
+}
+/* suppress the browser menu everywhere on the stage; route to particle context or a field context */
+renderer.domElement.addEventListener('contextmenu',e=>{e.preventDefault();
+  const p=pick(e.clientX,e.clientY);
+  if(p)openContext(p,e.clientX,e.clientY);
+  else{ // NEVER empty: even empty space gives the field context
+    ctx.style.display='block';ctx.style.left=Math.min(e.clientX,innerWidth-230)+'px';ctx.style.top=Math.min(e.clientY,innerHeight-140)+'px';
+    ctx.innerHTML=`<div class="hd"><div class="t">${SUBJECT.name}</div><div class="s">field · PU ${TOTAL_PU}</div></div>
+      <div class="row">${LINKS.length} relations · total <b>${TOTAL_PU} PU</b></div>
+      <div class="act" data-a="reset">⊗ clear selection</div>`;
+    ctx.querySelector('.act').onclick=()=>{if(selected){selected.mesh.material.color.setRGB(selected.goldenCol[0],selected.goldenCol[1],selected.goldenCol[2]);selected=null;}document.getElementById('insp').style.display='none';PARTS.forEach(p=>p.mesh.material.opacity=p.link?0.95:0.95);document.querySelectorAll('.lk').forEach(d=>d.classList.remove('active'));ctx.style.display='none';};
+  }
+});
+addEventListener('click',e=>{if(!ctx.contains(e.target))ctx.style.display='none';});
+
+/* ===== picking ===== */
+function pick(cx,cy){const r=renderer.domElement.getBoundingClientRect();let best=null,bd=13;
+  for(const p of PARTS){const v=new THREE.Vector3(p.base.x,p.base.y,p.base.z).project(camera);if(v.z>=1)continue;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);if(d<bd){bd=d;best=p;}}return best;}
+renderer.domElement.addEventListener('click',e=>{if(dragMoved)return;const p=pick(e.clientX,e.clientY);if(p)selectParticle(p);});
+renderer.domElement.addEventListener('mousemove',e=>{
+  if(dragging){if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)dragMoved=true;az-=(e.clientX-lx)*0.004;elev=Math.max(-1.2,Math.min(1.2,elev+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;}
+  renderer.domElement.style.cursor=pick(e.clientX,e.clientY)?'pointer':(dragging?'grabbing':'grab');});
+
+/* ===== controls ===== */
+document.getElementById('spin-btn').onclick=()=>{spin=!spin;document.getElementById('spin-btn').classList.toggle('on',spin);};
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(200,Math.min(1500,camDistT*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{if(e.button!==0)return;dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin&&!dragging)az+=dt*0.03;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.6);
+  // bounce animation (squash-stretch in place)
+  PARTS.forEach(p=>{if(p.bounce>0){p.bounce=Math.max(0,p.bounce-dt*2.2);const s=1+Math.sin((1-p.bounce)*9.42)*p.bounce*0.9;p.mesh.scale.set(11*s,11*(2-s),1);}else{const base=(selected===p)?15:11;p.mesh.scale.set(base,base,1);}});
+  camera.position.set(Math.sin(az)*Math.cos(elev)*camDist,Math.sin(elev)*camDist,Math.cos(az)*Math.cos(elev)*camDist);
+  camera.lookAt(0,0,0);renderer.render(scene,camera);}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+# =============================================================================
+# PB-201 — Real bug #2 found live on the Architect's own eriduous-vdi: the
+# enkiddb-write runtime image had no `git` binary, so PB-198's
+# authorship gate silently rejected everything as "no git history"
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: immediately after PB-200's :Z/:z SELinux fix let enkiddb-write
+# finally read /source at all, INGEST_DIR:/source/docs failed differently:
+#   ERR:ingest_dir: unauthorized creator for /source/docs/ARCHREF_NINSUN_
+#   DAILY_VERIFIED_2026-07-07.md: <unknown -- no git history>
+# for a file that has real, committed git history (author
+# noreply@anthropic.com) in the actual repo.
+#
+# ROOT CAUSE: `crates/enkiddb/src/authorship.rs::git_author_email` shells
+# out to `git log -1 --format=%ae -- <file>` (`std::process::Command::new
+# ("git")`). `deploy/podman/Containerfile.write-server`'s runtime stage
+# is `fedoraproject.org/fedora-minimal` with only `shadow-utils`
+# installed (for `useradd`) -- no `git` package. Inside that container,
+# spawning `git` fails outright; `git_author_email` swallows that via
+# `.ok()?` and returns `None`, which `check_authorship` correctly (per
+# its own fail-closed design) treats as unauthorized. Every file gets
+# rejected as "no git history" regardless of its real authorship --
+# not a bug in the authorship LOGIC (that behaved exactly as designed
+# given no git binary was reachable), but a real gap in the container
+# image PB-198 never got tested inside. PB-198's own verification ran
+# enkiddb-write-server bare on a sandbox host that already had git
+# installed -- this exact failure mode was invisible until the Architect
+# ran it in the real, minimal runtime container.
+#
+# A SEPARATE, compounding issue also found in this same debugging pass:
+# the Architect's rsync convention for populating eriduous-vdi's
+# ~/Forge/EnkiDB (`--exclude '.git/'`, established earlier this session)
+# means that directory has never actually carried real git history in
+# the first place -- so even with git installed in the image, the
+# authorship check would still find nothing until the sync itself stops
+# excluding `.git/`. Both fixes are required together; documented here so
+# neither gets silently forgotten as "already fixed."
+#
+# WHAT CHANGED:
+#   1. deploy/podman/Containerfile.write-server -- `microdnf install -y
+#      shadow-utils git` (was `shadow-utils` only), with a doc comment
+#      explaining git is a RUNTIME dependency here, not just a build one.
+#      enkimdb-write and the two read-server images don't need this --
+#      neither runs an authorship check.
+#
+# WHAT THE ARCHITECT STILL NEEDS TO DO ON eriduous-vdi (not automatable
+# from here -- this sandbox has no access to that machine):
+#   1. `git pull` the scratch clone, `rsync` it down again -- this time
+#      WITHOUT `--exclude '.git/'`, so ~/Forge/EnkiDB on eriduous-vdi
+#      becomes a real mirror of the repo's actual git history, not just
+#      its working files.
+#   2. Rebuild the enkiddb-write-server image (picks up the new
+#      Containerfile) and recreate the enkiddb-write container.
+#   3. Re-apply the config/enkiddb_team_allowlist.txt opt-in
+#      (noreply@anthropic.com) if it's still wanted -- re-syncing will
+#      reset that file to the repo's own committed version, which does
+#      NOT include that line (a live, undecided-in-the-repo opt-in the
+#      Architect made locally, deliberately not defaulted into the repo
+#      itself per PB-198's own design).
+#
+# VERIFIED: Containerfile change reviewed by inspection (single
+# well-known package name, same `microdnf install` pattern already used
+# on the line above it) -- this sandbox has no podman to actually build
+# the image. The real proof is the Architect's own next INGEST_DIR
+# attempt on eriduous-vdi after rebuilding.
+# =============================================================================
+---
+- name: "PB-201 | Record — enkiddb-write image now has git for the authorship gate"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-201.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. Changed: deploy/podman/Containerfile.write-server.
+          Requires, on eriduous-vdi: re-sync ~/Forge/EnkiDB WITHOUT
+          excluding .git/, rebuild enkiddb-write-server:latest, recreate
+          the enkiddb-write container, re-apply the
+          enkiddb_team_allowlist.txt opt-in if still wanted.

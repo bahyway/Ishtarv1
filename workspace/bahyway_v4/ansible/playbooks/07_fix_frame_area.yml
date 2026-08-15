@@ -1,0 +1,81 @@
+---
+# 07_fix_frame_area.yml
+# Fixes: f.area() → f.size() for ratatui 0.26
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/07_fix_frame_area.yml -v
+
+- name: "𒁾 Fix f.area() → f.size() for ratatui 0.26"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    main_rs: "/home/bahyway/Forge/bahyway_v4/bin/beemdm-monitor/src/main.rs"
+    forge:   "/home/bahyway/Forge/bahyway_v4"
+
+  tasks:
+
+    # ── Step 1: Replace f.area() with f.size() ────────────────────────────
+    # ratatui 0.26 uses Frame::size() — area() was added in 0.27
+    - name: "Replace f.area() with f.size() in main.rs"
+      ansible.builtin.replace:
+        path:    "{{ main_rs }}"
+        regexp:  'f\.area\(\)'
+        replace: 'f.size()'
+
+    # ── Step 2: Verify the fix landed ─────────────────────────────────────
+    - name: "Confirm f.size() is present"
+      ansible.builtin.command:
+        cmd: grep -n "f.size()" "{{ main_rs }}"
+      register: grep_size
+      changed_when: false
+      failed_when:  grep_size.rc != 0
+
+    - name: "Confirm f.area() is gone"
+      ansible.builtin.command:
+        cmd: grep -n "f.area()" "{{ main_rs }}"
+      register: grep_area
+      changed_when: false
+      failed_when:  grep_area.rc == 0   # rc=0 means found — that is failure
+      ignore_errors: false
+
+    - name: "Show fixed line"
+      ansible.builtin.debug:
+        msg: "{{ grep_size.stdout_lines }}"
+
+    # ── Step 3: Build ─────────────────────────────────────────────────────
+    - name: "cargo build -p beemdm-monitor"
+      ansible.builtin.command:
+        cmd:   cargo build -p beemdm-monitor
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 5 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-5:] }}"
+
+    # ── Step 4: Verify binary ─────────────────────────────────────────────
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/beemdm-monitor"
+      register: bin_stat
+
+    - name: "Assert binary exists"
+      ansible.builtin.assert:
+        that:
+          - bin_stat.stat.exists
+          - bin_stat.stat.size > 0
+        success_msg: "✓ binary ready — {{ bin_stat.stat.size | filesizeformat }}"
+        fail_msg:    "Binary not produced"
+
+    # ── Step 5: Done ──────────────────────────────────────────────────────
+    - name: "𒁾 Fix complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ f.size() fix applied"
+          - "✓ beemdm-monitor compiled"
+          - "Run:  cd ~/Forge/bahyway_v4"
+          - "      cargo run -p beemdm-monitor"
+          - "Keys: [P]ause [R]esume [S]weep [A]ccel [Q]uit"

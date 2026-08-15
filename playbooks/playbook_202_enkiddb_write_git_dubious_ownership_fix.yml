@@ -1,0 +1,60 @@
+# =============================================================================
+# PB-202 — Real bug #3 found live on eriduous-vdi: git's "dubious ownership"
+# safety check blocks the authorship gate even with git installed and
+# real history present
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: one layer past PB-201's fix (install git in the enkiddb-write
+# runtime image). With git installed and /source now a real, re-synced
+# checkout, `podman exec enkiddb-write git -C /source log -1 --format=%ae`
+# still failed:
+#   fatal: detected dubious ownership in repository at '/source'
+#   To add an exception for this directory, call:
+#     git config --global --add safe.directory /source
+#
+# ROOT CAUSE: git >= 2.35.2 (CVE-2022-24765 fix) refuses to trust a
+# repository whose top-level directory is owned by a different UID than
+# the calling process, unless that path is explicitly marked safe.
+# /source is bind-mounted from the host (owned by whatever host user ran
+# `podman run` -- bahyway on eriduous-vdi); the container's own user is
+# UID 999 (`enkiddb`, per Containerfile.write-server). Different UIDs,
+# so git's own safety check blocks it -- correctly, by git's own design,
+# just not something this Containerfile had accounted for.
+#
+# WHAT CHANGED:
+#   1. deploy/podman/Containerfile.write-server -- new
+#      `RUN git config --system --add safe.directory /source`, right
+#      after git is installed. `--system` writes /etc/gitconfig
+#      (readable by every user in the image), not `--global` (which
+#      would write to whichever user's $HOME happened to be active at
+#      build time) -- so it applies regardless of which UID the running
+#      container process ends up as, and needs no manual per-container
+#      `git config` step after every future recreation.
+#
+# IMMEDIATE UNBLOCK the Architect used on the already-running container,
+# while this rebuild was in flight (no need to wait on a fresh image):
+#   podman exec enkiddb-write git config --global --add safe.directory /source
+# This one is NOT durable -- it only lives in that specific container's
+# writable layer, lost on recreation. The Containerfile fix above is
+# what makes it permanent for every future build.
+#
+# VERIFIED: reviewed by inspection (single well-known git config
+# directive, no sandbox podman available to build it here). Real proof
+# is the Architect's own next `git -C /source log -1` / INGEST_DIR
+# attempt on eriduous-vdi against a freshly rebuilt image.
+# =============================================================================
+---
+- name: "PB-202 | Record — git safe.directory baked into the image"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-202.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. Changed: deploy/podman/Containerfile.write-server.
+          A container already running from a pre-PB-202 image needs
+          either the manual `git config --global --add safe.directory
+          /source` exec workaround, or a rebuild + recreate to pick up
+          the permanent fix.

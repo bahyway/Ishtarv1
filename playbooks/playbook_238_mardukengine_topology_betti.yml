@@ -1,0 +1,80 @@
+# =============================================================================
+# PB-238 -- MardukEngine: Topology verb, Betti β0/β1 on relation
+# graphs. BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHAT THIS ADDS: marduk-engine::topology, the third of BC-MRD-001's
+# five verbs implemented (after Position and Horizon, PB-236). Scoped
+# exactly as BC-MRD-001 and GL-MRD-002 (Neberu Slicer) define it --
+# "Betti beta0/beta1 of relation graphs", not full simplicial-complex
+# homology. For a plain graph both numbers are elementary: beta0 =
+# connected components (union-find), beta1 = |E| - |V| + beta0 (circuit
+# rank). Zero implementation of this existed anywhere in the workspace
+# before this build (checked directly: no hit for "Betti" in any
+# crate). beta1 > 0 is the graph-theoretic signature of a mule ring
+# (Sazu, BC-MRD-001 SS4.1) or an organized illegal-connection ring --
+# an independent loop in the relation graph.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Running
+# this playbook = CSR-08 Architect confirmation.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms marduk-engine's topology module is present (committed
+#      source).
+#   2. `cargo test --release -p marduk-engine` (all 12 tests: the 6
+#      from PB-236 plus 6 Betti tests, including a figure-eight case
+#      as the cheap analog of a mule-ring signature).
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_238_mardukengine_topology_betti.yml
+# =============================================================================
+
+- name: "PB-238 -- MardukEngine Topology verb: Betti beta0/beta1"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    build_log: "/tmp/pb238_build.log"
+
+  tasks:
+    - name: "Confirm marduk-engine's topology module is present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/crates/marduk-engine/src/topology.rs"
+      register: topology_check
+
+    - name: "Fail clearly if topology.rs is missing"
+      ansible.builtin.fail:
+        msg: >-
+          crates/marduk-engine/src/topology.rs not found at {{ repo_root }}.
+          Run `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- this is committed source, this playbook only builds
+          and verifies it.
+      when: not topology_check.stat.exists
+
+    - name: "cargo test marduk-engine (release) -- Position + Horizon + Topology verbs"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p marduk-engine > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-238 complete -- Topology verb (betti_0/betti_1 on
+          RelationGraph) is real and tested (12/12 marduk-engine tests
+          pass). Three of five BC-MRD-001 verbs now implemented
+          (Position, Horizon, Topology). Motion and Curvature remain
+          deliberately unbuilt -- see
+          docs/marduk/IMPL-MRD-001-position-horizon-first-slice.md.
+          No domain calculus (Sazu/Addu/Suhrim/Namtila) yet consumes
+          Topology -- wiring a Sazu-style relation graph over EGDEngine
+          meter/customer data to detect illegal-connection rings via
+          beta1 is a natural next step, not done here.

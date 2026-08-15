@@ -1,0 +1,79 @@
+-- BahyWay.Ecosystem v4.0 — Sovereign Cemetery Intelligence
+-- GraveParticle Template — Wadi al-Salam Discovery System
+--
+-- Each burial site is a sovereign particle with KAKI identity.
+-- Discovery fields (condition, confidence, image_tile_kaki) are populated
+-- by the AI discovery pipeline (satellite/drone imagery analysis).
+--
+-- QUALITY_DIVISOR = 240 (ADR-001, never 255)
+-- identity_confidence: 240=confirmed, 150=probable, 60=speculative, 0=unidentified
+--
+-- Required fields (KAKI or completeness=1.0):
+--   grave_kaki, sector_code, lat_center, lon_center
+--
+-- Optional enrichment (populated by discovery pipeline):
+--   condition, identity_confidence, civil_registry_kaki, image_tile_kaki,
+--   discovery_source, owner_name_arabic, death_hijri_year, interment_hijri_year
+
+PARTICLE GraveParticle {
+    grave_kaki:           KAKI
+    sector_code:          TEXT(completeness=1.0)
+    lat_center:           TEXT(completeness=1.0)
+    lon_center:           TEXT(completeness=1.0)
+    condition:            TEXT
+    identity_confidence:  TEXT
+    civil_registry_kaki:  KAKI
+    image_tile_kaki:      KAKI
+    discovery_source:     TEXT
+    owner_name_arabic:    TEXT
+    death_hijri_year:     TEXT
+    interment_hijri_year: TEXT
+    TRIBE: WadiAlSalamMDM
+}
+
+TRIBE WadiAlSalamMDM {
+    WEIGHTS: [0.30, 0.25, 0.20, 0.10, 0.05, 0.05, 0.05]
+    IDEAL:   [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0]
+}
+
+RULE flag_unidentified_damaged_grave {
+    WHEN particle.hepta.health < 0.416
+    THEN
+        LANE = SUSPECT
+        EMIT StoryWay("grave_unidentified_damaged")
+}
+
+RULE promote_confirmed_identity {
+    WHEN particle.hepta.health >= 0.916
+    THEN
+        LANE = GEM
+        EMIT StoryWay("grave_identity_confirmed")
+}
+
+RULE alert_destroyed_grave {
+    WHEN particle.hepta.health < 0.250
+    THEN
+        LANE = DEAD
+        EMIT StoryWay("grave_structural_loss")
+}
+
+OBSERVE unidentified_damaged_graves {
+    FROM: TRIBE WadiAlSalamMDM
+    WHERE: health < 0.416
+    SORT: orbital_radius DESC
+    LIMIT: 5000
+}
+
+OBSERVE recently_confirmed_identities {
+    FROM: TRIBE WadiAlSalamMDM
+    WHERE: health >= 0.916
+    SORT: orbital_radius DESC
+    LIMIT: 10000
+}
+
+OBSERVE all_satellite_discovered {
+    FROM: TRIBE WadiAlSalamMDM
+    WHERE: discovery_source = "Satellite"
+    SORT: orbital_radius DESC
+    LIMIT: 50000
+}

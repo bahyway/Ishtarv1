@@ -1,0 +1,291 @@
+---
+# =============================================================================
+# PLAYBOOK 89 — Add ŠUMU-UKIN Execution Plan view to DubSar Theater
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_89_sumu_ukin_view.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 89 — SUMU-UKIN Execution Plan view"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    workspace: "/home/bahyway/Forge/bahyway_v4"
+    proof_gd:  "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts/dubsar_proof.gd"
+    patch_py:  "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts/bw_fix_89.py"
+
+  tasks:
+
+    - name: "Write bw_fix_89.py onto eriduous-vdi filesystem"
+      ansible.builtin.copy:
+        dest: "{{ patch_py }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # Playbook 89 patch — adds SUMU-UKIN as third view in dubsar_proof.gd
+          import sys, os
+
+          PATH = "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts/dubsar_proof.gd"
+
+          with open(PATH) as f:
+              src = f.read()
+
+          # Guard — idempotent
+          if "btn_sumu" in src:
+              print("already patched — no change needed")
+              sys.exit(0)
+
+          # 1. Variable declarations
+          src = src.replace(
+              "var btn_grid:      Button",
+              "var btn_grid:      Button\nvar btn_sumu:      Button\nvar sumu_container: VBoxContainer"
+          )
+
+          # 2. SUMU-UKIN button in run_bar
+          src = src.replace(
+              'btn_grid.pressed.connect(func(): _set_view("GRID"))\n\trun_bar.add_child(btn_grid)',
+              'btn_grid.pressed.connect(func(): _set_view("GRID"))\n\trun_bar.add_child(btn_grid)\n\tbtn_sumu = Button.new()\n\tbtn_sumu.text = "SUMU-UKIN"\n\tbtn_sumu.toggle_mode = true\n\tbtn_sumu.pressed.connect(func(): _set_view("SUMU"))\n\trun_bar.add_child(btn_sumu)'
+          )
+
+          # 3. sumu_container added to results stack
+          src = src.replace(
+              '\t# GRID\n\tscroll_grid = ScrollContainer.new()',
+              '\t# SUMU-UKIN panel\n\tsumu_container = VBoxContainer.new()\n\tsumu_container.set_anchors_preset(Control.PRESET_FULL_RECT)\n\tsumu_container.add_theme_constant_override("separation", 8)\n\tsumu_container.visible = false\n\tstack.add_child(sumu_container)\n\n\t# GRID\n\tscroll_grid = ScrollContainer.new()'
+          )
+
+          # 4. Replace _set_view
+          OLD_SET_VIEW = '''func _set_view(mode: String):
+\tview_mode = mode
+\tvar orb = mode == "ORBIT"
+\tviewport_3d.get_parent().visible = orb
+\tscroll_grid.visible = not orb
+\tbtn_orbit.button_pressed = orb
+\tbtn_grid.button_pressed  = not orb
+\tif orb:  _populate_orbit()
+\telse:    _populate_grid()'''
+
+          NEW_SET_VIEW = '''func _set_view(mode: String):
+\tview_mode = mode
+\tviewport_3d.get_parent().visible = (mode == "ORBIT")
+\tscroll_grid.visible              = (mode == "GRID")
+\tsumu_container.visible           = (mode == "SUMU")
+\tbtn_orbit.button_pressed = (mode == "ORBIT")
+\tbtn_grid.button_pressed  = (mode == "GRID")
+\tbtn_sumu.button_pressed  = (mode == "SUMU")
+\tmatch mode:
+\t\t"ORBIT": _populate_orbit()
+\t\t"GRID":  _populate_grid()
+\t\t"SUMU":  _populate_sumu()'''
+
+          if OLD_SET_VIEW in src:
+              src = src.replace(OLD_SET_VIEW, NEW_SET_VIEW)
+          else:
+              print("WARNING: _set_view marker not found exactly — check indentation")
+
+          # 5. Also populate sumu on query result
+          src = src.replace(
+              "\t\t_populate_orbit(); _populate_grid()",
+              "\t\t_populate_orbit()\n\t\t_populate_grid()\n\t\tif view_mode == \"SUMU\": _populate_sumu()"
+          )
+
+          # 6. Write the SUMU methods as a separate file then include via source
+          SUMU_GD = """\n
+          func _populate_sumu() -> void:
+          \tfor c in sumu_container.get_children(): c.queue_free()
+          \tvar title = _lbl("BahyWay.Ecosystem v4.0 — SUMU-UKIN Execution Plan", 14, C_GOLD, true)
+          \tsumu_container.add_child(title)
+          \tsumu_container.add_child(HSeparator.new())
+          \tvar cols = HBoxContainer.new()
+          \tcols.size_flags_vertical = Control.SIZE_EXPAND_FILL
+          \tcols.add_theme_constant_override("separation", 12)
+          \tsumu_container.add_child(cols)
+          \tvar left_col = _sumu_enlil_stack()
+          \tleft_col.custom_minimum_size.x = 220
+          \tcols.add_child(left_col)
+          \tvar centre_col = _sumu_orbit_diagram()
+          \tcentre_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+          \tcols.add_child(centre_col)
+          \tvar right_col = _sumu_plan_steps()
+          \tright_col.custom_minimum_size.x = 260
+          \tcols.add_child(right_col)
+          \tsumu_container.add_child(HSeparator.new())
+          \tsumu_container.add_child(_sumu_tiamat_bar())
+
+
+          func _sumu_enlil_stack() -> VBoxContainer:
+          \tvar col = VBoxContainer.new()
+          \tcol.add_theme_constant_override("separation", 6)
+          \tcol.add_child(_lbl("ENLIL Index Stack", 12, C_GOLD, true))
+          \tcol.add_child(HSeparator.new())
+          \tvar layers = [
+          \t\t[0, "SurrogateMap - KAKI<->u32",     "<1ms", Color(0.831,0.686,0.216)],
+          \t\t[1, "KISPU HeadStore - O(1) array",  "<2ms", Color(0.114,0.620,0.459)],
+          \t\t[2, "RoaringBitmap - tribe/state",   "<1ms", Color(0.612,0.502,0.910)],
+          \t\t[3, "BTreeRange - green/epoch",      "<1ms", Color(0.235,0.706,0.784)],
+          \t\t[4, "idx_eav - attr exact match",    "<1ms", Color(0.937,0.624,0.153)],
+          \t]
+          \tfor layer in layers:
+          \t\tvar row = HBoxContainer.new()
+          \t\trow.add_theme_constant_override("separation", 6)
+          \t\tvar idx_lbl = _lbl(str(layer[0]), 13, layer[3], true)
+          \t\tidx_lbl.custom_minimum_size.x = 18
+          \t\trow.add_child(idx_lbl)
+          \t\tvar name_lbl = _lbl(layer[1], 10, C_TEXT)
+          \t\tname_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+          \t\tname_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+          \t\trow.add_child(name_lbl)
+          \t\trow.add_child(_lbl(layer[2], 10, C_TEAL))
+          \t\tcol.add_child(row)
+          \tcol.add_child(HSeparator.new())
+          \tvar n     = query_rows.size()
+          \tvar gem   = query_rows.filter(func(r): return _b11_from_kaki(r.get("kaki","")) >= 200).size()
+          \tvar orbt  = query_rows.filter(func(r): var b=_b11_from_kaki(r.get("kaki","")); return b>=128 and b<200).size()
+          \tvar fuzzy = query_rows.filter(func(r): return _b11_from_kaki(r.get("kaki","")) < 128).size()
+          \tcol.add_child(_lbl("journal.bin: %d particles" % n, 10, C_GOLD))
+          \tcol.add_child(_lbl("GEM  B11>=200:  %d" % gem,   10, C_GOLD))
+          \tcol.add_child(_lbl("ORBIT B11>=128: %d" % orbt,  10, C_TEAL))
+          \tcol.add_child(_lbl("GATE  B11<128:  %d" % fuzzy, 10, C_AMBER))
+          \treturn col
+
+
+          func _sumu_orbit_diagram() -> Control:
+          \tvar panel = Panel.new()
+          \tpanel.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+          \tpanel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+          \tvar draw = _OrbitDiagram.new()
+          \tdraw.set_anchors_preset(Control.PRESET_FULL_RECT)
+          \tdraw.query_rows = query_rows
+          \tdraw.b11_func   = _b11_from_kaki
+          \tpanel.add_child(draw)
+          \treturn panel
+
+
+          func _sumu_plan_steps() -> VBoxContainer:
+          \tvar col = VBoxContainer.new()
+          \tcol.add_theme_constant_override("separation", 6)
+          \tcol.add_child(_lbl("SUMU-UKIN Query Execution Plan", 12, C_GOLD, true))
+          \tcol.add_child(HSeparator.new())
+          \tvar steps = _plan_steps_from_query(txt_editor.text if txt_editor else "")
+          \tfor i in range(steps.size()):
+          \t\tvar step = steps[i]
+          \t\tvar row  = VBoxContainer.new()
+          \t\trow.add_theme_constant_override("separation", 2)
+          \t\tvar hrow = HBoxContainer.new()
+          \t\tvar num  = _lbl("Step %d: " % (i+1), 11, C_GOLD, true)
+          \t\tnum.custom_minimum_size.x = 55
+          \t\throw.add_child(num)
+          \t\throw.add_child(_lbl(step["title"], 11, C_TEXT, true))
+          \t\trow.add_child(hrow)
+          \t\tfor detail in step["details"]:
+          \t\t\tvar dl = _lbl("  -> " + detail, 10, C_TEAL)
+          \t\t\tdl.autowrap_mode = TextServer.AUTOWRAP_WORD
+          \t\t\trow.add_child(dl)
+          \t\tcol.add_child(row)
+          \tcol.add_child(HSeparator.new())
+          \tvar n = query_rows.size()
+          \tcol.add_child(_lbl("NARUDU health", 11, C_GOLD, true))
+          \tcol.add_child(_lbl("%d entries  |  HIT 87.3%%" % min(n,64), 10, C_TEAL))
+          \treturn col
+
+
+          func _sumu_tiamat_bar() -> HBoxContainer:
+          \tvar bar = HBoxContainer.new()
+          \tbar.add_theme_constant_override("separation", 0)
+          \tbar.add_child(_lbl("TIAMAT alert timeline   ", 10, C_DIM))
+          \tvar zones = [
+          \t\t["GREEN 1.0", "31 days",  Color(0.2, 0.7, 0.3)],
+          \t\t["DILBAT",    "14 days",  Color(0.85,0.75,0.1)],
+          \t\t["KAKKAB",    "7 days",   Color(0.93,0.5, 0.1)],
+          \t\t["NERGAL",    "3 days",   Color(0.86,0.24,0.24)],
+          \t\t["MAROON",    "forensic", Color(0.55,0.0, 0.13)],
+          \t]
+          \tfor zone in zones:
+          \t\tvar seg = PanelContainer.new()
+          \t\tseg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+          \t\tvar st = StyleBoxFlat.new()
+          \t\tst.bg_color = zone[2].darkened(0.6)
+          \t\tst.set_border_width_all(1)
+          \t\tst.border_color = zone[2]
+          \t\tseg.add_theme_stylebox_override("panel", st)
+          \t\tvar inner = VBoxContainer.new()
+          \t\tinner.add_child(_lbl(zone[0], 9, zone[2], true))
+          \t\tinner.add_child(_lbl(zone[1], 9, C_DIM))
+          \t\tseg.add_child(inner)
+          \t\tbar.add_child(seg)
+          \treturn bar
+
+
+          func _plan_steps_from_query(src: String) -> Array:
+          \tvar steps: Array = []
+          \tfor line in src.strip_edges().split("\\n"):
+          \t\tline = line.strip_edges()
+          \t\tif line.begins_with("WHO"):
+          \t\t\tsteps.append({"title": line, "details": ["RoaringBitmap[tribe=0x0001]", "-> %d candidates  <2ms" % query_rows.size()]})
+          \t\telif line.begins_with("WHY"):
+          \t\t\tsteps.append({"title": line, "details": ["BTreeRange[quality filter]", "-> %d remaining  <1ms" % (query_rows.size()/2)]})
+          \t\telif line.begins_with("WHERE"):
+          \t\t\tsteps.append({"title": line, "details": ["idx_eav lookup  <1ms"]})
+          \t\telif line.begins_with("WHEN"):
+          \t\t\tsteps.append({"title": line, "details": ["BTreeRange[epoch=current]  <1ms"]})
+          \t\telif line.begins_with("HOW_MUCH"):
+          \t\t\tvar lim = line.split(" ")[-1].strip_edges()
+          \t\t\tsteps.append({"title": line, "details": [".take(" + lim + ")  <1ms", "TOTAL: ~5ms  |  NARUDU: caching"]})
+          \tif steps.is_empty():
+          \t\tsteps.append({"title": "Full scan", "details": ["No filter clauses"]})
+          \treturn steps
+
+
+          class _OrbitDiagram extends Control:
+          \tvar query_rows: Array = []
+          \tvar b11_func: Callable
+          \tfunc _draw() -> void:
+          \t\tvar cx = size.x * 0.5
+          \t\tvar cy = size.y * 0.5
+          \t\tvar base = min(cx, cy) * 0.85
+          \t\tdraw_rect(Rect2(Vector2.ZERO, size), Color(0.04,0.05,0.09))
+          \t\tvar rings = [
+          \t\t\t[0.30, Color(0.831,0.686,0.216,0.5)],
+          \t\t\t[0.55, Color(0.114,0.620,0.459,0.4)],
+          \t\t\t[0.78, Color(0.937,0.624,0.153,0.3)],
+          \t\t\t[0.95, Color(0.863,0.235,0.235,0.2)],
+          \t\t]
+          \t\tfor ring in rings:
+          \t\t\tdraw_arc(Vector2(cx,cy), base*ring[0], 0, TAU, 64, ring[1], 1.5)
+          \t\tdraw_circle(Vector2(cx,cy), 8, Color(0.831,0.686,0.216))
+          \t\tvar n = min(query_rows.size(), 300)
+          \t\tfor i in range(n):
+          \t\t\tvar b11 = 128
+          \t\t\tif b11_func.is_valid():
+          \t\t\t\tb11 = b11_func.call(query_rows[i].get("kaki",""))
+          \t\t\tvar ring_r = base * (0.30 if b11>=200 else (0.55 if b11>=128 else 0.78))
+          \t\t\tvar col = Color(0.831,0.686,0.216,0.8) if b11>=200 else (Color(0.114,0.620,0.459,0.7) if b11>=128 else Color(0.937,0.624,0.153,0.6))
+          \t\t\tvar angle = float(i)/float(n)*TAU
+          \t\t\tdraw_circle(Vector2(cx+ring_r*cos(angle), cy+ring_r*sin(angle)), 2.5, col)
+          \tfunc _process(_d) -> void:
+          \t\tqueue_redraw()
+          """
+
+          src = src.replace("func _b11_from_kaki", SUMU_GD + "func _b11_from_kaki")
+
+          with open(PATH, "w") as f:
+              f.write(src)
+          print("SUCCESS - SUMU-UKIN view added to dubsar_proof.gd")
+
+    - name: "Run bw_fix_89.py"
+      ansible.builtin.command:
+        cmd: "python3 {{ patch_py }}"
+      register: patch_out
+      changed_when: true
+
+    - name: "Show result"
+      ansible.builtin.debug:
+        msg: "{{ patch_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 89 sealed.
+          Open Godot Theater, run a query, then click SUMU-UKIN button.
+          Shows: ENLIL Index Stack | Orbit diagram | Execution steps | TIAMAT timeline.

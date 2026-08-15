@@ -1,0 +1,92 @@
+# =============================================================================
+# BahyWay.Ecosystem assets-node — one Podman image holding every real
+# third-party binary/source dependency the ecosystem needs to build,
+# pinned so "download once" means byte-identical forever (PB-271). Never
+# floating-tagged: build, resolve the digest, reference the image ONLY as
+# assets-node@<digest> everywhere it's consumed. A later version
+# supersedes this one (ADR-006 no-delete/APPEND-supersedes) -- nothing
+# here is ever mutated in place; ship a new digest instead.
+#
+# CONTENTS (independently rebuildable/supersedable):
+#   1. Pinned Rust toolchain (1.94.1, rustup --profile minimal) -- exactly
+#      what this workspace already compiles clean under (verified
+#      2026-07-30), not "latest stable".
+#   2. Vendored crate sources -- `cargo vendor` snapshot of every one of
+#      this workspace's real dependency crates (from Cargo.lock, as staged
+#      by PB-271), so a build never touches crates.io again.
+#   3. Godot 4.3-stable source, patched via the SAME shared script
+#      playbooks/playbook_262_build_rebranded_godot_engine.yml uses
+#      (workspace/bahyway_v4/godot/patch_engine_source.py -- extracted
+#      out of that playbook's own inline copy by PB-271, so there is
+#      exactly one copy of this patch, not two able to silently drift),
+#      compiled once here via SCons instead of once per host.
+#   4. /assets/manifest.json recording exactly what's in this image and
+#      at what version -- PB-271 fills in the real digest/commit/
+#      timestamp after build.
+#   5. An empty, clearly-marked slot for Girsu IDE's VSCodium source
+#      (/assets/girsu-vscodium-src) -- that build lives entirely outside
+#      this repo; nothing here guesses its contents.
+#
+# Build (from the repo root, via PB-271 -- do not run by hand without
+# first staging build context; see that playbook's own header):
+#   ansible-playbook playbooks/playbook_271_build_bahyway_assets_node.yml
+#
+# Resolve the digest that actually matters (never reference :staging or
+# :latest downstream of this):
+#   podman inspect --format '{{.Digest}}' localhost/bahyway-assets-node:staging
+#
+# Base images match this repo's existing deploy/podman/* convention
+# (registry.fedoraproject.org, not Docker Hub) -- full Fedora for the
+# build stages (need gcc/scons/X11 headers), fedora-minimal for the
+# final assembled stage (holds static assets only, no build toolchain
+# needed at rest).
+# =============================================================================
+
+FROM registry.fedoraproject.org/fedora:44 AS toolchain
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc gcc-c++ make git curl ca-certificates python3 \
+        scons pkgconf-pkg-config \
+        libX11-devel libXcursor-devel libXinerama-devel libXi-devel \
+        libXrandr-devel mesa-libGL-devel alsa-lib-devel pulseaudio-libs-devel \
+    && dnf clean all
+
+ENV RUSTUP_HOME=/opt/rust/rustup \
+    CARGO_HOME=/opt/rust/cargo \
+    PATH=/opt/rust/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --profile minimal --default-toolchain 1.94.1 --no-modify-path
+
+# ── Layer 2: vendored crate sources ──────────────────────────────────────
+# Build context's manifests/ is staged by PB-271 (repo-root Cargo.toml/
+# Cargo.lock + every crates/*/bin*/Cargo.toml, manifests only, no source
+# bodies -- that's all `cargo vendor` needs to resolve the real graph).
+FROM toolchain AS vendor
+WORKDIR /workspace
+COPY manifests/ /workspace/
+RUN mkdir -p /assets && cargo vendor --locked /assets/vendor > /assets/vendor-config.toml
+
+# ── Layer 3: Godot 4.3-stable, rebranded, compiled once ──────────────────
+FROM toolchain AS godot
+WORKDIR /build
+RUN git clone --depth 1 --branch 4.3-stable https://github.com/godotengine/godot.git godot-src
+COPY patch_engine_source.py /build/patch_engine_source.py
+RUN python3 /build/patch_engine_source.py /build/godot-src
+RUN cd /build/godot-src && scons platform=linuxbsd target=editor -j"$(nproc)"
+RUN mkdir -p /assets/bin && install -Dm755 /build/godot-src/bin/godot.linuxbsd.editor.*.x86_64 /assets/bin/godot4
+
+# ── Final: assembled assets-node ─────────────────────────────────────────
+FROM registry.fedoraproject.org/fedora-minimal:44
+RUN mkdir -p /assets/rust-toolchain /assets/vendor /assets/bin /assets/girsu-vscodium-src
+COPY --from=toolchain /opt/rust /assets/rust-toolchain
+COPY --from=vendor /assets/vendor /assets/vendor
+COPY --from=vendor /assets/vendor-config.toml /assets/vendor-config.toml
+COPY --from=godot /assets/bin/godot4 /assets/bin/godot4
+# Empty, deliberately -- see header comment. Drop Girsu's VSCodium source
+# tree here before rebuilding this image if/when that build should be
+# folded in too; nothing reads this path until something is placed in it.
+RUN touch /assets/girsu-vscodium-src/.gitkeep
+COPY manifest.json /assets/manifest.json
+
+LABEL org.bahyway.assets-node.version="1"
+LABEL org.bahyway.assets-node.contents="rust-1.94.1,vendored-crates,godot-4.3-stable-rebranded"

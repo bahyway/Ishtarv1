@@ -1,0 +1,130 @@
+# =====================================================================
+# PB-323 — GulaFederationEngine · Godot mobile scaffold (Hubble rig)
+# Suite: GulaFederation (PB-321..PB-326) · Run FROM Fedora 44 HOST.
+# Godot 4.7 is the confirmed sovereign visualization body (egui/Bevy
+# retired). This scaffolds the phone client: three-LOD camera rig
+# (COSMOS -> CITY -> FLIGHT -> ANCHOR) as one continuous spline dolly.
+# Production visualization is Godot — the Šala HTML dive is prototype
+# only (Way-of-Work rule 5).
+# =====================================================================
+---
+- name: PB-323 Godot mobile Hubble scaffold
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    bahyway_root: "{{ playbook_dir }}/../workspace/bahyway_v4"  # FIXED 2026-08-15: was ansible_env.HOME + "/BahyWay.Ecosystem", a path that does not exist -- would have silently scaffolded an orphaned crate tree disconnected from the real Cargo workspace
+    app_dir: "{{ bahyway_root }}/apps/gula-mobile"
+  tasks:
+    - name: Ensure project directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ app_dir }}/scenes"
+        - "{{ app_dir }}/scripts"
+        - "{{ app_dir }}/assets/tiles"
+
+    - name: Write project.godot
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/project.godot"
+        mode: "0644"
+        content: |
+          ; GulaFederation mobile client — Godot 4.7
+          config_version=5
+
+          [application]
+          config/name="GulaFederation"
+          run/main_scene="res://scenes/Main.tscn"
+          config/features=PackedStringArray("4.7", "Mobile")
+
+          [rendering]
+          renderer/rendering_method="mobile"
+          renderer/rendering_method.mobile="mobile"
+
+          [display]
+          window/handheld/orientation=1
+
+    - name: Write scenes/Main.tscn
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/scenes/Main.tscn"
+        mode: "0644"
+        content: |
+          [gd_scene load_steps=2 format=3]
+
+          [ext_resource type="Script" path="res://scripts/HubbleRig.gd" id="1"]
+
+          [node name="Main" type="Node3D"]
+
+          [node name="HubbleRig" type="Node3D" parent="." ]
+          script = ExtResource("1")
+
+          [node name="Camera3D" type="Camera3D" parent="HubbleRig"]
+          transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, 900, 900)
+
+    - name: Write scripts/HubbleRig.gd (three-LOD continuous dolly)
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/scripts/HubbleRig.gd"
+        mode: "0644"
+        content: |
+          extends Node3D
+          ## Hubble dive: one Curve3D, no cuts. Phases by t:
+          ##   0.00-0.25 COSMOS  (federation particle field, wells)
+          ##   0.25-0.45 CROSSFADE cosmos->city (LOD swap by opacity)
+          ##   0.45-0.90 FLIGHT  (bird view along route spline, banking)
+          ##   0.90-1.00 ANCHOR  (slow orbit over target pharmacy beacon)
+          ## Advisory-only doctrine: HUD always shows report staleness (epsilon)
+          ## and "call ahead" as the advised rite. No reservation, ever.
+
+          @export var dive_seconds: float = 14.0
+          var t: float = 0.0
+          var playing: bool = false
+          var path := Curve3D.new()
+          @onready var cam: Camera3D = $Camera3D
+
+          func _ready() -> void:
+              # Waypoints will come from gula-federation-advisory (PB-321)
+              # + route core (Wadi al-Salam RTK sibling). Placeholder spline:
+              for p in [Vector3(0,900,900), Vector3(0,420,380), Vector3(60,140,120),
+                        Vector3(120,40,40), Vector3(220,18,-40), Vector3(300,14,-120),
+                        Vector3(360,10,-200), Vector3(380,8,-236)]:
+                  path.add_point(p)
+
+          func _process(delta: float) -> void:
+              if not playing: return
+              t = clamp(t + delta / dive_seconds, 0.0, 1.0)
+              var d := t * path.get_baked_length()
+              cam.global_position = path.sample_baked(d)
+              var ahead := path.sample_baked(min(d + 12.0, path.get_baked_length()))
+              cam.look_at(ahead, Vector3.UP)
+              if t >= 1.0: playing = false
+
+          func begin_dive() -> void:
+              t = 0.0; playing = true
+
+    - name: Write export_presets.cfg stub (Android)
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/export_presets.cfg"
+        mode: "0644"
+        content: |
+          [preset.0]
+          name="Android"
+          platform="Android"
+          runnable=true
+          ; Fill keystore + SDK paths on the host before export.
+          ; Sovereignty note: no Google Play services dependency; maps are
+          ; bundled offline tiles (PB-324), advisory via PB-321 endpoint.
+
+    - name: Verify Godot presence (informational only)
+      ansible.builtin.command: which godot
+      register: godot_bin
+      changed_when: false
+      failed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: >-
+          Scaffold written to {{ app_dir }}.
+          {{ 'Godot found: ' + godot_bin.stdout if godot_bin.rc == 0
+             else 'Godot binary not on PATH — open project manually (sovereign one-time download model, as with Z3).' }}

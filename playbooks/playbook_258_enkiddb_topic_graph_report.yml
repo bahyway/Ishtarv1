@@ -1,0 +1,174 @@
+# =============================================================================
+# PB-258 — EnkiDDB citation-affinity topic graph: real report against the
+# live Read Node's synced Data Files.
+# BahyWay.Ecosystem v4.0 — 2026-07-26
+#
+# CONTEXT: the Architect asked for an evaluation of an uploaded "Knowledge
+# Graph via Dynamic Orbits" design (topics as tribes, citations as
+# gravity, cross-topic documents as bridges) and, once its naming/
+# numbering was set aside as irrelevant, for the underlying concept to be
+# checked for validity and rebuilt honestly if sound. It is sound as a
+# citation-affinity clustering technique (a real, standard bibliometric
+# method), but the draft both invented a synthetic 3-document fixture
+# instead of using this repo's real citation data, and claimed to reuse
+# `kaki_type 0x03 CrossTribe` when that type has zero real callers
+# anywhere in EnkiDDB's actual ingestion path.
+#
+# WHAT THIS PLAYBOOK RUNS: `enkiddb::topics::TopicGraph` (new module,
+# `crates/enkiddb/src/topics.rs`) — a citation-affinity classifier built
+# directly on two things that already exist for real in this codebase:
+#   - `meta.collection`, the topic partition every document already gets
+#     at ingest time (`crate::ingest::infer_collection`, the same
+#     "gates"/"components"/"marduk"/... tagging PB-208's real 241-document
+#     corpus already carries).
+#   - `depends-on` citation edges, already journaled whenever one
+#     document's markdown links to another ingested alongside it
+#     (`WriteNode::link_discovered_dependencies`).
+#
+# A REAL BUG WAS FOUND AND FIXED ALONGSIDE THIS: `link_discovered_
+# dependencies` used to write a citing document's `link.target`/
+# `link.description` directly onto that document's own entity. Both
+# `ReadNode::query` and `CachedReadNode::query` fold an entity's history
+# into a single-slot `(attr_hash -> value)` map before projecting, so a
+# document citing more than one other document silently lost all but the
+# last-journaled citation the moment it was read back through a Read
+# Node -- this module is the first real reader of `depends-on` edges
+# through a Read Node, so it would have been silently wrong against real
+# multi-citation documents. Fixed by minting one child edge-entity per
+# citation (the same pattern `emit_sections`'s "section-of" and
+# `emit_concept_mentions`'s "mentioned-in" edges already use). Proven by
+# `topics::tests::multiple_citations_from_one_document_all_survive_
+# through_read_node` (3 real citations from one document, all
+# independently queryable) and `bridge_detected_when_citations_span_two_
+# topics` (a real ingested document correctly detected as a bridge).
+#
+# WHAT "DONE" LOOKS LIKE: the report below lists real topics
+# (`meta.collection` values) drawn from the corpus currently live on
+# enkidb-node-read, real document titles under each, and real cross-topic
+# bridges with their real affinity/radius numbers -- not a synthetic
+# fixture, not an empty array.
+#
+# HONEST SCOPE (see crates/enkiddb/src/topics.rs's own module doc
+# comment for the full statement): this classifies documents against a
+# topic partition that already exists; it does not discover topics from
+# scratch. It does not track drift over time or detect citation gaps
+# (cited-but-never-ingested documents) -- both real, useful, unbuilt
+# extensions, not silently-missing features.
+# =============================================================================
+---
+- name: "PB-258 | EnkiDDB topic graph report"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    enkiddb_read_host: "enkidb-node-read"
+    enkiddb_read_volume: "enkiddb-read-data"
+
+  tasks:
+    - name: "0.1 | Confirm the repo checkout exists"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      register: repo_head
+      changed_when: false
+
+    - name: "0.2 | Show current commit"
+      ansible.builtin.debug:
+        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-258's own commit."
+
+    - name: "1.1 | Build enkiddb-cli (release, picks up the new `topics` subcommand)"
+      ansible.builtin.command:
+        cmd: cargo build --release -p enkiddb-cli
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}/workspace/bahyway_v4"
+      changed_when: true
+
+    # ── 2. Pull a READ-ONLY copy of the Read Node's live Data Files ─────
+    # Deliberately pulls from the READ volume, not the write side: the
+    # report should reflect exactly what enkiddb-read-server is currently
+    # serving, the same corpus PB-213's own QUERY/SEARCH steps verify
+    # against. Same podman-unshare + tar + fetch idiom PB-213's cross-host
+    # sync already established (playbooks/tasks/enkiddb_cross_host_sync.yml)
+    # -- reused here read-only, no swap-in, nothing on enkidb-node-read is
+    # modified.
+    - name: "2.1 | Find the Read volume's real mountpoint on enkidb-node-read"
+      ansible.builtin.command: "podman volume inspect {{ enkiddb_read_volume }}"
+      delegate_to: "{{ enkiddb_read_host }}"
+      register: read_vol
+      changed_when: false
+
+    - name: "2.2 | Create a clean staging directory on enkidb-node-read"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        podman unshare rm -rf /tmp/enkiddb-topics-staging
+        mkdir -p /tmp/enkiddb-topics-staging
+      delegate_to: "{{ enkiddb_read_host }}"
+      changed_when: true
+
+    - name: "2.3 | Copy the live Data Files out of the volume (podman unshare, read-only)"
+      ansible.builtin.command: >-
+        podman unshare cp -a
+        {{ (read_vol.stdout | from_json)[0].Mountpoint }}/current
+        /tmp/enkiddb-topics-staging/current
+      delegate_to: "{{ enkiddb_read_host }}"
+      changed_when: true
+
+    - name: "2.4 | Tar it for transfer"
+      ansible.builtin.command: >-
+        tar czf /tmp/enkiddb-topics.tar.gz
+        -C /tmp/enkiddb-topics-staging current
+      delegate_to: "{{ enkiddb_read_host }}"
+      changed_when: true
+
+    - name: "2.5 | Pull the tarball down to this control node"
+      ansible.builtin.fetch:
+        src: "/tmp/enkiddb-topics.tar.gz"
+        dest: "/tmp/enkiddb-topics.tar.gz"
+        flat: true
+      delegate_to: "{{ enkiddb_read_host }}"
+
+    - name: "2.6 | Unpack it locally for enkiddb-cli to read"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        rm -rf /tmp/enkiddb-topics-report
+        mkdir -p /tmp/enkiddb-topics-report
+        tar xzf /tmp/enkiddb-topics.tar.gz -C /tmp/enkiddb-topics-report
+      changed_when: true
+
+    - name: "2.7 | Clean up the remote staging files (podman unshare -- see 2.2)"
+      ansible.builtin.shell: |
+        podman unshare rm -rf /tmp/enkiddb-topics-staging
+        rm -f /tmp/enkiddb-topics.tar.gz
+      delegate_to: "{{ enkiddb_read_host }}"
+      changed_when: true
+
+    - name: "2.8 | Clean up the fetched tarball on the control node"
+      ansible.builtin.file:
+        path: "/tmp/enkiddb-topics.tar.gz"
+        state: absent
+      changed_when: false
+
+    # ── 3. Run the real report ───────────────────────────────────────
+    - name: "3.1 | Run enkiddb-cli topics against the pulled copy"
+      ansible.builtin.command:
+        cmd: >-
+          {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}/workspace/bahyway_v4/target/release/enkiddb-cli
+          topics /tmp/enkiddb-topics-report
+      register: topics_report
+      changed_when: false
+
+    - name: "3.2 | Show the real topic graph report"
+      ansible.builtin.debug:
+        msg: "{{ topics_report.stdout_lines }}"
+
+    - name: "4.1 | Definition of done for this report"
+      ansible.builtin.debug:
+        msg: >-
+          Done means: 3.1 lists real topics from the corpus currently
+          live on enkidb-node-read, real document titles under each
+          (not "(untitled)" -- that would mean meta.title wasn't
+          projected), and at least one real cross-topic bridge with a
+          real affinity/radius pair, not an empty report. If everything
+          shows "unplaced," re-run PB-208 first -- this report only
+          reflects citation edges that exist in the corpus, it does not
+          fabricate any.

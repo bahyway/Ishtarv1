@@ -1,0 +1,60 @@
+-- BahyWay.Ecosystem v4.0 — Automation Pillar
+-- AutomationLog Particle Template
+--
+-- An AutomationLog records one execution of an AutomationTask:
+-- when it started, how long it ran, what the outcome was, and any error detail.
+-- Every log entry is a sovereign particle with its own KAKI — the full
+-- execution history is queryable via the OBSERVE geometric rotation query.
+--
+-- Required fields (completeness=1.0 or KAKI):
+--   log_id, task_kaki, epoch_start, outcome
+--
+-- Optional enrichment:
+--   epoch_end, duration_ms, error_message, retry_attempt, host_kaki, trigger_source
+
+PARTICLE AutomationLog {
+    log_id:          KAKI
+    task_kaki:       KAKI
+    epoch_start:     TEXT(completeness=1.0)
+    epoch_end:       TEXT
+    outcome:         TEXT(completeness=1.0)
+    duration_ms:     TEXT
+    error_message:   TEXT
+    retry_attempt:   TEXT
+    host_kaki:       KAKI
+    trigger_source:  TEXT
+    TRIBE: AutomationMDM
+}
+
+TRIBE AutomationMDM {
+    WEIGHTS: [0.30, 0.20, 0.15, 0.15, 0.10, 0.05, 0.05]
+    IDEAL:   [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+}
+
+RULE flag_failed_execution {
+    WHEN particle.hepta.health < 0.416
+    THEN
+        LANE = DEAD
+        EMIT StoryWay("automation_execution_failed")
+}
+
+RULE promote_successful_execution {
+    WHEN particle.hepta.health >= 0.833
+    THEN
+        LANE = GEM
+        EMIT StoryWay("automation_execution_golden")
+}
+
+OBSERVE failed_executions {
+    FROM: TRIBE AutomationMDM
+    WHERE: health < 0.416
+    SORT: orbital_radius DESC
+    LIMIT: 1000
+}
+
+OBSERVE recent_successful_executions {
+    FROM: TRIBE AutomationMDM
+    WHERE: health >= 0.833
+    SORT: orbital_radius DESC
+    LIMIT: 10000
+}

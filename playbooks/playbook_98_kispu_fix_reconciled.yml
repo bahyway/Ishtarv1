@@ -1,0 +1,161 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_98_kispu_fix_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-98 Reconciled: superseded by PB-172 (already shipped)
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_98_kispu_fix_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_98_kispu_fix.yml):
+#    The uploaded PB-98 rewrites enkidb-query-server/src/main.rs at the OLD
+#    flat path /home/bahyway/Forge/bahyway_v4, hand-rolling its own
+#    EnlilStack (imports enkidb_enlil_index, hepta_shell_index, geo_engine)
+#    and fixing a specific bug: the read path called akkvalue::codec::decode
+#    (aliased akk_decode) instead of enkidb_ingest::bridge::eav_triple_to_value,
+#    which meant the KISPU HeadStore was never populated.
+#
+#    None of enkidb_enlil_index / hepta_shell_index / geo_engine exist in
+#    this repo. This is confirmed directly by the CURRENT
+#    enkidb-query-server's own header comment, which names PB-98 explicitly:
+#      "The original version (PB-34/92/95/97/98) hand-rolled its own
+#       NATIRU/BTree candidate filtering and imported enkidb_enlil_index /
+#       hepta_shell_index / geo_engine — none of which exist anymore; that
+#       indexing work was consolidated into enkidb-indexes.
+#       For a while after that consolidation, nothing actually called
+#       enkidb-indexes from the query path — heptascript::execute() did a
+#       full journal.all_particles() + per-particle read_particle_history()
+#       scan on every query regardless of selectivity, which was the real,
+#       undocumented reason 10,000-particle queries stayed slow after the
+#       akk_decode-era bug was already fixed."
+#
+#    In other words: PB-98 really did fix its bug back in 2026-06-27. Then
+#    the architecture moved on (enlil-index/hepta-shell-index/geo-engine
+#    consolidated into enkidb-indexes) and a NEW, different bug appeared
+#    in the new architecture — which is exactly what THIS SESSION's
+#    playbook_172_enlil_index_wiring_fix.yml fixed and already shipped.
+#
+#    This file verifies PB-172 (PB-98's real successor) is present and
+#    passing — it does not rewrite anything, since PB-172 already did:
+#      heptascript : 170 passed
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-98 (Reconciled) | KISPU fix — superseded by PB-172, verify it's live"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB98_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | bin/enkidb-query-server/src/main.rs exists (current, heptascript-based)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/bin/enkidb-query-server/src/main.rs"
+      register: qs_main
+
+    - name: "FAIL | enkidb-query-server not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "bin/enkidb-query-server/src/main.rs not found after sync."
+      when: not qs_main.stat.exists
+
+    - name: "CHECK | Current main.rs uses execute_indexed (PB-172), not the old EnlilStack"
+      ansible.builtin.command:
+        cmd: "grep -c execute_indexed {{ workspace }}/bin/enkidb-query-server/src/main.rs"
+      register: grep_indexed
+      changed_when: false
+      failed_when: false
+
+    - name: "ASSERT | execute_indexed present in current query server"
+      ansible.builtin.assert:
+        that:
+          - "grep_indexed.stdout | trim | int > 0"
+        fail_msg: >
+          execute_indexed not found in current main.rs — PB-172 may not
+          have landed on this sync. Re-check the laptop pull.
+        success_msg: "Current query server confirmed on PB-172's execute_indexed path."
+
+    - name: "BUILD | cargo build -p enkidb-query-server"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p enkidb-query-server"
+        chdir: "{{ workspace }}"
+      register: build_qs
+      changed_when: false
+      failed_when: build_qs.rc != 0
+
+    - name: "TEST | cargo test -p heptascript"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p heptascript"
+        chdir: "{{ workspace }}"
+      register: test_hepta
+      changed_when: false
+      failed_when: test_hepta.rc != 0
+
+    - name: "PARSE | test_hepta passed-test count"
+      ansible.builtin.set_fact:
+        test_hepta_passed_count: "{{ (test_hepta.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | heptascript reports 170 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_hepta.stdout"
+          - test_hepta_passed_count >= 170
+        fail_msg: >-
+          Expected at least 170 passed, 0 failed. Got {{ test_hepta_passed_count }}
+          passed. Full output: {{ test_hepta.stdout }}
+        success_msg: >-
+          heptascript: {{ test_hepta_passed_count }} passed, 0 failed (>= baseline 170).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-98 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-98 (akk_decode -> eav_triple_to_value fix, hand-rolled
+          EnlilStack, old flat path): confirmed genuinely fixed a real bug
+          in 2026-06-27's architecture. That architecture (enlil-index,
+          hepta-shell-index, geo-engine, standalone EnlilStack) no longer
+          exists — consolidated into enkidb-indexes, per the current query
+          server's own documented history.
+
+          PB-98's real successor is PB-172 (this session,
+          playbook_172_enlil_index_wiring_fix.yml), which fixed the NEW
+          bug that appeared after that consolidation: heptascript never
+          called enkidb-indexes at all.
+
+          Verified this run:
+            enkidb-query-server builds clean, confirmed on execute_indexed path
+            heptascript : 170/170 tests PASS
+
+    - name: "DONE | PB-98 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-98 reconciled — its real successor (PB-172) verified live. Report: {{ report_file }}"

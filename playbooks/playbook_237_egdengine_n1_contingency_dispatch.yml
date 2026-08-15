@@ -1,0 +1,77 @@
+# =============================================================================
+# PB-237 -- EGDEngine: N-1 contingency sweep + risk-ranked dispatch
+# priority. BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHAT THIS ADDS (enrichment #1/#2 from the EGDEngine commercial
+# evaluation): egd-engine::exclusion::n_minus_1_sweep runs
+# simulate_exclusion over EVERY in-service edge, one at a time --
+# ETAP/PowerFactory-style N-1 contingency analysis, and a near-free
+# generalization of the PROVE-before-PRESCRIBE simulator PB-235 already
+# built (same function, called once per edge instead of once on
+# request). egd-engine::dispatch::dispatch_priority then combines two
+# numbers this crate already produces -- the Gibil horizon (probability
+# of failure) and the N-1 result's stranded-customer count
+# (consequence if it fails) -- into a single risk-ranked priority
+# score, without any new physics or static criticality tags.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Depends on
+# PB-235 (fdd-core, trend-core, egd-engine already present). Running
+# this playbook = CSR-08 Architect confirmation.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms egd-engine's dispatch module is present (committed
+#      source).
+#   2. `cargo test --release -p egd-engine` (all 16 tests: the 8 from
+#      PB-235 plus 3 N-1 contingency tests plus 5 dispatch-priority
+#      tests).
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_237_egdengine_n1_contingency_dispatch.yml
+# =============================================================================
+
+- name: "PB-237 -- EGDEngine N-1 contingency + risk-ranked dispatch"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    build_log: "/tmp/pb237_build.log"
+
+  tasks:
+    - name: "Confirm egd-engine's dispatch module is present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/crates/egd-engine/src/dispatch.rs"
+      register: dispatch_check
+
+    - name: "Fail clearly if dispatch.rs is missing"
+      ansible.builtin.fail:
+        msg: >-
+          crates/egd-engine/src/dispatch.rs not found at {{ repo_root }}.
+          Run `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- this is committed source, this playbook only builds
+          and verifies it.
+      when: not dispatch_check.stat.exists
+
+    - name: "cargo test egd-engine (release) -- N-1 contingency + dispatch priority"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p egd-engine > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-237 complete -- N-1 contingency sweep and risk-ranked
+          dispatch priority are real and tested (16/16 egd-engine
+          tests pass). Still not wired: surfacing N-1 results or
+          dispatch rank in the DubSar grid-nav lens UI (dubsar-gridnav-gd
+          has no bridge method for either yet) -- that's the next
+          honest gap, not hidden scope.

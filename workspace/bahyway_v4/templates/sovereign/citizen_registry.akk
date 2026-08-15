@@ -1,0 +1,104 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BahyWay.Ecosystem v4.0 — Sovereign Registry Pillar
+-- CitizenRegistry Particle Template
+--     citizen_registry.akk
+--
+-- Purpose:
+--   Iraqi / Arab sovereign civil registry particle. Represents a single
+--   natural person enrolled in the national civil registration system.
+--   Each particle maps to one citizen record — uniquely identified by
+--   national_id_kaki — and carries the canonical identity attributes
+--   required for cross-ministry MDM correlation.
+--
+-- VGCA-beam enforcement (completeness=1.0 blocks ingestion if absent):
+--   national_id_kaki, arabic_full_name, date_of_birth, gender, nationality
+--
+-- Quality-scored optional fields (enrich hepta score, never block):
+--   latin_name, mother_name, father_name, birth_governorate, birth_city,
+--   current_governorate, current_address, marital_status, passport_number,
+--   phone_number, email
+--
+-- Tribe weights (IraqiCitizenMDM, 7-component Heptagonal):
+--   accuracy=0.30   — names must be exact; transliteration errors penalised
+--   completeness=0.25 — birth data and identity fields required
+--   consistency=0.15  — cross-field coherence (DOB vs. issue dates, etc.)
+--   timeliness=0.15   — record freshness relative to last civil event
+--   uniqueness=0.10   — no duplicate national_id_kaki allowed in tribe
+--   validity=0.03     — format/range checks on national ID, DOB, gender
+--   integrity=0.02    — referential links to governorate and city KAKIs
+--
+-- QUALITY_DIVISOR: 240.0 (ADR-001)
+--
+-- Drop this file at: shard/profiles/{batch_name}.template.akk
+-- bee-watchdog loads it automatically and enforces this schema for every
+-- arriving batch named {batch_name}.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+PARTICLE CitizenRegistry {
+    -- ── Required identity fields (VGCA-beam enforced) ──────────────────────
+    national_id_kaki:      KAKI                                       -- 12-digit national ID, KAKI-encoded; primary sovereign key
+    arabic_full_name:      TEXT(accuracy=1.0, completeness=1.0)       -- full name in Arabic script (فلان بن فلان)
+    date_of_birth:         TEXT(accuracy=1.0, completeness=1.0)       -- ISO-8601 date; VGCA blocks if absent
+    gender:                TEXT(completeness=1.0)                     -- M | F — binary civil registry value
+    nationality:           TEXT(completeness=1.0)                     -- ISO 3166-1 alpha-3, e.g. IRQ
+
+    -- ── Optional personal enrichment ───────────────────────────────────────
+    latin_name:            TEXT(accuracy=0.95)                        -- Latin-script transliteration of full name
+    mother_name:           TEXT(accuracy=0.95)                        -- mother's first name in Arabic
+    father_name:           TEXT(accuracy=0.95)                        -- father's first name in Arabic
+    birth_governorate:     TEXT(accuracy=0.90)                        -- governorate of birth (Arabic)
+    birth_city:            TEXT(accuracy=0.90)                        -- city / district of birth
+    current_governorate:   TEXT(accuracy=0.90)                        -- current governorate of residence
+    current_address:       TEXT                                       -- free-text street address
+    marital_status:        TEXT(accuracy=0.90)                        -- SINGLE | MARRIED | DIVORCED | WIDOWED
+    passport_number:       TEXT(accuracy=0.95)                        -- passport number if available
+    phone_number:          TEXT                                        -- primary phone (E.164 preferred)
+    email:                 TEXT                                        -- email address (optional)
+
+    TRIBE: IraqiCitizenMDM
+}
+
+-- ── Tribe definition — 7-weight Heptagonal ────────────────────────────────
+-- Weights must sum to exactly 1.0
+-- [accuracy, completeness, consistency, timeliness, uniqueness, validity, integrity]
+TRIBE IraqiCitizenMDM {
+    WEIGHTS: [0.30, 0.25, 0.15, 0.15, 0.10, 0.03, 0.02]
+    IDEAL:   [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0]
+}
+
+-- ── Rule: Golden citizen record ────────────────────────────────────────────
+-- A hepta.health >= 0.833 (200/240.0) indicates a fully enriched, accurate,
+-- and timely record. Promote to GEM lane for priority MDM operations.
+RULE promote_citizen_golden {
+    WHEN particle.hepta.health >= 0.833
+    AND  particle.tribe = IraqiCitizenMDM
+    THEN
+        LANE = GEM
+        ORBIT = inner
+        EMIT StoryWay("citizen_record_golden")
+}
+
+-- ── Rule: Suspicious / anomalous record ───────────────────────────────────
+-- Flags records where health has dropped below 0.416 (possible duplicates,
+-- conflicting names between Arabic and Latin, or missing critical birth data
+-- that slipped through partial-batch ingestion). Routes to DEAD lane for
+-- manual review without deleting the particle.
+RULE flag_suspicious_citizen {
+    WHEN particle.hepta.health < 0.416
+    AND  particle.tribe = IraqiCitizenMDM
+    THEN
+        LANE = DEAD
+        ORBIT = outer
+        EMIT ZeroWay("citizen_record_suspicious")
+}
+
+-- ── Observe: Active citizen population ────────────────────────────────────
+-- Returns citizens whose records are health-qualified for live MDM queries.
+-- Sorted by orbital_radius ascending so the most orbit-stable (highest
+-- Heptagonal score) records surface first.
+OBSERVE active_citizens {
+    FROM: TRIBE IraqiCitizenMDM
+    WHERE: health >= 0.416
+    SORT: orbital_radius ASC
+    LIMIT: 100000
+}

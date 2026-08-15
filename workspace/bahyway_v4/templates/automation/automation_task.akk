@@ -1,0 +1,60 @@
+-- BahyWay.Ecosystem v4.0 — Automation Pillar
+-- AutomationTask Particle Template
+--
+-- An AutomationTask is the sovereign unit of automation: a named, scheduled,
+-- KAKI-identified action that the BeeMDM system can trigger, monitor, and record.
+--
+-- Required fields (completeness=1.0 or KAKI):
+--   task_id, task_name, schedule, status, owner_kaki
+--
+-- Optional enrichment:
+--   description, domain, priority, retry_count, last_run_epoch, tags
+--
+-- Drop this file at: shard/profiles/{batch_name}.template.akk
+-- bee-watchdog loads it automatically and enforces this schema for every
+-- arriving batch named {batch_name}.
+
+PARTICLE AutomationTask {
+    task_id:         KAKI
+    task_name:       TEXT(accuracy=1.0, completeness=1.0)
+    description:     TEXT
+    schedule:        TEXT(completeness=1.0)
+    status:          TEXT(completeness=1.0)
+    owner_kaki:      KAKI
+    domain:          TEXT
+    priority:        TEXT
+    retry_count:     TEXT
+    last_run_epoch:  TEXT
+    tags:            TEXT
+    TRIBE: AutomationMDM
+}
+
+TRIBE AutomationMDM {
+    WEIGHTS: [0.30, 0.20, 0.15, 0.15, 0.10, 0.05, 0.05]
+    IDEAL:   [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+}
+
+RULE promote_automation_golden {
+    WHEN particle.hepta.health >= 0.833
+    AND  particle.tribe = AutomationMDM
+    THEN
+        LANE = GEM
+        ORBIT = inner
+        EMIT StoryWay("automation_task_golden")
+}
+
+RULE flag_automation_fuzzy {
+    WHEN particle.hepta.health >= 0.416
+    AND  particle.hepta.health < 0.833
+    THEN
+        LANE = ACTIVE
+        ORBIT = outer
+        EMIT StoryWay("automation_task_active")
+}
+
+OBSERVE active_automation_tasks {
+    FROM: TRIBE AutomationMDM
+    WHERE: health >= 0.416
+    SORT: orbital_radius ASC
+    LIMIT: 10000
+}

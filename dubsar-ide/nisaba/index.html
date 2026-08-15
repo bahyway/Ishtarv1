@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NISABA — DubSar IDE Hologram Agent</title>
+  <style>
+    :root {
+      --cyan:   #00f5ff;
+      --blue:   #0066ff;
+      --violet: #8833ff;
+      --gold:   #ffd700;
+      --red:    #ff3366;
+      --green:  #00ff88;
+      --bg:     #010a14;
+      --panel:  rgba(0,20,40,0.75);
+      --border: rgba(0,245,255,0.18);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--cyan);
+      font-family: 'Courier New', monospace;
+      height: 100vh; overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Scanline overlay ── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 999;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+    }
+
+    /* ── Grid background ── */
+    .grid-bg {
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(0,245,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,245,255,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: grid-drift 20s linear infinite;
+    }
+    @keyframes grid-drift {
+      from { background-position: 0 0; }
+      to   { background-position: 40px 40px; }
+    }
+
+    /* ── Corner brackets ── */
+    .corner { position: fixed; width: 30px; height: 30px; z-index: 10; }
+    .corner::before, .corner::after {
+      content: ''; position: absolute; background: var(--cyan);
+    }
+    .corner::before { width: 100%; height: 2px; }
+    .corner::after  { width: 2px; height: 100%; }
+    .corner.tl { top: 12px; left: 12px; }
+    .corner.tr { top: 12px; right: 12px; transform: scaleX(-1); }
+    .corner.bl { bottom: 12px; left: 12px; transform: scaleY(-1); }
+    .corner.br { bottom: 12px; right: 12px; transform: scale(-1); }
+
+    /* ── Layout ── */
+    .layout {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-columns: 280px 1fr 280px;
+      grid-template-rows: 60px 1fr 160px;
+      height: 100vh;
+      gap: 0;
+      padding: 12px;
+    }
+
+    /* ── Header ── */
+    header {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-logo {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 1.3rem; font-weight: bold; letter-spacing: 0.3em;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan);
+    }
+    .header-logo svg { width: 32px; height: 32px; }
+    .header-sub { font-size: 0.6rem; letter-spacing: 0.25em; color: rgba(0,245,255,0.5); }
+    .header-status { display: flex; gap: 20px; font-size: 0.65rem; letter-spacing: 0.1em; }
+    .status-dot {
+      display: inline-block; width: 7px; height: 7px;
+      border-radius: 50%; margin-right: 5px;
+      animation: blink 1.5s ease-in-out infinite alternate;
+    }
+    .dot-green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+    .dot-yellow { background: var(--gold);   box-shadow: 0 0 6px var(--gold); animation-delay: 0.5s; }
+    .dot-red    { background: var(--red);    box-shadow: 0 0 6px var(--red);  animation-delay: 1s; }
+    @keyframes blink {
+      from { opacity: 0.5; } to { opacity: 1; }
+    }
+    .header-time { font-size: 0.7rem; color: rgba(0,245,255,0.6); letter-spacing: 0.1em; }
+
+    /* ── Panels ── */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(6px);
+      padding: 14px;
+      overflow: hidden;
+    }
+    .panel-title {
+      font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase;
+      color: rgba(0,245,255,0.5); border-bottom: 1px solid var(--border);
+      padding-bottom: 8px; margin-bottom: 12px;
+    }
+
+    /* ── Left panel ── */
+    .panel-left { grid-column: 1; grid-row: 2; }
+
+    .sys-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 0; border-bottom: 1px solid rgba(0,245,255,0.06);
+      font-size: 0.68rem;
+    }
+    .sys-label { color: rgba(0,245,255,0.7); }
+    .sys-value { color: var(--green); font-weight: bold; }
+    .sys-value.warn  { color: var(--gold); }
+    .sys-value.error { color: var(--red); }
+
+    .metric-bar { margin-top: 10px; }
+    .metric-label {
+      display: flex; justify-content: space-between;
+      font-size: 0.62rem; color: rgba(0,245,255,0.6); margin-bottom: 4px;
+    }
+    .bar-track {
+      height: 4px; background: rgba(0,245,255,0.1); border-radius: 2px; overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%; border-radius: 2px;
+      animation: bar-anim 3s ease-in-out infinite alternate;
+    }
+    .bar-cyan   { background: var(--cyan);  width: 68%; box-shadow: 0 0 8px var(--cyan); }
+    .bar-green  { background: var(--green); width: 45%; box-shadow: 0 0 8px var(--green); }
+    .bar-violet { background: var(--violet);width: 82%; box-shadow: 0 0 8px var(--violet); }
+    .bar-gold   { background: var(--gold);  width: 31%; box-shadow: 0 0 8px var(--gold); }
+    @keyframes bar-anim {
+      from { opacity: 0.7; } to { opacity: 1; }
+    }
+
+    /* ── Center ── */
+    .panel-center {
+      grid-column: 2; grid-row: 2;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; position: relative;
+      border: none; background: transparent;
+    }
+
+    canvas#hologram {
+      width: 420px; height: 420px;
+      filter: drop-shadow(0 0 30px rgba(0,245,255,0.4))
+              drop-shadow(0 0 60px rgba(0,245,255,0.15));
+    }
+
+    .nisaba-name {
+      margin-top: 10px;
+      font-size: 1.8rem; font-weight: bold; letter-spacing: 0.5em;
+      color: var(--cyan); text-shadow: 0 0 30px var(--cyan);
+      animation: name-pulse 3s ease-in-out infinite;
+    }
+    @keyframes name-pulse {
+      0%,100% { text-shadow: 0 0 20px var(--cyan), 0 0 40px rgba(0,245,255,0.3); }
+      50%      { text-shadow: 0 0 40px var(--cyan), 0 0 80px rgba(0,245,255,0.5); }
+    }
+    .nisaba-role {
+      font-size: 0.62rem; letter-spacing: 0.35em; color: rgba(0,245,255,0.5);
+      margin-top: 4px;
+    }
+
+    /* Rings around canvas */
+    .ring-wrap {
+      position: absolute;
+      width: 440px; height: 440px;
+      pointer-events: none;
+    }
+    .ring {
+      position: absolute; border-radius: 50%;
+      border: 1px solid rgba(0,245,255,0.15);
+    }
+    .ring-1 { inset: 0;    animation: ring-spin  8s linear infinite; }
+    .ring-2 { inset: 20px; animation: ring-spin 12s linear infinite reverse; }
+    .ring-3 { inset: 40px; animation: ring-spin 20s linear infinite; }
+    @keyframes ring-spin {
+      from { transform: rotateX(70deg) rotate(0deg); }
+      to   { transform: rotateX(70deg) rotate(360deg); }
+    }
+
+    /* ── Right panel ── */
+    .panel-right { grid-column: 3; grid-row: 2; }
+
+    .complexity-item {
+      margin-bottom: 12px;
+    }
+    .complexity-title {
+      font-size: 0.62rem; color: rgba(0,245,255,0.6);
+      letter-spacing: 0.15em; margin-bottom: 4px;
+    }
+    .complexity-value {
+      font-size: 1.1rem; font-weight: bold; color: var(--cyan);
+      text-shadow: 0 0 10px var(--cyan);
+    }
+    .complexity-value.high { color: var(--red); text-shadow: 0 0 10px var(--red); }
+    .complexity-value.med  { color: var(--gold); text-shadow: 0 0 10px var(--gold); }
+
+    .alert-box {
+      margin-top: 8px; padding: 8px 10px;
+      border: 1px solid rgba(255,51,102,0.3);
+      background: rgba(255,51,102,0.06);
+      border-radius: 2px; font-size: 0.6rem;
+      color: rgba(255,100,140,0.9); line-height: 1.6;
+      animation: alert-flash 2s ease-in-out infinite;
+    }
+    @keyframes alert-flash {
+      0%,100% { border-color: rgba(255,51,102,0.3); }
+      50%      { border-color: rgba(255,51,102,0.7); }
+    }
+
+    /* ── Bottom bar ── */
+    .panel-bottom {
+      grid-column: 1 / -1; grid-row: 3;
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    /* Chat log */
+    #chat-log {
+      flex: 1; overflow-y: auto; font-size: 0.7rem; line-height: 1.7;
+      display: flex; flex-direction: column; gap: 4px;
+      max-height: 72px;
+    }
+    #chat-log::-webkit-scrollbar { width: 3px; }
+    #chat-log::-webkit-scrollbar-thumb { background: var(--cyan); border-radius: 2px; }
+
+    .msg-nisaba { color: var(--cyan); }
+    .msg-nisaba span { color: rgba(0,245,255,0.5); margin-right: 8px; }
+    .msg-user   { color: rgba(255,255,255,0.7); }
+    .msg-user span { color: rgba(255,255,255,0.3); margin-right: 8px; }
+    .msg-system { color: var(--gold); font-size: 0.6rem; opacity: 0.7; }
+
+    /* Input row */
+    .input-row {
+      display: flex; gap: 10px; align-items: center;
+    }
+    .input-prefix {
+      font-size: 0.75rem; color: var(--cyan); white-space: nowrap;
+      text-shadow: 0 0 8px var(--cyan);
+    }
+    #user-input {
+      flex: 1; background: rgba(0,245,255,0.04);
+      border: 1px solid rgba(0,245,255,0.25);
+      color: white; font-family: 'Courier New', monospace;
+      font-size: 0.75rem; padding: 7px 12px; outline: none;
+      transition: border-color 0.2s;
+    }
+    #user-input:focus { border-color: var(--cyan); box-shadow: 0 0 12px rgba(0,245,255,0.2); }
+    #user-input::placeholder { color: rgba(0,245,255,0.25); }
+
+    .btn {
+      padding: 7px 18px; font-family: 'Courier New', monospace;
+      font-size: 0.7rem; letter-spacing: 0.15em; cursor: pointer;
+      border: 1px solid; transition: all 0.2s;
+    }
+    .btn-send {
+      background: rgba(0,245,255,0.1); border-color: var(--cyan);
+      color: var(--cyan);
+    }
+    .btn-send:hover { background: rgba(0,245,255,0.25); box-shadow: 0 0 16px rgba(0,245,255,0.3); }
+    .btn-voice {
+      background: rgba(136,51,255,0.1); border-color: var(--violet);
+      color: var(--violet);
+    }
+    .btn-voice:hover  { background: rgba(136,51,255,0.25); }
+    .btn-voice.active { background: rgba(136,51,255,0.4); animation: voice-pulse 0.8s ease infinite alternate; }
+    @keyframes voice-pulse { from { box-shadow: 0 0 0 rgba(136,51,255,0); } to { box-shadow: 0 0 20px rgba(136,51,255,0.6); } }
+    .btn-clear {
+      background: transparent; border-color: rgba(0,245,255,0.2); color: rgba(0,245,255,0.4);
+    }
+    .btn-clear:hover { border-color: var(--red); color: var(--red); }
+
+    /* Typing indicator */
+    .typing {
+      display: none; align-items: center; gap: 5px;
+      font-size: 0.62rem; color: rgba(0,245,255,0.5);
+    }
+    .typing.show { display: flex; }
+    .typing-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--cyan); animation: tdot 1s ease infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes tdot {
+      0%,100% { opacity: 0.2; transform: translateY(0); }
+      50%      { opacity: 1;   transform: translateY(-4px); }
+    }
+
+    /* API key notice */
+    .api-notice {
+      font-size: 0.58rem; color: rgba(255,215,0,0.5);
+      letter-spacing: 0.08em; text-align: center;
+    }
+    .api-notice a { color: var(--gold); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<div class="layout">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-logo">
+      <!-- Heptagram mini -->
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 2 L19.5 24.5 L5.5 8 L26.5 17 L2.5 17 L23.5 8 L9.5 24.5 Z"
+          stroke="#00f5ff" stroke-width="1.5" stroke-linejoin="round"
+          fill="rgba(0,245,255,0.07)"/>
+      </svg>
+      <div>
+        <div>DUBSAR IDE</div>
+        <div class="header-sub">ERIDU OS v4.0 · BAHYWAY ECOSYSTEM</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div><span class="status-dot dot-green"></span>ENKIDB</div>
+      <div><span class="status-dot dot-green"></span>PODMAN</div>
+      <div><span class="status-dot dot-yellow"></span>NISABA</div>
+      <div><span class="status-dot dot-green"></span>ERIDU-NET</div>
+    </div>
+    <div class="header-time" id="clock">──:──:──</div>
+  </header>
+
+  <!-- LEFT PANEL: System Status -->
+  <div class="panel panel-left">
+    <div class="panel-title">⬡ System Matrix</div>
+
+    <div class="sys-item"><span class="sys-label">EriduOS v4.0</span><span class="sys-value">ONLINE</span></div>
+    <div class="sys-item"><span class="sys-label">EnkiDB</span><span class="sys-value">ACTIVE</span></div>
+    <div class="sys-item"><span class="sys-label">Podman Socket</span><span class="sys-value">BOUND</span></div>
+    <div class="sys-item"><span class="sys-label">eridu-net</span><span class="sys-value">UP</span></div>
+    <div class="sys-item"><span class="sys-label">Claude API</span><span class="sys-value warn" id="api-status">CONFIGURE</span></div>
+    <div class="sys-item"><span class="sys-label">Voice Engine</span><span class="sys-value" id="voice-status">LOADING</span></div>
+    <div class="sys-item"><span class="sys-label">WebSocket</span><span class="sys-value warn">STANDBY</span></div>
+
+    <div style="margin-top:16px">
+      <div class="metric-bar">
+        <div class="metric-label"><span>CPU</span><span id="cpu-val">68%</span></div>
+        <div class="bar-track"><div class="bar-fill bar-cyan" id="cpu-bar"></div></div>
+      </div>
+      <div class="metric-bar" style="margin-top:10px">
+        <div class="metric-label"><span>MEMORY</span><span>45%</span></div>
+        <div class="bar-track"><div class="bar-fill bar-green"></div></div>
+      </div>
+      <div class="metric-bar" style="margin-top:10px">
+        <div class="metric-label"><span>SIMPLICIAL Ω</span><span id="omega-val">82%</span></div>
+        <div class="bar-track"><div class="bar-fill bar-violet" id="omega-bar"></div></div>
+      </div>
+      <div class="metric-bar" style="margin-top:10px">
+        <div class="metric-label"><span>SCHEMA DRIFT</span><span>31%</span></div>
+        <div class="bar-track"><div class="bar-fill bar-gold"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: Hologram Canvas -->
+  <div class="panel-center">
+    <div class="ring-wrap">
+      <div class="ring ring-1"></div>
+      <div class="ring ring-2"></div>
+      <div class="ring ring-3"></div>
+    </div>
+    <canvas id="hologram" width="420" height="420"></canvas>
+    <div class="nisaba-name">NISABA</div>
+    <div class="nisaba-role">SOVEREIGN HOLOGRAM AGENT · DUBSAR IDE</div>
+  </div>
+
+  <!-- RIGHT PANEL: Complexity Metrics -->
+  <div class="panel panel-right">
+    <div class="panel-title">⬡ Data Complexity</div>
+
+    <div class="complexity-item">
+      <div class="complexity-title">SIMPLICIAL DIMENSION</div>
+      <div class="complexity-value high" id="simp-dim">Δ = 7</div>
+    </div>
+    <div class="complexity-item">
+      <div class="complexity-title">BETTI NUMBER β₁</div>
+      <div class="complexity-value med" id="betti">β₁ = 14</div>
+    </div>
+    <div class="complexity-item">
+      <div class="complexity-title">NODE ENTANGLEMENT</div>
+      <div class="complexity-value" id="entangle">0.342</div>
+    </div>
+    <div class="complexity-item">
+      <div class="complexity-title">SCHEMA VERTICES</div>
+      <div class="complexity-value">V = 247</div>
+    </div>
+    <div class="complexity-item">
+      <div class="complexity-title">ACTIVE SIMPLICES</div>
+      <div class="complexity-value med">σ = 1,893</div>
+    </div>
+
+    <div class="alert-box" id="alert-box">
+      ⚠ HIGH COMPLEXITY DETECTED<br/>
+      EnkiDB schema layer 3 shows topological
+      instability. Recommend simplification pass.
+      Contact: Data Architecture Team.
+    </div>
+  </div>
+
+  <!-- BOTTOM: Chat Interface -->
+  <div class="panel-bottom">
+    <div id="chat-log">
+      <div class="msg-system">// NISABA HOLOGRAM AGENT INITIALIZED · DUBSAR IDE v0.1</div>
+      <div class="msg-nisaba"><span>[NISABA]</span>Sovereign agent online. I am monitoring your EnkiDB schema and EriduOS v4.0 environment. Ask me anything about your data models, architecture, or system status.</div>
+    </div>
+    <div class="typing" id="typing">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <span style="margin-left:4px">NISABA IS THINKING</span>
+    </div>
+    <div class="input-row">
+      <span class="input-prefix">NISABA://&gt;</span>
+      <input type="text" id="user-input" placeholder="Ask NISABA about your data model, schema complexity, or architecture..." autocomplete="off"/>
+      <button class="btn btn-voice" id="btn-voice" title="Voice input">🎙 VOICE</button>
+      <button class="btn btn-send" id="btn-send">SEND ⏎</button>
+      <button class="btn btn-clear" id="btn-clear">CLR</button>
+    </div>
+    <div class="api-notice">
+      ⚡ NISABA uses Claude API — set your key:
+      <code id="api-key-display">ANTHROPIC_API_KEY not configured</code>
+      &nbsp;·&nbsp;
+      <a href="#" id="set-key-btn">[ SET KEY ]</a>
+      &nbsp;·&nbsp;
+      <span id="ws-status">WebSocket: disconnected</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  CLOCK
+// ══════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toTimeString().slice(0,8) + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ══════════════════════════════════════════════
+//  HOLOGRAM CANVAS
+// ══════════════════════════════════════════════
+const canvas = document.getElementById('hologram');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height, CX = W/2, CY = H/2;
+
+// Particle system
+const PARTICLE_COUNT = 120;
+const particles = [];
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const angle  = Math.random() * Math.PI * 2;
+  const radius = 30 + Math.random() * 160;
+  particles.push({
+    angle,
+    radius,
+    speed:  (Math.random() - 0.5) * 0.008,
+    size:   Math.random() * 2.5 + 0.5,
+    opacity: Math.random() * 0.7 + 0.2,
+    layer:  Math.floor(Math.random() * 3),
+    vr:     (Math.random() - 0.5) * 0.3,
+  });
+}
+
+// Simplicial edges (random but deterministic)
+const edges = [];
+const nodeCount = 22;
+const nodes = [];
+for (let i = 0; i < nodeCount; i++) {
+  const a = (i / nodeCount) * Math.PI * 2;
+  const r = 60 + (i % 3) * 35;
+  nodes.push({ x: CX + Math.cos(a)*r, y: CY + Math.sin(a)*r });
+}
+for (let i = 0; i < nodeCount; i++) {
+  for (let j = i+1; j < nodeCount; j++) {
+    if (Math.random() < 0.18) edges.push([i,j]);
+  }
+}
+
+// {7/3} heptagram vertices
+const HEPTA_R = 155;
+const heptaVerts = [];
+for (let i = 0; i < 7; i++) {
+  const a = -Math.PI/2 + (i/7)*Math.PI*2;
+  heptaVerts.push({ x: CX + Math.cos(a)*HEPTA_R, y: CY + Math.sin(a)*HEPTA_R });
+}
+// {7/3} connection order: 0,3,6,2,5,1,4,0
+const heptaOrder = [0,3,6,2,5,1,4];
+
+let rot = 0;
+let innerRot = 0;
+let speaking = false;
+let speakPhase = 0;
+let time = 0;
+
+function lerp(a, b, t) { return a + (b-a)*t; }
+
+function drawFrame() {
+  ctx.clearRect(0, 0, W, H);
+
+  // ── Radial glow background ──
+  const grd = ctx.createRadialGradient(CX, CY, 0, CX, CY, 200);
+  grd.addColorStop(0,   'rgba(0,100,255,0.06)');
+  grd.addColorStop(0.5, 'rgba(0,245,255,0.03)');
+  grd.addColorStop(1,   'transparent');
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(CX, CY, 200, 0, Math.PI*2); ctx.fill();
+
+  // ── Outer reference circles ──
+  [170, 140, 110, 75, 42].forEach((r, i) => {
+    ctx.beginPath();
+    ctx.arc(CX, CY, r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(0,245,255,${0.04 + i*0.015})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // ── Rotating {7/3} heptagram ──
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(rot);
+  ctx.translate(-CX, -CY);
+
+  ctx.beginPath();
+  const startV = heptaVerts[heptaOrder[0]];
+  ctx.moveTo(startV.x, startV.y);
+  for (let i = 1; i <= heptaOrder.length; i++) {
+    const v = heptaVerts[heptaOrder[i % heptaOrder.length]];
+    ctx.lineTo(v.x, v.y);
+  }
+  ctx.closePath();
+
+  const heptaGlow = speaking ? `rgba(0,245,255,${0.25 + Math.sin(speakPhase)*0.15})` : 'rgba(0,245,255,0.12)';
+  ctx.fillStyle = heptaGlow;
+  ctx.fill();
+  ctx.strokeStyle = speaking
+    ? `rgba(0,245,255,${0.8 + Math.sin(speakPhase)*0.2})`
+    : 'rgba(0,245,255,0.6)';
+  ctx.lineWidth = speaking ? 2.5 : 1.8;
+  ctx.shadowColor = 'rgba(0,245,255,0.8)';
+  ctx.shadowBlur  = speaking ? 20 : 12;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // ── Simplicial complex edges ──
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(-innerRot);
+  ctx.translate(-CX, -CY);
+  edges.forEach(([i,j]) => {
+    const ni = nodes[i], nj = nodes[j];
+    ctx.beginPath();
+    ctx.moveTo(ni.x, ni.y);
+    ctx.lineTo(nj.x, nj.y);
+    ctx.strokeStyle = 'rgba(0,245,255,0.12)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  });
+  nodes.forEach((n, idx) => {
+    const pulse = 0.6 + Math.sin(time * 2 + idx) * 0.4;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, 2.5, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(0,245,255,${pulse * 0.8})`;
+    ctx.shadowColor = 'rgba(0,245,255,0.9)';
+    ctx.shadowBlur  = 6;
+    ctx.fill();
+    ctx.shadowBlur  = 0;
+  });
+  ctx.restore();
+
+  // ── Particles ──
+  particles.forEach(p => {
+    p.angle  += p.speed;
+    p.radius += Math.sin(time + p.angle) * 0.05;
+
+    const px = CX + Math.cos(p.angle) * p.radius;
+    const py = CY + Math.sin(p.angle) * p.radius;
+    const colors = ['0,245,255', '0,100,255', '136,51,255'];
+    const col = colors[p.layer];
+    const glow = ctx.createRadialGradient(px,py,0, px,py, p.size*3);
+    glow.addColorStop(0, `rgba(${col},${p.opacity})`);
+    glow.addColorStop(1, `rgba(${col},0)`);
+    ctx.beginPath();
+    ctx.arc(px, py, p.size*3, 0, Math.PI*2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+  });
+
+  // ── Center avatar core ──
+  const coreR = speaking ? 28 + Math.sin(speakPhase)*8 : 22;
+  const coreG = ctx.createRadialGradient(CX,CY,0, CX,CY,coreR);
+  coreG.addColorStop(0,   'rgba(255,255,255,0.95)');
+  coreG.addColorStop(0.3, 'rgba(0,245,255,0.8)');
+  coreG.addColorStop(0.7, 'rgba(0,100,255,0.4)');
+  coreG.addColorStop(1,   'transparent');
+  ctx.beginPath(); ctx.arc(CX,CY,coreR,0,Math.PI*2);
+  ctx.fillStyle = coreG;
+  ctx.shadowColor = 'rgba(0,245,255,1)';
+  ctx.shadowBlur  = speaking ? 40 : 25;
+  ctx.fill();
+  ctx.shadowBlur  = 0;
+
+  // ── Speech waveform ring ──
+  if (speaking) {
+    const bars = 48;
+    for (let i = 0; i < bars; i++) {
+      const a = (i/bars) * Math.PI*2;
+      const amp = 10 + Math.sin(speakPhase*3 + i*0.5)*14 + Math.random()*6;
+      const r1 = 35, r2 = r1 + amp;
+      ctx.beginPath();
+      ctx.moveTo(CX + Math.cos(a)*r1, CY + Math.sin(a)*r1);
+      ctx.lineTo(CX + Math.cos(a)*r2, CY + Math.sin(a)*r2);
+      ctx.strokeStyle = `rgba(0,245,255,${0.3 + amp/40})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    speakPhase += 0.12;
+  }
+
+  // ── Physics constants labels (fixed, non-rotating) ──
+  const constLabels = ['ℏ','k_B','e','c','π','G','1'];
+  ctx.font = 'italic 13px Georgia, serif';
+  ctx.fillStyle = 'rgba(255,215,0,0.55)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  heptaVerts.forEach((v, i) => {
+    const dx = v.x - CX, dy = v.y - CY;
+    const nx = CX + dx * 1.18, ny = CY + dy * 1.18;
+    ctx.fillText(constLabels[i], nx, ny);
+  });
+
+  rot      += 0.003;
+  innerRot += 0.001;
+  time     += 0.016;
+
+  requestAnimationFrame(drawFrame);
+}
+drawFrame();
+
+// ══════════════════════════════════════════════
+//  VOICE OUTPUT (Web Speech API)
+// ══════════════════════════════════════════════
+const synth = window.speechSynthesis;
+let voiceEnabled = true;
+
+function checkVoice() {
+  if (synth) {
+    document.getElementById('voice-status').textContent = 'READY';
+    document.getElementById('voice-status').style.color = 'var(--green)';
+  } else {
+    document.getElementById('voice-status').textContent = 'UNAVAILABLE';
+    document.getElementById('voice-status').style.color = 'var(--red)';
+    voiceEnabled = false;
+  }
+}
+setTimeout(checkVoice, 500);
+
+function speak(text) {
+  if (!voiceEnabled || !synth) return;
+  synth.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  const voices = synth.getVoices();
+  const preferred = voices.find(v =>
+    v.name.includes('Google') || v.name.includes('Samantha') ||
+    v.name.includes('Karen')  || v.lang === 'en-US'
+  );
+  if (preferred) utt.voice = preferred;
+  utt.rate   = 0.92;
+  utt.pitch  = 1.05;
+  utt.volume = 0.9;
+  utt.onstart = () => { speaking = true; speakPhase = 0; };
+  utt.onend   = () => { speaking = false; };
+  synth.speak(utt);
+}
+
+// ══════════════════════════════════════════════
+//  VOICE INPUT (Web Speech Recognition)
+// ══════════════════════════════════════════════
+let recognition = null;
+const voiceBtn = document.getElementById('btn-voice');
+
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.onresult = e => {
+    document.getElementById('user-input').value = e.results[0][0].transcript;
+    voiceBtn.classList.remove('active');
+    voiceBtn.textContent = '🎙 VOICE';
+  };
+  recognition.onend = () => {
+    voiceBtn.classList.remove('active');
+    voiceBtn.textContent = '🎙 VOICE';
+  };
+} else {
+  voiceBtn.disabled = true;
+  voiceBtn.title = 'Speech recognition not available in this browser';
+}
+
+voiceBtn.addEventListener('click', () => {
+  if (!recognition) return;
+  if (voiceBtn.classList.contains('active')) {
+    recognition.stop();
+  } else {
+    recognition.start();
+    voiceBtn.classList.add('active');
+    voiceBtn.textContent = '⏹ STOP';
+  }
+});
+
+// ══════════════════════════════════════════════
+//  CLAUDE API
+// ══════════════════════════════════════════════
+let ANTHROPIC_KEY = localStorage.getItem('nisaba_api_key') || '';
+updateApiDisplay();
+
+function updateApiDisplay() {
+  const el = document.getElementById('api-key-display');
+  const st = document.getElementById('api-status');
+  if (ANTHROPIC_KEY) {
+    el.textContent = '••••••••' + ANTHROPIC_KEY.slice(-6);
+    st.textContent = 'CONNECTED';
+    st.style.color = 'var(--green)';
+  } else {
+    el.textContent = 'ANTHROPIC_API_KEY not configured';
+    st.textContent = 'CONFIGURE';
+    st.style.color = 'var(--gold)';
+  }
+}
+
+document.getElementById('set-key-btn').addEventListener('click', e => {
+  e.preventDefault();
+  const key = prompt('Enter your Anthropic API key (stored in localStorage only):');
+  if (key && key.startsWith('sk-')) {
+    ANTHROPIC_KEY = key;
+    localStorage.setItem('nisaba_api_key', key);
+    updateApiDisplay();
+    appendMsg('system', '// API key configured. NISABA now connected to Claude.');
+  } else if (key) {
+    alert('Invalid key format. Anthropic keys start with "sk-"');
+  }
+});
+
+const NISABA_PROMPT = `You are NISABA, the Sovereign Hologram Agent for EriduOS v4.0 and the BahyWay Ecosystem, embedded inside the DubSar IDE. You are an expert in:
+- EnkiDB database architecture and schema design
+- Simplicial complex topology and particle data modeling
+- Rust systems programming
+- Podman containers on Fedora Silverblue
+- Data model complexity analysis and simplification recommendations
+- Guiding stakeholders through complex technical systems
+
+Speak with authority, precision, and a slightly futuristic tone. Keep responses concise (2-4 sentences) unless a detailed explanation is needed. When data models are complex or messy, proactively recommend simplification strategies and who to contact for help. Always sign off complex answers with a helpful next-step directive.`;
+
+async function callClaude(userMessage) {
+  if (!ANTHROPIC_KEY) {
+    return "I am not yet connected to the Claude API. Please configure your Anthropic API key using the [ SET KEY ] link below. Once connected, I can provide real-time analysis of your EnkiDB schema and EriduOS architecture.";
+  }
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 400,
+      system: NISABA_PROMPT,
+      messages: [{ role: 'user', content: userMessage }]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.content[0].text;
+}
+
+// ══════════════════════════════════════════════
+//  CHAT INTERFACE
+// ══════════════════════════════════════════════
+const chatLog   = document.getElementById('chat-log');
+const inputEl   = document.getElementById('user-input');
+const typingEl  = document.getElementById('typing');
+
+function appendMsg(role, text) {
+  const div = document.createElement('div');
+  if (role === 'nisaba') {
+    div.className = 'msg-nisaba';
+    div.innerHTML = `<span>[NISABA]</span>${text}`;
+  } else if (role === 'user') {
+    div.className = 'msg-user';
+    div.innerHTML = `<span>[YOU]</span>${text}`;
+  } else {
+    div.className = 'msg-system';
+    div.textContent = text;
+  }
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = '';
+  appendMsg('user', text);
+  typingEl.classList.add('show');
+  document.getElementById('btn-send').disabled = true;
+
+  try {
+    const reply = await callClaude(text);
+    typingEl.classList.remove('show');
+    appendMsg('nisaba', reply);
+    speak(reply);
+  } catch (err) {
+    typingEl.classList.remove('show');
+    const errMsg = `Connection error: ${err.message}. Check your API key and network.`;
+    appendMsg('nisaba', errMsg);
+  }
+  document.getElementById('btn-send').disabled = false;
+}
+
+document.getElementById('btn-send').addEventListener('click', sendMessage);
+inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+document.getElementById('btn-clear').addEventListener('click', () => {
+  chatLog.innerHTML = '<div class="msg-system">// CHAT LOG CLEARED</div>';
+});
+
+// ══════════════════════════════════════════════
+//  LIVE METRICS ANIMATION
+// ══════════════════════════════════════════════
+setInterval(() => {
+  const cpu = Math.floor(55 + Math.random()*30);
+  const omega = Math.floor(70 + Math.random()*25);
+  document.getElementById('cpu-val').textContent = cpu + '%';
+  document.getElementById('cpu-bar').style.width  = cpu + '%';
+  document.getElementById('omega-val').textContent = omega + '%';
+  document.getElementById('omega-bar').style.width  = omega + '%';
+
+  const beta = Math.floor(10 + Math.random()*12);
+  document.getElementById('betti').textContent = `β₁ = ${beta}`;
+  document.getElementById('betti').className = 'complexity-value ' + (beta > 18 ? 'high' : 'med');
+
+  const ent = (0.2 + Math.random()*0.4).toFixed(3);
+  document.getElementById('entangle').textContent = ent;
+  document.getElementById('entangle').className = 'complexity-value ' + (ent > 0.5 ? 'high' : '');
+}, 3000);
+
+// ══════════════════════════════════════════════
+//  STARTUP GREETING
+// ══════════════════════════════════════════════
+setTimeout(() => {
+  const greeting = "NISABA online. EriduOS v4.0 systems nominal. I am monitoring your EnkiDB schema topology and ready to assist with data modeling complexity. How can I guide you today?";
+  speak(greeting);
+}, 1200);
+</script>
+</body>
+</html>

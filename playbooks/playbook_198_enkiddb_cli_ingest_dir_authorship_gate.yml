@@ -1,0 +1,143 @@
+# =============================================================================
+# PB-198 — EnkiDDB directory-ingest, for real: enkiddb-cli (scan / categorize
+# / run) + enkiddb-write-server's INGEST_DIR:<path>, both gated by a
+# git-based BahyWay.Ecosystem team-authorship check
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: closes EnkiDDB_ROADMAP.md's Phase 2, the one item on that
+# roadmap explicitly marked NOT STARTED with an undecided implementation
+# choice ("(a) server command, or (b) CLI binary -- not decided yet, a
+# real design choice"). The Architect's answer: build both, and add a
+# security requirement the roadmap hadn't scoped -- "the CLI Command
+# that can scan first, categorize second and run last (with security
+# check if the creator are NOT BahyWay.Ecosystem team member)".
+#
+# WHAT WAS BUILT, grounded in real, already-existing code -- researched
+# first via a read-only Explore pass over WriteNode, the wire-protocol
+# precedent in enkimdb-write-server, and the whole repo for any existing
+# "team member" / authorship concept (none existed) before writing a
+# line of new code:
+#
+#  1. crates/enkiddb/src/authorship.rs -- NEW. `TeamAllowlist` (git
+#     author emails, case-insensitive; `::seed()` bootstraps with the
+#     Architect's own real git identities found by inspecting this
+#     repo's own `git log` history directly -- bfadam@bahyway.com,
+#     bfadam@bahyway.example, the bahyway GitHub-noreply address, plus
+#     bahaa.fadam@gmail.com; `::from_file`/`::from_env_or_seed` for
+#     real deployments). `git_author_email` shells out to
+#     `git log -1 --format=%ae -- <file>`; `check_authorship` fails
+#     CLOSED -- an untracked file, a repo with no git, or an
+#     undeterminable author is never authorized, never silently
+#     admitted. Deliberately built on git history, not a new invented
+#     signature scheme: no document format in this repo attaches a seal
+#     to a plain Markdown file today, so `kupru`'s real Ed25519
+#     primitives aren't a fit yet -- flagged as a real future upgrade
+#     path, not pretended into place now. Deliberately does NOT trust
+#     this agent's own commit identity (noreply@anthropic.com) --
+#     verified live: every file in this repo's real docs/ is currently
+#     authored under that identity, and the CLI correctly refuses all
+#     34 of them by default (see verification below), rather than
+#     rubber-stamping whatever process happens to be doing the ingesting.
+#     6 new tests.
+#
+#  2. crates/enkiddb/src/ingest.rs -- extended `IngestError` with
+#     `UnauthorizedCreator { path, author }`, a real `Display`/`Error`
+#     impl (the enum had neither before -- nothing had ever formatted
+#     it across a process boundary until this playbook's server command
+#     needed to), and a new public `scan_markdown_directory` (the
+#     directory walk, exposed on its own so a caller can inspect what
+#     would be ingested before categorizing or running it -- previously
+#     `pub(crate)`-only). 1 new test.
+#
+#  3. crates/enkiddb/src/writenode.rs -- new
+#     `WriteNode::ingest_directory_categorized_checked`: same walk as
+#     `ingest_directory_categorized`, but every file's authorship is
+#     checked BEFORE any file is journaled, and the whole call aborts
+#     (fails closed) at the first unauthorized or undeterminable-author
+#     file rather than silently skipping just that one -- a directory
+#     with one unexpected source shouldn't quietly ingest the rest
+#     around it. 2 new tests (authorizes when every author is allowed;
+#     rejects and journals nothing when one author is not).
+#
+#  4. bin/enkiddb-cli -- NEW binary. `enkiddb-cli ingest <dir>
+#     [--data-dir <dir>] [--tribe <hex>] [--team-allowlist <file>]
+#     [--epoch-start <n>] [--dry-run]`, three explicit, always-in-order
+#     stages the Architect specified literally: SCAN (list every .md
+#     file), CATEGORIZE (report each file's real `infer_collection`
+#     result and its authorship verdict -- every rejection visible
+#     BEFORE anything runs, not discovered after), RUN (journal via
+#     `ingest_directory_categorized_checked` -- the same check enforced
+#     again in the library, not just this CLI's display -- then
+#     `readnode::materialize_now` writes real Data Files). `--dry-run`
+#     stops after CATEGORIZE.
+#
+#  5. bin/enkiddb-write-server -- added `INGEST_DIR:<path>` to the wire
+#     protocol, mirroring `enkimdb-write-server`'s `SCAN_CRATES:`/
+#     `SCAN_PLAYBOOKS:` shape exactly (same `strip_prefix` dispatch,
+#     same `OK:INGESTED:<count>`/`ERR:<context>: <e>` response shape).
+#     Uses the same `ingest_directory_categorized_checked` gate as the
+#     CLI, allowlist from `$ENKIDDB_TEAM_ALLOWLIST` or the seed -- the
+#     policy can't be bypassed by hitting the server directly instead
+#     of the CLI.
+#
+#  6. workspace/bahyway_v4/Cargo.toml -- registered bin/enkiddb-cli.
+#
+# VERIFIED FOR REAL, not just compiled -- every claim below is a command
+# actually run this session, not asserted:
+#   - `enkiddb-cli ingest docs --dry-run` against this repo's real 34
+#     documents in docs/: SCAN found all 34, CATEGORIZE correctly
+#     reported each one's real collection AND rejected all 34 (every
+#     file here is currently committed as noreply@anthropic.com, not a
+#     seeded team identity) -- "RUN skipped -- 34 file(s) failed the
+#     team-authorship check", exit code 1, nothing written. This is the
+#     gate working as specified, not a bug -- and it means Phase 3
+#     (populating EnkiDDB with this repo's own docs/) needs the
+#     Architect to explicitly decide whether Claude-authored content
+#     counts as team-authored for this purpose, via --team-allowlist,
+#     rather than that being decided here by default.
+#   - Same run against docs/components/ (4 files) with an explicit
+#     --team-allowlist containing noreply@anthropic.com (a
+#     demonstration-only allowlist, not the shipped default): SCAN 4
+#     found, CATEGORIZE 4 OK, RUN ingested 4 documents and materialized
+#     real Data Files (51 entities) at the given --data-dir -- caught
+#     and fixed one real bug in the process (materialize_now needs its
+#     target directory pre-created; the CLI wasn't calling
+#     fs::create_dir_all before this fix, unlike the server's own
+#     materialize_fresh helper, which does).
+#   - The live TCP server: started enkiddb-write-server for real, sent
+#     a real `INGEST_DIR:/home/user/EnkiDB/docs/components` frame over
+#     the actual length-prefixed wire protocol with the allowlist set
+#     -- got `OK:INGESTED:4`, then `FLUSH` -> `OK:FLUSHED:51`. Restarted
+#     the server WITHOUT the allowlist override (default seed) and sent
+#     the same request against the same directory -- got
+#     `ERR:ingest_dir: unauthorized creator for
+#     .../ANU_INDEX_STACK.md: noreply@anthropic.com`, proving the gate
+#     is real over the wire, not CLI-only.
+#   - `cargo test --workspace`: 3508 passed, 0 failed (up from PB-196's
+#     3498 baseline by the 10 new tests this playbook adds; nothing
+#     else regressed).
+#
+# UPDATED: docs/EnkiDDB_ROADMAP.md's Phase 2 (NOT STARTED -> DONE, with
+# the real definition-of-done checked against what was actually run,
+# not just built) and docs/EnkiDDB_MANUAL.md's ingest section (the
+# "no bulk directory-ingest exists yet" caveat replaced with the real
+# INGEST_DIR:/enkiddb-cli usage and the allowlist requirement).
+# =============================================================================
+---
+- name: "PB-198 | Record — enkiddb-cli + INGEST_DIR + team-authorship gate landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-198.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. New: crates/enkiddb/src/authorship.rs,
+          bin/enkiddb-cli. Changed: crates/enkiddb/src/{ingest,writenode,lib}.rs,
+          bin/enkiddb-write-server/src/main.rs,
+          workspace/bahyway_v4/Cargo.toml, docs/EnkiDDB_ROADMAP.md,
+          docs/EnkiDDB_MANUAL.md. cargo test --workspace: 3508 passed,
+          0 failed. Live-verified against this repo's real docs/ tree
+          over both the CLI and the actual TCP wire protocol, not just
+          unit-tested.

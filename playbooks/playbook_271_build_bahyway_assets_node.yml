@@ -1,0 +1,220 @@
+# =============================================================================
+# PB-271 -- Build the BahyWay.Ecosystem assets-node: one Podman image
+# holding the pinned Rust toolchain, every vendored crate source, and the
+# rebranded Godot 4.3-stable engine binary, so downstream builds
+# (including the ecosystem's own eventual Flatpak) "download once, work
+# forever" against a fixed digest instead of re-fetching from crates.io/
+# GitHub every time. BahyWay.Ecosystem v4.0 -- 2026-07-30
+#
+# WHY THIS EXISTS: the Architect's own instruction this session -- "We can
+# create one specific Podman to keep all bahyWay.Ecosystem assets and
+# binary source files for any third party tools... that can be downloaded
+# once and work forever... then promoted into the same flatpak of the
+# whole ecosystem." Followed by the explicit ask for a real numbered
+# playbook to BUILD it, not just the Containerfile sketch that preceded
+# this one.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Stages a build context under `build_dir` (default
+#      /tmp/bahyway_assets_node_build, never committed): copies every
+#      real crates/*/Cargo.toml and bin/*/Cargo.toml manifest (no source
+#      bodies -- all `cargo vendor` needs to resolve the dependency
+#      graph), the repo-root Cargo.toml/Cargo.lock, and
+#      workspace/bahyway_v4/godot/patch_engine_source.py (the SAME shared
+#      patch script playbook_262 uses -- PB-271 does not carry its own
+#      copy).
+#   2. Reads the previous build's digest (if any) from
+#      chronicle/assets_node_registry.jsonl, so this run's manifest.json
+#      can record what it supersedes -- ADR-006's no-delete/APPEND-
+#      supersedes law, applied to this image the same way it already
+#      applies to documents and playbooks.
+#   3. Renders deploy/podman/assets-node.manifest.j2 into the staging
+#      dir's manifest.json with real facts: crate count (from this
+#      actual Cargo.lock), git commit, build timestamp, and the previous
+#      digest from step 2.
+#   4. `podman build`s deploy/podman/Containerfile.assets-node against
+#      the staged context, tagged :staging (never :latest -- see that
+#      Containerfile's own header on why).
+#   5. Resolves and prints the real content digest -- the ONLY thing any
+#      downstream consumer (a future Flatpak build, another host pulling
+#      this image) should ever reference.
+#   6. Appends {version, digest, commit, built_at, supersedes} to
+#      chronicle/assets_node_registry.jsonl -- append-only, never
+#      rewritten, so the full lineage of every assets-node version ever
+#      built stays queryable.
+#
+# THIS PLAYBOOK DELIBERATELY DOES NOT:
+#   - Push the image anywhere -- registry choice/credentials are the
+#     Architect's own decision, not this playbook's to make.
+#   - Fold Girsu IDE's VSCodium source in -- that slot
+#     (/assets/girsu-vscodium-src) stays empty; see the Containerfile's
+#     own header for why.
+#   - Wire this image into a Flatpak manifest -- that's a separate,
+#     not-yet-written step (see the design note this playbook's own
+#     commit carries: pull by digest, `podman cp` the filesystem out,
+#     hand the exported directory to flatpak-builder as an ordinary
+#     `type: dir` source).
+#   - Mint this playbook's own KAKI identities directly -- that already
+#     happens automatically the next time Shakkanakku's Corpus tab runs
+#     (PB-270's pb_mint/pb_doc_mint), same as every other numbered
+#     playbook; no special-casing needed here.
+#
+# COST, HONESTLY: this compiles the full Godot editor binary from source
+# AND vendors this workspace's entire crate dependency graph (678 crates
+# as of 2026-07-30) into the image. Expect several GB of scratch space
+# and, per playbook_262's own honest estimate, ~20 minutes to well over
+# an hour depending on hardware. Run it once per assets-node version, not
+# per host.
+#
+# NOT YET RUN FOR REAL: neither `podman` nor `ansible-playbook` is on the
+# PATH of the sandbox this was authored in -- `yaml.safe_load_all` is the
+# only check performed here. Needs the bare-metal Fedora Workstation 44
+# host (PB-269) to actually build.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_271_build_bahyway_assets_node.yml
+# =============================================================================
+- name: "PB-271 -- Build the BahyWay.Ecosystem assets-node (Podman image)"
+  hosts: eriduous-vdi
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root: "{{ playbook_dir }}/.."
+    bw4_root: "{{ forge_root }}/workspace/bahyway_v4"
+    podman_dir: "{{ forge_root }}/deploy/podman"
+    build_dir: "/tmp/bahyway_assets_node_build"
+    staging_manifests_dir: "{{ build_dir }}/manifests"
+    image_tag: "localhost/bahyway-assets-node:staging"
+    registry_path: "{{ forge_root }}/chronicle/assets_node_registry.jsonl"
+    assets_node_version: 1
+
+  tasks:
+    # ── 0. Preflight ─────────────────────────────────────────────────
+    - name: "Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_check
+      changed_when: false
+      failed_when: podman_check.rc != 0
+
+    - name: "Confirm the shared Godot patch script exists (playbook_262's own dependency too)"
+      ansible.builtin.stat:
+        path: "{{ bw4_root }}/godot/patch_engine_source.py"
+      register: patch_script
+      failed_when: not patch_script.stat.exists
+
+    # ── 1. Stage the build context ───────────────────────────────────
+    - name: "Create staging directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ build_dir }}"
+        - "{{ staging_manifests_dir }}"
+
+    - name: "Copy repo-root workspace manifests (Cargo.toml/Cargo.lock)"
+      ansible.builtin.copy:
+        src: "{{ bw4_root }}/{{ item }}"
+        dest: "{{ staging_manifests_dir }}/{{ item }}"
+        mode: "0644"
+      loop:
+        - Cargo.toml
+        - Cargo.lock
+
+    - name: "Copy every crates/*/Cargo.toml and bin/*/Cargo.toml, preserving relative paths (manifests only -- cargo vendor needs no source bodies)"
+      ansible.builtin.shell: >
+        cd {{ bw4_root | quote }} &&
+        find crates bin -maxdepth 2 -name Cargo.toml -exec
+        bash -c 'mkdir -p "{{ staging_manifests_dir }}/$(dirname "$1")" && cp "$1" "{{ staging_manifests_dir }}/$1"' _ {} \;
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: "Copy the Containerfile and the shared Godot patch script into the build context"
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ build_dir }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: "{{ podman_dir }}/Containerfile.assets-node", dest: "Containerfile.assets-node" }
+        - { src: "{{ bw4_root }}/godot/patch_engine_source.py", dest: "patch_engine_source.py" }
+
+    # ── 2. Read the previous version's digest, if any (supersession) ─
+    - name: "Ensure chronicle/ exists"
+      ansible.builtin.file:
+        path: "{{ forge_root }}/chronicle"
+        state: directory
+        mode: "0755"
+
+    - name: "Read the previous assets-node registry (may not exist yet -- that's fine, this is the first build)"
+      ansible.builtin.command: "tail -n 1 {{ registry_path }}"
+      register: previous_registry_line
+      changed_when: false
+      failed_when: false
+
+    - name: "Parse the previous digest, if a prior build exists"
+      ansible.builtin.set_fact:
+        previous_digest: "{{ (previous_registry_line.stdout | from_json).digest if (previous_registry_line.rc == 0 and previous_registry_line.stdout | trim | length > 0) else None }}"
+
+    - name: "Count real vendored crates from this actual Cargo.lock"
+      ansible.builtin.shell: "grep -c '^name = ' {{ bw4_root }}/Cargo.lock"
+      register: crate_count_result
+      changed_when: false
+
+    - name: "Read the current git commit"
+      ansible.builtin.command: git rev-parse HEAD
+      args:
+        chdir: "{{ forge_root }}"
+      register: git_commit_result
+      changed_when: false
+
+    # ── 3. Render the real manifest.json ─────────────────────────────
+    - name: "Render manifest.json with real facts (crate count, commit, timestamp, supersession)"
+      ansible.builtin.template:
+        src: "{{ podman_dir }}/assets-node.manifest.j2"
+        dest: "{{ build_dir }}/manifest.json"
+        mode: "0644"
+      vars:
+        crate_count: "{{ crate_count_result.stdout | trim }}"
+        built_from_commit: "{{ git_commit_result.stdout | trim }}"
+        built_at: "{{ ansible_date_time.iso8601 }}"
+        supersedes: "{{ previous_digest }}"
+
+    # ── 4. Build ───────────────────────────────────────────────────────
+    - name: "podman build the assets-node image (this is the long step -- see COST, HONESTLY above)"
+      ansible.builtin.command: >
+        podman build -t {{ image_tag }}
+        -f Containerfile.assets-node .
+      args:
+        chdir: "{{ build_dir }}"
+      register: build_result
+      changed_when: true
+
+    # ── 5. Resolve the real digest -- the only thing worth keeping ───
+    - name: "Resolve the image's content digest"
+      ansible.builtin.command: "podman inspect --format '{{ '{{' }}.Digest{{ '}}' }}' {{ image_tag }}"
+      register: digest_result
+      changed_when: false
+      failed_when: digest_result.stdout | trim | length == 0
+
+    # ── 6. Append to the durable, append-only registry ───────────────
+    - name: "Append this build's record to the assets-node registry (append-only -- never rewritten)"
+      ansible.builtin.lineinfile:
+        path: "{{ registry_path }}"
+        line: >-
+          {{ {'version': assets_node_version, 'digest': digest_result.stdout | trim,
+              'commit': git_commit_result.stdout | trim, 'built_at': ansible_date_time.iso8601,
+              'supersedes': previous_digest} | to_json }}
+        create: true
+        mode: "0644"
+        insertafter: EOF
+
+    - name: "Final report"
+      ansible.builtin.debug:
+        msg: >-
+          assets-node built: {{ image_tag }} @ {{ digest_result.stdout | trim }}.
+          Reference it ONLY by this digest downstream -- never :staging or :latest.
+          {{ ('Supersedes prior digest ' + previous_digest) if previous_digest else 'First version built (nothing superseded).' }}
+          Recorded in {{ registry_path }}. This playbook's own KAKI Identity/Event
+          mint happens automatically on the next Shakkanakku Corpus run (PB-270).

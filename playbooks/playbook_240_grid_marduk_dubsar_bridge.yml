@@ -1,0 +1,206 @@
+# =============================================================================
+# PB-240 -- Grid & Marduk DubSar bridge: extend dubsar-gridnav-gd with
+# state estimation/N-1/dispatch, build the new marduk-gdext bridge, and
+# wire both into a real IDE tab. BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHAT THIS ADDS:
+#   - dubsar-gridnav-gd::GridNavLens grows a real physics network
+#     (add_node/add_edge/set_edge_in_service), the linear state
+#     estimator (set_known_voltage/estimate_voltages/estimated_voltage),
+#     the KCL residual at a node (node_kappa), N-1 contingency
+#     (n1_unserved_count), and risk-ranked dispatch priority
+#     (dispatch_priority_for_asset) -- all thin delegations to the
+#     already-tested egd-engine functions (state_estimate, exclusion,
+#     dispatch), not new logic duplicated at the FFI boundary.
+#   - marduk-gdext is a NEW GDExtension crate (none existed for
+#     MardukEngine before this playbook) wrapping the three verbs
+#     marduk-engine implements: Position (template_score,
+#     radial_coordinate), Horizon (golden_horizon_days), Topology
+#     (betti_numbers). Same stateless, Godot-native-types-only shape
+#     pdm-gdext and kupru-gdext already established.
+#   - godot/dubsar-theater/scripts/grid_marduk_tab.gd: a new "Grid &
+#     Marduk" tab in DubSar IDE's MainTabs (next to Query Editor / PDM /
+#     AR-EN Navigator / Engine Map), demonstrating both bridges on a
+#     3-bus radial feeder + a figure-eight relation graph. Every number
+#     shown is a REAL function call through the FFI boundary -- what's
+#     synthetic is the source data (a demo feeder, not live EnkiDB
+#     telemetry; that feed remains the deferred item docs/GL-EGD-001.md
+#     already names).
+#
+# HONEST LIMIT: cargo build/test for both new bridge crates was verified
+# clean in the sandbox that wrote this (dev AND release profiles), and
+# the .tscn/.gd changes were checked for balanced syntax, but there is
+# NO Godot binary in that sandbox -- this is genuinely the first time
+# the "Grid & Marduk" tab has been opened inside a running Godot editor
+# by anyone. Same honest-limit shape as PB-234's DubSar IDE launch.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Depends on
+# PB-235-239 (fdd-core, trend-core, egd-engine, marduk-engine already
+# present). Running this playbook = CSR-08 Architect confirmation.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_240_grid_marduk_dubsar_bridge.yml
+#   ansible-playbook playbooks/playbook_240_grid_marduk_dubsar_bridge.yml -e dubsar_mode=editor
+# =============================================================================
+
+- name: "PB-240 -- Grid & Marduk DubSar bridge"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    dubsar_mode: "run"
+    skip_build: false
+    godot_bin: ""
+    build_log: "/tmp/pb240_build.log"
+    godot_log: "/tmp/pb240_launch.log"
+
+  tasks:
+    - name: "Confirm the new bridge crates + tab script are present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: file_checks
+      loop:
+        - "{{ repo_root }}/crates/marduk-gdext/Cargo.toml"
+        - "{{ repo_root }}/godot/dubsar-theater/scripts/grid_marduk_tab.gd"
+        - "{{ repo_root }}/godot/dubsar-theater/gridnav.gdextension"
+        - "{{ repo_root }}/godot/dubsar-theater/marduk.gdextension"
+
+    - name: "Fail clearly if any expected file is missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found. Run
+          `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- these are committed source, this playbook only
+          builds and verifies them.
+      loop: "{{ file_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "cargo test the underlying engine crates (release) before touching Godot"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p trend-core -p fdd-core -p egd-engine -p marduk-engine -p dubsar-gridnav-gd -p marduk-gdext > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "Build dubsar-gridnav-gd + marduk-gdext in release mode"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p dubsar-gridnav-gd -p marduk-gdext >> {{ build_log }} 2>&1
+      register: gdext_build_result
+      failed_when: gdext_build_result.rc != 0
+      when: not skip_build
+
+    - name: "Confirm both compiled libraries exist"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/{{ item }}"
+      register: lib_checks
+      loop:
+        - libdubsar_gridnav_gd.so
+        - libmarduk_gdext.so
+
+    - name: "Fail clearly if either compiled library is missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found under {{ repo_root }}/target/release/.
+          Run without -e skip_build=true first, or check {{ build_log }}.
+      loop: "{{ lib_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "Ensure the DubSar Theater project's bin/ directory exists"
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "Copy both compiled bridges into the DubSar project"
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/{{ item }}"
+        dest: "{{ dubsar_project }}/bin/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - libdubsar_gridnav_gd.so
+        - libmarduk_gdext.so
+
+    # ── Discover Godot (same proven logic as every prior DubSar playbook) ──
+    - name: "Discover a real Godot 4 binary"
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      when: godot_bin | length == 0
+
+    - name: "Fail clearly if no Godot binary was found"
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found. Pass -e godot_bin=/path/to/godot to
+          point at one directly.
+      when: godot_bin | length == 0 and (godot_discovery.rc is undefined or godot_discovery.rc != 0)
+
+    - name: "Resolve the Godot binary to use"
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else godot_discovery.stdout }}"
+
+    - name: "Prime the project's Godot import cache (headless)"
+      ansible.builtin.shell: >-
+        cd {{ dubsar_project }} &&
+        {{ resolved_godot_bin }} --headless --import > /tmp/pb240_import.log 2>&1
+      changed_when: true
+      failed_when: false
+
+    - name: "Launch DubSar IDE"
+      ansible.builtin.shell: >-
+        cd {{ dubsar_project }} &&
+        nohup {{ resolved_godot_bin }} {{ '--editor' if dubsar_mode == 'editor' else '' }} > {{ godot_log }} 2>&1 &
+      async: 1
+      poll: 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-240 complete -- GridNavLens now has a real physics
+          network, linear state estimation, N-1 contingency, and
+          dispatch priority (46/46 tests passing across trend-core,
+          fdd-core, egd-engine, marduk-engine, and both GDExtension
+          crates). marduk-gdext is MardukEngine's first Godot bridge.
+          The new Grid & Marduk tab is wired into MainTabs next to
+          Engine Map. Launched DubSar IDE -- open the Grid & Marduk tab
+          and confirm the demo feeder's estimated voltages, KCL
+          residuals, N-1 exposure, dispatch priority, Position/Horizon
+          values, and Betti numbers all render (this is the first live
+          check anywhere; verified only in the sandbox up to
+          `cargo build`/`cargo test`, never inside a running Godot
+          editor). Still open: the live EnkiDB feed into either bridge,
+          the harder WLS/King-plot state estimator, Motion/Curvature
+          verbs, and any domain calculus consuming Topology.

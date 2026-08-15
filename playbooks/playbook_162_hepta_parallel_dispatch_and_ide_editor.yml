@@ -1,0 +1,105 @@
+# =============================================================================
+# PB-162 — REAL PARALLEL HEPTASCRIPT DISPATCH + DUBSAR THEATER IDE EDITOR
+# BahyWay.Ecosystem v4.0 — 2026-07-10
+#
+# Closes two real gaps identified in PB-161's reconciliation audit:
+#   1. sumuukin::route() was a stub (always reported success, no network
+#      I/O). Real parallel/serial/first-only TCP dispatch to the 7 Enki
+#      engines is now implemented and tested.
+#   2. DubSar Theater had no HeptaScript authoring surface — queries
+#      could only be picked from presets in dubsar_proof.gd. A real
+#      CodeEdit-based editor with a CLI execution log and a PDM
+#      (Particles Data Modeling) tab now exists.
+#
+# WHAT WAS DONE (record of files actually landed, not a proposal):
+#
+# Rust (crates/heptascript/src/sumuukin.rs):
+#   - route() now performs real std::net::TcpStream dispatch using the
+#     confirmed HEPT wire protocol (matches bin/enkidb-query-server
+#     byte-for-byte: [u32 LE len][UTF-8 query] request, [u32 LE
+#     frame_len]-prefixed response frames, u32=0 DONE sentinel).
+#   - AllParallel spawns one std::thread per target and joins; AllSerial
+#     is sequential; FirstOnly contacts one target. No tokio, no unsafe.
+#   - route()'s signature changed: now takes the original query source
+#     text (query_text: &str) alongside the parsed HeptaQuery, since the
+#     server re-parses text, not the client AST. No external callers
+#     existed (verified via repo-wide grep), so this was a safe change.
+#   - Tests rewritten from fake-unroutable-IP stub-checks to real local
+#     mock TCP servers (127.0.0.1, ephemeral ports) speaking the actual
+#     protocol — 6 tests, all passing, including a genuine
+#     unreachable-target-reports-failure case the old stub could never
+#     produce. Full crate suite: 183/183 passing.
+#   - Only EnkiDB (port 7001) has a real server today. Dispatch to the
+#     other 6 ports (7002-7007) is real, correct code that will report
+#     targets_failed (connection refused) until those servers exist —
+#     honest behaviour, not a limitation of this change.
+#
+# Godot (workspace/bahyway_v4/godot/dubsar-theater/):
+#   - scripts/sumuukin_client.gd: client-side counterpart of route(),
+#     using real Godot Thread objects for AllParallel (StreamPeerTCP
+#     doesn't support await from worker threads, so this uses
+#     synchronous polling + OS.delay_msec() inside each thread, mirroring
+#     Rust's std::thread approach rather than the coroutine style
+#     enkidb_tcp.gd uses on the main thread).
+#   - scenes/heptascript_editor.tscn + scripts/heptascript_editor.gd:
+#     upper CodeEdit (W5H2/Triple-O syntax highlighting, keywords
+#     confirmed against crates/heptascript/src/token.rs and
+#     crates/heptascript/src/query.rs's DbTarget enum), lower read-only
+#     CLI log showing per-target contacted/failed/timing, NODE-target
+#     checkboxes built from EnkiEngines.TABLE (single source of truth
+#     shared with the wizard — no duplicated engine list), a
+#     FanOutPolicy dropdown, and a Run button wired to
+#     SumuUkinClient.route().
+#   - scripts/pdm_tab.gd: the editor's second tab. Lets a stakeholder
+#     write a minimal .akk PDM model, compile it, and run the resulting
+#     HeptaScript. Query results render as a particle/attribute grid
+#     classified GEM/ORBIT/FUZZY using the EXACT SAME B11-from-EAV-attrs
+#     rule already real and working in dubsar_proof.gd (never from raw
+#     KAKI bytes) — no parallel classification system invented.
+#   - scripts/akkadi_compiler.gd: a minimal, REAL, working .akk ->
+#     HeptaScript compiler. HONEST SCOPE NOTE carried in the file itself:
+#     this is NOT the "AkkadianAOL v4.0 compiler" (NABU) referenced in
+#     earlier ecosystem docs — NABU has no real crate or scaffold
+#     anywhere in the repo (confirmed 2026-07-10, bahyway-core's
+#     akkadian.rs declares the name only). This compiler handles a
+#     small, defined subset (MODEL/NODE/WHO/ATTR/LIMIT declarations)
+#     and emits HeptaScript text confirmed grammar-correct against
+#     crates/heptascript/src/parser.rs's own test cases (WHO
+#     TribeName.Var, WHAT Var[attr1, attr2], NODE db_target (| ...)*,
+#     HOW_MUCH LIMIT n). Canonicalizing an equivalent Rust module in
+#     crates/akkadi is a deliberate fast-follow, not a blocker — no
+#     GDExtension bridge exists yet for Godot to call into Rust directly.
+#   - No fictional "EnkiSDB test schema" system was built. EnkiSDB has
+#     no schema concept in the real repo (confirmed via grep, 2026-07-10)
+#     — "running against EnkiSDB" means checking its box in the NODE
+#     target list, same as any other engine.
+#   - scenes/main_theater.tscn + scripts/theater_controller.gd: the new
+#     editor is instanced (hidden by default) alongside the wizard, with
+#     Ctrl+E opening it and Ctrl+W opening the wizard (neither had an
+#     input binding before this change — the wizard's open_enkidb_wizard()
+#     existed but nothing called it).
+#
+# NOT DONE / STILL OPEN:
+#   - No protocol-level handshake exists in bin/enkidb-query-server, so
+#     Test Connection (in the wizard) remains reachability-only. Adding
+#     one is real, separate work.
+#   - The other 6 Enki engines (EnkiDW/EnkiSDB/EnkiODB/EnkiQDB/EnkiMDB/
+#     EnkiDDB) have no TCP server binaries. The parallel dispatch layer
+#     is real and ready for them; the servers themselves are not built.
+#   - No visual (in-editor) confirmation of the Godot scenes has
+#     happened — that remains DUB.SAR's checkpoint, same as every other
+#     Godot change this session.
+# =============================================================================
+---
+- name: "PB-162 | Record — no ansible action, git history is the source of truth"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-162.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-10, for the real diff. This playbook is a record, not an
+          installer — the files were authored directly in this session's
+          checkout, not templated by Ansible.

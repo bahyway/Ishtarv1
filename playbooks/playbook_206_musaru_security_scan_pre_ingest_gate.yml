@@ -1,0 +1,139 @@
+# =============================================================================
+# PB-206 — Musarû security scan as a pre-ingest gate on EnkiDDB markdown
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: the Architect asked whether a playbook could add "NergalEngine
+# security tests" before markdown reaches EnkiDDB's EAV schemas, and
+# whether a "Fuzzy"/"Dead" particle from an unrecognized document or
+# hyperspectral image could be excluded from Tribe Orbits. Research (one
+# Explore pass, file:line grounded) found: there is no single unified
+# "NergalEngine" API anywhere in this workspace. `dubsar-visualizer`'s
+# `panels::nergal` is a visualization panel only (reads counters written
+# elsewhere); `nergal-av`/`nergal-agent` are named by two ansible
+# playbooks that GENERATE those crates on a remote host, but neither
+# crate exists in this checkout. The real, working scanner underneath the
+# Nergal panel's data is a DIFFERENTLY-named crate, `musaru-security` --
+# real, tested, and already wired into `enkisdb`/`enkidw`'s ingest lanes,
+# but never into EnkiDDB's. `bahyway-core::particle_state::ParticleState`
+# (Golden/Fuzzy/Dead) is real but unused by `enkiddb`. `tribe-orbit-engine`
+# only computes WHERE to draw a particle (Inner/Mid/Outer ring by B11
+# threshold) -- no function anywhere excludes/ejects a particle from an
+# orbit. `wpd-engine`'s "spectral" means 12 plain reflectance-band floats,
+# not image files -- no image-decoding dependency exists in this
+# workspace, and EnkiDDB's ingest path only ever reads `.md` files.
+#
+# Given three separate, genuinely-new pieces to choose from, the
+# Architect chose scope explicitly: wire `musaru-security` in now (not
+# the unmaterialized `nergal-av`/`nergal-agent`), defer the Tribe-Orbit
+# exclusion mechanism until real security-scan verdicts exist to design
+# against, and scope hyperspectral/image handling out entirely -- EnkiDDB
+# is markdown/text only today, and no image substrate exists anywhere to
+# build a scanner against.
+#
+# WHAT WAS BUILT, real, live-verified:
+#
+#  1. crates/enkiddb/src/security.rs -- NEW. Thin, enkiddb-scoped wrapper
+#     around `musaru_security::zip_scan::scan` -- pure byte-signature
+#     pattern matching (EICAR test vectors, PE/MZ headers, PHP eval
+#     webshell probes, JS dropper probes), built for ZIP bytes
+#     pre-extraction but applied here to markdown text bytes pre-parse.
+#     `scan_document(bytes) -> SecurityScanResult { clean, detail }`.
+#     4 unit tests (clean text, EICAR hit, PHP webshell hit, empty doc).
+#
+#  2. crates/enkiddb/src/ingest.rs -- new `IngestError::SecurityRejected
+#     { path, detail }` variant, Display arm, alongside the existing
+#     `UnauthorizedCreator`.
+#
+#  3. crates/enkiddb/src/writenode.rs -- `WriteNode::ingest_document_from_path`
+#     now scans a file's raw bytes immediately after reading them, before
+#     `DocumentParser::parse_markdown` ever runs, returning
+#     `SecurityRejected` on a hit. This is the single choke point both
+#     `ingest_directory_categorized_checked` (and therefore
+#     `INGEST_DIR:`) and `enkiddb-cli`'s local RUN already pass through --
+#     no second call site needed for that path. New integration test
+#     confirms a real EICAR-signature file is rejected and journals
+#     nothing (`ingest_document_from_path_rejects_a_malware_signature_and_journals_nothing`).
+#
+#  4. bin/enkiddb-write-server/src/main.rs -- the plain per-document wire
+#     command (`<collection>\n<markdown>`, used by `enkiddb-cli --remote`
+#     and any direct TCP client) now calls `enkiddb::scan_document` on
+#     the raw body BEFORE `DocumentParser::parse_markdown`, responding
+#     `ERR:security: <detail>` on a hit. This is enforced in the server
+#     itself, not just the CLI's display -- the same "library enforces it,
+#     CLI just reports it early" discipline PB-198's authorship gate uses.
+#
+#  5. bin/enkiddb-cli/src/main.rs -- CATEGORIZE stage now reports a
+#     security-scan result per file (`security=<detail>` on rejection)
+#     alongside the existing authorship report, so both gates' verdicts
+#     are visible before RUN. A file failing either gate aborts RUN for
+#     the whole batch, matching the existing all-or-nothing behavior.
+#
+# LIVE-VERIFIED, not just compiled -- real running processes, this
+# session:
+#   - `enkiddb-cli ingest <dir> --remote <host:port>` against a scratch
+#     directory with one clean file (real git-authorship-allowlisted
+#     commit) and one file containing the literal EICAR test string:
+#     CATEGORIZE reported the EICAR file `REJECTED ... security=EICAR
+#     standard antivirus test file`, RUN was skipped, exit code 1.
+#   - Same directory with only the clean file: CATEGORIZE OK, RUN sent
+#     it, server responded `OK:<kaki_hex>:1`, server log shows the
+#     `[ingest]` line.
+#   - Bypassing the CLI entirely -- a raw Python socket client speaking
+#     the wire protocol directly sent the EICAR payload straight to the
+#     running server: real response `ERR:security: EICAR standard
+#     antivirus test file`, server log shows `[security] rejected
+#     collection=general: EICAR standard antivirus test file`. Confirms
+#     the gate is enforced by the server itself, not merely displayed by
+#     the CLI.
+#   - `cargo build -p enkiddb -p enkiddb-write-server -p enkiddb-cli` and
+#     `cargo test -p enkiddb -p enkiddb-write-server -p enkiddb-cli`: 83
+#     tests passed in `enkiddb` (4 new `security::tests`, 1 new
+#     `writenode::tests` integration test), 0 failed.
+#
+# WHAT THIS DOES NOT CLAIM:
+#   - This is NOT "NergalEngine" by name -- that name belongs to a
+#     visualization panel and two unmaterialized crates. This wires the
+#     REAL working scanner (`musaru-security`) that sits underneath the
+#     Nergal panel's data, into a DIFFERENT pipeline (EnkiDDB) than the
+#     one it already served (`enkisdb`/`enkidw`).
+#   - No Tribe-Orbit exclusion mechanism exists after this playbook.
+#     `bahyway-core::particle_state::ParticleState::{Fuzzy,Dead}` and
+#     `tribe-orbit-engine`/`orbital-trust-probe` remain unconnected to
+#     EnkiDDB, by the Architect's own explicit choice -- deferred until
+#     real security-scan verdicts on real documents exist to design the
+#     exclusion rule against, rather than building it against a
+#     hypothetical now.
+#   - No hyperspectral/image-file scanning exists after this playbook.
+#     EnkiDDB's ingest path remains markdown/text only; no image-decoding
+#     dependency was added anywhere in the workspace.
+#   - The malware-signature list (`musaru_security::zip_scan::MALWARE_SIGS`)
+#     is small and pattern-based (EICAR, PE/MZ header, PHP/JS probes) --
+#     this is a real, working, fail-closed gate, but it is not a general
+#     antivirus engine; it catches the same class of test/probe content
+#     Musarû already catches on ZIP bytes, nothing more, nothing less.
+# =============================================================================
+---
+- name: "PB-206 | Record — Musarû security scan wired into EnkiDDB pre-ingest"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-206.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. New: crates/enkiddb/src/security.rs. Changed:
+          crates/enkiddb/src/{ingest,writenode,lib}.rs,
+          crates/enkiddb/Cargo.toml (adds musaru-security path dep),
+          bin/enkiddb-write-server/src/main.rs,
+          bin/enkiddb-cli/src/main.rs. Effect: every document reaching
+          EnkiDDB's Journal -- via INGEST_DIR, the plain per-document wire
+          command, enkiddb-cli's local RUN, or enkiddb-cli --remote -- now
+          passes musaru_security::zip_scan's byte-signature check before
+          DocumentParser ever sees it. Rebuild enkiddb-write-server's
+          Podman image (deploy/podman/Containerfile.write-server -- no
+          Containerfile changes needed, this is pure Rust dependency
+          wiring, not a new runtime requirement) to pick this up on
+          eriduous-vdi. Tribe-Orbit exclusion for Fuzzy/Dead particles and
+          hyperspectral image scanning remain explicitly out of scope --
+          see this playbook's header for why.

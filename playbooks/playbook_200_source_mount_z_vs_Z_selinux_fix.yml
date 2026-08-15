@@ -1,0 +1,65 @@
+# =============================================================================
+# PB-200 — Real bug found live on the Architect's own eriduous-vdi: uppercase
+# :Z on a host path shared by two containers silently locks the first one out
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: PB-199 gave `enkiddb-write` a `-v {{ enkidb_repo_root }}:/source:ro,Z`
+# mount so `INGEST_DIR` would have something to scan -- but missed that
+# `enkimdb-write` (task 4.2, since PB-192) already bind-mounts that exact
+# same host path with `:Z` too. Discovered for real, not in this sandbox:
+# the Architect ran the corrected PB-192 on eriduous-vdi, all four
+# containers came up clean, `enkimdb`'s SCAN_CRATES/SCAN_PLAYBOOKS/FLUSH
+# worked (151 crates, 96 playbooks, 247 entities -- real numbers, not
+# projected), but `enkiddb-write`'s INGEST_DIR:/source/docs failed with
+# `io error: Permission denied (os error 13)`.
+#
+# ROOT CAUSE, confirmed via live diagnostics the Architect ran and pasted
+# back (`podman exec enkiddb-write id` -> uid=999(enkiddb); `podman exec
+# enkiddb-write ls -la /source` -> Permission denied; `getenforce` ->
+# Enforcing): Podman's `:Z` SELinux mount flag means "give this container
+# an EXCLUSIVE, PRIVATE label on this path" -- when two different
+# containers each request `:Z` on the SAME host directory, whichever one
+# (re)starts most recently wins the relabel and the other one is silently
+# locked out by SELinux, no matter how correct its own Unix file
+# permissions are. `enkimdb-write` (task 4.2) starts after `enkiddb-write`
+# (task 3.2), so it won and `enkiddb-write` lost. `:z` (lowercase) is the
+# correct flag for a path shared by multiple containers -- it labels the
+# path as shareable instead of exclusive. This was missed in PB-199
+# because the two mounts were added a session apart and never diffed
+# against each other for exactly this interaction.
+#
+# WHAT CHANGED:
+#   1. playbooks/playbook_192_enkiddb_enkimdb_podman_deploy_executable.yml
+#      -- tasks 3.2 (enkiddb-write) and 4.2 (enkimdb-write): both
+#      `/source` mounts changed from `:ro,Z` to `:ro,z`. Each container's
+#      own private `/data` volume mount is untouched (`:Z` is correct
+#      there -- nothing else ever mounts `enkiddb-write-data` or
+#      `enkimdb-write-data`, so exclusivity is exactly right).
+#   2. docs/EnkiDDB_PODMAN_DEPLOYMENT.md, docs/EnkiMDB_PODMAN_DEPLOYMENT.md
+#      -- manual `podman run` examples updated to match.
+#
+# VERIFIED: `ansible-playbook playbook_192... --syntax-check` passes. The
+# actual fix (recreating both containers with `:z`) was verified live by
+# the Architect on eriduous-vdi -- this record follows that, not
+# precedes it; the diagnosis and the manual recreate commands were given
+# first so the Architect wasn't blocked waiting on a rebuild-and-resync
+# cycle, and this playbook's job is making sure the NEXT fresh run of
+# playbook_192 doesn't need the same manual fix again.
+# =============================================================================
+---
+- name: "PB-200 | Record — :Z vs :z SELinux shared-mount fix landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-200.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. Changed: playbook_192 (tasks 3.2, 4.2),
+          EnkiDDB_PODMAN_DEPLOYMENT.md, EnkiMDB_PODMAN_DEPLOYMENT.md. If
+          enkiddb-write and/or enkimdb-write are already running with the
+          old :Z mount, `podman rm -f` both and re-run playbook_192 (or
+          recreate them manually with :ro,z) -- an already-running
+          container with the wrong flag baked into its config won't
+          self-correct just because the playbook file changed.

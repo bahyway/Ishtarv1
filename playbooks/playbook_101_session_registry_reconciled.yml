@@ -1,0 +1,138 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_101_session_registry_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-101 Reconciled: enkidb-session-registry, real test path
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_101_session_registry_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_101_session_registry.yml):
+#    Same pattern as PB-100: targets `--test playbook_registry`, a named
+#    integration binary that doesn't exist (no tests/ dir, no [[test]]
+#    entry). The crate and its described feature set are real and
+#    current — confirmed directly:
+#      NodeType enum has exactly the 7 variants PB-101 describes:
+#        EnkiDB, EnkiDW, EnkiSDB, EnkiODB, EnkiQDB, EnkiMDB, EnkiDDB
+#      Test functions match PB-101's C-series descriptions closely:
+#        parse_valid_toml_three_sessions, tribe_filtering_empty_means_all_tribes,
+#        role_filtering, enabled_filter, invalid_role_returns_error, by_id_lookup
+#    Real count is 6 (not 12 — consolidated, not a different design).
+#
+#  2026-07-25 FIX: the NodeType-variant-count check grepped the whole file
+#  for the 7 variant names -- but lib.rs also has a from_str-style match
+#  block (`"EnkiDB" => NodeType::EnkiDB,` etc.) using the same identifiers,
+#  so the grep matched both the enum declaration AND the parse impl: 14
+#  lines, not 7, confirmed live on eriduous-vdi. The crate was never wrong
+#  (still exactly 7 real variants) -- the check itself wasn't scoped to
+#  just the enum declaration. Fixed by scoping the grep with sed to only
+#  the `pub enum NodeType { ... }` block, so it can't double-count any
+#  other place those identifiers legitimately appear (parse impls,
+#  Display impls, tests, ...).
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-101 (Reconciled) | enkidb-session-registry — real test path"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB101_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "BUILD | cargo build -p enkidb-session-registry"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p enkidb-session-registry"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: false
+      failed_when: build_out.rc != 0
+
+    - name: "TEST | cargo test -p enkidb-session-registry"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-session-registry"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PARSE | test_out passed-test count"
+      ansible.builtin.set_fact:
+        test_out_passed_count: "{{ (test_out.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-session-registry reports 6 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_out.stdout"
+          - test_out_passed_count >= 6
+        fail_msg: >-
+          Expected at least 6 passed, 0 failed. Got {{ test_out_passed_count }}
+          passed. Full output: {{ test_out.stdout }}
+        success_msg: >-
+          enkidb-session-registry: {{ test_out_passed_count }} passed, 0 failed (>= baseline 6).
+
+    - name: "CHECK | All 7 NodeType variants present"
+      ansible.builtin.shell:
+        cmd: >
+          sed -n '/pub enum NodeType {/,/^}/p' {{ workspace }}/crates/enkidb-session-registry/src/lib.rs
+          | grep -c 'EnkiDB,\|EnkiDW,\|EnkiSDB,\|EnkiODB,\|EnkiQDB,\|EnkiMDB,\|EnkiDDB,'
+      register: nodetype_count
+      changed_when: false
+      failed_when: false
+
+    - name: "ASSERT | 7 NodeType variants confirmed"
+      ansible.builtin.assert:
+        that:
+          - "nodetype_count.stdout | trim | int == 7"
+        fail_msg: "Expected exactly 7 NodeType variant lines, found {{ nodetype_count.stdout }}"
+        success_msg: "All 7 NodeType variants (EnkiDB/DW/SDB/ODB/QDB/MDB/DDB) confirmed."
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-101 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-101 targeted `--test playbook_registry`, a named
+          integration binary that was never written. Crate and its
+          described feature set are real and current — all 7 NodeType
+          variants confirmed present.
+
+          Verified this run:
+            enkidb-session-registry : 6/6 tests PASS
+            NodeType variants       : 7/7 confirmed (EnkiDB, EnkiDW,
+              EnkiSDB, EnkiODB, EnkiQDB, EnkiMDB, EnkiDDB)
+
+          Note: already verified once this session at the same count in
+          playbook_99_v4_workspace_setup_reconciled.yml.
+
+    - name: "DONE | PB-101 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-101 reconciled. Report: {{ report_file }}"

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · The HeptaMap of Refuge — Every Resident Knows Where to Move</title>
+<!--
+  ════════════════════════════════════════════════════════════════
+  ŠALA HUB · THE HEPTAMAP OF REFUGE  (draft prototype — unsealed)
+  A poor, crowded neighborhood. Thin help. A fire with a wind.
+  The HeptaShell partitions the whole neighborhood into 126 zones
+  (rings of 7 · 14 · 21 · 28 · 35 · 21 — the seven-fold discipline)
+  and gives EVERY zone one clear directive: this way, now.
+  · 1,000,000 particles = residents and elements, splatted as
+    density; the crowding is visible, not a footnote.
+  · TWO SEALED WIND SCENARIOS drive the fire's expectation:
+      Θ_A — wind from the southwest, fire pushes northeast
+      Θ_B — wind veering, fire climbs due north
+    The Fadam lens λ blends the danger fields; the minority
+    scenario's front stays ghosted (ε honesty).
+  · THE LIFE-SAFETY LAW OF THIS MAP: when the scenarios disagree
+    about a zone's best move, the directive is NOT the blend —
+    it is the MINIMAX move: the direction whose worst case across
+    ALL sealed scenarios is least. Lives are never averaged.
+  · REFUGES have capacity — and this neighborhood's capacity is
+    poor. When a refuge overloads, it dims, and the directives
+    reroute. The map never sends people to a full door.
+  Membranes: zone boundaries are membranes; the density flows
+  through them along the directive field. Wave→Horizon→Orbit:
+  the front is the wave; the refuges are the orbits of the living.
+  ════════════════════════════════════════════════════════════════
+-->
+<style>
+:root{
+  --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022;
+  --bg-deep:#18191B; --bg-hover:#383A3E; --bg-selected:#404349;
+  --stroke:#3D3F43;
+  --gold:#D6A44C; --teal:#4FB8A8; --crimson:#C34A3F;
+  --orange:#D98E3E; --purple:#9B7FC7; --blue:#5E8FBF; --moss:#8FA85C;
+  --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+  --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+  --sans:-apple-system,"Segoe UI","Noto Sans",Ubuntu,Cantarell,sans-serif;
+  --mono:"JetBrains Mono","Fira Code",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+button,input{font-family:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+header{border-bottom:1px solid var(--stroke);background:var(--bg-panel)}
+.mast{max-width:1400px;margin:0 auto;padding:14px 20px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.mast .glyph{font-size:22px;color:var(--gold)}
+.mast h1{font-family:var(--serif);font-weight:500;font-size:21px}
+.mast h1 em{font-style:normal;color:var(--teal)}
+.mast .sub{font-size:12px;color:var(--muted)}
+.mast .law{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+
+.frame{max-width:1400px;margin:0 auto;padding:16px 20px;display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:16px}
+@media(max-width:1040px){.frame{grid-template-columns:1fr}}
+
+.wrap{background:var(--bg-deep);border:1px solid var(--stroke);border-radius:10px;overflow:hidden}
+.whead{display:flex;align-items:baseline;gap:10px;padding:10px 14px;border-bottom:1px solid var(--stroke);background:var(--bg-panel)}
+.whead .t{font-family:var(--serif);font-size:15px}
+.whead .n{font-family:var(--mono);font-size:11px;color:var(--gold)}
+.whead .hint{margin-left:auto;font-size:11px;color:var(--dim)}
+#sky{display:block;width:100%;height:auto;cursor:crosshair}
+.legend{display:flex;gap:12px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--stroke);background:var(--bg-panel);font-size:11px;color:var(--muted)}
+.legend .li{display:flex;align-items:center;gap:6px}
+.legend .sw{width:9px;height:9px;border-radius:50%}
+
+.ticker{margin-top:12px;background:var(--bg-widget);border:1px solid var(--stroke);border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);min-height:36px}
+.ticker b{color:var(--gold);font-weight:500}
+
+.rail{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:10px;padding:12px 14px}
+.card h2{font-family:var(--serif);font-weight:500;font-size:14px;margin-bottom:8px;display:flex;align-items:baseline;gap:8px}
+.card h2 .tag{font-family:var(--mono);font-size:9.5px;color:var(--dim);font-weight:400}
+
+.lensbar{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font-size:11px;margin-bottom:8px}
+.lensbar .b{font-family:var(--mono);font-size:10px;color:var(--blue)}
+.lensbar .a{font-family:var(--mono);font-size:10px;color:var(--orange);text-align:right}
+input[type=range]{appearance:none;height:5px;border-radius:3px;background:linear-gradient(90deg,var(--blue),var(--orange))}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);border:2px solid var(--bg-deep);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--gold);border:2px solid var(--bg-deep);cursor:pointer}
+.chk{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer}
+.chk input{accent-color:var(--gold)}
+.lensread{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:6px}
+.lensread b{color:var(--gold);font-weight:500}
+
+.refuges{display:flex;flex-direction:column;gap:5px}
+.ref{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:var(--bg-widget);border:1px solid var(--stroke);border-radius:7px;padding:6px 9px;font-size:11px}
+.ref .nm{font-family:var(--mono);font-size:10px;color:var(--teal)}
+.ref .sub{font-size:9.5px;color:var(--muted)}
+.ref .bar{grid-column:1/-1;height:6px;background:var(--bg-deep);border-radius:3px;overflow:hidden}
+.ref .fill{height:100%;border-radius:3px;background:var(--teal)}
+.ref.full .fill{background:var(--crimson)}
+.ref .m{font-family:var(--mono);font-size:9.5px;color:var(--muted);text-align:right}
+
+.journal{font-size:12px}
+.journal .empty{color:var(--dim);font-style:italic;padding:6px 0}
+.jhead{display:flex;flex-wrap:wrap;gap:5px 13px;padding-bottom:8px;border-bottom:1px dashed var(--stroke);margin-bottom:8px}
+.jhead .kv{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.jhead .kv b{color:var(--gold);font-weight:500}
+.mrow{display:grid;grid-template-columns:100px 1fr;gap:8px;padding:3px 0;font-size:11px;border-bottom:1px solid rgba(61,63,67,.4)}
+.mrow:last-of-type{border-bottom:none}
+.mrow .k{font-family:var(--mono);font-size:9.5px;color:var(--dim);padding-top:1px}
+.mrow .v b{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--ink)}
+.jverdict{margin-top:9px;background:var(--bg-widget);border-left:3px solid var(--teal);border-radius:0 7px 7px 0;padding:8px 10px;font-size:11.5px}
+.jverdict .q{font-family:var(--serif);font-style:italic;color:var(--muted);display:block;margin-bottom:3px}
+.jbarutu{margin-top:7px;font-family:var(--mono);font-size:9.5px;color:var(--dim)}
+.jbarutu b{color:var(--orange);font-weight:500}
+
+footer{max-width:1400px;margin:0 auto;padding:10px 20px 26px;font-size:10.5px;color:var(--dim);font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<header><div class="mast">
+  <span class="glyph">𒁾</span>
+  <h1>ŠALA · <em>The HeptaMap of Refuge</em> — every resident knows where to move</h1>
+  <span class="sub">126 zones · lives are never averaged: when scenarios disagree, the directive is minimax-safe</span>
+  <span class="law">HeptaShell E7 · GL-ALG-001-A1 · W→H→O · DRAFT — unsealed (CSR-08)</span>
+</div></header>
+
+<div class="frame">
+
+  <div>
+    <div class="wrap">
+      <div class="whead">
+        <span class="t">The Neighborhood · 126 Zones</span>
+        <span class="n">1,000,000 particles · <span id="ncont">0</span> minimax zones</span>
+        <span class="hint">click any zone for its resident directive</span>
+      </div>
+      <canvas id="sky" width="760" height="760" aria-label="HeptaShell map of 126 zones over a crowded neighborhood, with population density, fire fronts under two wind scenarios, per-zone evacuation arrows, and refuge points"></canvas>
+      <div class="legend">
+        <span class="li"><span class="sw" style="background:var(--crimson)"></span>danger (blended fields)</span>
+        <span class="li"><span class="sw" style="background:var(--orange)"></span>front · Θ_A wind SW→NE</span>
+        <span class="li"><span class="sw" style="background:var(--blue)"></span>front · Θ_B wind veering N (ghost when minority)</span>
+        <span class="li"><span class="sw" style="background:var(--teal);box-shadow:0 0 5px var(--teal)"></span>refuge (capacity honest)</span>
+        <span class="li">→ zone directive · <span style="color:var(--gold)">gold</span> = minimax (scenarios disagreed)</span>
+      </div>
+    </div>
+    <div class="ticker" id="ticker">𒁾 HeptaShell partition drawn — 126 zones, seven-fold. The wind begins to argue…</div>
+  </div>
+
+  <div class="rail">
+
+    <div class="card"><h2>The Fadam Lens <span class="tag">λ blends the danger fields</span></h2>
+      <div class="lensbar">
+        <span class="b">Θ_B · veering N</span>
+        <input type="range" id="lens" min="0" max="100" value="50" aria-label="Scenario lens between wind scenarios">
+        <span class="a">Θ_A · SW→NE</span>
+      </div>
+      <label class="chk"><input type="checkbox" id="follow" checked> follow the live Fadam verdict</label>
+      <div class="lensread" id="lensread">λ = 0.50 — CONTESTED: directives fall back to minimax wherever the winds disagree.</div>
+    </div>
+
+    <div class="card"><h2>Refuges <span class="tag">the map never sends people to a full door</span></h2>
+      <div class="refuges" id="refuges"></div>
+    </div>
+
+    <div class="card"><h2>Zone Directive <span class="tag">one zone, one clear move</span></h2>
+      <div class="journal" id="journal"><div class="empty">Click a zone. Its card says exactly where its residents move — and why that move survives both winds.</div></div>
+    </div>
+
+  </div>
+</div>
+
+<footer>ŠALA prototype workbench — HTML is the sketchpad, never production (WoW-5). The HeptaShell partition is the same seven-fold discipline as the E7 zone index; the danger fields are the physics service's proposal; directives are DETECT→PRESCRIBE renderings for command — the evacuation decree belongs to the authorities. Lives are never averaged: disagreement yields minimax, not blend. Figures illustrative until sealed.</footer>
+
+<script>
+"use strict";
+function h32(i){let x=(i^0x9E3779B9)>>>0;x=Math.imul(x^x>>>16,0x85EBCA6B)>>>0;x=Math.imul(x^x>>>13,0xC2B2AE35)>>>0;return(x^x>>>16)>>>0}
+const frac=i=>h32(i)/4294967296;
+const CX=380,CY=380,TAU=6.28318530718;
+
+/* ── the 126-zone HeptaShell: rings of 7·14·21·28·35·21 ── */
+const RINGSEC=[7,14,21,28,35,21];
+const RINGR=[[46,92],[92,138],[138,184],[184,230],[230,276],[276,322]];
+const ZONES=[];
+{let id=0;
+ for(let ri=0;ri<6;ri++){const ns=RINGSEC[ri],[r0,r1]=RINGR[ri];
+  for(let s=0;s<ns;s++){
+    const a0=s/ns*TAU, a1=(s+1)/ns*TAU, ac=(a0+a1)/2, rc=(r0+r1)/2;
+    ZONES.push({id:id++,ri,s,a0,a1,r0,r1,
+      cx:CX+rc*Math.cos(ac), cy:CY+rc*Math.sin(ac), ac,rc,
+      pop:0.35+frac(id*7)*0.65   /* crowded: high everywhere, hotter pockets */
+    });
+  }}}
+/* population: 1,000,000 distributed by zone pop weight */
+const POPW=ZONES.reduce((s,z)=>s+z.pop,0);
+ZONES.forEach(z=>z.count=Math.round(z.pop/POPW*1000000));
+
+/* ── fire + wind per sealed scenario ── */
+/* fire seat: southwest edge of the shell */
+const FIRE={ang:Math.PI*0.78, r:300};
+const fireXY={x:CX+FIRE.r*Math.cos(FIRE.ang), y:CY+FIRE.r*Math.sin(FIRE.ang)};
+const SCN={
+ A:{wind:-0.68, name:"Θ_A · SW→NE", col:'217,142,62'},   /* pushes toward NE */
+ B:{wind:-1.45, name:"Θ_B · veering N", col:'94,143,191'} /* pushes toward N  */
+};
+/* danger potential of a point under scenario s, at spread time tSpread */
+function danger(x,y,s,tSpread){
+  const dx=x-fireXY.x, dy=y-fireXY.y, d=Math.hypot(dx,dy)+1;
+  const ang=Math.atan2(dy,dx);
+  const align=Math.cos(ang-s.wind);                 /* downwind bias */
+  const reach=90+tSpread*46*(0.55+0.45*align);      /* front advances downwind */
+  return Math.max(0, 1-(d/reach)) * (0.55+0.45*Math.max(0,align)) ;
+}
+
+/* ── refuges (poor infrastructure: small capacities) ── */
+const REFUGES=[
+ {id:"R1",name:"OPEN SQUARE",   ang:-0.35,r:250,cap:180000},
+ {id:"R2",name:"SCHOOL YARD",   ang: 0.55,r:210,cap:120000},
+ {id:"R3",name:"RIVERBANK EDGE",ang:-2.35,r:300,cap:240000},
+];
+REFUGES.forEach(R=>{R.x=CX+R.r*Math.cos(R.ang);R.y=CY+R.r*Math.sin(R.ang);R.load=0});
+
+/* ── directive per zone: minimax across scenarios ──
+   candidate moves = toward each refuge with remaining capacity;
+   pick move minimizing the WORST danger along the way across A and B */
+let lambda=0.5, beat=0, margin=0, band=0.12, tSpread=1;
+function computeDirectives(){
+  REFUGES.forEach(R=>R.load=0);
+  let contested=0;
+  /* order zones by current blended danger: most endangered claim refuge first */
+  const order=[...ZONES].sort((a,b)=>zDanger(b)-zDanger(a));
+  for(const z of order){
+    let best=null;
+    for(const R of REFUGES){
+      if(R.load+z.count>R.cap*1.15) continue;       /* full door: skip */
+      const mx=(z.cx+R.x)/2, my=(z.cy+R.y)/2;       /* midpoint sample of the path */
+      const wA=Math.max(danger(mx,my,SCN.A,tSpread),danger(R.x,R.y,SCN.A,tSpread));
+      const wB=Math.max(danger(mx,my,SCN.B,tSpread),danger(R.x,R.y,SCN.B,tSpread));
+      const worst=Math.max(wA,wB);                  /* minimax core */
+      const blend=lambda*wA+(1-lambda)*wB;
+      const cost=worst*2+Math.hypot(R.x-z.cx,R.y-z.cy)/700;
+      if(!best||cost<best.cost)best={R,cost,worst,wA,wB,blend};
+    }
+    if(!best){ /* every door full: send outward away from both winds */
+      z.dir=Math.atan2(z.cy-CY,z.cx-CX); z.ref=null; z.minimax=true; contested++;
+    }else{
+      z.dir=Math.atan2(best.R.y-z.cy,best.R.x-z.cx);
+      z.ref=best.R; best.R.load+=z.count;
+      /* minimax flag: the two scenarios materially disagreed about this path */
+      z.minimax=Math.abs(best.wA-best.wB)>0.18;
+      if(z.minimax)contested++;
+      z.worst=best.worst;
+    }
+  }
+  document.getElementById('ncont').textContent=contested;
+  renderRefuges();
+}
+function zDanger(z){return lambda*danger(z.cx,z.cy,SCN.A,tSpread)+(1-lambda)*danger(z.cx,z.cy,SCN.B,tSpread)}
+
+/* ── density splat: 1,000,000 residents by zone ── */
+const sky=document.getElementById('sky'),ctx=sky.getContext('2d');
+const W=sky.width,H=sky.height;
+const acc=new Float32Array(W*H);
+const img=ctx.createImageData(W,H);
+let baseFrame=null;
+function splat(){
+  acc.fill(0);
+  for(const z of ZONES){
+    const n=z.count;
+    for(let k=0;k<n;k++){
+      const i=z.id*131071+k;
+      const a=z.a0+frac(i)* (z.a1-z.a0);
+      const r=z.r0+frac(i*5+2)*(z.r1-z.r0);
+      const x=(CX+r*Math.cos(a))|0, y=(CY+r*Math.sin(a))|0;
+      if(x<0||x>=W||y<0||y>=H)continue;
+      acc[y*W+x]+=1;
+    }
+  }
+  const d=img.data;
+  for(let i=0,j=0;i<W*H;i++,j+=4){
+    const v=acc[i];
+    if(v===0){d[j]=24;d[j+1]=25;d[j+2]=27;d[j+3]=255;continue}
+    const s=Math.min(1,Math.sqrt(v)/7);
+    d[j]  =24+Math.round(190*s);       /* warm population glow */
+    d[j+1]=25+Math.round(160*s);
+    d[j+2]=27+Math.round(120*s);
+    d[j+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  baseFrame=ctx.getImageData(0,0,W,H);
+}
+
+/* ── representatives: 8,000 residents flowing along directives ── */
+const REPS=8000,rep=[];
+{let s=17;const r0=()=>{s=(s*16807)%2147483647;return s/2147483647};
+ for(let k=0;k<REPS;k++){
+   const z=ZONES[(r0()*ZONES.length)|0];
+   const a=z.a0+r0()*(z.a1-z.a0), r=z.r0+r0()*(z.r1-z.r0);
+   rep.push({x:CX+r*Math.cos(a),y:CY+r*Math.sin(a),v:.14+r0()*.22});
+ }}
+function zoneAt(x,y){
+  const dx=x-CX,dy=y-CY,r=Math.hypot(dx,dy);
+  let a=Math.atan2(dy,dx); if(a<0)a+=TAU;
+  for(let ri=0;ri<6;ri++){const[r0,r1]=RINGR[ri];
+    if(r>=r0&&r<r1){const ns=RINGSEC[ri];const s=Math.min(ns-1,(a/TAU*ns)|0);
+      return ZONES[RINGSEC.slice(0,ri).reduce((p,q)=>p+q,0)+s];}}
+  return null;
+}
+
+/* ── draw ── */
+let selZone=null;
+function draw(t){
+  if(baseFrame){
+    ctx.putImageData(baseFrame,0,0);
+    /* danger wash + zone membranes + arrows */
+    for(const z of ZONES){
+      const dz=zDanger(z);
+      if(dz>0.03){
+        ctx.fillStyle=`rgba(195,74,63,${Math.min(.5,dz*.55)})`;
+        zonePath(z);ctx.fill();
+      }
+      ctx.strokeStyle=selZone&&selZone.id===z.id?'#D6A44C':'rgba(61,63,67,.7)';
+      ctx.lineWidth=selZone&&selZone.id===z.id?1.6:.6;
+      zonePath(z);ctx.stroke();
+      /* directive arrow */
+      if(z.dir!==undefined){
+        const L=9+6*Math.min(1,zDanger(z)*2);
+        const x2=z.cx+L*Math.cos(z.dir), y2=z.cy+L*Math.sin(z.dir);
+        ctx.strokeStyle=z.minimax?'#D6A44C':'rgba(232,230,225,.75)';
+        ctx.lineWidth=z.minimax?1.6:1;
+        ctx.beginPath();ctx.moveTo(z.cx,z.cy);ctx.lineTo(x2,y2);ctx.stroke();
+        const ah=Math.PI/7;
+        ctx.beginPath();
+        ctx.moveTo(x2,y2);
+        ctx.lineTo(x2-5*Math.cos(z.dir-ah),y2-5*Math.sin(z.dir-ah));
+        ctx.moveTo(x2,y2);
+        ctx.lineTo(x2-5*Math.cos(z.dir+ah),y2-5*Math.sin(z.dir+ah));
+        ctx.stroke();
+      }
+    }
+    /* fire fronts: confirmed solid, minority ghost */
+    drawFront(SCN.A,lambda,t);
+    drawFront(SCN.B,1-lambda,t);
+    /* fire seat */
+    const pulse=6+Math.sin(t*.006)*2;
+    let g=ctx.createRadialGradient(fireXY.x,fireXY.y,2,fireXY.x,fireXY.y,26);
+    g.addColorStop(0,'rgba(195,74,63,.95)');g.addColorStop(1,'rgba(195,74,63,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(fireXY.x,fireXY.y,26,0,7);ctx.fill();
+    /* refuges */
+    ctx.font='10px '+getComputedStyle(document.body).getPropertyValue('--mono');
+    for(const R of REFUGES){
+      const full=R.load>R.cap;
+      ctx.strokeStyle=full?'rgba(195,74,63,.9)':'rgba(79,184,168,.9)';
+      ctx.lineWidth=1.6;
+      /* heptagon marker */
+      ctx.beginPath();
+      for(let k=0;k<7;k++){const a=-Math.PI/2+k/7*TAU;
+        const px=R.x+11*Math.cos(a),py=R.y+11*Math.sin(a);
+        k?ctx.lineTo(px,py):ctx.moveTo(px,py)}
+      ctx.closePath();ctx.stroke();
+      ctx.fillStyle=full?'#C34A3F':'#4FB8A8';
+      ctx.fillText(R.id+(full?' FULL':''),R.x-12,R.y-16);
+    }
+    /* residents flowing */
+    ctx.fillStyle='rgba(232,230,225,.8)';
+    for(const p of rep){
+      const z=zoneAt(p.x,p.y);
+      if(z&&z.dir!==undefined&&zDanger(z)>0.02){
+        p.x+=Math.cos(z.dir)*p.v; p.y+=Math.sin(z.dir)*p.v;
+      }
+      ctx.fillRect(p.x-.7,p.y-.7,1.4,1.4);
+      /* arrived at a refuge: respawn in a hot zone */
+      for(const R of REFUGES){if(Math.hypot(p.x-R.x,p.y-R.y)<10){
+        const hz=ZONES[(Math.random()*ZONES.length)|0];
+        p.x=hz.cx;p.y=hz.cy;break;}}
+    }
+    /* wind arrows */
+    windArrow(SCN.A,lambda);windArrow(SCN.B,1-lambda);
+  }
+  requestAnimationFrame(draw);
+}
+function zonePath(z){
+  ctx.beginPath();
+  const steps=5;
+  for(let k=0;k<=steps;k++){const a=z.a0+(z.a1-z.a0)*k/steps;
+    const x=CX+z.r0*Math.cos(a),y=CY+z.r0*Math.sin(a);
+    k?ctx.lineTo(x,y):ctx.moveTo(x,y)}
+  for(let k=steps;k>=0;k--){const a=z.a0+(z.a1-z.a0)*k/steps;
+    ctx.lineTo(CX+z.r1*Math.cos(a),CY+z.r1*Math.sin(a))}
+  ctx.closePath();
+}
+function drawFront(s,wgt,t){
+  if(wgt<0.06)return;
+  const ghost=wgt<0.4;
+  ctx.strokeStyle=`rgba(${s.col},${ghost?0.35:0.85})`;
+  ctx.lineWidth=ghost?1:2;
+  if(ghost)ctx.setLineDash([4,5]);
+  ctx.beginPath();
+  for(let k=0;k<=40;k++){
+    const ang=s.wind+(k/40-0.5)*2.2;
+    const align=Math.cos(0);      /* along its own bearing the reach is max */
+    const reach=(90+tSpread*46*(0.55+0.45*Math.cos((k/40-0.5)*2.2)))*(0.96+0.04*Math.sin(t*.002+k));
+    const x=fireXY.x+reach*Math.cos(ang), y=fireXY.y+reach*Math.sin(ang);
+    k?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.stroke();ctx.setLineDash([]);
+}
+function windArrow(s,wgt){
+  if(wgt<0.06)return;
+  const x0=70,y0=s===SCN.A?70:100,L=30+30*wgt;
+  ctx.strokeStyle=`rgba(${s.col},${.3+.6*wgt})`;ctx.lineWidth=1.6;
+  ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x0+L*Math.cos(s.wind),y0+L*Math.sin(s.wind));ctx.stroke();
+  ctx.fillStyle=`rgba(${s.col},.9)`;
+  ctx.fillText(s.name+' · wind',x0+6,y0-8);
+}
+
+/* ── refuges rail ── */
+function renderRefuges(){
+  const box=document.getElementById('refuges');box.innerHTML='';
+  for(const R of REFUGES){
+    const pct=Math.min(1.3,R.load/R.cap);
+    box.insertAdjacentHTML('beforeend',
+     `<div class="ref${pct>1?' full':''}">
+        <span><span class="nm">${R.id} · ${R.name}</span><br>
+        <span class="sub">capacity ${R.cap.toLocaleString('en-US')} — this neighborhood's help is thin</span></span>
+        <span class="m">${Math.round(R.load).toLocaleString('en-US')}<br>${pct>1?'OVERLOADED — rerouting':Math.round(pct*100)+'%'}</span>
+        <span class="bar"><span class="fill" style="width:${Math.min(100,pct*100)}%"></span></span>
+      </div>`);
+  }
+}
+
+/* ── zone journal ── */
+function renderJournal(z){
+  const jr=document.getElementById('journal');
+  const dz=zDanger(z);
+  const dA=danger(z.cx,z.cy,SCN.A,tSpread),dB=danger(z.cx,z.cy,SCN.B,tSpread);
+  const bearing=['east','southeast','south','southwest','west','northwest','north','northeast'][Math.round(((z.dir||0)+TAU)%TAU/(TAU/8))%8];
+  jr.innerHTML=`
+   <div class="jhead">
+     <span class="kv">ZONE <b>K-${String(z.id).padStart(3,'0')}</b></span>
+     <span class="kv">ring <b>${z.ri+1}</b> · sector <b>${z.s+1}/${RINGSEC[z.ri]}</b></span>
+     <span class="kv">residents <b>${z.count.toLocaleString('en-US')}</b></span>
+   </div>
+   <div class="mrow"><span class="k">danger now</span><span class="v"><b>${dz.toFixed(2)}</b> blended · Θ_A ${dA.toFixed(2)} / Θ_B ${dB.toFixed(2)}</span></div>
+   <div class="mrow"><span class="k">directive</span><span class="v"><b>MOVE ${bearing.toUpperCase()}</b> → ${z.ref?z.ref.id+' · '+z.ref.name:'OUTWARD — all doors full, clear the shell'}</span></div>
+   <div class="mrow"><span class="k">why this way</span><span class="v">${z.minimax
+     ? '<b>MINIMAX</b> — the two winds disagreed about this path; this move has the least worst case under BOTH. Lives are never averaged.'
+     : 'both scenarios agree: this path stays behind the front under either wind.'}</span></div>
+   <div class="mrow"><span class="k">avoid</span><span class="v">the downwind corridors of ${dA>dB?'Θ_A (northeast drift)':'Θ_B (northward climb)'} — the front reaches them first</span></div>
+   <div class="jverdict"><span class="q">For the resident of this zone:</span>
+   Leave now, ${bearing}, toward ${z.ref?('the '+z.ref.name.toLowerCase()):'open ground beyond the shell'}. The route is chosen so that even if the wind changes to the other testimony, you are still walking away from the fire — not into its argument.</div>
+   <div class="jbarutu"><b>BARUTU</b> — this card is the map's proposal; the evacuation decree belongs to command. Both winds stay drawn until the decree: no resident is surprised by a verdict flip.</div>`;
+}
+
+/* ── interactions ── */
+sky.addEventListener('click',e=>{
+  const rc=sky.getBoundingClientRect();
+  const x=(e.clientX-rc.left)*(W/rc.width),y=(e.clientY-rc.top)*(H/rc.height);
+  const z=zoneAt(x,y);
+  if(z){selZone=z;renderJournal(z)}
+});
+
+/* ── the live verdict feeding λ, and the fire spreading ── */
+let following=true;
+function tick(){
+  beat++; tSpread=Math.min(4.6,1+beat*.045);
+  const ev=Math.min(1,beat*.03);
+  margin=Math.max(0,.02+ev*.24-.05*Math.random());
+  const target=margin>band? .5+.5*Math.min(1,(margin-band)/.15) : .5+(Math.random()-.5)*.06;
+  if(following){lambda+=(Math.min(.97,target)-lambda)*.15;
+    document.getElementById('lens').value=Math.round(lambda*100);}
+  else lambda=+document.getElementById('lens').value/100;
+  computeDirectives();
+  if(selZone)renderJournal(selZone);
+  const st=margin>band?(lambda>0.5?'Θ_A most probably confirmed':'Θ_B most probably confirmed'):'CONTESTED';
+  document.getElementById('lensread').innerHTML=
+   `λ = <b>${lambda.toFixed(2)}</b> — ${st}${margin>band?': directives follow the confirmed wind; disagreement pockets stay gold (minimax).':': directives fall back to minimax wherever the winds disagree.'}`;
+  const over=REFUGES.filter(R=>R.load>R.cap).length;
+  document.getElementById('ticker').innerHTML=
+   `𒁾 <b>HeptaMap</b> beat ${beat} — front at t=${tSpread.toFixed(1)} · λ ${lambda.toFixed(2)} · ${st}${over?` · <b>${over} refuge${over>1?'s':''} overloaded — rerouting live</b>`:''}. The map proposes; command decrees; no door lies about its capacity.`;
+}
+
+/* ── controls ── */
+document.getElementById('lens').addEventListener('input',()=>{
+  document.getElementById('follow').checked=false;following=false;
+  lambda=+document.getElementById('lens').value/100;computeDirectives();
+});
+document.getElementById('follow').addEventListener('change',e=>{following=e.target.checked});
+
+/* ── go ── */
+splat();
+computeDirectives();
+setInterval(tick,900);
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

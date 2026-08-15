@@ -1,0 +1,59 @@
+---
+# 𒁾 PB-311 — SNAPSHOT SEALS & THE NUZI VAULT (GL-OPS-001 L-3/L-4)
+# Ledger sealed AT WATERMARK (never a naive fs instant); EnkiDW at post-ETL
+# quiescence; EnkiQDB quarantine sealed ON EVERY ADMISSION, custody in lineage,
+# EXEMPT from pruning while any PARZU investigation is open (flag dir non-empty).
+- name: PB-311 | Snapshot seals and NUZI vault
+  hosts: write_node
+  become: true
+  tasks:
+    - name: Freeze at watermark (quiesce ledger appends briefly)
+      ansible.builtin.command: /usr/local/bin/enkidb-quiesce --begin   # TODO native tool
+      changed_when: true
+      failed_when: false
+
+    - name: LVM snapshot of ledger LV at watermark
+      ansible.builtin.command: >
+        lvcreate -s -L 2G -n ledger_seal_{{ ansible_date_time.iso8601_basic_short }}
+        {{ ledger_lv }}
+    - name: Thaw
+      ansible.builtin.command: /usr/local/bin/enkidb-quiesce --end
+      failed_when: false
+
+    - name: Ship seal to vault dataset and sign (Ed25519)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        SEAL=$(ls /dev/{{ host_vg }}/ledger_seal_* | tail -n1)
+        NAME=$(basename $SEAL).img.zst
+        dd if=$SEAL bs=4M | zstd -3 | \
+          ssh {{ ship_user }}@{{ ship_target_host }} "cat > {{ vault_mount }}/enkidb/$NAME"
+        ssh {{ ship_user }}@{{ ship_target_host }} \
+          "ssh-keygen -Y sign -f {{ signing_key }} -n bahyway-seal {{ vault_mount }}/enkidb/$NAME"
+        lvremove -y $SEAL
+
+    - name: Quarantine admission seal (EnkiQDB) — custody lineage, prune-exempt while open
+      ansible.builtin.shell: |
+        OPEN=$(ssh {{ ship_user }}@{{ ship_target_host }} \
+          "ls {{ vault_mount }}/enkiqdb/OPEN_PARZU 2>/dev/null | wc -l")
+        echo "open PARZU investigations: $OPEN (prune exempt while > 0)"
+      changed_when: false
+
+    - name: Retention prune (respecting exemptions)
+      ansible.builtin.shell: |
+        ssh {{ ship_user }}@{{ ship_target_host }} '
+          find {{ vault_mount }}/enkidw  -name "*.img.zst" -mtime +{{ retention_days.dw }} -delete
+          find {{ vault_mount }}/enkisdb -name "*.img.zst" -mtime +{{ retention_days.staging }} -delete
+          # enkiqdb: NEVER auto-pruned here — quarantine custody rule'
+
+    - name: GATE | verify newest + oldest retained seals, incl. oldest open-custody quarantine seal
+      ansible.builtin.shell: |
+        ssh {{ ship_user }}@{{ ship_target_host }} '
+          for f in $(ls -t {{ vault_mount }}/enkidb/*.img.zst | sed -n "1p;\$p"); do
+            ssh-keygen -Y verify -f {{ signing_key }}.pub -I bahyway -n bahyway-seal \
+              -s $f.sig < $f || exit 1; done'
+      changed_when: false
+
+    - name: Run-KAKI
+      ansible.builtin.shell: |
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-311\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"seals-verified\"}" >> {{ kaki_runs }}

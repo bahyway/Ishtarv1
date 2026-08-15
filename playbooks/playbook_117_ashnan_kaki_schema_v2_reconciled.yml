@@ -1,0 +1,138 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_117_ashnan_kaki_schema_v2_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-117 Reconciled: ashnan-kaki -> real ashnan crate
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_117_ashnan_kaki_schema_v2_reconciled.yml -i "localhost," -c local -v
+#
+#  NAMING COLLISION — this repo already has a DIFFERENT
+#  playbook_117_ashnan_kaki_schema_gap.yml (from an earlier batch this
+#  session, which found ashnan-kaki did not exist and documented the
+#  gap). This upload is fuller (proposes the complete schema, not just a
+#  gap report) and this reconciliation supersedes that earlier gap
+#  finding with real, positive results — kept as a separate file.
+#
+#  Why this file exists (not the original playbook_117_ashnan_kaki_schema.yml):
+#    The uploaded PB-117 proposes a standalone "ashnan-kaki" crate.
+#    Checked the real repo: no ashnan-kaki, but crates/ashnan already
+#    exists and covers almost the entire proposal — kaki.rs
+#    (AshnanKakiClass with the same four particle classes: PestIdentity/
+#    SoilCropEvent/LivestockEvent/ExternalIngest), provenance.rs
+#    (ProvenanceBlock, matching ProvenanceEav), cmi.rs/iri.rs/lmi.rs
+#    (dedicated modules, more developed than PB-117's single tiamat.rs
+#    stub file — real Cmi/Iri/Lmi types with CmiState/IriState/LmiState,
+#    not bare f64 stub functions).
+#
+#    One genuine, confirmed gap: ColourID B11 (round(H x 240), Plimpton
+#    322 base) did not exist anywhere in this repo. Built it for real
+#    this session at crates/ashnan/src/colour.rs, wired into lib.rs,
+#    verified compiling and passing against the full crate.
+#
+#    Note on kaki.rs: its doc comments claim kaki_type/kaki_role pairs
+#    matching PB-117 exactly (0x01/KISHIB, 0x02/ZIKRU, 0x02/PARZU,
+#    0x03/CrossTribe), but the enum's actual #[repr(u8)] discriminants
+#    are sequential ordinals (0x01, 0x02, 0x03, 0x04) that do not encode
+#    those pairs directly. Flagged here as worth checking against how
+#    kaki_type/kaki_role actually get set at KISPU commit time — not
+#    asserted as a bug, since a separate mapping may exist elsewhere.
+#
+#      ashnan : 5 passed (was 3 before this session's colour.rs addition)
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-117 (Reconciled) | ASHNAN KAKI schema — real ashnan crate + ColourID B11"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB117_V2_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | ashnan/src/colour.rs exists (built this session)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/ashnan/src/colour.rs"
+      register: colour_file
+
+    - name: "FAIL | colour.rs not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/ashnan/src/colour.rs not found after sync."
+      when: not colour_file.stat.exists
+
+    - name: "TEST | cargo test -p ashnan"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p ashnan"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PARSE | test_out passed-test count"
+      ansible.builtin.set_fact:
+        test_out_passed_count: "{{ (test_out.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | ashnan reports 5 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_out.stdout"
+          - test_out_passed_count >= 5
+        fail_msg: >-
+          Expected at least 5 passed, 0 failed. Got {{ test_out_passed_count }}
+          passed. Full output: {{ test_out.stdout }}
+        success_msg: >-
+          ashnan: {{ test_out_passed_count }} passed, 0 failed (>= baseline 5).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-117 (v2) Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-117 proposed standalone "ashnan-kaki" crate.
+          SUPERSEDED — real crates/ashnan already covers particle
+          classes, provenance, and CMI/IRI/LMI as dedicated modules
+          (more developed than the original's single-file stub).
+
+          Genuine gap found and fixed this session: ColourID B11 did not
+          exist anywhere in the repo. Built crates/ashnan/src/colour.rs
+          (round(H x 240), Plimpton 322 base, matches PB-117's exact
+          design), wired into ashnan's public API.
+
+          Verified this run:
+            ashnan : 5/5 tests PASS
+
+          Worth checking (not asserted as broken): AshnanKakiClass's
+          #[repr(u8)] discriminants (1,2,3,4) are sequential ordinals,
+          not the kaki_type/kaki_role byte pairs its own doc comments
+          describe. Confirm how kaki_type/kaki_role actually get set at
+          KISPU commit time before relying on the enum discriminant
+          directly for that purpose.
+
+    - name: "DONE | PB-117 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-117 reconciled — ashnan verified, ColourID B11 gap closed. Report: {{ report_file }}"

@@ -1,0 +1,173 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_247_workspace_orphan_crate_audit_and_wire.yml
+#  BahyWay.Ecosystem v4.0 — PB-247: orphaned-crate audit + wire-in gate
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_247_workspace_orphan_crate_audit_and_wire.yml -i "localhost," -c local -v
+#
+#  Why this playbook exists:
+#    The Architect asked how to know all "Pure Rust Code" is actually part
+#    of the ecosystem, given gaps in the playbook numbering sequence
+#    (PB-119..136 etc. never existed). Answer found live on 2026-07-25:
+#    playbook numbers were NEVER an inventory of implemented code — that
+#    role belongs to the Cargo workspace's own `members` list. Auditing
+#    that directly (every `crates/*/Cargo.toml` and `bin/*/Cargo.toml`
+#    dir vs. what's actually declared in workspace.members) found 3 real
+#    orphans: crates written, committed, but never wired into the
+#    workspace, so `cargo build --workspace` / `cargo test --workspace`
+#    had never touched them:
+#      - crates/bahyway-dqm         (1,760 lines; was reachable only
+#        transitively via other crates' path deps, so it happened to get
+#        built anyway — but had no direct `-p` buildability)
+#      - crates/orbital-trust-probe (804 lines; TRUE dead code — nothing
+#        depended on it, and it could not even be built standalone:
+#        `cargo build` from inside its own dir errored "current package
+#        believes it's in a workspace when it's not")
+#      - crates/quant-engine        (1,464 lines; same dead-code failure
+#        mode as orbital-trust-probe)
+#    All three added to workspace.members in Cargo.toml. Verified locally
+#    before shipping this playbook: `cargo build -p bahyway-dqm -p
+#    orbital-trust-probe -p quant-engine --release` — clean; `cargo test`
+#    on the same three — 154 unit tests total (75 + 22 + 57), all passing;
+#    `cargo check --workspace` — clean across the full 199-member
+#    workspace (196 original + 3 newly wired).
+#
+#    This playbook makes the audit itself repeatable and turns it into a
+#    standing regression gate: any future crate written under crates/ or
+#    bin/ with its own Cargo.toml but never added to workspace.members
+#    will fail this playbook, not silently sit unbuilt for a month like
+#    these three did (last touched 2026-06-18, found 2026-07-25).
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-247 | Orphaned-crate audit — workspace.members vs. real crates/bin/ dirs"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB247_ORPHAN_CRATE_AUDIT_{{ session_date }}.txt"
+    naru_journal:  "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU directory exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. On your Fedora
+          laptop: git pull origin {{ target_branch }}, then scp -r
+          workspace/bahyway_v4 bahaa@eriduos-vdi:{{ workspace }}. Re-run this
+          playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "AUDIT | Every crates/*/Cargo.toml and bin/*/Cargo.toml directory"
+      ansible.builtin.shell: |
+        set -o pipefail
+        find crates bin -maxdepth 1 -mindepth 1 -type d -exec test -e '{}/Cargo.toml' \; -print | sort
+      args:
+        executable: /bin/bash
+        chdir: "{{ workspace }}"
+      register: on_disk
+      changed_when: false
+
+    - name: "AUDIT | Every member declared in workspace.members"
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep -oE '"(crates|bin)/[^"]+"' Cargo.toml | tr -d '"' | sort
+      args:
+        executable: /bin/bash
+        chdir: "{{ workspace }}"
+      register: declared
+      changed_when: false
+
+    - name: "COMPUTE | Orphans (on disk, not declared)"
+      ansible.builtin.set_fact:
+        orphans: "{{ on_disk.stdout_lines | difference(declared.stdout_lines) }}"
+
+    - name: "FAIL | Orphaned crate(s) found — written but never wired into workspace.members"
+      ansible.builtin.fail:
+        msg: >
+          {{ orphans | length }} orphaned crate dir(s) have a Cargo.toml but
+          are NOT in workspace.members, so cargo build/test --workspace never
+          touches them: {{ orphans }}. Add each to Cargo.toml's members list,
+          then re-run this playbook.
+      when: orphans | length > 0
+
+    - name: "OK | Zero orphans — every crates/bin/ dir with a Cargo.toml is a workspace member"
+      ansible.builtin.debug:
+        msg: "PASS — {{ declared.stdout_lines | length }} declared members, {{ on_disk.stdout_lines | length }} on-disk crate dirs, 0 orphans."
+
+    - name: "BUILD | Full workspace check (fast compile-only pass, all members)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} check --workspace"
+        chdir: "{{ workspace }}"
+      register: check_out
+      changed_when: false
+      failed_when: check_out.rc != 0
+
+    - name: "TEST | bahyway-dqm + orbital-trust-probe + quant-engine (the 3 newly-wired crates)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p bahyway-dqm -p orbital-trust-probe -p quant-engine --release"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PRINT | Test output"
+      ansible.builtin.debug:
+        msg: "{{ test_out.stdout_lines }}"
+
+    - name: "WRITE | Audit report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-247 Orphaned-Crate Audit Report
+          Date : {{ session_date }}
+
+          Declared workspace.members : {{ declared.stdout_lines | length }}
+          On-disk crates/bin/ dirs   : {{ on_disk.stdout_lines | length }}
+          Orphans found              : {{ orphans | length }}
+
+          cargo check --workspace: PASS
+          cargo test -p bahyway-dqm -p orbital-trust-probe -p quant-engine: PASS
+
+          {{ test_out.stdout }}
+
+          Method: playbook numbers are not an inventory of implemented Rust
+          code — the workspace.members list in Cargo.toml is. This audit
+          diffs `find crates bin -maxdepth 1 -type d -exec test -e Cargo.toml`
+          against the declared members list on every run, so any future
+          crate written but never wired in fails this gate instead of
+          silently sitting unbuilt.
+
+    - name: "NARU | Record audit result"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ session_date }} | PB-247 | Orphan-crate audit | {{ orphans | length }} orphans | see {{ report_file }}"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | PB-247 COMPLETE"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════
+          PB-247  ORPHAN CRATE AUDIT  PASS
+          {{ declared.stdout_lines | length }} workspace members, 0 orphans
+          cargo check --workspace: clean
+          bahyway-dqm + orbital-trust-probe + quant-engine: all tests pass
+          Report: {{ report_file }}
+          ═══════════════════════════════════════════════════

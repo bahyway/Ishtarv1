@@ -1,0 +1,218 @@
+# =============================================================================
+# PB-234 -- Launch DubSar IDE with EVERY tab working (login + PDM + AR-EN
+# Navigator + Engine Map). BahyWay.Ecosystem v4.0 — 2026-07-25
+#
+# WHY THIS EXISTS: PB-231 (AR-EN Navigator) and PB-233 (Engine Map) each
+# only build and copy their OWN GDExtension .so into dubsar-theater/bin/ --
+# neither touches the other's file. Running just one of them leaves a tab
+# broken: AR-EN Navigator needs libnavi_translate_gdext.so (only PB-231
+# builds it); Engine Map needs libenkimdb_registry_gd.so (only PB-233
+# builds it). This playbook is the single, consolidated launcher that
+# builds and wires ALL THREE GDExtension bridges DubSar IDE's tabs
+# actually need, in one run -- exactly the "don't fragment into playbooks
+# that half-work" consistency the Architect asked for.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Builds kupru-gdext (login) + navi-translate-gdext (AR-EN Navigator)
+#      + enkimdb-registry-gd (Engine Map) together, one cargo invocation.
+#   2. Copies all three compiled .so files into dubsar-theater/bin/.
+#   3. Discovers a real Godot 4 binary (same proven priority order as
+#      every prior DubSar-launching playbook this session).
+#   4. Primes the project's Godot import cache with one headless
+#      `--import` pass -- unconditional, for the same reason every prior
+#      playbook in this chain does it unconditionally.
+#   5. Launches DubSar IDE (`dubsar_mode: run` default; `editor` to see
+#      script/scene panels).
+#
+# AFTER PB-234, dubsar-theater/bin/ holds all three .so files and every
+# tab in HeptaScript Editor's MainTabs works: Query Editor, PDM,
+# AR-EN Navigator, Engine Map. This playbook supersedes running PB-231
+# and PB-233 separately -- either one alone leaves a tab broken.
+#
+# HONEST LIMIT: `cargo build --workspace` was verified clean in the
+# sandbox that wrote this. The Godot side (all four tabs, GDExtension
+# discovery for all three bridges at once) has NEVER been run anywhere,
+# by anyone -- this is genuinely the first live test of the full DubSar
+# IDE surface built across this session's iPhone-playbook review pass.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo):
+#   ansible-playbook playbooks/playbook_234_launch_dubsar_ide_full.yml
+#   ansible-playbook playbooks/playbook_234_launch_dubsar_ide_full.yml -e dubsar_mode=editor
+#   ansible-playbook playbooks/playbook_234_launch_dubsar_ide_full.yml -e skip_build=true
+# =============================================================================
+
+- name: "PB-234 -- Launch DubSar IDE with every tab working"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    dubsar_mode: "run"
+    skip_build: false
+    godot_bin: ""
+    build_log: "/tmp/dubsar_ide_full_build.log"
+    godot_log: "/tmp/dubsar_ide_full_launch.log"
+
+  tasks:
+    - name: "Confirm the DubSar project really exists at the expected path"
+      ansible.builtin.stat:
+        path: "{{ dubsar_project }}/project.godot"
+      register: dubsar_project_check
+
+    - name: "Fail clearly if the DubSar project isn't where expected"
+      ansible.builtin.fail:
+        msg: >-
+          No project.godot found at {{ dubsar_project }}. Run this from
+          inside a checkout of the EnkiDB repo, or pass
+          -e dubsar_project=/path/to/project/dir to point at a different one.
+      when: not dubsar_project_check.stat.exists
+
+    # ── Build all three bridges DubSar IDE's tabs need ──────────────────
+    - name: "Build kupru-gdext + navi-translate-gdext + enkimdb-registry-gd in release mode"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p kupru-gdext -p navi-translate-gdext -p enkimdb-registry-gd > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: "Fail clearly if the build failed"
+      ansible.builtin.fail:
+        msg: >-
+          Build failed (rc={{ build_result.rc }}). Full output: {{ build_log }}
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: "Confirm all three compiled libraries exist"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/{{ item }}"
+      register: lib_checks
+      loop:
+        - libkupru_gdext.so
+        - libnavi_translate_gdext.so
+        - libenkimdb_registry_gd.so
+
+    - name: "Fail clearly if any compiled library is missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found under {{ repo_root }}/target/release/.
+          Run without -e skip_build=true first, or check {{ build_log }}
+          for a build failure.
+      loop: "{{ lib_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "Ensure the DubSar project's bin/ directory exists"
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "Copy all three compiled bridges into the DubSar project"
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/{{ item }}"
+        dest: "{{ dubsar_project }}/bin/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - libkupru_gdext.so
+        - libnavi_translate_gdext.so
+        - libenkimdb_registry_gd.so
+
+    # ── Discover Godot (same proven logic as every prior DubSar playbook) ──
+    - name: "Discover a real Godot 4 binary"
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: "Resolve the Godot binary to actually use"
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: "Fail clearly, with next steps, if no Godot binary was found anywhere"
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found on PATH, via Flatpak, under $HOME, or in
+          common system locations. Install Godot 4.x from
+          https://godotengine.org/download and re-run, or point at it
+          directly with -e godot_bin=/full/path/to/Godot.
+      when: resolved_godot_bin | length == 0
+
+    # ── Prime the import cache (GDExtension discovery, all three) ──────
+    - name: "Prime the DubSar project (headless import scan) so all three GDExtensions get discovered before launch"
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ dubsar_project }} --import
+        > {{ godot_log }}.import 2>&1
+      register: import_result
+      failed_when: false
+
+    - name: "Warn if the priming import scan reported errors"
+      ansible.builtin.debug:
+        msg: >-
+          Headless import priming exited {{ import_result.rc }}. See
+          {{ godot_log }}.import for details. Continuing to launch anyway --
+          but if any tab fails to find its bridge class, check that log first.
+      when: import_result.rc is defined and import_result.rc != 0
+
+    - name: "Report what is about to launch"
+      ansible.builtin.debug:
+        msg:
+          - "Project             : {{ dubsar_project }}"
+          - "Godot binary        : {{ resolved_godot_bin }}"
+          - "Mode                : {{ dubsar_mode }}"
+          - "Bridge (login)      : {{ dubsar_project }}/bin/libkupru_gdext.so"
+          - "Bridge (AR-EN Nav)  : {{ dubsar_project }}/bin/libnavi_translate_gdext.so"
+          - "Bridge (Engine Map) : {{ dubsar_project }}/bin/libenkimdb_registry_gd.so"
+          - "Launch log          : {{ godot_log }}"
+
+    - name: "Launch DubSar in editor mode (full IDE — script/scene panels)"
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --editor --path {{ dubsar_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "editor"
+
+    - name: "Launch DubSar in run mode (no editor chrome)"
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --path {{ dubsar_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "run"
+
+    - name: "Confirmation"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 DubSar IDE launching in the background ({{ dubsar_mode }} mode).
+          After login, open HeptaScript Editor and check all four tabs:
+          Query Editor, PDM, AR-EN Navigator, Engine Map. If any tab shows
+          a missing-class error, check {{ godot_log }} and
+          {{ godot_log }}.import first -- the Rust side of all three
+          bridges was verified independently via
+          `cargo build --release -p kupru-gdext -p navi-translate-gdext -p enkimdb-registry-gd`.

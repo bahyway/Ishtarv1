@@ -1,0 +1,277 @@
+# =============================================================================
+# PB-203 — EnkiDDB + EnkiMDB fleet health check + timestamped volume backup
+# BahyWay.Ecosystem v4.0 — 2026-07-19, corrected 2026-07-26 (PB-203.2)
+#
+# CONTEXT: evaluated from an external LLM design review (2026-07-19) of
+# the Architect's own EnkiDDB/EnkiMDB design questions. Its proposed
+# health-check/backup playbooks used `podman-compose` and a generic
+# `dbaas_*` container naming scheme that don't match this repo's real,
+# sealed convention (playbook_192's own header: "No `containers.podman`
+# Ansible collection used -- every prior playbook in this repo uses only
+# `ansible.builtin.*` modules"). This playbook keeps that principle --
+# ops hygiene worth having, real container/volume names, no new tooling
+# -- and mirrors playbook_192's own `wait_for` port-check pattern rather
+# than inventing a second style.
+#
+# PB-203.2 FIX (2026-07-26): originally authored 2026-07-19, when all
+# four containers and volumes lived on `eriduous-vdi` itself (`hosts:
+# localhost`, `connection: local`, every task a bare `podman`/`stat`
+# call with no `delegate_to`). PB-212 (also 2026-07-26, but later the
+# same day) moved the real fleet onto the 2-VM CQRS split --
+# `enkiddb-write`/`enkimdb-write` on `enkidb-node-write`
+# (192.168.122.101), `enkiddb-read`/`enkimdb-read` on `enkidb-node-read`
+# (192.168.122.107) -- and this playbook was never updated to follow.
+# Confirmed live: running it against real infra reported all four
+# containers "NOT RUNNING" and failed at 1.3, even though the fleet was
+# genuinely healthy on the two VMs -- it was checking `podman ps` on
+# eriduous-vdi, which hasn't run any of these containers since PB-212
+# landed. Fixed by splitting every task by which real host each
+# container/volume actually lives on now (`delegate_to`, same pattern
+# PB-212/213/258 already established), and by fetching each remote
+# volume's backup tarball back to `backup_root` on the control node
+# (eriduous-vdi) rather than leaving backups scattered across the two
+# VMs -- consolidated backup location was the original playbook's own
+# intent (`EnkiDDB_PODMAN_DEPLOYMENT.md`'s manual procedure), not a new
+# requirement invented here.
+#
+# WHAT IT DOES, against the real 2-VM fleet:
+#   1. HEALTH CHECK
+#      - `podman ps` status for all four real containers, delegated to
+#        whichever of `enkidb-node-write`/`enkidb-node-read` each one
+#        actually runs on; reports every status before any hard
+#        failure, then fails loudly if one is missing.
+#      - `wait_for` on all four real ports (7101/7102/7201/7202)
+#        against each VM's real IP from the control node, exactly
+#        PB-192's own verification step, re-runnable any time.
+#      - Confirms each node has actually materialized real Data Files
+#        on disk (`current/entities.data` under its volume's real
+#        mountpoint) -- distinguishes "container is up" from "container
+#        has ever actually flushed anything," which `podman ps` alone
+#        can't tell you.
+#   2. BACKUP
+#      - Snapshots each of the four real Podman volumes' mounted
+#        directories to a timestamped `.tar.gz` on the host that owns
+#        it, fetches it back to `backup_root` on the control node,
+#        matching the manual procedure `EnkiDDB_PODMAN_DEPLOYMENT.md`
+#        already documents ("back up the volume, not the container"),
+#        just automated and consolidated in one place.
+#      - Prunes archives older than `backup_retain_days` (default 7).
+#
+# HONEST SCOPE: this backs up the MATERIALIZED Data Files (and, for the
+# write nodes, whatever the in-memory Journal has flushed so far) -- it
+# does not, and cannot, back up unflushed Journal state, since that
+# Journal is in-memory only (`enkiddb-write-server`'s own documented v1
+# durability limitation). Restoring from one of these archives recovers
+# to "as of the last FLUSH before this backup ran," not to the exact
+# moment of a crash.
+#
+# PB-203.3 FIX (confirmed live 2026-07-26): PB-203.2's plain `stat`/`tar`
+# against the volume mountpoint hit real `Permission denied` errors --
+# rootless Podman remaps the container's UID range into a subuid
+# namespace, so the volume's real content isn't directly readable by the
+# outer login user, exactly the wall PB-213/258 already solved for
+# `cp`/`rm`/`mv`. Fixed the same way: `podman unshare test -f` for the
+# existence check (1.6), and `podman unshare cp -a` to stage a
+# plain-owned copy before ordinary `tar` (2.2/2.3) -- both reusing
+# PB-213/258's already-proven-working idiom rather than guessing a new
+# one.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_203_enkiddb_enkimdb_health_check_and_backup.yml \
+#     -i ansible/inventory.ini
+#   # override backup location/retention if wanted:
+#   # -e backup_root=/mnt/backups -e backup_retain_days=14
+#
+# Suitable for the same crontab pattern already suggested for this fleet
+# (e.g. health check hourly, backup nightly) -- scheduling itself is
+# left to the Architect's own crontab/systemd-timer choice, per the
+# established "no playbook schedules itself" convention in this repo.
+# =============================================================================
+---
+- name: "PB-203 | EnkiDDB + EnkiMDB fleet health check + backup"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    backup_root: "{{ ansible_env.HOME }}/dbaas_backups"
+    backup_retain_days: 7
+    enkiddb_write_host: "enkidb-node-write"
+    enkiddb_read_host: "enkidb-node-read"
+    enkiddb_write_ip: "192.168.122.101"
+    enkiddb_read_ip: "192.168.122.107"
+    fleet_containers:
+      - { name: enkiddb-write, host: "{{ enkiddb_write_host }}" }
+      - { name: enkimdb-write, host: "{{ enkiddb_write_host }}" }
+      - { name: enkiddb-read, host: "{{ enkiddb_read_host }}" }
+      - { name: enkimdb-read, host: "{{ enkiddb_read_host }}" }
+    fleet_volumes:
+      - { name: enkiddb-write-data, host: "{{ enkiddb_write_host }}" }
+      - { name: enkimdb-write-data, host: "{{ enkiddb_write_host }}" }
+      - { name: enkiddb-read-data, host: "{{ enkiddb_read_host }}" }
+      - { name: enkimdb-read-data, host: "{{ enkiddb_read_host }}" }
+
+  tasks:
+    # ── 1. Health check ─────────────────────────────────────────────
+    - name: "1.1 | Check container statuses on the real host each one runs on"
+      ansible.builtin.command: "podman ps --filter name=^{{ item.name }}$ --format '{{ '{{' }}.Names{{ '}}' }}: {{ '{{' }}.Status{{ '}}' }}'"
+      register: container_status
+      changed_when: false
+      delegate_to: "{{ item.host }}"
+      loop: "{{ fleet_containers }}"
+      loop_control:
+        label: "{{ item.name }} @ {{ item.host }}"
+
+    - name: "1.2 | Report every container's status"
+      ansible.builtin.debug:
+        msg: "{{ item.stdout if item.stdout | length > 0 else item.item.name + ' @ ' + item.item.host + ': NOT RUNNING' }}"
+      loop: "{{ container_status.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: "1.3 | Fail loudly if any container isn't running"
+      ansible.builtin.fail:
+        msg: "{{ item.item.name }} is not running on {{ item.item.host }} (podman ps returned no match)."
+      when: item.stdout | length == 0
+      loop: "{{ container_status.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: "1.4 | Confirm all four real ports accept connections on their real host IPs"
+      ansible.builtin.wait_for:
+        host: "{{ item.host }}"
+        port: "{{ item.port }}"
+        timeout: 10
+      loop:
+        - { host: "{{ enkiddb_write_ip }}", port: 7101 }  # enkiddb-write
+        - { host: "{{ enkiddb_read_ip }}", port: 7102 }   # enkiddb-read
+        - { host: "{{ enkiddb_write_ip }}", port: 7201 }  # enkimdb-write
+        - { host: "{{ enkiddb_read_ip }}", port: 7202 }   # enkimdb-read
+      loop_control:
+        label: "{{ item.host }}:{{ item.port }}"
+
+    - name: "1.5 | Resolve each real volume's host mountpoint"
+      ansible.builtin.command: "podman volume inspect {{ item.name }} --format '{{ '{{' }}.Mountpoint{{ '}}' }}'"
+      register: volume_mountpoints
+      changed_when: false
+      delegate_to: "{{ item.host }}"
+      loop: "{{ fleet_volumes }}"
+      loop_control:
+        label: "{{ item.name }} @ {{ item.host }}"
+
+    # PB-203.3 FIX (confirmed live 2026-07-26): plain `ansible.builtin.stat`
+    # as the login user hit `Permission denied` reading under the volume
+    # mountpoint -- rootless Podman remaps the container's UID range into
+    # a subuid namespace, so the volume's real data isn't directly
+    # readable by the outer login user even though the top-level
+    # Mountpoint path itself is listable. Same root cause PB-213/258
+    # already solved for `cp`/`rm`/`mv`: enter the user namespace with
+    # `podman unshare` first. `ansible.builtin.stat` is a Python module,
+    # not a shell command, so it can't be prefixed the same way --
+    # `podman unshare test -f` (a real shell test, exit code only) is the
+    # equivalent.
+    - name: "1.6 | Check for materialized Data Files under each volume (podman unshare -- rootless UID remap)"
+      ansible.builtin.shell: >
+        podman unshare test -f "{{ item.stdout }}/current/entities.data" && echo EXISTS || echo MISSING
+      register: data_file_check
+      changed_when: false
+      delegate_to: "{{ item.item.host }}"
+      loop: "{{ volume_mountpoints.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: "1.7 | Report which nodes have real materialized data vs are still empty"
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item.item.name }}:
+          {{ 'has materialized Data Files' if 'EXISTS' in item.stdout
+             else 'NOT YET MATERIALIZED (no current/entities.data -- run FLUSH or INGEST_DIR first)' }}
+      loop: "{{ data_file_check.results }}"
+      loop_control:
+        label: "{{ item.item.item.name }}"
+
+    # ── 2. Backup ────────────────────────────────────────────────────
+    - name: "2.1 | Ensure backup destination exists on the control node"
+      ansible.builtin.file:
+        path: "{{ backup_root }}"
+        state: directory
+        mode: '0700'
+
+    # PB-203.4 FIX (confirmed live 2026-07-26): PB-203.3's staging attempt
+    # still hit `tar: .: Cannot stat: Permission denied` -- pre-creating
+    # the staging dir with a plain `mkdir` and then `podman unshare cp -a
+    # src/. dest/` *merging* into it left the copied contents carrying
+    # the source's own restrictive modes with no owning path back to the
+    # plain login user for "." itself. PB-213/258's actually-proven
+    # shape never merges into a pre-existing dir: it lets `podman unshare
+    # cp -a` create the "current" subdirectory FRESH under a plain
+    # parent, so the fresh copy is owned by the unshare-mapped identity
+    # (which resolves back to the real login user) rather than inheriting
+    # an unreadable merge target. Mirrors that exactly: `rm -rf` any
+    # leftover parent first, `mkdir -p` only the PARENT (never the
+    # "current" subdir itself), then `podman unshare cp -a
+    # <mountpoint>/current <parent>/current` creates it fresh -- and
+    # ordinary `tar` names that subdirectory explicitly (`-C <parent>
+    # current`), never trying to `stat "."` on anything `podman unshare`
+    # touched directly.
+    - name: "2.2 | Stage each volume's content out via podman unshare (plain-owned copy, PB-213/258 shape)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        podman unshare rm -rf /tmp/{{ item.item.name }}-backup-staging
+        mkdir -p /tmp/{{ item.item.name }}-backup-staging
+        podman unshare cp -a {{ item.stdout }}/current /tmp/{{ item.item.name }}-backup-staging/current
+      delegate_to: "{{ item.item.host }}"
+      loop: "{{ volume_mountpoints.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: true
+
+    - name: "2.3 | Snapshot the staged (plain-owned) copy as a timestamped tarball"
+      ansible.builtin.command: >
+        tar czf /tmp/{{ item.item.name }}_{{ ansible_date_time.iso8601_basic_short }}.tar.gz
+        -C /tmp/{{ item.item.name }}-backup-staging current
+      delegate_to: "{{ item.item.host }}"
+      loop: "{{ volume_mountpoints.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: true
+
+    - name: "2.4 | Fetch each tarball back to backup_root on the control node"
+      ansible.builtin.fetch:
+        src: "/tmp/{{ item.item.name }}_{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+        dest: "{{ backup_root }}/{{ item.item.name }}_{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+        flat: true
+      delegate_to: "{{ item.item.host }}"
+      loop: "{{ volume_mountpoints.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: "2.5 | Clean up the remote staging dir and tarball now that it's been fetched"
+      ansible.builtin.shell: |
+        podman unshare rm -rf /tmp/{{ item.item.name }}-backup-staging
+        rm -f /tmp/{{ item.item.name }}_{{ ansible_date_time.iso8601_basic_short }}.tar.gz
+      delegate_to: "{{ item.item.host }}"
+      loop: "{{ volume_mountpoints.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: true
+
+    - name: "2.6 | Find backup archives past the retention window"
+      ansible.builtin.find:
+        paths: "{{ backup_root }}"
+        age: "{{ backup_retain_days }}d"
+        patterns: "*.tar.gz"
+      register: aged_backups
+
+    - name: "2.7 | Prune expired backup archives"
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ aged_backups.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: "2.8 | Report backup summary"
+      ansible.builtin.debug:
+        msg: >-
+          Backed up 4 volumes to {{ backup_root }};
+          pruned {{ aged_backups.files | length }} archive(s) older than {{ backup_retain_days }} day(s).

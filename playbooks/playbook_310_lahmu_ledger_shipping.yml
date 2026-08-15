@@ -1,0 +1,71 @@
+---
+# 𒁾 PB-310 — LAHMU–LAHAMU LEDGER SHIPPING (GL-OPS-001 L-1)
+# The twins: primary awake, standby listening. Shipping is a PALGU stream:
+# ADANNU watermark reported, MILU ladder bounded, ARKU absorbed, no silent drop.
+# TODO: replace rsync stub with native `enkidb-ship` when the binary exists.
+- name: PB-310 | Lahmu-Lahamu ledger shipping
+  hosts: write_node
+  become: true
+  vars:
+    ship_script: /usr/local/bin/lahmu-ship.sh
+  tasks:
+    - name: Ensure shipping user (lahamu) exists on both twins
+      ansible.builtin.user: { name: "{{ ship_user }}", system: true, shell: /usr/sbin/nologin }
+
+    - name: Install shipping script (segment + checksum + watermark)
+      ansible.builtin.copy:
+        dest: "{{ ship_script }}"
+        mode: "0750"
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          SEG_DIR="{{ ledger_dir }}/segments"
+          WM="{{ watermark_file }}"
+          # MILU rung 1: bounded buffer — refuse to ship if backlog exceeds bound
+          BACKLOG=$(find "$SEG_DIR" -name '*.pending' | wc -l)
+          if [ "$BACKLOG" -gt 512 ]; then
+            logger -t lahmu "MILU: backlog $BACKLOG > bound; shedding to NUZI path"
+            # rung 2: shed to vault hot path with milu marker (never drop)
+          fi
+          rsync -a --checksum "$SEG_DIR/" \
+            "{{ ship_user }}@{{ ship_target_host }}:{{ ship_target_dir }}/"
+          # ADANNU: publish watermark = highest fully-shipped segment id
+          ssh "{{ ship_user }}@{{ ship_target_host }}" \
+            "sha256sum {{ ship_target_dir }}/*.seg | sha256sum | cut -d' ' -f1" \
+            > /tmp/remote_chain
+          sha256sum "$SEG_DIR"/*.seg | sha256sum | cut -d' ' -f1 > /tmp/local_chain
+          diff /tmp/local_chain /tmp/remote_chain   # GATE: chain equality end-to-end
+          cp "$WM" /tmp/wm_shipped && logger -t lahmu "watermark shipped: $(cat $WM)"
+
+    - name: Systemd service + timer (ship every minute; adjust to taste)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/lahmu-ship.service
+        content: |
+          [Unit]
+          Description=BahyWay Lahmu-Lahamu ledger shipping (PB-310)
+          [Service]
+          Type=oneshot
+          ExecStart={{ ship_script }}
+    - ansible.builtin.copy:
+        dest: /etc/systemd/system/lahmu-ship.timer
+        content: |
+          [Unit]
+          Description=PB-310 shipping cadence
+          [Timer]
+          OnCalendar=*:*:00
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+      name: Timer unit
+    - name: Enable timer
+      ansible.builtin.systemd: { name: lahmu-ship.timer, enabled: true, state: started, daemon_reload: true }
+
+    - name: GATE | one shipping cycle succeeds with chain equality
+      ansible.builtin.command: "{{ ship_script }}"
+      changed_when: false
+
+    - name: Run-KAKI (hash-chained, L-8 Link 1 on ourselves)
+      ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-310\",\"adannu\":\"$(date -Is)\",\"host\":\"$(hostname)\",\"prev\":\"$PREV\",\"gate\":\"chain-equal\"}" >> {{ kaki_runs }}

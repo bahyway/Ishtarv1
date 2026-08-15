@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala · nasaru — symbol grammar + zoomable descent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--void:#04060e;--ink:#eaf0fb;--ink-dim:#9aa6c8;--ink-faint:#5a6488;--gold:#E3B458;--signal:#4fd6c4;--line:#1c2440;
+--top:#8fe6b0;--disc:#e0776a;--shared:#e3b458;--agent:#7fb0e8;--rule:#b083e0;--obj:#c8d0e8;
+--f-display:'Fraunces',Georgia,serif;--f-body:'Inter',system-ui,sans-serif;--f-data:'IBM Plex Mono',monospace;}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}button{font-family:inherit}
+#stage{position:fixed;inset:0;cursor:grab}#stage:active{cursor:grabbing}
+.hud{position:fixed;z-index:5}
+.scope{top:0;left:0;right:0;background:linear-gradient(90deg,rgba(79,214,196,.10),rgba(176,131,224,.08));border-bottom:1px solid var(--line);font-family:var(--f-data);font-size:9px;color:var(--signal);text-align:center;padding:5px 12px;z-index:7}
+.scope b{color:var(--ink)}
+.title{top:24px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.title h1{font-family:var(--f-display);font-weight:500;font-size:16px;letter-spacing:.06em}
+.title h1 em{font-style:italic;color:var(--signal)}.title .glyph{color:var(--gold)}
+.title .sub{font-size:8.5px;letter-spacing:.1em;color:var(--ink-faint);margin-top:2px}
+.panel{background:rgba(6,10,24,.93);border:1px solid var(--line);border-radius:8px;padding:10px 12px;backdrop-filter:blur(10px)}
+.hud-gram{top:64px;left:12px;width:270px;font-family:var(--f-data);max-height:calc(100vh - 130px);overflow:auto}
+.hud-gram h3{font-size:9px;letter-spacing:.1em;color:var(--rule);text-transform:uppercase;margin-bottom:3px}
+.hud-gram .tag{font-size:8px;color:var(--ink-faint);margin-bottom:8px;line-height:1.5}
+.prod{display:flex;gap:8px;align-items:center;padding:4px 5px;border-radius:5px;margin:2px 0;font-size:9.5px;line-height:1.35}
+.prod canvas{flex-shrink:0}
+.prod .cond{color:var(--ink-dim)}.prod .cond b{color:var(--ink)}
+.prod .role{color:var(--ink-faint);font-size:8px}
+.crumb{top:64px;left:50%;transform:translateX(-50%);font-family:var(--f-data);font-size:10px;background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:6px;padding:6px 12px;display:flex;gap:6px;align-items:center;z-index:6}
+.crumb .seg{cursor:pointer;color:var(--ink-dim)}.crumb .seg:hover{color:var(--signal)}.crumb .seg.here{color:var(--gold)}.crumb .arr{color:var(--ink-faint)}
+.hud-info{bottom:14px;left:12px;width:300px;font-family:var(--f-data);display:none}
+.hud-info .it{font-family:var(--f-display);font-size:14px;color:var(--gold)}
+.hud-info .ik{font-size:8.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;margin:2px 0 5px}
+.hud-info .ib{font-size:10px;color:var(--ink-dim);line-height:1.5}.hud-info .ib b{color:var(--ink)}.hud-info .ib .a{color:var(--shared)}
+.hud-ctl{bottom:14px;right:12px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;font-family:var(--f-data)}
+.hud-ctl .hint{font-size:8.5px;color:var(--ink-faint);max-width:230px;text-align:right;line-height:1.5}
+.hud-ctl .row{display:flex;gap:6px}
+.hud-ctl button{background:rgba(6,10,24,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;font-size:10px;padding:6px 11px;cursor:pointer}
+.zoomind{top:64px;right:12px;font-family:var(--f-data);font-size:9px;color:var(--ink-faint);background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:6px;padding:6px 9px;z-index:5}
+.zoomind b{color:var(--signal)}
+.hover{position:fixed;font-family:var(--f-data);font-size:10px;background:rgba(4,7,18,.98);border:1px solid var(--signal);border-radius:6px;padding:7px 10px;color:var(--ink);pointer-events:none;z-index:9;display:none;line-height:1.5;max-width:290px}
+.hover b{color:var(--gold)}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,6,14,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8px;color:var(--ink-faint);padding:4px 16px;z-index:6;text-align:center;line-height:1.5}
+</style></head>
+<body>
+<div id="stage"></div>
+<div class="hud scope">The <b>grammar is data</b> that drives rendering — render = apply(grammar, data), so it works on-the-fly for any context. Zoom is <b>law (GL-VIZ-006)</b>, not decoration: scroll = bird's-eye ↔ detail · click a concept = Hubble-descent into it · click an organism = its record.</div>
+<div class="hud title"><h1><span class="glyph">&#x12079;</span> nasaru <em>&mdash; SYMBOL GRAMMAR &middot; ZOOMABLE DESCENT</em></h1>
+<div class="sub">EACH ELEMENT RESOLVES TO AN ICON BY A PRODUCTION RULE &middot; THE SAME GRAMMAR RENDERS EVERY DEPTH</div></div>
+<div class="hud crumb" id="crumb"></div>
+<div class="hud zoomind" id="zoomind"></div>
+<div class="hud hud-gram panel" id="gram"></div>
+<div class="hud hud-info panel" id="info"></div>
+<div class="hover" id="hover"></div>
+<div class="hud hud-ctl">
+  <div class="hint">scroll = zoom (bird's-eye ↔ detail) · drag = pan · click a concept node = descend · breadcrumb = climb back</div>
+  <div class="row"><button id="fit-btn">⤢ fit</button><button id="top-btn">◄ lattice</button></div>
+</div>
+<footer>Way-of-Work rule 5 — HTML prototype (Sala rehearsal); production body Godot/WGPU. The GRAMMAR is a production system (condition → icon) held as data; the SAME resolveSymbol() renders the lattice, a descended concept, and a single organism — on-the-fly. Zoom + descent satisfy GL-VIZ-006 (Zoom-as-Necessity). Data = real computed FCA. Pending CSR-08.</footer>
+<script>
+const DATA = {"source": "static real microbiology cross-table (10 bacteria x 14 properties). NOT a live API \u2014 sandbox cannot reach medical APIs. Everything below is COMPUTED from this table.", "objects": ["E.coli", "Salmonella", "Pseudomonas", "Klebsiella", "Neisseria", "Haemophilus", "M.tuberculosis", "S.aureus", "S.pneumoniae", "C.difficile"], "attributes": ["gram_pos", "gram_neg", "rod", "coccus", "aerobe", "anaerobe", "facultative", "motile", "spore", "catalase", "oxidase", "lactose_ferm", "acid_fast", "encapsulated"], "incidence": {"E.coli": ["catalase", "facultative", "gram_neg", "lactose_ferm", "motile", "rod"], "Salmonella": ["catalase", "encapsulated", "facultative", "gram_neg", "motile", "rod"], "Pseudomonas": ["aerobe", "catalase", "encapsulated", "gram_neg", "motile", "oxidase", "rod"], "Klebsiella": ["catalase", "encapsulated", "facultative", "gram_neg", "lactose_ferm", "rod"], "Neisseria": ["aerobe", "catalase", "coccus", "encapsulated", "gram_neg", "oxidase"], "Haemophilus": ["encapsulated", "facultative", "gram_neg", "rod"], "M.tuberculosis": ["acid_fast", "aerobe", "catalase", "rod"], "S.aureus": ["catalase", "coccus", "facultative", "gram_pos"], "S.pneumoniae": ["coccus", "encapsulated", "facultative", "gram_pos"], "C.difficile": ["anaerobe", "gram_pos", "motile", "rod", "spore"]}, "attr_symbols": {"gram_pos": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 3 objects (overlap)", "extent": ["C.difficile", "S.aureus", "S.pneumoniae"]}, "gram_neg": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 6 objects (overlap)", "extent": ["E.coli", "Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"]}, "rod": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 7 objects (overlap)", "extent": ["C.difficile", "E.coli", "Haemophilus", "Klebsiella", "M.tuberculosis", "Pseudomonas", "Salmonella"]}, "coccus": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 3 objects (overlap)", "extent": ["Neisseria", "S.aureus", "S.pneumoniae"]}, "aerobe": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 3 objects (overlap)", "extent": ["M.tuberculosis", "Neisseria", "Pseudomonas"]}, "anaerobe": {"symbol": "\u25c6", "kind": "DISC", "why": "discriminator: unique to one object", "extent": ["C.difficile"]}, "facultative": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 6 objects (overlap)", "extent": ["E.coli", "Haemophilus", "Klebsiella", "S.aureus", "S.pneumoniae", "Salmonella"]}, "motile": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 4 objects (overlap)", "extent": ["C.difficile", "E.coli", "Pseudomonas", "Salmonella"]}, "spore": {"symbol": "\u25c6", "kind": "DISC", "why": "discriminator: unique to one object", "extent": ["C.difficile"]}, "catalase": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 7 objects (overlap)", "extent": ["E.coli", "Klebsiella", "M.tuberculosis", "Neisseria", "Pseudomonas", "S.aureus", "Salmonella"]}, "oxidase": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 2 objects (overlap)", "extent": ["Neisseria", "Pseudomonas"]}, "lactose_ferm": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 2 objects (overlap)", "extent": ["E.coli", "Klebsiella"]}, "acid_fast": {"symbol": "\u25c6", "kind": "DISC", "why": "discriminator: unique to one object", "extent": ["M.tuberculosis"]}, "encapsulated": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 6 objects (overlap)", "extent": ["Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "S.pneumoniae", "Salmonella"]}}, "concepts": [{"id": 0, "extent": ["Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"], "intent": ["encapsulated", "gram_neg"], "size": 5, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 5 organisms (a real shared concept)"}, {"id": 1, "extent": ["Salmonella"], "intent": ["catalase", "encapsulated", "facultative", "gram_neg", "motile", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 2, "extent": ["Neisseria"], "intent": ["aerobe", "catalase", "coccus", "encapsulated", "gram_neg", "oxidase"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 3, "extent": ["Haemophilus", "Klebsiella", "S.pneumoniae", "Salmonella"], "intent": ["encapsulated", "facultative"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 4, "extent": ["C.difficile", "E.coli", "Haemophilus", "Klebsiella", "M.tuberculosis", "Neisseria", "Pseudomonas", "S.aureus", "S.pneumoniae", "Salmonella"], "intent": [], "size": 10, "symbol": "\u22a4", "kind": "ROOT", "why": "root: extent = all objects"}, {"id": 5, "extent": ["Neisseria", "Pseudomonas"], "intent": ["aerobe", "catalase", "encapsulated", "gram_neg", "oxidase"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 6, "extent": ["M.tuberculosis"], "intent": ["acid_fast", "aerobe", "catalase", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 7, "extent": ["M.tuberculosis", "Pseudomonas"], "intent": ["aerobe", "catalase", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 8, "extent": ["C.difficile", "E.coli", "Haemophilus", "Klebsiella", "M.tuberculosis", "Pseudomonas", "Salmonella"], "intent": ["rod"], "size": 7, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 7 organisms (a real shared concept)"}, {"id": 9, "extent": ["E.coli", "Pseudomonas", "Salmonella"], "intent": ["catalase", "gram_neg", "motile", "rod"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 10, "extent": ["Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "S.pneumoniae", "Salmonella"], "intent": ["encapsulated"], "size": 6, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 6 organisms (a real shared concept)"}, {"id": 11, "extent": ["E.coli", "Klebsiella", "M.tuberculosis", "Pseudomonas", "Salmonella"], "intent": ["catalase", "rod"], "size": 5, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 5 organisms (a real shared concept)"}, {"id": 12, "extent": ["Klebsiella", "Pseudomonas", "Salmonella"], "intent": ["catalase", "encapsulated", "gram_neg", "rod"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 13, "extent": ["C.difficile", "E.coli", "Pseudomonas", "Salmonella"], "intent": ["motile", "rod"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 14, "extent": ["Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"], "intent": ["catalase", "encapsulated", "gram_neg"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 15, "extent": ["C.difficile", "S.aureus", "S.pneumoniae"], "intent": ["gram_pos"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 16, "extent": ["Haemophilus", "Klebsiella", "Pseudomonas", "Salmonella"], "intent": ["encapsulated", "gram_neg", "rod"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 17, "extent": ["Pseudomonas", "Salmonella"], "intent": ["catalase", "encapsulated", "gram_neg", "motile", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 18, "extent": ["Neisseria", "S.pneumoniae"], "intent": ["coccus", "encapsulated"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 19, "extent": [], "intent": ["acid_fast", "aerobe", "anaerobe", "catalase", "coccus", "encapsulated", "facultative", "gram_neg", "gram_pos", "lactose_ferm", "motile", "oxidase", "rod", "spore"], "size": 0, "symbol": "\u22a5", "kind": "BOTTOM", "why": "bottom: no object has all these attributes"}, {"id": 20, "extent": ["E.coli", "Klebsiella", "Salmonella"], "intent": ["catalase", "facultative", "gram_neg", "rod"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 21, "extent": ["S.pneumoniae"], "intent": ["coccus", "encapsulated", "facultative", "gram_pos"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 22, "extent": ["E.coli", "Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"], "intent": ["catalase", "gram_neg"], "size": 5, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 5 organisms (a real shared concept)"}, {"id": 23, "extent": ["C.difficile"], "intent": ["anaerobe", "gram_pos", "motile", "rod", "spore"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 24, "extent": ["S.aureus", "S.pneumoniae"], "intent": ["coccus", "facultative", "gram_pos"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 25, "extent": ["E.coli", "Klebsiella", "S.aureus", "Salmonella"], "intent": ["catalase", "facultative"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 26, "extent": ["E.coli", "Haemophilus", "Klebsiella", "Pseudomonas", "Salmonella"], "intent": ["gram_neg", "rod"], "size": 5, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 5 organisms (a real shared concept)"}, {"id": 27, "extent": ["E.coli", "Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"], "intent": ["gram_neg"], "size": 6, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 6 organisms (a real shared concept)"}, {"id": 28, "extent": ["E.coli"], "intent": ["catalase", "facultative", "gram_neg", "lactose_ferm", "motile", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 29, "extent": ["E.coli", "Klebsiella"], "intent": ["catalase", "facultative", "gram_neg", "lactose_ferm", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 30, "extent": ["Pseudomonas"], "intent": ["aerobe", "catalase", "encapsulated", "gram_neg", "motile", "oxidase", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 31, "extent": ["M.tuberculosis", "Neisseria", "Pseudomonas"], "intent": ["aerobe", "catalase"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 32, "extent": ["Neisseria", "S.aureus", "S.pneumoniae"], "intent": ["coccus"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 33, "extent": ["E.coli", "Klebsiella", "M.tuberculosis", "Neisseria", "Pseudomonas", "S.aureus", "Salmonella"], "intent": ["catalase"], "size": 7, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 7 organisms (a real shared concept)"}, {"id": 34, "extent": ["Klebsiella", "Salmonella"], "intent": ["catalase", "encapsulated", "facultative", "gram_neg", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 35, "extent": ["E.coli", "Haemophilus", "Klebsiella", "S.aureus", "S.pneumoniae", "Salmonella"], "intent": ["facultative"], "size": 6, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 6 organisms (a real shared concept)"}, {"id": 36, "extent": ["E.coli", "Haemophilus", "Klebsiella", "Salmonella"], "intent": ["facultative", "gram_neg", "rod"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 37, "extent": ["E.coli", "Klebsiella", "Pseudomonas", "Salmonella"], "intent": ["catalase", "gram_neg", "rod"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 38, "extent": ["E.coli", "Salmonella"], "intent": ["catalase", "facultative", "gram_neg", "motile", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 39, "extent": ["Neisseria", "S.aureus"], "intent": ["catalase", "coccus"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 40, "extent": ["Haemophilus", "Klebsiella", "Salmonella"], "intent": ["encapsulated", "facultative", "gram_neg", "rod"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 41, "extent": ["S.aureus"], "intent": ["catalase", "coccus", "facultative", "gram_pos"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 42, "extent": ["Klebsiella"], "intent": ["catalase", "encapsulated", "facultative", "gram_neg", "lactose_ferm", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}], "covers": [[0, 10], [0, 27], [1, 17], [1, 34], [1, 38], [2, 5], [2, 18], [2, 39], [3, 10], [3, 35], [5, 14], [5, 31], [6, 7], [7, 11], [7, 31], [8, 4], [9, 13], [9, 37], [10, 4], [11, 8], [11, 33], [12, 14], [12, 16], [12, 37], [13, 8], [14, 0], [14, 22], [15, 4], [16, 0], [16, 26], [17, 9], [17, 12], [18, 10], [18, 32], [19, 1], [19, 2], [19, 6], [19, 21], [19, 23], [19, 28], [19, 30], [19, 41], [19, 42], [20, 25], [20, 36], [20, 37], [21, 3], [21, 18], [21, 24], [22, 27], [22, 33], [23, 13], [23, 15], [24, 15], [24, 32], [24, 35], [25, 33], [25, 35], [26, 8], [26, 27], [27, 4], [28, 29], [28, 38], [29, 20], [30, 5], [30, 7], [30, 17], [31, 33], [32, 4], [33, 4], [34, 12], [34, 20], [34, 40], [35, 4], [36, 26], [36, 35], [37, 11], [37, 22], [37, 26], [38, 9], [38, 20], [39, 32], [39, 33], [40, 3], [40, 16], [40, 36], [41, 24], [41, 25], [41, 39], [42, 29], [42, 34]], "implications": [{"if": "aerobe", "then": ["catalase"]}, {"if": "anaerobe", "then": ["gram_pos", "motile", "rod", "spore"]}, {"if": "motile", "then": ["rod"]}, {"if": "spore", "then": ["anaerobe", "gram_pos", "motile", "rod"]}, {"if": "oxidase", "then": ["aerobe", "catalase", "encapsulated", "gram_neg"]}, {"if": "lactose_ferm", "then": ["catalase", "facultative", "gram_neg", "rod"]}, {"if": "acid_fast", "then": ["aerobe", "catalase", "rod"]}], "metamodel": {"ObjectType": {"count": 10, "instances": ["E.coli", "Salmonella", "Pseudomonas", "Klebsiella", "Neisseria", "Haemophilus", "M.tuberculosis", "S.aureus", "S.pneumoniae", "C.difficile"]}, "AttributeType": {"count": 14, "roles": {"gram_pos": "SHARED", "gram_neg": "SHARED", "rod": "SHARED", "coccus": "SHARED", "aerobe": "SHARED", "anaerobe": "DISC", "facultative": "SHARED", "motile": "SHARED", "spore": "DISC", "catalase": "SHARED", "oxidase": "SHARED", "lactose_ferm": "SHARED", "acid_fast": "DISC", "encapsulated": "SHARED"}}, "ConceptType": {"count": 43, "by_symbol": {"COMPOUND": 32, "AGENT": 9, "ROOT": 1, "BOTTOM": 1}}, "OrderRelation": {"covering_edges": 91}, "ImplicationRules": {"count": 7}}};
+
+/* ================= THE GRAMMAR (data — drives all rendering) ================= */
+/* Each production: a condition on a data element's structural role → an icon (shape+colour).
+   resolveSymbol fires the FIRST matching production. Swap this table → different visual language. */
+const GRAMMAR=[
+ {id:'ROOT',    when:e=>e.type=='concept'&&e.size==DATA.objects.length, glyph:'⊤', shape:'ring',    color:'#8fe6b0', label:'root · extent = all objects'},
+ {id:'BOTTOM',  when:e=>e.type=='concept'&&e.size==0,                    glyph:'⊥', shape:'downtri', color:'#5a6488', label:'bottom · no object has all'},
+ {id:'AGENT',   when:e=>e.type=='concept'&&e.size==1,                    glyph:'⬡', shape:'hexagon', color:'#7fb0e8', label:'agent · one organism'},
+ {id:'COMPOUND',when:e=>e.type=='concept',                              glyph:'⧉', shape:'nsquare', color:'#e3b458', label:'compound · shared concept'},
+ {id:'UNIVATTR',when:e=>e.type=='attr'&&e.ext==DATA.objects.length,      glyph:'⊤', shape:'ring',    color:'#8fe6b0', label:'attribute · universal'},
+ {id:'DISCATTR',when:e=>e.type=='attr'&&e.ext==1,                        glyph:'◆', shape:'diamond', color:'#e0776a', label:'attribute · discriminator'},
+ {id:'SHAREDATTR',when:e=>e.type=='attr',                               glyph:'∩', shape:'lens',    color:'#e3b458', label:'attribute · shared'},
+ {id:'ORGANISM',when:e=>e.type=='org',                                   glyph:'●', shape:'disc',    color:'#c8d0e8', label:'organism · object particle'},
+ {id:'RULE',    when:e=>e.type=='imp',                                   glyph:'⟹', shape:'arrow',   color:'#b083e0', label:'implication · rule'},
+];
+function resolveSymbol(e){for(const p of GRAMMAR){if(p.when(e))return p;}return {glyph:'?',shape:'disc',color:'#888',label:'unresolved',id:'?'};}
+
+/* draw a glyph shape on a 2d ctx (used by lattice, descent, AND the grammar legend — same code) */
+function drawGlyph(g,x,y,r,prod,hover){
+  g.save();g.translate(x,y);const col=prod.color;g.fillStyle=col;g.strokeStyle=col;g.lineWidth=1.6;
+  g.globalAlpha=hover?1:0.92;const s=r*(hover?1.25:1);
+  switch(prod.shape){
+    case 'ring': g.beginPath();g.arc(0,0,s,0,6.2832);g.fillStyle=col;g.fill();g.beginPath();g.arc(0,0,s+3,0,6.2832);g.strokeStyle=col;g.globalAlpha*=0.6;g.stroke();break;
+    case 'hexagon':{g.beginPath();for(let i=0;i<6;i++){const a=i/6*6.2832-0.5236;const px=Math.cos(a)*s,py=Math.sin(a)*s;i?g.lineTo(px,py):g.moveTo(px,py);}g.closePath();g.fill();break;}
+    case 'nsquare': g.strokeRect(-s,-s,2*s,2*s);g.globalAlpha*=0.5;g.fillRect(-s*0.5,-s*0.5,s,s);break;
+    case 'diamond': g.beginPath();g.moveTo(0,-s);g.lineTo(s,0);g.lineTo(0,s);g.lineTo(-s,0);g.closePath();g.fill();break;
+    case 'lens': g.beginPath();g.arc(-s*0.4,0,s,-0.9,0.9);g.arc(s*0.4,0,s,Math.PI-0.9,Math.PI+0.9,true);g.closePath();g.globalAlpha*=0.8;g.fill();break;
+    case 'downtri': g.beginPath();g.moveTo(-s,-s*0.7);g.lineTo(s,-s*0.7);g.lineTo(0,s);g.closePath();g.fill();break;
+    case 'arrow': g.beginPath();g.moveTo(-s,0);g.lineTo(s,0);g.moveTo(s*0.3,-s*0.5);g.lineTo(s,0);g.lineTo(s*0.3,s*0.5);g.stroke();break;
+    default: g.beginPath();g.arc(0,0,s,0,6.2832);g.fill();
+  }
+  g.restore();
+}
+
+/* ================= scene state ================= */
+const stage=document.getElementById('stage');
+const cv=document.createElement('canvas');stage.appendChild(cv);const g=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(devicePixelRatio||1,2);
+let view={s:1,ox:0,oy:0, ts:1,tox:0,toy:0};   // scale + offset, with targets (for smooth zoom)
+let mode='lattice', focus=null, focusOrg=null, crumbStack=[{name:'lattice'}];
+let sceneNodes=[];   // {el,prod,wx,wy,r}
+let dragging=false,lx=0,ly=0,dragMoved=false,hoverN=null;
+
+function toScreen(wx,wy){return [wx*view.s+view.ox, wy*view.s+view.oy];}
+function fitView(nodes){ if(!nodes.length){view.ts=1;view.tox=W/2;view.toy=H/2;return;}
+  let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;nodes.forEach(n=>{minx=Math.min(minx,n.wx);maxx=Math.max(maxx,n.wx);miny=Math.min(miny,n.wy);maxy=Math.max(maxy,n.wy);});
+  const w=maxx-minx||1,h=maxy-miny||1,pad=90;
+  const s=Math.min((W-2*pad)/w,(H-2*pad)/h,2.2);view.ts=s;view.tox=W/2-(minx+maxx)/2*s;view.toy=H/2-(miny+maxy)/2*s;}
+
+/* ---- build LATTICE scene (world coords by extent-size levels) ---- */
+function buildLattice(){
+  sceneNodes=[];mode='lattice';focus=null;focusOrg=null;
+  const byLevel={};DATA.concepts.forEach(c=>{(byLevel[c.size]=byLevel[c.size]||[]).push(c);});
+  const levels=Object.keys(byLevel).map(Number).sort((a,b)=>b-a);
+  levels.forEach((lv,li)=>{const row=byLevel[lv];const wy=li*130;
+    row.forEach((c,ci)=>{const wx=(ci-(row.length-1)/2)*140;
+      const el={type:'concept',size:c.size,id:c.id,extent:c.extent,intent:c.intent,kind:c.kind};
+      sceneNodes.push({el,prod:resolveSymbol(el),wx,wy,r:c.size==DATA.objects.length||c.size==0?11:(c.size==1?7:9),data:c});});});
+  crumbStack=[{name:'lattice'}];setCrumb();fitView(sceneNodes);
+}
+/* ---- build CONCEPT descent scene: focus concept + its extent orgs + intent attrs ---- */
+function buildConcept(c){
+  sceneNodes=[];mode='concept';focus=c;focusOrg=null;
+  const cel={type:'concept',size:c.size,id:c.id,extent:c.extent,intent:c.intent,kind:c.kind};
+  sceneNodes.push({el:cel,prod:resolveSymbol(cel),wx:0,wy:0,r:16,data:c,center:true});
+  // extent organisms in a ring (left), intent attributes in a ring (right)
+  c.extent.forEach((o,i)=>{const a=Math.PI - (i/(Math.max(1,c.extent.length-1||1)))*Math.PI*0.9 - Math.PI*0.05;
+    const wx=-200+Math.cos(a)*120,wy=Math.sin(a)*130-0;
+    const el={type:'org',name:o};sceneNodes.push({el,prod:resolveSymbol(el),wx:-230,wy:(i-(c.extent.length-1)/2)*46,r:8,org:o});});
+  c.intent.forEach((at,i)=>{const s=DATA.attr_symbols[at];
+    const el={type:'attr',name:at,ext:s.extent.length};
+    sceneNodes.push({el,prod:resolveSymbol(el),wx:230,wy:(i-(c.intent.length-1)/2)*40,r:8,attr:at});});
+  crumbStack=[{name:'lattice',lattice:true},{name:c.symbol+' concept'}];setCrumb();fitView(sceneNodes);
+}
+/* ---- build ORGANISM record: its full attribute set (each an attr symbol) ---- */
+function buildOrganism(o){
+  sceneNodes=[];mode='organism';focusOrg=o;
+  const el={type:'org',name:o};sceneNodes.push({el,prod:resolveSymbol(el),wx:0,wy:0,r:18,center:true,org:o});
+  const attrs=DATA.incidence[o];
+  attrs.forEach((at,i)=>{const s=DATA.attr_symbols[at];const a=i/attrs.length*6.2832;
+    const el2={type:'attr',name:at,ext:s.extent.length};
+    sceneNodes.push({el:el2,prod:resolveSymbol(el2),wx:Math.cos(a)*160,wy:Math.sin(a)*140,r:9,attr:at});});
+  crumbStack=[{name:'lattice',lattice:true},{name:(focus?focus.symbol+' concept':'concept'),concept:focus},{name:o}];setCrumb();fitView(sceneNodes);
+}
+
+/* ---- breadcrumb ---- */
+function setCrumb(){const el=document.getElementById('crumb');
+  el.innerHTML=crumbStack.map((c,i)=>`<span class="seg${i===crumbStack.length-1?' here':''}" data-i="${i}">${c.name}</span>`+(i<crumbStack.length-1?'<span class="arr">›</span>':'')).join('');
+  el.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{const c=crumbStack[+s.dataset.i];
+    if(c.lattice||c.name=='lattice')buildLattice();else if(c.concept)buildConcept(c.concept);});}
+
+/* ---- render ---- */
+function render(){
+  W=stage.clientWidth;H=stage.clientHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';g.setTransform(DPR,0,0,DPR,0,0);
+  g.clearRect(0,0,W,H);
+  // edges (lattice covers, or spokes in descent)
+  g.lineWidth=1;
+  if(mode=='lattice'){g.strokeStyle='rgba(120,130,170,0.26)';
+    DATA.covers.forEach(([i,j])=>{const a=sceneNodes.find(n=>n.data&&n.data.id==i),b=sceneNodes.find(n=>n.data&&n.data.id==j);if(!a||!b)return;
+      const A=toScreen(a.wx,a.wy),B=toScreen(b.wx,b.wy);g.beginPath();g.moveTo(A[0],A[1]);g.lineTo(B[0],B[1]);g.stroke();});
+  } else { const c=sceneNodes.find(n=>n.center);if(c){const C=toScreen(c.wx,c.wy);g.strokeStyle='rgba(120,130,170,0.22)';
+    sceneNodes.forEach(n=>{if(n.center)return;const P=toScreen(n.wx,n.wy);g.beginPath();g.moveTo(C[0],C[1]);g.lineTo(P[0],P[1]);g.stroke();});}}
+  // nodes via grammar
+  sceneNodes.forEach(n=>{const P=toScreen(n.wx,n.wy);const r=n.r*Math.min(1.6,Math.max(0.5,view.s));
+    drawGlyph(g,P[0],P[1],r,n.prod,hoverN===n);
+    // label when zoomed enough or in descent
+    if(view.s>0.9||mode!='lattice'){g.fillStyle=n.prod.color;g.globalAlpha=0.9;g.font=(mode=='lattice'?9:11)+'px "IBM Plex Mono"';g.textAlign='center';
+      let lbl=n.org||n.attr||(n.el.type=='concept'?(n.data&&n.data.extent.length<=2?n.data.extent.join(','):n.prod.glyph+' '+(n.data?n.data.size:'')):'');
+      if(lbl)g.fillText(lbl,P[0],P[1]-r-6);g.globalAlpha=1;}
+  });
+}
+
+/* ---- interaction ---- */
+function pick(mx,my){let best=null,bd=18;sceneNodes.forEach(n=>{const P=toScreen(n.wx,n.wy);const d=Math.hypot(mx-P[0],my-P[1]);if(d<bd+n.r){bd=d;best=n;}});return best;}
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  if(dragging){if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)dragMoved=true;view.ox+=e.clientX-lx;view.oy+=e.clientY-ly;view.tox=view.ox;view.toy=view.oy;lx=e.clientX;ly=e.clientY;}
+  const n=pick(mx,my);hoverN=n;const hv=document.getElementById('hover');
+  if(n){hv.style.display='block';hv.style.left=(e.clientX+14)+'px';hv.style.top=(e.clientY+14)+'px';
+    let body='';
+    if(n.el.type=='concept')body=`<b>extent</b>(${n.data.size}): ${n.data.extent.join(', ')||'—'}<br><b>intent</b>: ${n.data.intent.join(', ')||'—'}`;
+    else if(n.el.type=='org')body=`organism · ${DATA.incidence[n.org].length} attributes`;
+    else body=`attribute · in ${n.el.ext} objects`;
+    hv.innerHTML=`<b style="font-size:13px">${n.prod.glyph}</b> ${n.prod.id} <span style="color:#5a6488">(${n.prod.label})</span><br>${body}`+
+      (n.el.type=='concept'&&n.data.size>=1?'<br><span style="color:#4fd6c4">click to descend ↓</span>':(n.el.type=='org'?'<br><span style="color:#4fd6c4">click for its record ↓</span>':''));
+    cv.style.cursor='pointer';}
+  else{hv.style.display='none';cv.style.cursor=dragging?'grabbing':'grab';}});
+cv.addEventListener('mouseleave',()=>{hoverN=null;document.getElementById('hover').style.display='none';});
+cv.addEventListener('click',e=>{if(dragMoved)return;const r=cv.getBoundingClientRect();const n=pick(e.clientX-r.left,e.clientY-r.top);if(!n)return;
+  if(mode=='lattice'&&n.el.type=='concept'&&n.data.size>=1){zoomToThen(n,()=>buildConcept(n.data));showInfo(n);}
+  else if(mode=='concept'&&n.el.type=='org'){buildOrganism(n.org);}
+  else if(mode=='organism'&&false){}
+  else showInfo(n);});
+function zoomToThen(n,cb){const P=toScreen(n.wx,n.wy);view.tox=W/2-(P[0]-view.ox);view.toy=H/2-(P[1]-view.oy);view.ts=Math.min(view.s*2.2,2.4);setTimeout(cb,180);}
+function showInfo(n){const el=document.getElementById('info');el.style.display='block';
+  if(n.el.type=='concept')el.innerHTML=`<div class="it">${n.prod.glyph} ${n.prod.id} concept</div><div class="ik">resolved by rule · ${n.prod.label}</div><div class="ib"><b>extent</b>: ${n.data.extent.join(', ')||'—'}<br><b>intent</b>: <span class="a">${n.data.intent.join(', ')||'—'}</span></div>`;
+  else if(n.el.type=='org')el.innerHTML=`<div class="it">${n.org}</div><div class="ik">organism · object particle</div><div class="ib">attributes: <span class="a">${DATA.incidence[n.org].join(', ')}</span></div>`;
+  else el.innerHTML=`<div class="it">${n.prod.glyph} ${n.attr}</div><div class="ik">attribute · ${n.prod.id}</div><div class="ib">holds in ${n.el.ext} organisms · ${DATA.attr_symbols[n.attr].why}</div>`;}
+/* zoom / pan */
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  const f=Math.exp(-Math.sign(e.deltaY)*0.12);const ns=Math.max(0.25,Math.min(4,view.s*f));
+  // zoom toward cursor
+  view.ox=mx-(mx-view.ox)*(ns/view.s);view.oy=my-(my-view.oy)*(ns/view.s);view.s=ns;view.ts=ns;view.tox=view.ox;view.toy=view.oy;},{passive:false});
+cv.addEventListener('mousedown',e=>{if(e.button!==0)return;dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+document.getElementById('fit-btn').onclick=()=>fitView(sceneNodes);
+document.getElementById('top-btn').onclick=()=>buildLattice();
+addEventListener('resize',()=>fitView(sceneNodes));
+
+/* grammar legend (drawn with the SAME drawGlyph) */
+(function(){const el=document.getElementById('gram');
+  el.innerHTML=`<h3>◈ The grammar (production rules)</h3><div class="tag">render = apply(grammar, data). Each element fires the FIRST matching rule → its icon. Swap this table → a different visual language, same data.</div>`;
+  GRAMMAR.forEach(p=>{const row=document.createElement('div');row.className='prod';
+    const c=document.createElement('canvas');c.width=30;c.height=30;const cg=c.getContext('2d');drawGlyph(cg,15,15,8,p,false);
+    row.appendChild(c);const t=document.createElement('div');
+    t.innerHTML=`<div class="cond"><b>${p.glyph} ${p.id}</b></div><div class="role">${p.label}</div>`;row.appendChild(t);el.appendChild(row);});
+})();
+
+buildLattice();
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  view.s+=(view.ts-view.s)*Math.min(1,dt*6);view.ox+=(view.tox-view.ox)*Math.min(1,dt*6);view.oy+=(view.toy-view.oy)*Math.min(1,dt*6);
+  document.getElementById('zoomind').innerHTML=`zoom <b>${view.s.toFixed(2)}×</b> · ${mode==='lattice'?"bird's-eye lattice":(mode==='concept'?'descended into concept':'organism record')}`;
+  render();}
+requestAnimationFrame(loop);
+</script></body></html>

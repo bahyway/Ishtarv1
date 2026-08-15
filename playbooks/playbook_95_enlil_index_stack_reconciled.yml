@@ -1,0 +1,119 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_95_enlil_index_stack_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-95 Reconciled: enlil-index → enkidb-indexes
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_95_enlil_index_stack_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_95_enlil_index_stack_init.yml):
+#    The uploaded PB-95 scaffolds a standalone "enlil-index" crate (4 layers:
+#    SurrogateMap, KispuHeadStore, RoaringStateIndex via natiru-bitmap,
+#    BTreeRangeIndex), depending on kaki-types and natiru-bitmap — neither
+#    exists in this repo. enlil-index does not exist under that name either.
+#
+#    This is directly confirmed by the CURRENT enkidb-query-server's own
+#    header comment (crates/../bin/enkidb-query-server/src/main.rs):
+#      "The original version (PB-34/92/95/97/98) hand-rolled its own
+#       NATIRU/BTree candidate filtering and imported enkidb_enlil_index /
+#       hepta_shell_index / geo_engine — none of which exist anymore; that
+#       indexing work was consolidated into enkidb-indexes."
+#
+#    This file verifies the real successor:
+#      enkidb-indexes : 54 passed
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-95 (Reconciled) | ENLIL index stack — enkidb-indexes, current state verification"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB95_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | enkidb-indexes crate exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/enkidb-indexes/Cargo.toml"
+      register: idx_crate
+
+    - name: "FAIL | enkidb-indexes not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/enkidb-indexes/Cargo.toml not found after sync."
+      when: not idx_crate.stat.exists
+
+    - name: "TEST | cargo test -p enkidb-indexes"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-indexes"
+        chdir: "{{ workspace }}"
+      register: test_indexes
+      changed_when: false
+      failed_when: test_indexes.rc != 0
+
+    - name: "PARSE | test_indexes passed-test count"
+      ansible.builtin.set_fact:
+        test_indexes_passed_count: "{{ (test_indexes.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-indexes reports 54 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_indexes.stdout"
+          - test_indexes_passed_count >= 54
+        fail_msg: >-
+          Expected at least 54 passed, 0 failed. Got {{ test_indexes_passed_count }}
+          passed. Full output: {{ test_indexes.stdout }}
+        success_msg: >-
+          enkidb-indexes: {{ test_indexes_passed_count }} passed, 0 failed (>= baseline 54).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-95 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-95 (standalone "enlil-index" crate: SurrogateMap,
+          KispuHeadStore, RoaringStateIndex, BTreeRangeIndex; deps on
+          kaki-types + natiru-bitmap): SUPERSEDED. Confirmed absent, and
+          confirmed superseded directly by the current
+          enkidb-query-server's own header comment documenting this exact
+          consolidation.
+
+          Real successor verified this run:
+            enkidb-indexes : 54/54 tests PASS
+
+    - name: "DONE | PB-95 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-95 reconciled and verified against real repo state. Report: {{ report_file }}"

@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · ḪENDURSAĜA FLIGHT DECK — Bird · Orbit · Landing · Follow · Replay over the Hepta World</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abzu:#070B14; --abzu-2:#0C1220;
+  --lapis:#24406E; --lapis-soft:#31517F;
+  --gold:#D4A945; --gold-dim:#8F7430;
+  --alabaster:#E9E2D0; --alabaster-dim:#9C9584;
+  --clay:#C1603A; --reed:#6E9C7C;
+  --line:rgba(212,169,69,.18);
+  --card:#0E1524; --card-2:#111A2E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--abzu);color:var(--alabaster);font-family:'IBM Plex Sans',sans-serif;font-weight:300;overflow:hidden}
+header{height:62px;display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0B1120,#070B14)}
+.glyph{font-size:24px;color:var(--gold);line-height:1;user-select:none}
+h1{font-family:'Marcellus',serif;font-weight:400;font-size:16px;letter-spacing:.11em;white-space:nowrap}
+h1 span{color:var(--gold)}
+.subtitle{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.07em;border-left:1px solid var(--line);padding-left:16px;line-height:1.55}
+.subtitle b{color:var(--gold);font-weight:500}
+.wrap{display:flex;height:calc(100vh - 62px)}
+.stage{flex:1;position:relative;min-width:0}
+canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.modebar{position:absolute;left:14px;bottom:14px;display:flex;gap:6px;z-index:3}
+.mbtn{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;padding:8px 13px;border:1px solid var(--line);border-radius:3px;background:rgba(14,21,36,.9);color:var(--alabaster-dim);cursor:pointer;transition:all .18s}
+.mbtn.on{border-color:var(--gold);color:var(--gold);background:rgba(212,169,69,.1)}
+.mbtn:focus-visible,.chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.hud{position:absolute;left:14px;top:12px;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.8;color:rgba(233,226,208,.75);pointer-events:none;z-index:3}
+.hud b{color:var(--gold);font-weight:500}
+.hud .clay{color:var(--clay)}
+#mini{position:absolute;right:14px;bottom:14px;width:220px;height:120px;border:1px solid var(--gold-dim);border-radius:4px;background:rgba(8,12,22,.9);z-index:3}
+.stage-caption{position:absolute;right:14px;top:12px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--alabaster-dim);letter-spacing:.06em;line-height:1.7;pointer-events:none;z-index:3}
+aside{width:390px;flex-shrink:0;border-left:1px solid var(--line);background:var(--abzu-2);display:flex;flex-direction:column;overflow:hidden}
+.engine-head{padding:11px 16px 9px;border-bottom:1px solid var(--line)}
+.engine-head .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.engine-head h2{font-family:'Marcellus',serif;font-weight:400;font-size:15px;letter-spacing:.05em;margin-top:3px}
+.engine-head .gloss{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.05em;margin-top:2px;line-height:1.5}
+.clibox{flex:1;overflow-y:auto;padding:12px 14px}
+.clibox::-webkit-scrollbar,.journal::-webkit-scrollbar{width:8px}
+.clibox::-webkit-scrollbar-thumb,.journal::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+.cli-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;padding:4px 9px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--alabaster-dim);cursor:pointer;transition:all .15s}
+.chip:hover{color:var(--gold);border-color:var(--gold-dim)}
+.chip.gold{color:var(--gold);border-color:var(--gold-dim)}
+.cli-inbox{border:1px solid var(--gold-dim);border-radius:4px;background:#0A0F1C;margin-bottom:10px;overflow:hidden}
+#cliIn{width:100%;background:transparent;border:none;resize:vertical;min-height:50px;padding:9px 10px;color:var(--alabaster);font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.6;outline:none}
+.cli-actions{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-top:1px solid var(--line);background:var(--card)}
+.cli-hint{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.08em}
+.runb{padding:7px 16px;border-radius:3px;border:1px solid var(--gold-dim);background:var(--gold);color:#14100a;font-weight:600;font-size:11px;cursor:pointer}
+.cell{border:1px solid var(--line);border-radius:4px;margin-bottom:9px;overflow:hidden}
+.cell .cq{background:#0A0F1C;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.65;white-space:pre-wrap;border-bottom:1px solid var(--line)}
+.cell .co{background:var(--card);padding:9px 10px;font-size:10.5px;line-height:1.65}
+.cell.err .co{color:#E8B9A4}
+.cell .co b{color:var(--gold);font-weight:500}
+.cell .co .clay{color:var(--clay)}.cell .co .reed{color:var(--reed)}
+.hx-stage{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;margin:10px 0 6px;color:var(--gold)}
+.hk{color:var(--gold);font-weight:500}.hw{color:#7FA0D0}.hp{color:var(--reed)}.hv{color:#D8A08A}.hc{color:#5E6878;font-style:italic}
+.journal{height:104px;flex-shrink:0;border-top:1px solid var(--line);background:#080D18;padding:9px 14px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:9.5px;line-height:1.75;color:var(--alabaster-dim)}
+.journal .j-eyebrow{font-size:8.5px;letter-spacing:.22em;color:var(--gold);margin-bottom:4px;text-transform:uppercase}
+.journal .ln b{color:var(--gold);font-weight:500}
+.journal .ln .clay{color:var(--clay)}.journal .ln .reed{color:var(--reed)}
+@media (max-width:1000px){aside{width:320px}.subtitle{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="glyph">𒀭𒉺</div>
+  <h1>ŠALA <span>·</span> ḪENDURSAĜA FLIGHT DECK</h1>
+  <div class="subtitle"><b>ḪendursagaEngine</b> · Navigation Engine (NAV) · the herald who walks before — paths in Hepta space<br>bird · orbit · landing flare · follow · replay — the terrain is not Earth; it is the ecosystem itself · feed contract reserved: ws://:9000/position</div>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="hud" id="hud"></div>
+    <div class="stage-caption">
+      click any station or tribe → landing flare<br>
+      B bird · O orbit · F follow · R replay · SPACE land
+    </div>
+    <div class="modebar">
+      <button class="mbtn on" data-m="bird">BIRD</button>
+      <button class="mbtn" data-m="orbit">ORBIT</button>
+      <button class="mbtn" data-m="follow">FOLLOW</button>
+      <button class="mbtn" data-m="replay">REPLAY 30s</button>
+    </div>
+    <canvas id="mini"></canvas>
+  </div>
+
+  <aside>
+    <div class="engine-head">
+      <div class="eyebrow">Presiding · Navigation</div>
+      <h2>ḪENDURSAĜA ENGINE</h2>
+      <div class="gloss">logical: ḪendursagaEngine (NL-001, god of pathways) · physical: Navigation Engine (NAV) · production camera rig: DubSar Theater (Godot) · this tablet: Šala prototype · no Earth tiles, no CDN maps — the world below is Hepta</div>
+    </div>
+    <div class="clibox" id="clibox"></div>
+    <div class="journal" id="journal"><div class="j-eyebrow">StoryEngine Journal · append-only</div></div>
+  </aside>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   ŠALA ḪENDURSAĜA FLIGHT DECK — prototype (DRAFT, unsealed)
+   The camera grammar adopted from the NaviEngine proposal —
+   FOLLOW / FLY-TO(LANDING) / REPLAY — re-grounded sovereignly:
+   the terrain is the Hepta world (stations + TALUKU orbits),
+   not Earth tiles; no external map libraries. The headless
+   feed contract ws://:9000/position is reserved for the Rust
+   engine; production camera rig lives in DubSar Theater.
+   ============================================================ */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const mini=document.getElementById('mini'),mctx=mini.getContext('2d');
+let W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+function resize(){const r=cv.parentElement.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);mini.width=220*2;mini.height=120*2;mctx.setTransform(2,0,0,2,0,0);}
+window.addEventListener('resize',resize);
+
+/* ---------- the Hepta world ---------- */
+const WORLD={w:2600,h:1500};
+const STATIONS=['EnkiSDB','EnkiODB','EnkiQDB','EnkiDB','EnkiDW','EnkiMDB','EnkiDDB'].map((n,i)=>({
+  kind:'station',name:n,port:7001+i,
+  x:340+i*300,y:1020,w:180,h:230
+}));
+const TRIBES=[
+  {kind:'tribe',name:'LAGASH',x:700,y:420,R:190,hue:45,rings:[70,110,150,190]},
+  {kind:'tribe',name:'URUK',  x:1750,y:380,R:210,hue:210,rings:[80,125,168,210]},
+];
+const TARGETS=[...STATIONS,...TRIBES];
+/* flowing particles on the pipeline */
+let flow=[];
+for(let i=0;i<130;i++)flow.push({
+  x:Math.random()*WORLD.w,y:1020+40+Math.random()*150,
+  v:26+Math.random()*20,hue:[150,12,210][i%3],unknown:Math.random()<0.08
+});
+/* orbiting particles (TALUKU: omega ∝ r^-1.5) */
+let orbiters=[];
+TRIBES.forEach(t=>{
+  t.rings.forEach(r=>{
+    const n=10+Math.floor(r/16);
+    for(let k=0;k<n;k++)orbiters.push({t,r,a:Math.random()*Math.PI*2,w:34/Math.pow(r,1.5)*10});
+  });
+});
+
+/* ---------- camera ---------- */
+let cam={x:WORLD.w/2,y:WORLD.h/2,z:0.42,rot:0};
+let mode='bird',target=null,followP=null;
+let landing=null;                 /* {t0,dur,from:{...},to:{...}} */
+let orbitA=0;
+let history=[],replay=null;       /* camera/particle track for replay */
+function birdFit(){const z=Math.min(W/WORLD.w,H/WORLD.h)*0.92;return{x:WORLD.w/2,y:WORLD.h/2,z,rot:0};}
+function easeInOutCubic(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+function easeOutQuint(t){return 1-Math.pow(1-t,5);}
+function lerpAng(a,b,f){let d=((b-a+Math.PI*3)%(Math.PI*2))-Math.PI;return a+d*f;}
+function setMode(m){
+  mode=m;
+  document.querySelectorAll('.mbtn').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+}
+function startLanding(tg){
+  target=tg;followP=null;replay=null;
+  const to={x:tg.x+(tg.w?tg.w/2:0),y:tg.y+(tg.h?tg.h/2:0),z:tg.kind==='station'?2.6:1.7};
+  const approach=Math.atan2(to.y-cam.y,to.x-cam.x);
+  landing={t0:performance.now(),dur:2300,
+    from:{x:cam.x,y:cam.y,z:cam.z,rot:cam.rot},
+    to:{...to,rot:0},
+    ctrl:{x:(cam.x+to.x)/2,y:(cam.y+to.y)/2-260},approach};
+  setMode('landing');
+  jlog('LANDING \u00B7 flare onto <b>'+tg.name+'</b>'+(tg.port?' ('+tg.port+')':'')+' \u2014 exponential descent, heading aligned, gentle flare at the threshold');
+}
+function startOrbit(tg){
+  target=tg||target||TRIBES[0];followP=null;replay=null;landing=null;
+  orbitA=Math.atan2(cam.y-(target.y+(target.h?target.h/2:0)),cam.x-(target.x+(target.w?target.w/2:0)));
+  setMode('orbit');
+  jlog('ORBIT \u00B7 the eye circles <b>'+target.name+'</b> \u2014 the camera itself becomes a \u1E6C\u0100LUKU body');
+}
+function startFollow(){
+  followP=flow[Math.floor(Math.random()*flow.length)];
+  target=null;landing=null;replay=null;history=[];
+  setMode('follow');
+  jlog('FOLLOW \u00B7 the herald walks behind one soul \u2014 chase camera, motion points up, the track is remembered for replay');
+}
+function startReplay(){
+  if(history.length<10){jlog('<span class="clay">REPLAY refused</span> \u2014 the track is too short; follow a soul for a while first');return;}
+  const now=performance.now();
+  const slice=history.filter(h=>now-h.t<30000);
+  if(slice.length<10){jlog('<span class="clay">REPLAY refused</span> \u2014 fewer than 30 seconds remembered');return;}
+  replay={slice,i:0};followP=null;landing=null;
+  setMode('replay');
+  jlog('REPLAY \u00B7 the last 30 seconds walked again \u2014 an amber ghost retraces the path (N\u0100RU remembers)');
+}
+function toBird(){target=null;followP=null;landing=null;replay=null;setMode('bird');jlog('BIRD \u00B7 the eye climbs \u2014 the whole Hepta world in one glance');}
+
+document.querySelectorAll('.mbtn').forEach(b=>b.addEventListener('click',()=>{
+  const m=b.dataset.m;
+  if(m==='bird')toBird();
+  else if(m==='orbit')startOrbit(target);
+  else if(m==='follow')startFollow();
+  else if(m==='replay')startReplay();
+}));
+window.addEventListener('keydown',e=>{
+  if(e.key==='b'||e.key==='B')toBird();
+  if(e.key==='o'||e.key==='O')startOrbit(target);
+  if(e.key==='f'||e.key==='F')startFollow();
+  if(e.key==='r'||e.key==='R')startReplay();
+  if(e.key===' '){e.preventDefault();if(target)startLanding(target);}
+});
+/* click-to-land: inverse camera transform */
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect();
+  const sx=e.clientX-r.left-W/2,sy=e.clientY-r.top-H/2;
+  const cosR=Math.cos(cam.rot),sinR=Math.sin(cam.rot);
+  const wx=cam.x+(sx*cosR+sy*sinR)/cam.z;
+  const wy=cam.y+(-sx*sinR+sy*cosR)/cam.z;
+  let best=null,bd=1e9;
+  TARGETS.forEach(t=>{
+    const tx=t.x+(t.w?t.w/2:0),ty=t.y+(t.h?t.h/2:0);
+    const rad=t.R?t.R+30:Math.max(t.w,t.h)/2+40;
+    const d=Math.hypot(wx-tx,wy-ty);
+    if(d<rad&&d<bd){bd=d;best=t;}
+  });
+  if(best)startLanding(best);
+});
+
+/* ---------- simulation ---------- */
+let tPrev=performance.now();
+function step(dt,now){
+  flow.forEach(p=>{
+    p.x+=p.v*dt;
+    if(p.x>WORLD.w+20){p.x=-10;p.y=1060+Math.random()*150;}
+  });
+  orbiters.forEach(o=>{o.a+=o.w*dt;});
+  /* camera per mode */
+  if(mode==='bird'){
+    const b=birdFit();
+    cam.x+= (b.x-cam.x)*Math.min(1,dt*2.2);
+    cam.y+= (b.y-cam.y)*Math.min(1,dt*2.2);
+    cam.z+= (b.z-cam.z)*Math.min(1,dt*2.2);
+    cam.rot=lerpAng(cam.rot,0,Math.min(1,dt*2.5));
+  }else if(mode==='landing'&&landing){
+    const t=Math.min(1,(now-landing.t0)/landing.dur);
+    const e=easeInOutCubic(t);
+    /* quadratic bezier path with a high control point — the approach arc */
+    const a=landing.from,c=landing.ctrl,b=landing.to;
+    cam.x=(1-e)*(1-e)*a.x+2*(1-e)*e*c.x+e*e*b.x;
+    cam.y=(1-e)*(1-e)*a.y+2*(1-e)*e*c.y+e*e*b.y;
+    /* exponential descent with a flare at the end */
+    const zf=easeOutQuint(t);
+    cam.z=a.z*Math.pow(b.z/a.z,zf);
+    cam.rot=lerpAng(cam.rot,0,Math.min(1,dt*3));
+    if(t>=1){setMode('landed');jlog('<span class="reed">TOUCHDOWN</span> \u00B7 '+target.name+' fills the glass \u2014 press O to circle it, B to climb away');}
+  }else if(mode==='orbit'&&target){
+    orbitA+=dt*0.45;
+    const tx=target.x+(target.w?target.w/2:0),ty=target.y+(target.h?target.h/2:0);
+    const R=(target.R?target.R+140:260)/1;
+    const gx=tx+Math.cos(orbitA)*R,gy=ty+Math.sin(orbitA)*R*0.7;
+    cam.x+=(gx-cam.x)*Math.min(1,dt*3);
+    cam.y+=(gy-cam.y)*Math.min(1,dt*3);
+    cam.z+=(1.35-cam.z)*Math.min(1,dt*2);
+    cam.rot=lerpAng(cam.rot,Math.atan2(ty-cam.y,tx-cam.x)+Math.PI/2,Math.min(1,dt*3.4));
+  }else if(mode==='follow'&&followP){
+    const h=Math.atan2(0,followP.v); /* pipeline flow: heading = +x */
+    cam.x+=(followP.x-cam.x)*Math.min(1,dt*4.5);
+    cam.y+=(followP.y-cam.y)*Math.min(1,dt*4.5);
+    cam.z+=(3.1-cam.z)*Math.min(1,dt*2.4);
+    const want=-Math.PI/2-h; /* motion points up */
+    cam.rot=lerpAng(cam.rot,want,Math.min(1,dt*2.2));
+    history.push({x:followP.x,y:followP.y,t:now});
+    if(history.length>4000)history.shift();
+  }else if(mode==='replay'&&replay){
+    replay.i+=dt*40;
+    const i=Math.min(replay.slice.length-1,Math.floor(replay.i));
+    const p=replay.slice[i];
+    cam.x+=(p.x-cam.x)*Math.min(1,dt*5);
+    cam.y+=(p.y-cam.y)*Math.min(1,dt*5);
+    cam.z+=(2.6-cam.z)*Math.min(1,dt*2.4);
+    cam.rot=lerpAng(cam.rot,-Math.PI/2,Math.min(1,dt*2));
+    if(i>=replay.slice.length-1){replay=null;toBird();jlog('REPLAY complete \u00B7 the path is walked, the eye climbs home');}
+  }
+}
+
+/* ---------- rendering ---------- */
+function applyCam(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.translate(W/2,H/2);
+  ctx.rotate(-cam.rot);
+  ctx.scale(cam.z,cam.z);
+  ctx.translate(-cam.x,-cam.y);
+}
+function draw(now){
+  const t=now/1000;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createRadialGradient(W/2,H/2,80,W/2,H/2,Math.max(W,H)*.7);
+  g.addColorStop(0,'#0A101E');g.addColorStop(1,'#070B14');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  applyCam();
+  /* Hepta ground graticule */
+  ctx.strokeStyle='rgba(36,64,110,.25)';ctx.lineWidth=1/cam.z;
+  for(let x=0;x<=WORLD.w;x+=200){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,WORLD.h);ctx.stroke();}
+  for(let y=0;y<=WORLD.h;y+=200){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WORLD.w,y);ctx.stroke();}
+  /* pipeline lane */
+  ctx.strokeStyle='rgba(49,81,127,.5)';ctx.lineWidth=1.4/cam.z;
+  ctx.beginPath();ctx.moveTo(0,1040);ctx.lineTo(WORLD.w,1040);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,1230);ctx.lineTo(WORLD.w,1230);ctx.stroke();
+  /* stations */
+  STATIONS.forEach(s=>{
+    const sel=target===s;
+    ctx.strokeStyle=sel?'rgba(212,169,69,.95)':'rgba(49,81,127,.8)';
+    ctx.lineWidth=(sel?2.4:1.4)/cam.z;
+    ctx.fillStyle='rgba(14,21,36,.6)';
+    rr(s.x,s.y,s.w,s.h,14);ctx.fill();ctx.stroke();
+    ctx.fillStyle='rgba(233,226,208,.85)';
+    ctx.font=(13/Math.sqrt(cam.z))+'px "IBM Plex Mono",monospace';ctx.textAlign='center';
+    ctx.fillText(s.name,s.x+s.w/2,s.y-16);
+    ctx.fillStyle='rgba(156,149,132,.7)';
+    ctx.font=(10/Math.sqrt(cam.z))+'px "IBM Plex Mono",monospace';
+    ctx.fillText(String(s.port),s.x+s.w/2,s.y+s.h+22);
+  });
+  /* tribes: TALUKU rings */
+  TRIBES.forEach(tr=>{
+    const sel=target===tr;
+    tr.rings.forEach(r=>{
+      ctx.strokeStyle=sel?'rgba(212,169,69,.55)':'rgba(49,81,127,.55)';
+      ctx.lineWidth=1/cam.z;
+      ctx.beginPath();ctx.arc(tr.x,tr.y,r,0,Math.PI*2);ctx.stroke();
+    });
+    ctx.fillStyle='rgba(233,226,208,.85)';
+    ctx.font=(13/Math.sqrt(cam.z))+'px "IBM Plex Mono",monospace';ctx.textAlign='center';
+    ctx.fillText('TRIBE \u00B7 '+tr.name,tr.x,tr.y-tr.R-16);
+  });
+  orbiters.forEach(o=>{
+    const x=o.t.x+Math.cos(o.a)*o.r,y=o.t.y+Math.sin(o.a)*o.r;
+    ctx.fillStyle='hsl('+o.t.hue+' 65% 60%)';
+    const s=2/Math.sqrt(cam.z);
+    ctx.fillRect(x-s/2,y-s/2,s,s);
+  });
+  /* pipeline flow */
+  flow.forEach(p=>{
+    ctx.fillStyle=p.unknown?'hsl(18 72% 55%)':'hsl('+p.hue+' 65% 60%)';
+    const s=(p===followP?4:2.4)/Math.sqrt(cam.z);
+    ctx.fillRect(p.x-s/2,p.y-s/2,s,s);
+    if(p===followP){
+      ctx.strokeStyle='rgba(233,226,208,.9)';ctx.lineWidth=1.2/cam.z;
+      ctx.beginPath();ctx.arc(p.x,p.y,10/Math.sqrt(cam.z),0,Math.PI*2);ctx.stroke();
+    }
+  });
+  /* follow / replay track */
+  if(history.length>2&&(mode==='follow'||mode==='landed')){
+    ctx.strokeStyle='rgba(212,169,69,.5)';ctx.lineWidth=1.4/cam.z;
+    ctx.beginPath();ctx.moveTo(history[0].x,history[0].y);
+    history.forEach(h=>ctx.lineTo(h.x,h.y));ctx.stroke();
+  }
+  if(replay){
+    ctx.strokeStyle='rgba(255,140,60,.6)';ctx.lineWidth=1.6/cam.z;
+    ctx.beginPath();ctx.moveTo(replay.slice[0].x,replay.slice[0].y);
+    replay.slice.forEach(h=>ctx.lineTo(h.x,h.y));ctx.stroke();
+    const i=Math.min(replay.slice.length-1,Math.floor(replay.i));
+    const p=replay.slice[i];
+    ctx.fillStyle='rgba(255,140,60,.95)';
+    ctx.beginPath();ctx.arc(p.x,p.y,6/Math.sqrt(cam.z),0,Math.PI*2);ctx.fill();
+  }
+  /* HUD + minimap */
+  drawHud();
+  drawMini();
+}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function drawHud(){
+  const alt=(60/cam.z).toFixed(1);
+  const hdg=((cam.rot*180/Math.PI)%360+360)%360;
+  document.getElementById('hud').innerHTML=
+    '<b>\u1E2AENDURSA\u011CA \u00B7 NAV</b> \u00B7 flight over the Hepta world<br>'
+    +'mode <b>'+mode.toUpperCase()+'</b> \u00B7 altitude '+alt+' \u0161\u0101ru-lengths \u00B7 heading '+hdg.toFixed(0)+'\u00B0<br>'
+    +'target '+(target?('<b>'+target.name+'</b>'):(followP?'<b>one followed soul</b>':'\u2014'))
+    +'<br>feed <span class="clay">simulated</span> \u00B7 contract reserved ws://:9000/position';
+}
+function drawMini(){
+  mctx.clearRect(0,0,220,120);
+  mctx.fillStyle='rgba(8,12,22,.0)';
+  const sx=210/WORLD.w,sy=110/WORLD.h,s=Math.min(sx,sy);
+  const ox=(220-WORLD.w*s)/2,oy=(120-WORLD.h*s)/2;
+  mctx.strokeStyle='rgba(49,81,127,.6)';mctx.lineWidth=1;
+  mctx.strokeRect(ox,oy,WORLD.w*s,WORLD.h*s);
+  STATIONS.forEach(st=>{mctx.fillStyle='rgba(127,160,208,.8)';mctx.fillRect(ox+st.x*s,oy+st.y*s,Math.max(2,st.w*s),Math.max(2,st.h*s));});
+  TRIBES.forEach(tr=>{mctx.strokeStyle='rgba(212,169,69,.6)';mctx.beginPath();mctx.arc(ox+tr.x*s,oy+tr.y*s,tr.R*s,0,Math.PI*2);mctx.stroke();});
+  /* camera frustum (visible world rect, unrotated approx) */
+  const vw=W/cam.z*s,vh=H/cam.z*s;
+  mctx.strokeStyle='rgba(233,226,208,.9)';
+  mctx.strokeRect(ox+cam.x*s-vw/2,oy+cam.y*s-vh/2,vw,vh);
+}
+
+/* ---------- CLI (mandatory HELP) ---------- */
+const clibox=document.getElementById('clibox');
+function hxHighlight(code){
+  let s=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s=s.replace(/(--[^\n]*)/g,'<span class="hc">$1</span>');
+  s=s.replace(/\b(PRESENT|ORBIT|EMIT|PROVE|SYNC|WITNESS|VIA)\b/g,'<span class="hk">$1</span>');
+  s=s.replace(/\b(WHO|WHAT|WHEN|WHERE|WHY|HOW MUCH|HOW)\b/g,'<span class="hw">$1</span>');
+  s=s.replace(/\b(PHYSICS|META)\b/g,'<span class="hp">$1</span>');
+  s=s.replace(/\b(CAMERA|FLIGHT|LANDING|BIRD|REPLAY|STATION|TRIBE|AROUND|AT|FOR|OF|IS|IN|WITH)\b/g,'<span class="hv">$1</span>');
+  return s;
+}
+const SNIPPETS=[
+ {t:'Climb to the bird \u2014 the whole world in one glance',g:'<b>Plain gloss:</b> the highest station of the herald: every station, every orbit, one frame. From here every journey begins.',
+  c:'SYNC bird\n  META altitude = fit.world'},
+ {t:'Circle a house \u2014 the camera becomes an orbiting body',g:'<b>Plain gloss:</b> the eye joins the \u1E6C\u0100LUKU dance: it circles the chosen station or tribe at ring distance, always facing inward \u2014 the observer obeys the same law as the observed.',
+  c:'ORBIT camera AROUND TRIBE LAGASH\n  PHYSICS omega IS ring.law        -- the observer obeys \u1E6C\u0100LUKU too'},
+ {t:'Landing flare \u2014 the flight camera descends',g:'<b>Plain gloss:</b> the approach arc of an aircraft: a curved bezier path, exponential descent of altitude, heading aligned to the threshold, and a gentle flare at touchdown. Click any target on the glass, or name it here.',
+  c:'EMIT landing AT STATION EnkiMDB\n  HOW   arc.approach, exp.descent, flare\n  META  duration = 2.3 s'},
+ {t:'Follow one soul \u2014 the herald walks behind',g:'<b>Plain gloss:</b> chase camera on a single flowing particle; the world rotates so its motion points up, as a pilot flies. Every step is remembered in the track \u2014 N\u0100RU never forgets a path.',
+  c:'EMIT follow FOR particle next\n  HOW   chase, motion.up\nWITNESS track INTO naru.journal'},
+ {t:'Replay the last thirty seconds',g:'<b>Plain gloss:</b> the remembered track walked again by an amber ghost \u2014 the journal made visible. What was flown can always be flown again; that is what append-only means.',
+  c:'EMIT replay FOR 30 s\n  WHO   the.amber.ghost\n  META  source = naru.track'},
+];
+const CHIPS=[
+ {l:'bird',q:()=>'SYNC bird'},
+ {l:'orbit tribe',gold:true,q:()=>'ORBIT camera AROUND TRIBE LAGASH'},
+ {l:'land',gold:true,q:()=>'EMIT landing AT STATION EnkiMDB'},
+ {l:'follow',q:()=>'EMIT follow FOR particle next'},
+ {l:'replay',q:()=>'EMIT replay FOR 30 s'},
+ {l:'flight',q:()=>'PRESENT flight'},
+ {l:'grimoire',q:()=>'GRIMOIRE'},{l:'help',q:()=>'HELP'},
+];
+function buildCli(){
+  clibox.innerHTML='<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.08em;color:var(--alabaster-dim);margin-bottom:10px;line-height:1.65">HeptaScript CLI \u00B7 the herald\u2019s flight rites<br>Anti-SQL enforced \u00B7 HELP (grammar + snippets) is mandatory \u2014 pinned below, always.</div>'
+   +'<div class="cli-chips" id="cliChips"></div>'
+   +'<div class="cli-inbox"><textarea id="cliIn" rows="2" spellcheck="false" placeholder="EMIT landing AT STATION EnkiMDB"></textarea>'
+   +'<div class="cli-actions"><span class="cli-hint">the terrain is Hepta, not Earth</span><button class="runb" id="cliRun">RUN \u25B8</button></div></div>'
+   +'<div id="cliCells"></div>';
+  const box=document.getElementById('cliChips');
+  CHIPS.forEach(ch=>{const b=document.createElement('button');b.className='chip'+(ch.gold?' gold':'');b.textContent=ch.l;
+    b.addEventListener('click',()=>{const i=document.getElementById('cliIn');i.value=ch.q();i.focus();});box.appendChild(b);});
+  document.getElementById('cliRun').addEventListener('click',cliSubmit);
+  document.getElementById('cliIn').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();cliSubmit();}});
+  mandatoryHelp();
+}
+function mandatoryHelp(){
+  const box=document.getElementById('cliCells');
+  if(!box||box.querySelector('.cell.mandatory'))return;
+  const d=document.createElement('div');d.className='cell mandatory';
+  d.innerHTML='<div class="cq">'+hxHighlight('HELP')+'  <span style="color:var(--gold);font-size:8.5px;letter-spacing:.14em">\u00B7 MANDATORY RITE \u2014 always on the tablet</span></div><div class="co">'+cliHelp()+'</div>';
+  box.appendChild(d);
+}
+function cliSubmit(){
+  const inp=document.getElementById('cliIn');const raw=inp.value.trim();if(!raw)return;
+  const r=runHepta(raw);cliCell(raw,r.html,!r.ok);inp.value='';
+}
+function cliCell(q,out,err){
+  const box=document.getElementById('cliCells');if(!box)return;
+  const d=document.createElement('div');d.className='cell'+(err?' err':'');
+  d.innerHTML='<div class="cq">'+hxHighlight(q)+'</div><div class="co">'+out+'</div>';
+  box.prepend(d);
+}
+function findTarget(kind,name){
+  return TARGETS.find(t=>(kind?((kind==='station')===(t.kind==='station')):true)&&t.name.toUpperCase()===name.toUpperCase());
+}
+function runHepta(q){
+  const bad=q.match(/\b(select|insert\s+into|update|delete|drop|join|group\s+by|order\s+by|exists)\b/i);
+  if(bad)return{ok:false,html:'<span class="clay">Anti-SQL refusal.</span> The sovereign tongue has no <b>'+bad[1].toUpperCase()+'</b>. Type <b>HELP</b>.'};
+  let m;
+  if(/^help$/i.test(q))return{ok:true,html:cliHelp()};
+  if(/^grimoire$/i.test(q))return{ok:true,html:cliGrimoire()};
+  if(/^sync\s+bird/i.test(q)){toBird();return{ok:true,html:'The eye climbs. Altitude fits the world; heading north of the tablet.'};}
+  if(m=q.match(/^orbit\s+camera\s+around\s+(station|tribe)\s+([\w.]+)/i)){
+    const tg=findTarget(m[1].toLowerCase(),m[2]);
+    if(!tg)return{ok:false,html:'No '+m[1].toLowerCase()+' named <b>'+m[2].toUpperCase()+'</b> stands below.'};
+    startOrbit(tg);
+    return{ok:true,html:'The camera joins the rings around <b>'+tg.name+'</b> \u2014 the observer obeys \u1E6C\u0100LUKU too.'};
+  }
+  if(m=q.match(/^emit\s+landing\s+at\s+(station|tribe)\s+([\w.]+)/i)){
+    const tg=findTarget(m[1].toLowerCase(),m[2]);
+    if(!tg)return{ok:false,html:'No '+m[1].toLowerCase()+' named <b>'+m[2].toUpperCase()+'</b> stands below.'};
+    startLanding(tg);
+    return{ok:true,html:'Approach arc laid to <b>'+tg.name+'</b>: bezier path, exponential descent, flare at the threshold. 2.3 seconds to touchdown.'};
+  }
+  if(/^emit\s+follow/i.test(q)){startFollow();return{ok:true,html:'The herald walks behind one soul; its motion points up on the glass, and its track is remembered.'};}
+  if(/^emit\s+replay/i.test(q)){startReplay();return{ok:true,html:replay?'The amber ghost walks the last thirty seconds again.':'<span class="clay">The track is too short \u2014 follow first, then replay.</span>'};}
+  if(/^present\s+flight/i.test(q)){
+    const alt=(60/cam.z).toFixed(1),hdg=(((cam.rot*180/Math.PI)%360+360)%360).toFixed(0);
+    return{ok:true,html:'Flight \u00B7 mode <b>'+mode.toUpperCase()+'</b> \u00B7 altitude '+alt+' \u0161\u0101ru-lengths \u00B7 heading '+hdg+'\u00B0 \u00B7 target '+(target?target.name:(followP?'one followed soul':'\u2014'))+'<br>feed simulated \u00B7 the ws://:9000/position contract is reserved for the Rust engine; DubSar Theater\u2019s rig will drink from the same stream.'};
+  }
+  return{ok:false,html:'Unrecognised rite. Type <b>HELP</b> or press a chip.'};
+}
+function cliHelp(){
+  return '<b>The grammar of the herald</b> \u2014 five flight rites over the Hepta world:<br><br>'
+   +'<b>SYNC bird</b> \u2014 climb until the whole world fits the glass<br>'
+   +'<b>ORBIT camera AROUND STATION|TRIBE x</b> \u2014 circle the target; the observer obeys \u1E6C\u0100LUKU too<br>'
+   +'<b>EMIT landing AT STATION|TRIBE x</b> \u2014 approach arc, exponential descent, flare (or simply click the target)<br>'
+   +'<b>EMIT follow FOR particle next</b> \u2014 chase one soul, motion up, track remembered<br>'
+   +'<b>EMIT replay FOR 30 s</b> \u2014 the amber ghost walks the remembered path again<br>'
+   +'<b>PRESENT flight</b> \u2014 altitude, heading, target, feed status'
+   +'<div style="margin-top:11px;border-top:1px solid var(--line);padding-top:8px">'+cliGrimoire()+'</div>';
+}
+function cliGrimoire(){
+  let h='<b>The grimoire of the flight deck</b>:';
+  SNIPPETS.forEach(sn=>{
+    h+='<div class="hx-stage">'+sn.t+'</div>'
+     +'<div style="font-style:italic;color:var(--alabaster-dim);font-size:10px;margin-bottom:4px">'+sn.g+'</div>'
+     +'<pre style="margin:0 0 8px;padding:7px 9px;background:#0A0F1C;border:1px solid var(--line);border-radius:3px;font-family:\'IBM Plex Mono\',monospace;font-size:10px;line-height:1.65;overflow-x:auto">'+hxHighlight(sn.c)+'</pre>';
+  });
+  return h;
+}
+
+/* ---------- journal ---------- */
+const journal=document.getElementById('journal');
+function jlog(html){
+  const ts=new Date().toTimeString().slice(0,8);
+  const ln=document.createElement('div');ln.className='ln';
+  ln.innerHTML='<b>'+ts+'</b> \u00B7 '+html;
+  journal.appendChild(ln);journal.scrollTop=journal.scrollHeight;
+}
+
+/* ---------- loop ---------- */
+function loop(now){
+  const dt=Math.min(.033,(now-tPrev)/1000);tPrev=now;
+  step(dt,now);
+  draw(now);
+  requestAnimationFrame(loop);
+}
+resize();
+cam=birdFit();
+buildCli();
+jlog('\u1E2Aendursa\u011Ba takes the deck \u00B7 bird\u2019s-eye over the Hepta world \u00B7 click any station or tribe for the landing flare');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

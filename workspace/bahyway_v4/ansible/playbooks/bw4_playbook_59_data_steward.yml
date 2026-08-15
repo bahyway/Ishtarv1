@@ -1,0 +1,297 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_59_data_steward_agent.yml
+# DATA STEWARD AGENT — Governance Fact Extractor
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# Reads SLA docs, compliance policies, data ownership registers
+# Extracts governance facts → mints KAKI particles
+# Feeds NĀMZITUM governance corpus
+# Fires at BeeMDM S3 (dataSteward Station)
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 59 — DATA STEWARD AGENT Governance Fact Extractor"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_59_data_steward.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_59_data_steward.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # DATA STEWARD AGENT — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/data-steward-agent"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "data-steward-agent"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          [dependencies]
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          serde       = { version = "1", features = ["derive"] }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! DATA STEWARD AGENT — Governance Fact Extractor
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Reads SLA documents, compliance policies, data ownership registers
+          //! → extracts governance facts → mints KAKI particles
+          //! → feeds NĀMZITUM governance corpus
+          //! → auto-generates .way sovereign policy file candidates
+          //!
+          //! Fires at BeeMDM S3 (dataSteward Station)
+          //!
+          //! KAKI v4.0:
+          //!   κ[6] = 0x02 Event | κ[7] = 0x05 GOVERNANCE_FACT role
+          //!   eav_quality = governance confidence (EAV — never KAKI bytes)
+
+          #![forbid(unsafe_code)]
+
+          use enkidb_kaki::Kaki;
+
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub enum GovernanceFact {
+              DataOwner       { field: String, owner: String },
+              QualityRule     { field: String, rule: String, threshold: Option<f32> },
+              RetentionPeriod { entity: String, years: u32 },
+              ComplianceFlag  { standard: String, applies_to: String },
+              SensitivityClass { field: String, class: SensitivityLevel },
+              SlaThreshold    { metric: String, threshold: f32, unit: String },
+          }
+
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub enum SensitivityLevel {
+              Public, Internal, Confidential,
+              Restricted,  // → PUZRU candidate
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct DataStewardReport {
+              pub report_kaki:       Kaki,
+              pub governance_facts:  Vec<GovernanceFact>,
+              pub way_policy_lines:  Vec<String>,  // .way file candidates
+              pub sla_candidates:    Vec<SlaThreshold>,
+              pub puzru_candidates:  Vec<String>,   // fields for sovereign concealment
+              pub eav_quality:       f32,            // EAV — never KAKI bytes
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct SlaThreshold {
+              pub metric:    String,
+              pub threshold: f32,
+              pub unit:      String,
+          }
+
+          pub struct DataStewardAgent {
+              pub tribe_id: u16,
+          }
+
+          impl DataStewardAgent {
+              pub fn new(tribe_id: u16) -> Self { Self { tribe_id } }
+
+              pub fn process_governance_doc(
+                  &self,
+                  doc_name: &str,
+                  content:  &str,
+              ) -> DataStewardReport {
+                  let facts    = self.extract_governance_facts(content, doc_name);
+                  let sla_cands = self.extract_sla_candidates(&facts);
+                  let way_lines = self.generate_way_policy(&facts);
+                  let puzru     = self.identify_puzru_candidates(&facts);
+                  let mean_q    = if facts.is_empty() { 0.0 } else {
+                      0.75  // governance facts typically high confidence
+                  };
+
+                  let report_kaki = Kaki::mint(
+                      enkidb_kaki::fnv1a_u32(doc_name.as_bytes()),
+                      self.tribe_id,
+                      enkidb_kaki::KakiType::Event,
+                      0x05,  // GOVERNANCE_FACT role
+                  );
+
+                  DataStewardReport {
+                      report_kaki,
+                      governance_facts: facts,
+                      way_policy_lines: way_lines,
+                      sla_candidates: sla_cands,
+                      puzru_candidates: puzru,
+                      eav_quality: mean_q,
+                  }
+              }
+
+              fn extract_governance_facts(&self, content: &str, source: &str)
+                  -> Vec<GovernanceFact>
+              {
+                  let mut facts = Vec::new();
+                  for line in content.lines() {
+                      let lower = line.to_lowercase();
+
+                      // Detect SLA thresholds
+                      if lower.contains("sla") || lower.contains("threshold") {
+                          if let Some(pct) = Self::extract_percentage(line) {
+                              facts.push(GovernanceFact::SlaThreshold {
+                                  metric:    line.trim().to_string(),
+                                  threshold: pct,
+                                  unit:      "%".into(),
+                              });
+                          }
+                      }
+
+                      // Detect sensitivity
+                      if lower.contains("confidential") || lower.contains("restricted") {
+                          facts.push(GovernanceFact::SensitivityClass {
+                              field: line.trim().to_string(),
+                              class: if lower.contains("restricted") {
+                                  SensitivityLevel::Restricted
+                              } else {
+                                  SensitivityLevel::Confidential
+                              },
+                          });
+                      }
+
+                      // Detect retention
+                      if lower.contains("retain") || lower.contains("years") {
+                          if let Some(years) = Self::extract_years(line) {
+                              facts.push(GovernanceFact::RetentionPeriod {
+                                  entity: line.trim().to_string(),
+                                  years,
+                              });
+                          }
+                      }
+                  }
+                  facts
+              }
+
+              fn extract_percentage(s: &str) -> Option<f32> {
+                  s.split_whitespace()
+                   .find(|w| w.ends_with('%'))
+                   .and_then(|w| w.trim_end_matches('%').parse().ok())
+              }
+
+              fn extract_years(s: &str) -> Option<u32> {
+                  s.split_whitespace()
+                   .enumerate()
+                   .find(|(_, w)| w.to_lowercase() == "years" || w.to_lowercase() == "year")
+                   .and_then(|(i, _)| {
+                       s.split_whitespace().nth(i.saturating_sub(1))
+                        .and_then(|w| w.parse().ok())
+                   })
+              }
+
+              fn extract_sla_candidates(&self, facts: &[GovernanceFact]) -> Vec<SlaThreshold> {
+                  facts.iter().filter_map(|f| {
+                      if let GovernanceFact::SlaThreshold { metric, threshold, unit } = f {
+                          Some(SlaThreshold {
+                              metric:    metric.clone(),
+                              threshold: *threshold,
+                              unit:      unit.clone(),
+                          })
+                      } else { None }
+                  }).collect()
+              }
+
+              fn generate_way_policy(&self, facts: &[GovernanceFact]) -> Vec<String> {
+                  facts.iter().filter_map(|f| {
+                      match f {
+                          GovernanceFact::ComplianceFlag { standard, applies_to } =>
+                              Some(format!("COMPLIANCE {} APPLIES_TO {}", standard, applies_to)),
+                          GovernanceFact::RetentionPeriod { entity, years } =>
+                              Some(format!("RETAIN {} FOR {} YEARS", entity, years)),
+                          GovernanceFact::SensitivityClass { field, class: SensitivityLevel::Restricted } =>
+                              Some(format!("PUZRU {} # sovereign concealment", field)),
+                          _ => None,
+                      }
+                  }).collect()
+              }
+
+              fn identify_puzru_candidates(&self, facts: &[GovernanceFact]) -> Vec<String> {
+                  facts.iter().filter_map(|f| {
+                      if let GovernanceFact::SensitivityClass {
+                          field,
+                          class: SensitivityLevel::Restricted,
+                      } = f {
+                          Some(field.clone())
+                      } else { None }
+                  }).collect()
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              const TEST_DOC: &str = "
+          Patient data SLA: 99.9% availability
+          Medical records: confidential
+          Witness testimony: restricted
+          Retain patient records for 7 years
+          ";
+
+              #[test]
+              fn test_extracts_sla_threshold() {
+                  let agent  = DataStewardAgent::new(1);
+                  let report = agent.process_governance_doc("sla.txt", TEST_DOC);
+                  assert!(!report.sla_candidates.is_empty());
+                  assert!((report.sla_candidates[0].threshold - 99.9).abs() < 0.1);
+              }
+
+              #[test]
+              fn test_identifies_puzru_candidates() {
+                  let agent  = DataStewardAgent::new(1);
+                  let report = agent.process_governance_doc("policy.txt", TEST_DOC);
+                  assert!(report.puzru_candidates.iter().any(|p|
+                      p.to_lowercase().contains("testimony")));
+              }
+
+              #[test]
+              fn test_eav_quality_not_kaki() {
+                  let agent  = DataStewardAgent::new(1);
+                  let report = agent.process_governance_doc("test.txt", TEST_DOC);
+                  assert!(report.eav_quality > 0.0);
+                  // κ[6]=0x02 Event, κ[7]=0x05 GOVERNANCE_FACT
+                  assert_eq!(report.report_kaki.bytes[6], 0x02);
+                  assert_eq!(report.report_kaki.bytes[7], 0x05);
+              }
+          }
+          """))
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/data-steward-agent"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/data-steward-agent",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "data-steward-agent"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+
+          t = subprocess.run(["cargo", "test", "-p", "data-steward-agent", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ DATA STEWARD AGENT — governance facts → KAKI + .way policy")
+          print("✓ PLAYBOOK 59 — DATA STEWARD AGENT COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p59_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p59_out.stdout_lines }}"

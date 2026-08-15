@@ -1,0 +1,712 @@
+---
+# ============================================================
+# Playbook 08 — Nergal AV Panel in DubSar Visualizer
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+#
+# Three surgical changes — no sealed crates touched:
+#   1. NEW FILE: panels/nergal.rs        (pure egui isometric AV scene)
+#   2. EDIT:     panels/mod.rs           (add pub mod nergal + Nergal variant)
+#   3. EDIT:     app.rs                  (add tab button + auto-switch logic)
+#
+# Auto-activation: when bus.gates.g7_nergal() > 0, DubSar
+# automatically switches to the Nergal tab on first threat detection.
+#
+# Run from eriduous-vdi:
+#   cd ~/bahyway-ansible
+#   ansible-playbook playbooks/08_nergal_dubsar_panel.yml -v
+# ============================================================
+
+- name: "𒀭𒉺𒂵 Nergal AV Panel — DubSar Visualizer integration"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:       "/home/bahyway/Forge/bahyway_v4"
+    panels_dir:  "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels"
+    app_rs:      "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+    mod_rs:      "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/mod.rs"
+    nergal_rs:   "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/nergal.rs"
+
+  tasks:
+
+    # ── Step 1: Backup both files we will edit ─────────────────────────────
+    - name: "Backup panels/mod.rs"
+      ansible.builtin.copy:
+        src:        "{{ mod_rs }}"
+        dest:       "{{ mod_rs }}.bak"
+        remote_src: true
+        mode:       "0644"
+
+    - name: "Backup app.rs"
+      ansible.builtin.copy:
+        src:        "{{ app_rs }}"
+        dest:       "{{ app_rs }}.bak"
+        remote_src: true
+        mode:       "0644"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # CHANGE 1 — CREATE panels/nergal.rs
+    # ══════════════════════════════════════════════════════════════════════
+    - name: "Write panels/nergal.rs — Nergal AV isometric panel"
+      ansible.builtin.copy:
+        dest: "{{ nergal_rs }}"
+        mode: "0644"
+        content: |
+          //! 𒀭𒉺𒂵 Nergal AV Panel — DubSar Visualizer sovereign security view.
+          //!
+          //! Auto-activates when bus.gates.g7_nergal() > 0 (first threat detected).
+          //!
+          //! Layout mirrors ETL Transparency panel:
+          //!   Left  (280px) — AV stats + 7 threat category boxes + buttons
+          //!   Right (fill)  — isometric 3D threat particle cloud + Irkalla nucleus
+          //!                   + 7 threat category towers (reuses draw_iso_cube)
+          //!
+          //! All rendering is pure egui::Painter — same as etl_transparency.rs.
+          //! Palette: MAROON #800020 sovereign threat colours.
+          //!
+          //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust | eframe 0.29
+
+          use std::sync::{Arc, RwLock};
+          use egui::{
+              Align2, Color32, FontId, Pos2, Rect, RichText,
+              Rounding, Stroke, Ui, Vec2,
+          };
+          use bee_mdm_bus::{BeeMdmBusState, BusCmd};
+          use crate::app::ParticleDemo;
+
+          // ── Nergal sovereign colour palette ──────────────────────────────────
+          const BG_SCENE:   Color32 = Color32::from_rgb(3, 1, 1);
+          const COL_PANEL:  Color32 = Color32::from_rgb(12, 4, 6);
+          const COL_BORDER: Color32 = Color32::from_rgb(128, 0, 32);   // MAROON
+          const COL_GOLD:   Color32 = Color32::from_rgb(200, 160, 40);
+          const COL_WHITE:  Color32 = Color32::WHITE;
+          const COL_DIM:    Color32 = Color32::from_rgb(140, 100, 110);
+          const COL_GREEN:  Color32 = Color32::from_rgb(0, 220, 120);
+          const COL_RED:    Color32 = Color32::from_rgb(220, 40, 60);
+          const COL_MAROON: Color32 = Color32::from_rgb(128, 0, 32);
+          const COL_AMBER:  Color32 = Color32::from_rgb(220, 140, 20);
+          const COL_PINK:   Color32 = Color32::from_rgb(220, 0, 200);
+
+          // 7 threat category colours — one per tower
+          const CAT_COLS: [Color32; 7] = [
+              Color32::from_rgb(200, 30, 60),   // G1 Computer Viruses
+              Color32::from_rgb(220, 80, 10),   // G2 Ransomware
+              Color32::from_rgb(180, 20, 80),   // G3 Trojan Horses
+              Color32::from_rgb(160, 0, 50),    // G4 Spyware & Keyloggers
+              Color32::from_rgb(210, 100, 0),   // G5 Network Worms
+              Color32::from_rgb(180, 50, 10),   // G6 Adware & PUPs
+              Color32::from_rgb(128, 0, 32),    // G7 Rootkits — MAROON
+          ];
+
+          const CAT_NAMES: [&str; 7] = [
+              "Viruses", "Ransomware", "Trojans",
+              "Spyware", "Worms", "Adware", "Rootkits",
+          ];
+
+          // ── Entry point ───────────────────────────────────────────────────────
+          pub fn draw(
+              ui:        &mut Ui,
+              bus:       &Arc<RwLock<BeeMdmBusState>>,
+              particles: &[ParticleDemo],
+              tick:      f64,
+          ) {
+              let state = match bus.read() {
+                  Ok(s)  => s,
+                  Err(_) => {
+                      ui.label(RichText::new("⚠ Bus read error").color(COL_RED));
+                      return;
+                  }
+              };
+
+              // Left stats panel
+              egui::SidePanel::left("nergal_left")
+                  .resizable(false)
+                  .exact_width(280.0)
+                  .frame(
+                      egui::Frame::none()
+                          .fill(COL_PANEL)
+                          .stroke(Stroke::new(1.0, COL_BORDER))
+                          .inner_margin(egui::Margin::same(12.0)),
+                  )
+                  .show_inside(ui, |ui| {
+                      draw_left(ui, &state, bus);
+                  });
+
+              // Right 3D scene
+              egui::CentralPanel::default()
+                  .frame(egui::Frame::none().fill(BG_SCENE))
+                  .show_inside(ui, |ui| {
+                      draw_scene(ui, &state, particles, tick);
+                  });
+          }
+
+          // ── Left panel ────────────────────────────────────────────────────────
+          fn draw_left(
+              ui:    &mut Ui,
+              state: &BeeMdmBusState,
+              bus:   &Arc<RwLock<BeeMdmBusState>>,
+          ) {
+              ui.label(
+                  RichText::new("𒀭𒉺𒂵  NERGAL  AV  DASHBOARD")
+                      .color(COL_MAROON)
+                      .size(13.0)
+                      .strong(),
+              );
+              ui.label(
+                  RichText::new("BahyWay v4.0 — Sovereign Threat Intelligence")
+                      .color(COL_DIM)
+                      .size(10.0),
+              );
+              ui.add_space(8.0);
+
+              // Stats rows
+              let total_sigs = 50_000u64; // ThreatDB IRKALLA size
+              let neutralised = state.total_golden;
+              let scanning    = total_sigs.saturating_sub(neutralised)
+                                          .saturating_sub(state.total_quarantined);
+              let fuzzy       = state.etl.sdb_pending as u64;
+              let detected    = state.gates.total_in_flight();
+              let jailed      = state.total_quarantined;
+              let malware     = state.etl.sdb_malware_hits;
+
+              stat_row(ui, "THREATDB SIGNATURES",       &fmt_n(total_sigs),   COL_WHITE);
+              stat_row(ui, "NEUTRALISED → IRKALLA",     &fmt_n(neutralised),  COL_GOLD);
+              stat_row(ui, "ACTIVE ORBIT (SCANNING)",   &fmt_n(scanning),     COL_WHITE);
+              stat_row(ui, "FUZZY / UNCLASSIFIED",      &fmt_n(fuzzy),        COL_PINK);
+              stat_row(ui, "DETECTED THREATS",          &fmt_n(detected as u64), COL_RED);
+              stat_row(ui, "JAILED (IRKALLA)",          &fmt_n(jailed),       COL_MAROON);
+              stat_row(ui, "MUSARÛ MALWARE HITS",       &fmt_n(malware as u64), COL_AMBER);
+
+              ui.add_space(10.0);
+              ui.separator();
+              ui.add_space(6.0);
+
+              // 7 threat category boxes — gate loads
+              ui.label(
+                  RichText::new("THREAT CATEGORIES — KAKI COUNT PER TRIBE")
+                      .color(COL_DIM).size(10.0),
+              );
+              ui.add_space(6.0);
+
+              // Row 1: G1–G4
+              ui.horizontal(|ui| {
+                  for i in 0..4 {
+                      threat_box(ui, i, state.gates.counts[i], CAT_COLS[i]);
+                      if i < 3 { ui.add_space(3.0); }
+                  }
+              });
+              ui.add_space(4.0);
+              // Row 2: G5–G7
+              ui.horizontal(|ui| {
+                  for i in 4..7 {
+                      threat_box(ui, i, state.gates.counts[i], CAT_COLS[i]);
+                      if i < 6 { ui.add_space(3.0); }
+                  }
+              });
+
+              ui.add_space(14.0);
+
+              // Buttons
+              let scan_btn = egui::Button::new(
+                  RichText::new("⚡  ACCELERATE  THREAT  SCAN")
+                      .color(COL_WHITE).size(11.0).strong(),
+              )
+              .fill(Color32::from_rgb(160, 10, 30))
+              .min_size(Vec2::new(254.0, 36.0))
+              .rounding(Rounding::same(4.0));
+              if ui.add(scan_btn).clicked() {
+                  if let Ok(s) = bus.read() { s.send_cmd(BusCmd::AccelerateIntake); }
+              }
+
+              ui.add_space(5.0);
+              let jail_btn = egui::Button::new(
+                  RichText::new("🔒  JAIL  ALL  DETECTED  THREATS")
+                      .color(COL_AMBER).size(11.0).strong(),
+              )
+              .fill(Color32::from_rgb(40, 5, 10))
+              .stroke(Stroke::new(1.0, COL_MAROON))
+              .min_size(Vec2::new(254.0, 36.0))
+              .rounding(Rounding::same(4.0));
+              if ui.add(jail_btn).clicked() {
+                  if let Ok(s) = bus.read() { s.send_cmd(BusCmd::ProcessBadData); }
+              }
+
+              ui.add_space(5.0);
+              let clear_btn = egui::Button::new(
+                  RichText::new("✓  NEUTRALISE  CLEAN  SIGNATURES")
+                      .color(COL_GREEN).size(11.0).strong(),
+              )
+              .fill(Color32::from_rgb(0, 30, 15))
+              .stroke(Stroke::new(1.0, COL_GREEN))
+              .min_size(Vec2::new(254.0, 36.0))
+              .rounding(Rounding::same(4.0));
+              if ui.add(clear_btn).clicked() {
+                  if let Ok(s) = bus.read() { s.send_cmd(BusCmd::Resume); }
+              }
+
+              // Info footer
+              ui.add_space(12.0);
+              ui.separator();
+              ui.add_space(6.0);
+              ui.label(RichText::new("ThreatDB Tribe:  IRKALLA (0x0002)").color(COL_DIM).size(10.0));
+              ui.label(RichText::new("Scan protocol:   ZEQP Batch Pre-Scan").color(COL_DIM).size(10.0));
+              ui.label(RichText::new("Jail location:   zip_jail/ — chattr +i").color(COL_DIM).size(10.0));
+              ui.label(RichText::new("Feeds:           MalwareBazaar · ClamAV · YARA").color(COL_DIM).size(10.0));
+              ui.label(RichText::new("B11 divisor:     240 (Plimpton 322)").color(COL_DIM).size(10.0));
+
+              // Nergal alert banner if malware active
+              if malware > 0 {
+                  ui.add_space(10.0);
+                  let pulse = ((std::f64::consts::TAU * 0.5) as f32).abs();
+                  let alert_col = Color32::from_rgb(200, (30.0 * pulse) as u8, 50);
+                  egui::Frame::none()
+                      .fill(Color32::from_rgb(60, 0, 10))
+                      .stroke(Stroke::new(1.5, alert_col))
+                      .rounding(Rounding::same(4.0))
+                      .inner_margin(egui::Margin::same(8.0))
+                      .show(ui, |ui| {
+                          ui.label(
+                              RichText::new(format!(
+                                  "⛔  NERGAL ALERT — {} MALWARE HIT(S)\n\
+                                   AWAITING STEWARD CLEARANCE", malware
+                              ))
+                              .color(alert_col)
+                              .size(11.0)
+                              .strong(),
+                          );
+                      });
+              }
+          }
+
+          fn stat_row(ui: &mut Ui, label: &str, value: &str, val_color: Color32) {
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new(label).color(COL_DIM).size(10.0));
+                  ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                      ui.label(RichText::new(value).color(val_color).size(12.0).strong());
+                  });
+              });
+              ui.add_space(1.0);
+              let (r, _) = ui.allocate_exact_size(Vec2::new(254.0, 1.0), egui::Sense::hover());
+              ui.painter().hline(
+                  r.x_range(), r.center().y,
+                  Stroke::new(0.5, Color32::from_rgb(40, 10, 15)),
+              );
+              ui.add_space(3.0);
+          }
+
+          fn threat_box(ui: &mut Ui, idx: usize, count: usize, col: Color32) {
+              let is_rootkit = idx == 6;
+              let border_col = if count > 0 { col } else { Color32::from_rgb(40, 10, 15) };
+              let fill_col   = if count > 0 {
+                  Color32::from_rgba_premultiplied(col.r(), col.g(), col.b(), 40)
+              } else {
+                  Color32::from_rgb(20, 5, 8)
+              };
+              egui::Frame::none()
+                  .fill(fill_col)
+                  .stroke(Stroke::new(if count > 0 { 1.0 } else { 0.5 }, border_col))
+                  .rounding(Rounding::same(4.0))
+                  .inner_margin(egui::Margin::symmetric(6.0, 4.0))
+                  .show(ui, |ui| {
+                      ui.set_min_width(54.0);
+                      ui.vertical_centered(|ui| {
+                          ui.label(
+                              RichText::new(CAT_NAMES[idx])
+                                  .color(COL_DIM).size(9.0).monospace(),
+                          );
+                          ui.label(
+                              RichText::new(format!("{count}"))
+                                  .color(if count > 0 { col } else { COL_DIM })
+                                  .size(17.0)
+                                  .strong(),
+                          );
+                          if is_rootkit && count > 0 {
+                              ui.label(
+                                  RichText::new("⛔").size(9.0).color(COL_MAROON),
+                              );
+                          }
+                      });
+                  });
+          }
+
+          // ── Right 3D scene ────────────────────────────────────────────────────
+          fn draw_scene(
+              ui:        &mut Ui,
+              state:     &BeeMdmBusState,
+              _particles: &[ParticleDemo],
+              tick:      f64,
+          ) {
+              let available = ui.available_size();
+              let (resp, painter) = ui.allocate_painter(available, egui::Sense::hover());
+              let rect = resp.rect;
+
+              painter.rect_filled(rect, Rounding::ZERO, BG_SCENE);
+
+              let cx = rect.left() + available.x * 0.50;
+              let cy = rect.top()  + available.y * 0.40;
+
+              // 1. Threat particle cloud
+              draw_threat_cloud(&painter, rect, cx, cy, state, tick);
+
+              // 2. Irkalla nucleus (dark maroon wireframe sphere illusion)
+              draw_irkalla(&painter, Pos2::new(cx, cy - 15.0), 40.0, state.total_golden);
+
+              // 3. 7 threat category towers
+              draw_towers(&painter, rect, cx, cy, state, tick);
+
+              // 4. CRT scanline overlay
+              let lines = (available.y / 4.0) as usize;
+              for i in (0..lines).step_by(2) {
+                  let y = rect.top() + i as f32 * 4.0;
+                  painter.hline(
+                      rect.x_range(), y,
+                      Stroke::new(0.3, Color32::from_rgba_premultiplied(0, 0, 0, 25)),
+                  );
+              }
+          }
+
+          // ── Threat particle cloud ─────────────────────────────────────────────
+          fn draw_threat_cloud(
+              painter: &egui::Painter,
+              rect:    Rect,
+              cx:      f32,
+              cy:      f32,
+              state:   &BeeMdmBusState,
+              tick:    f64,
+          ) {
+              let cos30 = 0.866f32;
+              let sin30 = 0.5f32;
+              let total = 2000usize;
+
+              let golden = state.total_golden as usize;
+              let fuzzy  = state.etl.sdb_pending;
+              let jailed = state.total_quarantined as usize;
+              let detect = state.gates.total_in_flight();
+
+              for i in 0..total {
+                  let fi     = i as f32;
+                  let angle  = fi * 2.399_f32 + tick as f32 * 0.004;
+                  let radius = (fi / total as f32).sqrt() * rect.width() * 0.46;
+                  let x3     = radius * angle.cos();
+                  let z3     = radius * angle.sin() * 0.28;
+                  let y3     = (angle * 3.5 + tick as f32 * 0.018).sin() * 7.0;
+
+                  let sx = cx + x3 * cos30 - z3 * cos30;
+                  let sy = cy + x3 * sin30 + z3 * sin30 - y3;
+                  if !rect.contains(Pos2::new(sx, sy)) { continue; }
+
+                  let col = if i < golden {
+                      // Neutralised — gold
+                      Color32::from_rgba_premultiplied(200, 160, 40, 200)
+                  } else if i < golden + fuzzy {
+                      // Fuzzy — magenta pulse
+                      let p = ((tick as f32 * 2.5).sin() * 0.5 + 0.5) * 80.0;
+                      Color32::from_rgba_premultiplied(180, 0 , 180 + p as u8, 160)
+                  } else if i < golden + fuzzy + jailed {
+                      // Jailed — deep maroon
+                      Color32::from_rgba_premultiplied(100, 0, 20, 150)
+                  } else if i < golden + fuzzy + jailed + detect {
+                      // Detected threat — bright red
+                      Color32::from_rgba_premultiplied(220, 30, 50, 200)
+                  } else {
+                      // Scanning orbit — dark grey
+                      let b = 90 + ((fi * 41.0) as u8).wrapping_mul(3);
+                      Color32::from_rgba_premultiplied(b, b/2, b/2, 130)
+                  };
+
+                  let size = if i < golden { 1.8 } else { 1.1 };
+                  painter.circle_filled(Pos2::new(sx, sy), size, col);
+              }
+          }
+
+          // ── Irkalla nucleus ───────────────────────────────────────────────────
+          fn draw_irkalla(
+              painter:      &egui::Painter,
+              center:       Pos2,
+              radius:       f32,
+              neutral_count: u64,
+          ) {
+              // Layered circles — depth illusion, dark maroon palette
+              painter.circle_filled(center, radius,
+                  Color32::from_rgb(60, 0, 12));
+              painter.circle_filled(
+                  Pos2::new(center.x - radius*0.15, center.y - radius*0.15),
+                  radius * 0.84,
+                  Color32::from_rgb(90, 0, 20));
+              painter.circle_filled(
+                  Pos2::new(center.x - radius*0.25, center.y - radius*0.25),
+                  radius * 0.64,
+                  Color32::from_rgb(120, 0, 28));
+              painter.circle_filled(
+                  Pos2::new(center.x - radius*0.33, center.y - radius*0.33),
+                  radius * 0.40,
+                  Color32::from_rgb(150, 10, 35));
+              // Wireframe ring
+              painter.circle_stroke(center, radius,
+                  Stroke::new(0.8, Color32::from_rgba_premultiplied(180, 0, 40, 120)));
+              painter.circle_stroke(center, radius * 1.15,
+                  Stroke::new(0.4, Color32::from_rgba_premultiplied(128, 0, 32, 60)));
+              // Label
+              painter.text(
+                  Pos2::new(center.x, center.y + radius + 12.0),
+                  Align2::CENTER_TOP,
+                  "IRKALLA",
+                  FontId::proportional(10.0),
+                  COL_MAROON,
+              );
+              painter.text(
+                  Pos2::new(center.x, center.y + radius + 24.0),
+                  Align2::CENTER_TOP,
+                  format!("neutralised  {}", fmt_n(neutral_count)),
+                  FontId::proportional(9.0),
+                  COL_GOLD,
+              );
+          }
+
+          // ── 7 threat category towers ──────────────────────────────────────────
+          fn draw_towers(
+              painter: &egui::Painter,
+              rect:    Rect,
+              cx:      f32,
+              cy:      f32,
+              state:   &BeeMdmBusState,
+              tick:    f64,
+          ) {
+              let cos30 = 0.866f32;
+              let sin30 = 0.5f32;
+
+              for i in 0usize..7 {
+                  let angle = (i as f32 / 7.0) * std::f32::consts::TAU;
+                  let r3d   = 160.0f32;
+                  let x3    = angle.cos() * r3d;
+                  let z3    = angle.sin() * r3d * 0.38;
+                  let bob   = (tick as f32 * 0.35 + i as f32).sin() * 3.0;
+
+                  let sx = cx + x3 * cos30 - z3 * cos30;
+                  let sy = cy + x3 * sin30 + z3 * sin30 - 60.0 - bob;
+
+                  if !rect.contains(Pos2::new(sx, sy)) { continue; }
+
+                  let count = state.gates.counts[i];
+                  let col   = CAT_COLS[i];
+
+                  // Draw stacked cubes — height = count (capped at 8)
+                  let stack = count.min(8);
+                  for h in 0..stack.max(1) {
+                      let cube_pos = Pos2::new(sx, sy + h as f32 * 14.0);
+                      // Only draw if count > 0; draw dim ghost if count == 0
+                      let draw_col = if count > 0 { col }
+                                     else { Color32::from_rgba_premultiplied(60, 20, 25, 60) };
+                      draw_iso_cube(painter, cube_pos, 10.0, draw_col);
+                  }
+
+                  // Category label above tower
+                  painter.text(
+                      Pos2::new(sx, sy - 16.0),
+                      Align2::CENTER_BOTTOM,
+                      CAT_NAMES[i],
+                      FontId::proportional(9.5),
+                      if count > 0 { col } else { COL_DIM },
+                  );
+
+                  // KAKI count (gold) above label
+                  if count > 0 {
+                      painter.text(
+                          Pos2::new(sx, sy - 28.0),
+                          Align2::CENTER_BOTTOM,
+                          count.to_string(),
+                          FontId::proportional(11.0),
+                          COL_GOLD,
+                      );
+                  }
+
+                  // Orbital ring per tower
+                  let ring_a = tick as f32 * 0.6 + i as f32 * 0.8;
+                  for seg in 0..32u32 {
+                      let a1 = ring_a + seg as f32 * std::f32::consts::TAU / 32.0;
+                      let a2 = ring_a + (seg + 1) as f32 * std::f32::consts::TAU / 32.0;
+                      let rx = 16.0f32;
+                      let ry = 5.0f32;
+                      let p1 = Pos2::new(sx + rx * a1.cos(), sy + 30.0 + ry * a1.sin());
+                      let p2 = Pos2::new(sx + rx * a2.cos(), sy + 30.0 + ry * a2.sin());
+                      if rect.contains(p1) && rect.contains(p2) {
+                          painter.line_segment(
+                              [p1, p2],
+                              Stroke::new(0.6,
+                                  Color32::from_rgba_premultiplied(
+                                      col.r(), col.g(), col.b(), 80)),
+                          );
+                      }
+                  }
+              }
+          }
+
+          // ── Isometric cube (same algorithm as etl_transparency.rs) ────────────
+          fn draw_iso_cube(painter: &egui::Painter, pos: Pos2, s: f32, color: Color32) {
+              let cos30 = 0.866f32;
+              let sin30 = 0.5f32;
+
+              let top = vec![
+                  Pos2::new(pos.x,            pos.y - s),
+                  Pos2::new(pos.x + s*cos30,  pos.y - s + s*sin30),
+                  Pos2::new(pos.x,            pos.y - s + s),
+                  Pos2::new(pos.x - s*cos30,  pos.y - s + s*sin30),
+              ];
+              let right = vec![
+                  Pos2::new(pos.x + s*cos30,  pos.y - s + s*sin30),
+                  Pos2::new(pos.x + s*cos30,  pos.y     + s*sin30),
+                  Pos2::new(pos.x,            pos.y + s),
+                  Pos2::new(pos.x,            pos.y - s + s),
+              ];
+              let left = vec![
+                  Pos2::new(pos.x - s*cos30,  pos.y - s + s*sin30),
+                  Pos2::new(pos.x,            pos.y - s + s),
+                  Pos2::new(pos.x,            pos.y + s),
+                  Pos2::new(pos.x - s*cos30,  pos.y     + s*sin30),
+              ];
+
+              painter.add(egui::Shape::convex_polygon(
+                  top.clone(), color.linear_multiply(1.2), Stroke::NONE));
+              painter.add(egui::Shape::convex_polygon(
+                  right.clone(), color.linear_multiply(0.6), Stroke::NONE));
+              painter.add(egui::Shape::convex_polygon(
+                  left.clone(), color.linear_multiply(0.4), Stroke::NONE));
+
+              for face in [&top, &right, &left] {
+                  painter.add(egui::Shape::closed_line(
+                      face.iter().copied().collect(),
+                      Stroke::new(0.4, color.linear_multiply(1.4)),
+                  ));
+              }
+          }
+
+          // ── Helper ────────────────────────────────────────────────────────────
+          fn fmt_n(n: u64) -> String {
+              let s = n.to_string();
+              let mut out = String::with_capacity(s.len() + s.len() / 3);
+              for (i, ch) in s.chars().rev().enumerate() {
+                  if i > 0 && i % 3 == 0 { out.push(','); }
+                  out.push(ch);
+              }
+              out.chars().rev().collect()
+          }
+
+    # ══════════════════════════════════════════════════════════════════════
+    # CHANGE 2 — EDIT panels/mod.rs: add pub mod nergal + Nergal variant
+    # ══════════════════════════════════════════════════════════════════════
+    - name: "Add pub mod nergal to panels/mod.rs"
+      ansible.builtin.lineinfile:
+        path:        "{{ mod_rs }}"
+        insertafter: "pub mod eaagent;"
+        line:        "pub mod nergal;"
+        state:       present
+        regexp:      "pub mod nergal;"
+
+    - name: "Add Nergal variant to ActivePanel enum"
+      ansible.builtin.replace:
+        path:    "{{ mod_rs }}"
+        regexp:  "(    EaAgent,\n)"
+        replace: "    EaAgent,\n    Nergal,\n"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # CHANGE 3 — EDIT app.rs: tab button + match arm + auto-switch logic
+    # ══════════════════════════════════════════════════════════════════════
+    - name: "Add Nergal tab button in nav bar"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(tab_btn\(ui, &mut self\.panel, ActivePanel::EaAgent,   "𒂗𒆠 EaAgent"\);)'
+        replace: 'tab_btn(ui, &mut self.panel, ActivePanel::EaAgent,   "𒂗𒆠 EaAgent");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Nergal, "𒀭𒉺𒂵 Nergal AV");'
+
+    - name: "Add Nergal match arm in update()"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(ActivePanel::EtlTransparency => crate::panels::etl_transparency::draw\()'
+        replace: 'ActivePanel::Nergal => crate::panels::nergal::draw(
+                        ui, &self.bus, &self.particles, self.tick,
+                    ),
+                ActivePanel::EtlTransparency => crate::panels::etl_transparency::draw('
+
+    - name: "Add auto-switch logic — Nergal activates on first threat"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(self\.tick = ctx\.input\(\|i\| i\.time\);)'
+        replace: 'self.tick = ctx.input(|i| i.time);
+              // Auto-switch to Nergal panel on first threat detection
+              if let Ok(bus_state) = self.bus.read() {
+                  if bus_state.gates.g7_nergal() > 0
+                      && self.panel != ActivePanel::Nergal
+                      && self.panel != ActivePanel::EtlFlow
+                  {
+                      self.panel = ActivePanel::Nergal;
+                  }
+              }'
+
+    # ── Step 4: Verify mod.rs has both changes ─────────────────────────────
+    - name: "Verify pub mod nergal in mod.rs"
+      ansible.builtin.command:
+        cmd: grep -n "nergal" "{{ mod_rs }}"
+      register: grep_mod
+      changed_when: false
+      failed_when:  grep_mod.rc != 0
+
+    - name: "Show mod.rs nergal lines"
+      ansible.builtin.debug:
+        msg: "{{ grep_mod.stdout_lines }}"
+
+    # ── Step 5: Verify app.rs has all three changes ────────────────────────
+    - name: "Verify app.rs changes"
+      ansible.builtin.command:
+        cmd: grep -n "Nergal\|g7_nergal\|nergal" "{{ app_rs }}"
+      register: grep_app
+      changed_when: false
+      failed_when:  grep_app.rc != 0
+
+    - name: "Show app.rs nergal lines"
+      ansible.builtin.debug:
+        msg: "{{ grep_app.stdout_lines }}"
+
+    # ── Step 6: Build dubsar-visualizer ────────────────────────────────────
+    - name: "cargo build -p dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 6 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-6:] }}"
+
+    # ── Step 7: Verify binary ──────────────────────────────────────────────
+    - name: "Stat dubsar-visualizer binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "Assert binary exists"
+      ansible.builtin.assert:
+        that:
+          - bin_stat.stat.exists
+          - bin_stat.stat.size > 0
+        success_msg: "✓ dubsar-visualizer ready — {{ bin_stat.stat.size | filesizeformat }}"
+        fail_msg:    "Binary not produced"
+
+    # ── Step 8: Done ───────────────────────────────────────────────────────
+    - name: "𒀭𒉺𒂵 Nergal panel deployed"
+      ansible.builtin.debug:
+        msg:
+          - "======================================================="
+          - "𒀭𒉺𒂵 Nergal AV Panel — DubSar Visualizer v4.0"
+          - "New file:  panels/nergal.rs"
+          - "Edited:    panels/mod.rs  (Nergal variant + pub mod)"
+          - "Edited:    app.rs         (tab + match arm + auto-switch)"
+          - "Binary:    {{ bin_stat.stat.size | filesizeformat }}"
+          - "-------------------------------------------------------"
+          - "Run:   cd ~/Forge/bahyway_v4"
+          - "       cargo run -p dubsar-visualizer"
+          - "Tab:   𒀭𒉺𒂵 Nergal AV (rightmost tab in nav bar)"
+          - "Auto:  switches automatically when g7_nergal() > 0"
+          - "======================================================="

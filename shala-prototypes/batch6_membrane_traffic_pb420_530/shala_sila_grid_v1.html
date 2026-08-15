@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · SILA GRID — The Junction Court · Traffic Physics, Game Theory & TDA for Pipeline Grids</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abzu:#070B14; --abzu-2:#0C1220;
+  --lapis:#24406E; --lapis-soft:#31517F;
+  --gold:#D4A945; --gold-dim:#8F7430; --gold-bright:#F2CC6B;
+  --alabaster:#E9E2D0; --alabaster-dim:#9C9584;
+  --clay:#C1603A; --reed:#6E9C7C;
+  --line:rgba(212,169,69,.18);
+  --card:#0E1524; --card-2:#111A2E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--abzu);color:var(--alabaster);font-family:'IBM Plex Sans',sans-serif;font-weight:300;overflow:hidden}
+header{height:62px;display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0B1120,#070B14)}
+.glyph{font-size:24px;color:var(--gold);line-height:1;user-select:none}
+h1{font-family:'Marcellus',serif;font-weight:400;font-size:15.5px;letter-spacing:.1em;white-space:nowrap}
+h1 span{color:var(--gold)}
+.subtitle{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.07em;border-left:1px solid var(--line);padding-left:16px;line-height:1.55}
+.subtitle b{color:var(--gold);font-weight:500}
+.wrap{display:flex;height:calc(100vh - 62px)}
+.stage{flex:1;position:relative;min-width:0}
+canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.actionbar{position:absolute;left:14px;bottom:12px;display:flex;gap:8px;z-index:3;flex-wrap:wrap}
+.abtn{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.05em;padding:8px 13px;border:1px solid var(--gold-dim);border-radius:3px;background:var(--gold);color:#14100a;font-weight:600;cursor:pointer}
+.abtn.ghost{background:rgba(14,21,36,.9);color:var(--alabaster);border-color:var(--line);font-weight:400}
+.abtn:focus-visible,.chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.tip{position:absolute;display:none;max-width:310px;padding:8px 11px;border:1px solid var(--gold-dim);border-radius:5px;background:rgba(10,15,28,.97);font-size:10.5px;line-height:1.55;color:var(--alabaster);z-index:8;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.55)}
+.tip b{color:var(--gold);font-weight:500}
+.tip .th{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;margin-bottom:3px}
+.tip .tf{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--alabaster-dim);margin-top:5px}
+.info{position:absolute;left:14px;top:56px;width:min(580px,60%);max-height:calc(100% - 130px);display:none;flex-direction:column;border:1px solid var(--gold-dim);border-radius:6px;background:rgba(10,15,28,.97);box-shadow:0 10px 44px rgba(0,0,0,.65);z-index:9}
+.info.on{display:flex}
+.info-head{display:flex;justify-content:space-between;align-items:center;padding:11px 15px;border-bottom:1px solid var(--line)}
+.info-title{font-family:'Marcellus',serif;font-size:15px;letter-spacing:.06em}
+.info-sub{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--alabaster-dim);letter-spacing:.1em;margin-top:2px}
+.info-x{background:none;border:1px solid var(--line);border-radius:3px;color:var(--alabaster-dim);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 9px;cursor:pointer}
+.info-x:hover{color:var(--gold);border-color:var(--gold-dim)}
+.info-body{overflow-y:auto;padding:12px 16px;font-size:11.5px;line-height:1.7}
+.info-body::-webkit-scrollbar{width:8px}
+.info-body::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+.info-body b{color:var(--gold);font-weight:500}
+.info-body .sec{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin:12px 0 4px}
+.info-body .clay{color:var(--clay)}.info-body .reed{color:var(--reed)}
+aside{width:410px;flex-shrink:0;border-left:1px solid var(--line);background:var(--abzu-2);display:flex;flex-direction:column;overflow:hidden}
+.engine-head{padding:11px 16px 9px;border-bottom:1px solid var(--line)}
+.engine-head .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.engine-head h2{font-family:'Marcellus',serif;font-weight:400;font-size:15px;letter-spacing:.05em;margin-top:3px}
+.engine-head .gloss{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.05em;margin-top:2px;line-height:1.5}
+.court{padding:10px 16px;border-bottom:1px solid var(--line)}
+.kv{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;margin-top:4px;color:var(--alabaster-dim)}
+.kv b{color:var(--alabaster);font-weight:500}
+.kv b.gold{color:var(--gold-bright)}.kv b.bad{color:var(--clay)}.kv b.good{color:var(--reed)}
+.clibox{flex:1;overflow-y:auto;padding:12px 14px}
+.clibox::-webkit-scrollbar,.journal::-webkit-scrollbar{width:8px}
+.clibox::-webkit-scrollbar-thumb,.journal::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+.cli-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;padding:4px 9px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--alabaster-dim);cursor:pointer;transition:all .15s}
+.chip:hover{color:var(--gold);border-color:var(--gold-dim)}
+.chip.gold{color:var(--gold);border-color:var(--gold-dim)}
+.cli-inbox{border:1px solid var(--gold-dim);border-radius:4px;background:#0A0F1C;margin-bottom:10px;overflow:hidden}
+#cliIn{width:100%;background:transparent;border:none;resize:vertical;min-height:50px;padding:9px 10px;color:var(--alabaster);font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.6;outline:none}
+.cli-actions{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-top:1px solid var(--line);background:var(--card)}
+.cli-hint{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.08em}
+.runb{padding:7px 16px;border-radius:3px;border:1px solid var(--gold-dim);background:var(--gold);color:#14100a;font-weight:600;font-size:11px;cursor:pointer}
+.cell{border:1px solid var(--line);border-radius:4px;margin-bottom:9px;overflow:hidden}
+.cell .cq{background:#0A0F1C;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.65;white-space:pre-wrap;border-bottom:1px solid var(--line)}
+.cell .co{background:var(--card);padding:9px 10px;font-size:10.5px;line-height:1.65}
+.cell.err .co{color:#E8B9A4}
+.cell .co b{color:var(--gold);font-weight:500}
+.cell .co .clay{color:var(--clay)}.cell .co .reed{color:var(--reed)}.cell .co .goldb{color:var(--gold-bright)}
+.hx-stage{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;margin:10px 0 6px;color:var(--gold)}
+.hk{color:var(--gold);font-weight:500}.hw{color:#7FA0D0}.hp{color:var(--reed)}.hv{color:#D8A08A}.hc{color:#5E6878;font-style:italic}
+.journal{height:104px;flex-shrink:0;border-top:1px solid var(--line);background:#080D18;padding:9px 14px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:9.5px;line-height:1.75;color:var(--alabaster-dim)}
+.journal .j-eyebrow{font-size:8.5px;letter-spacing:.22em;color:var(--gold);margin-bottom:4px;text-transform:uppercase}
+.journal .ln b{color:var(--gold);font-weight:500}
+.journal .ln .clay{color:var(--clay)}.journal .ln .reed{color:var(--reed)}.journal .ln .goldb{color:var(--gold-bright)}
+@media (max-width:1000px){aside{width:330px}.subtitle{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="glyph">𒆜</div>
+  <h1>ŠALA <span>·</span> SILA GRID <span>·</span> THE JUNCTION COURT</h1>
+  <div class="subtitle"><b>Parallel pipelines as a web of streets</b> — vehicles are souls; junctions are shared resources; the jam is a shape, not a number<br><b>The Sila Calculus:</b> the fundamental diagram governs · curl warns · persistence confirms (β₁ = gridlock) · max-pressure heals · PoA audits · wheel to fly, drag to pan, right-click a vehicle for its story</div>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="tip" id="tip"></div>
+    <div class="info" id="info">
+      <div class="info-head"><div><div class="info-title" id="infoTitle"></div><div class="info-sub" id="infoSub"></div></div><button class="info-x" id="infoClose">CLOSE ✕</button></div>
+      <div class="info-body" id="infoBody"></div>
+    </div>
+    <div class="actionbar">
+      <button class="abtn ghost" id="btnIncident">EMIT incident — close one street</button>
+      <button class="abtn" id="btnSurge">EMIT surge ×3 — flood the grid</button>
+      <button class="abtn ghost" id="btnControl">CONTROL: MAX-PRESSURE</button>
+      <button class="abtn ghost" id="btnBraess">EMIT braess — probe the paradox</button>
+    </div>
+  </div>
+
+  <aside>
+    <div class="engine-head">
+      <div class="eyebrow">Presiding · ḪendursagaEngine · second court · GL-NAV-002 candidate</div>
+      <h2>ḪENDURSAĜA · THE SILA CALCULUS</h2>
+      <div class="gloss">sila = street · the herald of pathways governs the junctions · logical: traffic physics (LWR/Greenshields) + routing games (Wardrop, Braess, max-pressure) + TDA (jam Betti, gridlock = β₁ loop) + Hodge curl precursor · physical: Junction &amp; Bottleneck Analysis for parallel pipeline grids · Šala prototype; gauges graduate to the Igigi Watch</div>
+    </div>
+
+    <div class="court">
+      <div class="kv"><span>MEAN DENSITY ρ (of jam ρⱼ)</span><b id="rRho" class="gold">—</b></div>
+      <div class="kv"><span>THROUGHPUT (trips/min)</span><b id="rQ" class="gold">—</b></div>
+      <div class="kv"><span>DISTANCE TO CREST</span><b id="rCrest" class="good">—</b></div>
+      <div class="kv"><span>JAM ISLANDS β₀</span><b id="rB0" class="good">0</b></div>
+      <div class="kv"><span>GRIDLOCK LOOPS β₁</span><b id="rB1" class="good">0</b></div>
+      <div class="kv"><span>PERSISTENCE VERDICT</span><b id="rVerd" class="good">CLEAR</b></div>
+      <div class="kv"><span>PRICE OF ANARCHY (measured)</span><b id="rPoA" class="gold">—</b></div>
+    </div>
+
+    <div class="clibox" id="clibox"></div>
+    <div class="journal" id="journal"><div class="j-eyebrow">Ḫendursaĝa's Street Ledger · append-only</div></div>
+  </aside>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   ŠALA SILA GRID — the Junction Court (DRAFT)
+   The mathematics on this glass:
+   - Greenshields fundamental diagram: v = v_max(1 − ρ/ρ_j),
+     q = ρv — the crest at ρ_j/2 is the anti-bottleneck law:
+     stay LEFT of the crest; shed before it, never after.
+   - Junction control: MAX-PRESSURE (Tassiulas–Ephremides),
+     provably throughput-optimal, vs GREEDY (Wardrop selfish
+     routing) — the measured gap is the Price of Anarchy.
+   - Braess probe: close a shortcut; if flow IMPROVES, the
+     street was a paradox street.
+   - TDA: jam subgraph (ρ_e > ρ_crit) → β₀ = jam islands,
+     β₁ = gridlock loops (deadlock as a hole). Persistence
+     across thresholds sees the loop FORMING before it closes.
+   - Hodge curl per face: circulation is the precursor bruise.
+   Camera: wheel = fly (zoom), drag = pan, dblclick = bird.
+   Vehicles carry StoryEngine journals — right-click to hear.
+   ============================================================ */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+let W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+function resize(){const r=cv.parentElement.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+window.addEventListener('resize',resize);
+
+/* ---------- the street web ---------- */
+const N=4;                                   /* N×N junctions */
+const RHO_J=1.0, RHO_CRIT=0.6, VMAX=64;      /* Greenshields constants */
+let nodes=[],edges=[],SHORTCUTS=[];
+function nodePos(i,j){
+  const gx0=W*0.05,gy0=H*0.13,gw=W*0.52,gh=H*0.68;
+  return {x:gx0+j*(gw/(N-1)),y:gy0+i*(gh/(N-1))};
+}
+function buildGrid(){
+  nodes=[];edges=[];
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++)nodes.push({i,j,id:i*N+j});
+  const addE=(a,b,short)=>{edges.push({a,b,short:!!short,closed:false,count:0,rho:0,v:VMAX,q:0});};
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){
+    const id=i*N+j;
+    if(j<N-1){addE(id,id+1);addE(id+1,id);}
+    if(i<N-1){addE(id,id+N);addE(id+N,id);}
+  }
+  /* two diagonal shortcut streets — candidates for the Braess probe */
+  addE(0,N+1,true);addE(N+1,0,true);
+  addE(N*N-1,N*N-2-N,true);addE(N*N-2-N,N*N-1,true);
+  SHORTCUTS=edges.filter(e=>e.short);
+}
+function eLen(e){const A=nodePos(nodes[e.a].i,nodes[e.a].j),B=nodePos(nodes[e.b].i,nodes[e.b].j);return Math.hypot(B.x-A.x,B.y-A.y);}
+function outEdges(n){return edges.map((e,i)=>({e,i})).filter(x=>x.e.a===n&&!x.e.closed);}
+
+/* ---------- routing tables (Floyd–Warshall over 16 nodes) ---------- */
+let nextHop=[];
+function routeTables(congestionAware){
+  const V=N*N,INF=1e9;
+  const d=Array.from({length:V},()=>Array(V).fill(INF));
+  const nx=Array.from({length:V},()=>Array(V).fill(-1));
+  for(let v=0;v<V;v++)d[v][v]=0;
+  edges.forEach(e=>{
+    if(e.closed)return;
+    const w=eLen(e)*(congestionAware?(1+3*e.rho):1);
+    if(w<d[e.a][e.b]){d[e.a][e.b]=w;nx[e.a][e.b]=e.b;}
+  });
+  for(let k=0;k<V;k++)for(let i2=0;i2<V;i2++)for(let j2=0;j2<V;j2++){
+    if(d[i2][k]+d[k][j2]<d[i2][j2]){d[i2][j2]=d[i2][k]+d[k][j2];nx[i2][j2]=nx[i2][k];}
+  }
+  nextHop=nx;
+}
+
+/* ---------- vehicles (souls with stories) ---------- */
+const HUES=[150,178,210];
+let cars=[],carN=0,trips=[],surge=0,spawnAcc=0;
+const FLEET=110;
+function mkCar(atNode){
+  const dest=(()=>{let d;do{d=Math.floor(Math.random()*N*N);}while(d===atNode);return d;})();
+  const c={id:'V-'+String(++carN).padStart(3,'0'),node:atNode,dest,e:-1,t:0,hue:HUES[carN%3],
+           waiting:false,waitT:0,story:[]};
+  tell(c,'minted at junction J'+atNode+' \u00B7 bound for J'+dest);
+  chooseEdge(c);
+  return c;
+}
+function tell(c,ev){c.story.push({ts:new Date().toTimeString().slice(0,8),ev});if(c.story.length>9)c.story.shift();}
+function chooseEdge(c){
+  if(c.node===c.dest){ /* arrived */
+    trips.push(performance.now());
+    tell(c,'arrived at J'+c.dest+' \u00B7 the road is witnessed');
+    const spawn=Math.floor(Math.random()*N*N);
+    Object.assign(c,{node:spawn,dest:(spawn+1+Math.floor(Math.random()*(N*N-1)))%(N*N),e:-1,t:0,waiting:false,waitT:0});
+    tell(c,'reborn at J'+c.node+' \u00B7 bound for J'+c.dest);
+  }
+  const hop=nextHop[c.node]?nextHop[c.node][c.dest]:-1;
+  const cand=outEdges(c.node);
+  if(!cand.length){c.waiting=true;return;}
+  let pick=cand.find(x=>x.e.b===hop)||cand[Math.floor(Math.random()*cand.length)];
+  c.e=pick.i;c.t=0;c.waiting=false;
+}
+/* max-pressure junction service */
+let control='maxpressure',cycleT=0;
+function serveJunctions(){
+  for(let n=0;n<N*N;n++){
+    const approaches=edges.map((e,i)=>({e,i})).filter(x=>x.e.b===n&&!x.e.closed);
+    const queued=id=>cars.filter(c=>c.waiting&&c.e===id).length;
+    if(control==='maxpressure'){
+      let best=null,bp=-1e9;
+      approaches.forEach(ap=>{
+        const qin=queued(ap.i);
+        const down=Math.min(...outEdges(n).map(o=>o.e.count),9);
+        const p=qin-down;
+        if(qin>0&&p>bp){bp=p;best=ap;}
+      });
+      if(best){let served=0;
+        cars.forEach(c=>{if(served<3&&c.waiting&&c.e===best.i){c.node=n;chooseEdge(c);served++;}});}
+    }else{ /* greedy/Wardrop: every approach releases one, uncoordinated */
+      approaches.forEach(ap=>{
+        const c=cars.find(x=>x.waiting&&x.e===ap.i);
+        if(c){c.node=n;chooseEdge(c);}
+      });
+    }
+  }
+}
+
+/* ---------- TDA on the jam subgraph ---------- */
+function betti(tau){
+  const jam=edges.filter(e=>!e.closed&&e.rho>tau);
+  if(!jam.length)return{b0:0,b1:0,jam};
+  const vs=new Set();jam.forEach(e=>{vs.add(e.a);vs.add(e.b);});
+  const idx=new Map([...vs].map((v,k)=>[v,k]));
+  const par=[...vs].map((_,k)=>k);
+  const find=x=>par[x]===x?x:(par[x]=find(par[x]));
+  jam.forEach(e=>{const a=find(idx.get(e.a)),b=find(idx.get(e.b));if(a!==b)par[a]=b;});
+  const C=new Set([...vs].map(v=>find(idx.get(v)))).size;
+  /* undirected cycle count: collapse directed pairs */
+  const und=new Set();jam.forEach(e=>und.add(Math.min(e.a,e.b)+'-'+Math.max(e.a,e.b)));
+  const b1=Math.max(0,und.size-vs.size+C);
+  return{b0:C,b1,jam};
+}
+function persistenceStrip(){
+  const taus=[0.85,0.75,0.65,0.55,0.45,0.35];
+  return taus.map(tau=>({tau,b1:betti(tau).b1}));
+}
+function gridlockCycle(){ /* one jammed cycle for highlighting */
+  const {jam}=betti(RHO_CRIT);
+  const adj=new Map();
+  jam.forEach(e=>{const k=Math.min(e.a,e.b)+'-'+Math.max(e.a,e.b);
+    if(!adj.has(e.a))adj.set(e.a,[]);if(!adj.has(e.b))adj.set(e.b,[]);
+    adj.get(e.a).push({to:e.b,k});adj.get(e.b).push({to:e.a,k});});
+  const seenE=new Set(),stack=[],seenV=new Map();
+  for(const start of adj.keys()){
+    if(seenV.has(start))continue;
+    const dfs=[{v:start,path:[start],usedK:new Set()}];
+    let guard=0;
+    while(dfs.length&&guard++<400){
+      const s=dfs.pop();
+      for(const nb of (adj.get(s.v)||[])){
+        if(s.usedK.has(nb.k))continue;
+        const at=s.path.indexOf(nb.to);
+        if(at>=0&&s.path.length-at>=3)return s.path.slice(at);
+        if(s.path.length<10)dfs.push({v:nb.to,path:[...s.path,nb.to],usedK:new Set([...s.usedK,nb.k])});
+      }
+    }
+    seenV.set(start,1);
+  }
+  return null;
+}
+
+/* ---------- Hodge curl per face ---------- */
+function faceCurl(){
+  const out=[];
+  const q=(a,b)=>{const e=edges.find(x=>x.a===a&&x.b===b&&!x.closed);return e?e.q:0;};
+  for(let i=0;i<N-1;i++)for(let j=0;j<N-1;j++){
+    const tl=i*N+j,tr=tl+1,br=tr+N,bl=tl+N;
+    const circ=q(tl,tr)+q(tr,br)+q(br,bl)+q(bl,tl)-(q(tr,tl)+q(br,tr)+q(bl,br)+q(tl,bl));
+    out.push({i,j,circ});
+  }
+  return out;
+}
+
+/* ---------- actions ---------- */
+let incident=null,braess=null;
+function doIncident(){
+  const open=edges.filter(e=>!e.closed&&!e.short);
+  const e=open[Math.floor(Math.random()*open.length)];
+  e.closed=true;incident={e,t0:performance.now()};
+  routeTables(control==='maxpressure');
+  jlog('<span class="clay">INCIDENT</span> \u00B7 street J'+e.a+'\u2192J'+e.b+' closed \u00B7 watch the curl bruise upstream, then the persistence strip \u2014 the jam is a shape growing');
+}
+function doSurge(){surge=3;jlog('<span class="clay">SURGE \u00D73</span> \u00B7 the grid floods \u00B7 the fundamental diagram\u2019s operating point climbs toward the crest \u2014 stay left of it or throughput itself will fall');}
+function doControl(){
+  control=control==='maxpressure'?'greedy':'maxpressure';
+  document.getElementById('btnControl').textContent='CONTROL: '+(control==='maxpressure'?'MAX-PRESSURE':'GREEDY (Wardrop)');
+  routeTables(control==='maxpressure');
+  jlog('CONTROL \u2192 <b>'+(control==='maxpressure'?'MAX-PRESSURE (Tassiulas\u2013Ephremides, throughput-optimal)':'GREEDY \u2014 Wardrop selfish routing; the Price of Anarchy will show itself')+'</b>');
+}
+function doBraess(){
+  if(braess)return;
+  braess={phase:'open',t0:performance.now(),qOpen:0,qClosed:0};
+  jlog('BRAESS PROBE \u00B7 measuring flow with the shortcut streets OPEN\u2026 then closing them \u2014 if flow improves, the street was a paradox');
+}
+document.getElementById('btnIncident').addEventListener('click',doIncident);
+document.getElementById('btnSurge').addEventListener('click',doSurge);
+document.getElementById('btnControl').addEventListener('click',doControl);
+document.getElementById('btnBraess').addEventListener('click',doBraess);
+
+/* ---------- camera: bird / fly / pan ---------- */
+let cam={x:0,y:0,s:1},drag=null;
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const s0=cam.s,s1=Math.max(0.6,Math.min(2.6,s0*(e.deltaY<0?1.12:0.89)));
+  cam.x=mx-(mx-cam.x)*(s1/s0);cam.y=my-(my-cam.y)*(s1/s0);cam.s=s1;
+},{passive:false});
+cv.addEventListener('pointerdown',e=>{if(e.button===0)drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y,moved:false};});
+cv.addEventListener('pointermove',e=>{if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;cam.x=drag.cx+dx;cam.y=drag.cy+dy;}});
+cv.addEventListener('pointerup',()=>{drag=null;});
+cv.addEventListener('dblclick',()=>{cam={x:0,y:0,s:1};jlog('BIRD \u00B7 the camera returns to the sky');});
+function toGrid(mx,my){return {x:(mx-cam.x)/cam.s,y:(my-cam.y)/cam.s};}
+
+/* ---------- simulation step ---------- */
+let tPrev=performance.now();
+function step(dt,now){
+  if(surge>0)surge=Math.max(0,surge-dt*0.25);
+  /* densities & speeds */
+  edges.forEach(e=>{e.count=0;});
+  cars.forEach(c=>{if(c.e>=0)edges[c.e].count++;});
+  edges.forEach(e=>{
+    const slots=Math.max(3,eLen(e)/11);
+    e.rho=Math.min(1.4,e.count/slots);
+    e.v=e.closed?2:VMAX*Math.max(0.06,1-e.rho/RHO_J);
+    e.q=e.rho*e.v;
+  });
+  /* movement */
+  cars.forEach(c=>{
+    if(c.waiting){c.waitT+=dt;if(c.waitT>3&&c.waitT<3.05)tell(c,'long wait at J'+edges[c.e].b+' \u00B7 the junction breathes slowly');return;}
+    if(c.e<0){chooseEdge(c);return;}
+    const e=edges[c.e];
+    c.t+=e.v*dt/Math.max(20,eLen(e));
+    if(c.t>=1){c.waiting=true;c.waitT=0;}
+  });
+  cycleT+=dt;
+  if(cycleT>0.5){cycleT=0;serveJunctions();}
+  /* fleet & spawning */
+  spawnAcc+=dt*(1+surge)*4;
+  while(cars.length<FLEET*(1+surge*0.6)&&spawnAcc>1){spawnAcc-=1;cars.push(mkCar(Math.floor(Math.random()*N*N)));}
+  while(cars.length>FLEET*(1+surge*0.6)+8)cars.pop();
+  /* routing refresh */
+  if(!step._rt||now-step._rt>1500){step._rt=now;routeTables(control==='maxpressure');}
+  /* incident heal */
+  if(incident&&now-incident.t0>9000){incident.e.closed=false;jlog('<span class="reed">STREET REOPENED</span> \u00B7 J'+incident.e.a+'\u2192J'+incident.e.b+' \u00B7 watch the loop die in the persistence strip');incident=null;routeTables(control==='maxpressure');}
+  /* braess probe phases */
+  if(braess){
+    const e2=now-braess.t0;
+    if(braess.phase==='open'&&e2>5000){
+      braess.qOpen=tripsPerMin();
+      SHORTCUTS.forEach(s=>s.closed=true);routeTables(control==='maxpressure');
+      braess.phase='closed';braess.t0=now;
+    }else if(braess.phase==='closed'&&e2>5000){
+      braess.qClosed=tripsPerMin();
+      SHORTCUTS.forEach(s=>s.closed=false);routeTables(control==='maxpressure');
+      const para=braess.qClosed>braess.qOpen*1.03;
+      jlog(para?'<span class="goldb">BRAESS CONFIRMED</span> \u00B7 flow with shortcuts CLOSED ('+braess.qClosed.toFixed(0)+'/min) beat OPEN ('+braess.qOpen.toFixed(0)+'/min) \u2014 the shortcut was a paradox street; adding capacity harmed the grid'
+                :'BRAESS PROBE \u00B7 open '+braess.qOpen.toFixed(0)+'/min vs closed '+braess.qClosed.toFixed(0)+'/min \u2014 no paradox at this load; the shortcuts earn their asphalt today');
+      braess=null;
+    }
+  }
+  /* readouts */
+  const meanRho=edges.reduce((a,e)=>a+e.rho,0)/edges.length;
+  const q=tripsPerMin();
+  bestQ[control]=Math.max(bestQ[control]||0,q);
+  document.getElementById('rRho').textContent=(meanRho/RHO_J*100).toFixed(0)+'%';
+  document.getElementById('rQ').textContent=q.toFixed(0);
+  const crest=1-Math.min(1,meanRho/(RHO_J/2));
+  const cEl=document.getElementById('rCrest');
+  cEl.textContent=(crest*100).toFixed(0)+'% left of the crest';
+  cEl.className=crest<0.15?'bad':(crest<0.4?'gold':'good');
+  const B=betti(RHO_CRIT);
+  document.getElementById('rB0').textContent=B.b0;
+  document.getElementById('rB0').className=B.b0>0?'gold':'good';
+  const b1El=document.getElementById('rB1');
+  b1El.textContent=B.b1;b1El.className=B.b1>0?'bad':'good';
+  const strip=persistenceStrip();
+  const forming=strip.some(s=>s.tau<RHO_CRIT&&s.b1>0);
+  const vEl=document.getElementById('rVerd');
+  vEl.textContent=B.b1>0?'GRIDLOCK \u00B7 \u03B2\u2081 loop closed':(forming?'FORMING \u00B7 loop below threshold':'CLEAR');
+  vEl.className=B.b1>0?'bad':(forming?'gold':'good');
+  if(B.b1>0&&!step._gl){step._gl=true;jlog('<span class="clay">GRIDLOCK</span> \u00B7 \u03B2\u2081='+B.b1+' \u2014 vehicles wait in a closed loop: deadlock as a hole in the jam complex');}
+  if(B.b1===0)step._gl=false;
+  const poa=(bestQ.maxpressure&&q>4)?(bestQ.maxpressure/q):1;
+  document.getElementById('rPoA').textContent=poa.toFixed(2)+(control==='greedy'?' \u00B7 anarchy costs':' \u00B7 near optimum');
+}
+let bestQ={};
+function tripsPerMin(){
+  const now=performance.now();
+  trips=trips.filter(t=>now-t<20000);
+  return trips.length*3;
+}
+
+/* ---------- rendering ---------- */
+function draw(now){
+  const t=now/1000;
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createRadialGradient(W/2,H/2,80,W/2,H/2,Math.max(W,H)*.7);
+  g.addColorStop(0,'#0A101E');g.addColorStop(1,'#070B14');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(156,149,132,.6)';ctx.font='9.5px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('THE STREET WEB \u00B7 wheel = fly \u00B7 drag = pan \u00B7 double-click = bird \u00B7 right-click a vehicle for its story \u00B7 clay streets are jammed \u00B7 the bruise is curl, the warning before the hole',24,H*0.05);
+
+  /* === the grid (camera space) === */
+  ctx.save();ctx.translate(cam.x,cam.y);ctx.scale(cam.s,cam.s);
+  /* curl bruises */
+  faceCurl().forEach(f=>{
+    const A=nodePos(f.i,f.j),B2=nodePos(f.i+1,f.j+1);
+    const cx0=(A.x+B2.x)/2,cy0=(A.y+B2.y)/2;
+    const mag=Math.min(1,Math.abs(f.circ)/90);
+    if(mag>0.12){
+      const gr=ctx.createRadialGradient(cx0,cy0,4,cx0,cy0,44);
+      gr.addColorStop(0,'rgba(193,96,58,'+(0.34*mag)+')');
+      gr.addColorStop(1,'rgba(193,96,58,0)');
+      ctx.fillStyle=gr;ctx.beginPath();ctx.arc(cx0,cy0,44,0,Math.PI*2);ctx.fill();
+    }
+  });
+  /* streets */
+  edges.forEach(e=>{
+    const A=nodePos(nodes[e.a].i,nodes[e.a].j),B2=nodePos(nodes[e.b].i,nodes[e.b].j);
+    const jam=e.rho>RHO_CRIT;
+    ctx.strokeStyle=e.closed?'rgba(224,82,64,.9)':(jam?'rgba(193,96,58,.85)':(e.short?'rgba(212,169,69,.5)':'rgba(49,81,127,.75)'));
+    ctx.lineWidth=e.closed?2.4:(jam?2.6:1.2);
+    if(e.short)ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B2.x,B2.y);ctx.stroke();
+    ctx.setLineDash([]);
+    if(e.closed){
+      const mx=(A.x+B2.x)/2,my=(A.y+B2.y)/2;
+      ctx.fillStyle='rgba(224,82,64,.95)';ctx.font='9px "IBM Plex Mono",monospace';ctx.textAlign='center';
+      ctx.fillText('\u2715 closed',mx,my-6);ctx.textAlign='left';
+    }
+  });
+  /* gridlock loop highlight */
+  {
+    const cyc=gridlockCycle();
+    if(cyc){
+      ctx.strokeStyle='rgba(224,82,64,'+(0.55+0.4*Math.sin(t*5))+')';ctx.lineWidth=3.4;
+      ctx.beginPath();
+      cyc.forEach((v,k)=>{const p=nodePos(nodes[v].i,nodes[v].j);k===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});
+      ctx.closePath();ctx.stroke();
+    }
+  }
+  /* junctions + signals */
+  nodes.forEach(nd=>{
+    const p=nodePos(nd.i,nd.j);
+    ctx.fillStyle='rgba(14,21,36,.95)';
+    ctx.strokeStyle='rgba(212,169,69,.6)';ctx.lineWidth=1.2;
+    rr(p.x-7,p.y-7,14,14,3);ctx.fill();ctx.stroke();
+    ctx.fillStyle='rgba(233,226,208,.7)';ctx.font='7.5px "IBM Plex Mono",monospace';ctx.textAlign='center';
+    ctx.fillText('J'+nd.id,p.x,p.y+18);
+    ctx.textAlign='left';
+    /* the green of max pressure */
+    if(control==='maxpressure'){
+      const approaches=edges.map((e,i)=>({e,i})).filter(x=>x.e.b===nd.id&&!x.e.closed);
+      let best=null,bq=-1;
+      approaches.forEach(ap=>{const qn=cars.filter(c=>c.waiting&&c.e===ap.i).length;if(qn>bq){bq=qn;best=ap;}});
+      if(best&&bq>0){
+        const A=nodePos(nodes[best.e.a].i,nodes[best.e.a].j);
+        const dx=A.x-p.x,dy=A.y-p.y,L=Math.hypot(dx,dy);
+        ctx.fillStyle='rgba(110,156,124,.95)';
+        ctx.beginPath();ctx.arc(p.x+dx/L*11,p.y+dy/L*11,2.6,0,Math.PI*2);ctx.fill();
+      }
+    }
+  });
+  /* vehicles */
+  cars.forEach(c=>{
+    if(c.e<0)return;
+    const e=edges[c.e];
+    const A=nodePos(nodes[e.a].i,nodes[e.a].j),B2=nodePos(nodes[e.b].i,nodes[e.b].j);
+    const tt=Math.min(1,c.t);
+    const x=A.x+(B2.x-A.x)*tt,y=A.y+(B2.y-A.y)*tt;
+    const off=6*((c.id.charCodeAt(3)%2)?1:-1);
+    const nx2=-(B2.y-A.y),ny2=(B2.x-A.x),L=Math.hypot(nx2,ny2)||1;
+    ctx.fillStyle=c.waiting?'hsl('+c.hue+' 45% 42%)':'hsl('+c.hue+' 62% 60%)';
+    ctx.fillRect(x+nx2/L*off-2,y+ny2/L*off-2,4,4);
+  });
+  ctx.restore();
+
+  /* === FUNDAMENTAL DIAGRAM === */
+  {
+    const x0=W*0.615,y0=H*0.10,w0=W*0.35,h0=H*0.24;
+    ctx.strokeStyle='rgba(212,169,69,.3)';rr(x0,y0,w0,h0,10);ctx.stroke();
+    ctx.fillStyle='rgba(212,169,69,.85)';ctx.font='9.5px "IBM Plex Mono",monospace';
+    ctx.fillText('FUNDAMENTAL DIAGRAM \u00B7 q(\u03C1) \u00B7 the anti-bottleneck law',x0+10,y0+16);
+    ctx.fillStyle='rgba(110,156,124,.65)';ctx.font='8px "IBM Plex Mono",monospace';
+    ctx.fillText('stay LEFT of the crest: past it, admitting more moves less',x0+10,y0+28);
+    const px=r2=>x0+14+r2*(w0-28), py=q2=>y0+h0-16-(q2/(VMAX*RHO_J/4))*(h0-52);
+    ctx.strokeStyle='rgba(127,160,208,.9)';ctx.lineWidth=1.5;ctx.beginPath();
+    for(let r2=0;r2<=1.0001;r2+=0.02){
+      const q2=VMAX*r2*(1-r2/RHO_J)*RHO_J? VMAX*r2*(1-r2):0;
+      const X=px(r2),Y=py(VMAX*r2*(1-r2));
+      r2===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y);
+    }
+    ctx.stroke();
+    /* crest line */
+    ctx.strokeStyle='rgba(224,82,64,.7)';ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(px(0.5),y0+38);ctx.lineTo(px(0.5),y0+h0-14);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='rgba(224,82,64,.8)';ctx.fillText('crest',px(0.5)-12,y0+46);
+    /* operating point */
+    const meanRho=edges.reduce((a,e)=>a+e.rho,0)/edges.length;
+    const opQ=VMAX*meanRho*(1-Math.min(1,meanRho));
+    ctx.fillStyle='rgba(242,204,107,.95)';
+    ctx.beginPath();ctx.arc(px(Math.min(1,meanRho)),py(Math.max(0,opQ)),4.5,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(242,204,107,.5)';ctx.beginPath();ctx.arc(px(Math.min(1,meanRho)),py(Math.max(0,opQ)),8+2*Math.sin(t*4),0,Math.PI*2);ctx.stroke();
+  }
+
+  /* === PERSISTENCE STRIP === */
+  {
+    const x0=W*0.615,y0=H*0.375,w0=W*0.35,h0=H*0.155;
+    ctx.strokeStyle='rgba(212,169,69,.3)';rr(x0,y0,w0,h0,10);ctx.stroke();
+    ctx.fillStyle='rgba(212,169,69,.85)';ctx.font='9.5px "IBM Plex Mono",monospace';
+    ctx.fillText('PERSISTENCE STRIP \u00B7 the loop, seen FORMING',x0+10,y0+16);
+    ctx.fillStyle='rgba(110,156,124,.65)';ctx.font='8px "IBM Plex Mono",monospace';
+    ctx.fillText('\u03B2\u2081 of the jam complex across density thresholds \u2014 a bar below the law line is a gridlock being born',x0+10,y0+28);
+    const strip=persistenceStrip();
+    const bw=(w0-24)/strip.length;
+    strip.forEach((s0,i)=>{
+      const bx=x0+12+i*bw;
+      ctx.strokeStyle='rgba(49,81,127,.6)';
+      ctx.strokeRect(bx,y0+40,bw-6,h0-64);
+      if(s0.b1>0){
+        ctx.fillStyle=s0.tau>=RHO_CRIT?'rgba(224,82,64,.85)':'rgba(212,169,69,.8)';
+        ctx.fillRect(bx,y0+40,bw-6,h0-64);
+      }
+      ctx.fillStyle='rgba(156,149,132,.7)';ctx.font='7.5px "IBM Plex Mono",monospace';ctx.textAlign='center';
+      ctx.fillText('\u03C1>'+s0.tau.toFixed(2),bx+(bw-6)/2,y0+h0-12);
+      ctx.textAlign='left';
+    });
+    /* law line at RHO_CRIT */
+    const lawI=strip.findIndex(s0=>s0.tau<RHO_CRIT);
+    if(lawI>0){
+      const lx=x0+12+lawI*bw-3;
+      ctx.strokeStyle='rgba(242,204,107,.8)';ctx.setLineDash([3,3]);
+      ctx.beginPath();ctx.moveTo(lx,y0+36);ctx.lineTo(lx,y0+h0-24);ctx.stroke();ctx.setLineDash([]);
+    }
+  }
+
+  /* === POA & CONTROL === */
+  {
+    const x0=W*0.615,y0=H*0.565,w0=W*0.35,h0=H*0.175;
+    ctx.strokeStyle='rgba(212,169,69,.3)';rr(x0,y0,w0,h0,10);ctx.stroke();
+    ctx.fillStyle='rgba(212,169,69,.85)';ctx.font='9.5px "IBM Plex Mono",monospace';
+    ctx.fillText('THE ROUTING GAME \u00B7 Wardrop vs the optimum',x0+10,y0+16);
+    ctx.fillStyle='rgba(233,226,208,.85)';ctx.font='9px "IBM Plex Mono",monospace';
+    ctx.fillText('control now: '+(control==='maxpressure'?'MAX-PRESSURE (throughput-optimal by theorem)':'GREEDY \u2014 selfish Wardrop routing'),x0+12,y0+38);
+    const q=tripsPerMin();
+    const bg=bestQ.maxpressure||q||1;
+    const frac=Math.min(1,q/Math.max(1,bg));
+    ctx.strokeStyle='rgba(49,81,127,.7)';rr(x0+12,y0+50,w0-24,14,7);ctx.stroke();
+    ctx.fillStyle=frac>0.85?'rgba(110,156,124,.85)':'rgba(212,169,69,.85)';
+    rr(x0+12,y0+50,(w0-24)*frac,14,7);ctx.fill();
+    ctx.fillStyle='rgba(156,149,132,.8)';ctx.font='8px "IBM Plex Mono",monospace';
+    ctx.fillText('throughput '+q.toFixed(0)+'/min vs best coordinated '+bg.toFixed(0)+'/min \u2014 the gap is the Price of Anarchy',x0+12,y0+78);
+    ctx.fillStyle='rgba(110,156,124,.7)';
+    ctx.fillText('shortcut streets (dashed gold) await the BRAESS probe: close them \u2014 if flow improves, they were paradox streets',x0+12,y0+94);
+    ctx.fillStyle='rgba(212,169,69,.7)';
+    ctx.fillText('gauges bound for the Igigi Watch: crest-distance \u00B7 \u03B2\u2081 gridlock \u00B7 PoA \u00B7 curl maxima',x0+12,y0+h0-12);
+  }
+  drawInfoIcons();
+}
+
+/* ---------- the meaning system ---------- */
+function widgetRects(){
+  return [
+   {id:'sila.grid',x:W*0.02,y:H*0.08,w:W*0.57,h:H*0.76,title:'THE STREET WEB \u00B7 pipelines as streets',
+    short:'Vehicles are souls in parallel pipelines; junctions are shared resources (cores, gates, commit points). Clay = jammed street; the pulsing loop = gridlock.',
+    full:'<div class="sec">what it shows</div>A grid of junctions J0\u2026J15 carrying vehicle-souls in green/teal/blue lineages. Each street\u2019s density \u03C1 sets its speed by Greenshields v = v\u2098\u2090\u2093(1\u2212\u03C1/\u03C1\u2C7C); a street past \u03C1_crit turns <b>clay</b> \u2014 jammed. Dashed gold streets are shortcuts, standing for extra index paths \u2014 the Braess probe\u2019s subjects.<div class="sec">the mapping to pipelines</div>Junction = shared resource (an ENLIL core, an IO lane, a Gate, the KISPU commit point). Street = a stage of one pipeline. Vehicle = a batch of souls in flight. Running many pipelines in parallel IS running this grid.<div class="sec">the camera and the stories</div>Wheel to fly, drag to pan, double-click for the bird. Right-click any vehicle: its StoryEngine journal \u2014 minted, bound, waited, reborn \u2014 the storytelling of each particle you asked for.'},
+   {id:'fundamental.diagram',x:W*0.615,y:H*0.10,w:W*0.35,h:H*0.24,title:'FUNDAMENTAL DIAGRAM \u00B7 q(\u03C1)',
+    short:'The deepest anti-bottleneck law: throughput rises with density only to the crest \u2014 past it, admitting MORE moves LESS.',
+    full:'<div class="sec">what it measures</div>The Lighthill\u2013Whitham\u2013Richards/Greenshields relation q(\u03C1)=v\u2098\u2090\u2093\u03C1(1\u2212\u03C1/\u03C1\u2C7C), with the grid\u2019s live operating point (mean \u03C1, realized q) pulsing on the curve.<div class="sec">why it rules the ecosystem</div>It is the rigorous form of the headroom law and the backpressure ladder: <b>stay left of the crest; shed at the gates before it, never after</b>. The Bell of Breath is exactly \u201Cdistance to the crest.\u201D Above critical density, phantom stop-and-go waves (jamitons) can arise with no incident at all \u2014 which is why the seismograph watches for oscillations that stop damping.<div class="sec">the gauge it births</div><b>Crest-distance</b> graduates to the Igigi Watch as the grid\u2019s Breath.'},
+   {id:'persistence.strip',x:W*0.615,y:H*0.375,w:W*0.35,h:H*0.155,title:'PERSISTENCE STRIP \u00B7 gridlock, seen forming',
+    short:'\u03B2\u2081 of the jam complex across density thresholds. A gold bar right of the law line = a loop already alive BELOW threshold \u2014 gridlock being born.',
+    full:'<div class="sec">what it measures</div>For each density threshold \u03C4, the jam subcomplex (streets with \u03C1>\u03C4) and its first Betti number. <b>\u03B2\u2081 \u2265 1 at the law line means vehicles wait in a closed loop \u2014 the literal topological definition of gridlock: deadlock as a hole.</b><div class="sec">why persistence predicts</div>Loops are usually born at looser thresholds first. A bar lit at \u03C4 below \u03C1_crit (gold) is a cycle already present in the almost-jammed streets: raise the load slightly and it closes. The Watch can therefore ring <b>before</b> a single vehicle is fully stopped \u2014 prediction with no simulation, only topology.<div class="sec">the feed</div>Bell of Shape \u00B7 Lamassu gains streets to guard; sampled at cadence, never per-vehicle.'},
+   {id:'poa.gauge',x:W*0.615,y:H*0.565,w:W*0.35,h:H*0.175,title:'THE ROUTING GAME \u00B7 PoA, Wardrop, Braess, max-pressure',
+    short:'Selfish routing converges to a provably sub-optimal equilibrium; the measured gap is the Price of Anarchy. Max-pressure control is throughput-optimal by theorem.',
+    full:'<div class="sec">the three theorems on this gauge</div><b>Wardrop vs system optimum:</b> uncoordinated greedy routing settles into an equilibrium worse than the coordinated best; the ratio \u2014 the <b>Price of Anarchy</b> \u2014 is bounded (\u2264 4/3 for linear latencies) and is displayed here as measured throughput vs the best coordinated throughput seen. <b>Max-pressure (Tassiulas\u2013Ephremides):</b> serve the approach with the greatest queue-pressure differential; provably stabilizes every demand within the capacity region \u2014 the grid generalization of the backpressure ladder, with a proof attached. Toggle CONTROL and watch the bar. <b>Braess\u2019s paradox:</b> adding a street can slow everyone; the probe closes the dashed shortcuts, measures, and testifies \u2014 in pipeline terms: an added index path or shortcut route can DEGRADE total flow, and this detector finds it.<div class="sec">the gauges it births</div>PoA-live and the Braess verdict graduate to the Igigi Watch \u2014 auditors of the scheduler itself.'},
+  ];
+}
+const tip=document.getElementById('tip');
+let hoverW=null;
+cv.addEventListener('pointermove',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  hoverW=null;
+  for(const w of widgetRects()){
+    if(mx>=w.x&&mx<=w.x+w.w&&my>=w.y&&my<=w.y+w.h){hoverW=w;break;}
+  }
+  if(hoverW&&!drag){
+    tip.innerHTML='<div class="th">'+hoverW.title+'</div>'+hoverW.short+'<div class="tf">press the \u24D8 \u2014 or right-click empty street \u2014 for the full functionality tablet</div>';
+    tip.style.display='block';
+    tip.style.left=Math.min(W-330,mx+16)+'px';
+    tip.style.top=Math.min(H-130,my+14)+'px';
+  } else tip.style.display='none';
+});
+cv.addEventListener('pointerleave',()=>{tip.style.display='none';hoverW=null;});
+function openInfo(w){
+  document.getElementById('infoTitle').textContent=w.title;
+  document.getElementById('infoSub').textContent='the court explains itself \u00B7 nothing on this glass is decorative';
+  document.getElementById('infoBody').innerHTML=w.full;
+  document.getElementById('info').classList.add('on');
+  jlog('MEANING \u00B7 <b>'+w.title.split(' \u00B7')[0]+'</b> opened its functionality tablet');
+}
+document.getElementById('infoClose').addEventListener('click',()=>document.getElementById('info').classList.remove('on'));
+function drawInfoIcons(){
+  widgetRects().forEach(w=>{
+    const ix=w.x+w.w-16, iy=w.y+14;
+    const hot=hoverW&&hoverW.id===w.id;
+    ctx.strokeStyle=hot?'rgba(242,204,107,.95)':'rgba(212,169,69,.55)';
+    ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.arc(ix,iy,7,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle=hot?'rgba(242,204,107,.95)':'rgba(212,169,69,.7)';
+    ctx.font='9px "IBM Plex Mono",monospace';ctx.textAlign='center';
+    ctx.fillText('i',ix,iy+3);
+    ctx.textAlign='left';
+  });
+}
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  for(const w of widgetRects()){
+    const ix=w.x+w.w-16, iy=w.y+14;
+    if((mx-ix)**2+(my-iy)**2<=100){openInfo(w);return;}
+  }
+});
+cv.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect();
+  const gm=toGrid(e.clientX-r.left,e.clientY-r.top);
+  let best=null,bd=260;
+  cars.forEach(c=>{
+    if(c.e<0)return;
+    const ed=edges[c.e];
+    const A=nodePos(nodes[ed.a].i,nodes[ed.a].j),B2=nodePos(nodes[ed.b].i,nodes[ed.b].j);
+    const tt=Math.min(1,c.t),x=A.x+(B2.x-A.x)*tt,y=A.y+(B2.y-A.y)*tt;
+    const d=(x-gm.x)**2+(y-gm.y)**2;
+    if(d<bd){bd=d;best=c;}
+  });
+  if(best){vehicleTestimony(best);return;}
+  if(hoverW)openInfo(hoverW);
+});
+function vehicleTestimony(c){
+  const ed=c.e>=0?edges[c.e]:null;
+  document.getElementById('infoTitle').textContent='Testimony \u00B7 '+c.id;
+  document.getElementById('infoSub').textContent='a soul on the streets \u00B7 asked by right-click, answered by its journal';
+  document.getElementById('infoBody').innerHTML=
+   '<div class="sec">standing</div>'+(ed?('on street J'+ed.a+'\u2192J'+ed.b+' \u00B7 \u03C1='+ed.rho.toFixed(2)+' \u00B7 '+(c.waiting?'<span class="clay">waiting at the junction</span>':'moving at '+ed.v.toFixed(0)+' px/s')):'between streets')
+   +' \u00B7 bound for <b>J'+c.dest+'</b>'
+   +'<div class="sec">StoryEngine journal (kept scars)</div>'
+   +c.story.map(s0=>'<b>'+s0.ts+'</b> \u00B7 '+s0.ev).join('<br>');
+  document.getElementById('info').classList.add('on');
+  jlog('TESTIMONY \u00B7 '+c.id+' speaks \u00B7 the storytelling of one vehicle among the billions');
+}
+
+/* ---------- CLI (mandatory HELP) ---------- */
+const clibox=document.getElementById('clibox');
+function hxHighlight(code){
+  let s=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s=s.replace(/(--[^\n]*)/g,'<span class="hc">$1</span>');
+  s=s.replace(/\b(PRESENT|ORBIT|EMIT|PROVE|SYNC|WITNESS|VIA|INTO)\b/g,'<span class="hk">$1</span>');
+  s=s.replace(/\b(WHO|WHAT|WHEN|WHERE|WHY|HOW MUCH|HOW)\b/g,'<span class="hw">$1</span>');
+  s=s.replace(/\b(PHYSICS|META)\b/g,'<span class="hp">$1</span>');
+  s=s.replace(/\b(JUNCTIONS|GRIDLOCK|INCIDENT|SURGE|CONTROL|BRAESS|VEHICLE|STREET|FOR|OF|IS|AT|IN|WITH)\b/g,'<span class="hv">$1</span>');
+  return s;
+}
+const SNIPPETS=[
+ {t:'Prove gridlock \u2014 deadlock as a hole',g:'<b>Plain gloss:</b> build the jam complex (streets past critical density) and read \u03B2\u2081. A 1-cycle is vehicles waiting in a closed loop \u2014 the literal topology of gridlock. Persistence across thresholds sees the loop while it is still FORMING below the law line: prediction before a single vehicle stops.',
+  c:'PROVE gridlock FOR grid\n  HOW   jam.complex WHERE rho > rho.crit\n  META  beta1 >= 1 => deadlock is a hole\n        loop below law.line => FORMING\nWITNESS verdict INTO street.ledger'},
+ {t:'The crest \u2014 the anti-bottleneck law',g:'<b>Plain gloss:</b> q(\u03C1) rises only to the crest; past it, admitting more moves less. Every shedding rule in the ecosystem is this one curve: stay left of the crest, shed at the gates before it \u2014 never after, never at the store.',
+  c:'PRESENT junctions\n  HOW MUCH rho, q, crest.distance\n  PHYSICS q IS vmax*rho*(1-rho/rho.j)   -- Greenshields'},
+ {t:'The routing game \u2014 anarchy has a price',g:'<b>Plain gloss:</b> let every pipeline route selfishly and the grid settles into a Wardrop equilibrium provably worse than the coordinated optimum \u2014 the gap is the Price of Anarchy. Switch to MAX-PRESSURE (serve the greatest queue-pressure) and throughput is optimal by theorem. The toggle on this tablet is the theorem, felt.',
+  c:'SYNC control max-pressure\n  META  Tassiulas-Ephremides: stable FOR every demand IN capacity region\nEMIT braess\n  META  close the shortcut; IF flow improves, the street was a paradox'},
+ {t:'The curl \u2014 the bruise before the hole',g:'<b>Plain gloss:</b> Hodge-decompose the flow: divergence is filling, curl is circulation. Concentrated curl around a block is the precursor of the \u03B2\u2081 loop \u2014 visible before topology confirms it. Curl warns, persistence confirms, max-pressure heals, PoA audits.',
+  c:'PRESENT curl FOR grid\n  HOW   circulation PER face\n  META  bruise => loop precursor'},
+];
+const CHIPS=[
+ {l:'junctions',gold:true,q:()=>'PRESENT junctions'},
+ {l:'prove gridlock',gold:true,q:()=>'PROVE gridlock FOR grid'},
+ {l:'incident',q:()=>'EMIT incident'},
+ {l:'surge x3',q:()=>'EMIT surge HOW MUCH x3'},
+ {l:'control',q:()=>'SYNC control '+(control==='maxpressure'?'greedy':'max-pressure')},
+ {l:'braess',gold:true,q:()=>'EMIT braess'},
+ {l:'grimoire',q:()=>'GRIMOIRE'},{l:'help',q:()=>'HELP'},
+];
+function buildCli(){
+  clibox.innerHTML='<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.08em;color:var(--alabaster-dim);margin-bottom:10px;line-height:1.65">HeptaScript CLI \u00B7 the rites of the junction court<br>Anti-SQL enforced \u00B7 HELP (grammar + snippets) is mandatory \u2014 pinned below, always.</div>'
+   +'<div class="cli-chips" id="cliChips"></div>'
+   +'<div class="cli-inbox"><textarea id="cliIn" rows="2" spellcheck="false" placeholder="PROVE gridlock FOR grid"></textarea>'
+   +'<div class="cli-actions"><span class="cli-hint">curl warns \u00B7 persistence confirms \u00B7 max-pressure heals \u00B7 PoA audits</span><button class="runb" id="cliRun">RUN \u25B8</button></div></div>'
+   +'<div id="cliCells"></div>';
+  const box=document.getElementById('cliChips');
+  CHIPS.forEach(ch=>{const b=document.createElement('button');b.className='chip'+(ch.gold?' gold':'');b.textContent=ch.l;
+    b.addEventListener('click',()=>{const i=document.getElementById('cliIn');i.value=ch.q();i.focus();});box.appendChild(b);});
+  document.getElementById('cliRun').addEventListener('click',cliSubmit);
+  document.getElementById('cliIn').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();cliSubmit();}});
+  mandatoryHelp();
+}
+function mandatoryHelp(){
+  const box=document.getElementById('cliCells');
+  if(!box||box.querySelector('.cell.mandatory'))return;
+  const d=document.createElement('div');d.className='cell mandatory';
+  d.innerHTML='<div class="cq">'+hxHighlight('HELP')+'  <span style="color:var(--gold);font-size:8.5px;letter-spacing:.14em">\u00B7 MANDATORY RITE \u2014 always on the tablet</span></div><div class="co">'+cliHelp()+'</div>';
+  box.appendChild(d);
+}
+function cliSubmit(){
+  const inp=document.getElementById('cliIn');const raw=inp.value.trim();if(!raw)return;
+  const r=runHepta(raw);cliCell(raw,r.html,!r.ok);inp.value='';
+}
+function cliCell(q,out,err){
+  const box=document.getElementById('cliCells');if(!box)return;
+  const d=document.createElement('div');d.className='cell'+(err?' err':'');
+  d.innerHTML='<div class="cq">'+hxHighlight(q)+'</div><div class="co">'+out+'</div>';
+  box.prepend(d);
+}
+function runHepta(q){
+  const bad=q.match(/\b(select|insert\s+into|update|delete|drop|join|group\s+by|order\s+by|exists)\b/i);
+  if(bad)return{ok:false,html:'<span class="clay">Anti-SQL refusal.</span> The sovereign tongue has no <b>'+bad[1].toUpperCase()+'</b>. Type <b>HELP</b>.'};
+  let m;
+  if(/^help$/i.test(q))return{ok:true,html:cliHelp()};
+  if(/^grimoire$/i.test(q))return{ok:true,html:cliGrimoire()};
+  if(/^present\s+junctions/i.test(q)){
+    const meanRho=edges.reduce((a,e)=>a+e.rho,0)/edges.length;
+    const jam=edges.filter(e=>e.rho>RHO_CRIT).length;
+    return{ok:true,html:'<b>The grid reports.</b> Mean \u03C1 '+(meanRho*100).toFixed(0)+'% of jam \u00B7 '+jam+' jammed streets \u00B7 throughput '+tripsPerMin().toFixed(0)+'/min \u00B7 control <b>'+control+'</b> \u00B7 crest-distance '+((1-Math.min(1,meanRho/0.5))*100).toFixed(0)+'%.<br><span style="font-size:9.5px;color:var(--alabaster-dim)">stay left of the crest \u2014 past it, admitting more moves less.</span>'};
+  }
+  if(/^prove\s+gridlock/i.test(q)){
+    const B=betti(RHO_CRIT),strip=persistenceStrip();
+    const forming=strip.some(s0=>s0.tau<RHO_CRIT&&s0.b1>0);
+    return{ok:true,html:'<b>The jam complex speaks.</b> \u03B2\u2080='+B.b0+' islands \u00B7 \u03B2\u2081='+B.b1+' closed loops.<br>'+(B.b1>0?'<span class="clay">GRIDLOCK \u2014 vehicles wait in a cycle: deadlock as a hole. Max-pressure + reopening one street breaks it.</span>':(forming?'<span class="goldb">FORMING \u2014 a loop lives below the law line; raise the load and it closes. Shed now, at the gates.</span>':'<span class="reed">CLEAR \u2014 no loop at or near threshold; the streets breathe.</span>'))};
+  }
+  if(/^emit\s+incident/i.test(q)){doIncident();return{ok:true,html:'One street closes. Watch in order: the <b>curl bruise</b> upstream (the warning) \u2192 the <b>persistence strip</b> (the confirmation) \u2192 the ledger (the story).'};}
+  if(/^emit\s+surge/i.test(q)){doSurge();return{ok:true,html:'The grid floods \u00D73. The operating point climbs the fundamental diagram \u2014 the whole art is to keep it <b>left of the crest</b>.'};}
+  if(m=q.match(/^sync\s+control\s+(max-?pressure|greedy|wardrop)/i)){
+    const want=/max/i.test(m[1])?'maxpressure':'greedy';
+    if(want!==control)doControl();
+    return{ok:true,html:'Control is <b>'+(control==='maxpressure'?'MAX-PRESSURE \u2014 throughput-optimal by theorem (Tassiulas\u2013Ephremides)':'GREEDY \u2014 Wardrop selfish routing; watch the PoA bar pay the price')+'</b>.'};
+  }
+  if(/^emit\s+braess/i.test(q)){doBraess();return{ok:true,html:'The paradox probe runs: 5 \u0161\u0101ru with shortcuts open, 5 closed, then the verdict \u2014 <b>if closing improves flow, the street harmed the grid</b>. In pipeline clothes: an index path can slow the whole system.'};}
+  if(/^present\s+curl/i.test(q)){
+    const fc=faceCurl().map(f=>Math.abs(f.circ));
+    const mx=Math.max(...fc,0);
+    return{ok:true,html:'<b>Circulation per face</b> \u00B7 max |curl| '+mx.toFixed(0)+' \u00B7 the bruise on the glass marks it.<br><span style="font-size:9.5px;color:var(--alabaster-dim)">concentrated curl around a block is the precursor of the \u03B2\u2081 loop \u2014 curl warns before topology confirms.</span>'};
+  }
+  return{ok:false,html:'Unrecognised rite. Type <b>HELP</b> or press a chip.'};
+}
+function cliHelp(){
+  return '<b>The grammar of the junction court</b> \u2014 the calculus, as rites:<br><br>'
+   +'<b>PRESENT junctions</b> \u2014 \u03C1, throughput, crest-distance: the grid\u2019s breath<br>'
+   +'<b>PROVE gridlock FOR grid</b> \u2014 \u03B2\u2080 islands, \u03B2\u2081 loops, and the FORMING verdict from persistence<br>'
+   +'<b>EMIT incident</b> \u2014 close a street; watch curl warn, then persistence confirm<br>'
+   +'<b>EMIT surge HOW MUCH x3</b> \u2014 flood the grid; ride the fundamental diagram\u2019s left slope<br>'
+   +'<b>SYNC control max-pressure | greedy</b> \u2014 the theorem vs the anarchy; the PoA bar keeps score<br>'
+   +'<b>EMIT braess</b> \u2014 the paradox probe on the shortcut streets<br>'
+   +'<b>PRESENT curl FOR grid</b> \u2014 circulation per face, the bruise before the hole'
+   +'<div style="margin-top:11px;border-top:1px solid var(--line);padding-top:8px">'+cliGrimoire()+'</div>';
+}
+function cliGrimoire(){
+  let h='<b>The grimoire of the junction court</b>:';
+  SNIPPETS.forEach(sn=>{
+    h+='<div class="hx-stage">'+sn.t+'</div>'
+     +'<div style="font-style:italic;color:var(--alabaster-dim);font-size:10px;margin-bottom:4px">'+sn.g+'</div>'
+     +'<pre style="margin:0 0 8px;padding:7px 9px;background:#0A0F1C;border:1px solid var(--line);border-radius:3px;font-family:\'IBM Plex Mono\',monospace;font-size:10px;line-height:1.65;overflow-x:auto">'+hxHighlight(sn.c)+'</pre>';
+  });
+  return h;
+}
+
+/* ---------- journal ---------- */
+const journal=document.getElementById('journal');
+function jlog(html){
+  const ts=new Date().toTimeString().slice(0,8);
+  const ln=document.createElement('div');ln.className='ln';
+  ln.innerHTML='<b>'+ts+'</b> \u00B7 '+html;
+  journal.appendChild(ln);journal.scrollTop=journal.scrollHeight;
+}
+
+/* ---------- boot & loop (armored) ---------- */
+let drawErrLogged=false;
+function loop(now){
+  const dt=Math.min(.033,(now-tPrev)/1000);tPrev=now;
+  try{step(dt,now);draw(now);}
+  catch(err){
+    if(!drawErrLogged){drawErrLogged=true;
+      jlog('<span class="clay">RENDER FAULT CAUGHT</span> \u00B7 '+String(err&&err.message||err)+' \u2014 the loop survives; report to the Architect');
+      console.error(err);}
+  }
+  requestAnimationFrame(loop);
+}
+resize();buildGrid();routeTables(true);
+for(let k=0;k<FLEET;k++)cars.push(mkCar(Math.floor(Math.random()*N*N)));
+buildCli();
+jlog('\u1E2Aendursa\u011Da takes the junction court \u00B7 '+edges.length+' streets, '+(N*N)+' junctions, '+cars.length+' souls riding \u00B7 curl warns, persistence confirms, max-pressure heals, PoA audits');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

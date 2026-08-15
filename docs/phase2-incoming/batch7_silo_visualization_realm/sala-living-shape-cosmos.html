@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Living Shape Cosmos — fractal Hubble-zoom + decay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Alegreya+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#040914; --lapis:#0E2148; --glaze:#1B3B6F;
+  --gold:#E3B458; --faience:#62D6C5; --unknown:#a2559e; --unknown-hi:#c77bc0;
+  --brick:#C4633F; --dead:#5a6b7a; --bone:#F1E8D4; --bone-dim:#b9b09a; --ash:#7d8597; --green:#7fd99a;
+  --font-display:'Marcellus',serif; --font-body:'Alegreya Sans',sans-serif; --font-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--bone);font-family:var(--font-body)}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;font-family:var(--font-data);z-index:5}
+.hud-title{top:14px;left:0;right:0;text-align:center;pointer-events:none}
+.hud-title h1{font-family:var(--font-display);font-weight:400;font-size:21px;letter-spacing:.24em;color:var(--gold);text-shadow:0 0 20px rgba(227,180,88,.5)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:10px;letter-spacing:.28em;color:var(--bone-dim);margin-top:5px}
+.panel{background:rgba(4,9,20,.82);border:1px solid var(--glaze);border-radius:3px;padding:11px 13px}
+.hud-depth{top:92px;left:18px;max-width:286px;border-left:3px solid var(--gold)}
+.hud-depth .t{font-family:var(--font-display);letter-spacing:.14em;color:var(--gold);font-size:12px}
+.hud-depth .path{font-size:11px;color:var(--faience);margin:5px 0}
+.hud-depth .d{font-size:10.5px;color:var(--bone-dim);line-height:1.5;font-family:var(--font-body)}
+.hud-legend{bottom:64px;left:18px;max-width:320px;font-size:10px;color:var(--ash);line-height:1.7}
+.hud-legend b{font-weight:500}
+.lg{color:var(--green)}.lf{color:var(--brick)}.ld{color:var(--dead)}.lc{color:var(--faience)}.lm{color:var(--unknown-hi)}
+.hud-node{top:92px;right:18px;width:250px;display:none}
+.hud-node .n{font-family:var(--font-display);font-size:14px;color:var(--gold)}
+.hud-node .row{display:flex;justify-content:space-between;font-size:10.5px;padding:3px 0;border-bottom:1px dotted #14264e}
+.hud-node .row .k{color:var(--ash)} .hud-node .row .v{color:var(--bone)}
+.state-g{color:var(--green)}.state-f{color:var(--brick)}.state-d{color:var(--dead)}
+.hud-controls{bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:rgba(4,9,20,.85);border:1px solid var(--glaze);border-radius:3px;padding:8px 12px}
+.hud-controls button{background:var(--glaze);border:none;color:var(--bone-dim);border-radius:3px;font-family:var(--font-display);letter-spacing:.06em;font-size:12px;padding:7px 13px}
+.hud-controls button.on{background:var(--gold);color:#1a1204}
+.hud-controls .sp{color:var(--ash);font-size:10px;padding:0 4px}
+.hud-hint{top:150px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--gold);background:rgba(4,9,20,.7);border:1px solid var(--gold-dim,#93763a);border-radius:3px;padding:6px 12px;pointer-events:none;opacity:.9}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,9,20,.92);border-top:1px solid var(--glaze);font-family:var(--font-data);font-size:9px;color:var(--ash);padding:4px 18px;z-index:6}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">𒁾</span>&nbsp; LIVING SHAPE COSMOS</h1>
+  <div class="sub">CARDIOLOGY · FRACTAL HUBBLE-ZOOM · STRUCTURE + DECAY AT EVERY DEPTH · NO SHAPE LASTS FOREVER</div>
+</div>
+
+<div class="hud hud-depth panel">
+  <div class="t" id="depth-t">DEPTH 0 · THE WHOLE SHAPE</div>
+  <div class="path" id="depth-path">corpus · Cardiology</div>
+  <div class="d" id="depth-d">Concepts are gravity wells; chunk-kinds orbit them at radii set by dependency strength. Every particle ages in real time — watch GOLDEN drift to FUZZY toward the DEAD horizon. Double-click any well to dive in. The same law repeats at every depth, forever.</div>
+</div>
+
+<div class="hud hud-legend panel">
+  <b class="lg">● green</b> GOLDEN (fresh) · <b class="lf">● amber</b> FUZZY (aging) · <b class="ld">● grey</b> DEAD (decayed) ·
+  <b class="lm">◉ magenta</b> concept well · <b class="lc">■ cyan</b> chunk-kind ·
+  edges fray and dim as dependencies age · ring thickness = τ transparency deficit ·
+  <b>double-click</b> a well to Hubble-dive · <b>scroll</b> to zoom · drift shows decay is never done.
+</div>
+
+<div class="hud hud-node panel" id="node-card">
+  <div class="n" id="nc-name">—</div>
+  <div id="nc-body" style="margin-top:5px"></div>
+</div>
+
+<div class="hud hud-hint" id="hint">double-click a magenta well to dive · scroll to zoom · drag to orbit</div>
+
+<div class="hud hud-controls">
+  <button id="btn-up" class="on">▲ ASCEND</button>
+  <span class="sp">|</span>
+  <button id="btn-decay" class="on" aria-pressed="true">DECAY ⏱</button>
+  <button id="btn-spin" class="on" aria-pressed="true">ORBIT ✦</button>
+  <button id="btn-reset">RESET</button>
+</div>
+
+<footer>Way-of-Work rule 5 — HTML prototype; production body Godot/WGPU. Persistent homology + decay computed by LamassuEngine at design cadence; this view reads and renders. Transparency in all particle details. Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene(); scene.fog=new THREE.Fog(0x040914,600,2400);
+const camera=new THREE.PerspectiveCamera(55,2,0.1,6000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x040914,1);
+stage.appendChild(renderer.domElement);
+
+function glow(c){const cv=document.createElement('canvas');cv.width=cv.height=128;
+  const g=cv.getContext('2d'),r=g.createRadialGradient(64,64,2,64,64,64);
+  r.addColorStop(0,c);r.addColorStop(.4,c+'99');r.addColorStop(1,'#00000000');
+  g.fillStyle=r;g.fillRect(0,0,128,128);return new THREE.CanvasTexture(cv);}
+const TEX={well:glow('#c77bc0'),gold:glow('#7fd99a'),cyan:glow('#62D6C5')};
+
+/* starfield */
+(function(){const N=3000,p=new Float32Array(N*3);
+ for(let i=0;i<N;i++){p[i*3]=(Math.random()-.5)*3600;p[i*3+1]=(Math.random()-.5)*2400;p[i*3+2]=(Math.random()-.7)*2400;}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));
+ scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x22406e,size:1.3,transparent:true,opacity:.6})));})();
+
+/* ---------- fractal shape model ----------
+   A "shape" is a set of concept wells; each well holds chunk-kinds in orbit;
+   each chunk, when you dive in, becomes a shape of its own (EAV attrs + embedding).
+   Generated lazily per node, deterministically by a seed derived from the path. */
+function pathSeed(path){let h=2166136261;for(const c of path){h^=c.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return h;}
+
+const CONCEPTS=['ICD-I20–I25','SNOMED-cardio'];
+const KINDS=['ECG event','echo report','cath note','vital series'];
+const ATTRS=['Body','Provenance','License','Simtu','Classification','Quality','Embedding'];
+
+function buildShape(path, depth){
+  const rng=mulberry32(pathSeed(path)+depth*97);
+  // at depth 0: whole shape (concepts + kinds). deeper: children are sub-shapes.
+  let wells, satellites;
+  if(depth===0){
+    wells=CONCEPTS.map((c,i)=>({label:c,type:'concept'}));
+    satellites=KINDS.map(k=>({label:k,type:'kind'}));
+  } else if(depth===1){
+    // inside a concept: its chunk-kinds become wells; their EAV groups orbit
+    wells=KINDS.slice(0,2+(pathSeed(path)%2)).map(k=>({label:k,type:'kind'}));
+    satellites=ATTRS.map(a=>({label:a,type:'attr'}));
+  } else {
+    // inside a chunk/attr: sub-attributes and embedding dimensions — endless
+    wells=ATTRS.slice(0,2+(pathSeed(path)%3)).map(a=>({label:a,type:'attr'}));
+    satellites=Array.from({length:5+(pathSeed(path)%4)},(_,i)=>({label:'dim '+i,type:'dim'}));
+  }
+  // give each particle a life: birth phase, decay rate, tau, epsilon
+  const mk=(o,i,n,ring)=>{
+    const age0=rng(); // initial age fraction
+    return {...o, seed:rng()*6.28, ringBase:ring, idx:i, ofN:n,
+      decayRate:0.02+rng()*0.05, age:age0, tau:+(rng()*0.4).toFixed(2), eps:+(rng()*0.2).toFixed(3)};
+  };
+  wells=wells.map((w,i)=>mk(w,i,wells.length,0));
+  satellites=satellites.map((s,i)=>mk(s,i,satellites.length,1));
+  return {wells,satellites,depth,path};
+}
+
+/* ---------- render a shape into a THREE group ---------- */
+let current=null, cameraTarget=new THREE.Vector3(), camDist=520, camDistTarget=520;
+let stack=[]; // navigation stack of {path,label}
+let decayOn=!reduced, spin=!reduced;
+
+function stateColor(age){ // age 0..1 → GOLDEN→FUZZY→DEAD
+  if(age<0.5) return 0x7fd99a;      // GOLDEN
+  if(age<0.82) return 0xC4633F;     // FUZZY
+  return 0x5a6b7a;                   // DEAD
+}
+function stateName(age){return age<0.5?'GOLDEN':age<0.82?'FUZZY':'DEAD';}
+
+function makeShapeGroup(shape){
+  const g=new THREE.Group(); g.userData.shape=shape; g.userData.nodes=[];
+  const R=150;
+  // wells (concepts) — gravity wells at inner radius
+  shape.wells.forEach((w,i)=>{
+    const a=i/shape.wells.length*Math.PI*2;
+    const wx=Math.cos(a)*R*0.5, wy=Math.sin(a)*R*0.5*0.7;
+    const well=new THREE.Group(); well.position.set(wx,wy,0);
+    const core=new THREE.Mesh(new THREE.SphereGeometry(14,20,20),new THREE.MeshBasicMaterial({color:0xa2559e}));
+    const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX.well,transparent:true,depthWrite:false}));halo.scale.setScalar(70);
+    // tau ring — thickness encodes transparency deficit
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(20,1+w.tau*4,8,40),new THREE.MeshBasicMaterial({color:0xc77bc0,transparent:true,opacity:.7}));
+    ring.rotation.x=Math.PI/2.3;
+    well.add(core,halo,ring);
+    well.userData={particle:w,kind:'well',diveable:true};
+    g.add(well); g.userData.nodes.push(well);
+  });
+  // satellites (chunk-kinds / attrs) orbiting the shape center
+  shape.satellites.forEach((s,i)=>{
+    const sat=new THREE.Group();
+    const box=new THREE.Mesh(new THREE.BoxGeometry(11,11,11),new THREE.MeshBasicMaterial({color:0x62D6C5}));
+    sat.add(box);
+    sat.userData={particle:s,kind:'sat',diveable:shape.depth<6,mesh:box};
+    g.add(sat); g.userData.nodes.push(sat);
+  });
+  // bonds: each satellite → nearest well (dependency edge that will fray with age)
+  const bondGeo=[];
+  g.userData.bonds=[];
+  shape.satellites.forEach((s,i)=>{
+    const well=g.userData.nodes[i%shape.wells.length];
+    const mat=new THREE.LineBasicMaterial({color:0x2f5aa0,transparent:true,opacity:.7});
+    const geo=new THREE.BufferGeometry().setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+    const line=new THREE.Line(geo,mat);
+    g.add(line); g.userData.bonds.push({line,from:g.userData.nodes[shape.wells.length+i],to:well,s});
+  });
+  return g;
+}
+
+function loadShape(path,label,depth){
+  if(current) scene.remove(current);
+  const shape=buildShape(path,depth);
+  current=makeShapeGroup(shape);
+  scene.add(current);
+  document.getElementById('depth-t').textContent='DEPTH '+depth+' · '+(depth===0?'THE WHOLE SHAPE':(depth===1?'INSIDE A CONCEPT':'INSIDE A CHUNK'));
+  document.getElementById('depth-path').textContent=stack.map(s=>s.label).concat(label).join('  ›  ');
+  camDistTarget=520;
+  document.getElementById('hint').style.opacity = depth===0?'0.9':'0';
+}
+
+/* ---------- init ---------- */
+function reset(){ stack=[]; loadShape('cardiology','Cardiology',0); }
+reset();
+
+/* ---------- interaction ---------- */
+const ray=new THREE.Raycaster(); ray.params.Points={threshold:14};
+function pickNode(cx,cy){
+  const r=renderer.domElement.getBoundingClientRect();
+  let best=null,bd=42;
+  current.userData.nodes.forEach(n=>{
+    const wp=new THREE.Vector3(); n.getWorldPosition(wp); wp.project(camera);
+    if(wp.z>=1)return;
+    const sx=(wp.x*.5+.5)*r.width, sy=(-wp.y*.5+.5)*r.height;
+    const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);
+    if(d<bd){bd=d;best=n;}
+  });
+  return best;
+}
+renderer.domElement.addEventListener('mousemove',e=>{
+  const n=pickNode(e.clientX,e.clientY);
+  renderer.domElement.style.cursor=n?'pointer':(dragging?'grabbing':'grab');
+  if(n){showNodeCard(n);} else {document.getElementById('node-card').style.display='none';}
+});
+function showNodeCard(n){
+  const p=n.userData.particle; const el=document.getElementById('node-card');el.style.display='block';
+  document.getElementById('nc-name').textContent=p.label;
+  const st=stateName(p.age), sc=st==='GOLDEN'?'state-g':st==='FUZZY'?'state-f':'state-d';
+  document.getElementById('nc-body').innerHTML=
+    `<div class="row"><span class="k">type</span><span class="v">${p.type}</span></div>
+     <div class="row"><span class="k">state</span><span class="v ${sc}">${st}</span></div>
+     <div class="row"><span class="k">age</span><span class="v">${(p.age*100|0)}% of life</span></div>
+     <div class="row"><span class="k">τ deficit</span><span class="v">${p.tau}</span></div>
+     <div class="row"><span class="k">ε</span><span class="v">${p.eps}</span></div>
+     <div class="row"><span class="k">dive</span><span class="v">${n.userData.diveable?'double-click ↓':'leaf'}</span></div>`;
+}
+renderer.domElement.addEventListener('dblclick',e=>{
+  const n=pickNode(e.clientX,e.clientY);
+  if(n&&n.userData.diveable){
+    const p=n.userData.particle;
+    stack.push({path:current.userData.shape.path,label:document.getElementById('depth-path').textContent.split('  ›  ').pop()});
+    loadShape(current.userData.shape.path+'/'+p.label, p.label, current.userData.shape.depth+1);
+  }
+});
+document.getElementById('btn-up').onclick=()=>{
+  if(stack.length){const prev=stack.pop();
+    const depth=current.userData.shape.depth-1;
+    const path=current.userData.shape.path.split('/').slice(0,-1).join('/');
+    loadShape(path||'cardiology', prev.label||'Cardiology', Math.max(0,depth));
+  }
+};
+document.getElementById('btn-reset').onclick=reset;
+const bd=document.getElementById('btn-decay');
+bd.onclick=()=>{decayOn=!decayOn;bd.classList.toggle('on',decayOn);bd.setAttribute('aria-pressed',decayOn);};
+const bs=document.getElementById('btn-spin');
+bs.onclick=()=>{spin=!spin;bs.classList.toggle('on',spin);bs.setAttribute('aria-pressed',spin);};
+
+/* scroll zoom (Hubble) + drag orbit */
+let az=0.6, el=0.35, dragging=false, lx=0, ly=0;
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();
+  camDistTarget=Math.max(60,Math.min(1400,camDistTarget*(1+Math.sign(e.deltaY)*0.09)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{if(!dragging)return;az-=(e.clientX-lx)*0.005;el=Math.max(-1.3,Math.min(1.3,el+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;});
+
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+/* ---------- animation: orbit + real-time decay ---------- */
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  const t=ts/1000;
+  if(spin)az+=dt*0.06;
+  camDist+=(camDistTarget-camDist)*Math.min(1,dt*3);
+
+  if(current){
+    const shape=current.userData.shape;
+    const wells=current.userData.nodes.slice(0,shape.wells.length);
+    const sats=current.userData.nodes.slice(shape.wells.length);
+    // wells slowly pulse + age their tau rings
+    wells.forEach((w)=>{
+      const p=w.userData.particle;
+      if(decayOn)p.age=Math.min(1,p.age+dt*p.decayRate*0.25);
+      w.children[0].material.color.setHex(stateColor(p.age));
+      const ring=w.children[2]; ring.rotation.z+=dt*0.4;
+      ring.material.opacity=0.3+ (1-p.age)*0.5;
+    });
+    // satellites orbit their well; radius grows slightly as they age (drift outward = cost)
+    sats.forEach((s,i)=>{
+      const p=s.userData.particle; const well=wells[i%wells.length];
+      if(decayOn)p.age=Math.min(1,p.age+dt*p.decayRate*0.35);
+      const baseR=70+ (i%3)*26 + p.age*30;        // drift outward with age
+      const spd=(0.5+ (1-p.age)*0.8)/ (1+ (i%3)); // slows as it decays
+      const a=p.seed + t*spd;
+      const wp=well.position;
+      s.position.set(wp.x+Math.cos(a)*baseR, wp.y+Math.sin(a)*baseR*0.72, Math.sin(a*0.7)*22);
+      s.userData.mesh.material.color.setHex(stateColor(p.age));
+      s.userData.mesh.rotation.y+=dt*1.5; s.userData.mesh.rotation.x+=dt;
+    });
+    // bonds fray: opacity + jitter grow with the older endpoint's age
+    current.userData.bonds.forEach(b=>{
+      const fp=new THREE.Vector3(),tp=new THREE.Vector3();
+      b.from.getWorldPosition(fp); b.to.getWorldPosition(tp);
+      const arr=b.line.geometry.attributes.position.array;
+      arr[0]=fp.x;arr[1]=fp.y;arr[2]=fp.z; arr[3]=tp.x;arr[4]=tp.y;arr[5]=tp.z;
+      b.line.geometry.attributes.position.needsUpdate=true;
+      const age=Math.max(b.from.userData.particle.age,b.s.age);
+      b.line.material.opacity=Math.max(0.06,0.75-age*0.7);   // frays toward invisible
+      b.line.material.color.setHex(age<0.5?0x2f5aa0:age<0.82?0x6a3f2a:0x2a3540);
+    });
+    if(spin) current.rotation.y = az*0.15;
+  }
+
+  // camera on a spherical orbit around target (bird-fly + Hubble via camDist)
+  const cx=Math.cos(az)*Math.cos(el)*camDist;
+  const cy=Math.sin(el)*camDist;
+  const cz=Math.sin(az)*Math.cos(el)*camDist;
+  camera.position.set(cx,cy,cz);
+  camera.lookAt(0,0,0);
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_144_grafana_monitoring_setup.yml
+#  PB-144 grafana_monitoring_setup — BLOCKED, tracked honestly
+#
+#  Run: ansible-playbook playbook_144_grafana_monitoring_setup.yml -i "localhost," -c local -v
+#
+#  Needs a real dubsar-workstation (192.168.122.121) with Prometheus/
+#  Grafana pre-installed and sudo SSH access. Checks reachability only;
+#  does not attempt to install or configure anything blind.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-144 | Grafana Monitoring Setup (blocked — needs real hardware)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    dubsar_workstation: "192.168.122.121"
+    session_date: "{{ ansible_date_time.date }}"
+    report_file: "{{ ansible_env.HOME }}/Forge/EnkiDB/docs/PB144_REPORT_{{ session_date }}.txt"
+
+  tasks:
+    - name: "CHECK | dubsar-workstation SSH reachable"
+      ansible.builtin.wait_for: {host: "{{ dubsar_workstation }}", port: 22, timeout: 3}
+      register: dubsar_live
+      ignore_errors: true
+
+    - name: "CHECK | Grafana port (3000) reachable, if host is up"
+      ansible.builtin.wait_for: {host: "{{ dubsar_workstation }}", port: 3000, timeout: 3}
+      register: grafana_live
+      ignore_errors: true
+      when: dubsar_live is succeeded
+
+    - name: "PRINT | PB-144 blocker status"
+      ansible.builtin.debug:
+        msg: |
+          dubsar-workstation SSH : {{ 'reachable' if dubsar_live is succeeded else 'NOT reachable' }}
+          Grafana (:3000)        : {{ 'reachable' if (dubsar_live is succeeded and grafana_live is succeeded) else 'not checked / not reachable' }}
+          {{ 'Proceed with monitoring dashboard config now.' if (dubsar_live is succeeded and grafana_live is succeeded) else 'BLOCKED — provision dubsar-workstation with Prometheus/Grafana first; nothing to verify without it.' }}
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          PB-144 — {{ session_date }}
+          dubsar-workstation reachable: {{ dubsar_live is succeeded }}
+          Grafana reachable: {{ dubsar_live is succeeded and grafana_live is succeeded }}
+
+    - {name: "DONE", ansible.builtin.debug: {msg: "PB-144 status recorded — report at {{ report_file }}"}}

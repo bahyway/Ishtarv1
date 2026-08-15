@@ -1,0 +1,232 @@
+# =============================================================================
+# PB-261 — Headless bootstrap: mint + import a smoke-test Sargon Passport
+# into DubSar's login vault, with zero human GUI interaction.
+# BahyWay.Ecosystem v4.0 — 2026-07-27
+#
+# CONTEXT: the Architect asked how to solve DubSar's login gate blocking a
+# fully-unattended first-time IsimudEngine run, given that minting a
+# Sovereign Passport is normally a human ceremony (Gilgamesh/Sargon Passport
+# Manager, a real Godot GUI window someone has to click through). Given a
+# choice between building this for Sargon only vs. leaving it fully manual,
+# the Architect chose Sargon-only. Gilgamesh ("architect", privilege 7,
+# Shamir M-of-N key ceremony) is NEVER touched here and never will be --
+# that stays 100% human, permanently, by design.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Builds + wires kupru-gdext into dubsar-theater/bin/ (identical
+#      build+copy steps PB-226 already uses -- self-sufficient, doesn't
+#      assume PB-226 already ran first, safe to run standalone or as part
+#      of a pb_sequence either before or after PB-226).
+#   2. Discovers a real Godot 4 binary (same proven logic as PB-226/227).
+#   3. Primes the project's GDExtension import cache (same fix PB-226/227
+#      already apply -- a bare --path/--script launch skips it otherwise).
+#   4. Runs scripts/isimud_bootstrap_mint.gd headless (godot --headless
+#      --script) -- mints a gardener (privilege 1) Passport with a fixed,
+#      intentionally-non-secret bootstrap identity, imports it into
+#      DubSar's real user://dubsar_login_vault.dat via the exact same
+#      KupruBridge calls login.gd itself uses, then reads it back and
+#      runs the same verify_passport() check _on_login_pressed does --
+#      proving the full mint -> import -> decrypt -> verify round trip,
+#      not just that files got written.
+#   5. Reports the bootstrap identity/passport-type/passphrase plainly --
+#      this is a disposable 54h smoke-test credential, not a secret to
+#      protect, the same as any other freshly-minted Sovereign Passport.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_261_isimud_headless_bootstrap_passport.yml
+#   ansible-playbook playbooks/playbook_261_isimud_headless_bootstrap_passport.yml -e skip_build=true
+#   ansible-playbook playbooks/playbook_261_isimud_headless_bootstrap_passport.yml -e godot_bin=/path/to/Godot
+# =============================================================================
+
+- name: PB-261 -- Headless bootstrap Sargon Passport (mint + import, zero GUI clicks)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    godot_bin: ""
+    godot_log: "/tmp/isimud_bootstrap_mint.log"
+    skip_build: false
+    build_log: "/tmp/kupru_gdext_build.log"
+
+  tasks:
+    - name: Confirm the DubSar project really exists at the expected path
+      ansible.builtin.stat:
+        path: "{{ dubsar_project }}/project.godot"
+      register: dubsar_project_check
+
+    - name: Fail clearly if the DubSar project isn't where expected
+      ansible.builtin.fail:
+        msg: >-
+          No project.godot found at {{ dubsar_project }}. Run this from
+          inside a checkout of the EnkiDB repo, or pass
+          -e dubsar_project=/path/to/project/dir to point at a different
+          one on purpose.
+      when: not dubsar_project_check.stat.exists
+
+    - name: Confirm the headless bootstrap script itself exists
+      ansible.builtin.stat:
+        path: "{{ dubsar_project }}/scripts/isimud_bootstrap_mint.gd"
+      register: bootstrap_script_check
+
+    - name: Fail clearly if the bootstrap script is missing
+      ansible.builtin.fail:
+        msg: >-
+          {{ dubsar_project }}/scripts/isimud_bootstrap_mint.gd not found.
+          This playbook can't headless-mint without it.
+      when: not bootstrap_script_check.stat.exists
+
+    # ── Build and wire in kupru-gdext (identical to PB-226) ────────────
+    - name: Build kupru-gdext in release mode
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p kupru-gdext > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: Fail clearly if the build failed
+      ansible.builtin.fail:
+        msg: >-
+          cargo build --release -p kupru-gdext failed (rc={{ build_result.rc }}).
+          Full output: {{ build_log }}
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: Confirm the compiled library exists
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/libkupru_gdext.so"
+      register: lib_check
+
+    - name: Fail clearly if the compiled library is missing
+      ansible.builtin.fail:
+        msg: >-
+          {{ repo_root }}/target/release/libkupru_gdext.so does not exist.
+          Run without -e skip_build=true first, or check {{ build_log }}
+          for a build failure.
+      when: not lib_check.stat.exists
+
+    - name: Ensure the DubSar project's bin/ directory exists
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Copy the compiled bridge into the DubSar project
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/libkupru_gdext.so"
+        dest: "{{ dubsar_project }}/bin/libkupru_gdext.so"
+        mode: "0755"
+        remote_src: true
+
+    # ── Discover Godot (same proven logic as PB-226/227) ───────────────
+    - name: Discover a real Godot 4 binary
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: Resolve the Godot binary to actually use
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: Fail clearly, with next steps, if no Godot binary was found anywhere
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found on PATH, via Flatpak, under $HOME, or in
+          common system locations. Install Godot 4.x from
+          https://godotengine.org/download and re-run, or point at it
+          directly with -e godot_bin=/full/path/to/Godot.
+      when: resolved_godot_bin | length == 0
+
+    # ── Prime the import cache (same fix PB-226/227 already apply) ─────
+    - name: Prime the DubSar project (headless import scan) so KupruBridge gets discovered before the mint script runs
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ dubsar_project }} --import
+        > {{ godot_log }}.import 2>&1
+      register: import_result
+      failed_when: false
+
+    - name: Warn if the priming import scan reported errors
+      ansible.builtin.debug:
+        msg: >-
+          Headless import priming exited {{ import_result.rc }}. See
+          {{ godot_log }}.import for details. Continuing anyway -- but if
+          the mint script fails with "Identifier KupruBridge not found",
+          check that log first.
+      when: import_result.rc is defined and import_result.rc != 0
+
+    # ── Run the headless bootstrap mint script itself ──────────────────
+    - name: "Run isimud_bootstrap_mint.gd headless -- mint + import + round-trip-verify, zero GUI"
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ dubsar_project }}
+        --script res://scripts/isimud_bootstrap_mint.gd
+        > {{ godot_log }} 2>&1
+      register: mint_result
+      changed_when: true
+      failed_when: false
+
+    # BUG FIXED (2026-07-27): the shell command above redirects all output
+    # to {{ godot_log }} via `>`, so Ansible's own mint_result.stdout is
+    # ALWAYS empty by design -- checking it for the success marker would
+    # always be false regardless of what actually happened (reproduced
+    # live: a genuine rc=0 success still hard-failed this playbook on the
+    # stdout check alone). Read the real output back from the log file
+    # itself instead.
+    - name: "Read the mint script's real output from its own log file"
+      ansible.builtin.command: cat {{ godot_log }}
+      register: mint_log_content
+      changed_when: false
+
+    - name: Fail clearly if the headless mint did not report OK
+      ansible.builtin.fail:
+        msg: >-
+          Headless bootstrap mint failed (rc={{ mint_result.rc }}). Full
+          output: {{ godot_log }}. Common cause: KupruBridge not loaded --
+          confirm {{ dubsar_project }}/bin/libkupru_gdext.so exists and
+          {{ dubsar_project }}/kupru.gdextension is present.
+      when: mint_result.rc != 0 or 'ISIMUD-BOOTSTRAP OK' not in mint_log_content.stdout
+
+    - name: "Report what was minted"
+      ansible.builtin.debug:
+        # '^  \S' (exactly two spaces then a non-space) matches this
+        # script's own indented summary lines but NOT the three-space
+        # "   at: ..." stack-trace lines Godot prints for unrelated
+        # missing GDExtensions (dubsar-gridnav-gd, marduk-gdext,
+        # naming-registry-gd -- a separate, pre-existing gap, not
+        # something this playbook builds or copies) -- reproduced live
+        # 2026-07-27, those lines leaked into this report before this fix.
+        msg: "{{ mint_log_content.stdout_lines | select('match', '^  \\S') | list }}"
+
+    - name: Confirmation
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 Bootstrap Sargon Passport minted, imported into DubSar's own
+          login vault, and round-trip-verified -- zero human GUI clicks.
+          Gilgamesh (architect-level) was never touched and never will be
+          by this playbook. Full log: {{ godot_log }}.

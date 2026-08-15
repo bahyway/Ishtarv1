@@ -1,0 +1,173 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_141_ashnan_regional_extension_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-141 Reconciled: config valid, query syntax fixed
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_141_ashnan_regional_extension_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_141_ashnan_regional_extension.yml):
+#    This one is mostly fine — it's pure config-file generation (JSON
+#    station registries per region), no crate dependency, low risk. Only
+#    one real problem: its embedded HeptaScript cross-region query
+#    template uses the old colon-separated syntax ("PRESENT / WHO: /
+#    WHAT: / WHEN: / WHERE: / HOW: / LIMIT:"), the exact pattern
+#    confirmed broken against the current parser in playbook_112's
+#    reconciliation ("Unexpected character: ':'"). Rewrote it in the
+#    current v2.0 WHO/ORBITAL/HOW_MUCH dialect and parse-verified it
+#    against the real parser before shipping this file.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-141 (Reconciled) | ASHNAN Regional Extension — query syntax fixed"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    config_dir:    "{{ forge_root }}/config/ashnan/regions"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ docs_dir }}/PB141_RECONCILED_{{ session_date }}.txt"
+
+    regions:
+      - id: "ashnan_jordan_valley"
+        name: "Jordan Valley"
+        country: "JO"
+        crops: ["wheat", "barley", "citrus", "tomato"]
+        livestock: ["sheep", "goat"]
+        grid: "20x10"
+        sensors: 430
+        note: "Semi-arid, drip irrigation dominant, salinisation risk"
+      - id: "ashnan_syria_euphrates"
+        name: "Syria Euphrates Belt"
+        country: "SY"
+        crops: ["cotton", "wheat", "sesame"]
+        livestock: ["sheep", "cattle"]
+        grid: "25x12"
+        sensors: 510
+        note: "Post-conflict rehabilitation zone, sparse sensor network initially"
+      - id: "ashnan_fertile_crescent"
+        name: "Fertile Crescent (Tigris-Euphrates)"
+        country: "IQ-SY-TR"
+        crops: ["wheat", "barley", "date_palm", "rice"]
+        livestock: ["buffalo", "cattle", "sheep"]
+        grid: "40x15"
+        sensors: 703
+        note: "Core ASHNAN pilot region — mirrors Diyala configuration"
+
+  tasks:
+
+    - name: "PREP | Ensure region config dir exists"
+      ansible.builtin.file: { path: "{{ config_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "WRITE | Regional station registry — {{ item.id }}"
+      ansible.builtin.copy:
+        dest: "{{ config_dir }}/{{ item.id }}_registry.json"
+        mode: "0644"
+        content: |
+          {
+            "region_id": "{{ item.id }}",
+            "region_name": "{{ item.name }}",
+            "country_code": "{{ item.country }}",
+            "tribe_id": "{{ item.id }}",
+            "bc_ref": "BC-AGRI-001",
+            "note": "{{ item.note }}",
+            "sensor_count": {{ item.sensors }},
+            "grid_layout": "{{ item.grid }}",
+            "crops": {{ item.crops | to_json }},
+            "livestock": {{ item.livestock | to_json }},
+            "kaki_config": {
+              "soil_crop":     { "kaki_type": "0x02", "kaki_role": "ZIKRU",  "tiamat_index": "CMI" },
+              "pest_trap":     { "kaki_type": "0x01", "kaki_role": "KISHIB", "tiamat_index": "IRI" },
+              "livestock":     { "kaki_type": "0x02", "kaki_role": "PARZU",  "tiamat_index": "LMI" },
+              "ext_ingestion": { "kaki_type": "0x03", "kaki_role": "PARZU",  "requires_provenance": true }
+            },
+            "colour_id_base": 240,
+            "colour_id_note": "B11 = round(H * 240) - Plimpton 322, NEVER 255"
+          }
+      loop: "{{ regions }}"
+
+    - name: "WRITE | Fertile Crescent cross-region query (v2.0 syntax, not colon-syntax)"
+      ansible.builtin.copy:
+        dest: "{{ config_dir }}/fertile_crescent_cross_region_query.hs"
+        mode: "0644"
+        content: |
+          # HeptaScript — Cross-region ASHNAN cascade query
+          # Fertile Crescent (IQ + SY + JO) CMI/IRI/LMI consolidated view
+          # v2.0 syntax (WHO/ORBITAL/HOW_MUCH) — the original's colon-
+          # separated PRESENT/WHO:/WHAT:/WHEN:/WHERE:/HOW:/LIMIT: syntax
+          # is confirmed broken against the current parser (see
+          # playbook_112's reconciliation). Rewritten and parse-verified
+          # against the real current heptascript parser before shipping.
+
+          WHO ashnan_fertile_crescent.E
+          ORBITAL 0 .. 99999999
+          HOW_MUCH LIMIT 500
+          ANCHOR AUTO
+
+    - name: "VERIFY | Cross-region query parses against the real current parser"
+      ansible.builtin.shell: |
+        mkdir -p /tmp/pb141_parse_check
+        cat > /tmp/pb141_parse_check/parse_check.rs << 'EOF'
+        fn main() {
+            let q = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
+            let q: String = q.lines().filter(|l| !l.trim_start().starts_with('#')).collect::<Vec<_>>().join("\n");
+            match heptascript::parse_query(&q) {
+                Ok(_)  => println!("PARSE_OK"),
+                Err(e) => { println!("PARSE_FAIL: {:?}", e); std::process::exit(1); }
+            }
+        }
+        EOF
+        mkdir -p "{{ workspace }}/crates/heptascript/examples"
+        cp /tmp/pb141_parse_check/parse_check.rs "{{ workspace }}/crates/heptascript/examples/pb141_parse_check.rs"
+        cd "{{ workspace }}"
+        {{ cargo }} run -p heptascript --example pb141_parse_check -- "{{ config_dir }}/fertile_crescent_cross_region_query.hs"
+        rm -f "{{ workspace }}/crates/heptascript/examples/pb141_parse_check.rs"
+      register: parse_check
+      changed_when: false
+      failed_when: "'PARSE_OK' not in parse_check.stdout"
+
+    - name: "ASSERT | Cross-region query parses"
+      ansible.builtin.assert:
+        that: "'PARSE_OK' in parse_check.stdout"
+        fail_msg: "Cross-region query failed to parse: {{ parse_check.stdout }}"
+        success_msg: "Cross-region query confirmed parseable against the real current parser."
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-141 Reconciled Report
+          Date    : {{ session_date }}
+          Regions : {{ regions | map(attribute='id') | join(', ') }}
+          Configs : {{ config_dir }}/
+
+          Station registries written for all 3 regions (real, valid
+          config, no crate dependency issues).
+
+          Cross-region query rewritten from the original's colon-syntax
+          (confirmed broken against the current parser) to the current
+          v2.0 WHO/ORBITAL/HOW_MUCH dialect — parse-verified this run:
+            {{ parse_check.stdout | trim }}
+
+    - name: "DONE | PB-141 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-141 reconciled — config real, query syntax fixed and verified. Report: {{ report_file }}"

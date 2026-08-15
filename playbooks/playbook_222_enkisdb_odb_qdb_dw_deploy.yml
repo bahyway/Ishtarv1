@@ -1,0 +1,434 @@
+# =============================================================================
+# PB-222 — EnkiSDB/EnkiODB/EnkiQDB/EnkiDW real CQRS deployment.
+# BahyWay.Ecosystem v4.0 — 2026-07-21
+#
+# WHY THIS EXISTS: PB-221 made EnkiDB (core), and an earlier commit made
+# EnkiDDB/EnkiMDB, real -- in-memory CachedReadNode engine, binary wire
+# protocol, no JSON. The remaining four of the 7 EnkiDB Types (EnkiSDB,
+# EnkiODB, EnkiQDB, EnkiDW) had real domain crates (SdbPipeline,
+# ValidationSweep, OdbStore, QdbStore, EtlPipeline -- all already
+# journalling real events, not stubs) but NO deployed TCP server at all.
+# This playbook deploys the six new binaries that close that gap.
+#
+# THE REAL PIPELINE SHAPE THIS DEPLOYS (see enkisdb-write-server's own
+# module doc comment for the full reasoning):
+#
+#   LandingZone --SdbPipeline--> SdbStore (Pending)
+#                                    |  (every SWEEP_INTERVAL_TICKS)
+#                              ValidationSweep
+#                                 pass |        | fail
+#                                     v          v
+#                             OdbStore        QdbStore
+#
+# `enkisdb-write-server` is ONE process that owns all three stages
+# (EnkiSDB, EnkiODB, EnkiQDB) -- not three separate write processes --
+# because the real domain code (`OdbStore::drain_from_sdb`,
+# `QdbStore::drain_from_sdb`) takes `&SdbStore` by reference, an
+# in-process design already baked into those crates before this playbook
+# was written. It still materializes THREE separate Journals into THREE
+# separate Data File roots, each served by its own independent Read Node
+# -- the CQRS split (ADR-012) is per-*type*, not per-process.
+#
+# EnkiDW is a separate, unrelated pipeline (its own LandingZone feeds
+# `enkidw::EtlPipeline` -> `enkidb_persist::PersistedDb`, not fed by
+# EnkiODB retirement) -- `enkidw-write-server` / `enkidw-read-server` are
+# their own independent pair.
+#
+# WHAT THIS PLAYBOOK DOES, in order:
+#   A. (hosts: enkidb_write) Build + run enkisdb-write-server (port 7013)
+#      and enkidw-write-server (port 7012).
+#   B. (hosts: enkidb_read)  Build + run enkisdb-read-server (7003),
+#      enkiodb-read-server (7004), enkiqdb-read-server (7005), and
+#      enkidw-read-server (7002).
+#   C. (hosts: eriduous-vdi, the control node) FLUSH + cross-host sync +
+#      a real network QUERY for each of the four types, reusing PB-213's
+#      own `tasks/enkiddb_cross_host_sync.yml` (it is already fully
+#      parameterized by volume/host/port/query -- nothing new needed).
+#      None of these four types have a RAG/SEARCH index, so every call
+#      sets `enkiddb_run_search: false`. The QUERY clauses below use
+#      `state = "Golden"` as a real, working WHERE example (this
+#      codebase's own `ParticleState` values, and the exact synthetic
+#      seed data used in this session's own smoke tests) -- on a freshly
+#      deployed host with an empty landing zone this will legitimately
+#      match zero rows, which is not a failure: the point of Step C is
+#      proving the real network round trip through the real binary wire
+#      protocol works, not asserting specific data is already present.
+#
+# PREREQUISITES this playbook does NOT automate (same as PB-221/PB-215):
+#   - `~/Forge/EnkiDB` checked out on eriduous-vdi, enkidb-node-write,
+#     AND enkidb-node-read, at a commit including this playbook.
+#   - SSH from eriduous-vdi to both node VMs already working (per
+#     ansible/inventory.ini) -- no new trust relationship needed.
+#   - To see real data flow through EnkiSDB, drop a .csv/.tsv/.zip file
+#     into the enkisdb-write-data volume's `landing/` subdirectory on
+#     enkidb-node-write (or into enkidw-write-data's `landing/` for
+#     EnkiDW) before running Step C.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_222_enkisdb_odb_qdb_dw_deploy.yml
+#
+# KNOWN ISSUE, not yet fixed (flagged 2026-07-27): same "check if exists,
+# skip run if it does" container pattern as PB-221 -- see that playbook's
+# own KNOWN ISSUE note for the full explanation. A rebuilt image for any
+# of the six containers here never reaches an already-running one. PB-212's
+# PB-212.4 fix (conditional recreate on real image-ID change) is the
+# correct pattern to bring here too; not done in this pass.
+# =============================================================================
+---
+- name: "PB-222a | Build + run enkisdb-write-server and enkidw-write-server on enkidb-node-write"
+  hosts: enkidb_write
+  become: false
+  vars:
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+
+  tasks:
+    - name: "0.1 | Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: "0.2 | Confirm the repo checkout exists"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      register: repo_head
+      changed_when: false
+
+    - name: "0.3 | Show current commit on enkidb-node-write"
+      ansible.builtin.debug:
+        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-222's own commit."
+
+    # ── enkisdb-write-server (owns EnkiSDB + EnkiODB + EnkiQDB) ──
+    - name: "1.1 | Build enkisdb-write-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkisdb-write-server:latest -f deploy/podman/Containerfile.enkisdb-write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "1.2 | Create the three write-side data volumes + landing zone"
+      ansible.builtin.command: "podman volume create {{ item }}"
+      loop:
+        - enkisdb-write-data
+        - enkiodb-write-data
+        - enkiqdb-write-data
+      register: vol_create
+      failed_when: vol_create.rc != 0 and 'already exists' not in (vol_create.stderr | default(''))
+      changed_when: vol_create.rc == 0
+
+    - name: "1.3 | Check if enkisdb-write container exists"
+      ansible.builtin.command: podman container exists enkisdb-write
+      register: enkisdb_write_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "1.4 | Run enkisdb-write (port 7013)"
+      ansible.builtin.command: >
+        podman run -d --name enkisdb-write
+        -p 7013:7013
+        -v enkisdb-write-data:/data/sdb:Z
+        -v enkiodb-write-data:/data/odb:Z
+        -v enkiqdb-write-data:/data/qdb:Z
+        -e TRIBE_ID=0x7300
+        --restart=always
+        enkisdb-write-server:latest
+      when: enkisdb_write_exists.rc != 0
+      changed_when: true
+
+    - name: "1.5 | Ensure enkisdb-write is actually running"
+      ansible.builtin.command: podman start enkisdb-write
+      changed_when: true
+
+    # ── enkidw-write-server ──
+    - name: "2.1 | Build enkidw-write-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkidw-write-server:latest -f deploy/podman/Containerfile.enkidw-write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "2.2 | Create EnkiDW's persist + materialized data volumes"
+      ansible.builtin.command: "podman volume create {{ item }}"
+      loop:
+        - enkidw-persist-data
+        - enkidw-write-data
+      register: dw_vol_create
+      failed_when: dw_vol_create.rc != 0 and 'already exists' not in (dw_vol_create.stderr | default(''))
+      changed_when: dw_vol_create.rc == 0
+
+    - name: "2.3 | Check if enkidw-write container exists"
+      ansible.builtin.command: podman container exists enkidw-write
+      register: enkidw_write_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "2.4 | Run enkidw-write (port 7012)"
+      ansible.builtin.command: >
+        podman run -d --name enkidw-write
+        -p 7012:7012
+        -v enkidw-persist-data:/data/dw/persist:Z
+        -v enkidw-write-data:/data/dw:Z
+        -e TRIBE_ID=0x7600
+        --restart=always
+        enkidw-write-server:latest
+      when: enkidw_write_exists.rc != 0
+      changed_when: true
+
+    - name: "2.5 | Ensure enkidw-write is actually running"
+      ansible.builtin.command: podman start enkidw-write
+      changed_when: true
+
+    # ── Firewall ──
+    - name: "3.1 | Check if firewalld is active"
+      ansible.builtin.command: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: "3.2 | Open write ports in firewalld"
+      ansible.builtin.command: "firewall-cmd --permanent --add-port={{ item }}/tcp"
+      become: true
+      when: firewalld_status.stdout == "active"
+      loop:
+        - "7013"
+        - "7012"
+      register: fw_add
+      changed_when: "'ALREADY_ENABLED' not in (fw_add.stdout | default(''))"
+
+    - name: "3.3 | Reload firewalld to apply"
+      ansible.builtin.command: firewall-cmd --reload
+      become: true
+      when: firewalld_status.stdout == "active"
+      changed_when: true
+
+    - name: "4.1 | Wait for both write ports to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item }}"
+        timeout: 60
+      loop:
+        - 7013
+        - 7012
+
+
+- name: "PB-222b | Build + run the four Read Nodes on enkidb-node-read"
+  hosts: enkidb_read
+  become: false
+  vars:
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    enkidb_222_read_servers:
+      - { crate: enkisdb-read-server, container: enkisdb-read, port: 7003, volume: enkisdb-read-data }
+      - { crate: enkiodb-read-server, container: enkiodb-read, port: 7004, volume: enkiodb-read-data }
+      - { crate: enkiqdb-read-server, container: enkiqdb-read, port: 7005, volume: enkiqdb-read-data }
+      - { crate: enkidw-read-server,  container: enkidw-read,  port: 7002, volume: enkidw-read-data }
+
+  tasks:
+    - name: "0.1 | Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: "0.2 | Confirm the repo checkout exists (build context only -- these containers never read /source)"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      register: repo_head
+      changed_when: false
+
+    - name: "0.3 | Show current commit on enkidb-node-read"
+      ansible.builtin.debug:
+        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-222's own commit."
+
+    - name: "1.1 | Build each Read Node image"
+      ansible.builtin.command:
+        cmd: "podman build -t {{ item.crate }}:latest -f deploy/podman/Containerfile.{{ item.crate }} workspace/bahyway_v4"
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      loop: "{{ enkidb_222_read_servers }}"
+      loop_control:
+        label: "{{ item.crate }}"
+      changed_when: true
+
+    - name: "1.2 | Create each Read-side data volume"
+      ansible.builtin.command: "podman volume create {{ item.volume }}"
+      loop: "{{ enkidb_222_read_servers }}"
+      loop_control:
+        label: "{{ item.volume }}"
+      register: vol_create
+      failed_when: vol_create.rc != 0 and 'already exists' not in (vol_create.stderr | default(''))
+      changed_when: vol_create.rc == 0
+
+    - name: "1.3 | Check which Read containers already exist"
+      ansible.builtin.command: "podman container exists {{ item.container }}"
+      loop: "{{ enkidb_222_read_servers }}"
+      loop_control:
+        label: "{{ item.container }}"
+      register: read_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "1.4 | Run each Read Node"
+      ansible.builtin.command: >
+        podman run -d --name {{ item.item.container }}
+        -p {{ item.item.port }}:{{ item.item.port }}
+        -v {{ item.item.volume }}:/data:Z
+        -e RELOAD_SECS=10
+        --restart=always
+        {{ item.item.crate }}:latest
+      loop: "{{ read_exists.results }}"
+      loop_control:
+        label: "{{ item.item.container }}"
+      when: item.rc != 0
+      changed_when: true
+
+    - name: "1.5 | Ensure every Read Node is actually running"
+      ansible.builtin.command: "podman start {{ item.container }}"
+      loop: "{{ enkidb_222_read_servers }}"
+      loop_control:
+        label: "{{ item.container }}"
+      changed_when: true
+
+    - name: "2.1 | Check if firewalld is active"
+      ansible.builtin.command: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: "2.2 | Open Read ports in firewalld"
+      ansible.builtin.command: "firewall-cmd --permanent --add-port={{ item.port }}/tcp"
+      become: true
+      when: firewalld_status.stdout == "active"
+      loop: "{{ enkidb_222_read_servers }}"
+      loop_control:
+        label: "{{ item.port }}"
+      register: fw_add
+      changed_when: "'ALREADY_ENABLED' not in (fw_add.stdout | default(''))"
+
+    - name: "2.3 | Reload firewalld to apply"
+      ansible.builtin.command: firewall-cmd --reload
+      become: true
+      when: firewalld_status.stdout == "active"
+      changed_when: true
+
+    - name: "3.1 | Wait for every Read port to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item.port }}"
+        timeout: 60
+      loop: "{{ enkidb_222_read_servers }}"
+      loop_control:
+        label: "{{ item.port }}"
+
+
+- name: "PB-222c | FLUSH + cross-host sync + real QUERY for all four types"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    enkidb_read_ip: "192.168.122.107"   # enkidb-node-read, per ansible/inventory.ini
+
+  tasks:
+    - name: "0.1 | Confirm all six containers are up before touching anything"
+      ansible.builtin.command: "podman ps --filter name={{ item.1 }}"
+      delegate_to: "{{ item.0 }}"
+      loop:
+        - [enkidb-node-write, enkisdb-write]
+        - [enkidb-node-write, enkidw-write]
+        - [enkidb-node-read, enkisdb-read]
+        - [enkidb-node-read, enkiodb-read]
+        - [enkidb-node-read, enkiqdb-read]
+        - [enkidb-node-read, enkidw-read]
+      register: containers_up
+      changed_when: false
+
+    - name: "0.2 | Show container status on each node"
+      ansible.builtin.debug:
+        msg: "{{ item.item[1] }}@{{ item.item[0] }}: {{ item.stdout_lines }}"
+      loop: "{{ containers_up.results }}"
+      loop_control:
+        label: "{{ item.item[1] }}"
+
+    - name: "1 | EnkiSDB -- FLUSH, sync, real QUERY"
+      ansible.builtin.include_tasks: tasks/enkiddb_cross_host_sync.yml
+      vars:
+        enkiddb_db_label: "enkisdb"
+        enkiddb_write_volume: "enkisdb-write-data"
+        enkiddb_read_volume: "enkisdb-read-data"
+        enkiddb_write_host: "enkidb-node-write"
+        enkiddb_read_host: "enkidb-node-read"
+        # tasks/enkiddb_cross_host_sync.yml's own QUERY step reads
+        # enkiddb_read_ip (double-d, matching every other enkiddb_*
+        # var in this vars block) -- this play only ever defined
+        # enkidb_read_ip (single-d, PB-221's naming) at play scope, so
+        # the two names never matched and this include never saw it
+        # (found live 2026-08-01: "'enkiddb_read_ip' is undefined").
+        enkiddb_read_ip: "{{ enkidb_read_ip }}"
+        enkiddb_write_port: 7013
+        enkiddb_read_port: 7003
+        enkiddb_query_what: "state"
+        enkiddb_query_where_attr: "state"
+        enkiddb_query_value: "Golden"
+        enkiddb_run_search: false
+
+    - name: "2 | EnkiODB -- FLUSH (shared write process), sync, real QUERY"
+      ansible.builtin.include_tasks: tasks/enkiddb_cross_host_sync.yml
+      vars:
+        enkiddb_db_label: "enkiodb"
+        enkiddb_write_volume: "enkiodb-write-data"
+        enkiddb_read_volume: "enkiodb-read-data"
+        enkiddb_write_host: "enkidb-node-write"
+        enkiddb_read_host: "enkidb-node-read"
+        # tasks/enkiddb_cross_host_sync.yml's own QUERY step reads
+        # enkiddb_read_ip (double-d, matching every other enkiddb_*
+        # var in this vars block) -- this play only ever defined
+        # enkidb_read_ip (single-d, PB-221's naming) at play scope, so
+        # the two names never matched and this include never saw it
+        # (found live 2026-08-01: "'enkiddb_read_ip' is undefined").
+        enkiddb_read_ip: "{{ enkidb_read_ip }}"
+        enkiddb_write_port: 7013
+        enkiddb_read_port: 7004
+        enkiddb_query_what: "state"
+        enkiddb_query_where_attr: "state"
+        enkiddb_query_value: "Golden"
+        enkiddb_run_search: false
+
+    - name: "3 | EnkiQDB -- FLUSH (shared write process), sync, real QUERY"
+      ansible.builtin.include_tasks: tasks/enkiddb_cross_host_sync.yml
+      vars:
+        enkiddb_db_label: "enkiqdb"
+        enkiddb_write_volume: "enkiqdb-write-data"
+        enkiddb_read_volume: "enkiqdb-read-data"
+        enkiddb_write_host: "enkidb-node-write"
+        enkiddb_read_host: "enkidb-node-read"
+        # tasks/enkiddb_cross_host_sync.yml's own QUERY step reads
+        # enkiddb_read_ip (double-d, matching every other enkiddb_*
+        # var in this vars block) -- this play only ever defined
+        # enkidb_read_ip (single-d, PB-221's naming) at play scope, so
+        # the two names never matched and this include never saw it
+        # (found live 2026-08-01: "'enkiddb_read_ip' is undefined").
+        enkiddb_read_ip: "{{ enkidb_read_ip }}"
+        enkiddb_write_port: 7013
+        enkiddb_read_port: 7005
+        enkiddb_query_what: "state"
+        enkiddb_query_where_attr: "state"
+        enkiddb_query_value: "Golden"
+        enkiddb_run_search: false
+
+    - name: "4 | EnkiDW -- FLUSH, sync, real QUERY"
+      ansible.builtin.include_tasks: tasks/enkiddb_cross_host_sync.yml
+      vars:
+        enkiddb_db_label: "enkidw"
+        enkiddb_write_volume: "enkidw-write-data"
+        enkiddb_read_volume: "enkidw-read-data"
+        enkiddb_write_host: "enkidb-node-write"
+        enkiddb_read_host: "enkidb-node-read"
+        # tasks/enkiddb_cross_host_sync.yml's own QUERY step reads
+        # enkiddb_read_ip (double-d, matching every other enkiddb_*
+        # var in this vars block) -- this play only ever defined
+        # enkidb_read_ip (single-d, PB-221's naming) at play scope, so
+        # the two names never matched and this include never saw it
+        # (found live 2026-08-01: "'enkiddb_read_ip' is undefined").
+        enkiddb_read_ip: "{{ enkidb_read_ip }}"
+        enkiddb_write_port: 7012
+        enkiddb_read_port: 7002
+        enkiddb_query_what: "state"
+        enkiddb_query_where_attr: "state"
+        enkiddb_query_value: "Golden"
+        enkiddb_run_search: false

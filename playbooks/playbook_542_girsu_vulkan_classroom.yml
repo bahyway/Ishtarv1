@@ -1,0 +1,143 @@
+---
+# ============================================================================
+# PB-194 — Girsu Vulkan Classroom: Bare-Metal Toolchain Provisioning
+# BahyWay.Ecosystem v4.0 — Girsu VSCodium workbench · Fedora 44 HOST
+# ----------------------------------------------------------------------------
+# PURPOSE:
+#   Provisions the complete Vulkan learning toolchain on the bare-metal
+#   Fedora 44 host (MSI Prestige 15) for study inside the Girsu IDE:
+#   SDK/loader/validation packages, shader compilers (glslc +
+#   glslangValidator), GLFW/GLM for the tutorial phase, RenderDoc for
+#   frame debugging, sovereign Open VSX extensions (clangd, CodeLLDB,
+#   CMake Tools, GLSL, rust-analyzer), a girsu-vk wrapper that exports
+#   the Khronos validation layer, and a workspace with smoke tests.
+#   LAW ALIGNMENT: Vulkan learning happens ONLY on bare metal — the
+#   VDIs see virtio-gpu and are unlawful classrooms; DubSar Theater is
+#   sealed bare-metal Fedora (Way-of-Work rule 4), so the study bench
+#   IS the future stage. This playbook provisions tooling; it starts
+#   no services and touches no BahyWay component (PB-160 gate intact).
+#
+# NUMBERING NOTE: PB-194 taken by this rite; the offered nightly
+#   docs-sedimentation rite renumbers to PB-195 upon the Architect's
+#   call.
+#
+# SOVEREIGNTY:
+#   - Run by the Architect (DUB.SAR 𒁾) ON the Fedora 44 host (CSR-08):
+#       ansible-playbook -i localhost, -c local pb-194-girsu-vulkan-classroom.yml
+#   - All extensions from Open VSX (open source); no Microsoft
+#     marketplace, no telemetry additions.
+#
+# TARGET: localhost — the bare-metal Fedora 44 host
+# ============================================================================
+
+- name: "PB-194 | Provision the Girsu Vulkan classroom (bare-metal host)"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    study_root: "{{ ansible_env.HOME }}/bahyway/study/vulkan"
+    girsu_bin: "{{ ansible_env.HOME }}/.local/bin"
+    codium_cmd: "codium"          # the Girsu wardrobe wraps VSCodium
+    open_vsx_extensions:
+      - llvm-vs-code-extensions.vscode-clangd     # C/C++ language server
+      - vadimcn.vscode-lldb                        # CodeLLDB debugger
+      - ms-vscode.cmake-tools                      # CMake loop (OSS, on Open VSX)
+      - slevesque.shader                           # GLSL syntax
+      - rust-lang.rust-analyzer                    # for the ash/wgpu track
+
+  tasks:
+
+    - name: "PB-194.1 | Install Vulkan SDK, shader compilers, debug & tutorial libs (dnf)"
+      become: true
+      ansible.builtin.dnf:
+        name:
+          - vulkan-tools                 # vkcube, vulkaninfo — the smoke tests
+          - vulkan-loader-devel
+          - vulkan-validation-layers
+          - vulkan-headers
+          - glslc                        # shaderc compiler (SPIR-V)
+          - glslang                      # glslangValidator — lints in Girsu
+          - spirv-tools
+          - renderdoc                    # frame capture — the ID-buffer teacher
+          - glfw-devel                   # tutorial-phase windowing
+          - glm-devel                    # tutorial-phase math
+          - libX11-devel
+          - libXrandr-devel
+          - mesa-vulkan-drivers          # Intel iGPU ICD; NVIDIA via akmod if present
+          - cmake
+          - clang
+          - clang-tools-extra            # clangd itself
+          - lldb
+        state: present
+
+    - name: "PB-194.2 | Install sovereign extensions into Girsu (Open VSX)"
+      ansible.builtin.command: "{{ codium_cmd }} --install-extension {{ item }}"
+      loop: "{{ open_vsx_extensions }}"
+      register: ext_result
+      changed_when: "'successfully installed' in (ext_result.stdout | lower)"
+      failed_when: false   # already-installed is not a failure
+
+    - name: "PB-194.3 | Create the study workspace"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ study_root }}"
+        - "{{ study_root }}/00-smoke"
+        - "{{ study_root }}/01-tutorial"      # vulkan-tutorial.com track
+        - "{{ study_root }}/02-cookbook"      # Kosarevsky 2nd ed track
+        - "{{ study_root }}/03-lightweightvk" # clone target — read with clangd
+        - "{{ study_root }}/04-rd-bridge"     # Godot RenderingDevice ports
+        - "{{ girsu_bin }}"
+
+    - name: "PB-194.4 | Deploy the girsu-vk wrapper (validation layers always on)"
+      ansible.builtin.copy:
+        dest: "{{ girsu_bin }}/girsu-vk"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # girsu-vk — run any Vulkan study binary with the Khronos
+          # validation layer speaking. The layers are the real teacher:
+          # every mistake explains itself instead of crashing silently.
+          export VK_LAYER_PATH=/usr/share/vulkan/explicit_layer.d
+          export VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
+          exec "$@"
+
+    - name: "PB-194.5 | Deploy the shader watch-lint helper"
+      ansible.builtin.copy:
+        dest: "{{ girsu_bin }}/girsu-glsl"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # girsu-glsl <file.comp|vert|frag> — compile to SPIR-V beside
+          # the source and report errors in Girsu's terminal.
+          f="$1"; out="${f%.*}.spv"
+          glslc -fshader-stage="${f##*.}" "$f" -o "$out" && \
+            echo "✓ $out sealed" || echo "✗ shader refused"
+
+    - name: "PB-194.6 | Write the smoke-test tablet"
+      ansible.builtin.copy:
+        dest: "{{ study_root }}/00-smoke/README.md"
+        mode: "0644"
+        content: |
+          # Smoke tests — prove the bench before any code
+          1. `vulkaninfo --summary`   → lists your GPUs and their ICDs.
+             Expect the discrete NVIDIA (if akmod-nvidia is installed)
+             AND the Intel iGPU via mesa. Learning on either is fine;
+             benchmark on the discrete one.
+          2. `girsu-vk vkcube`        → the spinning cube WITH validation
+             layers active and silent. Silence here = clean bench.
+          3. `girsu-glsl hello.comp`  → SPIR-V lands beside the source.
+          When all three pass, open ~/bahyway/study/vulkan in Girsu and
+          begin the guide's milestone 1. The classroom is the stage.
+
+    - name: "PB-194.7 | Report"
+      ansible.builtin.debug:
+        msg: >
+          PB-194 complete. The Girsu Vulkan classroom stands on bare
+          metal: SDK + compilers + RenderDoc installed, five sovereign
+          extensions in Girsu, girsu-vk keeps the validation layers
+          speaking, and the study workspace awaits at {{ study_root }}.
+          Run the three smoke tests, then the build guide's milestones.
+          No BahyWay component touched; PB-160's gate stands.

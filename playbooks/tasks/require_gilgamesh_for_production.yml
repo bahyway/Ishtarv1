@@ -1,0 +1,108 @@
+# =============================================================================
+# require_gilgamesh_for_production.yml — the shared Production gate.
+#
+# Any playbook that can affect real infrastructure (deploys, pushes,
+# ingests) `import_tasks` this at the START of its task list. Fails
+# closed on every path: an unset target_env, an unrecognized one, or a
+# Production target without a verified privilege_level=7 passport all
+# stop the play before anything real happens.
+#
+# Rule (the Architect's own, 2026-08-01): stakeholders (Administrator/
+# DataSteward/Developer/etc., privilege_level 1-6, minted via the Sargon
+# Passport Manager ceremony -- "Sargon Passport" in DubSar IDE's own
+# login dropdown, see godot/dubsar-theater/scripts/enki_engines.gd:61)
+# may run against Dev/Test/Acceptance freely. Only a privilege_level=7
+# passport minted via the Gilgamesh Master Key ceremony ("Gilgamesh
+# Passport" in that same dropdown) may target Production.
+#
+# Reuses real, already-tested crypto -- no new verification code:
+# `bin/kupru-vault-cli` (crates/kupru-vault's own `open_vault_and_
+# authenticate`, the same function Shakkanakku's own `vault_check_
+# enabled` corpus gate calls in runner.rs). This task file gives that
+# SAME check to any playbook run directly via `ansible-playbook`, which
+# runner.rs's gate never covers (it only runs inside Shakkanakku's own
+# corpus loop).
+#
+# Vars this file requires:
+#   target_env               -- "Development" | "Test" | "Acceptance" | "Production"
+#                                No default -- an unset target_env is refused,
+#                                never silently treated as safe.
+# Vars with sane defaults (override with -e):
+#   gilgamesh_vault_path      -- default ~/.config/bahyway/sargon_vault.dat
+#   kupru_vault_cli           -- default {{ playbook_dir }}/../workspace/bahyway_v4/target/release/kupru-vault-cli
+#
+# Environment this file requires when target_env == Production:
+#   KUPRU_VAULT_PASSPHRASE    -- never passed as a var/CLI arg (kupru-vault-cli's
+#                                own design), must already be exported by the
+#                                operator running ansible-playbook.
+# =============================================================================
+---
+- name: "GATE | target_env must be set explicitly"
+  ansible.builtin.fail:
+    msg: >-
+      target_env is not set. Pass -e target_env=Development|Test|Acceptance|Production
+      -- this playbook refuses to guess which environment it's running against.
+  when: target_env is not defined or target_env == ''
+
+- name: "GATE | target_env must be a recognized value"
+  ansible.builtin.fail:
+    msg: "target_env='{{ target_env }}' is not one of Development, Test, Acceptance, Production."
+  when: target_env not in ['Development', 'Test', 'Acceptance', 'Production']
+
+- name: "GATE | OTA environments proceed without a passport check"
+  ansible.builtin.debug:
+    msg: "target_env={{ target_env }} -- OTA tier, any stakeholder passport (or none) may proceed."
+  when: target_env != 'Production'
+
+- name: "GATE | Production requires KUPRU_VAULT_PASSPHRASE to be exported"
+  ansible.builtin.fail:
+    msg: >-
+      target_env=Production requires KUPRU_VAULT_PASSPHRASE to be exported
+      in the environment before running ansible-playbook -- never pass it as
+      a -e var (it would land in shell history / Ansible logs).
+  when: target_env == 'Production' and (lookup('env', 'KUPRU_VAULT_PASSPHRASE') == '')
+
+- name: "GATE | verify kupru-vault-cli is built (cargo build --release -p kupru-vault-cli)"
+  ansible.builtin.stat:
+    path: "{{ kupru_vault_cli | default(playbook_dir + '/../workspace/bahyway_v4/target/release/kupru-vault-cli') }}"
+  register: vault_cli_bin
+  when: target_env == 'Production'
+
+- name: "FAIL | kupru-vault-cli not built"
+  ansible.builtin.fail:
+    msg: >-
+      {{ kupru_vault_cli | default(playbook_dir + '/../workspace/bahyway_v4/target/release/kupru-vault-cli') }}
+      not found. Build it once: cd workspace/bahyway_v4 &&
+      cargo build --release -p kupru-vault-cli
+  when: target_env == 'Production' and not vault_cli_bin.stat.exists
+
+# Uses lookup('env', ...), not the ansible_env fact, so this task file
+# never needs gather_facts: true on the calling play -- matches this
+# repo's own convention of gather_facts: false on localhost playbooks.
+- name: "GATE | verify the vault holds a privilege_level=7 (Gilgamesh) passport"
+  ansible.builtin.command:
+    cmd: >-
+      {{ kupru_vault_cli | default(playbook_dir + '/../workspace/bahyway_v4/target/release/kupru-vault-cli') }}
+      check --vault {{ gilgamesh_vault_path | default(lookup('env', 'HOME') + '/.config/bahyway/sargon_vault.dat') }}
+      --min-privilege 7
+  environment:
+    KUPRU_VAULT_PASSPHRASE: "{{ lookup('env', 'KUPRU_VAULT_PASSPHRASE') }}"
+  register: gilgamesh_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when: target_env == 'Production'
+
+- name: "FAIL | Production refused -- no verified Gilgamesh-tier passport"
+  ansible.builtin.fail:
+    msg: >-
+      Production run refused: kupru-vault-cli did not confirm a
+      privilege_level=7 (Gilgamesh) passport in the configured vault.
+      This is BlockedByAuthority, not a technical failure -- only the
+      Architect/CEO's own Gilgamesh Passport may target Production.
+  when: target_env == 'Production' and gilgamesh_check.rc != 0
+
+- name: "GATE | Production authorized"
+  ansible.builtin.debug:
+    msg: "target_env=Production -- Gilgamesh-tier passport verified. Proceeding."
+  when: target_env == 'Production' and gilgamesh_check.rc == 0

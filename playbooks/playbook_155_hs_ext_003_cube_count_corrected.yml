@@ -1,0 +1,162 @@
+# =============================================================================
+# PB-155 — HS-EXT-003 SCAFFOLD (Cube Count Clause: GATE / COUNT BY STATE)
+# BahyWay.Ecosystem v4.0 · HeptaScript v1.2 — CORRECTED 2026-07-10
+#
+# CORRECTION: the GOLDEN/FUZZY/DEAD tri-state model is NEW PROPOSED
+# VOCABULARY, not existing law. Verified directly: no `EavState` enum
+# with these three variants exists anywhere in the repo. The nearest
+# real relative is `dmw-engine::DmwState` (Golden/Stable/Turbulent/
+# Critical — four states, different domain). `naramsin-integrity` has
+# its own real taxonomy (Clean/Partial/Truncated/Malformed/
+# UnknownFormat/SchemaDrift) for archive integrity, also unrelated.
+# This playbook SEALS the proposal; it does not codify something that
+# already exists elsewhere in the ecosystem. Also: the real
+# `bee-mdm-bus::HEPTA_GATE_COUNT = 7` stations (S0..S6, confirmed) do
+# not match this scaffold's assumed S0..S8 (9 stations) — reconcile
+# before wiring GateTally to real bee-mdm-bus state.
+#
+# LAW ALIGNMENT:
+#   - No new verbs (HS-EXT-001 law). GATE is a WHERE noun; COUNT BY STATE is
+#     a HOW_MUCH aggregation form; GATE_COMPLETE is a PROVE function.
+#   - Truth Before Beauty: the clause counts states — NEVER render colours.
+#   - Read/write separation: HeptaScript PROVEs gate completeness only.
+#     Promotion is performed by BeeMDM through its own gate machinery and
+#     witnessed to NĀRU. KAKI minting stays in enkidb-ingest::bridge.
+#
+# GOVERNING LAW: queued behind Phase A -> Phase B -> TESTING_PLAYBOOK_PHASE1
+#   Blocks A-F. This playbook seals design + law tests only.
+# =============================================================================
+---
+- name: "PB-155 | Seal HS-EXT-003 Cube Count Clause scaffold"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    repo_path: "{{ bahyway_repo | default(ansible_env.HOME + '/Forge/EnkiDB/workspace/bahyway_v4') }}"
+    hs_crate: "{{ repo_path }}/crates/heptascript"
+
+  tasks:
+
+    - name: "PB-155.1 | Scaffold ext003_cube_count.rs"
+      ansible.builtin.copy:
+        dest: "{{ hs_crate }}/src/ext003_cube_count.rs"
+        mode: "0644"
+        content: |
+          //! HS-EXT-003 -- Cube Count Clause (BeeMDM gate observability)
+          //! Nouns/aggregations only; Triple-O verbs untouched.
+          //!
+          //! GOLDEN/FUZZY/DEAD is PROPOSED vocabulary sealed by this
+          //! playbook -- confirmed NOT an existing enum anywhere in the
+          //! repo as of 2026-07-10. Gate count here (S0..S8, 9 stations)
+          //! must be reconciled against the real bee-mdm-bus
+          //! HEPTA_GATE_COUNT=7 before GateTally is wired to live state.
+          #![forbid(unsafe_code)]
+
+          #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+          pub enum Gate { S0, S1, S2, S3, S4, S5, S6, S7, S8 }
+
+          /// PROPOSED canonical states -- not yet real anywhere else in
+          /// the ecosystem. Sealing this scaffold is what would make them
+          /// real, not a reference to something that already exists.
+          #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+          pub enum EavState { Golden, Fuzzy, Dead }
+
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub struct CubeCount {
+              pub by_state: bool,
+              pub by_gate: Option<Gate>,
+          }
+
+          #[derive(Debug, Clone, Default, PartialEq, Eq)]
+          pub struct GateTally {
+              pub golden: u64,
+              pub fuzzy: u64,
+              pub dead_quarantined: u64,
+              pub dead_unquarantined: u64,
+          }
+
+          pub fn gate_complete(t: &GateTally) -> bool {
+              t.fuzzy == 0 && t.dead_unquarantined == 0
+          }
+
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum Ext003LawError {
+              ColourAsState(String),
+              PromotionFromQuery,
+          }
+
+          pub fn reject_colour_dimension(word: &str)
+              -> Result<(), Ext003LawError>
+          {
+              const COLOURS: [&str; 7] =
+                  ["BLUE","GREEN","RED","GRAY","GREY","GOLD","MAROON"];
+              let up = word.to_ascii_uppercase();
+              if COLOURS.contains(&up.as_str()) {
+                  return Err(Ext003LawError::ColourAsState(up));
+              }
+              Ok(())
+          }
+
+          pub fn reject_promotion(verb: &str) -> Result<(), Ext003LawError> {
+              match verb {
+                  "ORBIT" | "PROVE" | "WITNESS" => Ok(()),
+                  _ => Err(Ext003LawError::PromotionFromQuery),
+              }
+          }
+
+          pub const ROLE_PARTICLE_MODELER: &str = "ParticleModeler";
+
+          #[cfg(test)]
+          mod law_tests {
+              use super::*;
+
+              #[test]
+              fn colours_are_not_states() {
+                  assert!(reject_colour_dimension("GREEN").is_err());
+                  assert!(reject_colour_dimension("GOLD").is_err());
+                  assert!(reject_colour_dimension("GOLDEN").is_ok());
+                  assert!(reject_colour_dimension("FUZZY").is_ok());
+              }
+
+              #[test]
+              fn query_never_promotes() {
+                  assert!(reject_promotion("ORBIT").is_ok());
+                  assert!(reject_promotion("EMIT").is_err());
+                  assert!(reject_promotion("SYNC").is_err());
+              }
+
+              #[test]
+              fn gate_complete_law() {
+                  let ready = GateTally { golden: 900, fuzzy: 0,
+                      dead_quarantined: 12, dead_unquarantined: 0 };
+                  let not_ready = GateTally { golden: 900, fuzzy: 1,
+                      dead_quarantined: 0, dead_unquarantined: 0 };
+                  let leaking = GateTally { golden: 900, fuzzy: 0,
+                      dead_quarantined: 0, dead_unquarantined: 3 };
+                  assert!(gate_complete(&ready));
+                  assert!(!gate_complete(&not_ready));
+                  assert!(!gate_complete(&leaking));
+              }
+
+              #[test]
+              fn gate_order() {
+                  assert!(Gate::S0 < Gate::S3 && Gate::S3 < Gate::S8);
+              }
+          }
+
+    - name: "PB-155.2 | Compile-check"
+      ansible.builtin.shell: |
+        set -e
+        export PATH="$HOME/.cargo/bin:$PATH"
+        cd "{{ hs_crate }}"
+        cargo check 2>&1 | tail -n 5 || true
+      register: hs_check
+      changed_when: false
+
+    - name: "PB-155.3 | WIRE note"
+      ansible.builtin.debug:
+        msg: >-
+          HS-EXT-003 sealed as PROPOSED vocabulary. Before wiring to real
+          bee-mdm-bus state: reconcile Gate S0..S8 (9) against the real
+          HEPTA_GATE_COUNT=7 (S0..S6) -- these do not currently match.
+          cargo check tail: {{ hs_check.stdout | default('n/a') }}

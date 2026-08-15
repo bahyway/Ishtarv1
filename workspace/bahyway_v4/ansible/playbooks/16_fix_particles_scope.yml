@@ -1,0 +1,193 @@
+---
+# Playbook 16 — Fix particles scope + restore simple signature
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/16_fix_particles_scope.yml -v
+
+- name: "𒁾 Fix particles scope"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:    "/home/bahyway/Forge/bahyway_v4"
+    eridu_rs: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/eridu_layout.rs"
+    app_rs:   "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+
+  tasks:
+
+    - name: "Backup eridu_layout.rs"
+      ansible.builtin.copy:
+        src:        "{{ eridu_rs }}"
+        dest:       "{{ eridu_rs }}.bak16"
+        remote_src: true
+        mode:       "0644"
+
+    # Use Python to do precise surgical edits on the Rust source
+    - name: "Fix eridu_layout.rs with Python script"
+      ansible.builtin.shell:
+        cmd: |
+          python3 << 'PYEOF'
+          import re
+
+          with open('/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/eridu_layout.rs', 'r') as f:
+              src = f.read()
+
+          # FIX 1: Remove extra params from draw() signature
+          src = src.replace(
+              '''pub fn draw(
+              ui:         &mut Ui,
+              state:      &mut EriduState,
+              bus:        &Arc<RwLock<BeeMdmBusState>>,
+              particles:  &[ParticleDemo],
+              tick:       f64,
+              journal:    &enkidb_journal::Journal,
+              identities: &[enkidb_kaki::IdentityKaki],
+              snapshots:  &[enkidb_snapshot::SnapshotRecord],
+          )''',
+              '''pub fn draw(
+              ui:         &mut Ui,
+              state:      &mut EriduState,
+              bus:        &Arc<RwLock<BeeMdmBusState>>,
+              particles:  &[ParticleDemo],
+              tick:       f64,
+          )'''
+          )
+
+          # FIX 2: Replace the particles float with a safe version
+          # Find the particles float block and replace it
+          old_particles_float = '''              // Particles float
+                  if state.float.particles {
+                      Window::new("◉ Sovereign Particles")
+                          .open(&mut state.float.particles)
+                          .resizable(true)
+                          .default_size([500.0, 420.0])
+                          .show(ctx, |ui| {
+                              crate::panels::particles::draw(
+                                  ui, particles,
+                                  &mut state.selected_p,
+                                  &mut crate::panels::InspectorTab::default(),
+                                  journal,
+                                  identities,
+                                  snapshots,
+                              );
+                          });
+                  }'''
+
+          new_particles_float = '''              // Particles float — safe list (no journal needed)
+                  if state.float.particles {
+                      Window::new("◉ Sovereign Particles")
+                          .open(&mut state.float.particles)
+                          .resizable(true)
+                          .default_size([480.0, 400.0])
+                          .show(ctx, |ui| {
+                              ui.label(RichText::new("Sovereign Particles")
+                                  .color(Color32::from_rgb(200,160,40)).strong());
+                              ui.separator();
+                              egui::ScrollArea::vertical().show(ui, |ui| {
+                                  for (i, p) in particles.iter().enumerate() {
+                                      let col = Color32::from_rgb(p.rgb.0, p.rgb.1, p.rgb.2);
+                                      let sel = i == state.selected_p;
+                                      ui.horizontal(|ui| {
+                                          ui.colored_label(col, "◉");
+                                          let txt = RichText::new(format!(
+                                              "{} — {} | HPS {:.0}% | {}",
+                                              p.id, p.label, p.hps*100.0, p.state))
+                                              .color(if sel {
+                                                  Color32::from_rgb(200,160,40)
+                                              } else {
+                                                  Color32::from_rgb(160,160,180)
+                                              }).size(12.0);
+                                          if ui.label(txt).clicked() {
+                                              state.selected_p = i;
+                                          }
+                                      });
+                                  }
+                              });
+                          });
+                  }'''
+
+          if old_particles_float in src:
+              src = src.replace(old_particles_float, new_particles_float)
+              print("FIX 2: particles float replaced")
+          else:
+              # Try to find and replace any particles::draw call with journal/identities
+              src = re.sub(
+                  r'crate::panels::particles::draw\([^;]+journal,[^;]+identities,[^;]+snapshots,[^;]+\);',
+                  '''// particles shown safely in right sidebar radar
+                      ui.label(RichText::new("Use Particles tab for full inspector")
+                          .color(Color32::from_rgb(140,140,160)).size(11.0));''',
+                  src, flags=re.DOTALL
+              )
+              print("FIX 2: particles::draw call patched via regex")
+
+          with open('/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/eridu_layout.rs', 'w') as f:
+              f.write(src)
+
+          print("eridu_layout.rs written successfully")
+          print(f"File size: {len(src)} chars")
+          PYEOF
+      register: py_result
+      changed_when: true
+
+    - name: "Show Python fix output"
+      ansible.builtin.debug:
+        msg: "{{ py_result.stdout_lines }}"
+
+    # Fix app.rs: restore simple 5-param call
+    - name: "Fix app.rs EriduOS match arm"
+      ansible.builtin.shell:
+        cmd: |
+          python3 << 'PYEOF'
+          with open('/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs', 'r') as f:
+              src = f.read()
+
+          # Remove the journal/identities/snapshots from the call if present
+          import re
+          src = re.sub(
+              r'(ActivePanel::EriduOS => crate::panels::eridu_layout::draw\(\s*ui, &mut self\.eridu, &self\.bus,\s*&self\.particles, self\.tick,)\s*&self\.journal, &self\.identities, &self\.snapshots,(\s*\),)',
+              r'\1\2',
+              src
+          )
+
+          with open('/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs', 'w') as f:
+              f.write(src)
+          print("app.rs fixed")
+          PYEOF
+      register: py_app
+      changed_when: true
+
+    - name: "Verify no journal in eridu_layout call sites"
+      ansible.builtin.command:
+        cmd: grep -n "journal\|identities\|snapshots" "{{ eridu_rs }}"
+      register: grep_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Show remaining references"
+      ansible.builtin.debug:
+        msg: "{{ grep_check.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 5 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-5:] }}"
+
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "𒁾 Fix complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Particles: safe list view — no journal needed"
+          - "✓ draw() signature: 5 params"
+          - "✓ Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "Run: cargo run -p dubsar-visualizer"

@@ -1,0 +1,275 @@
+# =============================================================================
+# PB-227 -- Build the kupru-gdext GDExtension bridge and launch either
+# standalone crypto tool (Sargon Passport Manager, Gilgamesh Master Key).
+# BahyWay.Ecosystem v4.0 — 2026-07-23
+#
+# WHY THIS EXISTS: the Architect asked for two standalone GUIs -- a
+# "kind-of-KeePass" vault for everyday SargonPassport issuance
+# (crates/kupru's real Argon2id + Ed25519 + ChaCha20-Poly1305, not the
+# AkkadiSafeBridge stub the main DubSar Theater still uses), and a
+# separate Gilgamesh Master Key tool for the Architect Key ceremony
+# (Shamir M-of-N split/reconstruct + architect passport minting -- see
+# crates/kupru/ARCHITECT_KEY_CEREMONY.md). Both depend on the same new
+# GDExtension bridge crate (crates/kupru-gdext), so this playbook builds
+# that once and wires both tools to it in a single run, per the
+# Architect's explicit request: "All of them, IN ONE PB."
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Builds crates/kupru-gdext in release mode (cargo build --release).
+#   2. Copies the compiled libkupru_gdext.so into BOTH standalone Godot
+#      projects' bin/ directories (each project needs its own copy --
+#      they're separate res:// roots, not sharing a filesystem tree).
+#   3. Discovers a real Godot 4 binary (same proven priority order as
+#      PB-226: PATH -> Flatpak -> bounded $HOME search -> common system
+#      paths) -- never assumes a fixed, potentially-stale path.
+#   4. Primes the project's Godot import cache with one headless
+#      `--import` pass (no editor chrome) if `.godot/` doesn't exist yet.
+#      Godot only discovers .gdextension resources during a project
+#      scan, normally triggered by the editor's first open -- a bare
+#      `--path` run-mode launch skips it, so on a never-opened project
+#      GDExtension classes (e.g. KupruBridge) silently fail to register
+#      and every script referencing them hits a parse-time error with
+#      no mention of the .gdextension anywhere in the log. This step
+#      fixes that, once, per project, without ever showing editor UI.
+#   5. Launches whichever tool you asked for (`tool: sargon` or
+#      `tool: gilgamesh`, default `sargon`) in run mode -- no editor
+#      chrome, matching the same law PB-226 already enforces for the
+#      main DubSar Theater IDE.
+#
+# HONEST LIMIT: the Rust side (cargo build, all kupru/kupru-gdext tests)
+# has been verified by actually compiling and running it. The Godot
+# side was first verified live on eriduous-vdi, where the initial
+# version of this playbook (without step 4) produced a blank grey
+# window and a "KupruBridge not declared in the current scope" parse
+# error -- root-caused to the missing import-cache priming pass added
+# above. If the extension still fails to load after this fix, check
+# {{ godot_log }}.import (the priming pass's own output) first, then
+# godot_log (the real launch) -- the Rust bridge itself has already
+# been proven correct independently via `cargo test -p kupru`.
+#
+# AMENDMENT (2026-07-29): eriduous-vdi is removed from the architecture
+# (bare-metal Fedora Workstation 44 host + real GPU/Vulkan replaces it --
+# see GL-DST-001 Sec 6.2's now-resolved deployment decision). This
+# playbook was always `hosts: localhost` -- it never targeted eriduous-vdi
+# by name, only by which machine you happened to run it from -- so no
+# code change is needed here, only the historical note above (left
+# unchanged, since it accurately records what actually happened) and the
+# USAGE instruction below, corrected to the real current target. Gilgamesh
+# Master Key verification (previously tracked as "verify live on
+# eriduous-vdi") now means: run this playbook on the bare-metal host.
+#
+# USAGE (run on the bare-metal Fedora Workstation 44 host, inside a
+# checkout of this repo):
+#   ansible-playbook playbooks/playbook_227_build_and_launch_kupru_tools.yml
+#   ansible-playbook playbooks/playbook_227_build_and_launch_kupru_tools.yml -e tool=gilgamesh
+#   ansible-playbook playbooks/playbook_227_build_and_launch_kupru_tools.yml -e dubsar_mode=editor
+#   ansible-playbook playbooks/playbook_227_build_and_launch_kupru_tools.yml -e skip_build=true
+# =============================================================================
+
+- name: PB-227 -- Build kupru-gdext and launch a standalone crypto tool
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    sargon_project: "{{ repo_root }}/godot/sargon-passport-manager"
+    gilgamesh_project: "{{ repo_root }}/godot/gilgamesh-master-key"
+    # "sargon" = everyday Passport Manager. "gilgamesh" = the Architect
+    # Key ceremony tool. Anything else fails clearly below.
+    tool: "sargon"
+    # "run" (default) = no editor chrome, matches PB-226's law. "editor"
+    # = full Godot IDE, for actually editing these two tools' scripts.
+    dubsar_mode: "run"
+    skip_build: false
+    godot_bin: ""
+    build_log: "/tmp/kupru_gdext_build.log"
+    # FIXED (2026-07-27): this used to be the single fixed path
+    # /tmp/kupru_tool_launch.log regardless of `tool` -- launching Sargon
+    # then Gilgamesh (or vice versa) silently overwrote the first tool's
+    # log with the second's, and neither filename actually contained the
+    # word "sargon" or "gilgamesh" to search for, unlike PB-226's own
+    # /tmp/dubsar_ide_full_launch.log. Now tool-specific and discoverable
+    # by name, and the two tools' logs no longer collide.
+    godot_log: "/tmp/{{ tool }}_tool_launch.log"
+
+  tasks:
+    - name: Fail clearly on an unknown tool name
+      ansible.builtin.fail:
+        msg: >-
+          Unknown tool "{{ tool }}" -- must be "sargon" (Passport Manager)
+          or "gilgamesh" (Master Key ceremony tool).
+      when: tool not in ['sargon', 'gilgamesh']
+
+    - name: Resolve which project to launch
+      ansible.builtin.set_fact:
+        target_project: "{{ sargon_project if tool == 'sargon' else gilgamesh_project }}"
+
+    # ── Build ────────────────────────────────────────────────────────
+    - name: Build kupru-gdext in release mode
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p kupru-gdext > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: Fail clearly if the build failed
+      ansible.builtin.fail:
+        msg: >-
+          cargo build --release -p kupru-gdext failed (rc={{ build_result.rc }}).
+          Full output: {{ build_log }}
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: Confirm the compiled library exists
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/libkupru_gdext.so"
+      register: lib_check
+
+    - name: Fail clearly if the compiled library is missing
+      ansible.builtin.fail:
+        msg: >-
+          {{ repo_root }}/target/release/libkupru_gdext.so does not exist.
+          Run without -e skip_build=true first, or check {{ build_log }}
+          for a build failure.
+      when: not lib_check.stat.exists
+
+    # ── Wire the compiled library into both standalone projects ───────
+    - name: Ensure both projects' bin/ directories exist
+      ansible.builtin.file:
+        path: "{{ item }}/bin"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ sargon_project }}"
+        - "{{ gilgamesh_project }}"
+
+    - name: Copy the compiled bridge into both projects
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/libkupru_gdext.so"
+        dest: "{{ item }}/bin/libkupru_gdext.so"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - "{{ sargon_project }}"
+        - "{{ gilgamesh_project }}"
+
+    # ── Discover Godot (same proven logic as PB-226) ──────────────────
+    - name: Discover a real Godot 4 binary
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: Resolve the Godot binary to actually use
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: Fail clearly, with next steps, if no Godot binary was found anywhere
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found on PATH, via Flatpak, under $HOME, or in
+          common system locations. Install Godot 4.x from
+          https://godotengine.org/download and re-run, or point at it
+          directly with -e godot_bin=/full/path/to/Godot.
+      when: resolved_godot_bin | length == 0
+
+    # ── Prime the import cache (GDExtension discovery) ────────────────
+    # A brand-new Godot project has no .godot/ cache directory yet. Godot
+    # only discovers .gdextension resources (and registers their classes,
+    # e.g. KupruBridge) during a project scan -- normally the editor's
+    # first-open filesystem scan. A bare `--path` run-mode launch does
+    # NOT perform this scan, so on a never-opened project the extension
+    # silently fails to load and every script referencing KupruBridge
+    # hits a parse-time "not declared in the current scope" error, with
+    # no log line about the .gdextension at all. Fix: run one headless
+    # `--import` pass first (no editor chrome, matches the Architect's
+    # law), which performs exactly that scan and writes .godot/, then
+    # proceed to the real launch below.
+    #
+    # 2026-07-23: originally skipped once .godot/ already existed, on
+    # the assumption a cache only exists after a real scan. That broke
+    # for PB-226's dubsar-theater (a project launched dozens of times
+    # BEFORE it ever had a .gdextension file) -- its stale pre-existing
+    # cache made the guard skip priming even though KupruBridge had
+    # never actually been discovered, reproducing this exact bug for a
+    # different reason. Priming now always runs here too, for the same
+    # reason: a few extra seconds beats a blank grey window, and Godot's
+    # own import step is a no-op for anything already up to date.
+    - name: Prime the project (headless import scan) so GDExtensions get discovered before first launch
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ target_project }} --import
+        > {{ godot_log }}.import 2>&1
+      register: import_result
+      failed_when: false
+
+    - name: Warn if the priming import scan reported errors
+      ansible.builtin.debug:
+        msg: >-
+          Headless import priming exited {{ import_result.rc }}. See
+          {{ godot_log }}.import for details. Continuing to launch anyway --
+          but if the tool still can't find KupruBridge, check that log first.
+      when: import_result.rc is defined and import_result.rc != 0
+
+    - name: Report what is about to launch
+      ansible.builtin.debug:
+        msg:
+          - "Tool          : {{ tool }}"
+          - "Project       : {{ target_project }}"
+          - "Godot binary  : {{ resolved_godot_bin }}"
+          - "Mode          : {{ dubsar_mode }}"
+          - "Bridge library: {{ target_project }}/bin/libkupru_gdext.so"
+          - "Launch log    : {{ godot_log }}"
+
+    - name: Launch in editor mode (for editing this tool's scripts)
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --editor --path {{ target_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "editor"
+
+    - name: Launch in run mode (the actual tool, no editor chrome)
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --path {{ target_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "run"
+
+    - name: Confirmation
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 {{ tool }} launching in the background ({{ dubsar_mode }} mode).
+          If a window doesn't appear within a few seconds, or the
+          extension fails to load, check {{ godot_log }} for the real
+          error -- the Rust bridge itself was verified independently via
+          `cargo test -p kupru` (17 passing tests) and a clean
+          `cargo build --release -p kupru-gdext`, so a failure here most
+          likely means either a GDExtension entry_symbol mismatch or a
+          GDScript-side issue in the tool's own scripts.yml, not the
+          crypto itself.

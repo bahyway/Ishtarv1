@@ -1,0 +1,181 @@
+// BahyWay SLA Governance Protocol — WAYv4.0 AkkadianAOL Policy
+// Governs stakeholder-configurable compliance requirements for all BahyWay topologies.
+// ADR-001: QUALITY_DIVISOR=240  |  ADR-002: .akk suffix reserved for WAYv4.0 only
+
+NAMESPACE bahyway.governance.sla
+
+IMPORT bahyway.kaki.identity
+IMPORT bahyway.crypto.pii_vault
+IMPORT bahyway.sec.hepta_firewall
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+CONSTANT QUALITY_DIVISOR          = 240       // B11 scale maximum (ADR-001)
+CONSTANT GO_LIVE_THRESHOLD        = 180       // 75% — minimum for go-live
+CONSTANT MANDATORY_THRESHOLD      = 192       // 80% — mandatory requirement minimum
+CONSTANT SOVEREIGN_THRESHOLD      = 200       // 83% — sovereign / GEM level
+CONSTANT SATTATU_MAX_HOURS        = 54        // maximum incident response window
+CONSTANT SLA_EPOCH_VALIDITY_SECS  = 86400     // report valid for 24 hours
+
+// ── Role Definitions ──────────────────────────────────────────────────────────
+
+CONSTANT ROLE_DATA_STEWARD        = 0x10
+CONSTANT ROLE_ADMIN               = 0x11
+CONSTANT ROLE_AUDITOR             = 0x12
+CONSTANT ROLE_GO_LIVE_APPROVER    = 0x13
+
+// ── Compliance Topology Profiles ──────────────────────────────────────────────
+
+PROTOCOL SlaTopologyNajaf {
+    // Wadi al-Salam — GDPR Art.9 special-category data
+    REQUIRED_DOMAINS: [GdprPrivacy, EncryptionAtRest, NajafPrivacy]
+    DOMAIN_WEIGHT GdprPrivacy  = 240
+    DOMAIN_WEIGHT NajafPrivacy = 240
+    TARGET_B11 = 200
+    MANDATORY_IDS: [1001, 1002, 1003, 1004, 1005, 1006, 5001, 5002, 5003, 5004]
+}
+
+PROTOCOL SlaTopologyWpd {
+    // Water Pipeline — NIS2 critical infrastructure
+    REQUIRED_DOMAINS: [EncryptionAtRest, NetworkSecurity, WpdInfrastructure]
+    DOMAIN_WEIGHT WpdInfrastructure = 240
+    TARGET_B11 = 180
+    MANDATORY_IDS: [6001, 6002, 3003, 3004]
+}
+
+PROTOCOL SlaTopologyEnkiDb {
+    // EnkiDB Core — replication, key management, CQRS isolation
+    REQUIRED_DOMAINS: [EncryptionAtRest, KeyManagement, NetworkSecurity]
+    DOMAIN_WEIGHT EncryptionAtRest = 240
+    DOMAIN_WEIGHT KeyManagement    = 220
+    TARGET_B11 = 192
+    MANDATORY_IDS: [2001, 2002, 2003, 2004, 2101, 2102]
+}
+
+PROTOCOL SlaTopologyWebGateway {
+    // HeptaScript website — HTTP boundary
+    REQUIRED_DOMAINS: [NetworkSecurity, OperationalSecurity]
+    DOMAIN_WEIGHT NetworkSecurity = 240
+    TARGET_B11 = 192
+    MANDATORY_IDS: [3001, 3002, 3003]
+}
+
+// ── Maturity Level Scoring ────────────────────────────────────────────────────
+
+CONSTANT MATURITY_NOT_STARTED  = 0    // fuzzy: 0.0
+CONSTANT MATURITY_PLANNED      = 1    // fuzzy: 0.2
+CONSTANT MATURITY_IN_PROGRESS  = 2    // fuzzy: 0.5
+CONSTANT MATURITY_IMPLEMENTED  = 3    // fuzzy: 0.8
+CONSTANT MATURITY_VERIFIED     = 4    // fuzzy: 1.0
+
+// ── Access Control Policies ───────────────────────────────────────────────────
+
+POLICY SlaReadAccess {
+    // Who may read compliance reports
+    ALLOW {
+        kaki.role IN [ROLE_DATA_STEWARD, ROLE_ADMIN, ROLE_AUDITOR, ROLE_GO_LIVE_APPROVER]
+        kaki.tribe_id == deployment.owner_tribe
+    }
+    DENY ALL
+}
+
+POLICY SlaWriteAccess {
+    // Who may submit compliance state updates
+    ALLOW {
+        kaki.role IN [ROLE_DATA_STEWARD, ROLE_ADMIN]
+        kaki.tribe_id == deployment.owner_tribe
+        request.epoch <= report.generated_epoch + SLA_EPOCH_VALIDITY_SECS
+    }
+    DENY ALL
+}
+
+POLICY GoLiveApproval {
+    // Approval gate before deployment
+    ALLOW {
+        kaki.role == ROLE_GO_LIVE_APPROVER
+        report.go_live_ready == TRUE
+        report.any_mandatory_gap == FALSE
+        report.overall_b11 >= GO_LIVE_THRESHOLD
+    }
+    DENY {
+        report.any_mandatory_gap == TRUE
+        MESSAGE "Mandatory compliance gap blocks go-live — resolve P0 actions first"
+    }
+    DENY {
+        report.overall_b11 < GO_LIVE_THRESHOLD
+        MESSAGE "Overall B11 score below go-live threshold (${GO_LIVE_THRESHOLD}/${QUALITY_DIVISOR})"
+    }
+}
+
+// ── Compliance Enforcement Guards ─────────────────────────────────────────────
+
+GUARD PiiEncryptionGuard {
+    // Enforces that PII fields are encrypted before any write to particle storage
+    ASSERT pii_vault.is_encrypted(entity.kaki_hash, field.FIELD_OWNER_NAME)
+    ASSERT pii_vault.is_encrypted(entity.kaki_hash, field.FIELD_DEATH_YEAR)
+    ASSERT NOT pii_vault.is_erased(entity.kaki_hash)
+    ON_VIOLATION BLOCK WITH "PII encryption requirement not met (req 2001)"
+}
+
+GUARD ErasureGuard {
+    // Enforces GDPR Art.17 — erased entities must not be readable
+    ASSERT NOT (pii_vault.is_erased(entity.kaki_hash) AND operation == READ_PII)
+    ON_VIOLATION BLOCK WITH "Entity erased — access denied (GDPR Art.17)"
+}
+
+GUARD MandatoryComplianceGuard {
+    // Blocks go-live if any mandatory requirement below threshold
+    ASSERT report.overall_b11 >= GO_LIVE_THRESHOLD
+    ASSERT NOT report.any_mandatory_gap
+    ON_VIOLATION BLOCK WITH "Go-live blocked: mandatory compliance gap detected"
+}
+
+GUARD SlaReportFreshness {
+    // Report must be recent (regenerated within 24h)
+    ASSERT now_epoch <= report.generated_epoch + SLA_EPOCH_VALIDITY_SECS
+    ON_VIOLATION WARN WITH "SLA report older than 24 hours — re-evaluate before go-live"
+}
+
+// ── Audit Alarms ──────────────────────────────────────────────────────────────
+
+ALARM MandatoryGapDetected {
+    TRIGGER report.any_mandatory_gap == TRUE
+    SEVERITY CRITICAL
+    NOTIFY [ROLE_GO_LIVE_APPROVER, ROLE_ADMIN]
+    MESSAGE "MANDATORY COMPLIANCE GAP: go-live is blocked until P0 actions are resolved"
+    SLA_RESPONSE_HOURS = SATTATU_MAX_HOURS
+}
+
+ALARM ComplianceScoreDegraded {
+    TRIGGER report.overall_b11 < GO_LIVE_THRESHOLD
+        AND previous_report.overall_b11 >= GO_LIVE_THRESHOLD
+    SEVERITY HIGH
+    NOTIFY [ROLE_DATA_STEWARD, ROLE_ADMIN]
+    MESSAGE "Compliance score dropped below go-live threshold — deployment may be at risk"
+}
+
+ALARM PiiErasureComplete {
+    TRIGGER pii_vault.erase_count > 0
+    SEVERITY INFO
+    NOTIFY [ROLE_DATA_STEWARD, ROLE_AUDITOR]
+    MESSAGE "GDPR Art.17 erasure recorded — ${pii_vault.erase_count} entities erased this epoch"
+    RETENTION_DAYS = 365
+}
+
+ALARM UnauthorisedSlaAccess {
+    TRIGGER SlaReadAccess.DENY_TRIGGERED OR SlaWriteAccess.DENY_TRIGGERED
+    SEVERITY HIGH
+    NOTIFY [ROLE_ADMIN]
+    MESSAGE "Unauthorised SLA access attempt from kaki_hash=${request.kaki_hash}"
+}
+
+// ── Firewall Integration ───────────────────────────────────────────────────────
+
+FIREWALL SlaApiFirewall {
+    // Protect the SLA GUI endpoints
+    ALLOW hepta_firewall.kaki_verified == TRUE
+    ALLOW hepta_firewall.rate_ok == TRUE
+    BLOCK hepta_firewall.kaki_quarantined == TRUE
+    BLOCK hepta_firewall.rate_exceeded == TRUE
+    MAX_PAYLOAD_BYTES = 65536   // max form submission size
+}

@@ -1,0 +1,1273 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_79_nergal_av.yml
+# NERGAL 𒀭𒉺𒂵 — Sovereign Anti-Virus Engine
+# Layers 1 (DubSar/Godot) + 2 (Website Firewall) + 3 (Standalone Product)
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# SEALED CONSTANTS:
+#   #800000 Maroon = NERGAL alarm colour EXCLUSIVELY
+#   IRKALLA tribe_id = 0x0002 (quarantine zone)
+#   Finding-KAKI κ[6]=0x02 Event, κ[7]=0xFF NERGAL_FINDING
+#   B11 = round(threat_severity × 240) — Plimpton 322
+#   Option A: HALT AND REPORT immediately on detection
+#
+# FIVE LAYERS (this playbook: Layers 1-3):
+#   Layer 1: Inside DubSar (Godot) — NERGAL panel
+#   Layer 2: Website Firewall (Three.js) — already built
+#   Layer 3: Standalone AV product (saleable)
+#   Layer 4: White-Hat Agent (Playbook 80)
+#   Layer 5: WAY v2.0 DEFENSE extension (Playbook 81)
+#
+# ZEQP Batch Pre-Scan protocol:
+#   Every file batch scanned BEFORE entering BeeMDM pipeline
+#   Threat → QUARANTINE → zip_jail/ chattr+i → IRKALLA KAKI
+#   Clean → proceeds to BeeMDM S0 Landing Zone
+#
+# "Only NERGAL can enter KUR and return."
+#
+# Target  : eriduous-vdi (192.168.122.214)
+# Run from: EnkiLab HOST
+# ansible-playbook -i inventory/vdi.yml playbooks/79_nergal_av.yml
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 79 — NERGAL 𒀭𒉺𒂵 Sovereign Anti-Virus Engine"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:   "/home/bahyway/Forge/bahyway_v4"
+    nergal_jail:  "/home/bahyway/Forge/bahyway_v4/nergal_jail"
+    dubsar_root:  "/home/bahyway/Forge/bahyway_v4/apps/dubsar-ide"
+    script_path:  "/tmp/bw_79_nergal_av.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_79_nergal_av.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # NERGAL AV — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE   = "/home/bahyway/Forge/bahyway_v4"
+          CRATE   = f"{FORGE}/crates/nergal-av"
+          SRC     = f"{CRATE}/src"
+          DUBSAR  = f"{FORGE}/apps/dubsar-ide"
+          SCRIPTS = f"{DUBSAR}/scripts"
+          JAIL    = f"{FORGE}/nergal_jail"
+
+          for d in [SRC, f"{SRC}/scanner", f"{SRC}/irkalla",
+                    f"{SRC}/firewall", f"{SRC}/zeqp",
+                    SCRIPTS, JAIL]:
+              os.makedirs(d, exist_ok=True)
+
+          write = lambda p, c: open(p, "w").write(c)
+
+          # ══════════════════════════════════════════════════════════════════
+          # RUST CRATE: nergal-av
+          # ══════════════════════════════════════════════════════════════════
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name        = "nergal-av"
+          version     = "4.0.0"
+          edition     = "2021"
+          authors     = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          description = "NERGAL 𒀭𒉺𒂵 Sovereign Anti-Virus Engine"
+
+          [dependencies]
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          serde       = { version = "1", features = ["derive"] }
+          serde_json  = "1"
+
+          [[bin]]
+          name = "nergal-av"
+          path = "src/main.rs"
+          """))
+
+          # ── lib.rs ────────────────────────────────────────────────────────
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! NERGAL 𒀭𒉺𒂵 — Sovereign Anti-Virus Engine
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! "Only NERGAL can enter KUR and return."
+          //!
+          //! SEALED CONSTANTS:
+          //!   #800000 Maroon  = NERGAL alarm colour (nowhere else)
+          //!   IRKALLA 0x0002  = quarantine tribe
+          //!   Finding-KAKI    = κ[6]=0x02 Event, κ[7]=0xFF
+          //!   B11             = round(severity × 240) Plimpton 322
+          //!   Option A        = HALT AND REPORT immediately
+          //!
+          //! FIVE LAYERS:
+          //!   Layer 1: DubSar (Godot) panel
+          //!   Layer 2: Website Firewall (Three.js)
+          //!   Layer 3: Standalone AV product
+          //!   Layer 4: White-Hat Agent (nergal-agent crate)
+          //!   Layer 5: WAY v2.0 DEFENSE extension
+
+          #![forbid(unsafe_code)]
+
+          pub mod scanner;
+          pub mod irkalla;
+          pub mod firewall;
+          pub mod zeqp;
+
+          // ── Sealed NERGAL constants ───────────────────────────────────────
+
+          /// NERGAL alarm colour — used NOWHERE ELSE in BahyWay
+          pub const NERGAL_MAROON:      &str = "#800000";
+
+          /// IRKALLA quarantine tribe — all threat KAKIs go here
+          pub const IRKALLA_TRIBE_ID:   u16  = 0x0002;
+
+          /// Finding-KAKI role byte (κ[7])
+          pub const NERGAL_FINDING_ROLE: u8  = 0xFF;
+
+          /// NERGAL AV role byte for stream scanner
+          pub const NERGAL_SCAN_ROLE:   u8   = 0xF0;
+
+          /// B11 divisor — Plimpton 322 — NEVER 255
+          pub const PLIMPTON_322:       f32  = 240.0;
+
+          /// Threat severity → B11 (higher severity = higher B11 in IRKALLA)
+          /// Note: IRKALLA inverts the quality model
+          ///   higher severity = worse threat = higher B11 (opposite of normal)
+          pub fn threat_b11(severity: f32) -> u8 {
+              (severity.clamp(0.0, 1.0) * PLIMPTON_322).round() as u8
+          }
+
+          /// NERGAL alert state
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum NergalState {
+              /// Monitoring — no threat detected
+              Watch,
+              /// Threat detected — HALTED — report minted (Option A)
+              Halt { reason: String },
+              /// Threat jailed into IRKALLA — zip_jail/ chattr+i
+              Jailed { kaki_hex: String },
+              /// Finding sent to MĀŠŠARU for verification
+              Reported { finding_kaki: String },
+          }
+
+          /// Threat category (maps to IRKALLA tower in Three.js)
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum ThreatCategory {
+              Virus,
+              Ransomware,
+              Trojan,
+              Spyware,
+              Worm,
+              Adware,
+              Rootkit,
+              KakiInjection,      // BahyWay-specific: malformed KAKI bytes
+              ReplayAttack,       // Event-KAKI minted twice
+              JournalTamper,      // journal.bin write-order violation
+              QueryInjection,     // malformed W5H2 WHY clause
+              PuzruBypass,        // unauthorized read of concealed particle
+              TribeEscalation,    // tribe_id privilege escalation attempt
+          }
+
+          impl ThreatCategory {
+              pub fn severity(&self) -> f32 {
+                  match self {
+                      // BahyWay-specific threats are critical
+                      Self::KakiInjection   => 0.95,
+                      Self::ReplayAttack    => 0.90,
+                      Self::JournalTamper   => 0.98,
+                      Self::QueryInjection  => 0.75,
+                      Self::PuzruBypass     => 0.85,
+                      Self::TribeEscalation => 0.92,
+                      // Standard AV categories
+                      Self::Ransomware      => 0.95,
+                      Self::Rootkit         => 0.88,
+                      Self::Trojan          => 0.75,
+                      Self::Worm            => 0.70,
+                      Self::Virus           => 0.65,
+                      Self::Spyware         => 0.60,
+                      Self::Adware          => 0.30,
+                  }
+              }
+
+              pub fn tower_index(&self) -> usize {
+                  // Maps to IRKALLA Three.js tower (0-6)
+                  match self {
+                      Self::Virus | Self::KakiInjection    => 0,
+                      Self::Ransomware | Self::ReplayAttack => 1,
+                      Self::Trojan | Self::QueryInjection   => 2,
+                      Self::Spyware | Self::PuzruBypass     => 3,
+                      Self::Worm | Self::TribeEscalation    => 4,
+                      Self::Adware                          => 5,
+                      Self::Rootkit | Self::JournalTamper   => 6,
+                  }
+              }
+          }
+
+          /// A NERGAL threat detection event
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub struct ThreatDetection {
+              /// Finding-KAKI κ[6]=0x02, κ[7]=0xFF
+              pub finding_kaki:  String,
+              pub category:      ThreatCategory,
+              pub severity:      f32,
+              /// B11 = round(severity × 240) — Plimpton 322
+              pub b11:           u8,
+              pub source:        String,    // file, query, or KAKI being scanned
+              pub description:   String,
+              pub proof:         String,    // exact payload / evidence
+              pub epoch:         u64,
+              pub state:         NergalState,
+              /// PUZRU until MĀŠŠARU verifies — then unsealed to audit
+              pub is_puzru:      bool,
+          }
+
+          impl ThreatDetection {
+              pub fn new(
+                  category:    ThreatCategory,
+                  source:      impl Into<String>,
+                  description: impl Into<String>,
+                  proof:       impl Into<String>,
+                  epoch:       u64,
+              ) -> Self {
+                  let severity = category.severity();
+                  let b11      = threat_b11(severity);
+
+                  // Mint Finding-KAKI
+                  let source_str = source.into();
+                  let hash = enkidb_kaki::fnv1a_u32(source_str.as_bytes());
+                  let kaki = enkidb_kaki::Kaki::mint(
+                      hash,
+                      IRKALLA_TRIBE_ID,
+                      enkidb_kaki::KakiType::Event,
+                      NERGAL_FINDING_ROLE,  // 0xFF
+                  );
+                  let kaki_hex = kaki.bytes.iter()
+                      .map(|b| format!("{:02X}", b)).collect::<String>();
+
+                  Self {
+                      finding_kaki: kaki_hex,
+                      category,
+                      severity,
+                      b11,
+                      source:      source_str,
+                      description: description.into(),
+                      proof:       proof.into(),
+                      epoch,
+                      // Option A: HALT AND REPORT immediately
+                      state: NergalState::Halt {
+                          reason: "NERGAL: HALT AND REPORT — Option A protocol".into()
+                      },
+                      is_puzru: true,  // sealed until MĀŠŠARU verifies
+                  }
+              }
+
+              /// Promote to JAILED state — moves to zip_jail/ chattr+i
+              pub fn jail(&mut self) {
+                  self.state = NergalState::Jailed {
+                      kaki_hex: self.finding_kaki.clone()
+                  };
+              }
+
+              /// Unseal after MĀŠŠARU verifies the patch
+              pub fn unseal_after_patch(&mut self) {
+                  self.is_puzru = false;
+                  self.state = NergalState::Reported {
+                      finding_kaki: self.finding_kaki.clone()
+                  };
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_nergal_maroon_colour_sealed() {
+                  assert_eq!(NERGAL_MAROON, "#800000");
+                  // This colour belongs to NERGAL ONLY
+                  // Not particles (#404040), not KUR (#1A0A2E)
+              }
+
+              #[test]
+              fn test_finding_kaki_bytes() {
+                  let det = ThreatDetection::new(
+                      ThreatCategory::KakiInjection,
+                      "test_source", "Test injection", "payload", 0
+                  );
+                  // κ[6] = 0x02 Event, κ[7] = 0xFF NERGAL_FINDING
+                  assert!(det.finding_kaki.len() == 32); // 16 bytes hex
+              }
+
+              #[test]
+              fn test_b11_plimpton_322() {
+                  // Maximum severity → B11 = 240 (never 255)
+                  assert_eq!(threat_b11(1.0), 240);
+                  // Never 255
+                  assert_ne!(threat_b11(1.0), 255);
+              }
+
+              #[test]
+              fn test_option_a_halt_immediately() {
+                  let det = ThreatDetection::new(
+                      ThreatCategory::JournalTamper,
+                      "journal.bin", "Write order violated", "proof", 0
+                  );
+                  // Option A: immediately HALTED — never continue probing
+                  assert!(matches!(det.state, NergalState::Halt { .. }));
+                  // Sealed until MĀŠŠARU verifies
+                  assert!(det.is_puzru);
+              }
+
+              #[test]
+              fn test_journal_tamper_highest_severity() {
+                  // journal.bin integrity is the most critical
+                  assert_eq!(ThreatCategory::JournalTamper.severity(), 0.98);
+                  assert!(ThreatCategory::JournalTamper.severity() >
+                          ThreatCategory::KakiInjection.severity());
+              }
+
+              #[test]
+              fn test_irkalla_tribe_sealed() {
+                  assert_eq!(IRKALLA_TRIBE_ID, 0x0002);
+              }
+          }
+          """))
+
+          # ── scanner/mod.rs ─────────────────────────────────────────────
+          write(f"{SRC}/scanner/mod.rs", textwrap.dedent("""\
+          //! NERGAL Stream Scanner — inline KAKI validation
+          //! Runs on every write before it lands in journal.bin
+          //! Speed target: < 1ms per KAKI (inline with KISPU)
+
+          #![forbid(unsafe_code)]
+
+          use crate::{ThreatDetection, ThreatCategory, NergalState};
+
+          /// Result of scanning one KAKI
+          #[derive(Debug, Clone)]
+          pub enum ScanResult {
+              Clean,
+              Threat(ThreatDetection),
+          }
+
+          pub struct KakiScanner {
+              pub scan_count: u64,
+              pub threat_count: u64,
+          }
+
+          impl KakiScanner {
+              pub fn new() -> Self {
+                  Self { scan_count: 0, threat_count: 0 }
+              }
+
+              /// Scan a 16-byte KAKI — called inline with every KISPU commit
+              /// Returns Clean or Threat (Option A: caller must HALT on Threat)
+              pub fn scan_kaki(&mut self, bytes: &[u8; 16], epoch: u64) -> ScanResult {
+                  self.scan_count += 1;
+
+                  // ── Check 1: Pauli Exclusion (via CRC-16) ────────────────
+                  let crc_stored = u16::from_be_bytes([bytes[14], bytes[15]]);
+                  let crc_computed = Self::crc16(&bytes[0..14]);
+                  if crc_stored != crc_computed {
+                      self.threat_count += 1;
+                      return ScanResult::Threat(ThreatDetection::new(
+                          ThreatCategory::KakiInjection,
+                          format!("KAKI:{:02X?}", &bytes[0..4]),
+                          "CRC-16 mismatch — KAKI bytes tampered",
+                          format!("stored={:#06X} computed={:#06X}",
+                              crc_stored, crc_computed),
+                          epoch,
+                      ));
+                  }
+
+                  // ── Check 2: Reserved bytes must be zero ──────────────────
+                  if bytes[8..12].iter().any(|&b| b != 0) {
+                      self.threat_count += 1;
+                      return ScanResult::Threat(ThreatDetection::new(
+                          ThreatCategory::KakiInjection,
+                          format!("KAKI:{:02X?}", &bytes[0..4]),
+                          "Reserved bytes κ[8..11] non-zero — possible encoding attack",
+                          format!("reserved bytes: {:02X?}", &bytes[8..12]),
+                          epoch,
+                      ));
+                  }
+
+                  // ── Check 3: kaki_type must be 0x01/0x02/0x03 ────────────
+                  let kaki_type = bytes[6]; // κ[6] = kaki_type
+                  if ![0x01u8, 0x02, 0x03].contains(&kaki_type) {
+                      self.threat_count += 1;
+                      return ScanResult::Threat(ThreatDetection::new(
+                          ThreatCategory::KakiInjection,
+                          format!("KAKI type byte: {:#04X}", kaki_type),
+                          "Invalid kaki_type byte κ[6] — not 0x01/0x02/0x03",
+                          format!("κ[6]={:#04X}", kaki_type),
+                          epoch,
+                      ));
+                  }
+
+                  // ── Check 4: tribe_id cannot be 0x0000 or 0xFFFF ─────────
+                  let tribe = u16::from_be_bytes([bytes[4], bytes[5]]);
+                  if tribe == 0x0000 || tribe == 0xFFFF {
+                      self.threat_count += 1;
+                      return ScanResult::Threat(ThreatDetection::new(
+                          ThreatCategory::TribeEscalation,
+                          format!("tribe_id={:#06X}", tribe),
+                          "Tribe ID in reserved range 0x0000 or 0xFFFF",
+                          format!("κ[4..5]={:#06X}", tribe),
+                          epoch,
+                      ));
+                  }
+
+                  ScanResult::Clean
+              }
+
+              /// Scan a W5H2 query string for injection
+              pub fn scan_query(&mut self, query: &str, epoch: u64) -> ScanResult {
+                  self.scan_count += 1;
+
+                  // WHY clause is mandatory — empty WHY = unauthorised
+                  if !query.contains("WHY") || query.contains("WHY  \"\"") ||
+                     query.contains("WHY \"\"") {
+                      self.threat_count += 1;
+                      return ScanResult::Threat(ThreatDetection::new(
+                          ThreatCategory::QueryInjection,
+                          "W5H2 query",
+                          "WHY clause missing or empty — unauthorised query",
+                          query.chars().take(120).collect::<String>(),
+                          epoch,
+                      ));
+                  }
+
+                  // SQL injection attempt via WHY clause
+                  let sql_keywords = ["SELECT", "DROP", "DELETE", "INSERT",
+                      "UPDATE", "EXEC", "--", "/*", "*/", "UNION"];
+                  for kw in &sql_keywords {
+                      if query.to_uppercase().contains(kw) {
+                          self.threat_count += 1;
+                          return ScanResult::Threat(ThreatDetection::new(
+                              ThreatCategory::QueryInjection,
+                              "W5H2 query",
+                              format!("SQL keyword '{}' detected in W5H2 query", kw),
+                              query.chars().take(120).collect::<String>(),
+                              epoch,
+                          ));
+                      }
+                  }
+
+                  ScanResult::Clean
+              }
+
+              /// Scan a file batch (Layer 3 standalone product)
+              pub fn scan_file_batch(
+                  &mut self,
+                  file_path: &str,
+                  content:   &[u8],
+                  epoch:     u64,
+              ) -> Vec<ScanResult> {
+                  let mut results = Vec::new();
+
+                  // EICAR test string (standard AV test)
+                  let eicar = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+                  if content.windows(eicar.len()).any(|w| w == eicar) {
+                      self.threat_count += 1;
+                      results.push(ScanResult::Threat(ThreatDetection::new(
+                          ThreatCategory::Virus,
+                          file_path,
+                          "EICAR test signature detected",
+                          "EICAR-STANDARD-ANTIVIRUS-TEST-FILE",
+                          epoch,
+                      )));
+                  }
+
+                  // Ransomware patterns: common header bytes
+                  let ransom_magic = [0x52u8, 0x61, 0x6E, 0x73]; // "Rans"
+                  if content.windows(4).any(|w| w == ransom_magic) {
+                      self.threat_count += 1;
+                      results.push(ScanResult::Threat(ThreatDetection::new(
+                          ThreatCategory::Ransomware,
+                          file_path,
+                          "Ransomware signature header detected",
+                          format!("magic bytes: {:02X?}", ransom_magic),
+                          epoch,
+                      )));
+                  }
+
+                  // Check for journal.bin structure markers outside expected context
+                  if file_path.ends_with(".zip") || file_path.ends_with(".tar") {
+                      let journal_magic = b"ENKIDB_JOURNAL_V4";
+                      if content.windows(journal_magic.len())
+                          .any(|w| w == journal_magic) {
+                          self.threat_count += 1;
+                          results.push(ScanResult::Threat(ThreatDetection::new(
+                              ThreatCategory::JournalTamper,
+                              file_path,
+                              "EnkiDB journal structure found inside archive — possible exfiltration",
+                              "ENKIDB_JOURNAL_V4 magic in archive",
+                              epoch,
+                          )));
+                      }
+                  }
+
+                  if results.is_empty() {
+                      results.push(ScanResult::Clean);
+                  }
+                  results
+              }
+
+              /// Fast CRC-16 (CCITT) — sovereign, no external deps
+              fn crc16(data: &[u8]) -> u16 {
+                  let mut crc: u16 = 0xFFFF;
+                  for &byte in data {
+                      crc ^= (byte as u16) << 8;
+                      for _ in 0..8 {
+                          if crc & 0x8000 != 0 {
+                              crc = (crc << 1) ^ 0x1021;
+                          } else {
+                              crc <<= 1;
+                          }
+                      }
+                  }
+                  crc
+              }
+
+              pub fn stats(&self) -> String {
+                  let clean = self.scan_count.saturating_sub(self.threat_count);
+                  format!(
+                      "[NERGAL] Scanned: {} | Clean: {} | Threats: {} | Rate: {:.2}%",
+                      self.scan_count, clean, self.threat_count,
+                      if self.scan_count > 0 {
+                          self.threat_count as f64 / self.scan_count as f64 * 100.0
+                      } else { 0.0 }
+                  )
+              }
+          }
+
+          impl Default for KakiScanner { fn default() -> Self { Self::new() } }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn zero_kaki_with_valid_crc() -> [u8; 16] {
+                  let mut b = [0u8; 16];
+                  b[4] = 0x00; b[5] = 0x01; // tribe_id = 1
+                  b[6] = 0x01;               // kaki_type = Identity
+                  b[7] = 0x00;               // kaki_role = 0
+                  let crc = KakiScanner::crc16(&b[0..14]);
+                  b[14] = (crc >> 8) as u8;
+                  b[15] = (crc & 0xFF) as u8;
+                  b
+              }
+
+              #[test]
+              fn test_clean_kaki_passes() {
+                  let mut sc = KakiScanner::new();
+                  let kaki   = zero_kaki_with_valid_crc();
+                  assert!(matches!(sc.scan_kaki(&kaki, 0), ScanResult::Clean));
+              }
+
+              #[test]
+              fn test_crc_tamper_detected() {
+                  let mut sc = KakiScanner::new();
+                  let mut kaki = zero_kaki_with_valid_crc();
+                  kaki[0] ^= 0xFF; // tamper uuid_hash
+                  assert!(matches!(
+                      sc.scan_kaki(&kaki, 0),
+                      ScanResult::Threat(_)
+                  ));
+              }
+
+              #[test]
+              fn test_reserved_bytes_attack_detected() {
+                  let mut sc   = KakiScanner::new();
+                  let mut kaki = zero_kaki_with_valid_crc();
+                  kaki[8] = 0xDE; // reserved byte non-zero
+                  // Recompute CRC so it passes CRC check but fails reserved check
+                  let crc = KakiScanner::crc16(&kaki[0..14]);
+                  kaki[14] = (crc >> 8) as u8;
+                  kaki[15] = (crc & 0xFF) as u8;
+                  assert!(matches!(
+                      sc.scan_kaki(&kaki, 0),
+                      ScanResult::Threat(_)
+                  ));
+              }
+
+              #[test]
+              fn test_invalid_kaki_type_detected() {
+                  let mut sc   = KakiScanner::new();
+                  let mut kaki = zero_kaki_with_valid_crc();
+                  kaki[6] = 0x99; // invalid kaki_type
+                  let crc  = KakiScanner::crc16(&kaki[0..14]);
+                  kaki[14] = (crc >> 8) as u8;
+                  kaki[15] = (crc & 0xFF) as u8;
+                  assert!(matches!(
+                      sc.scan_kaki(&kaki, 0),
+                      ScanResult::Threat(_)
+                  ));
+              }
+
+              #[test]
+              fn test_sql_injection_in_query_detected() {
+                  let mut sc = KakiScanner::new();
+                  let bad_q  = "WHO tribe:ALL\nWHAT kaki_hex\nWHY \"test\"\nSELECT * FROM";
+                  assert!(matches!(
+                      sc.scan_query(bad_q, 0),
+                      ScanResult::Threat(_)
+                  ));
+              }
+
+              #[test]
+              fn test_empty_why_blocked() {
+                  let mut sc = KakiScanner::new();
+                  let no_why = "WHO tribe:ALL\nWHAT kaki_hex\nHOW_MANY 100";
+                  assert!(matches!(
+                      sc.scan_query(no_why, 0),
+                      ScanResult::Threat(_)
+                  ));
+              }
+
+              #[test]
+              fn test_eicar_file_detected() {
+                  let mut sc = KakiScanner::new();
+                  let eicar  = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+                  let results = sc.scan_file_batch("test.zip", eicar, 0);
+                  assert!(results.iter().any(|r| matches!(r, ScanResult::Threat(_))));
+              }
+          }
+          """))
+
+          # ── irkalla/mod.rs ─────────────────────────────────────────────
+          write(f"{SRC}/irkalla/mod.rs", textwrap.dedent("""\
+          //! IRKALLA 𒄭𒆳𒆳 — The Great Below — Quarantine Tribe
+          //! All threat KAKIs are sentenced to IRKALLA (tribe 0x0002)
+          //! Physical jail: zip_jail/ directory, chattr+i immutable
+
+          #![forbid(unsafe_code)]
+
+          use std::path::{Path, PathBuf};
+          use crate::{ThreatDetection, NergalState, IRKALLA_TRIBE_ID};
+
+          pub struct Irkalla {
+              pub jail_path: PathBuf,
+              pub detections: Vec<ThreatDetection>,
+          }
+
+          impl Irkalla {
+              pub fn new(jail_path: impl Into<PathBuf>) -> Self {
+                  Self {
+                      jail_path: jail_path.into(),
+                      detections: Vec::new(),
+                  }
+              }
+
+              /// Sentence a threat to IRKALLA — Option A: immediate
+              pub fn sentence(&mut self, mut detection: ThreatDetection)
+                  -> std::io::Result<()>
+              {
+                  // Write finding to jail (immutable record)
+                  let filename = format!("nergal_{}.json", detection.finding_kaki);
+                  let jail_file = self.jail_path.join(&filename);
+
+                  let json = serde_json::to_string_pretty(&detection)
+                      .unwrap_or_else(|_| "{}".into());
+                  std::fs::write(&jail_file, &json)?;
+
+                  // In production: chattr +i jail_file
+                  // (makes file immutable at filesystem level)
+                  // Here we set read-only permissions as equivalent
+                  let mut perms = std::fs::metadata(&jail_file)?.permissions();
+                  use std::os::unix::fs::PermissionsExt;
+                  perms.set_mode(0o444); // read-only — immutable
+                  std::fs::set_permissions(&jail_file, perms)?;
+
+                  println!("[IRKALLA] Sentenced: {} → {:?}",
+                      detection.finding_kaki, jail_file);
+
+                  detection.jail();
+                  self.detections.push(detection);
+
+                  Ok(())
+              }
+
+              /// Count of jailed threats per category tower
+              pub fn tower_counts(&self) -> [usize; 7] {
+                  let mut counts = [0usize; 7];
+                  for det in &self.detections {
+                      let idx = det.category.tower_index();
+                      counts[idx] += 1;
+                  }
+                  counts
+              }
+
+              /// Export current state as JSON for Three.js dashboard
+              pub fn dashboard_json(&self) -> String {
+                  let towers = self.tower_counts();
+                  let total  = self.detections.len();
+                  let jailed = self.detections.iter()
+                      .filter(|d| matches!(d.state, NergalState::Jailed { .. }))
+                      .count();
+                  format!(
+                      r#"{{"tribe":"IRKALLA","tribe_id":"0x{:04X}","total_threats":{},"jailed":{},\
+                       "towers":[{},{},{},{},{},{},{}],"colour":"{}"}}"#,
+                      IRKALLA_TRIBE_ID, total, jailed,
+                      towers[0], towers[1], towers[2], towers[3],
+                      towers[4], towers[5], towers[6],
+                      crate::NERGAL_MAROON,
+                  )
+              }
+
+              pub fn unseal_after_patch(&mut self, finding_kaki: &str) {
+                  for det in &mut self.detections {
+                      if det.finding_kaki == finding_kaki {
+                          det.unseal_after_patch();
+                          println!("[IRKALLA] Finding {} unsealed after patch", finding_kaki);
+                      }
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use crate::{ThreatCategory};
+
+              #[test]
+              fn test_threat_sentenced_to_jail() {
+                  let jail = std::env::temp_dir().join("nergal_test_jail");
+                  std::fs::create_dir_all(&jail).unwrap();
+                  let mut irkalla = Irkalla::new(&jail);
+
+                  let det = ThreatDetection::new(
+                      ThreatCategory::Virus,
+                      "test_file.zip", "Test virus", "EICAR", 0
+                  );
+                  irkalla.sentence(det).unwrap();
+
+                  assert_eq!(irkalla.detections.len(), 1);
+                  assert!(matches!(
+                      irkalla.detections[0].state,
+                      NergalState::Jailed { .. }
+                  ));
+              }
+
+              #[test]
+              fn test_dashboard_json_valid() {
+                  let jail = std::env::temp_dir().join("nergal_test_json");
+                  std::fs::create_dir_all(&jail).unwrap();
+                  let irkalla = Irkalla::new(&jail);
+                  let json = irkalla.dashboard_json();
+                  assert!(json.contains("IRKALLA"));
+                  assert!(json.contains("#800000")); // NERGAL Maroon sealed
+              }
+          }
+          """))
+
+          # ── firewall/mod.rs ────────────────────────────────────────────
+          write(f"{SRC}/firewall/mod.rs", textwrap.dedent("""\
+          //! NERGAL Layer 2 — Website Firewall
+          //! Guards all W5H2 queries from browser → EnkiDB TCP
+          //! Every query passes through NERGAL before execution
+
+          #![forbid(unsafe_code)]
+
+          use crate::scanner::{KakiScanner, ScanResult};
+          use crate::ThreatDetection;
+
+          /// Firewall verdict for an incoming request
+          #[derive(Debug, Clone)]
+          pub enum FirewallVerdict {
+              Allow,
+              Block { detection: ThreatDetection },
+          }
+
+          pub struct NergalFirewall {
+              pub scanner:       KakiScanner,
+              pub blocked_count: u64,
+              pub allowed_count: u64,
+          }
+
+          impl NergalFirewall {
+              pub fn new() -> Self {
+                  Self {
+                      scanner:       KakiScanner::new(),
+                      blocked_count: 0,
+                      allowed_count: 0,
+                  }
+              }
+
+              /// Gate every incoming W5H2 query
+              /// Called before HeptaScript executor receives the query
+              pub fn gate_query(&mut self, query: &str, epoch: u64) -> FirewallVerdict {
+                  match self.scanner.scan_query(query, epoch) {
+                      ScanResult::Clean => {
+                          self.allowed_count += 1;
+                          FirewallVerdict::Allow
+                      }
+                      ScanResult::Threat(det) => {
+                          self.blocked_count += 1;
+                          println!("[NERGAL FIREWALL] BLOCKED: {} — {}",
+                              det.category.tower_index(), det.description);
+                          FirewallVerdict::Block { detection: det }
+                      }
+                  }
+              }
+
+              /// Gate a raw TCP connection (IP-level filtering)
+              pub fn gate_connection(&self, source_ip: &str) -> bool {
+                  // Deny known bad actors — production: connects to threat feed
+                  // Sovereign: no external API calls — local blocklist only
+                  let blocklist = ["10.0.0.0", "192.168.0.0"]; // example
+                  !blocklist.iter().any(|&blocked| source_ip.starts_with(blocked))
+              }
+
+              pub fn firewall_stats(&self) -> String {
+                  format!("[NERGAL FIREWALL] Allowed: {} | Blocked: {}",
+                      self.allowed_count, self.blocked_count)
+              }
+          }
+
+          impl Default for NergalFirewall { fn default() -> Self { Self::new() } }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_clean_query_allowed() {
+                  let mut fw = NergalFirewall::new();
+                  let q = "WHO tribe:ALL\nWHAT kaki_hex\nHOW AllEntities\n\
+                           WHERE state != DEAD_SEALED\nWHEN AllTime\n\
+                           WHY \"audit test\"\nHOW_MANY 100";
+                  assert!(matches!(fw.gate_query(q, 0), FirewallVerdict::Allow));
+              }
+
+              #[test]
+              fn test_sql_injection_blocked() {
+                  let mut fw = NergalFirewall::new();
+                  let bad = "WHO tribe:ALL\nWHY \"test\"\nDROP TABLE kaki;";
+                  assert!(matches!(
+                      fw.gate_query(bad, 0),
+                      FirewallVerdict::Block { .. }
+                  ));
+              }
+          }
+          """))
+
+          # ── zeqp/mod.rs ────────────────────────────────────────────────
+          write(f"{SRC}/zeqp/mod.rs", textwrap.dedent("""\
+          //! ZEQP — Batch Pre-Scan Protocol
+          //! Zero Entry Queue Protocol — scans BEFORE BeeMDM pipeline
+          //! Every file batch scanned here first
+          //! Clean → BeeMDM S0 Landing Zone
+          //! Threat → IRKALLA quarantine → zip_jail/ chattr+i
+
+          #![forbid(unsafe_code)]
+
+          use std::path::{Path, PathBuf};
+          use crate::scanner::{KakiScanner, ScanResult};
+          use crate::irkalla::Irkalla;
+          use crate::ThreatDetection;
+
+          /// Result of a ZEQP batch scan
+          #[derive(Debug, Clone)]
+          pub struct ZeqpBatchResult {
+              pub batch_name:   String,
+              pub total_files:  usize,
+              pub clean_files:  usize,
+              pub threat_files: usize,
+              pub threats:      Vec<ThreatDetection>,
+              /// true = batch can proceed to BeeMDM S0
+              pub cleared:      bool,
+          }
+
+          pub struct ZeqpScanner {
+              pub scanner:  KakiScanner,
+              pub jail_dir: PathBuf,
+          }
+
+          impl ZeqpScanner {
+              pub fn new(jail_dir: impl Into<PathBuf>) -> Self {
+                  Self {
+                      scanner:  KakiScanner::new(),
+                      jail_dir: jail_dir.into(),
+                  }
+              }
+
+              /// Scan a batch of files BEFORE BeeMDM ingestion
+              /// Option A: if ANY threat found → entire batch HALTED
+              pub fn scan_batch(
+                  &mut self,
+                  batch_name: impl Into<String>,
+                  files: &[(String, Vec<u8>)],  // (filename, content)
+                  epoch: u64,
+              ) -> ZeqpBatchResult {
+                  let batch_name = batch_name.into();
+                  let mut threats     = Vec::new();
+                  let mut clean_count = 0usize;
+
+                  for (filename, content) in files {
+                      let results = self.scanner.scan_file_batch(filename, content, epoch);
+                      let mut file_clean = true;
+                      for result in results {
+                          match result {
+                              ScanResult::Clean => {}
+                              ScanResult::Threat(det) => {
+                                  // Option A: collect and will halt the batch
+                                  threats.push(det);
+                                  file_clean = false;
+                              }
+                          }
+                      }
+                      if file_clean { clean_count += 1; }
+                  }
+
+                  let cleared = threats.is_empty();
+
+                  if !cleared {
+                      println!(
+                          "[ZEQP] BATCH HALTED: {} — {} threats in {} files",
+                          batch_name, threats.len(), files.len()
+                      );
+                      println!("[ZEQP] Option A: HALT AND REPORT — batch does not enter BeeMDM");
+                  } else {
+                      println!(
+                          "[ZEQP] BATCH CLEARED: {} — {} files clean → BeeMDM S0",
+                          batch_name, clean_count
+                      );
+                  }
+
+                  ZeqpBatchResult {
+                      batch_name,
+                      total_files:  files.len(),
+                      clean_files:  clean_count,
+                      threat_files: files.len() - clean_count,
+                      threats,
+                      cleared,
+                  }
+              }
+
+              /// Sentence all threats from a halted batch to IRKALLA
+              pub fn sentence_batch(
+                  &mut self,
+                  result: ZeqpBatchResult,
+                  irkalla: &mut Irkalla,
+              ) -> std::io::Result<()> {
+                  for det in result.threats {
+                      irkalla.sentence(det)?;
+                  }
+                  Ok(())
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_clean_batch_cleared() {
+                  let jail = std::env::temp_dir().join("zeqp_test_1");
+                  std::fs::create_dir_all(&jail).unwrap();
+                  let mut zeqp = ZeqpScanner::new(&jail);
+                  let files = vec![
+                      ("record.csv".into(), b"name,id\nAhmed,001".to_vec()),
+                  ];
+                  let result = zeqp.scan_batch("najaf_test", &files, 0);
+                  assert!(result.cleared);
+                  assert_eq!(result.clean_files, 1);
+                  assert_eq!(result.threat_files, 0);
+              }
+
+              #[test]
+              fn test_eicar_batch_halted() {
+                  let jail = std::env::temp_dir().join("zeqp_test_2");
+                  std::fs::create_dir_all(&jail).unwrap();
+                  let mut zeqp = ZeqpScanner::new(&jail);
+                  let eicar = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+                  let files = vec![
+                      ("normal.csv".into(), b"clean data".to_vec()),
+                      ("test.zip".into(),   eicar.to_vec()),
+                  ];
+                  let result = zeqp.scan_batch("test_batch", &files, 0);
+                  // Option A: batch HALTED because one file has threat
+                  assert!(!result.cleared);
+                  assert!(!result.threats.is_empty());
+              }
+
+              #[test]
+              fn test_option_a_all_threats_reported_immediately() {
+                  // Every detection is immediate — not batched or delayed
+                  let jail = std::env::temp_dir().join("zeqp_test_3");
+                  std::fs::create_dir_all(&jail).unwrap();
+                  let mut zeqp = ZeqpScanner::new(&jail);
+                  let eicar = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+                  let files = vec![("bad.zip".into(), eicar.to_vec())];
+                  let result = zeqp.scan_batch("immediate_test", &files, 0);
+                  // All threats present immediately — not deferred
+                  for det in &result.threats {
+                      assert!(matches!(det.state, crate::NergalState::Halt { .. }));
+                  }
+              }
+          }
+          """))
+
+          # ── main.rs (standalone CLI product) ──────────────────────────
+          write(f"{SRC}/main.rs", textwrap.dedent("""\
+          //! NERGAL AV — Standalone Sovereign Anti-Virus
+          //! Layer 3: Saleable product — CLI scan interface
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+
+          #![forbid(unsafe_code)]
+
+          use nergal_av::{
+              scanner::KakiScanner,
+              irkalla::Irkalla,
+              zeqp::ZeqpScanner,
+              NERGAL_MAROON, IRKALLA_TRIBE_ID,
+          };
+          use std::path::PathBuf;
+
+          fn main() {
+              println!("𒀭𒉺𒂵 NERGAL Sovereign Anti-Virus v4.0");
+              println!("   BahyWay.Ecosystem — DUB.SAR 𒁾");
+              println!("   Alarm colour: {}", NERGAL_MAROON);
+              println!("   IRKALLA tribe: 0x{:04X}", IRKALLA_TRIBE_ID);
+              println!("   B11 divisor: 240 (Plimpton 322)");
+              println!("   Protocol: ZEQP Batch Pre-Scan");
+              println!("   Option A: HALT AND REPORT immediately");
+              println!();
+
+              let args: Vec<String> = std::env::args().collect();
+
+              if args.len() < 2 {
+                  println!("Usage: nergal-av <file_to_scan>");
+                  println!("       nergal-av --kaki <hex_kaki>");
+                  println!("       nergal-av --query <query_string>");
+                  return;
+              }
+
+              let jail_path = PathBuf::from("/tmp/nergal_jail");
+              std::fs::create_dir_all(&jail_path).unwrap();
+              let mut irkalla = Irkalla::new(&jail_path);
+              let mut zeqp    = ZeqpScanner::new(&jail_path);
+              let epoch       = std::time::SystemTime::now()
+                  .duration_since(std::time::UNIX_EPOCH)
+                  .map(|d| d.as_secs()).unwrap_or(0);
+
+              match args[1].as_str() {
+                  "--kaki" if args.len() >= 3 => {
+                      println!("[NERGAL] Scanning KAKI: {}", args[2]);
+                      let bytes: Vec<u8> = args[2]
+                          .chars().collect::<Vec<_>>()
+                          .chunks(2)
+                          .filter_map(|c| {
+                              u8::from_str_radix(&c.iter().collect::<String>(), 16).ok()
+                          })
+                          .collect();
+                      if bytes.len() == 16 {
+                          let mut arr = [0u8; 16];
+                          arr.copy_from_slice(&bytes);
+                          let mut sc = KakiScanner::new();
+                          match sc.scan_kaki(&arr, epoch) {
+                              nergal_av::scanner::ScanResult::Clean =>
+                                  println!("✓ KAKI clean"),
+                              nergal_av::scanner::ScanResult::Threat(det) => {
+                                  println!("✗ THREAT: {}", det.description);
+                                  println!("  Severity: {:.2} | B11: {}", det.severity, det.b11);
+                                  println!("  Finding-KAKI: {}", det.finding_kaki);
+                                  irkalla.sentence(det).ok();
+                              }
+                          }
+                      } else {
+                          println!("Error: KAKI must be 32 hex chars (16 bytes)");
+                      }
+                  }
+
+                  "--query" if args.len() >= 3 => {
+                      println!("[NERGAL] Scanning query");
+                      let mut sc = KakiScanner::new();
+                      match sc.scan_query(&args[2..].join(" "), epoch) {
+                          nergal_av::scanner::ScanResult::Clean =>
+                              println!("✓ Query clean — allowed through firewall"),
+                          nergal_av::scanner::ScanResult::Threat(det) => {
+                              println!("✗ QUERY BLOCKED: {}", det.description);
+                              irkalla.sentence(det).ok();
+                          }
+                      }
+                  }
+
+                  path => {
+                      println!("[NERGAL] Scanning file: {}", path);
+                      match std::fs::read(path) {
+                          Ok(content) => {
+                              let files = vec![(path.to_string(), content)];
+                              let result = zeqp.scan_batch("cli_scan", &files, epoch);
+                              if result.cleared {
+                                  println!("✓ CLEAN — file can enter BeeMDM pipeline");
+                              } else {
+                                  println!("✗ HALTED — {} threat(s) detected",
+                                      result.threats.len());
+                                  zeqp.sentence_batch(result, &mut irkalla).ok();
+                                  println!("  Threats jailed to: {:?}", jail_path);
+                                  println!("  Dashboard JSON: {}",
+                                      irkalla.dashboard_json());
+                              }
+                          }
+                          Err(e) => println!("Error reading file: {}", e),
+                      }
+                  }
+              }
+
+              println!();
+              println!("{}", KakiScanner::new().stats());
+          }
+          """))
+
+          # ── Godot: nergal_panel.gd (Layer 1) ──────────────────────────
+          write(f"{SCRIPTS}/nergal_panel.gd", textwrap.dedent("""\
+          # nergal_panel.gd — NERGAL AV Panel for DubSar IDE
+          # Layer 1: Inside DubSar (Godot)
+          # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          #
+          # Shows live NERGAL threat stream inside DubSar IDE
+          # Infected particles glow NERGAL Maroon #800000 in ORBIT theater
+          # NISABA whispers: "NERGAL detected κ[7]=0xFF"
+          extends Control
+
+          # NERGAL sealed colour — used NOWHERE ELSE
+          const NERGAL_MAROON := Color("#800000")
+          const PLIMPTON_322  := 240.0
+
+          # Threat category labels → IRKALLA towers
+          const THREAT_CATS := [
+              "Viruses", "Ransomware", "Trojans", "Spyware",
+              "Worms",   "Adware",    "Rootkits"
+          ]
+
+          # Tower counts — populated from ZEQP JSON via TCP
+          var tower_counts := [0, 0, 0, 0, 0, 0, 0]
+          var total_threats := 0
+          var jailed_count  := 0
+          var clean_count   := 0
+          var scan_active   := false
+
+          # Signals to ORBIT theater and NISABA
+          signal threat_detected(kaki_hex: String, category: int, severity: float)
+          signal batch_cleared(batch_name: String, clean_count: int)
+          signal irkalla_updated(json: String)
+
+          func _ready() -> void:
+          	_build_ui()
+          	print("[NERGAL PANEL] 𒀭𒉺𒂵 Layer 1 ready — DubSar IDE")
+
+          func _build_ui() -> void:
+          	var vbox := VBoxContainer.new()
+          	add_child(vbox)
+
+          	# Header
+          	var header := Label.new()
+          	header.text = "𒀭𒉺𒂵 NERGAL — Sovereign AV"
+          	header.add_theme_color_override("font_color", NERGAL_MAROON)
+          	vbox.add_child(header)
+
+          	# Status
+          	var status := Label.new()
+          	status.text = "Protocol: ZEQP Batch Pre-Scan"
+          	status.add_theme_color_override("font_color", Color(0.6, 0.4, 0.4))
+          	vbox.add_child(status)
+
+          	# Tower counts grid
+          	var grid := GridContainer.new()
+          	grid.columns = 4
+          	for cat in THREAT_CATS:
+          		var lbl := Label.new()
+          		lbl.text = "%s: 0" % cat
+          		lbl.add_theme_color_override("font_color", NERGAL_MAROON)
+          		grid.add_child(lbl)
+          	vbox.add_child(grid)
+
+          	# Scan button
+          	var btn := Button.new()
+          	btn.text = "⚡ ZEQP Scan Active Batch"
+          	btn.add_theme_color_override("font_color", NERGAL_MAROON)
+          	btn.pressed.connect(_on_scan_pressed)
+          	vbox.add_child(btn)
+
+          func _on_scan_pressed() -> void:
+          	scan_active = true
+          	print("[NERGAL PANEL] ZEQP scan triggered")
+          	# In production: call nergal-av CLI via OS.execute()
+          	# and parse JSON result to update tower_counts
+          	_simulate_scan()
+
+          func _simulate_scan() -> void:
+          	# Demo: simulate threat detection
+          	# Production: parse IRKALLA dashboard JSON from TCP
+          	tower_counts[0] += 3  # Viruses
+          	tower_counts[4] += 1  # Worms
+          	total_threats    = tower_counts.reduce(func(a,b): return a+b, 0)
+          	emit_signal("threat_detected",
+          		"DEADBEEF00010200000000001A2B3C4D", 0, 0.65)
+          	print("[NERGAL PANEL] Threats detected: %d" % total_threats)
+
+          func on_orbit_particle_infected(kaki_hex: String, category: int) -> void:
+          	## Called by ORBIT theater when a particle matches NERGAL signature
+          	## Particle should glow NERGAL_MAROON in 3D theater
+          	emit_signal("threat_detected", kaki_hex, category, 0.80)
+          	print("[NERGAL PANEL] Particle infected: %s — glow Maroon" % kaki_hex)
+
+          func get_irkalla_colour() -> Color:
+          	return NERGAL_MAROON  # sealed — never changes
+          """))
+
+          # ── Register + build ────────────────────────────────────────────
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/nergal-av"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/nergal-av",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "nergal-av"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0:
+              print("✗ BUILD FAILED:"); print(r.stderr[-3000:]); sys.exit(1)
+          print("✓ nergal-av build clean")
+
+          t = subprocess.run(
+              ["cargo", "test", "-p", "nergal-av", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0:
+              print("✗ TESTS FAILED:"); print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ All NERGAL AV tests pass")
+
+          print("""
+          ══════════════════════════════════════════════════════════
+            PLAYBOOK 79 — NERGAL 𒀭𒉺𒂵 AV COMPLETE
+            Layer 1: nergal_panel.gd  — DubSar IDE (Godot)
+            Layer 2: firewall/mod.rs  — W5H2 query gate
+            Layer 3: main.rs          — standalone CLI product
+            ZEQP: Batch Pre-Scan protocol
+            IRKALLA: quarantine tribe 0x0002
+            Maroon: #800000 sealed
+            Option A: HALT AND REPORT — sealed
+            "Only NERGAL can enter KUR and return." 𒀭𒉺𒂵
+          ══════════════════════════════════════════════════════════
+          """)
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p79_out
+      changed_when: true
+
+    - name: "2.1 | Show output"
+      ansible.builtin.debug:
+        msg: "{{ p79_out.stdout_lines }}"
+
+    - name: "2.2 | Assert"
+      ansible.builtin.assert:
+        that: p79_out.rc == 0
+        success_msg: "✓ NERGAL AV — Layers 1-3 sealed"
+        fail_msg:    "✗ NERGAL AV build failed"

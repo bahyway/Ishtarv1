@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · HeptaMap Cosmic Web — 7D structure discovery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#03040c; --deep:#0a0e22; --panel:#0d1330;
+  --ink:#e9ecf6; --ink-dim:#9aa2c4; --ink-faint:#5f6690;
+  --fila:#5b7cc4; --node:#8fa8e6; --hole:#e0533f; --hole-hi:#ff8566;
+  --voidc:#3a2f6b; --gold:#E3B458; --signal:#4fd6c4; --line:#232a52;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;font-family:var(--f-data);z-index:5}
+.hud-title{top:14px;left:0;right:0;text-align:center;pointer-events:none}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:22px;letter-spacing:.14em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:10px;letter-spacing:.24em;color:var(--ink-faint);margin-top:5px}
+.panel{background:rgba(13,19,48,.82);border:1px solid var(--line);border-radius:8px;padding:13px 15px;backdrop-filter:blur(8px)}
+.hud-proj{top:88px;left:18px;width:256px;max-height:calc(100vh - 180px);overflow-y:auto}
+.hud-proj h3{font-family:var(--f-data);font-size:10px;letter-spacing:.16em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:9px}
+.axrow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:11px}
+.axrow .nm{width:78px;color:var(--ink-dim)}
+.axrow select{flex:1;background:var(--deep);border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:4px 6px;font-family:var(--f-data);font-size:11px}
+.axrow.xh .nm{color:#e07a7a}.axrow.yh .nm{color:#7ae0a8}.axrow.zh .nm{color:#7aa8e0}
+.hint{font-size:9.5px;color:var(--ink-faint);margin-top:8px;line-height:1.5;font-family:var(--f-body)}
+.hud-find{top:88px;right:18px;width:270px;max-height:calc(100vh - 260px);overflow:auto}
+.hud-find h3{font-family:var(--f-data);font-size:10px;letter-spacing:.16em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:9px}
+.find{border:1px solid var(--line);border-radius:6px;padding:10px 11px;margin-bottom:8px;cursor:pointer;transition:.14s}
+.find:hover{border-color:var(--hole)}
+.find.hole{border-left:3px solid var(--hole)}
+.find.void{border-left:3px solid var(--voidc)}
+.find.active{background:rgba(224,83,63,.08)}
+.find .ft{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.find .fn{font-family:var(--f-display);font-size:15px}
+.find.hole .fn{color:var(--hole-hi)} .find.void .fn{color:#a99be0}
+.find .sc{font-size:10px;color:var(--gold)}
+.find .fb{font-size:11px;color:var(--ink-dim);margin-top:5px;line-height:1.5}
+.find .stat{font-family:var(--f-data);font-size:10px;color:var(--signal);margin-top:6px}
+.hud-read{bottom:70px;left:18px;width:280px;display:none;max-height:38vh;overflow-y:auto;z-index:8}
+.hud-read .n{font-family:var(--f-display);font-size:14px;color:var(--gold)}
+.hud-read .row{display:flex;justify-content:space-between;font-size:10.5px;padding:2px 0;border-bottom:1px dotted var(--line)}
+.hud-read .row .k{color:var(--ink-faint)} .hud-read .row .v{color:var(--ink)}
+.hud-ctl{bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:7px;align-items:center;background:rgba(13,19,48,.85);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.hud-ctl button{background:var(--deep);border:1px solid var(--line);color:var(--ink-dim);border-radius:5px;font-size:11px;padding:6px 11px}
+.hud-ctl button.on{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.hud-ctl .sp{color:var(--ink-faint)}
+.legend{bottom:70px;right:18px;font-size:10px;color:var(--ink-faint);line-height:1.7;max-width:250px}
+.legend b{font-weight:500}
+.ln{color:var(--node)}.lh{color:var(--hole-hi)}.lv{color:#a99be0}.lf{color:var(--fila)}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(3,4,12,.9);border-top:1px solid var(--line);font-family:var(--f-data);font-size:9px;color:var(--ink-faint);padding:4px 18px;z-index:6;text-align:center}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">𒁾</span> HEPTAMAP <em>COSMIC WEB</em></h1>
+  <div class="sub">BACTERIOLOGY · THE LAYER ABOVE APAS · COLONIES FROM MANY PLATES IN ONE SPACE · BLACK HOLE = CROSS-PLATE OVER-DENSITY</div>
+</div>
+
+<div class="hud hud-proj panel">
+  <h3>7D → 3D Projection</h3>
+  <div class="axrow xh"><span class="nm">screen X ▸</span><select id="ax-x"></select></div>
+  <div class="axrow yh"><span class="nm">screen Y ▸</span><select id="ax-y"></select></div>
+  <div class="axrow zh"><span class="nm">screen Z ▸</span><select id="ax-z"></select></div>
+  <div class="hint">The data is 7-dimensional. This is one projection of it. A black hole hidden in one projection may appear in another — rotate the axes to interrogate the structure, not just view it.</div>
+  <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+    <div style="font-family:var(--f-data);font-size:10px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:6px">What this shows</div>
+    <div style="font-size:11px;color:var(--ink-dim);line-height:1.5">A <b style="color:var(--ink)">bacteriology corpus</b> — 420 colonies read off many plates (the layer <b style="color:var(--ink)">above</b> APAS). Colour = colony-type/agar · distance = coupling · a red knot = colonies from different plates that cluster and shouldn't.</div>
+    <div id="aggr-legend" style="margin-top:7px;font-family:var(--f-data);font-size:9.5px;line-height:1.6"></div>
+  </div>
+</div>
+
+<div class="hud hud-find panel">
+  <h3>Anomalies detected</h3>
+  <div id="find-list"></div>
+</div>
+
+<div class="hud hud-read panel" id="read"></div>
+
+<div class="hud legend">
+  <b class="ln">● colony</b> one colony read off a plate · <b class="lf">— link</b> a colony↔colony or colony↔disease relation ·
+  <b class="lh">◉ black hole</b> cross-plate over-density (a pattern one plate can't show) · <b class="lv">○ void</b> suspicious emptiness ·
+  position is <b>earned by force</b>, not assigned — clusters mean real coupling.
+</div>
+
+<div class="hud panel" id="apas" style="bottom:70px;left:18px;width:296px;border-left:3px solid var(--signal)">
+  <div style="font-family:var(--f-data);font-size:10px;letter-spacing:.14em;color:var(--signal);text-transform:uppercase;margin-bottom:6px">The layer above APAS</div>
+  <div style="font-size:11px;color:var(--ink-dim);line-height:1.55">
+    <b style="color:var(--ink)">APAS answers:</b> what is on <i>this plate</i>? (per-plate, ~6 s, regulated diagnosis, pos/neg triage).<br><br>
+    <b style="color:var(--ink)">This answers:</b> what is the shape of <i>everything cultured</i>, and how does it link to disease? It <b style="color:var(--signal)">consumes</b> APAS-grade colony data and reveals the department-wide, cross-plate, disease-linked patterns a per-plate system cannot see. Hypothesis tool — morphology proposes, the algebra &amp; the clinician prove.
+  </div>
+</div>
+
+<div class="hud panel" id="baru" style="top:88px;left:50%;transform:translateX(-50%);width:430px;display:none;border:1px solid var(--gold);text-align:center;z-index:9">
+  <div style="font-family:var(--f-display);font-size:15px;color:var(--gold);letter-spacing:.08em">◆ BĀRÛ · the Pattern-Diviner</div>
+  <div id="baru-say" style="font-family:var(--f-data);font-size:11px;color:var(--ink-dim);margin-top:6px;line-height:1.6">reading the sky…</div>
+</div>
+
+<div class="hud hud-ctl">
+  <button id="btn-sim" class="on">SIMULATE ⚛</button>
+  <button id="btn-holes" class="on">ANOMALY WARP</button>
+  <button id="btn-links" class="on">FILAMENTS</button>
+  <button id="btn-spin" class="on">ORBIT ✦</button>
+  <span class="sp">|</span>
+  <button id="btn-baru" class="on" style="background:var(--gold);color:#1a1204;border-color:var(--gold)">◆ BĀRÛ HUNT</button>
+  <button id="btn-reseed">RESEED</button>
+</div>
+
+<footer>Way-of-Work rule 5 — HTML prototype; production body Godot/WGPU. Sits ABOVE per-plate systems (APAS/AI colony counters): it consumes their colony data and reveals cross-plate, disease-linked patterns they cannot show. Layout is a real force sim; anomalies computed (k-NN density). Production forces/topology from LamassuEngine over the 7D HeptaMap. Morphology proposes; the algebra & clinician prove. Not a diagnostic device. Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+/* ---- the 7 Hepta axes ---- */
+const AXES=['ColonyID','Agar/Plate','Incubation-t','Gram','Resistance(ε)','ColonySize','Pigment'];
+
+/* ---- data: N particles, each a real 7D vector; some belong to latent clusters
+        (which the force sim will re-discover) and one hidden over-dense knot. ---- */
+let N=420, seed=7;
+let P7=[];      // 7D coords
+let P3=[];      // projected 3D working positions (force sim runs here)
+let vel=[];     // velocities
+let tribe=[];   // latent group id (ground truth we hide; sim rediscovers)
+let holes=[], voids=[];
+
+function build(){
+  const rng=mulberry32(seed);
+  P7=[];tribe=[];
+  // 5 latent clusters + 1 hidden dense knot (the black hole) + scattered field
+  const centers=[];
+  for(let c=0;c<5;c++) centers.push(Array.from({length:7},()=>rng()*2-1));
+  const knot=Array.from({length:7},()=>rng()*0.4-0.2); // tight hidden knot near origin-ish
+  for(let i=0;i<N;i++){
+    let v, tg;
+    const roll=rng();
+    if(roll<0.10){ // the hidden black hole: very tight cluster
+      v=knot.map(k=>k+(rng()*2-1)*0.06); tg=99;
+    } else if(roll<0.78){ // normal clusters
+      const c=(rng()*5)|0; v=centers[c].map(k=>k+(rng()*2-1)*0.34); tg=c;
+    } else { // scattered field (creates the voids)
+      v=Array.from({length:7},()=>rng()*2-1); tg=-1;
+    }
+    P7.push(v); tribe.push(tg);
+  }
+}
+build();
+
+/* ---- projection: pick 3 of 7 axes (or linear combos) for x,y,z ---- */
+let ax={x:5,y:2,z:1};  // default: OrbitalR, Temporal, Belonging
+function project(){
+  P3=P7.map(v=>[v[ax.x]*300, v[ax.y]*300, v[ax.z]*300]);
+  vel=P7.map(()=>[0,0,0]);
+}
+project();
+
+/* ---- k-NN density (real anomaly math) ---- *
+ * For each node, distance to its k-th nearest neighbour in CURRENT 3D projection.
+ * Small kNN-dist = over-dense (black-hole candidate). Large local emptiness = void. */
+function knnDensity(k=8){
+  const n=P3.length; const dens=new Array(n);
+  for(let i=0;i<n;i++){
+    const di=[];
+    const a=P3[i];
+    for(let j=0;j<n;j++){ if(i===j)continue;
+      const b=P3[j]; const d=Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]); di.push(d);}
+    di.sort((x,y)=>x-y);
+    dens[i]=di[k]; // distance to k-th neighbour (smaller = denser)
+  }
+  return dens;
+}
+function detect(){
+  const dens=knnDensity(8);
+  const sorted=[...dens].sort((a,b)=>a-b);
+  const med=sorted[sorted.length>>1];
+  const q10=sorted[Math.floor(sorted.length*0.08)];
+  const q90=sorted[Math.floor(sorted.length*0.92)];
+  // black holes: contiguous clumps of very-low kNN-dist (over-dense)
+  holes=[]; voids=[];
+  // cluster over-dense nodes by proximity into holes
+  const dense=[]; for(let i=0;i<dens.length;i++) if(dens[i]<=q10) dense.push(i);
+  const used=new Set();
+  dense.forEach(i=>{ if(used.has(i))return;
+    const group=[i]; used.add(i);
+    for(const j of dense){ if(used.has(j))continue;
+      const d=Math.hypot(P3[i][0]-P3[j][0],P3[i][1]-P3[j][1],P3[i][2]-P3[j][2]);
+      if(d<70){group.push(j);used.add(j);} }
+    if(group.length>=4){
+      const cx=group.reduce((s,g)=>s+P3[g][0],0)/group.length;
+      const cy=group.reduce((s,g)=>s+P3[g][1],0)/group.length;
+      const cz=group.reduce((s,g)=>s+P3[g][2],0)/group.length;
+      const avgd=group.reduce((s,g)=>s+dens[g],0)/group.length;
+      holes.push({c:[cx,cy,cz],n:group.length,strength:+(med/avgd).toFixed(2),members:group});
+    }
+  });
+  holes.sort((a,b)=>b.strength-a.strength);
+  // voids: large empty spheres — sample points, keep those far from all nodes
+  for(let s=0;s<40;s++){
+    const p=[(Math.random()*2-1)*300,(Math.random()*2-1)*300,(Math.random()*2-1)*300];
+    let nearest=1e9;
+    for(const q of P3){const d=Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2]); if(d<nearest)nearest=d;}
+    if(nearest>q90*1.6) voids.push({c:p,r:nearest});
+  }
+  voids.sort((a,b)=>b.r-a.r); voids=voids.slice(0,3);
+  renderFindings();
+}
+
+/* ---- semantic identity: colony-types on agars (grounded in real microbiology) ----
+   Each cluster = a colony morphotype on a specific selective/differential agar.
+   This is the aggregation layer: a black hole isn't "14 nodes" but
+   "14 MRSA-positive colonies on CHROMagar clustering across plates". */
+const CLUSTER_MEANING=[
+  {name:'MRSA · CHROMagar', kind:'mauve colonies', axis:'mauve on CHROMagar MRSA II → S. aureus (MRSA)', disease:'MRSA colonisation / SSTI / bacteraemia'},
+  {name:'E. coli · MacConkey', kind:'pink lactose-fermenter colonies', axis:'pink on MacConkey → lactose-fermenting Gram-negative', disease:'UTI / coliform infection'},
+  {name:'Klebsiella · chromogenic', kind:'blue-green colonies', axis:'metallic blue-green on chromogenic UTI agar', disease:'UTI / hospital-acquired pneumonia'},
+  {name:'β-haemolytic Strep · blood agar', kind:'clearing-zone colonies', axis:'beta-haemolysis (clear zone) on blood agar', disease:'pharyngitis / cellulitis / invasive GAS'},
+  {name:'Candida · Sabouraud', kind:'creamy yeast colonies', axis:'creamy colonies on Sabouraud dextrose agar', disease:'candidiasis / fungaemia'},
+];
+const KNOT_MEANING={name:'Cross-plate knot', kind:'colonies from different agars', axis:'colonies from DIFFERENT plates/agars clustering — a link no single plate can see', disease:'possible outbreak strain or shared resistance vector'};
+const FIELD_MEANING={name:'No significant growth', kind:'sparse / contaminant colonies', axis:'isolated colonies, no shared pattern', disease:'—'};
+function meaningOf(t){ return t===99?KNOT_MEANING : t===-1?FIELD_MEANING : CLUSTER_MEANING[t%CLUSTER_MEANING.length]; }
+const DEPT_RGB=[[0.72,0.45,0.78],[0.95,0.55,0.70],[0.35,0.80,0.75],[0.70,0.90,0.75],[0.95,0.90,0.70]];
+function fillAggrLegend(){
+  const el=document.getElementById('aggr-legend'); if(!el)return;
+  const rows=CLUSTER_MEANING.map((m,i)=>{
+    const c=DEPT_RGB[i%DEPT_RGB.length].map(x=>Math.round(x*255));
+    return `<div style="display:flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:2px;background:rgb(${c[0]},${c[1]},${c[2]})"></span>${m.name.split(' · ')[0]}</div>`;
+  }).join('');
+  el.innerHTML=rows+
+    `<div style="display:flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;background:#e0533f"></span>hidden knot (cross-domain)</div>`+
+    `<div style="display:flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;background:#6b7396"></span>field (unlinked)</div>`;
+}
+// dominant meaning of a set of member indices
+function dominantMeaning(members){
+  const counts={};
+  members.forEach(i=>{const m=meaningOf(tribe[i]).name;counts[m]=(counts[m]||0)+1;});
+  const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  return {name:top[0], share:top[1], total:members.length, mixed:Object.keys(counts).length>1};
+}
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x03040c,0.0009);
+const camera=new THREE.PerspectiveCamera(55,2,0.1,8000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x03040c,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8090c0,0.9));
+
+// starfield
+(function(){const M=1400,p=new Float32Array(M*3);
+ for(let i=0;i<M;i++){p[i*3]=(Math.random()-.5)*4000;p[i*3+1]=(Math.random()-.5)*3000;p[i*3+2]=(Math.random()-.7)*3000;}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));
+ scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x1a2148,size:1.2,transparent:true,opacity:.55})));})();
+
+// nodes as a single Points cloud (GPU)
+let nodeGeo=new THREE.BufferGeometry(), nodePts, nodeCol;
+function buildNodePoints(){
+  const pos=new Float32Array(N*3), col=new Float32Array(N*3);
+  nodeGeo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  nodeGeo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  nodeCol=col;
+  if(nodePts)scene.remove(nodePts);
+  nodePts=new THREE.Points(nodeGeo,new THREE.PointsMaterial({size:6,vertexColors:true,transparent:true,opacity:.95,sizeAttenuation:true}));
+  scene.add(nodePts);
+}
+buildNodePoints();
+
+// filaments (links between near neighbours) as line segments
+let linkLines;
+let adjacency=[];  // real neighbour list per node (from data, not projection)
+function buildLinks(){
+  if(linkLines)scene.remove(linkLines);
+  const segs=[];
+  adjacency=Array.from({length:N},()=>[]);
+  // REAL edges: connect nodes that share a latent tribe (a genuine dependency),
+  // plus each node to its tribe's "spine". These are data relationships — they
+  // mean the same thing in every projection, so an edge actually tells you something.
+  const byTribe={};
+  for(let i=0;i<N;i++){ const t=tribe[i]; if(t===-1)continue; (byTribe[t]=byTribe[t]||[]).push(i); }
+  Object.values(byTribe).forEach(members=>{
+    // link each member to a few others in the SAME tribe (real co-membership)
+    const rng=mulberry32(members[0]*31+7);
+    members.forEach((i,idx)=>{
+      const links=1+((rng()*2)|0);
+      for(let l=0;l<links;l++){
+        const j=members[(idx+1+((rng()*members.length)|0))%members.length];
+        if(j!==i){ segs.push(i,j); adjacency[i].push(j); adjacency[j].push(i); }
+      }
+    });
+  });
+  linkLines=new THREE.LineSegments(new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({color:0x3f5590,transparent:true,opacity:.24,vertexColors:true}));
+  linkLines.userData.pairs=segs;
+  scene.add(linkLines);
+  updateLinks();
+}
+function updateLinks(){
+  const pairs=linkLines.userData.pairs; const pos=new Float32Array(pairs.length*3);
+  const col=new Float32Array(pairs.length*3);
+  for(let k=0;k<pairs.length;k++){const i=pairs[k];
+    pos[k*3]=P3[i][0];pos[k*3+1]=P3[i][1];pos[k*3+2]=P3[i][2];
+    // highlight edges touching the selected node
+    const hot=(selected>=0 && (pairs[k]===selected || pairs[k^1]===selected || pairs[k-(k%2)]===selected || pairs[k-(k%2)+1]===selected));
+    if(hot){col[k*3]=0.9;col[k*3+1]=0.83;col[k*3+2]=0.35;}
+    else{col[k*3]=0.25;col[k*3+1]=0.33;col[k*3+2]=0.56;}
+  }
+  linkLines.geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  linkLines.geometry.setAttribute('color',new THREE.BufferAttribute(col,3));
+  linkLines.geometry.attributes.position.needsUpdate=true;
+}
+
+// black-hole warp meshes
+let holeMeshes=[];
+function buildHoleMeshes(){
+  holeMeshes.forEach(m=>scene.remove(m)); holeMeshes=[];
+  holes.forEach(h=>{
+    const g=new THREE.Group(); g.position.set(...h.c);
+    const core=new THREE.Mesh(new THREE.SphereGeometry(6+h.strength*3,20,20),
+      new THREE.MeshBasicMaterial({color:0x1a0603}));
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(18+h.strength*6,1.5,10,48),
+      new THREE.MeshBasicMaterial({color:0xe0533f,transparent:true,opacity:.8}));
+    const glow=new THREE.Mesh(new THREE.SphereGeometry(30+h.strength*10,24,24),
+      new THREE.MeshBasicMaterial({color:0xe0533f,transparent:true,opacity:.06,side:THREE.BackSide}));
+    g.add(core,ring,glow); g.userData.hole=h;
+    scene.add(g); holeMeshes.push(g);
+  });
+}
+let voidMeshes=[];
+function buildVoidMeshes(){
+  voidMeshes.forEach(m=>scene.remove(m)); voidMeshes=[];
+  voids.forEach(v=>{
+    const m=new THREE.Mesh(new THREE.SphereGeometry(v.r*0.7,20,16),
+      new THREE.MeshBasicMaterial({color:0x3a2f6b,wireframe:true,transparent:true,opacity:.18}));
+    m.position.set(...v.c); scene.add(m); voidMeshes.push(m);
+  });
+}
+
+/* ---- force simulation (positions earned, not assigned) ---- *
+ * repulsion (all-pairs approx via grid would be ideal; N=420 fine for O(N^2)/frame budget:
+ * we subsample repulsion for speed) + attraction along filaments + mild centering. */
+let simOn=!reduced, warpOn=true, linksOn=true, spin=!reduced;
+let selected=-1, pinned=false, activeFinding=null;
+let temp=1.0;   // simulated-annealing temperature: high early, cools to stable
+function step(dt){
+  const n=N; const k_rep=1400, k_att=0.020, center=0.0016;
+  const pairs=linkLines?linkLines.userData.pairs:[];
+  const damp=0.80, vmax=6*temp+0.5;
+  for(let i=0;i<n;i++){
+    if(i===selected && pinned){vel[i][0]=vel[i][1]=vel[i][2]=0; continue;} // pinned node holds
+    let fx=0,fy=0,fz=0; const a=P3[i];
+    for(let s=0;s<44;s++){ const j=(Math.random()*n)|0; if(j===i)continue; const b=P3[j];
+      let dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2]; let d2=dx*dx+dy*dy+dz*dz+25;
+      const f=k_rep/d2; fx+=dx*f;fy+=dy*f;fz+=dz*f; }
+    fx-=a[0]*center; fy-=a[1]*center; fz-=a[2]*center;
+    vel[i][0]=(vel[i][0]+fx*dt)*damp; vel[i][1]=(vel[i][1]+fy*dt)*damp; vel[i][2]=(vel[i][2]+fz*dt)*damp;
+  }
+  // attraction along REAL edges (shared-tribe dependencies) — pulls the web together
+  for(let k=0;k<pairs.length;k+=2){ const i=pairs[k],j=pairs[k+1]; if(j===undefined)continue;
+    const a=P3[i],b=P3[j]; const dx=b[0]-a[0],dy=b[1]-a[1],dz=b[2]-a[2];
+    vel[i][0]+=dx*k_att; vel[i][1]+=dy*k_att; vel[i][2]+=dz*k_att;
+    vel[j][0]-=dx*k_att; vel[j][1]-=dy*k_att; vel[j][2]-=dz*k_att;
+  }
+  for(let i=0;i<n;i++){
+    // clamp speed (prevents fling-off) and integrate
+    const sp=Math.hypot(vel[i][0],vel[i][1],vel[i][2]);
+    if(sp>vmax){const s=vmax/sp;vel[i][0]*=s;vel[i][1]*=s;vel[i][2]*=s;}
+    P3[i][0]+=vel[i][0]*dt*60; P3[i][1]+=vel[i][1]*dt*60; P3[i][2]+=vel[i][2]*dt*60;
+    // soft bound to a sphere so it always stays framed
+    const R=460, d=Math.hypot(P3[i][0],P3[i][1],P3[i][2]);
+    if(d>R){const s=R/d;P3[i][0]*=s;P3[i][1]*=s;P3[i][2]*=s;vel[i][0]*=0.5;vel[i][1]*=0.5;vel[i][2]*=0.5;}
+  }
+  temp=Math.max(0.06, temp*0.992);   // cool toward a stable frozen web
+}
+
+/* ---- projection UI ---- */
+function fillAxes(){
+  [['ax-x','x'],['ax-y','y'],['ax-z','z']].forEach(([id,key])=>{
+    const sel=document.getElementById(id);
+    sel.innerHTML=AXES.map((a,i)=>`<option value="${i}" ${ax[key]===i?'selected':''}>${a}</option>`).join('');
+    sel.onchange=()=>{ax[key]=+sel.value; reproject();};
+  });
+}
+function reproject(){ temp=1.0; project(); buildLinks(); settle(30); detect(); buildHoleMeshes(); buildVoidMeshes(); }
+fillAxes();
+/* ============================================================= *
+ * THE BĀRÛ — the Pattern-Diviner's hunt (Têrtu Engine)
+ * Fused navigation: (1) density gradient-ascent — the scent trail that
+ * follows clusters uphill to the densest knot; (2) projection-sweep —
+ * rotates 7D→3D to find the view where that knot is sharpest; then
+ * (3) issues a reading (Shape Verdict). Morphology proposes; algebra proves.
+ * ============================================================= */
+let baruOn=false, baruPhase='idle', baruTrail=[], baruTimer=0, baruTarget=null, baruProbe=null;
+let baruTrailLine=null;
+function baruDensityAt(p){ // kNN-ish local density at an arbitrary point (small = dense)
+  let dmin=[]; for(let i=0;i<N;i++){const d=Math.hypot(p[0]-P3[i][0],p[1]-P3[i][1],p[2]-P3[i][2]);dmin.push(d);}
+  dmin.sort((a,b)=>a-b); return (dmin[1]+dmin[2]+dmin[3]+dmin[4])/4; // avg dist to 4 nearest
+}
+function baruGradientStep(p){ // move toward INCREASING density = DECREASING kNN dist
+  const h=26, base=baruDensityAt(p);
+  const gx=(baruDensityAt([p[0]+h,p[1],p[2]])-base);
+  const gy=(baruDensityAt([p[0],p[1]+h,p[2]])-base);
+  const gz=(baruDensityAt([p[0],p[1],p[2]+h])-base);
+  const g=[-gx,-gy,-gz]; const m=Math.hypot(g[0],g[1],g[2])||1; // descend kNN dist
+  const step=34;
+  return [p[0]+g[0]/m*step, p[1]+g[1]/m*step, p[2]+g[2]/m*step];
+}
+function baruBestProjectionFor(members){
+  // sweep all axis triples; pick the projection where these members are tightest (sharpest)
+  let best=null, bestScore=1e9;
+  const combos=[];
+  for(let a=0;a<7;a++)for(let b=a+1;b<7;b++)for(let c=b+1;c<7;c++)combos.push([a,b,c]);
+  combos.forEach(([a,b,c])=>{
+    // spread of members in this projection (smaller = sharper cluster)
+    let mx=0,my=0,mz=0; members.forEach(i=>{mx+=P7[i][a];my+=P7[i][b];mz+=P7[i][c];});
+    mx/=members.length;my/=members.length;mz/=members.length;
+    let spread=0; members.forEach(i=>{spread+=Math.hypot(P7[i][a]-mx,P7[i][b]-my,P7[i][c]-mz);});
+    spread/=members.length;
+    if(spread<bestScore){bestScore=spread;best=[a,b,c];}
+  });
+  return {axes:best, sharpness:+(1/(bestScore+0.01)).toFixed(2)};
+}
+function baruSay(html){document.getElementById('baru-say').innerHTML=html;}
+function baruStart(){
+  baruOn=true; document.getElementById('baru').style.display='block';
+  // start the scent from screen center-ish, or from selected node
+  const start = selected>=0 ? P3[selected].slice() : [0,0,0];
+  baruTrail=[start]; baruPhase='scent'; baruTimer=0; baruProbe=start.slice();
+  baruSay('following the scent — walking uphill on the density field toward the nearest knot…');
+}
+function baruStop(){baruOn=false;document.getElementById('baru').style.display='none';
+  if(baruTrailLine){scene.remove(baruTrailLine);baruTrailLine=null;}
+  document.getElementById('btn-baru').classList.remove('on');}
+function baruStep(dt){
+  if(!baruOn)return;
+  baruTimer+=dt;
+  if(baruPhase==='scent'){
+    if(baruTimer>0.12){ baruTimer=0;
+      const next=baruGradientStep(baruProbe);
+      // arrived if we stop moving much
+      const moved=Math.hypot(next[0]-baruProbe[0],next[1]-baruProbe[1],next[2]-baruProbe[2]);
+      baruProbe=next; baruTrail.push(next.slice());
+      camTarget.set(next[0],next[1],next[2]); camDistT=Math.max(180,camDist*0.98);
+      drawTrail();
+      if(baruTrail.length>40 || moved<3){ // converged
+        // which detected knot are we nearest to?
+        let best=null,bd=1e9; holes.forEach(h=>{const d=Math.hypot(h.c[0]-next[0],h.c[1]-next[1],h.c[2]-next[2]);if(d<bd){bd=d;best=h;}});
+        baruTarget=best; baruPhase='sweep'; baruTimer=0;
+        if(best){ baruSay('scent converged on a knot — now turning the sky to find the projection where it reads clearest…'); }
+        else { baruSay('scent found a local density rise but no confirmed knot here. The absence may itself be a finding (void). Try another start.'); baruPhase='done'; }
+      }
+    }
+  } else if(baruPhase==='sweep'){
+    if(baruTimer>0.6){ baruTimer=0;
+      const bp=baruBestProjectionFor(baruTarget.members);
+      ax.x=bp.axes[0];ax.y=bp.axes[1];ax.z=bp.axes[2];
+      document.getElementById('ax-x').value=ax.x;document.getElementById('ax-y').value=ax.y;document.getElementById('ax-z').value=ax.z;
+      reproject();
+      baruPhase='read'; baruTimer=0;
+      baruSay(`sharpest in the <b style="color:var(--gold)">${AXES[bp.axes[0]]}×${AXES[bp.axes[1]]}×${AXES[bp.axes[2]]}</b> projection (sharpness ${bp.sharpness}). Reading the pattern…`);
+    }
+  } else if(baruPhase==='read'){
+    if(baruTimer>0.9){ baruTimer=0; baruPhase='done';
+      const dm=dominantMeaning(baruTarget.members);
+      const verdict = dm.mixed
+        ? 'VERDICT 3 · HIDDEN DEPENDENCY — colonies from different plates cluster here. A link the schema never named. Inspect for a shared attribute (outbreak strain? shared resistance?).'
+        : 'VERDICT 1 · NEW PATTERN — a tight cohort of '+dm.name+'. Consider minting it as a named sub-pattern in the arsenal.';
+      baruSay(`◆ <b style="color:var(--gold)">The Bārû reads:</b> ${baruTarget.n} colonies, mostly <b>${dm.name}</b>, over-density ×${baruTarget.strength}.<br><b style="color:var(--signal)">${verdict}</b><br><span style="color:var(--ink-faint)">Morphology proposed the path; confirm with a HeptaScript PROVE query before it is called a finding.</span>`);
+    }
+  }
+}
+function drawTrail(){
+  if(baruTrailLine)scene.remove(baruTrailLine);
+  const pos=new Float32Array(baruTrail.length*3);
+  baruTrail.forEach((p,i)=>{pos[i*3]=p[0];pos[i*3+1]=p[1];pos[i*3+2]=p[2];});
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  baruTrailLine=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xE3B458,transparent:true,opacity:.9}));
+  scene.add(baruTrailLine);
+}
+document.getElementById('btn-baru').onclick=()=>{
+  const b=document.getElementById('btn-baru');
+  if(baruOn){baruStop();} else {b.classList.add('on');baruStart();}
+};
+
+fillAggrLegend();
+
+function settle(iter){ for(let s=0;s<iter;s++) step(0.016); }
+
+/* first layout */
+buildLinks(); settle(40); detect(); buildHoleMeshes(); buildVoidMeshes();
+
+/* ---- findings panel ---- */
+function renderFindings(){
+  const holeCards=holes.slice(0,4).map((h,i)=>{
+    const dm=dominantMeaning(h.members);
+    const readable = dm.mixed
+      ? `${h.n} records from <b>different departments</b> packing together — a cross-domain pattern that shouldn't exist unless they share a hidden attribute.`
+      : `${h.n} records, mostly <b>${dm.name}</b> — clustering far tighter than the field. They share a concept the schema may not have named yet.`;
+    return `
+    <div class="find hole ${activeFinding==='h'+i?'active':''}" data-f="h${i}">
+      <div class="ft"><span class="fn">Black hole ${i+1}</span><span class="sc">×${h.strength} density</span></div>
+      <div class="fb">${readable}</div>
+      <div class="stat">kNN over-density ×${h.strength} · ${h.n} members · ${dm.mixed?'MIXED domains ⚠':dm.name}</div>
+      <div style="font-family:var(--f-data);font-size:9px;color:var(--ink-faint);margin-top:4px">what to do: inspect these records for the shared attribute — it may be a new schema (Verdict 1) or a hidden dependency (Verdict 3)</div>
+    </div>`;}).join('');
+  const voidCards=voids.map((v,i)=>`
+    <div class="find void ${activeFinding==='v'+i?'active':''}" data-f="v${i}">
+      <div class="ft"><span class="fn">Void ${i+1}</span><span class="sc">r≈${Math.round(v.r)}</span></div>
+      <div class="fb">A suspicious emptiness — a large region no data occupies. Sometimes the absence is the finding.</div>
+      <div class="stat">empty radius ≈ ${Math.round(v.r)} units</div>
+    </div>`).join('');
+  document.getElementById('find-list').innerHTML=
+    (holes.length?holeCards:'<div style="color:var(--ink-faint);font-size:11px">No over-density in this projection. Rotate the axes — it may hide elsewhere.</div>')
+    + voidCards;
+  document.querySelectorAll('.find').forEach(el=>el.onclick=()=>{
+    activeFinding=activeFinding===el.dataset.f?null:el.dataset.f; flyTo(el.dataset.f); renderFindings();});
+}
+let camTarget=new THREE.Vector3(0,0,0), camDist=760, camDistT=760;
+function flyTo(f){
+  let c;
+  if(f[0]==='h'){const h=holes[+f.slice(1)];c=h&&h.c;}
+  else{const v=voids[+f.slice(1)];c=v&&v.c;}
+  if(c){camTarget.set(c[0],c[1],c[2]); camDistT=f[0]==='h'?170:v?260:760;}
+}
+
+/* ---- camera ---- */
+let az=0.5, el=0.4, dragging=false, lx=0, ly=0, dragMoved=false;
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(80,Math.min(1800,camDistT*(1+Math.sign(e.deltaY)*0.09)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>{dragging=false; setTimeout(()=>dragMoved=false,50);});
+addEventListener('mousemove',e=>{if(!dragging)return;
+  if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)dragMoved=true;
+  az-=(e.clientX-lx)*0.005;el=Math.max(-1.4,Math.min(1.4,el+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;});
+
+function pickNode(clientX,clientY){
+  const r=renderer.domElement.getBoundingClientRect();
+  let best=-1,bd=18;
+  for(let i=0;i<N;i++){const v=new THREE.Vector3(P3[i][0],P3[i][1],P3[i][2]).project(camera);
+    if(v.z>=1)continue;const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;
+    const d=Math.hypot(clientX-r.left-sx,clientY-r.top-sy);if(d<bd){bd=d;best=i;}}
+  return best;
+}
+renderer.domElement.addEventListener('click',e=>{
+  if(dragMoved) return;                    // don't select at the end of an orbit-drag
+  const i=pickNode(e.clientX,e.clientY);
+  if(i>=0){ selected=i; pinned=true; showSelected(i); }
+  else { selected=-1; pinned=false; document.getElementById('read').style.display='none';
+    const ap=document.getElementById('apas'); if(ap)ap.style.display='block'; }
+});
+function showSelected(i){
+  const rd=document.getElementById('read'); rd.style.display='block';
+  const ap=document.getElementById('apas'); if(ap)ap.style.display='none';
+  const t=tribe[i]; const m=meaningOf(t);
+  const nbrs=[...new Set(adjacency[i])];
+  const nbrMeanings={};
+  nbrs.forEach(j=>{const nm=meaningOf(tribe[j]).name;nbrMeanings[nm]=(nbrMeanings[nm]||0)+1;});
+  const nbrSummary=Object.entries(nbrMeanings).map(([k,v])=>`${v}× ${k.split(' · ')[0]}`).join(', ')||'none';
+  rd.innerHTML=`<div class="n">◉ ${m.name} <span style="font-size:10px;color:var(--signal)">PINNED · click empty space to release</span></div>
+    <div class="row"><span class="k">this record is</span><span class="v">${m.kind}</span></div>
+    <div class="row"><span class="k">grouped because</span><span class="v" style="max-width:60%;text-align:right">${m.axis}</span></div>
+    <div class="row"><span class="k">real dependencies</span><span class="v">${nbrs.length} shared-concept links</span></div>
+    <div class="row"><span class="k">connected to</span><span class="v" style="max-width:60%;text-align:right">${nbrSummary}</span></div>
+    <div class="row"><span class="k">${AXES[ax.x]}</span><span class="v">${P7[i][ax.x].toFixed(3)}</span></div>
+    <div class="row"><span class="k">${AXES[ax.y]}</span><span class="v">${P7[i][ax.y].toFixed(3)}</span></div>
+    <div class="row"><span class="k">${AXES[ax.z]}</span><span class="v">${P7[i][ax.z].toFixed(3)}</span></div>
+    <div style="font-family:var(--f-data);font-size:9.5px;color:var(--ink-faint);margin-top:6px">gold edges = shared-concept dependencies · the axis numbers are this record's position on the 3 Hepta dimensions you're viewing</div>`;
+}
+renderer.domElement.addEventListener('mousemove',e=>{
+  if(pinned)return;                        // pinned selection stays until released
+  const best=pickNode(e.clientX,e.clientY);
+  const rd=document.getElementById('read');
+  if(best>=0){rd.style.display='block';
+    const t=tribe[best];
+    rd.innerHTML=`<div class="n">Node ${best} <span style="font-size:10px;color:var(--ink-faint)">click to pin</span></div>
+      <div class="row"><span class="k">group (rediscovered)</span><span class="v">${t===99?'black-hole knot':t===-1?'field':'cluster '+t}</span></div>
+      <div class="row"><span class="k">real dependencies</span><span class="v">${[...new Set(adjacency[best])].length} edges</span></div>
+      <div class="row"><span class="k">${AXES[ax.x]}</span><span class="v">${P7[best][ax.x].toFixed(3)}</span></div>
+      <div class="row"><span class="k">${AXES[ax.y]}</span><span class="v">${P7[best][ax.y].toFixed(3)}</span></div>
+      <div class="row"><span class="k">${AXES[ax.z]}</span><span class="v">${P7[best][ax.z].toFixed(3)}</span></div>`;
+  } else rd.style.display='none';
+});
+
+/* controls */
+const wire=(id,set)=>{const b=document.getElementById(id);b.onclick=()=>{const v=set();b.classList.toggle('on',v);};};
+wire('btn-sim',()=>simOn=!simOn);
+wire('btn-holes',()=>{warpOn=!warpOn;holeMeshes.forEach(m=>m.visible=warpOn);voidMeshes.forEach(m=>m.visible=warpOn);return warpOn;});
+wire('btn-links',()=>{linksOn=!linksOn;if(linkLines)linkLines.visible=linksOn;return linksOn;});
+wire('btn-spin',()=>spin=!spin);
+document.getElementById('btn-reseed').onclick=()=>{seed=(seed*1103515245+12345)&0x7fffffff;N=420;selected=-1;pinned=false;temp=1.0;build();reproject();buildNodePoints();};
+
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+let last=0, redetect=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(simOn && !baruOn){ step(dt); }
+  baruStep(dt);
+  // periodic re-detect as structure settles (paused during Bārû hunt)
+  redetect+=dt; if(redetect>1.2 && simOn && !baruOn){redetect=0; detect(); buildHoleMeshes(); buildVoidMeshes(); holeMeshes.forEach(m=>m.visible=warpOn);voidMeshes.forEach(m=>m.visible=warpOn);}
+  // push positions to GPU buffers
+  const pos=nodeGeo.attributes.position.array, col=nodeCol;
+  const nbrSet = selected>=0 ? new Set(adjacency[selected]) : null;
+  for(let i=0;i<N;i++){
+    pos[i*3]=P3[i][0];pos[i*3+1]=P3[i][1];pos[i*3+2]=P3[i][2];
+    const t=tribe[i];
+    let c;
+    if(i===selected){c=[1.0,0.86,0.35];}            // selected = gold
+    else if(nbrSet&&nbrSet.has(i)){c=[0.6,0.9,0.85];} // real neighbours = teal
+    else if(t===99){c=[1.0,0.42,0.30];}             // hidden knot = red
+    else if(t===-1){c=[0.42,0.46,0.62];}            // field = grey-blue
+    else {c=DEPT_RGB[t%DEPT_RGB.length];}           // department colour
+    col[i*3]=c[0];col[i*3+1]=c[1];col[i*3+2]=c[2];
+  }
+  nodeGeo.attributes.position.needsUpdate=true; nodeGeo.attributes.color.needsUpdate=true;
+  if(linkLines&&linksOn) updateLinks();
+  holeMeshes.forEach(g=>{g.children[1].rotation.z+=dt*0.8;g.children[1].rotation.x+=dt*0.3;
+    const s=1+Math.sin(ts/400)*0.05;g.children[2].scale.setScalar(s);});
+  if(spin)az+=dt*0.05;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*3);
+  const ct=camTarget;
+  camera.position.set(ct.x+Math.cos(az)*Math.cos(el)*camDist, ct.y+Math.sin(el)*camDist, ct.z+Math.sin(az)*Math.cos(el)*camDist);
+  camera.lookAt(ct);
+  renderer.render(scene,camera);
+}
+function hsl(h,s,l){ // → rgb 0..1
+  const a=s*Math.min(l,1-l); const f=n=>{const k=(n+h*12)%12;return l-a*Math.max(-1,Math.min(k-3,9-k,1));};
+  return [f(0),f(8),f(4)];
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

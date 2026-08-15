@@ -1,0 +1,108 @@
+# =============================================================================
+# PB-182 — "No Tree in the Orbits": full BTreeMap audit + removal
+# BahyWay.Ecosystem v4.0 — 2026-07-13
+#
+# CONTEXT: the Architect had already dismissed BTreeRange ("there is no tree
+# in the Orbits") -- confirmed earlier this session as dead code, replaced by
+# RadixSplineIndex. The Architect then asked directly whether the SAME
+# objection applies to Temporal (Index 4) and Snapshot (Index 7), which the
+# Architect had just discovered (via an uploaded lib.rs) still describe
+# themselves as "native LSM" and "sparse B-tree" in their doc comments.
+# Explicit instruction: advise on bottleneck risk under parallel access: keep
+# if safe, remove if not. Architect confirmed proceeding with the
+# tree-free-replacement option for whichever fails.
+#
+# THE AUDIT (grep for BTreeMap/BTreeSet/BTree across every file in
+# crates/enkidb-indexes/src, then read every hit in context):
+#
+#   BTreeRange   -- already dead code, already replaced. No action.
+#
+#   Temporal (Index 4) -- BTreeMap<u16, Vec<u32>>. VERDICT: bounded, safe.
+#     The outer key is a u16 (kappa[12..13], compressed epoch) -- at most
+#     65,536 tree nodes NO MATTER HOW MANY PARTICLES EXIST. Read-only after
+#     batch build, shared via &TemporalIndex across threads with zero lock
+#     contention (Rust allows unlimited concurrent immutable borrows with no
+#     runtime synchronization). This does NOT have BTreeRange's failure mode
+#     (one node per particle). Replaced anyway with a direct-indexed
+#     Vec<Vec<u32>> array (65,536 fixed slots) -- strictly faster (O(1) not
+#     O(log 65536)), zero pointer-chasing, and genuinely tree-free rather
+#     than "a tree that happens not to be a bottleneck." Matches the flat,
+#     direct/computed-index idiom surrogate/radix_spline/hepta_shell already
+#     use elsewhere in this same crate.
+#
+#   Snapshot (Index 7) -- BTreeMap<u32, BTreeMap<u64, SnapshotIndexEntry>>.
+#     VERDICT: FAILS. The OUTER key is uuid_hash -- one tree node PER
+#     PARTICLE, up to 1 billion nodes. This is the EXACT SAME failure shape
+#     that made BTreeRange cost 12GB at 1B particles: an outer tree keyed by
+#     the thing you have billions of, not by a bounded domain. Genuinely
+#     bottlenecks at scale (memory overhead, pointer-chasing, poor cache
+#     locality) -- both structurally AND under the Architect's stated
+#     bottleneck criterion. REPLACED with
+#     HashMap<uuid_hash, Vec<(epoch, entry)>>, each particle's list kept
+#     sorted by epoch (insertion-sort on write, binary search / partition_point
+#     on read). "Sparse" -- this index's own §9.3 description -- means each
+#     list is typically tiny, so latest_before() is a binary search over a
+#     handful of contiguous entries, never a function of total particle count.
+#
+#   BONUS FINDING (not explicitly asked, fixed while auditing): ColorID
+#   Spatial (Index 5) also had a misleading doc comment -- "native R-tree
+#   variant" -- but its actual implementation already uses a plain HashMap +
+#   bounding-box scan (no tree, ever). Comment corrected to say so plainly;
+#   no code change needed there, it was already compliant.
+#
+# WHAT WAS BUILT:
+#   - crates/enkidb-indexes/src/temporal/mod.rs: BTreeMap -> Vec<Vec<u32>>
+#     direct-indexed array (65,536 fixed epoch buckets). Same public API
+#     (new/insert/range_query/at) -- zero changes needed at any call site.
+#   - crates/enkidb-indexes/src/snapshot_idx/mod.rs: nested BTreeMap ->
+#     HashMap<u32, Vec<(u64, SnapshotIndexEntry)>>, sorted-insert + binary
+#     search. Same public API (new/insert/latest_before) -- zero call-site
+#     changes. New tests added: out-of-order inserts still sort correctly,
+#     duplicate-epoch insert overwrites (not duplicates, matching the old
+#     BTreeMap::insert semantics exactly), particles stay isolated from
+#     each other.
+#   - crates/enkidb-indexes/src/colorid/mod.rs: doc comment corrected
+#     ("R-tree variant" -> honest description of the real HashMap+scan).
+#   - crates/enkidb-indexes/src/lib.rs: the module-level doc comment
+#     rewritten from scratch -- the two never-reconciled numbering schemes
+#     (an original "Index 1-7" concept list, and a separate later "W5H2
+#     Performance Optimisations" addendum covering the 5 modules added
+#     since) are now ONE table matching the actual 13 modules that exist
+#     in the crate today, with an explicit "NO TREE IN THE ORBITS ...
+#     confirmed by audit 2026-07-13" statement at the top.
+#
+# CONFIRMED BY GREP: zero `BTreeMap`/`BTreeSet`/`BTree` remain anywhere in
+# crates/enkidb-indexes/src in production code. The one surviving BTreeSet
+# hit is inside a #[cfg(test)] unit test (a throwaway 4-element dedup-and-
+# count assertion in bloom's tests, unrelated to any index's data
+# structure) -- left as-is, it is not part of any index.
+#
+# TESTS: enkidb-indexes 55/55 -> 58/58 (+3: temporal boundary-timestamps,
+#   snapshot out-of-order-inserts, snapshot duplicate-epoch-overwrite,
+#   snapshot particle-isolation -- net +3 after also removing none).
+#   enkidb-engine (the only consumer of TemporalIndex/SnapshotIndex) builds
+#   clean, zero call-site changes needed -- same public API preserved on
+#   both replaced modules. Full workspace: 3416 passed, 0 failed (was 3412).
+#
+# STILL OPEN: this closes the "no tree in the Orbits" audit for
+# enkidb-indexes specifically. The still-unresolved question from earlier
+# this session -- reconciling the two different "how many ENLIL indexes"
+# counts (the original 7-item doc-comment list vs. the newer "6 ENLIL
+# indexes" language in the Architecture Reference / W5H2 guide) into one
+# canonical, named list -- remains open; this playbook fixes the tree
+# question, not the counting question.
+# =============================================================================
+---
+- name: "PB-182 | Record — no-tree-in-the-Orbits audit: Temporal + Snapshot indexes de-treed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-182.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-13. Changed: crates/enkidb-indexes/src/{temporal,snapshot_idx,
+          colorid,lib}.rs. Run `cargo test -p enkidb-indexes` for the standing
+          proof: 58 passed, 0 failed. Confirmed by grep: zero production
+          BTreeMap/BTreeSet remain in the crate.

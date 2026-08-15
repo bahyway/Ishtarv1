@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠASÛ Orbit Workbench — EnkiDDB Segments · Šala Prototype v2</title>
+<style>
+  :root{
+    --kur:#0E0B14; --kur-2:#161221; --line:#2b2440;
+    --clay:#C8A272; --clay-dim:#8a7050;
+    --lapis:#3D6BD8; --lapis-deep:#2E4E8F;
+    --gold:#E3B341; --carnelian:#C4554D; --jade:#5FA97C;
+    --violet:#8b6fd8;
+    --bone:#EDE4D3; --bone-dim:#a89f8e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--kur);color:var(--bone);
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:16px;line-height:1.6;overflow-x:hidden}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  header{padding:5vh 5vw 3vh;border-bottom:1px solid var(--line)}
+  header h1{font-size:clamp(28px,4.4vw,54px);font-weight:600}
+  header h1 em{font-style:normal;color:var(--gold)}
+  header p{max-width:74ch;color:var(--bone-dim);margin-top:8px}
+  .lawband{display:inline-block;border:1px solid var(--clay-dim);color:var(--clay);
+    padding:6px 14px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-top:16px}
+  .bar{display:flex;gap:12px;flex-wrap:wrap;padding:18px 5vw;border-bottom:1px solid var(--line);
+    background:var(--kur-2);position:sticky;top:0;z-index:40}
+  button.rite{font-family:inherit;font-size:14px;letter-spacing:.06em;cursor:pointer;
+    background:transparent;color:var(--gold);border:1px solid var(--gold);
+    padding:9px 18px;transition:background .2s,color .2s}
+  button.rite:hover,button.rite:focus{background:var(--gold);color:var(--kur);outline:none}
+  button.rite.blue{color:var(--lapis);border-color:var(--lapis)}
+  button.rite.blue:hover,button.rite.blue:focus{background:var(--lapis);color:var(--kur)}
+  button.rite:disabled{opacity:.35;cursor:default}
+  button.rite:disabled:hover{background:transparent;color:var(--gold)}
+  .stage{position:relative;display:grid;grid-template-columns:1fr 340px;gap:0}
+  @media(max-width:980px){.stage{grid-template-columns:1fr}}
+  canvas#orbit{width:100%;height:660px;display:block;
+    background:radial-gradient(ellipse at 45% 45%, #141021 0%, #0a0810 75%)}
+  /* right dock: journal + story panel */
+  .dock{border-left:1px solid var(--line);background:#0c0913;display:flex;
+    flex-direction:column;max-height:660px}
+  .dock h4{padding:10px 14px;border-bottom:1px solid var(--line);color:var(--clay);
+    font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+  .journal{flex:1;overflow:auto;padding:10px 14px;font-size:12.5px;min-height:120px}
+  .journal .j{opacity:0;transform:translateY(4px);transition:all .4s;
+    color:var(--bone-dim);padding:3px 0;border-bottom:1px dotted #221c33}
+  .journal .j.show{opacity:1;transform:none}
+  .journal .j b{color:var(--jade)} .journal .j .rid{color:var(--gold)}
+  .story{border-top:1px solid var(--line);max-height:56%;overflow:auto;display:none}
+  .story.open{display:block}
+  .story .ph{padding:10px 14px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center}
+  .story .ph b{color:var(--gold);font-size:13px}
+  .story .ph button{background:none;border:none;color:var(--bone-dim);cursor:pointer;font-size:15px}
+  .story .body{padding:12px 14px;font-size:13px}
+  .ev{padding:6px 0;border-bottom:1px dotted #221c33;color:var(--bone-dim)}
+  .ev .et{color:var(--lapis);font-size:11px;letter-spacing:.08em}
+  .ev.edit .et{color:var(--carnelian)}
+  .editform textarea{width:100%;background:#0a0810;color:var(--bone);
+    border:1px solid var(--line);padding:8px;font-family:inherit;font-size:13px;
+    min-height:64px;margin:8px 0}
+  .editnote{font-size:11.5px;color:var(--carnelian);margin-bottom:8px}
+  .kakiline{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--bone-dim);
+    word-break:break-all;padding:8px 0}
+  .kakiline .u{color:var(--lapis)} .kakiline .t{color:var(--gold)}
+  .kakiline .y{color:var(--jade)} .kakiline .r{color:var(--clay)}
+  .kakiline .z{color:#5a5273} .kakiline .s{color:var(--carnelian)} .kakiline .c{color:var(--bone)}
+  /* context menu */
+  .ctx{position:fixed;z-index:90;background:#171226;border:1px solid var(--clay-dim);
+    min-width:230px;display:none;box-shadow:0 18px 40px rgba(0,0,0,.6)}
+  .ctx.open{display:block}
+  .ctx .cth{padding:9px 14px;border-bottom:1px solid var(--line);color:var(--gold);
+    font-size:12.5px;letter-spacing:.08em}
+  .ctx button{display:block;width:100%;text-align:left;background:none;border:none;
+    color:var(--bone);font-family:inherit;font-size:14px;padding:10px 14px;cursor:pointer}
+  .ctx button:hover,.ctx button:focus{background:rgba(61,107,216,.15);outline:none}
+  .ctx button span{color:var(--bone-dim);font-size:11.5px;display:block}
+  footer{padding:4vh 5vw;color:var(--bone-dim);font-size:13.5px;border-top:1px solid var(--line)}
+  footer b{color:var(--clay)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;padding:12px 5vw;font-size:12.5px;
+    color:var(--bone-dim);border-bottom:1px solid var(--line)}
+  .sw{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:middle}
+  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ŠASÛ <em>Orbit Workbench</em> — the EnkiDDB segments</h1>
+  <p>v2 of the transparent-scanner prototype, on the same real session data. One rite
+  ingests <b>all</b> chunks; the particles fly into EnkiDDB’s living segments —
+  <b>Categories as sectors, Domains as bands</b>. Left-click a cube: it bounces, selected.
+  Right-click (or double-tap): the <b>StoryEngine menu</b> — read its Events, append an
+  Edit, expand its dependencies, read its KAKI. Nothing here mutates: edits append,
+  the journal only grows.</p>
+  <span class="lawband">Šala prototype v2 · not production · production stage = DubSar Visualizer (egui/WGPU)</span>
+</header>
+
+<div class="bar">
+  <button class="rite" id="ingestAll">⟶ Ingest all chunks — one rite</button>
+  <button class="rite blue" id="runOrbit" disabled>⟶ Run the ORBIT (role_class = LAW)</button>
+  <button class="rite blue" id="resetView" disabled>⟲ Recall answered particles</button>
+</div>
+
+<div class="legend">
+  <span><span class="sw" style="background:#3D6BD8"></span>LAW chunks (doctrine)</span>
+  <span><span class="sw" style="background:#C8A272"></span>SOURCE (parent tablet)</span>
+  <span><span class="sw" style="background:#8b6fd8"></span>QUESTION</span>
+  <span><span class="sw" style="background:#E3B341"></span>TERM particles (Ḫubullu)</span>
+  <span><span class="sw" style="background:#5FA97C"></span>answered by ORBIT</span>
+  <span><span class="sw" style="border:1px dashed #C4554D"></span>outer dashed ring = derived/RAG projection (advisory, rebuildable)</span>
+</div>
+
+<div class="stage">
+  <canvas id="orbit" width="1100" height="660"></canvas>
+  <div class="dock">
+    <h4>NĀRU — the witness journal</h4>
+    <div class="journal" id="journal">
+      <div class="j show">— idle. Perform the ingest rite. —</div>
+    </div>
+    <div class="story" id="story">
+      <div class="ph"><b id="storyTitle">particle</b>
+        <button id="storyClose" aria-label="close">✕</button></div>
+      <div class="body" id="storyBody"></div>
+    </div>
+  </div>
+</div>
+
+<div class="ctx" id="ctx" role="menu">
+  <div class="cth" id="ctxTitle">particle</div>
+  <button data-act="events">𒃻 Events<span>read this particle’s StoryEngine journal</span></button>
+  <button data-act="edit">✎ Edit EAV (append)<span>drafts an EDIT event — never mutates, seal_state stays DRAFT</span></button>
+  <button data-act="deps">⟲ Expand dependencies<span>show NUZI parent + Riksu term links</span></button>
+  <button data-act="kaki">𒁾 Show KAKI v4.0<span>the sixteen bytes, CRC-16 live</span></button>
+</div>
+
+<footer>
+  <b>𒁾 Doctrine of this stage:</b> selection is a bounce, not a mutation; editing is an
+  appended event, not an overwrite; dependencies are drawn threads, not hidden joins;
+  and the derived ring stays dashed because <i>a derived facet may propose — only a
+  sealed facet may classify</i>. DRAFT until the Architect confirms (CSR-08).
+</footer>
+
+<script>
+/* ───────── KAKI v4.0 minting (locked layout, real CRC-16/CCITT) ───────── */
+function fnv1a32(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h>>>0;}
+function crc16(b){let c=0xFFFF;for(const x of b){c^=(x<<8);for(let i=0;i<8;i++)c=(c&0x8000)?((c<<1)^0x1021)&0xFFFF:(c<<1)&0xFFFF;}return c;}
+function mint(content,tribe,type,role){
+  const u=fnv1a32(content),ts=0x1EDA,k=new Array(16).fill(0);
+  k[0]=u>>>24&255;k[1]=u>>>16&255;k[2]=u>>>8&255;k[3]=u&255;
+  k[4]=tribe>>>8&255;k[5]=tribe&255;k[6]=type;k[7]=role;
+  k[12]=ts>>>8&255;k[13]=ts&255;
+  const c=crc16(k.slice(0,14));k[14]=c>>>8&255;k[15]=c&255;return k;
+}
+const hx=b=>b.toString(16).padStart(2,'0').toUpperCase();
+
+/* ───────── the particles (same real chunks as v1) ───────── */
+const CAT={LAW:{a0:-Math.PI/2,a1:Math.PI/6,col:'#3D6BD8',label:'CATEGORY · LAW'},
+  SOURCE:{a0:Math.PI/6,a1:Math.PI*0.62,col:'#C8A272',label:'CATEGORY · SOURCE'},
+  QUESTION:{a0:Math.PI*0.62,a1:Math.PI*1.05,col:'#8b6fd8',label:'CATEGORY · QUESTION'},
+  TERM:{a0:Math.PI*1.05,a1:Math.PI*1.5,col:'#E3B341',label:'CATEGORY · TERM'}};
+const CX=430,CY=340,R_CORE=150,R_MID=225,R_DERIVED=290;
+
+function baseEvents(id){return [
+  {t:'R-002',e:'BIRTH — chunk split from parent tablet, KAKI minted'},
+  {t:'R-003',e:'FACET_SEALED — doc_class, role_class, domain=CORE, era=GUDEA'},
+  {t:'R-004',e:'GLOSSED — ḫubullu plain name written, H(P) whole'},
+  {t:'R-005',e:'LINKED — Riksu cross-tribe relations to Term particles (0x03)'},
+];}
+const P=[
+ {id:'DOC',cat:'SOURCE',tribe:0x00D7,type:0x01,role:0x01,law:false,
+  gloss:'the parent tablet — Q&A-2026-08-10',deps:[],terms:[]},
+ {id:'Q',cat:'QUESTION',tribe:0x00D8,type:0x01,role:0x02,law:false,
+  gloss:'the Architect’s question — EAV beyond the RAG',deps:['DOC'],terms:['ENKIDDB','KAKI']},
+ {id:'A1',cat:'LAW',tribe:0x00D8,type:0x01,role:0x02,law:true,
+  gloss:'sealed facets classify; the RAG only looks',deps:['DOC','Q'],terms:['SIMTU','TIAMAT']},
+ {id:'A2',cat:'LAW',tribe:0x00D8,type:0x01,role:0x02,law:true,
+  gloss:'terms are particles — names get KAKI, not strings',deps:['DOC','Q'],terms:['ḪUBULLU','KAKI']},
+ {id:'A3',cat:'LAW',tribe:0x00D8,type:0x01,role:0x02,law:true,
+  gloss:'facets, not a tree — Simtu',deps:['DOC','Q'],terms:['SIMTU']},
+ {id:'A4',cat:'LAW',tribe:0x00D8,type:0x01,role:0x02,law:true,
+  gloss:'derived proposes; sealed classifies',deps:['DOC','Q'],terms:['NINSUN','TIAMAT']},
+];
+P.forEach((p,i)=>{
+  p.kaki=mint(p.gloss+p.id,p.tribe,p.type,p.role);
+  p.events=baseEvents(p.id);
+  p.ing=false;p.sel=false;p.answered=false;p.showDeps=false;p.edited=false;
+  p.bounce=0; p.x=-60; p.y=120+i*24; p.vx=0; p.vy=0;
+  const c=CAT[p.cat],slots={LAW:4,SOURCE:1,QUESTION:1,TERM:0};
+  const idx=P.filter(q=>q.cat===p.cat).indexOf(p),n=Math.max(slots[p.cat],1);
+  p.ang=c.a0+(c.a1-c.a0)*((idx+0.5)/n); p.rad=(R_CORE+R_MID)/2; p.drift=0.0018+i*0.0004;
+});
+const TERMS=['SIMTU','ḪUBULLU','NINSUN','KAKI','TIAMAT','ENKIDDB'].map((n,i)=>{
+  const c=CAT.TERM,a=c.a0+(c.a1-c.a0)*((i+0.5)/6);
+  return {id:n,term:true,ang:a,rad:(R_CORE+R_MID)/2,drift:0.0012+i*0.0003,
+    x:CX+Math.cos(a)*187,y:CY+Math.sin(a)*187,sel:false,bounce:0,ing:false,
+    gloss:'lexicon term — '+n.toLowerCase(),kaki:mint('TERM:'+n,0x00E1,0x01,0x02),
+    events:[{t:'ḪUBULLU',e:'MINTED — lexicon term particle, gloss mandatory'}],
+    deps:[],terms:[],law:false,edited:false,answered:false,showDeps:false,cat:'TERM'};
+});
+const ALL=[...P,...TERMS];
+
+/* ───────── journal ───────── */
+const J=document.getElementById('journal');
+function jline(rid,txt){
+  const d=document.createElement('div');d.className='j';
+  d.innerHTML=`<span class="rid">${rid}</span> · ${txt}`;
+  J.appendChild(d);requestAnimationFrame(()=>d.classList.add('show'));
+  J.scrollTop=J.scrollHeight;
+}
+
+/* ───────── batch ingest: one rite ───────── */
+let ingested=false;
+document.getElementById('ingestAll').addEventListener('click',()=>{
+  if(ingested)return; ingested=true; J.innerHTML='';
+  const script=[
+   ['R-001','tablet opened — two turns found'],
+   ['R-002','one rite, six births: <b>DOC · Q · A1 · A2 · A3 · A4</b>'],
+   ['R-003','facets sealed on all — Categories: LAW×4, SOURCE, QUESTION'],
+   ['R-004','glosses written — all particles GOLDEN-eligible'],
+   ['R-005','Term particles bound: <b>SIMTU · ḪUBULLU · NINSUN · KAKI · TIAMAT · ENKIDDB</b>'],
+   ['R-006','no spans skipped — <b>τ contribution 0</b>'],
+   ['NĀRU','segments populated — the orbit is live; select, right-click, expand'],
+  ];
+  script.forEach((s,i)=>setTimeout(()=>jline(s[0],s[1]),i*420));
+  ALL.forEach((p,i)=>setTimeout(()=>{p.ing=true;p.bounce=1;},600+i*260));
+  setTimeout(()=>{document.getElementById('runOrbit').disabled=false;
+    document.getElementById('resetView').disabled=false;},600+ALL.length*260);
+});
+
+/* ───────── ORBIT run / recall ───────── */
+document.getElementById('runOrbit').addEventListener('click',()=>{
+  jline('ORBIT','WITHIN TRIBE ddb_source WHERE META role_class = <b>LAW</b> AND PRESENT gloss');
+  P.filter(p=>p.law).forEach((p,i)=>setTimeout(()=>{
+    p.answered=true;p.bounce=1;
+    p.events.push({t:'ORBIT',e:'ANSWERED — returned by sovereign query, PROVE fadam_floor ✓, WITNESS naru'});
+  },300*(i+1)));
+  setTimeout(()=>jline('PROVE','fadam_floor(τ, ε) holds on all four — <b>WITNESS written</b>'),1500);
+});
+document.getElementById('resetView').addEventListener('click',()=>{
+  P.forEach(p=>{p.answered=false;});jline('NĀRU','answered particles recalled to their segments');
+});
+
+/* ───────── selection, context menu, story panel ───────── */
+const cv=document.getElementById('orbit'),ctx=cv.getContext('2d');
+const menu=document.getElementById('ctx');
+const story=document.getElementById('story'),sTitle=document.getElementById('storyTitle'),
+      sBody=document.getElementById('storyBody');
+let menuTarget=null,lastTap=0;
+
+function canvasPos(e){
+  const r=cv.getBoundingClientRect();
+  return {x:(e.clientX-r.left)*cv.width/r.width, y:(e.clientY-r.top)*cv.height/r.height};
+}
+function hit(pos){
+  let best=null,bd=1e9;
+  ALL.forEach(p=>{if(!p.ing)return;
+    const d=Math.hypot(p.x-pos.x,p.y-pos.y);
+    if(d<20&&d<bd){bd=d;best=p;}});
+  return best;
+}
+cv.addEventListener('click',e=>{
+  menu.classList.remove('open');
+  const p=hit(canvasPos(e));
+  ALL.forEach(q=>q.sel=false);
+  if(p){p.sel=true;p.bounce=1;
+    const now=Date.now();
+    if(now-lastTap<420&&menuTarget===p){openMenu(e,p);} /* double-tap fallback */
+    lastTap=now;menuTarget=p;}
+});
+cv.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const p=hit(canvasPos(e));
+  if(p){ALL.forEach(q=>q.sel=false);p.sel=true;p.bounce=1;openMenu(e,p);}
+  else menu.classList.remove('open');
+});
+function openMenu(e,p){
+  menuTarget=p;
+  document.getElementById('ctxTitle').textContent=`${p.id} — ${p.gloss}`;
+  menu.style.left=Math.min(e.clientX,window.innerWidth-250)+'px';
+  menu.style.top=Math.min(e.clientY,window.innerHeight-220)+'px';
+  menu.classList.add('open');
+}
+document.addEventListener('click',e=>{if(!menu.contains(e.target)&&e.target!==cv)menu.classList.remove('open');});
+menu.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+  const p=menuTarget;menu.classList.remove('open');if(!p)return;
+  const act=b.dataset.act;
+  if(act==='events')showEvents(p);
+  if(act==='edit')showEdit(p);
+  if(act==='deps'){p.showDeps=!p.showDeps;p.bounce=1;
+    jline('RIKSU',`${p.id} — dependencies ${p.showDeps?'expanded':'folded'} (NUZI parent + term links)`);}
+  if(act==='kaki')showKaki(p);
+}));
+document.getElementById('storyClose').addEventListener('click',()=>story.classList.remove('open'));
+
+function showEvents(p){
+  sTitle.textContent=`𒃻 StoryEngine — ${p.id}`;
+  sBody.innerHTML=p.events.map(ev=>
+    `<div class="ev ${ev.t==='EDIT'?'edit':''}"><span class="et">${ev.t}</span><br>${ev.e}</div>`).join('');
+  story.classList.add('open');
+}
+function showEdit(p){
+  sTitle.textContent=`✎ Edit EAV — ${p.id}`;
+  sBody.innerHTML=`<div class="editform">
+    <div class="editnote">Append-only: this drafts an EDIT event on the journal.
+    The particle is never overwritten; seal_state remains DRAFT until CSR-08.</div>
+    <label style="font-size:12px;color:var(--clay)">gloss (ḫubullu)</label>
+    <textarea id="glossEdit">${p.gloss}</textarea>
+    <button class="rite" id="appendEdit">⟶ Append EDIT event (DRAFT)</button></div>`;
+  story.classList.add('open');
+  document.getElementById('appendEdit').addEventListener('click',()=>{
+    const v=document.getElementById('glossEdit').value.trim();
+    if(!v)return;
+    p.events.push({t:'EDIT',e:`gloss draft appended: “${v}” — prior gloss preserved in journal`});
+    p.gloss=v;p.edited=true;p.bounce=1;
+    jline('EDIT',`${p.id} — gloss draft appended (append-only, unsealed)`);
+    showEvents(p);
+  });
+}
+function showKaki(p){
+  const k=p.kaki,cls=['u','u','u','u','t','t','y','r','z','z','z','z','s','s','c','c'];
+  sTitle.textContent=`𒁾 KAKI v4.0 — ${p.id}`;
+  sBody.innerHTML=`<div class="kakiline">${k.map((b,i)=>`<span class="${cls[i]}">${hx(b)}</span>`).join(' ')}</div>
+   <div style="font-size:12px;color:var(--bone-dim)">uuid_hash · tribe_id · type · role ·
+   reserved(0) · timestamp · CRC-16/CCITT (computed live). Quality/colour/state live
+   only in EAV — never in these bytes.</div>`;
+  story.classList.add('open');
+}
+
+/* ───────── the orbit stage ───────── */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function drawSegments(){
+  /* domain bands */
+  [[R_CORE,'rgba(61,107,216,.10)','DOMAIN · CORE (sealed)'],
+   [R_MID,'rgba(200,162,114,.05)','']].forEach(([r,fill])=>{
+    ctx.beginPath();ctx.arc(CX,CY,r,0,Math.PI*2);ctx.strokeStyle='rgba(43,36,64,.9)';
+    ctx.lineWidth=1;ctx.stroke();});
+  /* derived dashed ring */
+  ctx.beginPath();ctx.setLineDash([6,7]);ctx.arc(CX,CY,R_DERIVED,0,Math.PI*2);
+  ctx.strokeStyle='rgba(196,85,77,.5)';ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='rgba(196,85,77,.65)';ctx.font='11px ui-monospace,monospace';
+  ctx.fillText('derived / RAG projection — advisory, rebuildable by rite',CX-160,CY-R_DERIVED-10);
+  /* category sectors */
+  Object.values(CAT).forEach(c=>{
+    ctx.beginPath();ctx.moveTo(CX+Math.cos(c.a0)*R_CORE*0.55,CY+Math.sin(c.a0)*R_CORE*0.55);
+    ctx.lineTo(CX+Math.cos(c.a0)*R_MID,CY+Math.sin(c.a0)*R_MID);
+    ctx.strokeStyle='rgba(43,36,64,1)';ctx.stroke();
+    const mid=(c.a0+c.a1)/2;
+    ctx.fillStyle=c.col+'99';ctx.font='11px ui-monospace,monospace';
+    const lx=CX+Math.cos(mid)*(R_MID+26),ly=CY+Math.sin(mid)*(R_MID+26);
+    ctx.save();ctx.translate(lx,ly);ctx.fillText(c.label,-ctx.measureText(c.label).width/2,0);ctx.restore();
+  });
+  /* nucleus */
+  ctx.fillStyle='rgba(237,228,211,.6)';ctx.font='13px "Iowan Old Style",serif';
+  ctx.fillText('EnkiDDB · 7007',CX-46,CY-2);
+  ctx.fillStyle='rgba(168,159,142,.5)';ctx.font='10px ui-monospace,monospace';
+  ctx.fillText('documents primary · indexes derivable',CX-104,CY+14);
+}
+function drawCube(p){
+  const s=p.term?9:13,b=p.bounce,sq=1+Math.sin(b*Math.PI)*0.45,st=1-Math.sin(b*Math.PI)*0.3;
+  const col=p.answered?'#5FA97C':(p.term?'#E3B341':CAT[p.cat].col);
+  ctx.save();ctx.translate(p.x,p.y+Math.sin(b*Math.PI)*-8);ctx.scale(st,sq);
+  /* isometric cube: top, left, right faces */
+  ctx.beginPath();ctx.moveTo(0,-s);ctx.lineTo(s,-s/2);ctx.lineTo(0,0);ctx.lineTo(-s,-s/2);ctx.closePath();
+  ctx.fillStyle=col;ctx.fill();
+  ctx.beginPath();ctx.moveTo(-s,-s/2);ctx.lineTo(0,0);ctx.lineTo(0,s);ctx.lineTo(-s,s/2);ctx.closePath();
+  ctx.fillStyle=shade(col,-35);ctx.fill();
+  ctx.beginPath();ctx.moveTo(s,-s/2);ctx.lineTo(0,0);ctx.lineTo(0,s);ctx.lineTo(s,s/2);ctx.closePath();
+  ctx.fillStyle=shade(col,-60);ctx.fill();
+  if(p.sel){ctx.beginPath();ctx.arc(0,0,s+8,0,Math.PI*2);
+    ctx.strokeStyle='#E3B341';ctx.lineWidth=1.6;ctx.stroke();}
+  if(p.edited){ctx.fillStyle='#C4554D';ctx.beginPath();ctx.arc(s+4,-s-2,3,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+  ctx.fillStyle='rgba(237,228,211,.85)';ctx.font='10px ui-monospace,monospace';
+  ctx.fillText(p.id,p.x+s+5,p.y+3);
+}
+function shade(hex,amt){
+  const n=parseInt(hex.slice(1),16),r=Math.max(0,(n>>16)+amt),
+        g=Math.max(0,((n>>8)&255)+amt),b=Math.max(0,(n&255)+amt);
+  return `rgb(${r},${g},${b})`;
+}
+function drawDeps(p){
+  if(!p.showDeps)return;
+  const targets=[...p.deps.map(id=>ALL.find(q=>q.id===id)),
+                 ...p.terms.map(id=>ALL.find(q=>q.id===id))].filter(Boolean);
+  targets.forEach(t=>{
+    ctx.beginPath();ctx.moveTo(p.x,p.y);
+    ctx.quadraticCurveTo((p.x+t.x)/2+(p.y-t.y)*0.2,(p.y+t.y)/2+(t.x-p.x)*0.2,t.x,t.y);
+    ctx.strokeStyle=t.term?'rgba(227,179,65,.6)':'rgba(196,85,77,.6)';
+    ctx.lineWidth=1.3;ctx.stroke();
+    /* pulse */
+    const tt=(performance.now()/900)%1,
+          px=p.x+(t.x-p.x)*tt,py=p.y+(t.y-p.y)*tt;
+    ctx.beginPath();ctx.arc(px,py,2.4,0,Math.PI*2);
+    ctx.fillStyle=t.term?'#E3B341':'#C4554D';ctx.fill();
+  });
+}
+function frame(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  drawSegments();
+  ALL.forEach(p=>{
+    if(!p.ing){return;}
+    /* target position: answered laws gather at inner ring near nucleus */
+    let tx,ty;
+    if(p.answered){const g=P.filter(q=>q.answered),i=g.indexOf(p);
+      const a=-Math.PI/2+i*(Math.PI*2/Math.max(g.length,1));
+      tx=CX+Math.cos(a)*70;ty=CY+Math.sin(a)*70;
+    }else{
+      if(!p.sel&&!reduced)p.ang+=p.drift*0.4;
+      const c=CAT[p.cat]; if(p.ang>c.a1)p.ang=c.a0+(p.ang-c.a1); /* stay in sector */
+      tx=CX+Math.cos(p.ang)*p.rad;ty=CY+Math.sin(p.ang)*p.rad;
+    }
+    p.vx=(p.vx+(tx-p.x)*0.06)*0.82;p.vy=(p.vy+(ty-p.y)*0.06)*0.82;
+    p.x+=p.vx;p.y+=p.vy;
+    if(p.bounce>0)p.bounce=Math.max(0,p.bounce-(reduced?1:0.04));
+    drawDeps(p);
+  });
+  ALL.forEach(p=>{if(p.ing)drawCube(p);});
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

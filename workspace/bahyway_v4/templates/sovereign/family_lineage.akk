@@ -1,0 +1,72 @@
+-- BahyWay.Ecosystem v4.0 — Sovereign Cemetery Intelligence
+-- FamilyLineage Particle Template — Wadi al-Salam Family Plot Discovery
+--
+-- A FamilyLineage links multiple GraveParticles belonging to the same family
+-- into a sovereign cluster.  Used by the AI discovery pipeline to group
+-- adjacent graves with matching surnames or civil-registry family identifiers.
+--
+-- The lineage_kaki is the sovereign identity of the family cluster.
+-- Member grave KAKIs are stored as separate child particles (EAV pattern).
+--
+-- Required:
+--   lineage_kaki, family_name_arabic
+--
+-- Optional:
+--   patriarch_grave_kaki, matriarch_grave_kaki, civil_family_id,
+--   earliest_hijri_year, latest_hijri_year, sector_code,
+--   discovery_source, confidence_avg
+
+PARTICLE FamilyLineage {
+    lineage_kaki:          KAKI
+    family_name_arabic:    TEXT(completeness=1.0)
+    patriarch_grave_kaki:  KAKI
+    matriarch_grave_kaki:  KAKI
+    civil_family_id:       TEXT
+    earliest_hijri_year:   TEXT
+    latest_hijri_year:     TEXT
+    sector_code:           TEXT
+    discovery_source:      TEXT
+    confidence_avg:        TEXT
+    member_count:          TEXT
+    TRIBE: FamilyLineageMDM
+}
+
+TRIBE FamilyLineageMDM {
+    WEIGHTS: [0.35, 0.25, 0.15, 0.10, 0.08, 0.04, 0.03]
+    IDEAL:   [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0]
+}
+
+RULE flag_orphan_lineage {
+    WHEN particle.hepta.health < 0.416
+    THEN
+        LANE = SUSPECT
+        EMIT StoryWay("family_lineage_incomplete")
+}
+
+RULE promote_confirmed_lineage {
+    WHEN particle.hepta.health >= 0.833
+    THEN
+        LANE = GEM
+        EMIT StoryWay("family_lineage_confirmed")
+}
+
+OBSERVE unresolved_family_clusters {
+    FROM: TRIBE FamilyLineageMDM
+    WHERE: health < 0.416
+    SORT: orbital_radius DESC
+    LIMIT: 2000
+}
+
+OBSERVE confirmed_family_lineages {
+    FROM: TRIBE FamilyLineageMDM
+    WHERE: health >= 0.833
+    SORT: orbital_radius ASC
+    LIMIT: 10000
+}
+
+OBSERVE large_family_clusters {
+    FROM: TRIBE FamilyLineageMDM
+    WHERE: member_count > "5"
+    SORT: orbital_radius DESC
+    LIMIT: 1000
+}

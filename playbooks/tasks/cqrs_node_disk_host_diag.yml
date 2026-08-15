@@ -1,0 +1,38 @@
+# =============================================================================
+# One CQRS node's real host-side disk info: real qcow2 path (via virsh, not
+# guessed), qemu-img info (virtual size vs actually allocated size -- these
+# differ for a sparse qcow2, and both matter for planning a grow), and the
+# host filesystem's real free space where that image file lives (the
+# actual ceiling on how far it can grow).
+#
+# Var this file requires: cqrs_vm_name
+# =============================================================================
+---
+- name: "[{{ cqrs_vm_name }}] Resolve the real qcow2 disk path (virsh domblklist, not assumed)"
+  ansible.builtin.shell: "virsh -c qemu:///system domblklist {{ cqrs_vm_name }} | awk 'NR==3{print $2}'"
+  register: disk_path
+  changed_when: false
+
+# -U/--force-share: qemu-img info otherwise wants an exclusive-ish lock
+# that conflicts with the qemu process already holding this image open
+# for the running VM -- hit live: "Failed to get shared 'write' lock".
+# -U is the standard, fully read-only way to inspect a live VM's disk
+# without touching the running VM at all.
+- name: "[{{ cqrs_vm_name }}] qemu-img info (real virtual size vs actually allocated size)"
+  ansible.builtin.command: "qemu-img info -U {{ disk_path.stdout }}"
+  register: qemuimg_info
+  changed_when: false
+
+- name: "[{{ cqrs_vm_name }}] Real free space on the HOST filesystem holding this disk image"
+  ansible.builtin.shell: "df -h $(dirname {{ disk_path.stdout }})"
+  register: host_free
+  changed_when: false
+
+- name: "== {{ cqrs_vm_name }} -- host-side disk report =="
+  ansible.builtin.debug:
+    msg:
+      - "Disk image path: {{ disk_path.stdout }}"
+      - "--- qemu-img info ---"
+      - "{{ qemuimg_info.stdout_lines }}"
+      - "--- host filesystem free space (the real ceiling on growing this image) ---"
+      - "{{ host_free.stdout_lines }}"

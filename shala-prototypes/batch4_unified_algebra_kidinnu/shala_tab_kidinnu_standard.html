@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · The Kidinnu Standard — Civil Protection, Offline and Checkable</title>
+<!--
+  ════════════════════════════════════════════════════════════════
+  ŠALA HUB · THE KIDINNU STANDARD  (name PROPOSED, awaiting the
+  Architect per NL-001 · draft prototype — unsealed, CSR-08)
+  Civil protection as a calculus: fire, bombardment, flood — one
+  mathematics. The HeptaShell's 126 zones; sealed THREAT TEMPLATES
+  instead of wind scenarios; siren patterns as the declared
+  template; minimax directives because lives are never averaged.
+  · OFFLINE FIRST: the directive table is pre-sealed and complete.
+    Every zone × every threat class = three lines a resident can
+    memorize, print, or receive by SMS. No battery required.
+  · AGGREGATION SILENCE (Θ as security): the RESIDENT view shows
+    only one zone's directive — never where people gather. The
+    COMMAND view shows the aggregate. No public channel carries
+    the whole. A shelter map in the wrong hands is a targeting aid.
+  · SIGNATURE: every directive Ed25519-sealed, verifiable offline.
+    A spoofed evacuation order is a weapon; the seal is the shield.
+  · ONE VOICE: the map proposes; civil authority decrees. If they
+    conflict, the decree is displayed and the disagreement is
+    journaled — never a second voice during an evacuation.
+  · HONEST FLOOR: no shelter is called "safe" — only "least worst
+    under every sealed scenario, with our ε declared."
+  ════════════════════════════════════════════════════════════════
+-->
+<style>
+:root{
+  --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022;
+  --bg-deep:#18191B; --bg-hover:#383A3E; --bg-selected:#404349;
+  --stroke:#3D3F43;
+  --gold:#D6A44C; --teal:#4FB8A8; --crimson:#C34A3F;
+  --orange:#D98E3E; --purple:#9B7FC7; --blue:#5E8FBF; --moss:#8FA85C;
+  --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+  --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+  --sans:-apple-system,"Segoe UI","Noto Sans",Ubuntu,Cantarell,sans-serif;
+  --mono:"JetBrains Mono","Fira Code",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+button,input,select{font-family:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+header{border-bottom:1px solid var(--stroke);background:var(--bg-panel)}
+.mast{max-width:1400px;margin:0 auto;padding:14px 20px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.mast .glyph{font-size:22px;color:var(--gold)}
+.mast h1{font-family:var(--serif);font-weight:500;font-size:21px}
+.mast h1 em{font-style:normal;color:var(--gold)}
+.mast .sub{font-size:12px;color:var(--muted)}
+.mast .law{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.offline{background:var(--bg-widget);border-bottom:1px solid var(--stroke);text-align:center;padding:5px;font-family:var(--mono);font-size:10.5px;color:var(--teal)}
+
+.frame{max-width:1400px;margin:0 auto;padding:16px 20px;display:grid;grid-template-columns:minmax(0,1fr) 392px;gap:16px}
+@media(max-width:1040px){.frame{grid-template-columns:1fr}}
+
+.wrap{background:var(--bg-deep);border:1px solid var(--stroke);border-radius:10px;overflow:hidden}
+.whead{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--stroke);background:var(--bg-panel);flex-wrap:wrap}
+.whead .t{font-family:var(--serif);font-size:15px}
+.whead .n{font-family:var(--mono);font-size:11px;color:var(--gold)}
+.viewsw{margin-left:auto;display:flex;gap:0;border:1px solid var(--stroke);border-radius:7px;overflow:hidden}
+.viewsw button{background:var(--bg-widget);border:none;padding:5px 13px;font-size:11.5px;cursor:pointer;color:var(--muted)}
+.viewsw button.on{background:var(--bg-selected);color:var(--ink)}
+#sky{display:block;width:100%;height:auto;cursor:crosshair}
+.legend{display:flex;gap:12px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--stroke);background:var(--bg-panel);font-size:11px;color:var(--muted)}
+.legend .li{display:flex;align-items:center;gap:6px}
+.legend .sw{width:9px;height:9px;border-radius:50%}
+
+.ticker{margin-top:12px;background:var(--bg-widget);border:1px solid var(--stroke);border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);min-height:36px}
+.ticker b{color:var(--gold);font-weight:500}
+
+.rail{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:10px;padding:12px 14px}
+.card h2{font-family:var(--serif);font-weight:500;font-size:14px;margin-bottom:8px;display:flex;align-items:baseline;gap:8px}
+.card h2 .tag{font-family:var(--mono);font-size:9.5px;color:var(--dim);font-weight:400}
+
+.sirens{display:flex;flex-direction:column;gap:5px}
+.siren{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:var(--bg-widget);border:1px solid var(--stroke);border-radius:7px;padding:7px 10px;cursor:pointer;font-size:11.5px;text-align:left}
+.siren:hover{background:var(--bg-hover)}
+.siren.on{background:var(--bg-selected);border-color:var(--gold)}
+.siren .pat{font-family:var(--mono);font-size:12px;letter-spacing:2px}
+.siren .nm{color:var(--muted);font-size:10.5px}
+.siren .th{font-family:var(--mono);font-size:9.5px;color:var(--dim)}
+
+.residcard{background:var(--bg-widget);border:1px solid var(--teal);border-radius:9px;padding:11px 13px;font-size:12.5px}
+.residcard .z{font-family:var(--mono);font-size:11px;color:var(--teal);margin-bottom:5px}
+.residcard .move{font-family:var(--serif);font-size:19px;color:var(--ink);margin:4px 0}
+.residcard .why{font-size:11px;color:var(--muted)}
+.residcard .sig{margin-top:8px;padding-top:7px;border-top:1px dashed var(--stroke);font-family:var(--mono);font-size:9.5px;color:var(--moss)}
+.residcard .sig b{color:var(--teal);font-weight:500}
+.residcard .eps{font-family:var(--mono);font-size:9.5px;color:var(--teal);margin-top:4px}
+.zonesel{display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:9px}
+.zonesel select{background:var(--bg-widget);border:1px solid var(--stroke);border-radius:6px;padding:5px 8px;font-size:12px}
+
+.tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:9.5px;margin-top:4px}
+.tbl th{color:var(--dim);text-align:left;font-weight:400;padding:3px 5px;border-bottom:1px solid var(--stroke)}
+.tbl td{padding:3px 5px;border-bottom:1px solid rgba(61,63,67,.4);color:var(--muted)}
+.tbl td:first-child{color:var(--teal)}
+.btn{background:var(--bg-widget);border:1px solid var(--stroke);border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;margin-top:8px}
+.btn:hover{background:var(--bg-hover)}
+.note{font-size:10.5px;color:var(--dim);margin-top:7px}
+
+footer{max-width:1400px;margin:0 auto;padding:10px 20px 26px;font-size:10.5px;color:var(--dim);font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<header><div class="mast">
+  <span class="glyph">𒁾</span>
+  <h1>ŠALA · <em>The Kidinnu Standard</em> — civil protection, offline and checkable</h1>
+  <span class="sub">one calculus: fire · bombardment · flood — lives are never averaged</span>
+  <span class="law">name PROPOSED per NL-001 · GL-ALG-001-A2 draft · DRAFT — unsealed (CSR-08)</span>
+</div></header>
+<div class="offline">◈ OFFLINE-FIRST — directive table pre-sealed 2026·W32 · complete for all 126 zones × all threat classes · verifiable without network · Ed25519</div>
+
+<div class="frame">
+
+  <div>
+    <div class="wrap">
+      <div class="whead">
+        <span class="t">The Neighborhood · 126 Zones</span>
+        <span class="n" id="mode">COMMAND VIEW</span>
+        <div class="viewsw">
+          <button id="vCmd" class="on">Command</button>
+          <button id="vRes">Resident</button>
+        </div>
+      </div>
+      <canvas id="sky" width="760" height="700" aria-label="Civil protection HeptaMap: 126 zones, threat fields, shelters, and per-zone directives; resident view shows only one zone"></canvas>
+      <div class="legend" id="legend">
+        <span class="li"><span class="sw" style="background:var(--crimson)"></span>threat field (declared template)</span>
+        <span class="li"><span class="sw" style="background:var(--teal);box-shadow:0 0 5px var(--teal)"></span>shelter (capacity honest)</span>
+        <span class="li">→ directive · <span style="color:var(--gold)">gold</span> = minimax (no siren / templates disagree)</span>
+        <span class="li"><span class="sw" style="background:var(--purple)"></span>hold underground</span>
+      </div>
+    </div>
+    <div class="ticker" id="ticker">𒁾 KIDINNU — the standard is raised. No siren: all directives minimax across every sealed template.</div>
+  </div>
+
+  <div class="rail">
+
+    <div class="card"><h2>Siren Patterns <span class="tag">the siren declares the sealed template</span></h2>
+      <div class="sirens" id="sirens"></div>
+      <div class="note">No siren → the map assumes nothing: every arrow is the minimax move across ALL sealed templates. The siren narrows; it never invents.</div>
+    </div>
+
+    <div class="card" id="resCard" style="display:none"><h2>Your Card <span class="tag">one zone · three lines · no battery needed</span></h2>
+      <div class="zonesel"><label for="zpick">Your zone</label>
+        <select id="zpick"></select></div>
+      <div class="residcard" id="residcard"></div>
+      <div class="note">Aggregation silence: this view never shows where others gather. Your card, your walk, the evidence behind it — nothing more.</div>
+    </div>
+
+    <div class="card" id="cmdCard"><h2>Shelter Muster <span class="tag">command only — never broadcast</span></h2>
+      <table class="tbl" id="muster"></table>
+      <div class="note">One voice: this map proposes; civil authority decrees. A conflicting official decree is displayed over these arrows and the disagreement journaled — never a second voice.</div>
+    </div>
+
+    <div class="card"><h2>The Offline Tablet <span class="tag">print · SMS · memorize</span></h2>
+      <table class="tbl" id="offtbl"></table>
+      <button class="btn" id="printBtn">Render full 126-zone tablet (plain text)</button>
+      <div class="note">The clay tablet principle: the technology that survives when the infrastructure burns. One literate teenager per zone can carry the whole system.</div>
+    </div>
+
+  </div>
+</div>
+
+<footer>ŠALA prototype workbench — HTML is the sketchpad, never production (WoW-5). KIDINNU is a PROPOSED name awaiting the Architect (NL-001). Threat fields and timings are illustrative choreography of the draft calculus; nothing here is validated for real emergency use. The map proposes; command decrees; the seal protects; ε remains.</footer>
+
+<script>
+"use strict";
+function h32(i){let x=(i^0x9E3779B9)>>>0;x=Math.imul(x^x>>>16,0x85EBCA6B)>>>0;x=Math.imul(x^x>>>13,0xC2B2AE35)>>>0;return(x^x>>>16)>>>0}
+const frac=i=>h32(i)/4294967296;
+const CX=380,CY=350,TAU=6.28318530718;
+
+/* ── 126-zone HeptaShell ── */
+const RINGSEC=[7,14,21,28,35,21], RINGR=[[42,84],[84,126],[126,168],[168,210],[210,252],[252,294]];
+const ZONES=[];
+{let id=0;for(let ri=0;ri<6;ri++){const ns=RINGSEC[ri],[r0,r1]=RINGR[ri];
+ for(let s=0;s<ns;s++){const a0=s/ns*TAU,a1=(s+1)/ns*TAU,ac=(a0+a1)/2,rc=(r0+r1)/2;
+  ZONES.push({id:id++,ri,s,a0,a1,r0,r1,ac,rc,
+   cx:CX+rc*Math.cos(ac),cy:CY+rc*Math.sin(ac),
+   pop:Math.round(3000+frac(id*7)*11000)});}}}
+
+/* ── sealed threat templates ── */
+const THREATS=[
+ {id:"T-FIRE", siren:"— — —",  name:"Wildfire, wind-driven",  ang:Math.PI*0.78, spread:1.9, col:'217,142,62'},
+ {id:"T-ARTY", siren:"· · · ·",name:"Shelling axis, east",     ang:0.10,          spread:2.6, col:'195,74,63'},
+ {id:"T-AIR",  siren:"— · — ·",name:"Air raid corridor, north",ang:-Math.PI/2,    spread:3.1, col:'155,127,199'},
+];
+function dangerT(x,y,T){
+  const sx=CX+300*Math.cos(T.ang), sy=CY+300*Math.sin(T.ang);
+  const dx=x-sx,dy=y-sy,d=Math.hypot(dx,dy)+1;
+  const align=Math.cos(Math.atan2(dy,dx)-(T.ang+Math.PI));
+  return Math.max(0,1-d/(150*T.spread))*(0.5+0.5*Math.max(0,align));
+}
+
+/* ── shelters (poor infrastructure) ── */
+const SHELTERS=[
+ {id:"S1",name:"SCHOOL BASEMENT", ang:-2.5,r:180,cap:90000, under:true},
+ {id:"S2",name:"MOSQUE COURTYARD",ang: 2.4,r:150,cap:70000, under:false},
+ {id:"S3",name:"RAIL UNDERPASS",  ang:-0.9,r:240,cap:120000,under:true},
+ {id:"S4",name:"OPEN FIELD WEST", ang: 3.0,r:290,cap:200000,under:false},
+];
+SHELTERS.forEach(S=>{S.x=CX+S.r*Math.cos(S.ang);S.y=CY+S.r*Math.sin(S.ang)});
+
+/* ── directives: per declared template, or minimax if none ── */
+let activeThreat=null; /* null = no siren = minimax over all */
+const EPS=0.07;
+function computeDirectives(){
+  SHELTERS.forEach(S=>S.load=0);
+  const scen=activeThreat?[activeThreat]:THREATS;
+  const order=[...ZONES].sort((a,b)=>worstAt(b.cx,b.cy,scen)-worstAt(a.cx,a.cy,scen));
+  for(const z of order){
+    let best=null;
+    for(const S of SHELTERS){
+      if(S.load+z.pop>S.cap*1.1)continue;
+      const mx=(z.cx+S.x)/2,my=(z.cy+S.y)/2;
+      /* under air/artillery, underground shelters discount worst-case */
+      const shield=S.under?0.55:1.0;
+      let worst=0,each={};
+      for(const T of scen){
+        const w=Math.max(dangerT(mx,my,T),dangerT(S.x,S.y,T)*shield);
+        each[T.id]=w; if(w>worst)worst=w;
+      }
+      const cost=worst*2+Math.hypot(S.x-z.cx,S.y-z.cy)/650;
+      if(!best||cost<best.cost)best={S,cost,worst,each};
+    }
+    if(best){
+      z.S=best.S; best.S.load+=z.pop;
+      z.dir=Math.atan2(best.S.y-z.cy,best.S.x-z.cx);
+      const vals=Object.values(best.each);
+      z.minimax=!activeThreat && (Math.max(...vals)-Math.min(...vals))>0.15;
+      z.worst=+best.worst.toFixed(2);
+      z.hold=best.S.under && best.worst>0.45;
+    }else{z.S=null;z.dir=Math.atan2(z.cy-CY,z.cx-CX);z.minimax=true;z.worst=1;z.hold=false}
+  }
+  renderMuster();renderOffTbl();renderResident();
+}
+function worstAt(x,y,scen){let w=0;for(const T of scen)w=Math.max(w,dangerT(x,y,T));return w}
+
+/* ── density splat: 1,000,000 residents ── */
+const sky=document.getElementById('sky'),ctx=sky.getContext('2d');
+const W=sky.width,H=sky.height;
+const acc=new Float32Array(W*H),img=ctx.createImageData(W,H);
+let baseFrame=null;
+function splat(){
+  acc.fill(0);
+  const per=1000000/ZONES.reduce((s,z)=>s+z.pop,0);
+  for(const z of ZONES){
+    const n=Math.round(z.pop*per);
+    for(let k=0;k<n;k++){const i=z.id*131071+k;
+      const a=z.a0+frac(i)*(z.a1-z.a0),r=z.r0+frac(i*5+2)*(z.r1-z.r0);
+      const x=(CX+r*Math.cos(a))|0,y=(CY+r*Math.sin(a))|0;
+      if(x>=0&&x<W&&y>=0&&y<H)acc[y*W+x]+=1;}
+  }
+  const d=img.data;
+  for(let i=0,j=0;i<W*H;i++,j+=4){
+    const v=acc[i];
+    if(!v){d[j]=24;d[j+1]=25;d[j+2]=27;d[j+3]=255;continue}
+    const s=Math.min(1,Math.sqrt(v)/6.5);
+    d[j]=24+Math.round(185*s);d[j+1]=25+Math.round(158*s);d[j+2]=27+Math.round(118*s);d[j+3]=255;
+  }
+  ctx.putImageData(img,0,0);baseFrame=ctx.getImageData(0,0,W,H);
+}
+
+/* ── views ── */
+let view='cmd', myZone=47;
+function zonePath(z){
+  ctx.beginPath();const st=5;
+  for(let k=0;k<=st;k++){const a=z.a0+(z.a1-z.a0)*k/st;
+    const x=CX+z.r0*Math.cos(a),y=CY+z.r0*Math.sin(a);k?ctx.lineTo(x,y):ctx.moveTo(x,y)}
+  for(let k=st;k>=0;k--){const a=z.a0+(z.a1-z.a0)*k/st;
+    ctx.lineTo(CX+z.r1*Math.cos(a),CY+z.r1*Math.sin(a))}
+  ctx.closePath();
+}
+function draw(t){
+  if(baseFrame){
+    if(view==='cmd'){
+      ctx.putImageData(baseFrame,0,0);
+      const scen=activeThreat?[activeThreat]:THREATS;
+      for(const z of ZONES){
+        const w=worstAt(z.cx,z.cy,scen);
+        if(w>0.04){ctx.fillStyle=`rgba(195,74,63,${Math.min(.48,w*.5)})`;zonePath(z);ctx.fill()}
+        ctx.strokeStyle='rgba(61,63,67,.7)';ctx.lineWidth=.6;zonePath(z);ctx.stroke();
+        if(z.dir!==undefined){
+          const L=8+7*Math.min(1,z.worst*1.6);
+          const x2=z.cx+L*Math.cos(z.dir),y2=z.cy+L*Math.sin(z.dir);
+          ctx.strokeStyle=z.hold?'#9B7FC7':(z.minimax?'#D6A44C':'rgba(232,230,225,.75)');
+          ctx.lineWidth=z.minimax||z.hold?1.5:1;
+          ctx.beginPath();ctx.moveTo(z.cx,z.cy);ctx.lineTo(x2,y2);ctx.stroke();
+          const ah=Math.PI/7;
+          ctx.beginPath();ctx.moveTo(x2,y2);
+          ctx.lineTo(x2-4.5*Math.cos(z.dir-ah),y2-4.5*Math.sin(z.dir-ah));
+          ctx.moveTo(x2,y2);
+          ctx.lineTo(x2-4.5*Math.cos(z.dir+ah),y2-4.5*Math.sin(z.dir+ah));ctx.stroke();
+        }
+      }
+      /* threat sources */
+      ctx.font='10px '+getComputedStyle(document.body).getPropertyValue('--mono');
+      for(const T of (activeThreat?[activeThreat]:THREATS)){
+        const sx=CX+300*Math.cos(T.ang),sy=CY+300*Math.sin(T.ang);
+        const alpha=activeThreat?0.95:0.35;
+        let g=ctx.createRadialGradient(sx,sy,2,sx,sy,24);
+        g.addColorStop(0,`rgba(${T.col},${alpha})`);g.addColorStop(1,`rgba(${T.col},0)`);
+        ctx.fillStyle=g;ctx.beginPath();ctx.arc(sx,sy,24,0,7);ctx.fill();
+        ctx.fillStyle=`rgba(${T.col},.9)`;
+        ctx.fillText(T.id,sx-16,sy-26);
+      }
+      /* shelters + loads (command only) */
+      for(const S of SHELTERS){
+        const full=S.load>S.cap;
+        ctx.strokeStyle=full?'#C34A3F':'#4FB8A8';ctx.lineWidth=1.6;
+        ctx.beginPath();
+        for(let k=0;k<7;k++){const a=-Math.PI/2+k/7*TAU;
+          const px=S.x+11*Math.cos(a),py=S.y+11*Math.sin(a);
+          k?ctx.lineTo(px,py):ctx.moveTo(px,py)}
+        ctx.closePath();ctx.stroke();
+        ctx.fillStyle=full?'#C34A3F':'#4FB8A8';
+        ctx.fillText(`${S.id} ${Math.round(S.load/1000)}k/${Math.round(S.cap/1000)}k${full?' FULL':''}`,S.x-24,S.y-16);
+      }
+    }else{
+      /* RESIDENT VIEW: aggregation silence — one zone only, no density, no loads */
+      ctx.fillStyle='#18191B';ctx.fillRect(0,0,W,H);
+      const z=ZONES[myZone];
+      ctx.strokeStyle='rgba(61,63,67,.35)';ctx.lineWidth=.5;
+      for(const zz of ZONES){zonePath(zz);ctx.stroke()}
+      ctx.strokeStyle='#4FB8A8';ctx.lineWidth=2;zonePath(z);ctx.stroke();
+      ctx.fillStyle='rgba(79,184,168,.12)';zonePath(z);ctx.fill();
+      if(z.dir!==undefined){
+        const L=44,x2=z.cx+L*Math.cos(z.dir),y2=z.cy+L*Math.sin(z.dir);
+        ctx.strokeStyle=z.hold?'#9B7FC7':'#D6A44C';ctx.lineWidth=3;
+        ctx.beginPath();ctx.moveTo(z.cx,z.cy);ctx.lineTo(x2,y2);ctx.stroke();
+        const ah=Math.PI/6;
+        ctx.beginPath();ctx.moveTo(x2,y2);
+        ctx.lineTo(x2-12*Math.cos(z.dir-ah),y2-12*Math.sin(z.dir-ah));
+        ctx.moveTo(x2,y2);
+        ctx.lineTo(x2-12*Math.cos(z.dir+ah),y2-12*Math.sin(z.dir+ah));ctx.stroke();
+      }
+      ctx.font='11px '+getComputedStyle(document.body).getPropertyValue('--mono');
+      ctx.fillStyle='#4FB8A8';
+      ctx.fillText('YOUR ZONE · K-'+String(z.id).padStart(3,'0'),z.cx-42,z.cy-18);
+      ctx.fillStyle='#6E7074';
+      ctx.fillText('aggregation silence: no gathering points are shown on this view',CX-190,H-18);
+      /* target shelter marker WITHOUT load numbers */
+      if(z.S){ctx.strokeStyle='#4FB8A8';ctx.lineWidth=1.6;
+        ctx.beginPath();
+        for(let k=0;k<7;k++){const a=-Math.PI/2+k/7*TAU;
+          const px=z.S.x+11*Math.cos(a),py=z.S.y+11*Math.sin(a);
+          k?ctx.lineTo(px,py):ctx.moveTo(px,py)}
+        ctx.closePath();ctx.stroke();
+        ctx.fillText(z.S.id+' · '+z.S.name,z.S.x-30,z.S.y-16);}
+    }
+  }
+  requestAnimationFrame(draw);
+}
+
+/* ── rails ── */
+function bearing(d){return ['east','southeast','south','southwest','west','northwest','north','northeast'][Math.round(((d||0)+TAU)%TAU/(TAU/8))%8]}
+function fakeSig(z){return 'ed25519:'+h32(z.id*99991+(activeThreat?h32(activeThreat.id.length*77):0)).toString(16).padStart(8,'0')+'…'+h32(z.id*31+7).toString(16).slice(0,6)}
+function directiveLine(z){
+  if(z.hold)return 'HOLD UNDERGROUND at '+z.S.id;
+  return 'MOVE '+bearing(z.dir).toUpperCase()+' → '+(z.S?z.S.id+' · '+z.S.name:'OPEN GROUND beyond the shell');
+}
+function renderResident(){
+  if(view!=='res')return;
+  const z=ZONES[myZone];
+  document.getElementById('residcard').innerHTML=`
+    <div class="z">ZONE K-${String(z.id).padStart(3,'0')} · ${activeThreat?('SIREN '+activeThreat.siren+' — '+activeThreat.name):'NO SIREN — minimax standing directive'}</div>
+    <div class="move">${directiveLine(z)}</div>
+    <div class="why">${activeThreat
+      ?'Declared template '+activeThreat.id+': this walk stays behind the threat field.'
+      :'This walk has the least worst case under EVERY sealed template — even if the siren that comes is not the one expected, you are still walking away, not into the argument.'}</div>
+    <div class="eps">honesty: least-worst, not "safe" · ε = ${EPS} declared · you may check the witnesses behind this card</div>
+    <div class="sig"><b>SEAL VERIFIED ✓</b> ${fakeSig(z)} · pre-sealed 2026·W32 · verifiable offline — a spoofed order fails this check</div>`;
+}
+function renderMuster(){
+  const t=document.getElementById('muster');
+  t.innerHTML='<tr><th>shelter</th><th>type</th><th>assigned</th><th>cap</th><th>state</th></tr>'+
+   SHELTERS.map(S=>`<tr><td>${S.id} ${S.name}</td><td>${S.under?'underground':'open'}</td>
+    <td>${Math.round(S.load).toLocaleString('en-US')}</td><td>${S.cap.toLocaleString('en-US')}</td>
+    <td style="color:${S.load>S.cap?'var(--crimson)':'var(--teal)'}">${S.load>S.cap?'OVERLOADED — rerouted':'holding'}</td></tr>`).join('');
+}
+function renderOffTbl(){
+  const t=document.getElementById('offtbl');
+  const rows=[12,47,88,111].map(id=>{const z=ZONES[id];
+    return `<tr><td>K-${String(id).padStart(3,'0')}</td><td>${activeThreat?activeThreat.siren:'any'}</td><td>${directiveLine(z)}</td></tr>`}).join('');
+  t.innerHTML='<tr><th>zone</th><th>siren</th><th>directive (three-line form)</th></tr>'+rows;
+}
+document.getElementById('printBtn').addEventListener('click',()=>{
+  let txt='KIDINNU OFFLINE TABLET (PROPOSED · DRAFT) — pre-sealed 2026·W32\nzone | siren | directive\n';
+  for(const T of [null,...THREATS]){
+    const save=activeThreat;activeThreat=T;computeDirectives();
+    for(const z of ZONES)txt+=`K-${String(z.id).padStart(3,'0')} | ${T?T.siren:'no siren'} | ${directiveLine(z)}\n`;
+    activeThreat=save;
+  }
+  computeDirectives();
+  const w=window.open('','_blank');
+  w.document.write('<pre style="font:11px monospace;white-space:pre-wrap">'+txt.replace(/</g,'&lt;')+'</pre>');
+});
+
+/* ── sirens ── */
+const sb=document.getElementById('sirens');
+function renderSirens(){
+  sb.innerHTML='';
+  const mk=(T)=>{const b=document.createElement('button');
+    b.className='siren'+((activeThreat===T)?' on':'');
+    b.innerHTML=T?`<span class="pat">${T.siren}</span><span class="nm">${T.name}</span><span class="th">${T.id}</span>`
+                 :`<span class="pat">∅</span><span class="nm">No siren — standing minimax directives</span><span class="th">ALL</span>`;
+    b.onclick=()=>{activeThreat=T;renderSirens();computeDirectives();
+      document.getElementById('ticker').innerHTML=T
+       ?`𒁾 <b>SIREN ${T.siren}</b> — sealed template ${T.id} declared: ${T.name}. Directives narrowed to the declared template. The siren narrows; it never invents.`
+       :`𒁾 <b>KIDINNU</b> — no siren: all directives minimax across every sealed template. Assume nothing; survive everything sealed.`;};
+    sb.appendChild(b)};
+  mk(null);THREATS.forEach(mk);
+}
+
+/* ── view switch ── */
+document.getElementById('vCmd').addEventListener('click',()=>{view='cmd';
+  document.getElementById('vCmd').classList.add('on');document.getElementById('vRes').classList.remove('on');
+  document.getElementById('mode').textContent='COMMAND VIEW';
+  document.getElementById('cmdCard').style.display='';document.getElementById('resCard').style.display='none';});
+document.getElementById('vRes').addEventListener('click',()=>{view='res';
+  document.getElementById('vRes').classList.add('on');document.getElementById('vCmd').classList.remove('on');
+  document.getElementById('mode').textContent='RESIDENT VIEW · aggregation silence';
+  document.getElementById('cmdCard').style.display='none';document.getElementById('resCard').style.display='';
+  renderResident();});
+const zp=document.getElementById('zpick');
+ZONES.forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent='K-'+String(z.id).padStart(3,'0');zp.appendChild(o)});
+zp.value=myZone;
+zp.addEventListener('change',()=>{myZone=+zp.value;renderResident()});
+
+/* ── go ── */
+splat();renderSirens();computeDirectives();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+# =============================================================================
+# PB-225 — OOO vocabulary gate: reject SQL/relational/foreign-database
+# vocabulary and ports before they're adopted into DubSar's Godot UI.
+# BahyWay.Ecosystem v4.0 — 2026-07-22
+#
+# WHY THIS EXISTS: the Architect's Triple-O (OOO) law -- BahyWay's Seven
+# EnkiDB Types are never SQL, never relational, never a foreign
+# database's vocabulary or port, "because they ARE NOT OOO and will
+# NEVER BE" -- previously lived only as a comment in enki_engines.gd's
+# header ("Forbidden vocabulary anywhere in this project: SQL,
+# Relational, 5432, Multi-Model..."). A comment doesn't enforce anything.
+# This is the promotion of that law from a comment to an actual, run-any-
+# time scanner: `musaru_security::vocab_gate` (crates/musaru-security/
+# src/vocab_gate.rs), fronted by the `ooo-vocab-gate` CLI
+# (bin/ooo-vocab-gate). Concretely: when an AI-generated or third-party
+# mockup is adopted as a *layout* reference for a real DubSar screen (as
+# happened with a prototype whose database cards were labelled
+# "Relational SQL" on port 5432, "Object Document" on 27017 (MongoDB's
+# real default port), "Multi-Model" on 9042 (Cassandra's)), this is the
+# step that runs before any of that content is trusted to survive into
+# `godot/dubsar-theater/`.
+#
+# SCOPE, deliberately narrow: this gate scans UI/design surfaces (.gd,
+# .tscn, .html, .htm, .md by default) for foreign product names, paradigm
+# words (SQL/NoSQL/Relational/Multi-Model), and foreign default ports
+# (5432/3306/27017/9042/6379/1433/1521/5984/9200/7687). It does NOT scan
+# bare SQL verbs (SELECT/INSERT/GROUP BY/...) as prose -- an early version
+# did, and running it against the real repo proved that's the wrong tool:
+# "select"/"selected"/"_select_database()" are ordinary English/GDScript
+# vocabulary, not SQL. `heptascript::operations::Operation::parse()`
+# already owns SQL-verb rejection precisely, as an exact-token match
+# against real *parsed* HeptaScript query source (`OperationError::
+# SqlForbidden`) -- this gate's real, non-redundant job is the surface
+# that scanner never sees.
+#
+# WHAT THIS PLAYBOOK DOES: builds `ooo-vocab-gate` (cargo build --release,
+# idempotent -- a no-op rebuild if already current), then runs it against
+# `vocab_gate_targets` (default: the DubSar Godot tree). Fails the play
+# with the gate's own violation report if anything is found -- run this
+# before merging any change to `godot/dubsar-theater/`, and point it at
+# an uploaded prototype's staging path before adopting its layout.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_225_ooo_vocabulary_gate.yml
+#   ansible-playbook playbooks/playbook_225_ooo_vocabulary_gate.yml \
+#     -e 'vocab_gate_targets=["/path/to/uploaded_prototype.html"]'
+# =============================================================================
+
+- name: PB-225 -- OOO vocabulary gate
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    vocab_gate_targets: ["{{ repo_root }}/godot/dubsar-theater"]
+
+  tasks:
+    # `-e 'vocab_gate_targets=["/some/path"]'` does NOT reliably parse as
+    # a YAML/JSON list via the key=value extra-vars shorthand -- confirmed
+    # live (this took two real fixes to nail down): it arrives here as the
+    # raw literal STRING '["/some/path"]', brackets and quotes included,
+    # not an actual list.
+    #   Fix 1 -- normalize into a DIFFERENTLY-named fact
+    #   (`_vocab_gate_target_list`), never reassigned to `vocab_gate_targets`
+    #   itself: extra-vars (`-e`) are Ansible's highest-precedence variable
+    #   source and silently win over any same-named `set_fact` for the rest
+    #   of the play (confirmed live: a `set_fact: vocab_gate_targets: ...`
+    #   attempt ran "ok" but had zero effect downstream).
+    #   Fix 2 -- actually parse the JSON-looking string with `from_json`
+    #   rather than just wrapping it in a list: a naive `[vocab_gate_targets]`
+    #   produces a one-element list whose single element is the entire
+    #   literal text '["/some/path"]' (brackets included), not the path --
+    #   confirmed live via `ansible-playbook -vvv`, which showed the gate
+    #   binary receiving that whole bracketed string as one bogus argv
+    #   element and failing with a real "No such file or directory".
+    - name: Detect whether vocab_gate_targets arrived as a JSON-looking string
+      set_fact:
+        _vocab_gate_targets_is_json_string: "{{ vocab_gate_targets is string and (vocab_gate_targets | trim | first) == '[' }}"
+
+    - name: Normalize vocab_gate_targets into a real list
+      set_fact:
+        _vocab_gate_target_list: >-
+          {{
+            (vocab_gate_targets | from_json) if _vocab_gate_targets_is_json_string
+            else ([vocab_gate_targets] if vocab_gate_targets is string else vocab_gate_targets)
+          }}
+
+    - name: Build ooo-vocab-gate (release, idempotent)
+      command: cargo build --release -p ooo-vocab-gate
+      args:
+        chdir: "{{ repo_root }}"
+      changed_when: false
+
+    - name: Run the OOO vocabulary gate against the configured targets
+      # argv (list form), not a shell-quoted string: `command:`'s string
+      # form only does a plain whitespace/shlex split with no real shell
+      # behind it, so a shell-style `quote` filter here doesn't get
+      # "unquoted" the way it would under /bin/sh -- it becomes literal
+      # characters in the argument (also confirmed live, same debugging
+      # pass as the fix above). The list form passes each target exactly
+      # as-is, correctly handling paths with spaces with no quoting needed.
+      command:
+        argv: "{{ [repo_root + '/target/release/ooo-vocab-gate'] + _vocab_gate_target_list }}"
+      register: gate_result
+      failed_when: false
+      changed_when: false
+
+    - name: Show gate report
+      debug:
+        msg: "{{ gate_result.stdout_lines }}"
+
+    - name: Fail the play if the gate found any forbidden vocabulary
+      fail:
+        msg: >-
+          GATE: FAIL -- forbidden SQL/relational/foreign-database
+          vocabulary or port found in {{ _vocab_gate_target_list | join(', ') }}.
+          BahyWay's Seven EnkiDB Types are Triple-O (OOO); they are not
+          SQL, not relational, and never will be. See the report above
+          for exact file:line hits, fix them, then re-run this playbook.
+      when: gate_result.rc != 0

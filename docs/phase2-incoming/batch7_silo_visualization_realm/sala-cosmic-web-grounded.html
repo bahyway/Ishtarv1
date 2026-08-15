@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Cosmic Web — grounded facts as glowing filaments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#02030a; --ink:#eaf0fb; --ink-dim:#9aa6c8; --ink-faint:#5a6488;
+  --fact:#8fe6b0; --weak:#e3b458; --ghost:#b083e0; --none:#4a5478;
+  --gold:#E3B458; --signal:#4fd6c4; --line:#1c2440;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button,select{font-family:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;z-index:5}
+.hud-title{top:14px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:20px;letter-spacing:.1em;color:var(--ink);text-shadow:0 0 30px rgba(143,230,176,.4)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:10px;letter-spacing:.2em;color:var(--ink-faint);margin-top:5px}
+.panel{background:rgba(6,10,24,.82);border:1px solid var(--line);border-radius:8px;padding:13px 15px;backdrop-filter:blur(10px)}
+.hud-ask{top:82px;left:50%;transform:translateX(-50%);width:min(680px,92vw);font-family:var(--f-data)}
+.hud-ask .lab{font-size:10px;letter-spacing:.14em;color:var(--signal);text-transform:uppercase;margin-bottom:8px}
+.ask-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ask-row select{flex:1;min-width:150px;background:rgba(4,7,18,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:9px 10px;font-family:var(--f-data);font-size:12px}
+.ask-row .kw{color:var(--ghost);font-size:12px}
+.ask-row button{background:var(--signal);border:none;color:#04231f;border-radius:5px;padding:9px 16px;font-family:var(--f-display);letter-spacing:.06em;font-size:13px;cursor:pointer}
+.hs-echo{margin-top:9px;font-size:11px;color:var(--ink-faint);line-height:1.5;background:rgba(2,3,10,.7);border-radius:5px;padding:8px 10px;border:1px solid var(--line)}
+.hs-echo .v{color:var(--gold)}
+.hud-verdict{top:224px;left:50%;transform:translateX(-50%);width:min(680px,92vw);font-family:var(--f-data);display:none}
+.verdict-badge{display:inline-block;font-size:12px;font-weight:600;padding:3px 12px;border-radius:100px;letter-spacing:.08em}
+.vb-fact{color:var(--fact);border:1px solid var(--fact)} .vb-weak{color:var(--weak);border:1px solid var(--weak)}
+.vb-ghost{color:var(--ghost);border:1px solid var(--ghost)} .vb-none{color:var(--none);border:1px solid var(--none)}
+.verdict-body{font-size:12px;color:var(--ink-dim);margin-top:9px;line-height:1.55}
+.verdict-body b{color:var(--ink)}
+.ev-item{border-left:2px solid var(--fact);padding:5px 0 5px 9px;margin:6px 0;font-size:11px;color:var(--ink-dim);line-height:1.4}
+.ev-item.weak{border-left-color:var(--weak)} .ev-item.ghost{border-left-color:var(--ghost)}
+.ev-item .src{display:block;font-size:9px;color:var(--signal);margin-top:2px}
+.legend{bottom:12px;left:18px;font-family:var(--f-data);font-size:10px;color:var(--ink-faint);line-height:1.8;max-width:340px}
+.legend .sw{display:inline-block;width:22px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(2,3,10,.9);border-top:1px solid var(--line);font-family:var(--f-data);font-size:9px;color:var(--ink-faint);padding:5px 18px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">𒁾</span> COSMIC WEB · <em>grounded</em></h1>
+  <div class="sub">EACH GLOWING FILAMENT IS A REAL GOLDEN FACT · DENSITY = GROUNDING · VOID = NO CONNECTION</div>
+</div>
+
+<div class="hud hud-ask panel">
+  <div class="lab">◆ Bārû · HeptaScript query console</div>
+  <div class="ask-row">
+    <span class="kw">ASK</span>
+    <select id="q-a"></select>
+    <span class="kw">AND</span>
+    <select id="q-b"></select>
+    <button id="q-run">PROVE ▸</button>
+  </div>
+  <div class="hs-echo" id="hs-echo">HeptaScript will appear here…</div>
+</div>
+
+<div class="hud hud-verdict panel" id="verdict"></div>
+
+<div class="legend">
+  <div><span class="sw" style="background:linear-gradient(90deg,#8fe6b0,#4fd6c4)"></span><b style="color:var(--fact)">FACT</b> — bright dense filament, cited</div>
+  <div><span class="sw" style="background:var(--weak)"></span><b style="color:var(--weak)">WEAK</b> — dim thin thread</div>
+  <div><span class="sw" style="background:var(--ghost);opacity:.5"></span><b style="color:var(--ghost)">GHOST</b> — faint scattered haze, needs research</div>
+  <div><span class="sw" style="background:var(--none);opacity:.3"></span><b style="color:var(--none)">NONE</b> — dark void, no filament</div>
+  <div style="margin-top:5px;color:var(--ink-faint)">drag to fly · scroll to zoom · the whole web is real GOLDEN facts</div>
+</div>
+
+<footer>Way-of-Work rule 5 — HTML prototype; production body Godot/WGPU. ~180k GPU particles, additive glow. Every filament traces a REAL GOLDEN fact (StatPearls/PMC/ScienceDirect); density = grounding, void = no connection. Aesthetic is a reading of the evidence, not decoration. The agent draws only what PROVE finds. Not medical advice. Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ===== GOLDEN store (real gangrene fact-set) ===== */
+const ENTITIES=['Clostridium perfringens','Clostridium septicum','Group A Streptococcus','Escherichia coli','Klebsiella pneumoniae','Staphylococcus aureus','diabetes mellitus','peripheral vascular disease','gas gangrene','necrotizing fasciitis','diabetic foot wound','alpha-toxin'];
+const GOLDEN=[
+  ['Clostridium perfringens','gas gangrene',0.97,'Gas Gangrene, StatPearls NBK537030 (80–90%)'],
+  ['Clostridium septicum','gas gangrene',0.85,'StatPearls (~20%, spontaneous)'],
+  ['Clostridium perfringens','alpha-toxin',0.96,'StatPearls (lecithinase)'],
+  ['alpha-toxin','gas gangrene',0.94,'StatPearls (drives necrosis)'],
+  ['Group A Streptococcus','necrotizing fasciitis',0.93,'Necrotizing Fasciitis, ScienceDirect (Type II)'],
+  ['Escherichia coli','necrotizing fasciitis',0.82,'ScienceDirect (Type I mixed)'],
+  ['diabetes mellitus','gas gangrene',0.90,'C. perfringens/diabetes case PMC10726074'],
+  ['diabetes mellitus','necrotizing fasciitis',0.88,'ScienceDirect (Type I, diabetes/vascular)'],
+  ['diabetes mellitus','diabetic foot wound',0.95,'PMC10726074 (traumatic foot wound)'],
+  ['diabetic foot wound','gas gangrene',0.89,'PMC10726074 (entry point)'],
+  ['diabetes mellitus','peripheral vascular disease',0.86,'ScienceDirect (compromised supply)'],
+  ['peripheral vascular disease','gas gangrene',0.84,'ScienceDirect (enables anaerobic growth)'],
+  ['Klebsiella pneumoniae','gas gangrene',0.45,'Gas gangrene case PMC12414490 (WEAK)'],
+  ['Staphylococcus aureus','gas gangrene',0.42,'PMC12414490 (WEAK)'],
+  ['Klebsiella pneumoniae','diabetes mellitus',0.22,'sparse co-mention — GHOST'],
+  ['Staphylococcus aureus','diabetic foot wound',0.19,'sparse co-mention — GHOST'],
+];
+function lookup(a,b){return GOLDEN.filter(r=>(r[0]===a&&r[1]===b)||(r[0]===b&&r[1]===a));}
+function classify(recs){if(!recs.length)return{kind:'NONE',conf:0};const best=Math.max(...recs.map(r=>r[2]));
+  if(best>=0.6)return{kind:'FACT',conf:best,recs};if(best>=0.35)return{kind:'WEAK',conf:best,recs};return{kind:'GHOST',conf:best,recs};}
+
+/* ===== three.js cosmic web ===== */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(58,2,0.1,6000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x02030a,1);
+stage.appendChild(renderer.domElement);
+
+/* entity anchor positions (the gravitational structure the web wraps around) */
+const anchors={};
+ENTITIES.forEach((e,i)=>{
+  const a=i/ENTITIES.length*Math.PI*2, r=210+((i*53)%70);
+  anchors[e]=new THREE.Vector3(Math.cos(a)*r, Math.sin(a)*r*0.5, Math.sin(a*1.7)*90);
+});
+
+/* glow sprite texture (soft radial) */
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.25,'rgba(255,255,255,0.6)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+
+/* ---- background field: faint scattered particles (the cosmic void has structure) ---- */
+function buildBackground(){
+  const N=90000; const pos=new Float32Array(N*3), col=new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    // cluster faintly around anchors + random void haze
+    let x,y,z;
+    if(Math.random()<0.5){const e=ENTITIES[(Math.random()*ENTITIES.length)|0];const A=anchors[e];
+      const rr=60+Math.random()*160;const th=Math.random()*6.28,ph=(Math.random()-.5)*3.14;
+      x=A.x+Math.cos(th)*Math.cos(ph)*rr;y=A.y+Math.sin(ph)*rr;z=A.z+Math.sin(th)*Math.cos(ph)*rr;
+    } else {x=(Math.random()-.5)*900;y=(Math.random()-.5)*500;z=(Math.random()-.5)*500;}
+    pos[i*3]=x;pos[i*3+1]=y;pos[i*3+2]=z;
+    const b=0.1+Math.random()*0.25; col[i*3]=b*0.5;col[i*3+1]=b*0.6;col[i*3+2]=b*1.0; // faint blue haze
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  const m=new THREE.PointsMaterial({size:2.0,vertexColors:true,transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX});
+  scene.add(new THREE.Points(g,m));
+}
+buildBackground();
+
+/* ---- filament particles ALONG every GOLDEN fact ---- */
+/* each fact seeds a dense stream of particles between its two anchors, colored & bright by strength */
+let filamentPoints, filData=[];
+function buildFilaments(){
+  if(filamentPoints)scene.remove(filamentPoints);
+  filData=[];
+  const perStrong=7000, perWeak=2500, perGhost=1200;
+  let total=0;
+  GOLDEN.forEach(r=>{const [a,b,conf]=r; total += conf>=0.6?perStrong:conf>=0.35?perWeak:perGhost;});
+  const pos=new Float32Array(total*3), col=new Float32Array(total*3), phase=new Float32Array(total);
+  let k=0;
+  GOLDEN.forEach(r=>{
+    const [a,b,conf,src]=r; const A=anchors[a],B=anchors[b];
+    const kind=conf>=0.6?'FACT':conf>=0.35?'WEAK':'GHOST';
+    const n=conf>=0.6?perStrong:conf>=0.35?perWeak:perGhost;
+    const spread=kind==='FACT'?14:kind==='WEAK'?10:26; // ghost = diffuse haze
+    // color per kind
+    let cr,cg,cb;
+    if(kind==='FACT'){cr=0.56;cg=0.90;cb=0.69;}      // green-teal
+    else if(kind==='WEAK'){cr=0.89;cg=0.70;cb=0.35;} // amber
+    else {cr=0.69;cg=0.51;cb=0.88;}                   // ghost purple
+    const bright=kind==='FACT'?1.0:kind==='WEAK'?0.6:0.32;
+    for(let i=0;i<n;i++){
+      const t=Math.random();
+      // point along the curved filament (slight bow toward center)
+      const mid=A.clone().add(B).multiplyScalar(0.5).multiplyScalar(0.7);
+      const p=new THREE.Vector3().copy(A).multiplyScalar((1-t)*(1-t))
+        .add(mid.clone().multiplyScalar(2*(1-t)*t))
+        .add(B.clone().multiplyScalar(t*t));
+      // scatter around the filament axis (denser at center of thread)
+      const s=spread*(0.4+Math.random()*Math.random());
+      p.x+=(Math.random()-.5)*s;p.y+=(Math.random()-.5)*s;p.z+=(Math.random()-.5)*s;
+      pos[k*3]=p.x;pos[k*3+1]=p.y;pos[k*3+2]=p.z;
+      const b=bright*(0.5+Math.random()*0.5);
+      col[k*3]=cr*b;col[k*3+1]=cg*b;col[k*3+2]=cb*b;
+      phase[k]=Math.random()*6.28;
+      k++;
+    }
+  });
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  g.setAttribute('aphase',new THREE.BufferAttribute(phase,1));
+  const m=new THREE.PointsMaterial({size:3.0,vertexColors:true,transparent:true,opacity:0.9,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX});
+  filamentPoints=new THREE.Points(g,m);
+  scene.add(filamentPoints);
+}
+buildFilaments();
+
+/* ---- knots: bright cluster cores at each entity, brightness = how many facts ground it ---- */
+const knots={};
+function buildKnots(){
+  const degree={}; ENTITIES.forEach(e=>degree[e]=0);
+  GOLDEN.forEach(r=>{degree[r[0]]+=r[2];degree[r[1]]+=r[2];});
+  ENTITIES.forEach(e=>{
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX,color:0xffffff,transparent:true,opacity:0.85,depthWrite:false,blending:THREE.AdditiveBlending}));
+    const sz=22+degree[e]*10; s.scale.set(sz,sz,1); s.position.copy(anchors[e]);
+    scene.add(s); knots[e]={sprite:s,base:sz};
+    // label
+    const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+    g.font='500 24px "IBM Plex Mono"';g.fillStyle='#c8d4f0';g.textAlign='center';g.textBaseline='middle';
+    g.shadowColor='rgba(0,0,0,.9)';g.shadowBlur=8;g.fillText(e,256,34);
+    const lab=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
+    lab.scale.set(150,19,1);lab.position.copy(anchors[e]).add(new THREE.Vector3(0,sz*0.6+10,0));scene.add(lab);
+    knots[e].label=lab;
+  });
+}
+buildKnots();
+
+/* ---- camera fly (declared before first runQuery so camTarget exists) ---- */
+let az=0.5,el=0.35,camDist=620,camDistT=620,camTarget=new THREE.Vector3(),ct=new THREE.Vector3(),dragging=false,lx=0,ly=0,spin=!reduced;
+
+/* ---- query: highlight the asked filament by dimming the rest ---- */
+let asked=null; // {a,b,kind}
+function fillSelects(){const qa=document.getElementById('q-a'),qb=document.getElementById('q-b');
+  ENTITIES.forEach(e=>{qa.insertAdjacentHTML('beforeend',`<option>${e}</option>`);qb.insertAdjacentHTML('beforeend',`<option>${e}</option>`);});
+  qa.value='diabetic foot wound';qb.value='gas gangrene';}
+fillSelects();
+const qa=document.getElementById('q-a'),qb=document.getElementById('q-b');
+function avoidCollision(changed){if(qa.value===qb.value){const other=changed===qa?qb:qa;const idx=ENTITIES.indexOf(other.value);other.value=ENTITIES[(idx+1)%ENTITIES.length];}runQuery();}
+qa.onchange=()=>avoidCollision(qa);qb.onchange=()=>avoidCollision(qb);
+
+function runQuery(){
+  const a=qa.value,b=qb.value;
+  if(a===b){document.getElementById('hs-echo').innerHTML='<span style="color:var(--weak)">Pick two different entities.</span>';return;}
+  document.getElementById('hs-echo').innerHTML=
+    `<span class="v">ASK</span> connection <span class="v">BETWEEN</span> "${a}" <span class="v">AND</span> "${b}"<br>`+
+    `&nbsp;&nbsp;<span class="v">PROVE OVER</span> EnkiDW <span class="v">SCOPE</span> domain="infection" <span class="v">WITH</span> evidence<br>`+
+    `&nbsp;&nbsp;<span class="v">GHOST IF NOT PROVEN</span> · <span class="v">WITNESS</span> result → StoryEngine`;
+  const recs=lookup(a,b), res=classify(recs);
+  asked={a,b,kind:res.kind};
+  // fly camera to midpoint of the asked pair
+  const mid=anchors[a].clone().add(anchors[b]).multiplyScalar(0.5);
+  camTarget.copy(mid); camDistT= res.kind==='NONE'?520:340;
+  // verdict
+  const vd=document.getElementById('verdict');vd.style.display='block';
+  const bc={FACT:'vb-fact',WEAK:'vb-weak',GHOST:'vb-ghost',NONE:'vb-none'}[res.kind];
+  let body;
+  if(res.kind==='FACT')body=`The GOLDEN store <b>confirms</b> this — a bright dense filament now glows between the two knots. Confidence ${(res.conf*100|0)}%.`;
+  else if(res.kind==='WEAK')body=`Only <b>weak</b> support — a dim thin thread. Not dressed up as strong. Confidence ${(res.conf*100|0)}%.`;
+  else if(res.kind==='GHOST')body=`A <b>ghost</b> — a faint scattered haze, present but below confidence. <b>Hypothesis, needs research.</b> Signal ~${(res.conf*100|0)}%.`;
+  else body=`<b>No connection</b> in the store — the space between these knots stays a <b>dark void</b>. No filament is drawn. Absence shown honestly.`;
+  const ev=recs.length?recs.map(r=>{const cls=r[2]>=0.6?'':r[2]>=0.35?'weak':'ghost';return `<div class="ev-item ${cls}">${r[0]} ↔ ${r[1]} · conf ${(r[2]*100|0)}%<span class="src">${r[3]}</span></div>`;}).join(''):'';
+  vd.innerHTML=`<span class="verdict-badge ${bc}">${res.kind}</span><div class="verdict-body">${body}</div>${ev}<div class="verdict-body" style="font-size:9.5px;color:var(--ink-faint);margin-top:8px">WITNESS: sealed as an Event particle. Morphology proposes; GOLDEN proves.</div>`;
+}
+document.getElementById('q-run').onclick=runQuery;
+runQuery();
+
+/* ---- camera controls ---- */
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(120,Math.min(1600,camDistT*(1+Math.sign(e.deltaY)*0.09)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{if(!dragging)return;az-=(e.clientX-lx)*0.005;el=Math.max(-1.4,Math.min(1.4,el+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;});
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin)az+=dt*0.03;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.5);
+  ct.lerp(camTarget,Math.min(1,dt*2));
+  // knot pulse; highlight asked pair
+  Object.entries(knots).forEach(([e,K])=>{
+    let hot=asked&&(e===asked.a||e===asked.b)&&asked.kind!=='NONE';
+    const pulse=1+Math.sin(ts/500+K.base)*0.06+(hot?0.5:0);
+    K.sprite.scale.set(K.base*pulse,K.base*pulse,1);
+    K.sprite.material.opacity=hot?1.0:0.7;
+  });
+  // gentle filament shimmer
+  if(filamentPoints) filamentPoints.rotation.y = Math.sin(ts/8000)*0.05;
+  camera.position.set(ct.x+Math.cos(az)*Math.cos(el)*camDist, ct.y+Math.sin(el)*camDist, ct.z+Math.sin(az)*Math.cos(el)*camDist);
+  camera.lookAt(ct);
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

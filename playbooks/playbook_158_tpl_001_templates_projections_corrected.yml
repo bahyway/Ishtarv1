@@ -1,0 +1,92 @@
+# =============================================================================
+# PB-158 — TPL-001 SEAL: TEMPLATE PLANS + JOURNAL PROJECTION CACHE
+# BahyWay.Ecosystem v4.0 — CORRECTED 2026-07-10
+#
+# CORRECTION: the original draft treated `prev_event` back-pointer
+# existence as an open "VERIFY" question. Checked directly against
+# crates/enkidb-journal/src/*.rs: it does NOT exist. Per-particle
+# history today is O(N) (full scan), not O(k) as TPL-001 §B.5 assumes.
+# This is a confirmed, real gap, not an open question — §B.5 below is
+# reworded from "verify" to "known missing, implementation-required."
+#
+# TARGET: eriduous-vdi (docs seal only; implementation queued behind
+#   Phase A -> Phase B -> TESTING_PLAYBOOK_PHASE1 Blocks A-F per RM-002)
+# =============================================================================
+---
+- name: "PB-158 | Seal TPL-001 design document"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    repo_path: "{{ bahyway_repo | default(ansible_env.HOME + '/Forge/EnkiDB/workspace/bahyway_v4') }}"
+    docs_dir: "{{ repo_path }}/docs/enkidb"
+
+  tasks:
+    - name: "PB-158.0 | Ensure docs directory"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "PB-158.1 | Seal TPL-001"
+      ansible.builtin.copy:
+        dest: "{{ docs_dir }}/TPL-001_templates_and_projections.md"
+        mode: "0644"
+        content: |
+          # TPL-001 — Template Execution Plans & Journal Projection Cache
+          Status: SEALED DESIGN · Implementation queued behind testing gate
+
+          ## A. Template Plans (design-time intelligence, runtime determinism)
+          1. A Template is a HeptaScript query compiled ONCE at design time:
+             parse -> planner -> (optional) MUMMU/Z3 satisfiability
+             proof -> AkkadianSeal (Ed25519, real: crates/kupru) over the
+             plan bytes.
+          2. Registry lives in EnkiMDB. VERIFY before implementation: the
+             real crates/enkimdb catalogs BahyWay's own artifacts
+             (crates/playbooks scanned from the filesystem) — a different
+             purpose than a general sealed-query-plan registry. Either
+             extend enkimdb's scope deliberately or pick a different home;
+             don't assume the fit without a design decision.
+          3. Admission law: a plan is sealable only if every access path is
+             index-covered by real enkidb-indexes structures (confirmed
+             real: EavExactIndex, HeptaShellIndex, NatiruIndex,
+             RadixSplineIndex, SurrogateMap). A plan requiring raw journal
+             scan is REJECTED at seal time.
+          4. Z3 placement law upheld: proofs at design time only; no solver
+             in any shipped binary.
+
+          ## B. Journal Projection Cache (derived EAV segments, read node)
+          1. Source of truth: append-only journal on enkidb-node-write.
+             Projections are DERIVED EAV segment files on enkidb-node-read.
+          2. Projector applies events post-commit, in commit order. Real
+             enkidb-indexes structures are built over *those segments* —
+             never over the journal.
+          3. Segment header: {journal_watermark_offset, built_at, seal}.
+             Divergence from journal => segment condemned + rebuilt.
+             Journal always wins.
+          4. Freshness is provable: PROVE FRESH(watermark, delta_t_max)
+             where delta_t_max comes from the client SLA.
+          5. Per-particle history — CONFIRMED GAP, not a verify point:
+             crates/enkidb-journal has NO prev_event back-pointer today
+             (checked directly, 2026-07-10). Full history walk is
+             currently O(N), a full journal scan. Adding the back-pointer
+             at projection time (deriving it without touching the locked
+             journal format) is real, unstarted implementation work and
+             the prerequisite for this section's O(k) claim.
+          6. The ONLY lawful full journal scan is the offline projector
+             rebuild (maintenance mode). A runtime plan that would
+             degrade to a journal scan should be refused at seal time,
+             not silently executed.
+
+          ## C. Federation note
+          Sealed Template plans may span engines: the fan-out and
+          KAKI-surrogate join are part of the sealed plan. See PB-159
+          (corrected) for what "spanning engines" actually means today.
+
+    - name: "PB-158.2 | Seal note"
+      ansible.builtin.debug:
+        msg: >-
+          TPL-001 sealed. CONFIRMED gap (not open question): journal
+          events do not carry prev_event back-pointers. EnkiMDB's real
+          purpose (artifact catalog) needs a deliberate scope decision
+          before it can host a plan registry.

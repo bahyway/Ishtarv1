@@ -1,0 +1,88 @@
+# ============================================================================
+# 𒁾 PB-322 — DEPLOY ŠALA TABLET v4 (LIVING ORBITS + STORYTELLING)
+# BahyWay.Ecosystem v4.0 — Unified Algebra session deliverable
+#
+# WHY THIS PLAYBOOK EXISTS
+#   The Architect was viewing a stale copy of the final Šala tablet
+#   (saved before the living-orbits/storytelling patches). Per the law
+#   "every fix is a numbered playbook," the correction is this deployment:
+#   install the new file, retire the old one, and PROVE the new behaviors
+#   are present in the deployed bytes — not assumed.
+#
+# BEFORE RUNNING
+#   Download from the session:  bahyway-unified-algebra-shala-v4-living-orbits.html
+#   into ~/Downloads (or pass -e src=/path/to/file).
+#   Expected sha256 prefix: 4e756944dff78785
+#
+# RUN
+#   ansible-playbook PB-322-deploy-shala-v4.yml
+# ============================================================================
+---
+- name: "PB-322 | Deploy Šala tablet v4 (living orbits + storytelling)"
+  hosts: localhost
+  gather_facts: true
+  vars:
+    src: "{{ src | default(ansible_env.HOME + '/Downloads/bahyway-unified-algebra-shala-v4-living-orbits.html') }}"
+    dest_dir: "{{ ansible_env.HOME }}/Forge/bahyway_v4/docs/__DialyWorks/Sun20260809/_Evening_BahyWay_Unified_Algebra"
+    dest: "{{ dest_dir }}/bahyway-unified-algebra-shala-v4-living-orbits.html"
+    stale: "{{ dest_dir }}/bahyway-unified-algebra-shala-final(With_StoryTelling).html"
+    expected_sha_prefix: "4e756944dff78785"
+  tasks:
+
+    - name: "Assert the downloaded v4 file exists"
+      ansible.builtin.stat:
+        path: "{{ src }}"
+      register: srcst
+
+    - name: "Fail with guidance if the download is missing"
+      ansible.builtin.fail:
+        msg: "{{ src }} not found — download bahyway-unified-algebra-shala-v4-living-orbits.html from the session first, or pass -e src=/path"
+      when: not srcst.stat.exists
+
+    - name: "Verify integrity — sha256 must match the session record"
+      ansible.builtin.shell: "sha256sum '{{ src }}' | cut -c1-16"
+      register: sha
+      changed_when: false
+
+    - name: "Fail if the bytes are not the session's bytes"
+      ansible.builtin.fail:
+        msg: "sha256 prefix {{ sha.stdout }} != {{ expected_sha_prefix }} — this is not the v4 file from the session"
+      when: sha.stdout != expected_sha_prefix
+
+    - name: "Ensure destination directory exists"
+      ansible.builtin.file:
+        path: "{{ dest_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Retire the stale tablet (backup, never delete)"
+      ansible.builtin.command: "mv '{{ stale }}' '{{ stale }}.stale-{{ ansible_date_time.iso8601_basic_short }}'"
+      args:
+        removes: "{{ stale }}"
+
+    - name: "Install the v4 tablet"
+      ansible.builtin.copy:
+        src: "{{ src }}"
+        dest: "{{ dest }}"
+        mode: "0644"
+
+    # ------------------------------------------------------------------
+    # PROVE — the deployed bytes must contain the promised behaviors
+    # ------------------------------------------------------------------
+    - name: "PROVE living orbits, dust representatives, and right-click interception"
+      ansible.builtin.shell: |
+        set -e
+        grep -q "ṬĀLUKU orbital law" "{{ dest }}"
+        grep -q "DUST_N" "{{ dest }}"
+        grep -q "contextmenu" "{{ dest }}"
+        grep -q "living orbits" "{{ dest }}"
+        echo "PROVEN: orbits + dust + storytelling present in deployed file"
+      register: prove
+      changed_when: false
+
+    - name: "Witness"
+      ansible.builtin.debug:
+        msg:
+          - "{{ prove.stdout }}"
+          - "Open: file://{{ dest }}"
+          - "If the old page still shows, hard-refresh: Ctrl+Shift+R (file:// pages cache aggressively)"

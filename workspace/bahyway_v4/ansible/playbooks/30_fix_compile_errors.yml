@@ -1,0 +1,169 @@
+---
+# =============================================================================
+# PLAYBOOK 30 — Fix 5 compile errors left by pre-Playbook-29 code
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-18
+# Target:       eriduous-vdi — run with: ansible-playbook ... -i "localhost," -c local -v
+#
+# Errors fixed:
+#   E0428  panels/mod.rs:23      — BahywayMain defined twice
+#   E0599  bahyway_main.rs:37    — Color32::White → Color32::WHITE
+#   E0283  bahyway_main.rs:802   — remove redundant .into() after linear_multiply()
+#   E0004  app.rs:378            — non-exhaustive match (zombie BahywayMain variant)
+#   warn   app.rs:404            — unreachable pattern (same root cause)
+# =============================================================================
+- name: "Playbook 30 — Fix 5 dubsar-visualizer compile errors"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    workspace: "/home/bahyway/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_30.py"
+
+  tasks:
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 1 — Write patch script
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "Write bw_fix_30.py"
+      ansible.builtin.copy:
+        dest: "{{ fix_script }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          """
+          Playbook 30 — surgical fixes for 5 compile errors.
+          All edits are idempotent (checked before applying).
+          """
+          import re, sys
+
+          WORKSPACE = "/home/bahyway/Forge/bahyway_v4"
+
+          def read(path):
+              with open(path) as f:
+                  return f.read()
+
+          def write(path, content):
+              with open(path, "w") as f:
+                  f.write(content)
+              print(f"  ✓  wrote {path}")
+
+          def replace_once(path, old, new, label):
+              src = read(path)
+              if new in src and old not in src:
+                  print(f"  ⟳  already fixed ({label}): {path}")
+                  return
+              if old not in src:
+                  print(f"  ✗  marker not found ({label}) in {path}", file=sys.stderr)
+                  print(f"     Looking for: {repr(old)}", file=sys.stderr)
+                  sys.exit(1)
+              write(path, src.replace(old, new, 1))
+              print(f"  ✓  fixed [{label}]  {path}")
+
+          # ── FIX 1: panels/mod.rs — remove duplicate BahywayMain ──────────
+          # The enum has two consecutive BahywayMain variants.
+          # We remove exactly the second occurrence by replacing the
+          # "BahywayMain,\n    BahywayMain," pattern with a single entry.
+          MOD_RS = f"{WORKSPACE}/crates/dubsar-visualizer/src/panels/mod.rs"
+          replace_once(
+              MOD_RS,
+              "    BahywayMain,\n    BahywayMain,",
+              "    BahywayMain,",
+              "E0428 duplicate BahywayMain",
+          )
+
+          # ── FIX 2: bahyway_main.rs:37 — Color32::White → Color32::WHITE ──
+          BAHYWAY = f"{WORKSPACE}/crates/dubsar-visualizer/src/panels/bahyway_main.rs"
+          replace_once(
+              BAHYWAY,
+              "Color32::White",
+              "Color32::WHITE",
+              "E0599 Color32::White",
+          )
+
+          # ── FIX 3: bahyway_main.rs:802 — remove .into() after linear_multiply ──
+          # Compiler says: "consider removing this method call"
+          replace_once(
+              BAHYWAY,
+              "GOLD.linear_multiply(0.25).into()",
+              "GOLD.linear_multiply(0.25)",
+              "E0283 linear_multiply .into()",
+          )
+
+          # ── FIX 4+5: app.rs — non-exhaustive match + unreachable pattern ──
+          # The match block has a duplicate BahywayMain arm at line 404.
+          # After fix 1 removes the enum duplicate, the match now has:
+          #   - one arm at line ~400 (the real one — keep it)
+          #   - one arm at line ~404 (the duplicate — remove it)
+          #
+          # Pattern to find: the second  "ActivePanel::BahywayMain => ..."
+          # We look for the exact duplicate arm that the compiler flagged as
+          # unreachable and remove it.
+          #
+          # The compiler output shows line 404 contains:
+          #   ), ActivePanel::BahywayMain => crate::panels::bahyway_main::draw(...)
+          # immediately after the first arm closes with ), so we target that.
+          APP_RS = f"{WORKSPACE}/crates/dubsar-visualizer/src/app.rs"
+          src = read(APP_RS)
+
+          # Find all occurrences of the BahywayMain arm
+          ARM_PATTERN = r"ActivePanel::BahywayMain\s*=>\s*crate::panels::bahyway_main::draw\s*\([^,]+,[^)]+\)"
+          matches = list(re.finditer(ARM_PATTERN, src, re.DOTALL))
+
+          if len(matches) == 0:
+              print("  ✗  no BahywayMain arm found in app.rs", file=sys.stderr)
+              sys.exit(1)
+          elif len(matches) == 1:
+              print("  ⟳  app.rs already has exactly 1 BahywayMain arm — no change needed")
+          else:
+              # Remove the second (duplicate) match
+              second = matches[1]
+              # Also remove a leading ", " or ", \n" connector if present
+              start = second.start()
+              # Walk back to consume ", " separator
+              while start > 0 and src[start-1] in (' ', '\n', '\r'):
+                  start -= 1
+              if start > 0 and src[start-1] == ',':
+                  start -= 1
+              patched = src[:start] + src[second.end():]
+              write(APP_RS, patched)
+              print(f"  ✓  fixed [E0004/unreachable] app.rs — removed duplicate BahywayMain arm")
+
+          print("\nPlaybook 30 patch complete — all 5 errors addressed.")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 2 — Run the patch
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "Execute bw_fix_30.py"
+      ansible.builtin.command:
+        cmd: "python3 {{ fix_script }}"
+      register: patch_out
+      changed_when: true
+
+    - name: "Show patch output"
+      ansible.builtin.debug:
+        msg: "{{ patch_out.stdout_lines }}"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 3 — Cargo build
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "cargo build -p dubsar-visualizer"
+      ansible.builtin.command:
+        cmd: "cargo build -p dubsar-visualizer 2>&1"
+        chdir: "{{ workspace }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result (last 15 lines)"
+      ansible.builtin.debug:
+        msg: "{{ (build_out.stdout + build_out.stderr) | split('\n') | reject('equalto','') | list | last(15) }}"
+
+    - name: "Confirm sealed"
+      ansible.builtin.debug:
+        msg: >
+          ✓ Playbook 30 sealed.
+          Run: cd ~/Forge/bahyway_v4 &&
+               WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan cargo run -p dubsar-visualizer

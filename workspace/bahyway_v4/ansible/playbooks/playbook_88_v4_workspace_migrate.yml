@@ -1,0 +1,200 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_88_v4_workspace_migrate.yml
+#  BahyWay.Ecosystem v4.0 — Sovereign Workspace Migration
+#  (Gap fill: PB-85–87 were egui/DubSar Visualizer era;
+#   PB-88 begins the v4.0 pure sovereign workspace)
+#
+#  Run FROM: eriduous-vdi (192.168.122.214)
+#  Target:   localhost (eriduous-vdi)
+#
+#  Purpose:
+#    Establish the v4.0 workspace at ~/Forge/EnkiDB/workspace/bahyway_v4/
+#    with the correct Cargo.toml workspace structure, deprecate all -Way
+#    suffixed references in the workspace root, and lock the v4.0 naming
+#    convention (-Engine suffix is universal, -Way fully deprecated).
+#
+#    This is the clean break between:
+#      - PB-85/86/87 (egui/DubSar Visualizer — now fully deprecated)
+#      - PB-92 onward (ConEngine, ENLIL, KISPU, v4.0 platform)
+#
+#  What it does:
+#    1. Create workspace/bahyway_v4/ structure if not present
+#    2. Write canonical v4.0 Cargo.toml workspace skeleton
+#    3. Write v4.0 naming convention lock file (docs/GL-001 precursor)
+#    4. Deprecation notice for egui/DubSar Visualizer
+#    5. Write BAHYWAY_BUILD_MANUAL.md (binary: enkidb-query-server)
+#    6. git status
+#    7. Report
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-88 | v4.0 Sovereign Workspace Migration"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    crates_dir:    "{{ workspace }}/crates"
+    docs_dir:      "{{ forge_root }}/docs"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ docs_dir }}/SHEDU/PB88_WORKSPACE_MIGRATE_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP  | Ensure all directories exist"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ workspace }}"
+        - "{{ crates_dir }}"
+        - "{{ docs_dir }}/SHEDU"
+        - "{{ docs_dir }}/v4.0"
+
+    - name: "WRITE | v4.0 workspace Cargo.toml skeleton"
+      ansible.builtin.copy:
+        dest: "{{ workspace }}/Cargo.toml"
+        mode: "0644"
+        force: false     # idempotent — do not overwrite if members already added
+        content: |
+          # BahyWay.Ecosystem v4.0 — Sovereign Workspace
+          # Source of truth: BAHYWAY_BUILD_MANUAL.md
+          # Binary: enkidb-query-server (in crates/enkidb-query-server/)
+          # Rule: -Way suffix FULLY DEPRECATED. All components use -Engine.
+
+          [workspace]
+          resolver = "2"
+          members  = [
+              # Crates are registered here by each playbook that creates them.
+              # Never use a glob — explicit members list only.
+          ]
+
+          [workspace.package]
+          version     = "0.1.0"
+          edition     = "2021"
+          authors     = ["DUB.SAR 𒁾 <bahaa@bahyway.io>"]
+          license     = "PROPRIETARY"
+          description = "BahyWay.Ecosystem v4.0 — Sovereign pure-Rust data intelligence"
+
+          [profile.release]
+          opt-level   = 3
+          lto         = true
+          codegen-units = 1
+
+    - name: "WRITE | v4.0 Naming Convention Lock (GL-001 precursor)"
+      ansible.builtin.copy:
+        dest: "{{ docs_dir }}/v4.0/NAMING_CONVENTION_LOCK.md"
+        mode: "0644"
+        content: |
+          # BahyWay.Ecosystem v4.0 — Naming Convention Lock
+          Date: {{ session_date }}
+          Status: LOCKED — no exceptions
+
+          ## The Single Rule
+          All components use the `-Engine` suffix.
+          The `-Way` suffix is FULLY DEPRECATED — including the prior
+          exception for Security Policy Language files.
+
+          ## Canonical v4.0 Names
+          | Deprecated (-Way) | Canonical v4.0 (-Engine) |
+          |---|---|
+          | AkkadiSafeWay | AkkadiSafeEngine |
+          | AkkadiRulesWay | AkkadiRulesEngine |
+          | AkkadiCipherWay | AkkadiCipherEngine |
+          | ShoWEngine | ShoWEngine ✓ (already correct) |
+          | ConEngine | ConEngine ✓ (already correct) |
+          | GeoEngine | GeoEngine ✓ (already correct) |
+          | UrNammu Engine | UrNammu Engine ✓ |
+          | Kittu Engine | Kittu Engine ✓ |
+          | NARAMSIN Engine | NARAMSIN Engine ✓ |
+          | TIAMAT Engine 5 | TIAMAT Engine 5 ✓ |
+
+          ## DubSar Theater
+          DubSar Theater (Godot 4.7) is the ONLY sovereign IDE and
+          visualisation platform. egui/DubSar Visualizer is permanently
+          retired. Never propose egui for production monitoring.
+
+    - name: "WRITE | BAHYWAY_BUILD_MANUAL.md"
+      ansible.builtin.copy:
+        dest: "{{ workspace }}/BAHYWAY_BUILD_MANUAL.md"
+        mode: "0644"
+        force: false
+        content: |
+          # BahyWay.Ecosystem v4.0 — Build Manual
+          Node: eriduous-vdi (192.168.122.214)
+          Workspace: ~/Forge/EnkiDB/workspace/bahyway_v4/
+
+          ## The One Binary to Build
+          ```bash
+          cd ~/Forge/EnkiDB/workspace/bahyway_v4
+          cargo build -p enkidb-query-server --release
+          ```
+
+          ## Run (on enkidb-node-write or enkidb-node-read)
+          ```bash
+          ./target/release/enkidb-query-server
+          ```
+
+          ## Workspace Structure
+          - crates/                  — all sovereign crates
+          - crates/enkidb-query-server/ — the primary binary
+          - Cargo.toml               — explicit members list (no globs)
+
+          ## Infrastructure Rules (locked)
+          1. Ansible targeting eriduous-vdi runs FROM the Fedora 44 HOST
+          2. Ansible targeting EnkiDB VMs runs FROM eriduous-vdi
+          3. dubsar-workstation (192.168.122.121) = Grafana+Prometheus ONLY
+          4. DubSar Theater = only sovereign IDE (egui retired)
+          5. HTML files = prototypes only, never production monitoring
+
+    - name: "WRITE | Deprecation notice for egui/DubSar Visualizer"
+      ansible.builtin.copy:
+        dest: "{{ docs_dir }}/v4.0/EGUI_DEPRECATION_NOTICE.md"
+        mode: "0644"
+        content: |
+          # egui / DubSar Visualizer — PERMANENTLY RETIRED
+          Date: {{ session_date }}
+          Superseded by: DubSar Theater (Godot 4.7) on eriduous-vdi
+
+          PB-85 (enkidb_wizard for Egui), PB-86 (fix_draw_args for Egui),
+          PB-87 (named_sidebar for Egui) were the final egui playbooks.
+          All visualisation work from PB-88 onward is exclusively
+          DubSar Theater (Godot 4.7).
+
+          Run DubSar Theater:
+            WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan cargo run --bin dubsar-visualizer
+          (This command is for reference only — the binary is now Godot-based)
+
+    - name: "GIT   | Status"
+      ansible.builtin.command:
+        cmd: "git status --short"
+        chdir: "{{ forge_root }}"
+      register: git_status
+      changed_when: false
+      ignore_errors: true
+
+    - name: "PRINT | Git status"
+      ansible.builtin.debug:
+        msg: "{{ git_status.stdout_lines | default(['git status unavailable']) }}"
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-88 Workspace Migration Report
+          Date  : {{ session_date }}
+
+          Workspace    : {{ workspace }}
+          Cargo.toml   : skeleton written (idempotent)
+          Naming lock  : {{ docs_dir }}/v4.0/NAMING_CONVENTION_LOCK.md
+          Build manual : {{ workspace }}/BAHYWAY_BUILD_MANUAL.md
+          Egui notice  : {{ docs_dir }}/v4.0/EGUI_DEPRECATION_NOTICE.md
+
+          Next: PB-89 — KAKI v4.0 type registry
+
+    - name: "DONE  | PB-88 v4.0 Workspace Migration COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-88 complete — v4.0 workspace established. -Way deprecated. DubSar Theater sovereign."

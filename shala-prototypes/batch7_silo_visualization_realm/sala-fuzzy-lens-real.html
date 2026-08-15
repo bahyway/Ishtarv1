@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Fuzzy Lens — working on mini-EnkiDDB output</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --fog-0:#141b26; --fog-1:#1b2532; --fog-2:#243141;
+  --ink:#eaf0f6; --ink-dim:#9aa9bb; --ink-faint:#6b7a8d;
+  --signal:#4fd6c4; --signal-deep:#1c7a70; --warm:#e8b24a; --warm-deep:#8a6620;
+  --alert:#e07a5f; --calm:#8fb8d6; --line:#2c3a4c;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--fog-0);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+header{padding:22px 26px 0;max-width:1200px;margin:0 auto}
+.brow{font-family:var(--f-data);font-size:11px;letter-spacing:.24em;color:var(--signal);text-transform:uppercase}
+.brow .real{color:var(--warm);border:1px solid var(--warm-deep);border-radius:100px;padding:1px 9px;margin-left:8px}
+h1{font-family:var(--f-display);font-weight:500;font-size:clamp(28px,4.5vw,42px);letter-spacing:-.01em;line-height:1.06;margin:8px 0 6px}
+h1 em{font-style:italic;color:var(--signal)}
+.lede{color:var(--ink-dim);max-width:640px;font-size:16px}
+.modewrap{display:flex;gap:6px;margin:16px 0 4px;align-items:center;flex-wrap:wrap}
+.modewrap .lbl{font-family:var(--f-data);font-size:11px;color:var(--ink-faint);letter-spacing:.1em;margin-right:4px}
+.mbtn{background:var(--fog-1);border:1px solid var(--line);color:var(--ink-dim);border-radius:100px;padding:8px 16px;font-size:13px;font-weight:500}
+.mbtn.on{background:var(--signal);color:#062420;border-color:var(--signal)}
+.prov{font-family:var(--f-data);font-size:10.5px;color:var(--ink-faint);margin-top:10px;line-height:1.6}
+.prov b{color:var(--calm)}
+.disclaim{font-family:var(--f-data);font-size:11px;color:var(--warm);border:1px solid var(--warm-deep);background:rgba(232,178,74,.06);border-radius:6px;padding:9px 13px;margin:12px 0 0;max-width:1200px}
+main{max-width:1200px;margin:0 auto;padding:18px 26px 70px;display:grid;grid-template-columns:1fr 350px;gap:24px}
+@media(max-width:920px){main{grid-template-columns:1fr}}
+.stage h2{font-family:var(--f-display);font-weight:500;font-size:19px;margin-bottom:2px}
+.stage .sub{color:var(--ink-faint);font-size:13px;margin-bottom:12px}
+.chart-frame{position:relative;background:var(--fog-1);border:1px solid var(--line);border-radius:14px;overflow:hidden;height:460px}
+canvas{display:block;width:100%;height:100%}
+.zoomrow{display:flex;gap:8px;align-items:center;margin-top:10px;font-family:var(--f-data);font-size:12px;color:var(--ink-dim)}
+.zoomrow input{flex:1;accent-color:var(--signal)}
+.zbtn{background:var(--fog-1);border:1px solid var(--line);color:var(--ink-dim);border-radius:6px;padding:6px 12px;font-size:12px}
+.readout{position:absolute;left:14px;top:12px;font-family:var(--f-data);font-size:11px;color:var(--ink-faint);background:rgba(20,27,38,.7);border:1px solid var(--line);border-radius:6px;padding:7px 10px;max-width:260px;line-height:1.6}
+.readout b{color:var(--signal)}
+.aside h3{font-family:var(--f-data);font-size:11px;letter-spacing:.16em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:10px}
+.signal{background:var(--fog-1);border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:12px;cursor:pointer}
+.signal:hover{border-color:var(--signal-deep)}
+.signal.active{border-color:var(--signal);background:var(--fog-2)}
+.signal .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.signal .name{font-family:var(--f-display);font-size:17px;font-weight:500}
+.conf{font-family:var(--f-data);font-size:11px;padding:2px 8px;border-radius:100px;white-space:nowrap}
+.conf.low{color:var(--warm);border:1px solid var(--warm-deep)}
+.conf.med{color:var(--calm);border:1px solid #3a5a72}
+.conf.high{color:var(--signal);border:1px solid var(--signal-deep)}
+.signal .body{margin-top:9px;font-size:14px;color:var(--ink-dim)}
+.signal .stat{font-family:var(--f-data);font-size:11.5px;color:var(--signal);margin-top:9px;background:rgba(79,214,196,.06);border-radius:6px;padding:7px 9px}
+.signal .stat .lab{color:var(--ink-faint);display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+.detbadge{font-family:var(--f-data);font-size:10px;margin-top:6px}
+.detbadge.yes{color:var(--signal)} .detbadge.no{color:var(--ink-faint)}
+.reveal{margin-top:11px;padding-top:11px;border-top:1px dashed var(--line);display:none}
+.signal.active .reveal{display:block}
+.reveal .ask{background:rgba(79,214,196,.07);border-left:2px solid var(--signal);padding:9px 12px;border-radius:0 6px 6px 0;font-size:14px;color:var(--ink)}
+.reveal .method{font-family:var(--f-data);font-size:11px;color:var(--calm);margin-top:8px}
+.reveal .method b{color:var(--ink)}
+.reveal .status{font-family:var(--f-data);font-size:10px;color:var(--warm);margin-top:5px}
+body.researcher .p-only{display:none} body.patient .r-only{display:none}
+footer{max-width:1200px;margin:0 auto;padding:0 26px 30px;font-family:var(--f-data);font-size:10.5px;color:var(--ink-faint);line-height:1.7}
+</style>
+</head>
+<body class="patient">
+<header>
+  <div class="brow">Šala · The Fuzzy Lens <span class="real">READING REAL PIPELINE OUTPUT</span></div>
+  <h1>This time, the blur <em>resolves</em>.</h1>
+  <p class="lede">Every point below is a real reading scored by a working pipeline; every statistic is really computed (Mann–Kendall, Theil–Sen), not invented in the browser. Zoom in and the fog becomes dated readings — and the hidden drift appears with its actual number.</p>
+  <div class="modewrap">
+    <span class="lbl">READING FOR</span>
+    <button class="mbtn on" id="m-patient">You, the patient</button>
+    <button class="mbtn" id="m-research">A researcher</button>
+  </div>
+  <div class="prov" id="prov"></div>
+  <div class="disclaim" id="disclaim">Not a diagnosis, and not a real person — the readings are generated, but the pipeline and statistics are genuine. It shows where your data drifts and what to ask a clinician; it never tells you what is wrong or what to do.</div>
+</header>
+<main>
+  <section class="stage">
+    <h2 id="stage-title">Systolic blood pressure · 2019–2026</h2>
+    <div class="sub">Time (left→right) against value. Dashed lines are the clinical thresholds. Drag the zoom to resolve the fog into individual dated readings.</div>
+    <div class="chart-frame">
+      <canvas id="chart"></canvas>
+      <div class="readout" id="readout"></div>
+    </div>
+    <div class="zoomrow">
+      <span>ZOOM</span>
+      <input type="range" id="zoom" min="0" max="100" value="0">
+      <button class="zbtn" id="reset">reset</button>
+      <span id="zoomlbl">fog</span>
+    </div>
+  </section>
+  <aside class="aside">
+    <h3>Signals the pipeline found</h3>
+    <div id="signal-list"></div>
+  </aside>
+</main>
+<footer id="foot"></footer>
+
+<script>window.LENS_DATA={"readings": [{"date": "2019-03-01", "t_days": 0, "systolic": 106.5, "state": "GOLDEN", "near_edge": false, "epsilon": 0.048, "kaki": "CC8B 227D 4444 0101 0000 0000 096F 8E18"}, {"date": "2019-05-31", "t_days": 91, "systolic": 109.2, "state": "GOLDEN", "near_edge": false, "epsilon": 0.042, "kaki": "F9C8 3E21 4444 0101 0000 0000 096F 059C"}, {"date": "2019-08-30", "t_days": 182, "systolic": 117.6, "state": "GOLDEN", "near_edge": true, "epsilon": 0.161, "kaki": "30E1 C85C 4444 0101 0000 0000 096F 3F3B"}, {"date": "2019-11-29", "t_days": 273, "systolic": 110.5, "state": "GOLDEN", "near_edge": false, "epsilon": 0.042, "kaki": "F840 1C55 4444 0101 0000 0000 096F 4298"}, {"date": "2020-02-29", "t_days": 365, "systolic": 118.7, "state": "GOLDEN", "near_edge": true, "epsilon": 0.143, "kaki": "498D D6D0 4444 0101 0000 0000 096F FB5C"}, {"date": "2020-05-30", "t_days": 456, "systolic": 118.9, "state": "GOLDEN", "near_edge": true, "epsilon": 0.15, "kaki": "091E 5118 4444 0101 0000 0000 096F 7149"}, {"date": "2020-08-29", "t_days": 547, "systolic": 119.0, "state": "GOLDEN", "near_edge": true, "epsilon": 0.155, "kaki": "83D4 FDC7 4444 0101 0000 0000 096F 947E"}, {"date": "2020-11-28", "t_days": 638, "systolic": 115.7, "state": "GOLDEN", "near_edge": true, "epsilon": 0.17, "kaki": "B2EC 57A0 4444 0101 0000 0000 096F 9AF0"}, {"date": "2021-02-28", "t_days": 730, "systolic": 112.0, "state": "GOLDEN", "near_edge": false, "epsilon": 0.053, "kaki": "AE2A CB71 4444 0101 0000 0000 096F E154"}, {"date": "2021-05-30", "t_days": 821, "systolic": 103.4, "state": "GOLDEN", "near_edge": false, "epsilon": 0.068, "kaki": "33F6 DF2B 4444 0101 0000 0000 096F C310"}, {"date": "2021-08-29", "t_days": 912, "systolic": 108.8, "state": "GOLDEN", "near_edge": false, "epsilon": 0.042, "kaki": "5F71 EDC1 4444 0101 0000 0000 096F 2624"}, {"date": "2021-11-28", "t_days": 1003, "systolic": 115.8, "state": "GOLDEN", "near_edge": true, "epsilon": 0.152, "kaki": "9303 4F46 4444 0101 0000 0000 096F C51D"}, {"date": "2022-02-28", "t_days": 1095, "systolic": 119.9, "state": "GOLDEN", "near_edge": true, "epsilon": 0.143, "kaki": "12D0 1F40 4444 0101 0000 0000 096F C487"}, {"date": "2022-05-30", "t_days": 1186, "systolic": 117.3, "state": "GOLDEN", "near_edge": true, "epsilon": 0.164, "kaki": "25E7 A4BC 4444 0101 0000 0000 096F 32FA"}, {"date": "2022-08-29", "t_days": 1277, "systolic": 119.7, "state": "GOLDEN", "near_edge": true, "epsilon": 0.156, "kaki": "5939 4DBF 4444 0101 0000 0000 096F 5020"}, {"date": "2022-11-28", "t_days": 1368, "systolic": 125.8, "state": "FUZZY", "near_edge": true, "epsilon": 0.158, "kaki": "C2BB CC3B 4444 0101 0000 0000 096F E93E"}, {"date": "2023-02-28", "t_days": 1460, "systolic": 128.8, "state": "FUZZY", "near_edge": true, "epsilon": 0.149, "kaki": "9F68 6ABA 4444 0101 0000 0000 096F C164"}, {"date": "2023-05-30", "t_days": 1551, "systolic": 126.3, "state": "FUZZY", "near_edge": true, "epsilon": 0.144, "kaki": "CA16 3088 4444 0101 0000 0000 096F E773"}, {"date": "2023-08-29", "t_days": 1642, "systolic": 121.0, "state": "FUZZY", "near_edge": true, "epsilon": 0.143, "kaki": "B034 87F9 4444 0101 0000 0000 096F B532"}, {"date": "2023-11-28", "t_days": 1733, "systolic": 117.8, "state": "GOLDEN", "near_edge": true, "epsilon": 0.155, "kaki": "0623 5828 4444 0101 0000 0000 096F 7DF6"}, {"date": "2024-02-28", "t_days": 1825, "systolic": 119.3, "state": "GOLDEN", "near_edge": true, "epsilon": 0.168, "kaki": "82D9 E634 4444 0101 0000 0000 096F C72E"}, {"date": "2024-05-29", "t_days": 1916, "systolic": 122.6, "state": "FUZZY", "near_edge": true, "epsilon": 0.167, "kaki": "B7D6 5E1C 4444 0101 0000 0000 096F 3B8D"}, {"date": "2024-08-28", "t_days": 2007, "systolic": 117.2, "state": "GOLDEN", "near_edge": true, "epsilon": 0.146, "kaki": "FF4E 23C4 4444 0101 0000 0000 096F F862"}, {"date": "2024-11-27", "t_days": 2098, "systolic": 125.4, "state": "FUZZY", "near_edge": true, "epsilon": 0.144, "kaki": "33BD 9C56 4444 0101 0000 0000 096F 15F2"}, {"date": "2025-02-27", "t_days": 2190, "systolic": 124.3, "state": "FUZZY", "near_edge": true, "epsilon": 0.167, "kaki": "8EA0 6097 4444 0101 0000 0000 096F 0460"}, {"date": "2025-05-29", "t_days": 2281, "systolic": 107.8, "state": "GOLDEN", "near_edge": false, "epsilon": 0.063, "kaki": "233C B74E 4444 0101 0000 0000 096F A4E2"}, {"date": "2025-08-28", "t_days": 2372, "systolic": 114.3, "state": "GOLDEN", "near_edge": false, "epsilon": 0.065, "kaki": "2DA0 1F28 4444 0101 0000 0000 096F 29FF"}, {"date": "2025-11-27", "t_days": 2463, "systolic": 116.7, "state": "GOLDEN", "near_edge": true, "epsilon": 0.151, "kaki": "35AF 582C 4444 0101 0000 0000 096F 417D"}], "analysis": {"marker": "Systolic blood pressure", "unit": "mmHg", "thresholds": {"normal_max": 120, "elevated": 130, "fuzzy_band": 5}, "trend": {"slope_per_year": 1.2, "theil_sen_intercept": 113.65, "theil_sen_slope_per_day": 0.0032853199803690755, "mann_kendall_tau": 0.265, "mann_kendall_p": 0.0498, "S": 100}, "signals": [{"id": "drift", "name": "A slow upward drift", "conf": 0.95, "stat_label": "Mann\u2013Kendall trend", "stat_value": "tau=+0.26, p=0.050  \u00b7  Theil\u2013Sen +1.20 mmHg/yr", "detected": true, "p_body": "Your blood pressure has been creeping upward across the years \u2014 too gradual to notice at any one visit, but the trend test picks it out of the noise.", "r_body": "Monotonic increase confirmed by Mann\u2013Kendall (tau=+0.26, p=0.050); robust Theil\u2013Sen slope +1.20 mmHg/yr.", "ask": "Ask: \u201cHas my blood pressure been trending up over my whole history, not just today\u2019s reading?\u201d", "method": "Mann\u2013Kendall trend test + Theil\u2013Sen robust slope", "status": "Standard in research; rarely run on routine BP records."}, {"id": "cross", "name": "Heading toward a threshold", "conf": 0.79, "stat_label": "Projected 130 mmHg crossing", "stat_value": "beyond horizon", "detected": false, "p_body": "If the current drift continues, your readings are on course to reach the stage-1 hypertension line \u2014 not now, but on a timeline worth knowing.", "r_body": "Extrapolated Theil\u2013Sen crossing of 130 mmHg at ~+6.9 yr from last observation (linear extrapolation; widen CI accordingly).", "ask": "Ask: \u201cAt this rate, when would my blood pressure reach the level that needs treatment \u2014 and can we act before then?\u201d", "method": "Trend extrapolation to clinical threshold", "status": "Trivial to compute; almost never surfaced to patients."}, {"id": "edge", "name": "Readings on the borderline", "conf": 1.0, "stat_label": "Readings within \u00b15 mmHg of a threshold", "stat_value": "20 of 28 readings in the fuzzy band", "detected": true, "p_body": "Several of your readings land right on the border between \u201cnormal\u201d and \u201cnot.\u201d Which side they fall on can depend on the day \u2014 that borderline itself is worth watching.", "r_body": "20/28 observations within the \u00b15 mmHg epsilon-band of 120/130; classification unstable to measurement noise.", "ask": "Ask: \u201cSome of my readings are borderline \u2014 should we repeat them or monitor more closely?\u201d", "method": "Fuzzy membership / uncertainty-band analysis", "status": "Well understood; routine care usually rounds it away."}], "n": 28}, "seal": "8016741688627cad", "generated": "2026-08-12T19:33:08.815633+00:00"};</script>
+<script>
+const D=window.LENS_DATA, R=D.readings, A=D.analysis, TR=A.trend, TH=A.thresholds;
+document.getElementById('prov').innerHTML=
+  `<b>source</b> mini-EnkiDDB pipeline.py · <b>sealed</b> sha256 ${D.seal}… · <b>n</b> ${A.n} readings · `+
+  `<b>Mann–Kendall</b> τ=${TR.mann_kendall_tau} p=${TR.mann_kendall_p} · <b>Theil–Sen</b> ${TR.slope_per_year>0?'+':''}${TR.slope_per_year} mmHg/yr`;
+document.getElementById('foot').innerHTML=
+  'Way-of-Work rule 5 — HTML prototype; production body Godot/WGPU. This Lens reads sealed output from a real local pipeline (mini-EnkiDDB): synthetic readings, genuine ingest→score→GOLDEN and genuine statistics. In production the same JSON comes from EnkiDDB over a sealed API. Morphology proposes; the algebra and your clinician prove. Not medical advice.';
+
+const cv=document.getElementById('chart'),ctx=cv.getContext('2d');
+let W,H,DPR=Math.min(devicePixelRatio,2);
+function resize(){const r=cv.parentElement.getBoundingClientRect();
+  cv.width=(W=r.width)*DPR;cv.height=(H=r.height)*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',resize);resize();
+
+const PAD={l:52,r:18,t:20,b:40};
+const tMin=Math.min(...R.map(r=>r.t_days)), tMax=Math.max(...R.map(r=>r.t_days));
+const vMin=90, vMax=145;
+let zoom=0, active=null, hover=null, mx=-1, my=-1;
+
+function X(t){return PAD.l+(t-tMin)/(tMax-tMin)*(W-PAD.l-PAD.r);}
+function Y(v){return H-PAD.b-(v-vMin)/(vMax-vMin)*(H-PAD.t-PAD.b);}
+function stateColor(s,edge){ if(s==='GOLDEN')return '#4fd6c4'; return edge?'#e8b24a':'#8fb8d6'; }
+
+let t=0;
+function draw(){
+  requestAnimationFrame(draw); t+=0.016;
+  ctx.clearRect(0,0,W,H);
+  const sharp=zoom/100;                        // 0 = fog, 1 = fully resolved
+
+  // axes
+  ctx.strokeStyle='#2c3a4c';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(PAD.l,PAD.t);ctx.lineTo(PAD.l,H-PAD.b);ctx.lineTo(W-PAD.r,H-PAD.b);ctx.stroke();
+  ctx.fillStyle='#6b7a8d';ctx.font='10px IBM Plex Mono';ctx.textAlign='right';
+  for(let v=90;v<=140;v+=10){const y=Y(v);ctx.fillText(v,PAD.l-6,y+3);
+    ctx.strokeStyle='rgba(44,58,76,.5)';ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(W-PAD.r,y);ctx.stroke();}
+  ctx.textAlign='center';
+  R.forEach((r,i)=>{if(i%6===0){const yr=2019+Math.round(r.t_days/365);ctx.fillText(yr,X(r.t_days),H-PAD.b+16);}});
+  ctx.save();ctx.translate(14,H/2);ctx.rotate(-Math.PI/2);ctx.fillStyle='#6b7a8d';ctx.fillText('systolic mmHg',0,0);ctx.restore();
+
+  // threshold lines (revealed as you zoom)
+  [[TH.normal_max,'120 · normal limit'],[TH.elevated,'130 · stage-1']].forEach(([lv,lab])=>{
+    ctx.strokeStyle=`rgba(224,122,95,${0.25+sharp*0.55})`;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(PAD.l,Y(lv));ctx.lineTo(W-PAD.r,Y(lv));ctx.stroke();ctx.setLineDash([]);
+    if(sharp>0.3){ctx.fillStyle=`rgba(224,122,95,${sharp})`;ctx.textAlign='left';ctx.fillText(lab,PAD.l+6,Y(lv)-5);ctx.textAlign='center';}
+  });
+
+  // fuzzy edge band around thresholds (appears as you zoom)
+  if(sharp>0.15){[TH.normal_max,TH.elevated].forEach(lv=>{
+    ctx.fillStyle=`rgba(232,178,74,${0.06*sharp})`;
+    ctx.fillRect(PAD.l,Y(lv+TH.fuzzy_band),W-PAD.l-PAD.r,Y(lv-TH.fuzzy_band)-Y(lv+TH.fuzzy_band));});}
+
+  // Theil–Sen trend line (the hidden drift) — fades in with zoom + when drift active
+  const showTrend = sharp>0.4 || active==='drift';
+  if(showTrend){
+    const a=Math.min(1,(sharp-0.4)/0.4 + (active==='drift'?1:0));
+    ctx.strokeStyle=`rgba(79,214,196,${0.85*Math.min(1,a)})`;ctx.lineWidth=2;
+    const y0=TR.theil_sen_intercept+TR.theil_sen_slope_per_day*tMin;
+    const y1=TR.theil_sen_intercept+TR.theil_sen_slope_per_day*tMax;
+    ctx.beginPath();ctx.moveTo(X(tMin),Y(y0));ctx.lineTo(X(tMax),Y(y1));ctx.stroke();
+    if(a>0.5){ctx.fillStyle='#4fd6c4';ctx.textAlign='right';
+      ctx.fillText(`${TR.slope_per_year>0?'+':''}${TR.slope_per_year} mmHg/yr`,W-PAD.r-4,Y(y1)-8);ctx.textAlign='center';}
+  }
+
+  // the readings — fog when zoomed out (jitter+blur by epsilon), resolved when zoomed in
+  hover=null;
+  R.forEach(r=>{
+    const px=X(r.t_days), py=Y(r.systolic);
+    const jit=(1-sharp)*r.epsilon*90;                    // epsilon → blur amplitude
+    const jx=Math.sin(t*2+r.t_days)*jit, jy=Math.cos(t*2.2+r.t_days)*jit;
+    const x=px+jx, y=py+jy;
+    const spot=(active==='edge'&&r.near_edge)||(active==='drift');
+    const size=(sharp>0.5?4.5:3)+ (spot?1.5:0);
+    // blur halo when foggy
+    if(sharp<0.6){ctx.globalAlpha=0.4*(1-sharp)+0.15;ctx.fillStyle=stateColor(r.state,r.near_edge);
+      ctx.beginPath();ctx.arc(x,y,size+(1-sharp)*6,0,7);ctx.fill();ctx.globalAlpha=1;}
+    ctx.fillStyle=stateColor(r.state,r.near_edge);
+    ctx.beginPath();ctx.arc(x,y,size,0,7);ctx.fill();
+    if(r.near_edge&&sharp>0.4){ctx.strokeStyle=`rgba(232,178,74,${sharp})`;ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(x,y,size+3,0,7);ctx.stroke();}
+    // hover pick
+    if(mx>0&&Math.hypot(mx-x,my-y)<10){hover={r,x,y};}
+  });
+
+  // hover tooltip: the real dated reading
+  const ro=document.getElementById('readout');
+  if(sharp>0.5&&hover){
+    ro.innerHTML=`<b>${hover.r.date}</b><br>${hover.r.systolic} mmHg · ${hover.r.state}`+
+      (hover.r.near_edge?' · <span style="color:#e8b24a">borderline</span>':'')+
+      `<br>ε ${hover.r.epsilon} · KAKI ${hover.r.kaki.slice(0,9)}…`;
+  } else if(sharp<0.2){
+    ro.innerHTML='The fog is your uncertainty (ε). Zoom in to resolve it into real dated readings.';
+  } else {
+    ro.innerHTML=`Resolving… ${Math.round(sharp*100)}% · hover a point when sharp`;
+  }
+}
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();mx=e.clientX-r.left;my=e.clientY-r.top;});
+cv.addEventListener('mouseleave',()=>{mx=my=-1;});
+requestAnimationFrame(draw);
+
+const zin=document.getElementById('zoom');
+zin.oninput=()=>{zoom=+zin.value;
+  document.getElementById('zoomlbl').textContent= zoom<20?'fog':zoom<60?'resolving':'sharp';};
+document.getElementById('reset').onclick=()=>{zoom=0;zin.value=0;active=null;document.getElementById('zoomlbl').textContent='fog';render();};
+
+// signal cards
+function confClass(c){return c>=0.66?'high':c>=0.45?'med':'low';}
+function render(){
+  const research=document.body.classList.contains('researcher');
+  document.getElementById('signal-list').innerHTML=A.signals.map(s=>{
+    const cc=confClass(s.conf);
+    return `<div class="signal ${active===s.id?'active':''}" data-id="${s.id}">
+      <div class="top"><span class="name">${s.name}</span>
+        <span class="conf ${cc}">${Math.round(s.conf*100)}% conf</span></div>
+      <div class="body">${research?s.r_body:s.p_body}</div>
+      <div class="stat"><span class="lab">${s.stat_label}</span>${s.stat_value}</div>
+      <div class="detbadge ${s.detected?'yes':'no'}">${s.detected?'● detected in your data':'○ below detection — a hint only'}</div>
+      <div class="reveal">
+        ${research
+          ? `<div class="method"><b>${s.method}</b></div><div class="status">${s.status}</div><p style="margin-top:8px;color:var(--ink-dim);font-size:13px">${s.p_body}</p>`
+          : `<div class="ask">${s.ask}</div><div class="method">Academic method: <b>${s.method}</b></div><div class="status">${s.status}</div>`}
+      </div></div>`;}).join('');
+  document.querySelectorAll('.signal').forEach(el=>el.onclick=()=>{
+    active=active===el.dataset.id?null:el.dataset.id;
+    if(active&&zoom<50){zoom=70;zin.value=70;document.getElementById('zoomlbl').textContent='sharp';}
+    render();});
+}
+render();
+document.getElementById('m-patient').onclick=()=>{document.body.className='patient';
+  document.getElementById('m-patient').classList.add('on');document.getElementById('m-research').classList.remove('on');
+  document.getElementById('stage-title').textContent='Systolic blood pressure · 2019–2026';render();};
+document.getElementById('m-research').onclick=()=>{document.body.className='researcher';
+  document.getElementById('m-research').classList.add('on');document.getElementById('m-patient').classList.remove('on');
+  document.getElementById('stage-title').textContent='Systolic BP · longitudinal · Theil–Sen + Mann–Kendall';render();};
+</script>
+</body>
+</html>

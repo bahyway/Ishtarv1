@@ -1,0 +1,132 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_92_con_engine_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-92 Reconciled: con-engine → enkidb-con-engine
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_92_con_engine_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_92_con_engine.yml):
+#    The uploaded PB-92 targets a bare crate named "con-engine" at the OLD
+#    flat path /home/bahyway/Forge/bahyway_v4, with a 12-file, 7-way CSR
+#    rule split (rules/csr01_sargon.rs .. csr07_isolation.rs), a full
+#    SessionRegistry/enkidb-sessions.toml topology loader, a HEPT-magic TCP
+#    handshake ConnectionPool, a blake3-hashed NaruJournal, and a
+#    std::thread+mpsc QueryFanOut. None of that exists under that name or
+#    path in this repo, and its Cargo.toml patch step targets an anchor
+#    string ("crates/enkidb-enlil-index") that does not exist anywhere in
+#    the current workspace Cargo.toml — confirmed by direct grep, meaning
+#    the original playbook would report false success while leaving the
+#    crate unregistered, then fail at cargo build.
+#
+#    The real crate is enkidb-con-engine (new path, nested under
+#    workspace/bahyway_v4), a consolidated descendant of the same design:
+#    same 7 CSR rules, collapsed into one csr.rs + apply_all_rules();
+#    same NaruJournal concept, CRC-16 instead of blake3; same
+#    ConnectionPool concept, without the TOML registry/HEPT handshake/
+#    fan-out executor. This playbook verifies that real crate.
+#      enkidb-con-engine : 6 passed
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-92 (Reconciled) | enkidb-con-engine — 7 CSR rules, current state verification"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB92_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | enkidb-con-engine/src/csr.rs exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/enkidb-con-engine/src/csr.rs"
+      register: csr_file
+
+    - name: "FAIL | enkidb-con-engine not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/enkidb-con-engine/src/csr.rs not found after sync."
+      when: not csr_file.stat.exists
+
+    - name: "TEST | cargo test -p enkidb-con-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-con-engine"
+        chdir: "{{ workspace }}"
+      register: test_con
+      changed_when: false
+      failed_when: test_con.rc != 0
+
+    - name: "PARSE | test_con passed-test count"
+      ansible.builtin.set_fact:
+        test_con_passed_count: "{{ (test_con.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-con-engine reports 6 passed (CSR-01..07 in apply_all_rules)"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_con.stdout"
+          - test_con_passed_count >= 6
+        fail_msg: >-
+          Expected at least 6 passed, 0 failed. Got {{ test_con_passed_count }}
+          passed. Full output: {{ test_con.stdout }}
+        success_msg: >-
+          enkidb-con-engine: {{ test_con_passed_count }} passed, 0 failed (>= baseline 6).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-92 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-92 (bare "con-engine" crate, old flat path
+          /home/bahyway/Forge/bahyway_v4, 12-file 7-way CSR split,
+          SessionRegistry + enkidb-sessions.toml + HEPT TCP handshake pool +
+          blake3 NaruJournal + thread/mpsc QueryFanOut):
+          SUPERSEDED. Cargo.toml patch anchor "crates/enkidb-enlil-index"
+          confirmed absent from current workspace Cargo.toml by direct grep
+          — the original playbook would silently no-op that patch step and
+          then fail at cargo build -p con-engine.
+
+          Real successor verified this run:
+            enkidb-con-engine : 6/6 tests PASS
+            Structure: error.rs, roles.rs, audit.rs (NaruJournal, CRC-16),
+            csr.rs (all 7 CSR rules in one apply_all_rules()), pool.rs
+            (ConnectionPool, Mutex<Vec<PooledConnection>>, no TCP handshake,
+            no SessionRegistry/TOML topology, no QueryFanOut).
+
+          Same 7-rule design intent, consolidated implementation.
+
+    - name: "DONE | PB-92 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-92 reconciled and verified against real repo state. Report: {{ report_file }}"

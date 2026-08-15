@@ -1,0 +1,192 @@
+# =============================================================================
+# PB-153 — FABLE IMPACT GATE (Design-Time Advisory) — CORRECTED 2026-07-10
+# BahyWay.Ecosystem v4.0
+#
+# CORRECTIONS applied against direct repo verification (see PB-161
+# reconciliation record for the full audit):
+#   - Original draft targeted `dubsar-workstation`. That host is LOCKED as
+#     Grafana+Prometheus ONLY (playbook_88_v4_workspace_migrate.yml:148:
+#     "dubsar-workstation (192.168.122.121) = Grafana+Prometheus ONLY").
+#     Retargeted to eriduous-vdi.
+#   - Original draft cited "CSR-08" as an existing confirmation-point rule.
+#     CSR-08 does not exist — the real enkidb-con-engine only has CSR-01
+#     through CSR-07 (crates/enkidb-con-engine/src/csr.rs). The only real
+#     reference to "CSR-08" anywhere in the repo is a forward TODO note in
+#     playbook_173_gate1_heptagate_resolution.yml ("Next: CSR-08 code
+#     design (PB-170)") — a planned future rule, not a shipped gate.
+#     Reworded to plain DUB.SAR manual-review framing.
+#
+# LAW ALIGNMENT (unchanged, still sound):
+#   - Placement law (Z3 precedent): Fable 5 is DESIGN-TIME ONLY.
+#     It never appears in a shipped binary. Zero runtime API calls preserved.
+#   - NINSUN precedent: output is ADVISORY-ONLY (fable_advisory: true).
+#     Deterministic gates (cargo check / test / semver) hold blocking authority.
+#
+# TARGET: eriduous-vdi (192.168.122.214) — build node
+#
+# STAGES DEPLOYED:
+#   1. blast_radius   — cargo tree --invert on changed crates
+#   2. deterministic  — cargo check + cargo test + cargo-semver-checks (BLOCKING)
+#   3. fable_advisory — claude-fable-5 semantic impact report (NON-BLOCKING)
+#   4. witness        — append-only archive of every impact report (NUZI-style)
+#
+# SECRET: ANTHROPIC_API_KEY must be provided via Ansible Vault variable
+#         `fable_api_key`. It is written to a root-only env file, never
+#         into the repo.
+# =============================================================================
+---
+- name: "PB-153 | Fable Impact Gate — design-time advisory on eriduous-vdi"
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    gate_root: /opt/bahyway/impact-gate
+    witness_dir: /opt/bahyway/impact-gate/witness
+    repo_path: "{{ bahyway_repo | default(ansible_env.HOME + '/Forge/EnkiDB/workspace/bahyway_v4') }}"
+    fable_model: "claude-fable-5"
+    # fable_api_key: supplied via --extra-vars @vault.yml (Ansible Vault)
+
+  tasks:
+
+    - name: "PB-153.0 | Create gate directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ gate_root }}"
+        - "{{ gate_root }}/prompts"
+        - "{{ witness_dir }}"
+
+    - name: "PB-153.1 | Install cargo-semver-checks (deterministic API-break gate)"
+      ansible.builtin.shell: |
+        set -e
+        export PATH="$HOME/.cargo/bin:$PATH"
+        cargo install cargo-semver-checks --locked || true
+      args:
+        creates: "/root/.cargo/bin/cargo-semver-checks"
+      become: false
+
+    - name: "PB-153.2 | Write Fable API key env file (0600, root)"
+      ansible.builtin.copy:
+        dest: "{{ gate_root }}/fable.env"
+        mode: "0600"
+        owner: root
+        group: root
+        content: |
+          ANTHROPIC_API_KEY={{ fable_api_key }}
+      no_log: true
+
+    - name: "PB-153.3 | Deploy sovereignty-law prompt template"
+      ansible.builtin.copy:
+        dest: "{{ gate_root }}/prompts/sovereignty_laws.txt"
+        mode: "0644"
+        content: |
+          You are the Fable Impact Gate, a DESIGN-TIME ADVISORY auditor for
+          BahyWay.Ecosystem v4.0. You are given a git diff and the list of
+          downstream crates it reaches. Audit the change against these laws:
+
+          L1  #![forbid(unsafe_code)] everywhere. No unsafe blocks introduced.
+          L2  No tokio, no external async runtime, no SQL, no SQL-like syntax.
+          L3  KAKI v4.0 byte layout is locked (uuid_hash/tribe_id/kaki_type/
+              kaki_role/reserved/timestamp/CRC-16). No layout drift. All
+              quality/colour/state lives in EAV Mandatory Attributes only.
+          L4  HeptaScript is Anti-SQL: PRESENT clause + W5H2 constructs only.
+              Triple-O verbs ORBIT/EMIT/PROVE/SYNC/WITNESS only.
+          L5  KAKI minting only in enkidb-ingest::bridge / enkidb_kaki::mint.
+          L6  GeoEngine is the single source of mathematical truth — no
+              duplicated math constants or geometry logic in other crates.
+          L7  Z3 and any cloud AI are design-time only, never in a shipped
+              binary. Runtime performs zero API calls.
+          L8  "-Engine" suffix only; "-Way" suffix is deprecated.
+          L9  Hepta Space Uniqueness Law: no change may permit two particles
+              at the same 7D position.
+          L10 Runtime performance law: 1 billion particles in under 1 second.
+              Flag any change that plausibly regresses the hot path
+              (allocations in loops, lock contention, index bypass).
+
+          Respond ONLY with JSON, no markdown fences, in W5H2 form:
+          {
+            "fable_advisory": true,
+            "WHO": "<crates directly changed>",
+            "WHAT": "<summary of the enhancement>",
+            "WHERE": ["<downstream crates plausibly affected>"],
+            "WHEN": "<lifecycle stage impacted: ingest|index|query|present>",
+            "WHY": ["<law IDs at risk, e.g. L3, L10, with one-line reason each>"],
+            "HOW": "<propagation mechanism>",
+            "HOW_MUCH": {"risk": "none|low|medium|high", "confidence": 0.0}
+          }
+          If no law is at risk, WHY must be [] and risk "none".
+
+    - name: "PB-153.4 | Deploy impact_gate.sh"
+      ansible.builtin.copy:
+        dest: "{{ gate_root }}/impact_gate.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # PB-153 Fable Impact Gate — run against a proposed enhancement.
+          # Usage: impact_gate.sh <repo_path> <base_ref> [head_ref]
+          set -euo pipefail
+          REPO="${1:?repo path required}"
+          BASE="${2:?base ref required}"
+          HEAD="${3:-HEAD}"
+          GATE=/opt/bahyway/impact-gate
+          WITNESS=$GATE/witness
+          STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          cd "$REPO"
+
+          echo "== STAGE 1: blast radius =="
+          CHANGED_CRATES=$(git diff --name-only "$BASE" "$HEAD" \
+            | grep -oP '^crates/[^/]+' | sort -u | sed 's|crates/||' || true)
+          echo "$CHANGED_CRATES"
+          AFFECTED=""
+          for c in $CHANGED_CRATES; do
+            AFFECTED+=$'\n'"$(cargo tree --invert -p "$c" 2>/dev/null \
+              | grep -oP '^\S+' || true)"
+          done
+          AFFECTED=$(echo "$AFFECTED" | sort -u | grep -v '^$' || true)
+
+          echo "== STAGE 2: deterministic gates (BLOCKING) =="
+          cargo check --workspace
+          cargo test --workspace
+          for c in $CHANGED_CRATES; do
+            cargo semver-checks check-release -p "$c" || {
+              echo "SEMVER BREAK in $c — gate BLOCKED"; exit 1; }
+          done
+
+          echo "== STAGE 3: fable advisory (NON-BLOCKING) =="
+          source $GATE/fable.env
+          DIFF=$(git diff "$BASE" "$HEAD" | head -c 150000)
+          LAWS=$(cat $GATE/prompts/sovereignty_laws.txt)
+          BODY=$(jq -n --arg model "{{ fable_model }}" \
+                       --arg laws "$LAWS" \
+                       --arg diff "$DIFF" \
+                       --arg aff "$AFFECTED" '
+            { model: $model, max_tokens: 2000,
+              system: $laws,
+              messages: [ { role: "user",
+                content: ("DOWNSTREAM CRATES:\n" + $aff + "\n\nDIFF:\n" + $diff) } ] }')
+          REPORT=$(curl -sS https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$BODY" | jq -r '.content[0].text' || echo '{"fable_advisory":true,"error":"api_unreachable"}')
+
+          echo "== STAGE 4: witness (append-only) =="
+          OUT=$WITNESS/impact_${STAMP}.json
+          echo "$REPORT" > "$OUT"
+          chmod 0444 "$OUT"
+          echo "Impact report sealed: $OUT"
+          echo "$REPORT" | jq . || cat "$OUT"
+          # Advisory NEVER blocks: exit 0 regardless of risk level. DUB.SAR
+          # reads the report and decides — this is a manual review point,
+          # not a coded gate (no CSR-08 exists to cite here).
+          exit 0
+
+    - name: "PB-153.5 | Seal confirmation"
+      ansible.builtin.debug:
+        msg: >-
+          PB-153 (corrected) deployed on eriduous-vdi. Run:
+          {{ gate_root }}/impact_gate.sh {{ repo_path }} <base_ref> [head_ref]
+          Deterministic gates block; Fable report is advisory witness only;
+          DUB.SAR's reading of the report is the confirmation point.

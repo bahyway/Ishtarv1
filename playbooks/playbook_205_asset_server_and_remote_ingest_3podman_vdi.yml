@@ -1,0 +1,181 @@
+# =============================================================================
+# PB-205 — Central Shared Asset Storage + VDI-side ingestion: the real
+# pieces of the "3 Podman + VDI" restructure the Architect proposed
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: the Architect showed the "3-Podman Node Topology" diagram from
+# their own Gemini-assisted design doc — a dedicated Central Shared Asset
+# Storage container (their draft named MinIO or NFS) holding physical
+# assets (.md/.sh/.py/.png), with Write DB and Read DB mounting/fetching
+# from it instead of the host directly, and asked whether this would have
+# avoided the SELinux/git debugging saga (PB-200/PB-201/PB-202) just
+# fixed live on eriduous-vdi. Assessment given before building anything:
+# genuine match for PB-200 (two containers sharing one `:Z` mount is
+# exactly what a dedicated asset owner removes), but PB-201/PB-202 were
+# about ONE container's own image contents (missing git binary, dubious
+# ownership against a bind-mounted repo) -- a topology change alone
+# doesn't touch that UNLESS the job that needs git access (directory
+# scanning + authorship checking) moves off any container entirely. The
+# Architect's diagram implied exactly that (ingestion running on the VDI
+# box, not inside a container) -- confirmed as the right read, chosen
+# over MinIO/NFS for the asset store (external service, breaks the
+# zero-external-dependency axiom) in favor of a small pure-Rust server
+# this ecosystem owns outright.
+#
+# WHAT WAS BUILT, both real, both live-verified this session (not just
+# compiled):
+#
+#  1. bin/enkiddb-asset-server -- NEW. Pure-std, `#![forbid(unsafe_code)]`
+#     binary crate. Hand-rolled HTTP/1.1 GET-only server (no HTTP crate,
+#     no tokio) serving files under `ASSET_ROOT` (default /data/assets)
+#     read-only. Fails closed on two independent checks before ever
+#     touching the filesystem: known extension allowlist (md/sh/py/rs/
+#     yml/yaml/png/svg/jpg/jpeg/json/txt) and a path-component scan that
+#     rejects `..`/root-anchored segments outright, plus a canonicalize +
+#     `starts_with(root)` check for anything that does exist. `GET /`
+#     returns a flat sorted file listing (health-check/human use, not
+#     programmatic discovery -- Write/Read address assets by pointer path,
+#     they never browse). 8 unit tests over the pure functions
+#     (resolve_safe_path, content_type_for, parse_request_line, list_root).
+#
+#     LIVE-VERIFIED: started for real against a scratch ASSET_ROOT
+#     containing a real .md file and a .env file --
+#       - GET /docs/widget.md -> real 200, correct Content-Type, correct
+#         bytes.
+#       - GET / -> real listing (`docs/widget.md`, `secrets.env`).
+#       - GET /secrets.env -> real 403 (disallowed extension).
+#       - GET /../../etc/passwd (raw socket, bypassing curl's own client-
+#         side path normalization) -> real 403 (extension-checked before
+#         the traversal check even runs, since `passwd` has no allowed
+#         extension -- fails closed either way).
+#       - GET /docs/nope.md -> real 404.
+#
+#  2. bin/enkiddb-cli/src/remote.rs (NEW) + `enkiddb-cli ingest --remote
+#     <host:port>` (bin/enkiddb-cli/src/main.rs) -- the VDI-side
+#     ingestion half. SCAN and CATEGORIZE stages are UNCHANGED (same
+#     `scan_markdown_directory`, same `check_authorship` against
+#     `TeamAllowlist`) -- only RUN changes: instead of journaling into a
+#     local, disposable `WriteNode`, it opens a TCP connection per
+#     document to a LIVE `enkiddb-write-server` and sends the exact same
+#     `<collection>\n<markdown>` wire command the server already
+#     understood before this playbook (no server-side changes at all).
+#     The authorship check runs HERE, on the VDI's own real git checkout
+#     -- correct host-side ownership, git already installed, nothing
+#     bind-mounted into a container for this purpose. The container on
+#     the receiving end never sees a directory path and never runs `git`.
+#
+#     LIVE-VERIFIED: real scratch git repo (`git init`, real commit
+#     authored by `bahaa.fadam@gmail.com`, a real allowlisted identity),
+#     a real `enkiddb-write-server` started on a scratch port --
+#     `enkiddb-cli ingest <dir> --remote 127.0.0.1:17101` ran SCAN (1
+#     file) -> CATEGORIZE (OK, author=bahaa.fadam@gmail.com) -> RUN
+#     (remote) -> real `OK:<kaki_hex>:1` response. The server's own log
+#     shows only `[ingest] collection=general ...` -- no `INGEST_DIR`,
+#     no git invocation at all on the container side for this path.
+#
+# WHAT THIS DOES NOT CLAIM:
+#   - This does not remove `INGEST_DIR` or PB-201/PB-202's Containerfile
+#     fix (git + `safe.directory` baked into enkiddb-write-server's
+#     image) -- that command and that fix remain real and correct for
+#     local/dev bulk-loading directly against a container's own
+#     bind-mounted checkout. This playbook adds a second, VDI-preferred
+#     path for the client-facing production workflow; it does not
+#     deprecate the first.
+#   - This does not (yet) wire enkiddb-read-server or enkimdb-read-server
+#     to fetch anything FROM enkiddb-asset-server -- today's Read Nodes
+#     still only read their own materialized Data Files. Making a
+#     document's ingested body actually reference and resolve assets
+#     stored in this new server (the "pointer" half of the Architect's
+#     diagram) is real follow-on work, not done here.
+#   - This is one container (`enkiddb-asset-server`) shared by BOTH
+#     EnkiDDB and EnkiMDB fleets conceptually, but this playbook only
+#     deploys and wires it for EnkiDDB's naming (`enkiddb-assets`,
+#     `enkiddb-repo_root`-scoped). EnkiMDB wiring, if wanted, is a
+#     separate follow-on using the same image.
+# =============================================================================
+---
+- name: "PB-205 | Deploy enkiddb-asset-server (Central Shared Asset Storage)"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+
+  tasks:
+    # ── 0. Preflight ──────────────────────────────────────────────────
+    - name: "0.1 | Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: "0.2 | Show podman version"
+      ansible.builtin.debug:
+        msg: "{{ podman_version.stdout }}"
+
+    # ── 1. Build image ─────────────────────────────────────────────────
+    - name: "1.1 | Build enkiddb-asset-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkiddb-asset-server:latest -f deploy/podman/Containerfile.asset-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    # ── 2. Volume ────────────────────────────────────────────────────
+    - name: "2.1 | Create enkiddb-assets-data volume"
+      ansible.builtin.command: podman volume create enkiddb-assets-data
+      register: vol_create
+      failed_when: vol_create.rc != 0 and 'already exists' not in (vol_create.stderr | default(''))
+      changed_when: vol_create.rc == 0
+
+    # ── 3. Container ────────────────────────────────────────────────────
+    - name: "3.1 | Check if enkiddb-assets container exists"
+      ansible.builtin.command: podman container exists enkiddb-assets
+      register: enkiddb_assets_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "3.2 | Run enkiddb-assets (Central Shared Asset Storage, port 7301)"
+      ansible.builtin.command: >
+        podman run -d --name enkiddb-assets
+        -p 7301:7301
+        -v enkiddb-assets-data:/data/assets:Z
+        --restart=always
+        enkiddb-asset-server:latest
+      when: enkiddb_assets_exists.rc != 0
+      changed_when: true
+
+    # ── 4. Health ────────────────────────────────────────────────────
+    - name: "4.1 | Wait for port 7301 to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 7301
+        timeout: 30
+
+    - name: "4.2 | Confirm the server answers a real GET /"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:7301/"
+        status_code: 200
+      register: assets_index
+
+    - name: "4.3 | Show current asset index"
+      ansible.builtin.debug:
+        msg: "{{ assets_index.content | default('(empty -- no assets uploaded yet)') }}"
+
+    # ── 5. Record ────────────────────────────────────────────────────
+    - name: "5.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. New: bin/enkiddb-asset-server (Cargo.toml, src/main.rs),
+          deploy/podman/Containerfile.asset-server,
+          bin/enkiddb-cli/src/remote.rs. Changed:
+          bin/enkiddb-cli/src/main.rs (--remote <host:port> flag).
+          Usage: enkiddb-cli ingest <dir> --remote <write-node-host:port>
+          runs SCAN+CATEGORIZE locally (real git-authorship check against
+          the VDI's own checkout) then sends each authorized document
+          over the wire -- no container ever needs git for this path.
+          enkiddb-asset-server is the sole claimant of its own volume
+          (:Z is correct, not :z) -- Write/Read nodes never bind-mount
+          it directly, closing PB-200's class of bug structurally rather
+          than by flag correction. Read-side asset resolution (documents
+          actually referencing pointers into this server) is real
+          follow-on work, not done here.

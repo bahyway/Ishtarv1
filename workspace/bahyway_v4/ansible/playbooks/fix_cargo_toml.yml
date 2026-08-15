@@ -1,0 +1,109 @@
+---
+# fix_cargo_toml.yml — remove duplicate/broken beemdm-monitor line
+# and insert it correctly inside the members array
+#
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/fix_cargo_toml.yml -v
+
+- name: "Fix workspace Cargo.toml — beemdm-monitor entry"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    workspace_toml: "{{ ansible_env.HOME }}/Forge/bahyway_v4/Cargo.toml"
+    forge:          "{{ ansible_env.HOME }}/Forge/bahyway_v4"
+
+  tasks:
+
+    # ── Step 1: Backup original ────────────────────────────────────────────
+    - name: "Backup Cargo.toml before fix"
+      ansible.builtin.copy:
+        src:  "{{ workspace_toml }}"
+        dest: "{{ workspace_toml }}.bak"
+        mode: "0644"
+
+    # ── Step 2: Remove ALL broken/duplicate beemdm-monitor lines ──────────
+    - name: "Remove all existing beemdm-monitor lines (clean slate)"
+      ansible.builtin.lineinfile:
+        path:   "{{ workspace_toml }}"
+        regexp: 'beemdm-monitor'
+        state:  absent
+
+    # ── Step 3: Verify the bad line is gone ───────────────────────────────
+    - name: "Confirm no beemdm-monitor lines remain"
+      ansible.builtin.command:
+        cmd: grep -n "beemdm-monitor" "{{ workspace_toml }}"
+      register: grep_check
+      failed_when:  grep_check.rc == 0   # rc=0 means found — that is failure
+      changed_when: false
+      ignore_errors: false
+
+    # ── Step 4: Insert correctly INSIDE the members array ─────────────────
+    # Inserts after "bin/bee-watchdog" which is already in the array
+    - name: "Insert beemdm-monitor correctly inside members array"
+      ansible.builtin.lineinfile:
+        path:        "{{ workspace_toml }}"
+        insertafter: '"bin/bee-watchdog"'
+        line:        '    "bin/beemdm-monitor",'
+        state:       present
+
+    # ── Step 5: Verify TOML parses ────────────────────────────────────────
+    - name: "Verify Cargo.toml parses cleanly"
+      ansible.builtin.command:
+        cmd:   cargo metadata --no-deps --format-version 1
+        chdir: "{{ forge }}"
+      register: meta
+      changed_when: false
+      failed_when:  meta.rc != 0
+
+    - name: "Confirm beemdm-monitor is in workspace"
+      ansible.builtin.assert:
+        that:    '"beemdm-monitor" in meta.stdout'
+        fail_msg:    "beemdm-monitor NOT in workspace after fix"
+        success_msg: "✓ beemdm-monitor found in workspace"
+
+    # ── Step 6: Show the fixed lines around line 168 ──────────────────────
+    - name: "Show fixed Cargo.toml Binaries section"
+      ansible.builtin.command:
+        cmd: grep -n "bin/" "{{ workspace_toml }}"
+      register: bins
+      changed_when: false
+
+    - name: "Print Binaries section"
+      ansible.builtin.debug:
+        msg: "{{ bins.stdout_lines }}"
+
+    # ── Step 7: Build ──────────────────────────────────────────────────────
+    - name: "cargo build -p beemdm-monitor"
+      ansible.builtin.command:
+        cmd:   cargo build -p beemdm-monitor
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Build result"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-5:] }}"
+
+    # ── Step 8: Confirm binary ────────────────────────────────────────────
+    - name: "Stat the binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/beemdm-monitor"
+      register: bin_stat
+
+    - name: "Assert binary exists"
+      ansible.builtin.assert:
+        that:
+          - bin_stat.stat.exists
+          - bin_stat.stat.size > 0
+        success_msg: "✓ binary ready — {{ bin_stat.stat.size | filesizeformat }}"
+        fail_msg:    "Binary not produced"
+
+    - name: "𒁾 Fix complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Cargo.toml fixed"
+          - "✓ beemdm-monitor built"
+          - "Run:  cd ~/Forge/bahyway_v4 && cargo run -p beemdm-monitor"

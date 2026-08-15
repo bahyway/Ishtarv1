@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ŠALA — PDM shape modeler v2 · Shape Operator graph (rehearsal)</title>
+<!-- ════════════════════════════════════════════════════════════════
+     ŠALA TAB — PDM v2 · Shape Operator Graph (Houdini-class editor)
+     BahyWay.Ecosystem v4.0 · rehearsal only (Way-of-Work rule 5)
+     Implements the PDM Shape Operator spec: typed wires (attr/shape/
+     pattern/tablet), deterministic cook + DAG law, PuhuExchange with
+     two-witness refusal, BettiProbe, GapWatch, OrbitBivector, and the
+     Seal node as the ONLY side-effecting operator (CSR-08 dialog).
+     Production twin: pdm-graph-core (pure Rust) + gdext/egui skins.
+     SPLICE between SHALA-SPLICE-BEGIN / END.
+     ════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022; --bg-deep:#18191B;
+  --bg-hover:#383A3E; --bg-selected:#404349; --stroke:#3D3F43;
+  --gold:#D6A44C; --teal:#4FB8A8; --orange:#D98E3E; --crimson:#C34A3F;
+  --purple:#9B7FC7; --pale:#C9CDD4;
+  --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --mono:"JetBrains Mono","Fira Code",ui-monospace,Menlo,monospace;
+  --sans:"Inter","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:baseline;gap:18px;padding:14px 22px 0;border-bottom:1px solid var(--stroke)}
+header h1{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:.24em;color:var(--gold)}
+header .sub{font-size:12px;color:var(--dim);letter-spacing:.08em}
+.tabs{display:flex;gap:2px;margin-left:auto}
+.tab{padding:8px 16px;font-size:13px;color:var(--muted);background:var(--bg-panel);border:1px solid var(--stroke);border-bottom:none;border-radius:6px 6px 0 0;cursor:default}
+.tab.on{background:var(--bg-selected);color:var(--gold);border-color:var(--gold)}
+main{flex:1;display:grid;grid-template-columns:250px minmax(0,1fr) 320px;gap:14px;padding:16px 22px}
+.panel{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:8px;padding:14px;min-width:0}
+.panel h2{font-family:var(--serif);font-weight:500;font-size:15px;color:var(--gold);letter-spacing:.06em;margin-bottom:10px}
+.panel h3{font-family:var(--serif);font-weight:500;font-size:13px;color:var(--gold);margin:12px 0 6px}
+button{background:var(--bg-widget);color:var(--ink);border:1px solid var(--stroke);border-radius:6px;padding:6px 10px;font-size:12.5px;cursor:pointer}
+button:hover{background:var(--bg-hover)}
+button.gold{border-color:var(--gold);color:var(--gold)}
+button.on{background:var(--bg-selected);border-color:var(--gold);color:var(--gold)}
+.pal{display:flex;flex-direction:column;gap:5px}
+.pal button{text-align:left;font-family:var(--mono);font-size:11.5px}
+.pal .t-attr{border-left:3px solid var(--teal)} .pal .t-shape{border-left:3px solid var(--gold)}
+.pal .t-pat{border-left:3px solid var(--purple)} .pal .t-tab{border-left:3px solid var(--pale)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chip{font-family:var(--mono);font-size:11px;color:var(--teal);background:var(--bg-widget);border:1px solid var(--stroke);border-radius:12px;padding:4px 9px;cursor:pointer}
+.chip:hover{border-color:var(--teal)}
+#log{margin-top:10px;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:6px;padding:9px;height:150px;overflow-y:auto;font-family:var(--mono);font-size:10.5px;color:var(--muted);line-height:1.65}
+#log .emit{color:var(--teal)} #log .err{color:var(--crimson)} #log .seal{color:var(--gold)}
+.bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.bar .stat{font-family:var(--mono);font-size:12px;color:var(--muted)}
+#graph{position:relative;height:560px;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:8px;overflow:hidden}
+#wires{position:absolute;inset:0;pointer-events:none}
+.node{position:absolute;min-width:150px;background:var(--bg-panel);border:1px solid var(--stroke);border-radius:8px;font-size:11px;user-select:none}
+.node.err{border-color:var(--crimson);box-shadow:0 0 0 1px var(--crimson)}
+.node.dirty{opacity:.55}
+.node .nh{padding:5px 8px;font-family:var(--mono);font-size:10.5px;color:var(--gold);border-bottom:1px solid var(--stroke);cursor:grab;border-radius:8px 8px 0 0;background:var(--bg-widget)}
+.node .nb{padding:6px 8px;display:flex;flex-direction:column;gap:4px}
+.node input,.node select{background:var(--bg-deep);color:var(--ink);border:1px solid var(--stroke);border-radius:4px;font-family:var(--mono);font-size:10.5px;padding:3px 5px;width:100%}
+.port{position:absolute;width:11px;height:11px;border-radius:50%;border:2px solid var(--bg-deep);cursor:crosshair}
+.port.in{left:-6px}.port.out{right:-6px}
+.p-attr{background:var(--teal)}.p-shape{background:var(--gold)}.p-pat{background:var(--purple)}.p-tab{background:var(--pale)}
+.port.hot{box-shadow:0 0 0 3px rgba(214,164,76,.45)}
+canvas{display:block;width:100%;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:8px}
+.betti{display:flex;gap:8px;margin-bottom:10px}
+.bcell{flex:1;background:var(--bg-widget);border:1px solid var(--stroke);border-radius:6px;padding:7px;text-align:center}
+.bcell .v{font-family:var(--mono);font-size:19px;color:var(--ink)}
+.bcell .k{font-family:var(--serif);font-style:italic;font-size:10.5px;color:var(--dim)}
+.verdict{font-family:var(--serif);font-size:14px;padding:7px 10px;border-radius:6px;border:1px solid var(--stroke);margin-bottom:8px}
+.verdict.H{color:var(--teal);border-color:var(--teal)}
+.verdict.HOLD{color:var(--crimson);border-color:var(--crimson)}
+.verdict.REVIEW{color:var(--orange);border-color:var(--orange)}
+.diag{font-size:11.5px;color:var(--muted);line-height:1.65}
+.diag b{color:var(--ink);font-weight:500}
+pre.tab{background:var(--bg-deep);border:1px solid var(--gold);border-radius:6px;padding:9px;font-family:var(--mono);font-size:10px;color:var(--gold);line-height:1.55;white-space:pre-wrap;max-height:250px;overflow-y:auto}
+.confirm{display:none;position:absolute;z-index:20;left:50%;top:38%;transform:translate(-50%,-50%);width:min(430px,92%);background:var(--bg-panel);border:1px solid var(--crimson);border-radius:8px;padding:14px}
+.confirm p{font-family:var(--serif);font-style:italic;font-size:12.5px;line-height:1.7;margin-bottom:10px}
+footer{padding:10px 22px 16px;font-family:var(--serif);font-style:italic;font-size:12px;color:var(--dim)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)}
+.legend b{display:inline-block;width:9px;height:9px;border-radius:50%;vertical-align:-1px;margin-right:4px}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Š A L A</h1><span class="sub">BahyWay.Ecosystem v4.0 · rehearsal stage</span>
+  <nav class="tabs" aria-label="Šala tabs">
+    <span class="tab">…existing tabs…</span>
+    <span class="tab">𒀯 MARDUK — data mining</span>
+    <span class="tab on">𒁾 PDM — shape operators</span>
+  </nav>
+</header>
+
+<!-- ══ SHALA-SPLICE-BEGIN : PDM v2 tab panel ══ -->
+<main>
+  <section class="panel">
+    <h2>Operator palette</h2>
+    <div class="pal">
+      <button class="t-shape" data-n="TribeSource">TribeSource — preset shape</button>
+      <button class="t-attr" data-n="AttributeDefine">AttributeDefine — EAV optional</button>
+      <button class="t-shape" data-n="AttributeRelate">AttributeRelate — attr↔attr</button>
+      <button class="t-shape" data-n="CompositeBind">CompositeBind — 2-simplex</button>
+      <button class="t-shape" data-n="ShapeMerge">ShapeMerge — union</button>
+      <button class="t-shape" data-n="CrossTribeRelate">CrossTribeRelate — A↔B map</button>
+      <button class="t-shape" data-n="PuhuExchange">PuhuExchange — same entity?</button>
+      <button class="t-pat" data-n="PatternSource">PatternSource — arsenal</button>
+      <button class="t-shape" data-n="PatternBindShape">PatternBindShape</button>
+      <button class="t-shape" data-n="GapWatch">GapWatch — expected fields</button>
+      <button class="t-shape" data-n="OrbitBivector">OrbitBivector — e_a∧e_b</button>
+      <button class="t-shape" data-n="BettiProbe">BettiProbe — TDA draft</button>
+      <button class="t-tab" data-n="ShapeTablet">ShapeTablet — cook contract</button>
+      <button class="t-tab" data-n="Seal">Seal — CSR-08 (only side effect)</button>
+    </div>
+    <h3>Sample graphs</h3>
+    <div class="chips">
+      <span class="chip" id="g1">Customer canonical</span>
+      <span class="chip" id="g2">Puhu: Klant↔Customer ✓</span>
+      <span class="chip" id="g3">Puhu refused ✗</span>
+      <span class="chip" id="g4">Loop → REVIEW</span>
+      <span class="chip" id="g0">Clear</span>
+    </div>
+    <div id="log" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" style="position:relative">
+    <div class="bar">
+      <button id="vG" class="on">Operator graph</button>
+      <button id="vC">Cooked complex</button>
+      <button id="vO">Orbit preview</button>
+      <span class="stat" id="cookstat"></span>
+    </div>
+    <div id="graph">
+      <svg id="wires"></svg>
+    </div>
+    <canvas id="cv" height="560" style="display:none"></canvas>
+    <div class="legend">
+      <span><b style="background:var(--teal)"></b>AttributeFlow</span>
+      <span><b style="background:var(--gold)"></b>ShapeFlow</span>
+      <span><b style="background:var(--purple)"></b>PatternFlow</span>
+      <span><b style="background:var(--pale)"></b>TabletFlow</span>
+      <span class="stat">· click out-port → in-port to wire · type mismatch & cycles refused · drag headers · right-click node to remove</span>
+    </div>
+    <div class="confirm" id="confirmBox">
+      <p id="confirmTxt"></p>
+      <button class="gold" id="cy">Yes — this is my CSR-08 confirmation</button>
+      <button id="cn">Return to the bench</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>BettiProbe — draft TDA</h2>
+    <div class="betti">
+      <div class="bcell"><div class="v" id="b0">·</div><div class="k">β₀</div></div>
+      <div class="bcell"><div class="v" id="b1">·</div><div class="k">β₁</div></div>
+      <div class="bcell"><div class="v" id="b2">·</div><div class="k">β₂</div></div>
+    </div>
+    <div class="verdict H" id="verdict">—</div>
+    <div class="diag" id="diag">Wire a BettiProbe into the flow to read the shape's health.</div>
+    <h3>Shape Tablet (DRAFT)</h3>
+    <pre class="tab" id="tablet">— cook a ShapeTablet node —</pre>
+  </section>
+</main>
+<!-- ══ SHALA-SPLICE-END ══ -->
+
+<footer>Rehearsal only, per Way-of-Work rule 5. Every wire is a knowledge-graph edge (GL-DDB-001); only Seal touches the world (CSR-08); PuhuExchange refuses claims the two witnesses have not proven. Production twin: pdm-graph-core (pure Rust) · gdext + egui faces. — inscribed for DUB.SAR 𒁾</footer>
+
+<script>
+"use strict";
+/* ═══ core model ═══════════════════════════════════════════════ */
+const WCOL={attr:"#4FB8A8",shape:"#D6A44C",pattern:"#9B7FC7",tablet:"#C9CDD4"};
+const SYN={klant:"customer",naam:"name",stad:"city",adres:"address",klant_id:"customer_id",order_id:"order_id"};
+const PRESETS={
+ CustomerEN:{f:[["customer_id","UUID","WHO"],["name","TEXT","WHAT"],["city","TEXT","WHERE"]],e:[[0,1],[0,2]],t:[[0,1,2]]},
+ KlantNL:{f:[["klant_id","UUID","WHO"],["naam","TEXT","WHAT"],["stad","TEXT","WHERE"]],e:[[0,1],[0,2]],t:[[0,1,2]]},
+ SensorLog:{f:[["sensor_id","UUID","WHO"],["reading","FLOAT","HOWMUCH"],["ts","DATE","WHEN"],["unit","TEXT","HOW"]],e:[[0,1],[0,2],[1,3]],t:[]},
+ OrderCore:{f:[["order_id","UUID","WHO"],["total","FLOAT","HOWMUCH"]],e:[[0,1]],t:[]}
+};
+const PATTERNS=["Smooth Flow","Fast Track","Stalled","Rework Loop","Aging Drift","Early Death"];
+let NODES=[],WIRES=[],nid=1,view='graph',pend=null,cookN=0;
+const graph=document.getElementById('graph'),svg=document.getElementById('wires');
+const logEl=document.getElementById('log');
+function log(m,c){const d=document.createElement('div');if(c)d.className=c;d.textContent=m;logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
+/* node type registry: ports [name,type], params render+read, cook fn */
+const REG={
+ TribeSource:{ins:[],outs:[["shape","shape"]],params:n=>sel(n,"preset",Object.keys(PRESETS)),
+   cook:(n)=>{const p=PRESETS[n.p.preset||"CustomerEN"];
+     return sh(p.f.map(f=>({name:f[0],type:f[1],role:f[2]})),p.e.slice(),p.t.map(t=>t.slice()));}},
+ AttributeDefine:{ins:[],outs:[["attr","attr"]],
+   params:n=>txt(n,"name","field")+selv(n,"type",["UUID","TEXT","INT","FLOAT","DATE","BOOL","JSON"])+selv(n,"role",["WHO","WHAT","WHEN","WHERE","WHY","HOW","HOWMUCH"]),
+   cook:n=>({name:n.p.name||("f"+n.id),type:n.p.type||"TEXT",role:n.p.role||"WHAT"})},
+ AttributeRelate:{ins:[["a","attr"],["b","attr"]],outs:[["shape","shape"]],
+   params:n=>selv(n,"rel",["DERIVES","CONSTRAINS","CO-OCCURS","UNIT-OF","IDENTIFIES","DESCRIBES"]),
+   cook:(n,i)=>{if(!i.a||!i.b)return null;
+     return sh([i.a,i.b],[[0,1]],[],[],[],null,[[i.a.name,i.b.name,n.p.rel||"CO-OCCURS"]]);}},
+ CompositeBind:{ins:[["a","attr"],["b","attr"],["c","attr"]],outs:[["shape","shape"]],params:()=>"",
+   cook:(n,i)=>{if(!i.a||!i.b||!i.c)return null;
+     return sh([i.a,i.b,i.c],[[0,1],[0,2],[1,2]],[[0,1,2]]);}},
+ ShapeMerge:{ins:[["a","shape"],["b","shape"]],outs:[["shape","shape"]],params:()=>"",
+   cook:(n,i)=>{if(!i.a)return i.b||null;if(!i.b)return i.a;return merge(i.a,i.b);}},
+ CrossTribeRelate:{ins:[["a","shape"],["b","shape"]],outs:[["shape","shape"]],
+   params:n=>txt(n,"attrA","attr in A")+txt(n,"attrB","attr in B")+selv(n,"rel",["MAPS-TO","FK-OF","SHARES-KEY"]),
+   cook:(n,i)=>{if(!i.a||!i.b)return null;const m=merge(i.a,i.b);
+     m.cross.push([n.p.attrA||"?",n.p.attrB||"?",n.p.rel||"MAPS-TO"]);
+     const ia=m.fields.findIndex(f=>f.name===n.p.attrA),ib=m.fields.findIndex(f=>f.name===n.p.attrB);
+     if(ia>=0&&ib>=0)m.edges.push([Math.min(ia,ib),Math.max(ia,ib)]);
+     return m;}},
+ PuhuExchange:{ins:[["a","shape"],["b","shape"]],outs:[["shape","shape"]],params:()=>"",
+   cook:(n,i)=>{if(!i.a||!i.b)return null;
+     const w=twoWitness(i.a,i.b);
+     n.info='J='+w.j.toFixed(2)+' · sem='+w.s.toFixed(2);
+     if(w.j<0.5||w.s<0.5){n.refused=true;
+       log('✖ PUHU REFUSED — witnesses disagree (structural '+w.j.toFixed(2)+', semantic '+w.s.toFixed(2)+') — no entity-identity without proof','err');
+       return null;}
+     n.refused=false;
+     log('PUHU EXCHANGE sealed — one entity, two costumes (J='+w.j.toFixed(2)+', sem='+w.s.toFixed(2)+')','seal');
+     const m=merge(i.a,i.b);m.puhu=true;return m;}},
+ PatternSource:{ins:[],outs:[["pattern","pattern"]],params:n=>sel(n,"pat",PATTERNS),
+   cook:n=>({pattern:n.p.pat||PATTERNS[0]})},
+ PatternBindShape:{ins:[["shape","shape"],["pat","pattern"]],outs:[["shape","shape"]],params:()=>"",
+   cook:(n,i)=>{if(!i.shape)return null;const m=clone(i.shape);
+     if(i.pat)m.patterns.push(i.pat.pattern);return m;}},
+ GapWatch:{ins:[["shape","shape"]],outs:[["shape","shape"]],
+   params:n=>txt(n,"expected","bsn,email"),
+   cook:(n,i)=>{if(!i.shape)return null;const m=clone(i.shape);
+     (n.p.expected||"").split(",").map(s=>s.trim()).filter(Boolean)
+       .forEach(x=>{if(!m.fields.some(f=>f.name===x))m.gaps.push(x);});
+     return m;}},
+ OrbitBivector:{ins:[["shape","shape"]],outs:[["shape","shape"]],
+   params:n=>selv(n,"a",["0","1","2","3","4","5","6"])+selv(n,"b",["0","1","2","3","4","5","6"]),
+   cook:(n,i)=>{if(!i.shape)return null;const m=clone(i.shape);
+     m.biv=[+(n.p.a??2),+(n.p.b??6)];if(m.biv[0]===m.biv[1])m.biv[1]=(m.biv[0]+1)%7;return m;}},
+ BettiProbe:{ins:[["shape","shape"]],outs:[["shape","shape"]],params:()=>"",
+   cook:(n,i)=>{if(!i.shape)return null;PROBE=i.shape;return i.shape;}},
+ ShapeTablet:{ins:[["shape","shape"]],outs:[["tablet","tablet"]],params:()=>"",
+   cook:(n,i)=>{if(!i.shape)return null;TABLET=mkTablet(i.shape);SHAPE=i.shape;return TABLET;}},
+ Seal:{ins:[["tablet","tablet"]],outs:[],params:n=>'<button class="gold" data-seal="'+n.id+'" style="font-size:10.5px">⚖ Seal — CSR-08</button>',
+   cook:(n,i)=>{n.ready=!!i.tablet;return null;}}
+};
+/* shape helpers */
+function sh(fields,edges,tris,cross,patterns,biv,rels){
+  return {fields,edges,tris:tris||[],cross:cross||[],patterns:patterns||[],
+          biv:biv||null,rels:rels||[],gaps:[],puhu:false};}
+function clone(s){return JSON.parse(JSON.stringify(s));}
+function merge(a,b){
+  const m=clone(a);const map=[];
+  b.fields.forEach(f=>{let i=m.fields.findIndex(g=>g.name===f.name);
+    if(i<0){m.fields.push(clone(f));i=m.fields.length-1;}map.push(i);});
+  b.edges.forEach(e=>{const p=[map[e[0]],map[e[1]]].sort((x,y)=>x-y);
+    if(!m.edges.some(q=>q[0]===p[0]&&q[1]===p[1]))m.edges.push(p);});
+  b.tris.forEach(t=>{const q=t.map(v=>map[v]).sort((x,y)=>x-y);
+    if(!m.tris.some(u=>u[0]===q[0]&&u[1]===q[1]&&u[2]===q[2]))m.tris.push(q);});
+  m.cross=m.cross.concat(clone(b.cross));m.rels=m.rels.concat(clone(b.rels));
+  m.patterns=[...new Set(m.patterns.concat(b.patterns))];
+  m.gaps=[...new Set(m.gaps.concat(b.gaps))];
+  m.biv=m.biv||b.biv;return m;}
+function twoWitness(a,b){
+  const sig=s=>new Set(s.fields.map(f=>f.role+":"+f.type));
+  const A=sig(a),B=sig(b);let inter=0;A.forEach(x=>{if(B.has(x))inter++;});
+  const j=inter/Math.max(1,(A.size+B.size-inter));
+  const norm=n=>SYN[n]||n;let sem=0;
+  a.fields.forEach(f=>{if(b.fields.some(g=>norm(g.name)===norm(f.name)))sem++;});
+  const s=sem/Math.max(1,Math.max(a.fields.length,b.fields.length));
+  return {j,s};}
+/* Z2 Betti */
+function rankZ2(rows,nc){let r=0;const nw=Math.ceil(Math.max(1,nc)/32);
+  for(let c=0;c<nc&&r<rows.length;c++){const w=c>>5,bit=1<<(c&31);let p=-1;
+    for(let q=r;q<rows.length;q++)if(rows[q][w]&bit){p=q;break;}
+    if(p<0)continue;[rows[r],rows[p]]=[rows[p],rows[r]];
+    for(let q=0;q<rows.length;q++)if(q!==r&&(rows[q][w]&bit))
+      for(let k=0;k<nw;k++)rows[q][k]^=rows[r][k];r++;}return r;}
+function betti(s){const V=s.fields.length,E=s.edges.length,T=s.tris.length;
+  const d1=s.edges.map(e=>{const r=new Int32Array(Math.ceil(Math.max(1,V)/32));
+    r[e[0]>>5]|=1<<(e[0]&31);r[e[1]>>5]|=1<<(e[1]&31);return r;});
+  const ei=(a,b)=>{if(a>b)[a,b]=[b,a];
+    return s.edges.findIndex(e=>e[0]===a&&e[1]===b);};
+  const d2=s.tris.map(t=>{const r=new Int32Array(Math.ceil(Math.max(1,E)/32));
+    [[t[0],t[1]],[t[0],t[2]],[t[1],t[2]]].forEach(p=>{const i=ei(p[0],p[1]);
+      if(i>=0)r[i>>5]|=1<<(i&31);});return r;});
+  const r1=rankZ2(d1,V),r2=rankZ2(d2,E);
+  return {b0:Math.max(0,V-r1),b1:Math.max(0,E-r1-r2),b2:Math.max(0,T-r2)};}
+/* tablet */
+function mkTablet(s){const B=betti(s);
+  let v="HEALTHY";if(B.b0>1||s.gaps.length)v="HOLD";else if(B.b1>0||B.b2>0)v="REVIEW";
+  return '{ "shape": {\n  "fields": ['+s.fields.map(f=>'"'+f.name+':'+f.type+':'+f.role+'"').join(', ')+'],\n'
+   +'  "attr_relations": ['+s.rels.map(r=>'"'+r[0]+' '+r[2]+' '+r[1]+'"').join(', ')+'],\n'
+   +'  "cross_tribe": ['+s.cross.map(c=>'"'+c[0]+' '+c[2]+' '+c[1]+'"').join(', ')+'],\n'
+   +'  "pattern_bindings": ['+s.patterns.map(p=>'"'+p+'"').join(', ')+'],\n'
+   +'  "betti": ['+B.b0+','+B.b1+','+B.b2+'], "gaps": ['+s.gaps.map(g=>'"'+g+'"')+'],\n'
+   +'  "puhu_identity": '+(s.puhu?'true':'false')+',\n'
+   +'  "orbit_bivector": "'+(s.biv?('e'+s.biv[0]+'^e'+s.biv[1]):'unset')+'", "verdict": "'+v+'" },\n'
+   +'  "heptascript":\n    PRESENT SHAPE Cooked\n'
+   +'      WHAT fields = '+s.fields.length+' · relations = '+s.edges.length+' · composites = '+s.tris.length+'\n'
+   +'      HOW  betti = ('+B.b0+', '+B.b1+', '+B.b2+')\n'
+   +'      WHERE orbit = '+(s.biv?('BIVECTOR e'+s.biv[0]+'^e'+s.biv[1]):'UNSET')+'\n'
+   +'    EMIT ShapeTablet SEAL AkkadianSeal,\n'
+   +'  "seal": "DRAFT — HEPT → GeoEngine → Lamassu → G4 → AAOL" }';}
+/* ═══ node UI ══════════════════════════════════════════════════ */
+function txt(n,k,ph){return '<input data-p="'+k+'" placeholder="'+ph+'" value="'+(n.p[k]||'')+'">';}
+function selv(n,k,opts){return '<select data-p="'+k+'">'+opts.map(o=>'<option'+((n.p[k]??'')==o?' selected':'')+'>'+o+'</option>').join('')+'</select>';}
+function sel(n,k,opts){return selv(n,k,opts);}
+function addNode(type,x,y,p){
+  const n={id:nid++,type,x:x??40+Math.random()*300,y:y??40+Math.random()*300,p:p||{},cooked:null,el:null};
+  NODES.push(n);renderNode(n);return n;}
+function renderNode(n){
+  const R=REG[n.type];
+  const el=document.createElement('div');el.className='node';el.style.left=n.x+'px';el.style.top=n.y+'px';
+  el.dataset.id=n.id;
+  el.innerHTML='<div class="nh">'+n.type+(n.info?' <span style="color:var(--muted)">'+n.info+'</span>':'')+'</div><div class="nb">'+R.params(n)+'</div>';
+  R.ins.forEach((pt,i)=>{const p=document.createElement('div');
+    p.className='port in p-'+pt[1];p.style.top=(30+i*16)+'px';
+    p.dataset.n=n.id;p.dataset.port=i;p.dataset.dir='in';p.dataset.t=pt[1];
+    p.title=pt[0]+' ('+pt[1]+')';el.appendChild(p);});
+  R.outs.forEach((pt,i)=>{const p=document.createElement('div');
+    p.className='port out p-'+pt[1];p.style.top=(30+i*16)+'px';
+    p.dataset.n=n.id;p.dataset.port=i;p.dataset.dir='out';p.dataset.t=pt[1];
+    p.title=pt[0]+' ('+pt[1]+')';el.appendChild(p);});
+  if(n.el)graph.replaceChild(el,n.el);else graph.appendChild(el);
+  n.el=el;
+}
+graph.addEventListener('input',e=>{
+  const k=e.target.dataset.p;if(!k)return;
+  const n=NODES.find(x=>x.el.contains(e.target));if(n){n.p[k]=e.target.value;cook();}
+});
+graph.addEventListener('click',e=>{
+  const sid=e.target.dataset.seal;
+  if(sid){const n=NODES.find(x=>x.id==sid);
+    if(!n.ready){log('Seal has no cooked tablet upstream.','err');return;}
+    document.getElementById('confirmTxt').textContent=
+      'This Shape Tablet will be routed over HEPT — GeoEngine verifies the algebra, Lamassu certifies persistence, Gate G4 proves, AAOL emits — and the canonical then commands the DataStructure Station. Sealing is your confirmation (CSR-08). Everything upstream was pure; this is the only side effect in the graph.';
+    document.getElementById('confirmBox').style.display='block';return;}
+  const p=e.target.closest('.port');if(!p)return;
+  if(p.dataset.dir==='out'){pend={n:+p.dataset.n,port:+p.dataset.port,t:p.dataset.t};
+    document.querySelectorAll('.port.in.p-'+p.dataset.t).forEach(x=>x.classList.add('hot'));}
+  else if(pend){
+    if(p.dataset.t!==pend.t){log('✖ TYPE REFUSED — '+pend.t+' wire cannot enter a '+p.dataset.t+' port.','err');}
+    else if(+p.dataset.n===pend.n){log('✖ self-wire refused.','err');}
+    else if(makesCycle(pend.n,+p.dataset.n)){log('✖ CYCLE REFUSED — the operator graph is a DAG; loops belong inside the shape, never in the graph that models it.','err');}
+    else{WIRES=WIRES.filter(w=>!(w.to===+p.dataset.n&&w.tport===+p.dataset.port));
+      WIRES.push({from:pend.n,fport:pend.port,to:+p.dataset.n,tport:+p.dataset.port,t:pend.t});
+      log('wire: '+typeOf(pend.n)+' → '+typeOf(+p.dataset.n)+' ['+pend.t+']','emit');cook();}
+    pend=null;document.querySelectorAll('.port.hot').forEach(x=>x.classList.remove('hot'));
+  }
+});
+function typeOf(id){return NODES.find(n=>n.id===id).type;}
+function makesCycle(from,to){const adj={};WIRES.forEach(w=>{(adj[w.from]=adj[w.from]||[]).push(w.to);});
+  (adj[from]=adj[from]||[]).push(to);
+  const seen=new Set(),stack=[to];
+  while(stack.length){const c=stack.pop();if(c===from)return true;
+    if(seen.has(c))continue;seen.add(c);(adj[c]||[]).forEach(x=>stack.push(x));}
+  return false;}
+let dragN=null,off=[0,0];
+graph.addEventListener('mousedown',e=>{
+  const h=e.target.closest('.nh');if(!h)return;
+  const el=h.parentElement;dragN=NODES.find(n=>n.id==el.dataset.id);
+  const r=el.getBoundingClientRect(),g=graph.getBoundingClientRect();
+  off=[e.clientX-r.left,e.clientY-r.top];});
+addEventListener('mousemove',e=>{if(!dragN)return;
+  const g=graph.getBoundingClientRect();
+  dragN.x=Math.max(0,Math.min(g.width-160,e.clientX-g.left-off[0]));
+  dragN.y=Math.max(0,Math.min(g.height-60,e.clientY-g.top-off[1]));
+  dragN.el.style.left=dragN.x+'px';dragN.el.style.top=dragN.y+'px';drawWires();});
+addEventListener('mouseup',()=>dragN=null);
+graph.addEventListener('contextmenu',e=>{
+  const el=e.target.closest('.node');if(!el)return;e.preventDefault();
+  const id=+el.dataset.id;
+  NODES=NODES.filter(n=>n.id!==id);WIRES=WIRES.filter(w=>w.from!==id&&w.to!==id);
+  el.remove();log('operator removed.','');cook();});
+function portXY(nid,dir,port){
+  const n=NODES.find(x=>x.id===nid);if(!n)return[0,0];
+  const g=graph.getBoundingClientRect();
+  const ps=n.el.querySelectorAll('.port.'+dir);const p=ps[port];
+  if(!p)return[n.x,n.y];
+  const r=p.getBoundingClientRect();
+  return [r.left-g.left+5.5,r.top-g.top+5.5];}
+function drawWires(){
+  let h='';
+  WIRES.forEach(w=>{const a=portXY(w.from,'out',w.fport),b=portXY(w.to,'in',w.tport);
+    const dx=Math.max(40,Math.abs(b[0]-a[0])*.5);
+    h+='<path d="M'+a[0]+' '+a[1]+' C'+(a[0]+dx)+' '+a[1]+','+(b[0]-dx)+' '+b[1]+','+b[0]+' '+b[1]
+      +'" fill="none" stroke="'+WCOL[w.t]+'" stroke-width="1.6" opacity="0.85"/>';});
+  svg.innerHTML=h;}
+/* ═══ cook engine ══════════════════════════════════════════════ */
+let PROBE=null,TABLET=null,SHAPE=null;
+function cook(){
+  const t0=performance.now();PROBE=null;TABLET=null;SHAPE=null;
+  const indeg={},adj={};NODES.forEach(n=>indeg[n.id]=0);
+  WIRES.forEach(w=>{indeg[w.to]=(indeg[w.to]||0)+1;(adj[w.from]=adj[w.from]||[]).push(w.to);});
+  const q=NODES.filter(n=>!indeg[n.id]).map(n=>n.id),order=[];
+  const deg={...indeg};
+  while(q.length){const c=q.shift();order.push(c);
+    (adj[c]||[]).forEach(x=>{if(--deg[x]===0)q.push(x);});}
+  NODES.forEach(n=>{n.cooked=null;n.refused=false;n.ready=false;});
+  order.forEach(id=>{const n=NODES.find(x=>x.id===id);const R=REG[n.type];
+    const ins={};R.ins.forEach((pt,i)=>{
+      const w=WIRES.find(u=>u.to===id&&u.tport===i);
+      ins[pt[0]]=w?NODES.find(x=>x.id===w.from).cooked:null;});
+    try{n.cooked=R.cook(n,ins);}catch(e){n.cooked=null;}
+    renderNode(n);
+    n.el.classList.toggle('err',!!n.refused);
+    const need=R.ins.length>0&&R.ins.some((pt,i)=>!WIRES.some(u=>u.to===id&&u.tport===i));
+    n.el.classList.toggle('dirty',need);
+  });
+  drawWires();
+  cookN++;
+  document.getElementById('cookstat').textContent=
+    'cook #'+cookN+' · '+NODES.length+' ops · '+WIRES.length+' wires · '+(performance.now()-t0).toFixed(1)+' ms · deterministic';
+  refreshPanels();
+  if(view!=='graph')drawCanvas();
+}
+function refreshPanels(){
+  const s=PROBE;
+  if(s){const B=betti(s);
+    document.getElementById('b0').textContent=B.b0;
+    document.getElementById('b1').textContent=B.b1;
+    document.getElementById('b2').textContent=B.b2;
+    let v="HEALTHY",cls="H";
+    if(B.b0>1||s.gaps.length){v="HOLD";cls="HOLD";}
+    else if(B.b1>0||B.b2>0){v="REVIEW";cls="REVIEW";}
+    const V=document.getElementById('verdict');V.textContent=v;V.className='verdict '+cls;
+    const dg=[];
+    if(B.b0>1)dg.push('<b>β₀='+B.b0+'</b> — islands: HOLD at STAGE.');
+    if(B.b1>0)dg.push('<b>β₁='+B.b1+'</b> — loop(s): Rework risk, PROVE gate tightens.');
+    if(B.b2>0)dg.push('<b>β₂='+B.b2+'</b> — void: schema review.');
+    s.gaps.forEach(g=>dg.push('<b>GAP</b> — “'+g+'” expected, absent (HeptaMap Gap).'));
+    s.cross.forEach(c=>dg.push('<b>CROSS</b> — '+c[0]+' '+c[2]+' '+c[1]+' → CrossTribe-KAKI at ingest.'));
+    if(s.puhu)dg.push('<b>PUHU</b> — entity identity sealed by two witnesses.');
+    if(!dg.length)dg.push('One component, no loops, no gaps — healthy.');
+    document.getElementById('diag').innerHTML=dg.join('<br>');
+  }else{['b0','b1','b2'].forEach(i=>document.getElementById(i).textContent='·');
+    document.getElementById('verdict').textContent='—';
+    document.getElementById('verdict').className='verdict H';
+    document.getElementById('diag').textContent='Wire a BettiProbe into the flow to read the shape\u2019s health.';}
+  document.getElementById('tablet').textContent=TABLET||'— cook a ShapeTablet node —';
+}
+document.getElementById('cy').addEventListener('click',()=>{
+  document.getElementById('confirmBox').style.display='none';
+  log('⚖ SEALED (rehearsal) — DRAFT tablet routed: HEPT → GeoEngine ✓ → Lamassu ✓ → G4 ✓ → AAOL emits contract → DataStructure Station commanded.','seal');});
+document.getElementById('cn').addEventListener('click',()=>{
+  document.getElementById('confirmBox').style.display='none';});
+/* ═══ canvas views (cooked complex + orbit) ════════════════════ */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let W=800,H=560,DPR=Math.min(2,devicePixelRatio||1),theta=0;
+function sizeCv(){W=cv.clientWidth||800;H=560;cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';}
+addEventListener('resize',()=>{sizeCv();if(view!=='graph')drawCanvas();});
+const ROLES={WHO:"#D6A44C",WHAT:"#4FB8A8",WHEN:"#D98E3E",WHERE:"#9B7FC7",WHY:"#C34A3F",HOW:"#C9CDD4",HOWMUCH:"#9A9C9F"};
+function drawCanvas(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle='#18191B';ctx.fillRect(0,0,W,H);
+  const s=SHAPE||PROBE;
+  if(!s){ctx.fillStyle='#6E7074';ctx.font='13px serif';
+    ctx.fillText('Cook a ShapeTablet (or BettiProbe) to view the shape.',20,30);return;}
+  if(view==='complex'){
+    const n=s.fields.length,cx=W/2,cy=H/2,R=Math.min(W,H)*.34;
+    const pos=s.fields.map((f,i)=>[cx+R*Math.cos(i/n*6.2832-1.57),cy+R*Math.sin(i/n*6.2832-1.57)]);
+    s.tris.forEach(t=>{ctx.fillStyle='rgba(214,164,76,.08)';
+      ctx.beginPath();ctx.moveTo(pos[t[0]][0],pos[t[0]][1]);
+      ctx.lineTo(pos[t[1]][0],pos[t[1]][1]);ctx.lineTo(pos[t[2]][0],pos[t[2]][1]);
+      ctx.closePath();ctx.fill();ctx.strokeStyle='rgba(214,164,76,.25)';ctx.stroke();});
+    ctx.strokeStyle='#4A4C50';s.edges.forEach(e=>{ctx.beginPath();
+      ctx.moveTo(pos[e[0]][0],pos[e[0]][1]);ctx.lineTo(pos[e[1]][0],pos[e[1]][1]);ctx.stroke();});
+    s.fields.forEach((f,i)=>{ctx.fillStyle=ROLES[f.role]||'#9A9C9F';
+      ctx.beginPath();ctx.arc(pos[i][0],pos[i][1],8,0,6.2832);ctx.fill();
+      ctx.fillStyle='#E8E6E1';ctx.font='11px monospace';
+      ctx.fillText(f.name,pos[i][0]+11,pos[i][1]+4);});
+    if(s.cross.length){ctx.fillStyle='#9B7FC7';ctx.font='11px monospace';
+      ctx.fillText('cross-tribe mappings: '+s.cross.length,16,H-16);}
+  }else{
+    theta+=0.012;const biv=s.biv||[2,6];const c0=[W/2,H/2],sc=Math.min(W,H)*.9;
+    ctx.globalCompositeOperation='lighter';
+    let ps=7;for(let i=0;i<4500;i++){ps=(ps*16807)%2147483647;
+      const r=.3+.18*(ps/2147483647);ps=(ps*16807)%2147483647;
+      const a=theta+6.2832*(ps/2147483647);
+      ctx.fillStyle='rgba(79,184,168,.5)';
+      ctx.fillRect(c0[0]+r*Math.cos(a)*sc,c0[1]+r*Math.sin(a)*sc*.38,1.6,1.6);}
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#9A9C9F';ctx.font='11px monospace';
+    ctx.fillText('R = exp(−B θ/2) · B = e'+biv[0]+'∧e'+biv[1]+' — the shape decides its BIGRING',14,22);
+    requestAnimationFrame(()=>{if(view==='orbit')drawCanvas();});
+  }
+}
+function setView(v){view=v;
+  ['vG','vC','vO'].forEach(i=>document.getElementById(i).className='');
+  document.getElementById(v==='graph'?'vG':v==='complex'?'vC':'vO').className='on';
+  graph.style.display=v==='graph'?'block':'none';
+  cv.style.display=v==='graph'?'none':'block';
+  if(v!=='graph'){sizeCv();drawCanvas();}else drawWires();}
+document.getElementById('vG').addEventListener('click',()=>setView('graph'));
+document.getElementById('vC').addEventListener('click',()=>setView('complex'));
+document.getElementById('vO').addEventListener('click',()=>setView('orbit'));
+document.querySelectorAll('.pal button').forEach(b=>b.addEventListener('click',()=>{
+  addNode(b.dataset.n,30+Math.random()*260,30+Math.random()*380);cook();}));
+/* ═══ sample graphs ════════════════════════════════════════════ */
+function clearAll(){NODES.forEach(n=>n.el.remove());NODES=[];WIRES=[];cook();}
+function wire(a,ap,b,bp,t){WIRES.push({from:a.id,fport:ap,to:b.id,tport:bp,t});}
+document.getElementById('g0').addEventListener('click',()=>{clearAll();log('Cleared.','');});
+document.getElementById('g1').addEventListener('click',()=>{clearAll();
+  const s=addNode('TribeSource',30,60,{preset:'CustomerEN'});
+  const d=addNode('AttributeDefine',30,200,{name:'email',type:'TEXT',role:'HOW'});
+  const d2=addNode('AttributeDefine',30,330,{name:'created',type:'DATE',role:'WHEN'});
+  const r=addNode('AttributeRelate',230,250,{rel:'DESCRIBES'});
+  const m=addNode('ShapeMerge',430,140);
+  const g=addNode('GapWatch',430,300,{expected:'bsn'});
+  const ob=addNode('OrbitBivector',620,140,{a:'2',b:'6'});
+  const bp=addNode('BettiProbe',620,300);
+  const st=addNode('ShapeTablet',800,220);
+  const sl=addNode('Seal',960,220);
+  wire(d,0,r,0,'attr');wire(d2,0,r,1,'attr');
+  wire(s,0,m,0,'shape');wire(r,0,m,1,'shape');
+  wire(m,0,g,0,'shape');wire(g,0,ob,0,'shape');wire(ob,0,bp,0,'shape');
+  wire(bp,0,st,0,'shape');wire(st,0,sl,0,'tablet');
+  cook();log('Sample: Customer canonical — cooked end to end; note the bsn GAP.','emit');});
+document.getElementById('g2').addEventListener('click',()=>{clearAll();
+  const a=addNode('TribeSource',40,90,{preset:'CustomerEN'});
+  const b=addNode('TribeSource',40,300,{preset:'KlantNL'});
+  const p=addNode('PuhuExchange',300,190);
+  const bp=addNode('BettiProbe',520,190);
+  const st=addNode('ShapeTablet',700,190);
+  const sl=addNode('Seal',870,190);
+  wire(a,0,p,0,'shape');wire(b,0,p,1,'shape');
+  wire(p,0,bp,0,'shape');wire(bp,0,st,0,'shape');wire(st,0,sl,0,'tablet');
+  cook();log('Sample: Klant↔Customer — structure agrees, synonyms agree → Puhu seals one entity.','emit');});
+document.getElementById('g3').addEventListener('click',()=>{clearAll();
+  const a=addNode('TribeSource',40,90,{preset:'CustomerEN'});
+  const b=addNode('TribeSource',40,300,{preset:'SensorLog'});
+  const p=addNode('PuhuExchange',300,190);
+  const st=addNode('ShapeTablet',520,190);
+  wire(a,0,p,0,'shape');wire(b,0,p,1,'shape');wire(p,0,st,0,'shape');
+  cook();log('Sample: Customer↔SensorLog — witnesses disagree → PUHU REFUSES; no tablet forms.','err');});
+document.getElementById('g4').addEventListener('click',()=>{clearAll();
+  const d1=addNode('AttributeDefine',30,60,{name:'order_id',type:'UUID',role:'WHO'});
+  const d2=addNode('AttributeDefine',30,190,{name:'invoice_id',type:'UUID',role:'WHO'});
+  const d3=addNode('AttributeDefine',30,320,{name:'shipment_id',type:'UUID',role:'WHO'});
+  const r1=addNode('AttributeRelate',240,90,{rel:'IDENTIFIES'});
+  const r2=addNode('AttributeRelate',240,220,{rel:'IDENTIFIES'});
+  const r3=addNode('AttributeRelate',240,350,{rel:'IDENTIFIES'});
+  const m1=addNode('ShapeMerge',440,150);
+  const m2=addNode('ShapeMerge',440,300);
+  const bp=addNode('BettiProbe',620,220);
+  const st=addNode('ShapeTablet',790,220);
+  wire(d1,0,r1,0,'attr');wire(d2,0,r1,1,'attr');
+  wire(d2,0,r2,0,'attr');wire(d3,0,r2,1,'attr');
+  wire(d1,0,r3,0,'attr');wire(d3,0,r3,1,'attr');
+  wire(r1,0,m1,0,'shape');wire(r2,0,m1,1,'shape');
+  wire(m1,0,m2,0,'shape');wire(r3,0,m2,1,'shape');
+  wire(m2,0,bp,0,'shape');wire(bp,0,st,0,'shape');
+  cook();log('Sample: three IDENTIFIES relates close a cycle — β₁=1 → REVIEW.','err');});
+/* ═══ boot ═════════════════════════════════════════════════════ */
+document.getElementById('g1').click();
+log('ŠALA · PDM v2 — Shape Operators awake. Only Seal touches the world; Puhu refuses unproven identity.','seal');
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+# =============================================================================
+# PB-190 — NISABA becomes the Architect's Internal Interface; LamassuEngine
+# (real TDA) built; StoryEngine's high-priority alerts reach the Data Steward
+# BahyWay.Ecosystem v4.0 — 2026-07-18
+#
+# CONTEXT: the Architect granted NISABA a much larger role: "my Internal
+# Interface... to orchestrate all processes (so I can talk to her, not only
+# get reports)... to be my TDA and show me the discovering Patterns in the
+# Orbits, and all the alerts associated with StoryEngine (High Priority) as
+# it have been sent to the dataSteward... a Full Hologram created assistant
+# that can control and see and tell me the state of my Ecosystem daily and
+# without stop." Two clarifying questions were asked and answered before any
+# code was written:
+#   1. TDA engine: build LamassuEngine for real (persistent homology via
+#      GeoEngine), not the pre-existing GA-clustering `nisaba` crate, which
+#      does a different job (movement-pattern clustering, not topology).
+#   2. Autonomy scope: propose, Architect ratifies — matching CSR-08
+#      ("No organ grows without DUB.SAR 𒁾 explicit confirmation"), the same
+#      shape `ninsun-agent` already uses. NISABA observes/orchestrates/
+#      proposes continuously; nothing that changes ecosystem state executes
+#      without the Architect's confirmation.
+#
+# WHAT WAS BUILT, five real, tested pieces wired end to end:
+#
+#  1. bahyway-algebra::persistence (new module) — real persistent homology
+#     over a Vietoris-Rips filtration: H0 (connected components) and H1
+#     (loops) via the Zomorodian-Carlsson boundary-matrix reduction
+#     algorithm over GF(2), pure std, zero external dependencies. This is
+#     GeoEngine's sole math-truth source for topology -- no other module in
+#     the repo computes homology. 6 tests, including a 12-point ring
+#     producing one loud persistent H1 class (GOLDEN signature, "the
+#     un-circle announcing itself") and a tight 5-point blob producing zero
+#     persistent H1 (DEAD signature).
+#
+#  2. crates/lamassu-engine (new crate) — the TDA sentinel. Samples a
+#     Tribe's particles (KAKI bytes + quality delta) into a 3D point cloud
+#     via bahyway_algebra::orbital (PA-14), asks persistence::
+#     vietoris_rips_persistence for the real diagram, classifies GOLDEN /
+#     FUZZY / DEAD. Never recomputes homology itself. 6 tests, including a
+#     full 16-point orbital ring (evenly spread azimuth bytes, same delta)
+#     that scans out to a real GOLDEN reading end to end.
+#
+#  3. crates/story-sentinel (new crate) — StoryEngine's alert bridge to the
+#     Data Steward. Reuses the shape of bahyway-algebra::enbilulu's sealed
+#     Terru/Milu diagnosis pattern (weighted factors -> banding -> an
+#     alert_engine::AlertSeverity bridge -> dominant-factor cause ->
+#     narration), scoped to what a story-engine::ProjectedState actually
+#     carries: dead-state, fuzzy-state, and orphan-identity (zero replayed
+#     events) factors. A Dead projection alone crosses the HighPriority band
+#     and produces a Critical alert_engine::Alert. Lives in its own crate,
+#     not inside story-engine, because alert-engine already depends on
+#     story-engine (via score-engine) -- story-engine depending back would
+#     cycle. 6 tests, including an end-to-end "dead particle -> Critical
+#     alert the real StewardStation can queue" test.
+#
+#  4. crates/nisaba::orchestrator (new module in the existing, real nisaba
+#     Pattern Discovery Service crate) — NisabaOrchestrator wires together
+#     alert-engine, data-steward-station::StewardStation, LamassuEngine, and
+#     story-sentinel into one continuously-observable digest:
+#     observe_story_projections() scans ProjectedStates and enqueues any
+#     high-priority finding on the real StewardStation ("zero writes to the
+#     database" by that station's own contract); observe_tribe_topology()
+#     runs a LamassuEngine scan and narrates the result; digest() and
+#     notes() expose read-only running state. This is also where the
+#     NISABA-crate-vs-NISABA-UI-panel naming collision flagged in PB-189
+#     actually resolves: the orchestrator is the real thing joining them.
+#     5 tests, zero regressions to the 9 pre-existing nisaba tests (GA
+#     clustering, trajectory buffering, pattern discovery all still pass).
+#
+#  5. dubsar-visualizer's EriduOS NISABA hologram panel — wired to the real
+#     orchestrator instead of static canned strings. A live digest bar
+#     (steward queue / orbit scans / notes, all real counts) sits above the
+#     chat log. Two real action buttons: "Scan Orbits (TDA)" builds a point
+#     cloud from the crate's real seeded IdentityKaki + hepta-score data and
+#     runs it through LamassuEngine; "Scan StoryEngine (Alerts)" projects
+#     every real IdentityKaki through the real StoryEngine against the real
+#     journal (same call particles.rs's Story tab already makes) and feeds
+#     the results through story-sentinel into the orchestrator. Free-text
+#     questions about "alerts", "queue", "orbit", or "pattern" now answer
+#     from NisabaOrchestrator::digest()/tribe_readings() instead of a
+#     scripted string; b11/kaki/hepta/nergal/way answers stay reference text
+#     since those describe fixed sovereign constants, not live state.
+#
+# WHAT THIS DOES NOT DO, by design (CSR-08): NisabaOrchestrator has no
+# method that mints a Kaki, submits an Event-Kaki through AdadGate, deletes
+# a particle, or otherwise mutates ecosystem state. StewardStation::receive
+# only enqueues a Diagnosis for human review. "Daily... without stop" is
+# honestly scoped to what a desktop egui app can provide: continuous 60fps
+# refresh of the digest bar plus an on-demand digest snapshot -- not a
+# literal background daemon, which this UI process is not.
+#
+# VERIFICATION: cargo build --workspace clean. cargo test --workspace:
+#   3471 passed, 0 failed (up from the PB-189 baseline of 3448 passed by
+#   the ~24 new tests across persistence/lamassu-engine/story-sentinel/
+#   nisaba::orchestrator; zero regressions to any pre-existing test).
+# =============================================================================
+---
+- name: "PB-190 | Record — NISABA Internal Interface, LamassuEngine TDA, StoryEngine alert bridge"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-190.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-18. New: crates/bahyway-algebra/src/persistence.rs (+lib.rs
+          registration). New: crates/lamassu-engine. New: crates/story-sentinel.
+          New: crates/nisaba/src/orchestrator.rs (+lib.rs registration).
+          Changed: crates/dubsar-visualizer/src/panels/eridu_layout.rs,
+          crates/dubsar-visualizer/src/app.rs (NISABA panel wired to the real
+          orchestrator). Changed: workspace Cargo.toml (lamassu-engine,
+          story-sentinel members), several Cargo.toml dependency additions.
+          Run `cargo test --workspace` for the standing proof: 3471 passed,
+          0 failed.

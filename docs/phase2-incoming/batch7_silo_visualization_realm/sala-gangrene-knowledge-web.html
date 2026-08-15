@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Gangrene Knowledge Web — real sourced connections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#04070f; --deep:#0a1020; --panel:#0d1428;
+  --ink:#e9edf7; --ink-dim:#98a2bd; --ink-faint:#5e6787;
+  --organism:#e0724a; --infection:#c4506a; --comorbid:#4f9dd6; --agar:#5fc9b0; --toxin:#e3b458;
+  --edge-strong:#7fd99a; --edge-assoc:#6a86c0; --line:#232c4a; --gold:#E3B458; --signal:#4fd6c4;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;font-family:var(--f-data);z-index:5}
+.hud-title{top:14px;left:0;right:0;text-align:center;pointer-events:none}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:20px;letter-spacing:.1em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--organism)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:10px;letter-spacing:.2em;color:var(--ink-faint);margin-top:5px}
+.panel{background:rgba(13,20,40,.86);border:1px solid var(--line);border-radius:8px;padding:13px 15px;backdrop-filter:blur(8px)}
+.hud-legend{top:84px;left:18px;width:238px}
+.hud-legend h3{font-family:var(--f-data);font-size:10px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:9px}
+.leg-row{display:flex;align-items:center;gap:8px;font-size:11px;margin:5px 0;color:var(--ink-dim)}
+.leg-row .sw{width:11px;height:11px;border-radius:50%;flex:none}
+.leg-note{font-size:9.5px;color:var(--ink-faint);margin-top:9px;line-height:1.5;font-family:var(--f-body)}
+.hud-detail{top:84px;right:18px;width:300px;max-height:calc(100vh - 200px);overflow:auto;display:none}
+.hud-detail .dn{font-family:var(--f-display);font-size:17px;color:var(--gold)}
+.hud-detail .dt{font-size:10px;color:var(--ink-faint);font-family:var(--f-data);text-transform:uppercase;letter-spacing:.1em;margin:2px 0 8px}
+.hud-detail .drow{font-size:12px;color:var(--ink-dim);margin:6px 0;line-height:1.5}
+.hud-detail .drow b{color:var(--ink)}
+.hud-detail .edge-item{border-left:2px solid var(--edge-assoc);padding:6px 0 6px 9px;margin:7px 0;font-size:11.5px;color:var(--ink-dim);line-height:1.45}
+.hud-detail .edge-item.strong{border-left-color:var(--edge-strong)}
+.hud-detail .edge-item .rel{color:var(--ink);font-weight:500}
+.hud-detail .edge-item .src{display:block;font-family:var(--f-data);font-size:9px;color:var(--signal);margin-top:3px}
+.hud-detail .colony{background:rgba(95,201,176,.07);border-radius:6px;padding:8px 10px;margin-top:8px;font-size:11px;color:var(--ink-dim);line-height:1.5}
+.hud-detail .colony b{color:var(--agar)}
+.hud-ctl{bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:7px;align-items:center;background:rgba(13,20,40,.9);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.hud-ctl button{background:var(--deep);border:1px solid var(--line);color:var(--ink-dim);border-radius:5px;font-size:11px;padding:6px 11px}
+.hud-ctl button.on{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.hint{position:fixed;top:150px;left:50%;transform:translateX(-50%);font-family:var(--f-data);font-size:11px;color:var(--gold);background:rgba(4,7,15,.8);border:1px solid var(--line);border-radius:5px;padding:6px 12px;z-index:5;pointer-events:none}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,7,15,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:9px;color:var(--ink-faint);padding:5px 18px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">𒁾</span> GANGRENE <em>KNOWLEDGE WEB</em></h1>
+  <div class="sub">EVERY LINK IS A REAL, SOURCED RELATIONSHIP · NOT LAYOUT · CLICK ANY NODE TO SEE ITS EVIDENCE</div>
+</div>
+
+<div class="hud hud-legend panel">
+  <h3>What the web is made of</h3>
+  <div class="leg-row"><span class="sw" style="background:var(--organism)"></span>organism (bacterium)</div>
+  <div class="leg-row"><span class="sw" style="background:var(--infection)"></span>infection / syndrome</div>
+  <div class="leg-row"><span class="sw" style="background:var(--comorbid)"></span>comorbidity / risk factor</div>
+  <div class="leg-row"><span class="sw" style="background:var(--agar)"></span>agar / colony appearance</div>
+  <div class="leg-row"><span class="sw" style="background:var(--toxin)"></span>toxin / mechanism</div>
+  <div style="border-top:1px solid var(--line);margin:9px 0;padding-top:8px">
+    <div class="leg-row"><span style="width:16px;height:2px;background:var(--edge-strong)"></span>established link (textbook)</div>
+    <div class="leg-row"><span style="width:16px;height:2px;background:var(--edge-assoc)"></span>reported association</div>
+  </div>
+  <div class="leg-note">Every edge here comes from published medical literature — a link exists only if a source says so. No edge = no claimed connection. This is the difference between a knowledge web and a pretty layout.</div>
+</div>
+
+<div class="hud hud-detail panel" id="detail"></div>
+<div class="hint" id="hint">click <b>diabetes</b> or <b>Clostridium perfringens</b> to trace the real path to gangrene</div>
+
+<div class="hud hud-ctl">
+  <button id="btn-spin" class="on">ORBIT ✦</button>
+  <button id="btn-labels" class="on">LABELS</button>
+  <button id="btn-path">TRACE: diabetes → gangrene</button>
+</div>
+
+<footer>Way-of-Work rule 5 — HTML prototype; production body Godot/WGPU. Every node and edge is a real, sourced fact from public medical literature (StatPearls, PubMed/PMC, ScienceDirect). Edges are relationships, not layout. This is a knowledge graph, not an illustration. Not medical advice. Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ============================================================= *
+ * REAL KNOWLEDGE GRAPH — gangrene / wound infection / diabetes
+ * Every node is a real entity; every edge is a documented relationship
+ * with a source. Nothing here is invented for layout.
+ * Sources: Gas Gangrene StatPearls (NBK537030/NBK...); Necrotizing
+ * Fasciitis (ScienceDirect); C. perfringens case reports (PMC10726074,
+ * PMC12414490); colony morphology (ScienceDirect, microbenotes).
+ * ============================================================= */
+const NODES=[
+  // organisms
+  {id:'cperf', label:'Clostridium perfringens', type:'organism',
+    note:'Gram-positive anaerobic spore-forming bacillus. Causes 80–90% of gas gangrene (clostridial myonecrosis).',
+    colony:'Blood agar: smooth, round, greyish colonies with a characteristic <b>double zone of haemolysis</b> (inner complete, outer partial) — "target haemolysis". Nagler reaction positive on egg-yolk agar (lecithinase). Grows rapidly, anaerobic.',
+    source:'Gas Gangrene, StatPearls NBK537030 · C. perfringens, ScienceDirect'},
+  {id:'cnovyi', label:'Clostridium novyi', type:'organism',
+    note:'Second most common gas gangrene agent (~40% of non-perfringens cases).',
+    colony:'Blood agar (anaerobic): grey, haemolytic colonies; strict anaerobe, harder to culture than C. perfringens.',
+    source:'Gas Gangrene, StatPearls NBK537030'},
+  {id:'csept', label:'Clostridium septicum', type:'organism',
+    note:'~20% of clostridial gas gangrene; associated with non-traumatic (spontaneous) gangrene and colonic malignancy.',
+    colony:'Blood agar (anaerobic): swarming, haemolytic growth.',
+    source:'Gas Gangrene, StatPearls NBK537030'},
+  {id:'gas', label:'Group A Streptococcus', type:'organism',
+    note:'Streptococcus pyogenes (GABHS). Cause of Type II necrotizing fasciitis; rapid necrosis + systemic toxicity.',
+    colony:'Blood agar: small colonies with a wide zone of <b>beta-haemolysis</b> (complete clearing).',
+    source:'Necrotizing Fasciitis, ScienceDirect'},
+  {id:'ecoli', label:'Escherichia coli', type:'organism',
+    note:'Enteric Gram-negative bacillus; component of Type I (mixed) necrotizing fasciitis.',
+    colony:'MacConkey: pink lactose-fermenting colonies. Blood agar: grey, variable haemolysis.',
+    source:'Necrotizing Fasciitis, ScienceDirect'},
+  {id:'kleb', label:'Klebsiella pneumoniae', type:'organism',
+    note:'Gram-negative; implicated in gas gangrene and Type I necrotizing fasciitis, esp. in diabetics.',
+    colony:'MacConkey: large mucoid pink colonies. Chromogenic UTI agar: metallic blue-green.',
+    source:'Gas gangrene case, PMC12414490 · Necrotizing Fasciitis, ScienceDirect'},
+  {id:'saureus', label:'Staphylococcus aureus', type:'organism',
+    note:'Gram-positive; implicated in some gas gangrene / mixed soft-tissue infection.',
+    colony:'Blood agar: golden colonies, often beta-haemolytic. CHROMagar: mauve.',
+    source:'Gas gangrene case, PMC12414490'},
+  // infections
+  {id:'gasgangrene', label:'Gas gangrene', type:'infection',
+    note:'Clostridial myonecrosis — highly lethal deep soft-tissue infection with gas production and rapid necrosis.',
+    source:'Gas Gangrene, StatPearls NBK537030'},
+  {id:'nf1', label:'Necrotizing fasciitis · Type I', type:'infection',
+    note:'Mixed infection: anaerobes + Gram-negative bacilli + streptococci. Often postoperative or in diabetes / vascular disease.',
+    source:'Necrotizing Fasciitis, ScienceDirect'},
+  {id:'nf2', label:'Necrotizing fasciitis · Type II', type:'infection',
+    note:'Group A Strep infection; rapid necrosis, systemic toxicity, can lead to shock.',
+    source:'Necrotizing Fasciitis, ScienceDirect'},
+  {id:'dfu', label:'Diabetic foot wound', type:'infection',
+    note:'Traumatic or ulcerated foot wound in diabetes — the common entry point for gangrene-causing organisms.',
+    source:'C. perfringens case, PMC10726074'},
+  // comorbidities / risk
+  {id:'diabetes', label:'Diabetes mellitus', type:'comorbid',
+    note:'Major predisposing factor: impaired vascular supply + immune compromise. Repeatedly documented in gas gangrene and Type I NF case reports.',
+    source:'C. perfringens/diabetes case PMC10726074 · Necrotizing Fasciitis, ScienceDirect'},
+  {id:'pvd', label:'Peripheral vascular disease', type:'comorbid',
+    note:'Compromised blood flow — enables anaerobic bacterial growth in tissue.',
+    source:'Necrotizing Fasciitis, ScienceDirect'},
+  {id:'trauma', label:'Trauma / surgical wound', type:'comorbid',
+    note:'Deep wounds contaminated with soil/faecal spores are the classic entry route for clostridia.',
+    source:'Gas Gangrene, StatPearls NBK537030'},
+  // toxins / mechanism
+  {id:'alpha', label:'Alpha-toxin (lecithinase)', type:'toxin',
+    note:'C. perfringens phospholipase; breaks down cell membranes → tissue necrosis, haemolysis. Central to gas gangrene severity.',
+    source:'Gas Gangrene, StatPearls NBK537030'},
+];
+
+/* EDGES — each a real relationship + strength + source. NO edge without evidence. */
+const EDGES=[
+  ['cperf','gasgangrene','causes (80–90% of cases)','strong','Gas Gangrene, StatPearls'],
+  ['cnovyi','gasgangrene','causes (~40% of non-perfringens)','strong','Gas Gangrene, StatPearls'],
+  ['csept','gasgangrene','causes (~20%); spontaneous type','strong','Gas Gangrene, StatPearls'],
+  ['cperf','alpha','produces','strong','Gas Gangrene, StatPearls'],
+  ['alpha','gasgangrene','drives necrosis in','strong','Gas Gangrene, StatPearls'],
+  ['gas','nf2','causes','strong','Necrotizing Fasciitis, ScienceDirect'],
+  ['ecoli','nf1','component of','strong','Necrotizing Fasciitis, ScienceDirect'],
+  ['kleb','nf1','component of','assoc','Necrotizing Fasciitis, ScienceDirect'],
+  ['kleb','gasgangrene','implicated in','assoc','Gas gangrene case, PMC12414490'],
+  ['saureus','gasgangrene','implicated in','assoc','Gas gangrene case, PMC12414490'],
+  ['diabetes','nf1','predisposes to','strong','Necrotizing Fasciitis, ScienceDirect'],
+  ['diabetes','gasgangrene','predisposes to','strong','C. perfringens/diabetes case, PMC10726074'],
+  ['diabetes','dfu','causes','strong','C. perfringens case, PMC10726074'],
+  ['dfu','gasgangrene','entry point for','strong','C. perfringens case, PMC10726074'],
+  ['pvd','gasgangrene','predisposes to','strong','Necrotizing Fasciitis, ScienceDirect'],
+  ['diabetes','pvd','causes','strong','Necrotizing Fasciitis, ScienceDirect'],
+  ['trauma','gasgangrene','entry route for','strong','Gas Gangrene, StatPearls'],
+  ['cperf','dfu','colonises','assoc','C. perfringens case, PMC10726074'],
+  ['nf1','gasgangrene','overlaps with','assoc','Necrotizing Fasciitis, ScienceDirect'],
+];
+
+const TYPECOLOR={organism:0xe0724a,infection:0xc4506a,comorbid:0x4f9dd6,agar:0x5fc9b0,toxin:0xe3b458};
+const TYPECSS={organism:'var(--organism)',infection:'var(--infection)',comorbid:'var(--comorbid)',agar:'var(--agar)',toxin:'var(--toxin)'};
+
+/* adjacency for path tracing + detail */
+const adj={}; NODES.forEach(n=>adj[n.id]=[]);
+EDGES.forEach(([a,b,rel,str,src])=>{adj[a].push({to:b,rel,str,src,dir:'out'});adj[b].push({to:a,rel,str,src,dir:'in'});});
+
+/* ---- three.js ---- */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x04070f,0.0016);
+const camera=new THREE.PerspectiveCamera(55,2,0.1,5000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x04070f,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8090c0,0.9));
+
+/* place nodes with force layout, but edges = REAL relationships */
+const pos={}, vel={};
+NODES.forEach(n=>{pos[n.id]=[(Math.random()-.5)*300,(Math.random()-.5)*300,(Math.random()-.5)*300];vel[n.id]=[0,0,0];});
+function layoutStep(dt){
+  const ids=NODES.map(n=>n.id);
+  for(const i of ids){let fx=0,fy=0,fz=0;const a=pos[i];
+    for(const j of ids){if(i===j)continue;const b=pos[j];
+      let dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2];let d2=dx*dx+dy*dy+dz*dz+40;
+      const f=6000/d2;fx+=dx*f;fy+=dy*f;fz+=dz*f;}
+    fx-=a[0]*0.02;fy-=a[1]*0.02;fz-=a[2]*0.02;
+    vel[i][0]=(vel[i][0]+fx*dt)*0.8;vel[i][1]=(vel[i][1]+fy*dt)*0.8;vel[i][2]=(vel[i][2]+fz*dt)*0.8;}
+  EDGES.forEach(([a,b,rel,str])=>{const A=pos[a],B=pos[b];const k=str==='strong'?0.06:0.035;
+    const dx=B[0]-A[0],dy=B[1]-A[1],dz=B[2]-A[2];
+    vel[a][0]+=dx*k;vel[a][1]+=dy*k;vel[a][2]+=dz*k;vel[b][0]-=dx*k;vel[b][1]-=dy*k;vel[b][2]-=dz*k;});
+  for(const i of ids){const sp=Math.hypot(...vel[i]);if(sp>8){const s=8/sp;vel[i]=vel[i].map(v=>v*s);}
+    pos[i][0]+=vel[i][0]*dt*60;pos[i][1]+=vel[i][1]*dt*60;pos[i][2]+=vel[i][2]*dt*60;}
+}
+for(let i=0;i<120;i++)layoutStep(0.016); // settle
+
+/* node meshes */
+const nodeMeshes={};
+NODES.forEach(n=>{
+  const g=new THREE.Group();
+  const r=n.type==='infection'?11:n.type==='comorbid'?10:9;
+  const core=new THREE.Mesh(new THREE.SphereGeometry(r,20,20),new THREE.MeshBasicMaterial({color:TYPECOLOR[n.type]}));
+  const halo=new THREE.Mesh(new THREE.SphereGeometry(r*2.1,16,16),new THREE.MeshBasicMaterial({color:TYPECOLOR[n.type],transparent:true,opacity:0.10,side:THREE.BackSide}));
+  g.add(core,halo); g.position.set(...pos[n.id]); g.userData={node:n,core,halo};
+  scene.add(g); nodeMeshes[n.id]=g;
+});
+
+/* edge lines (real relationships) */
+let edgeLines;
+function buildEdges(highlightSet){
+  if(edgeLines)scene.remove(edgeLines);
+  const posArr=[],colArr=[];
+  EDGES.forEach(([a,b,rel,str])=>{
+    const A=pos[a],B=pos[b];posArr.push(A[0],A[1],A[2],B[0],B[1],B[2]);
+    let c=str==='strong'?[0.5,0.85,0.6]:[0.42,0.52,0.75];
+    if(highlightSet){const on=highlightSet.has(a+'>'+b)||highlightSet.has(b+'>'+a);
+      c=on?[0.89,0.71,0.35]:[0.2,0.24,0.4];}
+    colArr.push(...c,...c);
+  });
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(posArr),3));
+  g.setAttribute('color',new THREE.BufferAttribute(new Float32Array(colArr),3));
+  edgeLines=new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:0.6}));
+  scene.add(edgeLines);
+}
+buildEdges(null);
+
+/* labels as sprites */
+const labelSprites={};
+function makeLabel(text,color){
+  const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+  g.font='500 30px "IBM Plex Mono", monospace';g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';
+  g.shadowColor='rgba(0,0,0,0.9)';g.shadowBlur=6;g.fillText(text,256,34);
+  const t=new THREE.CanvasTexture(cv);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false}));
+  s.scale.set(120,15,1);return s;
+}
+let labelsOn=true;
+NODES.forEach(n=>{const cssc={organism:'#e0724a',infection:'#c4506a',comorbid:'#4f9dd6',agar:'#5fc9b0',toxin:'#e3b458'}[n.type];
+  const s=makeLabel(n.label,cssc);s.position.set(pos[n.id][0],pos[n.id][1]+18,pos[n.id][2]);scene.add(s);labelSprites[n.id]=s;});
+
+/* interaction */
+let spin=!reduced, az=0.4, el=0.3, camDist=560, camDistT=560, dragging=false, lx=0, ly=0, dragMoved=false;
+let selected=null;
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(120,Math.min(1400,camDistT*(1+Math.sign(e.deltaY)*0.09)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>{dragging=false;});
+addEventListener('mousemove',e=>{if(!dragging)return;if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)dragMoved=true;az-=(e.clientX-lx)*0.005;el=Math.max(-1.4,Math.min(1.4,el+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;});
+function pick(cx,cy){const r=renderer.domElement.getBoundingClientRect();let best=null,bd=26;
+  for(const n of NODES){const g=nodeMeshes[n.id];const v=new THREE.Vector3().copy(g.position).project(camera);if(v.z>=1)continue;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);if(d<bd){bd=d;best=n;}}return best;}
+renderer.domElement.addEventListener('mousemove',e=>{renderer.domElement.style.cursor=pick(e.clientX,e.clientY)?'pointer':(dragging?'grabbing':'grab');});
+renderer.domElement.addEventListener('click',e=>{if(dragMoved)return;const n=pick(e.clientX,e.clientY);if(n)showDetail(n);else{selected=null;document.getElementById('detail').style.display='none';buildEdges(null);}});
+
+function showDetail(n){
+  selected=n; document.getElementById('hint').style.display='none';
+  const el2=document.getElementById('detail');el2.style.display='block';
+  const nbrs=adj[n.id];
+  const edgesHtml=nbrs.map(e=>{
+    const other=NODES.find(x=>x.id===e.to);
+    const arrow=e.dir==='out'?'→':'←';
+    return `<div class="edge-item ${e.str==='strong'?'strong':''}">
+      <span class="rel">${arrow} ${e.rel}</span> <b>${other.label}</b>
+      <span class="src">${e.src}</span></div>`;}).join('');
+  el2.innerHTML=`<div class="dn" style="color:${TYPECSS[n.type]}">${n.label}</div>
+    <div class="dt">${n.type}</div>
+    <div class="drow">${n.note}</div>
+    ${n.colony?`<div class="colony"><b>Colony appearance:</b> ${n.colony}</div>`:''}
+    <div class="dt" style="margin-top:12px">Real connections (${nbrs.length})</div>
+    ${edgesHtml}
+    <div class="drow" style="font-size:9.5px;color:var(--ink-faint);margin-top:8px;font-family:var(--f-data)">source: ${n.source}</div>`;
+  // highlight this node's real edges
+  const hs=new Set(); nbrs.forEach(e=>hs.add(n.id+'>'+e.to));
+  buildEdges(hs);
+}
+
+/* trace the real path diabetes → gas gangrene (BFS over real edges) */
+function tracePath(from,to){
+  const q=[[from]],seen=new Set([from]);
+  while(q.length){const path=q.shift();const last=path[path.length-1];
+    if(last===to)return path;
+    for(const e of adj[last]){if(!seen.has(e.to)){seen.add(e.to);q.push([...path,e.to]);}}}
+  return null;
+}
+document.getElementById('btn-path').onclick=()=>{
+  const path=tracePath('diabetes','gasgangrene');
+  if(!path)return;
+  const hs=new Set();
+  for(let i=0;i<path.length-1;i++)hs.add(path[i]+'>'+path[i+1]);
+  buildEdges(hs);
+  document.getElementById('hint').style.display='block';
+  document.getElementById('hint').innerHTML='real path: '+path.map(id=>NODES.find(n=>n.id===id).label).join(' <b style="color:var(--gold)">→</b> ');
+  // fly to center of path
+  let c=[0,0,0];path.forEach(id=>{c[0]+=pos[id][0];c[1]+=pos[id][1];c[2]+=pos[id][2];});c=c.map(x=>x/path.length);
+  camTargetX=c[0];camTargetY=c[1];camTargetZ=c[2];
+};
+document.getElementById('btn-spin').onclick=()=>{spin=!spin;document.getElementById('btn-spin').classList.toggle('on',spin);};
+document.getElementById('btn-labels').onclick=()=>{labelsOn=!labelsOn;document.getElementById('btn-labels').classList.toggle('on',labelsOn);
+  Object.values(labelSprites).forEach(s=>s.visible=labelsOn);};
+
+let camTargetX=0,camTargetY=0,camTargetZ=0,ctx2=0,cty=0,ctz=0;
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin)az+=dt*0.06;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*3);
+  ctx2+=(camTargetX-ctx2)*Math.min(1,dt*2);cty+=(camTargetY-cty)*Math.min(1,dt*2);ctz+=(camTargetZ-ctz)*Math.min(1,dt*2);
+  // gentle node pulse
+  Object.values(nodeMeshes).forEach(g=>{const s=1+Math.sin(ts/500+g.position.x)*0.04;g.userData.halo.scale.setScalar(s);});
+  camera.position.set(ctx2+Math.cos(az)*Math.cos(el)*camDist, cty+Math.sin(el)*camDist, ctz+Math.sin(az)*Math.cos(el)*camDist);
+  camera.lookAt(ctx2,cty,ctz);
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

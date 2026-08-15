@@ -1,0 +1,138 @@
+# =============================================================================
+# require_tenant_operator.yml — the client/tenant gate.
+#
+# Answers Q3 from the morning session ("should a client get Sargon Passport
+# access to Shakkanakku/Uruinimgina to run its own PBs in its own OTAP and
+# ingest its own EnkiDDB data?"): YES, but only as a Tenant Operator --
+# scoped hard to their own tenant's own infrastructure, never BahyWay's own
+# ecosystem-internal instance (enkidb-node-write/enkidb-node-read,
+# 192.168.122.101/.107) and never another tenant's.
+#
+# HONEST SCOPE, stated plainly rather than implied: `SargonPassport`
+# (crates/kupru/src/passport.rs) carries a privilege_level today but NO
+# tenant field -- adding real cryptographic tenant-binding to that struct
+# is a bigger, cross-cutting change (touches the Sargon Passport Manager
+# and Gilgamesh Master Key Godot tools, kupru-vault, web_auth.rs) that
+# needs the Architect's own sign-off before touching a primitive that many
+# already-working tools depend on. This gate is the mechanism buildable
+# TODAY without that change: it binds a tenant to its OWN vault FILE by
+# naming convention (tenant_<name>_vault.dat) and to its OWN inventory
+# hosts by an explicit allowlist var -- real, enforced, fails closed on
+# every path, but a NAMING-CONVENTION binding, not a cryptographic one.
+# A determined operator with filesystem access to rename/copy a vault file
+# could defeat the tenant-name check; they cannot defeat the privilege
+# check (that's still the real Ed25519 seal via kupru-vault-cli). Treat
+# this as "keeps honest tenants in their lane," not "cryptographically
+# unforgeable" -- see adr_023_tenant_operator_role_DRAFT.md for the
+# follow-up this gap should eventually close.
+#
+# Vars this file requires:
+#   tenant           -- the client name, e.g. "acme". No default -- unset
+#                        is refused, never silently treated as "bahyway".
+#   tenant_target_env -- "Development" | "Test" | "Acceptance" | "Production"
+#                        -- the TENANT's OWN environment tier (their own
+#                        Production is theirs to reach; this is not the
+#                        same rule as require_gilgamesh_for_production.yml,
+#                        which governs BAHYWAY's own production).
+#   tenant_allowed_hosts -- list of inventory host aliases this tenant may
+#                        target, e.g. ["acme-node-write", "acme-node-read"].
+#                        No default -- unset is refused. Must NEVER include
+#                        enkidb-node-write/enkidb-node-read (BahyWay's own)
+#                        -- checked explicitly below, hard failure if it does.
+#
+# Vars with sane defaults (override with -e):
+#   tenant_vault_dir  -- default ~/.config/bahyway/tenants
+#   tenant_min_privilege -- default 2 ("Tenant Operator" tier -- below
+#                        BahyWay's own Developer=3, so a tenant passport
+#                        can never be mistaken for internal staff privilege
+#                        by a check that only looks at the number)
+#
+# Environment this file requires:
+#   KUPRU_VAULT_PASSPHRASE -- never a -e var, same rule as every other
+#                        vault-check gate in this repo.
+# =============================================================================
+---
+- name: "TENANT GATE | tenant must be set explicitly"
+  ansible.builtin.fail:
+    msg: "tenant is not set. Pass -e tenant=<client-name> -- this playbook refuses to guess whose infrastructure it's touching."
+  when: tenant is not defined or tenant == ''
+
+- name: "TENANT GATE | tenant must never be 'bahyway' (that's the ecosystem-internal instance, not a client)"
+  ansible.builtin.fail:
+    msg: "tenant='bahyway' is reserved for BahyWay's own ecosystem-internal instance -- a client tenant may not use this name."
+  when: tenant == 'bahyway'
+
+- name: "TENANT GATE | tenant_target_env must be set and recognized"
+  ansible.builtin.fail:
+    msg: "tenant_target_env must be one of Development, Test, Acceptance, Production -- got '{{ tenant_target_env | default('') }}'."
+  when: tenant_target_env is not defined or tenant_target_env not in ['Development', 'Test', 'Acceptance', 'Production']
+
+- name: "TENANT GATE | tenant_allowed_hosts must be a non-empty explicit list"
+  ansible.builtin.fail:
+    msg: "tenant_allowed_hosts is not set (or empty). Pass -e '{\"tenant_allowed_hosts\": [\"<tenant>-node-write\", \"<tenant>-node-read\"]}' -- this playbook refuses to run against an unstated host set."
+  when: tenant_allowed_hosts is not defined or (tenant_allowed_hosts | length) == 0
+
+- name: "TENANT GATE | tenant_allowed_hosts must never include BahyWay's own ecosystem-internal hosts"
+  ansible.builtin.fail:
+    msg: >-
+      tenant_allowed_hosts includes {{ item }} -- enkidb-node-write and
+      enkidb-node-read are BahyWay's own ecosystem-internal CQRS pair
+      (192.168.122.101/.107), never a client tenant's. A Tenant Operator
+      may only ever target their own tenant's own infrastructure.
+  loop: "{{ tenant_allowed_hosts }}"
+  when: item in ['enkidb-node-write', 'enkidb-node-read']
+
+- name: "TENANT GATE | tenant vault must exist, bound to this tenant by filename"
+  ansible.builtin.stat:
+    path: "{{ tenant_vault_dir | default(lookup('env', 'HOME') + '/.config/bahyway/tenants') }}/tenant_{{ tenant }}_vault.dat"
+  register: tenant_vault_stat
+
+- name: "FAIL | tenant vault not found"
+  ansible.builtin.fail:
+    msg: >-
+      No vault at {{ tenant_vault_dir | default(lookup('env', 'HOME') + '/.config/bahyway/tenants') }}/tenant_{{ tenant }}_vault.dat.
+      Mint a Tenant Operator passport for '{{ tenant }}' via the Sargon
+      Passport Manager (never the Gilgamesh Master Key -- that ceremony
+      is Architect-tier only) and export it there first.
+  when: not tenant_vault_stat.stat.exists
+
+- name: "TENANT GATE | verify kupru-vault-cli is built"
+  ansible.builtin.stat:
+    path: "{{ kupru_vault_cli | default(playbook_dir + '/../workspace/bahyway_v4/target/release/kupru-vault-cli') }}"
+  register: tenant_vault_cli_bin
+
+- name: "FAIL | kupru-vault-cli not built"
+  ansible.builtin.fail:
+    msg: "kupru-vault-cli not built. cd workspace/bahyway_v4 && cargo build --release -p kupru-vault-cli"
+  when: not tenant_vault_cli_bin.stat.exists
+
+- name: "TENANT GATE | Production requires KUPRU_VAULT_PASSPHRASE to be exported"
+  ansible.builtin.fail:
+    msg: "KUPRU_VAULT_PASSPHRASE is not exported in the environment -- required for every tenant run, not just Production (a tenant passport is always vault-checked, unlike BahyWay's own OTA tiers)."
+  when: lookup('env', 'KUPRU_VAULT_PASSPHRASE') == ''
+
+- name: "TENANT GATE | authenticate against this tenant's own vault at Tenant Operator tier"
+  ansible.builtin.command:
+    cmd: >-
+      {{ kupru_vault_cli | default(playbook_dir + '/../workspace/bahyway_v4/target/release/kupru-vault-cli') }}
+      check --vault {{ tenant_vault_dir | default(lookup('env', 'HOME') + '/.config/bahyway/tenants') }}/tenant_{{ tenant }}_vault.dat
+      --min-privilege {{ tenant_min_privilege | default(2) }}
+  environment:
+    KUPRU_VAULT_PASSPHRASE: "{{ lookup('env', 'KUPRU_VAULT_PASSPHRASE') }}"
+  register: tenant_auth_result
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: "FAIL | tenant authentication denied"
+  ansible.builtin.fail:
+    msg: >-
+      Tenant Operator authentication DENIED for '{{ tenant }}'
+      (BlockedByAuthority, not a technical failure -- wrong passphrase,
+      corrupted vault, or no passport meets privilege_level
+      {{ tenant_min_privilege | default(2) }} in this tenant's own vault).
+  when: tenant_auth_result.rc != 0
+
+- name: "TENANT GATE | authorized"
+  ansible.builtin.debug:
+    msg: "Tenant Operator '{{ tenant }}' authorized for {{ tenant_target_env }}, scoped to {{ tenant_allowed_hosts }}."

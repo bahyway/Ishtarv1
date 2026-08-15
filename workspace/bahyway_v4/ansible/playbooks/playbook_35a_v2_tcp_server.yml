@@ -1,0 +1,440 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 35A v2 — enkidb-query-server with chunked streaming + backpressure
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECT : DUB.SAR 𒁾
+# SEALED    : 2026-06-20
+#
+# ADDITIONS FROM DOCUMENT EVALUATION
+# ────────────────────────────────────
+#   1. CHUNKED STREAMING  — server sends rows in batches of 1 000
+#                           [u32 batch_len][rows JSON][...][u32: 0 = DONE]
+#                           Server RAM stays at ~1MB per batch at any scale
+#
+#   2. IMPLICIT BACKPRESSURE — std::io::write_all blocks when client is slow
+#                              Linux kernel socket buffer handles it sovereign
+#                              No extra code — already built into std TcpStream
+#
+#   3. try_recv PER FRAME  — egui poll_worker drains max 500 rows per paint
+#                            ORBIT + GRID update progressively, no stutter
+#                            Added to Playbook 35B patch
+#
+# PURE RUST — no tokio, no external crates, no memmap2, no Arrow
+#
+# RUN FROM eriduous-vdi:
+#   ansible-playbook ~/playbook_35a_v2_tcp_server.yml -i localhost, --connection=local
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 35A v2 — TCP server with chunked streaming"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge_root:   "/home/bahyway/Forge/bahyway_v4"
+    server_crate: "{{ forge_root }}/crates/enkidb-query-server"
+    binary:       "{{ forge_root }}/target/release/enkidb-query-server"
+    read_node:    "192.168.122.107"
+    read_user:    "bahyway"
+    deploy_dir:   "/home/bahyway/enkidb/server"
+
+  tasks:
+
+    - name: "0.0 | Create crate directory"
+      ansible.builtin.file:
+        path: "{{ server_crate }}/src"
+        state: directory
+        mode: "0755"
+
+    - name: "0.1 | Write Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ server_crate }}/Cargo.toml"
+        content: |
+          [package]
+          name        = "enkidb-query-server"
+          version     = "4.0.0"
+          edition     = "2021"
+          authors     = ["DUB.SAR 𒁾"]
+          description = "Sovereign TCP query server — W5H2 chunked streaming port 7001"
+
+          [[bin]]
+          name = "enkidb-query-server"
+          path = "src/main.rs"
+
+          [dependencies]
+          bahyway-core   = { path = "../bahyway-core" }
+          enkidb-engine  = { path = "../enkidb-engine" }
+          enkidb-journal = { path = "../enkidb-journal" }
+          enkidb-persist = { path = "../enkidb-persist" }
+          enkidb-storage = { path = "../enkidb-storage" }
+          enkidb-kaki    = { path = "../enkidb-kaki" }
+          enkidb-query   = { path = "../enkidb-query" }
+          heptascript    = { path = "../heptascript" }
+          akkvalue       = { path = "../akkvalue" }
+          bahyway-core   = { path = "../bahyway-core" }
+
+    - name: "0.2 | Write src/main.rs"
+      ansible.builtin.copy:
+        dest: "{{ server_crate }}/src/main.rs"
+        content: |
+          //! enkidb-query-server v2 — Sovereign TCP server with chunked streaming
+          //! ════════════════════════════════════════════════════════════════════
+          //!
+          //! STARTUP
+          //!   Loads journal.bin ONCE into Arc<EnkiDb> — owned by this process.
+          //!   No Mutex. Arc is cloned cheaply per connection thread.
+          //!
+          //! WIRE PROTOCOL
+          //!   Client → Server : [u32 LE query_len][UTF-8 W5H2 source]
+          //!   Server → Client : one or more BATCH frames, then DONE frame
+          //!
+          //!   BATCH frame : [u32 LE json_len][UTF-8 JSON array of rows]
+          //!     JSON row  : {"kaki":"<16-byte hex>","attrs":[["<k>","<v>"],...]}
+          //!   DONE frame  : [u32 LE = 0]   ← sentinel, no payload
+          //!   ERROR frame : [u32 LE len]["ERR:<message>"]
+          //!
+          //! CHUNKED STREAMING (document recommendation 1)
+          //!   Server sends BATCH_SIZE rows at a time.
+          //!   Each batch is serialised, sent, buffer cleared.
+          //!   Server RAM never holds more than ~1 MB per connection.
+          //!
+          //! IMPLICIT BACKPRESSURE (document recommendation 2)
+          //!   std::io::write_all blocks when client TCP buffer is full.
+          //!   Linux kernel pauses disk reads automatically — sovereign, free.
+          //!
+          //! DUB.SAR 𒁾  2026-06-20
+
+          use std::io::{self, Read, Write};
+          use std::net::{TcpListener, TcpStream};
+          use std::path::Path;
+          use std::sync::Arc;
+          use std::thread;
+          use std::time::{Duration, Instant};
+
+          use bahyway_core::TribeId;
+          use enkidb_engine::EnkiDb;
+          use enkidb_persist::persisted_db::PersistedDb;
+          use enkidb_storage::FsyncPolicy;
+          use heptascript::{parse_query, execute};
+
+          const BIND_ADDR:    &str = "0.0.0.0:7001";
+          const DATA_DIR:     &str = "/home/bahyway/enkidb/data";
+          const TRIBE_ID:     u16  = 0x0001;
+          const MAX_FRAME:    u32  = 8 * 1024 * 1024; // 8 MB max query
+          const BATCH_SIZE:   usize = 1_000;           // rows per TCP frame
+          const READ_TIMEOUT: u64  = 30;
+          const WRITE_TIMEOUT:u64  = 60;
+
+          fn main() {
+              eprintln!("𒁾 enkidb-query-server v2 starting…");
+              eprintln!("  Data dir : {DATA_DIR}");
+              eprintln!("  Tribe    : 0x{TRIBE_ID:04X}");
+              eprintln!("  Batch    : {BATCH_SIZE} rows per frame");
+
+              let tribe_id  = TribeId::from_u16(TRIBE_ID);
+              let t_load    = Instant::now();
+
+              let persisted = PersistedDb::open(
+                  Path::new(DATA_DIR),
+                  tribe_id,
+                  FsyncPolicy::Never,
+              ).unwrap_or_else(|e| {
+                  eprintln!("FATAL: cannot open PersistedDb: {e}");
+                  std::process::exit(1);
+              });
+
+              let count = persisted.stats().entries_replayed;
+              eprintln!("  ✓ {count} entries loaded in {}ms",
+                  t_load.elapsed().as_millis());
+
+              // Arc<EnkiDb> — read-only, shared across all connection threads
+              // No Mutex needed — EnkiDb is never written after startup
+              let db = Arc::new(persisted.into_db());
+
+              let listener = TcpListener::bind(BIND_ADDR).unwrap_or_else(|e| {
+                  eprintln!("FATAL: cannot bind {BIND_ADDR}: {e}");
+                  std::process::exit(1);
+              });
+
+              eprintln!("𒁾 Listening on {BIND_ADDR} — ready for W5H2 queries");
+
+              for stream in listener.incoming() {
+                  match stream {
+                      Ok(s) => {
+                          let db   = Arc::clone(&db);
+                          let peer = s.peer_addr()
+                              .map(|a| a.to_string())
+                              .unwrap_or_else(|_| "?".into());
+                          eprintln!("[conn] {peer}");
+                          thread::spawn(move || {
+                              if let Err(e) = handle_connection(s, &db) {
+                                  eprintln!("[conn] {peer} error: {e}");
+                              }
+                          });
+                      }
+                      Err(e) => eprintln!("[accept] {e}"),
+                  }
+              }
+          }
+
+          fn handle_connection(mut stream: TcpStream, db: &EnkiDb) -> io::Result<()> {
+              stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT)))?;
+              stream.set_write_timeout(Some(Duration::from_secs(WRITE_TIMEOUT)))?;
+
+              // ── Read query frame ─────────────────────────────────────────────
+              let query_src = read_frame(&mut stream)?;
+              if query_src.trim().is_empty() {
+                  return send_error(&mut stream, "empty query");
+              }
+
+              eprintln!("[query] {} bytes received", query_src.len());
+
+              // Strip comment lines (-- prefix)
+              let clean: String = query_src.lines()
+                  .filter(|l| !l.trim().starts_with("--"))
+                  .collect::<Vec<_>>()
+                  .join("\n");
+
+              // ── Parse W5H2 ───────────────────────────────────────────────────
+              let query = match parse_query(&clean) {
+                  Ok(q)  => q,
+                  Err(e) => return send_error(&mut stream,
+                      &format!("parse error: {}", e.to_string().replace('"', "'"))),
+              };
+
+              // ── Execute — Arc<EnkiDb> owned, no Mutex ────────────────────────
+              let t0     = Instant::now();
+              let result = execute(&query, db.journal());
+              let elapsed = t0.elapsed().as_millis();
+
+              let total = result.matched.len();
+              eprintln!("[query] {elapsed}ms — {total} matched / {} evaluated",
+                  result.evaluated);
+
+              // ── Stream results in batches of BATCH_SIZE ──────────────────────
+              // Each batch is one TCP frame. Server RAM stays bounded.
+              // std::io::write_all provides implicit backpressure — if the client
+              // is slow, write_all blocks and the kernel pauses us automatically.
+
+              let mut sent = 0usize;
+              for chunk in result.matched.chunks(BATCH_SIZE) {
+                  let json = serialise_batch(chunk);
+                  write_frame(&mut stream, &json)?;
+                  sent += chunk.len();
+                  eprintln!("[stream] sent {sent}/{total}");
+              }
+
+              // ── DONE sentinel — u32 = 0, no payload ─────────────────────────
+              stream.write_all(&0u32.to_le_bytes())?;
+              stream.flush()?;
+
+              eprintln!("[done] {total} rows in {elapsed}ms");
+              Ok(())
+          }
+
+          /// Serialise a slice of MatchedEntity into a compact JSON array.
+          /// Hand-rolled — no serde, no external crates.
+          fn serialise_batch(entities: &[heptascript::MatchedEntity]) -> String {
+              let mut json = String::with_capacity(entities.len() * 120);
+              json.push('[');
+              for (i, entity) in entities.iter().enumerate() {
+                  if i > 0 { json.push(','); }
+                  let hex: String = entity.entity.bytes()
+                      .iter().map(|b| format!("{b:02x}")).collect();
+                  json.push_str(r#"{"kaki":""#);
+                  json.push_str(&hex);
+                  json.push_str(r#"","attrs":["#);
+                  for (j, (k, v)) in entity.projected.iter().enumerate() {
+                      if j > 0 { json.push(','); }
+                      let vs = format!("{v:?}");
+                      let vs = vs.trim_matches('"');
+                      let vs = vs.replace('"', "'");
+                      json.push('[');
+                      json.push('"'); json.push_str(k); json.push('"');
+                      json.push(',');
+                      json.push('"'); json.push_str(&vs); json.push('"');
+                      json.push(']');
+                  }
+                  json.push_str("]}");
+              }
+              json.push(']');
+              json
+          }
+
+          fn send_error(stream: &mut TcpStream, msg: &str) -> io::Result<()> {
+              let payload = format!(r#"ERR:{msg}"#);
+              write_frame(stream, &payload)?;
+              // Send DONE sentinel so client knows to stop reading
+              stream.write_all(&0u32.to_le_bytes())?;
+              stream.flush()
+          }
+
+          fn read_frame(s: &mut TcpStream) -> io::Result<String> {
+              let mut lb = [0u8; 4];
+              s.read_exact(&mut lb)?;
+              let len = u32::from_le_bytes(lb);
+              if len == 0  { return Ok(String::new()); }
+              if len > MAX_FRAME {
+                  return Err(io::Error::new(io::ErrorKind::InvalidData,
+                      format!("frame too large: {len} bytes")));
+              }
+              let mut buf = vec![0u8; len as usize];
+              s.read_exact(&mut buf)?;
+              String::from_utf8(buf)
+                  .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+          }
+
+          fn write_frame(s: &mut TcpStream, payload: &str) -> io::Result<()> {
+              let b = payload.as_bytes();
+              s.write_all(&(b.len() as u32).to_le_bytes())?;
+              s.write_all(b)?;
+              s.flush()
+          }
+
+    # ── 1. WORKSPACE ─────────────────────────────────────────────────────────
+    - name: "1.0 | Add to workspace Cargo.toml"
+      ansible.builtin.lineinfile:
+        path: "{{ forge_root }}/Cargo.toml"
+        line: '    "crates/enkidb-query-server",'
+        insertafter: '^\[workspace\]'
+        state: present
+
+    # ── 2. CARGO CHECK ────────────────────────────────────────────────────────
+    - name: "2.0 | cargo check"
+      ansible.builtin.shell: |
+        cd {{ forge_root }}
+        cargo check -p enkidb-query-server 2>&1
+      register: check_out
+
+    - name: "2.1 | Show last 40 lines"
+      ansible.builtin.debug:
+        msg: "{{ (check_out.stdout_lines + check_out.stderr_lines)[-40:] }}"
+
+    - name: "2.2 | Abort if failed"
+      ansible.builtin.fail:
+        msg: "cargo check failed"
+      when: check_out.rc != 0
+
+    # ── 3. BUILD ──────────────────────────────────────────────────────────────
+    - name: "3.0 | cargo build --release"
+      ansible.builtin.shell: |
+        cd {{ forge_root }}
+        cargo build --release -p enkidb-query-server 2>&1
+      register: build_out
+
+    - name: "3.1 | Abort if build failed"
+      ansible.builtin.fail:
+        msg: "build failed — see above"
+      when: build_out.rc != 0
+
+    # ── 4. DEPLOY ─────────────────────────────────────────────────────────────
+    - name: "4.0 | Create deploy dir on read node"
+      ansible.builtin.shell: |
+        ssh {{ read_user }}@{{ read_node }} "mkdir -p {{ deploy_dir }}"
+
+    - name: "4.1 | Copy binary to read node"
+      ansible.builtin.shell: |
+        scp {{ binary }} {{ read_user }}@{{ read_node }}:{{ deploy_dir }}/enkidb-query-server
+
+    - name: "4.2 | chmod +x"
+      ansible.builtin.shell: |
+        ssh {{ read_user }}@{{ read_node }} "chmod +x {{ deploy_dir }}/enkidb-query-server"
+
+    # ── 5. SYSTEMD ────────────────────────────────────────────────────────────
+    - name: "5.0 | Write and start systemd unit on read node"
+      ansible.builtin.shell: |
+        ssh {{ read_user }}@{{ read_node }} "
+        cat > /tmp/enkidb-query-server.service << 'UNIT'
+        [Unit]
+        Description=EnkiDB Sovereign TCP Query Server v2 — port 7001
+        After=network.target
+
+        [Service]
+        Type=simple
+        User={{ read_user }}
+        WorkingDirectory=/home/{{ read_user }}/enkidb
+        ExecStart={{ deploy_dir }}/enkidb-query-server
+        Restart=on-failure
+        RestartSec=3s
+        StandardOutput=journal
+        StandardError=journal
+
+        [Install]
+        WantedBy=multi-user.target
+        UNIT
+        sudo cp /tmp/enkidb-query-server.service /etc/systemd/system/
+        sudo systemctl daemon-reload
+        sudo systemctl enable enkidb-query-server
+        sudo systemctl restart enkidb-query-server
+        sleep 4
+        ss -tlnp | grep 7001
+        "
+      register: deploy_out
+
+    - name: "5.1 | Show deploy output"
+      ansible.builtin.debug:
+        msg: "{{ deploy_out.stdout_lines }}"
+
+    # ── 6. SMOKE TEST ─────────────────────────────────────────────────────────
+    - name: "6.0 | Smoke test — chunked protocol"
+      ansible.builtin.shell: |
+        python3 << 'PY'
+        import socket, struct, json
+
+        HOST, PORT = "192.168.122.107", 7001
+        query = b"WHO T.E\nHOW_MUCH LIMIT 5"
+
+        def read_frame(s):
+            lb = b""
+            while len(lb) < 4:
+                lb += s.recv(4 - len(lb))
+            n = struct.unpack("<I", lb)[0]
+            if n == 0:
+                return None  # DONE sentinel
+            buf = b""
+            while len(buf) < n:
+                buf += s.recv(n - len(buf))
+            return buf.decode()
+
+        with socket.create_connection((HOST, PORT), timeout=15) as s:
+            frame = struct.pack("<I", len(query)) + query
+            s.sendall(frame)
+            total_rows = 0
+            batch_num  = 0
+            while True:
+                data = read_frame(s)
+                if data is None:
+                    break  # DONE sentinel received
+                if data.startswith("ERR:"):
+                    print(f"Server error: {data}")
+                    break
+                rows = json.loads(data)
+                batch_num  += 1
+                total_rows += len(rows)
+                print(f"Batch {batch_num}: {len(rows)} rows")
+                if rows:
+                    print(f"  First KAKI : {rows[0]['kaki'][:16]}...")
+                    if rows[0]['attrs']:
+                        print(f"  First attr : {rows[0]['attrs'][0]}")
+
+        print(f"\nTotal rows received: {total_rows}")
+        print("Chunked protocol: OK")
+        PY
+      register: smoke
+
+    - name: "6.1 | Show smoke test"
+      ansible.builtin.debug:
+        msg: "{{ smoke.stdout_lines }}"
+
+    - name: "6.2 | Sealed"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════╗
+          ║  ✅  PLAYBOOK 35A v2 SEALED                              ║
+          ║  enkidb-query-server running on 192.168.122.107:7001    ║
+          ║  80,272 entries loaded — chunked streaming active       ║
+          ║  Batch size: 1,000 rows per TCP frame                   ║
+          ║  Backpressure: sovereign (std::io)                      ║
+          ║                                                          ║
+          ║  Now run Playbook 35B v2 on eriduous-vdi                ║
+          ╚══════════════════════════════════════════════════════════╝

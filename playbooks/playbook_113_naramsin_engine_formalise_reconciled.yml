@@ -1,0 +1,149 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_113_naramsin_engine_formalise_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-113 Reconciled: naramsin-core superseded by naramsin-integrity
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_113_naramsin_engine_formalise_reconciled.yml -i "localhost," -c local -v
+#
+#  NAMING COLLISION — flagging explicitly: this repo already has a
+#  DIFFERENT playbook_113_naramsin_enkiterra_coverage.yml (naramsin-format
+#  + kaki-generator + dw-analytics coverage). This upload is a completely
+#  different playbook, same PB-113 number. Kept as a separate file.
+#
+#  Why this file does NOT scaffold the original's target (not superseded
+#  by drift this time — superseded by a DIRECT CONFLICT with sovereign
+#  architecture already in the repo):
+#
+#    The uploaded PB-113 proposes a NEW crate "naramsin-core" with
+#    third-party dependencies: zip, tar, flate2, bzip2, xz2, sevenz-rust,
+#    sha2, hex, thiserror, anyhow. It implements an NrmCode 6-state
+#    integrity taxonomy (Clean/Partial/Truncated/Malformed/
+#    UnknownFormat/SchemaDrift).
+#
+#    Checked the real repo before writing anything: crates/naramsin-
+#    integrity ALREADY EXISTS and implements the EXACT SAME NrmCode
+#    6-state taxonomy — same variant names, same semantics
+#    (from_archive_error/from_format_error/is_rejection/label) — with
+#    ZERO external dependencies (Cargo.toml: only path deps on
+#    naramsin-archive and naramsin-format, both pure sovereign Rust).
+#    3 tests, all passing.
+#
+#    Scaffolding naramsin-core as designed would create a second,
+#    competing implementation of the same responsibility, using
+#    third-party crates, directly contradicting the
+#    #![forbid(unsafe_code)] / zero-external-dependency sovereign
+#    architecture every other crate in this repo follows (confirmed:
+#    naramsin-archive's own Cargo.toml literally says "Pure sovereign
+#    Rust — no external crates"). This is not done here.
+#
+#    This file verifies the real, sovereign, already-built equivalent:
+#      naramsin-integrity : 3 passed
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-113 (Reconciled) | naramsin-integrity — real sovereign NrmCode, no naramsin-core"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB113_NARAMSIN_INTEGRITY_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | naramsin-integrity crate exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/naramsin-integrity/src/lib.rs"
+      register: integrity_file
+
+    - name: "FAIL | naramsin-integrity not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/naramsin-integrity/src/lib.rs not found after sync."
+      when: not integrity_file.stat.exists
+
+    - name: "CHECK | naramsin-core does NOT exist (confirms no duplicate crate was created)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/naramsin-core"
+      register: naramsin_core_check
+
+    - name: "WARN | naramsin-core unexpectedly exists — investigate before proceeding"
+      ansible.builtin.debug:
+        msg: >
+          WARNING: crates/naramsin-core exists on this host. This
+          reconciliation assumed it did not (confirmed absent when this
+          playbook was written). If someone else added it, check whether
+          it duplicates naramsin-integrity's NrmCode taxonomy before
+          using either.
+      when: naramsin_core_check.stat.exists
+
+    - name: "TEST | cargo test -p naramsin-integrity"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p naramsin-integrity"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PARSE | test_out passed-test count"
+      ansible.builtin.set_fact:
+        test_out_passed_count: "{{ (test_out.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | naramsin-integrity reports 3 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_out.stdout"
+          - test_out_passed_count >= 3
+        fail_msg: >-
+          Expected at least 3 passed, 0 failed. Got {{ test_out_passed_count }}
+          passed. Full output: {{ test_out.stdout }}
+        success_msg: >-
+          naramsin-integrity: {{ test_out_passed_count }} passed, 0 failed (>= baseline 3).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-113 (naramsin-core version) Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-113 proposed a new "naramsin-core" crate using
+          third-party dependencies (zip/tar/flate2/bzip2/xz2/sevenz-rust/
+          sha2/hex/thiserror/anyhow) to implement an NrmCode 6-state
+          integrity taxonomy. NOT SCAFFOLDED — confirmed
+          crates/naramsin-integrity already implements the identical
+          taxonomy, sovereign (zero external deps), tested.
+
+          Verified this run:
+            naramsin-integrity : 3/3 tests PASS
+            naramsin-core       : confirmed absent (no duplicate created)
+
+          Note: numbering collides with the pre-existing
+          playbook_113_naramsin_enkiterra_coverage.yml (a different,
+          unrelated playbook) — both kept as separate files.
+
+    - name: "DONE | PB-113 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-113 reconciled — sovereign naramsin-integrity verified, no duplicate crate created. Report: {{ report_file }}"

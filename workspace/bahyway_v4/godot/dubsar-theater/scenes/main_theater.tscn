@@ -1,0 +1,88 @@
+; DubSar Theater — Main Scene
+; Architecture: CENTER_STAGE (BIGRING) + LEFT/RIGHT curved panels + NISABA
+; DUB.SAR 𒁾  2026-06-21
+;
+; LEFT_CURVED_PANEL  : transform rotated -35° on Y axis
+;   cos(35°) = 0.819152  sin(35°) = 0.573576
+;   Transform3D col0=(0.819152, 0, -0.573576)
+;
+; RIGHT_CURVED_PANEL : transform rotated +35° on Y axis
+;   Transform3D col0=(0.819152, 0, 0.573576)
+
+[gd_scene load_steps=7 format=3 uid="uid://theater_main"]
+
+[ext_resource type="Script" path="res://scripts/theater_controller.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/wizard.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/heptascript_editor.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/graph_explorer.tscn" id="6"]
+
+[sub_resource type="ParticleProcessMaterial" id="bigring_mat"]
+emission_shape = 2
+emission_sphere_radius = 3.0
+direction = Vector3(0, 1, 0)
+spread = 180.0
+gravity = Vector3(0, 0, 0)
+initial_velocity_min = 0.5
+initial_velocity_max = 2.0
+angular_velocity_min = -45.0
+angular_velocity_max = 45.0
+color = Color(0.118, 0.627, 0.459, 1)
+
+[sub_resource type="QuadMesh" id="panel_mesh"]
+size = Vector2(3.2, 2.0)
+
+[node name="DubSarTheater" type="Node3D"]
+script = ExtResource("1")
+
+[node name="EnkiDbWizard" parent="." instance=ExtResource("4")]
+
+[node name="HeptaScriptEditor" parent="." instance=ExtResource("5")]
+visible = false
+
+[node name="GraphExplorer" parent="." instance=ExtResource("6")]
+visible = false
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.9659, 0.2588, 0, -0.2588, 0.9659, 0, 2.0, 6.0)
+current = true
+fov = 70.0
+
+[node name="CENTER_STAGE" type="GPUParticles3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -1.0)
+amount = 50000
+lifetime = 4.0
+process_material = SubResource("bigring_mat")
+visibility_aabb = AABB(-5, -5, -5, 10, 10, 10)
+
+[node name="NISABA_STAGE1" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.0, -1.0)
+
+[node name="LEFT_CURVED_PANEL" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.819152, 0, 0.573576, 0, 1, 0, -0.573576, 0, 0.819152, -3.2, 1.5, 1.0)
+mesh = SubResource("panel_mesh")
+
+[node name="LEFT_SUBVIEWPORT" type="SubViewport" parent="LEFT_CURVED_PANEL"]
+size = Vector2i(960, 600)
+render_target_update_mode = 3
+
+[node name="RIGHT_CURVED_PANEL" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.819152, 0, -0.573576, 0, 1, 0, 0.573576, 0, 0.819152, 3.2, 1.5, 1.0)
+mesh = SubResource("panel_mesh")
+
+[node name="RIGHT_SUBVIEWPORT" type="SubViewport" parent="RIGHT_CURVED_PANEL"]
+size = Vector2i(960, 600)
+render_target_update_mode = 3
+
+[node name="TheaterLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 5, 0)
+light_energy = 0.6
+light_color = Color(0.831, 0.686, 0.216, 1)
+
+[node name="AmbientFill" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 3)
+light_color = Color(0.114, 0.62, 0.459, 1)
+light_energy = 0.3
+omni_range = 12.0
+
+[connection signal="wizard_completed" from="EnkiDbWizard" to="." method="_on_enkidb_wizard_confirmed"]
+[connection signal="connection_tested" from="EnkiDbWizard" to="." method="_on_enkidb_wizard_tested"]

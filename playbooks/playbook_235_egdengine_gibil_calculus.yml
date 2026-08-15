@@ -1,0 +1,155 @@
+# =============================================================================
+# PB-235 -- EGDEngine: fdd-core + trend-core + Gibil Calculus + grid
+# navigation lens. BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHY THIS SUPERSEDES THE EARLIER PB-172/PB-174 DRAFTS: those drafts
+# were evaluated against the real workspace before this playbook was
+# written (docs/SPEC-FDD-001.md, docs/GL-EGD-001.md carry the full
+# reasoning). Two things changed:
+#   1. NAME COLLISION: "Girra" was already sealed as girra-engine, the
+#      ecosystem's general sovereign monitoring dashboard -- and
+#      "Nusku" (the other obvious fire/light name) was already sealed
+#      for nusku-engine/nusku-score/nusku-fuzzy (body-scan security
+#      classification). The electricity calculus is GIBIL instead
+#      (smith-fire, the refining flame) -- unused anywhere in the
+#      workspace at the time of this build.
+#   2. "EXTRACTED FROM WPDENGINE" was false. The real wpd-engine is a
+#      spectral/weighted-score classifier, not a network-conservation-
+#      residual model (verified directly against source: see
+#      docs/SPEC-FDD-001.md's honest source note). fdd-core is NEW
+#      machinery, not a migration, and WPDEngine/Enbilulu are left
+#      completely untouched (BLK-1 lesson).
+# Also fixed from the drafts: `residuals`/`sweep`/`simulate_exclusion`
+# return a typed `FddError` on dimension mismatch instead of panicking;
+# the horizon trend fit lives once in trend-core (shared with
+# MardukEngine's T_golden, PB-236) instead of being reimplemented a
+# third time; and the GDExtension's KAKI-hex parser REJECTS malformed
+# input (logs via godot_error!) instead of silently defaulting bad
+# bytes to zero -- the whole point of GL-EGD-001 clause 3 is identity
+# over appearance, so a silently-mangled KAKI would defeat the law it's
+# meant to enforce.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Running
+# this playbook = CSR-08 Architect confirmation, including ratification
+# of the Gibil/Birqu naming.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms the five new crates (trend-core, fdd-core, egd-engine,
+#      dubsar-gridnav-gd, marduk-engine) are present and wired into the
+#      workspace -- they are committed source, not written by this
+#      playbook (unlike the PB-172/174 drafts, which used
+#      ansible.builtin.copy to author source directly; this repo's
+#      established flow for this session is git commit/push +
+#      `git pull` on eriduous-vdi, so this playbook verifies and
+#      builds rather than re-authoring files that already exist).
+#   2. `cargo test` for trend-core, fdd-core, egd-engine (release).
+#   3. `cargo build --release -p dubsar-gridnav-gd`, confirms the
+#      compiled .so, copies it into dubsar-theater/bin/, writes the
+#      matching gridnav.gdextension descriptor.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_235_egdengine_gibil_calculus.yml
+# =============================================================================
+
+- name: "PB-235 -- EGDEngine: fdd-core + trend-core + Gibil Calculus"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    build_log: "/tmp/pb235_build.log"
+
+  tasks:
+    - name: "Confirm the five new crates are present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/crates/{{ item }}/Cargo.toml"
+      register: crate_checks
+      loop:
+        - trend-core
+        - fdd-core
+        - egd-engine
+        - dubsar-gridnav-gd
+        - marduk-engine
+
+    - name: "Fail clearly if any expected crate is missing"
+      ansible.builtin.fail:
+        msg: >-
+          crates/{{ item.item }} not found at {{ repo_root }}. Run
+          `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- these are committed source, this playbook only
+          builds and verifies them.
+      loop: "{{ crate_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "cargo test trend-core + fdd-core + egd-engine (release)"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p trend-core -p fdd-core -p egd-engine > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "cargo build dubsar-gridnav-gd (release)"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p dubsar-gridnav-gd >> {{ build_log }} 2>&1
+      register: gdext_build_result
+      failed_when: gdext_build_result.rc != 0
+
+    - name: "Confirm the compiled grid-nav library exists"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/libdubsar_gridnav_gd.so"
+      register: gridnav_lib_check
+
+    - name: "Fail clearly if the compiled library is missing"
+      ansible.builtin.fail:
+        msg: >-
+          libdubsar_gridnav_gd.so not found under
+          {{ repo_root }}/target/release/. Check {{ build_log }}.
+      when: not gridnav_lib_check.stat.exists
+
+    - name: "Ensure the DubSar Theater project's bin/ directory exists"
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "Copy the compiled grid-nav lens into the DubSar Theater project"
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/libdubsar_gridnav_gd.so"
+        dest: "{{ dubsar_project }}/bin/libdubsar_gridnav_gd.so"
+        mode: "0755"
+        remote_src: true
+
+    - name: "Write the gridnav.gdextension descriptor (matches the enkimdb_registry.gdextension pattern already in use)"
+      ansible.builtin.copy:
+        dest: "{{ dubsar_project }}/gridnav.gdextension"
+        mode: "0644"
+        content: |
+          [configuration]
+          entry_symbol = "gdext_rust_init"
+          compatibility_minimum = 4.1
+          reloadable = true
+
+          [libraries]
+          linux.debug.x86_64 = "res://bin/libdubsar_gridnav_gd.so"
+          linux.release.x86_64 = "res://bin/libdubsar_gridnav_gd.so"
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-235 complete -- trend-core/fdd-core/egd-engine tests pass,
+          Gibil Calculus + Birqu alerts + horizon + exclusion proof all
+          real and tested. dubsar-gridnav-gd built and wired into
+          DubSar Theater as gridnav.gdextension. Deferred, honestly, in
+          docs/GL-EGD-001.md: power-flow/state-estimation solver,
+          King-plot bad-data separation, three-phase modeling, Suhrim
+          telemetry-security wiring, and the live EnkiDB feed into the
+          lens.

@@ -1,0 +1,122 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_103_enkidb_indexes.yml
+#  BahyWay.Ecosystem v4.0 — NatiruIndex + EavExactIndex (BLOCK E-IDX)
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_103_enkidb_indexes.yml
+#
+#  Crate: enkidb-indexes
+#  Tests: 14 integration tests (playbook_indexes)
+#  Covers:
+#    NatiruIndex:
+#      orbital-bucket temporal pruning  (BUCKET_ORBITALS = 10)
+#      range query, dedup after seal(), intersect_sorted()
+#      memory estimate (1000 entries < 64 KB)
+#      10M-particle pattern (10K entries, 10% range query)
+#    EavExactIndex:
+#      Xor8-bloom + sorted Vec  O(1) negative / O(log n) positive
+#      100K entries large index
+#      attr_hash_of() stability
+#    Combined NatiruIndex ∩ EavExactIndex pipeline
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-103 | EnkiDB Indexes — Build & Integration Tests"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    crate:        "enkidb-indexes"
+    test_bin:     "playbook_indexes"
+    results_dir:  "{{ forge_root }}/test_results"
+
+  tasks:
+
+    - name: "SETUP | Results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Build ─────────────────────────────────────────────────────────────
+    - name: "BUILD | cargo build -p {{ crate }}"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p {{ crate }} 2>&1"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: true
+
+    - name: "FAIL  | Build failed"
+      ansible.builtin.fail:
+        msg: "cargo build -p {{ crate }} FAILED\n{{ build_out.stderr }}"
+      when: build_out.rc != 0
+
+    - name: "PASS  | Build OK"
+      ansible.builtin.debug:
+        msg: "enkidb-indexes → BUILD PASS ✓"
+
+    # ── Integration tests ─────────────────────────────────────────────────
+    - name: "TEST  | cargo test -p {{ crate }} --test {{ test_bin }} --nocapture"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p {{ crate }} --test {{ test_bin }} -- --nocapture 2>&1"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+
+    - name: "SAVE  | Write test log"
+      ansible.builtin.copy:
+        content: "{{ test_out.stdout }}\n{{ test_out.stderr }}"
+        dest: "{{ results_dir }}/pb103_enkidb_indexes.log"
+        mode: "0644"
+
+    - name: "PRINT | Test output"
+      ansible.builtin.debug:
+        msg: "{{ test_out.stdout_lines }}"
+
+    - name: "PARSE | Result line"
+      ansible.builtin.set_fact:
+        result_line: >-
+          {{ test_out.stdout_lines
+             | select('match', '^test result')
+             | list | last | default('no result line') }}
+
+    - name: "PRINT | Summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌─────────────────────────────────────────────────────────────────┐
+          │  PB-103  enkidb-indexes  BLOCK E-IDX                            │
+          ├─────────────────────────────────────────────────────────────────┤
+          │  Expected tests:  14                                            │
+          │  {{ result_line }}
+          │  Log: {{ results_dir }}/pb103_enkidb_indexes.log
+          ├─────────────────────────────────────────────────────────────────┤
+          │  NatiruIndex:                                                   │
+          │    nairu_build_and_range_query                                  │
+          │    nairu_orbital_range_at_10m_particles_pattern                 │
+          │    nairu_empty_range_returns_empty_vec                          │
+          │    nairu_empty_index_returns_none                               │
+          │    nairu_bucket_granularity_is_bucket_orbitals                  │
+          │    nairu_contains_bucket_level_semantics                        │
+          │    nairu_intersect_sorted                                       │
+          │    nairu_dedup_same_bucket                                      │
+          │    nairu_memory_estimate_1000_entries                           │
+          │  EavExactIndex:                                                 │
+          │    eav_build_and_exact_lookup                                   │
+          │    eav_bloom_eliminates_absent_keys                             │
+          │    eav_attr_hash_is_stable                                      │
+          │    eav_large_index_100k_entries                                 │
+          │  Combined pipeline:                                             │
+          │    combined_nairu_plus_eav_pipeline                             │
+          └─────────────────────────────────────────────────────────────────┘
+
+    - name: "FAIL  | Tests failed"
+      ansible.builtin.fail:
+        msg: "EnkiDB Indexes tests FAILED — check {{ results_dir }}/pb103_enkidb_indexes.log"
+      when: test_out.rc != 0
+
+    - name: "DONE  | PB-103 Indexes COMPLETE → Run PB-104 next"
+      ansible.builtin.debug:
+        msg: "BLOCK E-IDX PASS ✓ — 14/14 tests — Run playbook_104_heptascript_v2.yml next"

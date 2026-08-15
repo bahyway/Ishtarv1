@@ -1,0 +1,174 @@
+# =====================================================================
+# PB-338 — ṢIBITTU JAIL · bīt ṣibitti, the House of Detention
+# BahyWay.Ecosystem v4.0 · Phase Two · companion to PB-330 (Karû)
+# Law implemented (Bābu clause B-2.J, pending CSR-08):
+#   Nergal AV does not merely alarm. On detection the file is JAILED
+#   IMMEDIATELY: physically moved into the Sibittu sector, NEUTRALIZED
+#   (zstd + AES-256 wrap, root-only key), stored by sha256, original
+#   shredded after verified copy. A PARZU case (KAKI role 0x03) opens;
+#   the EnkiQDB evidence particle references the physical jail path and
+#   is prune-exempt while the case is open. Release or destruction
+#   happens ONLY by sealed Steward decision, both journaled.
+#   Chain of authority: Nergal jails · Nisaba declares · Kittu delivers.
+# Trust domains: Karû = trusted & preserved. Sibittu = DISTRUSTED &
+#   preserved (evidence, not archive). Separate dataset, never nested.
+# Way of Work: run FROM Fedora 44 host; ZFS on NAS vault only.
+# =====================================================================
+---
+- name: PB-338 Sibittu jail sector
+  hosts: nas_vault
+  become: true
+  vars:
+    pool: vault
+    jail_root: "{{ pool }}/sibittu"
+    jail_quota: "500G"
+    jail_key: "/root/.sibittu/jail.key"     # interim; AkkadiSafeEngine custody later
+  tasks:
+    - name: Create Sibittu datasets (holding + cases + released-log)
+      community.general.zfs:
+        name: "{{ item }}"
+        state: present
+        extra_zfs_properties:
+          compression: zstd
+          atime: "off"
+          exec: "off"
+          setuid: "off"
+          devices: "off"
+          quota: "{{ jail_quota }}"
+      loop:
+        - "{{ jail_root }}"
+        - "{{ jail_root }}/holding"
+        - "{{ jail_root }}/cases"
+
+    - name: Root-only permissions on the jail mountpoints
+      ansible.builtin.file:
+        path: "/{{ item }}"
+        mode: "0700"
+        owner: root
+        group: root
+      loop:
+        - "{{ jail_root }}"
+        - "{{ jail_root }}/holding"
+        - "{{ jail_root }}/cases"
+
+    - name: Generate jail key (root-only; custody moves to AkkadiSafeEngine later)
+      ansible.builtin.shell: |
+        set -e
+        mkdir -p "$(dirname {{ jail_key }})"; chmod 0700 "$(dirname {{ jail_key }})"
+        [ -f "{{ jail_key }}" ] || { head -c 64 /dev/urandom | base64 -w0 > "{{ jail_key }}"; chmod 0400 "{{ jail_key }}"; }
+      args: { creates: "{{ jail_key }}" }
+
+    - name: Install sibittu_jail (called by Nergal AV the moment of detection)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/sibittu_jail.sh"
+        mode: "0700"
+        content: |
+          #!/usr/bin/env bash
+          # Usage: sibittu_jail.sh <file> <verdict> <scanner_sig>
+          # JAIL FIRST, TELL SECOND. Neutralize + detain + open PARZU case.
+          set -euo pipefail
+          F="${1:?file}"; V="${2:?verdict}"; G="${3:-nergal-v4}"
+          S=$(sha256sum "$F" | cut -d' ' -f1)
+          CASE="PARZU-$(date -u +%Y%m%d)-${S:0:8}"
+          HOLD="/{{ jail_root }}/holding/$S.jailed"
+          # Neutralize: zstd + AES-256 wrap => cannot execute, open, or re-trigger
+          zstd -q -T0 -c "$F" | openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -pass file:{{ jail_key }} -out "$HOLD"
+          chmod 0400 "$HOLD"
+          # Verify the wrap before destroying the original
+          openssl enc -d -aes-256-cbc -pbkdf2 -pass file:{{ jail_key }} -in "$HOLD" \
+            | zstd -q -d -c | sha256sum | grep -q "^$S" \
+            || { echo "WRAP VERIFY FAILED — original retained"; exit 2; }
+          shred -u "$F" 2>/dev/null || rm -f "$F"
+          # Case file (the physical half; EnkiQDB evidence particle is minted
+          # by the ETL/security side with KAKI role 0x03 PARZU, citing this path)
+          C="/{{ jail_root }}/cases/$CASE.case"
+          printf 'case=%s\nsha256=%s\nfile=%s\nverdict=%s\nscanner=%s\njailed=%s\nstatus=OPEN\nprune_exempt=true\n' \
+            "$CASE" "$S" "$(basename "$F")" "$V" "$G" "$(date -u +%FT%TZ)" > "$C"
+          chmod 0400 "$C"
+          echo "JAILED: $CASE sha256=$S verdict=$V — Nisaba declares, Kittu delivers."
+
+    - name: Install sibittu_release (sealed Steward decision only)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/sibittu_release.sh"
+        mode: "0700"
+        content: |
+          #!/usr/bin/env bash
+          # Usage: sibittu_release.sh <case_id> <steward_id> <reason>
+          # Restores the file to Bābu B-2 re-entry (it gets scanned AGAIN).
+          set -euo pipefail
+          C="/{{ jail_root }}/cases/${1:?case}.case"; W="${2:?steward}"; R="${3:?reason}"
+          S=$(grep '^sha256=' "$C" | cut -d= -f2)
+          N=$(grep '^file=' "$C" | cut -d= -f2)
+          OUT="/{{ pool }}/karu/warm/_reentry"; mkdir -p "$OUT"
+          openssl enc -d -aes-256-cbc -pbkdf2 -pass file:{{ jail_key }} \
+            -in "/{{ jail_root }}/holding/$S.jailed" | zstd -q -d -o "$OUT/$N"
+          chmod 0400 "$C"; chmod u+w "$C"
+          printf 'status=RELEASED\nreleased_by=%s\nreason=%s\nreleased=%s\n' \
+            "$W" "$R" "$(date -u +%FT%TZ)" >> "$C"; chmod 0400 "$C"
+          echo "RELEASED to $OUT/$N — MUST re-enter at Babu B-2 (rescan mandatory)."
+
+    - name: Install sibittu_destroy (tombstone rite; case stays forever)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/sibittu_destroy.sh"
+        mode: "0700"
+        content: |
+          #!/usr/bin/env bash
+          # Usage: sibittu_destroy.sh <case_id> <steward_id> <reason>
+          set -euo pipefail
+          C="/{{ jail_root }}/cases/${1:?case}.case"; W="${2:?steward}"; R="${3:?reason}"
+          S=$(grep '^sha256=' "$C" | cut -d= -f2)
+          shred -u "/{{ jail_root }}/holding/$S.jailed" 2>/dev/null || true
+          chmod u+w "$C"
+          printf 'status=DESTROYED\ndestroyed_by=%s\nreason=%s\ndestroyed=%s\n' \
+            "$W" "$R" "$(date -u +%FT%TZ)" >> "$C"; chmod 0444 "$C"
+          echo "DESTROYED. Case file remains — the Plate is a Memorial."
+
+    - name: Install sibittu_status (JSON feed for the Nergal dashboard Jail Sector)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/sibittu_status.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Emits jail population JSON the Nergal AV dashboard can render.
+          set -uo pipefail
+          echo '{"sector":"sibittu","cases":['
+          FIRST=1
+          for C in /{{ jail_root }}/cases/*.case; do
+            [ -e "$C" ] || break
+            [ $FIRST -eq 1 ] || echo ','
+            FIRST=0
+            awk -F= 'BEGIN{printf "{"} {printf "%s\"%s\":\"%s\"", (NR>1?",":""), $1, $2} END{printf "}"}' "$C"
+          done
+          echo '],"generated":"'"$(date -u +%FT%TZ)"'"}'
+
+    - name: Include jail in the annual Verification Rite (wrapper hashes)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/sibittu_verify.sh"
+        mode: "0700"
+        content: |
+          #!/usr/bin/env bash
+          # Evidence must remain intact: verify every wrapper decrypts to its sha256.
+          set -uo pipefail
+          FAIL=0
+          for C in /{{ jail_root }}/cases/*.case; do
+            [ -e "$C" ] || break
+            grep -q 'status=OPEN' "$C" || continue
+            S=$(grep '^sha256=' "$C" | cut -d= -f2)
+            openssl enc -d -aes-256-cbc -pbkdf2 -pass file:{{ jail_key }} \
+              -in "/{{ jail_root }}/holding/$S.jailed" 2>/dev/null \
+              | zstd -q -d -c 2>/dev/null | sha256sum | grep -q "^$S" \
+              || { echo "EVIDENCE MISMATCH case sha=$S"; FAIL=1; }
+          done
+          [ $FAIL -eq 0 ] && echo "Sibittu Verification: all evidence seals hold."
+          exit $FAIL
+
+    - name: Report (DUB.SAR's run is the CSR-08 confirmation point)
+      ansible.builtin.debug:
+        msg: >-
+          bīt ṣibitti stands: {{ jail_root }} (holding/cases, 0700 root-only,
+          exec/devices off, quota {{ jail_quota }}). Rites: jail (neutralize+
+          detain+PARZU), release (Steward-sealed, mandatory B-2 rescan),
+          destroy (tombstone; case eternal), status (dashboard JSON),
+          verify (evidence integrity). Jail first, tell second:
+          Nergal jails · Nisaba declares · Kittu delivers.

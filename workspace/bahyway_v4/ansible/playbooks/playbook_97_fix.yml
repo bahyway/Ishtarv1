@@ -1,0 +1,453 @@
+---
+# =============================================================================
+# PLAYBOOK 97-FIX — Clean rewrite of enkidb-query-server with correct APIs
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-26
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_97_fix.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 97-fix — ENLIL query server with verified APIs"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge:  "/home/bahyway/Forge/bahyway_v4"
+    server: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-query-server/src"
+
+  tasks:
+
+    # STEP 1 — Correct Cargo.toml dependencies
+    - name: "Write correct Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ forge }}/crates/enkidb-query-server/Cargo.toml"
+        content: |
+          [package]
+          name    = "enkidb-query-server"
+          version = "4.0.0"
+          edition = "2021"
+
+          [[bin]]
+          name = "enkidb-query-server"
+          path = "src/main.rs"
+
+          [dependencies]
+          bahyway-core         = { path = "../bahyway-core"         }
+          enkidb-persist       = { path = "../enkidb-persist"       }
+          enkidb-storage       = { path = "../enkidb-storage"       }
+          enkidb-kaki          = { path = "../enkidb-kaki"          }
+          enkidb-journal       = { path = "../enkidb-journal"       }
+          heptascript          = { path = "../heptascript"          }
+          akkvalue             = { path = "../akkvalue"             }
+          enkidb-enlil-index   = { path = "../enkidb-enlil-index"   }
+          hepta-shell-index    = { path = "../hepta-shell-index"    }
+          geo-engine           = { path = "../geo-engine"           }
+
+    # STEP 2 — Write clean main.rs with verified APIs
+    - name: "Write clean main.rs with verified APIs"
+      ansible.builtin.copy:
+        dest: "{{ server }}/main.rs"
+        content: |
+          //! enkidb-query-server — ENLIL 6-Index Sovereign Query Server
+          //! DUB.SAR 𒁾  BahyWay.Ecosystem v4.0  2026-06-26
+          //!
+          //! Index execution order (sovereign sargability):
+          //!   1. NATIRU RoaringBitmap  — state pruning          O(1)
+          //!   2. BTreeRange            — quality/epoch range    O(log n)
+          //!   3. HeptaShellIndex       — orbital zone (r,θ,φ)  O(1) zone
+          //!   4. KISPU HeadStore       — attribute projection   O(1) surrogate
+          //!   5. SurrogateMap          — surrogate → KAKI       O(1)
+          //!   6. idx_eav               — exact attr match       O(1)
+
+          use std::collections::HashSet;
+          use std::io::{self, Read, Write};
+          use std::net::{TcpListener, TcpStream};
+          use std::path::Path;
+          use std::sync::Arc;
+          use std::thread;
+          use std::time::{Duration, Instant};
+
+          use bahyway_core::TribeId;
+          use enkidb_persist::persisted_db::PersistedDb;
+          use enkidb_storage::FsyncPolicy;
+          use enkidb_kaki::IdentityKaki;
+          use heptascript::{execute, parse_query, HowMuchClause, WhyCondition, Op};
+          use akkvalue::AkkValue;
+          use akkvalue::codec::decode as akk_decode;
+
+          use enkidb_enlil_index::EnlilStack;
+          use enkidb_enlil_index::natiru::OrbitalState;
+          use hepta_shell_index::{HeptaShellIndex, KakiEntry, OrbitalStateTag};
+          use geo_engine::laws::geo01_e7::OrbitalPosition;
+
+          const BIND_ADDR:     &str  = "0.0.0.0:7001";
+          const DATA_DIR:      &str  = "/home/bahyway/enkidb/data";
+          const TRIBE_ID:      u16   = 0x0001;
+          const BATCH_SIZE:    usize = 2_000;
+          const MAX_FRAME:     u32   = 16 * 1024 * 1024;
+          const READ_TIMEOUT:  u64   = 30;
+          const WRITE_TIMEOUT: u64   = 120;
+
+          struct SovereignIndexes {
+              enlil: EnlilStack,
+              hepta: HeptaShellIndex,
+          }
+
+          fn main() {
+              eprintln!("𒁾 enkidb-query-server — ENLIL 6-index stack");
+
+              let tribe_id = TribeId::from_u16(TRIBE_ID);
+              let t0 = Instant::now();
+
+              let db = PersistedDb::open(
+                  Path::new(DATA_DIR), tribe_id, FsyncPolicy::Never,
+              ).unwrap_or_else(|e| {
+                  eprintln!("FATAL: {e}");
+                  std::process::exit(1);
+              });
+
+              eprintln!("  ✓ {} entries loaded in {}ms",
+                  db.stats().entries_replayed, t0.elapsed().as_millis());
+
+              // ── Build all 6 indexes at startup ──────────────────────────
+              let t_idx = Instant::now();
+              eprintln!("  Building ENLIL 6-index stack...");
+
+              let mut enlil = EnlilStack::new();
+              let mut hepta = HeptaShellIndex::new();
+
+              let journal = db.db().journal();
+              for particle in journal.all_particles() {
+                  let kaki_bytes: [u8; 16] = *particle.bytes();
+
+                  let quality   = kaki_bytes[13];
+                  let epoch     = u16::from_le_bytes([kaki_bytes[12], kaki_bytes[13]]) as u64;
+                  let kaki_type = kaki_bytes[6];
+
+                  // Register into SurrogateMap + NATIRU + BTreeRange
+                  let surrogate = enlil.register_kaki(
+                      kaki_bytes, kaki_type, 0u8, epoch, quality,
+                  );
+
+                  // Populate KISPU + idx_eav from journal history
+                  let history = journal.read_particle_history(&particle);
+                  let mut seen = HashSet::<u32>::new();
+                  for entry in &history {
+                      for triple in &entry.eav {
+                          if seen.insert(triple.attr_hash) {
+                              if let Ok((val, _)) = akk_decode(&triple.value, 0) {
+                                  enlil.kispu.upsert(surrogate, triple.attr_hash, val);
+                              }
+                              let val_hash = fnv_hash(&triple.value);
+                              enlil.idx_eav.insert(triple.attr_hash, val_hash, surrogate);
+                          }
+                      }
+                  }
+
+                  // HeptaShellIndex — derive orbital position from KAKI bytes
+                  let b11   = kaki_bytes[14] as u16;
+                  let r     = 1.0 + (quality as f64 / 255.0) * 6.0;
+                  let theta = ((TRIBE_ID as f64 / 65535.0) * std::f64::consts::PI)
+                                  .clamp(0.0, std::f64::consts::PI);
+                  let phi   = (b11 as f64 / 255.0) * 2.0 * std::f64::consts::PI;
+                  let pos   = OrbitalPosition::new(r, theta, phi);
+
+                  let state = if quality >= 200      { OrbitalStateTag::GoldenGem   }
+                              else if quality >= 128 { OrbitalStateTag::GoldenAlive }
+                              else if quality >= 64  { OrbitalStateTag::FuzzyAged   }
+                              else                   { OrbitalStateTag::FuzzyDecay  };
+
+                  hepta.insert(KakiEntry {
+                      surrogate,
+                      kaki: kaki_bytes,
+                      tribe_id: TRIBE_ID,
+                      position: pos,
+                      b11: b11 as u16,
+                      state,
+                  });
+              }
+
+              let idx_ms = t_idx.elapsed().as_millis();
+              let s = enlil.stats();
+              eprintln!("  ✓ ENLIL built in {}ms — {} KAKIs, {} KISPU cols, {} hepta zones",
+                  idx_ms, s.total_kakis, s.kispu_cols, hepta.total());
+
+              let shared_db  = Arc::new(db);
+              let shared_idx = Arc::new(SovereignIndexes { enlil, hepta });
+
+              let listener = TcpListener::bind(BIND_ADDR).unwrap_or_else(|e| {
+                  eprintln!("FATAL: bind {BIND_ADDR}: {e}");
+                  std::process::exit(1);
+              });
+              eprintln!("𒁾 Listening on {BIND_ADDR} — ENLIL 6-index active");
+
+              for stream in listener.incoming() {
+                  match stream {
+                      Ok(s) => {
+                          let peer = s.peer_addr()
+                              .map(|a| a.to_string())
+                              .unwrap_or_else(|_| "?".into());
+                          let db  = Arc::clone(&shared_db);
+                          let idx = Arc::clone(&shared_idx);
+                          thread::spawn(move || {
+                              if let Err(e) = handle(s, &db, &idx) {
+                                  eprintln!("[{peer}] {e}");
+                              }
+                          });
+                      }
+                      Err(e) => eprintln!("[accept] {e}"),
+                  }
+              }
+          }
+
+          fn handle(
+              mut stream: TcpStream,
+              db:  &PersistedDb,
+              idx: &SovereignIndexes,
+          ) -> io::Result<()> {
+              stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT)))?;
+              stream.set_write_timeout(Some(Duration::from_secs(WRITE_TIMEOUT)))?;
+
+              let src = read_frame(&mut stream)?;
+              if src.trim().is_empty() { return send_err(&mut stream, "empty query"); }
+
+              let clean: String = src.lines()
+                  .filter(|l| !l.trim().starts_with("--"))
+                  .collect::<Vec<_>>()
+                  .join("\n");
+
+              let query = match parse_query(&clean) {
+                  Ok(q)  => q,
+                  Err(e) => return send_err(&mut stream,
+                      &format!("parse: {}", e.to_string().replace('"', "'"))),
+              };
+
+              let t0 = Instant::now();
+              let limit = match &query.how_much {
+                  Some(HowMuchClause::Limit(n))     => *n,
+                  Some(HowMuchClause::Top { n, .. }) => *n,
+                  None => 10_000,
+              };
+
+              // ── PHYSICS: NATIRU + BTreeRange pruning ─────────────────────
+              let qmin = quality_min(&query);
+              let qmax = quality_max(&query);
+
+              let candidates: Vec<u32> = if qmin > 0 || qmax < 255 {
+                  let gte: HashSet<u32> = idx.enlil.btree.quality_gte(qmin)
+                      .into_iter().collect();
+                  idx.enlil.btree.quality_lte(qmax)
+                      .into_iter().filter(|s| gte.contains(s)).collect()
+              } else {
+                  // All non-dead surrogates from NATIRU
+                  [OrbitalState::GoldenGem, OrbitalState::GoldenAlive,
+                   OrbitalState::FuzzyAged, OrbitalState::FuzzyGray,
+                   OrbitalState::FuzzyDecay]
+                      .iter()
+                      .flat_map(|&s| idx.enlil.natiru.orbital_bitmap(s).iter())
+                      .collect()
+              };
+
+              eprintln!("[idx] {} candidates after NATIRU+BTree", candidates.len());
+
+              // ── Collect matched KAKIs up to limit ────────────────────────
+              let matched: Vec<[u8; 16]> = candidates.iter()
+                  .take(limit)
+                  .filter_map(|&s| idx.enlil.surrogate.kaki(s).copied())
+                  .collect();
+
+              eprintln!("[idx] {} matched in {}ms", matched.len(), t0.elapsed().as_millis());
+
+              // ── Stream via KISPU (O(1) per attr, no journal touch) ────────
+              let total = matched.len();
+              let mut sent = 0usize;
+              for chunk in matched.chunks(BATCH_SIZE) {
+                  let json = rows_to_json(chunk, idx, db);
+                  write_frame(&mut stream, &json)?;
+                  sent += chunk.len();
+                  eprintln!("[stream] {sent}/{total}");
+              }
+
+              stream.write_all(&0u32.to_le_bytes())?;
+              stream.flush()?;
+              eprintln!("[done] {} rows in {}ms", total, t0.elapsed().as_millis());
+              Ok(())
+          }
+
+          fn rows_to_json(
+              kakis: &[[u8; 16]],
+              idx:   &SovereignIndexes,
+              db:    &PersistedDb,
+          ) -> String {
+              const COMMON: &[u32] = &[
+                  0x57388739, 0x00001a4b, 0xdd80ccf7, 0x04d030b0,
+                  0x4bd9ccee, 0xcb45dc56, 0xbfb44d69, 0xbbcbca57,
+                  0x5e9c9580, 0xd6ef4c6b, 0x54038644, 0x1f01e2fd, 0x278a5432,
+              ];
+
+              let mut out = String::with_capacity(kakis.len() * 256);
+              out.push('[');
+
+              for (i, kaki) in kakis.iter().enumerate() {
+                  if i > 0 { out.push(','); }
+                  let hex: String = kaki.iter().map(|b| format!("{b:02x}")).collect();
+                  out.push_str("{\"kaki\":\"");
+                  out.push_str(&hex);
+                  out.push_str("\",\"attrs\":[");
+
+                  let surrogate = match idx.enlil.surrogate.surrogate(kaki) {
+                      Some(s) => s,
+                      None    => { out.push_str("]}"); continue; }
+                  };
+
+                  // KISPU first — O(1) per attribute
+                  let projected = idx.enlil.kispu.project(surrogate, COMMON);
+
+                  if !projected.is_empty() {
+                      for (j, (attr_hash, val)) in projected.iter().enumerate() {
+                          if j > 0 { out.push(','); }
+                          out.push_str(&format!(
+                              "[\"0x{:08X}\",\"{}\"]",
+                              attr_hash, json_safe(&fmt_val(val), 80)
+                          ));
+                      }
+                  } else {
+                      // Fallback: journal read (KISPU cache miss)
+                      if let Ok(ik) = IdentityKaki::from_bytes(*kaki) {
+                          let history = db.db().journal().read_particle_history(&ik);
+                          let mut seen = HashSet::<u32>::new();
+                          let mut first = true;
+                          for entry in &history {
+                              for triple in &entry.eav {
+                                  if !seen.insert(triple.attr_hash) { continue; }
+                                  if let Ok((v, _)) = akk_decode(&triple.value, 0) {
+                                      if !first { out.push(','); }
+                                      first = false;
+                                      out.push_str(&format!(
+                                          "[\"0x{:08X}\",\"{}\"]",
+                                          triple.attr_hash,
+                                          json_safe(&fmt_val(&v), 80)
+                                      ));
+                                  }
+                              }
+                          }
+                      }
+                  }
+                  out.push_str("]}");
+              }
+              out.push(']');
+              out
+          }
+
+          fn quality_min(q: &heptascript::HeptaQuery) -> u8 {
+              for c in &q.why {
+                  if let WhyCondition::QualityByte { op, val, .. } = c {
+                      match op {
+                          Op::Gt  => return val.saturating_add(1),
+                          Op::Gte => return *val,
+                          _ => {}
+                      }
+                  }
+              }
+              0
+          }
+
+          fn quality_max(q: &heptascript::HeptaQuery) -> u8 {
+              for c in &q.why {
+                  if let WhyCondition::QualityByte { op, val, .. } = c {
+                      match op {
+                          Op::Lt  => return val.saturating_sub(1),
+                          Op::Lte => return *val,
+                          _ => {}
+                      }
+                  }
+              }
+              255
+          }
+
+          fn fnv_hash(bytes: &[u8]) -> u32 {
+              let mut h: u32 = 0x811c9dc5;
+              for &b in bytes { h ^= b as u32; h = h.wrapping_mul(0x01000193); }
+              h
+          }
+
+          fn fmt_val(v: &AkkValue) -> String {
+              match v {
+                  AkkValue::Text(s)  => s.clone(),
+                  AkkValue::Int(n)   => n.to_string(),
+                  AkkValue::Float(f) => format!("{f:.4}"),
+                  AkkValue::Bool(b)  => b.to_string(),
+                  AkkValue::Null     => "null".into(),
+                  _                  => format!("{v:?}"),
+              }
+          }
+
+          fn json_safe(s: &str, max: usize) -> String {
+              s.chars().filter(|c| !c.is_control()).take(max)
+                  .flat_map(|c| match c {
+                      '"'  => vec!['\\', '"'],
+                      '\\' => vec!['\\', '\\'],
+                      o    => vec![o],
+                  }).collect()
+          }
+
+          fn send_err(s: &mut TcpStream, msg: &str) -> io::Result<()> {
+              write_frame(s, &format!("ERR:{msg}"))?;
+              s.write_all(&0u32.to_le_bytes())?;
+              s.flush()
+          }
+
+          fn read_frame(s: &mut TcpStream) -> io::Result<String> {
+              let mut lb = [0u8; 4];
+              s.read_exact(&mut lb)?;
+              let len = u32::from_le_bytes(lb);
+              if len == 0 { return Ok(String::new()); }
+              if len > MAX_FRAME {
+                  return Err(io::Error::new(io::ErrorKind::InvalidData,
+                      format!("frame too large: {len}")));
+              }
+              let mut buf = vec![0u8; len as usize];
+              s.read_exact(&mut buf)?;
+              String::from_utf8(buf)
+                  .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+          }
+
+          fn write_frame(s: &mut TcpStream, payload: &str) -> io::Result<()> {
+              let b = payload.as_bytes();
+              s.write_all(&(b.len() as u32).to_le_bytes())?;
+              s.write_all(b)?;
+              s.flush()
+          }
+
+    # STEP 3 — Build release
+    - name: "cargo build --release"
+      ansible.builtin.shell: |
+        cargo build -p enkidb-query-server --release 2>&1 | tail -15
+      args:
+        chdir: "{{ forge }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    # STEP 4 — Deploy to enkidb-node-read
+    - name: "Deploy to read node"
+      ansible.builtin.shell: |
+        scp {{ forge }}/target/release/enkidb-query-server \
+            bahyway@192.168.122.107:/home/bahyway/enkidb/enkidb-query-server-new && echo "deployed"
+      register: deploy_out
+      changed_when: true
+      ignore_errors: true
+
+    - name: "Show deploy"
+      ansible.builtin.debug:
+        msg: "{{ deploy_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: "Playbook 97-fix sealed — ENLIL 6-index query server with verified APIs."

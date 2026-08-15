@@ -1,0 +1,135 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_99_workspace_v4_setup.yml
+#  BahyWay.Ecosystem v4.0 — Pull latest branch & verify workspace compiles
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_99_workspace_v4_setup.yml
+#
+#  What it does:
+#    1. Git pull the branch  claude/babyway-ecosystem-new-crates-meerhp
+#    2. cargo build --workspace (debug, fast)
+#    3. Print crate inventory
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-99 | BahyWay v4.0 — Workspace Setup & Git Pull"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    branch:       "claude/babyway-ecosystem-new-crates-meerhp"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    git:          "/usr/bin/git"
+
+  tasks:
+
+    # ── 1. Verify Forge folder exists ─────────────────────────────────────
+    - name: "CHECK | Forge root exists"
+      ansible.builtin.stat:
+        path: "{{ forge_root }}"
+      register: forge_stat
+
+    - name: "FAIL  | Forge root not found — set forge_root var"
+      ansible.builtin.fail:
+        msg: |
+          Forge root not found at: {{ forge_root }}
+          Edit the 'forge_root' var at the top of this playbook to match
+          your actual Forge path on EriduOS-VDI.
+      when: not forge_stat.stat.exists
+
+    # ── 2. Git fetch + checkout branch ────────────────────────────────────
+    - name: "GIT   | Fetch origin"
+      ansible.builtin.command:
+        cmd: "{{ git }} fetch origin"
+        chdir: "{{ forge_root }}"
+      changed_when: true
+
+    - name: "GIT   | Checkout branch {{ branch }}"
+      ansible.builtin.command:
+        cmd: "{{ git }} checkout {{ branch }}"
+        chdir: "{{ forge_root }}"
+      changed_when: true
+
+    - name: "GIT   | Pull latest"
+      ansible.builtin.command:
+        cmd: "{{ git }} pull origin {{ branch }}"
+        chdir: "{{ forge_root }}"
+      register: git_pull
+      changed_when: true
+
+    - name: "INFO  | Git pull output"
+      ansible.builtin.debug:
+        msg: "{{ git_pull.stdout_lines }}"
+
+    # ── 3. Verify Rust / cargo ────────────────────────────────────────────
+    - name: "CHECK | cargo binary exists"
+      ansible.builtin.stat:
+        path: "{{ cargo }}"
+      register: cargo_stat
+
+    - name: "FAIL  | Rust not installed"
+      ansible.builtin.fail:
+        msg: "cargo not found at {{ cargo }} — install Rust first: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+      when: not cargo_stat.stat.exists
+
+    - name: "INFO  | Rust version"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} --version"
+      register: cargo_ver
+      changed_when: false
+
+    - name: "INFO  | rustc version"
+      ansible.builtin.command:
+        cmd: "{{ ansible_env.HOME }}/.cargo/bin/rustc --version"
+      register: rustc_ver
+      changed_when: false
+
+    - name: "PRINT | Toolchain"
+      ansible.builtin.debug:
+        msg:
+          - "cargo : {{ cargo_ver.stdout }}"
+          - "rustc : {{ rustc_ver.stdout }}"
+
+    # ── 4. Cargo build workspace ──────────────────────────────────────────
+    - name: "BUILD | cargo build --workspace (debug)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build --workspace 2>&1"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: true
+
+    - name: "PRINT | Build result"
+      ansible.builtin.debug:
+        msg: "BUILD {{ 'PASS ✓' if build_out.rc == 0 else 'FAIL ✗' }}"
+
+    - name: "FAIL  | Build failed"
+      ansible.builtin.fail:
+        msg: "cargo build FAILED — {{ build_out.stderr_lines | join(' ') }}"
+      when: build_out.rc != 0
+
+    # ── 5. List crates ─────────────────────────────────────────────────────
+    - name: "LIST  | Crates in workspace"
+      ansible.builtin.find:
+        paths: "{{ workspace }}/crates"
+        file_type: directory
+        depth: 1
+      register: crates_found
+
+    - name: "PRINT | Crate inventory"
+      ansible.builtin.debug:
+        msg: |
+          ┌─────────────────────────────────────────────────┐
+          │  BahyWay.Ecosystem v4.0 — Workspace Ready       │
+          │  Branch : {{ branch }}
+          │  Path   : {{ workspace }}
+          ├─────────────────────────────────────────────────┤
+          {% for c in crates_found.files | map(attribute='path') | sort %}
+          │  ✓  {{ c | basename }}
+          {% endfor %}
+          └─────────────────────────────────────────────────┘
+
+    - name: "DONE  | PB-99 Workspace Setup COMPLETE"
+      ansible.builtin.debug:
+        msg: "Run playbook_100 next → naramsin-archive unit tests"

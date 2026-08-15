@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Nergal Gate Court — the Bābu as living topology</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Alegreya+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#010103; --blood:#800020; --blood-hi:#cc2244; --blood-dim:#440011;
+  --gold:#E3B458; --faience:#62D6C5; --magenta:#ff4bd8; --ember:#ff5a3c;
+  --unknown:#a2559e; --unknown-hi:#c77bc0;
+  --bone:#F1E8D4; --bone-dim:#b09a9a; --ash:#7d7078;
+  --font-display:'Marcellus',serif; --font-body:'Alegreya Sans',sans-serif; --font-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--bone);font-family:var(--font-body)}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;font-family:var(--font-data);z-index:5}
+.hud-title{top:16px;left:0;right:0;text-align:center;pointer-events:none}
+.hud-title h1{font-family:var(--font-display);font-weight:400;font-size:23px;letter-spacing:.28em;color:var(--blood-hi);text-shadow:0 0 22px rgba(204,34,68,.6)}
+.hud-title .glyph{color:var(--blood-hi)}
+.hud-title .sub{font-size:10.5px;letter-spacing:.3em;color:var(--blood);margin-top:5px}
+.panel{background:rgba(8,3,4,.9);border:1px solid var(--blood-dim);border-radius:3px;padding:12px 14px}
+.hud-law{top:96px;left:18px;max-width:300px;border-left:3px solid var(--blood-hi)}
+.hud-law .t{font-family:var(--font-display);letter-spacing:.14em;color:var(--blood-hi);font-size:12px}
+.hud-law .d{font-size:11px;color:var(--bone-dim);margin-top:5px;font-family:var(--font-body);line-height:1.55}
+.hud-stats{top:96px;right:18px;width:210px}
+.hud-stats .row{display:flex;justify-content:space-between;font-size:11.5px;padding:4px 0;border-bottom:1px dotted #220011}
+.hud-stats .row .k{color:var(--ash)}
+.v-total{color:var(--bone)} .v-karu{color:var(--gold);text-shadow:0 0 8px rgba(227,180,88,.6)}
+.v-scan{color:var(--faience)} .v-jail{color:var(--unknown-hi);font-weight:600}
+.v-mal{color:var(--blood-hi);font-weight:600}
+.hud-legend{bottom:70px;left:18px;max-width:320px;font-size:10.5px;color:var(--ash)}
+.hud-legend b{font-weight:500}
+.lk{color:var(--gold)} .lf{color:var(--faience)} .lj{color:var(--blood-hi)}
+.hud-case{bottom:70px;right:18px;width:310px;max-height:calc(100% - 200px);overflow:auto;display:none}
+.hud-case .cn{font-family:var(--font-display);color:var(--blood-hi);font-size:14px;letter-spacing:.05em}
+.hud-case .row{display:flex;justify-content:space-between;font-size:10.5px;padding:3px 0;border-bottom:1px dotted #220011}
+.hud-case .row .k{color:var(--ash)} .hud-case .row .v{color:var(--bone-dim);word-break:break-all;text-align:right;max-width:180px}
+.hud-case .hs{font-family:var(--font-data);font-size:9.5px;color:var(--faience);background:#04140f;border:1px solid #0d3a2e;border-radius:3px;padding:7px 8px;margin:8px 0;line-height:1.5}
+.hud-case .jt{font-family:var(--font-display);font-size:10px;letter-spacing:.16em;color:var(--gold);margin:8px 0 4px}
+.hud-case .jr{list-style:none}
+.hud-case .jr li{font-family:var(--font-data);font-size:9.5px;color:var(--bone-dim);padding:3px 0 3px 12px;border-left:1px solid var(--blood-dim);position:relative;margin-left:2px}
+.hud-case .jr li::before{content:"";position:absolute;left:-3px;top:8px;width:4px;height:4px;border-radius:50%;background:var(--blood-hi)}
+.hud-case .jr li b{color:var(--blood-hi);font-weight:500}
+.hud-case .malware-warn{font-family:var(--font-body);font-size:11px;color:#ff9fb0;background:#1a0006;border:1px solid var(--blood);border-radius:3px;padding:9px 10px;margin:8px 0;line-height:1.5}
+.hud-case #mal-seal{background:var(--blood-hi);border:none;color:#fff;font-family:var(--font-display);letter-spacing:.06em;font-size:11px;padding:7px 14px;border-radius:3px;cursor:pointer;width:100%}
+.hud-case #mal-seal:disabled{background:#3a0010;color:var(--bone-dim);cursor:default}
+#ctx-menu{position:fixed;z-index:40;min-width:220px;background:#0c0306;border:1px solid var(--blood-hi);
+  border-radius:4px;box-shadow:0 8px 30px rgba(0,0,0,.7);font-family:var(--font-data);display:none;overflow:hidden}
+#ctx-menu .ctx-head{font-family:var(--font-display);letter-spacing:.1em;font-size:11px;color:var(--unknown-hi);
+  padding:9px 12px;border-bottom:1px solid var(--blood-dim);background:#160408}
+#ctx-menu .ctx-head.mal{color:var(--blood-hi)}
+#ctx-menu button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--bone);
+  font-family:var(--font-body);font-size:13px;padding:9px 12px;cursor:pointer;border-bottom:1px solid #1a0810}
+#ctx-menu button:last-child{border-bottom:none}
+#ctx-menu button:hover{background:#1c0710;color:var(--unknown-hi)}
+#ctx-menu button.danger:hover{color:var(--blood-hi)}
+#ctx-menu button .sub{display:block;font-size:9.5px;color:var(--ash);margin-top:2px}
+#ctx-menu button:disabled{color:var(--ash);cursor:default}
+#ctx-menu button:disabled:hover{background:none}
+.hud-case .jr li .ts{color:var(--ash);font-size:8.5px;margin-left:4px}
+.hud-case .jr li.editable{border-left-color:var(--unknown-hi)}
+.hud-case .jr li.editable::before{background:var(--unknown-hi)}
+.cc-close{position:absolute;top:8px;right:10px;background:none;border:1px solid var(--blood-dim);color:var(--bone-dim);
+  border-radius:3px;font-size:12px;line-height:1;padding:3px 7px;cursor:pointer;z-index:2}
+.cc-close:hover{border-color:var(--blood-hi);color:var(--blood-hi)}
+.hud-case .jr li.sealed b{color:var(--blood-hi)}
+.hud-case .jr li.editable b{color:var(--gold)}
+.hud-case .annot{color:var(--faience);font-size:9px;margin-top:2px;padding-left:4px;border-left:1px solid var(--faience)}
+.hud-case .j-annot{background:none;border:1px solid var(--gold-dim,#93763a);color:var(--gold);font-size:8px;border-radius:2px;padding:0 5px;margin-left:6px;cursor:pointer}
+.hud-case .steward-row{display:flex;gap:6px;align-items:center;margin:6px 0}
+.hud-case select,.hud-case textarea{background:#140a0c;border:1px solid var(--blood-dim);color:var(--bone);font-family:var(--font-data);font-size:10px;border-radius:3px;padding:5px 6px;width:100%}
+.hud-case textarea{min-height:44px;resize:vertical;margin:4px 0}
+.hud-case #st-append{background:var(--gold);border:none;color:#1a1204;font-family:var(--font-display);letter-spacing:.06em;font-size:10px;padding:6px 12px;border-radius:3px;cursor:pointer;white-space:nowrap}
+.hud-controls{bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center}
+.hud-controls button{background:var(--blood-dim);border:none;color:var(--bone-dim);border-radius:3px;font-family:var(--font-display);letter-spacing:.08em;font-size:12px;padding:8px 14px}
+.hud-controls button.on{background:var(--blood-hi);color:#fff}
+.hud-controls .feed{background:var(--gold);color:#1a1204}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(8,3,4,.92);border-top:1px solid var(--blood-dim);font-family:var(--font-data);font-size:9.5px;color:var(--ash);padding:4px 20px;z-index:6}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">𒀭𒉺𒂵</span>&nbsp; NERGAL GATE COURT</h1>
+  <div class="sub">ŠALA · THE BĀBU AS LIVING TOPOLOGY · NOT A THREAT LOG — A WITNESS OF THE GATE</div>
+</div>
+
+<div class="hud hud-law panel">
+  <div class="t" id="law-t">THE GATE JUDGES — IT DOES NOT MINT</div>
+  <div class="d" id="law-d">Nergal is a guard, not a smith. It renders one verdict: PASS or JAIL. Clean particles are admitted through the gate and flow onward into the BeeMDM ETL pipeline — where GOLDEN is earned much later, through the eight-step rite and Gate G4. The flagged are seized in flight, neutralized, and pulled into Ṣibittu as PARZU cases. Nergal never makes a particle GOLDEN.</div>
+</div>
+
+<div class="hud hud-stats panel">
+  <div class="row"><span class="k">ARRIVED</span><span class="v-total" id="s-total">0</span></div>
+  <div class="row"><span class="k">SCANNING</span><span class="v-scan" id="s-scan">0</span></div>
+  <div class="row"><span class="k">✓ ADMITTED → ETL</span><span class="v-karu" id="s-karu">0</span></div>
+  <div class="row"><span class="k">→ ṢIBITTU · UNKNOWN</span><span class="v-jail" id="s-jail">0</span></div>
+  <div class="row"><span class="k">⌦ MALWARE TRIBE</span><span class="v-mal" id="s-mal">0</span></div>
+</div>
+
+<div class="hud hud-legend panel">
+  <b class="lf">faience stream</b> = files flowing to the gate ·
+  <b>Nergal orb</b> = the scanner at the threshold ·
+  <b class="lf">cyan admittance</b> = clean → passes through into the BeeMDM ETL pipeline (GOLDEN earned later, not here) ·
+  <b class="lj">blood seizure</b> = flagged → Ṣibittu jail (neutralized + PARZU case) ·
+  <b>right-click</b> an UNKNOWN case (maroon-purple) → StoryTelling options menu · <b>right-click</b> the MALWARE Tribe → seal-only menu · the wrap is verified before the original is shredded.
+</div>
+
+<div class="hud hud-case panel" id="case-card">
+  <button class="cc-close" id="cc-close" aria-label="Close">✕</button>
+  <div class="cn" id="cc-name">—</div>
+  <div id="cc-body" style="margin-top:6px"></div>
+</div>
+
+<div id="ctx-menu" role="menu" aria-label="StoryTelling options"></div>
+
+<div class="hud hud-controls">
+  <button class="feed" id="btn-feed">RELEASE A BATCH ▶</button>
+  <button id="btn-eicar" class="on" aria-pressed="true">INJECT EICAR ⚠</button>
+  <button id="btn-steward" aria-pressed="false">STEWARD MODE 🖉</button>
+  <button id="btn-spin" class="on" aria-pressed="true">ORBIT ✦</button>
+</div>
+
+<footer>Way-of-Work rule 5 — HTML prototype; production body Godot. EICAR = harmless industry-standard AV test string. Nergal jails · Nisaba declares · Kittu delivers. Ṣibittu / Karû naming pending CSR-08.</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function rnd(){return Math.random()}
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene(); scene.fog=new THREE.Fog(0x010103,700,2200);
+const camera=new THREE.PerspectiveCamera(56,2,0.5,5000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x010103,1);
+stage.appendChild(renderer.domElement);
+
+function glow(c){const cv=document.createElement('canvas');cv.width=cv.height=128;
+  const g=cv.getContext('2d'),r=g.createRadialGradient(64,64,2,64,64,64);
+  r.addColorStop(0,c);r.addColorStop(.4,c+'99');r.addColorStop(1,'#00000000');
+  g.fillStyle=r;g.fillRect(0,0,128,128);return new THREE.CanvasTexture(cv);}
+const TEX_GOLD=glow('#E3B458'),TEX_BLOOD=glow('#cc2244'),TEX_CYAN=glow('#62D6C5');
+
+/* starfield */
+(function(){const N=2600,p=new Float32Array(N*3);
+ for(let i=0;i<N;i++){p[i*3]=(rnd()-.5)*3000;p[i*3+1]=(rnd()-.5)*1800;p[i*3+2]=(rnd()-.7)*1600;}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));
+ scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x552233,size:1.3,transparent:true,opacity:.5})));})();
+
+/* ---- landmarks: GATE (center), ETL PIPELINE (right), ṢIBITTU (lower) ---- */
+const GATE=new THREE.Vector3(0,0,0), ETL=new THREE.Vector3(430,60,-40), JAIL=new THREE.Vector3(210,-150,40), SRC=new THREE.Vector3(-560,60,0), MALWARE_TRIBE=new THREE.Vector3(-230,-210,20);
+
+// Nergal orb at the gate
+const nergal=new THREE.Group(); scene.add(nergal);
+const core=new THREE.Mesh(new THREE.SphereGeometry(34,28,28),new THREE.MeshBasicMaterial({color:0xcc2244}));
+const cor1=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_BLOOD,transparent:true,opacity:.9,depthWrite:false}));cor1.scale.setScalar(240);
+nergal.add(core,cor1);
+// scan ring
+const scanRing=new THREE.Mesh(new THREE.TorusGeometry(60,2,8,64),new THREE.MeshBasicMaterial({color:0x62D6C5,transparent:true,opacity:.7}));
+scanRing.rotation.x=Math.PI/2; nergal.add(scanRing);
+
+function label(txt,color,pos,scale){const c=document.createElement('canvas');c.width=512;c.height=96;
+  const g=c.getContext('2d');g.font='500 34px "IBM Plex Mono"';g.textAlign='center';
+  g.shadowColor=color;g.shadowBlur=14;g.fillStyle=color;g.fillText(txt,256,60);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false}));
+  s.scale.set(scale||190,(scale||190)*0.19,1);s.position.copy(pos);scene.add(s);return s;}
+label('NERGAL · THE GATE','#cc2244',new THREE.Vector3(0,-70,0),210);
+label('BeeMDM ETL →','#62D6C5',ETL.clone().add(new THREE.Vector3(30,86,0)),220);
+label('ṢIBITTU · JAIL','#800020',JAIL.clone().add(new THREE.Vector3(0,-70,0)),190);
+label('▲ click a case','#c77bc0',JAIL.clone().add(new THREE.Vector3(0,64,0)),150);
+
+// MALWARE TRIBE — a sealed containment silhouette. NO individuals are ever
+// rendered here: the ecosystem never reads the bytes even to draw them.
+// Only a collective mass + count. No KAKI, no particle, no handle, no open.
+const malwareTribe=new THREE.Group(); malwareTribe.position.copy(MALWARE_TRIBE); scene.add(malwareTribe);
+(function(){
+  // biohazard-like sealed vessel: a dark dome with a warded shell
+  const shell=new THREE.Mesh(new THREE.SphereGeometry(46,20,16),
+    new THREE.MeshBasicMaterial({color:0x2a0008,transparent:true,opacity:.55}));
+  const ward=new THREE.Mesh(new THREE.SphereGeometry(52,16,12),
+    new THREE.MeshBasicMaterial({color:0x800020,wireframe:true,transparent:true,opacity:.6}));
+  const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_BLOOD,transparent:true,opacity:.4,depthWrite:false}));
+  glow.scale.setScalar(160);
+  malwareTribe.add(shell,ward,glow);
+})();
+label('MALWARE TRIBE','#cc2244',MALWARE_TRIBE.clone().add(new THREE.Vector3(0,-72,0)),200);
+label('NO KAKI · NEVER OPENED','#800020',MALWARE_TRIBE.clone().add(new THREE.Vector3(0,-96,0)),190);
+// live count sprite, redrawn as the tribe grows
+let malwareCountSprite=null;
+function updateMalwareCount(n){
+  if(malwareCountSprite){malwareTribe.remove(malwareCountSprite);}
+  const c=document.createElement('canvas');c.width=256;c.height=128;
+  const g=c.getContext('2d');g.font='600 64px "IBM Plex Mono"';g.textAlign='center';
+  g.shadowColor='#cc2244';g.shadowBlur=18;g.fillStyle='#ff617f';g.fillText(String(n),128,84);
+  malwareCountSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false}));
+  malwareCountSprite.scale.set(70,35,1); malwareTribe.add(malwareCountSprite);
+}
+updateMalwareCount(0);
+
+// ETL pipeline mouth: eight staged rings the admitted particles enter
+// (Landing→Safety→Inference→Arsenal→Stakeholder PDM→Gate G4→SLA seal→GOLDEN,
+//  earned DOWNSTREAM — never at Nergal's threshold)
+(function(){const grp=new THREE.Group();grp.position.copy(ETL);
+ const stageColors=[0x62D6C5,0x62D6C5,0x62D6C5,0x62D6C5,0x62D6C5,0xE3B458,0xE3B458,0xffd34d];
+ for(let i=0;i<8;i++){
+   const ring=new THREE.Mesh(new THREE.TorusGeometry(46-i*3,1.6,6,40),
+     new THREE.MeshBasicMaterial({color:stageColors[i],transparent:true,opacity:.32+i*0.06}));
+   ring.rotation.y=Math.PI/2; ring.position.x=i*26; grp.add(ring);
+ }
+ scene.add(grp);window._etl=grp;})();
+// gentle downstream glow at the far end (where GOLDEN is eventually earned)
+(function(){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_GOLD,transparent:true,opacity:.4,depthWrite:false}));
+ s.scale.setScalar(120);s.position.copy(ETL).add(new THREE.Vector3(210,0,0));scene.add(s);})();
+// jail cage bars
+(function(){const cage=new THREE.Group();cage.position.copy(JAIL);
+ const mat=new THREE.MeshBasicMaterial({color:0x800020,transparent:true,opacity:.7});
+ for(let i=0;i<8;i++){const a=i/8*Math.PI*2;
+   const bar=new THREE.Mesh(new THREE.CylinderGeometry(1.6,1.6,150,6),mat);
+   bar.position.set(Math.cos(a)*70,0,Math.sin(a)*70);cage.add(bar);}
+ const ring=new THREE.Mesh(new THREE.TorusGeometry(70,2.2,8,48),mat);ring.rotation.x=Math.PI/2;ring.position.y=74;
+ const ring2=ring.clone();ring2.position.y=-74;cage.add(ring,ring2);scene.add(cage);})();
+
+/* ---- particle files in flight ---- */
+const files=[]; const jailed=[];
+const geoBox=new THREE.BoxGeometry(14,14,14);
+function spawnFile(verdictClass){
+  // verdictClass: 'clean' | 'unknown' | 'malware'
+  const mat=new THREE.MeshBasicMaterial({color:0x9fe6db});
+  const m=new THREE.Mesh(geoBox,mat);
+  m.position.copy(SRC).add(new THREE.Vector3(0,(rnd()-.5)*180,(rnd()-.5)*120));
+  m.userData={phase:'arrive',t:0,vclass:verdictClass,scanned:false,
+    sha:(Math.abs(Math.sin(files.length*97.13))*1e8|0).toString(16).padStart(8,'0'),
+    kind:verdictClass!=='clean'?'suspect_file':['leaflet_en','batches.csv','record.json','waveform.bin'][rnd()*4|0]};
+  scene.add(m); files.push(m);
+}
+let stTotal=0,stKaru=0,stJail=0,stMalware=0,injectEicar=true;
+function rollVerdict(){
+  if(injectEicar && rnd()<0.25){ return rnd()<0.5 ? 'unknown' : 'malware'; }
+  return 'clean';
+}
+function feedBatch(){for(let i=0;i<10;i++){spawnFile(rollVerdict());stTotal++;}}
+
+/* per-particle StoryEngine journal (mutable via append only) */
+function seedJournal(sha){
+  return [
+    {seq:1,event:'ARRIVED',detail:'file reached the Bābu gate',ts:'09:00:01Z',sealed:true},
+    {seq:2,event:'SCANNED',detail:'Nergal verdict: EICAR-TEST-SIGNATURE',ts:'09:00:01Z',sealed:true},
+    {seq:3,event:'SEIZED',detail:'yanked from admittance flow in-flight',ts:'09:00:02Z',sealed:true},
+    {seq:4,event:'NEUTRALIZED',detail:'zstd+AES-256 wrap; verified to sha256',ts:'09:00:02Z',sealed:true},
+    {seq:5,event:'SHREDDED',detail:'original destroyed after verified wrap',ts:'09:00:03Z',sealed:true},
+    {seq:6,event:'DETAINED',detail:'committed to Ṣibittu · prune-exempt',ts:'09:00:03Z',sealed:true},
+    {seq:7,event:'OPEN',detail:'awaiting Steward decision',ts:'09:00:03Z',sealed:false},
+  ];
+}
+let activeCase=null;
+function openCase(m){
+  if(!m.userData.journal) m.userData.journal=seedJournal(m.userData.sha);
+  activeCase=m;
+  renderCase();
+  document.getElementById('case-card').style.display='block';
+}
+function renderCase(){
+  const m=activeCase; if(!m) return;
+  const sha=m.userData.sha, J=m.userData.journal;
+  document.getElementById('cc-name').textContent='PARZU-'+sha.slice(0,6).toUpperCase()
+    + (stewardMode?'  ✎ STEWARD':'  · WITNESS');
+  const journalRows=J.map(en=>`
+    <li class="${en.sealed?'sealed':'editable'}">
+      <b>${en.event}</b> ${en.detail}
+      <span class="ts">${en.ts}</span>
+      ${stewardMode&&!en.sealed?`<button class="j-annot" data-seq="${en.seq}">annotate</button>`:''}
+      ${en.annotation?`<div class="annot">✎ ${en.annotation}</div>`:''}
+    </li>`).join('');
+  const stewardPanel = stewardMode ? `
+    <div class="jt">STEWARD ACTIONS (append-only — scars kept)</div>
+    <div class="steward-row">
+      <select id="st-event">
+        <option>REVIEWED</option><option>ANNOTATED</option>
+        <option>RELEASE-PROPOSED</option><option>DESTROY-PROPOSED</option>
+        <option>ESCALATED</option>
+      </select>
+    </div>
+    <textarea id="st-detail" placeholder="Steward note — becomes a new sealed journal event, never overwrites"></textarea>
+    <div class="steward-row">
+      <button id="st-append">APPEND EVENT</button>
+      <span class="note">Events are appended, never deleted. Verdict &amp; wrap stay immutable.</span>
+    </div>` : `
+    <div class="note">Witness mode — read-only. Enable STEWARD MODE to append review events. HeptaScript reads ABOUT the threat, never INTO it; the wrap stays sealed in Ṣibittu.</div>`;
+  document.getElementById('cc-body').innerHTML=
+   `<div class="row"><span class="k">tribe</span><span class="v">EnkiQDB.Quarantine.PARZU</span></div>
+    <div class="row"><span class="k">kaki role</span><span class="v">0x03 PARZU</span></div>
+    <div class="row"><span class="k">sha256</span><span class="v">${sha}…</span></div>
+    <div class="row"><span class="k">state</span><span class="v">UNKNOWN · not proven harmful</span></div>
+    <div class="row"><span class="k">bouncing</span><span class="v">selected — click another to stop</span></div>
+    <div class="hs">ORBIT particles WHERE tribe=<br>&nbsp;"EnkiQDB.Quarantine.PARZU"<br>SCOPE PARTICLE PROVE status IS "OPEN"<br>WITNESS open_cases → StoryEngine</div>
+    <div class="jt">STORYENGINE JOURNAL</div>
+    <ul class="jr">${journalRows}</ul>
+    ${stewardPanel}`;
+  // wire steward controls
+  if(stewardMode){
+    const ap=document.getElementById('st-append');
+    if(ap) ap.onclick=()=>{
+      const ev=document.getElementById('st-event').value;
+      const dt=document.getElementById('st-detail').value.trim()||'(no note)';
+      const seq=m.userData.journal.length+1;
+      m.userData.journal.push({seq,event:ev,detail:dt,
+        ts:new Date().toISOString().slice(11,19)+'Z',sealed:true,steward:true});
+      renderCase();
+    };
+    document.querySelectorAll('.j-annot').forEach(b=>b.onclick=()=>{
+      const seq=+b.dataset.seq; const note=prompt('Annotation (appended, original kept):');
+      if(note){const en=m.userData.journal.find(x=>x.seq===seq); en.annotation=note; renderCase();}
+    });
+  }
+}
+
+let spin=!reduced, az=0, feedTimer=0, stewardMode=false, malwareSelected=false, bounceUntil=0;
+function pickJailed(clientX,clientY){
+  const r=renderer.domElement.getBoundingClientRect();
+  const mx=clientX-r.left, my=clientY-r.top;
+  let best=null,bd=60;
+  for(const m of jailed){
+    const p=m.position.clone().project(camera);
+    if(p.z>=1) continue;
+    const sx=(p.x*0.5+0.5)*r.width, sy=(-p.y*0.5+0.5)*r.height;
+    const d=Math.hypot(mx-sx,my-sy);
+    if(d<bd){bd=d;best=m;}
+  }
+  return best;
+}
+function overMalware(clientX,clientY){
+  const r=renderer.domElement.getBoundingClientRect();
+  const p=MALWARE_TRIBE.clone().project(camera);
+  if(p.z>=1) return false;
+  const sx=(p.x*0.5+0.5)*r.width, sy=(-p.y*0.5+0.5)*r.height;
+  return Math.hypot((clientX-r.left)-sx,(clientY-r.top)-sy) < 70;
+}
+function selectParticle(m){
+  // UNKNOWN lawful particle: bounce in place + open its full card.
+  // Only one bounces at a time — choosing another stops the previous.
+  jailed.forEach(j=>{if(j!==m)j.userData.bounce=false;});
+  malwareSelected=false;
+  m.userData.bounce=true;
+  openCase(m);
+}
+function selectMalwareTribe(){
+  // NO KAKI: no individuals. Selecting one selects ALL — the whole Tribe bounces.
+  // Never opens a record; the file is never read. Visual-only.
+  malwareSelected=true; bounceUntil=performance.now()+4000;
+  const el=document.getElementById('case-card'); el.style.display='block';
+  document.getElementById('cc-name').textContent='MALWARE TRIBE  · NO KAKI';
+  document.getElementById('cc-body').innerHTML=
+   `<div class="row"><span class="k">identity</span><span class="v">NONE — never minted</span></div>
+    <div class="row"><span class="k">members</span><span class="v">${stMalware} (collective)</span></div>
+    <div class="row"><span class="k">state</span><span class="v">DEAD · proven harmful</span></div>
+    <div class="row"><span class="k">particles?</span><span class="v">NO — Tribe only</span></div>
+    <div class="malware-warn">⚠ This Tribe has NO KAKI. Its members are not particles, have no
+    individual identity, and are NEVER opened, parsed, or queried. Absence of
+    identity IS the containment. You may only see it as a collective mass and
+    seal it into the read-only sector.</div>
+    <div class="jt">THE ONLY ACTIONS</div>
+    <div class="steward-row">
+      <button id="mal-seal">SEAL → READ-ONLY SECTOR</button>
+    </div>
+    <div class="note">No handle exists to open it. Selecting one selects all — there are no individuals to distinguish.</div>`;
+  const sb=document.getElementById('mal-seal');
+  if(sb) sb.onclick=()=>{ sb.textContent='SEALED · READ-ONLY · immutable'; sb.disabled=true; };
+}
+renderer.domElement.addEventListener('click',e=>{
+  const hit=pickJailed(e.clientX,e.clientY);
+  if(hit){ selectParticle(hit); return; }
+  if(overMalware(e.clientX,e.clientY)){ selectMalwareTribe(); }
+});
+renderer.domElement.addEventListener('mousemove',e=>{
+  renderer.domElement.style.cursor =
+    (pickJailed(e.clientX,e.clientY)||overMalware(e.clientX,e.clientY)) ? 'pointer' : 'default';
+});
+
+/* ===== RIGHT-CLICK → StoryTelling options context menu ===== */
+const ctx=document.getElementById('ctx-menu');
+function hideCtx(){ctx.style.display='none';}
+document.addEventListener('click',hideCtx);
+document.addEventListener('scroll',hideCtx,true);
+addEventListener('blur',hideCtx);
+function showCtx(x,y,head,headClass,items){
+  ctx.innerHTML=`<div class="ctx-head ${headClass||''}">${head}</div>`+
+    items.map((it,i)=>`<button data-i="${i}" ${it.disabled?'disabled':''} class="${it.danger?'danger':''}">${it.label}${it.sub?`<span class="sub">${it.sub}</span>`:''}</button>`).join('');
+  ctx.style.display='block';
+  // clamp to viewport
+  const w=ctx.offsetWidth,h=ctx.offsetHeight;
+  ctx.style.left=Math.min(x,innerWidth-w-8)+'px';
+  ctx.style.top=Math.min(y,innerHeight-h-8)+'px';
+  ctx.querySelectorAll('button').forEach(b=>{
+    if(b.disabled)return;
+    b.onclick=(ev)=>{ev.stopPropagation();hideCtx();items[+b.dataset.i].act();};
+  });
+}
+renderer.domElement.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const hit=pickJailed(e.clientX,e.clientY);
+  if(hit){
+    // UNKNOWN lawful particle — full StoryTelling options
+    jailed.forEach(j=>{if(j!==hit)j.userData.bounce=false;});
+    malwareSelected=false; hit.userData.bounce=true;   // bounce in place until another chosen
+    showCtx(e.clientX,e.clientY,'PARZU-'+hit.userData.sha.slice(0,6).toUpperCase()+' · UNKNOWN','',[
+      {label:'Tell the Story',sub:'open StoryEngine journal',act:()=>openCase(hit)},
+      {label:'Add Event (Steward)',sub:'append-only — scars kept',act:()=>{stewardMode=true;
+        document.getElementById('btn-steward').classList.add('on');openCase(hit);}},
+      {label:'Annotate open event',sub:'note beside the tail',act:()=>{stewardMode=true;openCase(hit);
+        const b=document.querySelector('.j-annot'); if(b)b.click();}},
+      {label:'Propose Release',sub:'→ must rescan at Bābu B-2',danger:true,act:()=>{stewardMode=true;openCase(hit);
+        appendStewardEvent(hit,'RELEASE-PROPOSED','Steward proposed release — mandatory rescan');}},
+      {label:'Propose Destroy',sub:'→ tombstone, case kept',danger:true,act:()=>{stewardMode=true;openCase(hit);
+        appendStewardEvent(hit,'DESTROY-PROPOSED','Steward proposed destruction — memorial kept');}},
+      {label:'Stop bouncing',sub:'deselect',act:()=>{hit.userData.bounce=false;}},
+      {label:'✕ Close menu',act:()=>hideCtx()},
+    ]);
+    return;
+  }
+  if(overMalware(e.clientX,e.clientY)){
+    // MALWARE Tribe — NO KAKI, no individuals, never opened
+    malwareSelected=true; bounceUntil=performance.now()+6000;
+    showCtx(e.clientX,e.clientY,'MALWARE TRIBE · NO KAKI','mal',[
+      {label:'Select whole Tribe',sub:'no individuals exist — all bounce',act:()=>{malwareSelected=true;bounceUntil=performance.now()+6000;}},
+      {label:'Seal → Read-Only Sector',sub:'the only permitted action',danger:true,act:()=>selectMalwareTribe()},
+      {label:'Open a member',sub:'FORBIDDEN — never opened',disabled:true,act:()=>{}},
+      {label:'Give it a KAKI',sub:'FORBIDDEN — poison gets no name',disabled:true,act:()=>{}},
+      {label:'✕ Close menu',act:()=>hideCtx()},
+    ]);
+    return;
+  }
+  hideCtx();
+});
+/* helper: append a steward event to a particle's journal + refresh card */
+function appendStewardEvent(m,ev,detail){
+  if(!m.userData.journal)m.userData.journal=seedJournal(m.userData.sha);
+  const seq=m.userData.journal.length+1;
+  m.userData.journal.push({seq,event:ev,detail,
+    ts:new Date().toISOString().slice(11,19)+'Z',sealed:true,steward:true});
+  if(activeCase===m)renderCase();
+}
+document.getElementById('btn-feed').onclick=feedBatch;
+document.getElementById('cc-close').onclick=()=>{
+  document.getElementById('case-card').style.display='none';
+  jailed.forEach(j=>j.userData.bounce=false); malwareSelected=false; activeCase=null;
+};
+const btnSteward=document.getElementById('btn-steward');
+btnSteward.onclick=()=>{stewardMode=!stewardMode;
+  btnSteward.classList.toggle('on',stewardMode);
+  btnSteward.setAttribute('aria-pressed',stewardMode);
+  if(activeCase)renderCase();};
+const be=document.getElementById('btn-eicar');
+be.onclick=()=>{injectEicar=!injectEicar;be.classList.toggle('on',injectEicar);be.setAttribute('aria-pressed',injectEicar);};
+const bs=document.getElementById('btn-spin');
+bs.onclick=()=>{spin=!spin;bs.classList.toggle('on',spin);bs.setAttribute('aria-pressed',spin);};
+
+let scanning=0;
+function step(m,dt){
+  const u=m.userData;
+  if(u.phase==='arrive'){
+    u.t+=dt*.5; m.position.lerpVectors(m.position,GATE,Math.min(1,dt*1.4));
+    m.rotation.x+=dt*3;m.rotation.y+=dt*2;
+    if(m.position.distanceTo(GATE)<44){u.phase='scan';u.t=0;}
+  } else if(u.phase==='scan'){
+    u.t+=dt; scanning++;
+    m.position.lerp(GATE,Math.min(1,dt*4));
+    if(u.t>0.5){ // verdict: PASS / UNKNOWN / MALWARE — Nergal never mints GOLD
+      if(u.vclass==='clean'){u.phase='admit';u.t=0;m.material.color.setHex(0x62D6C5);}
+      else if(u.vclass==='unknown'){u.phase='seize';u.t=0;m.material.color.setHex(0xa2559e);} // UNKNOWN = maroon-purple
+      else {u.phase='malware';u.t=0;m.material.color.setHex(0xcc2244);} // MALWARE = blood
+    }
+  } else if(u.phase==='admit'){
+    u.t+=dt*.6; m.position.lerpVectors(m.position,ETL,Math.min(1,dt*1.3));
+    m.rotation.y+=dt*4;
+    if(m.position.distanceTo(ETL)<44){scene.remove(m);u.dead=true;stKaru++;}
+  } else if(u.phase==='seize'){
+    // UNKNOWN particle: yanked, neutralized, detained as a lawful particle
+    u.t+=dt;
+    const jitter=new THREE.Vector3((rnd()-.5)*20,(rnd()-.5)*20,(rnd()-.5)*20);
+    if(u.t<0.35){m.position.add(jitter.multiplyScalar(dt*30));}
+    else{m.position.lerpVectors(m.position,JAIL,Math.min(1,dt*1.6));
+      if(m.position.distanceTo(JAIL)<66){u.phase='jailed';u.seed=jailed.length*1.7;jailed.push(m);stJail++;
+        m.material=new THREE.MeshBasicMaterial({color:0xa2559e});}} // UNKNOWN = maroon-purple, has KAKI
+  } else if(u.phase==='malware'){
+    // MALWARE: pulled to the Tribe silhouette and COUNTED — never rendered as an
+    // individual, never given a KAKI, never opened. Absence of identity = containment.
+    u.t+=dt; m.position.lerpVectors(m.position,MALWARE_TRIBE,Math.min(1,dt*1.8));
+    m.scale.multiplyScalar(1-dt*1.2);
+    if(m.position.distanceTo(MALWARE_TRIBE)<50||u.t>1.2){scene.remove(m);u.dead=true;stMalware++;}
+  } else if(u.phase==='jailed'){
+    // slow tight libration inside the cage (compact, clickable cluster)
+    const a=(u.t+=dt*.4);const rr=22+Math.sin(a*1.3+u.seed)*10;
+    let bx=JAIL.x+Math.cos(a*0.7+u.seed)*rr,
+        by=JAIL.y+Math.sin(a*1.1+u.seed)*26,
+        bz=JAIL.z+Math.sin(a*0.7+u.seed)*rr;
+    if(u.bounce){ by += Math.abs(Math.sin(performance.now()/120))*34; // bounce in place
+      m.material.color.setHex(0xc77bc0); }
+    m.position.set(bx,by,bz);
+  }
+}
+
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin)az+=dt*.05;
+  scanning=0;
+  for(const m of files)if(!m.userData.dead)step(m,dt);
+  for(let i=files.length-1;i>=0;i--)if(files[i].userData.dead)files.splice(i,1);
+
+  scanRing.rotation.z+=dt*4; scanRing.scale.setScalar(1+Math.sin(ts/200)*.15);
+  cor1.scale.setScalar(240+Math.sin(ts/300)*30);
+  if(window._etl)window._etl.children.forEach((r,i)=>{r.rotation.z+=dt*(0.6+i*0.2);});
+
+  // auto-feed a trickle
+  feedTimer+=dt; if(feedTimer>1.1){feedTimer=0;for(let i=0;i<3;i++){const t=injectEicar&&rnd()<.22;spawnFile(t);stTotal++;}}
+
+  document.getElementById('s-total').textContent=stTotal;
+  document.getElementById('s-scan').textContent=scanning;
+  document.getElementById('s-karu').textContent=stKaru;
+  document.getElementById('s-jail').textContent=stJail;
+  document.getElementById('s-mal').textContent=stMalware;
+  if(malwareCountSprite && +malwareCountSprite.userData_n!==stMalware){updateMalwareCount(stMalware);malwareCountSprite.userData_n=stMalware;}
+  // whole-tribe bounce when selected (no individuals — the vessel pulses as one)
+  if(malwareSelected && performance.now()<bounceUntil){
+    const b=1+Math.abs(Math.sin(performance.now()/110))*0.35;
+    malwareTribe.scale.setScalar(b);
+  } else { malwareSelected=false; malwareTribe.scale.setScalar(1); }
+
+  const R=760;
+  camera.position.set(Math.cos(az)*R*0.3, 90, R);
+  camera.lookAt(0,-40,0);
+  renderer.render(scene,camera);
+}
+feedBatch(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

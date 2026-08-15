@@ -1,0 +1,28 @@
+---
+# PB-425 · GPR trace georeferencing → FUZZY anomaly particles · DRAFT (GL-NAV-001 Annex A)
+# A candidate grave is a hypothesis, never a fact. No anomaly auto-promotes.
+- name: "PB-425 · stand the anomaly-minting service"
+  hosts: najaf_field_sbc
+  become: yes
+  tasks:
+    - name: minting service — joins GPR traces to RTK+PPS positions, mints FUZZY particles
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/hendursaga-mint.service
+        content: |
+          [Unit]
+          Description=Hendursaga anomaly minting (PB-425)
+          After=hendursaga-feed.service
+          [Service]
+          # every trace → KAKI-identified particle · state FUZZY · Ed25519 sealed ·
+          # queued for export-rite to EnkiSDB (7001) when the Architect decrees sync
+          ExecStart=/usr/local/bin/hendursaga-mint --gpr /dev/ttyUSB0 --out /var/lib/hendursaga/anomalies.naru
+          Restart=always
+          [Install]
+          WantedBy=multi-user.target
+    - ansible.builtin.systemd: {name: hendursaga-mint, enabled: yes, state: started, daemon_reload: yes}
+
+    - name: invariant note in the journal
+      ansible.builtin.lineinfile:
+        path: /var/lib/hendursaga/NARU.journal
+        line: "{{ ansible_date_time.iso8601 }} · PB-425 · minting live · FUZZY leaves FUZZY only through PROVE (two witnesses)"
+        create: yes

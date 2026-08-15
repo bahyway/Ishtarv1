@@ -1,0 +1,98 @@
+# =============================================================================
+# PB-272 — Ninurta/Purussum naming seal + GeoEngine/Shamash correction
+# BahyWay.Ecosystem v4.0
+#
+# Seals NinurtaEngine (Engine) and the Purussum Calculus (Calculus) into
+# naming-registry (both verified unspent against the full registry before
+# sealing -- see docs/14_decisions_adr/adr_018_topological_engine_division.md),
+# and verifies two naming corrections found while evaluating the uploaded
+# "Self-Modelling Data Trilogy" / "Girsu CSD Notebook" / "Topological Engine
+# Division" tablets against the real repo:
+#   - "GeoEngine" is not a live crate (superseded into enkidb-indexes::
+#     hepta_shell per playbook_93_geo_engine_reconciled.yml); the real
+#     GA/persistent-homology math lives in bahyway-algebra.
+#   - "ShamashEngine" collides with the already-sealed SHAMASH Gate 4
+#     (State Exclusion); the statistics role folds into NinurtaEngine's
+#     own Purussum Calculus, matching ADR-018's three-way division.
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# Run from:  workspace/bahyway_v4 (this playbook cds there via `workspace`)
+# =============================================================================
+---
+- name: "PB-272 | Ninurta/Purussum naming seal + GeoEngine/Shamash correction"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    workspace: "{{ repo_root }}/workspace/bahyway_v4"
+    cargo:     "{{ ansible_env.HOME | default('/root') }}/.cargo/bin/cargo"
+
+  tasks:
+
+    - name: "VERIFY | ninurta-engine crate exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/ninurta-engine/src/lib.rs"
+      register: ninurta_lib
+
+    - name: "FAIL | ninurta-engine not found"
+      ansible.builtin.fail:
+        msg: "crates/ninurta-engine/src/lib.rs not found -- PB-273 must run before PB-272."
+      when: not ninurta_lib.stat.exists
+
+    - name: "VERIFY | the 3 corrected ADRs exist"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/docs/14_decisions_adr/{{ item }}"
+      register: adr_check
+      loop:
+        - "adr_017_three_layer_pdm_paradigm.md"
+        - "adr_018_topological_engine_division.md"
+        - "adr_019_girsu_csd_notebook.md"
+
+    - name: "FAIL | a corrected ADR is missing"
+      ansible.builtin.fail:
+        msg: "{{ item.item }} not found under docs/14_decisions_adr/."
+      when: not item.stat.exists
+      loop: "{{ adr_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "TEST | cargo test -p ninurta-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p ninurta-engine"
+        chdir: "{{ workspace }}"
+      register: test_ninurta
+      changed_when: false
+      failed_when: test_ninurta.rc != 0
+
+    - name: "ASSERT | ninurta-engine has zero failures and at least 23 passing tests"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_ninurta.stdout"
+          - "(test_ninurta.stdout | regex_search('([0-9]+) passed', '\\1') | first | int) >= 23"
+        fail_msg: "Expected at least 23 passed, 0 failed. Full output: {{ test_ninurta.stdout }}"
+        success_msg: "ninurta-engine: real Purussum Calculus math verified."
+
+    - name: "TEST | cargo test -p naming-registry"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p naming-registry"
+        chdir: "{{ workspace }}"
+      register: test_registry
+      changed_when: false
+      failed_when: test_registry.rc != 0
+
+    - name: "ASSERT | naming-registry has zero failures (Ninurta/Purussum entries verified real)"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_registry.stdout"
+        fail_msg: "naming-registry test failure -- a sealed entry's crate_path may not be real. Full output: {{ test_registry.stdout }}"
+        success_msg: "naming-registry: Ninurta and Purussum entries verified against real crate paths."
+
+    - name: "DONE | PB-272 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          Ninurta and Purussum sealed in naming-registry (both verified unspent
+          before sealing). GeoEngine and ShamashEngine corrections carried into
+          ADR-017/018/019. ninurta-engine: real, tested Purussum Calculus math.

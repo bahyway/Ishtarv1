@@ -1,0 +1,210 @@
+# =============================================================================
+# PB-246 -- Naming Registry (Glossary Phase 3): passport-tier redaction
+# of crate_path/snippet for external/client viewers of the DubSar
+# Glossary tab. BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHAT THIS ADDS (builds on PB-244/PB-245's data layer + tab):
+#   - naming-registry-gd: every listing method (all/search/
+#     by_mytho_category/by_system_role/find/snippet) now takes an
+#     `internal: bool` the caller supplies, and the redaction is
+#     enforced INSIDE THE BRIDGE, not merely hidden by the Godot UI --
+#     entry_to_dict() blanks crate_path for internal=false, and
+#     snippet() refuses to touch the filesystem at all for
+#     internal=false, returning an honest {ok:false, error:...} instead
+#     of a fabricated or silently-empty result. A new is_internal()
+#     method is the single source of truth for the threshold, so
+#     GDScript never hardcodes the magic number itself.
+#   - glossary_tab.gd: computes _is_internal once from the session's
+#     real kupru passport (SessionIdentity.privilege_level, populated
+#     by login.gd's mandatory gate -- the same field PB-131 wired but
+#     nothing read until now), shows an honest view-mode banner ("🔓
+#     Internal view" vs "🔒 Client view") so the redaction is visible,
+#     not silent, and relabels the Snippet button when locked.
+#
+# HONEST SCOPE: kupru's passport model (crates/kupru/src/passport.rs)
+# only defines two concrete privilege tiers today -- gardener
+# (privilege_level 1, "minimal read-only... entry level") and architect
+# (privilege_level 7, "full sovereign access"). This redaction draws
+# the internal/external line at privilege_level >= 7 because that's
+# the only tier above gardener that exists in this codebase; a real
+# intermediate "team member, not full Architect" tier is follow-on work
+# in kupru itself, not invented here to fit this one panel. source_doc
+# (a governing-law tablet citation, not a source file) is NOT redacted
+# for either tier -- it's the same kind of public pointer this
+# ecosystem's other sealed docs already are.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Depends on
+# PB-244/PB-245 (naming-registry + the Glossary tab must already be
+# landed). Running this playbook = CSR-08 Architect confirmation,
+# including ratification of the privilege_level >= 7 threshold.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_246_naming_registry_glossary_phase3.yml
+#   ansible-playbook playbooks/playbook_246_naming_registry_glossary_phase3.yml -e dubsar_mode=editor
+# =============================================================================
+
+- name: "PB-246 -- Naming Registry Glossary redaction (Phase 3)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    dubsar_mode: "run"
+    skip_build: false
+    godot_bin: ""
+    build_log: "/tmp/pb246_build.log"
+    godot_log: "/tmp/pb246_launch.log"
+
+  tasks:
+    - name: "Confirm the redaction-bearing bridge + tab + session identity are present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: file_checks
+      loop:
+        - "{{ repo_root }}/crates/naming-registry-gd/Cargo.toml"
+        - "{{ repo_root }}/godot/dubsar-theater/scripts/glossary_tab.gd"
+        - "{{ repo_root }}/godot/dubsar-theater/scripts/session_identity.gd"
+
+    - name: "Fail clearly if any expected file is missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found. Run
+          `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- these are committed source, this playbook only
+          builds and verifies them.
+      loop: "{{ file_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "Confirm glossary_tab.gd actually gates on SessionIdentity (not a no-op redaction)"
+      ansible.builtin.shell: >-
+        grep -q 'SessionIdentity.privilege_level' {{ dubsar_project }}/scripts/glossary_tab.gd &&
+        grep -q '_is_internal' {{ dubsar_project }}/scripts/glossary_tab.gd
+      changed_when: false
+
+    - name: "cargo test naming-registry-gd (release) -- the threshold logic itself"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p naming-registry-gd > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "Confirm both boundary cases were actually exercised (gardener redacted, architect not)"
+      ansible.builtin.shell: >-
+        grep -q 'gardener_tier_is_not_internal ... ok' {{ build_log }} &&
+        grep -q 'architect_tier_is_internal ... ok' {{ build_log }}
+      changed_when: false
+
+    - name: "Build naming-registry-gd in release mode"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p naming-registry-gd >> {{ build_log }} 2>&1
+      register: gdext_build_result
+      failed_when: gdext_build_result.rc != 0
+      when: not skip_build
+
+    - name: "Confirm the compiled library exists"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/libnaming_registry_gd.so"
+      register: lib_check
+
+    - name: "Fail clearly if the compiled library is missing"
+      ansible.builtin.fail:
+        msg: >-
+          libnaming_registry_gd.so not found under
+          {{ repo_root }}/target/release/. Run without -e skip_build=true
+          first, or check {{ build_log }}.
+      when: not lib_check.stat.exists
+
+    - name: "Ensure the DubSar Theater project's bin/ directory exists"
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "Copy the compiled bridge into the DubSar project"
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/libnaming_registry_gd.so"
+        dest: "{{ dubsar_project }}/bin/libnaming_registry_gd.so"
+        mode: "0755"
+        remote_src: true
+
+    # ── Discover Godot (same proven logic as every prior DubSar playbook) ──
+    - name: "Discover a real Godot 4 binary"
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      when: godot_bin | length == 0
+
+    - name: "Fail clearly if no Godot binary was found"
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found. Pass -e godot_bin=/path/to/godot to
+          point at one directly.
+      when: godot_bin | length == 0 and (godot_discovery.rc is undefined or godot_discovery.rc != 0)
+
+    - name: "Resolve the Godot binary to use"
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else godot_discovery.stdout }}"
+
+    - name: "Prime the project's Godot import cache (headless)"
+      ansible.builtin.shell: >-
+        cd {{ dubsar_project }} &&
+        {{ resolved_godot_bin }} --headless --import > /tmp/pb246_import.log 2>&1
+      changed_when: true
+      failed_when: false
+
+    - name: "Launch DubSar IDE"
+      ansible.builtin.shell: >-
+        cd {{ dubsar_project }} &&
+        nohup {{ resolved_godot_bin }} {{ '--editor' if dubsar_mode == 'editor' else '' }} > {{ godot_log }} 2>&1 &
+      async: 1
+      poll: 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-246 complete -- the Glossary tab now enforces real
+          passport-tier redaction, in the Rust bridge itself, not just
+          the Godot UI: log in with a gardener-tier passport (Sargon
+          Passport Manager) and the tab should show "🔒 Client view",
+          hide crate_path, and refuse every Snippet click with an
+          honest redaction message; log in with an architect-tier
+          passport (Gilgamesh Master Key) and it should show "🔓
+          Internal view" with real crate_path/snippet data. Both
+          boundary cases (gardener=1 redacted, architect=7 not) are
+          covered by naming-registry-gd's own test suite, which passed.
+          This is the first live check of the actual redaction
+          behavior inside a running Godot session anywhere -- verified
+          only up to cargo build/test in the sandbox that wrote this.
+          Closes the 3-phase Glossary sequence (PB-244/245/246).

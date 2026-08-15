@@ -1,0 +1,285 @@
+---
+# 𒁾 playbooks_72_to_78.yml — FIXED v4
+# Uses !unsafe to prevent ALL Jinja2 processing of Python source
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+
+- name: "PLAYBOOKS 72-78 — ENKI-HAJJ Suite"
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  tasks:
+
+    - name: "1.0 | Write Python script (raw — no templating)"
+      ansible.builtin.copy:
+        dest: /tmp/bw_72_78.py
+        mode: "0755"
+        content: !unsafe |
+          #!/usr/bin/env python3
+          import os, subprocess, sys
+          FORGE = "/home/bahyway/Forge/bahyway_v4"
+          def w(p, c):
+              os.makedirs(os.path.dirname(p), exist_ok=True)
+              open(p, "w").write(c)
+          def reg(name):
+              ws = f"{FORGE}/Cargo.toml"
+              c = open(ws).read()
+              if f'"crates/{name}"' not in c:
+                  open(ws,"w").write(c.replace('members = [', f'members = [\n    "crates/{name}",'))
+          def build(name):
+              r = subprocess.run(["cargo","build","-p",name], cwd=FORGE, capture_output=True, text=True)
+              if r.returncode != 0: print(f"FAILED {name}\n{r.stderr[-800:]}"); sys.exit(1)
+              t = subprocess.run(["cargo","test","-p",name,"--","--nocapture"], cwd=FORGE, capture_output=True, text=True)
+              if t.returncode != 0: print(f"TESTS FAILED {name}\n{t.stdout[-600:]}"); sys.exit(1)
+              print(f"  PASSED: {name}")
+          def cargo(name, deps_str, extra=""):
+              return f'[package]\nname = "{name}"\nversion = "4.0.0"\nedition = "2021"\nauthors = ["DUB.SAR"]\n[dependencies]\n{deps_str}\n{extra}\n'
+
+          # ENKI-HAJJ
+          C = f"{FORGE}/crates/enki-hajj"
+          w(f"{C}/Cargo.toml", cargo("enki-hajj",
+              'enkidb-kaki = { path = "../enkidb-kaki" }',
+              'serde = { version = "1", features = ["derive"] }'))
+          os.makedirs(f"{C}/src", exist_ok=True)
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          pub mod pilgrim;
+          pub mod sharu_crowd;
+          #[repr(u8)]
+          #[derive(Debug,Clone,Copy,PartialEq)]
+          pub enum PilgrimRole {
+              Domestic=0x01, International=0x02, Elderly=0x03,
+              Child=0x04, Lost=0x05, SecurityStaff=0x06, Medical=0x07,
+          }
+          #[derive(Debug,Clone,PartialEq,serde::Serialize,serde::Deserialize)]
+          pub enum ShrineSite { ImamAliNajaf, ImamHusseinKarbala }
+          pub const SAFE_DENSITY_PER_M2:f32=2.0;
+          pub const DILBAT_DENSITY:f32=3.0; pub const KAKKAB_DENSITY:f32=4.0;
+          pub const ERRA_DENSITY:f32=5.5; pub const KUR_DENSITY:f32=7.0;
+          pub fn density_to_tiamat(d:f32) -> u8 {
+              if d>=KUR_DENSITY {4} else if d>=ERRA_DENSITY {3}
+              else if d>=KAKKAB_DENSITY {2} else if d>=DILBAT_DENSITY {1} else {0}
+          }
+          #[derive(Debug,Clone)]
+          pub struct ShrineZone { pub zone_id:u16, pub name:String,
+              pub area_m2:f32, pub capacity:u32, pub current_count:u32, pub adjacent_zones:Vec<u16> }
+          impl ShrineZone {
+              pub fn density(&self) -> f32 { self.current_count as f32/self.area_m2 }
+              pub fn tiamat_level(&self) -> u8 { density_to_tiamat(self.density()) }
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_density() {
+                  assert_eq!(density_to_tiamat(1.5),0);
+                  assert_eq!(density_to_tiamat(3.5),1);
+                  assert_eq!(density_to_tiamat(8.0),4);
+              }
+              #[test] fn test_roles() {
+                  assert_eq!(PilgrimRole::Child as u8, 0x04);
+                  assert_eq!(PilgrimRole::Lost as u8, 0x05);
+              }
+          }
+          """)
+          w(f"{C}/src/pilgrim.rs", """
+          #![forbid(unsafe_code)]
+          use enkidb_kaki::Kaki;
+          use crate::PilgrimRole;
+          #[derive(Debug,Clone)]
+          pub struct PilgrimParticle {
+              pub kaki:Kaki, pub role:PilgrimRole, pub zone_id:u16,
+              pub x:f32, pub y:f32, pub eav_quality:f32,
+              pub entry_gate:u8, pub entry_epoch:u64, pub group_id:Option<u16>,
+          }
+          impl PilgrimParticle {
+              pub fn mint(hash:u32, zone_id:u16, role:PilgrimRole,
+                          group_id:Option<u16>, gate:u8, epoch:u64) -> Self {
+                  Self { kaki:Kaki::mint(hash,zone_id,enkidb_kaki::KakiType::Identity,role as u8),
+                      role, zone_id, x:0.0, y:0.0, eav_quality:1.0,
+                      entry_gate:gate, entry_epoch:epoch, group_id }
+              }
+          }
+          """)
+          w(f"{C}/src/sharu_crowd.rs", """
+          #![forbid(unsafe_code)]
+          use crate::{ShrineZone, SAFE_DENSITY_PER_M2};
+          #[derive(Debug,Clone,Default)]
+          pub struct SharuCrowdAccumulator {
+              pub zone_id:u16, pub accumulated:f64,
+              pub peak_density:f32, pub minutes_unsafe:u32,
+          }
+          impl SharuCrowdAccumulator {
+              pub fn new(z:u16) -> Self { Self { zone_id:z, ..Default::default() } }
+              pub fn tick(&mut self, zone:&ShrineZone) {
+                  let d=zone.density();
+                  if d>SAFE_DENSITY_PER_M2 {
+                      self.accumulated+=(d-SAFE_DENSITY_PER_M2) as f64;
+                      self.minutes_unsafe+=1;
+                  }
+                  if d>self.peak_density { self.peak_density=d; }
+              }
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_sharu() {
+                  let mut a=SharuCrowdAccumulator::new(1);
+                  let z=ShrineZone{zone_id:1,name:"T".into(),area_m2:1000.0,
+                      capacity:10000,current_count:5000,adjacent_zones:vec![]};
+                  a.tick(&z); a.tick(&z); a.tick(&z);
+                  assert!(a.accumulated>0.0); assert_eq!(a.minutes_unsafe,3);
+              }
+          }
+          """)
+          reg("enki-hajj"); build("enki-hajj")
+
+          # GILGAMESH-GATE
+          C = f"{FORGE}/crates/gilgamesh-gate"
+          w(f"{C}/Cargo.toml", cargo("gilgamesh-gate",
+              'enki-hajj = { path = "../enki-hajj" }\nenkidb-kaki = { path = "../enkidb-kaki" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          use enki_hajj::{PilgrimRole, pilgrim::PilgrimParticle};
+          pub struct GilgameshGate { pub gate_id:u8, pub zone_id:u16 }
+          impl GilgameshGate {
+              pub fn new(gate_id:u8, zone_id:u16) -> Self { Self { gate_id, zone_id } }
+              pub fn register(&self, hash:u32, role:PilgrimRole,
+                               group_id:Option<u16>, epoch:u64) -> PilgrimParticle {
+                  PilgrimParticle::mint(hash, self.zone_id, role, group_id, self.gate_id, epoch)
+              }
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_under_3s() {
+                  let gate=GilgameshGate::new(1,1);
+                  let start=std::time::Instant::now();
+                  let p=gate.register(0xDEAD, PilgrimRole::Domestic, None, 0);
+                  assert!(start.elapsed().as_millis()<3000);
+                  assert_eq!(p.kaki.bytes[6], 0x01);
+              }
+          }
+          """)
+          reg("gilgamesh-gate"); build("gilgamesh-gate")
+
+          # NAMTAR-HAJJ
+          C = f"{FORGE}/crates/namtar-hajj"
+          w(f"{C}/Cargo.toml", cargo("namtar-hajj",
+              'enki-hajj = { path = "../enki-hajj" }\nenkidb-kaki = { path = "../enkidb-kaki" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          use enkidb_kaki::Kaki;
+          #[derive(Debug,Clone,PartialEq)]
+          pub enum AlertStatus { Active, Found { reunion_epoch:u64, found_zone:u16 } }
+          #[derive(Debug,Clone)]
+          pub struct LostPersonAlert {
+              pub alert_kaki:Kaki, pub description:String,
+              pub last_zone_id:u16, pub alert_epoch:u64,
+              pub status:AlertStatus, pub sharu_separation:f64,
+          }
+          impl LostPersonAlert {
+              pub fn new(desc:String, zone:u16, epoch:u64, reporter:u16) -> Self {
+                  let h=enkidb_kaki::fnv1a_u32(desc.as_bytes());
+                  Self { alert_kaki:Kaki::mint(h,reporter,enkidb_kaki::KakiType::Event,0x08),
+                      description:desc, last_zone_id:zone, alert_epoch:epoch,
+                      status:AlertStatus::Active, sharu_separation:0.0 }
+              }
+              pub fn mark_found(&mut self, epoch:u64, zone:u16) {
+                  self.status=AlertStatus::Found { reunion_epoch:epoch, found_zone:zone };
+              }
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_event_kaki() {
+                  let a=LostPersonAlert::new("Child".into(),3,0,2);
+                  assert_eq!(a.alert_kaki.bytes[6],0x02);
+                  assert_eq!(a.alert_kaki.bytes[7],0x08);
+              }
+          }
+          """)
+          reg("namtar-hajj"); build("namtar-hajj")
+
+          # TIAMAT-CROWD
+          C = f"{FORGE}/crates/tiamat-crowd"
+          w(f"{C}/Cargo.toml", cargo("tiamat-crowd",
+              'enki-hajj = { path = "../enki-hajj" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          use enki_hajj::{ShrineZone, KUR_DENSITY, density_to_tiamat};
+          #[derive(Debug,Clone)]
+          pub struct ZoneSnapshot { pub zone_id:u16, pub density:f32, pub velocity:f32 }
+          pub struct TiamatCrowd { pub history:Vec<ZoneSnapshot> }
+          impl TiamatCrowd {
+              pub fn new() -> Self { Self { history:Vec::new() } }
+              pub fn record(&mut self, zone:&ShrineZone) {
+                  let v=self.history.last().map(|p|zone.density()-p.density).unwrap_or(0.0);
+                  self.history.push(ZoneSnapshot{zone_id:zone.zone_id,density:zone.density(),velocity:v});
+                  if self.history.len()>60 { self.history.remove(0); }
+              }
+              pub fn tiamat_level(&self, zone:&ShrineZone) -> u8 { density_to_tiamat(zone.density()) }
+          }
+          impl Default for TiamatCrowd { fn default() -> Self { Self::new() } }
+          #[cfg(test)] mod tests { use super::*;
+              fn z(n:u32) -> ShrineZone { ShrineZone{zone_id:1,name:"T".into(),area_m2:1000.0,
+                  capacity:10000,current_count:n,adjacent_zones:vec![]} }
+              #[test] fn test_crush() {
+                  let mut tc=TiamatCrowd::new();
+                  for i in 0..5u32 { tc.record(&z(2000+i*300)); }
+                  assert!(tc.tiamat_level(&z(4000))>=2);
+              }
+          }
+          """)
+          reg("tiamat-crowd"); build("tiamat-crowd")
+
+          # UTNAPISHTIM-PASS
+          C = f"{FORGE}/crates/utnapishtim-pass"
+          w(f"{C}/Cargo.toml", cargo("utnapishtim-pass",
+              'enki-hajj = { path = "../enki-hajj" }\nenkidb-kaki = { path = "../enkidb-kaki" }',
+              'serde = { version = "1", features = ["derive"] }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          use enkidb_kaki::Kaki;
+          use enki_hajj::{ShrineSite, PilgrimRole};
+          #[derive(Debug,Clone,serde::Serialize,serde::Deserialize)]
+          pub struct PilgrimPass {
+              pub kaki_hex:String, pub shrine:String,
+              pub entry_gate:u8, pub entry_time:String,
+              pub exit_time:Option<String>, pub duration_mins:Option<u32>,
+          }
+          impl PilgrimPass {
+              pub fn new(kaki:&Kaki, shrine:&ShrineSite, gate:u8, epoch:u64, _role:PilgrimRole) -> Self {
+                  let h=kaki.bytes.iter().map(|b|format!("{:02X}",b)).collect();
+                  let t=format!("{:02}:{:02}",(epoch%86400)/3600,(epoch%3600)/60);
+                  Self { kaki_hex:h, shrine:format!("{:?}",shrine), entry_gate:gate,
+                      entry_time:t, exit_time:None, duration_mins:None }
+              }
+              pub fn certificate(&self) -> String {
+                  format!("UTNAPISHTIM-PASS\nShrine:{}\nGate:{}\nKAKI:{}\nNo government can take this from you.\n",
+                      self.shrine, self.entry_gate, &self.kaki_hex[..16])
+              }
+          }
+          #[cfg(test)] mod tests { use super::*; use enkidb_kaki::KakiType;
+              #[test] fn test_cert() {
+                  let k=Kaki::mint(0xDEAD,1,KakiType::Identity,0x01);
+                  let p=PilgrimPass::new(&k,&ShrineSite::ImamAliNajaf,1,1_750_579_200,PilgrimRole::International);
+                  let c=p.certificate();
+                  assert!(c.contains("UTNAPISHTIM-PASS"));
+                  assert!(c.contains("No government"));
+              }
+          }
+          """)
+          reg("utnapishtim-pass"); build("utnapishtim-pass")
+
+          print("PLAYBOOKS 72-78 COMPLETE")
+
+    - name: "2.0 | Execute Python script"
+      ansible.builtin.command:
+        cmd: python3 /tmp/bw_72_78.py
+      environment:
+        PATH: /home/bahyway/.cargo/bin:/usr/bin:/bin
+        HOME: /home/bahyway
+      register: out
+      changed_when: true
+
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ out.stdout_lines }}"
+
+    - name: "2.2 | Assert"
+      ansible.builtin.assert:
+        that: out.rc == 0
+        success_msg: "PLAYBOOKS 72-78 PASSED"
+        fail_msg:    "PLAYBOOKS 72-78 FAILED"

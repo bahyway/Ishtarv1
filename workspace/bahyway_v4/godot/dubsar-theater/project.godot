@@ -1,0 +1,130 @@
+; Engine configuration file.
+; DubSar Theater — EnkiDDB HeptaScript Notebook & Grid/Orbit Viewer
+; BahyWay.Ecosystem v4.0
+;
+; PB-207 (2026-07-19): this file did not exist before -- every scene and
+; script in this directory was real and complete, but nothing was
+; openable in the Godot editor. Main scene is main_theater.tscn (the
+; DubSar Theater shell); press Ctrl+E once running to open the
+; HeptaScript Editor overlay (scenes/heptascript_editor.tscn), which is
+; the actual "notebook" -- CodeEdit for QUERY:/SEARCH: HeptaScript, a
+; live execution log showing real row content (not just counts), a NODE
+; target picker defaulting to EnkiDDB, and a PDM tab that renders results
+; as a GEM/ORBIT/FUZZY particle-classification grid.
+;
+; The 3D BIGRING particle ring in main_theater.tscn (the CENTER_STAGE
+; backdrop) is real geometry but is NOT wired to live query results --
+; that would require a Rust GDExtension (BigRingNode3D) that was only
+; ever referenced in a code comment, never built as a compiled crate in
+; this repo. Treat it as atmospheric only.
+;
+; PB-217 (2026-07-20): two real, working ways to inspect live EnkiDDB/
+; EnkiMDB data now exist -- Ctrl+E opens the HeptaScript Editor overlay
+; (CodeEdit + execution log + NODE picker + PDM tab), and Ctrl+G opens
+; the Grid & Orbit 3D view (scenes/theater_3d.tscn, a full scene switch,
+; Escape to return) -- real particles from a real query, grouped into
+; rings by their real category (meta.collection / artifact.kind), not
+; the CENTER_STAGE backdrop described above.
+;
+; PB-218/219 (2026-07-20): Ctrl+K opens the Graph Explorer overlay
+; (scenes/graph_explorer.tscn) -- a GraphEdit view of real link.target/
+; link.description particles (emit_link, reused by emit_sections'
+; "section-of" and emit_concept_mentions' "mentioned-in"), built from an
+; exact meta.title QUERY. Fixed a real serialization bug in
+; enkiddb-read-server/enkimdb-read-server's fmt_val() first (KakiPk values
+; were falling through to Rust's Debug format instead of hex), live-
+; verified locally before writing any of this scene's code.
+;
+; 2026-07-21: Ctrl+D opens the New DubSar Theater dashboard shell
+; (scenes/dashboard_theater.tscn) -- a tabbed 2D Monitor Dashboard for
+; all 7 EnkiDB Types (EnkiDB, EnkiDW, EnkiSDB, EnkiODB, EnkiQDB, EnkiMDB,
+; EnkiDDB), each tab driven by a real, schema-agnostic probe query
+; against that engine's real Read Node. Lives side by side with the 3D
+; theater as an alternative mode -- a header button and Escape both
+; return to this scene, neither replaces the other. Also fixed a real
+; regression in the same commit: sumuukin_client.gd (the shared fan-out
+; client heptascript_editor.gd/pdm_tab.gd/graph_explorer.gd all use) was
+; still speaking the old JSON protocol against a server shape no real
+; Read Node answers anymore -- rewritten to the same binary wire
+; theater_3d.gd's EnkiDB target already proved, and theater_3d.gd itself
+; now shares that one decoder instead of keeping a second, half-migrated
+; copy (its EnkiDDB/EnkiMDB targets had silently regressed to the JSON
+; path earlier the same day this session upgraded those two read-servers
+; off JSON).
+;
+; 2026-07-21: Ctrl+O opens the Onion Layers 3D Tower (scenes/onion_tower_3d.
+; tscn) -- the same real 25-layer/163-crate dataset as the sealed 2D onion
+; artifact (docs/BAHYWAY_ONION_LAYERS.html, transcribed verbatim from
+; workspace/bahyway_v4/Cargo.toml), rendered as a stacked, mouse-orbit,
+; click-to-inspect 3D tower instead of nested flat circles. Full scene
+; switch (owns its own Camera3D), Escape returns here. No GA/simplicial-
+; complex node type was added to the PDM Node Graph editor in the same
+; work -- see scripts/pdm_node_graph.gd's header for why (real Rust
+; implementations exist but have no GDExtension bridge into Godot yet).
+;
+; 2026-07-22: config/icon added -- the BahyWay "B / road" mark (icon.svg,
+; the Architect's own vector source) replaces the default Godot Engine
+; icon as this project's window/taskbar icon. Note: this ONLY takes
+; effect when the project is actually RUN (`godot --path ...`, no
+; --editor flag) -- the Godot EDITOR's own window always shows the Godot
+; Engine icon regardless of this setting, because that icon belongs to
+; the editor application itself, not to any project it has open. This is
+; exactly why PB-226 (playbooks/playbook_226_launch_dubsar_godot_ide.yml)
+; now defaults to run mode instead of editor mode.
+;
+; 2026-07-22 (same day, second gap found): config/icon controls the
+; WINDOW icon only. It does NOT control Godot's own boot splash -- the
+; "GODOT / Game engine" mascot screen the engine shows for a moment while
+; it initializes, BEFORE run/main_scene is ever reached. That splash is a
+; separate, compiled-in engine resource, governed by its own
+; boot_splash/* settings below -- config/icon alone can never remove it.
+; Disabled outright (show_image=false) rather than replaced with a
+; branded splash image, because the Architect's law is that a stakeholder
+; must see NOTHING but the login popup, triggered the instant Godot
+; starts -- not even a branded flash screen first. bg_color is set to
+; DubSarTheme.BG (#0a0e1a) so the one unavoidable blank frame before
+; login.tscn paints matches the app's own background instead of Godot's
+; default blue.
+
+config_version=5
+
+[application]
+
+config/name="BahyWay.Ecosystem v4.0 — DubSar Theater IDE"
+config/description="EnkiDDB HeptaScript Notebook -- inspect real ingested BahyWay.Ecosystem v4.0 documentation and test semantic (vector) search against a live EnkiDDB Read Node."
+run/main_scene="res://scenes/login.tscn"
+config/icon="res://icon.svg"
+config/features=PackedStringArray("4.3", "Forward Plus")
+boot_splash/show_image=false
+boot_splash/bg_color=Color(0.0392157, 0.0549020, 0.1019608, 1)
+
+[display]
+
+; FIXED (2026-07-27): no [display] section existed at all, so this ran
+; at Godot's small default window size (1152x648). The EnkiDB Connector
+; Wizard's Page 1 (7 database cards in a grid) plus its header/step-
+; indicator/footer overflows that easily, pushing the Next/Prev buttons
+; below the visible window with no scrollbar to reach them -- confirmed
+; live: the Architect's remote viewer has no zoom/resize controls at
+; all, so this has to be fixed at the source, not worked around by the
+; user resizing the window themselves.
+;
+; ENLARGED 2026-08-02: same window/size/mode=2 (Maximized) fix applied
+; to sargon-passport-manager/gilgamesh-master-key after 1280x900 was
+; still reported too small -- kept consistent across all 3 tools.
+window/size/viewport_width=1280
+window/size/viewport_height=900
+window/size/mode=2
+
+; FIXED 2026-08-02, live: mode=2 alone does NOT scale the UI -- confirmed
+; live on sargon-passport-manager/gilgamesh-master-key, text stayed tiny
+; on a maximized window since Godot doesn't scale UI with window size by
+; default. canvas_items stretch scales the whole UI to fill the actual
+; window size, using viewport_width/height above as the reference
+; resolution. Applied here too for consistency across all 3 tools.
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

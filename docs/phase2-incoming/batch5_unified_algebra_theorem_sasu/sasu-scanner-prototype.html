@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠASÛ — The Scanner That Reads Aloud · Šala Prototype</title>
+<style>
+  :root{
+    --kur:#0E0B14;        /* the night of KUR — ground */
+    --kur-2:#161221;      /* raised night */
+    --clay:#C8A272;       /* tablet clay */
+    --clay-dim:#8a7050;
+    --lapis:#3D6BD8;      /* lapis — sealed law */
+    --lapis-deep:#2E4E8F;
+    --gold:#E3B341;       /* the seal, GOLDEN */
+    --carnelian:#C4554D;  /* derived / invention */
+    --jade:#5FA97C;       /* proof passed */
+    --bone:#EDE4D3;       /* prose */
+    --bone-dim:#a89f8e;
+    --line:#2b2440;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--kur);color:var(--bone);
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    line-height:1.62;font-size:17px;
+  }
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.82em}
+  header{
+    min-height:78vh;display:flex;flex-direction:column;justify-content:center;
+    padding:8vh 7vw 6vh;position:relative;overflow:hidden;
+    border-bottom:1px solid var(--line);
+  }
+  header .glyph{font-size:64px;line-height:1;color:var(--clay);opacity:.9}
+  header h1{
+    font-size:clamp(38px,6.5vw,88px);font-weight:600;letter-spacing:.01em;
+    margin:14px 0 6px;color:var(--bone)
+  }
+  header h1 em{font-style:normal;color:var(--gold)}
+  header .sub{max-width:62ch;color:var(--bone-dim);font-size:clamp(16px,1.5vw,20px)}
+  .lawband{
+    margin-top:34px;display:inline-block;border:1px solid var(--clay-dim);
+    color:var(--clay);padding:8px 16px;font-size:13px;letter-spacing:.14em;
+    text-transform:uppercase
+  }
+  .acts-nav{position:sticky;top:0;z-index:50;background:rgba(14,11,20,.92);
+    backdrop-filter:blur(6px);border-bottom:1px solid var(--line);
+    display:flex;gap:0;overflow-x:auto}
+  .acts-nav a{
+    color:var(--bone-dim);text-decoration:none;padding:12px 18px;font-size:13px;
+    letter-spacing:.1em;white-space:nowrap;border-right:1px solid var(--line)}
+  .acts-nav a:hover,.acts-nav a:focus{color:var(--gold);outline:none}
+  section{padding:9vh 7vw;border-bottom:1px solid var(--line)}
+  .act-label{color:var(--clay);letter-spacing:.22em;font-size:13px;text-transform:uppercase}
+  h2{font-size:clamp(26px,3.4vw,44px);margin:10px 0 18px;font-weight:600}
+  h2 .akk{color:var(--gold)}
+  .lede{max-width:68ch;color:var(--bone-dim);margin-bottom:30px}
+  .lede b{color:var(--bone)}
+
+  /* Act I — the tablet */
+  .tablet{
+    background:linear-gradient(160deg,#1d1729,#151020);
+    border:1px solid var(--clay-dim);border-radius:3px;
+    padding:34px 38px;max-width:900px;position:relative;
+    box-shadow:0 30px 60px rgba(0,0,0,.45)}
+  .tablet::before{
+    content:"𒁾";position:absolute;top:14px;right:18px;color:var(--clay);
+    opacity:.35;font-size:30px}
+  .tablet h3{color:var(--clay);font-size:15px;letter-spacing:.12em;
+    text-transform:uppercase;margin-bottom:14px}
+  .turn{margin-bottom:20px}
+  .turn .who{color:var(--gold);font-size:13px;letter-spacing:.12em;margin-bottom:4px}
+  .turn p{color:var(--bone);max-width:70ch}
+  .turn.claude .who{color:var(--lapis)}
+  mark{background:transparent;border-bottom:2px solid var(--lapis);color:inherit}
+
+  /* Act II — witness journal */
+  .twocol{display:grid;grid-template-columns:1fr 1.2fr;gap:26px;align-items:start}
+  @media(max-width:900px){.twocol{grid-template-columns:1fr}}
+  .ruleset{border:1px solid var(--line);background:var(--kur-2)}
+  .ruleset h4{padding:12px 16px;border-bottom:1px solid var(--line);
+    color:var(--clay);font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+  .rule{padding:12px 16px;border-bottom:1px solid var(--line);cursor:default;
+    transition:background .25s}
+  .rule:last-child{border-bottom:none}
+  .rule .rid{color:var(--gold);font-size:12px}
+  .rule .rtxt{color:var(--bone-dim);font-size:14.5px}
+  .rule.firing{background:rgba(61,107,216,.13)}
+  .journal{border:1px solid var(--line);background:#0a0810;min-height:340px;
+    padding:16px;font-size:13.5px;overflow:auto;max-height:420px}
+  .journal .j{opacity:0;transform:translateY(4px);transition:all .5s;color:var(--bone-dim);
+    padding:3px 0;border-bottom:1px dotted #221c33}
+  .journal .j.show{opacity:1;transform:none}
+  .journal .j b{color:var(--jade);font-weight:600}
+  .journal .j .rid{color:var(--gold)}
+  .journal .j.skip b{color:var(--carnelian)}
+  button.rite{
+    font-family:inherit;font-size:15px;letter-spacing:.08em;cursor:pointer;
+    background:transparent;color:var(--gold);border:1px solid var(--gold);
+    padding:11px 22px;margin:18px 0;transition:background .25s,color .25s}
+  button.rite:hover,button.rite:focus{background:var(--gold);color:var(--kur);outline:none}
+
+  /* Act III — particles + KAKI */
+  .chunks{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:16px}
+  .chunk{
+    border:1px solid var(--line);background:var(--kur-2);padding:16px;
+    cursor:pointer;transition:border-color .25s,transform .25s;position:relative}
+  .chunk:hover,.chunk:focus{border-color:var(--lapis);transform:translateY(-3px);outline:none}
+  .chunk.selected{border-color:var(--gold)}
+  .chunk .cid{color:var(--gold);font-size:12px;letter-spacing:.1em}
+  .chunk .cgloss{color:var(--bone);font-size:15px;margin:6px 0 8px;min-height:2.6em}
+  .chunk .cexc{color:var(--bone-dim);font-size:13px;font-style:italic;
+    max-height:4.5em;overflow:hidden}
+  .kaki-panel{margin-top:26px;border:1px solid var(--clay-dim);background:#0a0810;
+    padding:22px 24px;max-width:940px}
+  .kaki-panel h4{color:var(--clay);font-size:13px;letter-spacing:.14em;
+    text-transform:uppercase;margin-bottom:14px}
+  .kaki-bytes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+  .kb{padding:8px 0;width:52px;text-align:center;border:1px solid var(--line);
+    font-family:ui-monospace,Menlo,monospace;font-size:14px;position:relative}
+  .kb small{display:block;font-size:9px;letter-spacing:.05em;margin-top:4px;opacity:.8}
+  .kb.uuid{border-color:var(--lapis);color:var(--lapis)}
+  .kb.tribe{border-color:var(--gold);color:var(--gold)}
+  .kb.type{border-color:var(--jade);color:var(--jade)}
+  .kb.role{border-color:var(--clay);color:var(--clay)}
+  .kb.resv{border-color:#3a3352;color:#5a5273}
+  .kb.ts{border-color:var(--carnelian);color:var(--carnelian)}
+  .kb.crc{border-color:var(--bone);color:var(--bone)}
+  .kaki-note{color:var(--bone-dim);font-size:14px;max-width:72ch}
+
+  /* Act IV — EAV table */
+  table.eav{border-collapse:collapse;width:100%;max-width:940px;font-size:14.5px}
+  .eav th,.eav td{border:1px solid var(--line);padding:9px 12px;text-align:left;
+    vertical-align:top}
+  .eav th{color:var(--clay);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    background:var(--kur-2)}
+  .eav td.attr{color:var(--gold);font-family:ui-monospace,Menlo,monospace;font-size:13px}
+  .eav td .sealedtag{color:var(--lapis);font-size:11px;letter-spacing:.1em}
+  .eav td .derivedtag{color:var(--carnelian);font-size:11px;letter-spacing:.1em}
+
+  /* Act V — HeptaScript */
+  .querywrap{display:grid;grid-template-columns:1.1fr 1fr;gap:26px;align-items:start}
+  @media(max-width:900px){.querywrap{grid-template-columns:1fr}}
+  pre.hepta{
+    background:#0a0810;border:1px solid var(--lapis-deep);padding:22px;
+    font-family:ui-monospace,Menlo,monospace;font-size:14px;line-height:1.7;
+    color:var(--bone);overflow:auto}
+  pre.hepta .kw{color:var(--gold)}
+  pre.hepta .meta{color:var(--lapis)}
+  pre.hepta .val{color:var(--jade)}
+  pre.hepta .cm{color:#5a5273}
+  .results{border:1px solid var(--line);background:var(--kur-2);min-height:200px;padding:16px}
+  .results h4{color:var(--clay);font-size:13px;letter-spacing:.14em;
+    text-transform:uppercase;margin-bottom:10px}
+  .rrow{padding:9px 10px;border-bottom:1px dotted #221c33;font-size:13.5px;
+    opacity:.25;transition:opacity .5s,background .5s}
+  .rrow.hit{opacity:1;background:rgba(227,179,65,.08)}
+  .rrow .rk{color:var(--gold);font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .rrow .rg{color:var(--bone-dim)}
+  .provebar{margin-top:12px;font-size:13px;color:var(--jade);opacity:0;transition:opacity .6s}
+  .provebar.show{opacity:1}
+
+  /* Act VI — membrane canvas */
+  .stagewrap{position:relative;max-width:1100px}
+  canvas#membrane{width:100%;height:560px;display:block;background:
+    radial-gradient(ellipse at 30% 40%, #141021 0%, #0a0810 70%);
+    border:1px solid var(--line)}
+  .stage-legend{display:flex;gap:22px;flex-wrap:wrap;margin-top:14px;
+    font-size:13px;color:var(--bone-dim)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;
+    margin-right:6px;vertical-align:middle}
+  footer{padding:7vh 7vw;color:var(--bone-dim);font-size:14px}
+  footer b{color:var(--clay)}
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;animation:none !important}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="glyph">𒁾</div>
+  <h1>ŠASÛ <em>— the scanner that reads aloud</em></h1>
+  <p class="sub">A Šala prototype on real data. One question and one answer from the
+  session <i>“Unified Algebra Theorem as BahyWay Algebra”</i> (2026-08-10) enter as a
+  tablet — and every decision the scanner makes on the way into EnkiDDB is spoken,
+  witnessed, minted with KAKI v4.0, faceted in EAV, and retrieved with sovereign
+  HeptaScript. Nothing is silent. Silence is a τ event.</p>
+  <span class="lawband">Šala prototype · not production · the production stage is egui / WGPU (Way of Work rule 5)</span>
+</header>
+
+<nav class="acts-nav" aria-label="Acts">
+  <a href="#act1">I · The Tablet</a>
+  <a href="#act2">II · Reading Aloud</a>
+  <a href="#act3">III · The Splitting &amp; KAKI</a>
+  <a href="#act4">IV · Simtu EAV</a>
+  <a href="#act5">V · HeptaScript</a>
+  <a href="#act6">VI · The Membrane</a>
+</nav>
+
+<!-- ══════════════════════ ACT I ══════════════════════ -->
+<section id="act1">
+  <div class="act-label">Act I</div>
+  <h2>The Tablet — <span class="akk">ṭuppu</span></h2>
+  <p class="lede">The source is a real exchange between the Architect and Claude.
+  It is prose — <b>humans already read it</b>. The question this prototype answers is:
+  can the <i>machine’s handling</i> of it be just as readable?</p>
+
+  <div class="tablet" id="sourceDoc">
+    <h3>Q&amp;A-2026-08-10 · session “Unified Algebra Theorem as BahyWay Algebra”</h3>
+    <div class="turn architect">
+      <div class="who">DUB.SAR 𒁾 — the Architect asks</div>
+      <p id="seg-q">“We need to structure the EAV of EnkiDDB so it shows not only documents,
+      versions and release dependencies, but also the related Akkadian terms — agents,
+      gates, engines, datasets — all as Particles. What are the best practices for an EAV
+      schema that does not only depend on the Graph RAG, but builds real classification
+      from the unique Categories and Domains of BahyWay Tribes and Particles?”</p>
+    </div>
+    <div class="turn claude">
+      <div class="who">Claude answers</div>
+      <p id="seg-a1"><mark>Classification lives in sealed EAV mandatory attributes; the Graph
+      RAG is one derived lens over it — rebuildable by rite, never authoritative.</mark>
+      Deterministic taxonomy first, statistical retrieval second.</p>
+      <p id="seg-a2">Take “all are Particles” literally: every Akkadian name is minted as a
+      <mark>Term particle with its own KAKI</mark>; a document never contains a mere string —
+      it holds a cross-tribe relation to the term particle. The Ḫubullu gloss becomes an
+      EAV attribute on the term itself.</p>
+      <p id="seg-a3">Classify by <mark>independent facets, not a tree</mark>: doc_class,
+      noun_class, role_class, arsenal_tier, domain, seal_state, era, gloss, lineage —
+      closed domains, minted like tribes, never renamed.</p>
+      <p id="seg-a4"><mark>A derived facet may propose; only a sealed facet may
+      classify.</mark> Statistical clusters carry derived=true and advisory status —
+      the reflex/cortex ladder applied to knowledge.</p>
+      <p id="seg-a5">Relations use a closed verb set — DEFINES, USES, SEALS, SUPERSEDES,
+      GLOSSES, DEPENDS_ON, INSTANTIATES — <mark>new domains cost new nouns, never new
+      verbs.</mark></p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ ACT II ══════════════════════ -->
+<section id="act2">
+  <div class="act-label">Act II</div>
+  <h2>Šasû Reads Aloud — <span class="akk">the witness journal</span></h2>
+  <p class="lede">The scanner contains no rules. It <b>interprets sealed rule tablets</b>
+  (.akk) — shown left — and every firing is announced into an append-only NĀRU journal —
+  shown right. A stakeholder never asks “why?” into a void: the answer already exists,
+  in Ḫubullu register, before the question.</p>
+
+  <button class="rite" id="runScan">⟶ Perform the reading rite</button>
+
+  <div class="twocol">
+    <div class="ruleset" id="rules">
+      <h4>Sealed rule tablets (interpreted, not compiled)</h4>
+      <div class="rule" data-r="R-001"><span class="rid">R-001 · ṭuppu-grammar</span><br>
+        <span class="rtxt">A turn boundary (“asks” / “answers”) opens a new section.</span></div>
+      <div class="rule" data-r="R-002"><span class="rid">R-002 · chunk-law</span><br>
+        <span class="rtxt">Each answer paragraph carrying a doctrine sentence becomes one chunk particle.</span></div>
+      <div class="rule" data-r="R-003"><span class="rid">R-003 · simtu-facets</span><br>
+        <span class="rtxt">Assign closed-domain facets: doc_class, role_class, domain, era, seal_state.</span></div>
+      <div class="rule" data-r="R-004"><span class="rid">R-004 · ḫubullu-gloss</span><br>
+        <span class="rtxt">Every particle must receive a plain-language gloss, or H(P) falls and the particle turns FUZZY.</span></div>
+      <div class="rule" data-r="R-005"><span class="rid">R-005 · term-binding</span><br>
+        <span class="rtxt">Detected Akkadian names bind as cross-tribe relations (kaki_type 0x03) to Term particles — never as strings.</span></div>
+      <div class="rule" data-r="R-006"><span class="rid">R-006 · silence-is-τ</span><br>
+        <span class="rtxt">Any skipped span must be witnessed with a reason; an unwitnessed skip raises the Opacity Monitor.</span></div>
+    </div>
+    <div class="journal" id="journal" aria-live="polite">
+      <div class="j">— NĀRU journal idle. Perform the rite to begin. —</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ ACT III ══════════════════════ -->
+<section id="act3">
+  <div class="act-label">Act III</div>
+  <h2>The Splitting — <span class="akk">chunks become Particles (KAKI v4.0)</span></h2>
+  <p class="lede">Six particles were born from one tablet: the parent document, the
+  question, and four doctrine chunks. <b>Select any particle</b> to see its 16 bytes,
+  minted live by this page under the locked v4.0 layout — the CRC-16/CCITT in bytes
+  14–15 is genuinely computed from the other fourteen. Quality, colour and state are
+  <i>not</i> in these bytes: they live exclusively in EAV (Act IV).</p>
+  <div class="chunks" id="chunkGrid"></div>
+  <div class="kaki-panel">
+    <h4 id="kakiTitle">KAKI v4.0 — select a particle above</h4>
+    <div class="kaki-bytes" id="kakiBytes"></div>
+    <p class="kaki-note">Layout law: κ[0..3] uuid_hash · κ[4..5] tribe_id ·
+    κ[6] kaki_type (0x01 Identity / 0x03 CrossTribe) · κ[7] kaki_role
+    (0x01 KISHIB seal / 0x02 ZIKRU) · κ[8..11] reserved, zeroed ·
+    κ[12..13] timestamp · κ[14..15] CRC-16/CCITT.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════ ACT IV ══════════════════════ -->
+<section id="act4">
+  <div class="act-label">Act IV</div>
+  <h2>Simtu — <span class="akk">the facet ingest into EAV</span></h2>
+  <p class="lede">Facets are <b>sealed</b> at ingest (deterministic, provable) or
+  <b>derived</b> (advisory, rebuildable). The table below is the actual EAV written for
+  chunk <span class="mono">A1</span> — a stakeholder can read every classification and
+  its register. A missing gloss would lower H(P) and colour the particle FUZZY: the
+  documentation is governed by the same Quality Equation it documents.</p>
+  <table class="eav">
+    <thead><tr><th>Attribute</th><th>Value</th><th>Register</th><th>Meaning (Ḫubullu gloss)</th></tr></thead>
+    <tbody>
+      <tr><td class="attr">doc_class</td><td>SOURCE</td><td><span class="sealedtag">SEALED</span></td><td>a session transcript, primary evidence</td></tr>
+      <tr><td class="attr">role_class</td><td>LAW</td><td><span class="sealedtag">SEALED</span></td><td>states a governing principle</td></tr>
+      <tr><td class="attr">arsenal_tier</td><td>META</td><td><span class="sealedtag">SEALED</span></td><td>about the structure of knowledge itself</td></tr>
+      <tr><td class="attr">domain</td><td>CORE</td><td><span class="sealedtag">SEALED</span></td><td>no domain calculus — ecosystem-wide</td></tr>
+      <tr><td class="attr">seal_state</td><td>DRAFT</td><td><span class="sealedtag">SEALED</span></td><td>awaits the Architect’s rite (CSR-08)</td></tr>
+      <tr><td class="attr">era</td><td>GUDEA</td><td><span class="sealedtag">SEALED</span></td><td>founding release era</td></tr>
+      <tr><td class="attr">gloss</td><td>“sealed facets classify; the RAG only looks”</td><td><span class="sealedtag">SEALED</span></td><td>the plain name — mandatory</td></tr>
+      <tr><td class="attr">nuzi_parent</td><td>KAKI → DOC (Q&amp;A-2026-08-10)</td><td><span class="sealedtag">SEALED</span></td><td>lineage: which tablet bore this chunk</td></tr>
+      <tr><td class="attr">links</td><td>DEFINES → SIMTU · USES → HUBULLU · USES → NINSUN</td><td><span class="sealedtag">SEALED</span></td><td>closed verb set — no free edges</td></tr>
+      <tr><td class="attr">rag_cluster</td><td>#c-17 (near “Masking Law”, “Facet Law”)</td><td><span class="derivedtag">DERIVED</span></td><td>advisory neighborhood — may propose, never classify</td></tr>
+      <tr><td class="attr">tau</td><td>0.03 ŠĀRU (ε = 0.03)</td><td><span class="derivedtag">DERIVED</span></td><td>at the Fadam Floor — nothing undeclared</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════════ ACT V ══════════════════════ -->
+<section id="act5">
+  <div class="act-label">Act V</div>
+  <h2>Retrieval — <span class="akk">sovereign HeptaScript, no SQL anywhere</span></h2>
+  <p class="lede">The stakeholder’s question — <i>“show me every doctrine sentence this
+  session sealed about classification”</i> — becomes an ORBIT over particles, filtered by
+  sealed META facets, proved against the Fadam Floor, and witnessed into NĀRU.
+  <b>Run it</b> and watch which particles answer.</p>
+  <div class="querywrap">
+    <div>
+<pre class="hepta"><span class="cm">-- W5H2: WHAT doctrine · WHERE this tribe · WHEN this era</span>
+<span class="kw">ORBIT</span> chunk <span class="kw">WITHIN TRIBE</span> ddb_source
+  <span class="kw">WHERE META</span> <span class="meta">doc_class</span> = <span class="val">SOURCE</span>
+    <span class="kw">AND META</span> <span class="meta">role_class</span> = <span class="val">LAW</span>
+    <span class="kw">AND PRESENT</span> <span class="meta">gloss</span>
+  <span class="kw">WHEN</span> <span class="meta">era</span> = <span class="val">GUDEA</span>
+<span class="kw">PRESENT</span> kaki, gloss, links
+<span class="kw">PROVE</span> fadam_floor(<span class="meta">tau</span>, <span class="meta">epsilon</span>)
+<span class="kw">WITNESS</span> naru</pre>
+      <button class="rite" id="runQuery">⟶ Run the ORBIT</button>
+    </div>
+    <div class="results">
+      <h4>Answering particles</h4>
+      <div id="resultRows"></div>
+      <div class="provebar" id="provebar">✓ PROVE fadam_floor — every returned particle
+      satisfies τ ≥ ε with declared ε · WITNESS written to NĀRU</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ ACT VI ══════════════════════ -->
+<section id="act6">
+  <div class="act-label">Act VI</div>
+  <h2>The Membrane — <span class="akk">Mashalu, and the elastic particles</span></h2>
+  <p class="lede">EnkiDDB drawn as a living membrane: the document’s chunks orbit inside
+  its elastic skin; Term particles (gold) hold their own small membranes; cross-tribe
+  links are the threads. <b>Run the retrieval</b> and watch the Mashalu membrane stretch —
+  answering particles pass through the wall, and the wall <i>visibly deforms and
+  recovers</i>: retrieval is never a hidden copy, it is a witnessed crossing.</p>
+  <button class="rite" id="runMembrane">⟶ Send the query through the membrane</button>
+  <div class="stagewrap">
+    <canvas id="membrane" width="1100" height="560"></canvas>
+    <div class="stage-legend">
+      <span><span class="dot" style="background:#3D6BD8"></span>chunk particles (Identity 0x01)</span>
+      <span><span class="dot" style="background:#E3B341"></span>Term particles (Ḫubullu lexicon)</span>
+      <span><span class="dot" style="background:#C4554D"></span>cross-tribe links (0x03, Riksu)</span>
+      <span><span class="dot" style="background:#5FA97C"></span>answered &amp; witnessed</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <b>𒁾 Šasû — “to read aloud.”</b> Prototype status: DRAFT, unsealed, awaiting the
+  Architect (CSR-08). The mechanism shown — sealed rule tablets → witnessed journal →
+  KAKI v4.0 minting → Simtu facets → sovereign ORBIT → membrane crossing — is the
+  transparency contract of EnkiDDB: the scanner is held to the same τ as the data it
+  ingests. Production visualization belongs to the DubSar Visualizer (egui/WGPU) on
+  eriduous-vdi; this page is the stakeholder’s ḫubullu column.
+</footer>
+
+<script>
+/* ───────────────────────── KAKI v4.0 minting ─────────────────────────
+   Locked layout: [0..3] uuid_hash · [4..5] tribe_id · [6] type · [7] role
+                  [8..11] reserved zeroed · [12..13] timestamp · [14..15] CRC-16/CCITT */
+function fnv1a32(str){
+  let h = 0x811c9dc5;
+  for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h,0x01000193)>>>0; }
+  return h>>>0;
+}
+function crc16ccitt(bytes){           /* poly 0x1021, init 0xFFFF — the real thing */
+  let crc = 0xFFFF;
+  for(const b of bytes){
+    crc ^= (b<<8);
+    for(let i=0;i<8;i++){ crc = (crc & 0x8000) ? ((crc<<1)^0x1021)&0xFFFF : (crc<<1)&0xFFFF; }
+  }
+  return crc;
+}
+function mintKaki(content, tribeId, type, role){
+  const uuid = fnv1a32(content);
+  const ts = 0x1EDA;                          /* 2026-08-10, epoch-days mod 2^16 */
+  const k = new Array(16).fill(0);
+  k[0]=(uuid>>>24)&255; k[1]=(uuid>>>16)&255; k[2]=(uuid>>>8)&255; k[3]=uuid&255;
+  k[4]=(tribeId>>>8)&255; k[5]=tribeId&255;
+  k[6]=type; k[7]=role;
+  k[12]=(ts>>>8)&255; k[13]=ts&255;
+  const crc = crc16ccitt(k.slice(0,14));
+  k[14]=(crc>>>8)&255; k[15]=crc&255;
+  return k;
+}
+const hex = b => b.toString(16).padStart(2,'0').toUpperCase();
+
+/* ───────────────────────── the six particles ───────────────────────── */
+const particles = [
+  {id:'DOC', seg:'sourceDoc', tribe:0x00D7, type:0x01, role:0x01, isLaw:false,
+   gloss:'the parent tablet — Q&A-2026-08-10', exc:'One question, one answer, one seal.'},
+  {id:'Q',   seg:'seg-q',  tribe:0x00D8, type:0x01, role:0x02, isLaw:false,
+   gloss:'the Architect’s question — EAV beyond the RAG',
+   exc:'“…builds real classification from the unique Categories and Domains…”'},
+  {id:'A1',  seg:'seg-a1', tribe:0x00D8, type:0x01, role:0x02, isLaw:true,
+   gloss:'sealed facets classify; the RAG only looks',
+   exc:'“Classification lives in sealed EAV mandatory attributes…”'},
+  {id:'A2',  seg:'seg-a2', tribe:0x00D8, type:0x01, role:0x02, isLaw:true,
+   gloss:'terms are particles — names get KAKI, not strings',
+   exc:'“…every Akkadian name is minted as a Term particle with its own KAKI…”'},
+  {id:'A3',  seg:'seg-a3', tribe:0x00D8, type:0x01, role:0x02, isLaw:true,
+   gloss:'facets, not a tree — Simtu',
+   exc:'“Classify by independent facets… closed domains, minted like tribes.”'},
+  {id:'A4',  seg:'seg-a4', tribe:0x00D8, type:0x01, role:0x02, isLaw:true,
+   gloss:'derived proposes; sealed classifies',
+   exc:'“A derived facet may propose; only a sealed facet may classify.”'},
+];
+particles.forEach(p=>{
+  const src = document.getElementById(p.seg);
+  p.kaki = mintKaki((src?src.textContent:p.id)+p.id, p.tribe, p.type, p.role);
+});
+
+/* ───────────────────────── Act II — the reading rite ─────────────────────── */
+const journalLines = [
+  {r:'R-001', t:'turn boundary found — “the Architect asks” → section 1 opened'},
+  {r:'R-001', t:'turn boundary found — “Claude answers” → section 2 opened'},
+  {r:'R-002', t:'doctrine sentence detected in ¶1 → chunk <b>A1</b> born'},
+  {r:'R-002', t:'doctrine sentence detected in ¶2 → chunk <b>A2</b> born'},
+  {r:'R-002', t:'doctrine sentence detected in ¶3 → chunk <b>A3</b> born'},
+  {r:'R-002', t:'doctrine sentence detected in ¶4 → chunk <b>A4</b> born'},
+  {r:'R-003', t:'facets sealed on all chunks — doc_class=<b>SOURCE</b>, era=<b>GUDEA</b>, seal_state=<b>DRAFT</b>'},
+  {r:'R-004', t:'ḫubullu glosses written — H(P) whole, all particles <b>GOLDEN-eligible</b>'},
+  {r:'R-005', t:'names bound as Term links (0x03): <b>SIMTU · HUBULLU · NINSUN · KAKI · ENKIDDB</b>'},
+  {r:'R-006', t:'¶5 (relation verbs) ingested whole — <b>no spans skipped, τ contribution 0</b>', skip:false},
+  {r:'NĀRU', t:'journal sealed append-only — this very log is itself a glossed document particle'},
+];
+document.getElementById('runScan').addEventListener('click', ()=>{
+  const j = document.getElementById('journal'); j.innerHTML='';
+  const rules = document.querySelectorAll('.rule');
+  journalLines.forEach((line,i)=>{
+    setTimeout(()=>{
+      rules.forEach(r=>r.classList.remove('firing'));
+      const rr = document.querySelector(`.rule[data-r="${line.r}"]`);
+      if(rr) rr.classList.add('firing');
+      const d = document.createElement('div');
+      d.className='j'+(line.skip?' skip':'');
+      d.innerHTML = `<span class="rid">${line.r}</span> · ${line.t}`;
+      j.appendChild(d);
+      requestAnimationFrame(()=>d.classList.add('show'));
+      j.scrollTop = j.scrollHeight;
+      if(i===journalLines.length-1) setTimeout(()=>rules.forEach(r=>r.classList.remove('firing')),900);
+    }, i*650);
+  });
+});
+
+/* ───────────────────────── Act III — chunk grid + KAKI panel ─────────────── */
+const grid = document.getElementById('chunkGrid');
+particles.forEach(p=>{
+  const el = document.createElement('div');
+  el.className='chunk'; el.tabIndex=0; el.dataset.pid=p.id;
+  el.innerHTML = `<span class="cid">${p.id} · tribe 0x${p.tribe.toString(16).padStart(4,'0').toUpperCase()}</span>
+    <div class="cgloss">${p.gloss}</div><div class="cexc">${p.exc}</div>`;
+  const show = ()=>{
+    document.querySelectorAll('.chunk').forEach(c=>c.classList.remove('selected'));
+    el.classList.add('selected'); renderKaki(p);
+  };
+  el.addEventListener('click',show);
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show();}});
+  grid.appendChild(el);
+});
+const groups=[['uuid','uuid_hash',0,4],['tribe','tribe_id',4,2],['type','type',6,1],
+  ['role','role',7,1],['resv','reserved',8,4],['ts','timestamp',12,2],['crc','CRC-16',14,2]];
+function renderKaki(p){
+  document.getElementById('kakiTitle').textContent =
+    `KAKI v4.0 — particle ${p.id} (${p.gloss})`;
+  const box = document.getElementById('kakiBytes'); box.innerHTML='';
+  groups.forEach(([cls,label,start,len])=>{
+    for(let i=0;i<len;i++){
+      const b=document.createElement('div');
+      b.className='kb '+cls;
+      b.innerHTML = hex(p.kaki[start+i]) + `<small>${i===0?label:'·'}</small>`;
+      box.appendChild(b);
+    }
+  });
+}
+renderKaki(particles[2]); document.querySelector('.chunk[data-pid="A1"]').classList.add('selected');
+
+/* ───────────────────────── Act V — the ORBIT ─────────────────────────────── */
+const rr = document.getElementById('resultRows');
+particles.forEach(p=>{
+  const row=document.createElement('div'); row.className='rrow'; row.dataset.pid=p.id;
+  row.innerHTML=`<span class="rk">${p.kaki.map(hex).join('')}</span><br>
+    <span class="rg">${p.id} — ${p.gloss}</span>`;
+  rr.appendChild(row);
+});
+document.getElementById('runQuery').addEventListener('click', ()=>{
+  document.querySelectorAll('.rrow').forEach(r=>r.classList.remove('hit'));
+  document.getElementById('provebar').classList.remove('show');
+  const hits = particles.filter(p=>p.isLaw);
+  hits.forEach((p,i)=>setTimeout(()=>{
+    document.querySelector(`.rrow[data-pid="${p.id}"]`).classList.add('hit');
+    if(i===hits.length-1)
+      setTimeout(()=>document.getElementById('provebar').classList.add('show'),400);
+  }, 350*(i+1)));
+});
+
+/* ───────────────────────── Act VI — elastic membranes ────────────────────── */
+const cv = document.getElementById('membrane'), ctx = cv.getContext('2d');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function makeMembrane(cx,cy,r,n,color){
+  const nodes=[];
+  for(let i=0;i<n;i++){
+    const a=i/n*Math.PI*2;
+    nodes.push({x:cx+Math.cos(a)*r, y:cy+Math.sin(a)*r, vx:0, vy:0,
+                rx:cx+Math.cos(a)*r, ry:cy+Math.sin(a)*r});
+  }
+  return {cx,cy,r,nodes,color};
+}
+const M = {
+  ddb: makeMembrane(360,290,205,44,'rgba(61,107,216,.55)'),      /* EnkiDDB skin  */
+  term: makeMembrane(880,160,88,28,'rgba(227,179,65,.5)'),       /* Term lexicon  */
+  query: makeMembrane(880,430,80,28,'rgba(95,169,124,.5)'),      /* query orbit   */
+};
+const eps=[];  /* elastic point particles */
+particles.forEach((p,i)=>{
+  const a=i/particles.length*Math.PI*2;
+  eps.push({p, x:360+Math.cos(a)*110, y:290+Math.sin(a)*110,
+    vx:0, vy:0, home:{cx:360,cy:290,r:110+((i*37)%50)}, ang:a,
+    col: p.isLaw?'#3D6BD8':'#7d74a0', answered:false, crossing:false});
+});
+const termPts=[{n:'SIMTU'},{n:'ḪUBULLU'},{n:'NINSABA'},{n:'KAKI'},{n:'TIAMAT'}]
+  .map((t,i)=>{const a=i/5*Math.PI*2;
+    return {...t, x:880+Math.cos(a)*44, y:160+Math.sin(a)*44, ang:a};});
+
+let crossingActive=false, tGlobal=0;
+document.getElementById('runMembrane').addEventListener('click', ()=>{
+  crossingActive=true;
+  eps.forEach(e=>{ if(e.p.isLaw){ e.crossing=true; e.answered=false; } });
+});
+
+function membraneStep(m){
+  m.nodes.forEach((nd,i)=>{
+    const prev=m.nodes[(i-1+m.nodes.length)%m.nodes.length],
+          next=m.nodes[(i+1)%m.nodes.length];
+    /* springs to neighbors + spring to rest position (skin elasticity) */
+    let fx=(prev.x+next.x-2*nd.x)*0.18 + (nd.rx-nd.x)*0.045;
+    let fy=(prev.y+next.y-2*nd.y)*0.18 + (nd.ry-nd.y)*0.045;
+    /* particles push the wall from inside/outside — the elastic deformation */
+    eps.forEach(e=>{
+      const dx=nd.x-e.x, dy=nd.y-e.y, d2=dx*dx+dy*dy;
+      if(d2<2600){ const d=Math.sqrt(d2)||1, push=(2600-d2)/2600*1.6;
+        fx+=dx/d*push; fy+=dy/d*push; }
+    });
+    nd.vx=(nd.vx+fx)*0.86; nd.vy=(nd.vy+fy)*0.86;
+    nd.x+=nd.vx; nd.y+=nd.vy;
+  });
+}
+function drawMembrane(m,label){
+  ctx.beginPath();
+  const n=m.nodes;
+  ctx.moveTo((n[0].x+n[n.length-1].x)/2,(n[0].y+n[n.length-1].y)/2);
+  for(let i=0;i<n.length;i++){
+    const nxt=n[(i+1)%n.length];
+    ctx.quadraticCurveTo(n[i].x,n[i].y,(n[i].x+nxt.x)/2,(n[i].y+nxt.y)/2);
+  }
+  ctx.closePath();
+  ctx.strokeStyle=m.color; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle=m.color.replace(/[\d.]+\)$/,'0.05)'); ctx.fill();
+  ctx.fillStyle='rgba(237,228,211,.55)'; ctx.font='12px ui-monospace,monospace';
+  ctx.fillText(label, m.cx-ctx.measureText(label).width/2, m.cy - m.r - 12);
+}
+function frame(){
+  tGlobal+=0.016;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  /* Riksu link threads: chunks → term membrane */
+  ctx.strokeStyle='rgba(196,85,77,.25)'; ctx.lineWidth=1;
+  eps.forEach(e=>{ if(e.p.isLaw){ ctx.beginPath(); ctx.moveTo(e.x,e.y);
+    ctx.quadraticCurveTo((e.x+880)/2, Math.min(e.y,160)-40, 880,160); ctx.stroke(); }});
+
+  Object.values(M).forEach(membraneStep);
+  drawMembrane(M.ddb,'EnkiDDB · tribe ddb_source');
+  drawMembrane(M.term,'Term lexicon · Ḫubullu');
+  drawMembrane(M.query,'query ORBIT · Mashalu crossing');
+
+  /* elastic particles */
+  eps.forEach(e=>{
+    if(e.crossing){
+      const dx=M.query.cx-e.x, dy=M.query.cy-e.y, d=Math.hypot(dx,dy);
+      e.vx+= dx/d*0.55; e.vy+= dy/d*0.55;
+      if(d<46){ e.crossing=false; e.answered=true; }
+    } else if(e.answered){
+      e.ang+= (reduced?0:0.012);
+      const tx=M.query.cx+Math.cos(e.ang)*40, ty=M.query.cy+Math.sin(e.ang)*40;
+      e.vx+=(tx-e.x)*0.05; e.vy+=(ty-e.y)*0.05;
+    } else {
+      e.ang+= (reduced?0:0.004+ (e.p.isLaw?0.002:0));
+      const tx=e.home.cx+Math.cos(e.ang)*e.home.r*0.85,
+            ty=e.home.cy+Math.sin(e.ang)*e.home.r*0.62;
+      e.vx+=(tx-e.x)*0.04; e.vy+=(ty-e.y)*0.04;
+    }
+    e.vx*=0.9; e.vy*=0.9; e.x+=e.vx; e.y+=e.vy;
+    /* squash-and-stretch: elastic particle drawn as ellipse along velocity */
+    const sp=Math.hypot(e.vx,e.vy), st=Math.min(sp*0.12,0.55);
+    ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(Math.atan2(e.vy,e.vx));
+    ctx.beginPath(); ctx.ellipse(0,0,8*(1+st),8*(1-st*0.7),0,0,Math.PI*2);
+    ctx.fillStyle = e.answered ? '#5FA97C' : e.col;
+    ctx.shadowColor = e.answered ? '#5FA97C' : 'transparent'; ctx.shadowBlur= e.answered?14:0;
+    ctx.fill(); ctx.restore();
+    ctx.fillStyle='rgba(237,228,211,.8)'; ctx.font='10px ui-monospace,monospace';
+    ctx.fillText(e.p.id, e.x+11, e.y+3);
+  });
+  /* term particles */
+  termPts.forEach(t=>{
+    t.ang+=(reduced?0:0.006);
+    t.x=880+Math.cos(t.ang)*44; t.y=160+Math.sin(t.ang)*44;
+    ctx.beginPath(); ctx.arc(t.x,t.y,5,0,Math.PI*2);
+    ctx.fillStyle='#E3B341'; ctx.fill();
+    ctx.fillStyle='rgba(227,179,65,.7)'; ctx.font='9px ui-monospace,monospace';
+    ctx.fillText(t.n,t.x+8,t.y+3);
+  });
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

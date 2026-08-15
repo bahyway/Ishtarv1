@@ -1,0 +1,158 @@
+# =============================================================================
+# PB-207 — project.godot for real: the DubSar(Godot) EnkiDDB HeptaScript
+# Notebook becomes actually openable, and actually points at EnkiDDB
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: the Architect asked, directly, for a working tool to inspect
+# how bahyway_v4 documentation was ingested into EnkiDDB and to check
+# whether SEARCH:'s semantic/vector search actually returns relevant
+# results for a phrase -- "give me anything to reach my documents with,
+# do not leave it like this." Prior research this session (both the
+# uploaded-playbook check and an earlier Explore pass) had established
+# that `workspace/bahyway_v4/godot/dubsar-theater/` contains real, complete
+# scenes and scripts but NO `project.godot` -- nothing in this tree was
+# openable in the Godot editor at all.
+#
+# Closer inspection this playbook (reading every relevant scene/script,
+# not just grepping for the file's absence) found the gap was smaller and
+# more fixable than it looked:
+#   - `scenes/heptascript_editor.tscn` + `scripts/heptascript_editor.gd`
+#     is a REAL, complete notebook UI: CodeEdit for HeptaScript, a NODE
+#     target picker, a fan-out policy dropdown, a live execution log, and
+#     a PDM tab (`scripts/pdm_tab.gd`) that renders GEM/ORBIT/FUZZY
+#     particle classification from real returned rows.
+#   - `scripts/sumuukin_client.gd`'s wire protocol ([u32 LE len][payload]
+#     request, [u32 LE len]-prefixed JSON-array frames terminated by a
+#     zero-length sentinel) is an EXACT match for
+#     `bin/enkiddb-read-server/src/main.rs`'s real `send()` framing and
+#     its `query_rows_to_json`/`search_hits_to_json` output -- confirmed
+#     by reading both sides of the wire, not assumed. No protocol
+#     mismatch exists between this Godot client and the real deployed
+#     EnkiDDB Read Node.
+#   - The one real, blocking bug: `scripts/enki_engines.gd`'s `TABLE`
+#     still had EnkiDDB on port 7007 and EnkiMDB on port 7006 -- 2026-07-10
+#     placeholders never reconciled against the real deployed
+#     `enkiddb-read-server`/`enkimdb-read-server` ports (7102/7202,
+#     `playbooks/playbook_192_...`). Selecting "EnkiDDB" in the editor
+#     would have connected to nothing.
+#   - A second real gap: `_on_run_complete` only ever logged row COUNTS,
+#     never row CONTENT -- so even a successful SEARCH: call would show
+#     "3 row(s)" and nothing else, which cannot answer "does semantic
+#     search actually find the right documents for a phrase."
+#   - `main_theater.tscn` (the 3D "DubSar Theater" shell, BIGRING particle
+#     ring + curved side panels + hidden HeptaScript editor opened via
+#     Ctrl+E) has NO GDExtension dependency anywhere in the scene file
+#     itself -- the "Rust GDExtension (BigRingNode3D) handles ... KAKI
+#     particle -> 3D position mapping" comment in `theater_controller.gd`
+#     describes a planned integration that was never wired into the
+#     scene; the particle ring is real geometry, not yet data-driven.
+#     Confirmed via `res://` reference audit: zero `.gdextension` files or
+#     GDExtension resource references exist anywhere in `scenes/`.
+#
+# WHAT WAS BUILT/FIXED, real, this playbook:
+#
+#  1. godot/dubsar-theater/project.godot -- NEW. Godot 4.3 project file,
+#     `run/main_scene="res://scenes/main_theater.tscn"`. This is the
+#     entire reason nothing was openable before -- every scene/script it
+#     references already existed and already worked.
+#
+#  2. scripts/enki_engines.gd -- EnkiDDB port 7007 -> 7102 (real
+#     `enkiddb-read-server`), EnkiMDB port 7006 -> 7202 (real
+#     `enkimdb-read-server`), both marked `read_only: true` (QUERY:/
+#     SEARCH: only exist on the Read Node side of each CQRS pair). The
+#     other five engines' 2026-07-10 placeholder ports are untouched --
+#     not verified this session, not claimed to be correct.
+#
+#  3. scripts/heptascript_editor.gd -- three real fixes:
+#       a. `_on_run_complete` now logs each row's actual content, not
+#          just a count -- `_format_row()` distinguishes SEARCH: hits
+#          (`score`+`text`, real snippet shown) from QUERY: rows
+#          (`kaki`+`attrs`), since the two commands return different real
+#          JSON shapes from `enkiddb-read-server`.
+#       b. NODE target picker now defaults to EnkiDDB only (previously
+#          defaulted to "ALL", fanning out to six engines with no server
+#          running -- reads as broken on first open for a target that
+#          isn't the one deployed).
+#       c. Default query text and the empty-host fallback point at real
+#          things: `QUERY:WHO T.E\nWHAT E[meta.title]\nWHERE
+#          E[meta.collection] = "components"` (the literal `QUERY:`/
+#          `SEARCH:` prefix EnkiDDB's wire protocol requires, unlike the
+#          bare-HeptaScript EnkiDB/7001 target) and host
+#          `192.168.122.214` (eriduous-vdi, the real deployed host this
+#          whole session's infrastructure work targeted -- the old
+#          `192.168.122.107` placeholder used elsewhere in this Godot
+#          project is untouched, since it addresses a different, older,
+#          unverified target).
+#
+#  4. scenes/heptascript_editor.tscn -- HostInput default text corrected
+#     to `192.168.122.214` to match.
+#
+# VERIFICATION -- honest about what could and couldn't be checked from
+# this sandbox, which has no Godot binary installed:
+#   - Every `res://` path referenced anywhere in `scenes/` or `scripts/`
+#     was extracted and confirmed to resolve to a real file on disk (zero
+#     missing references) -- a full, automated audit, not a sample.
+#   - Confirmed zero duplicate `class_name` declarations (would be a
+#     load-time error) and zero GDExtension dependencies in any scene.
+#   - Confirmed via direct reading of both `sumuukin_client.gd` and
+#     `bin/enkiddb-read-server/src/main.rs` that the wire protocol and
+#     JSON response shapes match exactly.
+#   - Bracket/quote balance checked on every edited GDScript file.
+#   - NOT done here (no Godot binary available in this environment): an
+#     actual `godot --headless --path . --quit` launch. The Architect's
+#     own machine has a real Godot install (this project's own `.uid`
+#     sidecar files were generated by a real Godot 4.3+ editor session) --
+#     the exact command to actually open and verify this is below.
+#
+# WHAT THIS DOES NOT CLAIM:
+#   - The 3D BIGRING particle ring is NOT wired to live query results.
+#     Use the HeptaScript Editor overlay (Ctrl+E once the theater is
+#     running) for real, working inspection of ingestion and search --
+#     the particle ring remains atmospheric only until a real
+#     `BigRingNode3D` GDExtension crate is actually built (it does not
+#     exist anywhere in this repo today).
+#   - Only EnkiDDB's port was corrected and verified against a real
+#     deployed server this session. EnkiDB/EnkiDW/EnkiSDB/EnkiODB/EnkiQDB
+#     ports remain the original 2026-07-10 placeholders.
+# =============================================================================
+---
+- name: "PB-207 | Record — DubSar Notebook (project.godot) landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-207.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. New: godot/dubsar-theater/project.godot. Changed:
+          godot/dubsar-theater/scripts/{enki_engines,heptascript_editor}.gd,
+          godot/dubsar-theater/scenes/heptascript_editor.tscn.
+
+    - name: "PB-207.2 | Exact steps for the Architect to actually open and use this"
+      ansible.builtin.debug:
+        msg: >-
+          On enkilab (or any machine with Godot 4.3+ installed): open
+          Godot -> Import -> select
+          ~/Forge/EnkiDB/workspace/bahyway_v4/godot/dubsar-theater/project.godot
+          -> Import & Edit. Press F5 (or the Play button) to run. The
+          DubSar Theater scene opens; press Ctrl+E to open the
+          HeptaScript Editor overlay. The NODE target list defaults to
+          EnkiDDB only, host 192.168.122.214 (eriduous-vdi), port 7102 --
+          confirm enkiddb-read-server is actually running there first
+          (podman ps | grep enkiddb-read). Type a query and press Run:
+          QUERY:WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.collection] =
+          "components" to inspect real ingested rows, or
+          SEARCH:5:<any phrase from your documents> to test semantic
+          search -- the log will show each hit's real score and a text
+          snippet, not just a row count.
+
+    - name: "PB-207.3 | Headless smoke-test command, if Godot CLI is available"
+      ansible.builtin.debug:
+        msg: >-
+          godot4 --headless --path
+          ~/Forge/EnkiDB/workspace/bahyway_v4/godot/dubsar-theater --quit
+          -- should exit 0 with no "Failed loading resource" errors on
+          stderr. This was NOT run in the sandbox that authored this
+          playbook (no Godot binary available there); run it for real
+          verification before relying on this in front of a client.

@@ -1,0 +1,196 @@
+# =============================================================================
+# PB-278 — Uruinimgina external-docs setup, Fedora Workstation44
+# BahyWay.Ecosystem v4.0
+#
+# Prepares everything Uruinimgina (crates/shakkanakku/src/docpulse.rs) needs
+# to ingest external documents into EnkiDDB WITHOUT touching the official
+# bahyway/EnkiDB repo, per docs/20_meta_engine/URUINIMGINA_EXTERNAL_DOCS.md:
+#   - builds uruinimgina-cli (headless face, PB adjacent to PB-hosted GUI)
+#   - creates (idempotently) the external docs repo on branch devVM, with a
+#     main branch present, per the two hard git requirements the code
+#     enforces (WrongBranch / the devVM->main pulse dance)
+#   - creates the archive/manifest/EnkiDDB-root directories OUTSIDE that
+#     repo (the code's own ArchiveInsideRepo guard, re-asserted here)
+#   - renders uruinimgina.toml with those paths, defaulting docs_tribe to
+#     "architect_docs" (enkiddb::ARCHITECT_DOCS_TRIBE_ID) -- the confirmed
+#     real use of this playbook is the Architect's own personal daily-work
+#     repo, a genuinely different corpus from bahyway/EnkiDB's own sealed
+#     documentation (enkiddb::DOCS_TRIBE_ID), kept queryable but never
+#     mixed with it (see docs/20_meta_engine/URUINIMGINA_EXTERNAL_DOCS.md).
+#
+# This playbook does NOT run the actual Reform & Pulse itself -- minting and
+# git push are deliberate, attended Architect actions (CSR-08), not
+# something a setup playbook should trigger blind. The final task prints
+# the exact command to run by hand in a terminal, where halts can be
+# answered interactively (see bin/uruinimgina_cli.rs).
+#
+# Override any path with -e, e.g.:
+#   ansible-playbook playbook_278_uruinimgina_fedora_w44_setup.yml \
+#     -e uruinimgina_docs_repo=/home/bfadam/Forge/bahyway_v4_docs
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# Run from:  workspace/bahyway_v4 (this playbook cds there via `workspace`)
+# =============================================================================
+---
+- name: "PB-278 | Uruinimgina external-docs setup, Fedora Workstation44"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    workspace: "{{ repo_root }}/workspace/bahyway_v4"
+    # lookup('env', ...), not the ansible_env FACT -- this play runs with
+    # gather_facts: false (matching this repo's own localhost-playbook
+    # convention), so ansible_env.HOME silently resolves via its
+    # default() to '/root' instead of erroring, which broke a real run
+    # (Permission denied building as a non-root user whose real HOME was
+    # never read). lookup('env', ...) reads the invoking shell's actual
+    # environment regardless of gather_facts.
+    cargo:     "{{ lookup('env', 'HOME') }}/.cargo/bin/cargo"
+    home_dir:  "{{ lookup('env', 'HOME') }}"
+
+    uruinimgina_docs_repo:      "{{ home_dir }}/Forge/bahyway_v4_docs"
+    # "architect_docs" (default here) mints into enkiddb::ARCHITECT_DOCS_TRIBE_ID
+    # -- the Architect's own personal daily-work corpus, kept queryable but
+    # never mixed with the sealed BahyWay.Ecosystem v4.0 documentation
+    # (enkiddb::DOCS_TRIBE_ID). Override with -e uruinimgina_docs_tribe=docs
+    # if this playbook is ever pointed at a different, non-personal corpus.
+    uruinimgina_docs_tribe:     "architect_docs"
+    uruinimgina_archive_dir:    "{{ home_dir }}/Forge/uruinimgina_archive"
+    uruinimgina_manifest_dir:   "{{ home_dir }}/Forge/uruinimgina_manifests"
+    uruinimgina_enkiddb_root:   "{{ home_dir }}/Forge/enkiddb_local"
+    uruinimgina_commit_message: "daily document pulse"
+    uruinimgina_toml_path:      "{{ workspace }}/uruinimgina.toml"
+
+  tasks:
+
+    - name: "GUARD | archive dir must be outside the docs repo"
+      ansible.builtin.fail:
+        msg: "uruinimgina_archive_dir ({{ uruinimgina_archive_dir }}) is inside uruinimgina_docs_repo ({{ uruinimgina_docs_repo }}) -- docpulse aborts with ArchiveInsideRepo. Choose a sibling directory instead."
+      when: uruinimgina_archive_dir.startswith(uruinimgina_docs_repo)
+
+    - name: "VERIFY | git and cargo are on PATH"
+      ansible.builtin.command:
+        cmd: "which {{ item }}"
+      loop:
+        - git
+      changed_when: false
+
+    - name: "BUILD | uruinimgina-cli (headless, no gui feature required)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build --no-default-features -p shakkanakku --bin uruinimgina-cli"
+        chdir: "{{ workspace }}"
+      register: build_cli
+      changed_when: "'Compiling shakkanakku' in build_cli.stderr"
+      failed_when: build_cli.rc != 0
+
+    - name: "VERIFY | uruinimgina-cli binary exists after build"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/target/debug/uruinimgina-cli"
+      register: cli_bin
+
+    - name: "FAIL | uruinimgina-cli did not build"
+      ansible.builtin.fail:
+        msg: "target/debug/uruinimgina-cli missing after build. Build output: {{ build_cli.stderr }}"
+      when: not cli_bin.stat.exists
+
+    - name: "CHECK | does the docs repo already exist"
+      ansible.builtin.stat:
+        path: "{{ uruinimgina_docs_repo }}/.git"
+      register: docs_repo_git
+
+    - name: "INIT | create the external docs repo (devVM + main, per URUINIMGINA_EXTERNAL_DOCS.md)"
+      when: not docs_repo_git.stat.exists
+      block:
+        - name: "  mkdir the docs repo"
+          ansible.builtin.file:
+            path: "{{ uruinimgina_docs_repo }}"
+            state: directory
+            mode: "0755"
+
+        - name: "  git init"
+          ansible.builtin.command:
+            cmd: "git init"
+            chdir: "{{ uruinimgina_docs_repo }}"
+
+        - name: "  create devVM branch with a seed commit"
+          ansible.builtin.command:
+            cmd: "{{ item }}"
+            chdir: "{{ uruinimgina_docs_repo }}"
+          loop:
+            - "git checkout -b devVM"
+            - "git commit --allow-empty -m seed"
+
+        - name: "  create main branch off the same seed"
+          ansible.builtin.command:
+            cmd: "git checkout -b main"
+            chdir: "{{ uruinimgina_docs_repo }}"
+
+        - name: "  back to devVM (docpulse's own branch guard requires this)"
+          ansible.builtin.command:
+            cmd: "git checkout devVM"
+            chdir: "{{ uruinimgina_docs_repo }}"
+
+    - name: "VERIFY | docs repo is on branch devVM"
+      ansible.builtin.command:
+        cmd: "git rev-parse --abbrev-ref HEAD"
+        chdir: "{{ uruinimgina_docs_repo }}"
+      register: current_branch
+      changed_when: false
+
+    - name: "FAIL | docs repo not on devVM"
+      ansible.builtin.fail:
+        msg: "{{ uruinimgina_docs_repo }} is on branch '{{ current_branch.stdout | trim }}', not devVM. docpulse aborts with WrongBranch -- run: git -C {{ uruinimgina_docs_repo }} checkout devVM"
+      when: current_branch.stdout | trim != 'devVM'
+
+    - name: "VERIFY | main branch exists in the docs repo"
+      ansible.builtin.command:
+        cmd: "git rev-parse --verify main"
+        chdir: "{{ uruinimgina_docs_repo }}"
+      register: main_exists
+      changed_when: false
+      failed_when: false
+
+    - name: "FAIL | main branch missing"
+      ansible.builtin.fail:
+        msg: "{{ uruinimgina_docs_repo }} has no 'main' branch. Stage 4 (Pulse devVM->main) requires one: git -C {{ uruinimgina_docs_repo }} branch main devVM"
+      when: main_exists.rc != 0
+
+    - name: "ENSURE | archive / manifest / EnkiDDB-root directories exist"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ uruinimgina_archive_dir }}"
+        - "{{ uruinimgina_manifest_dir }}"
+        - "{{ uruinimgina_enkiddb_root }}"
+
+    - name: "RENDER | uruinimgina.toml"
+      ansible.builtin.copy:
+        dest: "{{ uruinimgina_toml_path }}"
+        mode: "0644"
+        content: |
+          # Generated by playbook_278_uruinimgina_fedora_w44_setup.yml -- {{ ansible_date_time.iso8601 | default('') }}
+          # Leave official_repo empty to skip landing a copy into bahyway/EnkiDB
+          # (see docs/20_meta_engine/URUINIMGINA_EXTERNAL_DOCS.md).
+          repo                 = "{{ uruinimgina_docs_repo }}"
+          message              = "{{ uruinimgina_commit_message }}"
+          docs_tribe           = "{{ uruinimgina_docs_tribe }}"
+          archive              = "{{ uruinimgina_archive_dir }}"
+          ingest_manifest_dir  = "{{ uruinimgina_manifest_dir }}"
+          enkiddb_root         = "{{ uruinimgina_enkiddb_root }}"
+          official_repo        = ""
+          official_repo_subdir = ""
+          official_repo_branch = ""
+          push_to_official_repo = false
+
+    - name: "DONE | PB-278 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          Ready. Drop your new documents into {{ uruinimgina_docs_repo }}
+          (on branch devVM), then run by hand, in a real terminal, so halts
+          can be answered:
+          {{ workspace }}/target/debug/uruinimgina-cli {{ uruinimgina_toml_path }}

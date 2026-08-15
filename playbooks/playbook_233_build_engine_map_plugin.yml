@@ -1,0 +1,220 @@
+# =============================================================================
+# PB-233 -- Build enkimdb-registry-gd and wire the Engine Map tab into
+# DubSar IDE (dubsar-theater), then launch it.
+# BahyWay.Ecosystem v4.0 — 2026-07-24
+#
+# WHY THIS EXISTS: after landing a batch of playbooks reviewed from an
+# iPhone session (death-split law, Anu HotIndex, acoustic-leak-engine,
+# plancache-engine, Tupsimati, dagan-engine, girra-engine), the Architect
+# asked for the tool that shows how all of it fits together inside DubSar
+# IDE. This is that tool: a new "Engine Map" tab, grounded in a REAL
+# filesystem scan of every crates/*/Cargo.toml and bin/*/Cargo.toml under
+# this workspace (enkimdb-registry::scan_workspace) -- never a hand-
+# maintained list that goes stale the moment a new crate lands. It already
+# finds every crate built this session, itself included.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Builds crates/kupru-gdext (this project's own login gate) AND
+#      crates/enkimdb-registry-gd (the new bridge) in release mode.
+#   2. Copies both compiled .so files into dubsar-theater/bin/.
+#   3. Discovers a real Godot 4 binary (same proven priority order as
+#      PB-226/227/230/231).
+#   4. Primes the project's Godot import cache with one headless
+#      `--import` pass -- unconditional, for the same reason every prior
+#      DubSar-launching playbook does it unconditionally (a stale
+#      pre-existing .godot/ cache from before enkimdb_registry.gdextension
+#      existed would otherwise mask the new class never actually being
+#      discovered).
+#   5. Launches DubSar IDE (`dubsar_mode: run`, default -- no editor
+#      chrome; `dubsar_mode: editor` to see script/scene panels). The new
+#      "Engine Map" tab sits alongside Query Editor, PDM, and AR-EN
+#      Navigator in the HeptaScript Editor's MainTabs.
+#
+# HONEST LIMIT: `cargo build -p enkimdb-registry-gd` (and the full
+# workspace build) were verified clean at the time this playbook was
+# written, including a live test that the scanner finds every real crate
+# built this session. The Godot side (GDExtension discovery, the new
+# tab's scan-on-open + search-box behaviour) has NOT yet been verified
+# live on eriduous-vdi -- this is the first run, the same honest limit
+# every prior first-run DubSar playbook in this session has stated.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo):
+#   ansible-playbook playbooks/playbook_233_build_engine_map_plugin.yml
+#   ansible-playbook playbooks/playbook_233_build_engine_map_plugin.yml -e dubsar_mode=editor
+#   ansible-playbook playbooks/playbook_233_build_engine_map_plugin.yml -e skip_build=true
+# =============================================================================
+
+- name: "PB-233 -- Build enkimdb-registry-gd and launch DubSar IDE with the Engine Map tab"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    dubsar_mode: "run"
+    skip_build: false
+    godot_bin: ""
+    build_log: "/tmp/engine_map_gd_build.log"
+    godot_log: "/tmp/dubsar_engine_map_launch.log"
+
+  tasks:
+    - name: "Confirm the DubSar project really exists at the expected path"
+      ansible.builtin.stat:
+        path: "{{ dubsar_project }}/project.godot"
+      register: dubsar_project_check
+
+    - name: "Fail clearly if the DubSar project isn't where expected"
+      ansible.builtin.fail:
+        msg: >-
+          No project.godot found at {{ dubsar_project }}. Run this from
+          inside a checkout of the EnkiDB repo, or pass
+          -e dubsar_project=/path/to/project/dir to point at a different one.
+      when: not dubsar_project_check.stat.exists
+
+    # ── Build both bridges this project needs ──────────────────────────
+    - name: "Build kupru-gdext + enkimdb-registry-gd in release mode"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p kupru-gdext -p enkimdb-registry-gd > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: "Fail clearly if the build failed"
+      ansible.builtin.fail:
+        msg: >-
+          cargo build --release -p kupru-gdext -p enkimdb-registry-gd failed
+          (rc={{ build_result.rc }}). Full output: {{ build_log }}
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: "Confirm both compiled libraries exist"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/{{ item }}"
+      register: lib_checks
+      loop:
+        - libkupru_gdext.so
+        - libenkimdb_registry_gd.so
+
+    - name: "Fail clearly if either compiled library is missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found under {{ repo_root }}/target/release/.
+          Run without -e skip_build=true first, or check {{ build_log }}
+          for a build failure.
+      loop: "{{ lib_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "Ensure the DubSar project's bin/ directory exists"
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "Copy both compiled bridges into the DubSar project"
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/{{ item }}"
+        dest: "{{ dubsar_project }}/bin/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - libkupru_gdext.so
+        - libenkimdb_registry_gd.so
+
+    # ── Discover Godot (same proven logic as every prior DubSar playbook) ──
+    - name: "Discover a real Godot 4 binary"
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: "Resolve the Godot binary to actually use"
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: "Fail clearly, with next steps, if no Godot binary was found anywhere"
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found on PATH, via Flatpak, under $HOME, or in
+          common system locations. Install Godot 4.x from
+          https://godotengine.org/download and re-run, or point at it
+          directly with -e godot_bin=/full/path/to/Godot.
+      when: resolved_godot_bin | length == 0
+
+    # ── Prime the import cache (GDExtension discovery) ────────────────
+    - name: "Prime the DubSar project (headless import scan) so enkimdb_registry.gdextension gets discovered before launch"
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ dubsar_project }} --import
+        > {{ godot_log }}.import 2>&1
+      register: import_result
+      failed_when: false
+
+    - name: "Warn if the priming import scan reported errors"
+      ansible.builtin.debug:
+        msg: >-
+          Headless import priming exited {{ import_result.rc }}. See
+          {{ godot_log }}.import for details. Continuing to launch anyway --
+          but if the Engine Map tab can't find EnkiMdbRegistryBridge, check
+          that log first.
+      when: import_result.rc is defined and import_result.rc != 0
+
+    - name: "Report what is about to launch"
+      ansible.builtin.debug:
+        msg:
+          - "Project           : {{ dubsar_project }}"
+          - "Godot binary      : {{ resolved_godot_bin }}"
+          - "Mode              : {{ dubsar_mode }}"
+          - "Bridge (login)    : {{ dubsar_project }}/bin/libkupru_gdext.so"
+          - "Bridge (Engine Map): {{ dubsar_project }}/bin/libenkimdb_registry_gd.so"
+          - "Launch log        : {{ godot_log }}"
+
+    - name: "Launch DubSar in editor mode (full IDE — script/scene panels)"
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --editor --path {{ dubsar_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "editor"
+
+    - name: "Launch DubSar in run mode (no editor chrome)"
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --path {{ dubsar_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "run"
+
+    - name: "Confirmation"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 DubSar IDE launching in the background ({{ dubsar_mode }} mode).
+          After login, open HeptaScript Editor -> "Engine Map" tab to see
+          every real crate/binary in this workspace, live-scanned, search
+          box included. If a window doesn't appear or the tab errors, check
+          {{ godot_log }} -- the Rust side was verified independently via
+          `cargo build --release -p enkimdb-registry-gd` and a live test
+          that the scanner finds every crate built this session.

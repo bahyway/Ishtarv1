@@ -1,0 +1,98 @@
+---
+# 𒁾 PB-318 — THE VAULT BODY (ZFS on the 7x5TB NAS)
+# Redundancy belongs to the body, separation belongs to the names:
+# one RAID-Z2 pool, seven datasets named for the seven types + two annexes.
+# The monthly scrub is the muster of the bits (L-8 Link 2).
+# FIRST RITE after hardware arrives: restore something before trusting anything.
+- name: PB-318 | Vault body — pool, datasets, scrub
+  hosts: vault_body
+  become: true
+  tasks:
+    - name: SAFETY | refuse unless disks explicitly confirmed
+      ansible.builtin.assert:
+        that: confirm_disks | default(false) | bool
+        fail_msg: >
+          Run with -e confirm_disks=true ONLY after verifying nas_disks —
+          zpool create is destructive. The wall condition applies to us too.
+
+    - name: Create RAID-Z2 pool across the seven drives (survives any two)
+      ansible.builtin.command: >
+        zpool create -o ashift=12 -O compression=zstd -O atime=off
+        -O encryption=on -O keyformat=passphrase -O keylocation=prompt
+        {{ vault_pool }} raidz2 {{ nas_disks | join(' ') }}
+      args: { creates: "/{{ vault_pool }}" }
+
+    - name: Seven datasets + two annexes, quotas per L-4 tier table
+      ansible.builtin.command: >
+        zfs create -o quota={{ item.q }} {{ vault_pool }}/{{ item.n }}
+      loop:
+        - { n: enkisdb, q: 1T }     # staging: snapshots and a shrug
+        - { n: enkiodb, q: 3T }     # operational stream
+        - { n: enkiqdb, q: 2T }     # QUARANTINE: evidence-grade, prune-exempt while open
+        - { n: enkidb,  q: 5T }     # core ledger seals — Lahmu-Lahamu continuous
+        - { n: enkidw,  q: 4T }     # warehouse: post-ETL quiescence snapshots
+        - { n: enkimdb, q: 2T }     # master data — continuous
+        - { n: enkiddb, q: 4T }     # document corpus shipped; RAG indexes NOT stored (rebuilt)
+        - { n: forge,   q: 1T }     # workspace + inventories + keys backup
+        - { n: assets,  q: 2T }     # theater assets mirror (Buzu, Najaf)
+      args: { creates: "/{{ vault_pool }}/{{ item.n }}" }
+
+    - name: Per-dataset snapshot cadence (systemd timers)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/zfs-snap-{{ item.n }}.timer
+        content: |
+          [Unit]
+          Description=PB-318 snapshot cadence {{ item.n }}
+          [Timer]
+          OnCalendar={{ item.cal }}
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+      loop:
+        - { n: enkidb,  cal: hourly }
+        - { n: enkimdb, cal: hourly }
+        - { n: enkidw,  cal: daily }    # NOTE: real trigger is the ETL playbook's final task
+        - { n: forge,   cal: daily }
+    - name: Snapshot services
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/zfs-snap-{{ item }}.service
+        content: |
+          [Unit]
+          Description=snap {{ item }}
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/sbin/zfs snapshot {{ vault_pool }}/{{ item }}@auto-%%i-$(date +%%s)
+      loop: [enkidb, enkimdb, enkidw, forge]
+      # NOTE: replace with sanoid/zfs-auto-snapshot in review if preferred
+
+    - name: THE MUSTER OF THE BITS | monthly scrub timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/zpool-scrub.timer
+        content: |
+          [Unit]
+          Description=PB-318 monthly scrub — silent corruption has one month to hide
+          [Timer]
+          OnCalendar=monthly
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+    - ansible.builtin.copy:
+        dest: /etc/systemd/system/zpool-scrub.service
+        content: |
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/sbin/zpool scrub {{ vault_pool }}
+      name: Scrub service
+    - name: Enable timers
+      ansible.builtin.systemd: { name: "{{ item }}", enabled: true, state: started, daemon_reload: true }
+      loop: [zpool-scrub.timer, zfs-snap-enkidb.timer, zfs-snap-enkimdb.timer, zfs-snap-enkidw.timer, zfs-snap-forge.timer]
+      failed_when: false
+
+    - name: GATE (manual half) | 2-disk pull test is a HUMAN rite — record intent
+      ansible.builtin.debug:
+        msg: "Seal gate: pull two disks, verify pool DEGRADED-but-serving, reinsert, resilver. Record in muster.log."
+
+    - name: Run-KAKI
+      ansible.builtin.shell: |
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-318\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"pool+scrub-armed\"}" >> {{ kaki_runs }}

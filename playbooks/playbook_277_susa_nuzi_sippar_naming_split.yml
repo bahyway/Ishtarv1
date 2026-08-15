@@ -1,0 +1,93 @@
+# =============================================================================
+# PB-277 — Susa registration + Nuzi/SipparStore CQRS naming split
+# BahyWay.Ecosystem v4.0
+#
+# Verifies:
+#   - Susa is registered in naming-registry, pointing at the already-real,
+#     already-tested crates/susa-engine (closes the open "does client-doc
+#     ingestion need a new engine name" question -- no, SusaEngine already
+#     is it).
+#   - Nuzi and SipparStore are both present, Reserved, and their blurbs
+#     encode the CQRS split (Nuzi = retrieval/query side, SipparStore =
+#     ingest/write side) rather than colliding on the same role.
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# Run from:  workspace/bahyway_v4 (this playbook cds there via `workspace`)
+# =============================================================================
+---
+- name: "PB-277 | Susa registration + Nuzi/SipparStore CQRS naming split"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    workspace: "{{ repo_root }}/workspace/bahyway_v4"
+    # lookup('env', ...), not the ansible_env FACT -- gather_facts is false
+    # on this play, so ansible_env.HOME silently fell back to '/root'
+    # instead of the real invoking user's home (caught 2026-08-01 when
+    # this exact pattern broke playbook_278 with a real Permission denied).
+    cargo:     "{{ lookup('env', 'HOME') }}/.cargo/bin/cargo"
+
+  tasks:
+
+    - name: "VERIFY | susa-engine crate exists (registered, not newly built)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/susa-engine/src/lib.rs"
+      register: susa_lib
+
+    - name: "FAIL | susa-engine not found"
+      ansible.builtin.fail:
+        msg: "crates/susa-engine/src/lib.rs not found -- PB-277 only registers the existing engine, it does not build it."
+      when: not susa_lib.stat.exists
+
+    - name: "VERIFY | naming-registry source mentions Nuzi, Susa, and SipparStore"
+      ansible.builtin.command:
+        cmd: "grep -c '\"{{ item }}\"'  {{ workspace }}/crates/naming-registry/src/lib.rs"
+      register: name_grep
+      loop:
+        - "Nuzi"
+        - "Susa"
+        - "SipparStore"
+      changed_when: false
+      failed_when: name_grep.rc != 0
+
+    - name: "TEST | cargo test -p susa-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p susa-engine"
+        chdir: "{{ workspace }}"
+      register: test_susa
+      changed_when: false
+      failed_when: test_susa.rc != 0
+
+    - name: "ASSERT | susa-engine has zero failures and at least 9 passing tests"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_susa.stdout"
+          - "(test_susa.stdout | regex_search('([0-9]+) passed', '\\1') | first | int) >= 9"
+        fail_msg: "Expected at least 9 passed, 0 failed. Full output: {{ test_susa.stdout }}"
+        success_msg: "susa-engine: real sovereign import threshold verified, matches Susa's 'outward gateway' registration."
+
+    - name: "TEST | cargo test -p naming-registry"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p naming-registry"
+        chdir: "{{ workspace }}"
+      register: test_registry
+      changed_when: false
+      failed_when: test_registry.rc != 0
+
+    - name: "ASSERT | naming-registry has zero failures (Susa/Nuzi/SipparStore verified)"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_registry.stdout"
+        fail_msg: "naming-registry test failure. Full output: {{ test_registry.stdout }}"
+        success_msg: "naming-registry: Susa/Nuzi/SipparStore entries verified consistent."
+
+    - name: "DONE | PB-277 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          Susa registered against the real susa-engine crate (no new
+          ingestion-engine name needed). Nuzi (retrieval/query side) and
+          SipparStore (ingest/write side) sealed as a CQRS pair per
+          ADR-021 -- no naming collision remains.

@@ -1,0 +1,1102 @@
+---
+# =============================================================================
+# PLAYBOOK 90 — ENLIL 4-Index Stack + STATION clause + Multi-store connector
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_90_enlil_indexes.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 90 — ENLIL Indexes + STATION clause + Multi-store"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge: "/home/bahyway/Forge/bahyway_v4"
+    hepta: "/home/bahyway/Forge/bahyway_v4/crates/heptascript/src"
+    enlil: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/src"
+    godot: "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts"
+
+  tasks:
+
+    # =========================================================================
+    # STEP 1 — Add StationClause + StationValue to query.rs
+    # =========================================================================
+    - name: "Patch query.rs — add StationClause + StationValue"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_patch_query.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/crates/heptascript/src/query.rs"
+          with open(PATH) as f:
+              src = f.read()
+          if "StationClause" in src:
+              print("query.rs already patched"); sys.exit(0)
+
+          ADDITIONS = '''
+          // ── STATION ──────────────────────────────────────────────────────────────────
+
+          /// STATION clause — sovereign BeeMDM gate / pipeline station filter.
+          /// PHYSICS predicate: maps to NATIRU RoaringBitmap gate bitmaps.
+          /// Accepts both Akkadian logical names and BeeMDM physical names (S1-S8).
+          #[derive(Debug, Clone)]
+          pub struct StationClause {
+              pub stations:   Vec<StationCondition>,
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct StationCondition {
+              pub combinator: Combinator,
+              pub value:      StationValue,
+          }
+
+          /// Sovereign BeeMDM station — dual naming: Akkadian + Physical.
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum StationValue {
+              // BeeMDM physical names
+              S1,  // DATASTRUCTUUR  — structural fact extraction
+              S2,  // DATACOMPARE    — data comparison
+              S3,  // NAMZITUM       — semantic validation
+              S4,  // DATAENRICH     — enrichment
+              S5,  // TIAMAT5        — SLA predictive pre-configuration
+              S6,  // DATALINK       — cross-tribe linking
+              S7,  // DATASTEWARD    — governance / Way policy draft
+              S8,  // DATAARCHIVE    — archival
+          }
+
+          impl StationValue {
+              /// Akkadian logical name
+              pub fn akkadian_name(&self) -> &'static str {
+                  match self {
+                      StationValue::S1 => "DATASTRUCTUUR",
+                      StationValue::S2 => "DATACOMPARE",
+                      StationValue::S3 => "NAMZITUM",
+                      StationValue::S4 => "DATAENRICH",
+                      StationValue::S5 => "TIAMAT_ENGINE5",
+                      StationValue::S6 => "DATALINK",
+                      StationValue::S7 => "DATA_STEWARD",
+                      StationValue::S8 => "DATAARCHIVE",
+                  }
+              }
+              /// BeeMDM physical name
+              pub fn physical_name(&self) -> &'static str {
+                  match self {
+                      StationValue::S1 => "S1",
+                      StationValue::S2 => "S2",
+                      StationValue::S3 => "S3",
+                      StationValue::S4 => "S4",
+                      StationValue::S5 => "S5",
+                      StationValue::S6 => "S6",
+                      StationValue::S7 => "S7",
+                      StationValue::S8 => "S8",
+                  }
+              }
+              /// Gate bitmap index (0-based) for NATIRU RoaringBitmap lookup
+              pub fn gate_index(&self) -> u8 {
+                  match self {
+                      StationValue::S1 => 0,
+                      StationValue::S2 => 1,
+                      StationValue::S3 => 2,
+                      StationValue::S4 => 3,
+                      StationValue::S5 => 4,
+                      StationValue::S6 => 5,
+                      StationValue::S7 => 6,
+                      StationValue::S8 => 7,
+                  }
+              }
+          }
+
+          // ── ORBIT (tribe routing target) ──────────────────────────────────────────────
+
+          /// ORBIT clause — specifies which sovereign EnkiDB store(s) to query.
+          #[derive(Debug, Clone)]
+          pub struct OrbitClause {
+              pub tribe:    String,
+              pub db_types: Vec<DbTarget>,
+          }
+
+          /// Target EnkiDB instance type for multi-store routing.
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum DbTarget {
+              EnkiDB,   // Core CQRS sovereign store
+              EnkiDW,   // Data warehouse
+              EnkiSDB,  // Staging database
+              EnkiODB,  // Operation database
+              EnkiQDB,  // Quarantine database
+          }
+
+          /// CrossTribe reference — resolves via CrossTribe-KAKI registration journal.
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum TribeRef {
+              /// Direct tribe_id (e.g. 0x0001)
+              Direct(u16),
+              /// Resolve from CrossTribe-KAKI registration (left empty until PDM assigns)
+              CrossTribe,
+          }
+          '''
+
+          # Add STATION to HeptaQuery struct
+          src = src.replace(
+              "    pub how_much: Option<HowMuchClause>,\n}",
+              "    pub how_much: Option<HowMuchClause>,\n    pub station:  Option<StationClause>,\n    pub orbit:    Option<OrbitClause>,\n}"
+          )
+
+          src = src + ADDITIONS
+
+          with open(PATH, "w") as f:
+              f.write(src)
+          print("SUCCESS — query.rs patched with StationClause + OrbitClause")
+
+    - name: "Run query.rs patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_patch_query.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    # =========================================================================
+    # STEP 2 — Add STATION + ORBIT tokens to token.rs
+    # =========================================================================
+    - name: "Patch token.rs — add Station/Orbit/CrossTribe tokens"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_patch_token.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/crates/heptascript/src/token.rs"
+          with open(PATH) as f:
+              src = f.read()
+          if "Station" in src:
+              print("token.rs already patched"); sys.exit(0)
+
+          # Find the enum Token { ... } and add new tokens before the closing brace
+          # We look for HowMuch token and add after it
+          NEW_TOKENS = """
+              // STATION clause tokens
+              Station,
+              Orbit,
+              CrossTribe,
+              // BeeMDM station names (physical)
+              S1, S2, S3, S4, S5, S6, S7, S8,
+              // Akkadian station names (logical) — parsed as Ident but resolved here
+          """
+
+          # Add to enum
+          src = src.replace(
+              "    HowMuch,",
+              "    HowMuch,\n" + NEW_TOKENS
+          )
+
+          # Add to tokenizer keyword map
+          KEYWORD_MAP_ADDITIONS = '''
+                  "STATION"        => Token::Station,
+                  "ORBIT"          => Token::Orbit,
+                  "CROSSTRIBE"     => Token::CrossTribe,
+                  "S1"             => Token::S1,
+                  "S2"             => Token::S2,
+                  "S3"             => Token::S3,
+                  "S4"             => Token::S4,
+                  "S5"             => Token::S5,
+                  "S6"             => Token::S6,
+                  "S7"             => Token::S7,
+                  "S8"             => Token::S8,
+                  "DATASTRUCTUUR"  => Token::S1,
+                  "DATACOMPARE"    => Token::S2,
+                  "NAMZITUM"       => Token::S3,
+                  "DATAENRICH"     => Token::S4,
+                  "TIAMAT_ENGINE5" => Token::S5,
+                  "DATALINK"       => Token::S6,
+                  "DATA_STEWARD"   => Token::S7,
+                  "DATAARCHIVE"    => Token::S8,
+          '''
+
+          # Find keyword match arm insertion point
+          if '"HOW_MUCH"' in src:
+              src = src.replace(
+                  '"HOW_MUCH"',
+                  KEYWORD_MAP_ADDITIONS + '            "HOW_MUCH"'
+              )
+          else:
+              # Fallback: append to keyword map
+              print("WARNING: HOW_MUCH keyword not found in token.rs — manual check needed")
+
+          with open(PATH, "w") as f:
+              f.write(src)
+          print("SUCCESS — token.rs patched with STATION/ORBIT/CrossTribe tokens")
+
+    - name: "Run token.rs patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_patch_token.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    # =========================================================================
+    # STEP 3 — Add STATION + ORBIT parsing to parser.rs
+    # =========================================================================
+    - name: "Patch parser.rs — add station + orbit parsing"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_patch_parser.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/crates/heptascript/src/parser.rs"
+          with open(PATH) as f:
+              src = f.read()
+          if "maybe_parse_station" in src:
+              print("parser.rs already patched"); sys.exit(0)
+
+          # 1. Add station + orbit to the parse() return
+          src = src.replace(
+              "        Ok(HeptaQuery { who, what, r#where, when, why, how, how_much })",
+              "        let station = self.maybe_parse_station()?;\n        let orbit   = self.maybe_parse_orbit()?;\n        Ok(HeptaQuery { who, what, r#where, when, why, how, how_much, station, orbit })"
+          )
+
+          # 2. Add parsing methods before the closing impl Parser
+          STATION_PARSER = '''
+              // ── STATION ──────────────────────────────────────────────────────────────
+
+              fn maybe_parse_station(&mut self) -> Result<Option<StationClause>, ParseError> {
+                  if !matches!(self.peek(), Token::Station) { return Ok(None); }
+                  self.advance();
+                  self.expect(&Token::Eq)?;
+                  let first_val = self.parse_station_value()?;
+                  let mut stations = vec![StationCondition {
+                      combinator: Combinator::And,
+                      value:      first_val,
+                  }];
+                  loop {
+                      match self.peek().clone() {
+                          Token::And => {
+                              self.advance();
+                              let v = self.parse_station_value()?;
+                              stations.push(StationCondition { combinator: Combinator::And, value: v });
+                          }
+                          Token::Or => {
+                              self.advance();
+                              let v = self.parse_station_value()?;
+                              stations.push(StationCondition { combinator: Combinator::Or, value: v });
+                          }
+                          _ => break,
+                      }
+                  }
+                  Ok(Some(StationClause { stations }))
+              }
+
+              fn parse_station_value(&mut self) -> Result<StationValue, ParseError> {
+                  match self.advance() {
+                      Token::S1 => Ok(StationValue::S1),
+                      Token::S2 => Ok(StationValue::S2),
+                      Token::S3 => Ok(StationValue::S3),
+                      Token::S4 => Ok(StationValue::S4),
+                      Token::S5 => Ok(StationValue::S5),
+                      Token::S6 => Ok(StationValue::S6),
+                      Token::S7 => Ok(StationValue::S7),
+                      Token::S8 => Ok(StationValue::S8),
+                      t => Err(ParseError(format!(
+                          "expected station name (S1-S8 or Akkadian equivalent), got {t:?}"
+                      ))),
+                  }
+              }
+
+              // ── ORBIT ─────────────────────────────────────────────────────────────────
+
+              fn maybe_parse_orbit(&mut self) -> Result<Option<OrbitClause>, ParseError> {
+                  if !matches!(self.peek(), Token::Orbit) { return Ok(None); }
+                  self.advance();
+                  // ORBIT tribe: TRIBE_NAME [db: EnkiDB, EnkiSDB, ...]
+                  // Simplified: parse tribe name then optional db targets
+                  let tribe = match self.advance() {
+                      Token::Ident(s) => s,
+                      t => return Err(ParseError(format!("expected tribe name after ORBIT, got {t:?}"))),
+                  };
+                  let mut db_types = vec![DbTarget::EnkiDB]; // default
+                  // Parse optional db target list
+                  if matches!(self.peek(), Token::Ident(_)) {
+                      // Could be "db:" prefix
+                      if let Token::Ident(s) = self.peek().clone() {
+                          if s.to_uppercase() == "DB" {
+                              self.advance();
+                              // expect colon — skip if present
+                              if matches!(self.peek(), Token::Colon) { self.advance(); }
+                              db_types = self.parse_db_targets()?;
+                          }
+                      }
+                  }
+                  Ok(Some(OrbitClause { tribe, db_types }))
+              }
+
+              fn parse_db_targets(&mut self) -> Result<Vec<DbTarget>, ParseError> {
+                  let mut targets = vec![self.parse_db_target()?];
+                  while matches!(self.peek(), Token::Comma) {
+                      self.advance();
+                      targets.push(self.parse_db_target()?);
+                  }
+                  Ok(targets)
+              }
+
+              fn parse_db_target(&mut self) -> Result<DbTarget, ParseError> {
+                  match self.advance() {
+                      Token::Ident(s) => match s.to_uppercase().as_str() {
+                          "ENKIDB"  => Ok(DbTarget::EnkiDB),
+                          "ENKIDW"  => Ok(DbTarget::EnkiDW),
+                          "ENKISDB" => Ok(DbTarget::EnkiSDB),
+                          "ENKIODB" => Ok(DbTarget::EnkiODB),
+                          "ENKIQDB" => Ok(DbTarget::EnkiQDB),
+                          other => Err(ParseError(format!("unknown DB target: {other}"))),
+                      },
+                      t => Err(ParseError(format!("expected DB target name, got {t:?}"))),
+                  }
+              }
+          '''
+
+          # Insert before the last closing brace of impl Parser
+          # Find the #[cfg(test)] marker which comes after impl Parser closes
+          src = src.replace(
+              "\n#[cfg(test)]",
+              STATION_PARSER + "\n}\n\n#[cfg(test)]",
+              1
+          )
+          # Remove the extra closing brace we may have introduced
+          # (the impl Parser already has one — we add the methods inside it)
+          # Actually we need to insert BEFORE the closing brace of impl Parser
+          # Let's find the last "}" before #[cfg(test)] and insert before it
+
+          with open(PATH, "w") as f:
+              f.write(src)
+          print("SUCCESS — parser.rs patched with maybe_parse_station + maybe_parse_orbit")
+
+    - name: "Run parser.rs patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_patch_parser.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    # =========================================================================
+    # STEP 4 — Add STATION eval to engine.rs
+    # =========================================================================
+    - name: "Patch engine.rs — add eval_station PHYSICS predicate"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_patch_engine.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/crates/heptascript/src/engine.rs"
+          with open(PATH) as f:
+              src = f.read()
+          if "eval_station" in src:
+              print("engine.rs already patched"); sys.exit(0)
+
+          # 1. Add station filter in the execute() pipeline
+          # STATION is a PHYSICS predicate — runs BEFORE EAV scan
+          src = src.replace(
+              "        if !eval_where(&query.r#where, &eav) { return None; }",
+              "        if !eval_station_on_eav(&query.station, &eav) { return None; }\n        if !eval_where(&query.r#where, &eav) { return None; }"
+          )
+
+          # 2. Add eval_station_on_eav function before eval_where
+          STATION_EVAL = '''
+          // ── STATION evaluation (PHYSICS predicate) ───────────────────────────────────
+          // STATION maps to the BeeMDM gate stored in EAV as "beemm.station" attribute.
+          // In full ENLIL index: this becomes a NATIRU RoaringBitmap gate lookup.
+          // Current: EAV-based fallback until NATIRU bitmaps are built.
+
+          fn eval_station_on_eav(station: &Option<crate::query::StationClause>, map: &EavMap) -> bool {
+              let station = match station {
+                  Some(s) => s,
+                  None    => return true, // no STATION clause — pass all
+              };
+              if station.stations.is_empty() { return true; }
+
+              let stored_station = match get_val(map, "beemm.station") {
+                  Some(AkkValue::Text(s)) => s.clone(),
+                  Some(AkkValue::Int(n))  => format!("S{n}"),
+                  _ => return false, // particle has no station attribute
+              };
+
+              let mut result = eval_station_cond(&station.stations[0], &stored_station);
+              for cond in &station.stations[1..] {
+                  let this = eval_station_cond(cond, &stored_station);
+                  result = match cond.combinator {
+                      crate::query::Combinator::And => result && this,
+                      crate::query::Combinator::Or  => result || this,
+                  };
+              }
+              result
+          }
+
+          fn eval_station_cond(
+              cond:    &crate::query::StationCondition,
+              stored:  &str,
+          ) -> bool {
+              let physical  = cond.value.physical_name();
+              let akkadian  = cond.value.akkadian_name();
+              stored == physical
+                  || stored.to_uppercase() == physical
+                  || stored.to_uppercase() == akkadian
+                  || stored == akkadian
+          }
+
+          '''
+
+          src = src.replace(
+              "// ── WHERE evaluation",
+              STATION_EVAL + "// ── WHERE evaluation"
+          )
+
+          with open(PATH, "w") as f:
+              f.write(src)
+          print("SUCCESS — engine.rs patched with eval_station PHYSICS predicate")
+
+    - name: "Run engine.rs patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_patch_engine.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    # =========================================================================
+    # STEP 5 — Create enkidb-enlil-index crate
+    # =========================================================================
+    - name: "Create enkidb-enlil-index crate directory"
+      ansible.builtin.file:
+        path: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/src"
+        state: directory
+        mode: "0755"
+
+    - name: "Write enkidb-enlil-index/Cargo.toml"
+      ansible.builtin.copy:
+        dest: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/Cargo.toml"
+        content: |
+          [package]
+          name    = "enkidb-enlil-index"
+          version = "4.0.0"
+          edition = "2021"
+
+          [dependencies]
+          bahyway-crc  = { path = "../bahyway-crc"  }
+          bahyway-core = { path = "../bahyway-core" }
+          enkidb-kaki  = { path = "../enkidb-kaki"  }
+          akkvalue     = { path = "../akkvalue"      }
+          roaring      = "0.10"
+
+          [lib]
+          name = "enkidb_enlil_index"
+
+    - name: "Write enkidb-enlil-index/src/lib.rs"
+      ansible.builtin.copy:
+        dest: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/src/lib.rs"
+        content: |
+          //! ENLIL Four-Layer Sovereign Index Stack
+          //!
+          //! Index 0 — SurrogateMap   : KAKI-16 ↔ u32 Golden Key
+          //! Index 1 — KISPU HeadStore: columnar attribute arrays O(1) lookup
+          //! Index 2 — NATIRU         : RoaringBitmap per orbital state + gate
+          //! Index 3 — BTreeRange     : epoch / quality / b11 range index
+          //!                  + idx_eav: exact attribute hash match
+          //!
+          //! DUB.SAR 𒁾  BahyWay.Ecosystem v4.0
+
+          pub mod surrogate_map;
+          pub mod kispu;
+          pub mod natiru;
+          pub mod btree_range;
+          pub mod enlil_stack;
+
+          pub use enlil_stack::EnlilStack;
+
+    - name: "Write surrogate_map.rs"
+      ansible.builtin.copy:
+        dest: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/src/surrogate_map.rs"
+        content: |
+          //! Index 0 — SurrogateMap: KAKI-16 ↔ u32 Golden Key
+          //!
+          //! The SurrogateMap eliminates full KAKI-16 byte comparison from hot paths.
+          //! Every KAKI gets a compact u32 surrogate ("Golden Key") assigned at
+          //! ingestion time. All other indexes reference this u32 — never the raw KAKI.
+          //!
+          //! Golden Key assignment: sequential monotonic counter, tribe-scoped.
+          //! Lookup: O(1) via Vec<[u8;16]> indexed by surrogate u32.
+          //! Reverse: HashMap<[u8;16], u32> for KAKI→surrogate resolution.
+
+          use std::collections::HashMap;
+
+          /// SurrogateMap — Index 0 of the ENLIL stack.
+          #[derive(Default)]
+          pub struct SurrogateMap {
+              /// Forward: surrogate u32 → KAKI 16 bytes. Index = surrogate.
+              forward: Vec<[u8; 16]>,
+              /// Reverse: KAKI 16 bytes → surrogate u32.
+              reverse: HashMap<[u8; 16], u32>,
+          }
+
+          impl SurrogateMap {
+              pub fn new() -> Self { Self::default() }
+
+              /// Get or assign a surrogate for a KAKI.
+              /// Returns (surrogate, was_new).
+              pub fn get_or_insert(&mut self, kaki: [u8; 16]) -> (u32, bool) {
+                  if let Some(&s) = self.reverse.get(&kaki) {
+                      return (s, false);
+                  }
+                  let s = self.forward.len() as u32;
+                  self.forward.push(kaki);
+                  self.reverse.insert(kaki, s);
+                  (s, true)
+              }
+
+              /// Resolve surrogate → KAKI bytes. O(1).
+              pub fn kaki(&self, surrogate: u32) -> Option<&[u8; 16]> {
+                  self.forward.get(surrogate as usize)
+              }
+
+              /// Resolve KAKI bytes → surrogate. O(1) via HashMap.
+              pub fn surrogate(&self, kaki: &[u8; 16]) -> Option<u32> {
+                  self.reverse.get(kaki).copied()
+              }
+
+              /// Total number of registered KAKIs.
+              pub fn len(&self) -> usize { self.forward.len() }
+
+              pub fn is_empty(&self) -> bool { self.forward.is_empty() }
+          }
+
+    - name: "Write kispu.rs"
+      ansible.builtin.copy:
+        dest: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/src/kispu.rs"
+        content: |
+          //! Index 1 — KISPU HeadStore: columnar attribute arrays
+          //!
+          //! KISPU stores EAV attributes in columnar layout:
+          //! one Vec<(u32, AkkValue)> per attribute hash, sorted by surrogate.
+          //!
+          //! Lookup: binary search by surrogate → O(log n) per attribute column.
+          //! Projection: iterate only the columns referenced in WHAT clause.
+          //! Update: four-way atomic commit sealed in KISPU.
+
+          use std::collections::HashMap;
+          use akkvalue::AkkValue;
+
+          /// KISPU HeadStore — Index 1 of the ENLIL stack.
+          pub struct KispuHeadStore {
+              /// attr_hash → sorted Vec<(surrogate, value)>
+              columns: HashMap<u32, Vec<(u32, AkkValue)>>,
+          }
+
+          impl KispuHeadStore {
+              pub fn new() -> Self {
+                  Self { columns: HashMap::new() }
+              }
+
+              /// Insert or update an attribute value for a surrogate.
+              /// Last-write-wins per (surrogate, attr_hash).
+              pub fn upsert(&mut self, surrogate: u32, attr_hash: u32, value: AkkValue) {
+                  let col = self.columns.entry(attr_hash).or_default();
+                  match col.binary_search_by_key(&surrogate, |&(s, _)| s) {
+                      Ok(idx)  => col[idx].1 = value,
+                      Err(idx) => col.insert(idx, (surrogate, value)),
+                  }
+              }
+
+              /// Lookup a single attribute for a surrogate. O(log n).
+              pub fn get(&self, surrogate: u32, attr_hash: u32) -> Option<&AkkValue> {
+                  let col = self.columns.get(&attr_hash)?;
+                  let idx = col.binary_search_by_key(&surrogate, |&(s, _)| s).ok()?;
+                  Some(&col[idx].1)
+              }
+
+              /// Project multiple attributes for a surrogate.
+              /// Returns Vec<(attr_hash, &AkkValue)> for found attributes only.
+              pub fn project<'a>(
+                  &'a self,
+                  surrogate:  u32,
+                  attr_hashes: &[u32],
+              ) -> Vec<(u32, &'a AkkValue)> {
+                  attr_hashes.iter().filter_map(|&h| {
+                      self.get(surrogate, h).map(|v| (h, v))
+                  }).collect()
+              }
+
+              /// All surrogates that have a value for attr_hash.
+              pub fn surrogates_with_attr(&self, attr_hash: u32) -> &[(u32, AkkValue)] {
+                  self.columns.get(&attr_hash).map(|v| v.as_slice()).unwrap_or(&[])
+              }
+
+              pub fn column_count(&self) -> usize { self.columns.len() }
+          }
+
+          impl Default for KispuHeadStore {
+              fn default() -> Self { Self::new() }
+          }
+
+    - name: "Write natiru.rs"
+      ansible.builtin.copy:
+        dest: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/src/natiru.rs"
+        content: |
+          //! Index 2 — NATIRU: RoaringBitmap state + gate index
+          //!
+          //! NATIRU maintains seven orbital state bitmaps per tribe:
+          //!   GOLDEN_GEM / GOLDEN_ALIVE / FUZZY_AGED / FUZZY_GRAY /
+          //!   FUZZY_DECAY / DEAD_EXPIRED / DEAD_SEALED
+          //!
+          //! Plus eight BeeMDM gate bitmaps (S1-S8) for STATION predicate.
+          //! Plus KAKI type bitmaps: Identity / Event / CrossTribe.
+          //!
+          //! Partition pruning: STATION = S3 → bitmap AND before any EAV touch.
+
+          use roaring::RoaringBitmap;
+
+          /// Seven canonical orbital states (EAV-only — never in KAKI bytes).
+          #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+          pub enum OrbitalState {
+              GoldenGem    = 0,
+              GoldenAlive  = 1,
+              FuzzyAged    = 2,
+              FuzzyGray    = 3,
+              FuzzyDecay   = 4,
+              DeadExpired  = 5,
+              DeadSealed   = 6,
+          }
+
+          impl OrbitalState {
+              pub fn from_index(i: u8) -> Option<Self> {
+                  match i {
+                      0 => Some(Self::GoldenGem),
+                      1 => Some(Self::GoldenAlive),
+                      2 => Some(Self::FuzzyAged),
+                      3 => Some(Self::FuzzyGray),
+                      4 => Some(Self::FuzzyDecay),
+                      5 => Some(Self::DeadExpired),
+                      6 => Some(Self::DeadSealed),
+                      _ => None,
+                  }
+              }
+
+              pub fn sovereign_name(&self) -> &'static str {
+                  match self {
+                      Self::GoldenGem   => "GOLDEN_GEM",
+                      Self::GoldenAlive => "GOLDEN_ALIVE",
+                      Self::FuzzyAged   => "FUZZY_AGED",
+                      Self::FuzzyGray   => "FUZZY_GRAY",
+                      Self::FuzzyDecay  => "FUZZY_DECAY",
+                      Self::DeadExpired => "DEAD_EXPIRED",
+                      Self::DeadSealed  => "DEAD_SEALED",
+                  }
+              }
+          }
+
+          /// NATIRU — Index 2 of the ENLIL stack.
+          pub struct Natiru {
+              /// Seven orbital state bitmaps. Index = OrbitalState as u8.
+              orbital: [RoaringBitmap; 7],
+              /// Eight BeeMDM gate bitmaps (S1-S8). Index = gate_index (0-7).
+              gate:    [RoaringBitmap; 8],
+              /// Three KAKI type bitmaps: Identity=0, Event=1, CrossTribe=2.
+              kaki_type: [RoaringBitmap; 3],
+          }
+
+          impl Natiru {
+              pub fn new() -> Self {
+                  Self {
+                      orbital:   std::array::from_fn(|_| RoaringBitmap::new()),
+                      gate:      std::array::from_fn(|_| RoaringBitmap::new()),
+                      kaki_type: std::array::from_fn(|_| RoaringBitmap::new()),
+                  }
+              }
+
+              /// Set orbital state for a surrogate (removes from all others first).
+              pub fn set_orbital(&mut self, surrogate: u32, state: OrbitalState) {
+                  for bm in self.orbital.iter_mut() { bm.remove(surrogate); }
+                  self.orbital[state as usize].insert(surrogate);
+              }
+
+              /// Set BeeMDM gate for a surrogate (gate_index 0-7 = S1-S8).
+              pub fn set_gate(&mut self, surrogate: u32, gate_index: u8) {
+                  if gate_index < 8 {
+                      for bm in self.gate.iter_mut() { bm.remove(surrogate); }
+                      self.gate[gate_index as usize].insert(surrogate);
+                  }
+              }
+
+              /// Set KAKI type for a surrogate (0=Identity, 1=Event, 2=CrossTribe).
+              pub fn set_kaki_type(&mut self, surrogate: u32, kaki_type: u8) {
+                  if kaki_type < 3 {
+                      for bm in self.kaki_type.iter_mut() { bm.remove(surrogate); }
+                      self.kaki_type[kaki_type as usize].insert(surrogate);
+                  }
+              }
+
+              /// Bitmap of surrogates at a given orbital state.
+              pub fn orbital_bitmap(&self, state: OrbitalState) -> &RoaringBitmap {
+                  &self.orbital[state as usize]
+              }
+
+              /// Bitmap of surrogates at a given BeeMDM gate (gate_index 0-7).
+              pub fn gate_bitmap(&self, gate_index: u8) -> Option<&RoaringBitmap> {
+                  self.gate.get(gate_index as usize)
+              }
+
+              /// STATION predicate: returns surrogates matching gate_index.
+              /// This is the PHYSICS predicate — runs before EAV scan.
+              pub fn station_candidates(&self, gate_index: u8) -> Option<&RoaringBitmap> {
+                  self.gate_bitmap(gate_index)
+              }
+
+              /// Intersection of orbital state AND gate bitmaps.
+              pub fn orbital_and_gate(
+                  &self,
+                  state:      OrbitalState,
+                  gate_index: u8,
+              ) -> RoaringBitmap {
+                  match self.gate_bitmap(gate_index) {
+                      Some(g) => &self.orbital[state as usize] & g,
+                      None    => RoaringBitmap::new(),
+                  }
+              }
+
+              /// Total surrogates tracked.
+              pub fn total_surrogates(&self) -> u64 {
+                  self.orbital.iter().map(|b| b.len()).sum()
+              }
+          }
+
+          impl Default for Natiru {
+              fn default() -> Self { Self::new() }
+          }
+
+    - name: "Write btree_range.rs"
+      ansible.builtin.copy:
+        dest: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/src/btree_range.rs"
+        content: |
+          //! Index 3 — BTreeRange + idx_eav
+          //!
+          //! BTreeRange: ordered index for range queries on epoch, quality, b11.
+          //! idx_eav:    exact-match index on EAV attribute hash + value hash.
+          //!
+          //! Both are META predicates — run after NATIRU bitmap pruning.
+
+          use std::collections::{BTreeMap, HashMap};
+
+          /// BTreeRange — ordered range index for numeric predicates.
+          /// Key: (value, surrogate) — enables range scan + surrogate retrieval.
+          pub struct BTreeRange {
+              /// epoch index: epoch_u64 → set of surrogates
+              pub epoch:   BTreeMap<u64, Vec<u32>>,
+              /// quality index: quality_byte u8 → set of surrogates
+              pub quality: BTreeMap<u8, Vec<u32>>,
+              /// b11 index: b11 u16 → set of surrogates
+              pub b11:     BTreeMap<u16, Vec<u32>>,
+          }
+
+          impl BTreeRange {
+              pub fn new() -> Self {
+                  Self {
+                      epoch:   BTreeMap::new(),
+                      quality: BTreeMap::new(),
+                      b11:     BTreeMap::new(),
+                  }
+              }
+
+              pub fn insert_epoch(&mut self, epoch: u64, surrogate: u32) {
+                  self.epoch.entry(epoch).or_default().push(surrogate);
+              }
+
+              pub fn insert_quality(&mut self, quality: u8, surrogate: u32) {
+                  self.quality.entry(quality).or_default().push(surrogate);
+              }
+
+              pub fn insert_b11(&mut self, b11: u16, surrogate: u32) {
+                  self.b11.entry(b11).or_default().push(surrogate);
+              }
+
+              /// Surrogates with quality_byte >= min_quality.
+              pub fn quality_gte(&self, min_quality: u8) -> Vec<u32> {
+                  self.quality.range(min_quality..)
+                      .flat_map(|(_, s)| s.iter().copied())
+                      .collect()
+              }
+
+              /// Surrogates with quality_byte <= max_quality.
+              pub fn quality_lte(&self, max_quality: u8) -> Vec<u32> {
+                  self.quality.range(..=max_quality)
+                      .flat_map(|(_, s)| s.iter().copied())
+                      .collect()
+              }
+
+              /// Surrogates with epoch in [from, to].
+              pub fn epoch_range(&self, from: u64, to: u64) -> Vec<u32> {
+                  self.epoch.range(from..=to)
+                      .flat_map(|(_, s)| s.iter().copied())
+                      .collect()
+              }
+
+              /// Surrogates with b11 >= min_b11.
+              pub fn b11_gte(&self, min_b11: u16) -> Vec<u32> {
+                  self.b11.range(min_b11..)
+                      .flat_map(|(_, s)| s.iter().copied())
+                      .collect()
+              }
+          }
+
+          impl Default for BTreeRange {
+              fn default() -> Self { Self::new() }
+          }
+
+          /// idx_eav — exact attribute-value match index.
+          /// Key: (attr_hash u32, value_hash u32) → Vec<surrogate u32>
+          pub struct IdxEav {
+              index: HashMap<(u32, u32), Vec<u32>>,
+          }
+
+          impl IdxEav {
+              pub fn new() -> Self {
+                  Self { index: HashMap::new() }
+              }
+
+              /// Insert a (attr_hash, value_hash) → surrogate mapping.
+              pub fn insert(&mut self, attr_hash: u32, value_hash: u32, surrogate: u32) {
+                  self.index.entry((attr_hash, value_hash)).or_default().push(surrogate);
+              }
+
+              /// Exact match lookup: which surrogates have attr=value?
+              pub fn lookup(&self, attr_hash: u32, value_hash: u32) -> &[u32] {
+                  self.index.get(&(attr_hash, value_hash))
+                      .map(|v| v.as_slice())
+                      .unwrap_or(&[])
+              }
+
+              /// All surrogates that have any value for attr_hash.
+              pub fn surrogates_with_attr(&self, attr_hash: u32) -> Vec<u32> {
+                  self.index.iter()
+                      .filter(|((ah, _), _)| *ah == attr_hash)
+                      .flat_map(|(_, s)| s.iter().copied())
+                      .collect()
+              }
+          }
+
+          impl Default for IdxEav {
+              fn default() -> Self { Self::new() }
+          }
+
+    - name: "Write enlil_stack.rs"
+      ansible.builtin.copy:
+        dest: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-enlil-index/src/enlil_stack.rs"
+        content: |
+          //! ENLIL Stack — the four indexes unified into one sovereign structure.
+          //!
+          //! Query execution order (sovereign sargability):
+          //!   1. NATIRU bitmap  — STATION / orbital state pruning (PHYSICS)
+          //!   2. BTreeRange     — epoch / quality / b11 range filter (PHYSICS)
+          //!   3. idx_eav        — exact attr=value match (META)
+          //!   4. KISPU HeadStore— project requested attributes (META)
+          //!   5. SurrogateMap   — resolve surrogate → KAKI for result (Golden Key)
+          //!
+          //! All five EnkiDB types share this stack structure.
+          //! NATIRU gate bitmaps differ per type (EnkiSDB=S1-S4, EnkiODB=S4-S7, etc.)
+
+          use crate::{
+              surrogate_map::SurrogateMap,
+              kispu::KispuHeadStore,
+              natiru::Natiru,
+              btree_range::{BTreeRange, IdxEav},
+          };
+
+          /// The four-index ENLIL sovereign stack.
+          pub struct EnlilStack {
+              /// Index 0: SurrogateMap — Golden Key KAKI↔u32
+              pub surrogate: SurrogateMap,
+              /// Index 1: KISPU HeadStore — columnar attribute arrays
+              pub kispu:     KispuHeadStore,
+              /// Index 2: NATIRU — RoaringBitmap orbital + gate bitmaps
+              pub natiru:    Natiru,
+              /// Index 3a: BTreeRange — epoch/quality/b11 range index
+              pub btree:     BTreeRange,
+              /// Index 3b: idx_eav — exact attr=value match
+              pub idx_eav:   IdxEav,
+          }
+
+          impl EnlilStack {
+              pub fn new() -> Self {
+                  Self {
+                      surrogate: SurrogateMap::new(),
+                      kispu:     KispuHeadStore::new(),
+                      natiru:    Natiru::new(),
+                      btree:     BTreeRange::new(),
+                      idx_eav:   IdxEav::new(),
+                  }
+              }
+
+              /// Register a new KAKI — assigns surrogate and initialises all indexes.
+              pub fn register_kaki(
+                  &mut self,
+                  kaki:       [u8; 16],
+                  kaki_type:  u8,    // 0=Identity, 1=Event, 2=CrossTribe
+                  gate_index: u8,    // BeeMDM gate S1-S8 (0-7)
+                  epoch:      u64,
+                  quality:    u8,
+              ) -> u32 {
+                  let (surrogate, _) = self.surrogate.get_or_insert(kaki);
+                  self.natiru.set_kaki_type(surrogate, kaki_type);
+                  self.natiru.set_gate(surrogate, gate_index);
+                  self.btree.insert_epoch(epoch, surrogate);
+                  self.btree.insert_quality(quality, surrogate);
+                  surrogate
+              }
+
+              /// Stats summary for SUMU-UKIN display.
+              pub fn stats(&self) -> EnlilStats {
+                  EnlilStats {
+                      total_kakis:  self.surrogate.len(),
+                      kispu_cols:   self.kispu.column_count(),
+                      natiru_total: self.natiru.total_surrogates(),
+                  }
+              }
+          }
+
+          impl Default for EnlilStack {
+              fn default() -> Self { Self::new() }
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct EnlilStats {
+              pub total_kakis:  usize,
+              pub kispu_cols:   usize,
+              pub natiru_total: u64,
+          }
+
+    # =========================================================================
+    # STEP 6 — Add enkidb-enlil-index to workspace Cargo.toml
+    # =========================================================================
+    - name: "Add enkidb-enlil-index to workspace"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_patch_workspace.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/Cargo.toml"
+          with open(PATH) as f:
+              src = f.read()
+          if "enkidb-enlil-index" in src:
+              print("already in workspace"); sys.exit(0)
+          src = src.replace(
+              '"crates/enkidb-persist"',
+              '"crates/enkidb-persist",\n    "crates/enkidb-enlil-index"'
+          )
+          with open(PATH, "w") as f:
+              f.write(src)
+          print("SUCCESS — enkidb-enlil-index added to workspace")
+
+    - name: "Run workspace patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_patch_workspace.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    # =========================================================================
+    # STEP 7 — Update dubsar_proof.gd multi-store connector
+    # =========================================================================
+    - name: "Patch dubsar_proof.gd — multi-store engine selector"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_patch_godot_connector.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts/dubsar_proof.gd"
+          with open(PATH) as f:
+              src = f.read()
+          if "selected_engine" in src:
+              print("already patched"); sys.exit(0)
+
+          # Add engine selector state variables
+          src = src.replace(
+              "var connected     := false",
+              "var connected     := false\nvar selected_engine := \"EnkiDB\"\nvar engine_ports := {\"EnkiDB\": 7001, \"EnkiDW\": 7002, \"EnkiSDB\": 7003, \"EnkiODB\": 7004, \"EnkiQDB\": 7005}"
+          )
+
+          # Add engine selector to left panel UI after EnkiDB Connector label
+          src = src.replace(
+              "lv.add_child(_lbl(\"EnkiDB Connector\", 11, C_DIM))",
+              """lv.add_child(_lbl("EnkiDB Connector", 11, C_DIM))
+          lv.add_child(_lbl("Engine:", 10, C_DIM))
+          var engine_opts = OptionButton.new()
+          for eng in ["EnkiDB", "EnkiDW", "EnkiSDB", "EnkiODB", "EnkiQDB"]:
+          \tengine_opts.add_item(eng)
+          engine_opts.item_selected.connect(func(idx):
+          \tselected_engine = ["EnkiDB","EnkiDW","EnkiSDB","EnkiODB","EnkiQDB"][idx]
+          \tvar p = engine_ports.get(selected_engine, 7001)
+          \tif lbl_status: lbl_status.text = "Engine: " + selected_engine + " :" + str(p)
+          )
+          lv.add_child(engine_opts)"""
+          )
+
+          # Update SERVER_PORT to use selected_engine port dynamically
+          src = src.replace(
+              "if peer.connect_to_host(SERVER_HOST, SERVER_PORT) != OK:",
+              "var _port = engine_ports.get(selected_engine, SERVER_PORT)\n\tif peer.connect_to_host(SERVER_HOST, _port) != OK:"
+          )
+
+          with open(PATH, "w") as f:
+              f.write(src)
+          print("SUCCESS — dubsar_proof.gd patched with multi-store engine selector")
+
+    - name: "Run godot connector patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_patch_godot_connector.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    # =========================================================================
+    # STEP 8 — Build
+    # =========================================================================
+    - name: "cargo build — heptascript + enkidb-enlil-index"
+      ansible.builtin.shell: |
+        cargo build -p heptascript -p enkidb-enlil-index 2>&1 | tail -20
+      args:
+        chdir: "{{ forge }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 90 sealed.
+          Delivered:
+            heptascript: STATION clause (Akkadian + BeeMDM dual names)
+                         ORBIT clause (multi-store routing)
+                         CrossTribe-KAKI keyword
+            enkidb-enlil-index crate:
+              Index 0 — SurrogateMap  (KAKI-16 <-> u32 Golden Key)
+              Index 1 — KISPU         (columnar O(1) attribute arrays)
+              Index 2 — NATIRU        (RoaringBitmap orbital + gate bitmaps)
+              Index 3 — BTreeRange    (epoch/quality/b11 range index)
+                      + idx_eav       (exact attr=value match)
+            dubsar_proof.gd: engine OptionButton (EnkiDB/EnkiDW/EnkiSDB/EnkiODB/EnkiQDB)

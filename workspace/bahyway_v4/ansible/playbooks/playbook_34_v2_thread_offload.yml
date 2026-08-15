@@ -1,0 +1,431 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 34 v2 — Thread offload for enkidb_connect.rs
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECT : DUB.SAR 𒁾
+# SEALED    : 2026-06-20
+# TARGET    : eriduous-vdi (run FROM eriduous-vdi, ansible localhost)
+#
+# PROBLEM FIXED
+# ─────────────
+#   connect_to_journal()  line ~757 — load_entries() + 80k Journal::append()
+#                                     was on egui paint thread → FREEZE
+#   run_hepta_query()     line ~845 — execute() W5H2 scan
+#                                     was on egui paint thread → FREEZE
+#
+# SOLUTION
+# ────────
+#   Both functions now call std::thread::spawn immediately and return.
+#   A WorkerState struct (Arc<Mutex<>>) is the mailbox.
+#   poll_worker() is called once per egui frame — drains results, never blocks.
+#   page_size default 1 000 — prevents OOM on full-table match.
+#
+# PURE RUST — no tokio, no async, no external crates
+#
+# RUN FROM eriduous-vdi:
+#   ansible-playbook ~/playbook_34_v2_thread_offload.yml -i localhost,
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 34 v2 — Thread offload patch for enkidb_connect.rs"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    panel_file: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/enkidb_connect.rs"
+    forge_root: "/home/bahyway/Forge/bahyway_v4"
+
+  tasks:
+
+    - name: "0.0 | Confirm panel file exists"
+      ansible.builtin.stat:
+        path: "{{ panel_file }}"
+      register: panel_stat
+
+    - name: "0.1 | Abort if missing"
+      ansible.builtin.fail:
+        msg: "enkidb_connect.rs not found at {{ panel_file }}"
+      when: not panel_stat.stat.exists
+
+    - name: "0.2 | Backup original"
+      ansible.builtin.copy:
+        src:        "{{ panel_file }}"
+        dest:       "{{ panel_file }}.bak_p34v2"
+        remote_src: true
+
+    - name: "1.0 | Write patch script to /tmp"
+      ansible.builtin.copy:
+        dest: "/tmp/p34v2_patch.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # Surgical patch — DUB.SAR 𒁾  2026-06-20
+          import sys
+
+          TARGET = "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/enkidb_connect.rs"
+
+          with open(TARGET) as f:
+              src = f.read()
+
+          def fail(msg):
+              print("ERROR:", msg)
+              sys.exit(1)
+
+          def replace_once(src, old, new, label):
+              if old not in src:
+                  fail(f"{label} anchor not found:\n  {old[:80]!r}")
+              return src.replace(old, new, 1)
+
+          def replace_fn(src, header, new_fn, label):
+              """Replace a complete fn body by walking braces from the opening {."""
+              if header not in src:
+                  fail(f"{label} fn header not found:\n  {header[:80]!r}")
+              i_start = src.index(header)
+              i_open  = src.index("{", i_start + len(header))
+              depth, i = 0, i_open
+              while i < len(src):
+                  if src[i] == "{": depth += 1
+                  elif src[i] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          return src[:i_start] + new_fn + src[i+1:]
+                  i += 1
+              fail(f"{label} closing brace not found")
+
+          # ── A: WorkerState struct ─────────────────────────────────────────
+          WORKER_STATE = """
+          // ── Worker thread shared mailbox ─────────────────────────────────────────────
+          pub struct WorkerState {
+              pub busy:       bool,
+              pub journal:    Option<enkidb_journal::Journal>,
+              pub rows:       Vec<QueryRow>,
+              pub orbit:      Vec<crate::app::ParticleDemo>,
+              pub message:    String,
+              pub elapsed_ms: u128,
+              pub evaluated:  usize,
+              pub ok:         bool,
+          }
+
+          impl Default for WorkerState {
+              fn default() -> Self {
+                  Self {
+                      busy: false, journal: None, rows: Vec::new(),
+                      orbit: Vec::new(), message: String::new(),
+                      elapsed_ms: 0, evaluated: 0, ok: false,
+                  }
+              }
+          }
+
+          """
+          src = replace_once(src,
+              "// ── Result view mode",
+              WORKER_STATE + "// ── Result view mode",
+              "A")
+          print("A: WorkerState injected")
+
+          # ── B: worker field in struct ─────────────────────────────────────
+          src = replace_once(src,
+              "    pub connected:       bool,",
+              "    pub connected:       bool,\n"
+              "    pub worker:          std::sync::Arc<std::sync::Mutex<WorkerState>>,",
+              "B")
+          print("B: worker field added")
+
+          # ── C: initialise worker ──────────────────────────────────────────
+          src = replace_once(src,
+              "            connected:       false,",
+              "            connected:       false,\n"
+              "            worker:          std::sync::Arc::new(std::sync::Mutex::new(WorkerState::default())),",
+              "C")
+          print("C: worker initialised")
+
+          # ── D: page_size field ────────────────────────────────────────────
+          src = replace_once(src,
+              "    pub record_count:    Option<usize>,",
+              "    pub record_count:    Option<usize>,\n"
+              "    pub page_size:       usize,",
+              "D")
+          print("D: page_size field added")
+
+          # ── E: initialise page_size ───────────────────────────────────────
+          src = replace_once(src,
+              "            record_count:    None,",
+              "            record_count:    None,\n"
+              "            page_size:       1_000,",
+              "E")
+          print("E: page_size initialised")
+
+          # ── F: replace connect_to_journal() ──────────────────────────────
+          NEW_CONNECT = """\
+          // ── Connect to journal — THREAD-OFFLOADED ───────────────────────────────────
+          fn connect_to_journal(
+              state:    &mut EnkiDbConnectState,
+              _journal: &enkidb_journal::Journal,
+          ) {
+              use std::sync::Arc;
+              use std::thread;
+              use enkidb_persist::disk_journal::load_entries;
+              use enkidb_journal::Journal;
+              use std::path::PathBuf;
+
+              let path_str = state.journal_path.clone();
+              let read_ip  = state.read_ip.clone();
+              let worker   = Arc::clone(&state.worker);
+
+              {
+                  let mut w = worker.lock().unwrap();
+                  w.busy = true; w.ok = false;
+                  w.journal = None; w.rows = Vec::new(); w.orbit = Vec::new();
+                  w.message = format!("Loading {}…", path_str);
+              }
+
+              thread::spawn(move || {
+                  let path = PathBuf::from(&path_str);
+
+                  let size_mb = match std::fs::metadata(&path) {
+                      Ok(m)  => m.len() as f64 / 1_048_576.0,
+                      Err(e) => {
+                          let mut w = worker.lock().unwrap();
+                          w.busy = false; w.ok = false;
+                          w.message = format!("Error reading path: {}", e);
+                          return;
+                      }
+                  };
+
+                  let entries = match load_entries(&path) {
+                      Ok(e)  => e,
+                      Err(e) => {
+                          let mut w = worker.lock().unwrap();
+                          w.busy = false; w.ok = false;
+                          w.message = format!("Error loading journal.bin: {}", e);
+                          return;
+                      }
+                  };
+
+                  let count = entries.len();
+                  let mut real_journal = Journal::new(64);
+                  for entry in entries { let _ = real_journal.append(entry); }
+
+                  let mut w = worker.lock().unwrap();
+                  w.busy = false; w.ok = true;
+                  w.evaluated = count;
+                  w.journal   = Some(real_journal);
+                  w.message   = format!(
+                      "\\u2713 Connected \\u2014 {:.1} MB \\u00b7 {} entries loaded \\u00b7 Node: {} (read)",
+                      size_mb, count, read_ip
+                  );
+              });
+          }"""
+
+          src = replace_fn(src,
+              "// ── Connect to journal ────────────────────────────────────────────────────────\nfn connect_to_journal(",
+              NEW_CONNECT, "F")
+          print("F: connect_to_journal() replaced")
+
+          # ── G: replace run_hepta_query() ─────────────────────────────────
+          NEW_QUERY = """\
+          // ── Run HeptaScript W5H2 query — THREAD-OFFLOADED ───────────────────────────
+          fn run_hepta_query(
+              state:             &mut EnkiDbConnectState,
+              _fallback_journal: &enkidb_journal::Journal,
+          ) {
+              use std::sync::Arc;
+              use std::thread;
+              use heptascript::{parse_query, execute};
+
+              {
+                  let w = state.worker.lock().unwrap();
+                  if w.journal.is_none() {
+                      state.output = if w.busy {
+                          "Connect still loading \\u2014 wait for spinner".to_string()
+                      } else {
+                          "Not connected \\u2014 click \\u25b6 Connect first".to_string()
+                      };
+                      return;
+                  }
+              }
+
+              let src_text = state.editor.clone();
+              let row_cap  = state.page_size.max(1);
+              let worker   = Arc::clone(&state.worker);
+
+              {
+                  let mut w = worker.lock().unwrap();
+                  w.busy = true; w.ok = false;
+                  w.rows = Vec::new(); w.orbit = Vec::new();
+                  w.message = "Executing W5H2 query\\u2026".to_string();
+              }
+
+              thread::spawn(move || {
+                  let query_src: String = src_text.lines()
+                      .filter(|l| !l.trim().starts_with("--"))
+                      .collect::<Vec<_>>()
+                      .join("\\n");
+
+                  let query = match parse_query(&query_src) {
+                      Ok(q)  => q,
+                      Err(e) => {
+                          let mut w = worker.lock().unwrap();
+                          w.busy = false; w.ok = false;
+                          w.message = format!("Parse error: {}\\n\\nCheck W5H2 syntax:\\n  WHO   Entity.Var\\n  WHAT  E[attr]\\n  WHERE E[attr] = \\"value\\"\\n  WHEN  AT EPOCH NOW\\n  WHY   QUALITY_BYTE > 140\\n  HOW   BY E[attr] ASC\\n  HOW_MUCH LIMIT N", e);
+                          return;
+                      }
+                  };
+
+                  let mut w = worker.lock().unwrap();
+                  let journal_ptr: *const enkidb_journal::Journal = match w.journal.as_ref() {
+                      Some(j) => j as *const _,
+                      None    => {
+                          w.busy = false; w.ok = false;
+                          w.message = "Journal not loaded \\u2014 reconnect".to_string();
+                          return;
+                      }
+                  };
+
+                  // SAFETY: journal is only written by the connect worker which
+                  // finishes before run is possible (ok=true gate above).
+                  let t0     = std::time::Instant::now();
+                  let result = execute(&query, unsafe { &*journal_ptr });
+                  let elapsed = t0.elapsed().as_millis();
+                  let total   = result.matched.len();
+
+                  let mut rows:  Vec<QueryRow>                 = Vec::new();
+                  let mut orbit: Vec<crate::app::ParticleDemo> = Vec::new();
+
+                  for entity in result.matched.iter().take(row_cap) {
+                      let hex: String = entity.entity.bytes()
+                          .iter().map(|b| format!("{:02x}", b)).collect();
+                      let attrs: Vec<(String, String)> = entity.projected
+                          .iter().map(|(k, v)| (k.clone(), format!("{:?}", v))).collect();
+                      let b11 = entity.entity.bytes().get(10).copied().unwrap_or(128);
+                      let state_label = if b11 >= 200 { "NUCLEUS" }
+                          else if b11 >= 128 { "ORBIT" } else { "GATE" };
+                      rows.push(QueryRow { entity_hex: hex.clone(), attrs: attrs.clone(), b11, state: state_label });
+                      orbit.push(crate::app::ParticleDemo { kaki_hex: hex, b11, attrs });
+                  }
+
+                  w.busy = false; w.ok = true;
+                  w.rows = rows; w.orbit = orbit;
+                  w.elapsed_ms = elapsed; w.evaluated = result.evaluated;
+                  w.message = format!(
+                      "\\u2713 W5H2 in {}ms \\u2014 {} evaluated \\u00b7 {} matched \\u00b7 {} shown (cap {})",
+                      elapsed, result.evaluated, total, total.min(row_cap), row_cap
+                  );
+              });
+          }"""
+
+          src = replace_fn(src,
+              "// ── Run real HeptaScript W5H2 query ──────────────────────────────────────────\nfn run_hepta_query(",
+              NEW_QUERY, "G")
+          print("G: run_hepta_query() replaced")
+
+          # ── H: inject poll_worker() ───────────────────────────────────────
+          POLL_FN = """\
+          // ── Poll worker mailbox — called every egui frame, never blocks ─────────────
+          fn poll_worker(state: &mut EnkiDbConnectState) {
+              let w = match state.worker.try_lock() {
+                  Ok(g)  => g,
+                  Err(_) => return,   // worker holds lock — skip this frame
+              };
+              if !w.message.is_empty() { state.connect_msg = w.message.clone(); }
+              if w.busy { state.running = true; return; }
+              state.running = false;
+              if !w.ok { return; }
+              if w.journal.is_some() && !state.connected {
+                  state.connected = true;
+                  state.journal_entries = w.evaluated;
+                  state.record_count    = Some(w.evaluated);
+              }
+              if !w.rows.is_empty() {
+                  state.rows            = w.rows.clone();
+                  state.orbit_particles = w.orbit.clone();
+                  state.last_query_ms   = Some(w.elapsed_ms);
+                  state.total_evaluated = w.evaluated;
+                  state.output          = w.message.clone();
+              }
+          }
+
+          """
+          src = replace_once(src,
+              "// ── Connect to journal — THREAD-OFFLOADED",
+              POLL_FN + "// ── Connect to journal — THREAD-OFFLOADED",
+              "H")
+          print("H: poll_worker() injected")
+
+          # ── I: inject poll_worker call at top of show() ───────────────────
+          show_sig = "pub fn show("
+          if show_sig not in src:
+              show_sig = "pub fn draw("
+          if show_sig in src:
+              i_show = src.index(show_sig)
+              i_open = src.index("{", i_show)
+              src    = src[:i_open+1] + "\n        poll_worker(state);\n" + src[i_open+1:]
+              print("I: poll_worker(state) injected into show()")
+          else:
+              print("WARNING: show()/draw() not found — skipping I")
+
+          with open(TARGET, "w") as f:
+              f.write(src)
+          print(f"\n✅ Patch complete — {src.count(chr(10))} lines written")
+
+    - name: "1.1 | Run patch script"
+      ansible.builtin.command:
+        cmd: python3 /tmp/p34v2_patch.py
+      register: patch_out
+
+    - name: "1.2 | Show patch output"
+      ansible.builtin.debug:
+        msg: "{{ patch_out.stdout_lines }}"
+
+    - name: "1.3 | Abort if patch failed"
+      ansible.builtin.fail:
+        msg: "Patch failed — original at {{ panel_file }}.bak_p34v2"
+      when: patch_out.rc != 0
+
+    - name: "2.0 | cargo check"
+      ansible.builtin.shell: |
+        cd {{ forge_root }}
+        cargo check -p dubsar-visualizer 2>&1
+      register: cargo_check
+
+    - name: "2.1 | Show cargo check"
+      ansible.builtin.debug:
+        msg: "{{ cargo_check.stdout_lines + cargo_check.stderr_lines }}"
+
+    - name: "2.2 | Final status"
+      ansible.builtin.debug:
+        msg: >-
+          {% if cargo_check.rc == 0 %}
+          ╔══════════════════════════════════════════════════════╗
+          ║  ✅  PLAYBOOK 34 v2 SEALED — UI freeze fixed         ║
+          ╠══════════════════════════════════════════════════════╣
+          ║  Next:                                               ║
+          ║  1. Mount read node (if not mounted):                ║
+          ║     mkdir -p ~/enkidb-read                           ║
+          ║     sshfs bahyway@192.168.122.107:/home/bahyway/enkidb║
+          ║           ~/enkidb-read -o ro                        ║
+          ║                                                      ║
+          ║  2. Run DubSar Visualizer:                           ║
+          ║     cd ~/Forge/bahyway_v4                            ║
+          ║     WAYLAND_DISPLAY=wayland-0                        ║
+          ║     WGPU_BACKEND=vulkan                              ║
+          ║     cargo run --bin dubsar-visualizer                ║
+          ║                                                      ║
+          ║  3. In EnkiDB Connector:                             ║
+          ║     Path: ~/enkidb-read/data/tribe-0001/journal.bin  ║
+          ║     Click ▶ Connect — spinner, UI stays live         ║
+          ║     ~5-10s: ✓ 49MB · 80272 entries loaded           ║
+          ║                                                      ║
+          ║  First sovereign W5H2 query:                         ║
+          ║     WHO   Graves.E                                   ║
+          ║     WHAT  E[person.name_arabic, death.date,          ║
+          ║                grave.section]                        ║
+          ║     WHERE E[grave.section] = "Najaf"                 ║
+          ║     WHEN  AT EPOCH NOW                               ║
+          ║     WHY   QUALITY_BYTE > 140                         ║
+          ║     HOW   BY E[death.date] DESC                      ║
+          ║     HOW_MUCH LIMIT 100                               ║
+          ╚══════════════════════════════════════════════════════╝
+          {% else %}
+          ❌ cargo check FAILED — paste errors to DUB.SAR 𒁾 for surgical fix.
+          {% endif %}

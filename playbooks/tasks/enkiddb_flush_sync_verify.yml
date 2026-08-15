@@ -1,0 +1,157 @@
+# =============================================================================
+# Shared tasks: FLUSH the Write Node, sync Write -> Read (podman unshare,
+# PB-210.2's fix), and verify with a real QUERY + a real SEARCH.
+#
+# Included by BOTH playbook_208 (full-corpus ingestion) and playbook_211
+# (standalone, repeatable post-ingest sync/verify) so the two paths can
+# never drift apart the way EnkiDDB_MANUAL.md's own sync guidance already
+# did once this session -- it kept a stale `sudo rsync` example after
+# playbook_208 had already moved on to `cp`, then to `podman unshare
+# cp/rm/mv`. One real procedure, imported everywhere it's needed, not
+# copy-pasted and left to rot in a second place.
+#
+# Vars the including play may override with -e (all have safe defaults):
+#   enkiddb_write_port       (default 7101)
+#   enkiddb_read_port        (default 7102)
+#   enkiddb_query_collection (default "general" -- infer_collection's
+#                             always-populated fallback bucket)
+#   enkiddb_search_phrase    (default "EnkiDDB HeptaScript ingestion" --
+#                             override to something you know is ONLY in
+#                             the batch you just ingested, e.g.
+#                             -e enkiddb_search_phrase="WebGPU", so a real
+#                             hit actually proves TODAY's data landed and
+#                             you're not looking at stale leftovers from
+#                             earlier in the session -- found live,
+#                             2026-07-19: the first verification after the
+#                             sync bug below used a generic phrase and
+#                             returned real-looking-but-stale results.)
+# =============================================================================
+---
+- name: "FLUSH the Write Node immediately (don't wait for the next FLUSH_EVERY)"
+  ansible.builtin.shell: |
+    python3 -c "
+    import socket, struct
+    s = socket.create_connection(('127.0.0.1', {{ enkiddb_write_port | default(7101) }}), timeout=10)
+    payload = b'FLUSH'
+    s.sendall(struct.pack('<I', len(payload)) + payload)
+    lb = s.recv(4)
+    n = struct.unpack('<I', lb)[0]
+    print(s.recv(n).decode())
+    "
+  register: flush_result
+  changed_when: true
+
+- name: "Show FLUSH result (expect OK:FLUSHED:<entity_count>)"
+  ansible.builtin.debug:
+    msg: "{{ flush_result.stdout }}"
+
+# `scripts/enkiddb-sync-data.sh` is built for a TWO-VM topology
+# (enkidb-node-write --SSH/rsync--> enkidb-node-read), matching this
+# repo's older sibling VMs. The topology actually deployed and verified
+# this session (playbook_192) is DIFFERENT: both enkiddb-write and
+# enkiddb-read run as Podman containers on the SAME host (eriduous-vdi),
+# each with its own named volume. A local copy between the two volumes'
+# real host mountpoints is the correct sync for THIS topology.
+- name: "Find the Write Node volume's real host mountpoint"
+  ansible.builtin.command: podman volume inspect enkiddb-write-data
+  register: write_vol
+  changed_when: false
+
+- name: "Find the Read Node volume's real host mountpoint"
+  ansible.builtin.command: podman volume inspect enkiddb-read-data
+  register: read_vol
+  changed_when: false
+
+# Plain cp, not rsync: enkiddb-write-server's materialize_fresh does a
+# full remove_dir_all + rewrite on every FLUSH (never an incremental
+# append -- see EnkiDDB_GLOSSARY.md's "Data Files / materialize" entry),
+# so the source is always a small, complete, self-consistent snapshot --
+# nothing for rsync's delta-transfer to save, and not every host has
+# rsync installed.
+#
+# `podman unshare` is required, not optional (PB-210.2, found live
+# 2026-07-19): this fleet runs rootless Podman as the login user, and
+# plain `cp -a`/`rm -rf`/`mv` hit real `Permission denied` even as that
+# same user -- rootless Podman remaps container-internal UIDs to a
+# different range on the host filesystem, so files the containers wrote
+# into these volumes aren't owned by the login user's literal UID even
+# though that user can `podman volume inspect` them. `podman unshare`
+# runs a command inside the same user namespace Podman itself uses for
+# its containers, resolving the remapped ownership correctly -- this is
+# Podman's own documented mechanism for touching volume data from the
+# host, not a workaround. The failure mode when this goes wrong is
+# silent and dangerous: `rm`/`mv` failing left the Read Node quietly
+# serving STALE data from an earlier point in the session while FLUSH
+# and QUERY/SEARCH still appeared to "succeed" against that old data --
+# no error was surfaced to the operator until the results were compared
+# against what was actually just ingested.
+- name: "Replace the Read Node volume's current/ with the Write Node's fresh materialization"
+  ansible.builtin.command: >-
+    podman unshare cp -a
+    {{ (write_vol.stdout | from_json)[0].Mountpoint }}/current
+    {{ (read_vol.stdout | from_json)[0].Mountpoint }}/current_new
+  changed_when: true
+
+- name: "Atomically swap it into place"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    DEST="{{ (read_vol.stdout | from_json)[0].Mountpoint }}"
+    podman unshare rm -rf "$DEST/current"
+    podman unshare mv "$DEST/current_new" "$DEST/current"
+  changed_when: true
+  register: sync_result
+
+- name: "Confirm the swap landed"
+  ansible.builtin.command: podman unshare ls -la {{ (read_vol.stdout | from_json)[0].Mountpoint }}/current
+  register: sync_confirm
+  changed_when: false
+
+- name: "Show sync result"
+  ansible.builtin.debug:
+    msg: "{{ sync_confirm.stdout_lines }}"
+
+- name: "Wait for the Read Node to reload (RELOAD_SECS, default 30s)"
+  ansible.builtin.pause:
+    seconds: 35
+
+# HeptaScript's WHERE clause requires a leading exact-equality condition
+# to index on (RequiresWriteNode error otherwise, caught live while
+# verifying playbook_208) -- there's no "select everything, no filter"
+# form.
+- name: "Real QUERY -- real documents in the query collection"
+  ansible.builtin.shell: |
+    python3 -c "
+    import socket, struct
+    s = socket.create_connection(('127.0.0.1', {{ enkiddb_read_port | default(7102) }}), timeout=10)
+    payload = b'QUERY:WHO T.E\nWHAT E[meta.title, meta.collection]\nWHERE E[meta.collection] = \"{{ enkiddb_query_collection | default('general') }}\"\nHOW_MUCH LIMIT 20'
+    s.sendall(struct.pack('<I', len(payload)) + payload)
+    lb = s.recv(4)
+    n = struct.unpack('<I', lb)[0]
+    print(s.recv(n).decode())
+    "
+  register: query_result
+  changed_when: false
+
+- name: "Show real QUERY results"
+  ansible.builtin.debug:
+    msg: "{{ query_result.stdout }}"
+
+# Not a fixed phrase by default: override with -e enkiddb_search_phrase
+# to probe for something that can only be in a batch you just ingested.
+- name: "Real SEARCH -- semantic search over the configured phrase"
+  ansible.builtin.shell: |
+    python3 -c "
+    import socket, struct
+    s = socket.create_connection(('127.0.0.1', {{ enkiddb_read_port | default(7102) }}), timeout=10)
+    payload = b'SEARCH:5:{{ enkiddb_search_phrase | default('EnkiDDB HeptaScript ingestion') }}'
+    s.sendall(struct.pack('<I', len(payload)) + payload)
+    lb = s.recv(4)
+    n = struct.unpack('<I', lb)[0]
+    print(s.recv(n).decode())
+    "
+  register: search_result
+  changed_when: false
+
+- name: "Show real SEARCH results (ranked hits, real scores, real text)"
+  ansible.builtin.debug:
+    msg: "{{ search_result.stdout }}"

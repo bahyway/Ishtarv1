@@ -1,0 +1,125 @@
+# =============================================================================
+# PB-284 — Launch (or restart) the Shala web dashboard (shakkanakku-web),
+# detached, so it survives the launching terminal closing. BahyWay.
+# Ecosystem v4.0 — 2026-08-02
+#
+# WHY THIS EXISTS: `shakkanakku-web` was being started by hand, in the
+# foreground, in a terminal that was later closed/interrupted (a real
+# ^C after a stray `BadCertificate` connection-probe line killed it
+# silently) -- the Architect only found out it was down when the browser
+# reported "Unable to connect." Same class of gap PB-226 already closed
+# for launching DubSar Theater (detached via nohup, kills stale instances
+# first so re-runs don't stack listeners). This playbook does the same
+# for Shala.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Builds `shakkanakku-web` (release, `web` feature) unless
+#      `-e skip_build=true`.
+#   2. Kills any stale `shakkanakku-web` process already listening on
+#      `shala_port` (default 8763) so re-running this is always safe,
+#      never stacks a second listener on the same port.
+#   3. Launches it detached (`nohup ... &`, survives this
+#      terminal/session ending), logging to `shala_log`.
+#   4. Waits briefly, then confirms the port is actually listening before
+#      declaring success -- never reports "launched" without checking.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_284_launch_shala_dashboard.yml
+#   ansible-playbook playbooks/playbook_284_launch_shala_dashboard.yml -e skip_build=true
+# =============================================================================
+---
+- name: "PB-284 | Launch the Shala dashboard (shakkanakku-web), detached"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    # The bahyway/EnkiDB repo root -- where shakkanakku.toml (and any
+    # launcher config an Architect points Shala2's "config" field at)
+    # actually lives.
+    enkidb_root: "{{ playbook_dir }}/.."
+    shala_port: 8763
+    shala_log: "/tmp/shala_shakkanakku_web.log"
+    skip_build: false
+    build_log: "/tmp/shala_shakkanakku_web_build.log"
+
+  tasks:
+
+    - name: "Build shakkanakku-web (release, web feature)"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release --bin shakkanakku-web --features shakkanakku/web -p shakkanakku
+        > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: "FAIL | build failed"
+      ansible.builtin.fail:
+        msg: "cargo build for shakkanakku-web failed (rc={{ build_result.rc }}). Full output: {{ build_log }}"
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: "Confirm the built binary exists"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/shakkanakku-web"
+      register: bin_check
+
+    - name: "FAIL | binary missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ repo_root }}/target/release/shakkanakku-web does not exist.
+          Run without -e skip_build=true first, or check {{ build_log }}.
+      when: not bin_check.stat.exists
+
+    - name: "Kill any stale shakkanakku-web instance from a previous run"
+      ansible.builtin.command: "pkill -f target/release/shakkanakku-web"
+      register: kill_result
+      failed_when: false
+      changed_when: kill_result.rc == 0
+
+    - name: "Give a killed instance a moment to actually release the port"
+      ansible.builtin.pause:
+        seconds: 1
+      when: kill_result.rc == 0
+
+    - name: "Launch shakkanakku-web, detached"
+      # FIXED 2026-08-02: no chdir meant this inherited whatever directory
+      # `ansible-playbook` itself was invoked from (usually .../playbooks),
+      # not the repo root -- so Shala2's default "config" field
+      # (shakkanakku.toml) and any launcher config an Architect points at
+      # would resolve one level off from where those files actually live.
+      # Explicit chdir to enkidb_root makes every relative config path
+      # typed into Shala2 resolve the same way regardless of which
+      # directory this playbook was run from.
+      ansible.builtin.shell: >-
+        nohup {{ repo_root }}/target/release/shakkanakku-web
+        > {{ shala_log }} 2>&1 < /dev/null &
+      args:
+        chdir: "{{ enkidb_root }}"
+      async: 1
+      poll: 0
+
+    - name: "Wait briefly for the server to bind its port"
+      ansible.builtin.pause:
+        seconds: 2
+
+    - name: "Confirm the port is actually listening"
+      ansible.builtin.shell: "ss -ltn | grep -q ':{{ shala_port }} ' && echo LISTENING || echo NOT_LISTENING"
+      register: port_check
+      changed_when: false
+
+    - name: "FAIL | server did not start listening"
+      ansible.builtin.fail:
+        msg: >-
+          shakkanakku-web was launched but is not listening on port
+          {{ shala_port }}. Check {{ shala_log }} for the real error.
+      when: "'NOT_LISTENING' in port_check.stdout"
+
+    - name: "DONE | PB-284 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 Shala is listening on https://127.0.0.1:{{ shala_port }}/
+          (log: {{ shala_log }}). Open it in your browser -- past the
+          self-signed cert warning, upload ~/sargon_vault.dat + its
+          passphrase on the login screen.

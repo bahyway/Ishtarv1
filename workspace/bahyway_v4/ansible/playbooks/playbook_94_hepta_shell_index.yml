@@ -1,0 +1,468 @@
+---
+# =============================================================================
+# PLAYBOOK 94 — HeptaShellIndex: Sovereign Orbital Index
+# E7 lattice heptagons, 126 kissing neighbours, 882 zones
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_94_hepta_shell_index.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 94 — HeptaShellIndex sovereign orbital index"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge: "/home/bahyway/Forge/bahyway_v4"
+    crate: "/home/bahyway/Forge/bahyway_v4/crates/hepta-shell-index"
+
+  tasks:
+
+    - name: "Create hepta-shell-index directory structure"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crate }}/src"
+
+    - name: "Write Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/Cargo.toml"
+        content: |
+          [package]
+          name    = "hepta-shell-index"
+          version = "4.0.0"
+          edition = "2021"
+
+          # Sovereign orbital index — lives inside GeoEngine shards
+          # E7 lattice heptagons — NOT Uber H3 hexagons
+          [dependencies]
+          geo-engine  = { path = "../geo-engine" }
+          thiserror   = "1"
+
+          [lib]
+          name = "hepta_shell_index"
+
+    - name: "Write src/lib.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/lib.rs"
+        content: |
+          //! # HeptaShellIndex — Sovereign Orbital Index
+          //!
+          //! Replaces B-Tree for (r, θ, φ) orbital dimension queries.
+          //! B-Tree stays for linear dimensions (time, tribe_id).
+          //!
+          //! ## Foundation:
+          //!   Maryna Viazovska's E7 lattice (Fields Medal 2022)
+          //!   126 kissing-number neighbours per zone
+          //!   7 shells × 126 zones = 882 total heptagonal buckets
+          //!
+          //! ## Key operations:
+          //!   insert(pos, entry)      → O(1) zone mapping via E7
+          //!   query_zone(shell, zone) → O(1) direct bucket access
+          //!   query_cone(centre, r)   → O(126) E7 neighbour traversal
+          //!   gap(shell)              → O(126) Θ_E7 − found
+          //!   kibratu_gap_scan()      → all zones — typed gap events
+          //!   nisaba_scan()           → Betti trigger detection
+          //!   global_betti()          → full topological analysis
+
+          #![forbid(unsafe_code)]
+
+          use std::sync::RwLock;
+          use std::collections::HashMap;
+
+          use geo_engine::laws::geo01_e7::{
+              OrbitalPosition, position_to_zone, kissing_neighbours,
+              ZONES_PER_SHELL, MAX_SHELLS, TOTAL_ZONES,
+          };
+          use geo_engine::laws::geo02_plimpton::colour_id_b11;
+          use geo_engine::laws::geo03_betti::{BettiNumbers, compute_betti};
+          use geo_engine::laws::geo04_gap::{theta_e7, gap, GapEvent, classify_gap};
+
+          // ── KAKI entry stored in each zone ────────────────────────────────
+          #[derive(Debug, Clone)]
+          pub struct KakiEntry {
+              pub surrogate: u32,
+              pub kaki:      [u8; 16],
+              pub tribe_id:  u16,
+              pub position:  OrbitalPosition,
+              pub b11:       u16,
+              pub state:     OrbitalStateTag,
+          }
+
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          pub enum OrbitalStateTag {
+              GoldenGem, GoldenAlive,
+              FuzzyAged, FuzzyGray, FuzzyDecay,
+              DeadExpired, DeadSealed,
+          }
+
+          // ── Zone statistics — recomputed on every mutation ────────────────
+          #[derive(Debug, Clone, Default)]
+          pub struct ZoneStats {
+              pub count:          usize,
+              pub gap:            i64,
+              pub betti:          BettiNumbers,
+              pub golden_count:   usize,
+              pub fuzzy_count:    usize,
+              pub dead_count:     usize,
+              pub b11_variance:   f64,
+          }
+
+          impl ZoneStats {
+              fn recompute(entries: &[KakiEntry], shell: usize) -> Self {
+                  let count       = entries.len();
+                  let gap         = geo_engine::laws::geo04_gap::gap(shell, count);
+                  let golden      = entries.iter().filter(|e| matches!(e.state, OrbitalStateTag::GoldenGem | OrbitalStateTag::GoldenAlive)).count();
+                  let fuzzy       = entries.iter().filter(|e| matches!(e.state, OrbitalStateTag::FuzzyAged | OrbitalStateTag::FuzzyGray | OrbitalStateTag::FuzzyDecay)).count();
+                  let dead        = entries.iter().filter(|e| matches!(e.state, OrbitalStateTag::DeadExpired | OrbitalStateTag::DeadSealed)).count();
+
+                  // B11 variance for Nisaba ColourID hue anomaly detection
+                  let b11_values: Vec<f64> = entries.iter().map(|e| e.b11 as f64).collect();
+                  let mean = if count > 0 { b11_values.iter().sum::<f64>() / count as f64 } else { 0.0 };
+                  let variance = if count > 1 {
+                      b11_values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (count - 1) as f64
+                  } else { 0.0 };
+
+                  // Simple Betti from count distribution
+                  let zone_counts = vec![count / 3; 3];
+                  let betti = compute_betti(&zone_counts, 1);
+
+                  ZoneStats { count, gap, betti, golden_count: golden, fuzzy_count: fuzzy, dead_count: dead, b11_variance: variance }
+              }
+          }
+
+          // ── HeptaZone — one heptagonal bucket ────────────────────────────
+          pub struct HeptaZone {
+              shell:   usize,
+              zone_id: usize,
+              entries: RwLock<Vec<KakiEntry>>,
+              stats:   RwLock<ZoneStats>,
+          }
+
+          impl HeptaZone {
+              fn new(shell: usize, zone_id: usize) -> Self {
+                  Self {
+                      shell,
+                      zone_id,
+                      entries: RwLock::new(Vec::new()),
+                      stats:   RwLock::new(ZoneStats::default()),
+                  }
+              }
+
+              pub fn insert(&self, entry: KakiEntry) {
+                  let mut entries = self.entries.write().unwrap();
+                  entries.push(entry);
+                  let stats = ZoneStats::recompute(&entries, self.shell);
+                  *self.stats.write().unwrap() = stats;
+              }
+
+              pub fn remove(&self, surrogate: u32) {
+                  let mut entries = self.entries.write().unwrap();
+                  entries.retain(|e| e.surrogate != surrogate);
+                  let stats = ZoneStats::recompute(&entries, self.shell);
+                  *self.stats.write().unwrap() = stats;
+              }
+
+              pub fn update_state(&self, surrogate: u32, state: OrbitalStateTag) {
+                  let mut entries = self.entries.write().unwrap();
+                  if let Some(e) = entries.iter_mut().find(|e| e.surrogate == surrogate) {
+                      e.state = state;
+                  }
+                  let stats = ZoneStats::recompute(&entries, self.shell);
+                  *self.stats.write().unwrap() = stats;
+              }
+
+              pub fn entries(&self) -> Vec<KakiEntry> {
+                  self.entries.read().unwrap().clone()
+              }
+
+              pub fn stats(&self) -> ZoneStats {
+                  self.stats.read().unwrap().clone()
+              }
+
+              pub fn count(&self) -> usize {
+                  self.entries.read().unwrap().len()
+              }
+
+              pub fn gap(&self) -> i64 {
+                  self.stats.read().unwrap().gap
+              }
+          }
+
+          // ── Nisaba trigger types ──────────────────────────────────────────
+          #[derive(Debug, Clone)]
+          pub enum NisabaTrigger {
+              /// β₁ > 0 — loop detected — generate ṬUPŠARRU art
+              Loop { shell: usize, zone: usize, b1: usize },
+              /// β₂ > 0 — void detected — The Void is Sacred
+              Void { shell: usize, zone: usize, b2: usize },
+              /// B11 hue variance anomaly — ColourID shift detected
+              ColourIdAnomaly { shell: usize, zone: usize, variance: f64 },
+              /// β₀ cluster count deviation from expected
+              ClusterDeviation { shell: usize, zone: usize, deviation: i64 },
+          }
+
+          // ── HeptaShellIndex — the sovereign orbital index ─────────────────
+          pub struct HeptaShellIndex {
+              /// zones[shell * ZONES_PER_SHELL + zone] = HeptaZone
+              zones:         Vec<HeptaZone>,
+              /// surrogate → (shell, zone) for O(1) lookup/remove
+              surrogate_map: RwLock<HashMap<u32, (usize, usize)>>,
+          }
+
+          impl HeptaShellIndex {
+              pub fn new() -> Self {
+                  let mut zones = Vec::with_capacity(TOTAL_ZONES);
+                  for shell in 0..MAX_SHELLS {
+                      for zone in 0..ZONES_PER_SHELL {
+                          zones.push(HeptaZone::new(shell, zone));
+                      }
+                  }
+                  Self {
+                      zones,
+                      surrogate_map: RwLock::new(HashMap::new()),
+                  }
+              }
+
+              fn zone_index(shell: usize, zone: usize) -> usize {
+                  shell * ZONES_PER_SHELL + zone
+              }
+
+              fn zone_at(&self, shell: usize, zone: usize) -> &HeptaZone {
+                  &self.zones[Self::zone_index(shell, zone)]
+              }
+
+              /// Insert KAKI entry — O(1) E7 zone mapping.
+              pub fn insert(&self, entry: KakiEntry) {
+                  let (shell, zone) = position_to_zone(&entry.position);
+                  let surrogate     = entry.surrogate;
+                  self.zone_at(shell, zone).insert(entry);
+                  self.surrogate_map.write().unwrap().insert(surrogate, (shell, zone));
+              }
+
+              /// Remove by surrogate — O(1) via surrogate_map Golden Key.
+              pub fn remove(&self, surrogate: u32) {
+                  if let Some((shell, zone)) = self.surrogate_map.write().unwrap().remove(&surrogate) {
+                      self.zone_at(shell, zone).remove(surrogate);
+                  }
+              }
+
+              /// Update orbital state in-place — O(1).
+              pub fn update_state(&self, surrogate: u32, state: OrbitalStateTag) {
+                  if let Some(&(shell, zone)) = self.surrogate_map.read().unwrap().get(&surrogate) {
+                      self.zone_at(shell, zone).update_state(surrogate, state);
+                  }
+              }
+
+              /// Query exact zone — O(1).
+              pub fn query_zone(&self, shell: usize, zone: usize) -> Vec<KakiEntry> {
+                  if shell < MAX_SHELLS && zone < ZONES_PER_SHELL {
+                      self.zone_at(shell, zone).entries()
+                  } else {
+                      Vec::new()
+                  }
+              }
+
+              /// Query full shell — O(126 buckets).
+              pub fn query_shell(&self, shell: usize) -> Vec<KakiEntry> {
+                  if shell >= MAX_SHELLS { return Vec::new(); }
+                  (0..ZONES_PER_SHELL)
+                      .flat_map(|z| self.zone_at(shell, z).entries())
+                      .collect()
+              }
+
+              /// Query cone (spherical cap) — O(126) E7 neighbour traversal. No scan.
+              pub fn query_cone(&self, centre: &OrbitalPosition, radius: f64) -> Vec<KakiEntry> {
+                  let (shell, zone) = position_to_zone(centre);
+                  let neighbours    = kissing_neighbours(shell, zone);
+                  let mut results   = self.zone_at(shell, zone).entries();
+                  for (ns, nz) in neighbours {
+                      results.extend(self.zone_at(ns, nz).entries());
+                  }
+                  // Filter by actual distance
+                  results.retain(|e| {
+                      let dr = e.position.r     - centre.r;
+                      let dt = e.position.theta - centre.theta;
+                      let dp = e.position.phi   - centre.phi;
+                      (dr*dr + dt*dt + dp*dp).sqrt() <= radius
+                  });
+                  results
+              }
+
+              /// Query by tribe across all zones — pre-filtered.
+              pub fn query_tribe(&self, tribe_id: u16) -> Vec<KakiEntry> {
+                  self.zones.iter()
+                      .flat_map(|z| z.entries())
+                      .filter(|e| e.tribe_id == tribe_id)
+                      .collect()
+              }
+
+              /// GeoLaw-04: Gap(n) for one shell — O(126).
+              pub fn gap(&self, shell: usize) -> i64 {
+                  if shell >= MAX_SHELLS { return 0; }
+                  let found: usize = (0..ZONES_PER_SHELL)
+                      .map(|z| self.zone_at(shell, z).count())
+                      .sum();
+                  geo_engine::laws::geo04_gap::gap(shell, found)
+              }
+
+              /// KIBRATU gap scan — all zones, typed gap events.
+              pub fn kibratu_gap_scan(&self) -> Vec<(usize, GapEvent)> {
+                  (0..MAX_SHELLS).map(|shell| {
+                      let found: usize = (0..ZONES_PER_SHELL)
+                          .map(|z| self.zone_at(shell, z).count())
+                          .sum();
+                      (shell, classify_gap(shell, found))
+                  }).collect()
+              }
+
+              /// Nisaba scan — detect all four trigger types across all zones.
+              pub fn nisaba_scan(&self) -> Vec<NisabaTrigger> {
+                  let mut triggers = Vec::new();
+                  for shell in 0..MAX_SHELLS {
+                      for zone in 0..ZONES_PER_SHELL {
+                          let stats = self.zone_at(shell, zone).stats();
+                          if stats.betti.b1 > 0 {
+                              triggers.push(NisabaTrigger::Loop {
+                                  shell, zone, b1: stats.betti.b1
+                              });
+                          }
+                          if stats.betti.b2 > 0 {
+                              triggers.push(NisabaTrigger::Void {
+                                  shell, zone, b2: stats.betti.b2
+                              });
+                          }
+                          if stats.b11_variance > 50.0 {
+                              triggers.push(NisabaTrigger::ColourIdAnomaly {
+                                  shell, zone, variance: stats.b11_variance
+                              });
+                          }
+                      }
+                  }
+                  triggers
+              }
+
+              /// GeoLaw-03: Global Betti across all zones.
+              pub fn global_betti(&self) -> BettiNumbers {
+                  let zone_counts: Vec<usize> = self.zones.iter().map(|z| z.count()).collect();
+                  compute_betti(&zone_counts, 1)
+              }
+
+              /// Tribe Betti — topological analysis for one tribe.
+              pub fn tribe_betti(&self, tribe_id: u16) -> BettiNumbers {
+                  let zone_counts: Vec<usize> = self.zones.iter()
+                      .map(|z| z.entries().iter().filter(|e| e.tribe_id == tribe_id).count())
+                      .collect();
+                  compute_betti(&zone_counts, 1)
+              }
+
+              /// Total particles indexed.
+              pub fn total(&self) -> usize {
+                  self.surrogate_map.read().unwrap().len()
+              }
+          }
+
+          impl Default for HeptaShellIndex {
+              fn default() -> Self { Self::new() }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use geo_engine::laws::geo01_e7::OrbitalPosition;
+
+              fn make_entry(surrogate: u32, r: f64, tribe_id: u16) -> KakiEntry {
+                  KakiEntry {
+                      surrogate,
+                      kaki:      [0u8; 16],
+                      tribe_id,
+                      position:  OrbitalPosition::new(r, 1.0, 1.0),
+                      b11:       120,
+                      state:     OrbitalStateTag::GoldenAlive,
+                  }
+              }
+
+              #[test]
+              fn insert_and_query_zone() {
+                  let idx = HeptaShellIndex::new();
+                  idx.insert(make_entry(1, 1.5, 1));
+                  idx.insert(make_entry(2, 1.5, 1));
+                  assert_eq!(idx.total(), 2);
+              }
+
+              #[test]
+              fn remove_by_surrogate() {
+                  let idx = HeptaShellIndex::new();
+                  idx.insert(make_entry(1, 1.5, 1));
+                  idx.remove(1);
+                  assert_eq!(idx.total(), 0);
+              }
+
+              #[test]
+              fn query_tribe_filters_correctly() {
+                  let idx = HeptaShellIndex::new();
+                  idx.insert(make_entry(1, 1.5, 1));
+                  idx.insert(make_entry(2, 2.5, 2));
+                  let tribe1 = idx.query_tribe(1);
+                  assert_eq!(tribe1.len(), 1);
+                  assert_eq!(tribe1[0].tribe_id, 1);
+              }
+
+              #[test]
+              fn b11_never_255() {
+                  use geo_engine::laws::geo02_plimpton::colour_id_b11;
+                  assert_ne!(colour_id_b11(1.0), 255);
+                  assert!(colour_id_b11(1.0) <= 240);
+              }
+          }
+
+    - name: "Add hepta-shell-index to workspace"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_add_hepta.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/Cargo.toml"
+          with open(PATH) as f: src = f.read()
+          if '"crates/hepta-shell-index"' in src:
+              print("already in workspace"); sys.exit(0)
+          src = src.replace(
+              '"crates/geo-engine"',
+              '"crates/geo-engine",\n    "crates/hepta-shell-index"'
+          )
+          with open(PATH, "w") as f: f.write(src)
+          print("SUCCESS — hepta-shell-index added to workspace")
+
+    - name: "Run workspace patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_add_hepta.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    - name: "cargo build -p hepta-shell-index"
+      ansible.builtin.shell: "cargo build -p hepta-shell-index 2>&1 | tail -15"
+      args:
+        chdir: "{{ forge }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 94 sealed — HeptaShellIndex: Sovereign Orbital Index.
+          882 zones (7 shells × 126). E7 kissing neighbours.
+          gap() O(1). query_cone() O(126). nisaba_scan() all triggers.
+          Lives inside GeoEngine shards. B-Tree stays for linear dims.

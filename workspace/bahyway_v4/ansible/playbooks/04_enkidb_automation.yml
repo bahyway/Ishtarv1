@@ -1,0 +1,309 @@
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 𒁾 04_enkidb_automation.yml
+# BahyWay.Ecosystem v4.0 — EnkiDB CQRS Automation
+# DUB.SAR Bahaa Fadam
+#
+# Rule 2: Run FROM eriduous-vdi → targeting EnkiDB VMs
+#
+# Usage (from eriduous-vdi):
+#   cd ~/bahyway-ansible
+#   ansible-playbook -i inventory/vms.yml playbooks/04_enkidb_automation.yml
+#
+# What it automates (everything done manually today):
+#   Phase 1 — Both nodes:  cronie install + enable
+#   Phase 2 — Write node:  SSH keygen, scripts, cron, binary deploy
+#   Phase 3 — Read node:   Accept write node SSH key, create dirs
+#   Phase 4 — Wire:        Test write→read SSH, test wal_sync.sh
+#   Phase 5 — Verify:      Both nodes report health
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- name: "𒁾 Phase 1 — Install cronie on BOTH nodes"
+  hosts: enkidb_nodes
+  become: true
+
+  tasks:
+
+    - name: "Install cronie"
+      ansible.builtin.dnf:
+        name:
+          - cronie
+          - cronie-anacron
+          - rsync
+        state: present
+
+    - name: "Enable and start crond"
+      ansible.builtin.systemd:
+        name:    crond
+        enabled: true
+        state:   started
+
+    - name: "Create enkidb log directory"
+      ansible.builtin.file:
+        path:  "/home/bahyway/enkidb/logs"
+        state: directory
+        owner: bahyway
+        group: bahyway
+        mode:  "0755"
+
+    - name: "Create scripts directory"
+      ansible.builtin.file:
+        path:  "/home/bahyway/scripts"
+        state: directory
+        owner: bahyway
+        group: bahyway
+        mode:  "0755"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+- name: "𒁾 Phase 2 — Write node: SSH key + scripts + cron + binary"
+  hosts: enkidb_write
+  become: false
+
+  vars:
+    read_node_ip:  "192.168.122.107"
+    journal_path:  "/home/bahyway/enkidb/data/tribe-0001/journal.bin"
+    scripts_dir:   "/home/bahyway/scripts"
+    enkidb_logs:   "/home/bahyway/enkidb/logs"
+    binary_src:    "/home/bahyway/Forge/bahyway_v4/target/release/najaf-ingest"
+
+  tasks:
+
+    # ── SSH key setup ─────────────────────────────────────────────────────────
+
+    - name: "Generate SSH key on write node (if missing)"
+      ansible.builtin.shell:
+        cmd: |
+          if [ ! -f ~/.ssh/id_rsa ]; then
+            ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ''
+            echo "KEY_GENERATED"
+          else
+            echo "KEY_EXISTS"
+          fi
+        executable: /bin/bash
+      register: keygen_result
+      changed_when: "'KEY_GENERATED' in keygen_result.stdout"
+
+    - name: "Show SSH key status"
+      ansible.builtin.debug:
+        msg: "{{ keygen_result.stdout }}"
+
+    - name: "Get write node public key"
+      ansible.builtin.shell:
+        cmd: "cat ~/.ssh/id_rsa.pub"
+        executable: /bin/bash
+      register: write_pub_key
+      changed_when: false
+
+    # ── wal_sync.sh ───────────────────────────────────────────────────────────
+
+    - name: "Write wal_sync.sh"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/wal_sync.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # 𒁾 wal_sync.sh — Sovereign WAL replication write → read node
+          # Run on enkidb-node-write, syncs journal.bin to read node
+          set -euo pipefail
+          READ_NODE="bahyway@{{ read_node_ip }}"
+          JOURNAL="{{ journal_path }}"
+          LOG="{{ enkidb_logs }}/wal_sync.log"
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+          echo "[$TIMESTAMP] 𒁾 WAL sync starting" >> "$LOG"
+
+          if [ ! -f "$JOURNAL" ]; then
+              echo "[$TIMESTAMP] SKIP: journal.bin not found" >> "$LOG"
+              exit 0
+          fi
+
+          SIZE_BEFORE=$(stat -c%s "$JOURNAL" 2>/dev/null || echo 0)
+          rsync -az "$JOURNAL" "$READ_NODE:$JOURNAL" >> "$LOG" 2>&1
+          SIZE_HUMAN=$(ls -lh "$JOURNAL" | awk '{print $5}')
+
+          echo "[$TIMESTAMP] ✓ Replicated journal.bin ($SIZE_HUMAN)" >> "$LOG"
+
+    - name: "Write najaf-ingest runner script"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/run_ingest.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # 𒁾 run_ingest.sh — Run najaf-ingest then sync to read node
+          set -euo pipefail
+          LOG="{{ enkidb_logs }}/ingest_$(date +%Y%m%d_%H%M%S).log"
+          echo "𒁾 BeeMDM ETL run: $(date)" | tee "$LOG"
+
+          # Run pipeline
+          ~/najaf-ingest 2>&1 | tee -a "$LOG"
+
+          # Sync to read node immediately after
+          echo "" | tee -a "$LOG"
+          echo "Syncing to read node..." | tee -a "$LOG"
+          bash {{ scripts_dir }}/wal_sync.sh
+          echo "✓ Done: $(date)" | tee -a "$LOG"
+
+    # ── Cron jobs ─────────────────────────────────────────────────────────────
+
+    - name: "Set up cron — WAL sync every 5 minutes"
+      ansible.builtin.cron:
+        name:   "enkidb_wal_sync"
+        minute: "*/5"
+        job:    "bash {{ scripts_dir }}/wal_sync.sh >> {{ enkidb_logs }}/wal_sync_cron.log 2>&1"
+        user:   bahyway
+
+    - name: "Set up cron — EnkiDB health check every hour"
+      ansible.builtin.cron:
+        name:   "enkidb_health"
+        minute: "0"
+        job:    "ls -lh {{ journal_path }} >> {{ enkidb_logs }}/health.log 2>&1"
+        user:   bahyway
+
+    # ── Expose write pub key for Phase 3 ─────────────────────────────────────
+
+    - name: "Store write node public key as fact"
+      ansible.builtin.set_fact:
+        write_node_pubkey: "{{ write_pub_key.stdout }}"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+- name: "𒁾 Phase 3 — Read node: accept write node SSH key + dirs"
+  hosts: enkidb_read
+  become: false
+
+  vars:
+    journal_dir:  "/home/bahyway/enkidb/data/tribe-0001"
+    scripts_dir:  "/home/bahyway/scripts"
+    enkidb_logs:  "/home/bahyway/enkidb/logs"
+
+  tasks:
+
+    - name: "Create EnkiDB directories on read node"
+      ansible.builtin.file:
+        path:  "{{ item }}"
+        state: directory
+        mode:  "0755"
+      loop:
+        - "{{ journal_dir }}"
+        - "{{ scripts_dir }}"
+        - "{{ enkidb_logs }}"
+        - "/home/bahyway/.ssh"
+
+    - name: "Set .ssh permissions"
+      ansible.builtin.file:
+        path: "/home/bahyway/.ssh"
+        mode: "0700"
+
+    - name: "Add write node SSH key to read node authorized_keys"
+      ansible.builtin.shell:
+        cmd: |
+          WRITE_PUB="{{ hostvars['enkidb_write']['write_node_pubkey'] }}"
+          if ! grep -qF "$WRITE_PUB" ~/.ssh/authorized_keys 2>/dev/null; then
+              echo "$WRITE_PUB" >> ~/.ssh/authorized_keys
+              chmod 600 ~/.ssh/authorized_keys
+              echo "KEY_ADDED"
+          else
+              echo "KEY_EXISTS"
+          fi
+        executable: /bin/bash
+      register: key_add
+      changed_when: "'KEY_ADDED' in key_add.stdout"
+
+    - name: "Show key add result"
+      ansible.builtin.debug:
+        msg: "Write node SSH key: {{ key_add.stdout }}"
+
+    - name: "Write enkidb_query.sh on read node"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/enkidb_query.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # 𒁾 enkidb_query.sh — Query EnkiDB read replica status
+          JOURNAL="/home/bahyway/enkidb/data/tribe-0001/journal.bin"
+          echo "𒁾 EnkiDB Read Replica — $(date)"
+          echo "=================================="
+          if [ -f "$JOURNAL" ]; then
+              SIZE=$(ls -lh "$JOURNAL" | awk '{print $5}')
+              MODIFIED=$(stat -c '%y' "$JOURNAL" | cut -d. -f1)
+              echo "journal.bin:  $SIZE"
+              echo "Last sync:    $MODIFIED"
+              echo "Status:       ✓ REPLICA ACTIVE"
+          else
+              echo "journal.bin:  NOT FOUND"
+              echo "Status:       ✗ NOT REPLICATED YET"
+          fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+- name: "𒁾 Phase 4 — Wire: test write→read SSH + wal_sync"
+  hosts: enkidb_write
+  become: false
+
+  vars:
+    read_node_ip: "192.168.122.107"
+
+  tasks:
+
+    - name: "Test write node can SSH to read node"
+      ansible.builtin.shell:
+        cmd: |
+          ssh -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=5 \
+              bahyway@{{ read_node_ip }} hostname
+        executable: /bin/bash
+      register: ssh_test
+      changed_when: false
+
+    - name: "SSH test result"
+      ansible.builtin.debug:
+        msg: "Write→Read SSH: {{ ssh_test.stdout }} ✓"
+
+    - name: "Run wal_sync.sh to verify replication"
+      ansible.builtin.shell:
+        cmd: "bash ~/scripts/wal_sync.sh"
+        executable: /bin/bash
+      register: sync_result
+      changed_when: true
+      ignore_errors: true
+
+    - name: "WAL sync result"
+      ansible.builtin.debug:
+        msg: "{{ sync_result.stdout_lines | default(['no output']) }}"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+- name: "𒁾 Phase 5 — Final verification both nodes"
+  hosts: enkidb_nodes
+  become: false
+
+  tasks:
+
+    - name: "Check cron is running"
+      ansible.builtin.shell:
+        cmd: "systemctl is-active crond"
+        executable: /bin/bash
+      register: crond_status
+      changed_when: false
+      become: true
+
+    - name: "Check crontab"
+      ansible.builtin.shell:
+        cmd: "crontab -l 2>/dev/null || echo 'no crontab'"
+        executable: /bin/bash
+      register: crontab_check
+      changed_when: false
+
+    - name: "Check journal.bin"
+      ansible.builtin.shell:
+        cmd: "ls -lh ~/enkidb/data/tribe-0001/journal.bin 2>/dev/null || echo 'not yet'"
+        executable: /bin/bash
+      register: journal_check
+      changed_when: false
+
+    - name: "𒁾 Node health report"
+      ansible.builtin.debug:
+        msg:
+          - "════════════════════════════════════════════════════"
+          - "𒁾 Node: {{ inventory_hostname }}"
+          - "crond:       {{ crond_status.stdout }}"
+          - "journal.bin: {{ journal_check.stdout }}"
+          - "crontab:     {{ crontab_check.stdout }}"
+          - "════════════════════════════════════════════════════"

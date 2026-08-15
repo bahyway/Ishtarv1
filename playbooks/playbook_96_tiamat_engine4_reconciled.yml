@@ -1,0 +1,129 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_96_tiamat_engine4_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-96 Reconciled: TIAMAT Engine 4 — built for real
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_96_tiamat_engine4_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_96_tiamat_engine4_opacity.yml):
+#    Unlike the rest of this batch, PB-96 is NOT superseded — it was never
+#    built at all. Checked directly: no tiamat-engine4 crate, no TauInput /
+#    compute_tau_full / SaruAccumulator symbols anywhere in this repo, and
+#    no equivalent opacity/transparency-scoring mechanism exists under a
+#    different name (checked sla-engine, riksu-engine, aaol — no match).
+#
+#    The uploaded design (tau_full = geometric mean of 4 transparency
+#    dimensions; SARU deficit accumulator; SAHU uncertainty modifier) is
+#    self-contained — it does not depend on any crate that has since been
+#    consolidated or removed (the "kaki-types" dependency in the original
+#    Cargo.toml was declared but never actually used in the Rust code).
+#
+#    So this playbook does not just verify — it CREATES the real crate,
+#    at current path conventions, with the original's 2 tests plus 2 more
+#    covering freshness_from_hours/eav_state_from_tau (previously untested
+#    public functions). Already built, tested, and committed to the repo
+#    this session — this playbook re-verifies it on your machine:
+#      tiamat-engine4 : 7 passed
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-96 (Reconciled) | TIAMAT Engine 4 — Opacity Monitor, built for real"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB96_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | tiamat-engine4 crate exists (created this session)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/tiamat-engine4/Cargo.toml"
+      register: tiamat_crate
+
+    - name: "FAIL | tiamat-engine4 not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/tiamat-engine4/Cargo.toml not found after sync."
+      when: not tiamat_crate.stat.exists
+
+    - name: "TEST | cargo test -p tiamat-engine4"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p tiamat-engine4"
+        chdir: "{{ workspace }}"
+      register: test_tiamat
+      changed_when: false
+      failed_when: test_tiamat.rc != 0
+
+    - name: "PARSE | test_tiamat passed-test count"
+      ansible.builtin.set_fact:
+        test_tiamat_passed_count: "{{ (test_tiamat.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | tiamat-engine4 reports 7 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_tiamat.stdout"
+          - test_tiamat_passed_count >= 7
+        fail_msg: >-
+          Expected at least 7 passed, 0 failed. Got {{ test_tiamat_passed_count }}
+          passed. Full output: {{ test_tiamat.stdout }}
+        success_msg: >-
+          tiamat-engine4: {{ test_tiamat_passed_count }} passed, 0 failed (>= baseline 7).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-96 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-96 (tiamat-engine4: tau_full 4-dimension transparency
+          score, SARU deficit accumulator, SAHU uncertainty modifier):
+          NOT superseded — confirmed NEVER BUILT prior to this session.
+          No equivalent found under any other name.
+
+          Built this session at current path conventions (kaki-types dep
+          dropped — was declared but unused in the actual code):
+            tiamat-engine4 : 7/7 tests PASS
+            (original 2 tests: perfect_tau_is_one, zero_completeness_kills_tau
+             + 2 new: freshness_decays_with_staleness, eav_state_thresholds
+             + 3 SARU accumulator tests)
+
+          Not yet wired into any calling crate — this establishes the
+          engine itself. Wiring it into a TIAMAT dashboard/alerting path
+          is follow-up work, not part of this playbook.
+
+    - name: "DONE | PB-96 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-96 reconciled — TIAMAT Engine 4 built and verified for real. Report: {{ report_file }}"

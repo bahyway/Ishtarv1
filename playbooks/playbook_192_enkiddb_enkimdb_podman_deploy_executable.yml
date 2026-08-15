@@ -1,0 +1,227 @@
+# =============================================================================
+# PB-192 — EnkiDDB + EnkiMDB Podman deployment: the REAL, executable playbook
+# BahyWay.Ecosystem v4.0 — 2026-07-18
+#
+# CONTEXT: every playbook before this one in this repo (PB-153 onward) is a
+# RECORD -- a single `ansible.builtin.debug` task pointing at commit
+# history, written for the Architect to read, not to run. This playbook is
+# different on purpose: the Architect asked for "all the playbooks that I
+# must run on my own EriduOS-vdi to create the new Podmans for EnkiDDB &
+# EnkiMDB" -- the first two of the seven EnkiDB Types, per the agreed
+# build order. This is a real, idempotent, `ansible-playbook`-executable
+# playbook that actually builds both images and runs all four containers
+# (EnkiDDB write+read, EnkiMDB write+read) -- nothing here is a pointer to
+# something already done elsewhere; running it IS the deployment.
+#
+# WHAT IT DOES, per host `eriduous-vdi` (override `enkidb_repo_root` if the
+# checkout isn't at `~/Forge/EnkiDB`):
+#   1. Confirms `podman` is installed.
+#   2. Builds enkiddb-write-server / enkiddb-read-server images
+#      (deploy/podman/Containerfile.{write,read}-server).
+#   3. Builds enkimdb-write-server / enkimdb-read-server images
+#      (deploy/podman/Containerfile.enkimdb-{write,read}-server).
+#   4. Creates all four named volumes (safe to re-run -- checks for
+#      "already exists" rather than failing).
+#   5. Runs all four containers, each guarded by `podman container exists`
+#      so re-running this playbook after the containers are already up is
+#      a no-op, not a duplicate-container error. EnkiMDB's write container
+#      additionally bind-mounts the repo checkout itself, read-only, at
+#      `/source` -- that's what it scans, per
+#      `docs/EnkiMDB_PODMAN_DEPLOYMENT.md`.
+#   6. Waits for each container's port to actually accept connections
+#      (`wait_for`, ansible-core builtin, no extra collection needed) --
+#      this proves the container came up and is listening, not just that
+#      `podman run` exited zero.
+#   7. Prints the exact follow-up commands (sync loops, catalog scan,
+#      first document ingest) -- those stay manual/documented steps, same
+#      separation of concerns `docs/EnkiDDB_PODMAN_DEPLOYMENT.md` already
+#      established: this playbook's job is "create the new Podmans," not
+#      every operational action against them afterward.
+#
+# DELIBERATELY NOT DONE HERE, and why:
+#   - No `containers.podman` Ansible collection used -- every prior
+#     playbook in this repo uses only `ansible.builtin.*` modules; this
+#     one stays consistent rather than assuming a collection is installed
+#     on the Architect's real Ansible controller.
+#   - No systemd unit, anywhere -- `--restart=always` on `podman run`
+#     covers restart-on-reboot, matching the Architect's explicit
+#     instruction from PB-181 ("I DO NOT WANT... PLAY WITH SYSTEMD").
+#   - The sync loops, the EnkiMDB catalog scan (SCAN_CRATES/
+#     SCAN_PLAYBOOKS), and EnkiDDB document ingestion are NOT automated
+#     here -- they are per-content operational actions, not one-time
+#     deployment steps, and both PODMAN_DEPLOYMENT.md guides already
+#     document them precisely. Automating a one-shot scan here would also
+#     silently re-run it (and re-journal every artifact again -- see
+#     EnkiMDB_PODMAN_DEPLOYMENT.md's "no deduplication across re-scans")
+#     every time this playbook is re-run for an unrelated reason.
+#
+# VERIFICATION IN THIS SANDBOX (not on the Architect's real eriduous-vdi,
+# which this session has no access to): the underlying binaries this
+# playbook containerizes were smoke-tested as real, unContainerized
+# processes -- SCAN_CRATES ingested 151 real crates, SCAN_PLAYBOOKS
+# ingested 88 real playbooks, FLUSH materialized 239 entities, and a
+# QUERY against the synced Read Node returned the real "enkiddb" crate's
+# catalog row end to end. `cargo build --workspace` and
+# `cargo test --workspace` both pass -- see PB-192's companion record
+# entry for the exact numbers. Running THIS playbook for real, and
+# confirming `podman ps` shows all four containers healthy, is the
+# Architect's own next action on their infrastructure.
+# =============================================================================
+---
+- name: "PB-192 | Create EnkiDDB + EnkiMDB Podman containers"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    # Override with `-e enkidb_repo_root=/path/to/checkout` if it isn't at
+    # the default location. Deliberately NOT assigning `enkidb_repo_root`
+    # itself here -- a var can't safely default off its own name inside
+    # the same vars: block (it shadows any -e override instead of falling
+    # back to it). Every task below uses
+    # `enkidb_repo_root | default(enkidb_repo_root_fallback)` instead.
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+
+  tasks:
+    # ── 0. Preflight ──────────────────────────────────────────────────
+    - name: "0.1 | Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: "0.2 | Show podman version"
+      ansible.builtin.debug:
+        msg: "{{ podman_version.stdout }}"
+
+    # ── 1. Build images ───────────────────────────────────────────────
+    - name: "1.1 | Build enkiddb-write-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkiddb-write-server:latest -f deploy/podman/Containerfile.write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "1.2 | Build enkiddb-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkiddb-read-server:latest -f deploy/podman/Containerfile.read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "1.3 | Build enkimdb-write-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkimdb-write-server:latest -f deploy/podman/Containerfile.enkimdb-write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "1.4 | Build enkimdb-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkimdb-read-server:latest -f deploy/podman/Containerfile.enkimdb-read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    # ── 2. Volumes (idempotent: tolerate "already exists") ───────────
+    - name: "2.1 | Create data volumes"
+      ansible.builtin.command: "podman volume create {{ item }}"
+      register: vol_create
+      failed_when: vol_create.rc != 0 and 'already exists' not in (vol_create.stderr | default(''))
+      changed_when: vol_create.rc == 0
+      loop:
+        - enkiddb-write-data
+        - enkiddb-read-data
+        - enkimdb-write-data
+        - enkimdb-read-data
+
+    # ── 3. EnkiDDB (Tigris) containers ────────────────────────────────
+    - name: "3.1 | Check if enkiddb-write container exists"
+      ansible.builtin.command: podman container exists enkiddb-write
+      register: enkiddb_write_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "3.2 | Run enkiddb-write (Journal + periodic materialize, port 7101, read-only source mount)"
+      ansible.builtin.command: >
+        podman run -d --name enkiddb-write
+        -p 7101:7101
+        -v enkiddb-write-data:/data:Z
+        -v {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}:/source:ro,z
+        -e TRIBE_ID=0x7160
+        -e FLUSH_EVERY=10
+        -e ENKIDDB_TEAM_ALLOWLIST=/source/config/enkiddb_team_allowlist.txt
+        --restart=always
+        enkiddb-write-server:latest
+      when: enkiddb_write_exists.rc != 0
+      changed_when: true
+
+    - name: "3.3 | Check if enkiddb-read container exists"
+      ansible.builtin.command: podman container exists enkiddb-read
+      register: enkiddb_read_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "3.4 | Run enkiddb-read (materialized Data Files + RAG search, port 7102)"
+      ansible.builtin.command: >
+        podman run -d --name enkiddb-read
+        -p 7102:7102
+        -v enkiddb-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkiddb-read-server:latest
+      when: enkiddb_read_exists.rc != 0
+      changed_when: true
+
+    # ── 4. EnkiMDB (Euphrates) containers ─────────────────────────────
+    - name: "4.1 | Check if enkimdb-write container exists"
+      ansible.builtin.command: podman container exists enkimdb-write
+      register: enkimdb_write_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "4.2 | Run enkimdb-write (Journal + periodic materialize, port 7201, read-only source mount)"
+      ansible.builtin.command: >
+        podman run -d --name enkimdb-write
+        -p 7201:7201
+        -v enkimdb-write-data:/data:Z
+        -v {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}:/source:ro,z
+        -e TRIBE_ID=0xFF01
+        -e FLUSH_EVERY=50
+        --restart=always
+        enkimdb-write-server:latest
+      when: enkimdb_write_exists.rc != 0
+      changed_when: true
+
+    - name: "4.3 | Check if enkimdb-read container exists"
+      ansible.builtin.command: podman container exists enkimdb-read
+      register: enkimdb_read_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "4.4 | Run enkimdb-read (materialized Data Files, HeptaScript query, port 7202)"
+      ansible.builtin.command: >
+        podman run -d --name enkimdb-read
+        -p 7202:7202
+        -v enkimdb-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkimdb-read-server:latest
+      when: enkimdb_read_exists.rc != 0
+      changed_when: true
+
+    # ── 5. Prove all four are actually listening ─────────────────────
+    - name: "5.1 | Wait for all four ports to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item }}"
+        timeout: 60
+      loop:
+        - 7101   # enkiddb-write
+        - 7102   # enkiddb-read
+        - 7201   # enkimdb-write
+        - 7202   # enkimdb-read
+
+    # ── 6. Next steps (documented, not automated -- see rationale above)
+    - name: "6.1 | Follow-up steps"
+      ansible.builtin.debug:
+        msg:
+          - "All four containers are up and listening."
+          - "Next (manual, per docs/EnkiDDB_PODMAN_DEPLOYMENT.md and docs/EnkiMDB_PODMAN_DEPLOYMENT.md):"
+          - "  1. Start the sync loops: scripts/enkiddb-sync-data.sh + scripts/enkimdb-sync-data.sh"
+          - "  2. Trigger EnkiMDB's first catalog scan: SCAN_CRATES:/source/workspace/bahyway_v4 then SCAN_PLAYBOOKS:/source then FLUSH"
+          - "  3. Ingest EnkiDDB's first documents (PB-198): INGEST_DIR:/source/docs against enkiddb-write, port 7101 -- edit config/enkiddb_team_allowlist.txt first if the committing author isn't on it yet, then FLUSH"

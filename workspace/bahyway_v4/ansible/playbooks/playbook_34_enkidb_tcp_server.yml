@@ -1,0 +1,842 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 34 — enkidb-query-server (TCP) + enkidb-query-client
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECT : DUB.SAR 𒁾
+# SEALED    : 2026-06-20
+# TARGET    : eriduous-vdi (192.168.122.214)  — creates crate files
+#             enkidb-node-read (192.168.122.107) — server binary deployed there
+#
+# WHAT THIS PLAYBOOK BUILDS
+# ─────────────────────────
+#  1. NEW CRATE : crates/enkidb-query-server/
+#       Pure std::net::TcpListener on port 7001
+#       One thread per connection (std::thread::spawn)
+#       Receives HeptaScript source text (length-prefixed u32 LE)
+#       Returns encoded QueryResult rows (length-prefixed u32 LE)
+#       No tokio. No HTTP. No external crates.
+#
+#  2. PATCH    : crates/dubsar-visualizer/src/panels/enkidb_connect.rs
+#       Adds tcp_client module (std::net::TcpStream)
+#       Adds async_query() that spawns std::thread → Arc<Mutex<QueryState>>
+#       UI thread polls QueryState — NEVER blocks
+#
+#  3. PATCH    : Cargo.toml (workspace root)
+#       Adds enkidb-query-server to [workspace.members]
+#
+# PURE RUST RULES
+# ───────────────
+#   NO tokio  NO async  NO HTTP  NO WebSocket
+#   NO serde  NO bincode  NO external wire format
+#   Wire format: hand-rolled length-prefix (u32 LE) + UTF-8 text
+#
+# RUN FROM : enkilab HOST only
+#   ansible-playbook playbook_34_enkidb_tcp_server.yml -i inventory.ini
+#
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 34 — EnkiDB Query TCP Server + Client"
+  hosts: eriduous_vdi
+  gather_facts: false
+
+  vars:
+    forge_root: "/home/bahyway/Forge/bahyway_v4"
+    server_crate: "{{ forge_root }}/crates/enkidb-query-server"
+    visualizer_panels: "{{ forge_root }}/crates/dubsar-visualizer/src/panels"
+
+  tasks:
+
+    # ── 0. GUARD ─────────────────────────────────────────────────────────────
+    - name: "0.0 | Verify workspace root exists"
+      ansible.builtin.stat:
+        path: "{{ forge_root }}/Cargo.toml"
+      register: ws_toml
+
+    - name: "0.1 | Abort if workspace not found"
+      ansible.builtin.fail:
+        msg: "Workspace not found at {{ forge_root }}"
+      when: not ws_toml.stat.exists
+
+    # ── 1. CREATE enkidb-query-server CRATE ──────────────────────────────────
+    - name: "1.0 | Create crate directory tree"
+      ansible.builtin.file:
+        path: "{{ server_crate }}/src"
+        state: directory
+        mode: "0755"
+
+    - name: "1.1 | Write Cargo.toml for enkidb-query-server"
+      ansible.builtin.copy:
+        dest: "{{ server_crate }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name        = "enkidb-query-server"
+          version     = "4.0.0"
+          edition     = "2021"
+          description = "Sovereign TCP query server for EnkiDB read node (port 7001)"
+          authors     = ["DUB.SAR 𒁾"]
+          license     = "Proprietary"
+
+          # SOVEREIGN RULE: pure std only — no external crates
+          [dependencies]
+          # none
+
+          [[bin]]
+          name = "enkidb-query-server"
+          path = "src/main.rs"
+
+    - name: "1.2 | Write src/main.rs — sovereign TCP entry point"
+      ansible.builtin.copy:
+        dest: "{{ server_crate }}/src/main.rs"
+        mode: "0644"
+        content: |
+          //! enkidb-query-server — Sovereign TCP query server
+          //! ══════════════════════════════════════════════════
+          //! Pure std::net — no tokio, no HTTP, no external crates.
+          //!
+          //! Wire protocol (both directions):
+          //!   [u32 LE payload_len][payload_bytes (UTF-8)]
+          //!
+          //! Client sends  : HeptaScript source text
+          //! Server replies: newline-delimited result rows, then sentinel "---END---\n"
+          //!                 or "ERR: <message>\n" on parse/execution failure
+          //!
+          //! DUB.SAR 𒁾  2026-06-20
+
+          mod protocol;
+          mod handler;
+          mod journal;
+
+          use std::net::TcpListener;
+          use std::thread;
+
+          const BIND_ADDR: &str = "0.0.0.0:7001";
+
+          fn main() {
+              eprintln!("[enkidb-query-server] 𒁾 Sovereign TCP server starting");
+              eprintln!("[enkidb-query-server] Binding to {}", BIND_ADDR);
+
+              let listener = TcpListener::bind(BIND_ADDR)
+                  .expect("Failed to bind to port 7001 — is another process using it?");
+
+              eprintln!("[enkidb-query-server] Listening. Waiting for HeptaScript queries…");
+
+              for stream in listener.incoming() {
+                  match stream {
+                      Ok(tcp_stream) => {
+                          let peer = tcp_stream
+                              .peer_addr()
+                              .map(|a| a.to_string())
+                              .unwrap_or_else(|_| "unknown".to_string());
+                          eprintln!("[enkidb-query-server] Connection from {}", peer);
+
+                          thread::spawn(move || {
+                              if let Err(e) = handler::handle_connection(tcp_stream) {
+                                  eprintln!("[enkidb-query-server] Handler error: {}", e);
+                              }
+                          });
+                      }
+                      Err(e) => {
+                          eprintln!("[enkidb-query-server] Accept error: {}", e);
+                      }
+                  }
+              }
+          }
+
+    - name: "1.3 | Write src/protocol.rs — wire format (length-prefix u32 LE)"
+      ansible.builtin.copy:
+        dest: "{{ server_crate }}/src/protocol.rs"
+        mode: "0644"
+        content: |
+          //! protocol.rs — Length-prefixed wire format (pure std::io)
+          //!
+          //! Frame structure:
+          //!   Bytes 0..3  : payload length as u32 little-endian
+          //!   Bytes 4..N  : UTF-8 payload
+          //!
+          //! Max frame size: 4 MB (enforced to prevent memory exhaustion)
+
+          use std::io::{self, Read, Write};
+
+          const MAX_FRAME_BYTES: u32 = 4 * 1024 * 1024; // 4 MB
+
+          /// Read one length-prefixed frame from `reader`.
+          /// Returns the UTF-8 payload as a String.
+          pub fn read_frame<R: Read>(reader: &mut R) -> io::Result<String> {
+              let mut len_buf = [0u8; 4];
+              reader.read_exact(&mut len_buf)?;
+              let len = u32::from_le_bytes(len_buf);
+
+              if len == 0 {
+                  return Ok(String::new());
+              }
+              if len > MAX_FRAME_BYTES {
+                  return Err(io::Error::new(
+                      io::ErrorKind::InvalidData,
+                      format!("Frame too large: {} bytes (max {})", len, MAX_FRAME_BYTES),
+                  ));
+              }
+
+              let mut buf = vec![0u8; len as usize];
+              reader.read_exact(&mut buf)?;
+
+              String::from_utf8(buf).map_err(|e| {
+                  io::Error::new(io::ErrorKind::InvalidData, format!("UTF-8 error: {}", e))
+              })
+          }
+
+          /// Write one length-prefixed frame to `writer`.
+          pub fn write_frame<W: Write>(writer: &mut W, payload: &str) -> io::Result<()> {
+              let bytes = payload.as_bytes();
+              let len = bytes.len() as u32;
+              writer.write_all(&len.to_le_bytes())?;
+              writer.write_all(bytes)?;
+              writer.flush()
+          }
+
+    - name: "1.4 | Write src/journal.rs — sovereign journal reader"
+      ansible.builtin.copy:
+        dest: "{{ server_crate }}/src/journal.rs"
+        mode: "0644"
+        content: |
+          //! journal.rs — Read journal.bin entries from EnkiDB read node
+          //!
+          //! journal.bin layout (each entry):
+          //!   [u32 LE entry_len][entry_bytes (UTF-8 newline-delimited fields)]
+          //!
+          //! If the on-disk format differs, adjust `parse_entry()` to match
+          //! your actual EnkiDB journal encoding.
+          //!
+          //! DUB.SAR 𒁾  2026-06-20
+
+          use std::io::{self, BufRead, BufReader, Read};
+          use std::fs::File;
+
+          pub const JOURNAL_PATH: &str =
+              "/home/bahyway/enkidb/data/tribe-0001/journal.bin";
+
+          /// A single decoded journal entry — field map as parallel Vecs.
+          #[derive(Debug, Clone)]
+          pub struct JournalEntry {
+              pub keys:   Vec<String>,
+              pub values: Vec<String>,
+          }
+
+          impl JournalEntry {
+              /// Return value for `key`, or empty string if absent.
+              pub fn get(&self, key: &str) -> &str {
+                  self.keys
+                      .iter()
+                      .position(|k| k == key)
+                      .and_then(|i| self.values.get(i))
+                      .map(|s| s.as_str())
+                      .unwrap_or("")
+              }
+
+              /// Format this entry as a tab-separated result row.
+              pub fn to_row(&self) -> String {
+                  self.keys
+                      .iter()
+                      .zip(self.values.iter())
+                      .map(|(k, v)| format!("{}={}", k, v))
+                      .collect::<Vec<_>>()
+                      .join("\t")
+              }
+          }
+
+          /// Load all entries from journal.bin into memory.
+          /// Returns a Vec of JournalEntry — one per valid record.
+          pub fn load_all() -> io::Result<Vec<JournalEntry>> {
+              let file = File::open(JOURNAL_PATH)?;
+              let mut reader = BufReader::new(file);
+              let mut entries = Vec::new();
+
+              loop {
+                  // Read 4-byte length prefix
+                  let mut len_buf = [0u8; 4];
+                  match reader.read_exact(&mut len_buf) {
+                      Ok(_) => {}
+                      Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+                      Err(e) => return Err(e),
+                  }
+
+                  let entry_len = u32::from_le_bytes(len_buf) as usize;
+                  if entry_len == 0 {
+                      continue;
+                  }
+
+                  let mut entry_buf = vec![0u8; entry_len];
+                  reader.read_exact(&mut entry_buf)?;
+
+                  if let Ok(text) = String::from_utf8(entry_buf) {
+                      let entry = parse_entry(&text);
+                      entries.push(entry);
+                  }
+              }
+
+              Ok(entries)
+          }
+
+          /// Parse a single raw entry string into a JournalEntry.
+          /// Expects lines of "KEY=VALUE" separated by '\n'.
+          fn parse_entry(raw: &str) -> JournalEntry {
+              let mut keys   = Vec::new();
+              let mut values = Vec::new();
+
+              for line in raw.lines() {
+                  if let Some(pos) = line.find('=') {
+                      keys.push(line[..pos].trim().to_string());
+                      values.push(line[pos + 1..].trim().to_string());
+                  }
+              }
+
+              JournalEntry { keys, values }
+          }
+
+    - name: "1.5 | Write src/handler.rs — connection handler + W5H2 dispatch"
+      ansible.builtin.copy:
+        dest: "{{ server_crate }}/src/handler.rs"
+        mode: "0644"
+        content: |
+          //! handler.rs — Per-connection handler: parse W5H2 query, execute, stream results
+          //!
+          //! HeptaScript W5H2 grammar (minimal sovereign subset):
+          //!
+          //!   WHO   <field>=<value>          — filter by field equality
+          //!   WHAT  <field1> <field2> ...    — columns to return (* = all)
+          //!   WHERE <field>=<value>          — secondary filter (same as WHO)
+          //!   WHEN  <field>=<value>          — temporal filter
+          //!   WHY   <label>                  — query label / audit tag
+          //!   HOW   ASC|DESC <sort_field>    — sort order
+          //!   HOW_MUCH LIMIT <n>             — result cap
+          //!
+          //! All clauses are optional. Absence = "match everything / return all".
+          //!
+          //! DUB.SAR 𒁾  2026-06-20
+
+          use std::io::{self, BufWriter, Write};
+          use std::net::TcpStream;
+
+          use crate::journal::{self, JournalEntry};
+          use crate::protocol::{read_frame, write_frame};
+
+          const SENTINEL: &str = "---END---\n";
+
+          pub fn handle_connection(stream: TcpStream) -> io::Result<()> {
+              let mut reader = stream.try_clone()?;
+              let writer_raw = stream;
+              let mut writer = BufWriter::new(writer_raw);
+
+              // Read the HeptaScript source sent by the client
+              let query_text = read_frame(&mut reader)?;
+
+              if query_text.trim().is_empty() {
+                  write_frame(&mut writer, "ERR: empty query\n")?;
+                  return Ok(());
+              }
+
+              eprintln!("[handler] Query received ({} bytes):", query_text.len());
+              for line in query_text.lines().take(6) {
+                  eprintln!("  > {}", line);
+              }
+
+              // Parse the W5H2 clauses
+              let plan = match QueryPlan::parse(&query_text) {
+                  Ok(p)  => p,
+                  Err(e) => {
+                      let msg = format!("ERR: parse error — {}\n", e);
+                      write_frame(&mut writer, &msg)?;
+                      return Ok(());
+                  }
+              };
+
+              // Load journal (blocking, but we are on our own thread)
+              let entries = match journal::load_all() {
+                  Ok(e)  => e,
+                  Err(e) => {
+                      let msg = format!("ERR: journal load failed — {}\n", e);
+                      write_frame(&mut writer, &msg)?;
+                      return Ok(());
+                  }
+              };
+
+              eprintln!("[handler] Loaded {} journal entries", entries.len());
+
+              // Filter → sort → limit → project
+              let results = plan.execute(entries);
+              let count   = results.len();
+
+              // Stream results back: one frame per row
+              let mut response = String::new();
+              for entry in &results {
+                  let row = plan.project(entry);
+                  response.push_str(&row);
+                  response.push('\n');
+              }
+              response.push_str(SENTINEL);
+
+              write_frame(&mut writer, &response)?;
+
+              eprintln!("[handler] Sent {} rows + sentinel", count);
+              Ok(())
+          }
+
+          // ── Query Plan ────────────────────────────────────────────────────────────
+
+          #[derive(Debug, Default)]
+          struct QueryPlan {
+              /// WHO / WHERE / WHEN filters: list of (field, value) equality pairs
+              filters:  Vec<(String, String)>,
+              /// WHAT columns to project (* = all)
+              columns:  Vec<String>,
+              /// HOW sort: (field, ascending)
+              sort:     Option<(String, bool)>,
+              /// HOW_MUCH LIMIT
+              limit:    Option<usize>,
+              /// WHY label (audit only, not used in execution)
+              why:      Option<String>,
+          }
+
+          impl QueryPlan {
+              fn parse(src: &str) -> Result<Self, String> {
+                  let mut plan = QueryPlan::default();
+
+                  for raw_line in src.lines() {
+                      let line = raw_line.trim();
+                      if line.is_empty() || line.starts_with('#') {
+                          continue;
+                      }
+
+                      // Split "CLAUSE rest"
+                      let (clause, rest) = match line.find(char::is_whitespace) {
+                          Some(pos) => (&line[..pos], line[pos..].trim()),
+                          None      => (line, ""),
+                      };
+
+                      match clause.to_uppercase().as_str() {
+                          "WHO" | "WHERE" | "WHEN" => {
+                              // Expect "field=value"
+                              if let Some(eq) = rest.find('=') {
+                                  let field = rest[..eq].trim().to_string();
+                                  let value = rest[eq + 1..].trim().to_string();
+                                  plan.filters.push((field, value));
+                              } else {
+                                  return Err(format!(
+                                      "{} clause missing '=': {:?}", clause, rest
+                                  ));
+                              }
+                          }
+
+                          "WHAT" => {
+                              plan.columns = rest
+                                  .split_whitespace()
+                                  .map(|s| s.to_string())
+                                  .collect();
+                          }
+
+                          "HOW" => {
+                              // "ASC field" or "DESC field"
+                              let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
+                              if parts.len() == 2 {
+                                  let asc   = parts[0].to_uppercase() != "DESC";
+                                  let field = parts[1].trim().to_string();
+                                  plan.sort = Some((field, asc));
+                              }
+                          }
+
+                          "HOW_MUCH" => {
+                              // "LIMIT n"
+                              let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
+                              if parts.len() == 2
+                                  && parts[0].to_uppercase() == "LIMIT"
+                              {
+                                  match parts[1].trim().parse::<usize>() {
+                                      Ok(n)  => plan.limit = Some(n),
+                                      Err(_) => {
+                                          return Err(format!(
+                                              "HOW_MUCH LIMIT expects integer, got {:?}",
+                                              parts[1]
+                                          ))
+                                      }
+                                  }
+                              }
+                          }
+
+                          "WHY" => {
+                              plan.why = Some(rest.to_string());
+                          }
+
+                          other => {
+                              // Unknown clause — warn but continue (sovereign tolerance)
+                              eprintln!("[handler] Unknown clause ignored: {:?}", other);
+                          }
+                      }
+                  }
+
+                  Ok(plan)
+              }
+
+              fn execute(&self, mut entries: Vec<JournalEntry>) -> Vec<JournalEntry> {
+                  // Filter
+                  if !self.filters.is_empty() {
+                      entries.retain(|e| {
+                          self.filters.iter().all(|(field, value)| {
+                              e.get(field) == value.as_str()
+                          })
+                      });
+                  }
+
+                  // Sort
+                  if let Some((ref field, asc)) = self.sort {
+                      let f = field.clone();
+                      entries.sort_by(|a, b| {
+                          let va = a.get(&f);
+                          let vb = b.get(&f);
+                          if asc { va.cmp(vb) } else { vb.cmp(va) }
+                      });
+                  }
+
+                  // Limit
+                  if let Some(n) = self.limit {
+                      entries.truncate(n);
+                  }
+
+                  entries
+              }
+
+              /// Project a single entry to a tab-separated row string.
+              fn project(&self, entry: &JournalEntry) -> String {
+                  if self.columns.is_empty()
+                      || (self.columns.len() == 1 && self.columns[0] == "*")
+                  {
+                      // Return all fields
+                      return entry.to_row();
+                  }
+
+                  // Return only requested columns
+                  self.columns
+                      .iter()
+                      .map(|col| format!("{}={}", col, entry.get(col)))
+                      .collect::<Vec<_>>()
+                      .join("\t")
+              }
+          }
+
+    # ── 2. PATCH workspace Cargo.toml ────────────────────────────────────────
+    - name: "2.0 | Add enkidb-query-server to workspace members"
+      ansible.builtin.lineinfile:
+        path: "{{ forge_root }}/Cargo.toml"
+        regexp: '^\s*"crates/enkidb-query-server"'
+        line: '    "crates/enkidb-query-server",'
+        insertafter: '^\[workspace\]'
+        state: present
+
+    # ── 3. PATCH enkidb_connect.rs — add TCP client module ───────────────────
+    - name: "3.0 | Backup enkidb_connect.rs before patching"
+      ansible.builtin.copy:
+        src: "{{ visualizer_panels }}/enkidb_connect.rs"
+        dest: "{{ visualizer_panels }}/enkidb_connect.rs.bak34"
+        remote_src: true
+
+    - name: "3.1 | Write tcp_client.rs alongside enkidb_connect.rs"
+      ansible.builtin.copy:
+        dest: "{{ visualizer_panels }}/tcp_client.rs"
+        mode: "0644"
+        content: |
+          //! tcp_client.rs — Sovereign TCP client for EnkiDB query server
+          //!
+          //! Pure std::net::TcpStream — no tokio, no async, no external crates.
+          //! Spawns a std::thread per query so the egui UI thread NEVER blocks.
+          //!
+          //! Usage:
+          //!   let state = Arc::clone(&self.query_state);
+          //!   tcp_client::submit_query(
+          //!       "192.168.122.107:7001",
+          //!       query_text,
+          //!       state,
+          //!   );
+          //!
+          //! DUB.SAR 𒁾  2026-06-20
+
+          use std::io::{self, Read, Write};
+          use std::net::TcpStream;
+          use std::sync::{Arc, Mutex};
+          use std::thread;
+          use std::time::Duration;
+
+          /// State shared between the egui UI thread and the TCP worker thread.
+          #[derive(Debug, Default)]
+          pub struct QueryState {
+              pub running:  bool,
+              pub rows:     Vec<String>,
+              pub error:    Option<String>,
+              pub finished: bool,
+          }
+
+          const CONNECT_TIMEOUT_SECS: u64 = 5;
+          const READ_TIMEOUT_SECS:    u64 = 30;
+          const SENTINEL:              &str = "---END---\n";
+
+          /// Submit a HeptaScript query to the TCP server.
+          /// Spawns a background thread; updates `state` when done.
+          pub fn submit_query(
+              server_addr: &str,
+              query_text:  String,
+              state:       Arc<Mutex<QueryState>>,
+          ) {
+              // Mark as running
+              {
+                  let mut s = state.lock().unwrap();
+                  s.running  = true;
+                  s.rows     = Vec::new();
+                  s.error    = None;
+                  s.finished = false;
+              }
+
+              let addr = server_addr.to_string();
+
+              thread::spawn(move || {
+                  let result = run_query(&addr, &query_text);
+
+                  let mut s = state.lock().unwrap();
+                  match result {
+                      Ok(rows) => {
+                          s.rows  = rows;
+                          s.error = None;
+                      }
+                      Err(e) => {
+                          s.error = Some(e.to_string());
+                          s.rows  = Vec::new();
+                      }
+                  }
+                  s.running  = false;
+                  s.finished = true;
+              });
+          }
+
+          /// Blocking TCP round-trip (runs on worker thread, not UI thread).
+          fn run_query(addr: &str, query_text: &str) -> io::Result<Vec<String>> {
+              // Connect with timeout via non-blocking socket trick (pure std)
+              let stream = connect_with_timeout(addr, Duration::from_secs(CONNECT_TIMEOUT_SECS))?;
+
+              stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)))?;
+              stream.set_write_timeout(Some(Duration::from_secs(10)))?;
+
+              let mut stream = stream;
+
+              // Send query: [u32 LE len][UTF-8 bytes]
+              write_frame(&mut stream, query_text)?;
+
+              // Read response: [u32 LE len][UTF-8 bytes]
+              let response = read_frame(&mut stream)?;
+
+              // Check for server-side error
+              if response.starts_with("ERR:") {
+                  return Err(io::Error::new(
+                      io::ErrorKind::Other,
+                      response.trim().to_string(),
+                  ));
+              }
+
+              // Split on newlines, strip sentinel, collect rows
+              let rows: Vec<String> = response
+                  .lines()
+                  .filter(|l| !l.is_empty() && *l != "---END---")
+                  .map(|l| l.to_string())
+                  .collect();
+
+              Ok(rows)
+          }
+
+          fn connect_with_timeout(addr: &str, timeout: Duration) -> io::Result<TcpStream> {
+              use std::net::ToSocketAddrs;
+              let sock_addr = addr
+                  .to_socket_addrs()?
+                  .next()
+                  .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "No addr"))?;
+              TcpStream::connect_timeout(&sock_addr, timeout)
+          }
+
+          fn write_frame<W: Write>(writer: &mut W, payload: &str) -> io::Result<()> {
+              let bytes = payload.as_bytes();
+              let len   = bytes.len() as u32;
+              writer.write_all(&len.to_le_bytes())?;
+              writer.write_all(bytes)?;
+              writer.flush()
+          }
+
+          fn read_frame<R: Read>(reader: &mut R) -> io::Result<String> {
+              let mut len_buf = [0u8; 4];
+              reader.read_exact(&mut len_buf)?;
+              let len = u32::from_le_bytes(len_buf) as usize;
+
+              if len == 0 {
+                  return Ok(String::new());
+              }
+              if len > 4 * 1024 * 1024 {
+                  return Err(io::Error::new(
+                      io::ErrorKind::InvalidData,
+                      "Response frame too large (> 4MB)",
+                  ));
+              }
+
+              let mut buf = vec![0u8; len];
+              reader.read_exact(&mut buf)?;
+
+              String::from_utf8(buf).map_err(|e| {
+                  io::Error::new(io::ErrorKind::InvalidData, format!("UTF-8 decode: {}", e))
+              })
+          }
+
+    - name: "3.2 | Inject tcp_client module declaration into enkidb_connect.rs"
+      ansible.builtin.lineinfile:
+        path: "{{ visualizer_panels }}/enkidb_connect.rs"
+        line: "mod tcp_client;"
+        insertbefore: "^use "
+        state: present
+
+    - name: "3.3 | Inject QueryState field into EnkiDbConnect struct"
+      ansible.builtin.replace:
+        path: "{{ visualizer_panels }}/enkidb_connect.rs"
+        regexp: "(pub struct EnkiDbConnect\\s*\\{)"
+        replace: |
+          pub struct EnkiDbConnect {
+              pub query_state: std::sync::Arc<std::sync::Mutex<tcp_client::QueryState>>,
+
+    - name: "3.4 | Inject submit_query call into run_query / execute button handler"
+      ansible.builtin.replace:
+        path: "{{ visualizer_panels }}/enkidb_connect.rs"
+        regexp: "// TODO: execute HeptaScript query"
+        replace: |
+          // SOVEREIGN TCP DISPATCH — spawns std::thread, never blocks UI
+          tcp_client::submit_query(
+              "192.168.122.107:7001",
+              self.hepta_source.clone(),
+              std::sync::Arc::clone(&self.query_state),
+          );
+
+    # ── 4. COMPILE CHECK on eriduous-vdi ─────────────────────────────────────
+    - name: "4.0 | Run cargo check on new server crate"
+      ansible.builtin.shell: |
+        cd {{ forge_root }}
+        cargo check -p enkidb-query-server 2>&1
+      register: cargo_check_server
+
+    - name: "4.1 | Show cargo check output"
+      ansible.builtin.debug:
+        msg: "{{ cargo_check_server.stdout_lines + cargo_check_server.stderr_lines }}"
+
+    - name: "4.2 | Abort if cargo check failed"
+      ansible.builtin.fail:
+        msg: "enkidb-query-server failed cargo check — see output above"
+      when: cargo_check_server.rc != 0
+
+    # ── 5. BUILD release binary ───────────────────────────────────────────────
+    - name: "5.0 | Build release binary of enkidb-query-server"
+      ansible.builtin.shell: |
+        cd {{ forge_root }}
+        cargo build --release -p enkidb-query-server 2>&1
+      register: cargo_build_server
+
+    - name: "5.1 | Show build output"
+      ansible.builtin.debug:
+        msg: "{{ cargo_build_server.stdout_lines + cargo_build_server.stderr_lines }}"
+
+    - name: "5.2 | Abort if build failed"
+      ansible.builtin.fail:
+        msg: "enkidb-query-server build failed — see output above"
+      when: cargo_build_server.rc != 0
+
+    - name: "5.3 | Confirm binary exists"
+      ansible.builtin.stat:
+        path: "{{ forge_root }}/target/release/enkidb-query-server"
+      register: binary_stat
+
+    - name: "5.4 | Show binary path"
+      ansible.builtin.debug:
+        msg: >-
+          ✅ Binary ready:
+          {{ forge_root }}/target/release/enkidb-query-server
+          ({{ binary_stat.stat.size | default('?') }} bytes)
+      when: binary_stat.stat.exists
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 35 — Deploy server binary to enkidb-node-read (192.168.122.107)
+# RUN AFTER playbook 34 succeeds
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 35 — Deploy enkidb-query-server to read node"
+  hosts: enkidb_read
+  gather_facts: false
+
+  vars:
+    binary_src: "/home/bahyway/Forge/bahyway_v4/target/release/enkidb-query-server"
+    deploy_dir: "/home/bahyway/enkidb/server"
+    service_name: "enkidb-query-server"
+
+  tasks:
+
+    - name: "35.0 | Create deploy directory on read node"
+      ansible.builtin.file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "35.1 | Copy server binary to read node"
+      ansible.builtin.copy:
+        src: "{{ binary_src }}"
+        dest: "{{ deploy_dir }}/enkidb-query-server"
+        mode: "0755"
+        remote_src: false
+
+    - name: "35.2 | Write systemd unit file for enkidb-query-server"
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/enkidb-query-server.service"
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=EnkiDB Sovereign TCP Query Server (port 7001)
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=bahyway
+          WorkingDirectory=/home/bahyway/enkidb
+          ExecStart={{ deploy_dir }}/enkidb-query-server
+          Restart=on-failure
+          RestartSec=5s
+          StandardOutput=journal
+          StandardError=journal
+          SyslogIdentifier=enkidb-query-server
+
+          [Install]
+          WantedBy=multi-user.target
+      become: true
+
+    - name: "35.3 | Reload systemd daemon"
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+
+    - name: "35.4 | Enable and start enkidb-query-server"
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+        enabled: true
+        state: started
+      become: true
+
+    - name: "35.5 | Verify server is listening on port 7001"
+      ansible.builtin.shell: |
+        sleep 2
+        ss -tlnp | grep 7001
+      register: port_check
+
+    - name: "35.6 | Show port status"
+      ansible.builtin.debug:
+        msg: "{{ port_check.stdout_lines }}"
+
+    - name: "35.7 | Abort if port 7001 not listening"
+      ansible.builtin.fail:
+        msg: "enkidb-query-server is NOT listening on port 7001 — check journalctl -u enkidb-query-server"
+      when: port_check.rc != 0 or port_check.stdout == ""

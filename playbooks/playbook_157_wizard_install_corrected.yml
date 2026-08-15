@@ -1,0 +1,140 @@
+# =============================================================================
+# PB-157 — INSTALL WIZ-001 CONNECTOR WIZARD (Godot 4.7) — CORRECTED 2026-07-10
+# BahyWay.Ecosystem v4.0 · DubSar Theater
+#
+# STATUS: the files this playbook installs were already landed directly
+# into workspace/bahyway_v4/godot/dubsar-theater/ in this session (not
+# via ansible run — no live eriduous-vdi target was reachable from this
+# environment). This playbook is kept as the reproducible install
+# record for re-applying the same change to a fresh checkout or a
+# different target host, and documents what was actually done, not what
+# was merely proposed.
+#
+# WHAT WAS DONE (superseding the original PB-157 draft):
+#   - Retired scripts/enkidb_wizard.gd(.uid) and scenes/enkidb_wizard.tscn
+#     to _retired_2026-07-10/ (kept for reference, not reuse).
+#   - dubsar_proof.gd's separate inline wizard (_show_wizard/_wizard_connect)
+#     was LEFT UNTOUCHED — it is a different, smaller multi-engine quick-
+#     connect tool embedded in a proof-of-concept scene; reconciling it
+#     with the main wizard needs its own review, not a same-pass rewrite.
+#   - Landed scenes/wizard.tscn + scripts/{wizard,page1_db_selection,
+#     page2_connection,page3_credentials,page4_summary,credentials_popup,
+#     test_popup,connection_tester,enki_engines,akkadi_safe_bridge}.gd.
+#   - enki_engines.gd port mapping reconciled to the numbering already
+#     live in the retired enkidb_wizard.gd (7001=EnkiDB..7005=EnkiQDB),
+#     extended with 7006=EnkiMDB, 7007=EnkiDDB.
+#   - connection_tester.gd's original HEPT-magic-byte probe was REMOVED —
+#     verified against bin/enkidb-query-server/src/main.rs that no such
+#     handshake exists server-side. Replaced with an honestly-labelled
+#     TCP-reachability-only check.
+#   - scenes/main_theater.tscn's EnkiDbWizard instance repointed from
+#     enkidb_wizard.tscn to wizard.tscn; its two signal connections
+#     updated from (connection_confirmed, wizard_cancelled) to the new
+#     wizard's actual signals (wizard_completed, connection_tested).
+#   - scripts/theater_controller.gd's two handler functions updated to
+#     match: reads connection_data["database"] not ["engine"], and a new
+#     _on_enkidb_wizard_tested() handler was added.
+#
+# TARGET: eriduous-vdi (when re-run against a live host).
+# =============================================================================
+---
+- name: "PB-157 | Install WIZ-001 Connector Wizard (reproducible record)"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    forge_root: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    # FIXED (2026-07-26): this playbook originally copied from
+    # {{ playbook_dir }}/wizard_wiz001_v2, a staging directory that was
+    # never actually created or committed -- the playbook's own header
+    # already admits the real files were "landed directly" by hand, and
+    # this was only ever meant to be a "reproducible install record,"
+    # but the source it recorded was never captured. Reproduced live:
+    # PB-157.1 fails with "Could not find or access
+    # .../wizard_wiz001_v2/scenes/wizard.tscn" every time, on every
+    # checkout, because that directory has never existed.
+    #
+    # The actual canonical source was sitting right there the whole
+    # time: workspace/bahyway_v4/godot/dubsar-theater IS the real,
+    # git-tracked home of every file this playbook installs. In the
+    # default case src_dir and godot_project are the SAME directory
+    # (a safe, idempotent no-op copy -- Ansible reports "ok" when
+    # content already matches), and overriding dubsar_theater to a
+    # different target still works correctly, now copying from the
+    # real checkout instead of a directory that was never there.
+    godot_project: "{{ dubsar_theater | default(forge_root + '/workspace/bahyway_v4/godot/dubsar-theater') }}"
+    src_dir: "{{ forge_root }}/workspace/bahyway_v4/godot/dubsar-theater"
+
+  tasks:
+
+    - name: "PB-157.0 | Backup current wizard files before re-applying"
+      ansible.builtin.shell: |
+        set -e
+        cd "{{ godot_project }}"
+        STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+        mkdir -p .wizard_backup_$STAMP/scenes .wizard_backup_$STAMP/scripts
+        cp -f scenes/wizard.tscn scenes/main_theater.tscn .wizard_backup_$STAMP/scenes/ 2>/dev/null || true
+        cp -f scripts/wizard.gd scripts/page*.gd scripts/credentials_popup.gd \
+              scripts/test_popup.gd scripts/connection_tester.gd \
+              scripts/enki_engines.gd scripts/akkadi_safe_bridge.gd \
+              scripts/theater_controller.gd \
+              .wizard_backup_$STAMP/scripts/ 2>/dev/null || true
+        echo "backup: .wizard_backup_$STAMP"
+      register: backup_out
+
+    - name: "PB-157.1 | Deploy wizard scene"
+      ansible.builtin.copy:
+        src: "{{ src_dir }}/scenes/wizard.tscn"
+        dest: "{{ godot_project }}/scenes/wizard.tscn"
+        mode: "0644"
+        remote_src: true
+
+    - name: "PB-157.2 | Deploy wizard scripts"
+      ansible.builtin.copy:
+        src: "{{ src_dir }}/scripts/{{ item }}"
+        dest: "{{ godot_project }}/scripts/{{ item }}"
+        mode: "0644"
+        remote_src: true
+      loop:
+        - enki_engines.gd
+        - akkadi_safe_bridge.gd
+        - wizard.gd
+        - page1_db_selection.gd
+        - page2_connection.gd
+        - page3_credentials.gd
+        - page4_summary.gd
+        - credentials_popup.gd
+        - test_popup.gd
+        - connection_tester.gd
+
+    - name: "PB-157.3 | Deploy main_theater.tscn + theater_controller.gd rewiring"
+      ansible.builtin.copy:
+        src: "{{ src_dir }}/{{ item.dst }}"
+        dest: "{{ godot_project }}/{{ item.dst }}"
+        mode: "0644"
+        remote_src: true
+      loop:
+        - { dst: "scenes/main_theater.tscn" }
+        - { dst: "scripts/theater_controller.gd" }
+
+    - name: "PB-157.4 | Lexicon conformance gate (blocking)"
+      ansible.builtin.shell: |
+        cd "{{ godot_project }}"
+        HITS=$(grep -rn -i "relational\|5432\|6379\|27017\|9042\|SSLCheck" \
+               scenes/wizard.tscn scripts/wizard.gd scripts/page*.gd \
+               scripts/enki_engines.gd | grep -v "abolished\|CORRECTION\|Forbidden vocabulary" || true)
+        if [ -n "$HITS" ]; then
+          echo "FOREIGN VOCABULARY REMAINS:"; echo "$HITS"; exit 1
+        fi
+        echo "LEXICON CLEAN"
+      register: lexicon
+      changed_when: false
+
+    - name: "PB-157.5 | Seal note"
+      ansible.builtin.debug:
+        msg: >-
+          {{ backup_out.stdout_lines | last }} · {{ lexicon.stdout_lines | last }}.
+          Open the project in Godot 4.7 for visual confirmation — that
+          step is DUB.SAR's, not this playbook's. dubsar_proof.gd's
+          separate inline wizard was intentionally left untouched; see
+          PB-161 for the follow-up item.

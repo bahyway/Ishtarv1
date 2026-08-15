@@ -1,0 +1,149 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_251_security_singles_functional_verification.yml
+#  BahyWay.Ecosystem v4.0 — PB-251: the 5 orphaned security/compliance crates
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_251_security_singles_functional_verification.yml -i "localhost," -c local -v
+#
+#  Context: playbook_248's 56-crate audit grouped pii-vault, istar,
+#  adad-gate, vgca-validation, and bahyway-z3 under "security &
+#  compliance" as the highest-stakes untested-beyond-cargo-test category.
+#  playbook_249 (HeptaSec) and playbook_250 (EnkiduLLM/EaAgent) closed the
+#  two biggest subsystems from that batch. This playbook closes the
+#  remaining 5 singles — but closing them honestly meant first finding out
+#  what each one's *actual* gap was, since they turned out not to be the
+#  same shape of problem:
+#
+#    - istar (AkkFirewall — 5 constitutional meta rules + QualityLane gate
+#      builders): had ZERO tests of any kind before this playbook, despite
+#      being genuine security logic. This was the real gap. 17 new tests
+#      added directly to crates/istar/src/akk_firewall.rs covering all 5
+#      meta rules individually, priority ordering (Meta-1 outranks Meta-4
+#      when both would apply), the Audit-then-continue semantics, and the
+#      gates:: module's zero-trust/redact composition. One test's first
+#      draft was itself wrong in a revealing way: a "does sho_redact_gate
+#      fire" scenario used quality=50, not realizing META-1's dead-quality
+#      floor (59) would fire first and mask the very rule being tested —
+#      standard_firewall() *adds* gates on top of the 5 meta rules, it
+#      doesn't replace them. Fixed by choosing quality=65/70 in those
+#      scenarios; left as an in-line comment so the next person doesn't
+#      repeat the mistake.
+#
+#    - pii-vault (GDPR Article 17 erasure): already had 15 solid unit tests
+#      covering encrypt/decrypt round-trip, cross-entity key isolation,
+#      erase-blocks-encrypt/decrypt, and erased-hash-set round-trip (the
+#      crate's own documented restore-after-restart mechanism). The real
+#      "gap" here isn't test coverage — it's that pii-vault is not yet
+#      wired into any ingestion path, which crates/sla-engine/src/
+#      requirements.rs already tracks explicitly as an open GDPR gap-action
+#      item ("Deploy pii-vault crate; migrate existing GraveParticle PII
+#      fields to PiiSidecar"). Writing a new "deployment" playbook here
+#      would misrepresent that decision as already made. No new tests
+#      added; PB-248's build+test plus the existing 15 unit tests are the
+#      real, sufficient verification of pii-vault's own correctness today.
+#
+#    - bahyway-z3 (Gate G4 SAT checker): already had 11+ real tests, every
+#      one driven through heptascript::parse_query on actual HeptaScript
+#      syntax (not hand-built ASTs), covering satisfiable/unsatisfiable
+#      WHERE and WHY clauses, unsat-core labeling, and GRAVITY safety-cap
+#      warnings. This is already thorough, real verification. The actual
+#      gap is architectural, not correctness: nothing in the workspace
+#      calls check_query() yet — its own doc comment says it's meant to be
+#      invoked from a separate dev-time CLI or DubSar PDM's "validate
+#      query" action, neither of which exists yet. That's a product
+#      decision (which CLI, what UX) out of scope for a coverage-closing
+#      playbook — flagged honestly rather than silently deciding it.
+#
+#    - adad-gate, vgca-validation: unlike the 3 above, these are NOT
+#      orphaned — both are real dependencies of bin/dubsar and
+#      bin/najaf-ingest (bee-watchdog too, for vgca-validation), and both
+#      already have solid unit coverage exercised via PB-248's build+test.
+#      No new work needed; noted here so the audit trail is complete.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-251 | Security singles — istar tested for the first time, rest audited honestly"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    session_date: "{{ ansible_date_time.date }}"
+    docs_dir:     "{{ forge_root }}/docs/SHEDU"
+    report_file:  "{{ docs_dir }}/PB251_SECURITY_SINGLES_{{ session_date }}.txt"
+    naru_journal: "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU directory exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced"
+      ansible.builtin.fail:
+        msg: "{{ workspace }}/Cargo.toml not found. Sync the workspace from the laptop first."
+      when: not ws_check.stat.exists
+
+    - name: "TEST | cargo test across all 5 security singles"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p istar -p pii-vault -p adad-gate -p vgca-validation -p bahyway-z3"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "ASSERT | istar's new meta-rule test suite actually ran (17 tests, was 0 before this playbook)"
+      ansible.builtin.assert:
+        that:
+          - "'priority_order_meta1_outranks_meta4' in test_out.stdout"
+          - "'gates_sho_redacts_between_thresholds' in test_out.stdout"
+        fail_msg: >
+          istar's new akk_firewall test module did not run — this playbook's
+          headline claim (istar's security logic now has real test coverage,
+          where before it had none) would be false without this.
+        success_msg: "istar's 17-test meta-rule suite confirmed to have run."
+
+    - name: "WRITE | Verification report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-251 Security Singles Verification
+          Date : {{ session_date }}
+
+          {{ test_out.stdout }}
+
+          Summary:
+            istar            — 17 NEW tests (previously zero test coverage)
+            pii-vault         — 15 pre-existing tests, already sufficient
+                                (deployment tracked separately in sla-engine)
+            bahyway-z3        — 11+ pre-existing tests, already sufficient
+                                (invocation wiring is a product decision,
+                                 out of scope here)
+            adad-gate         — not orphaned; real dep of dubsar/najaf-ingest,
+                                already covered
+            vgca-validation   — not orphaned; real dep of dubsar/najaf-ingest/
+                                bee-watchdog, already covered
+
+    - name: "NARU | Record security singles verification result"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ session_date }} | PB-251 | Security singles verification | istar 17 new tests (was 0) | pii-vault/bahyway-z3/adad-gate/vgca-validation already sufficiently covered | see {{ report_file }}"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | PB-251 COMPLETE"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════
+          PB-251  SECURITY SINGLES VERIFICATION  PASS
+          istar: 0 -> 17 real tests (constitutional meta-rule engine)
+          pii-vault / bahyway-z3 / adad-gate / vgca-validation: already sufficient
+          Report: {{ report_file }}
+          ═══════════════════════════════════════════════════

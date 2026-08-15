@@ -1,0 +1,289 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_55_nisaba.yml
+# NISABA 𒀭𒀭𒂗𒍪 — Sovereign Knowledge Hologram
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# Goddess of writing, accounting, scribal wisdom.
+# Patron of the É-DUBBA. Floats above the BIGRING.
+# Speaks query results, narrates TIAMAT alerts,
+# witnesses É-DUBBA seal events.
+#
+# CORRECTIONS vs iPhone PB51+52:
+#   C1: _tiamat_name() now includes KUR level 4 (was missing)
+#   C2: _tiamat_colour() KUR = #1A0A2E (was absent, not #800000)
+#   C3: inventory vdi.ini → vdi.yml, hosts: eriduous_vdi
+#
+# Target  : eriduous-vdi (192.168.122.214)
+# Run from: EnkiLab HOST
+# ansible-playbook -i inventory/vdi.yml playbooks/55_nisaba.yml
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 55 — NISABA 𒀭𒀭𒂗𒍪 Sovereign Knowledge Hologram"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    dubsar_root: "/home/bahyway/Forge/bahyway_v4/apps/dubsar-ide"
+    script_path: "/tmp/bw_55_nisaba.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_55_nisaba.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # NISABA Hologram — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, textwrap
+
+          DUBSAR  = "/home/bahyway/Forge/bahyway_v4/apps/dubsar-ide"
+          SCRIPTS = f"{DUBSAR}/scripts"
+          SCENES  = f"{DUBSAR}/scenes"
+          os.makedirs(SCRIPTS, exist_ok=True)
+          os.makedirs(SCENES,  exist_ok=True)
+
+          write = lambda path, content: open(path, "w").write(content)
+
+          write(f"{SCRIPTS}/nisaba.gd", textwrap.dedent("""\
+          # nisaba.gd — NISABA 𒀭𒀭𒂗𒍪 Sovereign Knowledge Hologram
+          # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          #
+          # Sumerian goddess of writing, accounting, scribal wisdom.
+          # Patron of the É-DUBBA tablet house.
+          # Floats at Vector3(0, 6, 0) above BIGRING.
+          #
+          # CORRECTIONS:
+          #   _tiamat_name() level 4 = KUR 𒆳 (was missing)
+          #   _tiamat_colour() level 4 = #1A0A2E sovereign indigo (was absent)
+          #   All four TIAMAT levels now handled
+          extends Node3D
+
+          enum Mode { IDLE, QUERYING, WITNESSING, TIAMAT_ALERT }
+
+          # ── Sovereign colour constants ─────────────────────────────────
+          const COLOR_GOLD     = Color("#C8A84B")
+          const COLOR_GEM      = Color("#FFD700")
+          const COLOR_DILBAT   = Color("#E8B400")
+          const COLOR_KAKKAB   = Color("#D46000")
+          const COLOR_ERRA     = Color("#CC2244")
+          const COLOR_KUR      = Color("#1A0A2E")  # sovereign indigo ← CORRECTED
+          # NOTE: #800000 Maroon = Nergal AV engine — never used here
+
+          const PLIMPTON_322:  float  = 240.0
+          const CROWN_RADIUS:  float  = 0.5
+          const CROWN_HEIGHT:  float  = 0.2
+
+          var _mode:          Mode     = Mode.IDLE
+          var _cone_light:    SpotLight3D
+          var _crown_pivot:   Node3D
+          var _crown_light:   OmniLight3D
+          var _crown_sparks:  GPUParticles3D
+          var _glyph_label:   Label3D
+          var _whisper_label: Label3D
+          var _crown_angle:   float = 0.0
+          var _pulse_phase:   float = 0.0
+          var _witness_timer: float = 0.0
+          var _whisper_timer: float = 0.0
+
+          func _ready() -> void:
+          	_build_cone_light()
+          	_build_crown_pivot()
+          	_build_crown_sparks()
+          	_build_glyph_label()
+          	_build_whisper_label()
+          	print("[NISABA] 𒀭𒀭𒂗𒍪 Hologram ready at Vector3(0, 6, 0)")
+
+          func _process(delta: float) -> void:
+          	match _mode:
+          		Mode.IDLE:       _tick_idle(delta)
+          		Mode.QUERYING:   _tick_query(delta)
+          		Mode.WITNESSING: _tick_witness(delta)
+
+          # ── Public API ─────────────────────────────────────────────────
+
+          func whisper_query_result(particle_count: int, gem_count: int) -> void:
+          	_mode = Mode.QUERYING
+          	var narrative := _compose_narrative(particle_count, gem_count)
+          	_show_whisper(narrative)
+          	_mode = Mode.IDLE
+
+          func witness_tiamat(level: int) -> void:
+          	_mode = Mode.TIAMAT_ALERT
+          	_set_cone_colour(_tiamat_colour(level))
+          	_crown_light.light_color  = _tiamat_colour(level)
+          	_crown_sparks.emitting    = true
+          	_show_whisper("[TIAMAT] %s" % _tiamat_name(level))
+          	_witness_timer = 4.0
+          	_mode = Mode.WITNESSING
+
+          func witness_edubba_seal(client_name: String) -> void:
+          	_mode = Mode.WITNESSING
+          	_crown_sparks.emitting = true
+          	_set_cone_colour(COLOR_GEM)
+          	_crown_light.light_color  = COLOR_GEM
+          	_crown_light.light_energy = 4.0
+          	_show_whisper("É-DUBBA SEALED\\n%s\\n𒌓𒍣𒅁𒀭 UTNAPISHTIM fires" % client_name)
+          	_witness_timer = 5.0
+
+          # ── TIAMAT helpers (CORRECTED: all 4 levels) ──────────────────
+
+          func _tiamat_colour(level: int) -> Color:
+          	match level:
+          		1: return COLOR_DILBAT
+          		2: return COLOR_KAKKAB
+          		3: return COLOR_ERRA
+          		4: return COLOR_KUR    # KUR 𒆳 sovereign indigo ← CORRECTED
+          		_: return COLOR_GOLD
+
+          func _tiamat_name(level: int) -> String:
+          	match level:
+          		1: return "DILBAT 𒀭𒁾𒁍"
+          		2: return "KAKKAB 𒀭𒆳𒀝"
+          		3: return "ERRA 𒀭𒂗𒆳"
+          		4: return "KUR 𒆳"      # ← CORRECTED: was missing
+          		_: return "NOMINAL"
+
+          # ── Tick functions ─────────────────────────────────────────────
+
+          func _tick_idle(delta: float) -> void:
+          	_crown_angle += delta * 0.15
+          	_crown_pivot.rotation.y = _crown_angle
+          	_pulse_phase += delta * 0.4
+          	_cone_light.light_energy = 1.8 + sin(_pulse_phase) * 0.3
+
+          func _tick_query(delta: float) -> void:
+          	_crown_angle += delta * 0.6
+          	_crown_pivot.rotation.y = _crown_angle
+          	_pulse_phase += delta * 2.5
+          	_cone_light.light_energy = 2.0 + sin(_pulse_phase) * 0.8
+
+          func _tick_witness(delta: float) -> void:
+          	_crown_angle += delta * 1.2
+          	_crown_pivot.rotation.y = _crown_angle
+          	_witness_timer -= delta
+          	if _witness_timer <= 0.0:
+          		_mode = Mode.IDLE
+          		_set_cone_colour(COLOR_GOLD)
+          		_crown_light.light_color  = COLOR_GOLD
+          		_crown_light.light_energy = 2.5
+          		_crown_sparks.emitting    = false
+          	if _whisper_timer > 0.0:
+          		_whisper_timer -= delta
+          		if _whisper_timer <= 0.0:
+          			_whisper_label.visible = false
+
+          # ── Build helpers ──────────────────────────────────────────────
+
+          func _build_cone_light() -> void:
+          	_cone_light               = SpotLight3D.new()
+          	_cone_light.light_color   = COLOR_GOLD
+          	_cone_light.light_energy  = 1.8
+          	_cone_light.spot_range    = 9.0
+          	_cone_light.spot_angle    = 22.0
+          	_cone_light.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+          	add_child(_cone_light)
+
+          func _build_crown_pivot() -> void:
+          	_crown_pivot               = Node3D.new()
+          	add_child(_crown_pivot)
+          	_crown_light               = OmniLight3D.new()
+          	_crown_light.light_color   = COLOR_GOLD
+          	_crown_light.light_energy  = 2.5
+          	_crown_light.omni_range    = 2.0
+          	_crown_light.position      = Vector3(CROWN_RADIUS, CROWN_HEIGHT, 0.0)
+          	_crown_pivot.add_child(_crown_light)
+
+          func _build_crown_sparks() -> void:
+          	_crown_sparks                  = GPUParticles3D.new()
+          	_crown_sparks.amount           = 120
+          	_crown_sparks.lifetime         = 1.2
+          	_crown_sparks.emitting         = false
+          	var mat                        := ParticleProcessMaterial.new()
+          	mat.emission_shape             = ParticleProcessMaterial.EMISSION_SHAPE_RING
+          	mat.emission_ring_radius       = CROWN_RADIUS
+          	mat.emission_ring_inner_radius = CROWN_RADIUS - 0.1
+          	mat.gravity                    = Vector3(0, 0.4, 0)
+          	mat.initial_velocity_min       = 0.3
+          	mat.initial_velocity_max       = 0.9
+          	mat.color                      = COLOR_GEM
+          	mat.scale_min                  = 0.03
+          	mat.scale_max                  = 0.07
+          	_crown_sparks.process_material = mat
+          	add_child(_crown_sparks)
+
+          func _build_glyph_label() -> void:
+          	_glyph_label           = Label3D.new()
+          	_glyph_label.text      = "𒀭𒀭𒂗𒍪"
+          	_glyph_label.font_size = 48
+          	_glyph_label.modulate  = COLOR_GOLD
+          	_glyph_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+          	_glyph_label.position  = Vector3(0.0, 0.8, 0.0)
+          	add_child(_glyph_label)
+
+          func _build_whisper_label() -> void:
+          	_whisper_label                     = Label3D.new()
+          	_whisper_label.font_size           = 18
+          	_whisper_label.modulate            = Color(0.85, 0.85, 0.95, 0.90)
+          	_whisper_label.billboard           = BaseMaterial3D.BILLBOARD_ENABLED
+          	_whisper_label.position            = Vector3(0.0, -0.7, 0.0)
+          	_whisper_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+          	_whisper_label.visible             = false
+          	add_child(_whisper_label)
+
+          func _show_whisper(text: String) -> void:
+          	_whisper_label.text    = text
+          	_whisper_label.visible = true
+          	_whisper_timer         = 5.0
+
+          func _set_cone_colour(colour: Color) -> void:
+          	_cone_light.light_color = colour
+
+          func _compose_narrative(particle_count: int, gem_count: int) -> String:
+          	var gem_pct := 0.0
+          	if particle_count > 0:
+          		gem_pct = float(gem_count) / float(particle_count) * 100.0
+          	if gem_pct >= 80.0:
+          		return "%d particles\\n%.0f%% GOLDEN 𒀭\\nTopology sovereign" \
+          			% [particle_count, gem_pct]
+          	elif gem_pct >= 50.0:
+          		return "%d particles\\n%.0f%% GOLDEN\\nFUZZY zone detected" \
+          			% [particle_count, gem_pct]
+          	else:
+          		return "%d particles\\n%.0f%% GOLDEN\\n𒀭𒂗𒆳 ERRA — act now" \
+          			% [particle_count, gem_pct]
+          """))
+
+          # ── nisaba_stage.tscn ─────────────────────────────────────────
+          write(f"{SCENES}/nisaba_stage.tscn", textwrap.dedent("""\
+          [gd_scene load_steps=2 format=3]
+          ; NISABA 𒀭𒀭𒂗𒍪 — Sovereign Hologram Stage
+          ; BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          ; Instanced at Vector3(0, 6, 0) above BIGRING
+          ; CORRECTED: TIAMAT level 4 KUR present
+
+          [ext_resource type="Script" path="res://scripts/nisaba.gd" id="1"]
+
+          [node name="NISABA" type="Node3D"]
+          position = Vector3(0, 6, 0)
+          script   = ExtResource("1")
+          ; Children built dynamically in nisaba.gd _ready():
+          ; SpotLight3D cone, OmniLight3D crown pivot,
+          ; GPUParticles3D crown sparks,
+          ; Label3D glyph 𒀭𒀭𒂗𒍪, Label3D whisper
+          """))
+
+          print("✓ nisaba.gd written (CORRECTED: KUR level 4, #1A0A2E indigo)")
+          print("✓ nisaba_stage.tscn written")
+          print("✓ PLAYBOOK 55 — NISABA 𒀭𒀭𒂗𒍪 COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p55_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p55_out.stdout_lines }}"

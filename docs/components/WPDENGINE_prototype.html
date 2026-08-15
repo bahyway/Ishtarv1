@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Water Infrastructure & Fluid Dynamics Simulator</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --panel-bg: #161b22;
+            --accent: #58a6ff;
+            --text: #c9d1d9;
+            --danger: #f85149;
+            --success: #56d364;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #21262d;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; color: #fff; }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab-btn {
+            background-color: var(--panel-bg);
+            border: 1px solid #30363d;
+            color: var(--text);
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover { border-color: #8b949e; }
+        .tab-btn.active {
+            background-color: var(--accent);
+            color: #000;
+            border-color: var(--accent);
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .view-panel {
+            flex: 2;
+            background-color: #000;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .control-panel {
+            flex: 1;
+            background-color: var(--panel-bg);
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .panel-section {
+            border-bottom: 1px solid #21262d;
+            padding-bottom: 15px;
+        }
+
+        .panel-section:last-child { border: none; }
+        h3 { margin-top: 0; margin-bottom: 10px; color: #fff; font-size: 1.1rem; }
+
+        .btn {
+            background-color: #238636;
+            color: #fff;
+            border: 1px solid rgba(240,246,252,0.1);
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            width: 100%;
+            transition: background 0.2s;
+        }
+        .btn:hover { background-color: #2ea44f; }
+        .btn-danger { background-color: var(--danger); }
+        .btn-danger:hover { background-color: #da3633; }
+
+        .metric-card {
+            background: #0d1117;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #21262d;
+            margin-top: 5px;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(22, 27, 34, 0.95);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            pointer-events: none;
+            font-size: 0.8rem;
+            z-index: 10;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>Water Grid & Particle Orbit Simulation Engine</h1>
+            <small style="color: #8b949e;">Local Sandbox Proof-of-Concept</small>
+        </div>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchMode('dijkstra')">1. Dijkstra Grid Routing</button>
+            <button class="tab-btn" onclick="switchMode('drone')">2. Drone Multispectral Matrix</button>
+            <button class="tab-btn" onclick="switchMode('sph')">3. SPH Wave Particle Mixture</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="view-panel" id="viewPanelContainer">
+            <canvas id="simCanvas"></canvas>
+
+            <div id="dijkstraLegend" class="legend">
+                <div class="legend-item"><div class="legend-color" style="background: #58a6ff;"></div> Reservoir/Pump Station</div>
+                <div class="legend-item"><div class="legend-color" style="background: #56d364;"></div> On-Service Pipeline Loop</div>
+                <div class="legend-item"><div class="legend-color" style="background: #f85149;"></div> Under-Service (Detected Leak Node)</div>
+                <div class="legend-item"><div class="legend-color" style="background: #ffff00;"></div> Computed Shortest Water Path</div>
+            </div>
+
+            <div id="droneLegend" class="legend hidden">
+                <div class="legend-item"><div class="legend-color" style="background: #00ff00;"></div> NDVI (High Plant Health Anomalies)</div>
+                <div class="legend-item"><div class="legend-color" style="background: #ff4500;"></div> Thermal Infrared (Cold Moisture Infiltration)</div>
+                <div class="legend-item"><div class="legend-color" style="background: #1f242c;"></div> Asphalt / Urban Road Edges</div>
+            </div>
+
+            <div id="sphLegend" class="legend hidden">
+                <div class="legend-item"><div class="legend-color" style="background: #0077ff;"></div> Pure Clean River Water Wave Particles</div>
+                <div class="legend-item"><div class="legend-color" style="background: #7a5901;"></div> Sewage Contaminant Plume Input</div>
+                <div class="legend-item"><div class="legend-color" style="background: #00ffcc;"></div> Active SPH Shear Mixing Zone</div>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <div id="dijkstraControls" class="panel-section">
+                <h3>Hydraulic Graph Parameters</h3>
+                <p style="font-size:0.85rem; color:#8b949e;">Simulates the Rust graph memory matrix pipeline. Click nodes to inject simulated pipe bursts.</p>
+                <button class="btn" onclick="resetDijkstraNetwork()">Regenerate City Pipelines</button>
+                <div class="metric-card" id="dijkstraMetrics">
+                    Active Nodes: 14<br>
+                    Path Status: Computed Invariant<br>
+                    System State: Safe
+                </div>
+            </div>
+
+            <div id="droneControls" class="panel-section hidden">
+                <h3>Bit-Packed Spatial Quantization</h3>
+                <p style="font-size:0.85rem; color:#8b949e;">Translates multi-spectral matrix indices into leak signatures.</p>
+                <label style="font-size:0.85rem;">Display Mode Slice:</label>
+                <select id="droneDisplayMode" onchange="render()" style="width:100%; background:#161b22; color:#fff; border:1px solid #30363d; padding:6px; border-radius:6px; margin-top:5px;">
+                    <option value="fused">Fused Diagnostic View (Recommended)</option>
+                    <option value="ndvi">Isolated NDVI Vector (Near-Infrared / Red)</option>
+                    <option value="thermal">Isolated Thermal Multi-Vector</option>
+                </select>
+                <div class="metric-card" id="droneMetrics">
+                    Simulated Target: 10,000x10,000 px<br>
+                    Raw Footprint: 1.52 GB RAM<br>
+                    Quantized .WDN Footprint: 762.9 MB<br>
+                    Memory Optimization: 50.0% Savings
+                </div>
+            </div>
+
+            <div id="sphControls" class="panel-section hidden">
+                <h3>SPH Spatial Hashing Engine</h3>
+                <p style="font-size:0.85rem; color:#8b949e;">Simulates the Lagrangian Particle mechanics mixing loop natively inside continuous array segments.</p>
+                <button class="btn btn-danger" id="sewageToggleBtn" onclick="toggleSewageOutflow()">Inject Sewage Influx</button>
+                <div class="metric-card" id="sphMetrics">
+                    Active Particles Orbit: 400<br>
+                    Hash Grid Buckets: Linear O(N)<br>
+                    Fluid Mixing Rate: 0.00%
+                </div>
+            </div>
+
+            <div class="panel-section" style="margin-top:auto;">
+                <h3>Local CPU Architecture Metrics</h3>
+                <div class="metric-card" style="border-color: var(--accent); color: var(--accent);">
+                    Allocation Mode: Zero-Copy Slices<br>
+                    Heap Pointers Utilized: 0 (Flat Stack)<br>
+                    Execution Thread Profile: Deterministic
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const viewPanel = document.getElementById('viewPanelContainer');
+        const ctx = canvas.getContext('2d');
+        let currentMode = 'dijkstra';
+        let animationFrameId = null;
+
+        function resizeCanvas() {
+            const rect = viewPanel.getBoundingClientRect();
+            canvas.width = Math.max(rect.width, 400);
+            canvas.height = Math.max(rect.height, 400);
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            const buttons = document.querySelectorAll('.tab-btn');
+            if (mode === 'dijkstra') buttons[0].classList.add('active');
+            if (mode === 'drone') buttons[1].classList.add('active');
+            if (mode === 'sph') buttons[2].classList.add('active');
+            document.getElementById('dijkstraControls').classList.add('hidden');
+            document.getElementById('droneControls').classList.add('hidden');
+            document.getElementById('sphControls').classList.add('hidden');
+            document.getElementById('dijkstraLegend').classList.add('hidden');
+            document.getElementById('droneLegend').classList.add('hidden');
+            document.getElementById('sphLegend').classList.add('hidden');
+            document.getElementById(`${mode}Controls`).classList.remove('hidden');
+            document.getElementById(`${mode}Legend`).classList.remove('hidden');
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            initModeData();
+        }
+
+        // ==========================================
+        // 1. DIJKSTRA ENGINE MODEL
+        // ==========================================
+        let nodes = [];
+        let adjList = {};
+        let shortestPathTree = [];
+
+        function resetDijkstraNetwork() {
+            nodes = [];
+            adjList = {};
+            const numNodes = 14;
+            nodes.push({ id: 0, x: 60, y: canvas.height / 2, type: 'source', label: "Main Station" });
+            for(let i = 1; i < numNodes - 1; i++) {
+                nodes.push({
+                    id: i,
+                    x: 120 + Math.random() * (canvas.width - 240),
+                    y: 40 + Math.random() * (canvas.height - 80),
+                    type: Math.random() > 0.82 ? 'under-service' : 'on-service',
+                    label: `Valve-${i}`
+                });
+            }
+            nodes.push({ id: numNodes - 1, x: canvas.width - 60, y: canvas.height / 2, type: 'on-service', label: "Terminal Node" });
+            nodes.forEach(n => { adjList[n.id] = []; });
+            for(let i = 0; i < nodes.length; i++) {
+                let targets = [...nodes].sort((a,b) => {
+                    return Math.hypot(a.x-nodes[i].x, a.y-nodes[i].y) - Math.hypot(b.x-nodes[i].x, b.y-nodes[i].y);
+                });
+                for(let k = 1; k <= 3; k++) {
+                    if(targets[k]) {
+                        let dist = Math.hypot(targets[k].x - nodes[i].x, targets[k].y - nodes[i].y);
+                        let weight = targets[k].type === 'under-service' ? dist * 10.0 : dist;
+                        adjList[nodes[i].id].push({ target: targets[k].id, weight: weight });
+                    }
+                }
+            }
+            computeLocalDijkstra(0);
+        }
+
+        function computeLocalDijkstra(sourceId) {
+            let numNodes = nodes.length;
+            let distances = new Array(numNodes).fill(Infinity);
+            let predecessors = new Array(numNodes).fill(null);
+            let visited = new Array(numNodes).fill(false);
+            distances[sourceId] = 0;
+            for (let step = 0; step < numNodes; step++) {
+                let min_dist = Infinity;
+                let u = -1;
+                for (let i = 0; i < numNodes; i++) {
+                    if (!visited[i] && distances[i] < min_dist) {
+                        min_dist = distances[i];
+                        u = i;
+                    }
+                }
+                if (u === -1 || distances[u] === Infinity) break;
+                visited[u] = true;
+                if (adjList[u]) {
+                    adjList[u].forEach(edge => {
+                        if (!visited[edge.target]) {
+                            let alt = distances[u] + edge.weight;
+                            if (alt < distances[edge.target]) {
+                                distances[edge.target] = alt;
+                                predecessors[edge.target] = u;
+                            }
+                        }
+                    });
+                }
+            }
+            shortestPathTree = predecessors;
+            updateDijkstraMetrics();
+        }
+
+        function updateDijkstraMetrics() {
+            const anomaliesCount = nodes.filter(n => n.type === 'under-service').length;
+            document.getElementById('dijkstraMetrics').innerHTML = `Active Graph Nodes: ${nodes.length}<br> Under-Service Leaks: ${anomaliesCount}<br> Path Calculation: Success (O(N))<br> Routing Constraint: Dynamic Re-routing active`;
+        }
+
+        canvas.addEventListener('click', function(e) {
+            if (currentMode !== 'dijkstra') return;
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            nodes.forEach(n => {
+                if (Math.hypot(n.x - clickX, n.y - clickY) < 22) {
+                    n.type = n.type === 'under-service' ? 'on-service' : 'under-service';
+                    for(let u in adjList) {
+                        let parsedU = parseInt(u);
+                        adjList[u].forEach(edge => {
+                            let targetNode = nodes.find(nod => nod.id === edge.target);
+                            let dist = Math.hypot(nodes[parsedU].x - targetNode.x, nodes[parsedU].y - targetNode.y);
+                            edge.weight = targetNode.type === 'under-service' ? dist * 10.0 : dist;
+                        });
+                    }
+                    computeLocalDijkstra(0);
+                    render();
+                }
+            });
+        });
+
+        // ==========================================
+        // 2. DRONE MATRIX ANALYSIS CONFIGURATION
+        // ==========================================
+        let pipelineMatrix = [];
+
+        function initDroneMatrix() {
+            pipelineMatrix = [];
+            for (let y = 0; y < canvas.height; y += 6) {
+                for (let x = 0; x < canvas.width; x += 6) {
+                    let distanceToHiddenPipe = Math.abs(x - y * 1.2 - 80);
+                    let isRoad = (y > canvas.height * 0.42 && y < canvas.height * 0.49);
+                    let ndviBase = Math.max(0.1, 0.75 - (distanceToHiddenPipe * 0.006));
+                    let thermalBase = Math.min(1.0, 0.15 + (distanceToHiddenPipe * 0.009));
+                    if (isRoad) { ndviBase = 0.01; thermalBase += 0.35; }
+                    pipelineMatrix.push({
+                        x: x, y: y,
+                        ndvi: ndviBase + Math.random() * 0.05,
+                        thermal: thermalBase - (isRoad ? 0.0 : Math.random() * 0.04),
+                        isRoad: isRoad
+                    });
+                }
+            }
+        }
+
+        // ==========================================
+        // 3. SPH FLUID MIXING PARTICLES SIMULATION
+        // ==========================================
+        let sphParticles = [];
+        let sewageOutflowActive = false;
+        const maxParticles = 450;
+
+        function toggleSewageOutflow() {
+            sewageOutflowActive = !sewageOutflowActive;
+            const btn = document.getElementById('sewageToggleBtn');
+            if(sewageOutflowActive) {
+                btn.innerText = "Halt Sewage Influx";
+                btn.className = "btn";
+                btn.style.backgroundColor = "#238636";
+            } else {
+                btn.innerText = "Inject Sewage Influx";
+                btn.className = "btn btn-danger";
+                btn.style.backgroundColor = "";
+            }
+        }
+
+        function initSPHParticles() {
+            sphParticles = [];
+            for (let i = 0; i < maxParticles; i++) {
+                spawnParticle(true);
+            }
+        }
+
+        function spawnParticle(randomizeX = false) {
+            let xPos = randomizeX ? Math.random() * canvas.width : 5;
+            let yPos = canvas.height * 0.25 + Math.random() * (canvas.height * 0.5);
+            let isSewage = !randomizeX && sewageOutflowActive && (Math.random() > 0.65);
+            if (isSewage) {
+                yPos = canvas.height * 0.5 + (Math.random() - 0.5) * 40;
+            }
+            sphParticles.push({
+                x: xPos,
+                y: yPos,
+                vx: 1.8 + Math.random() * 2.2,
+                vy: (Math.random() - 0.5) * 0.8,
+                type: isSewage ? 1 : 0,
+                concentration: isSewage ? 1.0 : 0.0,
+                radius: 4 + Math.random() * 4
+            });
+        }
+
+        function stepSPHPhysics() {
+            let grid = {};
+            let cellSize = 25;
+            sphParticles.forEach((p, idx) => {
+                let gx = Math.floor(p.x / cellSize);
+                let gy = Math.floor(p.y / cellSize);
+                let key = `${gx},${gy}`;
+                if (!grid[key]) grid[key] = [];
+                grid[key].push(idx);
+            });
+            sphParticles.forEach((p, idx) => {
+                let gx = Math.floor(p.x / cellSize);
+                let gy = Math.floor(p.y / cellSize);
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        let neighborKey = `${gx + dx},${gy + dy}`;
+                        if (grid[neighborKey]) {
+                            grid[neighborKey].forEach(nIdx => {
+                                if (idx === nIdx) return;
+                                let neighbor = sphParticles[nIdx];
+                                let dist = Math.hypot(p.x - neighbor.x, p.y - neighbor.y);
+                                if (dist < cellSize) {
+                                    let mixAmount = (cellSize - dist) * 0.0008;
+                                    let average = (p.concentration + neighbor.concentration) / 2;
+                                    p.concentration += (average - p.concentration) * mixAmount;
+                                    neighbor.concentration += (average - neighbor.concentration) * mixAmount;
+                                }
+                            });
+                        }
+                    }
+                }
+                p.x += p.vx;
+                p.y += p.vy + Math.sin(p.x * 0.06) * 0.5;
+                if (p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                    sphParticles.splice(idx, 1);
+                    spawnParticle(false);
+                }
+            });
+            while (sphParticles.length < maxParticles) {
+                spawnParticle(false);
+            }
+            let mixedParticles = sphParticles.filter(p => p.concentration > 0.15 && p.concentration < 0.85).length;
+            document.getElementById('sphMetrics').innerHTML = `Active Particles Orbit: ${sphParticles.length}<br> Spatial Hash Layout: Linear O(N)<br> Advection Mixing Nodes: ${mixedParticles}<br> Plume Penetration: ${(mixedParticles / maxParticles * 100).toFixed(2)}%`;
+        }
+
+        // ==========================================
+        // RENDER PIPELINES
+        // ==========================================
+        function initModeData() {
+            resizeCanvas();
+            if (currentMode === 'dijkstra') {
+                resetDijkstraNetwork();
+                render();
+            } else if (currentMode === 'drone') {
+                initDroneMatrix();
+                render();
+            } else if (currentMode === 'sph') {
+                initSPHParticles();
+                runContinuousLoop();
+            }
+        }
+
+        function runContinuousLoop() {
+            if (currentMode !== 'sph') return;
+            stepSPHPhysics();
+            render();
+            animationFrameId = requestAnimationFrame(runContinuousLoop);
+        }
+
+        function render() {
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if (currentMode === 'dijkstra') {
+                for (let u in adjList) {
+                    let fromNode = nodes.find(n => n.id == u);
+                    if (!fromNode) continue;
+                    adjList[u].forEach(edge => {
+                        let toNode = nodes.find(n => n.id == edge.target);
+                        if (!toNode) return; // FIXED: was `continue` inside forEach
+                        ctx.beginPath();
+                        ctx.moveTo(fromNode.x, fromNode.y);
+                        ctx.lineTo(toNode.x, toNode.y);
+                        if (toNode.type === 'under-service' || fromNode.type === 'under-service') {
+                            ctx.strokeStyle = '#f85149';
+                            ctx.lineWidth = 2.5;
+                        } else {
+                            ctx.strokeStyle = '#2ea44f';
+                            ctx.lineWidth = 4;
+                        }
+                        ctx.stroke();
+                    });
+                }
+                let curr = nodes.length - 1;
+                ctx.beginPath();
+                let first = true;
+                while (curr !== null && shortestPathTree[curr] !== undefined && shortestPathTree[curr] !== null) {
+                    let node = nodes.find(n => n.id === curr);
+                    if (node) {
+                        if (first) { ctx.moveTo(node.x, node.y); first = false; }
+                        else { ctx.lineTo(node.x, node.y); }
+                    }
+                    curr = shortestPathTree[curr];
+                }
+                let src = nodes.find(n => n.id === 0);
+                if (src && !first) { ctx.lineTo(src.x, src.y); }
+                ctx.strokeStyle = '#ffff00';
+                ctx.lineWidth = 3.5;
+                ctx.stroke();
+                nodes.forEach(n => {
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, 11, 0, 2 * Math.PI);
+                    if (n.type === 'source') ctx.fillStyle = '#58a6ff';
+                    else if (n.type === 'under-service') ctx.fillStyle = '#f85149';
+                    else ctx.fillStyle = '#56d364';
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 10px monospace';
+                    ctx.fillText(n.label, n.x - 22, n.y - 16);
+                });
+            } else if (currentMode === 'drone') {
+                let viewOption = document.getElementById('droneDisplayMode').value;
+                pipelineMatrix.forEach(pixel => {
+                    if (viewOption === 'ndvi') {
+                        let intensity = Math.floor(pixel.ndvi * 255);
+                        ctx.fillStyle = `rgb(0, ${intensity}, 0)`;
+                    } else if (viewOption === 'thermal') {
+                        let intensity = Math.floor(pixel.thermal * 255);
+                        ctx.fillStyle = `rgb(${intensity}, ${Math.floor(intensity*0.2)}, 0)`;
+                    } else {
+                        if (pixel.isRoad) {
+                            ctx.fillStyle = '#1f242c';
+                        } else if (pixel.ndvi > 0.55) {
+                            ctx.fillStyle = `rgb(46, 164, 79)`;
+                        } else if (pixel.thermal < 0.45) {
+                            ctx.fillStyle = `rgb(88, 166, 255)`;
+                        } else {
+                            ctx.fillStyle = '#14191f';
+                        }
+                    }
+                    ctx.fillRect(pixel.x, pixel.y, 6, 6);
+                });
+                ctx.beginPath();
+                ctx.moveTo(80, 0);
+                ctx.lineTo((canvas.height + 80) / 1.2, canvas.height);
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            } else if (currentMode === 'sph') {
+                ctx.fillStyle = '#05070a';
+                ctx.fillRect(0, canvas.height * 0.22, canvas.width, canvas.height * 0.56);
+                sphParticles.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, 2 * Math.PI);
+                    if (p.concentration > 0.15 && p.concentration < 0.85) {
+                        ctx.fillStyle = `rgb(0, 255, ${Math.floor(p.concentration * 180 + 75)})`;
+                    } else if (p.concentration >= 0.85) {
+                        ctx.fillStyle = '#7a5901';
+                    } else {
+                        ctx.fillStyle = '#0077ff';
+                    }
+                    ctx.fill();
+                });
+            }
+        }
+
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            switchMode('dijkstra');
+        });
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            if (currentMode !== 'sph') render();
+        });
+    </script>
+</body>
+</html>

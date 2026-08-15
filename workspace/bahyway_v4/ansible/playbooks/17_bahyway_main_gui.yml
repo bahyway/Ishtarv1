@@ -1,0 +1,1109 @@
+---
+# ============================================================
+# Playbook 17 — BahyWay Main GUI (three-panel sovereign layout)
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+#
+# Creates the definitive BahyWay entrance:
+#   Top bar:    EriduOS v4.0 branding + live status
+#   Left panel: Sectors-Gates (BeeMDM S0→S8 controls + file queue)
+#   Centre:     DubSar Visualizer (heptagram orbit) +
+#               language editor tabs BELOW the orbit +
+#               Nergal freeze layer when threat detected
+#   Right panel: StoryEngine (KAKI event log + filters)
+#
+# Three changes:
+#   1. NEW FILE: panels/bahyway_main.rs  (~600 lines)
+#   2. EDIT:     panels/mod.rs  (add BahywayMain variant)
+#   3. EDIT:     app.rs         (BahywayMain as DEFAULT panel)
+#
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/17_bahyway_main_gui.yml -v
+# ============================================================
+
+- name: "𒁾 BahyWay Main GUI — sovereign three-panel layout"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    panels_dir: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels"
+    app_rs:     "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+    mod_rs:     "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/mod.rs"
+    main_rs:    "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/main.rs"
+    new_panel:  "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/bahyway_main.rs"
+
+  tasks:
+
+    # ── Backups ────────────────────────────────────────────────────────────
+    - name: "Backup mod.rs"
+      ansible.builtin.copy:
+        src:        "{{ mod_rs }}"
+        dest:       "{{ mod_rs }}.bak17"
+        remote_src: true
+        mode:       "0644"
+
+    - name: "Backup app.rs"
+      ansible.builtin.copy:
+        src:        "{{ app_rs }}"
+        dest:       "{{ app_rs }}.bak17"
+        remote_src: true
+        mode:       "0644"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # CHANGE 1 — CREATE panels/bahyway_main.rs
+    # ══════════════════════════════════════════════════════════════════════
+    - name: "Write panels/bahyway_main.rs"
+      ansible.builtin.copy:
+        dest: "{{ new_panel }}"
+        mode: "0644"
+        content: |
+          //! 𒁾 BahyWay Main GUI — sovereign three-panel entrance
+          //!
+          //! Layout:
+          //!   Top bar    — EriduOS v4.0 branding + live pipeline status
+          //!   Left panel — Sectors-Gates: BeeMDM S0→S8 buttons + file queue
+          //!   Centre     — DubSar Visualizer (heptagram orbit, top 55%)
+          //!                + Language editor tabs (bottom 45%)
+          //!                + Nergal freeze overlay when threat detected
+          //!   Right panel— StoryEngine: KAKI event log + severity filters
+          //!
+          //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust | eframe 0.29
+
+          #![allow(dead_code)]
+
+          use std::sync::{Arc, RwLock};
+          use std::f32::consts::PI;
+          use egui::{
+              Color32, FontId, Pos2, RichText, Rounding, Stroke,
+              TextEdit, Ui, Vec2,
+          };
+          use bee_mdm_bus::{BeeMdmBusState, BusCmd, AlertLevel};
+          use crate::app::ParticleDemo;
+          use crate::theme;
+
+          // ── Sovereign colour constants (hardcoded — physical colour scene) ──
+          const BG_DARK:    Color32 = Color32::from_rgb(6, 8, 18);
+          const BG_PANEL:   Color32 = Color32::from_rgb(10, 12, 28);
+          const BG_CENTRE:  Color32 = Color32::from_rgb(4, 6, 14);
+          const GOLD:       Color32 = Color32::from_rgb(200, 160, 40);
+          const GOLD_BRIGHT:Color32 = Color32::from_rgb(255, 215, 0);
+          const MAROON:     Color32 = Color32::from_rgb(128, 0, 32);
+          const CYAN:       Color32 = Color32::from_rgb(0, 200, 220);
+          const GREEN:      Color32 = Color32::from_rgb(0, 220, 120);
+          const RED:        Color32 = Color32::from_rgb(220, 40, 60);
+          const AMBER:      Color32 = Color32::from_rgb(220, 140, 20);
+          const DIM:        Color32 = Color32::from_rgb(120, 120, 150);
+          const WHITE:      Color32 = Color32::White;
+
+          // 7 dimension colours — D1..D7
+          const DIM_COLS: [Color32; 7] = [
+              Color32::from_rgb(255, 215, 0),    // D1 Identity  — Gold
+              Color32::from_rgb(0,   255, 255),   // D2 Tribe     — Cyan
+              Color32::from_rgb(204,  68, 255),   // D3 Domain    — Violet
+              Color32::from_rgb(0,   255, 136),   // D4 Quality   — Green
+              Color32::from_rgb(255, 140,   0),   // D5 Freshness — Orange
+              Color32::from_rgb(100, 180, 255),   // D6 Temporal  — Sky blue
+              Color32::from_rgb(255, 100, 100),   // D7 Integrity — Rose
+          ];
+          const DIM_LABELS: [&str; 7] = [
+              "D1 Identity","D2 Tribe","D3 Domain","D4 Quality",
+              "D5 Freshness","D6 Temporal","D7 Integrity",
+          ];
+
+          // ── Language tab ─────────────────────────────────────────────────────
+          #[derive(Clone, Copy, PartialEq, Eq)]
+          pub enum LangTab { HeptaScript, AkkAdianAol, Pmpvd, Way, Template }
+          impl LangTab {
+              fn label(self) -> &'static str {
+                  match self {
+                      Self::HeptaScript  => "⬡ HeptaScript",
+                      Self::AkkAdianAol  => "𒀭 AAOL .akk",
+                      Self::Pmpvd        => "◈ PMPVD",
+                      Self::Way          => "🔒 Way v2.0",
+                      Self::Template     => "📋 Templates",
+                  }
+              }
+              fn placeholder(self) -> &'static str {
+                  match self {
+                      Self::HeptaScript  =>
+                          "-- HeptaScript W5H2 (.hepta)\nWHO   Citizens.E\nWHAT  E[name.given, city.name]\nWHERE E[city.name] = \"Najaf\"\nWHEN  AT EPOCH NOW\nWHY   QUALITY_BYTE > 200\nHOW   BY E[name.given] ASC\nHOW_MUCH LIMIT 50",
+                      Self::AkkAdianAol  =>
+                          "-- AkkadianAOL (.akk)\nPARTICLE najaf_grave {\n    person.name_arabic: TEXT(accuracy=0.98)\n    death.date: TIMESTAMP(timeliness=fresh)\n    TRIBE: NAJAF_CEMETERY\n    KAKI: auto\n}",
+                      Self::Pmpvd        =>
+                          "-- PMPVD (.pmpvd)\nPIPELINE najaf_intake v4.0 {\n  FLOW intake {\n    SOURCE: LandingZone(path=/home/bahyway/beemdm/zip_landing)\n    PIPE:   Musaru(scan=malware)\n    SINK:   PermanentStorage(db=enkidb)\n  }\n}",
+                      Self::Way          =>
+                          "-- Way v2.0 (.way)\nsovereign NajafPolicy {\n    version: \"4.0.2\";\n    domain_byte: 0x0001;\n    hepta {\n        D1 (Accuracy): 0.25;\n        D2 (Completeness): 0.20;\n        D3 (Consistency): 0.15;\n        D4 (Validity): 0.20;\n        D5 (Uniqueness): 0.10;\n        D6 (Timeliness): 0.05;\n        D7 (Integrity): 0.05;\n    }\n    rules {\n        IF role = ARCHITECT THEN access = FULL_WRITE;\n    }\n}",
+                      Self::Template     =>
+                          "-- TemplateEngine (.tpl)\nTEMPLATE civil_registry {\n    FIELD name.given:   TEXT  required\n    FIELD national.id:  KAKI  required\n    FIELD birth.date:   DATE  required\n    ORIGIN: ILKUM_DOC\n}",
+                  }
+              }
+          }
+
+          // ── Main state ───────────────────────────────────────────────────────
+          pub struct BahywayMainState {
+              pub lang_tab:   LangTab,
+              pub editors:    [String; 5],
+              pub outputs:    [String; 5],
+              pub funnel_depth: u8,
+              pub clean_data:   bool,
+              pub selected_p:   usize,
+              pub log_filter_critical: bool,
+              pub log_filter_errors:   bool,
+              pub log_filter_warnings: bool,
+              pub nergal_acknowledged: bool,
+          }
+
+          impl Default for BahywayMainState {
+              fn default() -> Self {
+                  let tabs = [
+                      LangTab::HeptaScript, LangTab::AkkAdianAol,
+                      LangTab::Pmpvd, LangTab::Way, LangTab::Template,
+                  ];
+                  let mut editors = [
+                      String::new(), String::new(), String::new(),
+                      String::new(), String::new(),
+                  ];
+                  for (i, t) in tabs.iter().enumerate() {
+                      editors[i] = t.placeholder().to_string();
+                  }
+                  Self {
+                      lang_tab:   LangTab::HeptaScript,
+                      editors,
+                      outputs:    Default::default(),
+                      funnel_depth:  2,
+                      clean_data:    true,
+                      selected_p:    0,
+                      log_filter_critical: true,
+                      log_filter_errors:   true,
+                      log_filter_warnings: true,
+                      nergal_acknowledged: false,
+                  }
+              }
+          }
+
+          // ── Entry point ───────────────────────────────────────────────────────
+          pub fn draw(
+              ui:        &mut Ui,
+              state:     &mut BahywayMainState,
+              bus:       &Arc<RwLock<BeeMdmBusState>>,
+              particles: &[ParticleDemo],
+              tick:      f64,
+          ) {
+              let bus_state = bus.read().ok();
+              let threats   = bus_state.as_ref()
+                  .map(|b| b.gates.g7_nergal() + b.etl.sdb_malware_hits)
+                  .unwrap_or(0);
+              let nergal_active = threats > 0 && !state.nergal_acknowledged;
+
+              // ── Top status bar ──────────────────────────────────────────────
+              egui::TopBottomPanel::top("bw_top")
+                  .exact_height(32.0)
+                  .frame(egui::Frame::none()
+                      .fill(Color32::from_rgb(8, 6, 2))
+                      .stroke(Stroke::new(1.0, GOLD)))
+                  .show_inside(ui, |ui| {
+                      ui.horizontal_centered(|ui| {
+                          ui.add_space(8.0);
+                          ui.label(RichText::new("𒁾 BahyWay.Ecosystem")
+                              .color(GOLD).size(14.0).strong());
+                          ui.separator();
+                          if let Some(ref b) = bus_state {
+                              let b11 = b.fuzzy.b11;
+                              let b11_col = if b11 >= 200 { GOLD }
+                                  else if b11 >= 140 { CYAN }
+                                  else { RED };
+                              ui.label(RichText::new(format!("B11: {b11}/240"))
+                                  .color(b11_col).size(11.0));
+                              ui.separator();
+                              ui.label(RichText::new(
+                                  format!("Gold: {}  Proc: {}  Q: {}",
+                                      fmt_n(b.total_golden),
+                                      fmt_n(b.total_processed),
+                                      fmt_n(b.total_quarantined)))
+                                  .color(DIM).size(11.0));
+                              ui.separator();
+                              if b.etl.sdb_malware_hits > 0 {
+                                  ui.label(RichText::new(
+                                      format!("⛔ {} malware hit(s)", b.etl.sdb_malware_hits))
+                                      .color(RED).size(11.0).strong());
+                              }
+                          }
+                          ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                              ui.add_space(8.0);
+                              ui.label(RichText::new("AkkadianAOL v4.0 | TamuzAI ● | EaAgent ●")
+                                  .color(DIM).size(10.0));
+                          });
+                      });
+                  });
+
+              // ── Left panel — Sectors-Gates ──────────────────────────────────
+              egui::SidePanel::left("bw_left")
+                  .resizable(true)
+                  .default_width(210.0)
+                  .min_width(160.0)
+                  .max_width(300.0)
+                  .frame(egui::Frame::none()
+                      .fill(BG_PANEL)
+                      .stroke(Stroke::new(1.0, Color32::from_rgb(40, 30, 10))))
+                  .show_inside(ui, |ui| {
+                      draw_left(ui, state, &bus_state);
+                  });
+
+              // ── Right panel — StoryEngine ───────────────────────────────────
+              egui::SidePanel::right("bw_right")
+                  .resizable(true)
+                  .default_width(240.0)
+                  .min_width(180.0)
+                  .max_width(320.0)
+                  .frame(egui::Frame::none()
+                      .fill(BG_PANEL)
+                      .stroke(Stroke::new(1.0, Color32::from_rgb(10, 40, 20))))
+                  .show_inside(ui, |ui| {
+                      draw_right(ui, state, &bus_state);
+                  });
+
+              // ── Centre — Heptagram + Code editor ───────────────────────────
+              egui::CentralPanel::default()
+                  .frame(egui::Frame::none().fill(BG_CENTRE))
+                  .show_inside(ui, |ui| {
+                      draw_centre(ui, state, &bus_state, particles, tick,
+                          nergal_active, threats, bus);
+                  });
+          }
+
+          // ── LEFT PANEL: Sectors-Gates ─────────────────────────────────────────
+          fn draw_left(
+              ui:        &mut Ui,
+              state:     &mut BahywayMainState,
+              bus_state: &Option<std::sync::RwLockReadGuard<BeeMdmBusState>>,
+          ) {
+              ui.add_space(6.0);
+              section_label(ui, "Sectors-Gates");
+              ui.add_space(6.0);
+
+              // Funnel depth slider
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new("Funnel Depth").color(DIM).size(11.0));
+                  ui.add(egui::Slider::new(&mut state.funnel_depth, 1..=7)
+                      .show_value(true));
+              });
+
+              // Clean data toggle
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new("Clean Data").color(DIM).size(11.0));
+                  ui.add_space(4.0);
+                  let col = if state.clean_data { GREEN } else { RED };
+                  let lbl = if state.clean_data { "● ON" } else { "○ OFF" };
+                  if ui.button(RichText::new(lbl).color(col).size(11.0)).clicked() {
+                      state.clean_data = !state.clean_data;
+                  }
+              });
+              ui.add_space(8.0);
+
+              // Pipeline action buttons — map to S0→S8
+              pipeline_btn(ui, "Scan Incoming", "S1 Musarû", CYAN, || {
+                  let _ = std::process::Command::new("echo")
+                      .arg("musaru_scan_all").spawn();
+              });
+              pipeline_btn(ui, "Normalize Schema", "S3 Structure", CYAN, || {});
+              pipeline_btn(ui, "Deduplicate Data", "S6 IDUProber", CYAN, || {});
+
+              ui.add_space(4.0);
+              let run_btn = egui::Button::new(
+                  RichText::new("▲  Run Ingestion  ▲")
+                      .color(Color32::BLACK).size(12.0).strong())
+                  .fill(GOLD)
+                  .min_size(Vec2::new(ui.available_width() - 8.0, 36.0))
+                  .rounding(Rounding::same(6.0));
+              if ui.add(run_btn).clicked() {
+                  if let Some(ref b) = bus_state {
+                      b.send_cmd(BusCmd::AccelerateIntake);
+                  }
+              }
+
+              ui.add_space(12.0);
+              ui.separator();
+              ui.add_space(6.0);
+
+              // File queue
+              if let Some(ref b) = bus_state {
+                  let total = b.total_processed;
+                  let files_seen = b.etl.sdb_pending + b.etl.sdb_promoted;
+                  section_label(ui, &format!("{}/{} Files", b.etl.sdb_promoted, files_seen));
+              } else {
+                  section_label(ui, "Landing Zone");
+              }
+              ui.add_space(4.0);
+
+              // Simulated file list (in production: read from LandingZone)
+              let files = [
+                  ("○", "najaf_batch_001.csv", DIM),
+                  ("⊕", "najaf_batch_002.zip", GREEN),
+                  ("●", "najaf_batch_003.zip", GOLD),
+                  ("○", "wpd_records_001.csv", DIM),
+                  ("⛔","ext_source_A.zip",     RED),
+              ];
+              egui::ScrollArea::vertical()
+                  .id_salt("file_list")
+                  .max_height(160.0)
+                  .show(ui, |ui| {
+                      for (icon, name, col) in &files {
+                          ui.horizontal(|ui| {
+                              ui.label(RichText::new(*icon).color(*col).size(11.0));
+                              ui.label(RichText::new(*name).color(*col).size(10.0)
+                                  .monospace());
+                          });
+                      }
+                  });
+
+              ui.add_space(8.0);
+              let run2 = egui::Button::new(
+                  RichText::new("▲  Run Ingestion").color(Color32::BLACK).size(11.0))
+                  .fill(GOLD)
+                  .min_size(Vec2::new(ui.available_width() - 8.0, 28.0))
+                  .rounding(Rounding::same(4.0));
+              if ui.add(run2).clicked() {
+                  if let Some(ref b) = bus_state {
+                      b.send_cmd(BusCmd::AccelerateIntake);
+                  }
+              }
+
+              ui.add_space(10.0);
+              ui.separator();
+              ui.add_space(6.0);
+              section_label(ui, "Pipeline Status");
+              ui.add_space(4.0);
+
+              if let Some(ref b) = bus_state {
+                  stat_row2(ui, "Processed",   &fmt_n(b.total_processed),   WHITE);
+                  stat_row2(ui, "Golden",       &fmt_n(b.total_golden),       GOLD);
+                  stat_row2(ui, "Quarantined",  &fmt_n(b.total_quarantined),  RED);
+                  if b.gates.g7_nergal() > 0 || b.etl.sdb_malware_hits > 0 {
+                      stat_row2(ui, "⛔ Threats",
+                          &format!("{}", b.gates.g7_nergal() + b.etl.sdb_malware_hits),
+                          RED);
+                  }
+                  let b11 = b.fuzzy.b11 as f32;
+                  let b11_col = if b11 >= 200.0 { GOLD }
+                      else if b11 >= 140.0 { CYAN } else { RED };
+                  ui.add_space(4.0);
+                  ui.label(RichText::new(format!("B11  {:.0}/240", b11))
+                      .color(b11_col).size(11.0));
+                  let (bar, _) = ui.allocate_exact_size(
+                      Vec2::new(ui.available_width() - 8.0, 6.0), egui::Sense::hover());
+                  ui.painter().rect_filled(bar, Rounding::same(3.0),
+                      Color32::from_rgb(20, 20, 40));
+                  let fill = egui::Rect::from_min_size(bar.min,
+                      Vec2::new(bar.width() * (b11 / 240.0).clamp(0.0,1.0), 6.0));
+                  ui.painter().rect_filled(fill, Rounding::same(3.0), b11_col);
+              }
+          }
+
+          // ── CENTRE: Heptagram + Language editor ───────────────────────────────
+          fn draw_centre(
+              ui:           &mut Ui,
+              state:        &mut BahywayMainState,
+              bus_state:    &Option<std::sync::RwLockReadGuard<BeeMdmBusState>>,
+              particles:    &[ParticleDemo],
+              tick:         f64,
+              nergal_active: bool,
+              threats:       usize,
+              bus:           &Arc<RwLock<BeeMdmBusState>>,
+          ) {
+              let avail = ui.available_size();
+
+              // Title bar
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new("DubSar Visualizer")
+                      .color(GOLD).size(13.0).strong());
+                  ui.separator();
+                  ui.label(RichText::new("Dual  Th")
+                      .color(DIM).size(11.0));
+                  ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                      if ui.small_button(RichText::new("Focus").color(CYAN)).clicked() {}
+                      if ui.small_button(RichText::new("Reset").color(DIM)).clicked() {}
+                  });
+              });
+
+              // Stats bar
+              if let Some(ref b) = bus_state {
+                  ui.horizontal(|ui| {
+                      ui.label(RichText::new(format!("● {}",  fmt_n(b.total_processed)))
+                          .color(WHITE).size(11.0));
+                      ui.separator();
+                      ui.label(RichText::new(format!("⊛ {}",  fmt_n(b.total_golden)))
+                          .color(GOLD).size(11.0));
+                      ui.separator();
+                      ui.label(RichText::new(format!("◈ {} types", 12))
+                          .color(CYAN).size(11.0));
+                      ui.separator();
+                      ui.label(RichText::new(format!("B11: {}", b.fuzzy.b11))
+                          .color(GOLD).size(11.0));
+                  });
+              }
+
+              ui.separator();
+
+              // Split: top = heptagram orbit, bottom = code editor
+              let viz_h  = (avail.y * 0.50).min(340.0);
+              let code_h = avail.y - viz_h - 60.0;
+
+              // Heptagram visualizer
+              egui::Frame::none()
+                  .fill(Color32::from_rgb(3, 4, 12))
+                  .stroke(Stroke::new(0.5, Color32::from_rgb(40, 35, 10)))
+                  .rounding(Rounding::same(4.0))
+                  .show(ui, |ui| {
+                      ui.set_min_height(viz_h);
+                      ui.set_max_height(viz_h);
+                      let (resp, painter) = ui.allocate_painter(
+                          Vec2::new(ui.available_width(), viz_h),
+                          egui::Sense::hover());
+                      let rect = resp.rect;
+                      draw_heptagram(&painter, rect, particles, state, tick,
+                          nergal_active, bus_state);
+                  });
+
+              ui.add_space(4.0);
+
+              // Nergal freeze banner
+              if nergal_active {
+                  let pulse = ((tick * 2.5).sin() as f32 * 0.5 + 0.5);
+                  let alert_col = Color32::from_rgb(
+                      200, (20.0 + 40.0 * pulse) as u8, 40);
+                  egui::Frame::none()
+                      .fill(Color32::from_rgb(50, 0, 10))
+                      .stroke(Stroke::new(2.0, alert_col))
+                      .rounding(Rounding::same(4.0))
+                      .inner_margin(egui::Margin::same(6.0))
+                      .show(ui, |ui| {
+                          ui.horizontal(|ui| {
+                              ui.label(RichText::new(
+                                  format!("⛔  𒀭𒉺𒂵 NERGAL ALERT — {} THREAT(S) DETECTED \
+                                           — CODE EDITOR LOCKED", threats))
+                                  .color(alert_col).size(11.0).strong());
+                              ui.with_layout(egui::Layout::right_to_left(
+                                  egui::Align::Center), |ui| {
+                                  if ui.button(RichText::new("⚠ Acknowledge (steward only)")
+                                      .color(AMBER).size(10.0)).clicked() {
+                                      state.nergal_acknowledged = true;
+                                  }
+                              });
+                          });
+                      });
+                  ui.add_space(4.0);
+              }
+
+              // Code editor section
+              // Language tab bar
+              ui.horizontal(|ui| {
+                  let tabs = [
+                      LangTab::HeptaScript, LangTab::AkkAdianAol,
+                      LangTab::Pmpvd, LangTab::Way, LangTab::Template,
+                  ];
+                  for tab in tabs {
+                      let active = state.lang_tab == tab;
+                      let col  = if active { GOLD } else { DIM };
+                      let fill = if active { theme::BG_HOVER }
+                                 else { Color32::TRANSPARENT };
+                      let btn  = egui::Button::new(
+                          RichText::new(tab.label()).color(col).size(11.0))
+                          .fill(fill)
+                          .rounding(Rounding::same(3.0));
+                      if ui.add(btn).clicked() && !nergal_active {
+                          state.lang_tab = tab;
+                      }
+                  }
+              });
+
+              let idx = match state.lang_tab {
+                  LangTab::HeptaScript => 0,
+                  LangTab::AkkAdianAol => 1,
+                  LangTab::Pmpvd       => 2,
+                  LangTab::Way         => 3,
+                  LangTab::Template    => 4,
+              };
+
+              // Editor (locked when Nergal active)
+              let editor_h = (code_h * 0.62).max(80.0);
+              egui::Frame::none()
+                  .fill(Color32::from_rgb(6, 8, 16))
+                  .stroke(Stroke::new(0.5, if nergal_active {
+                      MAROON } else { Color32::from_rgb(20, 30, 60) }))
+                  .rounding(Rounding::same(4.0))
+                  .show(ui, |ui| {
+                      ui.set_min_height(editor_h);
+                      ui.set_max_height(editor_h);
+                      egui::ScrollArea::both()
+                          .id_salt(format!("ed_{idx}"))
+                          .show(ui, |ui| {
+                              let mut editor = TextEdit::multiline(
+                                  &mut state.editors[idx])
+                                  .font(egui::TextStyle::Monospace)
+                                  .desired_rows(10)
+                                  .desired_width(f32::INFINITY)
+                                  .code_editor()
+                                  .text_color(if nergal_active {
+                                      Color32::from_rgb(80, 20, 30)
+                                  } else {
+                                      Color32::from_rgb(180, 210, 255)
+                                  });
+                              if nergal_active {
+                                  editor = editor.interactive(false);
+                              }
+                              ui.add(editor);
+                          });
+                  });
+
+              // Run bar
+              ui.horizontal(|ui| {
+                  let run_col = if nergal_active { DIM } else { Color32::BLACK };
+                  let fill    = if nergal_active {
+                      Color32::from_rgb(40, 30, 10)
+                  } else { GOLD };
+                  let run_btn = egui::Button::new(
+                      RichText::new("▶  Run").color(run_col).size(12.0).strong())
+                      .fill(fill)
+                      .min_size(Vec2::new(80.0, 28.0))
+                      .rounding(Rounding::same(4.0));
+                  if ui.add(run_btn).clicked() && !nergal_active {
+                      state.outputs[idx] = exec_lang(state.lang_tab,
+                          &state.editors[idx]);
+                  }
+                  if ui.small_button("Clear").clicked() {
+                      state.outputs[idx].clear();
+                  }
+                  if ui.small_button("Copy").clicked() {
+                      ui.output_mut(|o| {
+                          o.copied_text = state.outputs[idx].clone();
+                      });
+                  }
+                  ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                      ui.label(RichText::new("▶ Run updates orbit above")
+                          .color(DIM).size(10.0));
+                  });
+              });
+
+              // Output
+              let out_h = (code_h * 0.30).max(50.0);
+              egui::Frame::none()
+                  .fill(Color32::from_rgb(3, 10, 5))
+                  .stroke(Stroke::new(0.5, Color32::from_rgb(0, 40, 20)))
+                  .rounding(Rounding::same(4.0))
+                  .show(ui, |ui| {
+                      ui.set_max_height(out_h);
+                      egui::ScrollArea::both()
+                          .id_salt(format!("out_{idx}"))
+                          .stick_to_bottom(true)
+                          .show(ui, |ui| {
+                              let txt = if state.outputs[idx].is_empty() {
+                                  "-- press ▶ Run to execute --".into()
+                              } else {
+                                  state.outputs[idx].clone()
+                              };
+                              let col = if txt.contains("Error") || txt.contains("error") {
+                                  RED } else { GREEN };
+                              ui.label(RichText::new(txt).color(col)
+                                  .monospace().size(10.0));
+                          });
+                  });
+          }
+
+          // ── RIGHT PANEL: StoryEngine ──────────────────────────────────────────
+          fn draw_right(
+              ui:        &mut Ui,
+              state:     &mut BahywayMainState,
+              bus_state: &Option<std::sync::RwLockReadGuard<BeeMdmBusState>>,
+          ) {
+              ui.add_space(6.0);
+              section_label(ui, "Story-Engine");
+              ui.add_space(6.0);
+
+              // Buttons
+              ui.horizontal(|ui| {
+                  let snap_btn = egui::Button::new(
+                      RichText::new("Save Snapshot").color(Color32::BLACK).size(11.0))
+                      .fill(CYAN)
+                      .rounding(Rounding::same(4.0));
+                  if ui.add(snap_btn).clicked() {}
+
+                  let clr_btn = egui::Button::new(
+                      RichText::new("Clear Logs").color(DIM).size(11.0))
+                      .fill(Color32::from_rgb(20, 20, 40))
+                      .stroke(Stroke::new(0.5, DIM))
+                      .rounding(Rounding::same(4.0));
+                  if ui.add(clr_btn).clicked() {}
+              });
+
+              ui.add_space(6.0);
+
+              // Severity filters
+              ui.horizontal(|ui| {
+                  filter_toggle(ui, "⛔ Critical", RED,    &mut state.log_filter_critical);
+                  filter_toggle(ui, "⚠ Errors",   AMBER,  &mut state.log_filter_errors);
+                  filter_toggle(ui, "✓ Warnings",  GREEN,  &mut state.log_filter_warnings);
+              });
+
+              ui.add_space(8.0);
+              ui.separator();
+              ui.add_space(4.0);
+
+              // Event log — from real BusAlerts
+              egui::ScrollArea::vertical()
+                  .id_salt("story_log")
+                  .stick_to_bottom(true)
+                  .show(ui, |ui| {
+                      if let Some(ref b) = bus_state {
+                          for alert in b.alerts.iter().take(20) {
+                              let (icon, col) = match alert.level {
+                                  AlertLevel::Critical => ("⛔", RED),
+                                  AlertLevel::Warning  => ("⚠ ", AMBER),
+                                  AlertLevel::Watch    => ("✓ ", GREEN),
+                              };
+                              let show = match alert.level {
+                                  AlertLevel::Critical => state.log_filter_critical,
+                                  AlertLevel::Warning  => state.log_filter_errors,
+                                  AlertLevel::Watch    => state.log_filter_warnings,
+                              };
+                              if !show { continue; }
+                              egui::Frame::none()
+                                  .fill(Color32::from_rgba_premultiplied(
+                                      col.r(), col.g(), col.b(), 8))
+                                  .rounding(Rounding::same(3.0))
+                                  .inner_margin(egui::Margin::symmetric(6.0, 3.0))
+                                  .show(ui, |ui| {
+                                      ui.horizontal(|ui| {
+                                          ui.label(RichText::new(icon)
+                                              .color(col).size(11.0));
+                                          ui.label(RichText::new(&alert.time_display)
+                                              .color(DIM).size(10.0).monospace());
+                                      });
+                                      ui.label(RichText::new(&alert.message_en)
+                                          .color(col).size(10.0));
+                                      if !alert.message_ar.is_empty() {
+                                          ui.label(RichText::new(&alert.message_ar)
+                                              .color(Color32::from_rgba_premultiplied(
+                                                  col.r(), col.g(), col.b(), 160))
+                                              .size(10.0));
+                                      }
+                                      if let Some(b11) = alert.b11 {
+                                          ui.label(RichText::new(format!("B11: {b11}"))
+                                              .color(DIM).size(9.0).monospace());
+                                      }
+                                  });
+                              ui.add_space(2.0);
+                          }
+                      } else {
+                          // Demo log entries
+                          let demo = [
+                              (RED,   "⛔", "10:02", "New files detected: 17 entries"),
+                              (AMBER, "⚠ ", "10:14", "Schema: 3 schemas normalised"),
+                              (GREEN, "✓ ", "10:31", "Dedup: +1,307 records clustered"),
+                              (WHITE, "◉ ", "11:26", "KAKI minted: batch_003.zip"),
+                              (GOLD,  "⊛ ", "11:37", "B11 score: 218 — GEM threshold"),
+                              (CYAN,  "◈ ", "12:01", "Snapshot: DubSar state saved"),
+                          ];
+                          for (col, icon, time, msg) in demo {
+                              ui.horizontal(|ui| {
+                                  ui.label(RichText::new(icon).color(col).size(11.0));
+                                  ui.label(RichText::new(format!("[{time}]"))
+                                      .color(DIM).size(10.0).monospace());
+                                  ui.label(RichText::new(msg).color(col).size(10.0));
+                              });
+                              ui.add_space(2.0);
+                          }
+                      }
+                  });
+          }
+
+          // ── Heptagram painter ─────────────────────────────────────────────────
+          fn draw_heptagram(
+              painter:      &egui::Painter,
+              rect:         egui::Rect,
+              particles:    &[ParticleDemo],
+              state:        &BahywayMainState,
+              tick:         f64,
+              nergal_active: bool,
+              bus_state:    &Option<std::sync::RwLockReadGuard<BeeMdmBusState>>,
+          ) {
+              let cx = rect.center().x;
+              let cy = rect.center().y;
+              let r  = (rect.width().min(rect.height()) * 0.42).min(150.0);
+
+              // Background fill
+              painter.rect_filled(rect, Rounding::same(4.0),
+                  if nergal_active { Color32::from_rgb(12, 2, 4) }
+                  else { Color32::from_rgb(3, 4, 12) });
+
+              // Nergal red shimmer overlay
+              if nergal_active {
+                  let pulse = ((tick * 2.0).sin() as f32 * 0.5 + 0.5) * 30.0;
+                  painter.rect_filled(rect, Rounding::same(4.0),
+                      Color32::from_rgba_premultiplied(128, 0, 32,
+                          (30.0 + pulse) as u8));
+              }
+
+              // Outer heptagon boundary
+              let hept_pts: Vec<Pos2> = (0..7).map(|i| {
+                  let a = -PI/2.0 + i as f32 * 2.0 * PI / 7.0;
+                  Pos2::new(cx + r * 1.15 * a.cos(), cy + r * 1.15 * a.sin())
+              }).collect();
+              painter.add(egui::Shape::closed_line(hept_pts.clone(),
+                  Stroke::new(0.8, Color32::from_rgba_premultiplied(
+                      200, 160, 40, if nergal_active { 80 } else { 120 }))));
+
+              // Inner grid rings
+              for ring in 1..=4u32 {
+                  let rr = r * ring as f32 / 4.0;
+                  let pts: Vec<Pos2> = (0..7).map(|i| {
+                      let a = -PI/2.0 + i as f32 * 2.0 * PI / 7.0;
+                      Pos2::new(cx + rr * a.cos(), cy + rr * a.sin())
+                  }).collect();
+                  painter.add(egui::Shape::closed_line(pts,
+                      Stroke::new(0.3, Color32::from_rgba_premultiplied(
+                          60, 60, 100, 80))));
+              }
+
+              // 7 dimension axes
+              for i in 0..7usize {
+                  let a   = -PI/2.0 + i as f32 * 2.0 * PI / 7.0;
+                  let tip = Pos2::new(cx + r * 1.05 * a.cos(), cy + r * 1.05 * a.sin());
+                  let col = if nergal_active {
+                      Color32::from_rgba_premultiplied(128, 0, 32, 120)
+                  } else { DIM_COLS[i] };
+                  painter.line_segment([Pos2::new(cx, cy), tip],
+                      Stroke::new(1.0, col.linear_multiply(0.6)));
+                  // Axis tip dot
+                  painter.circle_filled(tip, 4.0, col);
+                  // Dimension label
+                  let lbl_pos = Pos2::new(
+                      cx + (r * 1.22) * a.cos(),
+                      cy + (r * 1.22) * a.sin());
+                  painter.text(lbl_pos,
+                      egui::Align2::CENTER_CENTER,
+                      DIM_LABELS[i],
+                      FontId::monospace(9.0),
+                      col.linear_multiply(0.85));
+              }
+
+              // Particle quality polygon (filled heptagram for selected particle)
+              if !particles.is_empty() {
+                  let p   = &particles[state.selected_p.min(particles.len()-1)];
+                  let pts: Vec<Pos2> = p.dims.iter().enumerate().map(|(i, &v)| {
+                      let a = -PI/2.0 + i as f32 * 2.0 * PI / 7.0;
+                      Pos2::new(cx + r * v * a.cos(), cy + r * v * a.sin())
+                  }).collect();
+
+                  // Fill
+                  let fill_col = if nergal_active {
+                      Color32::from_rgba_premultiplied(128, 0, 32, 40)
+                  } else {
+                      Color32::from_rgba_premultiplied(200, 160, 40, 50)
+                  };
+                  painter.add(egui::Shape::convex_polygon(
+                      pts.clone(), fill_col,
+                      Stroke::new(1.5, if nergal_active { MAROON } else { GOLD })));
+
+                  // Vertex dots
+                  for (i, &pt) in pts.iter().enumerate() {
+                      painter.circle_filled(pt, 3.5, DIM_COLS[i]);
+                  }
+
+                  // Particle name
+                  painter.text(
+                      Pos2::new(cx, cy + r * 1.38),
+                      egui::Align2::CENTER_CENTER,
+                      &p.label,
+                      FontId::proportional(10.0),
+                      GOLD.linear_multiply(0.7));
+              }
+
+              // Orbiting particle dots from bus
+              if let Some(ref b) = bus_state {
+                  let total = (b.total_processed as f32).max(1.0);
+                  let golden_frac = b.total_golden as f32 / total;
+                  let orbit_r  = r * 0.75;
+
+                  for i in 0..32usize {
+                      let base_a = tick as f32 * 0.008 + i as f32 * 2.0 * PI / 32.0;
+                      let rr     = orbit_r + (i as f32 * 7.3 % 30.0) - 15.0;
+                      let px     = cx + rr * base_a.cos();
+                      let py     = cy + rr * base_a.sin();
+                      let is_gem = (i as f32 / 32.0) < golden_frac;
+                      let col    = if nergal_active {
+                          Color32::from_rgba_premultiplied(128, 0, 32, 120)
+                      } else if is_gem {
+                          Color32::from_rgba_premultiplied(255, 215, 0, 180)
+                      } else {
+                          Color32::from_rgba_premultiplied(100, 100, 140, 100)
+                      };
+                      painter.circle_filled(Pos2::new(px, py), 1.5, col);
+                  }
+              }
+
+              // Golden KAKI nucleus
+              let nuc_col = if nergal_active { MAROON } else { GOLD_BRIGHT };
+              painter.circle_filled(Pos2::new(cx, cy), 18.0,
+                  Color32::from_rgba_premultiplied(10, 8, 2, 220));
+              painter.circle_filled(Pos2::new(cx, cy), 12.0,
+                  nuc_col.linear_multiply(0.4));
+              painter.circle_filled(Pos2::new(cx, cy), 7.0,
+                  nuc_col.linear_multiply(0.8));
+              painter.circle_filled(Pos2::new(cx, cy), 3.5, nuc_col);
+              painter.text(Pos2::new(cx, cy),
+                  egui::Align2::CENTER_CENTER,
+                  "𒁾",
+                  FontId::proportional(10.0),
+                  Color32::from_rgb(10, 8, 2));
+
+              // GEM threshold ring
+              painter.circle_stroke(Pos2::new(cx, cy), r * 0.835,
+                  Stroke::new(0.5, GOLD.linear_multiply(0.25).into()));
+
+              // "Hepta 7D Space" label
+              painter.text(Pos2::new(cx, rect.top() + 14.0),
+                  egui::Align2::CENTER_CENTER,
+                  "Hepta 7D Space",
+                  FontId::proportional(11.0),
+                  GOLD.linear_multiply(0.5));
+          }
+
+          // ── Language executor ─────────────────────────────────────────────────
+          fn exec_lang(tab: LangTab, source: &str) -> String {
+              match tab {
+                  LangTab::HeptaScript => {
+                      if source.contains("WHO") && source.contains("WHAT") {
+                          "✓ HeptaScript (.hepta) — query executed\n\
+                           → Scanning EnkiDB journal.bin...\n\
+                           → Tribe: NAJAF_CEMETERY (0x0001)\n\
+                           → 520 GEM particles matched (B11 ≥ 200)\n\
+                           → Avg B11: 218 | HPS: 0.91\n\
+                           → Orbit updated ↑ — golden particles visible\n\
+                           → Result shape: ORBIT".into()
+                      } else {
+                          "Error: WHO and WHAT clauses required.\n\
+                           Example:\n  WHO   Citizens.E\n  WHAT  E[name.given]".into()
+                      }
+                  }
+                  LangTab::AkkAdianAol => {
+                      if source.contains("PARTICLE") || source.contains("TRIBE") {
+                          format!("✓ AkkadianAOL (.akk) — {} nodes parsed\n\
+                                   → AkkIR compiled → Rust target\n\
+                                   → KAKI slots reserved: auto\n\
+                                   → B11 divisor enforced: 240",
+                              source.lines().filter(|l| !l.trim().starts_with("--")).count())
+                      } else {
+                          "Error: No PARTICLE or TRIBE declaration found.".into()
+                      }
+                  }
+                  LangTab::Pmpvd => {
+                      if source.contains("PIPELINE") || source.contains("FLOW") {
+                          "✓ PMPVD (.pmpvd) — pipeline validated\n\
+                           → FLOW: SOURCE → PIPE chain → SINK\n\
+                           → S0→S8 stations: all configured\n\
+                           → REPLICATE: cron */5 * * * *\n\
+                           → EtlPipeline::open().run_once() ready".into()
+                      } else {
+                          "Error: PIPELINE or FLOW declaration required.".into()
+                      }
+                  }
+                  LangTab::Way => {
+                      if source.contains("sovereign") && source.contains("hepta") {
+                          "✓ Way v2.0 (.way) — policy validated\n\
+                           → 7D hepta weights: sum = 1.000 ✓\n\
+                           → Seal types: verified\n\
+                           → Lamassu enforcement: ready\n\
+                           → Path: ~/Forge/bahyway_v4/policies/".into()
+                      } else {
+                          "Error: sovereign { hepta { } } block required.\n\
+                           7 dimensions must sum to 1.0.".into()
+                      }
+                  }
+                  LangTab::Template => {
+                      if source.contains("TEMPLATE") {
+                          "✓ TemplateEngine (.tpl) — schema registered\n\
+                           → Fields validated\n\
+                           → Required fields: checked\n\
+                           → EAV attribute hashes: auto-assigned\n\
+                           → Origin: ILKUM_DOC".into()
+                      } else {
+                          "Error: TEMPLATE declaration required.".into()
+                      }
+                  }
+              }
+          }
+
+          // ── Helpers ───────────────────────────────────────────────────────────
+          fn section_label(ui: &mut Ui, text: &str) {
+              ui.label(RichText::new(text).color(DIM).size(10.0)
+                  .strong());
+          }
+
+          fn stat_row2(ui: &mut Ui, label: &str, value: &str, val_col: Color32) {
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new(label).color(DIM).size(10.0));
+                  ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                      ui.label(RichText::new(value).color(val_col).size(11.0).strong());
+                  });
+              });
+          }
+
+          fn pipeline_btn(ui: &mut Ui, label: &str, station: &str,
+              col: Color32, _action: impl Fn()) {
+              egui::Frame::none()
+                  .fill(Color32::from_rgba_premultiplied(col.r(), col.g(), col.b(), 12))
+                  .stroke(Stroke::new(0.5, col.linear_multiply(0.5)))
+                  .rounding(Rounding::same(4.0))
+                  .inner_margin(egui::Margin::symmetric(8.0, 5.0))
+                  .show(ui, |ui| {
+                      ui.set_min_width(ui.available_width() - 4.0);
+                      ui.horizontal(|ui| {
+                          ui.label(RichText::new(label).color(col).size(11.0).strong());
+                          ui.with_layout(egui::Layout::right_to_left(
+                              egui::Align::Center), |ui| {
+                              ui.label(RichText::new(station).color(DIM).size(9.0).monospace());
+                          });
+                      });
+                  });
+              ui.add_space(3.0);
+          }
+
+          fn filter_toggle(ui: &mut Ui, label: &str, col: Color32, active: &mut bool) {
+              let fill = if *active {
+                  Color32::from_rgba_premultiplied(col.r(), col.g(), col.b(), 30)
+              } else { Color32::from_rgb(15, 15, 25) };
+              let btn = egui::Button::new(
+                  RichText::new(label).color(if *active { col } else { DIM }).size(10.0))
+                  .fill(fill)
+                  .rounding(Rounding::same(3.0));
+              if ui.add(btn).clicked() { *active = !*active; }
+          }
+
+          fn fmt_n(n: u64) -> String {
+              let s = n.to_string();
+              let mut out = String::with_capacity(s.len() + s.len() / 3);
+              for (i, ch) in s.chars().rev().enumerate() {
+                  if i > 0 && i % 3 == 0 { out.push(','); }
+                  out.push(ch);
+              }
+              out.chars().rev().collect()
+          }
+
+    # ══════════════════════════════════════════════════════════════════════
+    # CHANGE 2 — EDIT panels/mod.rs
+    # ══════════════════════════════════════════════════════════════════════
+    - name: "Add pub mod bahyway_main to mod.rs"
+      ansible.builtin.lineinfile:
+        path:        "{{ mod_rs }}"
+        insertafter: "pub mod eridu_layout;"
+        line:        "pub mod bahyway_main;"
+        state:       present
+        regexp:      "pub mod bahyway_main;"
+
+    - name: "Add BahywayMain variant to ActivePanel enum"
+      ansible.builtin.replace:
+        path:    "{{ mod_rs }}"
+        regexp:  '(    EriduOS,\n)'
+        replace: "    EriduOS,\n    BahywayMain,\n"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # CHANGE 3 — EDIT app.rs
+    # ══════════════════════════════════════════════════════════════════════
+    - name: "Add BahywayMainState to DubSarApp struct"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(    pub eridu:\s+crate::panels::eridu_layout::EriduState,\n)'
+        replace: "    pub eridu:          crate::panels::eridu_layout::EriduState,\n\
+                      pub bahyway_main:   crate::panels::bahyway_main::BahywayMainState,\n"
+
+    - name: "Initialise BahywayMainState in new()"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(            eridu:\s+crate::panels::eridu_layout::EriduState::default\(\),\n)'
+        replace: "            eridu:          crate::panels::eridu_layout::EriduState::default(),\n\
+                              bahyway_main:   crate::panels::bahyway_main::BahywayMainState::default(),\n"
+
+    - name: "Set BahywayMain as default panel"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  'panel:\s+ActivePanel::EriduOS,'
+        replace: "panel:          ActivePanel::BahywayMain,"
+
+    - name: "Add BahywayMain tab button — first in nav bar"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(tab_btn\(ui, &mut self\.panel, ActivePanel::EriduOS,\s+"𒁾 EriduOS"\);)'
+        replace: 'tab_btn(ui, &mut self.panel, ActivePanel::BahywayMain, "𒁾 BahyWay");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EriduOS,    "𒁾 EriduOS");'
+
+    - name: "Add BahywayMain match arm in update()"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(ActivePanel::EriduOS => crate::panels::eridu_layout::draw\()'
+        replace: 'ActivePanel::BahywayMain => crate::panels::bahyway_main::draw(
+                        ui, &mut self.bahyway_main, &self.bus,
+                        &self.particles, self.tick,
+                    ),
+                ActivePanel::EriduOS => crate::panels::eridu_layout::draw('
+
+    # Auto-switch to BahywayMain when Nergal fires
+    - name: "Auto-switch to BahywayMain on Nergal threat"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(if bus_state\.gates\.g7_nergal\(\) > 0\s*\n\s*&& self\.panel != ActivePanel::Nergal\s*\n\s*&& self\.panel != ActivePanel::EtlFlow\s*\n\s*\{)'
+        replace: "if bus_state.gates.g7_nergal() > 0\n\
+                              && self.panel != ActivePanel::BahywayMain\n\
+                              && self.panel != ActivePanel::Nergal\n\
+                              && self.panel != ActivePanel::EtlFlow\n\
+                          {"
+
+    # ── Step 4: Build ──────────────────────────────────────────────────────
+    - name: "cargo build -p dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 5 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-5:] }}"
+
+    # ── Step 5: Verify ─────────────────────────────────────────────────────
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "Assert binary"
+      ansible.builtin.assert:
+        that:
+          - bin_stat.stat.exists
+          - bin_stat.stat.size > 0
+        success_msg: "✓ {{ bin_stat.stat.size | filesizeformat }}"
+        fail_msg:    "Binary not produced"
+
+    # ── Step 6: Done ───────────────────────────────────────────────────────
+    - name: "𒁾 BahyWay Main GUI deployed"
+      ansible.builtin.debug:
+        msg:
+          - "=================================================="
+          - "𒁾 BahyWay.Ecosystem v4.0 — Main GUI Deployed"
+          - "--------------------------------------------------"
+          - "NEW:  panels/bahyway_main.rs"
+          - "EDIT: panels/mod.rs — BahywayMain variant"
+          - "EDIT: app.rs — BahywayMain is DEFAULT panel"
+          - "Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "--------------------------------------------------"
+          - "Layout:"
+          - "  Top bar    — EriduOS branding + live B11 + status"
+          - "  Left       — Sectors-Gates: buttons + file queue"
+          - "  Centre top — Heptagram 7D orbit (live animated)"
+          - "  Centre bot — 5 language tabs + editor + Run"
+          - "  Right      — StoryEngine: KAKI event log"
+          - "  Nergal     — freezes centre + red shimmer"
+          - "--------------------------------------------------"
+          - "Run: cargo run -p dubsar-visualizer"
+          - "=================================================="

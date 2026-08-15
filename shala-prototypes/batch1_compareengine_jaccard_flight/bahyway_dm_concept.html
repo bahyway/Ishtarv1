@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>𒀭 BahyWay — Triple-O Data Mining</title>
+<style>
+  :root{
+    --bg-base:#2B2D31;--bg-panel:#232527;--bg-widget:#1E2022;--bg-deep:#161719;
+    --bg-hover:#383A3E;--bg-selected:#404349;--stroke:#3D3F43;
+    --gold:#D6A44C;--teal:#4FB8A8;--crimson:#C34A3F;--orange:#D98E3E;--purple:#9B7FC7;
+    --ink:#E8E6E1;--muted:#9A9C9F;--dim:#6E7074;
+    --golden:#D6A44C;--fuzzy:#D98E3E;--dead:#C34A3F;
+    --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --sans:-apple-system,"Segoe UI","Noto Sans",Ubuntu,Cantarell,sans-serif;
+    --mono:"JetBrains Mono","Fira Code",ui-monospace,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+  button{font-family:inherit;color:inherit;cursor:pointer}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  .app{display:flex;flex-direction:column;height:100vh}
+  header{border-bottom:1px solid var(--stroke);background:var(--bg-panel);padding:12px 20px;
+    display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;flex-shrink:0}
+  header h1{font-family:var(--serif);font-weight:600;font-size:19px;letter-spacing:.03em}
+  header h1 .glyph{color:var(--gold);margin-right:7px}
+  header .sub{color:var(--muted);font-size:12px}
+  header .not{margin-left:auto;font-size:11px;color:var(--dim);font-style:italic}
+
+  .body{flex:1;display:grid;grid-template-columns:210px 1fr 300px;min-height:0}
+  @media(max-width:1000px){.body{grid-template-columns:1fr}.rail,.tribes{display:none}}
+
+  /* ── Left rail: TRIBES (not "data sources") ── */
+  .tribes{background:var(--bg-panel);border-right:1px solid var(--stroke);overflow-y:auto;padding:14px 0}
+  .railTitle{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);padding:0 16px 8px}
+  .tribe{padding:9px 16px;cursor:pointer;border-left:2px solid transparent;display:flex;align-items:center;gap:9px}
+  .tribe:hover{background:var(--bg-hover)}
+  .tribe.on{background:var(--bg-widget);border-left-color:var(--gold)}
+  .tribe .swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+  .tribe .tn{font-family:var(--mono);font-size:12px}
+  .tribe .tc{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+  .tribe.on .tn{color:var(--gold)}
+  .railTitle.mt{margin-top:16px;border-top:1px solid var(--stroke);padding-top:14px}
+  .op{padding:8px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)}
+  .op:hover{background:var(--bg-hover);color:var(--ink)}
+  .op .verb{font-family:var(--mono);font-size:11px;color:var(--gold);width:64px}
+  .op small{color:var(--dim);font-size:11px}
+
+  /* ── Center: the ORBIT FIELD (the telescope, not a canvas of boxes) ── */
+  .field{position:relative;background:radial-gradient(ellipse at 50% 45%,#1a1c1f 0%,#141517 70%,#0f1012 100%);overflow:hidden}
+  .fieldHud{position:absolute;top:14px;left:16px;z-index:10;font-family:var(--mono);font-size:11px;
+    background:rgba(22,23,25,.8);border:1px solid var(--stroke);border-radius:8px;padding:8px 12px;backdrop-filter:blur(4px)}
+  .fieldHud .lvl{color:var(--gold);font-weight:600}.fieldHud .sub{color:var(--dim)}
+  .zoomCtl{position:absolute;top:14px;right:16px;z-index:10;display:flex;flex-direction:column;gap:4px}
+  .zoomCtl button{width:34px;height:34px;background:rgba(22,23,25,.85);border:1px solid var(--stroke);
+    border-radius:7px;color:var(--ink);font-size:16px;backdrop-filter:blur(4px)}
+  .zoomCtl button:hover{background:var(--bg-hover)}
+  svg.orbits{width:100%;height:100%;display:block;cursor:grab}
+  svg.orbits:active{cursor:grabbing}
+  .legend{position:absolute;bottom:14px;left:16px;z-index:10;display:flex;gap:14px;font-size:11px;
+    background:rgba(22,23,25,.8);border:1px solid var(--stroke);border-radius:8px;padding:7px 12px;backdrop-filter:blur(4px)}
+  .legend span{display:flex;align-items:center;gap:6px;color:var(--muted)}
+  .legend .d{width:9px;height:9px;border-radius:50%}
+  .flash{position:absolute;bottom:14px;right:16px;z-index:10;font-family:var(--mono);font-size:11px;
+    color:var(--teal);background:rgba(22,23,25,.85);border:1px solid rgba(79,184,168,.35);border-radius:8px;padding:7px 12px;
+    backdrop-filter:blur(4px);opacity:0;transition:opacity .3s}
+  .flash.show{opacity:1}
+
+  /* ── Right: PARTICLE INSPECTOR + HeptaScript ── */
+  .rail{background:var(--bg-panel);border-left:1px solid var(--stroke);overflow-y:auto;display:flex;flex-direction:column}
+  .insp{padding:15px 16px;border-bottom:1px solid var(--stroke)}
+  .insp h3{font-family:var(--serif);font-size:15px;margin-bottom:3px}
+  .insp .hint{font-size:11.5px;color:var(--dim);margin-bottom:12px}
+  .kaki{font-family:var(--mono);font-size:11px;background:var(--bg-widget);border:1px solid var(--stroke);
+    border-radius:7px;padding:9px 11px;color:var(--teal);word-break:break-all;margin-bottom:12px}
+  .kaki .lbl{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+  .eav{list-style:none}
+  .eav li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid rgba(61,63,67,.4);font-size:12.5px}
+  .eav li:last-child{border:none}
+  .eav .a{color:var(--muted);font-family:var(--mono);font-size:11.5px}
+  .eav .v{color:var(--ink);font-family:var(--mono)}
+  .stateChip{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:2px 9px;border-radius:5px;font-weight:600}
+  .stateChip.golden{color:#F0D08A;background:rgba(214,164,76,.14)}
+  .stateChip.fuzzy{color:#F0B27A;background:rgba(217,142,62,.14)}
+  .stateChip.dead{color:#E08A80;background:rgba(195,74,63,.14)}
+
+  .hepta{padding:15px 16px;flex:1}
+  .hepta h3{font-family:var(--serif);font-size:14px;margin-bottom:8px}.hepta h3 .glyph{color:var(--gold)}
+  pre{font-family:var(--mono);font-size:11.5px;line-height:1.7;color:#C9C7C2;white-space:pre-wrap}
+  .kw{color:var(--gold);font-weight:600}.nn{color:var(--teal)}.vv{color:var(--orange)}.cm{color:var(--dim);font-style:italic}.pu{color:var(--purple)}
+
+  footer{flex-shrink:0;background:var(--bg-panel);border-top:1px solid var(--stroke);padding:9px 20px;font-size:11.5px;color:var(--dim)}
+  footer b{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1><span class="glyph">𒀭</span>BahyWay — Data Mining &amp; Visualization</h1>
+    <span class="sub">Triple-O · Tribes, Orbits, Particles — not a pipeline of boxes</span>
+    <span class="not">concept for approval — react, don't adopt</span>
+  </header>
+
+  <div class="body">
+    <!-- TRIBES + OPERATIONS -->
+    <div class="tribes">
+      <div class="railTitle">Tribes</div>
+      <div id="tribeList"></div>
+      <div class="railTitle mt">Operations on orbits</div>
+      <div class="op" onclick="op('PROVE')"><span class="verb">PROVE</span><span>find defects<br><small>β₁ loops, outliers</small></span></div>
+      <div class="op" onclick="op('WITNESS')"><span class="verb">WITNESS</span><span>trace a life<br><small>born → events</small></span></div>
+      <div class="op" onclick="op('ORBIT')"><span class="verb">ORBIT</span><span>cluster<br><small>persistent homology</small></span></div>
+      <div class="op" onclick="op('EMIT')"><span class="verb">EMIT</span><span>derive tribe<br><small>materialized orbit</small></span></div>
+      <div class="op" onclick="op('SYNC')"><span class="verb">SYNC</span><span>compare tribes<br><small>Jaccard / Sigmoid</small></span></div>
+    </div>
+
+    <!-- ORBIT FIELD -->
+    <div class="field">
+      <div class="fieldHud"><span class="lvl" id="lvl">Cluster</span> · <span class="sub" id="lvlSub">tribe orbits · 10³ particles shown</span></div>
+      <div class="zoomCtl">
+        <button onclick="zoom(1)" aria-label="zoom in">+</button>
+        <button onclick="zoom(-1)" aria-label="zoom out">−</button>
+      </div>
+      <svg class="orbits" id="svg" viewBox="0 0 760 620" role="img" aria-label="Orbit field"></svg>
+      <div class="legend">
+        <span><span class="d" style="background:var(--golden)"></span>GOLDEN</span>
+        <span><span class="d" style="background:var(--fuzzy)"></span>FUZZY</span>
+        <span><span class="d" style="background:var(--dead)"></span>DEAD</span>
+      </div>
+      <div class="flash" id="flash"></div>
+    </div>
+
+    <!-- INSPECTOR + HEPTASCRIPT -->
+    <div class="rail">
+      <div class="insp">
+        <h3>Particle inspector</h3>
+        <div class="hint" id="inspHint">Click a particle in the field.</div>
+        <div id="inspBody" style="display:none">
+          <div class="kaki"><span class="lbl">KAKI · 16-byte identity</span><span id="kakiHex"></span></div>
+          <ul class="eav" id="eav"></ul>
+        </div>
+      </div>
+      <div class="hepta">
+        <h3><span class="glyph">𒁾</span> HeptaScript — this view</h3>
+<pre id="hepta"></pre>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <b>The paradigm, stated.</b> Orange &amp; RapidMiner wire operator-boxes left-to-right; data is a table flowing through.
+    BahyWay has no boxes — the field <b>is</b> the data: tribes are regions, orbits are rings, particles are living points
+    (GOLDEN/FUZZY/DEAD by EAV state). Mining is an <b>operation on orbits</b> (PROVE/WITNESS/ORBIT/EMIT/SYNC), and you
+    navigate by Hubble zoom, not by dragging wires. Rehearsal only; production renders in Godot (rule 5).
+  </footer>
+</div>
+
+<script>
+/* ══ Triple-O workbench concept ══
+   Tribes = named populations (regions of the field)
+   Orbits = concentric rings within a tribe (a shared trait / cohort)
+   Particles = points on orbits, coloured by EAV state (GOLDEN/FUZZY/DEAD) */
+
+const TRIBES=[
+  {id:0,name:"Najaf.plots",   col:"#4FB8A8", cx:230, cy:250, n:3, count:"80,272"},
+  {id:1,name:"Baghdad.water", col:"#D98E3E", cx:540, cy:210, n:3, count:"14,801"},
+  {id:2,name:"Grid.feeders",  col:"#9B7FC7", cx:400, cy:440, n:2, count:"6,240"},
+];
+let activeTribe=0, zoomLevel=1, selected=null;
+const STATES=["golden","fuzzy","dead"];
+const STATE_COL={golden:"#D6A44C",fuzzy:"#D98E3E",dead:"#C34A3F"};
+
+/* deterministic pseudo-random so the field is stable */
+function rng(seed){let s=seed%2147483647;if(s<=0)s+=2147483646;return()=>(s=s*16807%2147483647)/2147483647;}
+
+function buildParticles(){
+  const parts=[];
+  for(const T of TRIBES){
+    const rand=rng((T.id+1)*97);
+    for(let ring=0;ring<T.n;ring++){
+      const radius=34+ring*30+ (zoomLevel-1)*10;
+      const onRing= 10+ring*6;
+      for(let i=0;i<onRing;i++){
+        const ang=(i/onRing)*Math.PI*2 + rand()*0.3;
+        const jitter=(rand()-0.5)*6;
+        // state distribution: inner rings healthier
+        const r=rand();
+        let st = r<0.55-ring*0.12 ? "golden" : r<0.85-ring*0.05 ? "fuzzy" : "dead";
+        parts.push({
+          tribe:T.id, ring, x:T.cx+Math.cos(ang)*(radius+jitter), y:T.cy+Math.sin(ang)*(radius+jitter),
+          st, id:`${T.name}#${ring}.${i}`, col:T.col
+        });
+      }
+    }
+  }
+  return parts;
+}
+let PARTICLES=buildParticles();
+
+function renderTribes(){
+  document.getElementById('tribeList').innerHTML=TRIBES.map(T=>
+    `<div class="tribe ${T.id===activeTribe?'on':''}" onclick="pickTribe(${T.id})">
+       <span class="swatch" style="background:${T.col}"></span>
+       <span class="tn">${T.name}</span><span class="tc">${T.count}</span></div>`).join('');
+}
+function pickTribe(id){activeTribe=id;draw();flash(`focused tribe · ${TRIBES[id].name}`);}
+
+function draw(){
+  const svg=document.getElementById('svg');let s='';
+  // tribe halos + orbit rings
+  for(const T of TRIBES){
+    const dim = T.id===activeTribe?1:0.4;
+    s+=`<circle cx="${T.cx}" cy="${T.cy}" r="${34+T.n*30+8}" fill="${T.col}" opacity="${0.05*dim}"/>`;
+    for(let ring=0;ring<T.n;ring++){
+      const radius=34+ring*30+(zoomLevel-1)*10;
+      s+=`<circle cx="${T.cx}" cy="${T.cy}" r="${radius}" fill="none" stroke="${T.col}"
+           stroke-width="1" opacity="${0.22*dim}" stroke-dasharray="2 4"/>`;
+    }
+    // tribe label
+    s+=`<text x="${T.cx}" y="${T.cy - (34+T.n*30+16)}" text-anchor="middle" fill="${T.col}"
+         font-family="var(--mono)" font-size="12" opacity="${dim}">${T.name}</text>`;
+    // tribe core (a particle too — "templates are particles")
+    s+=`<circle cx="${T.cx}" cy="${T.cy}" r="4" fill="${T.col}" opacity="${dim}"/>`;
+  }
+  // particles
+  for(let i=0;i<PARTICLES.length;i++){
+    const p=PARTICLES[i];
+    const active=p.tribe===activeTribe;
+    const r = active? (selected===i?4.5:2.6) : 1.8;
+    const op = active? 0.95 : 0.35;
+    const stroke = selected===i? `stroke="#E8E6E1" stroke-width="1.4"`:``;
+    s+=`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="${STATE_COL[p.st]}"
+         opacity="${op}" ${stroke} style="cursor:pointer" onclick="pick(${i})"/>`;
+  }
+  svg.innerHTML=s;
+  document.getElementById('lvl').textContent = zoomLevel<=1?"Cluster":zoomLevel===2?"Orbit":"Particle";
+  document.getElementById('lvlSub').textContent =
+    zoomLevel<=1?"tribe orbits · 10³ particles shown":zoomLevel===2?"individual orbits · trails":"single particle · full model";
+  renderHepta();
+}
+
+function pick(i){
+  selected=i;const p=PARTICLES[i];
+  document.getElementById('inspHint').style.display='none';
+  document.getElementById('inspBody').style.display='block';
+  // fake but plausible KAKI hex
+  const hex=[...Array(16)].map((_,k)=>((p.tribe*40+i*7+k*13)%256).toString(16).padStart(2,'0')).join(' ');
+  document.getElementById('kakiHex').textContent=hex;
+  const T=TRIBES[p.tribe];
+  document.getElementById('eav').innerHTML=`
+    <li><span class="a">tribe</span><span class="v">${T.name}</span></li>
+    <li><span class="a">orbit ring</span><span class="v">${p.ring}</span></li>
+    <li><span class="a">state</span><span class="v"><span class="stateChip ${p.st}">${p.st.toUpperCase()}</span></span></li>
+    <li><span class="a">completeness</span><span class="v">${p.st==='golden'?'0.98':p.st==='fuzzy'?'0.74':'0.31'}</span></li>
+    <li><span class="a">age (epochs)</span><span class="v">${1000+i*7}</span></li>
+    <li><span class="a">last event</span><span class="v">reconcile</span></li>`;
+  draw();flash(`witnessed · ${p.id}`);
+}
+
+function op(verb){
+  const T=TRIBES[activeTribe];
+  const msgs={PROVE:`PROVE ran · ${Math.floor(Math.random()*7+2)} defect loops found`,
+    WITNESS:"WITNESS · pick a particle to trace its life",
+    ORBIT:"ORBIT · clustered by persistent homology",
+    EMIT:`EMIT · derived tribe from ${T.name}`,
+    SYNC:"SYNC · compared active tribe vs neighbours"};
+  flash(msgs[verb]||verb);
+  renderHepta(verb);
+}
+
+function zoom(d){zoomLevel=Math.max(1,Math.min(3,zoomLevel+d));PARTICLES=buildParticles();selected=null;
+  document.getElementById('inspBody').style.display='none';
+  document.getElementById('inspHint').style.display='block';draw();}
+
+let flashT=null;
+function flash(msg){const f=document.getElementById('flash');f.textContent=msg;f.classList.add('show');
+  clearTimeout(flashT);flashT=setTimeout(()=>f.classList.remove('show'),2200);}
+
+function renderHepta(verb){
+  const T=TRIBES[activeTribe];
+  const v=verb||"PROVE";
+  const body={
+    PROVE:`<span class="kw">PROVE</span> ${T.name} <span class="kw">FOR</span> defect
+  <span class="kw">WITH</span> <span class="nn">RESONANCE</span> homology   <span class="cm">-- β₁ loops = anomalies</span>
+<span class="kw">EMIT</span> flagged <span class="kw">WHERE</span> state <span class="pu">!=</span> <span class="vv">golden</span>`,
+    WITNESS:`<span class="kw">WITNESS</span> particle <span class="kw">FROM</span> ${T.name}
+  <span class="kw">EMIT</span> life <span class="kw">AS</span> born → events → now   <span class="cm">-- StoryEngine chain</span>`,
+    ORBIT:`<span class="kw">ORBIT</span> ${T.name} <span class="kw">BY</span> <span class="nn">CLUSTER</span>
+  <span class="kw">WITH</span> persistent_homology(β₀,β₁,β₂)   <span class="cm">-- LamassuEngine</span>`,
+    EMIT:`<span class="kw">EMIT</span> derived_tribe <span class="kw">FROM</span> ${T.name}
+  <span class="kw">WHERE</span> completeness <span class="pu">&gt;=</span> <span class="vv">0.9</span>   <span class="cm">-- materialized orbit</span>`,
+    SYNC:`<span class="kw">SYNC</span> ${T.name} <span class="kw">WITH</span> neighbours
+  <span class="kw">WITH</span> <span class="nn">RESONANCE</span> sigmoid   <span class="cm">-- tribe similarity</span>`
+  };
+  document.getElementById('hepta').innerHTML=
+`<span class="cm">-- ${T.name} · ${TRIBES[activeTribe].count} particles</span>
+<span class="kw">PRESENT</span> tribe <span class="vv">${T.name}</span> <span class="kw">AT</span> ${zoomLevel<=1?'cluster':zoomLevel===2?'orbit':'particle'}
+${body[v]}`;
+}
+
+renderTribes();draw();
+</script>
+</body>
+</html>

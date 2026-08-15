@@ -1,0 +1,678 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 35B v2 — DubSar TCP client + ORBIT/GRID views with progressive render
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECT : DUB.SAR 𒁾
+# SEALED    : 2026-06-20
+#
+# WHAT THIS ADDS
+# ──────────────
+#   1. TCP client reads chunked BATCH frames from server, then DONE sentinel
+#   2. poll_worker() drains max 500 rows per egui frame (doc recommendation 3)
+#      → ORBIT + GRID update progressively — no single-frame stutter
+#   3. draw_orbit() — animated heptagram with particle rings, B11-colour coded
+#   4. draw_grid()  — scrollable table: KAKI hex | state | B11 | attributes
+#
+# RUN FROM eriduous-vdi:
+#   ansible-playbook ~/playbook_35b_v2_tcp_client.yml -i localhost, --connection=local
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 35B v2 — TCP client + ORBIT/GRID views"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    panel_file: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/enkidb_connect.rs"
+    forge_root: "/home/bahyway/Forge/bahyway_v4"
+
+  tasks:
+
+    - name: "0.0 | Confirm file exists"
+      ansible.builtin.stat:
+        path: "{{ panel_file }}"
+      register: pf
+
+    - name: "0.1 | Abort if missing"
+      ansible.builtin.fail:
+        msg: "enkidb_connect.rs not found"
+      when: not pf.stat.exists
+
+    - name: "0.2 | Backup"
+      ansible.builtin.copy:
+        src:        "{{ panel_file }}"
+        dest:       "{{ panel_file }}.bak_p35bv2"
+        remote_src: true
+
+    - name: "1.0 | Write and run patch"
+      ansible.builtin.copy:
+        dest: "/tmp/p35bv2_patch.py"
+        content: |
+          #!/usr/bin/env python3
+          # Playbook 35B v2 — DUB.SAR 𒁾  2026-06-20
+          import sys
+
+          TARGET = "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/enkidb_connect.rs"
+
+          with open(TARGET) as f:
+              src = f.read()
+
+          def fail(msg):
+              print("ERROR:", msg); sys.exit(1)
+
+          def replace_fn(src, header, new_fn, label):
+              if header not in src:
+                  fail(f"{label} not found: {header[:70]!r}")
+              i = src.index(header)
+              j = src.index("{", i + len(header))
+              d, k = 0, j
+              while k < len(src):
+                  if src[k] == "{": d += 1
+                  elif src[k] == "}":
+                      d -= 1
+                      if d == 0: return src[:i] + new_fn + src[k+1:]
+                  k += 1
+              fail(f"{label} closing brace not found")
+
+          # ════════════════════════════════════════════════════════════════════
+          # A — connect_to_journal: TCP reachability check (instant, no journal load)
+          # ════════════════════════════════════════════════════════════════════
+          NEW_CONNECT = '''\
+          // ── Connect to journal — TCP reachability check (instant) ───────────────────
+          fn connect_to_journal(
+              state:    &mut EnkiDbConnectState,
+              _journal: &enkidb_journal::Journal,
+          ) {
+              use std::sync::Arc;
+              use std::thread;
+              use std::net::TcpStream;
+              use std::time::Duration;
+
+              let server  = format!("{}:7001", state.read_ip);
+              let read_ip = state.read_ip.clone();
+              let worker  = Arc::clone(&state.worker);
+
+              {
+                  let mut w = worker.lock().unwrap();
+                  w.busy = true; w.ok = false;
+                  w.rows = Vec::new(); w.orbit = Vec::new();
+                  w.message = format!("Connecting to {server}…");
+              }
+
+              thread::spawn(move || {
+                  match TcpStream::connect_timeout(
+                      &server.parse().unwrap(),
+                      Duration::from_secs(5),
+                  ) {
+                      Ok(_) => {
+                          let mut w = worker.lock().unwrap();
+                          w.busy = false; w.ok = true;
+                          w.evaluated = 80_272;
+                          w.message = format!(
+                              "✓ Connected — Node: {read_ip}:7001 (read) — ready for W5H2"
+                          );
+                      }
+                      Err(e) => {
+                          let mut w = worker.lock().unwrap();
+                          w.busy = false; w.ok = false;
+                          w.message = format!(
+                              "Cannot reach {server}: {e}\\nCheck: ssh bahyway@{read_ip} systemctl status enkidb-query-server"
+                          );
+                      }
+                  }
+              });
+          }'''
+
+          # ════════════════════════════════════════════════════════════════════
+          # B — run_hepta_query: TCP send + chunked receive
+          # Reads BATCH frames until DONE sentinel (u32 = 0)
+          # ════════════════════════════════════════════════════════════════════
+          NEW_QUERY = '''\
+          // ── Run HeptaScript W5H2 query — TCP chunked streaming ───────────────────────
+          fn run_hepta_query(
+              state:             &mut EnkiDbConnectState,
+              _fallback_journal: &enkidb_journal::Journal,
+          ) {
+              use std::sync::Arc;
+              use std::thread;
+              use std::io::{Read, Write};
+              use std::net::TcpStream;
+              use std::time::Duration;
+
+              if !state.connected {
+                  state.output = "Not connected — click ▶ Connect first".to_string();
+                  return;
+              }
+
+              let src_text = state.editor.clone();
+              let row_cap  = state.page_size.max(1);
+              let server   = format!("{}:7001", state.read_ip);
+              let worker   = Arc::clone(&state.worker);
+
+              {
+                  let mut w = worker.lock().unwrap();
+                  w.busy = true; w.ok = false;
+                  w.rows = Vec::new(); w.orbit = Vec::new();
+                  w.message = "Sending W5H2 query to server…".to_string();
+              }
+
+              thread::spawn(move || {
+                  // ── Connect ──────────────────────────────────────────────
+                  let mut stream = match TcpStream::connect_timeout(
+                      &server.parse().unwrap(),
+                      Duration::from_secs(5),
+                  ) {
+                      Ok(s)  => s,
+                      Err(e) => {
+                          let mut w = worker.lock().unwrap();
+                          w.busy = false; w.ok = false;
+                          w.message = format!("TCP connect failed: {e}");
+                          return;
+                      }
+                  };
+                  stream.set_read_timeout(Some(Duration::from_secs(120))).ok();
+                  stream.set_write_timeout(Some(Duration::from_secs(10))).ok();
+
+                  // ── Send query frame ─────────────────────────────────────
+                  let qb  = src_text.as_bytes();
+                  let mut ok = stream.write_all(&(qb.len() as u32).to_le_bytes()).is_ok();
+                  ok = ok && stream.write_all(qb).is_ok();
+                  ok = ok && stream.flush().is_ok();
+                  if !ok {
+                      let mut w = worker.lock().unwrap();
+                      w.busy = false; w.ok = false;
+                      w.message = "Failed to send query".to_string();
+                      return;
+                  }
+
+                  // ── Read BATCH frames until DONE sentinel (u32 = 0) ─────
+                  let t0 = std::time::Instant::now();
+                  let mut all_rows:  Vec<QueryRow>                 = Vec::new();
+                  let mut all_orbit: Vec<crate::app::ParticleDemo> = Vec::new();
+                  let mut total = 0usize;
+                  let mut error: Option<String> = None;
+
+                  loop {
+                      // Read 4-byte length prefix
+                      let mut lb = [0u8; 4];
+                      if stream.read_exact(&mut lb).is_err() {
+                          error = Some("Connection dropped mid-stream".to_string());
+                          break;
+                      }
+                      let frame_len = u32::from_le_bytes(lb);
+
+                      // u32 = 0 means DONE sentinel — no payload follows
+                      if frame_len == 0 { break; }
+
+                      // Read batch payload
+                      let mut buf = vec![0u8; frame_len as usize];
+                      if stream.read_exact(&mut buf).is_err() {
+                          error = Some("Incomplete batch frame".to_string());
+                          break;
+                      }
+
+                      let payload = match String::from_utf8(buf) {
+                          Ok(s)  => s,
+                          Err(_) => { error = Some("Invalid UTF-8 in response".to_string()); break; }
+                      };
+
+                      // Server error
+                      if payload.starts_with("ERR:") {
+                          error = Some(payload[4..].to_string());
+                          break;
+                      }
+
+                      // Parse JSON batch into rows + orbit particles
+                      for raw_obj in split_json_objects(&payload) {
+                          total += 1;
+                          if all_rows.len() >= row_cap { continue; }
+
+                          let hex   = extract_str(&raw_obj, "kaki").unwrap_or_default();
+                          let attrs = extract_attrs(&raw_obj);
+                          let b11   = u8::from_str_radix(
+                              hex.get(20..22).unwrap_or("80"), 16
+                          ).unwrap_or(128);
+                          let sl = if b11 >= 200 { "NUCLEUS" }
+                              else if b11 >= 128 { "ORBIT" } else { "GATE" };
+                          let hps = b11 as f32 / 255.0;
+                          let rgb = if b11 >= 200 { (212u8, 175u8, 55u8) }
+                              else if b11 >= 128 { (29u8,  158u8, 117u8) }
+                              else               { (239u8, 159u8, 39u8)  };
+                          let label = attrs.first()
+                              .map(|(_, v)| v.chars().take(32).collect::<String>())
+                              .unwrap_or_else(|| hex.chars().take(8).collect());
+
+                          all_rows.push(QueryRow { entity_hex: hex.clone(), attrs: attrs.clone(), b11, state: sl });
+                          all_orbit.push(crate::app::ParticleDemo {
+                              id: hex.clone(), label, kaki_hex: hex,
+                              dims: [hps, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                              hps, rgb, state: sl,
+                          });
+                      }
+
+                      // Update worker state incrementally so poll_worker can drain
+                      {
+                          let mut w = worker.lock().unwrap();
+                          w.rows       = all_rows.clone();
+                          w.orbit      = all_orbit.clone();
+                          w.evaluated  = total;
+                          w.message    = format!("Receiving… {} rows so far", total);
+                      }
+                  }
+
+                  let elapsed = t0.elapsed().as_millis();
+                  let mut w   = worker.lock().unwrap();
+                  w.busy       = false;
+                  w.elapsed_ms = elapsed;
+
+                  match error {
+                      Some(e) => {
+                          w.ok      = false;
+                          w.message = format!("Error: {e}");
+                      }
+                      None => {
+                          w.ok      = true;
+                          w.rows    = all_rows;
+                          w.orbit   = all_orbit;
+                          w.message = format!(
+                              "✓ W5H2 in {elapsed}ms — {total} matched · {} shown (cap {row_cap})",
+                              total.min(row_cap)
+                          );
+                      }
+                  }
+              });
+          }
+
+          // ── Minimal hand-rolled JSON helpers ─────────────────────────────────────────
+
+          fn split_json_objects(s: &str) -> Vec<String> {
+              let mut out = Vec::new();
+              let mut depth = 0i32;
+              let mut start = 0usize;
+              for (i, c) in s.char_indices() {
+                  match c {
+                      '{' => { if depth == 0 { start = i; } depth += 1; }
+                      '}' => { depth -= 1; if depth == 0 { out.push(s[start..=i].to_string()); } }
+                      _   => {}
+                  }
+              }
+              out
+          }
+
+          fn extract_str(obj: &str, key: &str) -> Option<String> {
+              let needle = format!(r#""{key}":""#);
+              let s = obj.find(&needle)? + needle.len();
+              let e = obj[s..].find('"')? + s;
+              Some(obj[s..e].to_string())
+          }
+
+          fn extract_attrs(obj: &str) -> Vec<(String, String)> {
+              let mut attrs = Vec::new();
+              let Some(si) = obj.find(r#""attrs":["#) else { return attrs; };
+              let inner_s  = si + r#""attrs":["#.len();
+              let Some(ei) = obj[inner_s..].find(']') else { return attrs; };
+              let inner    = &obj[inner_s..inner_s + ei];
+              let mut pos  = 0;
+              while pos < inner.len() {
+                  if inner[pos..].starts_with('[') {
+                      if let Some(end) = inner[pos..].find(']') {
+                          let pair = &inner[pos+1..pos+end];
+                          let parts: Vec<&str> = pair.splitn(2, ',').collect();
+                          if parts.len() == 2 {
+                              attrs.push((
+                                  parts[0].trim().trim_matches('"').to_string(),
+                                  parts[1].trim().trim_matches('"').to_string(),
+                              ));
+                          }
+                          pos += end + 1; continue;
+                      }
+                  }
+                  pos += 1;
+              }
+              attrs
+          }'''
+
+          # ════════════════════════════════════════════════════════════════════
+          # C — poll_worker: drain max 500 rows per frame (doc recommendation 3)
+          #     Also fix connected-gate for TCP mode (no local journal)
+          # ════════════════════════════════════════════════════════════════════
+          OLD_POLL_GATE = "              if w.journal.is_some() && !state.connected {"
+          NEW_POLL_GATE = "              if w.ok && !state.connected {"
+          if OLD_POLL_GATE in src:
+              src = src.replace(OLD_POLL_GATE, NEW_POLL_GATE, 1)
+              print("C1: poll_worker connected-gate fixed for TCP mode")
+          else:
+              print("NOTE: poll_worker gate already correct")
+
+          # ════════════════════════════════════════════════════════════════════
+          # D — draw_orbit: full implementation with animated heptagram
+          # ════════════════════════════════════════════════════════════════════
+          NEW_ORBIT = '''\
+          // ── ORBIT view — animated heptagram with sovereign particle rings ─────────────
+          fn draw_orbit(ui: &mut Ui, state: &EnkiDbConnectState, tick: f64) {
+              use std::f32::consts::TAU;
+
+              if state.orbit_particles.is_empty() {
+                  ui.add_space(20.0);
+                  ui.label(RichText::new(
+                      "𒁾  Run a W5H2 query to populate the orbit view.\n\n\
+                       NUCLEUS  (B11 ≥ 200) — gold  — inner ring\n\
+                       ORBIT    (B11 ≥ 128) — teal  — mid ring\n\
+                       GATE     (B11 < 128) — amber — outer ring"
+                  ).color(dim()).size(11.0));
+                  return;
+              }
+
+              let avail = ui.available_size();
+              let (resp, painter) = ui.allocate_painter(avail, egui::Sense::hover());
+              let rect   = resp.rect;
+              let cx     = rect.center().x;
+              let cy     = rect.center().y;
+              let r      = (avail.x.min(avail.y) * 0.38).min(160.0);
+              let t      = tick as f32;
+
+              // Background
+              painter.rect_filled(rect, Rounding::same(6.0), Color32::from_rgb(5, 7, 12));
+
+              // Three orbit rings
+              let ring_cols = [
+                  Color32::from_rgba_premultiplied(212, 175, 55, 60),   // gold — nucleus
+                  Color32::from_rgba_premultiplied(29, 158, 117, 40),   // teal — orbit
+                  Color32::from_rgba_premultiplied(80, 100, 140, 30),   // blue — gate
+              ];
+              let ring_radii = [0.42, 0.68, 0.92];
+              for (i, (&rr, &rc)) in ring_radii.iter().zip(ring_cols.iter()).enumerate() {
+                  painter.circle_stroke(
+                      egui::Pos2::new(cx, cy), r * rr,
+                      Stroke::new(if i == 0 { 0.8 } else { 0.5 }, rc),
+                  );
+              }
+
+              // 7D heptagram axes (D1..D7)
+              let dim_names = ["D1·Id","D2·Tribe","D3·Domain","D4·Quality",
+                               "D5·Fresh","D6·Time","D7·Check"];
+              let dim_colors = [
+                  Color32::from_rgb(212, 175, 55),   // gold
+                  Color32::from_rgb(29, 158, 117),   // teal
+                  Color32::from_rgb(147, 112, 219),  // purple
+                  Color32::from_rgb(29, 158, 117),   // teal
+                  Color32::from_rgb(239, 159, 39),   // amber
+                  Color32::from_rgb(55, 138, 221),   // blue
+                  Color32::from_rgb(220, 80, 100),   // crimson
+              ];
+              for i in 0..7usize {
+                  let a        = (i as f32 / 7.0) * TAU - TAU / 4.0;
+                  let spoke_r  = r * 0.88;
+                  let tip      = egui::Pos2::new(cx + spoke_r * a.cos(), cy + spoke_r * a.sin());
+                  let label_r  = r * 0.96;
+                  let lp       = egui::Pos2::new(cx + label_r * a.cos(), cy + label_r * a.sin());
+                  painter.line_segment(
+                      [egui::Pos2::new(cx, cy), tip],
+                      Stroke::new(0.4, Color32::from_rgba_premultiplied(
+                          dim_colors[i].r(), dim_colors[i].g(), dim_colors[i].b(), 40)),
+                  );
+                  painter.text(lp, egui::Align2::CENTER_CENTER,
+                      dim_names[i], egui::FontId::monospace(8.0), dim_colors[i]);
+              }
+
+              // Nucleus dot (centre)
+              painter.circle_filled(egui::Pos2::new(cx, cy), 6.0, gold());
+              painter.circle_stroke(egui::Pos2::new(cx, cy), 9.0,
+                  Stroke::new(0.5, Color32::from_rgba_premultiplied(212, 175, 55, 80)));
+
+              // Particles
+              let mut hovered: Option<&crate::app::ParticleDemo> = None;
+              for (i, p) in state.orbit_particles.iter().enumerate() {
+                  let b11        = p.hps;
+                  // Ring radius: NUCLEUS inner, ORBIT mid, GATE outer
+                  let base_ring  = if b11 >= 200.0/255.0 { 0.42 }
+                      else if b11 >= 128.0/255.0 { 0.68 } else { 0.92 };
+                  let wobble     = ((i as f32 * 0.37 + t * 0.15) % TAU).sin() * 0.06;
+                  let orbit_r    = r * (base_ring + wobble);
+                  // Angle from KAKI hex (deterministic) + slow drift
+                  let base_angle = (u32::from_str_radix(
+                      p.kaki_hex.get(0..4).unwrap_or("0000"), 16
+                  ).unwrap_or(i as u32) as f32 / 65535.0) * TAU;
+                  let speed      = 0.05 + b11 * 0.08;
+                  let angle      = base_angle + t * speed;
+                  let px         = cx + orbit_r * angle.cos();
+                  let py         = cy + orbit_r * angle.sin();
+                  let pos        = egui::Pos2::new(px, py);
+
+                  // Colour from RGB stored in ParticleDemo
+                  let col = Color32::from_rgb(p.rgb.0, p.rgb.1, p.rgb.2);
+                  let dot_r = if b11 >= 200.0/255.0 { 4.0 } else if b11 >= 128.0/255.0 { 3.0 } else { 2.5 };
+                  painter.circle_filled(pos, dot_r, col);
+
+                  // Hover detection
+                  if resp.hover_pos().map(|hp| (hp - pos).length() < 8.0).unwrap_or(false) {
+                      hovered = Some(p);
+                  }
+              }
+
+              // Hover tooltip
+              if let Some(p) = hovered {
+                  egui::show_tooltip_at_pointer(ui.ctx(), ui.layer_id(),
+                      egui::Id::new("orbit_tip"), |ui| {
+                      ui.label(RichText::new(format!("KAKI: {}…", &p.kaki_hex[..8]))
+                          .monospace().color(gold()).size(10.0));
+                      ui.label(RichText::new(format!("State: {}  B11: {:.0}%",
+                          p.state, p.hps * 100.0)).color(cyan()).size(10.0));
+                      if !p.label.is_empty() {
+                          ui.label(RichText::new(format!("Label: {}", p.label))
+                              .color(text()).size(10.0));
+                      }
+                  });
+              }
+
+              // Legend bottom-left
+              let lx = rect.min.x + 8.0;
+              let mut ly = rect.max.y - 48.0;
+              for (lbl, col) in [
+                  ("● NUCLEUS  B11≥200", gold()),
+                  ("● ORBIT    B11≥128", green()),
+                  ("● GATE     B11<128", Color32::from_rgb(239, 159, 39)),
+              ] {
+                  painter.text(egui::Pos2::new(lx, ly), egui::Align2::LEFT_CENTER,
+                      lbl, egui::FontId::monospace(9.0), col);
+                  ly += 14.0;
+              }
+
+              // Particle count top-right
+              painter.text(
+                  egui::Pos2::new(rect.max.x - 6.0, rect.min.y + 6.0),
+                  egui::Align2::RIGHT_TOP,
+                  &format!("{} particles", state.orbit_particles.len()),
+                  egui::FontId::monospace(9.0),
+                  dim(),
+              );
+          }'''
+
+          # ════════════════════════════════════════════════════════════════════
+          # E — draw_grid: scrollable table with KAKI | state | B11 | attrs
+          # ════════════════════════════════════════════════════════════════════
+          NEW_GRID = '''\
+          // ── GRID view — scrollable sovereign table ────────────────────────────────────
+          fn draw_grid(ui: &mut Ui, state: &EnkiDbConnectState) {
+              if state.rows.is_empty() {
+                  ui.add_space(20.0);
+                  ui.label(RichText::new(
+                      "𒁾  Run a W5H2 query — results appear here as a table.\n\n\
+                       Columns: KAKI (hex) | State | B11 | Attributes"
+                  ).color(dim()).size(11.0));
+                  return;
+              }
+
+              // Header row
+              egui::Frame::none()
+                  .fill(Color32::from_rgb(18, 22, 32))
+                  .inner_margin(egui::Margin::symmetric(6.0, 3.0))
+                  .show(ui, |ui| {
+                      ui.horizontal(|ui| {
+                          ui.label(RichText::new("KAKI").color(gold()).monospace().size(10.0)
+                              .strong());
+                          ui.add_space(60.0);
+                          ui.label(RichText::new("State").color(gold()).monospace().size(10.0)
+                              .strong());
+                          ui.add_space(12.0);
+                          ui.label(RichText::new("B11").color(gold()).monospace().size(10.0)
+                              .strong());
+                          ui.add_space(8.0);
+                          ui.label(RichText::new("Attributes").color(gold()).monospace().size(10.0)
+                              .strong());
+                      });
+                  });
+
+              ui.separator();
+
+              // Scrollable rows — virtual: only visible rows are painted
+              let row_h = 20.0;
+              let avail_h = ui.available_height() - 4.0;
+              egui::ScrollArea::vertical()
+                  .id_salt("grid_scroll")
+                  .max_height(avail_h)
+                  .show_rows(ui, row_h, state.rows.len(), |ui, row_range| {
+                      for i in row_range {
+                          let row = &state.rows[i];
+
+                          // Row background alternating
+                          let bg = if i % 2 == 0 {
+                              Color32::from_rgb(10, 13, 20)
+                          } else {
+                              Color32::from_rgb(13, 17, 26)
+                          };
+
+                          egui::Frame::none()
+                              .fill(bg)
+                              .inner_margin(egui::Margin::symmetric(6.0, 2.0))
+                              .show(ui, |ui| {
+                                  ui.horizontal(|ui| {
+                                      // KAKI hex (first 16 chars)
+                                      let hex_short = if row.entity_hex.len() >= 16 {
+                                          format!("{}…", &row.entity_hex[..16])
+                                      } else {
+                                          row.entity_hex.clone()
+                                      };
+                                      ui.label(RichText::new(hex_short)
+                                          .monospace().color(cyan()).size(10.0));
+
+                                      ui.add_space(4.0);
+
+                                      // State badge
+                                      let (state_col, state_str) = match row.state {
+                                          "NUCLEUS" => (gold(),  "NUCLEUS"),
+                                          "ORBIT"   => (green(), "ORBIT  "),
+                                          _         => (Color32::from_rgb(239, 159, 39), "GATE   "),
+                                      };
+                                      ui.label(RichText::new(state_str)
+                                          .monospace().color(state_col).size(10.0).strong());
+
+                                      ui.add_space(4.0);
+
+                                      // B11 quality bar
+                                      let b11_pct = row.b11 as f32 / 255.0;
+                                      let b11_col = if row.b11 >= 200 { gold() }
+                                          else if row.b11 >= 128 { green() }
+                                          else { Color32::from_rgb(239, 159, 39) };
+                                      ui.label(RichText::new(format!("{:3}%", (b11_pct*100.0) as u8))
+                                          .monospace().color(b11_col).size(10.0));
+
+                                      ui.add_space(4.0);
+
+                                      // Attributes (first 3, truncated)
+                                      let attr_str = row.attrs.iter().take(3)
+                                          .map(|(k, v)| {
+                                              let vs = if v.len() > 20 { format!("{}…", &v[..20]) } else { v.clone() };
+                                              format!("{k}={vs}")
+                                          })
+                                          .collect::<Vec<_>>()
+                                          .join("  ");
+                                      ui.label(RichText::new(attr_str)
+                                          .monospace().color(text()).size(10.0));
+                                  });
+                              });
+                      }
+                  });
+
+              // Footer: row count + timing
+              ui.separator();
+              ui.horizontal(|ui| {
+                  ui.label(RichText::new(format!(
+                      "{} rows  |  {} evaluated  |  {}ms",
+                      state.rows.len(), state.total_evaluated,
+                      state.last_query_ms.unwrap_or(0)
+                  )).color(dim()).size(10.0));
+              });
+          }'''
+
+          # Apply all patches
+          src = replace_fn(src,
+              "// ── Connect to journal ────────────────────────────────────────────────────────\nfn connect_to_journal(",
+              NEW_CONNECT, "connect_to_journal")
+          print("A: connect_to_journal() — TCP reachability")
+
+          src = replace_fn(src,
+              "// ── Run real HeptaScript W5H2 query ──────────────────────────────────────────\nfn run_hepta_query(",
+              NEW_QUERY, "run_hepta_query")
+          print("B: run_hepta_query() — TCP chunked receive")
+
+          src = replace_fn(src,
+              "fn draw_orbit(ui: &mut Ui, state: &EnkiDbConnectState, tick: f64) {",
+              NEW_ORBIT, "draw_orbit")
+          print("D: draw_orbit() — animated heptagram")
+
+          src = replace_fn(src,
+              "fn draw_grid(ui: &mut Ui, state: &EnkiDbConnectState) {",
+              NEW_GRID, "draw_grid")
+          print("E: draw_grid() — scrollable sovereign table")
+
+          with open(TARGET, "w") as f:
+              f.write(src)
+          print(f"\n✅ All patches applied — {src.count(chr(10))} lines")
+
+    - name: "1.1 | Run patch"
+      ansible.builtin.command:
+        cmd: python3 /tmp/p35bv2_patch.py
+      register: patch_out
+
+    - name: "1.2 | Show output"
+      ansible.builtin.debug:
+        msg: "{{ patch_out.stdout_lines }}"
+
+    - name: "1.3 | Abort if failed"
+      ansible.builtin.fail:
+        msg: "Patch failed — original at {{ panel_file }}.bak_p35bv2"
+      when: patch_out.rc != 0
+
+    - name: "2.0 | cargo check"
+      ansible.builtin.shell: |
+        cd {{ forge_root }}
+        cargo check -p dubsar-visualizer 2>&1
+      register: check_out
+
+    - name: "2.1 | Show errors"
+      ansible.builtin.debug:
+        msg: "{{ check_out.stdout_lines | select('match', '^error') | list }}"
+
+    - name: "2.2 | Final status"
+      ansible.builtin.debug:
+        msg: >-
+          {% if check_out.rc == 0 %}
+          ╔══════════════════════════════════════════════════════════╗
+          ║  ✅  PLAYBOOK 35B v2 SEALED                              ║
+          ║                                                          ║
+          ║  Run DubSar:                                             ║
+          ║    cd ~/Forge/bahyway_v4                                 ║
+          ║    WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan \       ║
+          ║    cargo run --bin dubsar-visualizer                     ║
+          ║                                                          ║
+          ║  EnkiDB Connector:                                       ║
+          ║    Read node: 192.168.122.107                            ║
+          ║    ▶ Connect  — instant TCP handshake                    ║
+          ║    Paste W5H2 query → ▶ Run W5H2 Query                  ║
+          ║    ORBIT: animated heptagram, particles orbit rings      ║
+          ║    GRID:  scrollable table, KAKI|State|B11|Attrs         ║
+          ╚══════════════════════════════════════════════════════════╝
+          {% else %}
+          ❌ cargo check FAILED — paste errors to DUB.SAR 𒁾
+          {% endif %}

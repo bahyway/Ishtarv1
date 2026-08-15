@@ -1,0 +1,199 @@
+# =============================================================================
+# PB-245 -- Naming Registry (Glossary Phase 2): naming-registry-gd
+# GDExtension bridge + a new "Glossary" tab in DubSar Theater.
+# BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHAT THIS ADDS (builds on PB-244's data layer):
+#   - naming-registry-gd: a stateless GDExtension bridge (same shape as
+#     enkimdb-registry-gd/marduk-gdext) exposing all(), search(),
+#     by_mytho_category(), by_system_role(), find(), and snippet() --
+#     the last of these reads a REAL excerpt of the source file backing
+#     a name (via naming-registry::read_snippet), returning an honest
+#     {ok:false, error:...} for Reserved/conceptual names with no file
+#     rather than a fabricated example.
+#   - godot/dubsar-theater/scripts/glossary_tab.gd: a new "Glossary"
+#     tab in DubSar Theater's MainTabs (next to Query Editor / PDM /
+#     AR-EN Navigator / Engine Map / Grid & Marduk), with search +
+#     category/role filters and a per-row "Snippet" button that lazily
+#     fetches the real source excerpt on first click.
+#   - naming_registry.gdextension descriptor (committed, same pattern
+#     as gridnav.gdextension/marduk.gdextension).
+#
+# NOT BUILT HERE: Phase 3 (kupru-passport-tier redaction of
+# crate_path/snippet for external/client viewers) -- every field is
+# shown to whoever opens this tab, same as every other DubSar panel
+# today. That gate is explicitly deferred, not silently implied.
+#
+# HONEST LIMIT: cargo build/test for naming-registry (Phase 1, 10
+# tests) and cargo build for naming-registry-gd were verified clean in
+# the sandbox that wrote this (dev AND release profiles), and
+# glossary_tab.gd was checked for balanced parens/brackets/braces, but
+# there is NO Godot binary in that sandbox -- this is genuinely the
+# first time the Glossary tab has been opened inside a running Godot
+# editor by anyone. Same honest-limit shape as PB-234/PB-240's DubSar
+# IDE launches.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Depends on
+# PB-244 (naming-registry must already be landed). Running this
+# playbook = CSR-08 Architect confirmation.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_245_naming_registry_glossary_phase2.yml
+#   ansible-playbook playbooks/playbook_245_naming_registry_glossary_phase2.yml -e dubsar_mode=editor
+# =============================================================================
+
+- name: "PB-245 -- Naming Registry Glossary tab (Phase 2)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    dubsar_mode: "run"
+    skip_build: false
+    godot_bin: ""
+    build_log: "/tmp/pb245_build.log"
+    godot_log: "/tmp/pb245_launch.log"
+
+  tasks:
+    - name: "Confirm the new bridge crate + tab script + descriptor are present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: file_checks
+      loop:
+        - "{{ repo_root }}/crates/naming-registry-gd/Cargo.toml"
+        - "{{ repo_root }}/godot/dubsar-theater/scripts/glossary_tab.gd"
+        - "{{ repo_root }}/godot/dubsar-theater/naming_registry.gdextension"
+
+    - name: "Fail clearly if any expected file is missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found. Run
+          `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- these are committed source, this playbook only
+          builds and verifies them.
+      loop: "{{ file_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "cargo test naming-registry (release) -- the data layer this bridge depends on"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p naming-registry > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "Build naming-registry-gd in release mode"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p naming-registry-gd >> {{ build_log }} 2>&1
+      register: gdext_build_result
+      failed_when: gdext_build_result.rc != 0
+      when: not skip_build
+
+    - name: "Confirm the compiled library exists"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/libnaming_registry_gd.so"
+      register: lib_check
+
+    - name: "Fail clearly if the compiled library is missing"
+      ansible.builtin.fail:
+        msg: >-
+          libnaming_registry_gd.so not found under
+          {{ repo_root }}/target/release/. Run without -e skip_build=true
+          first, or check {{ build_log }}.
+      when: not lib_check.stat.exists
+
+    - name: "Ensure the DubSar Theater project's bin/ directory exists"
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "Copy the compiled bridge into the DubSar project"
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/libnaming_registry_gd.so"
+        dest: "{{ dubsar_project }}/bin/libnaming_registry_gd.so"
+        mode: "0755"
+        remote_src: true
+
+    # ── Discover Godot (same proven logic as every prior DubSar playbook) ──
+    - name: "Discover a real Godot 4 binary"
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      when: godot_bin | length == 0
+
+    - name: "Fail clearly if no Godot binary was found"
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found. Pass -e godot_bin=/path/to/godot to
+          point at one directly.
+      when: godot_bin | length == 0 and (godot_discovery.rc is undefined or godot_discovery.rc != 0)
+
+    - name: "Resolve the Godot binary to use"
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else godot_discovery.stdout }}"
+
+    - name: "Prime the project's Godot import cache (headless)"
+      ansible.builtin.shell: >-
+        cd {{ dubsar_project }} &&
+        {{ resolved_godot_bin }} --headless --import > /tmp/pb245_import.log 2>&1
+      changed_when: true
+      failed_when: false
+
+    - name: "Launch DubSar IDE"
+      ansible.builtin.shell: >-
+        cd {{ dubsar_project }} &&
+        nohup {{ resolved_godot_bin }} {{ '--editor' if dubsar_mode == 'editor' else '' }} > {{ godot_log }} 2>&1 &
+      async: 1
+      poll: 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-245 complete -- naming-registry-gd bridges the real
+          naming-registry catalog (10/10 tests passing) into Godot.
+          The new Glossary tab is wired into MainTabs next to Grid &
+          Marduk: search + category/role filters, and a per-row
+          Snippet button reading a real excerpt of the source file
+          backing each name (Reserved names like Ishum honestly report
+          they have no file yet, rather than showing a fabricated
+          example). Launched DubSar IDE -- open the Glossary tab and
+          confirm the ~22 seeded names render, filters work, and at
+          least one Snippet button (try Gibil) shows real source text
+          (this is the first live check anywhere; verified only in the
+          sandbox up to `cargo build`/`cargo test`, never inside a
+          running Godot editor). Still open: Phase 3
+          (kupru-passport-tier redaction of crate_path/snippet for
+          external/client viewers) and growing the seed registry past
+          its current ~22 manually-curated entries.

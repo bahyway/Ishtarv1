@@ -1,0 +1,81 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_117_ashnan_kaki_schema_gap.yml
+#  PB-117 ashnan_kaki_schema — GENUINE GAP, not a confirmation playbook
+#
+#  Run: ansible-playbook playbook_117_ashnan_kaki_schema_gap.yml -i "localhost," -c local -v
+#
+#  Unlike PB-111/113 above, this is not a re-verification of existing work.
+#  RM-001_ADDENDUM confirmed 2026-07-01, and this playbook reconfirms today:
+#  the `ashnan-kaki` crate — the particle schema for the ASHNAN business
+#  case (BC-AGRI-001) — does not exist. It was marked "WRITTEN" upstream in
+#  a prior session's self-report; that claim never held up.
+#
+#  What BC-AGRI-001 specifies for this crate (for when it's actually built):
+#    - CMI  (Crop Mortality Index) formula
+#    - IRI  (Pest Incursion Risk Index) formula
+#    - LMI  (Livestock Mortality Index) formula
+#    - 4 KAKI particle classes (crop, livestock, pest-trap, soil/sensor)
+#    - Confidence-tiered international data ingestion (TIER 0-3)
+#  This is real, deliberate design work — not a scaffold stub. It blocks
+#  PB-118 and PB-140.
+#
+#  This playbook's job: confirm the gap still exists (so nobody assumes it
+#  was quietly filled), and confirm what it blocks still can't proceed.
+#  It does not attempt to build the crate — that is real, separate
+#  engineering work, tracked as the next concrete deliverable after the
+#  90-onward playbook series finishes, not squeezed into a confirmation run.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-117 | ashnan-kaki Gap Confirmation (BLOCKS PB-118, PB-140)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ forge_root }}/docs/PB117_GAP_REPORT_{{ session_date }}.txt"
+
+  tasks:
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "CHECK | Does crates/ashnan-kaki exist?"
+      ansible.builtin.stat: {path: "{{ workspace }}/crates/ashnan-kaki/Cargo.toml"}
+      register: ashnan_kaki_stat
+
+    - name: "PRINT | Gap status"
+      ansible.builtin.debug:
+        msg: >
+          {{ 'UNEXPECTED: ashnan-kaki now exists! The gap this playbook tracks may be closed -- verify with a fresh cargo test -p ashnan-kaki and consider this playbook superseded.'
+          if ashnan_kaki_stat.stat.exists
+          else 'Confirmed: crates/ashnan-kaki does not exist. PB-118 and PB-140 remain blocked on it. This is real, scoped design work (CMI/IRI/LMI formulas, 4 KAKI particle classes, TIER 0-3 ingestion per BC-AGRI-001) -- next concrete build after the 90-onward series.' }}
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          PB-117 Gap Confirmation — {{ session_date }} — {{ ansible_hostname }}
+          ashnan-kaki exists: {{ ashnan_kaki_stat.stat.exists }}
+          Blocks: PB-118 (ashnan_sensor_pilot_setup), PB-140 (edubba_seal_integration)
+          Spec source: BC-AGRI-001
+
+    - {name: "DONE", ansible.builtin.debug: {msg: "PB-117 gap status recorded — report at {{ report_file }}"}}

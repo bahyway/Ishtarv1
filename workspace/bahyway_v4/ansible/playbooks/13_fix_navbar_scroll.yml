@@ -1,0 +1,81 @@
+---
+# ============================================================
+# Playbook 13 — Fix DubSar nav bar overflow
+# Wraps tab buttons in egui ScrollArea::horizontal()
+# Run from eriduous-vdi:
+#   cd ~/bahyway-ansible
+#   ansible-playbook playbooks/13_fix_navbar_scroll.yml -v
+# ============================================================
+
+- name: "𒁾 Fix DubSar nav bar — horizontal scroll"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    app_rs: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+    forge:  "/home/bahyway/Forge/bahyway_v4"
+
+  tasks:
+
+    - name: "Backup app.rs"
+      ansible.builtin.copy:
+        src:        "{{ app_rs }}"
+        dest:       "{{ app_rs }}.bak13"
+        remote_src: true
+        mode:       "0644"
+
+    # Replace the exact nav bar horizontal_centered block
+    # with a ScrollArea wrapper around it
+    - name: "Wrap tab buttons in horizontal ScrollArea"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  'ui\.horizontal_centered\(\|ui\| \{'
+        replace: 'egui::ScrollArea::horizontal().id_source("nav_tabs").auto_shrink([false,true]).show(ui, |ui| { ui.horizontal_centered(|ui| {'
+
+    # Close the extra brace — the original block ends with });
+    # We need to add one more }); for the ScrollArea
+    - name: "Close the ScrollArea after tab buttons"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  '(tab_btn\(ui, &mut self\.panel, ActivePanel::Nergal, "𒀭𒉺𒂵 Nergal AV"\);)\s*\}\);\s*\}\);'
+        replace: |
+          tab_btn(ui, &mut self.panel, ActivePanel::Nergal, "𒀭𒉺𒂵 Nergal AV");
+                      });  // horizontal_centered
+                  });      // ScrollArea
+              });
+
+    - name: "Verify ScrollArea in app.rs"
+      ansible.builtin.command:
+        cmd: grep -n "ScrollArea\|horizontal_centered\|nav_tabs" "{{ app_rs }}"
+      register: grep_result
+      changed_when: false
+
+    - name: "Show nav bar lines"
+      ansible.builtin.debug:
+        msg: "{{ grep_result.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Build output"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-4:] }}"
+
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "𒁾 Nav bar scroll fix complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ ScrollArea::horizontal() wraps all tab buttons"
+          - "✓ Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "Scroll right in nav bar to reach 𒀭𒉺𒂵 Nergal AV"
+          - "Run: cargo run -p dubsar-visualizer"

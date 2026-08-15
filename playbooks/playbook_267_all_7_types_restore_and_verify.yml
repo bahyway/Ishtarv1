@@ -1,0 +1,339 @@
+# =============================================================================
+# PB-267 — All 7 EnkiDB Types: restore-and-verify drill
+# BahyWay.Ecosystem v4.0 — 2026-07-29
+#
+# WHY THIS EXISTS: PB-266 proves backups get TAKEN. It does not prove they
+# RESTORE. "Today's Build Steps" step 6 is explicit: "A restore-and-verify
+# playbook — prove backups actually work, don't just take them." This
+# playbook is that proof, run against the latest archive PB-266 already
+# produced for each of the 15 real volumes.
+#
+# HOW THIS STAYS SAFE TO RUN ANY TIME (never touches live production data):
+#   - Runs entirely on the bare-metal Fedora host's OWN local Podman --
+#     the same host `backup_root` already lives on -- never delegates to
+#     enkidb-node-write/enkidb-node-read. The 2-VM CQRS fleet is never
+#     contacted, started, stopped, or mounted into by this playbook.
+#   - Extracts each tarball into a scratch directory under /tmp, loads it
+#     into a THROWAWAY podman volume (name suffixed `-restore-verify`,
+#     never the real `*-write-data`/`*-read-data` volume), and runs a
+#     throwaway container on a SCRATCH port in the 81xx range -- entirely
+#     disjoint from the fleet's real 70xx/72xx/71xx ports, so it can run
+#     concurrently with a live fleet with zero collision.
+#   - Tears every scratch container/volume/directory down at the end,
+#     whether verification passed or failed.
+#
+# WHAT "VERIFIED" MEANS HERE, HONESTLY: for the 14 volumes that follow the
+# DATA_DIR / `current/entities.data` shape (confirmed identical across all
+# 7 Types' read- and write-side servers by grepping every `bin/*-server/
+# src/main.rs` before writing this playbook), this (a) extracts the
+# archive, (b) starts the REAL matching read-server binary against it in
+# a container, (c) confirms the TCP port comes up, and (d) sends a real
+# HeptaScript QUERY over the real binary wire protocol and confirms a
+# well-formed, non-error response comes back. `WHO T.E / WHAT E[state] /
+# WHERE E[state] = "Golden"` is used as that query for EVERY Type -- not
+# because every Type's real particles use a `state` attribute (EnkiDDB's
+# `meta.*`/EnkiMDB's `artifact.*` namespaces don't, per `tasks/
+# enkiddb_cross_host_sync.yml`'s own header), but because HeptaScript's
+# EAV WHERE clause is not schema-validated (confirmed against
+# `enkidb-readnode/src/cached.rs`'s own test suite: an unrecognized
+# attribute name legitimately yields a 0-row match, not a parse/execution
+# error) -- so this is a real, safe, universal protocol-liveness probe,
+# not a per-Type business-data assertion. The row count is reported
+# alongside the restored `entities.data` file's real byte size, so a
+# reader can judge data presence for themselves rather than this playbook
+# overclaiming what a 0-row match on an unused attribute would mean.
+#
+# The 15th volume, `enkidw-persist-data`, is NOT a DATA_DIR-shaped volume
+# -- it's `enkidb_persist::PersistedDb`'s own on-disk journal under
+# `PERSIST_DIR` (confirmed via `enkidw-write-server/src/main.rs`'s
+# `persist_dir()`), a different on-disk layout no read-server binary
+# opens. Its restore-and-verify is deliberately lighter and honestly
+# labelled as such: extract the archive, confirm it extracts without
+# error, and report the extracted file count/byte size -- no server is
+# started against it and no query is run, because no such server exists.
+#
+# WHAT THIS PLAYBOOK DELIBERATELY DOES NOT DO: restore data back INTO a
+# live production volume (that's a real incident-response action, not a
+# routine drill, and stays a manual, deliberate, Architect-authorized
+# step outside any playbook's automatic reach -- Advisory Never Authority).
+# This proves the archives are restorable; it never performs the restore
+# against production.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_267_all_7_types_restore_and_verify.yml
+#   # verify a single volume only:
+#   # -e restore_only=enkiddb-read-data
+#   # point at a specific archive instead of "latest for this volume":
+#   # -e restore_only=enkiddb-read-data -e restore_tarball_override=/path/to/x.tar.gz
+# =============================================================================
+---
+- name: "PB-267 | All 7 EnkiDB Types -- restore-and-verify drill"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    backup_root: "{{ ansible_env.HOME }}/dbaas_backups"
+    enkidb_repo_root: "{{ playbook_dir }}/.."
+    restore_only: ""            # set via -e to test just one volume
+    restore_tarball_override: "" # set via -e to force a specific archive
+    restore_work_dir: "/tmp/pb267-restore-verify"
+
+    restore_targets:
+      - { name: enkidb-write-data,   image: enkidb-read-server,  containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkidb-read-server",  port: 8101, checkable: true }
+      - { name: enkidb-read-data,    image: enkidb-read-server,  containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkidb-read-server",  port: 8102, checkable: true }
+      - { name: enkidw-write-data,   image: enkidw-read-server,  containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkidw-read-server",  port: 8103, checkable: true }
+      - { name: enkidw-read-data,    image: enkidw-read-server,  containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkidw-read-server",  port: 8104, checkable: true }
+      - { name: enkidw-persist-data, image: "",                  containerfile: "",                                                                     port: 0,    checkable: false }
+      - { name: enkisdb-write-data,  image: enkisdb-read-server, containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkisdb-read-server", port: 8105, checkable: true }
+      - { name: enkisdb-read-data,   image: enkisdb-read-server, containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkisdb-read-server", port: 8106, checkable: true }
+      - { name: enkiodb-write-data,  image: enkiodb-read-server, containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkiodb-read-server", port: 8107, checkable: true }
+      - { name: enkiodb-read-data,   image: enkiodb-read-server, containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkiodb-read-server", port: 8108, checkable: true }
+      - { name: enkiqdb-write-data,  image: enkiqdb-read-server, containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkiqdb-read-server", port: 8109, checkable: true }
+      - { name: enkiqdb-read-data,   image: enkiqdb-read-server, containerfile: "workspace/bahyway_v4/deploy/podman/Containerfile.enkiqdb-read-server", port: 8110, checkable: true }
+      - { name: enkimdb-write-data,  image: enkimdb-read-server, containerfile: "deploy/podman/Containerfile.enkimdb-read-server",                      port: 8111, checkable: true }
+      - { name: enkimdb-read-data,   image: enkimdb-read-server, containerfile: "deploy/podman/Containerfile.enkimdb-read-server",                      port: 8112, checkable: true }
+      - { name: enkiddb-write-data,  image: enkiddb-read-server, containerfile: "deploy/podman/Containerfile.read-server",                               port: 8113, checkable: true }
+      - { name: enkiddb-read-data,   image: enkiddb-read-server, containerfile: "deploy/podman/Containerfile.read-server",                               port: 8114, checkable: true }
+
+  tasks:
+    - name: "0.1 | Narrow to a single volume if restore_only was set"
+      ansible.builtin.set_fact:
+        active_targets: "{{ restore_targets | selectattr('name', 'equalto', restore_only) | list if restore_only | length > 0 else restore_targets }}"
+
+    - name: "0.2 | Fail loudly if restore_only was set but matched nothing real"
+      ansible.builtin.fail:
+        msg: "restore_only={{ restore_only }} matched no entry in restore_targets -- check spelling against the 15 real volume names."
+      when: restore_only | length > 0 and active_targets | length == 0
+
+    - name: "0.3 | Ensure backup_root exists (nothing to restore if PB-266 never ran)"
+      ansible.builtin.stat:
+        path: "{{ backup_root }}"
+      register: backup_root_stat
+
+    - name: "0.4 | Fail loudly if backup_root doesn't exist"
+      ansible.builtin.fail:
+        msg: "{{ backup_root }} doesn't exist -- run playbook_266 (health check + backup) at least once before this drill."
+      when: not backup_root_stat.stat.exists
+
+    - name: "0.5 | Clean and recreate the scratch work directory"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        podman unshare rm -rf "{{ restore_work_dir }}" 2>/dev/null || rm -rf "{{ restore_work_dir }}"
+        mkdir -p "{{ restore_work_dir }}"
+      changed_when: true
+
+    # ── Per-volume: locate the latest archive ───────────────────────
+    - name: "1.1 | Find the latest archive for each active volume"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ls -1t "{{ backup_root }}"/{{ item.name }}_*.tar.gz 2>/dev/null | head -n1 || true
+      register: latest_archive
+      changed_when: false
+      loop: "{{ active_targets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: restore_tarball_override | length == 0
+
+    - name: "1.2 | Fail loudly for any active volume with zero archives on disk"
+      ansible.builtin.fail:
+        msg: "No backup archive found for {{ item.item.name }} under {{ backup_root }} -- run playbook_266 first."
+      when: restore_tarball_override | length == 0 and (item.stdout | default('') | length == 0)
+      loop: "{{ latest_archive.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: "1.3 | Build the (volume, chosen archive path) pair list"
+      ansible.builtin.set_fact:
+        restore_pairs: >-
+          {{
+            (active_targets | zip(latest_archive.results | map(attribute='stdout') | list) | list)
+            if restore_tarball_override | length == 0
+            else (active_targets | map('combine', {'_override': true}) | list | zip([restore_tarball_override] * (active_targets | length)) | list)
+          }}
+
+    # ── Per-volume: extract ─────────────────────────────────────────
+    - name: "2.1 | Extract each archive into its own scratch subdirectory"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        mkdir -p "{{ restore_work_dir }}/{{ item.0.name }}"
+        tar xzf "{{ item.1 }}" -C "{{ restore_work_dir }}/{{ item.0.name }}"
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.name }} <- {{ item.1 }}"
+      changed_when: true
+      register: extract_result
+
+    - name: "2.2 | Confirm current/entities.data exists in the extracted copy (DATA_DIR-shaped volumes only)"
+      ansible.builtin.stat:
+        path: "{{ restore_work_dir }}/{{ item.0.name }}/current/entities.data"
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.name }}"
+      when: item.0.checkable
+      register: entities_stat
+
+    - name: "2.3 | Fail loudly if a checkable volume's archive has no entities.data after extraction"
+      ansible.builtin.fail:
+        msg: "{{ item.item.0.name }}: extracted archive has no current/entities.data -- the backup itself is broken, not just unlucky data."
+      when: item.item.0.checkable and not item.stat.exists
+      loop: "{{ entities_stat.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.0.name }}"
+
+    - name: "2.4 | Report extracted entities.data byte size per checkable volume"
+      ansible.builtin.debug:
+        msg: "{{ item.item.0.name }}: current/entities.data = {{ item.stat.size }} bytes"
+      loop: "{{ entities_stat.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.0.name }}"
+      when: item.item.0.checkable
+
+    - name: "2.5 | Report the non-checkable volume (enkidw-persist-data) extraction, honestly scoped"
+      ansible.builtin.shell: |
+        find "{{ restore_work_dir }}/{{ item.0.name }}" -type f | wc -l
+      register: persist_file_count
+      changed_when: false
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.name }}"
+      when: not item.0.checkable
+
+    - name: "2.6 | Show non-checkable volume's file count (extraction-only verification)"
+      ansible.builtin.debug:
+        msg: "{{ item.item.0.name }}: extracted {{ item.stdout }} file(s); no server exists to load this PersistedDb-journal layout, so no live QUERY is run against it."
+      loop: "{{ persist_file_count.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.0.name }}"
+      when: not item.item.0.checkable
+
+    # ── Per-volume: live protocol check for checkable volumes ───────
+    - name: "3.1 | Check whether each needed image already exists locally"
+      ansible.builtin.command: "podman image exists {{ item.0.image }}:pb267-verify"
+      register: image_exists
+      failed_when: false
+      changed_when: false
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.image }}"
+      when: item.0.checkable
+
+    - name: "3.2 | Build any missing verify image (same source, tagged separately from the live :latest images)"
+      ansible.builtin.command:
+        cmd: "podman build -t {{ item.item.0.image }}:pb267-verify -f {{ item.item.0.containerfile }} workspace/bahyway_v4"
+        chdir: "{{ enkidb_repo_root }}"
+      loop: "{{ image_exists.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.0.image }}"
+      when: item.item.0.checkable and item.rc != 0
+      changed_when: true
+
+    - name: "3.3 | Remove any stale verify container from a previous interrupted run"
+      ansible.builtin.command: "podman rm -f pb267-verify-{{ item.0.name }}"
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.name }}"
+      when: item.0.checkable
+      failed_when: false
+      changed_when: false
+
+    - name: "3.4 | Start the throwaway verify container against the extracted (read-only) data"
+      ansible.builtin.command: >
+        podman run -d --name pb267-verify-{{ item.0.name }}
+        -p {{ item.0.port }}:{{ item.0.port }}
+        -v {{ restore_work_dir }}/{{ item.0.name }}:/verify:Z,ro
+        -e BIND_ADDR=0.0.0.0:{{ item.0.port }}
+        -e DATA_DIR=/verify
+        {{ item.0.image }}:pb267-verify
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.name }}"
+      when: item.0.checkable
+      changed_when: true
+
+    - name: "3.5 | Wait for each verify container's scratch port to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item.0.port }}"
+        timeout: 30
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.name }} :{{ item.0.port }}"
+      when: item.0.checkable
+
+    # Same binary wire protocol every live read-server answers
+    # (`tasks/enkiddb_cross_host_sync.yml`'s own QUERY task): [4B LE len]
+    # + payload out, [4B LE len] + [1B tag] + body back. tag 0x00 =
+    # success + [4B LE row_count]; only the tag + row_count are parsed.
+    - name: "3.6 | Real QUERY over the wire against the restored, running verify container"
+      ansible.builtin.shell: |
+        python3 -c "
+        import socket, struct
+        def recv_exact(s, n):
+            buf = b''
+            while len(buf) < n:
+                chunk = s.recv(n - len(buf))
+                if not chunk:
+                    raise EOFError('connection closed early')
+                buf += chunk
+            return buf
+        s = socket.create_connection(('127.0.0.1', {{ item.0.port }}), timeout=15)
+        payload = b'QUERY:WHO T.E\nWHAT E[state]\nWHERE E[state] = \"Golden\"\nHOW_MUCH LIMIT 20'
+        s.sendall(struct.pack('<I', len(payload)) + payload)
+        n = struct.unpack('<I', recv_exact(s, 4))[0]
+        body = recv_exact(s, n)
+        if body[0] == 0x01:
+            msg_len = struct.unpack('<I', body[1:5])[0]
+            print('PROTOCOL_ERROR: ' + body[5:5+msg_len].decode('utf-8', errors='replace'))
+        else:
+            row_count = struct.unpack('<I', body[1:5])[0]
+            print(f'OK: matched={row_count} rows')
+        "
+      register: verify_query
+      changed_when: false
+      failed_when: false
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.name }}"
+      when: item.0.checkable
+
+    - name: "3.7 | Report PASS/FAIL per checkable volume"
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item.0.name }}:
+          {{ 'PASS -- restored data is live-queryable (' + item.stdout + ')'
+             if item.rc == 0 and 'PROTOCOL_ERROR' not in item.stdout
+             else 'FAIL -- ' + (item.stdout | default('no output')) + (item.stderr | default('')) }}
+      loop: "{{ verify_query.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.0.name }}"
+      when: item.item.0.checkable
+
+    - name: "3.8 | Fail the whole playbook if any checkable volume's restore-verify did not PASS"
+      ansible.builtin.fail:
+        msg: "{{ item.item.0.name }} restore-verify FAILED -- see 3.7 output above. Do not trust this volume's backups until this is root-caused."
+      when: item.item.0.checkable and (item.rc != 0 or 'PROTOCOL_ERROR' in (item.stdout | default('')))
+      loop: "{{ verify_query.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.0.name }}"
+
+    # ── Teardown (always, even after a 3.8 failure on a later loop item) ──
+    - name: "4.1 | Stop and remove every throwaway verify container"
+      ansible.builtin.command: "podman rm -f pb267-verify-{{ item.0.name }}"
+      loop: "{{ restore_pairs }}"
+      loop_control:
+        label: "{{ item.0.name }}"
+      when: item.0.checkable
+      failed_when: false
+      changed_when: true
+
+    - name: "4.2 | Remove the scratch work directory"
+      ansible.builtin.shell: |
+        podman unshare rm -rf "{{ restore_work_dir }}" 2>/dev/null || rm -rf "{{ restore_work_dir }}"
+      changed_when: true
+
+    - name: "4.3 | Final summary"
+      ansible.builtin.debug:
+        msg: >-
+          Restore-and-verify drill complete for {{ active_targets | length }} volume(s).
+          See 3.7/2.6 above for per-volume PASS/FAIL. Scratch containers, images'
+          :pb267-verify tag left cached (cheap to reuse next run), work dir removed.

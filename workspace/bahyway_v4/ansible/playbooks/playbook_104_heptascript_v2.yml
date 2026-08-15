@@ -1,0 +1,118 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_104_heptascript_v2.yml
+#  BahyWay.Ecosystem v4.0 — HeptaScript v2.0 W5H2 (BLOCK E) — Build + Test
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_104_heptascript_v2.yml
+#
+#  Crate: heptascript
+#  Tests: 29 integration tests (playbook_heptascript)
+#  Covers:
+#    Mandatory WHO TribeName.VarName clause
+#    NODE EnkiDB / NODE ALL
+#    ORBITAL N .. N range
+#    ANCHOR AUTO / SURROGATE_TIME / STATE_STATION / E7_FIRST / FULL_SCAN
+#    ABORT_SCAN N
+#    STREAM flag
+#    FILTER_ORDER (all 8 FilterStage variants)
+#    DERIVE_STATION "GOLD" / "DataSteward" / etc.
+#    HOW_MUCH LIMIT N / HOW_MUCH TOP N BY var[attr] DESC
+#    WHAT E[attr, attr] / WHAT E[*]
+#    Full production query (10M particle scope)
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-104 | HeptaScript v2.0 — Build & Integration Tests"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    crate:        "heptascript"
+    test_bin:     "playbook_heptascript"
+    results_dir:  "{{ forge_root }}/test_results"
+
+  tasks:
+
+    - name: "SETUP | Results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Build ─────────────────────────────────────────────────────────────
+    - name: "BUILD | cargo build -p {{ crate }}"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p {{ crate }} 2>&1"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: true
+
+    - name: "FAIL  | Build failed"
+      ansible.builtin.fail:
+        msg: "cargo build -p {{ crate }} FAILED\n{{ build_out.stderr }}"
+      when: build_out.rc != 0
+
+    - name: "PASS  | Build OK"
+      ansible.builtin.debug:
+        msg: "heptascript → BUILD PASS ✓"
+
+    # ── Integration tests ─────────────────────────────────────────────────
+    - name: "TEST  | cargo test -p {{ crate }} --test {{ test_bin }} --nocapture"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p {{ crate }} --test {{ test_bin }} -- --nocapture 2>&1"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+
+    - name: "SAVE  | Write test log"
+      ansible.builtin.copy:
+        content: "{{ test_out.stdout }}\n{{ test_out.stderr }}"
+        dest: "{{ results_dir }}/pb104_heptascript_v2.log"
+        mode: "0644"
+
+    - name: "PRINT | Test output"
+      ansible.builtin.debug:
+        msg: "{{ test_out.stdout_lines }}"
+
+    - name: "PARSE | Result line"
+      ansible.builtin.set_fact:
+        result_line: >-
+          {{ test_out.stdout_lines
+             | select('match', '^test result')
+             | list | last | default('no result line') }}
+
+    - name: "PRINT | Summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌─────────────────────────────────────────────────────────────────┐
+          │  PB-104  heptascript v2.0  BLOCK E                              │
+          ├─────────────────────────────────────────────────────────────────┤
+          │  Expected tests:  29                                            │
+          │  {{ result_line }}
+          │  Log: {{ results_dir }}/pb104_heptascript_v2.log
+          ├─────────────────────────────────────────────────────────────────┤
+          │  E-001  WHO TribeName.VarName (mandatory)                       │
+          │  E-002  ANCHOR AUTO/SURROGATE_TIME/STATE_STATION/E7_FIRST/FULL  │
+          │  E-003  ABORT_SCAN N                                            │
+          │  E-004  STREAM flag                                             │
+          │  E-005  FILTER_ORDER (8 variants)                               │
+          │  E-006  DERIVE_STATION beeMDM stations                          │
+          │  E-007  Full 10M production query                               │
+          │  E-008  ŠUMU-UKIN routing (AllParallel/Serial/FirstOnly)        │
+          │  E-009  All 8 FilterStage variants                              │
+          │  E-010  Multiple independent queries                            │
+          │  E-011  HOW_MUCH LIMIT / TOP N BY                               │
+          │  E-012  WHAT projections / WHAT E[*]                            │
+          └─────────────────────────────────────────────────────────────────┘
+
+    - name: "FAIL  | Tests failed"
+      ansible.builtin.fail:
+        msg: "HeptaScript tests FAILED — check {{ results_dir }}/pb104_heptascript_v2.log"
+      when: test_out.rc != 0
+
+    - name: "DONE  | PB-104 HeptaScript v2.0 COMPLETE → Run PB-105 next"
+      ansible.builtin.debug:
+        msg: "BLOCK E PASS ✓ — 29/29 tests — Run playbook_105_sumuukin_routing.yml next"

@@ -1,0 +1,314 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_60_namzitum.yml
+# NĀMZITUM 𒀭𒈠𒍪 — Semantic Data Modeling Validator
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# "The one who is named correctly"
+# Evaluates any proposed configuration against the
+# sovereign fact corpus from DATASTRUCTUUR + DATA STEWARD agents.
+# The client cannot configure something that contradicts
+# their own documentation.
+#
+# Three verdicts: CONFIRMED / CONFLICT / INSUFFICIENT_EVIDENCE
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 60 — NĀMZITUM 𒀭𒈠𒍪 Semantic Validation Engine"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_60_namzitum.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_60_namzitum.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # NĀMZITUM Semantic Validator — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/namzitum"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "namzitum"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          [dependencies]
+          serde = { version = "1", features = ["derive"] }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! NĀMZITUM 𒀭𒈠𒍪 — Semantic Data Modeling Validator
+          //! "The one who is named correctly"
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! THE KEY INSIGHT:
+          //!   The client cannot configure something that contradicts
+          //!   their own documentation. NĀMZITUM enforces this.
+          //!
+          //! THREE VERDICTS:
+          //!   CONFIRMED           — configuration matches corpus
+          //!   CONFLICT            — configuration contradicts corpus
+          //!   INSUFFICIENT_EVIDENCE — corpus lacks data to decide
+          //!
+          //! FIRES AS: Stage 2 of É-DUBBA seal sequence
+          //! ALSO FIRES: SLA validation gate (before SLA KAKI is minted)
+
+          #![forbid(unsafe_code)]
+
+          // ── Verdicts ──────────────────────────────────────────────────
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum SemanticVerdict {
+              Confirmed,
+              Conflict,
+              InsufficientEvidence,
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct SemanticValidation {
+              pub verdict:     SemanticVerdict,
+              /// KAKI particles supporting the verdict
+              pub evidence:    Vec<String>,
+              /// KAKI particles contradicting the configuration
+              pub conflicts:   Vec<String>,
+              /// 0.0–1.0 based on evidence coverage
+              pub confidence:  f32,
+              /// Transparency debt if conflict is ignored
+              pub sharu_risk:  f32,
+              /// Human-readable explanation for stakeholder
+              pub explanation: String,
+          }
+
+          impl SemanticValidation {
+              pub fn is_clear(&self) -> bool {
+                  self.verdict == SemanticVerdict::Confirmed ||
+                  self.verdict == SemanticVerdict::InsufficientEvidence
+              }
+          }
+
+          // ── Fact Corpus ────────────────────────────────────────────────
+
+          #[derive(Debug, Clone, Default)]
+          pub struct FactCorpus {
+              /// Facts from DATASTRUCTUUR agent
+              pub structural_facts: Vec<CorpusFact>,
+              /// Facts from DATA STEWARD agent
+              pub governance_facts: Vec<CorpusFact>,
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct CorpusFact {
+              pub fact_text:  String,
+              pub source:     String,
+              pub confidence: f32,
+              pub kaki_ref:   String,  // reference to the KAKI particle
+          }
+
+          impl FactCorpus {
+              pub fn add_structural(&mut self, text: &str, source: &str, confidence: f32, kaki: &str) {
+                  self.structural_facts.push(CorpusFact {
+                      fact_text:  text.to_string(),
+                      source:     source.to_string(),
+                      confidence,
+                      kaki_ref:   kaki.to_string(),
+                  });
+              }
+
+              pub fn add_governance(&mut self, text: &str, source: &str, confidence: f32, kaki: &str) {
+                  self.governance_facts.push(CorpusFact {
+                      fact_text:  text.to_string(),
+                      source:     source.to_string(),
+                      confidence,
+                      kaki_ref:   kaki.to_string(),
+                  });
+              }
+
+              pub fn total_facts(&self) -> usize {
+                  self.structural_facts.len() + self.governance_facts.len()
+              }
+          }
+
+          // ── NĀMZITUM ─────────────────────────────────────────────────
+
+          pub struct Namzitum {
+              pub corpus: FactCorpus,
+          }
+
+          impl Namzitum {
+              pub fn new(corpus: FactCorpus) -> Self { Self { corpus } }
+
+              /// Evaluate a proposed configuration against the fact corpus.
+              /// Returns CONFIRMED / CONFLICT / INSUFFICIENT_EVIDENCE.
+              pub fn evaluate(&self, configuration: &str) -> SemanticValidation {
+                  if self.corpus.total_facts() == 0 {
+                      return SemanticValidation {
+                          verdict:     SemanticVerdict::InsufficientEvidence,
+                          evidence:    vec![],
+                          conflicts:   vec![],
+                          confidence:  0.0,
+                          sharu_risk:  0.0,
+                          explanation: "No fact corpus available. Upload documentation first.".into(),
+                      };
+                  }
+
+                  let config_lower = configuration.to_lowercase();
+                  let mut supporting = Vec::new();
+                  let mut conflicting = Vec::new();
+
+                  for fact in self.corpus.structural_facts.iter()
+                      .chain(self.corpus.governance_facts.iter())
+                  {
+                      if Self::facts_align(&config_lower, &fact.fact_text) {
+                          supporting.push(format!("[{}] {}", fact.source, fact.fact_text));
+                      } else if Self::facts_conflict(&config_lower, &fact.fact_text) {
+                          conflicting.push(format!("[{}] {}", fact.source, fact.fact_text));
+                      }
+                  }
+
+                  let total = self.corpus.total_facts() as f32;
+                  let confidence = supporting.len() as f32 / total;
+                  let sharu_risk = conflicting.len() as f32 / total;
+
+                  if !conflicting.is_empty() {
+                      SemanticValidation {
+                          verdict:     SemanticVerdict::Conflict,
+                          evidence:    supporting,
+                          conflicts:   conflicting.clone(),
+                          confidence,
+                          sharu_risk,
+                          explanation: format!(
+                              "NĀMZITUM CONFLICT: Configuration contradicts your organisation's \
+                               own documentation. {} conflict(s) found. \
+                               τ_transparency = {:.2}. Resolve before sealing.",
+                              conflicting.len(), sharu_risk
+                          ),
+                      }
+                  } else if supporting.is_empty() {
+                      SemanticValidation {
+                          verdict:     SemanticVerdict::InsufficientEvidence,
+                          evidence:    vec![],
+                          conflicts:   vec![],
+                          confidence:  0.0,
+                          sharu_risk:  0.10,
+                          explanation: "NĀMZITUM: No evidence found in corpus. \
+                                        Configuration is neither confirmed nor contradicted. \
+                                        Upload more documentation.".into(),
+                      }
+                  } else {
+                      SemanticValidation {
+                          verdict:     SemanticVerdict::Confirmed,
+                          evidence:    supporting,
+                          conflicts:   vec![],
+                          confidence,
+                          sharu_risk:  0.0,
+                          explanation: format!(
+                              "NĀMZITUM CONFIRMED: Configuration consistent with \
+                               {:.0}% of your organisation's documentation.",
+                              confidence * 100.0
+                          ),
+                      }
+                  }
+              }
+
+              fn facts_align(config: &str, fact: &str) -> bool {
+                  let fact_lower = fact.to_lowercase();
+                  config.split_whitespace().any(|w| {
+                      w.len() > 4 && fact_lower.contains(w)
+                  })
+              }
+
+              fn facts_conflict(config: &str, fact: &str) -> bool {
+                  let fact_lower = fact.to_lowercase();
+                  (config.contains("optional") && fact_lower.contains("mandatory")) ||
+                  (config.contains("mandatory") && fact_lower.contains("optional")) ||
+                  (config.contains("public") && fact_lower.contains("restricted")) ||
+                  (config.contains("delete") && fact_lower.contains("retain"))
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn test_corpus() -> FactCorpus {
+                  let mut c = FactCorpus::default();
+                  c.add_structural("PatientID: integer mandatory",
+                      "data_dict.pdf", 0.9, "KAKI_001");
+                  c.add_governance("Patient data SLA: 99.9% availability",
+                      "sla.pdf", 0.85, "KAKI_002");
+                  c.add_governance("Witness testimony: restricted",
+                      "policy.pdf", 0.9, "KAKI_003");
+                  c
+              }
+
+              #[test]
+              fn test_confirmed_when_aligned() {
+                  let n = Namzitum::new(test_corpus());
+                  let v = n.evaluate("PatientID field is mandatory integer");
+                  assert_eq!(v.verdict, SemanticVerdict::Confirmed);
+              }
+
+              #[test]
+              fn test_conflict_when_contradicts_own_docs() {
+                  // Stakeholder says optional, doc says mandatory
+                  let n = Namzitum::new(test_corpus());
+                  let v = n.evaluate("PatientID is optional");
+                  assert_eq!(v.verdict, SemanticVerdict::Conflict);
+                  // Explanation teaches the stakeholder
+                  assert!(v.explanation.contains("CONFLICT"));
+                  assert!(v.sharu_risk > 0.0);
+              }
+
+              #[test]
+              fn test_puzru_conflict_detected() {
+                  // Stakeholder says public, governance says restricted
+                  let n = Namzitum::new(test_corpus());
+                  let v = n.evaluate("testimony field is public");
+                  assert_eq!(v.verdict, SemanticVerdict::Conflict);
+              }
+
+              #[test]
+              fn test_empty_corpus_insufficient() {
+                  let n = Namzitum::new(FactCorpus::default());
+                  let v = n.evaluate("anything");
+                  assert_eq!(v.verdict, SemanticVerdict::InsufficientEvidence);
+              }
+          }
+          """))
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/namzitum"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/namzitum",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "namzitum"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+
+          t = subprocess.run(["cargo", "test", "-p", "namzitum", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ NĀMZITUM — CONFIRMED/CONFLICT/INSUFFICIENT — 4 tests pass")
+          print("✓ PLAYBOOK 60 — NĀMZITUM COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p60_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p60_out.stdout_lines }}"

@@ -1,0 +1,83 @@
+# =============================================================================
+# PB-177 — EnkiDDB RAG Categorization + Summary-to-Chunk Indexing
+# BahyWay.Ecosystem v4.0 — 2026-07-12
+#
+# CONTEXT: the Architect's ask, verbatim two turns: (1) advice on
+# categorizing EnkiDDB and linking collections together "in a RAG way" so
+# every existing BahyWay.Ecosystem document can be uploaded without losing
+# an Engine, paragraph, or detail -- using a Key-Value Document Mapping
+# (condensed summary as the searchable Key, raw chunk as the fetched
+# Value); (2) an absolute follow-up removing any option to defer part of
+# this to a later phase: "YOU DO NOT HAVE ANY OTHER TASK ; IF YOU DIDNT
+# FINISHED EnkiDDB IN BEST Existing Way."
+#
+# WHAT WAS BUILT (all of it, this pass, nothing deferred):
+#   - crates/enkiddb/src/document.rs: Section struct + new
+#     DocumentStructure::sections() -- groups headers/body/code_blocks at
+#     header boundaries using the parser's existing shared `order` field.
+#     Every paragraph and code block lands in exactly one section; nothing
+#     dropped or reordered (proven by test).
+#   - crates/enkiddb/src/emitter.rs: DocumentEmitter::emit_collection()
+#     (tags a document with a meta.collection KIND taxonomy, orthogonal to
+#     DocOrbit's structural axis) and emit_sections() (mints one child
+#     Identity-Kaki per section, each carrying body.summary -- the RAG
+#     Key, a heuristic header+preview -- and body.text -- the RAG Value,
+#     the section's full untouched text -- plus a link.* particle back to
+#     the parent document, reusing the existing emit_link mechanism).
+#   - crates/enkiddb/src/writenode.rs: WriteNode::ingest_document_categorized()
+#     journals the parent document (with its collection tag) and every one
+#     of its sections as their own Journal entries in one call -- the
+#     Journal alone is now enough to rebuild the whole RAG index.
+#   - crates/enkiddb/src/rag.rs (NEW): RagIndex wraps the real adapa-recall
+#     TF-IDF+cosine crate over every body.summary particle scanned
+#     straight out of a Journal (matched by EavTriple::attr_hash, no Data
+#     Files materialization needed). RagIndex::search() ranks sections by
+#     topical relevance to a query; RagIndex::fetch_value() fetches the
+#     matched section's full body.text back out of the same Journal --
+#     the Key-Value Document Mapping mechanism, end to end, built on real
+#     code already proven elsewhere (adapa-recall, the Journal, the
+#     particle/EAV bridge) rather than any new storage layer.
+#   - crates/enkiddb/src/ingest.rs: ingest_directory() now also infers a
+#     meta.collection per file from its path (infer_collection() --
+#     playbooks/ -> playbook-record, docs/components/ -> component,
+#     *glossary*/*architecture*/*transparency* filenames -> their own
+#     tags, else general) and emits that document's sections in the same
+#     pass -- the practical bulk-upload entry point now does categorization
+#     and RAG chunking automatically, not as a separate step.
+#
+# HONEST SCOPE: summaries are heuristic (header text + a bounded preview
+# of the section body), not LLM-generated -- enkidullm-codex, the
+# not-yet-built knowledge-base bridge for TamuzAI/EnkiduLLM, does not
+# exist. This ships the real, working v1 now instead of blocking
+# indexing on that; richer summaries can replace the heuristic later
+# without changing RagIndex's shape (it only needs body.summary to hold
+# searchable text and body.text to hold the verbatim payload).
+#
+# TESTS: enkiddb 22/22 -> 36/36 (+14: 4 document::sections, 3
+#   emitter::emit_collection/emit_sections, 2 writenode::ingest_document_categorized,
+#   4 rag::RagIndex, 2 ingest::infer_collection/categorized-sections-in-bulk-ingest).
+#   Full workspace: 3407 passed, 0 failed (was 3392).
+#
+# STILL OPEN: bulk-uploading the Architect's actual existing documentation
+# corpus through this pipeline is the next practical step, not done in
+# this pass (this playbook lands the mechanism; running it over the real
+# docs/ tree is a follow-up run, trivial now that ingest_directory does
+# categorization+chunking automatically). enkidullm-codex (LLM-quality
+# summaries) remains unbuilt, as noted above.
+# =============================================================================
+---
+- name: "PB-177 | Record — EnkiDDB RAG categorization + summary-to-chunk indexing landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-177.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-12. New: crates/enkiddb/src/rag.rs. Changed:
+          document.rs (Section/sections()), emitter.rs (emit_collection/
+          emit_sections), writenode.rs (ingest_document_categorized),
+          ingest.rs (infer_collection + per-file section emission).
+          Run `cargo test -p enkiddb` for the standing proof: 36 passed,
+          0 failed.

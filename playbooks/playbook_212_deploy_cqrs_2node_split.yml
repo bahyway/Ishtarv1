@@ -1,0 +1,497 @@
+# =============================================================================
+# PB-212 — Redeploy EnkiDDB + EnkiMDB onto the real 2-VM CQRS split.
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: PB-192 (2026-07-18) put all four database containers
+# (enkiddb-write/read, enkimdb-write/read) on ONE host, `eriduous-vdi`,
+# per the Architect's own instruction at that time. This session's own
+# comments repeatedly called `enkidb-node-write`/`enkidb-node-read` --
+# the hostnames `scripts/enkiddb-sync-data.sh` was originally written
+# for -- "older sibling VMs," assuming they were superseded. They are
+# NOT superseded: the Architect's real Virtual Machine Manager inventory
+# (screenshot, 2026-07-19) shows both still exist and are Running, and
+# the Architect confirmed the real intended shape directly: one VM per
+# CQRS ROLE, not one VM per database. Every EnkiDB Type's Write-role
+# container lives on `enkidb-node-write`; every type's Read-role
+# container lives on `enkidb-node-read`. Today that means EnkiDDB and
+# EnkiMDB (the only two of the 7 EnkiDB Types with real Write/Read server
+# binaries built -- see docs/components/ENKIDB_7_TYPES.md). The other
+# five (EnkiSDB/EnkiODB/EnkiQDB/EnkiDW/EnkiDB-core, the BeeMDM ETL
+# Processing Stations Chain) join this same split once their own server
+# binaries exist -- explicitly future work, not started here.
+#
+# `eriduous-vdi` keeps `enkiddb-assets` (PB-205's shared static asset
+# server -- no Write/Read split, so it doesn't belong on either node
+# VM) and becomes the DubSar (Godot) IDE + Ansible control node +
+# whole-ecosystem monitoring host, per the Architect's explicit plan.
+# `dubsar-workstation` (the VM previously used for DubSar/Grafana/
+# ShoWay) is being retired by the Architect once this redeploy lands --
+# not touched by this playbook.
+#
+# REAL connection info, from the Architect's own uploaded
+# `09_sovereign_vm_restart.yml` (run on the bare enkilab host, not
+# from inside any VM):
+#   enkidb-node-write  192.168.122.101  user bahyway
+#   enkidb-node-read   192.168.122.107  user bahyway
+# SSH from eriduous-vdi (the control node this playbook is run from) to
+# both node VMs is already set up per the Architect, 2026-07-19 -- no
+# key-distribution step here. See ansible/inventory.ini's own header for
+# why SSH directly between the two node VMs is deliberately NOT assumed.
+#
+# PB-212.1 FIX (found live, 2026-07-19, first real run): containers
+# started fine and `wait_for` on their ports succeeded within THIS
+# playbook's own SSH session -- but by the time PB-213 ran moments later
+# (a separate Ansible invocation, a new SSH session), `podman ps` on
+# enkidb-node-write showed zero containers. Root cause: rootless Podman
+# containers started over SSH are supervised by that user's systemd
+# instance; without `loginctl enable-linger <user>`, systemd-logind tears
+# down the user's whole systemd instance -- conmon and every container it
+# supervises included -- the moment the last login session for that user
+# ends. `eriduous-vdi` never hit this because a GUI session stays logged
+# in there continuously; the two headless node VMs only ever get the
+# transient SSH session Ansible itself opens and closes. Task 0.5 below
+# enables lingering (idempotent -- a no-op if already enabled) before any
+# container is started, and every "run container" task now has an
+# explicit follow-up `podman start` rather than assuming "created" means
+# "still running" by the time a later, separate playbook run checks.
+#
+# WHAT THIS PLAYBOOK DOES NOT DO: it does not migrate any data from the
+# old eriduous-vdi-hosted containers. Run this against clean node VMs
+# and re-ingest (PB-208), or manually copy each old volume's `current/`
+# across before running this if preserving existing data matters -- not
+# automated here since the Architect's own next step is a fresh PB-208
+# ingestion run against the new topology anyway.
+# =============================================================================
+---
+- name: "PB-212a | Build + run EnkiDDB/EnkiMDB Write containers on enkidb-node-write"
+  hosts: enkidb_write
+  become: false
+  vars:
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+
+  tasks:
+    # ── 0. Preflight ────────────────────────────────────────────────
+    - name: "0.1 | Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: "0.2 | Show podman version"
+      ansible.builtin.debug:
+        msg: "{{ podman_version.stdout }}"
+
+    - name: "0.3 | Confirm the repo checkout exists (needed for image build context + /source mount + allowlist)"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      register: repo_head
+      changed_when: false
+
+    - name: "0.4 | Show current commit on enkidb-node-write"
+      ansible.builtin.debug:
+        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-212's own commit."
+
+    - name: "0.5 | Check if systemd lingering is already enabled for {{ ansible_user_id }}"
+      ansible.builtin.command: "loginctl show-user {{ ansible_user_id }} --property=Linger"
+      register: linger_status
+      changed_when: false
+      failed_when: false
+
+    - name: "0.6 | Enable lingering (PB-212.1, found live: without this, rootless Podman containers are killed by systemd-logind the moment this SSH session closes -- eriduous-vdi never hit this because a GUI session stays logged in there continuously)"
+      ansible.builtin.command: "loginctl enable-linger {{ ansible_user_id }}"
+      become: true
+      when: "'Linger=yes' not in linger_status.stdout"
+      changed_when: true
+
+    # FIXED (2026-07-26, PB-212.2): every container below is already run
+    # with --restart=always, but that policy is only ever *acted on* by
+    # `podman-restart.service` -- a systemd user unit shipped by the
+    # podman package that runs `podman start --all --filter
+    # restart-policy=always` at boot. Nothing here ever enabled it, so
+    # --restart=always was a no-op across a real reboot: confirmed live
+    # when the underlying hypervisor host rebooted and every container
+    # on enkidb-node-write/enkidb-node-read came back Exited(137) and
+    # stayed that way, needing a manual `podman start` days later.
+    # Lingering (0.6, above) only prevents an SSH-logout kill; it does
+    # nothing for a reboot on its own -- both are needed together.
+    - name: "0.7 | Enable podman-restart.service (PB-212.2 -- makes --restart=always survive an actual host reboot, not just SSH-logout)"
+      ansible.builtin.systemd:
+        name: podman-restart.service
+        scope: user
+        enabled: true
+        state: started
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts.user_uid }}"
+
+    # ── 1. Build Write-server images ───────────────────────────────
+    - name: "1.1 | Build enkiddb-write-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkiddb-write-server:latest -f deploy/podman/Containerfile.write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "1.2 | Build enkimdb-write-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkimdb-write-server:latest -f deploy/podman/Containerfile.enkimdb-write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    # ── 2. Volumes (idempotent) ────────────────────────────────────
+    - name: "2.1 | Create Write-side data volumes"
+      ansible.builtin.command: "podman volume create {{ item }}"
+      register: vol_create
+      failed_when: vol_create.rc != 0 and 'already exists' not in (vol_create.stderr | default(''))
+      changed_when: vol_create.rc == 0
+      loop:
+        - enkiddb-write-data
+        - enkimdb-write-data
+
+    # ── 3. Run Write containers ────────────────────────────────────
+    # FIXED (2026-07-26, PB-212.3): "check if exists, skip run if it
+    # does" meant rebuilding the image (step 1.1/1.2) never had any
+    # effect on an already-running container -- confirmed live as the
+    # root cause of a real production bug: enkiddb-read kept serving the
+    # pre-02a6216 JSON wire protocol for a week after that commit
+    # rewrote it to binary frames, because this container was created
+    # 2026-07-19 and every later run of this playbook found it already
+    # existed and skipped 3.2 every time, no matter how many times the
+    # image was rebuilt. A client parsing the stale JSON as the new
+    # binary format decoded `[{"ka` as a u32 and reported "matched=
+    # 1634411131 rows" -- garbage that looked like a query-engine bug
+    # but was actually a stale-container bug. Volumes are separate named
+    # mounts (`-v enkiddb-write-data:/data`), so stop+rm+recreate never
+    # touches the actual entity/eav data -- only the container process
+    # and whatever binary it's running.
+    # FIXED (2026-07-27, PB-212.4): PB-212.3's fix above (build the image,
+    # then ALWAYS stop+rm+recreate) traded one bug for another. It
+    # correctly closed "a rebuilt image never reaches an already-running
+    # container," but every run now destroys and recreates a container
+    # even when the image didn't change at all -- exactly the "why does
+    # this recreate every time" behavior the Architect asked about
+    # directly. The image ID is the right thing to compare: recreate
+    # only when the container's own running image differs from what was
+    # just built. True on a real code change (still fixes PB-212.3's
+    # bug), false on a routine re-run against unchanged code (fixes this
+    # one, and stops an unflushed in-memory write journal from being
+    # wiped for no reason on a plain redeploy).
+    - name: "3.1 | Check whether enkiddb-write needs recreating (missing, or running a different image than what was just built)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkiddb-write --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkiddb-write-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkiddb_write_status
+      changed_when: false
+
+    - name: "3.1b | Stop + remove enkiddb-write ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkiddb-write 2>/dev/null; podman rm enkiddb-write 2>/dev/null; true
+      when: "'RECREATE' in enkiddb_write_status.stdout"
+      changed_when: true
+
+    - name: "3.2 | Run enkiddb-write (port 7101, /source read-only) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkiddb-write
+        -p 7101:7101
+        -v enkiddb-write-data:/data:Z
+        -v {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}:/source:ro,z
+        -e TRIBE_ID=0x7160
+        -e FLUSH_EVERY=10
+        -e ENKIDDB_TEAM_ALLOWLIST=/source/config/enkiddb_team_allowlist.txt
+        --restart=always
+        enkiddb-write-server:latest
+      when: "'RECREATE' in enkiddb_write_status.stdout"
+      changed_when: true
+
+    - name: "3.2b | Ensure enkiddb-write is actually running (covers e.g. a stopped-but-not-recreated container)"
+      ansible.builtin.command: podman start enkiddb-write
+      changed_when: false
+      failed_when: false
+
+    - name: "3.3 | Check whether enkimdb-write needs recreating (missing, or running a different image than what was just built)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkimdb-write --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkimdb-write-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkimdb_write_status
+      changed_when: false
+
+    - name: "3.3b | Stop + remove enkimdb-write ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkimdb-write 2>/dev/null; podman rm enkimdb-write 2>/dev/null; true
+      when: "'RECREATE' in enkimdb_write_status.stdout"
+      changed_when: true
+
+    - name: "3.4 | Run enkimdb-write (port 7201, /source read-only) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkimdb-write
+        -p 7201:7201
+        -v enkimdb-write-data:/data:Z
+        -v {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}:/source:ro,z
+        -e TRIBE_ID=0xFF01
+        -e FLUSH_EVERY=50
+        --restart=always
+        enkimdb-write-server:latest
+      when: "'RECREATE' in enkimdb_write_status.stdout"
+      changed_when: true
+
+    - name: "3.4b | Ensure enkimdb-write is actually running (covers e.g. a stopped-but-not-recreated container)"
+      ansible.builtin.command: podman start enkimdb-write
+      changed_when: false
+      failed_when: false
+
+    # ── 3.5 Open the published ports in the host firewall, if one's active ──
+    # PB-212.2, found live: a `wait_for` against 127.0.0.1 (below) always
+    # succeeds regardless of firewall state -- loopback traffic isn't
+    # filtered by firewalld's zone rules. The real test is a connection
+    # from ANOTHER host (PB-213's cross-host QUERY, run from eriduous-vdi),
+    # which hit "OSError: No route to host" even though `podman ps` showed
+    # the port correctly published. firewalld (Fedora's default) blocks
+    # inbound traffic on anything but SSH out of the box; this fleet needs
+    # 7101/7201 reachable from eriduous-vdi for enkiddb-cli --remote
+    # ingestion and PB-213's cross-host sync/verify. Conditional on
+    # firewalld actually being active, so this is a no-op on any host that
+    # doesn't use it.
+    - name: "3.5a | Check if firewalld is active"
+      ansible.builtin.command: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: "3.5b | Open Write ports in firewalld"
+      ansible.builtin.command: "firewall-cmd --permanent --add-port={{ item }}/tcp"
+      become: true
+      when: firewalld_status.stdout == "active"
+      register: fw_add
+      changed_when: "'ALREADY_ENABLED' not in (fw_add.stdout | default(''))"
+      loop:
+        - 7101
+        - 7201
+
+    - name: "3.5c | Reload firewalld to apply"
+      ansible.builtin.command: firewall-cmd --reload
+      become: true
+      when: firewalld_status.stdout == "active" and (fw_add.changed | default(false))
+      changed_when: true
+
+    # ── 4. Prove both are listening ────────────────────────────────
+    - name: "4.1 | Wait for Write ports to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item }}"
+        timeout: 60
+      loop:
+        - 7101   # enkiddb-write
+        - 7201   # enkimdb-write
+
+
+- name: "PB-212b | Build + run EnkiDDB/EnkiMDB Read containers on enkidb-node-read"
+  hosts: enkidb_read
+  become: false
+
+  tasks:
+    # ── 0. Preflight ────────────────────────────────────────────────
+    # No repo checkout needed here -- Read containers never build from
+    # source or read /source (they only open DATA_DIR/current, per
+    # ADR-012's Data Files Law). The Containerfiles must still be
+    # available locally to build the image; simplest path is building
+    # the two Read images on enkidb-node-write (which already has the
+    # checkout) and `podman save`/`scp`/`podman load`-ing them across --
+    # NOT automated here. This play assumes the repo IS checked out on
+    # enkidb-node-read too (simplest operationally, and harmless: the
+    # Read containers still never mount or touch it), consistent with
+    # every other node in this fleet having its own checkout.
+    - name: "0.1 | Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: "0.2 | Show podman version"
+      ansible.builtin.debug:
+        msg: "{{ podman_version.stdout }}"
+
+    - name: "0.3 | Confirm the repo checkout exists (build context for the two Read images only)"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      register: repo_head
+      changed_when: false
+
+    - name: "0.4 | Show current commit on enkidb-node-read"
+      ansible.builtin.debug:
+        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-212's own commit."
+
+    - name: "0.5 | Check if systemd lingering is already enabled for {{ ansible_user_id }}"
+      ansible.builtin.command: "loginctl show-user {{ ansible_user_id }} --property=Linger"
+      register: linger_status
+      changed_when: false
+      failed_when: false
+
+    - name: "0.6 | Enable lingering (PB-212.1, found live: without this, rootless Podman containers are killed by systemd-logind the moment this SSH session closes)"
+      ansible.builtin.command: "loginctl enable-linger {{ ansible_user_id }}"
+      become: true
+      when: "'Linger=yes' not in linger_status.stdout"
+      changed_when: true
+
+    - name: "0.7 | Enable podman-restart.service (PB-212.2 -- makes --restart=always survive an actual host reboot, not just SSH-logout)"
+      ansible.builtin.systemd:
+        name: podman-restart.service
+        scope: user
+        enabled: true
+        state: started
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts.user_uid }}"
+
+    # ── 1. Build Read-server images ────────────────────────────────
+    - name: "1.1 | Build enkiddb-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkiddb-read-server:latest -f deploy/podman/Containerfile.read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      changed_when: true
+
+    - name: "1.2 | Build enkimdb-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkimdb-read-server:latest -f deploy/podman/Containerfile.enkimdb-read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      changed_when: true
+
+    # ── 2. Volumes (idempotent) ────────────────────────────────────
+    - name: "2.1 | Create Read-side data volumes"
+      ansible.builtin.command: "podman volume create {{ item }}"
+      register: vol_create
+      failed_when: vol_create.rc != 0 and 'already exists' not in (vol_create.stderr | default(''))
+      changed_when: vol_create.rc == 0
+      loop:
+        - enkiddb-read-data
+        - enkimdb-read-data
+
+    # ── 3. Run Read containers ─────────────────────────────────────
+    # FIXED (2026-07-26, PB-212.3): see the matching Write-side comment
+    # above -- "skip run if the container already exists" meant a
+    # rebuilt image never reached an already-running container. This is
+    # exactly what left enkiddb-read serving the pre-02a6216 JSON wire
+    # protocol for a week: created 2026-07-19, this playbook rebuilt the
+    # image on every later run but always found the container already
+    # existed and skipped recreating it. Stop+rm+recreate never touches
+    # the named data volume, only the container process.
+    # See PB-212a's own PB-212.4 comment for the full rationale: recreate
+    # only when the container's running image actually differs from what
+    # was just built, instead of unconditionally destroying it every run.
+    - name: "3.1 | Check whether enkiddb-read needs recreating (missing, or running a different image than what was just built)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkiddb-read --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkiddb-read-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkiddb_read_status
+      changed_when: false
+
+    - name: "3.1b | Stop + remove enkiddb-read ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkiddb-read 2>/dev/null; podman rm enkiddb-read 2>/dev/null; true
+      when: "'RECREATE' in enkiddb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.2 | Run enkiddb-read (port 7102) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkiddb-read
+        -p 7102:7102
+        -v enkiddb-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkiddb-read-server:latest
+      when: "'RECREATE' in enkiddb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.2b | Ensure enkiddb-read is actually running (covers e.g. a stopped-but-not-recreated container)"
+      ansible.builtin.command: podman start enkiddb-read
+      changed_when: false
+      failed_when: false
+
+    - name: "3.3 | Check whether enkimdb-read needs recreating (missing, or running a different image than what was just built)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkimdb-read --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkimdb-read-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkimdb_read_status
+      changed_when: false
+
+    - name: "3.3b | Stop + remove enkimdb-read ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkimdb-read 2>/dev/null; podman rm enkimdb-read 2>/dev/null; true
+      when: "'RECREATE' in enkimdb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.4 | Run enkimdb-read (port 7202) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkimdb-read
+        -p 7202:7202
+        -v enkimdb-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkimdb-read-server:latest
+      when: "'RECREATE' in enkimdb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.4b | Ensure enkimdb-read is actually running (covers e.g. a stopped-but-not-recreated container)"
+      ansible.builtin.command: podman start enkimdb-read
+      changed_when: false
+      failed_when: false
+
+    # ── 3.5 Open the published ports in the host firewall, if one's active ──
+    # See PB-212a's own 3.5a/b/c comment for the full rationale (found
+    # live: "No route to host" querying across the network despite the
+    # container's port being published -- firewalld's default blocks
+    # inbound traffic on anything but SSH). Ports here are the Read
+    # side's: 7102/7202, needed for PB-213's cross-host QUERY/SEARCH and
+    # any other client (TamuzAI, EaAgent, the DubSar notebook) reaching
+    # this host from elsewhere on the network.
+    - name: "3.5a | Check if firewalld is active"
+      ansible.builtin.command: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: "3.5b | Open Read ports in firewalld"
+      ansible.builtin.command: "firewall-cmd --permanent --add-port={{ item }}/tcp"
+      become: true
+      when: firewalld_status.stdout == "active"
+      register: fw_add
+      changed_when: "'ALREADY_ENABLED' not in (fw_add.stdout | default(''))"
+      loop:
+        - 7102
+        - 7202
+
+    - name: "3.5c | Reload firewalld to apply"
+      ansible.builtin.command: firewall-cmd --reload
+      become: true
+      when: firewalld_status.stdout == "active" and (fw_add.changed | default(false))
+      changed_when: true
+
+    # ── 4. Prove both are listening ────────────────────────────────
+    - name: "4.1 | Wait for Read ports to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ item }}"
+        timeout: 60
+      loop:
+        - 7102   # enkiddb-read
+        - 7202   # enkimdb-read
+
+
+- name: "PB-212c | Summary"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "Definition of done"
+      ansible.builtin.debug:
+        msg:
+          - "enkidb-node-write (192.168.122.101): enkiddb-write:7101, enkimdb-write:7201 up."
+          - "enkidb-node-read  (192.168.122.107): enkiddb-read:7102, enkimdb-read:7202 up."
+          - "enkiddb-assets stays on eriduous-vdi:7301 -- unchanged, no redeploy needed."
+          - "Next: run PB-208 (full-corpus ingestion) against enkidb-node-write to repopulate"
+          - "real data on the new split, THEN PB-213 (cross-host flush/sync/verify) -- in that"
+          - "order. Running PB-213 first (right after this redeploy, before anything is"
+          - "re-ingested) will legitimately FLUSH:0 and its own safety guard will refuse to"
+          - "sync that empty state over a populated Read Node. See PB-215's own PB-215.1 note."
+          - "Then update client defaults (TamuzAI/EaAgent !enkiddb, DubSar notebook, akkadi-cli)"
+          - "from eriduous-vdi's IP to enkidb-node-read's IP (192.168.122.107) for queries."

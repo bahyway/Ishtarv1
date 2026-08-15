@@ -1,0 +1,82 @@
+# =============================================================================
+# PB-180 — OTAP Pipeline for the EnkiDDB Rebuild
+# BahyWay.Ecosystem v4.0 — 2026-07-12
+#
+# CONTEXT: the Architect proposed a temporary GitHub repository to host the
+# new EnkiDDB EAV structure, moved through OTAP (Ontwikkeling/Test/
+# Acceptatie/Productie) stages until it reaches Production -- full working
+# documentation database, HeptaScript query language, ENLIL 7-index stack
+# (>1 billion particles, <1s), and the AI Agents on top of it.
+#
+# CORRECTED AND CONFIRMED WITH THE ARCHITECT: a second repository can't
+# actually build -- `enkiddb` path-depends on a dozen+ sibling crates
+# (enkidb-kaki, enkidb-particles, enkidb-journal, enkidb-readnode,
+# heptascript, adapa-recall, bahyway-core, akkvalue, enkidb-ingest, ...)
+# that would all need vendoring or a private registry, which this
+# sovereign/offline/pure-Rust ecosystem deliberately has none of. Asked
+# the Architect to choose between (a) branch-based OTAP in the same repo
+# or (b) a separate repo seeded as a full workspace clone. Architect chose
+# (a).
+#
+# WHAT WAS BUILT:
+#   - docs/OTAP_PIPELINE.md: the four stages and what each one means --
+#       O(dev)  -> otap/dev     -- active rebuild work lands here first
+#       T(est)  -> otap/test    -- promoted once cargo test --workspace
+#                                   is green
+#       A(ccept)-> otap/accept  -- promoted once Test passes AND a real
+#                                   smoke test has run (enkiddb-ingest
+#                                   against real docs, RagIndex search
+#                                   returning real hits)
+#       P(rod)  -> master       -- the EXISTING default branch, not a new
+#                                   one invented for this pipeline; this is
+#                                   what actually gets deployed as
+#                                   enkiddb-write-server/enkiddb-read-server
+#                                   systemd services on enkidb-node-write/
+#                                   enkidb-node-read, mirroring the
+#                                   existing enkidb-query-server pattern
+#                                   (playbook_34/35, port 7001)
+#     Also states a concrete "definition of done" for the scope the
+#     Architect named (EAV structure, HeptaScript, ENLIL 7-index stack,
+#     AI Agents) so "reaches Production" is checkable, not vague -- and
+#     names the real open gaps against that definition honestly (ENLIL
+#     7-index list still unconfirmed by the Architect; enkidullm-codex,
+#     the AI-agent query bridge, still unbuilt).
+#   - scripts/otap-promote.sh: `otap-promote.sh <from> <to>
+#     [--i-understand-this-is-production]`. Fast-forward-only merge (never
+#     a merge commit, never a force-push -- refuses and tells you to
+#     reconcile by hand if the branches have diverged), gated by
+#     `cargo test --workspace` passing on the merged result before it
+#     pushes. Promoting into `master` additionally requires the explicit
+#     flag -- without it the script prints what it would do and exits
+#     untouched, since that promotion is the one that results in a real
+#     VM redeploy.
+#   - Day-to-day rebuild work still happens on this session's designated
+#     working branch (claude/iphone-playbooks-crosstribe-eval-nbc5sw), not
+#     directly on otap/dev -- keeps the working branch's own history
+#     intact and makes "what's in the Dev stage right now" an explicit
+#     promotion event, not implicit.
+#
+# SMOKE-TESTED FOR REAL: ran otap-promote.sh dev->test and test->accept
+# against the freshly created otap/dev branch (seeded from this commit).
+# Both promotions passed the full workspace test suite gate and pushed
+# successfully -- see commit history for otap/dev, otap/test, otap/accept.
+#
+# STILL OPEN: no promotion into master has happened (nor will it
+# automatically) -- that is the Architect's call. enkiddb-write-server /
+# enkiddb-read-server (the actual TCP services that would run on
+# enkidb-node-write/enkidb-node-read once something DOES reach
+# Production) do not exist yet -- separate, not-yet-started work.
+# =============================================================================
+---
+- name: "PB-180 | Record — OTAP pipeline for the EnkiDDB rebuild landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-180.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-12, plus branches otap/dev, otap/test, otap/accept.
+          Read docs/OTAP_PIPELINE.md for the stage mapping. Run
+          `bash scripts/otap-promote.sh <from> <to>` to promote.

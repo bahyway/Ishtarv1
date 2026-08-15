@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · The Inner Life of Data — cellular shape discovery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Alegreya+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#03070f; --lapis:#0E2148; --glaze:#1B3B6F;
+  --gold:#E3B458; --faience:#62D6C5; --unknown:#a2559e; --unknown-hi:#c77bc0;
+  --brick:#C4633F; --dead:#54626f; --bone:#F1E8D4; --bone-dim:#b9b09a; --ash:#7d8597; --green:#7fd99a;
+  --font-display:'Marcellus',serif; --font-body:'Alegreya Sans',sans-serif; --font-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--bone);font-family:var(--font-body)}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;font-family:var(--font-data);z-index:5}
+.hud-title{top:14px;left:0;right:0;text-align:center;pointer-events:none}
+.hud-title h1{font-family:var(--font-display);font-weight:400;font-size:21px;letter-spacing:.2em;color:var(--faience);text-shadow:0 0 22px rgba(98,214,197,.45)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:10px;letter-spacing:.26em;color:var(--bone-dim);margin-top:5px}
+.panel{background:rgba(3,7,15,.82);border:1px solid var(--glaze);border-radius:3px;padding:11px 13px}
+.hud-info{top:92px;left:18px;max-width:290px;border-left:3px solid var(--faience)}
+.hud-info .t{font-family:var(--font-display);letter-spacing:.14em;color:var(--faience);font-size:12px}
+.hud-info .d{font-size:10.5px;color:var(--bone-dim);line-height:1.55;font-family:var(--font-body);margin-top:5px}
+.hud-legend{bottom:64px;left:18px;max-width:340px;font-size:10px;color:var(--ash);line-height:1.7}
+.hud-legend b{font-weight:500}
+.lg{color:var(--green)}.lf{color:var(--brick)}.ld{color:var(--dead)}.lc{color:var(--faience)}.lm{color:var(--unknown-hi)}
+.hud-read{top:92px;right:18px;width:236px;display:none}
+.hud-read .n{font-family:var(--font-display);font-size:13px;color:var(--gold)}
+.hud-read .row{display:flex;justify-content:space-between;font-size:10.5px;padding:3px 0;border-bottom:1px dotted #14264e}
+.hud-read .row .k{color:var(--ash)} .hud-read .row .v{color:var(--bone)}
+.hud-controls{bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:7px;align-items:center;background:rgba(3,7,15,.85);border:1px solid var(--glaze);border-radius:3px;padding:8px 12px}
+.hud-controls button{background:var(--glaze);border:none;color:var(--bone-dim);border-radius:3px;font-family:var(--font-display);letter-spacing:.05em;font-size:11.5px;padding:7px 12px}
+.hud-controls button.on{background:var(--faience);color:#04231f}
+.hud-controls .sp{color:var(--ash);font-size:10px}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(3,7,15,.92);border-top:1px solid var(--glaze);font-family:var(--font-data);font-size:9px;color:var(--ash);padding:4px 18px;z-index:6}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">𒁾</span>&nbsp; THE INNER LIFE OF DATA</h1>
+  <div class="sub">CARDIOLOGY CORPUS · SHAPE DISCOVERED AS LIVING CELL · CARRIERS WALK DEPENDENCIES · ε IS JITTER · τ IS DECAY</div>
+</div>
+
+<div class="hud hud-info panel">
+  <div class="t" id="info-t">THE CORPUS AS A CELL</div>
+  <div class="d" id="info-d">Concepts are organelles. Chunk-particles crowd the cytoplasm, each jittering by its own ε (uncertainty made visible). Kinesin-like carriers walk cargo along microtubule dependency-tracks — data delivered where it's needed, not floating. Everything ages: watch GOLDEN drift to FUZZY to DEAD. Scroll to dive in; drag to fly.</div>
+</div>
+
+<div class="hud hud-legend panel">
+  <b class="lc">▬ microtubule</b> = dependency track · <b>◆ carrier</b> = kinesin walking a chunk to its concept ·
+  <b class="lm">◉ organelle</b> = concept well · jitter = <b>ε</b> uncertainty · membrane thickness = <b>τ</b> ·
+  <b class="lg">green</b> GOLDEN · <b class="lf">amber</b> FUZZY · <b class="ld">grey</b> DEAD · hover a particle to read it.
+</div>
+
+<div class="hud hud-read panel" id="read-card">
+  <div class="n" id="rc-name">—</div>
+  <div id="rc-body" style="margin-top:5px"></div>
+</div>
+
+<div class="hud hud-controls">
+  <button id="btn-decay" class="on" aria-pressed="true">AGING ⏱</button>
+  <button id="btn-jitter" class="on" aria-pressed="true">ε JITTER</button>
+  <button id="btn-walk" class="on" aria-pressed="true">CARRIERS</button>
+  <button id="btn-spin" class="on" aria-pressed="true">FLY ✦</button>
+</div>
+
+<footer>Way-of-Work rule 5 — HTML prototype; production body Godot/WGPU. Motion is data-informed: τ/ε/decay/dependency from LamassuEngine drive walk-speed, jitter, and aging. Inspired by Harvard/XVIVO "Inner Life of the Cell." Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function rnd(){return Math.random()}
+
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x03070f,0.0011);
+const camera=new THREE.PerspectiveCamera(56,2,0.1,6000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x03070f,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x557799,0.8));
+const key=new THREE.PointLight(0x9fd8ff,1.1,1600); key.position.set(200,300,300); scene.add(key);
+const warm=new THREE.PointLight(0xE3B458,0.5,1400); warm.position.set(-260,-160,180); scene.add(warm);
+
+/* ---- cell membrane (translucent sphere we live inside) ---- */
+(function(){
+  const m=new THREE.Mesh(new THREE.SphereGeometry(560,40,32),
+    new THREE.MeshPhongMaterial({color:0x0d2a4a,transparent:true,opacity:0.12,side:THREE.BackSide,shininess:8}));
+  scene.add(m);
+  const inner=new THREE.Mesh(new THREE.SphereGeometry(555,32,24),
+    new THREE.MeshBasicMaterial({color:0x123a63,wireframe:true,transparent:true,opacity:0.06,side:THREE.BackSide}));
+  scene.add(inner);
+})();
+
+function stateColor(age){ return age<0.5?0x7fd99a : age<0.82?0xC4633F : 0x54626f; }
+function stateName(age){ return age<0.5?'GOLDEN' : age<0.82?'FUZZY':'DEAD'; }
+
+/* ---- organelles: concept wells ---- */
+const CONCEPTS=[
+  {label:'ICD-I20–I25',pos:new THREE.Vector3(-160,60,-40)},
+  {label:'SNOMED-cardio',pos:new THREE.Vector3(180,-40,60)},
+];
+const KINDS=['ECG event','echo report','cath note','vital series'];
+const organelles=[]; const pickables=[];
+CONCEPTS.forEach(c=>{
+  const grp=new THREE.Group(); grp.position.copy(c.pos);
+  const core=new THREE.Mesh(new THREE.SphereGeometry(30,28,28),
+    new THREE.MeshPhongMaterial({color:0xa2559e,emissive:0x3a1636,shininess:30}));
+  // tau membrane — a translucent shell whose thickness we vary
+  const tau=0.15+rnd()*0.35;
+  const memb=new THREE.Mesh(new THREE.SphereGeometry(30+tau*22,24,20),
+    new THREE.MeshPhongMaterial({color:0xc77bc0,transparent:true,opacity:0.18,shininess:10}));
+  grp.add(core,memb);
+  grp.userData={particle:{label:c.label,type:'concept · organelle',age:rnd()*0.3,tau:+tau.toFixed(2),eps:+(rnd()*0.1).toFixed(3)},core};
+  scene.add(grp); organelles.push(grp); pickables.push(grp);
+});
+
+/* ---- microtubules: dependency tracks between organelles and out to the rim ---- */
+const tracks=[];
+function makeTrack(a,b){
+  const curve=new THREE.CatmullRomCurve3([a,
+    a.clone().lerp(b,0.35).add(new THREE.Vector3((rnd()-.5)*80,(rnd()-.5)*80,(rnd()-.5)*80)),
+    a.clone().lerp(b,0.7).add(new THREE.Vector3((rnd()-.5)*60,(rnd()-.5)*60,(rnd()-.5)*60)),
+    b]);
+  const tube=new THREE.Mesh(new THREE.TubeGeometry(curve,64,2.2,7,false),
+    new THREE.MeshPhongMaterial({color:0x2f6f8f,emissive:0x0a2230,transparent:true,opacity:0.6,shininess:20}));
+  scene.add(tube);
+  tracks.push({curve,tube,age:rnd()*0.4});
+  return curve;
+}
+// organelle-to-organelle
+makeTrack(organelles[0].position, organelles[1].position);
+// organelle-to-rim (several, like microtubules radiating)
+organelles.forEach(o=>{ for(let k=0;k<3;k++){
+  const dir=new THREE.Vector3(rnd()-.5,rnd()-.5,rnd()-.5).normalize().multiplyScalar(430);
+  makeTrack(o.position, dir);
+}});
+
+/* ---- kinesin-like carriers: walk a chunk cargo along a track ---- */
+const carriers=[];
+function spawnCarrier(){
+  const track=tracks[rnd()*tracks.length|0];
+  const grp=new THREE.Group();
+  // the "motor" — two little feet + a vesicle cargo
+  const foot=new THREE.Mesh(new THREE.SphereGeometry(3,10,10),new THREE.MeshPhongMaterial({color:0xE3B458}));
+  const foot2=foot.clone(); foot2.position.x=6;
+  const cargoAge=rnd();
+  const cargo=new THREE.Mesh(new THREE.SphereGeometry(7,14,14),
+    new THREE.MeshPhongMaterial({color:stateColor(cargoAge),emissive:0x111a22,shininess:20}));
+  cargo.position.set(3,10,0);
+  grp.add(foot,foot2,cargo);
+  const kind=KINDS[rnd()*KINDS.length|0];
+  grp.userData={track,t:rnd()*0.2,cargo,
+    particle:{label:kind+' → concept',type:'carrier (kinesin)',age:cargoAge,
+      tau:+(rnd()*0.3).toFixed(2),eps:+(rnd()*0.25).toFixed(3)},
+    speed:0.03+ (1-cargoAge)*0.06};
+  scene.add(grp); carriers.push(grp); pickables.push(grp);
+}
+for(let i=0;i<10;i++)spawnCarrier();
+
+/* ---- crowded cytoplasm: hundreds of jittering chunk-particles (ε = jitter) ---- */
+const CROWD=520;
+const crowdGeo=new THREE.BufferGeometry();
+const cpos=new Float32Array(CROWD*3), ccol=new Float32Array(CROWD*3);
+const crowd=[]; // per-particle life
+for(let i=0;i<CROWD;i++){
+  const r=80+rnd()*440, a=rnd()*Math.PI*2, ph=(rnd()-.5)*Math.PI;
+  const base=new THREE.Vector3(Math.cos(a)*Math.cos(ph)*r, Math.sin(ph)*r*0.8, Math.sin(a)*Math.cos(ph)*r);
+  const age=rnd(); const eps=rnd(); // higher eps = more jitter
+  crowd.push({base,age,eps,seed:rnd()*6.28,decay:0.01+rnd()*0.04});
+  cpos[i*3]=base.x;cpos[i*3+1]=base.y;cpos[i*3+2]=base.z;
+  const c=new THREE.Color(stateColor(age)); ccol[i*3]=c.r;ccol[i*3+1]=c.g;ccol[i*3+2]=c.b;
+}
+crowdGeo.setAttribute('position',new THREE.BufferAttribute(cpos,3));
+crowdGeo.setAttribute('color',new THREE.BufferAttribute(ccol,3));
+const crowdPts=new THREE.Points(crowdGeo,new THREE.PointsMaterial({size:4.5,vertexColors:true,transparent:true,opacity:0.9,depthWrite:false}));
+scene.add(crowdPts);
+
+/* ---- controls ---- */
+let decayOn=!reduced, jitterOn=!reduced, walkOn=!reduced, spin=!reduced;
+const wire=(id,set)=>{const b=document.getElementById(id);b.onclick=()=>{const v=set();b.classList.toggle('on',v);b.setAttribute('aria-pressed',v);};};
+wire('btn-decay',()=>decayOn=!decayOn);
+wire('btn-jitter',()=>jitterOn=!jitterOn);
+wire('btn-walk',()=>walkOn=!walkOn);
+wire('btn-spin',()=>spin=!spin);
+
+/* camera: fly + hubble scroll */
+let az=0.5, el=0.3, camDist=760, camDistTarget=760, dragging=false, lx=0, ly=0;
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();
+  camDistTarget=Math.max(60,Math.min(1600,camDistTarget*(1+Math.sign(e.deltaY)*0.09)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{if(!dragging)return;az-=(e.clientX-lx)*0.005;el=Math.max(-1.35,Math.min(1.35,el+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;});
+
+/* hover read */
+renderer.domElement.addEventListener('mousemove',e=>{
+  const r=renderer.domElement.getBoundingClientRect();
+  let best=null,bd=40;
+  pickables.forEach(g=>{const wp=new THREE.Vector3();g.getWorldPosition(wp);wp.project(camera);
+    if(wp.z>=1)return;const sx=(wp.x*.5+.5)*r.width,sy=(-wp.y*.5+.5)*r.height;
+    const d=Math.hypot(e.clientX-r.left-sx,e.clientY-r.top-sy);if(d<bd){bd=d;best=g;}});
+  const el2=document.getElementById('read-card');
+  if(best){el2.style.display='block';const p=best.userData.particle;
+    const st=stateName(p.age);
+    document.getElementById('rc-name').textContent=p.label;
+    document.getElementById('rc-body').innerHTML=
+      `<div class="row"><span class="k">type</span><span class="v">${p.type}</span></div>
+       <div class="row"><span class="k">state</span><span class="v" style="color:${'#'+stateColor(p.age).toString(16)}">${st}</span></div>
+       <div class="row"><span class="k">age</span><span class="v">${(p.age*100|0)}% of life</span></div>
+       <div class="row"><span class="k">τ</span><span class="v">${p.tau}</span></div>
+       <div class="row"><span class="k">ε (jitter)</span><span class="v">${p.eps}</span></div>`;
+    renderer.domElement.style.cursor='pointer';
+  } else {el2.style.display='none';renderer.domElement.style.cursor=dragging?'grabbing':'grab';}
+});
+
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  const t=ts/1000;
+  if(spin)az+=dt*0.05;
+  camDist+=(camDistTarget-camDist)*Math.min(1,dt*3);
+
+  // organelles: age, pulse, membrane thickness = tau
+  organelles.forEach(o=>{const p=o.userData.particle;
+    if(decayOn)p.age=Math.min(1,p.age+dt*0.01);
+    o.userData.core.material.color.setHex(stateColor(p.age));
+    o.userData.core.material.emissive.setHex(p.age<0.5?0x123a2a:p.age<0.82?0x3a1e10:0x1a2028);
+    o.scale.setScalar(1+Math.sin(t*0.8+o.position.x)*0.03);
+  });
+
+  // carriers: WALK along their track (kinesin), cargo colored by age
+  carriers.forEach(c=>{
+    if(walkOn) c.userData.t += dt*c.userData.speed;
+    if(c.userData.t>1){ // delivered — respawn on a new track
+      c.userData.t=0; c.userData.track=tracks[rnd()*tracks.length|0];
+      c.userData.particle.age=rnd(); c.userData.speed=0.03+(1-c.userData.particle.age)*0.06;
+    }
+    const p=c.userData.track.curve.getPointAt(Math.min(0.999,c.userData.t));
+    const ahead=c.userData.track.curve.getPointAt(Math.min(0.999,c.userData.t+0.02));
+    // little stepping bob = the "walk"
+    const bob=Math.sin(c.userData.t*80)*1.6;
+    c.position.copy(p); c.position.y+=bob;
+    c.lookAt(ahead);
+    if(decayOn)c.userData.particle.age=Math.min(1,c.userData.particle.age+dt*0.02);
+    c.userData.cargo.material.color.setHex(stateColor(c.userData.particle.age));
+  });
+
+  // microtubule tracks fray with age
+  tracks.forEach(tr=>{ if(decayOn)tr.age=Math.min(1,tr.age+dt*0.004);
+    tr.tube.material.opacity=Math.max(0.12,0.6-tr.age*0.4);
+    tr.tube.material.color.setHex(tr.age<0.5?0x2f6f8f:tr.age<0.82?0x5a4a2a:0x2a3540);
+  });
+
+  // crowd: Brownian jitter scaled by ε; drift+decay; recolor by age
+  const arr=crowdGeo.attributes.position.array, col=crowdGeo.attributes.color.array;
+  for(let i=0;i<CROWD;i++){
+    const c=crowd[i];
+    if(decayOn)c.age=Math.min(1,c.age+dt*c.decay*0.2);
+    const j=jitterOn? c.eps*10 : 0;
+    arr[i*3]  =c.base.x+Math.sin(t*2+c.seed)*j + Math.sin(t*5.3+i)*j*0.4;
+    arr[i*3+1]=c.base.y+Math.cos(t*2.2+c.seed)*j + Math.cos(t*4.7+i)*j*0.4;
+    arr[i*3+2]=c.base.z+Math.sin(t*1.7+c.seed*1.3)*j;
+    // outward drift with age (cost accumulation)
+    c.base.multiplyScalar(1+ (decayOn?dt*0.0008*c.age:0));
+    const cc=new THREE.Color(stateColor(c.age));
+    col[i*3]=cc.r;col[i*3+1]=cc.g;col[i*3+2]=cc.b;
+  }
+  crowdGeo.attributes.position.needsUpdate=true;
+  crowdGeo.attributes.color.needsUpdate=true;
+
+  const cx=Math.cos(az)*Math.cos(el)*camDist, cy=Math.sin(el)*camDist, cz=Math.sin(az)*Math.cos(el)*camDist;
+  camera.position.set(cx,cy,cz); camera.lookAt(0,0,0);
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,309 @@
+---
+# ============================================================
+# Playbook 10 — Fix VM disk paths + start all VMs
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+#
+# Problem: VM XML points to old path /home/bfadam/Forge/vdi/
+#          Actual qcow2 files are at:
+#          /home/bfadam/Forge/FedoraWorkstation44Infra/vdi/
+#
+# Fix: update disk source path in each VM XML definition
+#      then start all VMs in correct order
+#
+# Run on enkilab HOST:
+#   ansible-playbook ~/Downloads/10_fix_vm_disk_paths.yml -v
+# ============================================================
+
+- name: "𒁾 Fix VM disk paths + start all VMs"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    old_vdi: "/home/bfadam/Forge/vdi"
+    new_vdi: "/home/bfadam/Forge/FedoraWorkstation44Infra/vdi"
+    vm_write:    "enkidb-node-write"
+    vm_read:     "enkidb-node-read"
+    vm_dubsar:   "dubsar-workstation"
+    ip_eriduous: "192.168.122.214"
+    ip_write:    "192.168.122.101"
+    ip_read:     "192.168.122.107"
+    ip_dubsar:   "192.168.122.121"
+    ssh_user:    "bahyway"
+
+  tasks:
+
+    # ── Step 1: Confirm eriduous-vdi is already running ───────────────────
+    - name: "Check VM states before fix"
+      ansible.builtin.shell:
+        cmd: sudo virsh list --all
+      register: vm_states
+      changed_when: false
+
+    - name: "Current VM states"
+      ansible.builtin.debug:
+        msg: "{{ vm_states.stdout_lines }}"
+
+    # ── Step 2: Confirm actual disk files exist ────────────────────────────
+    - name: "Verify enkidb-node-write.qcow2 exists at new path"
+      ansible.builtin.stat:
+        path: "{{ new_vdi }}/enkidb-node-write.qcow2"
+      register: disk_write
+      failed_when: not disk_write.stat.exists
+
+    - name: "Verify enkidb-node-read.qcow2 exists at new path"
+      ansible.builtin.stat:
+        path: "{{ new_vdi }}/enkidb-node-read.qcow2"
+      register: disk_read
+      failed_when: not disk_read.stat.exists
+
+    - name: "Verify dubsar-workstation.qcow2 exists at new path"
+      ansible.builtin.stat:
+        path: "{{ new_vdi }}/dubsar-workstation.qcow2"
+      register: disk_dubsar
+      failed_when: not disk_dubsar.stat.exists
+
+    - name: "✓ All disk images confirmed at new path"
+      ansible.builtin.debug:
+        msg:
+          - "enkidb-node-write: {{ disk_write.stat.size | filesizeformat }}"
+          - "enkidb-node-read:  {{ disk_read.stat.size | filesizeformat }}"
+          - "dubsar-workstation:{{ disk_dubsar.stat.size | filesizeformat }}"
+
+    # ── Step 3: Update disk path in enkidb-node-write XML ─────────────────
+    - name: "Dump enkidb-node-write XML"
+      ansible.builtin.shell:
+        cmd: sudo virsh dumpxml {{ vm_write }}
+      register: xml_write
+      changed_when: false
+
+    - name: "Save updated enkidb-node-write XML"
+      ansible.builtin.copy:
+        dest:    "/tmp/enkidb-node-write.xml"
+        content: "{{ xml_write.stdout | replace(old_vdi, new_vdi) }}"
+        mode:    "0644"
+
+    - name: "Redefine enkidb-node-write with new disk path"
+      ansible.builtin.shell:
+        cmd: sudo virsh define /tmp/enkidb-node-write.xml
+      register: redefine_write
+      changed_when: true
+      failed_when:  redefine_write.rc != 0
+
+    - name: "✓ enkidb-node-write redefined"
+      ansible.builtin.debug:
+        msg: "{{ redefine_write.stdout }}"
+
+    # ── Step 4: Update disk path in enkidb-node-read XML ──────────────────
+    - name: "Dump enkidb-node-read XML"
+      ansible.builtin.shell:
+        cmd: sudo virsh dumpxml {{ vm_read }}
+      register: xml_read
+      changed_when: false
+
+    - name: "Save updated enkidb-node-read XML"
+      ansible.builtin.copy:
+        dest:    "/tmp/enkidb-node-read.xml"
+        content: "{{ xml_read.stdout | replace(old_vdi, new_vdi) }}"
+        mode:    "0644"
+
+    - name: "Redefine enkidb-node-read with new disk path"
+      ansible.builtin.shell:
+        cmd: sudo virsh define /tmp/enkidb-node-read.xml
+      register: redefine_read
+      changed_when: true
+      failed_when:  redefine_read.rc != 0
+
+    - name: "✓ enkidb-node-read redefined"
+      ansible.builtin.debug:
+        msg: "{{ redefine_read.stdout }}"
+
+    # ── Step 5: Update disk path in dubsar-workstation XML ────────────────
+    - name: "Dump dubsar-workstation XML"
+      ansible.builtin.shell:
+        cmd: sudo virsh dumpxml {{ vm_dubsar }}
+      register: xml_dubsar
+      changed_when: false
+
+    - name: "Save updated dubsar-workstation XML"
+      ansible.builtin.copy:
+        dest:    "/tmp/dubsar-workstation.xml"
+        content: "{{ xml_dubsar.stdout | replace(old_vdi, new_vdi) }}"
+        mode:    "0644"
+
+    - name: "Redefine dubsar-workstation with new disk path"
+      ansible.builtin.shell:
+        cmd: sudo virsh define /tmp/dubsar-workstation.xml
+      register: redefine_dubsar
+      changed_when: true
+      failed_when:  redefine_dubsar.rc != 0
+
+    - name: "✓ dubsar-workstation redefined"
+      ansible.builtin.debug:
+        msg: "{{ redefine_dubsar.stdout }}"
+
+    # ── Step 6: Verify all 3 VMs now point to correct disk ────────────────
+    - name: "Verify enkidb-node-write disk path"
+      ansible.builtin.shell:
+        cmd: sudo virsh domblklist {{ vm_write }}
+      register: bl_write
+      changed_when: false
+
+    - name: "Verify enkidb-node-read disk path"
+      ansible.builtin.shell:
+        cmd: sudo virsh domblklist {{ vm_read }}
+      register: bl_read
+      changed_when: false
+
+    - name: "Verify dubsar-workstation disk path"
+      ansible.builtin.shell:
+        cmd: sudo virsh domblklist {{ vm_dubsar }}
+      register: bl_dubsar
+      changed_when: false
+
+    - name: "✓ Updated disk paths"
+      ansible.builtin.debug:
+        msg:
+          - "write:  {{ bl_write.stdout_lines }}"
+          - "read:   {{ bl_read.stdout_lines }}"
+          - "dubsar: {{ bl_dubsar.stdout_lines }}"
+
+    - name: "Assert new path in write VM"
+      ansible.builtin.assert:
+        that: "new_vdi in bl_write.stdout"
+        success_msg: "✓ enkidb-node-write path correct"
+        fail_msg:    "enkidb-node-write still has old path"
+
+    - name: "Assert new path in read VM"
+      ansible.builtin.assert:
+        that: "new_vdi in bl_read.stdout"
+        success_msg: "✓ enkidb-node-read path correct"
+        fail_msg:    "enkidb-node-read still has old path"
+
+    # ── Step 7: Start enkidb-node-write ───────────────────────────────────
+    - name: "Start enkidb-node-write"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_write }}
+      register: start_write
+      changed_when: true
+      failed_when:
+        - start_write.rc != 0
+        - "'already running' not in start_write.stderr"
+
+    - name: "Wait 30s for enkidb-node-write to boot"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on enkidb-node-write"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_write }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    - name: "Check journal.bin on write node"
+      ansible.builtin.shell:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no {{ ssh_user }}@{{ ip_write }}
+          "ls -lh /home/bahyway/enkidb/data/tribe-0001/journal.bin
+           2>/dev/null || echo NOT_FOUND"
+      register: journal_write
+      changed_when: false
+
+    - name: "✓ Write node journal.bin: {{ journal_write.stdout }}"
+      ansible.builtin.debug:
+        msg: "{{ journal_write.stdout }}"
+
+    # ── Step 8: Start enkidb-node-read ────────────────────────────────────
+    - name: "Start enkidb-node-read"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_read }}
+      register: start_read
+      changed_when: true
+      failed_when:
+        - start_read.rc != 0
+        - "'already running' not in start_read.stderr"
+
+    - name: "Wait 30s for enkidb-node-read to boot"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on enkidb-node-read"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_read }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    - name: "Check journal.bin on read node"
+      ansible.builtin.shell:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no {{ ssh_user }}@{{ ip_read }}
+          "ls -lh /home/bahyway/enkidb/data/tribe-0001/journal.bin
+           2>/dev/null || echo NOT_FOUND"
+      register: journal_read
+      changed_when: false
+
+    - name: "✓ Read node journal.bin: {{ journal_read.stdout }}"
+      ansible.builtin.debug:
+        msg: "{{ journal_read.stdout }}"
+
+    # ── Step 9: Start dubsar-workstation ──────────────────────────────────
+    - name: "Start dubsar-workstation"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_dubsar }}
+      register: start_dubsar
+      changed_when: true
+      failed_when:
+        - start_dubsar.rc != 0
+        - "'already running' not in start_dubsar.stderr"
+
+    - name: "Wait 30s for dubsar-workstation"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on dubsar-workstation"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_dubsar }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    # ── Step 10: Final status ─────────────────────────────────────────────
+    - name: "Final VM list"
+      ansible.builtin.shell:
+        cmd: sudo virsh list --all
+      register: final_list
+      changed_when: false
+
+    - name: "✓ All VMs"
+      ansible.builtin.debug:
+        msg: "{{ final_list.stdout_lines }}"
+
+    # ── Step 11: Open eriduous-vdi console ────────────────────────────────
+    - name: "Launch virt-viewer for eriduous-vdi"
+      ansible.builtin.shell:
+        cmd: "virt-viewer eriduous-vdi &"
+      changed_when: true
+      failed_when: false
+
+    # ── Step 12: Done ─────────────────────────────────────────────────────
+    - name: "𒁾 All systems restored"
+      ansible.builtin.debug:
+        msg:
+          - "=============================================="
+          - "𒁾 BahyWay.Ecosystem v4.0 — All Systems Online"
+          - "----------------------------------------------"
+          - "eriduous-vdi       {{ ip_eriduous }}  ✓"
+          - "enkidb-node-write  {{ ip_write }}   ✓"
+          - "enkidb-node-read   {{ ip_read }}   ✓"
+          - "dubsar-workstation {{ ip_dubsar }}  ✓"
+          - "----------------------------------------------"
+          - "Disk path fixed:"
+          - "  OLD: {{ old_vdi }}"
+          - "  NEW: {{ new_vdi }}"
+          - "----------------------------------------------"
+          - "In eriduous-vdi desktop terminal run:"
+          - "  cd ~/Forge/bahyway_v4"
+          - "  cargo run -p dubsar-visualizer"
+          - "=============================================="

@@ -1,0 +1,86 @@
+# =============================================================================
+# PB-178 — enkiddb-ingest CLI: the real "upload my documentation" tool
+# BahyWay.Ecosystem v4.0 — 2026-07-12
+#
+# CONTEXT: direct follow-up to PB-177 (RAG categorization/chunking). The
+# Architect asked concretely: "HOW can I Now import or upload my
+# documentations into EnkiDDB?" and attached a real tree listing of their
+# local BahyWay v4 folder -- 546 Markdown files (plus a couple of .docx)
+# scattered across many subfolders on their own machine, outside this
+# repo. PB-177 built the categorization/chunking/indexing mechanism but
+# left the actual "walk a folder and journal everything" step as a bare
+# API on WriteNode with no runnable entry point -- not a real answer to
+# "how". This playbook closes that gap.
+#
+# WHAT WAS BUILT:
+#   - crates/enkiddb/src/writenode.rs:
+#       WriteNode::ingest_document_from_path(path, epoch) -- read one .md
+#       file off disk, categorize it via ingest::infer_collection, journal
+#       it plus every section, with a meta.source_path particle for
+#       traceability (matching ingest::ingest_directory's convention).
+#       WriteNode::ingest_directory_categorized(root, start_epoch) -- walk
+#       root for every .md file (reusing ingest::collect_markdown_files,
+#       now pub(crate) so the two directory walks can't drift apart) and
+#       journal each one via the above. This is the one call that answers
+#       "how do I get my docs into EnkiDDB": everything after it
+#       (materialize, RagIndex::build) was already real from PB-177.
+#     Refactored ingest_document_categorized to share a
+#     journal_document_and_sections tail with the new path-based method
+#     instead of duplicating the mint+journal logic a third time.
+#   - crates/enkiddb/src/emitter.rs: DocumentEmitter::minter() accessor --
+#     needed so WriteNode can mint its own Event-Kakis alongside an
+#     emitter's Identity-Kakis without a second KakiMinter or an
+#     unnecessary &mut self/&self.minter borrow conflict.
+#   - crates/enkiddb-ingest/ (NEW crate, bin target, mirrors the existing
+#     esarhaddon-ingest / najaf-ingest CLI convention -- plain env::args(),
+#     no CLI-parsing dependency): `enkiddb-ingest <docs_root> <output_root>
+#     <version> [search_query]`. Walks docs_root, journals + categorizes +
+#     chunks every file, materializes a named Tigris generation to
+#     output_root, builds a RagIndex, and (if a query is given) runs a
+#     live search demo printing each hit's score and a preview of its
+#     full body.text.
+#
+# SMOKE-TESTED FOR REAL: ran `enkiddb-ingest ./docs /tmp/.../smoke 4.0
+# "KAKI identity"` against this repo's own docs/ folder (not a synthetic
+# fixture) -- 22 real documents, 331 real section chunks, 353 Journal
+# entries, materialized to disk, RAG search returned genuinely on-topic
+# hits (top hit: the KAKI immutability-law paragraph; second hit: the
+# KakiRole enum definition). Output deleted after the smoke test --
+# nothing left behind in the repo from it.
+#
+# HONEST SCOPE, STATED PLAINLY:
+#   1. The .docx files in the Architect's tree (2 seen in
+#      "_Architecting-Design References") are NOT read by this tool --
+#      DocumentParser only understands Markdown. They need converting to
+#      .md first (e.g. via pandoc, or Word's own "Save as Markdown" where
+#      available) before this CLI will pick them up.
+#   2. RagIndex is built from the in-memory Journal each run -- it is not
+#      persisted to disk. The Data Files this CLI materializes ARE
+#      persisted and queryable via ReadNode/HeptaScript across restarts;
+#      the RAG search demo is not, yet. Re-running the CLI rebuilds it
+#      cheaply (same batch-rebuild contract as materialize_version).
+#   3. This sandbox has no network access to the Architect's local
+#      machine -- the binary had to be smoke-tested against this repo's
+#      own docs/ folder. The Architect runs it themselves, pointed at
+#      their real BahyWayV4 folder, on their own machine or eriduous-vdi.
+#
+# TESTS: enkiddb 36/36 -> 38/38 (+2: ingest_document_from_path,
+#   ingest_directory_categorized). enkiddb-ingest: bin crate, builds
+#   clean, smoke-tested manually as described above (no unit tests --
+#   it's a thin CLI shell over already-tested enkiddb library code).
+#   Full workspace: 3409 passed, 0 failed (was 3407).
+# =============================================================================
+---
+- name: "PB-178 | Record — enkiddb-ingest CLI landed, real docs directory upload path proven"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-178.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-12. New crate: crates/enkiddb-ingest (bin: enkiddb-ingest).
+          Usage: enkiddb-ingest <docs_root> <output_root> <version>
+          [search_query]. Run `cargo test -p enkiddb` for the standing
+          proof: 38 passed, 0 failed.

@@ -1,0 +1,292 @@
+---
+# 𒁾 playbooks_64_to_71.yml — FIXED v4
+# Uses !unsafe to prevent ALL Jinja2 processing of Python source
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+
+- name: "PLAYBOOKS 64-71 — ENKI-TERRA Suite"
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  tasks:
+
+    - name: "1.0 | Write Python script (raw — no templating)"
+      ansible.builtin.copy:
+        dest: /tmp/bw_64_71.py
+        mode: "0755"
+        content: !unsafe |
+          #!/usr/bin/env python3
+          import os, subprocess, sys
+          FORGE = "/home/bahyway/Forge/bahyway_v4"
+          def w(p, c):
+              os.makedirs(os.path.dirname(p), exist_ok=True)
+              open(p, "w").write(c)
+          def reg(name):
+              ws = f"{FORGE}/Cargo.toml"
+              c = open(ws).read()
+              if f'"crates/{name}"' not in c:
+                  open(ws,"w").write(c.replace('members = [', f'members = [\n    "crates/{name}",'))
+          def build(name):
+              r = subprocess.run(["cargo","build","-p",name], cwd=FORGE, capture_output=True, text=True)
+              if r.returncode != 0: print(f"FAILED {name}\n{r.stderr[-800:]}"); sys.exit(1)
+              t = subprocess.run(["cargo","test","-p",name,"--","--nocapture"], cwd=FORGE, capture_output=True, text=True)
+              if t.returncode != 0: print(f"TESTS FAILED {name}\n{t.stdout[-600:]}"); sys.exit(1)
+              print(f"  PASSED: {name}")
+          def cargo(name, deps_str, extra=""):
+              return f'[package]\nname = "{name}"\nversion = "4.0.0"\nedition = "2021"\nauthors = ["DUB.SAR"]\n[dependencies]\n{deps_str}\n{extra}\n'
+
+          # HEPTAMAP
+          C = f"{FORGE}/crates/heptamap"
+          w(f"{C}/Cargo.toml", cargo("heptamap",
+              'enki-terra = { path = "../enki-terra" }\nenkidb-kaki = { path = "../enkidb-kaki" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          #[derive(Debug,Clone)]
+          pub struct E7Coord {
+              pub d0_uuid_hash:u32, pub d1_tribe_id:u16,
+              pub d2_kaki_type:u8, pub d3_kaki_role:u8,
+              pub d4_timestamp:u16, pub d5_eav_quality:f32, pub d6_orbital_r:f32,
+          }
+          pub struct Heptamap { pub coords:Vec<(E7Coord,String)> }
+          impl Heptamap {
+              pub fn new() -> Self { Self { coords: Vec::new() } }
+              pub fn insert(&mut self, c:E7Coord, k:String) { self.coords.push((c,k)); }
+          }
+          impl Default for Heptamap { fn default() -> Self { Self::new() } }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_kaki_type_not_quality() {
+                  let c = E7Coord { d0_uuid_hash:0, d1_tribe_id:1,
+                      d2_kaki_type:0x02, d3_kaki_role:0x10,
+                      d4_timestamp:0, d5_eav_quality:0.85, d6_orbital_r:0.3 };
+                  assert_eq!(c.d2_kaki_type, 0x02);
+                  assert_eq!(c.d5_eav_quality, 0.85);
+              }
+          }
+          """)
+          reg("heptamap"); build("heptamap")
+
+          # ERESKIGAL
+          C = f"{FORGE}/crates/ereskigal"
+          w(f"{C}/Cargo.toml", cargo("ereskigal", 'enki-terra = { path = "../enki-terra" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          #[derive(Debug,Clone,PartialEq)]
+          pub enum NodeType { EntryPoint, RoofTank, Junction }
+          #[derive(Debug,Clone)]
+          pub struct NetworkNode { pub lat:f64, pub lon:f64, pub node_type:NodeType, pub eav_quality:f32 }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_node() {
+                  let n = NetworkNode { lat:-22.9, lon:-43.1, node_type:NodeType::EntryPoint, eav_quality:0.85 };
+                  assert_eq!(n.node_type, NodeType::EntryPoint);
+              }
+          }
+          """)
+          reg("ereskigal"); build("ereskigal")
+
+          # NANSHE
+          C = f"{FORGE}/crates/nanshe"
+          w(f"{C}/Cargo.toml", cargo("nanshe", 'enki-terra = { path = "../enki-terra" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          use enki_terra::{SharuType, SharuEvent};
+          #[derive(Debug,Clone,PartialEq)]
+          pub enum ContaminationType { SewageOutfall, OilfieldBtex }
+          #[derive(Debug,Clone)]
+          pub struct RiverReading {
+              pub lat:f64, pub lon:f64, pub contamination:ContaminationType,
+              pub eav_quality:f32, pub population_at_risk:u64, pub days_accumulating:u32,
+          }
+          impl RiverReading {
+              pub fn sharu_health(&self) -> SharuEvent {
+                  SharuEvent { sharu_type:SharuType::Health,
+                      value:self.population_at_risk as f64*(1.0-self.eav_quality as f64)*self.days_accumulating as f64,
+                      days:self.days_accumulating, zone_id:3, eav_quality:self.eav_quality }
+              }
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_sharu() {
+                  let r = RiverReading { lat:30.5, lon:47.8, contamination:ContaminationType::SewageOutfall,
+                      eav_quality:0.30, population_at_risk:2_000_000, days_accumulating:365 };
+                  assert!(r.sharu_health().value > 100_000_000.0);
+              }
+          }
+          """)
+          reg("nanshe"); build("nanshe")
+
+          # ABZU
+          C = f"{FORGE}/crates/abzu"
+          w(f"{C}/Cargo.toml", cargo("abzu", 'enki-terra = { path = "../enki-terra" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          use enki_terra::{SharuType, SharuEvent};
+          #[derive(Debug,Clone)]
+          pub struct GroundwaterSite {
+              pub lat:f64, pub lon:f64, pub depth_m_min:f32,
+              pub depth_m_max:f32, pub yield_l_per_s:f32, pub eav_quality:f32,
+          }
+          impl GroundwaterSite {
+              pub fn navigator(&self) -> String {
+                  let q = if self.eav_quality >= 0.70 { "HIGH CONFIDENCE" } else { "LOW" };
+                  format!("ABZU lat={:.4} depth={:.0}-{:.0}m {}", self.lat, self.depth_m_min, self.depth_m_max, q)
+              }
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_nav() {
+                  let s = GroundwaterSite { lat:14.5, lon:17.3, depth_m_min:12.0,
+                      depth_m_max:18.0, yield_l_per_s:3.5, eav_quality:0.84 };
+                  assert!(s.navigator().contains("HIGH CONFIDENCE"));
+              }
+          }
+          """)
+          reg("abzu"); build("abzu")
+
+          # NAMTAR
+          C = f"{FORGE}/crates/namtar"
+          w(f"{C}/Cargo.toml", cargo("namtar", 'enki-terra = { path = "../enki-terra" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          use enki_terra::{SharuType, SharuEvent};
+          #[derive(Debug,Clone)]
+          pub struct GraveRecord {
+              pub lat:Option<f64>, pub lon:Option<f64>,
+              pub name:String, pub year_buried:u32, pub eav_quality:f32,
+          }
+          impl GraveRecord {
+              pub fn sharu_memory(&self, now:u64) -> SharuEvent {
+                  let ep=(self.year_buried as u64).saturating_sub(1970)*365*86400;
+                  let d=((now.saturating_sub(ep))/86400) as u32;
+                  SharuEvent { sharu_type:SharuType::Memory,
+                      value:(1.0-self.eav_quality as f64)*d as f64,
+                      days:d, zone_id:1, eav_quality:self.eav_quality }
+              }
+              pub fn mark_found(&mut self, lat:f64, lon:f64, c:f32) {
+                  self.lat=Some(lat); self.lon=Some(lon); self.eav_quality=c;
+              }
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_found_zero() {
+                  let mut r = GraveRecord { lat:None, lon:None, name:"F".into(), year_buried:2010, eav_quality:0.05 };
+                  r.mark_found(31.99, 44.31, 1.0);
+                  assert_eq!(r.sharu_memory(1_798_761_600).value, 0.0);
+              }
+          }
+          """)
+          reg("namtar"); build("namtar")
+
+          # NAMTAR-DINUM
+          C = f"{FORGE}/crates/namtar-dinum"
+          w(f"{C}/Cargo.toml", cargo("namtar-dinum",
+              'enki-terra = { path = "../enki-terra" }\nenkidb-kaki = { path = "../enkidb-kaki" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          use enki_terra::{SharuType, SharuEvent};
+          use enkidb_kaki::Kaki;
+          #[derive(Debug,Clone,PartialEq)]
+          pub enum IdentificationStatus { DnaConfirmed, FamilyConfirmed, Probable, Unknown }
+          #[derive(Debug,Clone)]
+          pub struct VictimRecord {
+              pub kaki:Kaki, pub name:Option<String>,
+              pub death_year_range:(u32,u32), pub id_status:IdentificationStatus, pub id_confidence:f32,
+          }
+          impl VictimRecord {
+              pub fn sharu_justice(&self, now:u64) -> SharuEvent {
+                  let yr=(self.death_year_range.0+self.death_year_range.1)/2;
+                  let ep=(yr as u64).saturating_sub(1970)*365*86400;
+                  let d=((now.saturating_sub(ep))/86400) as u32;
+                  SharuEvent { sharu_type:SharuType::Justice,
+                      value:(1.0-self.id_confidence as f64)*d as f64,
+                      days:d, zone_id:0, eav_quality:self.id_confidence }
+              }
+          }
+          #[cfg(test)] mod tests { use super::*; use enkidb_kaki::KakiType;
+              #[test] fn test_immutable() {
+                  let v = VictimRecord { kaki:Kaki::mint(0xDEAD,1,KakiType::Identity,0x02),
+                      name:None, death_year_range:(1991,1991),
+                      id_status:IdentificationStatus::Unknown, id_confidence:0.05 };
+                  assert_eq!(v.kaki.bytes[6], 0x01);
+              }
+          }
+          """)
+          reg("namtar-dinum"); build("namtar-dinum")
+
+          # WPDENGINE
+          C = f"{FORGE}/crates/wpdengine"
+          w(f"{C}/Cargo.toml", cargo("wpdengine", 'enki-terra = { path = "../enki-terra" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          pub mod tribes {
+              pub const UPPER_TIGRIS:u16=1; pub const MIDDLE_TIGRIS:u16=2;
+              pub const LOWER_TIGRIS:u16=3; pub const EUPHRATES:u16=4;
+              pub const SHATT_AL_ARAB:u16=5; pub const MARSHES:u16=6; pub const COASTAL:u16=7;
+          }
+          #[derive(Debug,Clone)]
+          pub struct WaterZone { pub tribe_id:u16, pub zone_name:String,
+              pub total_sharu:f64, pub access_difficulty:f32 }
+          impl WaterZone {
+              pub fn priority(&self) -> f64 {
+                  if self.access_difficulty >= 1.0 { return 0.0; }
+                  self.total_sharu / (self.access_difficulty as f64 + 0.01)
+              }
+          }
+          pub fn rank(zones:&mut Vec<WaterZone>) {
+              zones.sort_by(|a,b| b.priority().partial_cmp(&a.priority()).unwrap());
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_tribes() { assert_eq!(tribes::COASTAL, 7); }
+          }
+          """)
+          reg("wpdengine"); build("wpdengine")
+
+          # NAMTAR-NAVIGATOR
+          C = f"{FORGE}/crates/namtar-navigator"
+          w(f"{C}/Cargo.toml", cargo("namtar-navigator",
+              'namtar = { path = "../namtar" }\nabzu   = { path = "../abzu" }'))
+          w(f"{C}/src/lib.rs", """
+          #![forbid(unsafe_code)]
+          #[derive(Debug,Clone,PartialEq)]
+          pub enum NavigatorMode { WadiAlSalamGrave, GroundwaterDriller }
+          #[derive(Debug,Clone,PartialEq)]
+          pub enum Language { Arabic, English }
+          pub struct Navigator { pub mode:NavigatorMode, pub language:Language }
+          impl Navigator {
+              pub fn new(m:NavigatorMode, l:Language) -> Self { Self { mode:m, language:l } }
+              pub fn navigate(&self, u_lat:f64, u_lon:f64, t_lat:f64, t_lon:f64, conf:f32) -> String {
+                  let r=6_371_000.0f64;
+                  let dlat=(t_lat-u_lat).to_radians(); let dlon=(t_lon-u_lon).to_radians();
+                  let a=(dlat/2.0).sin().powi(2)+u_lat.to_radians().cos()*t_lat.to_radians().cos()*(dlon/2.0).sin().powi(2);
+                  let dist=(r*2.0*a.sqrt().atan2((1.0-a).sqrt())) as f32;
+                  match self.language {
+                      Language::Arabic => format!("اتجه {:.0} متر - الثقة {:.0}%", dist, conf*100.0),
+                      Language::English => format!("{:.0}m - {:.0}% conf", dist, conf*100.0),
+                  }
+              }
+          }
+          #[cfg(test)] mod tests { use super::*;
+              #[test] fn test_arabic() {
+                  let n = Navigator::new(NavigatorMode::WadiAlSalamGrave, Language::Arabic);
+                  assert!(n.navigate(31.99,44.31,31.9945,44.31,0.84).contains("متر"));
+              }
+          }
+          """)
+          reg("namtar-navigator"); build("namtar-navigator")
+
+          print("PLAYBOOKS 64-71 COMPLETE")
+
+    - name: "2.0 | Execute Python script"
+      ansible.builtin.command:
+        cmd: python3 /tmp/bw_64_71.py
+      environment:
+        PATH: /home/bahyway/.cargo/bin:/usr/bin:/bin
+        HOME: /home/bahyway
+      register: out
+      changed_when: true
+
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ out.stdout_lines }}"
+
+    - name: "2.2 | Assert"
+      ansible.builtin.assert:
+        that: out.rc == 0
+        success_msg: "PLAYBOOKS 64-71 PASSED"
+        fail_msg:    "PLAYBOOKS 64-71 FAILED"

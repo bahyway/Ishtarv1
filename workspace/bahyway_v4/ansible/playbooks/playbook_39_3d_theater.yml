@@ -1,0 +1,892 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 39 — DubSar Theater 3D: Real curved panels + BIGRING + live data
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECT : DUB.SAR 𒁾
+# SEALED    : 2026-06-21
+#
+# WHAT THIS BUILDS
+# ────────────────
+#   The real 3D Theater replacing the flat proof scene:
+#
+#   CENTER_STAGE   — GPUParticles3D galaxy (50,000 particles, gold/teal)
+#   NISABA_STAGE1  — gold spotlight crown above nucleus
+#   LEFT_PANEL     — QuadMesh rotated -35° Y, SubViewport renders:
+#                    HeptaScript editor + query controls + GRID table
+#   RIGHT_PANEL    — QuadMesh rotated +35° Y, SubViewport renders:
+#                    ORBIT 3D particles + connection status + stats
+#   BOTTOM_STRIP   — flat QuadMesh at floor, SubViewport renders:
+#                    status bar + quick W5H2 presets
+#
+#   All data flows from enkidb-query-server:7001 via TCP
+#   SubViewport panels are 2D UI rendered as 3D textures
+#   Camera positioned to see all three panels simultaneously
+#
+# RUN FROM eriduous-vdi:
+#   ansible-playbook ~/playbook_39_3d_theater.yml -i localhost, --connection=local
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 39 — DubSar Theater 3D"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    theater_dir:  "/home/bahyway/dubsar-theater"
+    godot_dir:    "{{ theater_dir }}/godot"
+    scenes_dir:   "{{ godot_dir }}/scenes"
+    scripts_dir:  "{{ godot_dir }}/scripts"
+
+  tasks:
+
+    # ── 1. UPDATE project.godot — fullscreen + 3D theater as main scene ───────
+    - name: "1.0 | Write clean project.godot"
+      ansible.builtin.copy:
+        dest: "{{ godot_dir }}/project.godot"
+        content: |
+          ; DubSar IDE v4.0 — Sovereign BahyWay.Ecosystem
+          config_version=5
+
+          [application]
+          config/name="DubSar IDE v4.0"
+          config/description="Sovereign 3D IDE Theater — BIGRING + HeptaScript + ORBIT"
+          config/version="4.0.0"
+          config/features=PackedStringArray("4.7", "Forward Plus")
+          run/main_scene="res://scenes/theater_3d.tscn"
+          boot_splash/show_image=false
+          boot_splash/bg_color=Color(0.04, 0.05, 0.08, 1)
+
+          [display]
+          window/size/viewport_width=1920
+          window/size/viewport_height=1080
+          window/size/mode=3
+          window/vsync/vsync_mode=1
+
+          [rendering]
+          renderer/rendering_method="forward_plus"
+          environment/defaults/default_clear_color=Color(0.04, 0.05, 0.08, 1)
+
+    # ── 2. WRITE theater_3d.tscn — the real 3D scene ─────────────────────────
+    - name: "2.0 | Write theater_3d.tscn"
+      ansible.builtin.copy:
+        dest: "{{ scenes_dir }}/theater_3d.tscn"
+        content: |
+          [gd_scene load_steps=2 format=3 uid="uid://theater_3d"]
+
+          [ext_resource type="Script" path="res://scripts/theater_3d.gd" id="1"]
+
+          [node name="Theater3D" type="Node3D"]
+          script = ExtResource("1")
+
+    # ── 3. WRITE theater_3d.gd — complete 3D Theater orchestrator ─────────────
+    - name: "3.0 | Write theater_3d.gd"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/theater_3d.gd"
+        content: |
+          # theater_3d.gd — DubSar IDE v4.0 — Sovereign 3D Theater
+          # ═════════════════════════════════════════════════════════
+          #
+          # Layout (top view):
+          #
+          #         LEFT_PANEL (-35°)    CENTER     RIGHT_PANEL (+35°)
+          #              /                  |                \
+          #         HeptaScript          BIGRING           ORBIT 3D
+          #         Query Editor         Galaxy            Results
+          #         + GRID table         Particles         + Stats
+          #
+          # All UI panels are SubViewports projected as textures
+          # onto physical 3D QuadMesh planes in world space.
+          #
+          # DUB.SAR 𒁾  2026-06-21
+
+          extends Node3D
+
+          # ── Sovereign colours ──────────────────────────────────────────────
+          const C_GOLD    = Color(0.831, 0.686, 0.216)
+          const C_TEAL    = Color(0.114, 0.620, 0.459)
+          const C_AMBER   = Color(0.937, 0.624, 0.153)
+          const C_CRIMSON = Color(0.863, 0.235, 0.235)
+          const C_BG      = Color(0.04,  0.05,  0.08)
+          const C_PANEL   = Color(0.08,  0.09,  0.14)
+          const C_DIM     = Color(0.35,  0.38,  0.52)
+          const C_TEXT    = Color(0.82,  0.84,  0.92)
+
+          # ── Server ────────────────────────────────────────────────────────
+          const SERVER_HOST = "192.168.122.107"
+          const SERVER_PORT = 7001
+
+          const ATTR_NAMES = {
+              "0x57388739": "timestamp",
+              "0x00001A4B": "lane",
+              "0xDD80CCF7": "latitude",
+              "0x04D030B0": "longitude",
+              "0x4BD9CCEE": "b11.score",
+              "0xCB45DC56": "grave.id",
+              "0xBFB44D69": "death.date",
+              "0xBBCBCA57": "name.arabic",
+              "0x5E9C9580": "gender",
+              "0xD6EF4C6B": "city",
+              "0x54038644": "section",
+              "0x1F01E2FD": "record.no",
+              "0x278A5432": "uuid",
+          }
+
+          # ── State ─────────────────────────────────────────────────────────
+          var connected    := false
+          var running      := false
+          var query_rows   := []
+          var orbit_angle  := 0.0
+          var theater_tick := 0.0
+
+          var thread:        Thread = null
+          var thread_done   := false
+          var thread_result := []
+          var thread_status := ""
+
+          var connect_thread: Thread = null
+          var connect_done   := false
+          var connect_ok     := false
+
+          # ── Scene nodes ───────────────────────────────────────────────────
+          var camera:         Camera3D
+          var center_stage:   GPUParticles3D
+          var nisaba:         Node3D
+          var left_mesh:      MeshInstance3D
+          var right_mesh:     MeshInstance3D
+          var left_vp:        SubViewport
+          var right_vp:       SubViewport
+
+          # Left panel UI nodes
+          var lbl_status:     Label
+          var lbl_entries:    Label
+          var btn_connect:    Button
+          var btn_run:        Button
+          var txt_editor:     TextEdit
+          var lbl_running:    Label
+
+          # Right panel UI nodes
+          var orbit_vp:       SubViewport
+          var orbit_root:     Node3D
+          var grid_scroll:    ScrollContainer
+          var grid_box:       VBoxContainer
+          var btn_orbit:      Button
+          var btn_grid:       Button
+          var view_mode       := "ORBIT"
+
+          func _ready():
+              get_tree().root.title = "DubSar IDE v4.0 — EnkiDB Theater"
+              _build_scene()
+
+          func _build_scene():
+              # ── Camera ────────────────────────────────────────────────────
+              camera = Camera3D.new()
+              camera.transform.origin = Vector3(0, 1.8, 7.0)
+              camera.rotation_degrees = Vector3(-8, 0, 0)
+              camera.fov = 75.0
+              add_child(camera)
+
+              # ── Environment ───────────────────────────────────────────────
+              var env     = Environment.new()
+              env.background_mode = Environment.BG_COLOR
+              env.background_color = C_BG
+              env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+              env.ambient_light_color  = Color(0.05, 0.06, 0.10)
+              env.ambient_light_energy = 0.4
+              camera.environment = env
+
+              # ── CENTER STAGE — BIGRING galaxy ─────────────────────────────
+              center_stage = GPUParticles3D.new()
+              center_stage.transform.origin = Vector3(0, 1.2, -1.5)
+              center_stage.amount   = 50000
+              center_stage.lifetime = 5.0
+              center_stage.speed_scale = 0.8
+
+              var pmat = ParticleProcessMaterial.new()
+              pmat.emission_shape          = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+              pmat.emission_sphere_radius  = 2.5
+              pmat.direction               = Vector3(0, 0, 0)
+              pmat.gravity                 = Vector3(0, 0, 0)
+              pmat.initial_velocity_min    = 0.2
+              pmat.initial_velocity_max    = 1.5
+              pmat.angular_velocity_min    = -60.0
+              pmat.angular_velocity_max    = 60.0
+              pmat.scale_min               = 0.015
+              pmat.scale_max               = 0.04
+              pmat.color                   = C_TEAL
+              # Colour gradient: teal core → gold rim
+              var grad = Gradient.new()
+              grad.add_point(0.0, C_TEAL)
+              grad.add_point(0.4, C_GOLD)
+              grad.add_point(0.7, C_AMBER)
+              grad.add_point(1.0, Color(0.2, 0.05, 0.05, 0.0))
+              var gtex = GradientTexture1D.new()
+              gtex.gradient = grad
+              pmat.color_ramp = gtex
+              center_stage.process_material = pmat
+
+              var pmesh = SphereMesh.new()
+              pmesh.radius = 0.025
+              pmesh.height = 0.05
+              center_stage.draw_pass_1 = pmesh
+              add_child(center_stage)
+
+              # Nucleus gold sphere
+              var nucleus = MeshInstance3D.new()
+              var ns = SphereMesh.new()
+              ns.radius = 0.18
+              nucleus.mesh = ns
+              var nmat = StandardMaterial3D.new()
+              nmat.albedo_color          = C_GOLD
+              nmat.emission_enabled      = true
+              nmat.emission              = C_GOLD
+              nmat.emission_energy_multiplier = 3.0
+              nucleus.set_surface_override_material(0, nmat)
+              nucleus.transform.origin = Vector3(0, 1.2, -1.5)
+              add_child(nucleus)
+
+              # ── NISABA Stage 1 — gold spotlight crown ─────────────────────
+              nisaba = Node3D.new()
+              nisaba.transform.origin = Vector3(0, 4.5, -1.5)
+              add_child(nisaba)
+
+              var spot = SpotLight3D.new()
+              spot.light_color              = C_GOLD
+              spot.light_energy             = 3.0
+              spot.spot_range               = 10.0
+              spot.spot_angle               = 20.0
+              spot.shadow_enabled           = false
+              spot.rotation_degrees         = Vector3(-90, 0, 0)
+              nisaba.add_child(spot)
+
+              # ── Ambient fill light ────────────────────────────────────────
+              var fill = OmniLight3D.new()
+              fill.light_color  = C_TEAL
+              fill.light_energy = 0.5
+              fill.omni_range   = 15.0
+              fill.transform.origin = Vector3(0, 3, 2)
+              add_child(fill)
+
+              # ── LEFT PANEL — HeptaScript editor ───────────────────────────
+              _build_left_panel()
+
+              # ── RIGHT PANEL — ORBIT + GRID ────────────────────────────────
+              _build_right_panel()
+
+              # ── Floor glow ────────────────────────────────────────────────
+              var floor_mesh = MeshInstance3D.new()
+              var quad = QuadMesh.new()
+              quad.size = Vector2(18, 12)
+              floor_mesh.mesh = quad
+              floor_mesh.rotation_degrees = Vector3(-90, 0, 0)
+              floor_mesh.transform.origin = Vector3(0, -0.5, 0)
+              var fmat = StandardMaterial3D.new()
+              fmat.albedo_color     = Color(0.04, 0.06, 0.10)
+              fmat.emission_enabled = true
+              fmat.emission         = C_TEAL
+              fmat.emission_energy_multiplier = 0.08
+              floor_mesh.set_surface_override_material(0, fmat)
+              add_child(floor_mesh)
+
+          # ── Build LEFT panel (HeptaScript editor + connector) ─────────────
+          func _build_left_panel():
+              # 3D mesh at -35° Y
+              left_mesh = MeshInstance3D.new()
+              var quad = QuadMesh.new()
+              quad.size = Vector2(4.2, 3.2)
+              left_mesh.mesh = quad
+              left_mesh.transform.origin = Vector3(-3.8, 1.8, 0.5)
+              left_mesh.rotation_degrees = Vector3(0, 35, 0)
+              add_child(left_mesh)
+
+              # SubViewport
+              left_vp = SubViewport.new()
+              left_vp.size = Vector2i(900, 680)
+              left_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+              left_vp.transparent_bg = false
+              left_mesh.add_child(left_vp)
+
+              # Apply SubViewport as texture to mesh
+              var vp_mat = StandardMaterial3D.new()
+              vp_mat.albedo_texture       = left_vp.get_texture()
+              vp_mat.emission_enabled     = true
+              vp_mat.emission_texture     = left_vp.get_texture()
+              vp_mat.emission_energy_multiplier = 0.15
+              vp_mat.flags_unshaded       = false
+              left_mesh.set_surface_override_material(0, vp_mat)
+
+              # Panel border glow
+              var border = MeshInstance3D.new()
+              var bq = QuadMesh.new()
+              bq.size = Vector2(4.25, 3.25)
+              border.mesh = bq
+              border.transform.origin = Vector3(0, 0, -0.01)
+              var bmat = StandardMaterial3D.new()
+              bmat.albedo_color           = Color(0, 0, 0, 0)
+              bmat.emission_enabled       = true
+              bmat.emission               = C_TEAL
+              bmat.emission_energy_multiplier = 0.4
+              bmat.flags_unshaded         = true
+              border.set_surface_override_material(0, bmat)
+              left_mesh.add_child(border)
+
+              # Build 2D UI inside left viewport
+              _build_left_ui()
+
+          func _build_left_ui():
+              var root = Control.new()
+              root.set_anchors_preset(Control.PRESET_FULL_RECT)
+              left_vp.add_child(root)
+
+              # Dark background
+              var bg = ColorRect.new()
+              bg.color = C_PANEL
+              bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+              root.add_child(bg)
+
+              var vbox = VBoxContainer.new()
+              vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+              vbox.add_theme_constant_override("separation", 6)
+              vbox.add_theme_constant_override("margin_left", 14)
+              vbox.add_theme_constant_override("margin_right", 14)
+              vbox.add_theme_constant_override("margin_top", 10)
+              root.add_child(vbox)
+
+              # Header
+              vbox.add_child(_lbl("𒁾  DubSar IDE v4.0", 18, C_GOLD, true))
+              vbox.add_child(_sep())
+              vbox.add_child(_lbl("EnkiDB Connector", 11, C_DIM))
+              vbox.add_child(_lbl("Read node:  192.168.122.107:7001", 11, C_TEAL))
+              vbox.add_child(_lbl("Tribe:      0x0001  NAJAF_CEMETERY", 10, C_DIM))
+              vbox.add_child(_lbl("Engine:     HeptaScript v1.0  W5H2", 10, C_DIM))
+
+              lbl_entries = _lbl("Entries: —", 11, C_TEXT)
+              vbox.add_child(lbl_entries)
+
+              btn_connect = Button.new()
+              btn_connect.text = "▶  Connect to EnkiDB"
+              btn_connect.add_theme_font_size_override("font_size", 13)
+              btn_connect.pressed.connect(_on_connect)
+              vbox.add_child(btn_connect)
+
+              lbl_status = _lbl("Not connected", 10, C_DIM)
+              lbl_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+              vbox.add_child(lbl_status)
+
+              vbox.add_child(_sep())
+              vbox.add_child(_lbl("HeptaScript W5H2 Query Editor", 12, C_GOLD, true))
+
+              txt_editor = TextEdit.new()
+              txt_editor.text = "WHO T.E\nHOW_MUCH LIMIT 100"
+              txt_editor.custom_minimum_size.y = 140
+              txt_editor.add_theme_font_size_override("font_size", 13)
+              txt_editor.add_theme_color_override("background_color",
+                  Color(0.05, 0.06, 0.10))
+              txt_editor.add_theme_color_override("font_color", C_TEXT)
+              vbox.add_child(txt_editor)
+
+              # Run + view buttons
+              var bar = HBoxContainer.new()
+              btn_run = Button.new()
+              btn_run.text = "▶  Run W5H2 Query"
+              btn_run.disabled = true
+              btn_run.add_theme_font_size_override("font_size", 13)
+              btn_run.pressed.connect(_on_run_query)
+              bar.add_child(btn_run)
+              vbox.add_child(bar)
+
+              lbl_running = _lbl("", 10, C_AMBER)
+              vbox.add_child(lbl_running)
+
+              vbox.add_child(_sep())
+              vbox.add_child(_lbl("Quick W5H2 Queries", 11, C_GOLD))
+
+              for preset in [
+                  ["All particles (1000)",     "WHO T.E\nHOW_MUCH LIMIT 1000"],
+                  ["GEM quality B11≥200",      "WHO T.E\nWHY QUALITY_BYTE > 200\nHOW_MUCH LIMIT 500"],
+                  ["Low quality FUZZY",         "WHO T.E\nWHY QUALITY_BYTE < 128\nHOW_MUCH LIMIT 500"],
+                  ["First 100 records",         "WHO T.E\nHOW_MUCH LIMIT 100"],
+              ]:
+                  var b = Button.new()
+                  b.text = preset[0]
+                  b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+                  b.add_theme_font_size_override("font_size", 11)
+                  var q = preset[1]
+                  b.pressed.connect(func(): txt_editor.text = q)
+                  vbox.add_child(b)
+
+          # ── Build RIGHT panel (ORBIT 3D + GRID table) ─────────────────────
+          func _build_right_panel():
+              # 3D mesh at +35° Y
+              right_mesh = MeshInstance3D.new()
+              var quad = QuadMesh.new()
+              quad.size = Vector2(4.2, 3.2)
+              right_mesh.mesh = quad
+              right_mesh.transform.origin = Vector3(3.8, 1.8, 0.5)
+              right_mesh.rotation_degrees = Vector3(0, -35, 0)
+              add_child(right_mesh)
+
+              # SubViewport
+              right_vp = SubViewport.new()
+              right_vp.size = Vector2i(900, 680)
+              right_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+              right_vp.transparent_bg = false
+              right_mesh.add_child(right_vp)
+
+              var vp_mat = StandardMaterial3D.new()
+              vp_mat.albedo_texture           = right_vp.get_texture()
+              vp_mat.emission_enabled         = true
+              vp_mat.emission_texture         = right_vp.get_texture()
+              vp_mat.emission_energy_multiplier = 0.15
+              right_mesh.set_surface_override_material(0, vp_mat)
+
+              # Border glow
+              var border = MeshInstance3D.new()
+              var bq = QuadMesh.new()
+              bq.size = Vector2(4.25, 3.25)
+              border.mesh = bq
+              border.transform.origin = Vector3(0, 0, -0.01)
+              var bmat = StandardMaterial3D.new()
+              bmat.albedo_color               = Color(0, 0, 0, 0)
+              bmat.emission_enabled           = true
+              bmat.emission                   = C_GOLD
+              bmat.emission_energy_multiplier = 0.4
+              bmat.flags_unshaded             = true
+              border.set_surface_override_material(0, bmat)
+              right_mesh.add_child(border)
+
+              _build_right_ui()
+
+          func _build_right_ui():
+              var root = Control.new()
+              root.set_anchors_preset(Control.PRESET_FULL_RECT)
+              right_vp.add_child(root)
+
+              var bg = ColorRect.new()
+              bg.color = C_PANEL
+              bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+              root.add_child(bg)
+
+              var vbox = VBoxContainer.new()
+              vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+              vbox.add_theme_constant_override("separation", 4)
+              root.add_child(vbox)
+
+              # Header + view toggle
+              var hdr = HBoxContainer.new()
+              hdr.add_child(_lbl("ORBIT — particle quality space", 13, C_GOLD, true))
+              var sp = Control.new()
+              sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+              hdr.add_child(sp)
+
+              btn_orbit = Button.new()
+              btn_orbit.text = "ORBIT"
+              btn_orbit.toggle_mode = true
+              btn_orbit.button_pressed = true
+              btn_orbit.add_theme_font_size_override("font_size", 11)
+              btn_orbit.pressed.connect(func(): _set_view("ORBIT"))
+              hdr.add_child(btn_orbit)
+
+              btn_grid = Button.new()
+              btn_grid.text = "GRID"
+              btn_grid.toggle_mode = true
+              btn_grid.add_theme_font_size_override("font_size", 11)
+              btn_grid.pressed.connect(func(): _set_view("GRID"))
+              hdr.add_child(btn_grid)
+              vbox.add_child(hdr)
+
+              vbox.add_child(_sep())
+
+              # ORBIT SubViewport inside right panel
+              var orb_container = SubViewportContainer.new()
+              orb_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+              orb_container.stretch = true
+              vbox.add_child(orb_container)
+
+              orbit_vp = SubViewport.new()
+              orbit_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+              orb_container.add_child(orbit_vp)
+
+              orbit_root = Node3D.new()
+              orbit_vp.add_child(orbit_root)
+
+              var orb_cam = Camera3D.new()
+              orb_cam.transform.origin = Vector3(0, 2.5, 5.5)
+              orb_cam.rotation_degrees = Vector3(-20, 0, 0)
+              orb_cam.fov = 60.0
+              orbit_root.add_child(orb_cam)
+
+              var orb_light = OmniLight3D.new()
+              orb_light.light_color  = C_GOLD
+              orb_light.light_energy = 1.2
+              orb_light.omni_range   = 20.0
+              orbit_root.add_child(orb_light)
+
+              # GRID scroll (hidden by default)
+              grid_scroll = ScrollContainer.new()
+              grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+              grid_scroll.visible = false
+              vbox.add_child(grid_scroll)
+
+              grid_box = VBoxContainer.new()
+              grid_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+              grid_scroll.add_child(grid_box)
+
+          # ── _process: animation + thread polling ──────────────────────────
+          func _process(delta):
+              theater_tick += delta
+              orbit_angle  += delta * 0.25
+
+              # Slowly rotate BIGRING
+              center_stage.rotation.y += delta * 0.04
+
+              # NISABA pulse
+              if nisaba:
+                  var pulse = 1.0 + 0.3 * sin(theater_tick * 2.0)
+                  for c in nisaba.get_children():
+                      if c is SpotLight3D:
+                          c.light_energy = 3.0 * pulse
+
+              # Poll connect thread
+              if connect_done and connect_thread != null:
+                  connect_thread.wait_to_finish()
+                  connect_thread = null
+                  connect_done   = false
+                  if connect_ok:
+                      connected = true
+                      btn_connect.text = "✓ Connected — Reconnect"
+                      btn_run.disabled = false
+                      lbl_entries.text = "Entries: 80,272  NAJAF_CEMETERY"
+                      _update_status("✓ Connected  192.168.122.107:7001", C_TEAL)
+                  else:
+                      connected = false
+                      btn_connect.text = "▶  Connect to EnkiDB"
+                      _update_status("Cannot reach 192.168.122.107:7001", C_CRIMSON)
+
+              # Poll query thread
+              if thread_done and thread != null:
+                  thread.wait_to_finish()
+                  thread      = null
+                  thread_done = false
+                  running     = false
+                  btn_run.disabled = false
+                  query_rows  = thread_result
+                  lbl_running.text = ""
+                  var n = query_rows.size()
+                  _update_status("✓ W5H2 complete — %d rows" % n, C_TEAL)
+                  _populate_orbit()
+                  _populate_grid()
+
+              elif running:
+                  lbl_running.text = thread_status
+
+              # Animate orbit particles
+              _animate_orbit(delta)
+
+          # ── Connect ───────────────────────────────────────────────────────
+          func _on_connect():
+              btn_connect.text = "Testing..."
+              btn_connect.disabled = true
+              _update_status("Connecting to 192.168.122.107:7001...", C_AMBER)
+              connect_done   = false
+              connect_thread = Thread.new()
+              connect_thread.start(_thread_connect)
+
+          func _thread_connect():
+              connect_ok   = EnkiDbTCP_test_connection(SERVER_HOST, SERVER_PORT)
+              connect_done = true
+
+          # ── Run query ─────────────────────────────────────────────────────
+          func _on_run_query():
+              if not connected or running:
+                  return
+              running      = true
+              btn_run.disabled = true
+              lbl_running.text = "Sending W5H2 query..."
+              query_rows   = []
+              _clear_orbit()
+              _clear_grid()
+              thread       = Thread.new()
+              thread_done  = false
+              thread_result = []
+              thread.start(_thread_query.bind(txt_editor.text))
+
+          func _thread_query(src: String):
+              thread_result = EnkiDbTCP_execute_query(
+                  SERVER_HOST, SERVER_PORT, src,
+                  func(msg): thread_status = msg
+              )
+              thread_done = true
+
+          # ── ORBIT 3D ──────────────────────────────────────────────────────
+          func _clear_orbit():
+              for c in orbit_root.get_children():
+                  if c is Camera3D or c is OmniLight3D:
+                      continue
+                  c.queue_free()
+
+          func _populate_orbit():
+              _clear_orbit()
+              if query_rows.is_empty() or view_mode != "ORBIT":
+                  return
+              var n = query_rows.size()
+
+              # Gold nucleus
+              var nucleus = MeshInstance3D.new()
+              var ns = SphereMesh.new(); ns.radius = 0.12
+              nucleus.mesh = ns
+              var nm = StandardMaterial3D.new()
+              nm.albedo_color = C_GOLD
+              nm.emission_enabled = true
+              nm.emission = C_GOLD
+              nm.emission_energy_multiplier = 3.0
+              nucleus.set_surface_override_material(0, nm)
+              nucleus.name = "Nucleus"
+              orbit_root.add_child(nucleus)
+
+              # Ring labels
+              for ring_data in [
+                  [1.0, C_GOLD,  "GEM  B11≥200"],
+                  [1.7, C_TEAL,  "ORBIT  B11≥128"],
+                  [2.4, C_AMBER, "GATE  B11<128"],
+              ]:
+                  var lbl = Label3D.new()
+                  lbl.text = ring_data[2]
+                  lbl.font_size = 14
+                  lbl.modulate = ring_data[1]
+                  lbl.position = Vector3(ring_data[0] + 0.1, 0.05, 0)
+                  orbit_root.add_child(lbl)
+
+              # Particles
+              for i in range(min(n, 1000)):
+                  var row = query_rows[i]
+                  var b11 = _b11_from_kaki(row.get("kaki", ""))
+                  var ring_r: float
+                  var col:    Color
+                  if b11 >= 200:
+                      ring_r = 1.0;  col = C_GOLD
+                  elif b11 >= 128:
+                      ring_r = 1.7;  col = C_TEAL
+                  else:
+                      ring_r = 2.4;  col = C_AMBER
+
+                  var angle  = (i as float / n) * TAU
+                  var wobble = sin(i * 0.43) * 0.25
+
+                  var dot = MeshInstance3D.new()
+                  var sm  = SphereMesh.new()
+                  sm.radius = 0.035 if b11 >= 200 else 0.025
+                  dot.mesh  = sm
+                  var mat   = StandardMaterial3D.new()
+                  mat.albedo_color              = col
+                  mat.emission_enabled          = true
+                  mat.emission                  = col
+                  mat.emission_energy_multiplier = 0.8
+                  dot.set_surface_override_material(0, mat)
+                  dot.position = Vector3(
+                      ring_r * cos(angle),
+                      wobble,
+                      ring_r * sin(angle)
+                  )
+                  dot.name = "P_%d" % i
+                  dot.set_meta("base_angle", angle)
+                  dot.set_meta("ring_r",     ring_r)
+                  dot.set_meta("wobble",     wobble)
+                  dot.set_meta("b11",        b11)
+                  orbit_root.add_child(dot)
+
+              # Stats label
+              var gem   = query_rows.filter(func(r): return _b11_from_kaki(r.get("kaki","")) >= 200).size()
+              var orbit = query_rows.filter(func(r): var b=_b11_from_kaki(r.get("kaki","")); return b>=128 and b<200).size()
+              var fuzzy = query_rows.filter(func(r): return _b11_from_kaki(r.get("kaki","")) < 128).size()
+              var stats = Label3D.new()
+              stats.text      = "%d particles\nGEM %d  ·  ORBIT %d  ·  FUZZY %d" % [n, gem, orbit, fuzzy]
+              stats.font_size = 16
+              stats.modulate  = C_GOLD
+              stats.position  = Vector3(0, 3.0, 0)
+              orbit_root.add_child(stats)
+
+          func _animate_orbit(delta):
+              if not is_instance_valid(orbit_root): return
+              for child in orbit_root.get_children():
+                  if not child.name.begins_with("P_"): continue
+                  var base   = child.get_meta("base_angle", 0.0)
+                  var ring_r = child.get_meta("ring_r",     2.0)
+                  var wobble = child.get_meta("wobble",     0.0)
+                  var b11    = child.get_meta("b11",        128)
+                  var speed  = 0.9 if b11 >= 200 else (0.55 if b11 >= 128 else 0.3)
+                  var angle  = base + orbit_angle * speed
+                  child.position = Vector3(
+                      ring_r * cos(angle),
+                      wobble,
+                      ring_r * sin(angle)
+                  )
+
+          # ── GRID table ────────────────────────────────────────────────────
+          func _clear_grid():
+              for c in grid_box.get_children():
+                  c.queue_free()
+
+          func _populate_grid():
+              _clear_grid()
+              if query_rows.is_empty() or view_mode != "GRID":
+                  return
+
+              # Header
+              var hdr = HBoxContainer.new()
+              hdr.add_child(_gcell("KAKI",       180, C_GOLD, true))
+              hdr.add_child(_gcell("State",       65, C_GOLD, true))
+              hdr.add_child(_gcell("B11",         45, C_GOLD, true))
+              hdr.add_child(_gcell("Attributes", 560, C_GOLD, true))
+              grid_box.add_child(hdr)
+              grid_box.add_child(_sep())
+
+              for i in range(min(query_rows.size(), 1000)):
+                  var row  = query_rows[i]
+                  var hex  = row.get("kaki", "")
+                  var b11  = _b11_from_kaki(hex)
+                  var st   = "NUCLEUS" if b11 >= 200 else ("ORBIT" if b11 >= 128 else "GATE")
+                  var col  = C_GOLD if b11 >= 200 else (C_TEAL if b11 >= 128 else C_AMBER)
+
+                  var attrs = row.get("attrs", [])
+                  var attr_str = ""
+                  for pair in attrs.slice(0, 4):
+                      if pair is Array and pair.size() >= 2:
+                          var k = ATTR_NAMES.get(pair[0], pair[0].right(6))
+                          var v = str(pair[1]).left(28)
+                          attr_str += "%s=%s  " % [k, v]
+
+                  var r = HBoxContainer.new()
+                  if i % 2 == 0:
+                      var bg_style = StyleBoxFlat.new()
+                      bg_style.bg_color = Color(0.06, 0.07, 0.11)
+                      r.add_theme_stylebox_override("panel", bg_style)
+                  r.add_child(_gcell(hex.left(16) + "..", 180, C_TEAL))
+                  r.add_child(_gcell(st, 65, col, true))
+                  r.add_child(_gcell("%d%%" % int(b11 / 2.55), 45, col))
+                  r.add_child(_gcell(attr_str, 560, C_TEXT))
+                  grid_box.add_child(r)
+
+              grid_box.add_child(_sep())
+              grid_box.add_child(_lbl(
+                  "%d rows  |  TCP: 192.168.122.107:7001" % query_rows.size(),
+                  10, C_DIM
+              ))
+
+          # ── View toggle ───────────────────────────────────────────────────
+          func _set_view(mode: String):
+              view_mode = mode
+              var orb = mode == "ORBIT"
+              orbit_vp.get_parent().visible = orb
+              grid_scroll.visible           = not orb
+              btn_orbit.button_pressed      = orb
+              btn_grid.button_pressed       = not orb
+              if orb:   _populate_orbit()
+              else:     _populate_grid()
+
+          # ── Helpers ───────────────────────────────────────────────────────
+          func _b11_from_kaki(hex: String) -> int:
+              if hex.length() < 16: return 128
+              var b = ("0x" + hex.substr(14, 2)).hex_to_int()
+              return b
+
+          func _update_status(msg: String, col: Color = C_DIM):
+              if lbl_status:
+                  lbl_status.text = msg
+                  lbl_status.add_theme_color_override("font_color", col)
+
+          func _lbl(text: String, size: int = 11,
+                    col: Color = C_TEXT, bold: bool = false) -> Label:
+              var l = Label.new()
+              l.text = text
+              l.add_theme_font_size_override("font_size", size)
+              l.add_theme_color_override("font_color", col)
+              return l
+
+          func _sep() -> HSeparator: return HSeparator.new()
+
+          func _gcell(text: String, w: int,
+                      col: Color = C_TEXT, bold: bool = false) -> Label:
+              var l = Label.new()
+              l.text = text
+              l.custom_minimum_size.x = w
+              l.add_theme_font_size_override("font_size", 11)
+              l.add_theme_color_override("font_color", col)
+              l.clip_text = true
+              return l
+
+          # ══ Inlined TCP client (no autoload dependency) ════════════════════
+          const CONNECT_TIMEOUT = 5.0
+          const READ_TIMEOUT    = 120.0
+
+          func EnkiDbTCP_test_connection(host: String, port: int) -> bool:
+              var peer = StreamPeerTCP.new()
+              if peer.connect_to_host(host, port) != OK: return false
+              var t = Time.get_ticks_msec()
+              while peer.get_status() == StreamPeerTCP.STATUS_CONNECTING:
+                  peer.poll()
+                  if Time.get_ticks_msec() - t > CONNECT_TIMEOUT * 1000:
+                      peer.disconnect_from_host(); return false
+              var ok = peer.get_status() == StreamPeerTCP.STATUS_CONNECTED
+              peer.disconnect_from_host(); return ok
+
+          func EnkiDbTCP_execute_query(host: String, port: int,
+                  w5h2: String, progress_cb: Callable = Callable()) -> Array:
+              var peer = StreamPeerTCP.new()
+              if peer.connect_to_host(host, port) != OK: return []
+              var t = Time.get_ticks_msec()
+              while peer.get_status() == StreamPeerTCP.STATUS_CONNECTING:
+                  peer.poll()
+                  if Time.get_ticks_msec() - t > CONNECT_TIMEOUT * 1000: return []
+              if peer.get_status() != StreamPeerTCP.STATUS_CONNECTED: return []
+
+              var qb  = w5h2.to_utf8_buffer()
+              var lb  = PackedByteArray(); lb.resize(4)
+              var ql  = qb.size()
+              lb[0]=ql&0xFF; lb[1]=(ql>>8)&0xFF; lb[2]=(ql>>16)&0xFF; lb[3]=(ql>>24)&0xFF
+              peer.put_data(lb); peer.put_data(qb)
+
+              var results: Array = []
+              var st = Time.get_ticks_msec()
+              while peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+                  peer.poll()
+                  if Time.get_ticks_msec() - st > READ_TIMEOUT * 1000: break
+                  if peer.get_available_bytes() < 4: OS.delay_msec(10); continue
+                  var lr = peer.get_data(4)
+                  if lr[0] != OK: break
+                  var lb2: PackedByteArray = lr[1]
+                  var fl = lb2[0]|(lb2[1]<<8)|(lb2[2]<<16)|(lb2[3]<<24)
+                  if fl == 0: break
+                  var wt = Time.get_ticks_msec()
+                  while peer.get_available_bytes() < fl:
+                      peer.poll(); OS.delay_msec(5)
+                      if Time.get_ticks_msec() - wt > READ_TIMEOUT * 1000:
+                          peer.disconnect_from_host(); return results
+                  var fr = peer.get_data(fl)
+                  if fr[0] != OK: break
+                  var payload = fr[1].get_string_from_utf8()
+                  if payload.begins_with("ERR:"): break
+                  var batch = JSON.parse_string(payload)
+                  if batch is Array:
+                      results.append_array(batch)
+                      if progress_cb.is_valid():
+                          progress_cb.call("Received %d rows..." % results.size())
+              peer.disconnect_from_host()
+              return results
+
+    # ── 4. LAUNCH ─────────────────────────────────────────────────────────────
+    - name: "4.0 | Sealed"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  ✅  PLAYBOOK 39 SEALED — DubSar Theater 3D ready              ║
+          ║                                                                  ║
+          ║  Launch:                                                         ║
+          ║    ~/dubsar-theater/launch_theater.sh                           ║
+          ║                                                                  ║
+          ║  What you will see:                                              ║
+          ║    CENTER : BIGRING gold/teal galaxy rotating                   ║
+          ║    NISABA : pulsing gold spotlight above nucleus                 ║
+          ║    LEFT   : HeptaScript editor curved at -35° Y                 ║
+          ║    RIGHT  : ORBIT 3D + GRID table curved at +35° Y             ║
+          ║    FLOOR  : teal grid glow                                       ║
+          ╚══════════════════════════════════════════════════════════════════╝

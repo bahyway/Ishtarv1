@@ -1,0 +1,225 @@
+# =============================================================================
+# PB-231 -- Build navi-translate-gdext and wire the AR-EN Navigator plugin
+# into DubSar IDE (dubsar-theater), then launch it.
+# BahyWay.Ecosystem v4.0 — 2026-07-24
+#
+# WHY THIS EXISTS: the Architect asked for an Arabic-English translation
+# plug-in usable in the DubSar IDE for navigation (Najaf/Baghdad projects),
+# and separately asked whether vectorizing Arabic names could help real
+# translation. The honest answer built here: a bilingual NAVIGATION-TERM
+# GLOSSARY (exact/fuzzy place-name lookup), not free-text machine
+# translation -- using two real, already-tested crates glued together
+# (navi-engine's own ATTR_NAME/ATTR_NAME_ARABIC EAV convention, already
+# used for real in this project's PDM tab default query, + adapa-recall's
+# real TF-IDF/cosine retrieval, already wired into TamuzAI). See
+# crates/navi-translate-gdext/src/lib.rs's own header for the full
+# reasoning on why lexical retrieval, not neural embeddings, is the right
+# (and more auditable) tool for this security-sensitive naming context.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Builds crates/navi-translate-gdext in release mode.
+#   2. Copies libnavi_translate_gdext.so into dubsar-theater/bin/ (this
+#      project also needs libkupru_gdext.so for its own login gate --
+#      built here too, same as PB-226, so this playbook is a complete
+#      standalone way to get DubSar IDE running with the new tab).
+#   3. Discovers a real Godot 4 binary (same proven priority order as
+#      PB-226/227/230).
+#   4. Primes the project's Godot import cache with one headless
+#      `--import` pass -- unconditional, for the same reason PB-226/227/
+#      230 all do it unconditionally (a stale pre-existing .godot/ cache
+#      from before navi_translate.gdextension existed would otherwise
+#      mask the new class never actually being discovered).
+#   5. Launches DubSar IDE (`dubsar_mode: run`, default -- no editor
+#      chrome; `dubsar_mode: editor` to see script/scene panels). The new
+#      "AR-EN Navigator" tab sits alongside "Query Editor" and "PDM" in
+#      the HeptaScript Editor's MainTabs.
+#
+# HONEST LIMIT: `cargo build -p navi-translate-gdext` (and the full
+# workspace build) were verified clean at the time this playbook was
+# written. The Godot side (GDExtension discovery, the new tab rendering,
+# NaviTranslateBridge calls from navi_translate_tab.gd) has NOT yet been
+# verified live on eriduous-vdi -- this is the first run, same honest
+# limit PB-230 stated for DubSar PDM. If the tab fails to appear or the
+# extension fails to load, check {{ godot_log }}.import first.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo):
+#   ansible-playbook playbooks/playbook_231_build_navi_translate_plugin.yml
+#   ansible-playbook playbooks/playbook_231_build_navi_translate_plugin.yml -e dubsar_mode=editor
+#   ansible-playbook playbooks/playbook_231_build_navi_translate_plugin.yml -e skip_build=true
+# =============================================================================
+
+- name: PB-231 -- Build navi-translate-gdext and launch DubSar IDE with the AR-EN Navigator tab
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    dubsar_mode: "run"
+    skip_build: false
+    godot_bin: ""
+    build_log: "/tmp/navi_translate_gdext_build.log"
+    godot_log: "/tmp/dubsar_navi_translate_launch.log"
+
+  tasks:
+    - name: Confirm the DubSar project really exists at the expected path
+      ansible.builtin.stat:
+        path: "{{ dubsar_project }}/project.godot"
+      register: dubsar_project_check
+
+    - name: Fail clearly if the DubSar project isn't where expected
+      ansible.builtin.fail:
+        msg: >-
+          No project.godot found at {{ dubsar_project }}. Run this from
+          inside a checkout of the EnkiDB repo, or pass
+          -e dubsar_project=/path/to/project/dir to point at a different one.
+      when: not dubsar_project_check.stat.exists
+
+    # ── Build both bridges this project needs ──────────────────────────
+    - name: Build kupru-gdext + navi-translate-gdext in release mode
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p kupru-gdext -p navi-translate-gdext > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: Fail clearly if the build failed
+      ansible.builtin.fail:
+        msg: >-
+          cargo build --release -p kupru-gdext -p navi-translate-gdext failed
+          (rc={{ build_result.rc }}). Full output: {{ build_log }}
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: Confirm both compiled libraries exist
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/{{ item }}"
+      register: lib_checks
+      loop:
+        - libkupru_gdext.so
+        - libnavi_translate_gdext.so
+
+    - name: Fail clearly if either compiled library is missing
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found under {{ repo_root }}/target/release/.
+          Run without -e skip_build=true first, or check {{ build_log }}
+          for a build failure.
+      loop: "{{ lib_checks.results }}"
+      when: not item.stat.exists
+
+    - name: Ensure the DubSar project's bin/ directory exists
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Copy both compiled bridges into the DubSar project
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/{{ item }}"
+        dest: "{{ dubsar_project }}/bin/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - libkupru_gdext.so
+        - libnavi_translate_gdext.so
+
+    # ── Discover Godot (same proven logic as PB-226/227/230) ───────────
+    - name: Discover a real Godot 4 binary
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: Resolve the Godot binary to actually use
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: Fail clearly, with next steps, if no Godot binary was found anywhere
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found on PATH, via Flatpak, under $HOME, or in
+          common system locations. Install Godot 4.x from
+          https://godotengine.org/download and re-run, or point at it
+          directly with -e godot_bin=/full/path/to/Godot.
+      when: resolved_godot_bin | length == 0
+
+    # ── Prime the import cache (GDExtension discovery) ────────────────
+    - name: Prime the DubSar project (headless import scan) so navi_translate.gdextension gets discovered before launch
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ dubsar_project }} --import
+        > {{ godot_log }}.import 2>&1
+      register: import_result
+      failed_when: false
+
+    - name: Warn if the priming import scan reported errors
+      ansible.builtin.debug:
+        msg: >-
+          Headless import priming exited {{ import_result.rc }}. See
+          {{ godot_log }}.import for details. Continuing to launch anyway --
+          but if the AR-EN Navigator tab can't find NaviTranslateBridge,
+          check that log first.
+      when: import_result.rc is defined and import_result.rc != 0
+
+    - name: Report what is about to launch
+      ansible.builtin.debug:
+        msg:
+          - "Project        : {{ dubsar_project }}"
+          - "Godot binary   : {{ resolved_godot_bin }}"
+          - "Mode           : {{ dubsar_mode }}"
+          - "Bridge (login) : {{ dubsar_project }}/bin/libkupru_gdext.so"
+          - "Bridge (AR-EN) : {{ dubsar_project }}/bin/libnavi_translate_gdext.so"
+          - "Launch log     : {{ godot_log }}"
+
+    - name: Launch DubSar in editor mode (full IDE — script/scene panels)
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --editor --path {{ dubsar_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "editor"
+
+    - name: Launch DubSar in run mode (no editor chrome)
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --path {{ dubsar_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "run"
+
+    - name: Confirmation
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 DubSar IDE launching in the background ({{ dubsar_mode }} mode).
+          After login, open HeptaScript Editor -> "AR-EN Navigator" tab to
+          try real bilingual glossary lookup (seed placeholder entries --
+          replace with real surveyed Najaf/Baghdad POI data via "+ Add
+          Place" or by editing navi_translate_tab.gd's _seed_gazetteer()).
+          If a window doesn't appear or the tab errors, check {{ godot_log }}
+          -- the Rust side was verified independently via
+          `cargo build --release -p navi-translate-gdext`.

@@ -1,0 +1,525 @@
+---
+# 06_fix_and_deploy_monitor.yml
+# Fixes the broken Cargo.toml entry AND creates all missing files
+# Run from eriduous-vdi:
+#   cd ~/bahyway-ansible
+#   ansible-playbook playbooks/06_fix_and_deploy_monitor.yml -v
+
+- name: "𒁾 Fix Cargo.toml + Deploy beemdm-monitor"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:          "/home/bahyway/Forge/bahyway_v4"
+    monitor_dir:    "/home/bahyway/Forge/bahyway_v4/bin/beemdm-monitor"
+    src_dir:        "/home/bahyway/Forge/bahyway_v4/bin/beemdm-monitor/src"
+    workspace_toml: "/home/bahyway/Forge/bahyway_v4/Cargo.toml"
+
+  tasks:
+
+    # ── Step 1: Backup Cargo.toml ──────────────────────────────────────────
+    - name: "Backup workspace Cargo.toml"
+      ansible.builtin.copy:
+        src:  "{{ workspace_toml }}"
+        dest: "{{ workspace_toml }}.bak2"
+        mode: "0644"
+        remote_src: true
+
+    # ── Step 2: Remove ALL broken beemdm-monitor lines ────────────────────
+    - name: "Remove all beemdm-monitor lines from workspace Cargo.toml"
+      ansible.builtin.lineinfile:
+        path:    "{{ workspace_toml }}"
+        regexp:  'beemdm-monitor'
+        state:   absent
+
+    # ── Step 3: Create directory structure ────────────────────────────────
+    - name: "Create bin/beemdm-monitor/src/"
+      ansible.builtin.file:
+        path:  "{{ src_dir }}"
+        state: directory
+        mode:  "0755"
+
+    # ── Step 4: Write beemdm-monitor/Cargo.toml ───────────────────────────
+    - name: "Write bin/beemdm-monitor/Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ monitor_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name        = "beemdm-monitor"
+          version     = "4.0.2"
+          edition     = "2021"
+          authors     = ["Bahaa Fadam — BahyWay Sovereign Ecosystem"]
+          description = "BeeMDM Ratatui TUI — live S0→S8 sovereign pipeline monitor"
+
+          [[bin]]
+          name = "beemdm-monitor"
+          path = "src/main.rs"
+
+          [dependencies]
+          bee-mdm-bus  = { path = "../../crates/bee-mdm-bus" }
+          fuzzy-engine = { path = "../../crates/fuzzy-engine" }
+          ratatui      = "0.26"
+          crossterm    = { version = "0.27", features = ["event-stream"] }
+
+    # ── Step 5: Write src/main.rs ─────────────────────────────────────────
+    - name: "Write bin/beemdm-monitor/src/main.rs"
+      ansible.builtin.copy:
+        dest: "{{ src_dir }}/main.rs"
+        mode: "0644"
+        content: |
+          //! beemdm-monitor — BeeMDM Ratatui TUI v4.0.2
+          //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0
+          //! Reads BeeMdmBusState via BusHandle every 500ms.
+          //! Keys: [P]ause [R]esume [S]weep [A]ccelerate [Q]uit
+          #![forbid(unsafe_code)]
+
+          use std::io;
+          use std::time::{Duration, Instant};
+          use crossterm::{
+              event::{self, Event, KeyCode, KeyEventKind},
+              execute,
+              terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+          };
+          use ratatui::{
+              backend::CrosstermBackend,
+              layout::{Alignment, Constraint, Direction, Layout, Rect},
+              style::{Color, Modifier, Style},
+              text::{Line, Span},
+              widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
+              Frame, Terminal,
+          };
+          use bee_mdm_bus::{
+              new_bus, populate_demo, BusHandle, BusCmd, AlertLevel,
+              GEM_THRESHOLD, TRIBE_THRESHOLD, ACTIVE_THRESHOLD, B11_DIVISOR,
+          };
+          use fuzzy_engine::SourceTrust;
+
+          // Sovereign colour palette
+          const GOLD:   Color = Color::Rgb(200, 160,  40);
+          const CYAN:   Color = Color::Rgb(  0, 200, 220);
+          const GREEN:  Color = Color::Rgb( 80, 200, 120);
+          const MAROON: Color = Color::Rgb(128,   0,  32);
+          const AMBER:  Color = Color::Rgb(220, 140,  20);
+          const GREY:   Color = Color::Rgb(160, 160, 160);
+          const WHITE:  Color = Color::White;
+          const RED:    Color = Color::Rgb(220,  60,  60);
+          const BLUE:   Color = Color::Rgb( 80, 140, 220);
+
+          struct App {
+              bus:         BusHandle,
+              last_tick:   Instant,
+              tick_rate:   Duration,
+              should_quit: bool,
+          }
+          impl App {
+              fn new(bus: BusHandle) -> Self {
+                  App { bus, last_tick: Instant::now(),
+                        tick_rate: Duration::from_millis(500), should_quit: false }
+              }
+              fn on_key(&mut self, code: KeyCode) {
+                  match code {
+                      KeyCode::Char('q') | KeyCode::Char('Q') => self.should_quit = true,
+                      KeyCode::Char('p') | KeyCode::Char('P') => {
+                          if let Ok(s) = self.bus.read() { s.send_cmd(BusCmd::Pause); }
+                      }
+                      KeyCode::Char('r') | KeyCode::Char('R') => {
+                          if let Ok(s) = self.bus.read() { s.send_cmd(BusCmd::Resume); }
+                      }
+                      KeyCode::Char('s') | KeyCode::Char('S') => {
+                          if let Ok(s) = self.bus.read() { s.send_cmd(BusCmd::ForceSweep); }
+                      }
+                      KeyCode::Char('a') | KeyCode::Char('A') => {
+                          if let Ok(s) = self.bus.read() { s.send_cmd(BusCmd::AccelerateIntake); }
+                      }
+                      _ => {}
+                  }
+              }
+          }
+
+          fn main() -> io::Result<()> {
+              enable_raw_mode()?;
+              let mut stdout = io::stdout();
+              execute!(stdout, EnterAlternateScreen)?;
+              let backend  = CrosstermBackend::new(stdout);
+              let mut term = Terminal::new(backend)?;
+
+              let (bus, _rx) = new_bus();
+              populate_demo(&bus);
+              let mut app = App::new(bus);
+
+              loop {
+                  term.draw(|f| ui(f, &app))?;
+                  let timeout = app.tick_rate
+                      .checked_sub(app.last_tick.elapsed())
+                      .unwrap_or(Duration::ZERO);
+                  if crossterm::event::poll(timeout)? {
+                      if let Event::Key(key) = event::read()? {
+                          if key.kind == KeyEventKind::Press { app.on_key(key.code); }
+                      }
+                  }
+                  if app.last_tick.elapsed() >= app.tick_rate { app.last_tick = Instant::now(); }
+                  if app.should_quit { break; }
+              }
+              disable_raw_mode()?;
+              execute!(term.backend_mut(), LeaveAlternateScreen)?;
+              term.show_cursor()?;
+              Ok(())
+          }
+
+          fn ui(f: &mut Frame, app: &App) {
+              let state = match app.bus.read() { Ok(s) => s, Err(_) => return };
+              let area  = f.area();
+
+              let has_crit   = state.diagnosis.critical > 0;
+              let paused     = state.paused;
+              let title_col  = if has_crit { RED   } else { GOLD  };
+              let border_col = if has_crit { MAROON } else { GOLD };
+              let status     = if paused { "⏸ PAUSED" } else { "▶ RUNNING" };
+              let status_col = if paused { AMBER } else { GREEN };
+
+              let root = Block::default()
+                  .title(Line::from(vec![
+                      Span::styled(" 𒁾 BeeMDM Monitor v4.0.2 ",
+                          Style::default().fg(title_col).add_modifier(Modifier::BOLD)),
+                      Span::styled("──────────── ", Style::default().fg(GREY)),
+                      Span::styled(status, Style::default().fg(status_col).add_modifier(Modifier::BOLD)),
+                      Span::raw(" "),
+                  ]))
+                  .borders(Borders::ALL)
+                  .border_style(Style::default().fg(border_col));
+              let inner = root.inner(area);
+              f.render_widget(root, area);
+
+              let outer = Layout::default()
+                  .direction(Direction::Vertical)
+                  .constraints([Constraint::Min(12), Constraint::Length(9), Constraint::Length(1)])
+                  .split(inner);
+
+              let top = Layout::default()
+                  .direction(Direction::Horizontal)
+                  .constraints([Constraint::Length(26), Constraint::Min(30)])
+                  .split(outer[0]);
+
+              let right = Layout::default()
+                  .direction(Direction::Horizontal)
+                  .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+                  .split(top[1]);
+
+              let right_col = Layout::default()
+                  .direction(Direction::Vertical)
+                  .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+                  .split(right[1]);
+
+              render_gates(f, top[0], &state.gates);
+              render_tiers(f, right[0], &state.etl);
+              render_quality(f, right_col[0], &state.fuzzy);
+              render_diagnosis(f, right_col[1], &state);
+              render_alerts(f, outer[1], &state.alerts);
+              render_keys(f, outer[2]);
+          }
+
+          fn render_gates(f: &mut Frame, area: Rect, gates: &bee_mdm_bus::GateLoads) {
+              let block = Block::default()
+                  .title(Span::styled(" S0→S8 Gates ",
+                      Style::default().fg(CYAN).add_modifier(Modifier::BOLD)))
+                  .borders(Borders::ALL).border_style(Style::default().fg(CYAN));
+              let inner = block.inner(area);
+              f.render_widget(block, area);
+              let labels: [(&str, Color); 7] = [
+                  ("G1 AdadGate ", GOLD),
+                  ("G2 Musarû   ", AMBER),
+                  ("G3 Structure", BLUE),
+                  ("G4 Cleanse  ", BLUE),
+                  ("G5 DQM      ", BLUE),
+                  ("G6 IDUProber", BLUE),
+                  ("G7 𒀭𒉺𒂵Nergal", RED),
+              ];
+              let max_v = gates.counts.iter().copied().max().unwrap_or(1).max(1);
+              let rows  = Layout::default()
+                  .direction(Direction::Vertical)
+                  .constraints(vec![Constraint::Length(1); 7])
+                  .split(inner);
+              for (i, (label, color)) in labels.iter().enumerate() {
+                  if i >= rows.len() { break; }
+                  let n       = gates.counts[i];
+                  let bar_len = ((n as f64 / max_v as f64) * 9.0).round() as usize;
+                  let line    = Line::from(vec![
+                      Span::styled(format!("{label} "), Style::default().fg(*color)),
+                      Span::styled("█".repeat(bar_len),            Style::default().fg(*color)),
+                      Span::styled("░".repeat(9usize.saturating_sub(bar_len)), Style::default().fg(GREY)),
+                      Span::styled(format!("{n:>3}"),              Style::default().fg(WHITE)),
+                  ]);
+                  f.render_widget(Paragraph::new(line), rows[i]);
+              }
+          }
+
+          fn render_tiers(f: &mut Frame, area: Rect, etl: &bee_mdm_bus::EtlTierCounts) {
+              let block = Block::default()
+                  .title(Span::styled(" Tier Counts ",
+                      Style::default().fg(CYAN).add_modifier(Modifier::BOLD)))
+                  .borders(Borders::ALL).border_style(Style::default().fg(CYAN));
+              let inner = block.inner(area);
+              f.render_widget(block, area);
+              let sweep_pct = if etl.sweep_interval > 0 {
+                  ((1.0 - etl.ticks_until_sweep as f64 / etl.sweep_interval as f64) * 100.0) as u16
+              } else { 0 };
+              let lines = vec![
+                  Line::from(vec![
+                      Span::styled("SDB ", Style::default().fg(rgb(etl.sdb_tribal_rgb)).add_modifier(Modifier::BOLD)),
+                      Span::styled(format!("pend:{:<4}", etl.sdb_pending),  Style::default().fg(AMBER)),
+                      Span::styled(format!("prom:{:<4}", etl.sdb_promoted), Style::default().fg(GREEN)),
+                      Span::styled(format!("qr:{}", etl.sdb_quarantined),   Style::default().fg(MAROON)),
+                  ]),
+                  Line::from(vec![
+                      Span::raw("    "),
+                      Span::styled(
+                          if etl.sdb_malware_hits > 0 { format!("⛔ malware:{}", etl.sdb_malware_hits) }
+                          else { "✓ no malware".into() },
+                          Style::default().fg(if etl.sdb_malware_hits > 0 { RED } else { GREEN }),
+                      ),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("QDB ", Style::default().fg(rgb(etl.qdb_tribal_rgb)).add_modifier(Modifier::BOLD)),
+                      Span::styled(format!("total:{:<5}", etl.qdb_total),       Style::default().fg(WHITE)),
+                      Span::styled(format!("mal:{}", etl.qdb_malware_count),    Style::default().fg(RED)),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("ODB ", Style::default().fg(rgb(etl.odb_tribal_rgb)).add_modifier(Modifier::BOLD)),
+                      Span::styled(format!("total:{}", etl.odb_total),          Style::default().fg(WHITE)),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("DW  ", Style::default().fg(rgb(etl.dw_tribal_rgb)).add_modifier(Modifier::BOLD)),
+                      Span::styled(format!("total:{:<5}", etl.dw_total),        Style::default().fg(WHITE)),
+                      Span::styled("DB  ", Style::default().fg(rgb(etl.db_tribal_rgb)).add_modifier(Modifier::BOLD)),
+                      Span::styled(format!("total:{}", etl.db_total),           Style::default().fg(WHITE)),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("Tick ", Style::default().fg(GREY)),
+                      Span::styled(format!("{} ", etl.current_tick),            Style::default().fg(WHITE)),
+                      Span::styled("sweep in ", Style::default().fg(GREY)),
+                      Span::styled(format!("{} [{sweep_pct}%]", etl.ticks_until_sweep), Style::default().fg(CYAN)),
+                  ]),
+              ];
+              f.render_widget(Paragraph::new(lines), inner);
+          }
+
+          fn render_quality(f: &mut Frame, area: Rect, fuzzy: &bee_mdm_bus::FuzzySnapshot) {
+              let b11   = fuzzy.b11 as u8;
+              let tc    = tier_color_of(b11);
+              let block = Block::default()
+                  .title(Span::styled(format!(" B11 {} ", tier_label(b11)),
+                      Style::default().fg(tc).add_modifier(Modifier::BOLD)))
+                  .borders(Borders::ALL).border_style(Style::default().fg(tc));
+              let inner = block.inner(area);
+              f.render_widget(block, area);
+              let chunks = Layout::default()
+                  .direction(Direction::Vertical)
+                  .constraints([Constraint::Length(1), Constraint::Min(3)])
+                  .split(inner);
+              let pct = (fuzzy.b11 as f64 / B11_DIVISOR as f64 * 100.0) as u16;
+              f.render_widget(
+                  Gauge::default()
+                      .gauge_style(Style::default().fg(tc).bg(Color::Rgb(30, 30, 40)))
+                      .percent(pct)
+                      .label(format!("{} ({pct}%)", fuzzy.b11)),
+                  chunks[0],
+              );
+              let trust = trust_label(&fuzzy.dims.d6_source_trust);
+              let lines = vec![
+                  Line::from(Span::styled(
+                      format!("Avg:{} Scored:{}", fuzzy.avg_b11(), fmt_n(fuzzy.scored_count)),
+                      Style::default().fg(GREY))),
+                  Line::from(Span::styled(
+                      format!("D1:{:.2} D2:{:.2} D3:{:.2}",
+                          fuzzy.dims.d1_name_completeness,
+                          fuzzy.dims.d2_name_consistency,
+                          fuzzy.dims.d3_id_validity),
+                      Style::default().fg(GREY))),
+                  Line::from(Span::styled(
+                      format!("D4:{:.2} D5:{:.2} D6:{}",
+                          fuzzy.dims.d4_date_validity,
+                          fuzzy.dims.d5_geo_precision,
+                          trust),
+                      Style::default().fg(GREY))),
+                  Line::from(Span::styled(
+                      format!("D7:{:.2} D8:{:.2} D9:{:.2}",
+                          fuzzy.dims.d7_duplicate_proximity,
+                          fuzzy.dims.d8_arabic_density,
+                          fuzzy.dims.d9_orbital_trust_penalty),
+                      Style::default().fg(GREY))),
+              ];
+              f.render_widget(Paragraph::new(lines), chunks[1]);
+          }
+
+          fn render_diagnosis(f: &mut Frame, area: Rect, state: &bee_mdm_bus::BeeMdmBusState) {
+              let d  = &state.diagnosis;
+              let hc = if d.critical > 0 { RED } else if d.warning > 0 { AMBER } else { GREEN };
+              let icon = if d.critical > 0 { "⛔" } else if d.warning > 0 { "⚠ " } else { "✓ " };
+              let block = Block::default()
+                  .title(Span::styled(" Diagnosis ",
+                      Style::default().fg(hc).add_modifier(Modifier::BOLD)))
+                  .borders(Borders::ALL).border_style(Style::default().fg(hc));
+              let inner = block.inner(area);
+              f.render_widget(block, area);
+              let lines = vec![
+                  Line::from(vec![
+                      Span::styled(format!("{icon}"), Style::default().fg(hc)),
+                      Span::styled(format!("W:{} ", d.watch),   Style::default().fg(GREY)),
+                      Span::styled(format!("⚠:{} ", d.warning), Style::default().fg(AMBER)),
+                      Span::styled(format!("⛔:{}", d.critical), Style::default().fg(RED)),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("Proc: ", Style::default().fg(GREY)),
+                      Span::styled(fmt_n(state.total_processed), Style::default().fg(WHITE)),
+                  ]),
+                  Line::from(vec![
+                      Span::styled("Gold: ", Style::default().fg(GOLD)),
+                      Span::styled(fmt_n(state.total_golden),      Style::default().fg(GOLD)),
+                      Span::styled(" Q: ",  Style::default().fg(GREY)),
+                      Span::styled(fmt_n(state.total_quarantined), Style::default().fg(MAROON)),
+                  ]),
+                  Line::from(Span::styled(
+                      format!("Rate: {:.1}%", state.golden_rate_pct()),
+                      Style::default().fg(GOLD))),
+              ];
+              f.render_widget(Paragraph::new(lines), inner);
+          }
+
+          fn render_alerts(f: &mut Frame, area: Rect,
+              alerts: &std::collections::VecDeque<bee_mdm_bus::BusAlert>) {
+              let block = Block::default()
+                  .title(Span::styled(format!(" Alerts — {} ",  alerts.len()),
+                      Style::default().fg(AMBER).add_modifier(Modifier::BOLD)))
+                  .borders(Borders::ALL).border_style(Style::default().fg(AMBER));
+              let inner = block.inner(area);
+              f.render_widget(block, area);
+              let items: Vec<ListItem> = alerts.iter().take(7).map(|a| {
+                  let (icon, col) = match a.level {
+                      AlertLevel::Critical => ("⛔", RED),
+                      AlertLevel::Warning  => ("⚠ ", AMBER),
+                      AlertLevel::Watch    => ("◉ ", CYAN),
+                  };
+                  let b11_s  = a.b11.map(|v| format!(" [B11:{v}]")).unwrap_or_default();
+                  let kaki_s = a.kaki_hex.as_deref()
+                      .map(|k| format!(" {}", &k[..k.len().min(8)]))
+                      .unwrap_or_default();
+                  ListItem::new(Line::from(vec![
+                      Span::styled(format!("{icon} "), Style::default().fg(col)),
+                      Span::styled(format!("{} ", a.time_display), Style::default().fg(GREY)),
+                      Span::styled(format!("{}{}{}", a.message_en, b11_s, kaki_s),
+                          Style::default().fg(col)),
+                  ]))
+              }).collect();
+              f.render_widget(List::new(items), inner);
+          }
+
+          fn render_keys(f: &mut Frame, area: Rect) {
+              let line = Line::from(vec![
+                  Span::styled("[P]ause ",      Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+                  Span::styled("[R]esume ",     Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+                  Span::styled("[S]weep ",      Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+                  Span::styled("[A]ccelerate ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+                  Span::styled("[Q]uit ",       Style::default().fg(RED).add_modifier(Modifier::BOLD)),
+                  Span::styled("  𒁾 BahyWay.Ecosystem v4.0", Style::default().fg(GREY)),
+              ]);
+              f.render_widget(Paragraph::new(line).alignment(Alignment::Left), area);
+          }
+
+          // ── Helpers ───────────────────────────────────────────────────────
+          fn tier_label(b11: u8) -> &'static str {
+              if b11 >= GEM_THRESHOLD         { "GEM 𒀭"     }
+              else if b11 >= TRIBE_THRESHOLD  { "TRIBE"      }
+              else if b11 >= ACTIVE_THRESHOLD { "ACTIVE"     }
+              else                            { "NON-ACTIVE" }
+          }
+          fn tier_color_of(b11: u8) -> Color {
+              if b11 >= GEM_THRESHOLD         { GOLD   }
+              else if b11 >= TRIBE_THRESHOLD  { CYAN   }
+              else if b11 >= ACTIVE_THRESHOLD { BLUE   }
+              else                            { MAROON }
+          }
+          fn trust_label(t: &SourceTrust) -> &'static str {
+              match t {
+                  SourceTrust::Authoritative => "Auth",
+                  SourceTrust::Official      => "Official",
+                  SourceTrust::Community     => "Commty",
+                  SourceTrust::Unknown       => "Unknown",
+              }
+          }
+          fn rgb([r, g, b]: [u8; 3]) -> Color { Color::Rgb(r, g, b) }
+          fn fmt_n(n: u64) -> String {
+              let s = n.to_string();
+              let mut out = String::with_capacity(s.len() + s.len() / 3);
+              for (i, ch) in s.chars().rev().enumerate() {
+                  if i > 0 && i % 3 == 0 { out.push(','); }
+                  out.push(ch);
+              }
+              out.chars().rev().collect()
+          }
+
+    # ── Step 6: Insert workspace entry AFTER files exist ──────────────────
+    - name: "Insert beemdm-monitor into workspace Cargo.toml"
+      ansible.builtin.lineinfile:
+        path:        "{{ workspace_toml }}"
+        insertafter: '"bin/bee-watchdog"'
+        line:        '    "bin/beemdm-monitor",'
+        state:       present
+        regexp:      '"bin/beemdm-monitor"'
+
+    # ── Step 7: Verify TOML parses ────────────────────────────────────────
+    - name: "Verify Cargo.toml parses cleanly"
+      ansible.builtin.command:
+        cmd:   cargo metadata --no-deps --format-version 1
+        chdir: "{{ forge }}"
+      register: meta
+      changed_when: false
+      failed_when:  meta.rc != 0
+
+    - name: "Confirm beemdm-monitor in workspace"
+      ansible.builtin.assert:
+        that:    '"beemdm-monitor" in meta.stdout'
+        success_msg: "✓ beemdm-monitor found in workspace"
+        fail_msg:    "beemdm-monitor NOT found after patch"
+
+    # ── Step 8: Build ─────────────────────────────────────────────────────
+    - name: "cargo build -p beemdm-monitor"
+      ansible.builtin.command:
+        cmd:   cargo build -p beemdm-monitor
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 5 lines of build output"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-5:] }}"
+
+    # ── Step 9: Verify binary ─────────────────────────────────────────────
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/beemdm-monitor"
+      register: bin_stat
+
+    - name: "Assert binary exists"
+      ansible.builtin.assert:
+        that:
+          - bin_stat.stat.exists
+          - bin_stat.stat.size > 0
+        success_msg: "✓ binary ready — {{ bin_stat.stat.size | filesizeformat }}"
+        fail_msg:    "Binary not produced"
+
+    # ── Step 10: Done ─────────────────────────────────────────────────────
+    - name: "𒁾 Deployment complete"
+      ansible.builtin.debug:
+        msg:
+          - "========================================"
+          - "𒁾 beemdm-monitor v4.0.2 — DEPLOYED"
+          - "Binary: {{ forge }}/target/debug/beemdm-monitor"
+          - "Size:   {{ bin_stat.stat.size | filesizeformat }}"
+          - "----------------------------------------"
+          - "Run:    cd ~/Forge/bahyway_v4"
+          - "        cargo run -p beemdm-monitor"
+          - "Keys:   [P]ause [R]esume [S]weep [A]ccel [Q]uit"
+          - "========================================"

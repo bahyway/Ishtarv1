@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · KARĀNU VINEYARD — Grape-Cluster Monitoring · Stem-Locality Diagnosis · Automated Harvest · The Cellar of Vintages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abzu:#070B14; --abzu-2:#0C1220;
+  --lapis:#24406E; --lapis-soft:#31517F;
+  --gold:#D4A945; --gold-dim:#8F7430; --gold-bright:#F2CC6B;
+  --alabaster:#E9E2D0; --alabaster-dim:#9C9584;
+  --clay:#C1603A; --reed:#6E9C7C;
+  --line:rgba(212,169,69,.18);
+  --card:#0E1524; --card-2:#111A2E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--abzu);color:var(--alabaster);font-family:'IBM Plex Sans',sans-serif;font-weight:300;overflow:hidden}
+header{height:62px;display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0B1120,#070B14)}
+.glyph{font-size:24px;color:var(--gold);line-height:1;user-select:none}
+h1{font-family:'Marcellus',serif;font-weight:400;font-size:15.5px;letter-spacing:.1em;white-space:nowrap}
+h1 span{color:var(--gold)}
+.subtitle{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.07em;border-left:1px solid var(--line);padding-left:16px;line-height:1.55}
+.subtitle b{color:var(--gold);font-weight:500}
+.wrap{display:flex;height:calc(100vh - 62px)}
+.stage{flex:1;position:relative;min-width:0}
+canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.actionbar{position:absolute;left:14px;bottom:12px;display:flex;gap:8px;z-index:3;flex-wrap:wrap}
+.abtn{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.05em;padding:8px 13px;border:1px solid var(--gold-dim);border-radius:3px;background:var(--gold);color:#14100a;font-weight:600;cursor:pointer}
+.abtn.ghost{background:rgba(14,21,36,.9);color:var(--alabaster);border-color:var(--line);font-weight:400}
+.abtn:focus-visible,.chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.tip{position:absolute;display:none;max-width:310px;padding:8px 11px;border:1px solid var(--gold-dim);border-radius:5px;background:rgba(10,15,28,.97);font-size:10.5px;line-height:1.55;color:var(--alabaster);z-index:8;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.55)}
+.tip b{color:var(--gold);font-weight:500}
+.tip .th{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;margin-bottom:3px}
+.tip .tf{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--alabaster-dim);margin-top:5px}
+.info{position:absolute;left:14px;top:56px;width:min(560px,58%);max-height:calc(100% - 130px);display:none;flex-direction:column;border:1px solid var(--gold-dim);border-radius:6px;background:rgba(10,15,28,.97);box-shadow:0 10px 44px rgba(0,0,0,.65);z-index:9}
+.info.on{display:flex}
+.info-head{display:flex;justify-content:space-between;align-items:center;padding:11px 15px;border-bottom:1px solid var(--line)}
+.info-title{font-family:'Marcellus',serif;font-size:15px;letter-spacing:.06em}
+.info-sub{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--alabaster-dim);letter-spacing:.1em;margin-top:2px}
+.info-x{background:none;border:1px solid var(--line);border-radius:3px;color:var(--alabaster-dim);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 9px;cursor:pointer}
+.info-x:hover{color:var(--gold);border-color:var(--gold-dim)}
+.info-body{overflow-y:auto;padding:12px 16px;font-size:11.5px;line-height:1.7}
+.info-body::-webkit-scrollbar{width:8px}
+.info-body::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+.info-body b{color:var(--gold);font-weight:500}
+.info-body .sec{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin:12px 0 4px}
+.info-body .clay{color:var(--clay)}.info-body .reed{color:var(--reed)}
+aside{width:410px;flex-shrink:0;border-left:1px solid var(--line);background:var(--abzu-2);display:flex;flex-direction:column;overflow:hidden}
+.engine-head{padding:11px 16px 9px;border-bottom:1px solid var(--line)}
+.engine-head .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.engine-head h2{font-family:'Marcellus',serif;font-weight:400;font-size:15px;letter-spacing:.05em;margin-top:3px}
+.engine-head .gloss{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.05em;margin-top:2px;line-height:1.5}
+.court{padding:10px 16px;border-bottom:1px solid var(--line)}
+.kv{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;margin-top:4px;color:var(--alabaster-dim)}
+.kv b{color:var(--alabaster);font-weight:500}
+.kv b.gold{color:var(--gold-bright)}.kv b.bad{color:var(--clay)}.kv b.good{color:var(--reed)}
+.clibox{flex:1;overflow-y:auto;padding:12px 14px}
+.clibox::-webkit-scrollbar,.journal::-webkit-scrollbar{width:8px}
+.clibox::-webkit-scrollbar-thumb,.journal::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+.cli-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;padding:4px 9px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--alabaster-dim);cursor:pointer;transition:all .15s}
+.chip:hover{color:var(--gold);border-color:var(--gold-dim)}
+.chip.gold{color:var(--gold);border-color:var(--gold-dim)}
+.cli-inbox{border:1px solid var(--gold-dim);border-radius:4px;background:#0A0F1C;margin-bottom:10px;overflow:hidden}
+#cliIn{width:100%;background:transparent;border:none;resize:vertical;min-height:50px;padding:9px 10px;color:var(--alabaster);font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.6;outline:none}
+.cli-actions{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-top:1px solid var(--line);background:var(--card)}
+.cli-hint{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.08em}
+.runb{padding:7px 16px;border-radius:3px;border:1px solid var(--gold-dim);background:var(--gold);color:#14100a;font-weight:600;font-size:11px;cursor:pointer}
+.cell{border:1px solid var(--line);border-radius:4px;margin-bottom:9px;overflow:hidden}
+.cell .cq{background:#0A0F1C;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.65;white-space:pre-wrap;border-bottom:1px solid var(--line)}
+.cell .co{background:var(--card);padding:9px 10px;font-size:10.5px;line-height:1.65}
+.cell.err .co{color:#E8B9A4}
+.cell .co b{color:var(--gold);font-weight:500}
+.cell .co .clay{color:var(--clay)}.cell .co .reed{color:var(--reed)}.cell .co .goldb{color:var(--gold-bright)}
+.hx-stage{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;margin:10px 0 6px;color:var(--gold)}
+.hk{color:var(--gold);font-weight:500}.hw{color:#7FA0D0}.hp{color:var(--reed)}.hv{color:#D8A08A}.hc{color:#5E6878;font-style:italic}
+.journal{height:104px;flex-shrink:0;border-top:1px solid var(--line);background:#080D18;padding:9px 14px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:9.5px;line-height:1.75;color:var(--alabaster-dim)}
+.journal .j-eyebrow{font-size:8.5px;letter-spacing:.22em;color:var(--gold);margin-bottom:4px;text-transform:uppercase}
+.journal .ln b{color:var(--gold);font-weight:500}
+.journal .ln .clay{color:var(--clay)}.journal .ln .reed{color:var(--reed)}.journal .ln .goldb{color:var(--gold-bright)}
+@media (max-width:1000px){aside{width:330px}.subtitle{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="glyph">𒃾</div>
+  <h1>ŠALA <span>·</span> KARĀNU VINEYARD <span>·</span> WINE FARM CONTROL CENTER</h1>
+  <div class="subtitle"><b>A billion souls hang as grape clusters</b> — one cluster per root-cause lineage inside one file-structure row<br><b>Stem-locality</b> names the root problem on the SSD · the <b>harvest rules</b> automate the pipeline · the <b>cellar</b> keeps the vintages · Geštinanna presides — the vine-goddess who is also a scribe</div>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="tip" id="tip"></div>
+    <div class="info" id="info">
+      <div class="info-head"><div><div class="info-title" id="infoTitle"></div><div class="info-sub" id="infoSub"></div></div><button class="info-x" id="infoClose">CLOSE ✕</button></div>
+      <div class="info-body" id="infoBody"></div>
+    </div>
+    <div class="actionbar">
+      <button class="abtn ghost" id="btnInfect">EMIT infection — sicken one cluster (drill)</button>
+      <button class="abtn" id="btnHarvest">EMIT harvest — pick every ripe cluster now</button>
+      <button class="abtn ghost" id="btnAuto">AUTOPILOT: ON</button>
+    </div>
+  </div>
+
+  <aside>
+    <div class="engine-head">
+      <div class="eyebrow">Presiding · Cluster Lifecycle Court · naming pending CSR-08</div>
+      <h2>GEŠTINANNA · THE VINE &amp; THE SCRIBE</h2>
+      <div class="gloss">physical: Cluster Lifecycle Monitor (CLM) · rows = file-structures · clusters = root-cause lineages · berries = souls · KISPU columnar layout makes a tribe physically one stem — so stem-locality is a real SSD diagnosis, not a metaphor · Šala prototype; production feeds the Igigi Watch</div>
+    </div>
+
+    <div class="court">
+      <div class="kv"><span>SOULS ON THE VINES (scale model)</span><b id="rSouls" class="gold">—</b></div>
+      <div class="kv"><span>MEAN RIPENESS (GOLDEN share)</span><b id="rRipe" class="gold">—</b></div>
+      <div class="kv"><span>VINTAGES IN THE CELLAR</span><b id="rVint">0</b></div>
+      <div class="kv"><span>SORTING TABLE (red berries)</span><b id="rSort" class="bad">0</b></div>
+      <div class="kv"><span>PHYLLOXERA (root-layer alarm)</span><b id="rPhyl" class="good">SILENT</b></div>
+      <div class="kv"><span>AUTOPILOT RULES</span><b class="good">ripe≥85% ∧ age≥12 → harvest</b></div>
+    </div>
+
+    <div class="clibox" id="clibox"></div>
+    <div class="journal" id="journal"><div class="j-eyebrow">Geštinanna's Ledger · append-only</div></div>
+  </aside>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   ŠALA KARĀNU VINEYARD — grape-cluster monitoring (DRAFT)
+   Answering the three questions at 10^9 scale:
+   1) ROOT PROBLEM ON SSD: stem-locality. KISPU columnar layout
+      + orbital partitioning make a lineage physically one stem
+      (contiguous extents). Sick berries on ONE stem => cause is
+      feed/storage (C-01 / NAND soil). Sick berries SCATTERED
+      across stems => systemic cause (template C-02 / calibration
+      C-03). locality = 1 - fragments/berries. Soil Report =
+      wear/temp/write-amp per row.
+   2) AUTOMATE PIPELINE: ripening IS the pipeline. green (raw)
+      -> veraison (operational) -> gold (sealed). Harvest rules:
+      ripeness>=85% AND age>=12 => auto snapshot-partition (the
+      vintage SN-xxx) into the cellar (EnkiDW). Infection over
+      covenant => green-harvest early. Red berries drop to the
+      SORTING TABLE (EnkiQDB) and return on Steward decree.
+   3) VISUALIZE ETL: this control center — rows aged left→right,
+      clusters hanging, cellar shelf, sorting table, soil strip.
+   Containment: red exists ONLY on the sorting table + drop
+   corridor. Motion law: everything moves until resident.
+   ============================================================ */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+let W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+function resize(){const r=cv.parentElement.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);if(typeof drops!=='undefined')drops.length=0;}
+window.addEventListener('resize',resize);
+
+/* ---------- the vineyard ---------- */
+const ROWS=[
+ {file:'parcels.json',    soil:{wear:12,temp:41,wamp:1.3}},
+ {file:'sensors_water.csv',soil:{wear:34,temp:47,wamp:1.9}},
+ {file:'ledger_export.xml',soil:{wear:8, temp:39,wamp:1.2}},
+ {file:'permits_scan.pdf', soil:{wear:61,temp:52,wamp:2.7}},
+];
+const SCALE='1 berry \u2248 12.5M souls';   /* 4 rows × ~10 clusters × ~10 berries ≈ 1B model */
+let clusters=[],drops=[],cellar=[],vintN=0,autoPilot=true,phyl=false,selC=null;
+function mkCluster(row,age){
+  const n=8+Math.floor(Math.random()*5);
+  const berries=[];
+  for(let k=0;k<n;k++)berries.push({state:'green',a:Math.random()*Math.PI*2,r:5+Math.random()*7});
+  /* stem locality: most clusters are one stem (contiguous extents) by KISPU design */
+  const scattered=Math.random()<0.18;
+  const fragments=scattered?2+Math.floor(Math.random()*3):1;
+  return {row,age,berries,fragments,infected:false,cause:null,id:'K-'+String(++mkCluster._i||(mkCluster._i=1)).padStart(3,'0')};
+}
+function seed(){
+  clusters=[];drops=[];cellar=[];vintN=0;phyl=false;selC=null;
+  ROWS.forEach((r,ri)=>{
+    const n=9+Math.floor(Math.random()*3);
+    for(let k=0;k<n;k++)clusters.push(mkCluster(ri,Math.random()*10));
+  });
+  jlog('Ge\u0161tinanna opens the vineyard \u00B7 '+clusters.length+' clusters on '+ROWS.length+' rows \u00B7 '+SCALE+' \u00B7 the vines ripen toward the seal');
+}
+function rowGeom(ri){
+  const y=H*0.14+ri*(H*0.155);
+  return {x0:W*0.03,x1:W*0.60,y};
+}
+function clusterPos(c){
+  const g=rowGeom(c.row);
+  const x=g.x0+ (Math.min(20,c.age)/20)*(g.x1-g.x0);
+  return {x,y:g.y+26};
+}
+function ripeness(c){return c.berries.filter(b=>b.state==='gold').length/c.berries.length;}
+function locality(c){return 1-(c.fragments-1)/Math.max(1,c.berries.length);}
+
+/* ---------- actions ---------- */
+function infectOne(){
+  const healthy=clusters.filter(c=>!c.infected);
+  if(!healthy.length)return;
+  const c=healthy[Math.floor(Math.random()*healthy.length)];
+  c.infected=true;
+  const stem=c.fragments===1;
+  c.cause=stem?'C-01 SOURCE_FEED_POISON (or NAND soil fault)':'C-02/C-03 systemic (template / calibration)';
+  const nSick=2+Math.floor(Math.random()*3);
+  let s=0;
+  c.berries.forEach(b=>{if(s<nSick&&b.state!=='gold'){b.state='red';s++;}});
+  jlog('<span class="clay">INFECTION</span> \u00B7 '+c.id+' on row '+ROWS[c.row].file+' \u00B7 '+(stem?'ONE STEM \u2014 root cause below (feed/storage)':'SCATTERED \u2014 systemic cause (canopy)'));
+  if(stem&&ROWS[c.row].soil.wear>50){phyl=true;
+    jlog('<span class="clay">PHYLLOXERA</span> \u00B7 stem disease over exhausted soil \u2014 the root layer itself is suspect (row '+ROWS[c.row].file+')');}
+}
+function harvest(c){
+  const g=clusterPos(c);
+  /* red berries fall to the sorting table; the rest is pressed into a vintage */
+  const reds=c.berries.filter(b=>b.state==='red').length;
+  for(let k=0;k<reds;k++)drops.push({x:g.x+(Math.random()-.5)*14,y:g.y,ty:H*0.86-8-Math.random()*20,st:'fall'});
+  vintN++;
+  const label='SN-'+String(vintN).padStart(3,'0');
+  cellar.push({label,n:c.berries.length-reds,row:c.row,age:c.age.toFixed(0)});
+  clusters=clusters.filter(x=>x!==c);
+  clusters.push(mkCluster(c.row,0));  /* the row is replanted — the vineyard never empties */
+  jlog('<span class="goldb">HARVEST '+label+'</span> \u00B7 row '+ROWS[c.row].file+' \u00B7 '+(c.berries.length-reds)+' golden berries pressed to the cellar'+(reds?(' \u00B7 <span class="clay">'+reds+' red to the sorting table</span>'):''));
+}
+function harvestAllRipe(){
+  clusters.slice().forEach(c=>{if(ripeness(c)>=0.85&&c.age>=12)harvest(c);});
+}
+document.getElementById('btnInfect').addEventListener('click',infectOne);
+document.getElementById('btnHarvest').addEventListener('click',()=>{clusters.slice().forEach(c=>{if(ripeness(c)>=0.6)harvest(c);});});
+document.getElementById('btnAuto').addEventListener('click',e=>{autoPilot=!autoPilot;e.target.textContent='AUTOPILOT: '+(autoPilot?'ON':'OFF');jlog('AUTOPILOT '+(autoPilot?'ON \u2014 the vigneron rules govern the harvest':'OFF \u2014 the steward picks by hand'));});
+
+/* ---------- simulation ---------- */
+let tPrev=performance.now(),stewardT=0;
+function step(dt,now){
+  clusters.forEach(c=>{
+    c.age+=dt*0.5;
+    /* ripening: green -> veraison -> gold, faster in healthy soil */
+    const soil=ROWS[c.row].soil;
+    const rate=dt*0.05*(soil.wear>50?0.55:1);
+    c.berries.forEach(b=>{
+      if(b.state==='green'&&Math.random()<rate)b.state='ver';
+      else if(b.state==='ver'&&Math.random()<rate*0.9)b.state='gold';
+    });
+  });
+  if(autoPilot)harvestAllRipe();
+  /* drops: fall to sorting table; steward returns them */
+  drops.forEach(d=>{
+    if(d.st==='fall'){d.y+=dt*110;if(d.y>=d.ty)d.st='held';}
+    else if(d.st==='held'){d.x+=Math.sin(now/700+d.ty)*dt*8;}
+    else if(d.st==='ret'){d.y-=dt*95;if(d.y<=H*0.20)d.st='done';}
+    /* CONTAINMENT: sorting table + corridor only */
+    d.x=Math.max(W*0.035,Math.min(W*0.585,d.x));
+    d.y=Math.max(H*0.12,Math.min(H*0.86-6,d.y));
+  });
+  drops=drops.filter(d=>d.st!=='done');
+  stewardT+=dt;
+  if(stewardT>6&&drops.filter(d=>d.st==='held').length>3){
+    stewardT=0;
+    const d=drops.find(x=>x.st==='held');
+    if(d){d.st='ret';jlog('<span class="reed">STEWARD DECREE</span> \u00B7 one berry judged at the sorting table \u00B7 re-grafted to its row, green again');}
+  }
+  /* readouts */
+  const nB=clusters.reduce((a,c)=>a+c.berries.length,0);
+  document.getElementById('rSouls').textContent='~'+(nB*12.5/1000).toFixed(2)+' B ('+nB+' berries)';
+  const meanR=clusters.length?clusters.reduce((a,c)=>a+ripeness(c),0)/clusters.length:0;
+  document.getElementById('rRipe').textContent=(meanR*100).toFixed(0)+'%';
+  document.getElementById('rVint').textContent=cellar.length;
+  const held=drops.filter(d=>d.st!=='done').length;
+  const sEl=document.getElementById('rSort');sEl.textContent=held;sEl.className=held>6?'bad':'good';
+  const pEl=document.getElementById('rPhyl');
+  pEl.textContent=phyl?'RINGING \u00B7 root layer suspect':'SILENT';
+  pEl.className=phyl?'bad':'good';
+}
+
+/* ---------- rendering ---------- */
+const BCOL={green:'hsl(150 55% 52%)',ver:'hsl(178 55% 55%)',gold:'hsl(45 80% 58%)',red:'hsl(4 74% 52%)'};
+function draw(now){
+  const t=now/1000;
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createRadialGradient(W/2,H/2,80,W/2,H/2,Math.max(W,H)*.7);
+  g.addColorStop(0,'#0A101E');g.addColorStop(1,'#070B14');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(156,149,132,.6)';ctx.font='9.5px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('THE VINEYARD \u00B7 rows = file-structures \u00B7 clusters = root-cause lineages \u00B7 age runs left \u2192 right \u00B7 '+SCALE+' \u00B7 hover anything; press \u24D8 for its full tablet',24,H*0.05);
+  /* rows: trellis + soil strip */
+  ROWS.forEach((r0,ri)=>{
+    const rg=rowGeom(ri);
+    ctx.strokeStyle='rgba(110,156,124,.5)';ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.moveTo(rg.x0,rg.y);ctx.lineTo(rg.x1,rg.y);ctx.stroke();
+    ctx.fillStyle='rgba(233,226,208,.85)';ctx.font='10px "IBM Plex Mono",monospace';
+    ctx.fillText('ROW \u00B7 '+r0.file,rg.x0,rg.y-26);
+    /* soil report strip */
+    const soilBad=r0.soil.wear>50;
+    ctx.fillStyle=soilBad?'rgba(224,82,64,.75)':'rgba(110,156,124,.6)';
+    ctx.font='8px "IBM Plex Mono",monospace';
+    ctx.fillText('soil \u00B7 wear '+r0.soil.wear+'% \u00B7 '+r0.soil.temp+'\u00B0C \u00B7 write-amp '+r0.soil.wamp+(soilBad?' \u00B7 EXHAUSTED':''),rg.x0,rg.y-14);
+    /* age ticks */
+    for(let a=0;a<=20;a+=5){
+      const x=rg.x0+a/20*(rg.x1-rg.x0);
+      ctx.strokeStyle='rgba(49,81,127,.4)';
+      ctx.beginPath();ctx.moveTo(x,rg.y-4);ctx.lineTo(x,rg.y+4);ctx.stroke();
+    }
+    ctx.fillStyle='rgba(156,149,132,.5)';
+    ctx.fillText('harvest line \u2192',rg.x1-70,rg.y-14);
+  });
+  /* clusters */
+  clusters.forEach(c=>{
+    const p=clusterPos(c);
+    /* stem */
+    ctx.strokeStyle=c.fragments===1?'rgba(110,156,124,.8)':'rgba(212,169,69,.7)';
+    ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.moveTo(p.x,rowGeom(c.row).y);ctx.lineTo(p.x,p.y-6);ctx.stroke();
+    if(c.fragments>1){ /* scattered: forked stem */
+      ctx.beginPath();ctx.moveTo(p.x,rowGeom(c.row).y+8);ctx.lineTo(p.x-10,p.y-8);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(p.x,rowGeom(c.row).y+8);ctx.lineTo(p.x+10,p.y-8);ctx.stroke();
+    }
+    /* berries */
+    c.berries.forEach((b,k)=>{
+      const bx=p.x+Math.cos(b.a+k)*b.r*1.6, by=p.y+8+Math.abs(Math.sin(b.a+k))*b.r*1.7+Math.sin(t*1.8+k+c.age)*1.2;
+      ctx.fillStyle=BCOL[b.state];
+      ctx.beginPath();ctx.arc(bx,by,3.1,0,Math.PI*2);ctx.fill();
+    });
+    /* ripeness ringlet + selection */
+    const rp=ripeness(c);
+    if(rp>=0.85&&c.age>=12){
+      ctx.strokeStyle='rgba(242,204,107,'+(0.5+0.4*Math.sin(t*4))+')';ctx.lineWidth=1.3;
+      ctx.beginPath();ctx.arc(p.x,p.y+12,16,0,Math.PI*2);ctx.stroke();
+    }
+    if(selC===c){
+      ctx.strokeStyle='rgba(233,226,208,.95)';ctx.setLineDash([3,3]);
+      ctx.beginPath();ctx.arc(p.x,p.y+12,20,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+    }
+    if(c.infected){
+      ctx.fillStyle='rgba(224,82,64,.8)';ctx.font='8px "IBM Plex Mono",monospace';ctx.textAlign='center';
+      ctx.fillText(c.fragments===1?'stem-sick':'scattered',p.x,p.y+34);
+      ctx.textAlign='left';
+    }
+  });
+  /* sorting table (containment home of red) */
+  {
+    const x0=W*0.03,y0=H*0.80,w0=W*0.56,h0=H*0.075;
+    ctx.fillStyle='rgba(20,12,12,.5)';
+    ctx.strokeStyle='rgba(224,82,64,.85)';ctx.lineWidth=1.5;
+    rr(x0,y0,w0,h0,8);ctx.fill();ctx.stroke();
+    ctx.fillStyle='rgba(233,226,208,.85)';ctx.font='9.5px "IBM Plex Mono",monospace';
+    ctx.fillText('SORTING TABLE \u00B7 EnkiQDB \u00B7 red berries only \u00B7 evidence-grade \u00B7 returned on Steward decree',x0+10,y0+16);
+    drops.forEach(d=>{
+      ctx.fillStyle='hsl(4 74% 52%)';
+      ctx.beginPath();ctx.arc(d.x,Math.max(d.y,y0+26),3,0,Math.PI*2);ctx.fill();
+    });
+  }
+  /* cellar shelf */
+  {
+    const x0=W*0.635,y0=H*0.12,w0=W*0.33,h0=H*0.50;
+    ctx.strokeStyle='rgba(212,169,69,.3)';rr(x0,y0,w0,h0,10);ctx.stroke();
+    ctx.fillStyle='rgba(212,169,69,.85)';ctx.font='9.5px "IBM Plex Mono",monospace';
+    ctx.fillText('THE CELLAR \u00B7 EnkiDW \u00B7 vintages (snapshot partitions)',x0+10,y0+16);
+    ctx.fillStyle='rgba(110,156,124,.65)';ctx.font='8px "IBM Plex Mono",monospace';
+    ctx.fillText('a harvest = EMIT snapshot INTO EnkiDW \u00B7 age on the shelf, ready for the dashboards',x0+10,y0+28);
+    cellar.slice(-12).forEach((v,i)=>{
+      const bx=x0+16+(i%4)*((w0-32)/4), by=y0+44+Math.floor(i/4)*54;
+      ctx.strokeStyle='rgba(184,150,62,.8)';ctx.lineWidth=1.3;
+      rr(bx,by,(w0-32)/4-10,40,6);ctx.stroke();
+      ctx.fillStyle='rgba(242,204,107,.9)';ctx.font='9px "IBM Plex Mono",monospace';
+      ctx.fillText(v.label,bx+8,by+15);
+      ctx.fillStyle='rgba(156,149,132,.75)';ctx.font='8px "IBM Plex Mono",monospace';
+      ctx.fillText(v.n+' golden \u00B7 age '+v.age,bx+8,by+29);
+    });
+    if(!cellar.length){ctx.fillStyle='rgba(156,149,132,.5)';ctx.font='9px "IBM Plex Mono",monospace';
+      ctx.fillText('the shelf waits for the first vintage',x0+14,y0+h0/2);}
+  }
+  /* vintage calendar & stem gauge widget */
+  {
+    const x0=W*0.635,y0=H*0.655,w0=W*0.33,h0=H*0.21;
+    ctx.strokeStyle='rgba(212,169,69,.3)';rr(x0,y0,w0,h0,10);ctx.stroke();
+    ctx.fillStyle='rgba(212,169,69,.85)';ctx.font='9.5px "IBM Plex Mono",monospace';
+    ctx.fillText('VINTAGE CALENDAR \u00B7 the automation, visible',x0+10,y0+16);
+    const soon=clusters.map(c=>({c,eta:Math.max(0,(12-c.age)/0.5)})).sort((a,b)=>a.eta-b.eta).slice(0,4);
+    soon.forEach((s0,i)=>{
+      ctx.fillStyle='rgba(233,226,208,.85)';ctx.font='8.5px "IBM Plex Mono",monospace';
+      ctx.fillText(s0.c.id+' \u00B7 '+ROWS[s0.c.row].file+' \u00B7 ripe '+(ripeness(s0.c)*100).toFixed(0)+'% \u00B7 harvest in ~'+s0.eta.toFixed(0)+' \u0161\u0101ru',x0+12,y0+34+i*15);
+    });
+    ctx.fillStyle='rgba(110,156,124,.7)';ctx.font='8px "IBM Plex Mono",monospace';
+    ctx.fillText('rules: ripe\u226585% \u2227 age\u226512 \u2192 harvest \u00B7 infection>covenant \u2192 green-harvest \u00B7 red \u2192 sorting table',x0+12,y0+h0-12);
+  }
+  drawInfoIcons();
+}
+
+/* ---------- the meaning system ---------- */
+function widgetRects(){
+  const rowsBottom=rowGeom(ROWS.length-1).y+40;
+  return [
+   {id:'vineyard',x:W*0.02,y:H*0.08,w:W*0.60,h:rowsBottom-H*0.08,title:'THE VINEYARD \u00B7 rows, stems, clusters',
+    short:'Rows are file-structures; clusters are root-cause lineages; berries are souls (1 berry \u2248 12.5M). A forked stem marks a SCATTERED cluster.',
+    full:'<div class="sec">what it shows</div>A scale model of 10\u2079 particles as grape clusters: one <b>row per file-structure</b>, one <b>cluster per root-cause lineage</b> inside that file, aged left \u2192 right. Berry colour is state: green (raw), teal (veraison/operational), gold (sealed), red (custody-only).<div class="sec">the SSD truth beneath</div>KISPU HeadStore columnar layout + orbital partitioning store a lineage <b>contiguously</b> \u2014 so a cluster genuinely is one stem of extents on the disk. A single straight stem = contiguous LBA ranges; a <b>forked stem</b> = fragmented extents (SCATTERED).<div class="sec">the diagnosis law</div>Sick berries on ONE stem \u21D2 the root problem is <b>below</b>: the feed, the file, or the NAND region itself (C-01 family). Sick berries SCATTERED across stems \u21D2 the cause is <b>systemic canopy</b>: template or calibration (C-02/C-03). One glance replaces the first hour of forensics.'},
+   {id:'soil',x:W*0.02,y:H*0.055,w:W*0.60,h:H*0.03,title:'SOIL REPORT \u00B7 the storage layer per row',
+    short:'Wear %, temperature, write-amplification of the extents under each row \u2014 exhausted soil slows ripening and breeds root disease.',
+    full:'<div class="sec">what it measures</div>The physical health of the SSD regions a row is planted in: NAND <b>wear</b> (erase-count share), <b>temperature</b>, and <b>write-amplification</b> of that row\u2019s extent ranges.<div class="sec">why it matters</div>Exhausted soil (wear > 50%) visibly <b>slows ripening</b> in this model \u2014 as in production, where a worn region throttles and errors. Stem-sickness over exhausted soil raises the <b>PHYLLOXERA</b> alarm: the root layer itself is suspect, and the remedy is replanting (extent migration), not schema medicine.<div class="sec">production feed</div>NVMe telemetry mapped per-row by the extent registry (proposed PB-515).'},
+   {id:'sorting',x:W*0.03,y:H*0.80,w:W*0.56,h:H*0.075,title:'SORTING TABLE \u00B7 EnkiQDB',
+    short:'Red berries fall here at harvest \u2014 evidence-grade, prune-exempt \u2014 and return re-grafted on Steward decree. Red exists nowhere else.',
+    full:'<div class="sec">what it is</div>The vineyard\u2019s BlackBox: during picking, red berries are dropped to the sorting table instead of the press \u2014 exactly the tray of the Ecosystem Dashboard wearing harvest clothes.<div class="sec">the laws it keeps</div><b>Colour law:</b> red exists only here and in the drop corridor (clamped every frame, resize-safe). <b>Custody law:</b> evidence-grade, prune-exempt while judgment is open. <b>Return law:</b> the Steward\u2019s decree re-grafts a judged berry to its row, green again \u2014 the fall-and-return cycle of the BlackBox, unchanged.'},
+   {id:'cellar',x:W*0.635,y:H*0.12,w:W*0.33,h:H*0.50,title:'THE CELLAR \u00B7 EnkiDW vintages',
+    short:'Every harvest is a snapshot partition: SN-xxx barrels aging on the shelf \u2014 the warehouse, ready for dashboards.',
+    full:'<div class="sec">what it is</div>EnkiDW as a wine cellar: each automated harvest presses a cluster\u2019s golden berries into a <b>vintage</b> \u2014 a sealed snapshot partition SN-xxx \u2014 shelved with its count and age.<div class="sec">why the metaphor holds</div>A vintage is immutable, dated, and provenance-complete; so is a snapshot partition. Warehousing queries read vintages; the living vineyard (EnkiDB\u2019s cycle) keeps turning behind them. Orbits truth, Grid convenience \u2014 the cellar is the Grid\u2019s pantry.'},
+   {id:'calendar',x:W*0.635,y:H*0.655,w:W*0.33,h:H*0.21,title:'VINTAGE CALENDAR \u00B7 the automation, visible',
+    short:'The vigneron rules that automate the pipeline: ripe\u226585% \u2227 age\u226512 \u2192 harvest; infection>covenant \u2192 green-harvest; red \u2192 sorting.',
+    full:'<div class="sec">what it shows</div>The next clusters due for harvest with their ETAs \u2014 the automation of pipeline movement made inspectable. Nothing moves by hand on autopilot; the steward is summoned only for <b>scattered-cause</b> clusters, where judgment beats rules.<div class="sec">the three vigneron rules</div>1) <b>Harvest</b> when ripeness \u2265 85% and age \u2265 12 \u2014 the snapshot fires itself. 2) <b>Green-harvest</b> a cluster whose infection exceeds covenant \u2014 early removal so the row\u2019s season is saved (shed at the gates, vineyard edition). 3) <b>Sort</b>: red berries never reach the press \u2014 they fall to custody and return only by decree.<div class="sec">production feed</div>Harvest rules engine (proposed PB-516) emitting EMIT snapshot INTO EnkiDW.'},
+  ];
+}
+const tip=document.getElementById('tip');
+let hoverW=null;
+cv.addEventListener('pointermove',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  hoverW=null;
+  for(const w of widgetRects()){
+    if(mx>=w.x&&mx<=w.x+w.w&&my>=w.y&&my<=w.y+w.h){hoverW=w;break;}
+  }
+  if(hoverW){
+    tip.innerHTML='<div class="th">'+hoverW.title+'</div>'+hoverW.short+'<div class="tf">press the \u24D8 \u2014 or right-click \u2014 for the full functionality tablet</div>';
+    tip.style.display='block';
+    tip.style.left=Math.min(W-330,mx+16)+'px';
+    tip.style.top=Math.min(H-130,my+14)+'px';
+  } else tip.style.display='none';
+});
+cv.addEventListener('pointerleave',()=>{tip.style.display='none';hoverW=null;});
+function openInfo(w){
+  document.getElementById('infoTitle').textContent=w.title;
+  document.getElementById('infoSub').textContent='the vineyard explains itself \u00B7 nothing on this glass is decorative';
+  document.getElementById('infoBody').innerHTML=w.full;
+  document.getElementById('info').classList.add('on');
+  jlog('MEANING \u00B7 <b>'+w.title.split(' \u00B7')[0]+'</b> opened its functionality tablet');
+}
+document.getElementById('infoClose').addEventListener('click',()=>document.getElementById('info').classList.remove('on'));
+function drawInfoIcons(){
+  widgetRects().forEach(w=>{
+    const ix=w.x+w.w-16, iy=w.y+14;
+    const hot=hoverW&&hoverW.id===w.id;
+    ctx.strokeStyle=hot?'rgba(242,204,107,.95)':'rgba(212,169,69,.55)';
+    ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.arc(ix,iy,7,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle=hot?'rgba(242,204,107,.95)':'rgba(212,169,69,.7)';
+    ctx.font='9px "IBM Plex Mono",monospace';ctx.textAlign='center';
+    ctx.fillText('i',ix,iy+3);
+    ctx.textAlign='left';
+  });
+}
+/* click cluster to select; ⓘ opens widget tablets; right-click = cluster testimony or widget tablet */
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  for(const w of widgetRects()){
+    const ix=w.x+w.w-16, iy=w.y+14;
+    if((mx-ix)**2+(my-iy)**2<=100){openInfo(w);return;}
+  }
+  let best=null,bd=900;
+  clusters.forEach(c=>{const p=clusterPos(c);const d=(p.x-mx)**2+(p.y+12-my)**2;if(d<bd){bd=d;best=c;}});
+  if(best){selC=best;jlog('SELECTED \u00B7 '+best.id+' \u00B7 row '+ROWS[best.row].file+' \u00B7 locality '+(locality(best)*100).toFixed(0)+'% \u00B7 right-click for its testimony');}
+});
+cv.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  let best=null,bd=900;
+  clusters.forEach(c=>{const p=clusterPos(c);const d=(p.x-mx)**2+(p.y+12-my)**2;if(d<bd){bd=d;best=c;}});
+  if(best){clusterTestimony(best);return;}
+  if(hoverW)openInfo(hoverW);
+});
+function clusterTestimony(c){
+  const loc=locality(c),rp=ripeness(c);
+  const stem=c.fragments===1;
+  const verdict=stem?'ONE STEM \u2014 if sickness comes, the root cause lives BELOW: the feed, the file, or the NAND soil (C-01 family). Repair is sequential and cheap.':'SCATTERED ('+c.fragments+' fragments) \u2014 sickness here points to the CANOPY: template or calibration (C-02/C-03). The steward judges; rules do not.';
+  document.getElementById('infoTitle').textContent='Testimony \u00B7 '+c.id;
+  document.getElementById('infoSub').textContent='row '+ROWS[c.row].file+' \u00B7 asked by right-click, answered by the vine';
+  document.getElementById('infoBody').innerHTML=
+   '<div class="sec">composition</div>'+c.berries.length+' berries \u00B7 '
+   +c.berries.filter(b=>b.state==='green').length+' green \u00B7 '
+   +c.berries.filter(b=>b.state==='ver').length+' veraison \u00B7 '
+   +'<b>'+c.berries.filter(b=>b.state==='gold').length+' gold</b> \u00B7 '
+   +'<span class="clay">'+c.berries.filter(b=>b.state==='red').length+' red</span>'
+   +'<div class="sec">stem locality (SSD)</div>locality <b>'+(loc*100).toFixed(0)+'%</b> \u00B7 '+verdict
+   +'<div class="sec">harvest standing</div>ripeness <b>'+(rp*100).toFixed(0)+'%</b> \u00B7 age '+c.age.toFixed(1)+' \u00B7 '+(rp>=0.85&&c.age>=12?'<b>DUE \u2014 the autopilot will press it</b>':'ripening on the vine')
+   +(c.infected?'<div class="sec">infection</div><span class="clay">'+c.cause+'</span>':'');
+  document.getElementById('info').classList.add('on');
+  jlog('TESTIMONY \u00B7 '+c.id+' speaks \u00B7 locality '+(loc*100).toFixed(0)+'% \u00B7 '+(stem?'stem':'scattered'));
+}
+
+/* ---------- CLI (mandatory HELP) ---------- */
+const clibox=document.getElementById('clibox');
+function hxHighlight(code){
+  let s=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s=s.replace(/(--[^\n]*)/g,'<span class="hc">$1</span>');
+  s=s.replace(/\b(PRESENT|ORBIT|EMIT|PROVE|SYNC|WITNESS|VIA|INTO)\b/g,'<span class="hk">$1</span>');
+  s=s.replace(/\b(WHO|WHAT|WHEN|WHERE|WHY|HOW MUCH|HOW)\b/g,'<span class="hw">$1</span>');
+  s=s.replace(/\b(PHYSICS|META)\b/g,'<span class="hp">$1</span>');
+  s=s.replace(/\b(VINEYARD|CLUSTER|ROOT|HARVEST|SOIL|CELLAR|ROW|FOR|OF|IS|AT|IN|WITH)\b/g,'<span class="hv">$1</span>');
+  return s;
+}
+const SNIPPETS=[
+ {t:'Prove the root \u2014 stem or scattered',g:'<b>Plain gloss:</b> the first question of any billion-soul sickness: does it live on ONE stem (one file, one extent range, one feed \u2014 fix below) or is it SCATTERED across stems (template or calibration \u2014 fix the canopy)? Stem-locality answers it in one glance, because KISPU stores a lineage as one physical stem by design.',
+  c:'PROVE root FOR CLUSTER K-004\n  HOW   locality = 1 - fragments/berries\n  META  one.stem => C-01 family (feed / NAND soil)\n        scattered => C-02/C-03 (canopy)\nWITNESS verdict INTO gestinanna.ledger'},
+ {t:'Read the soil \u2014 the storage layer per row',g:'<b>Plain gloss:</b> wear, temperature, write-amplification of the extents beneath each row. Exhausted soil slows ripening and breeds root disease; stem-sickness over exhausted soil rings PHYLLOXERA \u2014 replant (migrate extents), do not medicate the schema.',
+  c:'PRESENT soil FOR vineyard\n  HOW MUCH wear, temp, write.amp PER row\n  META  phylloxera = stem.disease \u2227 soil.exhausted'},
+ {t:'Let the rules pick \u2014 the automated harvest',g:'<b>Plain gloss:</b> the pipeline automates itself as ripening: green \u2192 veraison \u2192 gold, and when a cluster reaches ripe\u226585% at age\u226512 the harvest fires \u2014 a snapshot partition pressed into the cellar as vintage SN-xxx. Red berries never touch the press: they fall to the sorting table and return only by decree.',
+  c:'EMIT harvest FOR ROW parcels.json\n  HOW   rules = (ripe>=85% AND age>=12)\n  META  vintage = SN.next INTO EnkiDW\nWITNESS harvest INTO gestinanna.ledger   -- the automation, journalled'},
+ {t:'Open the cellar \u2014 vintages on the shelf',g:'<b>Plain gloss:</b> every vintage is an immutable, dated, provenance-complete snapshot \u2014 the warehouse as a wine cellar. Dashboards drink from the cellar; the living vineyard keeps turning.',
+  c:'PRESENT cellar\n  HOW MUCH vintages, souls PER vintage, age'},
+];
+const CHIPS=[
+ {l:'prove root',gold:true,q:()=>'PROVE root FOR CLUSTER '+(selC?selC.id:(clusters[0]?clusters[0].id:'K-001'))},
+ {l:'soil',q:()=>'PRESENT soil FOR vineyard'},
+ {l:'harvest row',gold:true,q:()=>'EMIT harvest FOR ROW parcels.json'},
+ {l:'cellar',q:()=>'PRESENT cellar'},
+ {l:'infect drill',q:()=>'EMIT infection'},
+ {l:'grimoire',q:()=>'GRIMOIRE'},{l:'help',q:()=>'HELP'},
+];
+function buildCli(){
+  clibox.innerHTML='<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.08em;color:var(--alabaster-dim);margin-bottom:10px;line-height:1.65">HeptaScript CLI \u00B7 the rites of the vineyard<br>Anti-SQL enforced \u00B7 HELP (grammar + snippets) is mandatory \u2014 pinned below, always.</div>'
+   +'<div class="cli-chips" id="cliChips"></div>'
+   +'<div class="cli-inbox"><textarea id="cliIn" rows="2" spellcheck="false" placeholder="PROVE root FOR CLUSTER K-004"></textarea>'
+   +'<div class="cli-actions"><span class="cli-hint">one stem: fix below \u00B7 scattered: fix the canopy</span><button class="runb" id="cliRun">RUN \u25B8</button></div></div>'
+   +'<div id="cliCells"></div>';
+  const box=document.getElementById('cliChips');
+  CHIPS.forEach(ch=>{const b=document.createElement('button');b.className='chip'+(ch.gold?' gold':'');b.textContent=ch.l;
+    b.addEventListener('click',()=>{const i=document.getElementById('cliIn');i.value=ch.q();i.focus();});box.appendChild(b);});
+  document.getElementById('cliRun').addEventListener('click',cliSubmit);
+  document.getElementById('cliIn').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();cliSubmit();}});
+  mandatoryHelp();
+}
+function mandatoryHelp(){
+  const box=document.getElementById('cliCells');
+  if(!box||box.querySelector('.cell.mandatory'))return;
+  const d=document.createElement('div');d.className='cell mandatory';
+  d.innerHTML='<div class="cq">'+hxHighlight('HELP')+'  <span style="color:var(--gold);font-size:8.5px;letter-spacing:.14em">\u00B7 MANDATORY RITE \u2014 always on the tablet</span></div><div class="co">'+cliHelp()+'</div>';
+  box.appendChild(d);
+}
+function cliSubmit(){
+  const inp=document.getElementById('cliIn');const raw=inp.value.trim();if(!raw)return;
+  const r=runHepta(raw);cliCell(raw,r.html,!r.ok);inp.value='';
+}
+function cliCell(q,out,err){
+  const box=document.getElementById('cliCells');if(!box)return;
+  const d=document.createElement('div');d.className='cell'+(err?' err':'');
+  d.innerHTML='<div class="cq">'+hxHighlight(q)+'</div><div class="co">'+out+'</div>';
+  box.prepend(d);
+}
+function runHepta(q){
+  const bad=q.match(/\b(select|insert\s+into|update|delete|drop|join|group\s+by|order\s+by|exists)\b/i);
+  if(bad)return{ok:false,html:'<span class="clay">Anti-SQL refusal.</span> The sovereign tongue has no <b>'+bad[1].toUpperCase()+'</b>. Type <b>HELP</b>.'};
+  let m;
+  if(/^help$/i.test(q))return{ok:true,html:cliHelp()};
+  if(/^grimoire$/i.test(q))return{ok:true,html:cliGrimoire()};
+  if(m=q.match(/^prove\s+root\s+for\s+cluster\s+([\w-]+)/i)){
+    const c=clusters.find(x=>x.id.toUpperCase()===m[1].toUpperCase());
+    if(!c)return{ok:false,html:'No cluster named <b>'+m[1].toUpperCase()+'</b> hangs on the vines now (harvested, perhaps). Click a cluster to select one.'};
+    selC=c;clusterTestimony(c);
+    const stem=c.fragments===1;
+    return{ok:true,html:'<b>'+c.id+'</b> \u00B7 locality '+(locality(c)*100).toFixed(0)+'% \u00B7 '+(stem?'<span class="reed">ONE STEM</span> \u2014 the root problem, if any, lives below: feed, file, or NAND soil (C-01 family). Repair is sequential and cheap.':'<span class="clay">SCATTERED</span> \u2014 '+c.fragments+' fragments: canopy cause (C-02/C-03); the steward judges.')};
+  }
+  if(/^present\s+soil/i.test(q)){
+    const rows=ROWS.map(r0=>'<b>'+r0.file+'</b>: wear '+r0.soil.wear+'% \u00B7 '+r0.soil.temp+'\u00B0C \u00B7 wamp '+r0.soil.wamp+(r0.soil.wear>50?' \u00B7 <span class="clay">EXHAUSTED</span>':'')).join('<br>');
+    return{ok:true,html:'<b>Soil report</b> \u2014 the storage layer per row:<br>'+rows+'<br><span style="font-size:9.5px;color:var(--alabaster-dim)">phylloxera rings when stem-disease meets exhausted soil \u2014 replant (migrate extents), do not medicate the schema.</span>'};
+  }
+  if(m=q.match(/^emit\s+harvest\s+for\s+row\s+([\w.]+)/i)){
+    const ri=ROWS.findIndex(r0=>r0.file.toLowerCase()===m[1].toLowerCase());
+    if(ri<0)return{ok:false,html:'No row named <b>'+m[1]+'</b>. Rows: '+ROWS.map(r0=>r0.file).join(', ')+'.'};
+    let n=0;
+    clusters.slice().forEach(c=>{if(c.row===ri&&ripeness(c)>=0.6){harvest(c);n++;}});
+    return{ok:true,html:n?('<span class="goldb">'+n+' clusters pressed</span> from row <b>'+ROWS[ri].file+'</b> \u2014 vintages shelved in the cellar; red berries, if any, fell to the sorting table.'):'No cluster on that row is ripe enough to press \u2014 the vigneron does not pick green.'};
+  }
+  if(/^present\s+cellar/i.test(q)){
+    if(!cellar.length)return{ok:true,html:'The shelf waits for its first vintage \u2014 let the rules pick, or EMIT harvest yourself.'};
+    return{ok:true,html:'<b>The cellar</b> \u00B7 '+cellar.length+' vintages: '+cellar.slice(-8).map(v=>'<b>'+v.label+'</b>\u00D7'+v.n).join(' \u00B7 ')+'<br><span style="font-size:9.5px;color:var(--alabaster-dim)">immutable, dated, provenance-complete \u2014 the dashboards drink from here while the vineyard keeps turning.</span>'};
+  }
+  if(/^emit\s+infection/i.test(q)){infectOne();return{ok:true,html:'One cluster sickens \u2014 read its stem: one straight stem points below (feed/soil), a forked stem points to the canopy (template/calibration).'};}
+  return{ok:false,html:'Unrecognised rite. Type <b>HELP</b> or press a chip.'};
+}
+function cliHelp(){
+  return '<b>The grammar of the vineyard</b> \u2014 the three questions, answered:<br><br>'
+   +'<b>PROVE root FOR CLUSTER K-xxx</b> \u2014 stem or scattered: the SSD-layer diagnosis in one verdict<br>'
+   +'<b>PRESENT soil FOR vineyard</b> \u2014 wear/temp/write-amp per row; phylloxera when roots meet exhausted soil<br>'
+   +'<b>EMIT harvest FOR ROW file</b> \u2014 press the ripe clusters; vintages to the cellar, red to the sorting table<br>'
+   +'<b>PRESENT cellar</b> \u2014 the vintages (snapshot partitions) on the shelf<br>'
+   +'<b>EMIT infection</b> \u2014 the drill: sicken one cluster and read its stem'
+   +'<div style="margin-top:11px;border-top:1px solid var(--line);padding-top:8px">'+cliGrimoire()+'</div>';
+}
+function cliGrimoire(){
+  let h='<b>The grimoire of the vineyard</b>:';
+  SNIPPETS.forEach(sn=>{
+    h+='<div class="hx-stage">'+sn.t+'</div>'
+     +'<div style="font-style:italic;color:var(--alabaster-dim);font-size:10px;margin-bottom:4px">'+sn.g+'</div>'
+     +'<pre style="margin:0 0 8px;padding:7px 9px;background:#0A0F1C;border:1px solid var(--line);border-radius:3px;font-family:\'IBM Plex Mono\',monospace;font-size:10px;line-height:1.65;overflow-x:auto">'+hxHighlight(sn.c)+'</pre>';
+  });
+  return h;
+}
+
+/* ---------- journal ---------- */
+const journal=document.getElementById('journal');
+function jlog(html){
+  const ts=new Date().toTimeString().slice(0,8);
+  const ln=document.createElement('div');ln.className='ln';
+  ln.innerHTML='<b>'+ts+'</b> \u00B7 '+html;
+  journal.appendChild(ln);journal.scrollTop=journal.scrollHeight;
+}
+
+/* ---------- loop (armored) ---------- */
+let drawErrLogged=false;
+function loop(now){
+  const dt=Math.min(.033,(now-tPrev)/1000);tPrev=now;
+  try{step(dt,now);draw(now);}
+  catch(err){
+    if(!drawErrLogged){drawErrLogged=true;
+      jlog('<span class="clay">RENDER FAULT CAUGHT</span> \u00B7 '+String(err&&err.message||err)+' \u2014 the loop survives; report to the Architect');
+      console.error(err);}
+  }
+  requestAnimationFrame(loop);
+}
+resize();seed();buildCli();requestAnimationFrame(loop);
+</script>
+</body>
+</html>

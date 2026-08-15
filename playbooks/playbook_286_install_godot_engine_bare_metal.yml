@@ -1,0 +1,148 @@
+# =============================================================================
+# PB-286 — Install a real Godot 4 engine binary on the bare-metal host,
+# once, permanently, so PB-226/PB-285's own auto-discovery finds it
+# without ever touching the eriduous-vdi VM again. BahyWay.Ecosystem
+# v4.0 — 2026-08-02
+#
+# WHY THIS EXISTS: PB-285 (Sargon Passport Manager / Gilgamesh Master
+# Key launcher) failed live on the real bare-metal host with "No Godot
+# 4 binary found" -- Godot had only ever been installed on the retired
+# eriduous-vdi VM. PB-226's own header already documents that VM's old
+# `~/dubsar-theater/godot/Godot_v4.7-stable_linux.x86_64` copy "no
+# longer exists" as of before this session even started, so there was
+# no stray binary anywhere worth fetching -- confirmed live, a search of
+# both `filter-repo` backup directories found nothing. The real,
+# durable fix is installing Godot properly on bare metal, not chasing
+# another copy.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Downloads the official Godot 4 standard (non-.NET) Linux x86_64
+#      editor release zip directly from GitHub Releases
+#      (godotengine/godot) for `godot_version` (default "4.3" -- matches
+#      `config/features=PackedStringArray("4.3", ...)` already declared
+#      in dubsar-theater/project.godot, and satisfies every GDExtension
+#      crate's `compatibility_minimum = 4.1`).
+#   2. Extracts it and installs the binary to `~/.local/bin/godot4`
+#      (XDG user-local convention, no root/become needed -- `~/.local/
+#      bin` is on PATH by default on Fedora Workstation for login
+#      shells; this playbook does not modify shell rc files).
+#   3. Verifies the installed binary actually runs (`--version`) before
+#      declaring success -- never reports "installed" on an unverified
+#      download.
+#   4. Idempotent: skips the download entirely if `~/.local/bin/godot4`
+#      already exists and reports the same version, unless
+#      `-e force_reinstall=true`.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_286_install_godot_engine_bare_metal.yml
+#   ansible-playbook playbooks/playbook_286_install_godot_engine_bare_metal.yml -e godot_version=4.4
+#   ansible-playbook playbooks/playbook_286_install_godot_engine_bare_metal.yml -e force_reinstall=true
+# =============================================================================
+---
+- name: "PB-286 | Install Godot 4 engine binary on bare metal"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    godot_version: "4.3"
+    install_dir: "{{ lookup('env', 'HOME') }}/.local/bin"
+    install_path: "{{ install_dir }}/godot4"
+    tmp_dir: "/tmp/godot_install_{{ godot_version }}"
+    download_url: "https://github.com/godotengine/godot/releases/download/{{ godot_version }}-stable/Godot_v{{ godot_version }}-stable_linux.x86_64.zip"
+    force_reinstall: false
+
+  tasks:
+
+    - name: "Check whether godot4 is already installed"
+      ansible.builtin.stat:
+        path: "{{ install_path }}"
+      register: existing_bin
+
+    - name: "REPORT | already installed -- verify version and skip"
+      ansible.builtin.command:
+        cmd: "{{ install_path }} --version"
+      register: existing_version
+      changed_when: false
+      failed_when: false
+      when: existing_bin.stat.exists and not (force_reinstall | bool)
+
+    - name: "DONE | already installed, nothing to do"
+      ansible.builtin.debug:
+        msg: "𒁾 {{ install_path }} already installed ({{ existing_version.stdout | default('version check failed') }}). Pass -e force_reinstall=true to reinstall."
+      when: existing_bin.stat.exists and not (force_reinstall | bool) and existing_version.rc == 0
+
+    - name: "END PLAY | nothing more to do" # noqa: no-changed-when
+      ansible.builtin.meta: end_play
+      when: existing_bin.stat.exists and not (force_reinstall | bool) and existing_version.rc == 0
+
+    - name: "Ensure install_dir exists"
+      ansible.builtin.file:
+        path: "{{ install_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Ensure a clean tmp_dir"
+      ansible.builtin.file:
+        path: "{{ tmp_dir }}"
+        state: "{{ item }}"
+        mode: "0755"
+      loop:
+        - absent
+        - directory
+
+    - name: "Download the official Godot {{ godot_version }}-stable Linux x86_64 release"
+      ansible.builtin.get_url:
+        url: "{{ download_url }}"
+        dest: "{{ tmp_dir }}/godot.zip"
+        mode: "0644"
+        timeout: 120
+
+    - name: "Extract the release zip"
+      ansible.builtin.unarchive:
+        src: "{{ tmp_dir }}/godot.zip"
+        dest: "{{ tmp_dir }}"
+        remote_src: true
+
+    - name: "Find the extracted Godot binary"
+      ansible.builtin.find:
+        paths: "{{ tmp_dir }}"
+        patterns: "Godot_v*_linux.x86_64"
+      register: extracted_bin
+
+    - name: "FAIL | extracted binary not found"
+      ansible.builtin.fail:
+        msg: "No Godot_v*_linux.x86_64 file found after extracting {{ tmp_dir }}/godot.zip -- the release archive's naming may have changed."
+      when: extracted_bin.files | length == 0
+
+    - name: "Install the binary to {{ install_path }}"
+      ansible.builtin.copy:
+        src: "{{ extracted_bin.files[0].path }}"
+        dest: "{{ install_path }}"
+        mode: "0755"
+        remote_src: true
+
+    - name: "Clean up the temp download/extract directory"
+      ansible.builtin.file:
+        path: "{{ tmp_dir }}"
+        state: absent
+
+    - name: "Verify the installed binary actually runs"
+      ansible.builtin.command:
+        cmd: "{{ install_path }} --version"
+      register: verify_result
+      changed_when: false
+      failed_when: false
+
+    - name: "FAIL | installed binary does not run"
+      ansible.builtin.fail:
+        msg: "{{ install_path }} was installed but `--version` failed (rc={{ verify_result.rc }}): {{ verify_result.stderr | default('') }}"
+      when: verify_result.rc != 0
+
+    - name: "DONE | PB-286 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 Godot installed at {{ install_path }} ({{ verify_result.stdout | trim }}).
+          Make sure {{ install_dir }} is on PATH (Fedora Workstation login
+          shells usually have ~/.local/bin already) -- PB-226 and PB-285's
+          own auto-discovery will find it there from now on, no VM needed.

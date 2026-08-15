@@ -1,0 +1,18 @@
+# Build context excludes for every Containerfile in deploy/podman/ that
+# uses `workspace/bahyway_v4` as its build context (`COPY . .`).
+#
+# FIXED (2026-07-27): no .containerignore existed here at all, so every
+# `podman build` COPYing this directory transferred the ENTIRE workspace
+# including `target/` -- 21G in a real, cargo-built checkout (measured
+# live) -- into the build layer. Confirmed live on eriduous-vdi: a real
+# `podman build -f deploy/podman/Containerfile.asset-server` ran for 28
+# real minutes and then failed at the `COPY . .` step with `no space
+# left on device` writing to `/var/tmp` -- committing that oversized
+# layer exhausted host disk space. `target/` is rebuilt fresh inside the
+# container by `cargo build --release` anyway (see the Containerfile's
+# own builder stage), so copying the host's own already-built artifacts
+# in was never useful, only expensive.
+target/
+**/target/
+.git/
+**/.godot/

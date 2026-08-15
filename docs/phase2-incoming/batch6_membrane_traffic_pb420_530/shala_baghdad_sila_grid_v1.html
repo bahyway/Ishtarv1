@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · BAGHDAD SILA GRID — Offline Arterial Congestion & The Shortcut Rite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abzu:#070B14; --abzu-2:#0C1220;
+  --lapis:#24406E; --lapis-soft:#31517F;
+  --gold:#D4A945; --gold-dim:#8F7430; --gold-bright:#F2CC6B;
+  --alabaster:#E9E2D0; --alabaster-dim:#9C9584;
+  --clay:#C1603A; --reed:#6E9C7C;
+  --tigris:#1C3A5E;
+  --line:rgba(212,169,69,.18);
+  --card:#0E1524; --card-2:#111A2E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--abzu);color:var(--alabaster);font-family:'IBM Plex Sans',sans-serif;font-weight:300;overflow:hidden}
+header{height:62px;display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0B1120,#070B14)}
+.glyph{font-size:24px;color:var(--gold);line-height:1;user-select:none}
+h1{font-family:'Marcellus',serif;font-weight:400;font-size:15px;letter-spacing:.09em;white-space:nowrap}
+h1 span{color:var(--gold)}
+.subtitle{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.07em;border-left:1px solid var(--line);padding-left:16px;line-height:1.55}
+.subtitle b{color:var(--gold);font-weight:500}
+.wrap{display:flex;height:calc(100vh - 62px)}
+.stage{flex:1;position:relative;min-width:0;display:flex;flex-direction:column}
+.mapwrap{position:relative;flex:1 1 62%;min-height:0;border-bottom:1px solid var(--line)}
+.finderwrap{flex:0 0 38%;position:relative;overflow:hidden;background:#080D18}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#cv{cursor:crosshair}
+.badge{position:absolute;left:14px;top:12px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;z-index:4;background:rgba(7,11,20,.7);padding:4px 9px;border:1px solid var(--line);border-radius:3px}
+.offline{position:absolute;right:14px;top:12px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;color:var(--reed);z-index:4;background:rgba(7,11,20,.7);padding:4px 9px;border:1px solid rgba(110,156,124,.4);border-radius:3px}
+.actionbar{position:absolute;left:14px;bottom:12px;display:flex;gap:8px;z-index:5;flex-wrap:wrap}
+.abtn{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.05em;padding:8px 13px;border:1px solid var(--gold-dim);border-radius:3px;background:var(--gold);color:#14100a;font-weight:600;cursor:pointer}
+.abtn.ghost{background:rgba(14,21,36,.9);color:var(--alabaster);border-color:var(--line);font-weight:400}
+.abtn:focus-visible,.chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.tip{position:absolute;display:none;max-width:300px;padding:8px 11px;border:1px solid var(--gold-dim);border-radius:5px;background:rgba(10,15,28,.97);font-size:10.5px;line-height:1.55;color:var(--alabaster);z-index:10;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.55)}
+.tip b{color:var(--gold);font-weight:500}
+.tip .th{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;margin-bottom:3px}
+.tip .tf{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--alabaster-dim);margin-top:5px}
+.info{position:absolute;left:14px;top:44px;width:min(560px,64%);max-height:calc(100% - 96px);display:none;flex-direction:column;border:1px solid var(--gold-dim);border-radius:6px;background:rgba(10,15,28,.98);box-shadow:0 10px 44px rgba(0,0,0,.65);z-index:11}
+.info.on{display:flex}
+.info-head{display:flex;justify-content:space-between;align-items:center;padding:11px 15px;border-bottom:1px solid var(--line)}
+.info-title{font-family:'Marcellus',serif;font-size:15px;letter-spacing:.06em}
+.info-sub{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--alabaster-dim);letter-spacing:.1em;margin-top:2px}
+.info-x{background:none;border:1px solid var(--line);border-radius:3px;color:var(--alabaster-dim);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 9px;cursor:pointer}
+.info-x:hover{color:var(--gold);border-color:var(--gold-dim)}
+.info-body{overflow-y:auto;padding:12px 16px;font-size:11.5px;line-height:1.7}
+.info-body::-webkit-scrollbar{width:8px}.info-body::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+.info-body b{color:var(--gold);font-weight:500}
+.info-body .sec{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin:12px 0 4px}
+.info-body .clay{color:var(--clay)}.info-body .reed{color:var(--reed)}
+aside{width:410px;flex-shrink:0;border-left:1px solid var(--line);background:var(--abzu-2);display:flex;flex-direction:column;overflow:hidden}
+.engine-head{padding:11px 16px 9px;border-bottom:1px solid var(--line)}
+.engine-head .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.engine-head h2{font-family:'Marcellus',serif;font-weight:400;font-size:15px;letter-spacing:.05em;margin-top:3px}
+.engine-head .gloss{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.05em;margin-top:2px;line-height:1.5}
+.court{padding:10px 16px;border-bottom:1px solid var(--line)}
+.kv{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;margin-top:4px;color:var(--alabaster-dim)}
+.kv b{color:var(--alabaster);font-weight:500}
+.kv b.gold{color:var(--gold-bright)}.kv b.bad{color:var(--clay)}.kv b.good{color:var(--reed)}
+.clibox{flex:1;overflow-y:auto;padding:12px 14px}
+.clibox::-webkit-scrollbar,.journal::-webkit-scrollbar{width:8px}
+.clibox::-webkit-scrollbar-thumb,.journal::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+.cli-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;padding:4px 9px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--alabaster-dim);cursor:pointer;transition:all .15s}
+.chip:hover{color:var(--gold);border-color:var(--gold-dim)}
+.chip.gold{color:var(--gold);border-color:var(--gold-dim)}
+.cli-inbox{border:1px solid var(--gold-dim);border-radius:4px;background:#0A0F1C;margin-bottom:10px;overflow:hidden}
+#cliIn{width:100%;background:transparent;border:none;resize:vertical;min-height:48px;padding:9px 10px;color:var(--alabaster);font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.6;outline:none}
+.cli-actions{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-top:1px solid var(--line);background:var(--card)}
+.cli-hint{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.08em}
+.runb{padding:7px 16px;border-radius:3px;border:1px solid var(--gold-dim);background:var(--gold);color:#14100a;font-weight:600;font-size:11px;cursor:pointer}
+.cell{border:1px solid var(--line);border-radius:4px;margin-bottom:9px;overflow:hidden}
+.cell .cq{background:#0A0F1C;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.65;white-space:pre-wrap;border-bottom:1px solid var(--line)}
+.cell .co{background:var(--card);padding:9px 10px;font-size:10.5px;line-height:1.65}
+.cell.err .co{color:#E8B9A4}
+.cell .co b{color:var(--gold);font-weight:500}
+.cell .co .clay{color:var(--clay)}.cell .co .reed{color:var(--reed)}.cell .co .goldb{color:var(--gold-bright)}
+.hx-stage{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;margin:10px 0 6px;color:var(--gold)}
+.hk{color:var(--gold);font-weight:500}.hw{color:#7FA0D0}.hp{color:var(--reed)}.hv{color:#D8A08A}.hc{color:#5E6878;font-style:italic}
+.journal{height:96px;flex-shrink:0;border-top:1px solid var(--line);background:#080D18;padding:9px 14px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:9.5px;line-height:1.75;color:var(--alabaster-dim)}
+.journal .j-eyebrow{font-size:8.5px;letter-spacing:.22em;color:var(--gold);margin-bottom:4px;text-transform:uppercase}
+.journal .ln b{color:var(--gold);font-weight:500}
+.journal .ln .clay{color:var(--clay)}.journal .ln .reed{color:var(--reed)}.journal .ln .goldb{color:var(--gold-bright)}
+@media (max-width:1000px){aside{width:330px}.subtitle{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="glyph">𒆜</div>
+  <h1>ŠALA <span>·</span> BAGHDAD SILA GRID <span>·</span> ARTERIAL CONGESTION &amp; THE SHORTCUT RITE</h1>
+  <div class="subtitle"><b>Both banks over the Tigris</b> — Karkh (west) &amp; Rusafa (east), bridges as junctions · <b>offline-first</b>, no tiles: sovereign by construction<br>Congestion map above · the shortcut finder below · the fundamental diagram governs each bridge · fly &amp; bird camera · a Šala prototype (leaflet is the online cousin); the arterial graph is Template-shaped for any future city</div>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <div class="mapwrap">
+      <canvas id="cv"></canvas>
+      <div class="badge">Baghdad · schematic · real geometry · tile-free</div>
+      <div class="offline">◉ OFFLINE-FIRST · battery-ready</div>
+      <div class="tip" id="tip"></div>
+      <div class="info" id="info">
+        <div class="info-head"><div><div class="info-title" id="infoTitle"></div><div class="info-sub" id="infoSub"></div></div><button class="info-x" id="infoClose">CLOSE ✕</button></div>
+        <div class="info-body" id="infoBody"></div>
+      </div>
+      <div class="actionbar">
+        <button class="abtn ghost" id="btnBird">BIRD — the whole city</button>
+        <button class="abtn ghost" id="btnFly">FLY — to the busiest bridge</button>
+        <button class="abtn" id="btnRush">EMIT rush — the evening peak</button>
+      </div>
+    </div>
+    <div class="finderwrap">
+      <canvas id="finder"></canvas>
+    </div>
+  </div>
+
+  <aside>
+    <div class="engine-head">
+      <div class="eyebrow">Presiding · ḪendursagaEngine · the day court · GL-NAV-002 (Sila) applied</div>
+      <h2>ḪENDURSAĜA · THE TAXI'S HERALD</h2>
+      <div class="gloss">the herald who walks ahead on the road — here at rush hour, not at night · logical: Sila Calculus (fundamental diagram + Wardrop routing) on real Baghdad arterials · physical: offline shortcut advisor · a SIMULATION over real geometry (no live feed in a prototype) · production = sovereign pure-Rust Field Core with the same map</div>
+    </div>
+
+    <div class="court">
+      <div class="kv"><span>CITY MEAN LOAD ρ</span><b id="rRho" class="gold">—</b></div>
+      <div class="kv"><span>BUSIEST CROSSING</span><b id="rBusy" class="gold">—</b></div>
+      <div class="kv"><span>BRIDGES PAST THE CREST</span><b id="rCrest" class="good">0 of 6</b></div>
+      <div class="kv"><span>SHORTCUT: FROM → TO</span><b id="rRoute">— → —</b></div>
+      <div class="kv"><span>TIME SAVED vs OBVIOUS</span><b id="rSaved" class="good">—</b></div>
+      <div class="kv"><span>WARDROP CAUTION</span><b id="rWard" class="good">—</b></div>
+    </div>
+
+    <div class="clibox" id="clibox"></div>
+    <div class="journal" id="journal"><div class="j-eyebrow">Ḫendursaĝa's Road Ledger · append-only</div></div>
+  </aside>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   ŠALA · BAGHDAD SILA GRID (DRAFT, offline-first, tile-free)
+   - Schematic drawn from real Baghdad geometry: the Tigris'
+     S-curve through the city; Karkh (west) & Rusafa (east)
+     arterials; six crossings as JUNCTIONS.
+   - Sila Calculus on real streets: each arterial has density
+     ρ, Greenshields speed v=vmax(1-ρ/ρj), q=ρv. A crossing
+     past its crest is the bottleneck.
+   - SHORTCUT RITE (the star): pick FROM and TO; the finder
+     runs congestion-aware shortest path AND the naive
+     "obvious" path, shows both, the time saved, and the
+     Wardrop caution (if everyone takes it, it stops being a
+     shortcut).
+   - Camera: fly (smooth ease to a target), bird (whole city),
+     wheel zoom, drag pan.
+   - Template note: districts+arterials+crossings is the shape
+     a City Map Template would carry (proposed PB-519/PB-520).
+   All third-party-free; production would be sovereign Rust.
+   ============================================================ */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const fcv=document.getElementById('finder'),fx=fcv.getContext('2d');
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+let W=0,H=0,FW=0,FH=0,DPR=Math.min(window.devicePixelRatio||1,2);
+function resize(){
+  let r=cv.parentElement.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  r=fcv.parentElement.getBoundingClientRect();FW=r.width;FH=r.height;fcv.width=FW*DPR;fcv.height=FH*DPR;fx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize);
+
+/* ---------- Baghdad in normalized coords (0..1 lon-ish, 0..1 lat-ish) ---------- */
+/* the Tigris path (north→south), an S through the city centre */
+const TIGRIS=[[0.42,0.02],[0.44,0.12],[0.52,0.22],[0.55,0.33],[0.50,0.44],[0.46,0.55],[0.50,0.66],[0.58,0.76],[0.60,0.9],[0.63,0.99]];
+/* districts (nodes), bank = W(karkh) or E(rusafa) */
+const DIST=[
+ {id:0,name:'Kadhimiya',bank:'W',x:0.30,y:0.10},
+ {id:1,name:'Adhamiya',bank:'E',x:0.60,y:0.12},
+ {id:2,name:'Mansour',bank:'W',x:0.20,y:0.30},
+ {id:3,name:'Waziriya',bank:'E',x:0.66,y:0.26},
+ {id:4,name:'Salhiya',bank:'W',x:0.40,y:0.34},
+ {id:5,name:'Rusafa Ctr',bank:'E',x:0.62,y:0.40},
+ {id:6,name:'Karkh Ctr',bank:'W',x:0.34,y:0.46},
+ {id:7,name:'Bab al-Sharqi',bank:'E',x:0.58,y:0.50},
+ {id:8,name:'Karrada',bank:'E',x:0.60,y:0.62},
+ {id:9,name:'Jadriya',bank:'W',x:0.42,y:0.66},
+ {id:10,name:'Dora',bank:'W',x:0.40,y:0.84},
+ {id:11,name:'Zaafaraniya',bank:'E',x:0.66,y:0.84},
+ {id:12,name:'Airport Rd',bank:'W',x:0.12,y:0.54},
+ {id:13,name:'Palestine St',bank:'E',x:0.74,y:0.44},
+];
+/* bridges: crossings = the junctions the whole city funnels through */
+const BRIDGES=[
+ {id:'BR0',name:'Aimmah Br',a:0,b:1,y:0.11},
+ {id:'BR1',name:'Sarafiya Br',a:2,b:3,y:0.27},
+ {id:'BR2',name:'Jumhuriya Br',a:4,b:5,y:0.37},
+ {id:'BR3',name:'Sinak Br',a:6,b:7,y:0.48},
+ {id:'BR4',name:'Jadriya Br',a:9,b:8,y:0.64},
+ {id:'BR5',name:'Dora Br',a:10,b:11,y:0.84},
+];
+/* arterials (edges). {a,b} district ids; bridge flag if it's a crossing */
+let EDGES=[];
+function buildRoads(){
+  EDGES=[];
+  const add=(a,b,bridge)=>{EDGES.push({a,b,bridge:bridge||null,rho:0.15,base:0.15+Math.random()*0.1});};
+  /* west bank spine */
+  add(0,2);add(2,4);add(4,6);add(6,9);add(9,10);add(2,12);add(12,6);add(4,9);
+  /* east bank spine */
+  add(1,3);add(3,5);add(5,7);add(7,8);add(8,11);add(5,13);add(13,8);add(3,7);
+  /* the crossings */
+  BRIDGES.forEach(br=>add(br.a,br.b,br.id));
+  /* a couple of cross-district shortcuts (the "shortcut" candidates) */
+  add(4,7);      /* Salhiya↔Bab al-Sharqi informal */
+  add(6,8);      /* Karkh Ctr↔Karrada riverside */
+  add(9,11);     /* Jadriya↔Zaafaraniya bypass */
+}
+function distById(id){return DIST.find(d=>d.id===id);}
+function edgeLen(e){const A=distById(e.a),B=distById(e.b);return Math.hypot(B.x-A.x,B.y-A.y);}
+
+/* ---------- camera ---------- */
+let cam={x:0,y:0,s:1},camTarget=null,drag=null;
+function proj(nx,ny){return {x:cam.x+nx*W*cam.s*0.9+W*0.05,y:cam.y+ny*H*cam.s*0.92+H*0.04};}
+function P(d){return proj(d.x,d.y);}
+function flyTo(nx,ny,scale,label){
+  camTarget={nx,ny,s:scale,t:0,label};
+}
+function stepCam(dt){
+  if(camTarget){
+    camTarget.t=Math.min(1,camTarget.t+dt*1.4);
+    const e=1-Math.pow(1-camTarget.t,3);            /* easeOutCubic — the smooth "fly" */
+    const s1=camTarget.s;
+    const wantX=W/2-(camTarget.nx*W*0.9+W*0.05)*s1;
+    const wantY=H/2-(camTarget.ny*H*0.92+H*0.04)*s1;
+    cam.s=cam.s+(s1-cam.s)*e*0.2+ (s1-cam.s)*0.02;
+    cam.x=cam.x+(wantX-cam.x)*0.06;
+    cam.y=cam.y+(wantY-cam.y)*0.06;
+    if(camTarget.t>=1&&Math.abs(cam.s-s1)<0.02){cam.s=s1;cam.x=wantX;cam.y=wantY;camTarget=null;}
+  }
+}
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();camTarget=null;
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const s0=cam.s,s1=Math.max(0.7,Math.min(3.2,s0*(e.deltaY<0?1.12:0.89)));
+  cam.x=mx-(mx-cam.x)*(s1/s0);cam.y=my-(my-cam.y)*(s1/s0);cam.s=s1;
+},{passive:false});
+cv.addEventListener('pointerdown',e=>{if(e.button===0)drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y,moved:false};});
+cv.addEventListener('pointermove',e=>{if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;cam.x=drag.cx+dx;cam.y=drag.cy+dy;camTarget=null;}});
+cv.addEventListener('pointerup',()=>{drag=null;});
+function bird(){flyTo(0.45,0.5,0.86,'the whole city');jlog('BIRD \u00B7 the camera rises \u2014 both banks in one glance');}
+function flyBusiest(){
+  const br=busiestBridge();
+  flyTo((distById(br.a).x+distById(br.b).x)/2,br.y,2.0,br.name);
+  jlog('FLY \u00B7 gliding to <b>'+br.name+'</b> \u2014 the busiest crossing right now');
+}
+document.getElementById('btnBird').addEventListener('click',bird);
+document.getElementById('btnFly').addEventListener('click',flyBusiest);
+
+/* ---------- traffic model ---------- */
+const RHO_J=1.0,RHO_CRIT=0.62,VMAX=1.0;
+let rush=0,cars=[];
+function edgeSpeed(e){return e.rho>=RHO_J?0.05:VMAX*(1-e.rho/RHO_J);}
+function busiestBridge(){
+  let best=BRIDGES[0],bv=-1;
+  BRIDGES.forEach(br=>{const e=EDGES.find(x=>x.bridge===br.id);const rho=e?e.rho:0;if(rho>bv){bv=rho;best=br;}});
+  return best;
+}
+function doRush(){rush=1;jlog('<span class="clay">EVENING PEAK</span> \u00B7 the arterials fill \u00B7 watch the bridges cross their crest \u2014 past it, a fuller bridge is a SLOWER bridge');}
+document.getElementById('btnRush').addEventListener('click',doRush);
+
+/* ---------- routing: Dijkstra with a cost mode ---------- */
+function neighbors(id){return EDGES.map((e,i)=>({e,i})).filter(x=>x.e.a===id||x.e.b===id).map(x=>({i:x.i,e:x.e,other:x.e.a===id?x.e.b:x.e.a}));}
+function route(from,to,mode){ /* mode: 'aware' | 'naive' */
+  const V=DIST.length,INF=1e9;
+  const dist=Array(V).fill(INF),prev=Array(V).fill(-1),prevE=Array(V).fill(-1),seen=Array(V).fill(false);
+  dist[from]=0;
+  for(let it=0;it<V;it++){
+    let u=-1,bd=INF;
+    for(let v=0;v<V;v++)if(!seen[v]&&dist[v]<bd){bd=dist[v];u=v;}
+    if(u<0)break;seen[u]=true;
+    neighbors(u).forEach(nb=>{
+      const len=edgeLen(nb.e);
+      const w=mode==='aware'? len/Math.max(0.06,edgeSpeed(nb.e)) : len; /* naive ignores congestion */
+      if(dist[u]+w<dist[nb.other]){dist[nb.other]=dist[u]+w;prev[nb.other]=u;prevE[nb.other]=nb.i;}
+    });
+  }
+  if(dist[to]>=INF)return null;
+  const path=[],epath=[];let c=to;
+  while(c!==from&&c>=0){path.unshift(c);epath.unshift(prevE[c]);c=prev[c];}
+  path.unshift(from);
+  /* travel time = sum len/speed regardless of mode (real experienced time) */
+  let time=0;epath.forEach(ei=>{if(ei>=0){const e=EDGES[ei];time+=edgeLen(e)/Math.max(0.06,edgeSpeed(e));}});
+  return{path,epath,time};
+}
+let finderState={from:8,to:0,aware:null,naive:null};   /* Karrada → Kadhimiya default */
+function computeShortcut(){
+  finderState.aware=route(finderState.from,finderState.to,'aware');
+  finderState.naive=route(finderState.from,finderState.to,'naive');
+}
+
+/* ---------- simulation ---------- */
+let tPrev=performance.now();
+function step(dt,now){
+  if(rush>0)rush=Math.max(0,rush-dt*0.03);
+  /* densities breathe; bridges load heavier under rush */
+  EDGES.forEach((e,i)=>{
+    const isBr=!!e.bridge;
+    const target=e.base+(isBr?0.42:0.22)*rush+0.12*Math.sin(now/3000+i)+ (isBr?0.15:0);
+    e.rho=Math.max(0.05,Math.min(1.15,e.rho+(target-e.rho)*dt*0.6));
+  });
+  if(!step._rt||now-step._rt>700){step._rt=now;computeShortcut();}
+  stepCam(dt);
+  /* readouts */
+  const meanRho=EDGES.reduce((a,e)=>a+e.rho,0)/EDGES.length;
+  document.getElementById('rRho').textContent=(meanRho*100).toFixed(0)+'%';
+  const br=busiestBridge();document.getElementById('rBusy').textContent=br.name;
+  const past=BRIDGES.filter(b=>{const e=EDGES.find(x=>x.bridge===b.id);return e&&e.rho>RHO_CRIT;}).length;
+  const cEl=document.getElementById('rCrest');cEl.textContent=past+' of 6';cEl.className=past>=3?'bad':(past>0?'gold':'good');
+  document.getElementById('rRoute').textContent=distById(finderState.from).name+' → '+distById(finderState.to).name;
+  if(finderState.aware&&finderState.naive){
+    const saved=finderState.naive.time-finderState.aware.time;
+    const pct=finderState.naive.time>0?saved/finderState.naive.time*100:0;
+    const sEl=document.getElementById('rSaved');
+    sEl.textContent=(saved>0.01?('~'+pct.toFixed(0)+'% faster'):'obvious route is fine');
+    sEl.className=saved>0.01?'good':'gold';
+    /* Wardrop caution: is the shortcut already near its crest? */
+    const shortcutBusy=finderState.aware.epath.some(ei=>ei>=0&&!EDGES[ei].bridge&&EDGES[ei].rho>RHO_CRIT*0.85);
+    const wEl=document.getElementById('rWard');
+    wEl.textContent=shortcutBusy?'if all take it, it clogs':'route has headroom';
+    wEl.className=shortcutBusy?'bad':'good';
+  }
+}
+
+/* ---------- draw: the map ---------- */
+function drawTigris(){
+  ctx.strokeStyle='rgba(43,90,140,.9)';ctx.lineWidth=Math.max(10,14*cam.s);ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.beginPath();
+  TIGRIS.forEach((pt,i)=>{const p=proj(pt[0],pt[1]);i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});
+  ctx.stroke();
+  ctx.strokeStyle='rgba(70,130,180,.35)';ctx.lineWidth=Math.max(16,22*cam.s);
+  ctx.beginPath();
+  TIGRIS.forEach((pt,i)=>{const p=proj(pt[0],pt[1]);i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});
+  ctx.stroke();
+}
+function draw(now){
+  const t=now/1000;
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createRadialGradient(W/2,H/2,80,W/2,H/2,Math.max(W,H)*.7);
+  g.addColorStop(0,'#0A101E');g.addColorStop(1,'#070B14');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(156,149,132,.55)';ctx.font='9px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('KARKH \u00B7 west bank',18,H*0.5);
+  ctx.textAlign='right';ctx.fillText('east bank \u00B7 RUSAFA',W-18,H*0.5);ctx.textAlign='left';
+  drawTigris();
+  /* arterials colored by congestion */
+  EDGES.forEach(e=>{
+    const A=P(distById(e.a)),B=P(distById(e.b));
+    const jam=e.rho>RHO_CRIT;
+    if(e.bridge){
+      ctx.strokeStyle=jam?'rgba(224,82,64,.95)':'rgba(212,169,69,.8)';
+      ctx.lineWidth=jam?4:3;
+    }else{
+      const hue=e.rho>RHO_CRIT?4:(e.rho>0.4?38:150);
+      ctx.strokeStyle='hsl('+hue+' '+(e.rho>RHO_CRIT?70:55)+'% '+(48+e.rho*8)+'% / .85)';
+      ctx.lineWidth=jam?3:1.6;
+    }
+    ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);ctx.stroke();
+  });
+  /* highlight the shortcut route (aware) and obvious (naive) */
+  const drawPath=(res,color,wd,dash)=>{
+    if(!res)return;
+    ctx.strokeStyle=color;ctx.lineWidth=wd;if(dash)ctx.setLineDash(dash);else ctx.setLineDash([]);
+    ctx.beginPath();
+    res.path.forEach((id,i)=>{const p=P(distById(id));i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});
+    ctx.stroke();ctx.setLineDash([]);
+  };
+  drawPath(finderState.naive,'rgba(156,149,132,.6)',2,[5,5]);
+  drawPath(finderState.aware,'rgba(110,156,124,.95)',3.4,null);
+  /* bridges labelled */
+  BRIDGES.forEach(br=>{
+    const A=distById(br.a),B=distById(br.b);
+    const mx=(A.x+B.x)/2,my=br.y;const p=proj(mx,my);
+    const e=EDGES.find(x=>x.bridge===br.id);const jam=e&&e.rho>RHO_CRIT;
+    ctx.fillStyle=jam?'rgba(224,82,64,.95)':'rgba(212,169,69,.85)';
+    ctx.font='8.5px "IBM Plex Mono",monospace';ctx.textAlign='center';
+    ctx.fillText(br.name+(jam?' \u00B7 past crest':''),p.x,p.y-8);
+    /* mini fundamental-diagram dot on the bridge */
+    ctx.strokeStyle='rgba(212,169,69,.5)';ctx.beginPath();ctx.arc(p.x,p.y,10,0,Math.PI*2);ctx.stroke();
+    const rho=e?e.rho:0;const ang=-Math.PI/2+Math.min(1,rho)*Math.PI*2;
+    ctx.fillStyle=jam?'rgba(224,82,64,.95)':'rgba(242,204,107,.9)';
+    ctx.beginPath();ctx.arc(p.x+Math.cos(ang)*10,p.y+Math.sin(ang)*10,3,0,Math.PI*2);ctx.fill();
+  });
+  /* districts */
+  DIST.forEach(d=>{
+    const p=P(d);
+    const isEnd=d.id===finderState.from||d.id===finderState.to;
+    ctx.fillStyle=isEnd?'rgba(242,204,107,.95)':'rgba(14,21,36,.95)';
+    ctx.strokeStyle=isEnd?'rgba(242,204,107,.95)':'rgba(212,169,69,.55)';ctx.lineWidth=1.3;
+    ctx.beginPath();ctx.arc(p.x,p.y,isEnd?6:4,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='rgba(233,226,208,.8)';ctx.font='8px "IBM Plex Mono",monospace';ctx.textAlign='left';
+    ctx.fillText(d.name,p.x+8,p.y+3);
+    if(d.id===finderState.from){ctx.fillStyle='rgba(110,156,124,.95)';ctx.fillText('\u25B6 FROM',p.x+8,p.y+13);}
+    if(d.id===finderState.to){ctx.fillStyle='rgba(242,204,107,.95)';ctx.fillText('\u25C9 TO',p.x+8,p.y+13);}
+  });
+  if(camTarget){ctx.fillStyle='rgba(212,169,69,.7)';ctx.font='9px "IBM Plex Mono",monospace';ctx.textAlign='center';
+    ctx.fillText('\u2708 flying to '+camTarget.label,W/2,28);ctx.textAlign='left';}
+  drawInfoIcons();
+}
+
+/* ---------- draw: the finder panel ---------- */
+function drawFinder(now){
+  fx.clearRect(0,0,FW,FH);
+  fx.fillStyle='#080D18';fx.fillRect(0,0,FW,FH);
+  fx.fillStyle='rgba(212,169,69,.85)';fx.font='10px "IBM Plex Mono",monospace';fx.textAlign='left';
+  fx.fillText('THE SHORTCUT RITE \u00B7 '+distById(finderState.from).name+' \u2192 '+distById(finderState.to).name,14,20);
+  fx.fillStyle='rgba(156,149,132,.65)';fx.font='8px "IBM Plex Mono",monospace';
+  fx.fillText('green = congestion-aware shortcut \u00B7 grey dashed = the obvious route \u00B7 click FROM/TO on the map, or use the rite',14,33);
+  if(!finderState.aware||!finderState.naive){return;}
+  /* two comparison bars: obvious vs shortcut travel time */
+  const maxT=Math.max(finderState.aware.time,finderState.naive.time,0.001);
+  const barW=FW-160;
+  const bar=(y,label,time,color)=>{
+    fx.fillStyle='rgba(233,226,208,.85)';fx.font='9px "IBM Plex Mono",monospace';
+    fx.fillText(label,14,y+4);
+    fx.strokeStyle='rgba(49,81,127,.6)';rr(fx,120,y-9,barW,13,6);fx.stroke();
+    fx.fillStyle=color;rr(fx,120,y-9,barW*(time/maxT),13,6);fx.fill();
+    fx.fillStyle='rgba(156,149,132,.85)';fx.font='8px "IBM Plex Mono",monospace';fx.textAlign='right';
+    fx.fillText(time.toFixed(2)+' units',FW-14,y+2);fx.textAlign='left';
+  };
+  bar(58,'obvious route',finderState.naive.time,'rgba(156,149,132,.6)');
+  bar(84,'the shortcut',finderState.aware.time,'rgba(110,156,124,.85)');
+  const saved=finderState.naive.time-finderState.aware.time;
+  const pct=finderState.naive.time>0?saved/finderState.naive.time*100:0;
+  /* the WHY */
+  fx.fillStyle='rgba(212,169,69,.85)';fx.font='9.5px "IBM Plex Mono",monospace';
+  fx.fillText(saved>0.01?('\u2713 the shortcut saves ~'+pct.toFixed(0)+'% \u2014 here is why:'):'the obvious route is fine right now \u2014 no bridge past its crest on it',14,116);
+  /* list the steps + which bridges avoided */
+  fx.fillStyle='rgba(233,226,208,.8)';fx.font='8.5px "IBM Plex Mono",monospace';
+  const names=finderState.aware.path.map(id=>distById(id).name).join(' \u2192 ');
+  wrapText(fx,'via: '+names,14,134,FW-28,12);
+  /* which crossing it dodged */
+  const awareBr=new Set(finderState.aware.epath.map(ei=>ei>=0?EDGES[ei].bridge:null).filter(Boolean));
+  const naiveBr=finderState.naive.epath.map(ei=>ei>=0?EDGES[ei].bridge:null).filter(Boolean);
+  const dodged=naiveBr.filter(b=>!awareBr.has(b)).map(bid=>BRIDGES.find(x=>x.id===bid).name);
+  if(dodged.length){
+    fx.fillStyle='rgba(224,82,64,.85)';
+    fx.fillText('avoids the jammed: '+dodged.join(', '),14,FH-40);
+  }
+  /* Wardrop caution */
+  const shortcutBusy=finderState.aware.epath.some(ei=>ei>=0&&!EDGES[ei].bridge&&EDGES[ei].rho>RHO_CRIT*0.85);
+  fx.fillStyle=shortcutBusy?'rgba(224,82,64,.85)':'rgba(110,156,124,.8)';
+  fx.font='8px "IBM Plex Mono",monospace';
+  fx.fillText(shortcutBusy?'\u26A0 Wardrop caution: this shortcut is already near its crest \u2014 if every taxi takes it, it stops being one'
+                         :'\u2713 this route still has headroom \u2014 safe to recommend widely',14,FH-20);
+}
+function wrapText(c,text,x,y,maxW,lh){
+  const words=text.split(' ');let line='',yy=y;
+  words.forEach(w=>{const test=line+w+' ';if(c.measureText(test).width>maxW){c.fillText(line,x,yy);line=w+' ';yy+=lh;}else line=test;});
+  c.fillText(line,x,yy);
+}
+
+/* ---------- pick FROM/TO by clicking districts ---------- */
+let clickArmed='to';
+cv.addEventListener('pointerup',e=>{
+  if(drag&&drag.moved)return;
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  let best=null,bd=400;
+  DIST.forEach(d=>{const p=P(d);const dd=(p.x-mx)**2+(p.y-my)**2;if(dd<bd){bd=dd;best=d;}});
+  if(best){
+    if(clickArmed==='from'){finderState.from=best.id;clickArmed='to';jlog('FROM \u2192 <b>'+best.name+'</b> \u00B7 now click the destination');}
+    else{finderState.to=best.id;clickArmed='from';jlog('TO \u2192 <b>'+best.name+'</b> \u00B7 the shortcut is drawn in green');}
+    computeShortcut();
+  }
+});
+
+/* ---------- meaning system ---------- */
+function widgetRects(){
+  return [
+   {id:'city.map',x:0,y:0,w:W,h:H,title:'THE CONGESTION MAP \u00B7 both banks over the Tigris',
+    short:'Real Baghdad geometry, tile-free. Arterials colour by density; bridges are the junctions; the green line is your shortcut, the grey dashed the obvious route.',
+    full:'<div class="sec">what it shows</div>A schematic of Baghdad drawn from real geometry: the Tigris\u2019 S-curve, Karkh (west) and Rusafa (east), fourteen districts, and six bridge crossings. Arterials are coloured green\u2192amber\u2192clay by their density \u03C1; a clay street is past critical density.<div class="sec">the bridges are the junctions</div>Baghdad\u2019s east\u2013west traffic funnels through a handful of Tigris crossings \u2014 textbook Sila-Grid junctions. Each bridge carries a little fundamental-diagram dial: the dot sweeps as \u03C1 rises, and turns clay past the crest, where a fuller bridge is a SLOWER bridge.<div class="sec">offline &amp; sovereign</div>No tiles, no network, no third-party map \u2014 it runs on a battery in a basement. The online cousin uses leaflet.js; production would be the sovereign pure-Rust Field Core with the same geometry. This is a <b>simulation</b> over real shape, not a live feed.<div class="sec">camera</div>Wheel to zoom, drag to pan, FLY to ease smoothly to the busiest bridge, BIRD for the whole city.'},
+   {id:'shortcut.finder',x:0,y:H+6,w:FW,h:FH,title:'THE SHORTCUT RITE \u00B7 the taxi\u2019s answer',
+    short:'Congestion-aware route vs the obvious one, the time saved, the bridges it dodges, and the Wardrop caution \u2014 the whole answer a driver needs before setting off.',
+    full:'<div class="sec">what it computes</div>Two routes from FROM to TO: the <b>congestion-aware shortcut</b> (shortest by travel-TIME, using Greenshields speeds) and the <b>naive obvious route</b> (shortest by distance, ignoring jams). The bars compare their real experienced travel time; the panel names the districts traversed and which jammed bridge the shortcut <b>avoids</b>.<div class="sec">the honest part \u2014 the Wardrop caution</div>A shortcut everyone takes stops being a shortcut (this is the Price of Anarchy on the junction court). So the rite flags when the suggested route is already near its own crest \u2014 recommend it widely only when it has headroom. That honesty is what separates an advisor from a stampede.<div class="sec">how to drive it</div>Click any district on the map to set FROM, then TO \u2014 or run <b>PRESENT shortcut FROM Karrada TO Kadhimiya</b>. The camera can fly to either end.'},
+  ];
+}
+const tip=document.getElementById('tip');
+let hoverW=null;
+cv.addEventListener('pointermove',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  hoverW=widgetRects()[0];
+  if(!drag){
+    tip.innerHTML='<div class="th">'+hoverW.title+'</div>'+hoverW.short+'<div class="tf">press the \u24D8 for the full functionality tablet</div>';
+    tip.style.display='block';
+    tip.style.left=Math.min(W-320,mx+16)+'px';tip.style.top=Math.min(H-120,my+14)+'px';
+  }
+});
+cv.addEventListener('pointerleave',()=>{tip.style.display='none';});
+function openInfo(w){
+  document.getElementById('infoTitle').textContent=w.title;
+  document.getElementById('infoSub').textContent='the court explains itself \u00B7 nothing on this glass is decorative';
+  document.getElementById('infoBody').innerHTML=w.full;
+  document.getElementById('info').classList.add('on');
+  jlog('MEANING \u00B7 <b>'+w.title.split(' \u00B7')[0]+'</b> opened its tablet');
+}
+document.getElementById('infoClose').addEventListener('click',()=>document.getElementById('info').classList.remove('on'));
+function drawInfoIcons(){
+  const w=widgetRects()[0];const ix=W-20,iy=44;
+  ctx.strokeStyle='rgba(212,169,69,.6)';ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.arc(ix,iy,8,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle='rgba(212,169,69,.8)';ctx.font='10px "IBM Plex Mono",monospace';ctx.textAlign='center';
+  ctx.fillText('i',ix,iy+3.5);ctx.textAlign='left';
+  ctx.__icon={ix,iy};
+}
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  if(ctx.__icon&&(mx-ctx.__icon.ix)**2+(my-ctx.__icon.iy)**2<=120){openInfo(widgetRects()[0]);}
+});
+fcv.addEventListener('pointerdown',()=>openInfo(widgetRects()[1]));
+
+/* ---------- CLI ---------- */
+const clibox=document.getElementById('clibox');
+function hxHighlight(code){
+  let s=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s=s.replace(/(--[^\n]*)/g,'<span class="hc">$1</span>');
+  s=s.replace(/\b(PRESENT|ORBIT|EMIT|PROVE|SYNC|WITNESS|VIA|INTO|FROM|TO)\b/g,'<span class="hk">$1</span>');
+  s=s.replace(/\b(WHO|WHAT|WHEN|WHERE|WHY|HOW MUCH|HOW)\b/g,'<span class="hw">$1</span>');
+  s=s.replace(/\b(PHYSICS|META)\b/g,'<span class="hp">$1</span>');
+  s=s.replace(/\b(SHORTCUT|CAMERA|BRIDGE|RUSH|CONGESTION|FOR|OF|IS|AT|IN|WITH)\b/g,'<span class="hv">$1</span>');
+  return s;
+}
+const SNIPPETS=[
+ {t:'The shortcut rite \u2014 the driver\u2019s answer',g:'<b>Plain gloss:</b> before setting off, ask for the route. The rite returns the congestion-aware shortcut, compares it to the obvious road, names the jammed bridge it dodges, and \u2014 honestly \u2014 warns if the shortcut is already near its own crest (a shortcut everyone takes is no shortcut).',
+  c:'PRESENT shortcut FROM Karrada TO Kadhimiya\n  HOW   route BY travel.time      -- Greenshields speeds\n  META  compare VS obvious BY distance\n        warn IF shortcut near crest -- Wardrop caution\nWITNESS route INTO road.ledger'},
+ {t:'Fly the camera \u2014 smooth herald\u2019s eye',g:'<b>Plain gloss:</b> ease the camera to a crossing or district with a smooth flight (easeOutCubic), or rise to the bird\u2019s view of both banks. The motion is a sovereign rite, not just a mouse gesture.',
+  c:'ORBIT camera TO bridge.jumhuriya\n  HOW   fly WITH ease            -- smooth glide\nORBIT camera TO bird             -- the whole city'},
+ {t:'Read a bridge \u2014 the crest law',g:'<b>Plain gloss:</b> each Tigris crossing has a fundamental diagram. Past the crest, a fuller bridge is a slower bridge \u2014 so the shortcut engine routes around crossings that have crossed it, and the map turns them clay.',
+  c:'PRESENT bridge jumhuriya\n  HOW MUCH rho, speed, crest.distance\n  PHYSICS q IS vmax*rho*(1-rho)   -- the anti-bottleneck law'},
+ {t:'The template note \u2014 any future city',g:'<b>Plain gloss:</b> districts + arterials + crossings is the SHAPE a City Map Template carries. Ingest a province\u2019s roads through BeeMDM ETL, mint the arterial graph as a GOLDEN tribe, extract the template \u2014 and the next city (Najaf, Basra) instantiates from it instead of being hand-drawn.',
+  c:'EMIT template FROM baghdad.arterials\n  META  districts + arterials + crossings\n        => CityMap Template (GL-TPL cand.)\n  -- proposed PB-519 ingest, PB-520 mint'},
+];
+const CHIPS=[
+ {l:'shortcut',gold:true,q:()=>'PRESENT shortcut FROM Karrada TO Kadhimiya'},
+ {l:'fly bridge',q:()=>'ORBIT camera TO bridge.jumhuriya'},
+ {l:'bird',q:()=>'ORBIT camera TO bird'},
+ {l:'rush',q:()=>'EMIT rush'},
+ {l:'read bridge',q:()=>'PRESENT bridge jumhuriya'},
+ {l:'template',gold:true,q:()=>'EMIT template FROM baghdad.arterials'},
+ {l:'grimoire',q:()=>'GRIMOIRE'},{l:'help',q:()=>'HELP'},
+];
+function buildCli(){
+  clibox.innerHTML='<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.08em;color:var(--alabaster-dim);margin-bottom:10px;line-height:1.65">HeptaScript CLI \u00B7 the rites of the taxi\u2019s herald<br>Anti-SQL enforced \u00B7 HELP is mandatory \u2014 pinned below, always.</div>'
+   +'<div class="cli-chips" id="cliChips"></div>'
+   +'<div class="cli-inbox"><textarea id="cliIn" rows="2" spellcheck="false" placeholder="PRESENT shortcut FROM Karrada TO Kadhimiya"></textarea>'
+   +'<div class="cli-actions"><span class="cli-hint">a shortcut everyone takes is no shortcut</span><button class="runb" id="cliRun">RUN \u25B8</button></div></div>'
+   +'<div id="cliCells"></div>';
+  const box=document.getElementById('cliChips');
+  CHIPS.forEach(ch=>{const b=document.createElement('button');b.className='chip'+(ch.gold?' gold':'');b.textContent=ch.l;
+    b.addEventListener('click',()=>{const i=document.getElementById('cliIn');i.value=ch.q();i.focus();});box.appendChild(b);});
+  document.getElementById('cliRun').addEventListener('click',cliSubmit);
+  document.getElementById('cliIn').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();cliSubmit();}});
+  mandatoryHelp();
+}
+function mandatoryHelp(){
+  const box=document.getElementById('cliCells');if(!box||box.querySelector('.cell.mandatory'))return;
+  const d=document.createElement('div');d.className='cell mandatory';
+  d.innerHTML='<div class="cq">'+hxHighlight('HELP')+'  <span style="color:var(--gold);font-size:8.5px;letter-spacing:.14em">\u00B7 MANDATORY RITE</span></div><div class="co">'+cliHelp()+'</div>';
+  box.appendChild(d);
+}
+function cliSubmit(){const inp=document.getElementById('cliIn');const raw=inp.value.trim();if(!raw)return;const r=runHepta(raw);cliCell(raw,r.html,!r.ok);inp.value='';}
+function cliCell(q,out,err){const box=document.getElementById('cliCells');if(!box)return;const d=document.createElement('div');d.className='cell'+(err?' err':'');d.innerHTML='<div class="cq">'+hxHighlight(q)+'</div><div class="co">'+out+'</div>';box.prepend(d);}
+function findDist(name){return DIST.find(d=>d.name.toLowerCase().includes(name.toLowerCase().trim()));}
+function runHepta(q){
+  const bad=q.match(/\b(select|insert\s+into|update|delete|drop|join|group\s+by|order\s+by|exists)\b/i);
+  if(bad)return{ok:false,html:'<span class="clay">Anti-SQL refusal.</span> No <b>'+bad[1].toUpperCase()+'</b> in the sovereign tongue. Type <b>HELP</b>.'};
+  let m;
+  if(/^help$/i.test(q))return{ok:true,html:cliHelp()};
+  if(/^grimoire$/i.test(q))return{ok:true,html:cliGrimoire()};
+  if(m=q.match(/^present\s+shortcut\s+from\s+(.+?)\s+to\s+(.+)$/i)){
+    const a=findDist(m[1]),b=findDist(m[2]);
+    if(!a||!b)return{ok:false,html:'Unknown district. Try: '+DIST.map(d=>d.name).join(', ')+'.'};
+    finderState.from=a.id;finderState.to=b.id;computeShortcut();
+    if(!finderState.aware)return{ok:false,html:'No road path found.'};
+    const saved=finderState.naive.time-finderState.aware.time;
+    const pct=finderState.naive.time>0?saved/finderState.naive.time*100:0;
+    const awareBr=new Set(finderState.aware.epath.map(ei=>ei>=0?EDGES[ei].bridge:null).filter(Boolean));
+    const dodged=finderState.naive.epath.map(ei=>ei>=0?EDGES[ei].bridge:null).filter(Boolean).filter(bid=>!awareBr.has(bid)).map(bid=>BRIDGES.find(x=>x.id===bid).name);
+    const via=finderState.aware.path.map(id=>distById(id).name).join(' \u2192 ');
+    const busy=finderState.aware.epath.some(ei=>ei>=0&&!EDGES[ei].bridge&&EDGES[ei].rho>RHO_CRIT*0.85);
+    return{ok:true,html:'<b>'+a.name+' \u2192 '+b.name+'</b><br>via: <span class="reed">'+via+'</span><br>'
+      +(saved>0.01?'<span class="goldb">\u2713 ~'+pct.toFixed(0)+'% faster</span> than the obvious route':'the obvious route is fine right now')
+      +(dodged.length?'<br>avoids the jammed <span class="clay">'+dodged.join(', ')+'</span>':'')
+      +'<br><span style="font-size:9.5px;color:'+(busy?'var(--clay)':'var(--reed)')+'">'+(busy?'\u26A0 near its crest \u2014 do not send every taxi here':'\u2713 has headroom \u2014 safe to recommend')+'</span>'};
+  }
+  if(m=q.match(/^orbit\s+camera\s+to\s+(.+)$/i)){
+    const tgt=m[1].toLowerCase().trim();
+    if(tgt.includes('bird')){bird();return{ok:true,html:'The camera rises to the bird\u2019s view \u2014 both banks in one glance.'};}
+    const br=BRIDGES.find(b=>tgt.includes(b.name.toLowerCase().split(' ')[0]));
+    if(br){flyTo((distById(br.a).x+distById(br.b).x)/2,br.y,2.1,br.name);return{ok:true,html:'Gliding smoothly to <b>'+br.name+'</b> \u2014 easeOutCubic, the herald\u2019s eye.'};}
+    const d=findDist(tgt);
+    if(d){flyTo(d.x,d.y,2.2,d.name);return{ok:true,html:'Flying to <b>'+d.name+'</b>.'};}
+    return{ok:false,html:'Unknown camera target. Try a bridge name or \u201Cbird\u201D.'};
+  }
+  if(m=q.match(/^present\s+bridge\s+(.+)$/i)){
+    const br=BRIDGES.find(b=>b.name.toLowerCase().includes(m[1].toLowerCase().trim()));
+    if(!br)return{ok:false,html:'Bridges: '+BRIDGES.map(b=>b.name).join(', ')+'.'};
+    const e=EDGES.find(x=>x.bridge===br.id);
+    return{ok:true,html:'<b>'+br.name+'</b> \u00B7 \u03C1='+(e.rho*100).toFixed(0)+'% \u00B7 speed '+(edgeSpeed(e)*100).toFixed(0)+'% \u00B7 '+(e.rho>RHO_CRIT?'<span class="clay">PAST THE CREST \u2014 a fuller bridge is now a slower bridge</span>':'<span class="reed">below the crest \u2014 flowing</span>')};
+  }
+  if(/^emit\s+rush/i.test(q)){doRush();return{ok:true,html:'The evening peak floods the arterials \u2014 watch the bridges cross their crest and the shortcut engine re-route around them.'};}
+  if(/^emit\s+template/i.test(q)){return{ok:true,html:'<b>The Template move.</b> districts + arterials + crossings is the shape a <b>CityMap Template</b> carries. Ingest a province\u2019s roads through BeeMDM ETL \u2192 mint the arterial graph as a GOLDEN tribe \u2192 extract the template \u2014 the next city instantiates from it. Proposed <b>PB-519</b> (osm-province ingest) + <b>PB-520</b> (arterial-graph template mint, GL-TPL cand.).'};}
+  return{ok:false,html:'Unrecognised rite. Type <b>HELP</b> or press a chip.'};
+}
+function cliHelp(){
+  return '<b>The grammar of the taxi\u2019s herald</b>:<br><br>'
+   +'<b>PRESENT shortcut FROM x TO y</b> \u2014 the aware route vs the obvious, time saved, bridge dodged, Wardrop caution<br>'
+   +'<b>ORBIT camera TO bridge.name | bird</b> \u2014 smooth fly, or the whole city<br>'
+   +'<b>PRESENT bridge name</b> \u2014 \u03C1, speed, crest-distance of one crossing<br>'
+   +'<b>EMIT rush</b> \u2014 the evening peak<br>'
+   +'<b>EMIT template FROM baghdad.arterials</b> \u2014 the City Map Template move for any future city'
+   +'<div style="margin-top:11px;border-top:1px solid var(--line);padding-top:8px">'+cliGrimoire()+'</div>';
+}
+function cliGrimoire(){
+  let h='<b>The grimoire of the herald</b>:';
+  SNIPPETS.forEach(sn=>{h+='<div class="hx-stage">'+sn.t+'</div><div style="font-style:italic;color:var(--alabaster-dim);font-size:10px;margin-bottom:4px">'+sn.g+'</div><pre style="margin:0 0 8px;padding:7px 9px;background:#0A0F1C;border:1px solid var(--line);border-radius:3px;font-family:\'IBM Plex Mono\',monospace;font-size:10px;line-height:1.65;overflow-x:auto">'+hxHighlight(sn.c)+'</pre>';});
+  return h;
+}
+
+/* ---------- journal ---------- */
+const journal=document.getElementById('journal');
+function jlog(html){const ts=new Date().toTimeString().slice(0,8);const ln=document.createElement('div');ln.className='ln';ln.innerHTML='<b>'+ts+'</b> \u00B7 '+html;journal.appendChild(ln);journal.scrollTop=journal.scrollHeight;}
+
+/* ---------- boot & loop (armored) ---------- */
+let drawErrLogged=false;
+function loop(now){
+  const dt=Math.min(.033,(now-tPrev)/1000);tPrev=now;
+  try{step(dt,now);draw(now);drawFinder(now);}
+  catch(err){if(!drawErrLogged){drawErrLogged=true;jlog('<span class="clay">RENDER FAULT CAUGHT</span> \u00B7 '+String(err&&err.message||err)+' \u2014 the loop survives');console.error(err);}}
+  requestAnimationFrame(loop);
+}
+resize();buildRoads();computeShortcut();bird();buildCli();
+jlog('\u1E2Aendursa\u011Da takes the day court \u00B7 Baghdad \u00B7 both banks, six crossings, offline &amp; battery-ready \u00B7 the shortcut is drawn \u2014 Karrada \u2192 Kadhimiya');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

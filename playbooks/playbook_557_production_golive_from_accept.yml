@@ -1,0 +1,143 @@
+# =============================================================================
+# PB-557 — Production Go-Live: the missing "next step" scripts/otap-promote.sh
+# already names but never built. BahyWay.Ecosystem v4.0 — 2026-08-15
+#
+# WHY THIS EXISTS: after `bash scripts/otap-promote.sh otap/accept master
+# --i-understand-this-is-production` succeeds, its own final message says:
+#   "NEXT STEP (not done by this script): deploy enkiddb-write-server /
+#    enkiddb-read-server binaries built from this commit onto
+#    enkidb-node-write / enkidb-node-read, per the enkidb-query-server
+#    precedent (playbook_34/35)."
+# That next step was never built. This playbook is it.
+#
+# THE DISTINCTION THIS PLAYBOOK EXISTS TO PRESERVE (the Architect's own
+# correction, 2026-08-15): `otap/accept` and `master` being IDENTICAL AT
+# THE GIT LEVEL is not the same claim as "Production is live." Branch
+# position answers "is this code correct and accepted?" -- a question
+# about the repository. Production is a RUNTIME fact -- which Podman
+# containers are actually running, built from which commit, on
+# enkidb-node-write/enkidb-node-read -- a question about the real
+# machines. Those two facts can drift apart (accepted code sitting on
+# master for days before anyone redeploys it), and conflating them is
+# exactly the gap this playbook closes: it is the one, deliberate,
+# auditable act that turns "accepted in git" into "actually serving."
+#
+# WHAT THIS PLAYBOOK DOES, IN ORDER:
+#   1. Refuses to run at all without -e i_understand_this_is_production=true
+#      (matches scripts/otap-promote.sh's own confirmation convention).
+#   2. Verifies the local checkout's HEAD matches origin/master exactly --
+#      refuses if it doesn't, so nobody can "go live" from an arbitrary
+#      unreviewed commit by accident.
+#   3. Runs `cargo test --workspace` one more time, immediately before
+#      touching real infrastructure -- defense in depth on top of
+#      otap-promote.sh's own gate, since real time may have passed since
+#      that promotion ran.
+#   4. Redeploys the CQRS core (enkiddb-write-server / enkiddb-read-server)
+#      by invoking the real, already-proven playbook_212 -- this playbook
+#      does NOT reimplement that logic, to avoid two divergent ways of
+#      deploying the same service.
+#   5. Records a permanent, timestamped go-live entry in
+#      docs/SHEDU/NARU_AUDIT_JOURNAL.md (the existing witness-journal
+#      convention, pipe-delimited, same format as every other entry) --
+#      so "when did Production actually change" has one real answer,
+#      separate from "when did master's git history change."
+#
+# DELIBERATELY NOT CHAINED, on purpose -- ask for these explicitly if this
+# go-live also needs them, they are not always in scope for every release:
+#   - playbook_284 (Shala/shakkanakku-web dashboard) -- only needed if the
+#     governor UI itself changed.
+#   - playbook_556 (bahyway.com/beemdm.com/heptascript.com) -- only needed
+#     if website content changed.
+# Bundling every possible service into one mega-playbook would raise the
+# blast radius of every go-live to "everything, always" -- the opposite
+# of the point of separating these concerns.
+#
+# Running this playbook = CSR-08 confirmation that Production changes now.
+# Review this file -> confirm you're on the commit you mean -> run for real.
+# =============================================================================
+---
+- name: "PB-557 | Production go-live: redeploy CQRS core from master"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    ws: "{{ repo_root }}/workspace/bahyway_v4"
+    i_understand_this_is_production: false
+    naru_journal: "{{ repo_root }}/docs/SHEDU/NARU_AUDIT_JOURNAL.md"
+
+  tasks:
+
+    - name: "FAIL | confirmation flag not set"
+      ansible.builtin.fail:
+        msg: >-
+          Refusing to go live without explicit confirmation. This
+          redeploys real Podman containers on enkidb-node-write and
+          enkidb-node-read. Re-run with
+          -e i_understand_this_is_production=true if that is genuinely
+          what you want right now.
+      when: not i_understand_this_is_production
+
+    - name: "1.1 | Get local HEAD commit"
+      ansible.builtin.command: git rev-parse HEAD
+      args: { chdir: "{{ repo_root }}" }
+      register: local_head
+      changed_when: false
+
+    - name: "1.2 | Fetch origin/master fresh"
+      ansible.builtin.command: git fetch origin master
+      args: { chdir: "{{ repo_root }}" }
+      changed_when: true
+
+    - name: "1.3 | Get origin/master commit"
+      ansible.builtin.command: git rev-parse origin/master
+      args: { chdir: "{{ repo_root }}" }
+      register: remote_master
+      changed_when: false
+
+    - name: "FAIL | local HEAD does not match origin/master"
+      ansible.builtin.fail:
+        msg: >-
+          Local HEAD ({{ local_head.stdout }}) != origin/master
+          ({{ remote_master.stdout }}). Check out master and pull before
+          going live -- refusing to deploy an arbitrary unreviewed commit.
+      when: local_head.stdout != remote_master.stdout
+
+    - name: "2.1 | Final test gate before touching real infrastructure"
+      ansible.builtin.command: cargo test --workspace
+      args: { chdir: "{{ ws }}" }
+      register: final_test
+      changed_when: false
+
+    - name: "FAIL | workspace tests do not pass on this commit"
+      ansible.builtin.fail:
+        msg: "cargo test --workspace failed (rc={{ final_test.rc }}) -- refusing to go live on a red commit."
+      when: final_test.rc != 0
+
+    - name: "3.1 | Redeploy CQRS core (invokes the real, proven playbook_212)"
+      ansible.builtin.command: >-
+        ansible-playbook {{ repo_root }}/playbooks/playbook_212_deploy_cqrs_2node_split.yml
+      register: cqrs_deploy
+      changed_when: true
+
+    - name: "FAIL | CQRS redeploy failed"
+      ansible.builtin.fail:
+        msg: "playbook_212 failed during go-live: {{ cqrs_deploy.stdout }}"
+      when: cqrs_deploy.rc != 0
+
+    - name: "4.1 | Record the go-live witness entry"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ ansible_date_time.date }} | PB-557 | PRODUCTION_GOLIVE | commit={{ local_head.stdout }} | cqrs_redeploy=OK | tests=PASS"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | PB-557 complete"
+      ansible.builtin.debug:
+        msg: >-
+          Production is now serving commit {{ local_head.stdout }}.
+          CQRS core redeployed via playbook_212, workspace tests green,
+          witnessed in docs/SHEDU/NARU_AUDIT_JOURNAL.md. If this release
+          also touches the Shakkanakku/Shala dashboard or the websites,
+          run playbook_284 / playbook_556 explicitly -- not chained here
+          by design.

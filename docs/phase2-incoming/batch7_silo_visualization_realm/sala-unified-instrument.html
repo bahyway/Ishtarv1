@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala · naṣāru — the Unified Instrument (Mašḫalu · naṣāru · Asalluhi)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{--void:#04060e;--ink:#eaf0fb;--ink-dim:#9aa6c8;--ink-faint:#5a6488;
+--gold:#E3B458;--signal:#4fd6c4;--line:#1c2440;--calm:#8fe6b0;--trill:#e3b458;--violent:#e0776a;
+--f-display:'Fraunces',Georgia,serif;--f-body:'Inter',system-ui,sans-serif;--f-data:'IBM Plex Mono',monospace;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit}
+#stage{position:fixed;inset:0;cursor:grab}#stage:active{cursor:grabbing}
+.hud{position:fixed;z-index:5}
+.hud-title{top:12px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:18px;letter-spacing:.08em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:9px;letter-spacing:.13em;color:var(--ink-faint);margin-top:4px}
+.panel{background:rgba(6,10,24,.92);border:1px solid var(--line);border-radius:8px;padding:11px 13px;backdrop-filter:blur(10px)}
+.hud-fed{top:70px;left:14px;width:236px;font-family:var(--f-data);max-height:calc(100vh - 150px);overflow:auto}
+.hud-fed h3{font-size:9px;letter-spacing:.12em;color:var(--gold);text-transform:uppercase;margin-bottom:7px}
+.mem{padding:7px 8px;border-radius:6px;margin:3px 0;cursor:pointer;border:1px solid transparent}
+.mem:hover{background:rgba(79,214,196,.06)}
+.mem.active{background:rgba(79,214,196,.12);border-color:var(--signal)}
+.mem .nm{font-size:11px;color:var(--ink);display:flex;justify-content:space-between;align-items:center}
+.mem .st{font-size:8.5px;padding:1px 6px;border-radius:100px}
+.st.CALM{color:var(--calm);border:1px solid var(--calm)} .st.TRILLING{color:var(--trill);border:1px solid var(--trill)} .st.VIOLENT{color:var(--violent);border:1px solid var(--violent)}
+.mem .bar{height:4px;background:rgba(255,255,255,.06);border-radius:3px;margin-top:5px;overflow:hidden}
+.mem .bar i{display:block;height:100%;border-radius:3px}
+.mem .meta{font-size:8.5px;color:var(--ink-faint);margin-top:3px}
+.hud-crumb{top:70px;left:50%;transform:translateX(-50%);font-family:var(--f-data);font-size:10px;background:rgba(6,10,24,.85);border:1px solid var(--line);border-radius:6px;padding:6px 12px;display:flex;gap:6px;align-items:center}
+.hud-crumb .seg{cursor:pointer;color:var(--ink-dim)}.hud-crumb .seg:hover{color:var(--signal)}.hud-crumb .seg.here{color:var(--gold)}.hud-crumb .arr{color:var(--ink-faint)}
+.hud-court{top:70px;right:14px;width:270px;font-family:var(--f-data);display:none;max-height:calc(100vh - 150px);overflow:auto}
+.hud-court h3{font-size:9px;letter-spacing:.12em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:2px}
+.hud-court .cn{font-family:var(--f-display);font-size:15px;color:var(--gold);margin-bottom:6px}
+.gauge{margin:8px 0}
+.gauge .lb{font-size:9px;color:var(--ink-faint);display:flex;justify-content:space-between}
+.gauge .track{height:7px;background:rgba(255,255,255,.06);border-radius:4px;margin-top:3px;overflow:hidden;position:relative}
+.gauge .fill{height:100%;border-radius:4px}
+.witness{display:flex;gap:6px;margin:8px 0;font-size:9.5px}
+.witness .w{flex:1;border:1px solid var(--line);border-radius:5px;padding:5px 7px;text-align:center;color:var(--ink-faint)}
+.witness .w.on{border-color:var(--violent);color:var(--violent)}
+.verdict{font-size:10.5px;padding:7px 9px;border-radius:6px;margin-top:6px;line-height:1.5}
+.verdict.sound{background:rgba(143,230,176,.08);color:var(--calm)}
+.verdict.abnormal{background:rgba(224,119,106,.09);color:var(--violent)}
+.hud-court button{margin-top:8px;width:100%;background:rgba(224,119,106,.14);border:1px solid var(--violent);color:var(--violent);border-radius:5px;padding:7px;font-size:10px;cursor:pointer;font-family:var(--f-data)}
+.hud-court button.heal{background:rgba(143,230,176,.14);border-color:var(--calm);color:var(--calm)}
+.hud-court .diag{font-size:9.5px;color:var(--ink-dim);line-height:1.55;margin-top:7px;border-top:1px solid var(--line);padding-top:7px}
+.hud-court .diag b{color:var(--ink)}
+.hud-court .diag .c{color:var(--trill)}
+.hud-ctl{bottom:14px;right:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;font-family:var(--f-data)}
+.hud-ctl button{background:rgba(6,10,24,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;font-size:10px;padding:7px 12px;cursor:pointer}
+.hud-ctl button.on{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.hud-ctl .hint{font-size:9px;color:var(--ink-faint);max-width:230px;text-align:right;line-height:1.5}
+.hud-insp{bottom:14px;left:14px;width:280px;font-family:var(--f-data);display:none}
+.hud-insp .it{font-family:var(--f-display);font-size:13px;color:var(--gold)}
+.hud-insp .ib{font-size:10px;color:var(--ink-dim);line-height:1.5;margin-top:5px}
+.hud-insp .sw{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:middle;margin:0 4px}
+.ctxmenu{position:fixed;z-index:20;background:rgba(6,10,24,.98);border:1px solid var(--signal);border-radius:7px;padding:7px 0;font-family:var(--f-data);font-size:10.5px;color:var(--ink);min-width:210px;display:none;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.ctxmenu .hd{padding:2px 12px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.ctxmenu .hd .t{color:var(--gold);font-family:var(--f-display);font-size:13px}
+.ctxmenu .hd .s{font-size:9px;color:var(--ink-faint)}
+.ctxmenu .row{padding:4px 12px;line-height:1.4}
+.ctxmenu .row b{color:var(--ink)}
+.ctxmenu .act{padding:5px 12px;cursor:pointer;color:var(--signal)}
+.ctxmenu .act:hover{background:rgba(79,214,196,.1)}
+.ctxmenu .sw{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:5px}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,6,14,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8px;color:var(--ink-faint);padding:4px 16px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="hud hud-title"><h1><span class="glyph">&#x12079;</span> na&#7779;&#257;ru <em>&mdash; THE UNIFIED INSTRUMENT</em></h1>
+<div class="sub">MA&#352;&#7716;ALU MEMBRANES &middot; na&#7779;&#257;ru WATCHES &middot; ASALLUHI HEALS &middot; GRAM-NEGATIVE FEDERATION &middot; INTEGRITY = TRUTH-DECAY READOUT</div></div>
+
+<div class="hud hud-fed panel">
+  <h3>&#9670; Federation · Mašḫalu membranes</h3>
+  <div id="fed-list"></div>
+  <div style="font-size:8.5px;color:var(--ink-faint);margin-top:8px;border-top:1px solid var(--line);padding-top:7px">taut+green = sound GOLDEN · sagging+drift = aging/decay · click to fly in</div>
+</div>
+
+<div class="hud hud-crumb" id="crumb"><span class="seg here">federation</span></div>
+<div class="hud hud-court panel" id="court"></div>
+<div class="hud hud-insp panel" id="insp"></div>
+<div class="ctxmenu" id="ctx"></div>
+
+<div class="hud hud-ctl">
+  <div class="hint">drag=orbit · scroll=zoom · click a membrane=fly in · left-click particle=select+bounce+origin · right-click=context (never empty)</div>
+  <button id="fed-btn">&#9664; federation</button>
+  <button id="spin-btn" class="on">ORBIT</button>
+</div>
+
+<footer>Way-of-Work rule 5 &mdash; HTML prototype (Sala rehearsal); production body Godot/WGPU. THE UNIFIED INSTRUMENT: Mašḫalu elastic membranes deform under particle-gravity (dent); naṣāru watches integrity (trill + colour-decay, two-witness); AsalluhiEngine diagnoses &amp; heals (DETECT→PROVE→PREDICT→PRESCRIBE). Gram-negative federation. GOLDEN transition bounded (paler, never black). Every particle selectable · right-click never empty. Pending CSR-08.</footer>
+
+<script>
+/* ===== STATE UP FRONT (no TDZ) ===== */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let az=0.2, elev=0.22, camDist=1050, camDistT=1050;
+let ctx3={x:0,y:0,z:0}, tgt={x:0,y:0,z:0};
+let dragging=false, lx=0, ly=0, dragMoved=false, spin=!reduced;
+let mode='federation';        // 'federation' | 'membrane'
+let focusMem=null, selected=null;
+
+/* ===== Gram-negative federation: each tribe a Mašḫalu membrane =====
+ * decay: 0 = sound GOLDEN; rising = aging→decay. trill derived from decay + seed. */
+const TRIBES=[
+  {id:'ecoli', name:'E. coli', hue:[0.45,0.84,0.62], decay:0.05, seedTrill:0.06, pu:41, cause:null},
+  {id:'salmonella', name:'Salmonella', hue:[0.50,0.80,0.55], decay:0.10, seedTrill:0.10, pu:28, cause:null},
+  {id:'neisseria', name:'Neisseria', hue:[0.60,0.66,0.95], decay:0.08, seedTrill:0.08, pu:19, cause:null},
+  {id:'haemophilus',name:'Haemophilus', hue:[0.55,0.72,0.90], decay:0.34, seedTrill:0.38, pu:15, cause:'C-05 STALE_RENEWAL'},
+  {id:'pseudomonas',name:'Pseudomonas', hue:[0.42,0.80,0.72], decay:0.55, seedTrill:0.60, pu:33, cause:'C-02 TEMPLATE_DEFECT'},
+  {id:'klebsiella', name:'Klebsiella', hue:[0.75,0.60,0.40], decay:0.82, seedTrill:0.86, pu:22, cause:'C-01 SOURCE_FEED_POISON'},
+];
+/* place membranes around the federation ring */
+TRIBES.forEach((t,i)=>{const a=i/TRIBES.length*6.28; t.pos={x:Math.cos(a)*300,y:Math.sin(a)*90,z:Math.sin(a)*180}; t.healed=false;});
+
+/* ===== three.js ===== */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(58,2,0.1,9000); camera.position.set(0,0,1050);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x04060e,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8090c0,0.9));
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.5)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+function rgb(c){return`rgb(${c[0]*255|0},${c[1]*255|0},${c[2]*255|0})`;}
+/* bounded GOLDEN + decay colour: healthy = tribe hue; decaying = desaturate toward pale grey-amber, NEVER to black */
+function memColor(t){const d=t.healed?0.05:t.decay;const pale=[0.6,0.58,0.5];
+  const c=[t.hue[0]*(1-d*0.6)+pale[0]*d*0.6, t.hue[1]*(1-d*0.6)+pale[1]*d*0.6, t.hue[2]*(1-d*0.6)+pale[2]*d*0.6];
+  const floor=0.28; return [Math.max(floor*0.5,c[0]),Math.max(floor*0.5,c[1]),Math.max(floor*0.5,c[2])];}
+function trillOf(t){return t.healed?0.05:Math.min(1,t.seedTrill);}
+function statusOf(t){const tr=trillOf(t);return tr<0.2?'CALM':tr<0.5?'TRILLING':'VIOLENT';}
+/* two witnesses: physical flux trill AND topological β1 instability; both must exceed to be abnormal */
+function beta1Of(t){return t.healed?0.04:Math.min(1,t.decay*0.9+0.05);}
+function abnormal(t){return trillOf(t)>0.45 && beta1Of(t)>0.45;}
+
+let objs=[];
+function clearScene(){objs.forEach(o=>scene.remove(o));objs=[];}
+function addObj(o){scene.add(o);objs.push(o);return o;}
+function label(center,text,color,sc){const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+  g.font='600 26px "IBM Plex Mono"';g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';g.shadowColor='rgba(0,0,0,.95)';g.shadowBlur=9;
+  g.fillText(text,256,34);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
+  s.scale.set(sc||150,(sc||150)/8,1);s.position.set(center.x,center.y+22,center.z);return addObj(s);}
+
+/* ===== a Mašḫalu membrane: a deformable ring of particles (points), radius modulated by
+ * interior-particle gravity (dent) + trill wobble. Rendered as a Points ring we update per-frame. */
+const NV=72; // membrane ring vertices
+function makeMembraneRing(t, R, storeRef){
+  const pos=new Float32Array(NV*3), col=new Float32Array(NV*3);
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:3.4,vertexColors:true,transparent:true,opacity:0.95,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX}));
+  addObj(pts);
+  storeRef.ring={geo,pos,col,R};
+}
+/* interior particle cloud (the tribe's held particles that exert gravity) */
+function makeInterior(t, R, center, count, storeRef){
+  const parts=[];
+  for(let i=0;i<count;i++){const a=Math.random()*6.28, rr=R*0.72*Math.pow(Math.random(),0.5);
+    const sd=0.55+Math.random()*0.45;
+    parts.push({ang:a, rad:rr, sd, base:{x:center.x+Math.cos(a)*rr, y:center.y+(Math.random()-.5)*24, z:center.z+Math.sin(a)*rr},
+      x:0,y:0,z:0, bounce:0, showOrigin:false, kaki:shortKaki(t.id+i), tribe:t.name, birthHue:t.hue});}
+  storeRef.interior=parts;storeRef.center=center;storeRef.R=R;
+}
+function shortKaki(seed){let h=0;for(const c of seed)h=(h*131+c.charCodeAt(0))&0xffffffff;const hex=(h>>>0).toString(16).padStart(8,'0');return hex.slice(0,4)+'…'+hex.slice(4,8);}
+
+/* ===== FEDERATION VIEW ===== */
+const memStore={};
+function buildFederation(){
+  clearScene(); mode='federation'; focusMem=null; selected=null;
+  Object.keys(memStore).forEach(k=>delete memStore[k]);
+  TRIBES.forEach(t=>{const s={};memStore[t.id]=s;
+    makeMembraneRing(t, 66, s);
+    makeInterior(t, 66, t.pos, Math.min(60,t.pu+18), s);
+    label(t.pos, t.name, rgb(memColor(t)), 150);
+  });
+  setCrumb([{name:'federation'}]);
+  document.getElementById('court').style.display='none';
+  document.getElementById('insp').style.display='none';
+  flyTo(0,0,0,1050);
+  renderFedList();
+}
+
+/* ===== MEMBRANE FOCUS (fly in + descend) ===== */
+function focusMembrane(t){
+  clearScene(); mode='membrane'; focusMem=t; selected=null;
+  const s={};memStore[t.id]=s; const C={x:0,y:0,z:0};
+  makeMembraneRing(t, 150, s);
+  makeInterior(t, 150, C, Math.min(120,t.pu+30), s);
+  label(C, t.name+' · '+t.pu+' PU', rgb(memColor(t)), 220);
+  // a few PU-honest relation stubs radiating (each = its PU count of particles)
+  const rels=[{rel:'produces',obj:'Toxin',pu:Math.round(t.pu*0.18)},{rel:'causes',obj:'Disease',pu:Math.round(t.pu*0.12)},{rel:'colonizes',obj:'Host',pu:Math.max(1,Math.round(t.pu*0.06))}];
+  rels.forEach((r,i)=>{const a=i/rels.length*6.28; const O={x:Math.cos(a)*300,y:Math.sin(a)*70,z:Math.sin(a*1.5)*60};
+    for(let k=0;k<r.pu;k++){const tt=(k+1)/(r.pu+1);
+      const p={ang:0,rad:0,sd:0.6, base:{x:C.x+(O.x-C.x)*tt+(Math.random()-.5)*8,y:C.y+(O.y-C.y)*tt+(Math.random()-.5)*8,z:C.z+(O.z-C.z)*tt+(Math.random()-.5)*8},
+        x:0,y:0,z:0,bounce:0,showOrigin:false,kaki:shortKaki(t.id+r.rel+k),tribe:t.name,birthHue:t.hue,rel:r.rel,obj:r.obj,relpu:r.pu};
+      memStore[t.id].interior.push(p);}
+    label(O, r.obj+' · '+r.pu+' PU', rgb(memColor(t)),150);
+    label({x:(C.x+O.x)/2,y:(C.y+O.y)/2,z:(C.z+O.z)/2}, r.rel, '#7f8aa8',120);
+  });
+  setCrumb([{name:'federation',fed:true},{name:t.name}]);
+  flyTo(0,0,0,560);
+  openCourt(t);
+  renderFedList();
+}
+function flyTo(x,y,z,dist){tgt={x,y,z};camDistT=dist;}
+
+/* ===== the naṣāru integrity court + Asalluhi ===== */
+function openCourt(t){
+  const el=document.getElementById('court');el.style.display='block';
+  const tr=trillOf(t), b1=beta1Of(t), st=statusOf(t), ab=abnormal(t);
+  const statusCol=st==='CALM'?'var(--calm)':st==='TRILLING'?'var(--trill)':'var(--violent)';
+  el.innerHTML=`<h3>naṣāru watch · Mašḫalu integrity</h3><div class="cn">${t.name}</div>
+    <div class="gauge"><div class="lb"><span>membrane trill (flux)</span><span style="color:${statusCol}">${st}</span></div>
+      <div class="track"><div class="fill" style="width:${(tr*100)|0}%;background:${statusCol}"></div></div></div>
+    <div class="gauge"><div class="lb"><span>colour-decay drift</span><span>${(t.decay*100)|0}%</span></div>
+      <div class="track"><div class="fill" style="width:${(t.decay*100)|0}%;background:linear-gradient(90deg,${rgb(t.hue)},#9a8f78)"></div></div></div>
+    <div class="witness">
+      <div class="w ${tr>0.45?'on':''}">witness 1<br>flux trill ${tr>0.45?'✓':'—'}</div>
+      <div class="w ${b1>0.45?'on':''}">witness 2<br>β₁ unstable ${b1>0.45?'✓':'—'}</div>
+    </div>
+    ${ab?`<div class="verdict abnormal">⚠ ABNORMAL — two witnesses agree. This membrane's GOLDEN records are drifting from fact. AsalluhiEngine required.</div>
+       <div class="diag"><b>AsalluhiEngine · DFA</b><br>proven root cause: <span class="c">${t.cause||'—'}</span><br>relapse if symptom-only: ~88% · after cause fix: ~3%</div>
+       <button id="diag-btn">▶ run DETECT→PROVE→PREDICT→PRESCRIBE</button>`
+     :`<div class="verdict sound">✓ SOUND — membrane taut, colour on-curve. GOLDEN records match the facts they claim.</div>`}`;
+  if(ab){document.getElementById('diag-btn').onclick=()=>runAsalluhi(t);}
+}
+function runAsalluhi(t){
+  const el=document.getElementById('court');
+  el.querySelector('.diag').innerHTML=`<b>Āšipu rite complete.</b><br>DETECT ✓ two-witness · PROVE ✓ <span class="c">${t.cause}</span> (conf 0.91)<br>PREDICT: drain-only relapse 88% → cause-fix 3%<br>PRESCRIBE: PB-DRAFT (cause-level) minted.<br><b style="color:var(--calm)">Namburbi ready — heal to root colour &amp; re-ingest.</b>`;
+  const btn=el.querySelector('button');btn.className='heal';btn.textContent='◉ Namburbi — heal & rebirth in root colour';
+  btn.onclick=()=>{t.healed=true;t.decay=0.05;t.seedTrill=0.05;focusMembrane(t);};
+}
+
+/* ===== federation list ===== */
+function renderFedList(){
+  const el=document.getElementById('fed-list');
+  el.innerHTML=TRIBES.map(t=>{const st=statusOf(t),tr=trillOf(t);const c=st==='CALM'?'var(--calm)':st==='TRILLING'?'var(--trill)':'var(--violent)';
+    return `<div class="mem${focusMem&&focusMem.id===t.id?' active':''}" data-id="${t.id}">
+      <div class="nm">${t.name}<span class="st ${st}">${st}</span></div>
+      <div class="bar"><i style="width:${(tr*100)|0}%;background:${c}"></i></div>
+      <div class="meta">${t.pu} PU · decay ${(t.decay*100)|0}%${abnormal(t)?' · ⚠ Asalluhi':t.healed?' · ✓ reborn':''}</div></div>`;}).join('');
+  el.querySelectorAll('.mem').forEach(d=>d.onclick=()=>focusMembrane(TRIBES.find(x=>x.id===d.dataset.id)));
+}
+
+/* ===== breadcrumb ===== */
+function setCrumb(items){const c=document.getElementById('crumb');
+  c.innerHTML=items.map((it,i)=>`<span class="seg${i===items.length-1?' here':''}" data-fed="${it.fed?1:0}">${it.name}</span>`+(i<items.length-1?'<span class="arr">›</span>':'')).join('');
+  c.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{if(s.dataset.fed==='1'||s.textContent==='federation')buildFederation();});}
+
+/* ===== selection + bounce + origin colour ===== */
+function selectParticle(p){
+  if(selected)selected.showOrigin=false;
+  selected=p;p.bounce=1.0;
+  const differs=Math.abs(p.birthHue[0]-0.9)+Math.abs(p.birthHue[1]-0.85)>0.3; // origin differs from generic golden
+  p.showOrigin=true;
+  const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">${p.rel?p.rel+' → '+p.obj:p.tribe+' particle'}</div>
+    <div class="ib"><b>KAKI</b> κ ${p.kaki} · tribe ${p.tribe}${p.relpu?` · relation ${p.relpu} PU`:''}</div>
+    <div class="ib">surface: <span class="sw" style="background:${rgb(memColor(focusMem||TRIBES[0]))}"></span>GOLDEN · origin (Birth Root Shade): <span class="sw" style="background:${rgb(p.birthHue)}"></span> ${p.tribe}</div>`;
+}
+
+/* ===== right-click — NEVER empty ===== */
+const ctxEl=document.getElementById('ctx');
+function openContext(p,cx,cy){
+  ctxEl.style.display='block';ctxEl.style.left=Math.min(cx,innerWidth-230)+'px';ctxEl.style.top=Math.min(cy,innerHeight-200)+'px';
+  ctxEl.innerHTML=`<div class="hd"><div class="t">${p.rel?p.obj:p.tribe}</div><div class="s">${p.rel?('relation: '+p.rel):'membrane particle'} · κ ${p.kaki}</div></div>
+    <div class="row">tribe: <b>${p.tribe}</b>${p.relpu?` · <b>${p.relpu} PU</b>`:''}</div>
+    <div class="row">surface <span class="sw" style="background:${rgb(memColor(focusMem||TRIBES[0]))}"></span>GOLDEN &nbsp; origin <span class="sw" style="background:${rgb(p.birthHue)}"></span></div>
+    <div class="act" data-a="select">◉ select & bounce</div>
+    <div class="act" data-a="origin">◐ show Birth Root Shade</div>
+    <div class="act" data-a="trace">⟲ trace provenance (Event-KAKI)</div>`;
+  ctxEl.querySelectorAll('.act').forEach(a=>a.onclick=()=>{const act=a.dataset.a;
+    if(act==='select'||act==='origin')selectParticle(p);
+    else if(act==='trace'){selectParticle(p);document.getElementById('insp').innerHTML+=`<div class="ib" style="color:var(--signal)">⟲ born in ${p.tribe} → Event-KAKI chain → GOLDEN. Birth Root Shade preserved.</div>`;}
+    ctxEl.style.display='none';});
+}
+renderer.domElement.addEventListener('contextmenu',e=>{e.preventDefault();
+  const p=(mode==='membrane')?pickParticle(e.clientX,e.clientY):null;
+  if(p){openContext(p,e.clientX,e.clientY);return;}
+  // never empty: field/membrane context
+  ctxEl.style.display='block';ctxEl.style.left=Math.min(e.clientX,innerWidth-230)+'px';ctxEl.style.top=Math.min(e.clientY,innerHeight-150)+'px';
+  ctxEl.innerHTML=`<div class="hd"><div class="t">${mode==='membrane'?focusMem.name:'Federation'}</div><div class="s">${mode==='membrane'?('Mašḫalu · '+statusOf(focusMem)):TRIBES.length+' membranes'}</div></div>
+    ${mode==='membrane'?`<div class="row">trill <b>${(trillOf(focusMem)*100)|0}%</b> · decay <b>${(focusMem.decay*100)|0}%</b></div>`:`<div class="row">${TRIBES.filter(t=>abnormal(t)).length} abnormal · needs Asalluhi</div>`}
+    <div class="act" data-a="fed">◄ back to federation</div>`;
+  ctxEl.querySelector('.act').onclick=()=>{buildFederation();ctxEl.style.display='none';};
+});
+addEventListener('click',e=>{if(!ctxEl.contains(e.target))ctxEl.style.display='none';});
+
+/* ===== picking ===== */
+function pickMembrane(cx,cy){const r=renderer.domElement.getBoundingClientRect();let best=null,bd=1e9;
+  TRIBES.forEach(t=>{const v=new THREE.Vector3(t.pos.x,t.pos.y,t.pos.z).project(camera);if(v.z>=1)return;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);
+    if(d<70&&d<bd){bd=d;best=t;}});return best;}
+function pickParticle(cx,cy){if(!focusMem)return null;const s=memStore[focusMem.id];if(!s||!s.interior)return null;
+  const r=renderer.domElement.getBoundingClientRect();let best=null,bd=12;
+  for(const p of s.interior){const v=new THREE.Vector3(p.x,p.y,p.z).project(camera);if(v.z>=1)continue;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);if(d<bd){bd=d;best=p;}}return best;}
+renderer.domElement.addEventListener('click',e=>{if(dragMoved)return;
+  if(mode==='federation'){const t=pickMembrane(e.clientX,e.clientY);if(t)focusMembrane(t);}
+  else{const p=pickParticle(e.clientX,e.clientY);if(p)selectParticle(p);}});
+renderer.domElement.addEventListener('mousemove',e=>{
+  if(dragging){if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)dragMoved=true;az-=(e.clientX-lx)*0.004;elev=Math.max(-1.2,Math.min(1.2,elev+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;}
+  let hit=mode==='federation'?pickMembrane(e.clientX,e.clientY):pickParticle(e.clientX,e.clientY);
+  renderer.domElement.style.cursor=hit?'pointer':(dragging?'grabbing':'grab');});
+
+/* ===== controls ===== */
+document.getElementById('fed-btn').onclick=buildFederation;
+document.getElementById('spin-btn').onclick=()=>{spin=!spin;document.getElementById('spin-btn').classList.toggle('on',spin);};
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(220,Math.min(1900,camDistT*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{if(e.button!==0)return;dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+buildFederation();
+
+/* ===== the living loop: membranes deform (dent) + trill; particles orbit + bounce ===== */
+let last=0;
+function updateMembrane(t, ts){
+  const s=memStore[t.id];if(!s)return;
+  const C=s.center||t.pos, R=s.R||66;
+  const tr=trillOf(t);
+  // interior particles orbit; compute their angular positions for dent
+  if(s.interior){s.interior.forEach(p=>{
+    if(p.ang!==undefined && p.rad!==undefined){ // orbiting interior particle
+      p.ang+=0.0015*(1+tr*3)*(reduced?0:1);
+      const wob=Math.sin(ts/500+p.rad)*(tr*6);
+      p.x=C.x+Math.cos(p.ang)*(p.rad+wob);
+      p.y=(p.base?p.base.y:C.y)+Math.sin(ts/700+p.ang)*(2+tr*8);
+      p.z=C.z+Math.sin(p.ang)*(p.rad+wob);
+    } else { p.x=p.base.x;p.y=p.base.y;p.z=p.base.z; } // relation particle (fixed on filament)
+    if(p.bounce>0)p.bounce=Math.max(0,p.bounce-0.02);
+  });}
+  // membrane ring: radius modulated by nearest interior-particle gravity (dent) + trill wobble
+  if(s.ring){const {pos,col,geo}=s.ring;const mc=memColor(t);
+    for(let i=0;i<NV;i++){const ang=i/NV*6.28;
+      // dent: sum gaussian pull from interior particles near this angle
+      let dent=0;
+      if(s.interior){for(const p of s.interior){if(p.ang===undefined)continue;let du=((p.ang-ang)%6.28+6.28)%6.28;if(du>3.14)du=6.28-du;
+        dent+=0.06*Math.exp(-(du*du)/0.05);}}
+      dent=Math.min(dent,0.22);
+      // trill: erratic radial wobble when sick
+      const trill=Math.sin(ang*5+ts/300)*(tr*0.10)+Math.sin(ang*11+ts/170)*(tr*0.06);
+      const rr=R*(1-dent+trill);
+      pos[i*3]=C.x+Math.cos(ang)*rr; pos[i*3+1]=C.y+Math.sin(ts/600+ang)*(tr*10); pos[i*3+2]=C.z+Math.sin(ang)*rr;
+      const b=0.6+0.4*Math.sin(ang*3+ts/400);
+      col[i*3]=mc[0]*(0.7+b*0.3);col[i*3+1]=mc[1]*(0.7+b*0.3);col[i*3+2]=mc[2]*(0.7+b*0.3);}
+    geo.attributes.position.needsUpdate=true;geo.attributes.color.needsUpdate=true;
+  }
+}
+/* render interior particles as sprites? we drew them into ring only; add a Points cloud per membrane for interior */
+function ensureInteriorPoints(){
+  TRIBES.forEach(t=>{const s=memStore[t.id];if(!s||!s.interior)return;
+    if(!s.ipts){const n=s.interior.length;const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+      const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+      const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:mode==='membrane'?7:4,vertexColors:true,transparent:true,opacity:0.95,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX}));
+      addObj(pts);s.ipts={geo,pos,col};}
+    const {pos,col,geo}=s.ipts;const mc=memColor(t);
+    s.interior.forEach((p,i)=>{pos[i*3]=p.x;pos[i*3+1]=p.y;pos[i*3+2]=p.z;
+      let c=p.showOrigin?p.birthHue:mc;const bmp=p.bounce>0?(1+p.bounce*0.8):1;const sel=(selected===p)?1.4:1;
+      col[i*3]=Math.min(1,c[0]*bmp*sel);col[i*3+1]=Math.min(1,c[1]*bmp*sel);col[i*3+2]=Math.min(1,c[2]*bmp*sel);});
+    geo.attributes.position.needsUpdate=true;geo.attributes.color.needsUpdate=true;});
+}
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin&&!dragging)az+=dt*0.025;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.6);
+  ctx3.x+=(tgt.x-ctx3.x)*Math.min(1,dt*2.6);ctx3.y+=(tgt.y-ctx3.y)*Math.min(1,dt*2.6);ctx3.z+=(tgt.z-ctx3.z)*Math.min(1,dt*2.6);
+  if(mode==='federation')TRIBES.forEach(t=>updateMembrane(t,ts));
+  else if(focusMem)updateMembrane(focusMem,ts);
+  ensureInteriorPoints();
+  camera.position.set(ctx3.x+Math.sin(az)*Math.cos(elev)*camDist,ctx3.y+Math.sin(elev)*camDist,ctx3.z+Math.cos(az)*Math.cos(elev)*camDist);
+  camera.lookAt(ctx3.x,ctx3.y,ctx3.z);renderer.render(scene,camera);}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

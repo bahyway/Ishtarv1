@@ -1,0 +1,60 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_118_ashnan_sensor_pilot_setup.yml
+#  PB-118 ashnan_sensor_pilot_setup — BLOCKED, tracked honestly
+#
+#  Run: ansible-playbook playbook_118_ashnan_sensor_pilot_setup.yml -i "localhost," -c local -v
+#
+#  Blocked on two things, confirmed by this playbook rather than assumed:
+#    1. crates/ashnan-kaki does not exist (see PB-117)
+#    2. This needs a real generated test corpus + SSH access to
+#       enkidb-node-write (192.168.122.101), neither of which a sandbox
+#       or a plain repo checkout can manufacture.
+#  This playbook checks both conditions honestly and does real setup work
+#  (corpus directory scaffolding) only where it safely can, without ever
+#  claiming PASS on a blocked prerequisite.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-118 | ASHNAN Sensor Pilot Setup (blocked — see conditions below)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    forge_root:  "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:   "{{ forge_root }}/workspace/bahyway_v4"
+    write_host:  "192.168.122.101"
+    corpus_dir:  "{{ ansible_env.HOME }}/ashnan_sensor_pilot_corpus"
+    session_date: "{{ ansible_date_time.date }}"
+    report_file: "{{ forge_root }}/docs/PB118_REPORT_{{ session_date }}.txt"
+
+  tasks:
+    - name: "CHECK | ashnan-kaki exists (PB-117 dependency)"
+      ansible.builtin.stat: {path: "{{ workspace }}/crates/ashnan-kaki/Cargo.toml"}
+      register: kaki_stat
+
+    - name: "CHECK | enkidb-node-write reachable ({{ write_host }}:22)"
+      ansible.builtin.wait_for: {host: "{{ write_host }}", port: 22, timeout: 3}
+      register: ssh_live
+      ignore_errors: true
+
+    - name: "PREP | Ensure local corpus staging directory exists (safe regardless of blockers)"
+      ansible.builtin.file: {path: "{{ corpus_dir }}", state: directory, mode: "0755"}
+
+    - name: "PRINT | PB-118 blocker status"
+      ansible.builtin.debug:
+        msg: |
+          ashnan-kaki crate present : {{ kaki_stat.stat.exists }}
+          enkidb-node-write SSH     : {{ 'reachable' if ssh_live is succeeded else 'NOT reachable' }}
+          corpus staging dir        : {{ corpus_dir }} (created)
+          VERDICT: {{ 'READY to proceed' if (kaki_stat.stat.exists and ssh_live is succeeded) else 'BLOCKED — ' + (['ashnan-kaki missing'] if not kaki_stat.stat.exists else []) | union((['no SSH to enkidb-node-write'] if ssh_live is failed else [])) | join(', ') }}
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          PB-118 — {{ session_date }} — {{ ansible_hostname }}
+          ashnan-kaki present: {{ kaki_stat.stat.exists }}
+          SSH to write node:  {{ ssh_live is succeeded }}
+          Corpus dir:          {{ corpus_dir }}
+
+    - {name: "DONE", ansible.builtin.debug: {msg: "PB-118 status recorded — report at {{ report_file }}"}}

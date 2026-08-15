@@ -1,0 +1,173 @@
+# =============================================================================
+# PB-259 — Full 7-Types EnkiDB bootstrap: deploy, ingest, and verify all
+# seven EnkiDB Types with one command.
+# BahyWay.Ecosystem v4.0 — 2026-07-27
+#
+# WHY THIS EXISTS: the Architect asked directly why PB-215's run kept
+# destroying and recreating containers, and whether all the related
+# per-type deploy/ingest/sync playbooks could be folded into one. Two
+# separate things were true:
+#
+#   1. The "create and destroy" the Architect saw is INTENTIONAL, not a
+#      bug: PB-212's own task 3.1/3.3 unconditionally stops+removes+
+#      recreates every container on every run, because "skip if it
+#      already exists" was the exact root cause of a real, previously-
+#      shipped bug (see PB-212's own PB-212.3 comment: a rebuilt image
+#      silently never reached an already-running container for a full
+#      week). Named volumes are untouched by stop/rm, so this never
+#      loses FLUSHed data on its own.
+#
+#   2. What WAS a real bug: PB-215 chained `212 -> 213 -> 208` — sync
+#      BEFORE ingest. Right after PB-212's forced recreate, the Write
+#      Node's in-memory journal is always empty (that's expected — real
+#      content only exists after an ingest step), so PB-213's FLUSH
+#      legitimately reports 0 entities, and its own safety guard
+#      correctly refuses to sync that 0-byte state over the Read Node's
+#      real, already-populated data. Nothing was lost — the guard did
+#      its job — but the run failed every time it was re-run against an
+#      already-live environment. Fixed directly in PB-215 (now
+#      `212 -> 208 -> 213`, see that file's own PB-215.1 note) and
+#      reused correctly here.
+#
+# CORRECTED (2026-07-27, this section was wrong before): "builds all 7
+# types with real data" is NOT true for all 7 -- only EnkiDDB and
+# EnkiMDB have an automated path that scans real, already-committed
+# content and pushes it in. The other 5 (the BeeMDM chain: EnkiSDB ->
+# EnkiODB/EnkiQDB -> EnkiDW/EnkiDB) receive real Golden Particles ONLY
+# through `bee-watchdog` polling a landing directory (ZIP drop -> Musarû
+# scan -> station chain -> B11 score routing -> ParticleState::Golden ->
+# PermanentStore, see docs/components/BEEMDM_ETL_PIPELINE.md) -- there is
+# no playbook in this repo that automates that whole chain into EnkiDB.
+# See the per-step notes below for exactly what each step actually does.
+#
+# THE 7 TYPES AND WHAT ALREADY BUILDS EACH (see
+# docs/components/ENKIDB_7_TYPES.md for the full type reference):
+#   - EnkiDDB (7007) + EnkiMDB (7006) -- PB-212 deploys both; PB-208
+#     gives EnkiDDB REAL content (scans committed docs/); PB-216 gives
+#     EnkiMDB REAL content (scans committed crates/playbooks). These are
+#     genuinely the only two of the 7 with an automated real-content path.
+#   - EnkiDB core (7001)              -- PB-221 deploys its containers,
+#     then runs a SYNTHETIC benchmark seed (`SEED:<n>`, sent straight to
+#     the write server's TCP port) to prove HeptaScript query performance
+#     at 1M-1B rows. This is NOT Golden Particle ingestion and does NOT
+#     go through LandingZone/ValidationSweep/EnkiODB at all -- it is a
+#     scale-proof tool, not a data pipeline. See step 2 below for how to
+#     skip it.
+#   - EnkiSDB/EnkiODB/EnkiQDB/EnkiDW
+#     (7003/7004/7005/7002)           -- PB-222 deploys their containers
+#     only. Its own FLUSH/sync/verify step legitimately reports ZERO rows
+#     unless something was manually dropped into a landing/ subdirectory
+#     first (PB-222's own header says this plainly) -- that's correct
+#     behavior, not something this playbook (or PB-222) fixes or works
+#     around.
+#
+# This playbook does not reinvent any of those five playbooks' logic —
+# it only fixes the ORDER they need to run in so that a single command
+# builds all 7 types' infrastructure, with real content wherever an
+# automated real-content path actually exists (EnkiDDB/EnkiMDB only),
+# instead of the Architect needing to remember (or rediscover, the hard
+# way) which sequence actually works.
+#
+# WHAT IT DOES, in order (via `import_playbook`):
+#   1. PB-212 -- deploy/redeploy EnkiDDB + EnkiMDB Write+Read containers.
+#      Infrastructure only, no content yet.
+#   2. PB-221 -- deploy EnkiDB core Write+Read containers, THEN run its
+#      1M/10M/100M/1B SYNTHETIC benchmark seed sweep (independent of
+#      EnkiDDB/EnkiMDB — own containers, own ports). This is a scale
+#      PROOF, not real data — the sweep runs by default because this
+#      import brings in PB-221's whole file (all its plays). To deploy
+#      EnkiDB core's containers WITHOUT injecting any synthetic rows,
+#      override: `-e '{"enkidb_seed_sizes": []}'` (empty list — the
+#      sweep's own loop then does zero iterations).
+#   3. PB-222 -- deploy EnkiSDB/EnkiODB/EnkiQDB/EnkiDW Write+Read
+#      containers, then FLUSH/sync/verify whatever real content already
+#      exists in each type's landing/ zone. On a fresh host with nothing
+#      manually dropped there, this legitimately reports zero rows — not
+#      a bug, not something to "fix" by seeding fake data instead.
+#   4. PB-208 -- ingest the full repo corpus into EnkiDDB, then
+#      FLUSH/sync/verify (its own step 3/4) -- this is what gives
+#      EnkiDDB REAL content, and it must run AFTER PB-212, never before.
+#   5. PB-216 -- SCAN_CRATES + SCAN_PLAYBOOKS into EnkiMDB, then
+#      FLUSH/sync/verify -- this is what gives EnkiMDB REAL content, and
+#      like PB-208 it must run AFTER PB-212.
+#   6. PB-213 -- a final combined FLUSH + cross-host sync + QUERY/SEARCH
+#      verification pass for BOTH EnkiDDB and EnkiMDB together (only —
+#      EnkiDB core and the BeeMDM chain types are not part of this
+#      combined pass; see PB-221/222's own steps above for those). By
+#      this point both already have real data from steps 4/5, so this
+#      pass is a confirmation, not a first sync -- idempotent and
+#      harmless if nothing changed since 4/5.
+#
+# WHAT THIS PLAYBOOK DOES NOT DO: it does not touch `enkiddb-assets`
+# (PB-205's shared static asset server on eriduous-vdi — unrelated to
+# the CQRS split) and it does not run IsimudEngine's full
+# 65-playbook sweep (`playbook_IsimudEngine.yml`) — that tool
+# covers the whole ecosystem's CI/CD, not specifically "build the 7
+# EnkiDB Types." Use this playbook for that one job.
+#
+# USAGE (run from eriduous-vdi, the Ansible control node):
+#   ansible-playbook playbooks/playbook_259_full_7types_enkidb_bootstrap.yml \
+#     -i ../ansible/inventory.ini -e target_env=Development
+#
+# GATED (added 2026-08-01, see tasks/require_gilgamesh_for_production.yml):
+# target_env is now REQUIRED -- Development/Test/Acceptance run freely,
+# Production additionally requires a verified privilege_level=7 (Gilgamesh)
+# passport (KUPRU_VAULT_PASSPHRASE exported, a real vault present). Omitting
+# target_env fails the run immediately, before PB-212 or any other imported
+# playbook below executes.
+#
+# RUN THIS ONE COMMAND ONLY -- do NOT run PB-212, PB-221, PB-222, PB-208,
+# PB-216, or PB-213 by hand first. `import_playbook` above is not a
+# "run these first" instruction to the Architect; it's Ansible's own
+# mechanism for THIS playbook to run all six of those itself, in the
+# order listed, inside this one invocation. Running any of them again
+# separately afterward is harmless (every step here is idempotent or
+# additive-safe) but not needed.
+#
+# SYNTHETIC DATA + HEAVY BY DEFAULT -- READ BEFORE RUNNING: step 2
+# (PB-221) defaults to seeding EnkiDB core with 1M, 10M, 100M, AND 1B
+# SYNTHETIC particles in sequence (see PB-221's own header for why --
+# that sweep IS its stated purpose, not something PB-259 added; it is
+# not real Golden Particle data, see the header note above). On real
+# hardware this can run for hours and needs real free disk (100M+/1B are
+# comfortably past what a small sandbox can hold). Two independent
+# overrides:
+#   -e '{"enkidb_seed_sizes": [1000000, 10000000]}'   # skip the two
+#     heaviest sizes, keep a smaller synthetic proof, run fast
+#   -e '{"enkidb_seed_sizes": []}'                     # inject NO
+#     synthetic rows at all -- EnkiDB core's containers still get
+#     deployed, just with nothing seeded into them
+#   ansible-playbook playbooks/playbook_259_full_7types_enkidb_bootstrap.yml \
+#     -i ../ansible/inventory.ini \
+#     -e '{"enkidb_seed_sizes": []}'
+#
+# PREREQUISITES this playbook does NOT automate (same as PB-215's own —
+# real one-time setup, not part of a routine bring-up):
+#   - `~/Forge/EnkiDB` checked out on all three VMs (eriduous-vdi,
+#     enkidb-node-write, enkidb-node-read) at the branch/commit you want.
+#   - SSH from eriduous-vdi to both node VMs already working.
+#   - `config/enkiddb_team_allowlist.txt` containing every git author
+#     whose documents should be ingestable (needed by PB-208).
+# =============================================================================
+---
+# GATE (added 2026-08-01): this whole bring-up affects real infrastructure,
+# so it now requires -e target_env=Development|Test|Acceptance|Production
+# before the first import_playbook below runs. Production additionally
+# requires a verified privilege_level=7 (Gilgamesh) passport -- see
+# playbooks/tasks/require_gilgamesh_for_production.yml for the full rule.
+# This is a real play (not another import_playbook) so the gate always
+# runs first, once, regardless of which of the six imported playbooks
+# below would otherwise have run first.
+- name: "PB-259 | Production gate"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - ansible.builtin.import_tasks: tasks/require_gilgamesh_for_production.yml
+
+- import_playbook: playbook_212_deploy_cqrs_2node_split.yml
+- import_playbook: playbook_221_enkidb_core_deploy_and_scale_sweep.yml
+- import_playbook: playbook_222_enkisdb_odb_qdb_dw_deploy.yml
+- import_playbook: playbook_208_full_corpus_ingestion_runbook.yml
+- import_playbook: playbook_216_populate_enkimdb_catalog.yml
+- import_playbook: playbook_213_cross_host_flush_sync_verify.yml

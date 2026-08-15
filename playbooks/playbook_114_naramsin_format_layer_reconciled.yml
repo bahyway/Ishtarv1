@@ -1,0 +1,113 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_114_naramsin_format_layer_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-114 Reconciled: naramsin-format is already real
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_114_naramsin_format_layer_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_114_naramsin_format_layer.yml):
+#    The uploaded PB-114 depends on "naramsin-core" (the crate this
+#    session's PB-113 reconciliation already declined to scaffold — it
+#    would have duplicated the real, sovereign naramsin-integrity with a
+#    third-party-dependency competitor). It also proposes CSV/JSON/XML
+#    parsing via third-party crates (csv, serde_json, quick-xml,
+#    encoding_rs, sha2, hex).
+#
+#    Checked the real repo: crates/naramsin-format already exists —
+#    sovereign, zero external dependencies (Cargo.toml literally says
+#    "Pure sovereign Rust — no external crates"), with csv.rs/json.rs/
+#    xml.rs/row.rs modules covering the same three formats. Structure
+#    differs (Row/Field/FileFormat, not NamedRow/ContentFormat), but the
+#    responsibility is the same and it's real, already wired into
+#    naramsin-integrity and naramsin-bridge.
+#
+#    This file verifies the real crate instead of scaffolding a
+#    dependency-violating duplicate:
+#      naramsin-format : 2 passed
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-114 (Reconciled) | naramsin-format — real sovereign crate, no scaffold"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB114_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | naramsin-format crate exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/naramsin-format/src/lib.rs"
+      register: format_file
+
+    - name: "FAIL | naramsin-format not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/naramsin-format/src/lib.rs not found after sync."
+      when: not format_file.stat.exists
+
+    - name: "TEST | cargo test -p naramsin-format"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p naramsin-format"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PARSE | test_out passed-test count"
+      ansible.builtin.set_fact:
+        test_out_passed_count: "{{ (test_out.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | naramsin-format reports 2 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_out.stdout"
+          - test_out_passed_count >= 2
+        fail_msg: >-
+          Expected at least 2 passed, 0 failed. Got {{ test_out_passed_count }}
+          passed. Full output: {{ test_out.stdout }}
+        success_msg: >-
+          naramsin-format: {{ test_out_passed_count }} passed, 0 failed (>= baseline 2).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-114 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-114 depended on naramsin-core (declined to
+          scaffold in PB-113's reconciliation) and third-party CSV/JSON/
+          XML crates. SUPERSEDED by the real, sovereign, zero-dependency
+          naramsin-format (Row/Field/FileFormat, csv.rs/json.rs/xml.rs).
+
+          Verified this run:
+            naramsin-format : 2/2 tests PASS
+
+    - name: "DONE | PB-114 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-114 reconciled. Report: {{ report_file }}"

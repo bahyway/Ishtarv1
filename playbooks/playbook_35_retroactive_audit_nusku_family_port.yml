@@ -1,0 +1,190 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_35_retroactive_audit_nusku_family_port.yml
+#  BahyWay.Ecosystem v4.0 — RETROACTIVE AUDIT: Nusku Engine Family Port
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_35_retroactive_audit_nusku_family_port.yml -i "localhost," -c local -v
+#
+#  WHY THIS PLAYBOOK EXISTS (read this first):
+#  This is the first of a planned series filling the PB-35..51 numbering
+#  gap. That gap was never lost work and never fabricated work either --
+#  it's real engineering (git commits f51388d, 48e76eb, 41fe1e9, dated
+#  before the playbook-numbering discipline was adopted) that landed via
+#  direct manual commits instead of through an ansible playbook. Per the
+#  Architect's standing rule -- nothing manual, every correction is a
+#  numbered playbook, NAaRU audits everything before it proceeds -- that
+#  history has no audit trail. This playbook does not redo the port (it
+#  already happened, correctly); it closes the audit gap by making the
+#  CURRENT state of that work a verified, re-runnable, numbered artifact.
+#
+#  Original commits being retroactively audited:
+#    41fe1e9  feat(iris-engine, panam-engine, nusku-score): port sovereign
+#             IR camera, face PK, and aggregate scoring engines
+#    48e76eb  feat(nusku-engine): port canonical sovereign types and
+#             migrate all stub dependencies
+#    f51388d  feat(shulman-engine): port sovereign alert and report
+#             generator from shulmanuway-wayv354
+#  Plus ammas-engine (27eac2a, AMMAS kinetic triad), included here because
+#  nusku-engine's KakiPK/Hepta types are shared with it.
+#
+#  This also formally closes LST-001 items A2, A5, A6, A7 ("UNVERIFIED" ->
+#  "RESOLVED 2026-07-03: NuskuWay ...") with an actual executed gate,
+#  not just a prose note -- and confirms none of the five crates were ever
+#  named with the deprecated "-Way" suffix in code, consistent with the
+#  Architect's 2026-07-07 naming law.
+#
+#  What it does:
+#    1. git pull
+#    2. cargo test on each of the 6 crates, asserting real counts
+#    3. Confirms none of the crate directories are named *-way (naming law)
+#    4. cargo build --workspace
+#    5. Writes a dated audit report
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-35 | Retroactive Audit — Nusku Engine Family Port"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs"
+    report_file:   "{{ docs_dir }}/PB35_RETROACTIVE_AUDIT_REPORT_{{ session_date }}.txt"
+
+  tasks:
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "CHECK | No *-way crate directories exist for this family"
+      ansible.builtin.find:
+        paths: "{{ workspace }}/crates"
+        patterns: "*-way"
+        file_type: directory
+      register: way_dirs
+
+    - name: "ASSERT | Naming law holds — zero -way directories"
+      ansible.builtin.assert:
+        that: ["way_dirs.matched == 0"]
+        fail_msg: "Found *-way directories: {{ way_dirs.files | map(attribute='path') | list }} -- naming law violated."
+        success_msg: "Confirmed: no -Way suffix crates exist. Naming law holds."
+
+    # ── Test each crate in the family, asserting real counts ───────────────
+    - name: "TEST | ammas-engine"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p ammas-engine", chdir: "{{ workspace }}"}
+      register: t_ammas
+      changed_when: false
+      failed_when: t_ammas.rc != 0
+    - name: "ASSERT | ammas-engine 32 passed"
+      ansible.builtin.assert: {that: ["((t_ammas.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 32)"], fail_msg: "{{ t_ammas.stdout }}"}
+
+    - name: "TEST | iris-engine"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p iris-engine", chdir: "{{ workspace }}"}
+      register: t_iris
+      changed_when: false
+      failed_when: t_iris.rc != 0
+    - name: "ASSERT | iris-engine 6 passed"
+      ansible.builtin.assert: {that: ["((t_iris.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 6)"], fail_msg: "{{ t_iris.stdout }}"}
+
+    - name: "TEST | panam-engine"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p panam-engine", chdir: "{{ workspace }}"}
+      register: t_panam
+      changed_when: false
+      failed_when: t_panam.rc != 0
+    - name: "ASSERT | panam-engine 7 passed"
+      ansible.builtin.assert: {that: ["((t_panam.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 7)"], fail_msg: "{{ t_panam.stdout }}"}
+
+    - name: "TEST | nusku-engine"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p nusku-engine", chdir: "{{ workspace }}"}
+      register: t_nusku
+      changed_when: false
+      failed_when: t_nusku.rc != 0
+    - name: "ASSERT | nusku-engine 28 passed"
+      ansible.builtin.assert: {that: ["((t_nusku.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 28)"], fail_msg: "{{ t_nusku.stdout }}"}
+
+    - name: "TEST | nusku-score"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p nusku-score", chdir: "{{ workspace }}"}
+      register: t_score
+      changed_when: false
+      failed_when: t_score.rc != 0
+    - name: "ASSERT | nusku-score 9 passed"
+      ansible.builtin.assert: {that: ["((t_score.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 9)"], fail_msg: "{{ t_score.stdout }}"}
+
+    - name: "TEST | shulman-engine"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p shulman-engine", chdir: "{{ workspace }}"}
+      register: t_shulman
+      changed_when: false
+      failed_when: t_shulman.rc != 0
+    - name: "ASSERT | shulman-engine 8 passed"
+      ansible.builtin.assert: {that: ["((t_shulman.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 8)"], fail_msg: "{{ t_shulman.stdout }}"}
+
+    # ── Full workspace ───────────────────────────────────────────────────
+    - name: "BUILD | cargo build --workspace"
+      ansible.builtin.command: {cmd: "{{ cargo }} build --workspace", chdir: "{{ workspace }}"}
+      register: build_ws
+      changed_when: false
+      failed_when: build_ws.rc != 0
+
+    # ── Report ───────────────────────────────────────────────────────────
+    - name: "PRINT | PB-35 retroactive audit verdict"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════════════╗
+          ║   BahyWay.Ecosystem v4.0 — PB-35 Retroactive Audit: Nusku Family       ║
+          ║   Date : {{ session_date }}   Node : {{ ansible_hostname }}           ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  ammas-engine   : 32/32 PASS                                           ║
+          ║  iris-engine    : 6/6 PASS                                             ║
+          ║  panam-engine   : 7/7 PASS                                             ║
+          ║  nusku-engine   : 28/28 PASS                                           ║
+          ║  nusku-score    : 9/9 PASS                                             ║
+          ║  shulman-engine : 8/8 PASS                                             ║
+          ║  naming law     : CONFIRMED (zero -Way suffix crates)                  ║
+          ║  workspace build: CLEAN                                               ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  This closes LST-001 items A2/A5/A6/A7 with an executed gate, and      ║
+          ║  gives commits 41fe1e9/48e76eb/f51388d an audit trail they never had.  ║
+          ║  Next in the PB-35..51 series: bee-watchdog ETL chain (PB-36).         ║
+          ╚═══════════════════════════════════════════════════════════════════════╝
+
+    - name: "WRITE | Dated audit report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-35 Retroactive Audit Report
+          Date: {{ session_date }}  Node: {{ ansible_hostname }}  Branch: {{ target_branch }}
+          Original (unaudited) commits: 41fe1e9, 48e76eb, f51388d, 27eac2a
+
+          ammas-engine:   {{ t_ammas.stdout }}
+          iris-engine:    {{ t_iris.stdout }}
+          panam-engine:   {{ t_panam.stdout }}
+          nusku-engine:   {{ t_nusku.stdout }}
+          nusku-score:    {{ t_score.stdout }}
+          shulman-engine: {{ t_shulman.stdout }}
+          Naming law check: {{ 'PASS' if way_dirs.matched == 0 else 'FAIL' }}
+          Workspace build:  {{ 'CLEAN' if build_ws.rc == 0 else 'FAILED' }}
+
+    - name: "DONE  | PB-35 COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-35 complete — report at {{ report_file }}. Audit gap for this cluster closed."

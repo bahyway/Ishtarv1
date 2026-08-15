@@ -1,0 +1,208 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_109_full_phase1_report_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-109 Reconciled: consolidated report, self-contained
+#
+#  SCP to EriduOS-VDI then run (after playbooks 105-108 reconciled, or standalone):
+#    ansible-playbook playbook_109_full_phase1_report_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_109_full_phase1_report.yml):
+#    Three real problems fixed:
+#      1. References branch "claude/babyway-ecosystem-new-crates-meerhp" —
+#         a different branch than this session's
+#         "claude/iphone-playbooks-crosstribe-eval-nbc5sw". Fixed.
+#      2. Tries to slurp log files (pb100_naramsin_archive.log, etc.) that
+#         the RECONCILED PB-100..104 playbooks never write (they write
+#         docs/SHEDU/PBxxx_RECONCILED_*.txt reports instead). Fixed: this
+#         playbook is now self-contained — it runs cargo test itself for
+#         every crate in scope rather than depending on other playbooks'
+#         log files being present in a specific order.
+#      3. Its own "Backup Sequence" step 1 instructs running `git push`
+#         ON ERIDUOS-VDI — but eriduos-vdi has no GitHub access (this was
+#         established and fixed across every playbook earlier this
+#         session). Fixed: backup instructions now correctly say to git
+#         push from the LAPTOP after copying results back via scp.
+#
+#    Real, corrected total: naramsin-archive(9) + enkidb-session-registry(6)
+#    + enkidb-con-engine(6) + enkidb-indexes(54) + heptascript(170) = 245
+#    (the original claimed 96, based on the never-built integration-test
+#    binary counts from PB-100..104's original uploads).
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-109 (Reconciled) | Phase 1 Full Report — self-contained"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    results_dir:   "{{ forge_root }}/test_results"
+    report_date:   "{{ ansible_date_time.date }}"
+    report_file:   "{{ forge_root }}/PHASE1_REPORT_{{ ansible_date_time.date }}.txt"
+
+  tasks:
+
+    - name: "SETUP | Results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    # ── Run each crate's tests fresh, self-contained ────────────────────────
+    - name: "TEST | naramsin-archive"
+      ansible.builtin.command: "{{ cargo }} test -p naramsin-archive"
+      args: { chdir: "{{ workspace }}" }
+      register: t_naramsin
+      changed_when: false
+      failed_when: false
+
+    - name: "TEST | enkidb-session-registry"
+      ansible.builtin.command: "{{ cargo }} test -p enkidb-session-registry"
+      args: { chdir: "{{ workspace }}" }
+      register: t_registry
+      changed_when: false
+      failed_when: false
+
+    - name: "TEST | enkidb-con-engine"
+      ansible.builtin.command: "{{ cargo }} test -p enkidb-con-engine"
+      args: { chdir: "{{ workspace }}" }
+      register: t_con
+      changed_when: false
+      failed_when: false
+
+    - name: "TEST | enkidb-indexes"
+      ansible.builtin.command: "{{ cargo }} test -p enkidb-indexes"
+      args: { chdir: "{{ workspace }}" }
+      register: t_indexes
+      changed_when: false
+      failed_when: false
+
+    - name: "TEST | heptascript"
+      ansible.builtin.command: "{{ cargo }} test -p heptascript"
+      args: { chdir: "{{ workspace }}" }
+      register: t_hepta
+      changed_when: false
+      failed_when: false
+
+    - name: "TEST | Full workspace"
+      ansible.builtin.command: "{{ cargo }} test --workspace"
+      args: { chdir: "{{ workspace }}" }
+      register: full_test
+      changed_when: false
+      failed_when: false
+
+    - name: "SAVE | Full test output"
+      ansible.builtin.copy:
+        content: "{{ full_test.stdout }}\n{{ full_test.stderr }}"
+        dest: "{{ results_dir }}/pb109_full_workspace_test.log"
+        mode: "0644"
+
+    # ── Check for corpus + bench logs from PB-107/108 (optional) ───────────
+    - name: "READ | Corpus log (optional, from PB-107)"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb107_corpus_run.log"
+      register: log_corpus
+      ignore_errors: true
+
+    - name: "READ | Bench log (optional, from PB-108)"
+      ansible.builtin.slurp:
+        src: "{{ results_dir }}/pb108_hepta_bench_10m.log"
+      register: log_bench
+      ignore_errors: true
+
+    - name: "PRINT | Phase 1 Report"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════════════╗
+          ║       BahyWay.Ecosystem v4.0 — Phase 1 Test Report (Reconciled)       ║
+          ║       Date : {{ report_date }}   Node : {{ ansible_hostname }}        ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  naramsin-archive        9 tests   {{ 'PASS' if t_naramsin.rc == 0 else 'FAIL' }}
+          ║  enkidb-session-registry 6 tests   {{ 'PASS' if t_registry.rc == 0 else 'FAIL' }}
+          ║  enkidb-con-engine       6 tests   {{ 'PASS' if t_con.rc == 0 else 'FAIL' }}
+          ║  enkidb-indexes         54 tests   {{ 'PASS' if t_indexes.rc == 0 else 'FAIL' }}
+          ║  heptascript           170 tests   {{ 'PASS' if t_hepta.rc == 0 else 'FAIL' }}
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  TOTAL: 245 tests (corrected — original claimed 96, based on a       ║
+          ║  never-built integration-test binary)                                 ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  CORPUS (PB-107, if run)  : {{ 'log present' if log_corpus.failed == false else 'not run yet' }}
+          ║  BENCH  (PB-108, if run)  : {{ 'log present' if log_bench.failed == false else 'not run yet' }}
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  Full workspace test:  {{ 'PASS' if full_test.rc == 0 else 'FAIL' }}
+          ╚═══════════════════════════════════════════════════════════════════════╝
+
+    - name: "WRITE | Dated report file"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — Phase 1 Test Report (Reconciled)
+          Date      : {{ report_date }}
+          Node      : {{ ansible_hostname }}
+          Branch    : {{ target_branch }}
+          Workspace : {{ workspace }}
+
+          naramsin-archive        9 tests  {{ 'PASS' if t_naramsin.rc == 0 else 'FAIL' }}
+          enkidb-session-registry 6 tests  {{ 'PASS' if t_registry.rc == 0 else 'FAIL' }}
+          enkidb-con-engine       6 tests  {{ 'PASS' if t_con.rc == 0 else 'FAIL' }}
+          enkidb-indexes          54 tests {{ 'PASS' if t_indexes.rc == 0 else 'FAIL' }}
+          heptascript              170 tests {{ 'PASS' if t_hepta.rc == 0 else 'FAIL' }}
+          TOTAL                    245 tests
+
+          Full workspace: {{ 'PASS' if full_test.rc == 0 else 'FAIL' }}
+
+          Logs in: {{ results_dir }}/
+
+    - name: "GIT | Status (informational only — no git push happens on this host)"
+      ansible.builtin.command:
+        cmd: "git status --short"
+        chdir: "{{ forge_root }}"
+      register: git_status
+      changed_when: false
+      failed_when: false
+
+    - name: "PRINT | Git status"
+      ansible.builtin.debug:
+        msg: "{{ git_status.stdout_lines | default(['(git not usable here — check manually)']) }}"
+
+    - name: "PRINT | Backup instructions (corrected — no git push on eriduos-vdi)"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════════════
+          NEXT STEPS (run manually):
+          ═══════════════════════════════════════════════════════════════════
+
+          1. Copy results back to your Fedora laptop, then push from there
+             (eriduos-vdi has no GitHub access — do NOT run git push here):
+               (on eriduos-vdi)  scp -r {{ results_dir }} <you>@<laptop>:~/Forge/EnkiDB/
+               (on laptop)       cd ~/Forge/EnkiDB && git add -A && \
+                                   git commit -m "Phase 1 test results {{ report_date }}" && \
+                                   git push origin {{ target_branch }}
+
+          2. Local backup on eriduos-vdi, if you have a backup target mounted
+             — adjust the path below to whatever you actually have:
+               rsync -avz --progress {{ forge_root }}/ /path/to/your/backup/target/
+
+          Report saved to: {{ report_file }}
+          ═══════════════════════════════════════════════════════════════════
+
+    - name: "DONE | PB-109 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "Phase 1 testing complete — report at {{ report_file }}"

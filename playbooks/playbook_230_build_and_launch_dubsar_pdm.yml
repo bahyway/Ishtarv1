@@ -1,0 +1,225 @@
+# =============================================================================
+# PB-230 -- Build kupru-gdext + pdm-gdext and launch the standalone
+# DubSar PDM app.
+# BahyWay.Ecosystem v4.0 — 2026-07-24
+#
+# WHY THIS EXISTS: the Architect's plan for DubSar is two independent
+# standalone apps, like Sargon Passport Manager / Gilgamesh Master Key
+# already are -- DubSar IDE (dubsar-theater: HeptaScript, Orbits/Grid,
+# CLI/notebook tabs) and DubSar PDM (this one: Simplicial Complex + GA
+# Particle Data Modeling), each launched independently, each with its
+# own icon/logo, sharing one unified Cobalt2 visual identity. This
+# playbook builds and launches the PDM side.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Builds BOTH GDExtension bridges DubSar PDM needs in release mode:
+#      kupru-gdext (the same real sovereign-crypto bridge Sargon,
+#      Gilgamesh, and DubSar IDE all use, for this app's own login
+#      gate) and pdm-gdext (the new bridge wrapping bahyway-algebra's
+#      20-operator topology module + najaf-engine's simplicial-complex
+#      machinery -- real, already-tested math, not reimplemented here).
+#   2. Copies both compiled .so files into dubsar-pdm/bin/.
+#   3. Discovers a real Godot 4 binary (same proven priority order as
+#      PB-226/PB-227).
+#   4. Primes the project's Godot import cache with one headless
+#      `--import` pass -- the same fix PB-226/PB-227 needed after the
+#      real blank-grey-window bug traced to GDExtension classes never
+#      being discovered on an unprimed project. Runs unconditionally,
+#      not gated on .godot/ already existing, for the same reason
+#      PB-226/PB-227 do -- a stale pre-existing cache can mask a
+#      never-actually-discovered extension.
+#   5. Launches DubSar PDM (`dubsar_mode: run`, default -- no editor
+#      chrome; `dubsar_mode: editor` for actually editing its scripts).
+#
+# HONEST LIMIT: cargo build -p pdm-gdext and cargo build --workspace
+# were verified clean at the time this playbook was written. The Godot
+# side (GDExtension discovery, the login-to-workspace scene transition,
+# the PdmBridge demo calls in pdm_workspace.gd) has NOT yet been
+# verified live on eriduous-vdi -- this is the first run. If the
+# extension fails to load, check {{ godot_log }}.import first (the
+# priming pass's own output), matching the same triage order
+# PB-227's own header describes.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo):
+#   ansible-playbook playbooks/playbook_230_build_and_launch_dubsar_pdm.yml
+#   ansible-playbook playbooks/playbook_230_build_and_launch_dubsar_pdm.yml -e dubsar_mode=editor
+#   ansible-playbook playbooks/playbook_230_build_and_launch_dubsar_pdm.yml -e skip_build=true
+# =============================================================================
+
+- name: PB-230 -- Build kupru-gdext + pdm-gdext and launch DubSar PDM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    pdm_project: "{{ repo_root }}/godot/dubsar-pdm"
+    # "run" (default) = no editor chrome, matches PB-226/PB-227's law.
+    # "editor" = full Godot IDE, for actually editing this app's scripts.
+    dubsar_mode: "run"
+    skip_build: false
+    godot_bin: ""
+    build_log: "/tmp/dubsar_pdm_build.log"
+    godot_log: "/tmp/dubsar_pdm_launch.log"
+
+  tasks:
+    # ── Build both bridges ──────────────────────────────────────────
+    - name: Build kupru-gdext + pdm-gdext in release mode
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release -p kupru-gdext -p pdm-gdext > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: Fail clearly if the build failed
+      ansible.builtin.fail:
+        msg: >-
+          cargo build --release -p kupru-gdext -p pdm-gdext failed
+          (rc={{ build_result.rc }}). Full output: {{ build_log }}
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: Confirm both compiled libraries exist
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/{{ item }}"
+      register: lib_checks
+      loop:
+        - libkupru_gdext.so
+        - libpdm_gdext.so
+
+    - name: Fail clearly if either compiled library is missing
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found under {{ repo_root }}/target/release/.
+          Run without -e skip_build=true first, or check {{ build_log }}
+          for a build failure.
+      loop: "{{ lib_checks.results }}"
+      when: not item.stat.exists
+
+    # ── Wire both compiled libraries into the project ──────────────────
+    - name: Ensure the project's bin/ directory exists
+      ansible.builtin.file:
+        path: "{{ pdm_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Copy both compiled bridges into dubsar-pdm/bin/
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/{{ item }}"
+        dest: "{{ pdm_project }}/bin/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - libkupru_gdext.so
+        - libpdm_gdext.so
+
+    # ── Discover Godot (same proven logic as PB-226/PB-227) ────────────
+    - name: Discover a real Godot 4 binary
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: Resolve the Godot binary to actually use
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: Fail clearly, with next steps, if no Godot binary was found anywhere
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found on PATH, via Flatpak, under $HOME, or in
+          common system locations. Install Godot 4.x from
+          https://godotengine.org/download and re-run, or point at it
+          directly with -e godot_bin=/full/path/to/Godot.
+      when: resolved_godot_bin | length == 0
+
+    # ── Prime the import cache (GDExtension discovery) ────────────────
+    # Same real bug this fixes as PB-226/PB-227's own headers describe:
+    # a project's GDExtension classes (KupruBridge, PdmBridge) are only
+    # discovered during a project scan, normally the editor's first-open
+    # scan -- a bare `--path` run-mode launch skips it, producing a
+    # blank grey window and "not declared in the current scope" parse
+    # errors with no mention of the .gdextension anywhere in the log.
+    # Runs unconditionally (not gated on .godot/ existing) for the same
+    # reason PB-226/PB-227 do: a stale cache from an earlier launch
+    # (before pdm.gdextension existed) would otherwise mask this.
+    - name: Prime the project (headless import scan) so both GDExtensions get discovered before first launch
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ pdm_project }} --import
+        > {{ godot_log }}.import 2>&1
+      register: import_result
+      failed_when: false
+
+    - name: Warn if the priming import scan reported errors
+      ansible.builtin.debug:
+        msg: >-
+          Headless import priming exited {{ import_result.rc }}. See
+          {{ godot_log }}.import for details. Continuing to launch anyway --
+          but if DubSar PDM still can't find KupruBridge or PdmBridge,
+          check that log first.
+      when: import_result.rc is defined and import_result.rc != 0
+
+    - name: Report what is about to launch
+      ansible.builtin.debug:
+        msg:
+          - "Project        : {{ pdm_project }}"
+          - "Godot binary   : {{ resolved_godot_bin }}"
+          - "Mode           : {{ dubsar_mode }}"
+          - "Bridge (login) : {{ pdm_project }}/bin/libkupru_gdext.so"
+          - "Bridge (math)  : {{ pdm_project }}/bin/libpdm_gdext.so"
+          - "Launch log     : {{ godot_log }}"
+
+    - name: Launch in editor mode (for editing this app's scripts)
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --editor --path {{ pdm_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "editor"
+
+    - name: Launch in run mode (the actual app, no editor chrome)
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --path {{ pdm_project }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "run"
+
+    - name: Confirmation
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 DubSar PDM launching in the background ({{ dubsar_mode }} mode).
+          Log in with a Passport imported via "Import Passport…" (a fresh
+          import is required here even if already imported into DubSar
+          IDE -- separate app, separate user:// vault), then click "Run
+          Simplicial Complex Demo" to exercise the real pdm-gdext math.
+          If a window doesn't appear within a few seconds, or an
+          extension fails to load, check {{ godot_log }} -- the Rust side
+          was verified independently via `cargo build -p pdm-gdext` and
+          `cargo build --workspace`, so a failure here most likely means
+          a GDExtension discovery issue (check {{ godot_log }}.import
+          first), not the underlying math.

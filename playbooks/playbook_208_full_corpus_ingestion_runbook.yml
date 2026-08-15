@@ -1,0 +1,206 @@
+# =============================================================================
+# PB-208 — THE full-ingestion runbook: everything in this repo, into the
+# real deployed EnkiDDB, in one pass, verified.
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: the Architect asked directly for one clear plan to get EnkiDDB
+# ingesting the WHOLE repo (top-level docs/, workspace/bahyway_v4/docs/,
+# and everything else under ~/Forge/EnkiDB) and to stop the drift into
+# side-builds. Two decisions were made explicitly, not defaulted:
+#   1. `config/enkiddb_team_allowlist.txt` now permanently trusts
+#      noreply@anthropic.com (this agent's own commit identity) -- every
+#      commit under it in this repo was made at the Architect's direct
+#      instruction all session; re-authoring the whole docs/ tree first
+#      was explicitly rejected as the slower path.
+#   2. The next real build after this lands is wiring TamuzAI to actually
+#      query EnkiDDB's RAG (tracked separately) -- the graph-explorer UI
+#      from the Architect's reference screenshot is explicitly deferred,
+#      scoped as its own future project, not squeezed in here.
+#
+# THIS PLAYBOOK IS THE RUNBOOK -- read PB-208.2/.3/.4's messages below in
+# order; they ARE the steps, not just a record of steps taken elsewhere.
+# It cannot be run from the sandbox that authored it (no access to the
+# Architect's real eriduous-vdi) -- it must be run for real, by the
+# Architect, against real infrastructure.
+#
+# PB-212 UPDATE (2026-07-19): originally written when Write and Read both
+# ran as containers on this same host (eriduous-vdi). PB-212 moved them
+# onto the real 2-VM CQRS split (enkidb-node-write, enkidb-node-read) --
+# `hosts: eriduous-vdi` stays correct below (enkiddb-cli still runs
+# bare-metal from here, per PB-205's git-authorship rationale), but task
+# 2.1 now sends `--remote` to enkidb-node-write's real IP instead of
+# 127.0.0.1, and the sync step (3/4) now imports the cross-host successor
+# task file. See playbook_212's and playbook_213's own headers.
+# =============================================================================
+---
+- name: "PB-208 | Full-corpus ingestion runbook"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+
+  tasks:
+    # ── 0. Preflight ─────────────────────────────────────────────────
+    - name: "0.1 | Confirm the repo checkout exists and is current"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      register: repo_head
+      changed_when: false
+
+    - name: "0.2 | Show current commit (should include PB-206/207/208)"
+      ansible.builtin.debug:
+        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-208's own commit."
+
+    - name: "0.3 | Confirm enkiddb-write / enkiddb-read containers are up"
+      ansible.builtin.command: podman ps --filter "name=enkiddb-write" --filter "name=enkiddb-read"
+      register: containers_up
+      changed_when: false
+
+    - name: "0.4 | Show container status"
+      ansible.builtin.debug:
+        msg: "{{ containers_up.stdout_lines }}"
+
+    - name: "0.5 | Check for a Rust toolchain on THIS host (enkiddb-cli runs bare-metal, not containerized)"
+      ansible.builtin.command: cargo --version
+      register: cargo_check
+      failed_when: false
+      changed_when: false
+
+    - name: "0.6 | FAIL LOUDLY here if cargo is missing -- don't silently skip to a confusing later error"
+      ansible.builtin.fail:
+        msg: >-
+          No Rust toolchain found on this host. enkiddb-cli must run
+          bare-metal (not in a container) so its git-authorship check
+          sees this host's real git checkout with correct ownership --
+          that's the whole point of PB-205. Install one
+          (https://rustup.rs) on eriduous-vdi, or build the binary
+          elsewhere (e.g. enkilab) and scp
+          target/release/enkiddb-cli here, then re-run from step 1.
+      when: cargo_check.rc != 0
+
+    # ── 1. Build the real ingestion CLI ────────────────────────────────
+    - name: "1.1 | Build enkiddb-cli (release)"
+      ansible.builtin.command:
+        cmd: cargo build --release -p enkiddb-cli
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}/workspace/bahyway_v4"
+      changed_when: true
+
+    # ── 2. Ingest EVERYTHING under the repo root in one pass ───────────
+    # A single recursive scan of the repo root catches BOTH docs/ (top
+    # level) and workspace/bahyway_v4/docs/ (and any other .md file
+    # anywhere in the checkout) in one call -- exactly "all EnkiDB
+    # documentation on the GitHub repo AND all bahyway-v4 on the local
+    # Forge folder," since ~/Forge/EnkiDB IS both at once.
+    # PB-210: `enkiddb-cli` exits non-zero on ANY per-file failure, even
+    # if 200 of 201 files sent successfully -- `failed_when: false` here
+    # so one bad file doesn't abort FLUSH/sync/verify for everything that
+    # DID succeed (found live, 2026-07-19: an empty file caused exactly
+    # this). 2.3 below surfaces the failure clearly without stopping the
+    # play. As of the same commit, enkiddb-cli auto-skips empty/
+    # whitespace-only files before RUN instead of sending them and
+    # failing -- this resilience is defense-in-depth for other failure
+    # modes, not a workaround for that specific one anymore.
+    - name: "2.1 | SCAN + CATEGORIZE + RUN against the live Write Node"
+      ansible.builtin.command:
+        cmd: >-
+          {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}/workspace/bahyway_v4/target/release/enkiddb-cli
+          ingest {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}
+          --remote {{ enkiddb_write_ip | default('192.168.122.101') }}:7101
+          --team-allowlist {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}/config/enkiddb_team_allowlist.txt
+      register: ingest_run
+      changed_when: true
+      failed_when: false
+
+    - name: "2.2 | Show the full ingestion report (every file, OK/SKIP/REJECTED, and why)"
+      ansible.builtin.debug:
+        msg: "{{ ingest_run.stdout_lines }}"
+
+    # FIXED (2026-07-26): this message previously said "continuing to
+    # FLUSH/sync/verify the documents that DID succeed" unconditionally
+    # for any non-zero rc, which is only true for the per-file failure
+    # mode (e.g. a bad empty file, mid-RUN). It is FALSE for the
+    # authorship/security gate: that gate runs before RUN even starts,
+    # and any rejected file skips RUN entirely -- zero files sent, not
+    # "everything else." Confirmed live: a run with 232 authorized + 9
+    # rejected files printed "RUN skipped" and FLUSHED:0, while this
+    # message still claimed partial success, which sent the Architect
+    # chasing a phantom empty-write-journal bug that didn't exist -- the
+    # real cause was simply that nothing had been sent yet.
+    - name: "2.3 | Warn (don't abort) if any file failed to send"
+      ansible.builtin.debug:
+        msg: >-
+          {% if 'RUN skipped' in ingest_run.stdout %}
+          enkiddb-cli exited non-zero (rc={{ ingest_run.rc }}) -- the
+          team-authorship/security gate rejected at least one file, so
+          RUN was skipped for the WHOLE BATCH. ZERO files were sent this
+          run, not "everything except the bad ones." Review 2.2 above
+          for the REJECTED line(s), fix authorship (commit as a team
+          member) or extend --team-allowlist, then re-run this playbook
+          from scratch -- FLUSH/sync/verify below will operate on
+          whatever was already on the Write Node before this run, not
+          on anything new.
+          {% else %}
+          enkiddb-cli exited non-zero (rc={{ ingest_run.rc }}) -- at least
+          one file failed to send during RUN itself (not an authorship/
+          security rejection). Review 2.2 above for the exact ERR
+          line(s). Continuing to FLUSH/sync/verify the documents that DID
+          succeed rather than aborting -- fix the failing file(s) and
+          re-run this playbook afterward to pick them up.
+          {% endif %}
+      when: ingest_run.rc != 0
+
+    # ── 3/4. FLUSH, sync (cross-host, podman unshare), and verify ───────
+    # PB-211 used a same-host `tasks/enkiddb_flush_sync_verify.yml` here,
+    # correct for the topology at the time (Write and Read as two
+    # containers on the same eriduous-vdi host). PB-212 moved Write and
+    # Read onto two genuinely separate VMs (enkidb-node-write,
+    # enkidb-node-read), so that same-host task file can no longer sync
+    # anything -- there's no shared filesystem between two VMs. This now
+    # imports PB-213's cross-host successor instead, which relays the
+    # transfer through this play's own host (eriduous-vdi, the Ansible
+    # control node) rather than requiring direct SSH between the two node
+    # VMs. See playbooks/tasks/enkiddb_cross_host_sync.yml's own header
+    # for the full path and PB-210.2's rootless-Podman UID-remapping root
+    # cause, which still applies on both ends of this transfer.
+    - name: "3/4 | FLUSH the Write Node, sync to the Read Node, verify with QUERY + SEARCH"
+      ansible.builtin.import_tasks: tasks/enkiddb_cross_host_sync.yml
+      vars:
+        enkiddb_db_label: "enkiddb"
+        enkiddb_write_volume: "enkiddb-write-data"
+        enkiddb_read_volume: "enkiddb-read-data"
+        enkiddb_write_host: "enkidb-node-write"
+        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_port: 7101
+        enkiddb_read_port: 7102
+        enkiddb_read_ip: "192.168.122.107"
+        enkiddb_query_what: "meta.title, meta.collection"
+        enkiddb_query_where_attr: "meta.collection"
+        enkiddb_query_value: "general"
+        enkiddb_run_search: true
+        # FIXED (2026-07-26): this var was never set here, so the imported
+        # task file's `{{ enkiddb_search_phrase | default('') }}` silently
+        # sent SEARCH:5: (empty query text) to the Read Node every time.
+        # adapa-recall's RecallIndex::query returns an empty Vec the
+        # instant the query string tokenizes to zero tokens -- an
+        # unconditional 0 hit(s) regardless of corpus content, proven live
+        # by both a passing local repro test (RagIndex/RecallIndex logic
+        # is correct) and a --dry-run CATEGORIZE confirming
+        # docs/BAHYWAY_ONION_LAYERS_DESIGN.md itself is authorized and
+        # ingestible. PB-211 and PB-213 both already set this explicitly;
+        # this playbook just never got the same treatment.
+        enkiddb_search_phrase: "Onion Layers"
+
+    # ── 5. What "done" looks like ───────────────────────────────────────
+    - name: "5.1 | Definition of done for this runbook"
+      ansible.builtin.debug:
+        msg: >-
+          Done means: 2.2 shows real files from BOTH docs/ and
+          workspace/bahyway_v4/docs/ with OK verdicts (not all REJECTED),
+          the imported task file's "Show real QUERY results" step lists
+          real document titles you recognize, and its "Show real SEARCH
+          results" step returns ranked hits with real text snippets, not
+          an empty array. If any of those three are false, stop here and
+          report exactly which one -- don't proceed to any further build
+          until ingestion itself is confirmed working end to end.

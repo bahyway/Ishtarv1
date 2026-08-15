@@ -1,0 +1,311 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_57_mashsharu.yml
+# MĀŠŠARU — Lean 4 Topology Verifier
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# Formal mathematical verification of TÊRTUM topology.
+# Three proof layers: Pauli / Density / GA structural invariants.
+# Rejection messages teach stakeholders about their own data.
+#
+# CORRECTIONS vs iPhone PB54:
+#   C1: inventory vdi.ini → vdi.yml
+#   C2: Lean project integrates with existing lean4/DubSarGA/
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 57 — MĀŠŠARU Lean 4 Topology Verifier"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    dubsar_root: "/home/bahyway/Forge/bahyway_v4/apps/dubsar-ide"
+    script_path: "/tmp/bw_57_mashsharu.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_57_mashsharu.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # MĀŠŠARU Lean 4 Verifier — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE   = "/home/bahyway/Forge/bahyway_v4"
+          DUBSAR  = f"{FORGE}/apps/dubsar-ide"
+          LEAN4   = f"{DUBSAR}/lean4/DubSarGA"
+          CRATE   = f"{FORGE}/crates/mashsharu"
+          SRC     = f"{CRATE}/src"
+          os.makedirs(SRC,  exist_ok=True)
+          os.makedirs(LEAN4, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          # ── Lean 4: MĀŠŠARU axioms ────────────────────────────────────
+          write(f"{LEAN4}/Mashsharu.lean", textwrap.dedent("""\
+          -- Mashsharu.lean — Topology Verification Axioms
+          -- MĀŠŠARU — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          --
+          -- Three proof layers:
+          --   Layer 1: Pauli Exclusion (no duplicate KAKIs)
+          --   Layer 2: Density (simplices must have sufficient particle density)
+          --   Layer 3: GA Structural (grade invariants)
+          --
+          -- Rejection messages teach stakeholders about their own data.
+
+          namespace Mashsharu
+
+          -- Verification result
+          inductive VerifyResult : Type
+            | pass   : String → VerifyResult
+            | reject : String → String → VerifyResult  -- code + teaching message
+            deriving Repr
+
+          -- Layer 1: Pauli Exclusion
+          -- No two particles can share the same KAKI identity
+          def verifyPauli (kaki_count: Nat) (unique_count: Nat) : VerifyResult :=
+            if kaki_count == unique_count then
+              VerifyResult.pass "Pauli ✓: all KAKIs unique"
+            else
+              VerifyResult.reject "PAULI_VIOLATION"
+                s!"You have {kaki_count - unique_count} duplicate KAKI identities. \
+                   This means duplicate records exist in your data. \
+                   Each particle must be sovereign and unique."
+
+          -- Layer 2: Density
+          -- Each declared simplex must have sufficient particle density
+          def verifyDensity (declared_edges: Nat) (found_bonds: Nat) : VerifyResult :=
+            let ratio := found_bonds * 100 / (declared_edges.max 1)
+            if ratio >= 60 then
+              VerifyResult.pass s!"Density ✓: {ratio}% bond coverage"
+            else
+              VerifyResult.reject "DENSITY_TOO_LOW"
+                s!"Only {ratio}% of declared bonds have sufficient particle density. \
+                   These entities may not be genuinely related in your data. \
+                   Consider: are they truly connected or assumed to be?"
+
+          -- Layer 3: GA Grade Invariant
+          -- grade(A∧B) = grade(A) + grade(B)
+          def verifyGAGrade (grade_a: Nat) (grade_b: Nat) (result_grade: Nat) : VerifyResult :=
+            if result_grade == grade_a + grade_b then
+              VerifyResult.pass s!"GA Grade ✓: {grade_a}+{grade_b}={result_grade}"
+            else
+              VerifyResult.reject "GA_GRADE_VIOLATION"
+                s!"Outer product grade should be {grade_a + grade_b} but got {result_grade}. \
+                   The simplex you declared has an internal inconsistency. \
+                   Axiom GA6: grade(A∧B) = grade(A) + grade(B)."
+
+          -- Master verification — all three layers
+          def verify (kaki_count unique_count declared_edges found_bonds
+                      grade_a grade_b result_grade : Nat) : List VerifyResult :=
+            [ verifyPauli kaki_count unique_count,
+              verifyDensity declared_edges found_bonds,
+              verifyGAGrade grade_a grade_b result_grade ]
+
+          end Mashsharu
+          """))
+
+          # ── Rust crate: mashsharu ─────────────────────────────────────
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "mashsharu"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          # No external dependencies — pure std
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! MĀŠŠARU — Lean 4 Topology Verifier
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Three proof layers:
+          //!   Layer 1: Pauli Exclusion (no duplicate KAKIs)
+          //!   Layer 2: Density (declared bonds must exist in data)
+          //!   Layer 3: GA Grade Invariant (grade(A∧B) = grade(A)+grade(B))
+          //!
+          //! Rejection messages teach stakeholders about their own data.
+          //! Production: calls Lean 4 subprocess lean4/DubSarGA/Mashsharu.lean
+          //! MVP: native Rust implementation of same axioms.
+
+          #![forbid(unsafe_code)]
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum VerifyResult {
+              Pass   { message: String },
+              Reject { code: String, teaching: String },
+          }
+
+          impl VerifyResult {
+              pub fn is_pass(&self) -> bool { matches!(self, Self::Pass { .. }) }
+          }
+
+          pub struct Mashsharu;
+
+          impl Mashsharu {
+              /// Layer 1 — Pauli Exclusion
+              pub fn verify_pauli(kaki_count: usize, unique_count: usize) -> VerifyResult {
+                  if kaki_count == unique_count {
+                      VerifyResult::Pass {
+                          message: "Pauli ✓: all KAKIs unique — no duplicate identities".into()
+                      }
+                  } else {
+                      VerifyResult::Reject {
+                          code: "PAULI_VIOLATION".into(),
+                          teaching: format!(
+                              "You have {} duplicate KAKI identities. \
+                               This means duplicate records exist in your data. \
+                               Each particle must be sovereign and unique.",
+                              kaki_count - unique_count
+                          ),
+                      }
+                  }
+              }
+
+              /// Layer 2 — Density
+              pub fn verify_density(declared_edges: usize, found_bonds: usize) -> VerifyResult {
+                  let ratio = if declared_edges > 0 {
+                      found_bonds * 100 / declared_edges
+                  } else { 100 };
+
+                  if ratio >= 60 {
+                      VerifyResult::Pass {
+                          message: format!("Density ✓: {}% bond coverage", ratio)
+                      }
+                  } else {
+                      VerifyResult::Reject {
+                          code: "DENSITY_TOO_LOW".into(),
+                          teaching: format!(
+                              "Only {}% of declared bonds have sufficient density. \
+                               These entities may not be genuinely related in your data. \
+                               Are they truly connected or assumed to be?",
+                              ratio
+                          ),
+                      }
+                  }
+              }
+
+              /// Layer 3 — GA Grade Invariant
+              /// grade(A∧B) = grade(A) + grade(B)  — Axiom GA6
+              pub fn verify_ga_grade(grade_a: u8, grade_b: u8, result_grade: u8) -> VerifyResult {
+                  let expected = grade_a + grade_b;
+                  if result_grade == expected {
+                      VerifyResult::Pass {
+                          message: format!("GA Grade ✓: {}+{}={}", grade_a, grade_b, expected)
+                      }
+                  } else {
+                      VerifyResult::Reject {
+                          code: "GA_GRADE_VIOLATION".into(),
+                          teaching: format!(
+                              "Outer product grade should be {} but got {}. \
+                               The simplex has an internal inconsistency. \
+                               GA6: grade(A∧B) = grade(A) + grade(B).",
+                              expected, result_grade
+                          ),
+                      }
+                  }
+              }
+
+              /// Run all three verification layers.
+              /// All must pass for topology to be sealed.
+              pub fn verify_all(
+                  kaki_count:     usize,
+                  unique_count:   usize,
+                  declared_edges: usize,
+                  found_bonds:    usize,
+                  grade_a:        u8,
+                  grade_b:        u8,
+                  result_grade:   u8,
+              ) -> Vec<VerifyResult> {
+                  vec![
+                      Self::verify_pauli(kaki_count, unique_count),
+                      Self::verify_density(declared_edges, found_bonds),
+                      Self::verify_ga_grade(grade_a, grade_b, result_grade),
+                  ]
+              }
+
+              pub fn all_pass(results: &[VerifyResult]) -> bool {
+                  results.iter().all(|r| r.is_pass())
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_pauli_pass_unique_kakis() {
+                  let r = Mashsharu::verify_pauli(100, 100);
+                  assert!(r.is_pass());
+              }
+
+              #[test]
+              fn test_pauli_reject_duplicates() {
+                  let r = Mashsharu::verify_pauli(100, 97);
+                  assert!(!r.is_pass());
+                  if let VerifyResult::Reject { teaching, .. } = r {
+                      assert!(teaching.contains("3 duplicate"));
+                  }
+              }
+
+              #[test]
+              fn test_ga_grade_triangle_bivector() {
+                  // 2-simplex: grade(e₁ ∧ e₂) = 1+1 = 2
+                  let r = Mashsharu::verify_ga_grade(1, 1, 2);
+                  assert!(r.is_pass());
+              }
+
+              #[test]
+              fn test_ga_grade_tetrahedron_trivector() {
+                  // 3-simplex: grade(e₁∧e₂∧e₃) = 1+1+1 = 3
+                  let r = Mashsharu::verify_ga_grade(2, 1, 3);
+                  assert!(r.is_pass());
+              }
+
+              #[test]
+              fn test_all_pass_seals_topology() {
+                  let results = Mashsharu::verify_all(50, 50, 10, 8, 1, 1, 2);
+                  assert!(Mashsharu::all_pass(&results));
+              }
+
+              #[test]
+              fn test_rejection_teaches_stakeholder() {
+                  let r = Mashsharu::verify_density(10, 3);
+                  assert!(!r.is_pass());
+                  if let VerifyResult::Reject { teaching, code } = r {
+                      assert_eq!(code, "DENSITY_TOO_LOW");
+                      assert!(teaching.contains("30%"));
+                      // Teaching message guides the stakeholder
+                      assert!(teaching.contains("genuinely related"));
+                  }
+              }
+          }
+          """))
+
+          # Register + build
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/mashsharu"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/mashsharu",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "mashsharu"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+
+          t = subprocess.run(["cargo", "test", "-p", "mashsharu", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ MĀŠŠARU — 3 proof layers — 6 tests pass")
+          print("✓ Lean 4 axioms written to lean4/DubSarGA/Mashsharu.lean")
+          print("✓ PLAYBOOK 57 — MĀŠŠARU COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p57_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p57_out.stdout_lines }}"

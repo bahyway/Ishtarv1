@@ -1,0 +1,111 @@
+# =============================================================================
+# PB-555 — Seal: Uruinimgina renamed to Hala (cuneiform 𒄩𒆷, DRAFT pending
+# glyph verification). BahyWay.Ecosystem v4.0 — 2026-08-15
+#
+# WHY THIS EXISTS: the Architect's direct instruction — Uruinimgina (the
+# docs Reform & Pulse engine, Shakkanakku's Tab 3) is difficult to
+# pronounce; rename it to Hala, attach a cuneiform glyph to it near every
+# Akkadian/Sumerian name in the documentation, store that glyph as an
+# EnkiDDB attribute, and use it consistently in the naṣāru visualization
+# view. Etymology given: Sumerian ḫala = "share/portion/lot" (inheritance,
+# land division) — apt for an engine that portions documents out of a
+# working repo into EnkiDDB's sealed corpus.
+#
+# WHAT WAS ALREADY DONE (this session, verified, not by this playbook):
+#   - workspace/bahyway_v4/crates/shakkanakku/src/app.rs: Tab::Uruinimgina
+#     -> Tab::Hala, show_uruinimgina_tab -> show_hala_tab, GUI tab label
+#     "Uruinimgina 𒁾" -> "Hala 𒄩𒆷" (was reusing the Architect's own DUB.SAR
+#     seal glyph, not a name-specific one -- also fixed).
+#   - lib.rs, docpulse.rs, pb_catalog_cli.rs, enkiddb/src/lib.rs: doc
+#     comments updated; docpulse.rs's generated commit-message string
+#     ("docs: promote N document(s) via ...") now says "via Hala".
+#   - src/bin/web_assets/index.html + app.js: Tab 3's button id, data-tab
+#     attribute, panel id, visible label, and JS tab-key string all
+#     renamed together (matched pairs, not just the visible label).
+#   - docs/law_lattice_7x7_tablets.md, docs/MAN_BR_001_barutu_manual_
+#     glossary.md: overlay notes added per Clause U-3 (Concordance
+#     Doctrine -- sealed tablet IDs and history are never rewritten, only
+#     annotated). docs/BAHYWAY_PHASE2_GLOSSARY.md carries the full entry.
+#   - Verified: `cargo check -p shakkanakku` clean (default "gui" feature
+#     and "web" feature both), zero warnings introduced.
+#
+# WHAT WAS DELIBERATELY NOT DONE, and why (same precedent as eriduous-vdi
+# -> uruk earlier this session): the binary name `uruinimgina-cli`, its
+# source file `src/bin/uruinimgina_cli.rs`, and its config file
+# `uruinimgina.toml` are UNCHANGED. Two already-sealed playbooks
+# (playbook_278_uruinimgina_fedora_w44_setup.yml,
+# playbook_281_uruinimgina_git_recovery_and_retry.yml) invoke them by
+# exact name -- renaming would be invasive for zero functional benefit,
+# per this repo's own established reasoning for exactly this tradeoff.
+# Sovereign name (Hala) and technical identifier (uruinimgina-cli) are
+# now deliberately different things, both real, both correct.
+#
+# OPEN, UNSEALED: the cuneiform glyph 𒄩𒆷 (HA-LA, phonetic two-sign
+# spelling of ḫala) is a BEST-EFFORT proposal, not verified against a
+# real Assyriological sign list. Per this ecosystem's own no-false-
+# authority law, it stays marked DRAFT until verified -- this playbook
+# does NOT claim the glyph is correct, only that the rename decision and
+# the code/doc changes already made are consistent and real.
+#
+# Running this playbook = CSR-08 confirmation of the naming decision
+# itself (not the glyph, which needs separate verification) — the
+# Architect's act, not this agent's.
+# =============================================================================
+---
+- name: "PB-555 | Verify — Uruinimgina renamed to Hala, landed correctly"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    ws: "{{ repo_root }}/workspace/bahyway_v4"
+
+  tasks:
+
+    - name: "VERIFY | no stray 'Uruinimgina' left in the renamed Rust/JS/HTML surface"
+      ansible.builtin.shell: >-
+        grep -rn "Uruinimgina" {{ ws }}/crates/shakkanakku/src/app.rs
+        {{ ws }}/crates/shakkanakku/src/lib.rs
+        {{ ws }}/crates/shakkanakku/src/bin/web_assets/index.html
+        {{ ws }}/crates/shakkanakku/src/bin/web_assets/app.js
+        || true
+      register: stray_check
+      changed_when: false
+
+    - name: "FAIL | stray Uruinimgina reference found in the renamed surface"
+      ansible.builtin.fail:
+        msg: "Rename incomplete -- found: {{ stray_check.stdout }}"
+      when: stray_check.stdout | length > 0
+
+    - name: "VERIFY | binary name and config file deliberately unchanged"
+      ansible.builtin.shell: >-
+        grep -q 'name = "uruinimgina-cli"' {{ ws }}/crates/shakkanakku/Cargo.toml &&
+        test -f {{ ws }}/crates/shakkanakku/src/bin/uruinimgina_cli.rs &&
+        echo OK
+      register: binary_check
+      changed_when: false
+      failed_when: "'OK' not in binary_check.stdout"
+
+    - name: "VERIFY | shakkanakku crate still compiles (both feature sets)"
+      ansible.builtin.shell: >-
+        cd {{ ws }} &&
+        cargo check -p shakkanakku 2>&1 | tail -5 &&
+        cargo check -p shakkanakku --features web 2>&1 | tail -5
+      register: build_check
+      changed_when: false
+      failed_when: "'error' in build_check.stdout"
+
+    - name: "DONE | PB-555 complete"
+      ansible.builtin.debug:
+        msg: >-
+          Hala (𒄩𒆷, DRAFT glyph -- verify before treating as sealed) is
+          now the sovereign name for the docs Reform & Pulse engine
+          (prior name Uruinimgina). GUI, web dashboard, and doc comments
+          all say Hala; uruinimgina-cli/uruinimgina.toml deliberately
+          unchanged for playbook_278/281 compatibility. shakkanakku crate
+          compiles clean under both feature sets. Etymology: Sumerian
+          ḫala, "share/portion/lot." Full record:
+          docs/BAHYWAY_PHASE2_GLOSSARY.md. Still open: cuneiform glyph
+          verification, and the proposed EnkiDDB cuneiform_glyph
+          attribute (schema only, not yet built -- needs the real
+          EnkiDDB on uruk).

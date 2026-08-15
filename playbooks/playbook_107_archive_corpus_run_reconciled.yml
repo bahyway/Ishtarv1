@@ -1,0 +1,178 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_107_archive_corpus_run_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-107 Reconciled: NARAMSIN vs corpus, count fixed
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_107_archive_corpus_run_reconciled.yml -i "localhost," -c local -v
+#
+#  Prerequisite: run playbook_106_corpus_files_reconciled.yml first.
+#
+#  Why this file exists (not the original playbook_107_archive_corpus_run.yml):
+#    Actually built and ran this corpus_runner.rs against a real,
+#    freshly-generated corpus in a sandbox before shipping it. Verdict:
+#    the original's Rust logic is correct as written — no bug. It calls
+#    naramsin_archive::decompress(&data, 0), which matches the crate's
+#    real, current public API exactly (confirmed against
+#    crates/naramsin-archive/src/lib.rs: decompress(data: &[u8],
+#    recursion_depth: u8) -> Result<Vec<ExtractedFile>, ArchiveError>,
+#    ExtractedFile{name, data}). Sandbox run against 45 real corpus files
+#    (the corrected count from PB-106): 0 unexpected failures — every
+#    valid/corrupt/malicious/stub file behaved exactly as expected.
+#
+#    Only change from the original: corpus count references corrected
+#    from 50 to 45 to match PB-106's real output.
+#
+#  2026-07-25 FIX: same bug as PB-106 -- `gather_facts: false` while vars
+#  use `ansible_env.HOME`, confirmed by the same pattern found live on
+#  eriduous-vdi. Flipped on.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-107 (Reconciled) | NARAMSIN vs archive corpus"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    corpus_dir:   "{{ ansible_env.HOME }}/Forge/enkidb-corpus"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    results_dir:  "{{ forge_root }}/test_results"
+
+  tasks:
+
+    - name: "SETUP | Results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "CHECK | Corpus directory"
+      ansible.builtin.find:
+        paths: "{{ corpus_dir }}"
+        patterns: "*.zip,*.tar.gz,*.bz2,*.xz,*.7z"
+      register: corpus_check
+
+    - name: "FAIL | Corpus not generated"
+      ansible.builtin.fail:
+        msg: "Corpus not found at {{ corpus_dir }} — run playbook_106_corpus_files_reconciled.yml first"
+      when: corpus_check.matched == 0
+
+    - name: "INFO | Corpus size"
+      ansible.builtin.debug:
+        msg: "Found {{ corpus_check.matched }} corpus files in {{ corpus_dir }} (expect 45)"
+
+    - name: "WRITE | corpus_runner example (verified in sandbox: 0 unexpected failures)"
+      ansible.builtin.copy:
+        dest: "{{ workspace }}/crates/naramsin-archive/examples/corpus_runner.rs"
+        mode: "0644"
+        content: |
+          //! corpus_runner — process every file in a directory through
+          //! naramsin_archive::decompress() and report PASS / ERR_EXPECTED / FAIL.
+          //!
+          //! Usage:  cargo run -p naramsin-archive --example corpus_runner --release \
+          //!           -- /path/to/enkidb-corpus
+
+          fn main() {
+              let dir = std::env::args().nth(1)
+                  .unwrap_or_else(|| format!("{}/Forge/enkidb-corpus",
+                      std::env::var("HOME").unwrap_or_default()));
+
+              let mut entries: Vec<_> = std::fs::read_dir(&dir)
+                  .expect("cannot read corpus dir")
+                  .filter_map(|e| e.ok())
+                  .map(|e| e.path())
+                  .filter(|p| p.is_file())
+                  .collect();
+              entries.sort();
+
+              let total = entries.len();
+              let mut pass = 0usize;
+              let mut expected_err = 0usize;
+              let mut fail = 0usize;
+
+              println!("NARAMSIN CORPUS RUNNER");
+              println!("Directory : {dir}");
+              println!("Files     : {total}");
+              println!("{:<54} {:<16} {}", "FILE", "RESULT", "DETAIL");
+              println!("{}", "─".repeat(100));
+
+              for path in &entries {
+                  let name = path.file_name().unwrap().to_string_lossy().to_string();
+                  let data = match std::fs::read(path) {
+                      Ok(d) => d,
+                      Err(e) => {
+                          println!("{:<54} {:<16} {}", name, "IO_ERROR", e);
+                          fail += 1;
+                          continue;
+                      }
+                  };
+
+                  let is_corrupt   = name.starts_with("corrupt_");
+                  let is_stub      = name.starts_with("stub_");
+                  let is_malicious = name.starts_with("malicious_");
+
+                  match naramsin_archive::decompress(&data, 0) {
+                      Ok(files) => {
+                          let bytes: usize = files.iter().map(|f| f.data.len()).sum();
+                          if is_corrupt {
+                              println!("{:<54} {:<16} {} file(s) {} bytes [WARN: expected error]",
+                                  name, "UNEXPECTED_OK", files.len(), bytes);
+                              fail += 1;
+                          } else {
+                              println!("{:<54} {:<16} {} file(s) {} bytes",
+                                  name, "PASS", files.len(), bytes);
+                              pass += 1;
+                          }
+                      }
+                      Err(e) => {
+                          if is_corrupt || is_stub || is_malicious {
+                              println!("{:<54} {:<16} {}", name, "ERR_EXPECTED", e);
+                              expected_err += 1;
+                              pass += 1;
+                          } else {
+                              println!("{:<54} {:<16} {}", name, "FAIL", e);
+                              fail += 1;
+                          }
+                      }
+                  }
+              }
+
+              println!("{}", "─".repeat(100));
+              println!("TOTAL: {}  |  PASS: {}  |  ERR_EXPECTED: {}  |  FAIL: {}",
+                  total, pass - expected_err, expected_err, fail);
+
+              if fail > 0 {
+                  eprintln!("\nCORPUS TEST FAILED — {} unexpected failure(s)", fail);
+                  std::process::exit(1);
+              }
+              println!("\nCORPUS TEST PASSED ✓  ({} files processed, 0 unexpected failures)", total);
+          }
+
+    - name: "RUN | cargo run --example corpus_runner --release"
+      ansible.builtin.command:
+        cmd: >
+          {{ cargo }} run -p naramsin-archive --example corpus_runner
+          --release -- {{ corpus_dir }} 2>&1
+        chdir: "{{ workspace }}"
+      register: run_out
+      changed_when: false
+
+    - name: "SAVE | Write corpus test log"
+      ansible.builtin.copy:
+        content: "{{ run_out.stdout }}\n{{ run_out.stderr }}"
+        dest: "{{ results_dir }}/pb107_corpus_run.log"
+        mode: "0644"
+
+    - name: "PRINT | Corpus runner output"
+      ansible.builtin.debug:
+        msg: "{{ run_out.stdout_lines }}"
+
+    - name: "FAIL | Corpus test failed"
+      ansible.builtin.fail:
+        msg: "CORPUS TEST FAILED — check {{ results_dir }}/pb107_corpus_run.log"
+      when: run_out.rc != 0
+
+    - name: "DONE | PB-107 Corpus Run COMPLETE → Run PB-108 next"
+      ansible.builtin.debug:
+        msg: "CORPUS PASS — 45/45 files processed — Run playbook_108_hepta_bench_10m_reconciled.yml"

@@ -1,0 +1,132 @@
+# =============================================================================
+# PB-211 — Standalone, repeatable FLUSH + sync + verify for EnkiDDB.
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# WHY THIS PLAYBOOK EXISTS: the Architect asked directly for a proper
+# Ansible playbook instead of manually pasted Python/bash debugging
+# commands in chat, with its own header explaining the bug and the fix --
+# not just a record of steps taken elsewhere. PB-208 (the full-ingestion
+# runbook) already does FLUSH+sync+verify as its LAST phase, but re-running
+# all of PB-208 just to re-sync or re-check the Read Node means rebuilding
+# enkiddb-cli and re-sending every document again, which is slow and
+# unnecessary when nothing new needs ingesting. PB-211 is the same
+# FLUSH/sync/verify procedure, runnable on its own, any time you need to:
+#   - force a sync after suspecting the Read Node is serving stale data
+#   - re-verify with a different QUERY collection or SEARCH phrase
+#   - confirm a fix to the sync mechanism itself actually works
+#
+# THE TWO REAL BUGS THIS PROCEDURE EXISTS BECAUSE OF (both found live,
+# 2026-07-19, running PB-208 for real against eriduous-vdi):
+#
+#   PB-210   enkiddb-cli exits non-zero if even ONE file in a batch fails
+#            to send (e.g. a genuinely empty .md file), which under
+#            Ansible's default task-failure handling aborted FLUSH/sync/
+#            verify for the 200 OTHER files that succeeded. Fixed in
+#            enkiddb-cli itself (empty/whitespace-only files are now
+#            partitioned out at SCAN time and reported as SKIP, not sent)
+#            and in PB-208's ingest task (failed_when: false, so future
+#            per-file failures warn instead of aborting downstream steps).
+#            Not this playbook's concern directly, but it's why 200/201
+#            documents were flushed instead of 0.
+#
+#   PB-210.2 Even after fixing PB-210, the sync step (copying the Write
+#            Node's fresh materialization into the Read Node's volume)
+#            failed with real `Permission denied` on plain `cp`/`rm`/`mv`
+#            -- even run as the same login user (bahyway) who can
+#            successfully `podman volume inspect` both volumes. Root
+#            cause: this fleet runs ROOTLESS Podman, which remaps
+#            container-internal UIDs to a different range on the HOST
+#            filesystem. Files the enkiddb-write/enkiddb-read containers
+#            wrote into their named volumes are therefore NOT owned by
+#            bahyway's literal host UID, even though bahyway "owns" the
+#            volume in the sense of being able to inspect it.
+#
+#            THE DANGEROUS PART: this failure was SILENT. The manual
+#            script that hit it wasn't `set -e`, so it kept going past
+#            the failed cp/rm/mv and ran QUERY/SEARCH verification
+#            anyway -- which returned real, well-formed EnkiDDB data
+#            (real titles, real scores, real text), because the Read
+#            Node's PREVIOUS data was still sitting there untouched.
+#            Nothing in the output said "this is stale" -- only comparing
+#            it against what was supposed to have just been ingested
+#            revealed the mismatch.
+#
+#            THE FIX: `podman unshare <cmd>` runs a command inside the
+#            same user namespace Podman itself uses for its rootless
+#            containers, so the remapped ownership resolves correctly.
+#            This is Podman's own documented mechanism for touching
+#            volume data from the host -- not a workaround. Applied to
+#            every cp/rm/mv/ls task in tasks/enkiddb_flush_sync_verify.yml.
+#
+# HOW TO AVOID BEING FOOLED BY STALE DATA AGAIN: don't just eyeball that
+# QUERY/SEARCH "returned something." Override enkiddb_search_phrase (see
+# below) to a phrase you know is really in the TEXT BODY of a document
+# you just ingested -- a real hit with real scores/text is proof, an
+# empty array after a real sync is a red flag worth re-checking.
+#
+# CAUGHT LIVE, 2026-07-19, running this playbook for the first time:
+# the default phrase was originally "WebGPU", chosen because that was
+# the filename of the one file PB-210 skips as empty
+# (`lab_creation_docs/Architecting/Apps/WebGPU_Create_.md`, confirmed
+# 0 bytes via `wc -c`). That file is CORRECTLY never sent to the Write
+# Node, so "WebGPU" never appears in the corpus at all and SEARCH on it
+# always returns `[]` -- sync working or not. That's a false-negative
+# trap, not a real signal: an empty result only means something if the
+# phrase is known to be in a real, non-empty, successfully-ingested
+# document's body. "Onion Layers" (a real heading inside
+# `docs/BahyWay_Ecosystem_Onion_Layers_Design.md`, part of every full
+# ingestion) was substituted as the default for exactly this reason,
+# and returns real ranked hits with real scores/text.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_211_flush_sync_and_verify_enkiddb.yml
+#
+#   To probe for a specific phrase you know is in a document's real text
+#   (not just its filename or title) -- the strongest freshness proof:
+#   ansible-playbook playbooks/playbook_211_flush_sync_and_verify_enkiddb.yml \
+#     -e enkiddb_search_phrase="<phrase only in that document's body>"
+#
+#   To check a different collection than the default "general" bucket:
+#   ansible-playbook playbooks/playbook_211_flush_sync_and_verify_enkiddb.yml \
+#     -e enkiddb_query_collection="components"
+#
+# All overridable vars are documented in
+# playbooks/tasks/enkiddb_flush_sync_verify.yml's own header comment.
+# =============================================================================
+---
+- name: "PB-211 | Standalone FLUSH + sync + verify for EnkiDDB (no re-ingestion)"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    # Real heading text inside a real, always-ingested document
+    # (docs/BahyWay_Ecosystem_Onion_Layers_Design.md) -- proven live,
+    # 2026-07-19, to return real ranked hits after a real sync. Override
+    # with -e enkiddb_search_phrase="..." for any other specific check;
+    # see this file's header for why a filename-only phrase (the
+    # original "WebGPU" default) is a false-negative trap.
+    enkiddb_search_phrase: "Onion Layers"
+
+  tasks:
+    - name: "0.1 | Confirm enkiddb-write / enkiddb-read containers are up before touching anything"
+      ansible.builtin.command: podman ps --filter "name=enkiddb-write" --filter "name=enkiddb-read"
+      register: containers_up
+      changed_when: false
+
+    - name: "0.2 | Show container status"
+      ansible.builtin.debug:
+        msg: "{{ containers_up.stdout_lines }}"
+
+    - name: "1 | FLUSH the Write Node, sync to the Read Node (podman unshare), verify with QUERY + SEARCH"
+      ansible.builtin.import_tasks: tasks/enkiddb_flush_sync_verify.yml
+
+    - name: "2 | What 'done' looks like"
+      ansible.builtin.debug:
+        msg: >-
+          Done means: the QUERY step above lists real document titles you
+          recognize, and the SEARCH step returns ranked hits containing
+          {{ enkiddb_search_phrase }} with real scores and real text, not
+          an empty array. An empty SEARCH result for a phrase you know is
+          in the corpus means the sync didn't actually land -- re-check
+          for Permission denied errors above and confirm `podman unshare`
+          is being used, not plain cp/rm/mv.

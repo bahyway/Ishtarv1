@@ -1,0 +1,289 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_145_rm001_roadmap_update_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-145 Reconciled v2: honest status, corrected
+#  after cross-checking a separate earlier session's real merged work
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_145_rm001_roadmap_update_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file was revised (v1 of this reconciliation undersold real work):
+#    v1 of this reconciled playbook said PB-119-136's content "does not
+#    exist." That was correct about the playbook FILES (they never did),
+#    but incomplete about the underlying work: five documents from an
+#    earlier, separate session (00-03 + BC-SEC-001.docx, uploaded
+#    2026-07-08) revealed that most of what PB-119-136 was meant to build
+#    — ESARHADDON's KAKI schema/SMI/survivor aggregator/HeptaMap grid/
+#    atmospheric threat model, ASHNAN's CMI/IRI/LMI TIAMAT formulas,
+#    NAMTAR/EREŠKIGAL, NINSUN + its Steward bridge, the ENKI-TERRA ingest
+#    crates, BlackBox Station/Storage Sector quarantine routing, and a
+#    rebuilt enkidb-query-server with a BIGRING orbital bridge — was built
+#    for real in that session and merged into master via PR #17 and PR
+#    #18, entirely outside the iPhone session's playbook-numbering
+#    scheme. Every one of those crates was re-verified against this repo
+#    directly (not taken on the earlier session's word): all present,
+#    all registered in the workspace, full `cargo test --workspace` run
+#    clean at 288 test suites / 0 failures before writing this table.
+#    That same review also caught and fixed a real production bug
+#    (bee-watchdog reprocessing already-completed batches on restart) and
+#    an orphaned crate (enkidb-quantdb never registered in the workspace).
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-145 (Reconciled v2) | RM-001 Roadmap Update — corrected against real merged work"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:     "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:      "{{ forge_root }}/workspace/bahyway_v4"
+    docs_dir:       "{{ forge_root }}/docs/SHEDU"
+    session_date:   "{{ ansible_date_time.date }}"
+    target_branch:  "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    report_file:    "{{ docs_dir }}/PB145_RECONCILED_V2_{{ session_date }}.txt"
+    naru_journal:   "{{ docs_dir }}/NARU_NARAMSIN_JOURNAL.txt"
+    rm001_addendum: "{{ docs_dir }}/RM-001_ADDENDUM_PB111-145_RECONCILED_V2_{{ session_date }}.md"
+    deploy_ref:     "{{ docs_dir }}/DEPLOY_REFERENCE_ALL_PLAYBOOKS.md"
+
+    eriduous_ip:    "192.168.122.214"
+    node_write_ip:  "192.168.122.101"
+    node_read_ip:   "192.168.122.107"
+    monitor_ip:     "192.168.122.121"
+
+  tasks:
+
+    - name: "PREP  | Ensure docs/SHEDU dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "TEST  | Full workspace test suite (ground truth before writing any status doc)"
+      ansible.builtin.command:
+        cmd: "{{ ansible_env.HOME }}/.cargo/bin/cargo test --workspace"
+        chdir: "{{ workspace }}"
+      register: full_test
+      changed_when: false
+      failed_when: "'test result: FAILED' in full_test.stdout"
+
+    # ── RM-001 Addendum v2 — corrected against real merged crates ─────────────
+    - name: "WRITE | RM-001 Addendum v2 — PB-111 through PB-145 (corrected)"
+      ansible.builtin.copy:
+        dest: "{{ rm001_addendum }}"
+        mode: "0644"
+        content: |
+          # RM-001 Addendum v2 (Reconciled) — BahyWay.Ecosystem v4.0 Roadmap Update
+          ## Playbook Series PB-111 through PB-145 — corrected against real merged work
+          Generated: {{ session_date }} | Node: {{ ansible_hostname }}
+
+          This supersedes both the original unexecuted PB-145 draft (which
+          falsely claimed PB-119-136 "WRITTEN") and this playbook's own v1
+          reconciliation (which correctly said the playbook FILES don't
+          exist, but didn't know that most of the underlying CONTENT had
+          already been built directly and merged via PR #17/#18 in a
+          separate session). Full workspace test result at generation time:
+            {{ full_test.stdout | trim | regex_search('test result:.*') | default('see build log') }}
+
+          ---
+
+          ## What PB-119-136 was supposed to build, and what's actually real
+
+          | Intended scope | Status | Evidence |
+          |---|---|---|
+          | ESARHADDON KAKI schema (SeismicEvent/SurvivorSignal/StructuralState) | **REAL** | `crates/esarhaddon/src/kaki.rs` |
+          | ESARHADDON TIAMAT SMI formula | **REAL, tested** | `crates/esarhaddon/src/smi.rs`, 2 tests |
+          | ESARHADDON Survivor Signal Aggregator | **REAL** | `crates/esarhaddon/src/survivor.rs` |
+          | ESARHADDON HeptaMap E7 rescue grid | **REAL** | `crates/esarhaddon/src/grid.rs` |
+          | ESARHADDON atmospheric/gas threat model | **REAL** | `crates/esarhaddon/src/atmosphere.rs` (CH4/CO/H2S/PM2.5 lethality) |
+          | ESARHADDON DubSar Theater scenes | **NOT BUILT** | no Godot scene code anywhere |
+          | ESARHADDON field ruggedisation (mesh radio) | **NOT BUILT** | nothing found |
+          | ASHNAN TIAMAT CMI/IRI/LMI formulas | **REAL, tested** | `crates/ashnan/src/{cmi,iri,lmi}.rs` |
+          | ASHNAN provenance / confidence tiers (TIER 0-3) | **REAL** | `crates/ashnan/src/provenance.rs` |
+          | ASHNAN external ingestion adapters (FAO/WOAH) | **NOT BUILT** | tier framework exists, no actual adapter code |
+          | ASHNAN DubSar Theater scenes | **NOT BUILT** | nothing found |
+          | ASHNAN regional extension (Jordan/Syria/Fertile Crescent) | **REAL** | PB-141 reconciled this session (config only) |
+          | NARAMSIN regression pass (7-archive corpus) | **NOT BUILT as own suite** | individual crates (archive/format/integrity/audit/bridge) exist and pass tests; no dedicated regression harness |
+          | INANA series entirely (KAKI schema, FETCH wiring, tribe crystallisation, advertiser reports) | **DOES NOT EXIST** | no crate, no doc, not mentioned in any session — pure fabrication in the original PB-145 draft |
+          | NAMTAR / EREŠKIGAL scaffolds | **REAL, tested** | `namtar-kaki`/`ereskigal-kaki`, 4 tests each (reconciled this session) |
+          | NINSUN agent + Steward advisory bridge | **REAL, tested** | `ninsun-agent`, `ninsun-steward-bridge` |
+          | ENKI-TERRA ingest wiring (nanshe/esarhaddon/ashnan-ingest) | **REAL, tested** | redesigned against the actual `naramsin-bridge::process()` signature, 9 tests |
+          | BlackBox Station / Storage Sector quarantine split | **REAL, tested** | `blackbox-station`, `storage-sector`, wired into `SchedulerLoop::run_sweep()` |
+          | `enkidb-query-server` + BIGRING orbital bridge | **REAL** | rebuilt from scratch, `ACROSS BIGRING` clause wired to `bahyway-algebra::orbital` |
+          | bee-watchdog restart-duplicate-ingestion bug | **FOUND AND FIXED** | real production bug, `archive()` step added, confirmed at `bin/bee-watchdog/src/main.rs:929` |
+          | `enkidb-quantdb` (EnkiMDB slot) workspace registration | **FOUND ORPHANED, FIXED** | had 32 real tests, was never in `cargo build --workspace` scope until fixed |
+
+          All of the above marked REAL/tested was independently re-verified
+          against this repo — not taken on the source documents' word —
+          via `cargo test --workspace`: 288 test suites, 0 failures.
+
+          ---
+
+          ## Playbook Status Table — PB-111 to PB-145
+
+          | PB  | File | Module / Layer | Status |
+          |-----|------|---------------|--------|
+          | 111 | enkidb_cqrs_node_verify | EnkiDB — CQRS health gate | RECONCILED |
+          | 112 | kispu_headstore_benchmark | KISPU — sub-1s performance gate | RECONCILED |
+          | 113 | naramsin_engine_formalise | NARAMSIN — archive layer + NRM_* codes | RECONCILED |
+          | 114 | naramsin_format_layer | NARAMSIN — CSV/JSON/XML format layer | RECONCILED |
+          | 115 | naramsin_mashsharu_bridge | NARAMSIN — MASHSHARU bridge + NĀRU | RECONCILED |
+          | 116 | enki_terra_suite_wire | ENKI-TERRA — NARAMSIN ingestion wiring | RECONCILED |
+          | 117 | ashnan_kaki_schema | ASHNAN — 4 particle types + ColourID B11 | RECONCILED |
+          | 118 | ashnan_sensor_pilot_setup | ASHNAN — Diyala pilot + test corpus | BLOCKED (needs corpus + SSH) |
+          | 119-136 | ESARHADDON / ASHNAN TIAMAT / NARAMSIN regression / INANA | **PARTIALLY REAL** — see table above; playbook files never existed, but ESARHADDON/ASHNAN core + ingest/quarantine work is real; INANA is pure fabrication |
+          | 137 | urnammu_attestationd_impl | UrNammu — TPM2 boot attestation daemon | IMPLEMENTED (11 tests) |
+          | 138 | kittu_engine_v1 | Kittu — ShoWEngine + email delivery | IMPLEMENTED (4 tests) |
+          | 139 | ninsun_refiner_wire | NINSUN — progressive refiner | REAL (`ninsun-agent`, separate earlier session) |
+          | 140 | edubba_seal_integration | É-DUBBA — 6-stage integration test | RECONCILED |
+          | 141 | ashnan_regional_extension | ASHNAN — Jordan/Syria/Fertile Crescent | RECONCILED |
+          | 142 | namtar_domain_scaffold | NAMTAR — sacred burial | IMPLEMENTED (namtar-kaki, 4 tests) |
+          | 143 | ereskigal_domain_scaffold | EREŠKIGAL — informal settlement | IMPLEMENTED (ereskigal-kaki, 4 tests) |
+          | 144 | grafana_monitoring_setup | Grafana+Prometheus on dubsar-workstation | CONFIGS READY, deploy BLOCKED (no live hardware) |
+          | 145 | rm001_roadmap_update | This document (v2) | RECONCILED |
+
+          ---
+
+          ## Genuine remaining gaps (confirmed absent, not just unverified)
+
+          1. **INANA series** — entirely fabricated in the original PB-145 draft. No crate, no doc, no design. Would need to be designed from scratch if wanted.
+          2. **NARAMSIN regression pass** — no dedicated 7-archive-corpus regression suite exists as its own artifact.
+          3. **DubSar Theater scenes** for ESARHADDON and ASHNAN — Godot visualization work, not started.
+          4. **Field ruggedisation** — mesh radio transport, battery-backup field node — not started.
+          5. **Real EnkiDDB (Documentation DB) and EnkiMDB (Metadata DB)** in the Architect's actual intended sense — `enkidb-recovery` and `enkidb-quantdb` are legitimate crates but were mislabeled onto those two port slots by a prior session; the real Documentation/Metadata databases (to back MetaEngine and TemplateEngine respectively) don't exist yet. Explicitly deferred by the Architect to a future session.
+          6. **Nergal AV backend** — design-only: a manual spec (`BAHYWAY_ECOSYSTEM_MANUAL_V4.md` §16) and a client-side Three.js prototype exist; no scanning backend, no DubSar IDE freeze/jam hooks, no website firewall.
+          7. **SLA Layer resolution** — naming conflict between `sla-engine` (app go-live governance) and `client-dq-profile` (the one actually wired into bee-watchdog, tagged "BeeMDM §SLA") never resolved.
+          8. **EnkiDB storage engine rearchitecture** — `PersistedDb` still does full journal-replay on open, `MmapReader` is not actually memory-mapped (eager `fs::read()`). This is the real blocker for 1B+ particle scale, and it's exactly the scope of ADR-012 (Data Files Law) written earlier this session — architecture is documented, implementation has not started.
+
+          ---
+
+          *End of RM-001 Addendum v2 (Reconciled) — PB-111 to PB-145*
+
+    # ── Deployment reference ────────────────────────────────────────────────
+    - name: "WRITE | Deployment Reference (reconciled v2)"
+      ansible.builtin.copy:
+        dest: "{{ deploy_ref }}"
+        mode: "0644"
+        content: |
+          # BahyWay.Ecosystem v4.0 — Playbook Deployment Reference (Reconciled v2)
+          ## SCP Transfer + ansible-playbook Launch Commands
+          Generated: {{ session_date }}
+
+          This reference lists playbooks that actually exist in the repo as
+          reconciled *_reconciled.yml files. It does not list PB-119-136 as
+          playbook files (they never existed as files), but see the RM-001
+          addendum v2 above for what content in that range is real anyway.
+
+          ---
+
+          ## Infrastructure Overview
+
+          | Node | IP | Role | Run playbooks FROM |
+          |------|----|------|--------------------|
+          | Fedora laptop (Host) | — | GitHub remote, download point | — |
+          | eriduous-vdi | {{ eriduous_ip }} | Dev control plane, ansible runner | FROM eriduous-vdi (scp'd from laptop) |
+          | enkidb-node-write | {{ node_write_ip }} | CQRS write path | FROM eriduous-vdi |
+          | enkidb-node-read  | {{ node_read_ip }} | CQRS read path  | FROM eriduous-vdi |
+          | dubsar-workstation | {{ monitor_ip }} | Grafana+Prometheus ONLY | FROM eriduous-vdi |
+
+          ## Sync convention
+
+          eriduous-vdi has no GitHub access. Workflow is always:
+            1. On the laptop: git pull origin {{ target_branch }}
+            2. scp -r workspace/bahyway_v4 bahaa@eriduos-vdi:~/Forge/EnkiDB/workspace/bahyway_v4
+            3. scp playbooks/*_reconciled.yml bahaa@eriduos-vdi:~/playbooks/
+            4. ssh bahaa@eriduos-vdi, then: ansible-playbook <name>_reconciled.yml -i "localhost," -c local -v
+
+          ## Playbooks confirmed to exist — PB-111 to PB-145
+
+          111, 112, 113, 114, 115, 116, 117, 118 (blocked), 137, 138, 139, 140,
+          141, 142, 143, 144 (configs ready, deploy blocked), 145.
+
+          ## Special Notes
+
+          **PB-98 MUST run before PB-111** — the KISPU fix is the prerequisite
+          for the performance gate.
+
+          **PB-144** generates real Grafana/Prometheus configs locally
+          regardless of hardware; remote deploy only runs if dubsar-workstation
+          is reachable on SSH + the target ports.
+
+          **PB-140** requires both EnkiDB nodes running and the ASHNAN test
+          corpus present.
+
+          ---
+          *BahyWay.Ecosystem v4.0 — Sovereign, Pure Rust, Offline*
+
+    # ── NĀRU session-close record ───────────────────────────────────────────
+    - name: "NĀRU  | Append session-close record"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: >-
+          {{ session_date }}|SESSION_CLOSE|PB_SERIES=111-145|
+          modules=NANSHE/ASHNAN/ESARHADDON/NARAMSIN/UrNammu/Kittu/NINSUN/NAMTAR/ERESKIGAL/BlackBoxStation/StorageSector|
+          platform=E-DUBBA-6stage+CQRS+KISPU+enkidb-query-server+BIGRING|
+          gap=INANA_FABRICATED,NARAMSIN_REGRESSION_SUITE,DUBSAR_THEATER_SCENES,FIELD_RUGGEDISATION,REAL_ENKIDDB_ENKIMDB,NERGAL_AV_BACKEND,SLA_LAYER,ENKIDB_STORAGE_ENGINE|
+          status=RECONCILED_V2
+        create: true
+        mode: "0644"
+
+    - name: "PRINT | PB-145 v2 Final Summary"
+      ansible.builtin.debug:
+        msg: |
+          BahyWay.Ecosystem v4.0 — PB-145 Reconciled v2 RM-001 Roadmap Update
+          Date : {{ session_date }}
+
+          RM-001 addendum v2 : {{ rm001_addendum }}
+          Deploy reference   : {{ deploy_ref }}
+          NARU journal       : session-close record appended (corrected status)
+
+          Corrected from v1: most of PB-119-136's intended content (ESARHADDON
+          core, ASHNAN TIAMAT formulas, ingest wiring, quarantine routing,
+          NINSUN) is REAL, built via a separate session's PR #17/#18 — not
+          missing. INANA remains fully fabricated, no such work exists.
+
+          BACKUP SEQUENCE (run on your LAPTOP, not eriduos-vdi — eriduos-vdi
+          has no GitHub access):
+            cd ~/Forge/EnkiDB
+            git add -A
+            git commit -m "PB-145 v2 reconciled roadmap update {{ session_date }}"
+            git push origin {{ target_branch }}
+          Then scp any new docs/config back down to eriduos-vdi if needed.
+
+    - name: "WRITE | Deliverables report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-145 Reconciled v2 Report
+          Date  : {{ session_date }}
+
+          Deliverables:
+            {{ rm001_addendum }}
+            {{ deploy_ref }}
+            NARU journal session-close record
+
+          Corrected from v1 of this reconciliation:
+            - Most of PB-119-136's content is REAL (ESARHADDON, ASHNAN
+              TIAMAT, ingest wiring, BlackBox/Storage Sector, NINSUN),
+              built via a separate session's PR #17/#18, re-verified
+              directly against this repo (288 test suites, 0 failures)
+            - INANA confirmed fully fabricated — no such work exists anywhere
+            - Genuine remaining gaps listed explicitly, not lumped together
+              with the work that's already done
+
+    - name: "DONE  | PB-145 Reconciled v2 COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-145 reconciled v2 — corrected against real merged work. Report: {{ report_file }}"

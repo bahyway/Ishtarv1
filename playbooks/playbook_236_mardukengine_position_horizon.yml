@@ -1,0 +1,88 @@
+# =============================================================================
+# PB-236 -- MardukEngine first slice: Position + Horizon verbs (Nabu
+# Calculus wired onto vgca-engine::riemannian). BahyWay.Ecosystem v4.0
+# -- 2026-07-25
+#
+# WHY A FIRST SLICE, NOT THE FULL BC-MRD-001 SCOPE: BC-MRD-001 defines
+# five invariant verbs (Position, Motion, Curvature, Topology, Horizon)
+# and four domain calculi (Sazu/Addu/Suhrim/Namtila), and is itself
+# positioned as QUEUED behind the ecosystem's full multi-phase testing
+# regime (BC-MRD-001 SS9) -- GL-MRD-002 (Neberu Slicer) already extends
+# the scope further. Bundling all of that with the comparatively small,
+# already-drafted EGDEngine work (PB-235) would have mismatched two
+# very different size/risk profiles in one playbook. This playbook
+# builds only the two verbs with no open mathematical questions against
+# what the workspace already has:
+#   - Position: H(P) / radial coordinate under the flat Hepta Space
+#     metric g = diag(w1..w7). Cross-validated in-code against
+#     vgca_engine::riemannian's independently-built, independently-
+#     validated geodesic integrator (christoffel/covariant_derivative/
+#     geodesic/ricci already existed before this build and are proven
+#     against both BahyWay's own metric and an analytic 2-sphere case).
+#   - Horizon: T_golden, delegated to the same trend-core primitive
+#     PB-235's Gibil horizon uses -- one shared implementation instead
+#     of a third independent reimplementation of the same least-squares
+#     trend-to-threshold math.
+# Motion, Curvature, Topology, and all four domain calculi are
+# deliberately NOT built here -- see docs/marduk/IMPL-MRD-001-position-horizon-first-slice.md
+# for exactly what's deferred and why.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Depends on
+# PB-235 only for the shared trend-core crate (already present in the
+# same commit). Running this playbook = CSR-08 Architect confirmation.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms crates/marduk-engine is present (committed source).
+#   2. `cargo test --release -p marduk-engine`, including the geodesic
+#      cross-check against vgca-engine.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_236_mardukengine_position_horizon.yml
+# =============================================================================
+
+- name: "PB-236 -- MardukEngine first slice: Position + Horizon"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    build_log: "/tmp/pb236_build.log"
+
+  tasks:
+    - name: "Confirm crates/marduk-engine is present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/crates/marduk-engine/Cargo.toml"
+      register: marduk_check
+
+    - name: "Fail clearly if marduk-engine is missing"
+      ansible.builtin.fail:
+        msg: >-
+          crates/marduk-engine not found at {{ repo_root }}. Run
+          `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- this is committed source, this playbook only builds
+          and verifies it.
+      when: not marduk_check.stat.exists
+
+    - name: "cargo test marduk-engine (release) -- Position + Horizon verbs"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p marduk-engine > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-236 complete -- marduk-engine's Position verb (H(P)
+          radial coordinate, cross-checked against vgca-engine's
+          geodesic integrator) and Horizon verb (T_golden via
+          trend-core) are real and tested. Motion, Curvature, Topology,
+          and all four domain calculi remain deliberately unbuilt --
+          see docs/marduk/IMPL-MRD-001-position-horizon-first-slice.md.

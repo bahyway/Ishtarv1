@@ -1,0 +1,284 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 𒁾  PollutionWay v3.5 — AkkadianAOL Import Policy
+--     import_schema_policy.akk
+--
+--     BahyWay.Ecosystem v3.5 | BAHYWAYOTAP Architecture | DUB.SAR 𒁾
+--
+--     Governs the "ze kiest EAV schema" smart import mechanism:
+--       1. DETECTION THRESHOLDS   (confidence gates)
+--       2. AMBIGUOUS DETECTION    (alarm + human gate)
+--       3. SCHEMA AUDIT TRAIL     (AkkadiSafeWay entries)
+--       4. SOURCE FIREWALL        (trusted / blocked origins)
+--       5. RATE & SIZE LIMITS     (batch size caps)
+--       6. ENKIWAY WRITE POLICY   (post-import EAV permissions)
+--       7. CIPHER DIRECTIVES      (encryption of sensitive imports)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  1. DETECTION THRESHOLDS
+-- ───────────────────────────────────────────────────────────────────────────
+
+NAMESPACE bahyway.pollution_way.import.v3_5
+
+IMPORT bahyway.akkadi_rules_way   AS RULES
+IMPORT bahyway.akkadi_cipher_way  AS CIPHER
+IMPORT bahyway.akkadi_safe_way    AS SAFE
+IMPORT bahyway.vault_way          AS VAULT
+IMPORT bahyway.enki_way.v3_5      AS ENKI
+
+-- Confidence thresholds for schema auto-detection
+CONSTANT CONFIDENCE_HIGH     := 0.85   -- fully automatic, no review
+CONSTANT CONFIDENCE_MEDIUM   := 0.65   -- auto with audit entry
+CONSTANT CONFIDENCE_LOW      := 0.40   -- alarm + human confirmation required
+CONSTANT CONFIDENCE_REJECT   := 0.20   -- hard reject, do not import
+
+-- Maximum batch sizes per domain
+CONSTANT MAX_BATCH_AIR       := 50_000
+CONSTANT MAX_BATCH_WATER     := 20_000
+CONSTANT MAX_BATCH_OIL       := 5_000
+CONSTANT MAX_BATCH_GENERIC   := 10_000
+
+-- Trusted source origins (bypass low-confidence human gate)
+CONSTANT TRUSTED_SOURCES := [
+    "openaq.org",
+    "api.openaq.org",
+    "open-meteo.com",
+    "eea.europa.eu",
+    "incidentnews.noaa.gov",
+    "response.restoration.noaa.gov",
+]
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  2. AMBIGUOUS DETECTION — confidence gates
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- GATE 1: Hard reject — below floor confidence
+POLICY import_hard_reject
+    WHEN  import.detection.top_confidence < CONFIDENCE_REJECT
+    DENY  import.flow -> ENKI.store
+    DENY  import.flow -> ENKI.archive
+    EMIT  ALARM "IMPORT_HARD_REJECT"
+        source      = import.source_url
+        confidence  = import.detection.top_confidence
+        scores      = import.detection.scores_summary
+        reason      = "Confidence below reject floor (0.20)"
+    AUDIT SAFE.trail.import_rejected
+        actor   = import.source_url
+        payload = import.detection.scores_summary
+
+-- GATE 2: Low confidence — alarm + require human confirmation
+POLICY import_low_confidence_gate
+    WHEN  import.detection.top_confidence >= CONFIDENCE_REJECT
+    AND   import.detection.top_confidence <  CONFIDENCE_LOW
+    AND   import.source NOT IN TRUSTED_SOURCES
+    DENY  import.flow -> ENKI.store
+    EMIT  ALARM "IMPORT_AMBIGUOUS_SCHEMA"
+        source      = import.source_url
+        top_domain  = import.detection.top_domain
+        confidence  = import.detection.top_confidence
+        scores      = import.detection.scores_summary
+        adapter     = import.adapter_used
+    REQUIRE human_confirmation
+        message = "Schema detection confidence too low. Please confirm domain."
+        options = ["AIR", "WATER", "OIL", "CANCEL"]
+        timeout_minutes = 30
+    AUDIT SAFE.trail.import_human_gate
+        actor   = import.source_url
+        payload = import.detection.scores_summary
+
+-- GATE 3: Medium confidence — auto-proceed with audit
+POLICY import_medium_confidence_audit
+    WHEN  import.detection.top_confidence >= CONFIDENCE_LOW
+    AND   import.detection.top_confidence <  CONFIDENCE_HIGH
+    ALLOW import.flow -> ENKI.store
+    EMIT  ALARM "IMPORT_SCHEMA_ADVISORY"
+        source     = import.source_url
+        top_domain = import.detection.top_domain
+        confidence = import.detection.top_confidence
+        adapter    = import.adapter_used
+        severity   = LOW
+    AUDIT SAFE.trail.import_advisory
+        actor   = import.source_url
+        payload = import.akk_summary
+
+-- GATE 4: High confidence — silent pass, no alarm needed
+POLICY import_high_confidence_pass
+    WHEN  import.detection.top_confidence >= CONFIDENCE_HIGH
+    ALLOW import.flow -> ENKI.store
+    -- Lightweight audit only
+    AUDIT SAFE.trail.import_success
+        actor   = import.source_url
+        payload = import.akk_summary
+
+-- GATE 5: Trusted source override — bypass human gate regardless of confidence
+POLICY import_trusted_source_bypass
+    WHEN  import.source IN TRUSTED_SOURCES
+    AND   import.detection.top_confidence >= CONFIDENCE_REJECT
+    ALLOW import.flow -> ENKI.store
+    AUDIT SAFE.trail.import_trusted_source
+        actor      = import.source_url
+        confidence = import.detection.top_confidence
+        adapter    = import.adapter_used
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  3. MULTI-DOMAIN DETECTION
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Flag imports where multiple domains score above 0.40 (mixed file)
+POLICY import_multi_domain_advisory
+    WHEN  import.detection.is_multi_domain == TRUE
+    EMIT  ALARM "IMPORT_MULTI_DOMAIN_DETECTED"
+        source      = import.source_url
+        air_score   = import.detection.air.combined
+        water_score = import.detection.water.combined
+        oil_score   = import.detection.oil.combined
+        severity    = LOW
+    -- Allow row-level classification to proceed (generic adapter handles this)
+    ALLOW import.flow -> ENKI.store
+    AUDIT SAFE.trail.import_multi_domain
+        actor   = import.source_url
+        payload = import.detection.scores_summary
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  4. SOURCE FIREWALL — trusted / blocked origins
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Block imports from unknown local filesystem paths (security risk)
+FIREWALL block_local_filesystem_imports
+    WHEN  import.source_url STARTS_WITH "file://"
+    OR    import.source_url STARTS_WITH "/home/"
+    OR    import.source_url STARTS_WITH "C:\\"
+    AND   import.source NOT IN TRUSTED_SOURCES
+    DENY  import.flow -> *
+    EMIT  ALARM "IMPORT_LOCAL_PATH_BLOCKED"
+        source = import.source_url
+        reason = "Local filesystem imports require trusted source registration"
+
+-- Block imports with no TLS from non-local sources
+FIREWALL require_tls_for_remote_imports
+    WHEN  import.source_url STARTS_WITH "http://"
+    AND   import.source_url NOT STARTS_WITH "http://localhost"
+    DENY  import.flow -> ENKI.store
+    EMIT  ALARM "IMPORT_INSECURE_SOURCE"
+        source = import.source_url
+        reason = "Remote sources must use HTTPS (TLS 1.3)"
+
+-- Allowlist for localhost dev (Synology NAS / dev machine)
+FIREWALL allow_localhost_dev
+    WHEN  import.source_url STARTS_WITH "http://localhost"
+    OR    import.source_url STARTS_WITH "http://127.0.0.1"
+    OR    import.source_url STARTS_WITH "http://192.168."
+    ALLOW import.flow -> ENKI.store
+    AUDIT SAFE.trail.import_dev_source
+        actor = import.source_url
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  5. RATE & SIZE LIMITS
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Batch size cap per domain
+POLICY import_batch_size_cap
+    WHEN  import.domain == "AIR"   AND import.row_count > MAX_BATCH_AIR
+    DENY  import.flow -> ENKI.store
+    EMIT  ALARM "IMPORT_BATCH_TOO_LARGE"
+        domain    = "AIR"
+        row_count = import.row_count
+        limit     = MAX_BATCH_AIR
+
+POLICY import_batch_size_cap_water
+    WHEN  import.domain == "WATER" AND import.row_count > MAX_BATCH_WATER
+    DENY  import.flow -> ENKI.store
+    EMIT  ALARM "IMPORT_BATCH_TOO_LARGE"
+        domain    = "WATER"
+        row_count = import.row_count
+        limit     = MAX_BATCH_WATER
+
+POLICY import_batch_size_cap_oil
+    WHEN  import.domain == "OIL"   AND import.row_count > MAX_BATCH_OIL
+    DENY  import.flow -> ENKI.store
+    EMIT  ALARM "IMPORT_BATCH_TOO_LARGE"
+        domain    = "OIL"
+        row_count = import.row_count
+        limit     = MAX_BATCH_OIL
+
+-- Rate limit: max 10 imports per minute per source
+FIREWALL import_rate_limit
+    WHEN  import.source_url.imports_per_minute > 10
+    DENY  import.flow -> ENKI.store
+    EMIT  ALARM "IMPORT_RATE_LIMIT_EXCEEDED"
+        source = import.source_url
+        rate   = import.source_url.imports_per_minute
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  6. ENKIWAY WRITE POLICY — post-import EAV permissions
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Imported particles from low-confidence detections go to staging area
+POLICY import_low_confidence_to_staging
+    WHEN  import.detection.top_confidence < CONFIDENCE_MEDIUM
+    AND   import.flow.approved == TRUE     -- human confirmed
+    ENKI.write -> ENKI.staging             -- not live store
+    AUDIT SAFE.trail.import_staging
+        actor      = import.source_url
+        confidence = import.detection.top_confidence
+
+-- High-confidence imports write directly to live store
+POLICY import_high_confidence_live
+    WHEN  import.detection.top_confidence >= CONFIDENCE_MEDIUM
+    ENKI.write -> ENKI.store
+
+-- Mark imported particles with provenance tag
+POLICY import_provenance_tagging
+    ALWAYS
+    ENKI.attribute.set
+        entity = import.particle_pk
+        attr   = "import_source"
+        value  = import.source_url
+    ENKI.attribute.set
+        entity = import.particle_pk
+        attr   = "import_adapter"
+        value  = import.adapter_used
+    ENKI.attribute.set
+        entity = import.particle_pk
+        attr   = "import_confidence"
+        value  = import.detection.top_confidence
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  7. CIPHER DIRECTIVES — encryption of sensitive imports
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Encrypt oil spill import batches at rest (sensitive coordinates)
+CIPHER_POLICY encrypt_oil_imports
+    WHEN  import.domain == "OIL"
+    ENCRYPT import.batch
+        algorithm = CHACHA20_POLY1305
+        kdf       = ARGON2ID
+        key_ref   = VAULT.key.oil_import_key
+
+-- Sign all import audit trail entries with AkkadianSeal
+CIPHER_POLICY sign_import_audit
+    ALWAYS
+    SIGN  SAFE.trail.import_entry
+        algorithm = ED25519
+        key_ref   = VAULT.key.import_audit_signing_key
+
+-- Rotate import encryption keys monthly
+CIPHER_POLICY rotate_import_keys
+    SCHEDULE monthly
+    VAULT.key.rotate
+        key_ref   = VAULT.key.oil_import_key
+        algorithm = CHACHA20_POLY1305
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- END import_schema_policy.akk
+-- "Ze kiest EAV schema" — the system chooses, AkkadiRulesWay enforces.
+-- BahyWay.Ecosystem v3.5 | BAHYWAYOTAP Architecture | DUB.SAR 𒁾
+-- ═══════════════════════════════════════════════════════════════════════════

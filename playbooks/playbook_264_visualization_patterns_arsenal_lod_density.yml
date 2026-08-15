@@ -1,0 +1,183 @@
+# ── PB-264 — Patterns Arsenal: Interaction-Cadence LOD + Exact-Aggregation
+#             Density Field ──────────────────────────────────────────────
+#
+# Lands the two genuinely new, portable patterns validated from a shared
+# document comparing ParaView, vaex, and HOOMD-blue's real billion-element
+# visualization mechanisms against BahyWay v4.0's own already-sealed
+# patterns (docs/WHAT_IS_BAHYWAY.md's "Patterns Arsenal" / "Seven Sages").
+# Per the naming/numbering-is-irrelevant standing instruction, this
+# playbook evaluates and builds on the *concepts* in that document, not
+# its authorship or numbering.
+#
+# Validation summary (full reasoning in the chat record this playbook
+# accompanies, and in the amended Patterns Arsenal section of
+# docs/WHAT_IS_BAHYWAY.md):
+#   - Three of the document's five sub-patterns were already present here
+#     as named Sage patterns or already-built code (Enmebulugga's CQRS
+#     boundary / GL-DST-001 §4 = ParaView's data-render split; Uanduga's
+#     chunked columns = vaex's out-of-core mmap; Enmegalamma's two-layer
+#     rendering + BUZU's BuzuChunk (GL-VIZ-001) + hepta_shell's E7 zone
+#     table (just wired live this same session) = HOOMD-blue's
+#     GPU-resident-particles + cell-list-neighbours + delegate-to-
+#     external-renderer trio).
+#   - Two were genuinely new and unbuilt: interaction-cadence LOD (decimate
+#     while the camera moves, full fidelity at rest) and exact-aggregation-
+#     as-the-picture (vaex's binned density image, computed exactly via
+#     HeptaScript's real GRAVITY/MEASURE clauses, not sampled). Both are
+#     built by this playbook's target files.
+#   - ParaView's remote-pixel-delivery (render server-side, ship pixels)
+#     is real but reserved future work, not built here — no renderer-as-
+#     a-service exists in this fleet yet; shakkanakku-web's real TLS
+#     server is the natural future home for it.
+#
+# What was ALSO found and fixed along the way, honestly: `orbit_multimesh.
+# gd` (the script this playbook's LOD pattern lands in) was talking to
+# `enkidb-query-server` — a protocol `sumuukin_client.gd`'s own header
+# already documents as "never actually deployed anywhere in this fleet's
+# real infrastructure." It was therefore never receiving live data from
+# any real Read Node. Fixed to speak the one real, currently-deployed
+# binary wire protocol (see that file's own header for the full story)
+# as an unavoidable part of landing LOD on top of it honestly.
+#
+# A second real gap found and fixed: every real Read Node's binary wire
+# already appends a MEASURE/GRAVITY aggregate trailer after the verb
+# trailer (`encode_aggregate()`, landed with the aggregate-verb work
+# earlier this session) — but no Godot client ever read past the verb
+# trailer to decode it. `sumuukin_client.gd`'s `decode_binary_response()`
+# now does, which is what makes the new `density_field.gd`'s exact-
+# aggregation pattern possible at all.
+#
+# Proposed Sage names (NOT sealed by this playbook — per NL-001, sage-
+# naming is the Architect's to grant, not a script's to assume; these are
+# candidates recorded for the Architect to confirm, rename, or reject):
+#   - "interaction-cadence LOD"        -> proposed: Enkimdu (a minor sage
+#     attested as a herding/pasture god — "tend the visible herd, let the
+#     rest graze unseen until the shepherd stops moving" fits the
+#     decimate-while-moving/full-at-rest shape; needs the Architect's own
+#     naming judgement, not this script's guess).
+#   - "exact-aggregation density field" -> proposed: Nisaba (already this
+#     ecosystem's grain/measure/scribe sage elsewhere in the fleet — an
+#     exact count is a measure, and Nisaba is literally the sage of
+#     counting and grain-yield; may collide with the existing `nisaba`
+#     crate's own name and would need the same collision check NL-001
+#     already applies elsewhere in this fleet).
+#
+# Running this playbook = CSR-08 confirmation, same as every other
+# numbered playbook in this corpus.
+
+- name: "PB-264 -- Verify Patterns Arsenal LOD + density-field GDScript lands cleanly"
+  hosts: localhost
+  connection: local
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    godot_log: /tmp/pb264_godot_import.log
+    godot_bin: ""
+
+  tasks:
+    - name: Confirm the three changed/new files exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ dubsar_project }}/scripts/sumuukin_client.gd"
+        - "{{ dubsar_project }}/scripts/orbit_multimesh.gd"
+        - "{{ dubsar_project }}/scripts/density_field.gd"
+      register: pattern_files
+
+    - name: Fail clearly if any expected file is missing
+      ansible.builtin.fail:
+        msg: "Expected file missing: {{ item.item }} -- this playbook's own target files were not landed correctly."
+      loop: "{{ pattern_files.results }}"
+      when: not item.stat.exists
+
+    - name: Report file sizes (a real, if weak, "these aren't empty stubs" check)
+      ansible.builtin.debug:
+        msg: "{{ item.item | basename }}: {{ item.stat.size }} bytes"
+      loop: "{{ pattern_files.results }}"
+
+    # ── Discover Godot (same real discovery logic as PB-226, not
+    #    duplicated by invention -- copied verbatim from that playbook's
+    #    own task) ──────────────────────────────────────────────────────
+    - name: Discover a real Godot 4 binary
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: Resolve the Godot binary to actually use
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: Report that GDScript syntax was NOT engine-verified, if Godot isn't found here
+      ansible.builtin.debug:
+        msg: >-
+          No Godot 4 binary found on this host. The three files above were
+          written by hand, following this project's own existing GDScript
+          patterns exactly (StreamPeerTCP framing, MultiMesh usage,
+          SumuUkinClient's decode idioms) and reviewed for correctness
+          against the real Rust wire-protocol source
+          (bin/enkiddb-read-server/src/main.rs's encode_aggregate()), but
+          they have NOT been parsed by the actual Godot engine on this
+          host -- this is an honest "not verified here," not a claim of
+          "verified." Re-run this playbook with
+          -e godot_bin=/full/path/to/Godot_v4.x-stable_linux.x86_64 (or
+          install Godot 4.x) to get a real headless import check.
+      when: resolved_godot_bin | length == 0
+
+    - name: Headless import scan (real GDScript parse check, when Godot is available)
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ dubsar_project }} --import
+        > {{ godot_log }} 2>&1
+      register: import_result
+      failed_when: false
+      when: resolved_godot_bin | length > 0
+
+    - name: Report the real import-scan result
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'Headless import scan exited 0 -- no GDScript parse errors reported for the project (see ' + godot_log + ' for the full log, including any warnings).'
+             if (import_result.rc is defined and import_result.rc == 0)
+             else 'Headless import scan reported errors (exit ' + (import_result.rc | default('?') | string) + '). See ' + godot_log + ' -- do not trust the new scripts until this is clean.' }}
+      when: resolved_godot_bin | length > 0
+
+    - name: Fail this playbook if the real import scan found errors
+      ansible.builtin.fail:
+        msg: "Godot headless import scan failed -- see {{ godot_log }}. Fix before depending on these patterns."
+      when: >
+        resolved_godot_bin | length > 0 and
+        import_result.rc is defined and import_result.rc != 0
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "PB-264 complete."
+          - "Interaction-cadence LOD  : orbit_multimesh.gd (decimate on camera motion, full at rest via MultiMesh.visible_instance_count -- zero re-query, zero data movement)"
+          - "Exact-aggregation density: density_field.gd (GRAVITY BAND + MEASURE DENSE, exact server-side counts, one glyph per band)"
+          - "Wire decode extended     : sumuukin_client.gd now decodes the MEASURE/GRAVITY aggregate trailer every real Read Node already sends"
+          - "Also fixed               : orbit_multimesh.gd no longer talks to the never-deployed enkidb-query-server protocol"
+          - "Reserved, not built      : ParaView's remote-pixel-delivery pattern (documented in this playbook's header and docs/WHAT_IS_BAHYWAY.md's amended Patterns Arsenal section)"
+          - "Sage names               : proposed only, pending the Architect's own naming judgement per NL-001 -- see this playbook's header"

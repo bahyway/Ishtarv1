@@ -1,0 +1,157 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_249_heptasec_layer8_functional_verification.yml
+#  BahyWay.Ecosystem v4.0 — PB-249: HeptaSec Layer 8 real functional gate
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_249_heptasec_layer8_functional_verification.yml -i "localhost," -c local -v
+#
+#  Context: playbook_248 closed the "zero playbook mention" gap for 56
+#  crates with a build+test baseline. HeptaSec (hepta-sec-firewall/-policy/
+#  -sentinel/-web — Layer 8 security) was flagged as the highest-stakes of
+#  those 56: it's a security/access-control stack, and `cargo test` alone
+#  only proves each crate is internally self-consistent, not that the real
+#  entry point (raw HTTP header bytes in, an enforcement verdict out) behaves
+#  correctly when the four crates are chained together the way a server
+#  actually would.
+#
+#  Research before writing this playbook (read source, no guessing):
+#    - None of the 4 crates bind a port or run as a service — pure in-process
+#      Rust, meant to be embedded by a server (hepta-sec-web's own doc
+#      comment names bahyway-server as the intended embedder, but
+#      bin/bahyway-server does NOT currently depend on it — still orphaned
+#      at the binary level, tracked separately, see the "known open item"
+#      note at the bottom of this file).
+#    - Existing per-crate unit tests were already solid (Golden/Unknown/
+#      Revoked/Expired scenarios, policy rule matching, rate tracker resets,
+#      header parsing edge cases) but none of them chained all 4 crates
+#      through the actual HTTP-header-in entry point a server would use.
+#    - Found and fixed a real bug while building this: `HeptaSecSentinel::
+#      purge_stale()` always returned 0 — the count-of-downgraded-entries
+#      logic was dead code (computed `purged` via a stats diff that could
+#      never be non-zero, since expire_stale downgrades trust state without
+#      removing entries, then discarded that variable and hardcoded
+#      `return 0`). Fixed by having `KakiFirewall::expire_stale()` return
+#      the real count directly; `purge_stale()` now forwards it and emits
+#      the correct count in the `StalePurged` event.
+#
+#  What this playbook actually verifies (new integration test, not a
+#  duplicate of the per-crate unit suites):
+#    crates/hepta-sec-web/tests/full_stack_integration.rs — 7 tests chaining
+#    KakiExtractor → WebSentinelGuard → HeptaSecSentinel → PolicyEngine →
+#    KakiFirewall through raw header bytes: Golden→Allow, missing header→
+#    Forbidden, malformed header→Forbidden, unregistered KAKI→Quarantine,
+#    revoked KAKI→Forbidden, and a purge_stale scenario that registers 3
+#    KAKIs, refreshes one via a real inspect() call just before the SATTATU_
+#    MAX window closes, and asserts exactly 2 (not 0, not 3) get downgraded
+#    — the scenario that would have caught the dead-code bug had it existed
+#    before this session.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-249 | HeptaSec Layer 8 — real cross-crate functional verification"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    session_date: "{{ ansible_date_time.date }}"
+    docs_dir:     "{{ forge_root }}/docs/SHEDU"
+    report_file:  "{{ docs_dir }}/PB249_HEPTASEC_VERIFICATION_{{ session_date }}.txt"
+    naru_journal: "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU directory exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced"
+      ansible.builtin.fail:
+        msg: "{{ workspace }}/Cargo.toml not found. Sync the workspace from the laptop first."
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | The new full_stack_integration.rs test file is present"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/hepta-sec-web/tests/full_stack_integration.rs"
+      register: itest_check
+
+    - name: "FAIL | Integration test file missing — did the sync bring the whole PR?"
+      ansible.builtin.fail:
+        msg: >
+          crates/hepta-sec-web/tests/full_stack_integration.rs not found.
+          Re-sync the workspace — this playbook depends on that file existing.
+      when: not itest_check.stat.exists
+
+    - name: "TEST | cargo test across all 4 HeptaSec crates (unit + new integration suite)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p hepta-sec-firewall -p hepta-sec-policy -p hepta-sec-sentinel -p hepta-sec-web"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PRINT | Test output"
+      ansible.builtin.debug:
+        msg: "{{ test_out.stdout_lines }}"
+
+    - name: "ASSERT | The 7 new full-stack integration tests actually ran (not silently skipped)"
+      ansible.builtin.assert:
+        that:
+          - "'Running tests/full_stack_integration.rs' in test_out.stderr"
+          - "'purge_stale_reports_real_downgrade_count_through_the_full_stack' in test_out.stdout"
+        fail_msg: >
+          The full_stack_integration test binary did not run — cargo may have
+          filtered it out or the file isn't wired into Cargo's test harness
+          discovery. This playbook's whole point is to prove the cross-crate
+          path works; a green run without this test executing is a false pass.
+        success_msg: "Cross-crate integration suite confirmed to have run."
+
+    - name: "WRITE | Verification report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-249 HeptaSec Layer 8 Verification
+          Date : {{ session_date }}
+
+          {{ test_out.stdout }}
+
+          Fixed during this verification: HeptaSecSentinel::purge_stale() was
+          dead code that always returned 0 regardless of how many trust
+          entries actually expired. KakiFirewall::expire_stale() now returns
+          the real downgrade count; purge_stale() forwards it. Covered by
+          purge_stale_reports_real_downgrade_count_through_the_full_stack in
+          the new integration suite.
+
+          Known open item (not closed by this playbook — tracked separately):
+          hepta-sec-web's own doc comment names bahyway-server as its intended
+          embedder, but bin/bahyway-server does not yet depend on it — the
+          stack is verified correct in isolation but still not wired into any
+          running server binary. Wiring that in is an architectural decision
+          (which server, what HTTP framework, what deploy shape) beyond the
+          scope of a coverage-closing playbook — flagging honestly rather than
+          declaring HeptaSec "deployed" when it verifiably is not yet.
+
+    - name: "NARU | Record HeptaSec verification result"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ session_date }} | PB-249 | HeptaSec Layer 8 functional verification | cross-crate integration PASS + purge_stale bug fixed | still not wired into a running server binary (tracked open item) | see {{ report_file }}"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | PB-249 COMPLETE"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════
+          PB-249  HEPTASEC LAYER 8 VERIFICATION  PASS
+          Cross-crate integration suite: 7/7 passing
+          Bug fixed: purge_stale() dead-code count bug
+          Report: {{ report_file }}
+          Open item: not yet embedded in any running server binary
+          ═══════════════════════════════════════════════════

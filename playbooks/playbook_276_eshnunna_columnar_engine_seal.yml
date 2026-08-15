@@ -1,0 +1,90 @@
+# =============================================================================
+# PB-276 — Eshnunna columnar data-file engine: seal + real-code verification
+# BahyWay.Ecosystem v4.0
+#
+# Verifies EshnunnaEngine (crates/eshnunna-engine) is real, tested code and
+# that its naming-registry entry (ADR-021) is sealed and points at it.
+# Eshnunna is the fix for the diagnosed journal-walk retrieval bottleneck:
+# enkidb-indexes::SurrogateMap prunes queries to a surrogate set in O(log N),
+# but there was no columnar data file to fetch particle VALUES from by that
+# surrogate -- retrieval fell back to an O(n) journal walk. EshnunnaEngine
+# closes that gap: surrogate u32 -> fixed byte offset -> mmap'd column value.
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# Run from:  workspace/bahyway_v4 (this playbook cds there via `workspace`)
+# =============================================================================
+---
+- name: "PB-276 | Eshnunna columnar data-file engine: seal + verification"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    workspace: "{{ repo_root }}/workspace/bahyway_v4"
+    # lookup('env', ...), not the ansible_env FACT -- gather_facts is false
+    # on this play, so ansible_env.HOME silently fell back to '/root'
+    # instead of the real invoking user's home (caught 2026-08-01 when
+    # this exact pattern broke playbook_278 with a real Permission denied).
+    cargo:     "{{ lookup('env', 'HOME') }}/.cargo/bin/cargo"
+
+  tasks:
+
+    - name: "VERIFY | eshnunna-engine crate exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/eshnunna-engine/src/lib.rs"
+      register: eshnunna_lib
+
+    - name: "FAIL | eshnunna-engine not found"
+      ansible.builtin.fail:
+        msg: "crates/eshnunna-engine/src/lib.rs not found."
+      when: not eshnunna_lib.stat.exists
+
+    - name: "VERIFY | ADR-021 exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/docs/14_decisions_adr/adr_021_eshnunna_susa_nuzi_naming_seal.md"
+      register: adr021
+
+    - name: "FAIL | ADR-021 missing"
+      ansible.builtin.fail:
+        msg: "docs/14_decisions_adr/adr_021_eshnunna_susa_nuzi_naming_seal.md not found -- Eshnunna/Susa/Nuzi naming seal is undocumented."
+      when: not adr021.stat.exists
+
+    - name: "TEST | cargo test -p eshnunna-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p eshnunna-engine"
+        chdir: "{{ workspace }}"
+      register: test_eshnunna
+      changed_when: false
+      failed_when: test_eshnunna.rc != 0
+
+    - name: "ASSERT | eshnunna-engine has zero failures and at least 5 passing tests"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_eshnunna.stdout"
+          - "(test_eshnunna.stdout | regex_search('([0-9]+) passed', '\\1') | first | int) >= 5"
+        fail_msg: "Expected at least 5 passed, 0 failed. Full output: {{ test_eshnunna.stdout }}"
+        success_msg: "eshnunna-engine: real surrogate->offset->mmap columnar retrieval verified."
+
+    - name: "TEST | cargo test -p naming-registry"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p naming-registry"
+        chdir: "{{ workspace }}"
+      register: test_registry
+      changed_when: false
+      failed_when: test_registry.rc != 0
+
+    - name: "ASSERT | naming-registry has zero failures (Eshnunna entry verified real)"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_registry.stdout"
+        fail_msg: "naming-registry test failure -- Eshnunna's crate_path may not be real. Full output: {{ test_registry.stdout }}"
+        success_msg: "naming-registry: Eshnunna entry verified against a real crate path."
+
+    - name: "DONE | PB-276 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          Eshnunna sealed (ADR-021). eshnunna-engine: real, tested columnar
+          data-file engine -- not yet wired into the live HeptaScript read
+          path (follow-up work, tracked separately).

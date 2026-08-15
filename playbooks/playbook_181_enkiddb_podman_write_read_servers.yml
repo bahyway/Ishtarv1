@@ -1,0 +1,104 @@
+# =============================================================================
+# PB-181 — enkiddb-write-server + enkiddb-read-server, Podman deployment
+# BahyWay.Ecosystem v4.0 — 2026-07-12
+#
+# CONTEXT: direct follow-up to PB-177-180. The Architect asked, verbatim,
+# "In which Playbook you will send me I will find the creation of all the
+# 2 NEW Nodes of CQRS and EAV that will create the EnkiDDB Database Write
+# Node=Journal & Read Node=data files" -- and separately, firmly: "I DO
+# NOT WANT... PLAY WITH SYSTEMD. I PREFER WORKING WITH PODMAN... we
+# already talks alot about this matter before." That last point turned
+# out to be validated by the codebase itself: crates/enkidb-replication's
+# own architecture diagram is literally "WRITE POD -> BROKER -> READ POD"
+# with `--network none` on the broker -- a Podman pod topology was already
+# the intended design for cross-node replication here, just never wired
+# into EnkiDDB. This playbook lands the actual write/read node services,
+# Podman-only, no systemd unit anywhere.
+#
+# WHAT WAS BUILT:
+#   - crates/enkiddb/src/rag.rs: RagIndex::build_from_readnode() +
+#     fetch_value_from_readnode() -- the CQRS-correct way to build the RAG
+#     search index for a read-server process, which never has (and per
+#     ADR-012's Data Files Law, must never have) the Write Node's Journal.
+#     Uses ReadNode::query("WHO T.E WHAT E[body.summary, body.text] WHERE
+#     E[hist.event] = \"BIRTH\"") -- hist.event="BIRTH" is the one
+#     attribute every entity this crate mints carries, giving an
+#     indexable "match everything" query despite ReadNode only serving
+#     single-exact-equality lookups. Discovered and fixed a real bug
+#     live: WHAT E[*] on a ReadNode returns hash-keyed placeholder
+#     attribute names (#e4e4 etc), not real ones -- materialized Data
+#     Files only ever stored attr_hash, never the original string, and
+#     there is no reverse map anywhere in this codebase
+#     (heptascript::engine::project_what's own comment says as much).
+#     Naming the two attributes explicitly sidesteps this entirely.
+#   - bin/enkiddb-write-server (NEW crate): sovereign TCP server wrapping
+#     WriteNode, same wire protocol as the existing enkidb-query-server
+#     (length-prefixed u32 LE frames, one thread per connection, no
+#     tokio/HTTP/external wire format). `<collection>\n<markdown>` ->
+#     ingest+categorize+chunk, `FLUSH` -> force materialize. Auto-flushes
+#     every FLUSH_EVERY (default 10) documents into DATA_DIR/current,
+#     wiping and rebuilding fresh each time (DataFileWriter never
+#     truncates -- see materialize_now's own doc comment).
+#   - bin/enkiddb-read-server (NEW crate): sovereign TCP server wrapping
+#     ReadNode + RagIndex::build_from_readnode. QUERY:<heptascript> and
+#     SEARCH:<top_k>:<text> commands. Background thread reloads from
+#     DATA_DIR/current every RELOAD_SECS (default 30) so synced data
+#     becomes visible without a restart.
+#   - deploy/podman/Containerfile.{write,read}-server: multi-stage builds
+#     (rust:1-slim builder -> fedora-minimal runtime, matching this
+#     fleet's existing Fedora/SELinux convention -- :Z volume labels
+#     noted explicitly). No systemd unit anywhere; `--restart=always` on
+#     `podman run` covers persistence-across-reboot.
+#   - scripts/enkiddb-sync-data.sh: rsync (scp fallback) bridge copying
+#     the Write Node's materialized generation to the Read Node's volume,
+#     since the two run on separate VMs and a container can't see a
+#     remote host's volume directly. Deliberately NOT containerized or
+#     wired to enkidb-replication in this pass -- that crate (KAKI-sealed,
+#     Ed25519, chain-hashed, 7-layer HeptaSecSentinel-verified) is real
+#     and already built, and is the honest next hardening step, but needs
+#     its own key-management decision this pass doesn't make silently.
+#   - docs/EnkiDDB_PODMAN_DEPLOYMENT.md: the end-to-end walkthrough --
+#     build, run, sync, query, search, stop/start/backup (the exact
+#     lifecycle operations the Architect asked for).
+#
+# SMOKE-TESTED FOR REAL, not just built: ran both binaries as live
+# processes on ephemeral ports, sent a real document over the actual wire
+# protocol to enkiddb-write-server (2 sections chunked, auto-flushed),
+# copied the materialized Data Files to a second directory (standing in
+# for the cross-VM sync), pointed enkiddb-read-server at it -- it loaded
+# correctly ("initial state: loaded"), then a real QUERY found the
+# document by meta.collection and a real SEARCH ranked the correct
+# section first and returned its full untouched text. FLUSH and an
+# unrecognized-request error path both verified too.
+#
+# TESTS: enkiddb 41/41 -> 42/42 (RagIndex::build_from_readnode, both the
+#   success path through real materialization and the empty-Data-Files
+#   case). Full workspace: 3412 passed, 0 failed (was 3410).
+#
+# STILL OPEN (stated plainly, per docs/EnkiDDB_PODMAN_DEPLOYMENT.md):
+#   - Durability: Journal is in-memory only; unflushed writes are lost on
+#     container restart. enkidb-replication is the real fix, not wired in.
+#   - ENLIL 7-index stack and "HeptaScript v1.0 & v2.0 Unified" remain
+#     blocked on the Architect supplying the missing specifics (see
+#     docs/OTAP_PIPELINE.md's "definition of done").
+#   - Nothing here has been deployed to the Architect's real
+#     enkidb-node-write/enkidb-node-read VMs yet -- built, tested, and
+#     smoke-tested in this sandbox only; the Architect runs the actual
+#     `podman build`/`podman run` sequence on their own infrastructure.
+# =============================================================================
+---
+- name: "PB-181 | Record — enkiddb-write-server + enkiddb-read-server, Podman deployment landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-181.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-12. New: bin/enkiddb-write-server, bin/enkiddb-read-server,
+          deploy/podman/Containerfile.{write,read}-server,
+          scripts/enkiddb-sync-data.sh, docs/EnkiDDB_PODMAN_DEPLOYMENT.md.
+          Run `cargo test -p enkiddb` for the standing proof: 42 passed,
+          0 failed. Follow docs/EnkiDDB_PODMAN_DEPLOYMENT.md to actually
+          deploy on enkidb-node-write/enkidb-node-read.

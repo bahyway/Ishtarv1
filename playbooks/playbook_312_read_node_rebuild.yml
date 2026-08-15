@@ -1,0 +1,43 @@
+---
+# 𒁾 PB-312 — READ-NODE REBUILD RITE (GL-OPS-001 L-2)
+# Projections move; the ledger never does. The rebuilt node must be EQUAL,
+# not similar — Gate G4 replay determinism exercised in anger.
+- name: PB-312 | Read-node rebuild rite
+  hosts: read_node
+  become: true
+  tasks:
+    - name: Record pre-rite projection checksums (if node still alive)
+      ansible.builtin.shell: |
+        find {{ projections_dir }} -type f -exec sha256sum {} + | sort | sha256sum \
+          > /tmp/projections.pre || true
+      changed_when: false
+
+    - name: Stop read services
+      ansible.builtin.systemd: { name: "enkidb-read", state: stopped }
+      failed_when: false
+
+    - name: Wipe projections (expendable by doctrine)
+      ansible.builtin.file: { path: "{{ projections_dir }}", state: absent }
+    - ansible.builtin.file: { path: "{{ projections_dir }}", state: directory, mode: "0750" }
+      name: Recreate projections dir
+
+    - name: Replay projections from the ledger (deterministic)
+      ansible.builtin.command: >
+        /usr/local/bin/enkidb-replay --from {{ hostvars[groups['write_node'][0]].ansible_host | default('192.168.122.101') }}
+        --to {{ projections_dir }} --until-watermark        # TODO native tool
+      register: replay
+
+    - name: Start read services
+      ansible.builtin.systemd: { name: "enkidb-read", state: started }
+
+    - name: GATE | checksum EQUALITY (when a pre-image exists)
+      ansible.builtin.shell: |
+        find {{ projections_dir }} -type f -exec sha256sum {} + | sort | sha256sum \
+          > /tmp/projections.post
+        if [ -s /tmp/projections.pre ]; then diff /tmp/projections.pre /tmp/projections.post; fi
+      changed_when: false
+
+    - name: Run-KAKI
+      ansible.builtin.shell: |
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-312\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"equality\"}" >> {{ kaki_runs }}

@@ -1,0 +1,127 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_94_heptascript_v1_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-94 Reconciled: heptascript-v1 stub → real heptascript
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_94_heptascript_v1_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_94_heptascript_v1_wire.yml):
+#    The uploaded PB-94 scaffolds a "heptascript-v1" crate: a SQL-keyword
+#    blocklist parser, primitive line-based field extraction, and an
+#    execute_stub() that always returns empty rows ("TODO PB-103: wire to
+#    KISPU HeadStore + ENLIL index"). heptascript-v1 does not exist in this
+#    repo. The real heptascript crate is a completely different, much
+#    later implementation: full tokenizer/parser, real execute() and
+#    execute_indexed() (the latter added THIS SESSION as PB-172's fix for
+#    the O(n) full-scan bug — see playbook_172_enlil_index_wiring_fix.yml).
+#
+#    This file verifies the real crate:
+#      heptascript : 170 passed (original baseline; 216 passed as of the
+#                    2026-07-25 reconfirmation below)
+#
+#  2026-07-25 FIX: the ASSERT task hard-matched the literal string "170
+#  passed" -- heptascript has grown since this file was written (216
+#  passed, 0 failed, confirmed live on eriduous-vdi). Switched to the
+#  same ">= baseline, 0 failed" pattern used elsewhere in this batch of
+#  fixes (playbook_90/playbook_93's same-day fixes), so legitimate
+#  growth doesn't require editing this file again.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-94 (Reconciled) | HeptaScript — real engine, current state verification"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB94_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | heptascript/src/indexed.rs exists (PB-172's fix)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/heptascript/src/indexed.rs"
+      register: indexed_file
+
+    - name: "FAIL | heptascript not found or PB-172 not landed — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/heptascript/src/indexed.rs not found after sync."
+      when: not indexed_file.stat.exists
+
+    - name: "TEST | cargo test -p heptascript"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p heptascript"
+        chdir: "{{ workspace }}"
+      register: test_hepta
+      changed_when: false
+      failed_when: test_hepta.rc != 0
+
+    - name: "PARSE | heptascript passed-test count"
+      ansible.builtin.set_fact:
+        hepta_passed_count: "{{ (test_hepta.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | heptascript has zero failures and at least the PB-94 baseline of passing tests"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_hepta.stdout"
+          - hepta_passed_count >= 170
+        fail_msg: >-
+          Expected at least 170 passed, 0 failed. Got {{ hepta_passed_count }}
+          passed. Full output: {{ test_hepta.stdout }}
+        success_msg: >-
+          heptascript: {{ hepta_passed_count }} passed, 0 failed
+          (>= baseline 170 -- reconfirmed 216 passed on 2026-07-25).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-94 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-94 ("heptascript-v1" crate: SQL-keyword blocklist,
+          line-based field extraction, execute_stub() always returning
+          empty rows): SUPERSEDED. heptascript-v1 does not exist in this
+          repo under that name.
+
+          Real successor verified this run:
+            heptascript : {{ hepta_passed_count }} passed, 0 failed (original baseline 170)
+            (full tokenizer/parser, real execute() + execute_indexed();
+            execute_indexed() added this session as PB-172's fix for the
+            journal.all_particles() + read_particle_history() full-scan
+            bug on every query)
+
+    - name: "DONE | PB-94 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-94 reconciled and verified against real repo state. Report: {{ report_file }}"

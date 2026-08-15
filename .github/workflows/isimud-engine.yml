@@ -1,0 +1,132 @@
+name: BahyWay.Ecosystem KAKI v4.0 — IsimudEngine
+
+# Runs on a SELF-HOSTED runner registered from eriduous-vdi (or another
+# host with real access to this project's private VM network, TPM
+# hardware, ZFS filesystems, etc.) — not GitHub's hosted runners. Most of
+# the playbooks the orchestrator runs check for real private IPs
+# (192.168.122.x), real hardware, or real deployed services; a GitHub-
+# hosted runner can't reach any of that and would just report BLOCKED on
+# most phases, same as playbook_144 did before it was dismissed.
+#
+# PB-269 (2026-07-30): the EriduOS-VDI VM this runner was originally
+# registered from is retired as of v4.0 — no longer used. Register the
+# replacement runner from the bare-metal Fedora Workstation 44 host
+# instead, using the SAME label "eriduous-vdi" below so this workflow file
+# needs no edit (see PB-269 / ansible/inventory.ini for why the label is
+# kept rather than renamed — it's an identifier, not a claim about which
+# machine answers to it). Then remove the old VDI-registered runner from
+# Settings → Actions → Runners once confirmed retired.
+#
+# To register the runner (one-time, on whichever host is currently the
+# control node):
+#   Repo → Settings → Actions → Runners → New self-hosted runner → follow
+#   the generated ./config.sh command, then run it as a service so it
+#   survives reboots (the setup script offers `./svc.sh install && ./svc.sh start`).
+# This workflow targets the label "eriduous-vdi" (set via --labels during
+# that registration, or add it afterward in the runner's settings).
+#
+# Triggers:
+#   push            → ci_fast profile (excludes multi-hour scale-sweep /
+#                      full-corpus-ingestion playbooks — see
+#                      heavy_pattern in playbook_IsimudEngine.yml)
+#   workflow_dispatch → manual, profile selectable
+#   schedule (nightly) → full profile, the complete sweep including the
+#                      heavy playbooks
+#
+# Ansible itself is assumed already installed on the runner (the same way
+# it's used manually today) — this workflow does not attempt to install
+# or manage it, to avoid fighting however eriduous-vdi already has it set
+# up.
+
+on:
+  push:
+    branches: [master, "claude/**"]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      run_profile:
+        description: "full (everything) or ci_fast (skip heavy/long-running playbooks)"
+        required: false
+        default: "full"
+        type: choice
+        options: [full, ci_fast]
+      pb_filter_numbers:
+        description: "Optional: comma-separated PB numbers to restrict this run to (e.g. 249,250,251)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 3 * * *"   # nightly at 03:00 UTC — full profile, includes heavy playbooks
+
+concurrency:
+  group: isimud-engine-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a real infra run mid-flight
+
+jobs:
+  orchestrate:
+    runs-on: [self-hosted, eriduous-vdi]
+    timeout-minutes: 480   # 8h ceiling for a full run including heavy playbooks
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show ansible version (assumed pre-installed on this runner)
+        run: ansible --version | head -3
+
+      - name: Determine run profile for this trigger
+        id: profile
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "run_profile=full" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run_profile=${{ inputs.run_profile }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_profile=ci_fast" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run IsimudEngine
+        id: isimud
+        working-directory: playbooks
+        run: |
+          ansible-playbook playbook_IsimudEngine.yml \
+            -i "localhost," -c local -v \
+            -e "forge_root=${{ github.workspace }}" \
+            -e "run_profile=${{ steps.profile.outputs.run_profile }}" \
+            -e "pb_filter_numbers=${{ inputs.pb_filter_numbers }}" \
+            -e "heal_points_threshold=${{ vars.HEAL_POINTS_THRESHOLD || '0' }}"
+
+      - name: Publish Heal_points to the job summary
+        if: always()
+        shell: bash
+        run: |
+          JSON="${{ github.workspace }}/docs/SHEDU/ISIMUD_ENGINE_LATEST.json"
+          if [ -f "$JSON" ]; then
+            {
+              echo "## BahyWay.Ecosystem KAKI v4.0 — IsimudEngine"
+              echo ""
+              echo "| Metric | Value |"
+              echo "|---|---|"
+              echo "| Heal_points | $(jq -r .heal_points "$JSON") / 100 |"
+              echo "| Passed | $(jq -r .total_passed "$JSON") / $(jq -r .total_attempted "$JSON") |"
+              echo "| Failed | $(jq -r .total_failed "$JSON") |"
+              echo "| Doc-skipped | $(jq -r .doc_skipped_count "$JSON") |"
+              echo "| Profile-excluded | $(jq -r .profile_excluded_count "$JSON") |"
+              echo "| Release | $(jq -r .release "$JSON") |"
+              echo "| Crate version | $(jq -r .crate_version "$JSON") |"
+              echo "| Run profile | $(jq -r .run_profile "$JSON") |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No ISIMUD_ENGINE_LATEST.json found — orchestrator may not have reached the report-writing step." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload orchestrator reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isimud-engine-report-${{ github.run_id }}
+          path: |
+            docs/SHEDU/ISIMUD_ENGINE_REPORT_*.txt
+            docs/SHEDU/ISIMUD_ENGINE_REPORT_*.json
+          retention-days: 90

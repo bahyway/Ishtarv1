@@ -1,0 +1,34 @@
+# =============================================================================
+# enkidw-read-server — EnkiDW (Data Warehouse) Read Node container image.
+#
+# Build (from the repo root):
+#   podman build -t enkidw-read-server:latest \
+#     -f deploy/podman/Containerfile.enkidw-read-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkidw-read \
+#     -p 7002:7002 \
+#     -v enkidw-data:/data:Z,ro \
+#     --restart=always \
+#     enkidw-read-server:latest
+#
+# The volume here is the same `enkidw-data` volume `enkidw-write-server`
+# materializes into via its DATA_DIR -- read-only here (CQRS split,
+# ADR-012).
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkidw-read-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkidw
+COPY --from=builder /build/target/release/enkidw-read-server /usr/local/bin/enkidw-read-server
+USER enkidw
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7002
+ENV DATA_DIR=/data
+EXPOSE 7002
+ENTRYPOINT ["/usr/local/bin/enkidw-read-server"]

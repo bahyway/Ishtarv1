@@ -1,0 +1,91 @@
+---
+# =============================================================================
+# PLAYBOOK 86 — Fix E0061: remove ctx argument from enkidb_connect::draw call
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_86_fix_draw_args.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 86 — Fix enkidb_connect::draw call signature"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    workspace: "/home/bahyway/Forge/bahyway_v4"
+    app_rs:    "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+    fix_script: "/tmp/bw_fix_86.py"
+
+  tasks:
+
+    - name: "Write bw_fix_86.py"
+      ansible.builtin.copy:
+        dest: "{{ fix_script }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          """
+          Playbook 86 — removes `ctx,` from the enkidb_connect::draw() call in app.rs.
+          The new draw() signature is (ui, state, journal, tick) — ctx is obtained
+          internally via ui.ctx().
+          """
+          APP = "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+
+          OLD = """                        crate::panels::enkidb_connect::draw(
+                            ctx,
+                            ui,
+                            &mut self.enkidb_state,
+                            &self.journal,
+                            tick,
+                        );"""
+
+          NEW = """                        crate::panels::enkidb_connect::draw(
+                            ui,
+                            &mut self.enkidb_state,
+                            &self.journal,
+                            tick,
+                        );"""
+
+          with open(APP) as f:
+              src = f.read()
+
+          if NEW.strip() in src and OLD.strip() not in src:
+              print("  already fixed — no change needed")
+          elif OLD not in src:
+              print("  ERROR: marker not found — check app.rs manually")
+              import sys; sys.exit(1)
+          else:
+              with open(APP, "w") as f:
+                  f.write(src.replace(OLD, NEW, 1))
+              print("  fixed — ctx removed from enkidb_connect::draw() call")
+
+    - name: "Execute bw_fix_86.py"
+      ansible.builtin.command:
+        cmd: "python3 {{ fix_script }}"
+      register: patch_out
+      changed_when: true
+
+    - name: "Show patch output"
+      ansible.builtin.debug:
+        msg: "{{ patch_out.stdout_lines }}"
+
+    - name: "cargo build -p dubsar-visualizer"
+      ansible.builtin.shell: "cargo build -p dubsar-visualizer 2>&1 | tail -10"
+      args:
+        chdir: "{{ workspace }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 86 sealed.
+          Run: cd ~/Forge/bahyway_v4 &&
+               WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan cargo run -p dubsar-visualizer

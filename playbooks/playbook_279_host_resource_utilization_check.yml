@@ -1,0 +1,171 @@
+# =============================================================================
+# PB-279 — Host resource-utilization check: CPU, RAM, swap, disk, network
+# BahyWay.Ecosystem v4.0
+#
+# WHY THIS EXISTS: nothing in this repo checked general host resource
+# utilization before a bring-up -- the closest existing thing,
+# playbook_223_cqrs_node_disk_diagnostics.yml, is disk/swap-only and scoped
+# to the two CQRS node VMs specifically, not the bare-metal control-node
+# host itself. This gap was surfaced directly: a screenshot mid-session
+# showed 68% RAM used and swap at 7.9/8.0 GiB (near-full) on the host
+# BEFORE starting a heavy multi-container bring-up (PB-259 alone deploys
+# several more containers and, by default, seeds a 1M/10M/100M/1B
+# synthetic benchmark sweep).
+#
+# WHAT THIS PLAYBOOK DOES: gathers real host facts (Ansible's own
+# `setup` module -- ansible_memtotal_mb, ansible_mounts, etc.) plus raw
+# `free`/`df`/`uptime`/`ip -s link`/`swapon` output for a human-readable
+# report matching what `btop`/`virt-top` show. WARNS (does not fail the
+# run) when a threshold is crossed, since low resources are a judgment
+# call for the Architect, not an automatic abort -- but every warning is
+# loud and specific, not buried in a log. Run this BEFORE and AFTER a
+# heavy bring-up (e.g. PB-259) to compare.
+#
+# THRESHOLDS (all overridable via -e):
+#   min_available_ram_gb: 8      -- warn below this
+#   max_swap_used_pct: 50        -- warn above this
+#   min_available_disk_gb: 50    -- warn below this, per mount checked
+#   max_load_per_core: 1.0       -- warn if 1-min load avg / vcpu count exceeds this
+#
+# USAGE:
+#   ansible-playbook playbook_279_host_resource_utilization_check.yml
+#   ansible-playbook playbook_279_host_resource_utilization_check.yml -e min_available_ram_gb=16
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# =============================================================================
+---
+- name: "PB-279 | Host resource-utilization check (CPU/RAM/swap/disk/network)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    min_available_ram_gb: 8
+    max_swap_used_pct: 50
+    min_available_disk_gb: 50
+    max_load_per_core: 1.0
+    report_path: "{{ repo_root }}/docs/testing/PB279_RESOURCE_UTILIZATION_{{ lookup('pipe', 'date -u +%Y-%m-%d_%H%M%SZ') }}.txt"
+
+  tasks:
+
+    - name: "GATHER | raw free -h"
+      ansible.builtin.command: "free -h"
+      register: free_h
+      changed_when: false
+
+    - name: "GATHER | raw df -h (real filesystems only)"
+      ansible.builtin.shell: "df -hT | grep -vE '^(tmpfs|devtmpfs|overlay|Filesystem)'"
+      register: df_h
+      changed_when: false
+
+    - name: "GATHER | swapon summary"
+      ansible.builtin.command: "swapon --show"
+      register: swapon_show
+      changed_when: false
+      failed_when: false
+
+    - name: "GATHER | load average / uptime"
+      ansible.builtin.command: "uptime"
+      register: uptime_out
+      changed_when: false
+
+    - name: "GATHER | network interface counters"
+      ansible.builtin.command: "ip -s link"
+      register: ip_link
+      changed_when: false
+      failed_when: false
+
+    - name: "GATHER | true MemAvailable (reclaimable cache included, unlike ansible_memfree_mb)"
+      ansible.builtin.shell: "awk '/MemAvailable/ {print $2}' /proc/meminfo"
+      register: mem_available_kb
+      changed_when: false
+
+    - name: "COMPUTE | available RAM in GiB"
+      ansible.builtin.set_fact:
+        available_ram_gb: "{{ (mem_available_kb.stdout | trim | int / (1024*1024)) | round(1) }}"
+
+    - name: "COMPUTE | swap used percent"
+      ansible.builtin.set_fact:
+        swap_used_pct: >-
+          {{ ((ansible_facts['swaptotal_mb'] - ansible_facts['swapfree_mb']) / ansible_facts['swaptotal_mb'] * 100) | round(1)
+             if ansible_facts['swaptotal_mb'] | int > 0 else 0 }}
+
+    - name: "COMPUTE | 1-minute load average per vCPU"
+      ansible.builtin.set_fact:
+        load_per_core: "{{ (ansible_facts['loadavg']['1m'] / ansible_facts['processor_vcpus']) | round(2) }}"
+
+    - name: "WARN | low available RAM"
+      ansible.builtin.debug:
+        msg: >-
+          ⚠ Available RAM {{ available_ram_gb }} GiB is below the
+          {{ min_available_ram_gb }} GiB floor -- consider closing apps or
+          freeing memory before a heavy bring-up (PB-259 spins up several
+          more containers on top of whatever's already running).
+      when: available_ram_gb | float < min_available_ram_gb | float
+
+    - name: "WARN | swap near-full"
+      ansible.builtin.debug:
+        msg: >-
+          ⚠ Swap is {{ swap_used_pct }}% used (above the
+          {{ max_swap_used_pct }}% floor) -- a sign of recent memory
+          pressure. Not fatal, but watch for thrashing during the run.
+      when: swap_used_pct | float > max_swap_used_pct | float
+
+    - name: "WARN | low disk space on a real mount"
+      ansible.builtin.debug:
+        msg: >-
+          ⚠ {{ item.mount }} has only {{ (item.size_available / (1024*1024*1024)) | round(1) }}
+          GiB available (below the {{ min_available_disk_gb }} GiB floor).
+      loop: "{{ ansible_facts['mounts'] }}"
+      when: >-
+        item.mount in ['/', '/home', '/var'] and
+        (item.size_available / (1024*1024*1024)) < (min_available_disk_gb | float)
+
+    - name: "WARN | CPU load per core high"
+      ansible.builtin.debug:
+        msg: >-
+          ⚠ 1-minute load average per vCPU is {{ load_per_core }}
+          (above the {{ max_load_per_core }} floor) -- host is already
+          busy; a heavy bring-up will contend with whatever's running.
+      when: load_per_core | float > max_load_per_core | float
+
+    - name: "REPORT | ensure docs/testing exists (ansible.builtin.copy never creates parent dirs)"
+      ansible.builtin.file:
+        path: "{{ repo_root }}/docs/testing"
+        state: directory
+        mode: "0755"
+
+    - name: "REPORT | write the human-readable resource snapshot"
+      ansible.builtin.copy:
+        dest: "{{ report_path }}"
+        mode: "0644"
+        content: |
+          PB-279 host resource-utilization snapshot
+          Generated: {{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}
+          Host: {{ ansible_facts['hostname'] }} ({{ ansible_facts['architecture'] }}, {{ ansible_facts['processor_vcpus'] }} vCPUs)
+
+          == free -h ==
+          {{ free_h.stdout }}
+
+          == swapon --show ==
+          {{ swapon_show.stdout | default('(no active swap)') }}
+
+          == df -hT (real filesystems) ==
+          {{ df_h.stdout }}
+
+          == uptime / load ==
+          {{ uptime_out.stdout }}
+
+          == computed ==
+          available_ram_gb   = {{ available_ram_gb }}  (floor {{ min_available_ram_gb }})
+          swap_used_pct      = {{ swap_used_pct }}      (floor {{ max_swap_used_pct }})
+          load_per_core (1m) = {{ load_per_core }}      (floor {{ max_load_per_core }})
+
+          == ip -s link ==
+          {{ ip_link.stdout | default('(ip -s link unavailable)') }}
+
+    - name: "DONE | PB-279 COMPLETE"
+      ansible.builtin.debug:
+        msg: "Resource snapshot written to {{ report_path }}. Re-run this playbook after a heavy bring-up to compare."

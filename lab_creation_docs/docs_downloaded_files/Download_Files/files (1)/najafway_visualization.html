@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NajafWay - BDBWay v1.0 Stress Test Visualization</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- Arabic Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Cairo', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            direction: rtl;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header .subtitle {
+            color: #666;
+            font-size: 1.2rem;
+        }
+        
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.2);
+        }
+        
+        .stat-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #764ba2;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        
+        .map-container {
+            background: white;
+            margin: 20px;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        
+        #map {
+            height: 600px;
+            border-radius: 10px;
+            border: 2px solid #667eea;
+        }
+        
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .chart-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        
+        .chart-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .search-container {
+            background: white;
+            margin: 20px;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1rem;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            font-family: 'Cairo', Arial, sans-serif;
+            direction: rtl;
+        }
+        
+        .search-results {
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .result-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        
+        .result-item:hover {
+            background: #f0f0f0;
+        }
+        
+        .quality-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .quality-sovereign { background: #FFD700; color: #333; }
+        .quality-active { background: #90EE90; color: #333; }
+        .quality-poor { background: #FFE4B5; color: #333; }
+        .quality-nonactive { background: #D3D3D3; color: #666; }
+        
+        .footer {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+        }
+        
+        .legend {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .legend-item {
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🕌 NajafWay - مقبرة وادي السلام</h1>
+        <div class="subtitle">BDBWay v1.0 Stress Test - 340,000 Cemetery Records</div>
+    </div>
+    
+    <div class="stats-container">
+        <div class="stat-card">
+            <h3>📊 إجمالي السجلات</h3>
+            <div class="stat-value" id="totalRecords">340,000</div>
+            <div class="stat-label">سجل قبر في قاعدة البيانات</div>
+        </div>
+        
+        <div class="stat-card">
+            <h3>⏱️ وقت الاستيراد</h3>
+            <div class="stat-value" id="importTime">~20</div>
+            <div class="stat-label">دقيقة لاستيراد كامل البيانات</div>
+        </div>
+        
+        <div class="stat-card">
+            <h3>🚀 السرعة</h3>
+            <div class="stat-value" id="importSpeed">17,000</div>
+            <div class="stat-label">سجل في الدقيقة</div>
+        </div>
+        
+        <div class="stat-card">
+            <h3>💾 حجم البيانات</h3>
+            <div class="stat-value" id="dbSize">151 MB</div>
+            <div class="stat-label">حجم الجدول في PostgreSQL</div>
+        </div>
+    </div>
+    
+    <div class="search-container">
+        <h3 style="color: #667eea; margin-bottom: 15px;">🔍 البحث عن الأسماء</h3>
+        <input type="text" class="search-input" id="searchInput" placeholder="ابحث عن اسم... (مثال: محمد، فاطمة، علي)">
+        <div class="search-results" id="searchResults"></div>
+    </div>
+    
+    <div class="map-container">
+        <h3 style="color: #667eea; margin-bottom: 15px; text-align: center;">🗺️ خريطة مقبرة وادي السلام - النجف الأشرف</h3>
+        <div id="map"></div>
+        <div class="legend">
+            <h4 style="margin-bottom: 10px;">مستويات الجودة:</h4>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFD700;"></div>
+                <span>Sovereign (200-255)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #90EE90;"></div>
+                <span>Active (140-199)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFE4B5;"></div>
+                <span>Poor (100-139)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #D3D3D3;"></div>
+                <span>Non-Active (0-99)</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="charts-container">
+        <div class="chart-card">
+            <h3>📊 توزيع المناطق</h3>
+            <canvas id="zoneChart"></canvas>
+        </div>
+        
+        <div class="chart-card">
+            <h3>🎨 توزيع الجودة</h3>
+            <canvas id="qualityChart"></canvas>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p><strong>BahyWay Ecosystem - NajafWay Integration</strong></p>
+        <p>Powered by BDBWay v1.0 Sovereign Identity & PostgreSQL with pgrx</p>
+        <p>Created by Bahaa Fadam - January 2026</p>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // ============================================================
+        // CONFIGURATION
+        // ============================================================
+        const API_BASE = 'http://localhost:5000/api'; // Change to your API endpoint
+        
+        // Sample data for demonstration (replace with actual API calls)
+        const SAMPLE_DATA = {
+            zones: {
+                'بابلقيعنا': 48822,
+                'دابعنا': 48654,
+                'بقونكال': 48585,
+                'قريشلد': 48573,
+                'كتربيشكا': 48556,
+                'قريتا النجفا': 48508,
+                'ثابريك': 48302
+            },
+            quality: {
+                'Sovereign (200-255)': 17000,
+                'Active (140-199)': 102000,
+                'Poor (100-139)': 136000,
+                'Non-Active (0-99)': 85000
+            },
+            graves: [] // Will be populated with sample coordinates
+        };
+        
+        // Generate sample grave coordinates
+        for (let i = 0; i < 500; i++) {
+            const lat = 31.985 + Math.random() * 0.03;
+            const lon = 44.305 + Math.random() * 0.04;
+            const quality = Math.floor(Math.random() * 255);
+            
+            SAMPLE_DATA.graves.push({
+                lat: lat,
+                lon: lon,
+                name: ['محمد علي', 'فاطمة حسن', 'علي حسين', 'زينب عباس'][Math.floor(Math.random() * 4)],
+                quality: quality,
+                zone: Object.keys(SAMPLE_DATA.zones)[Math.floor(Math.random() * 7)]
+            });
+        }
+        
+        // ============================================================
+        // MAP INITIALIZATION
+        // ============================================================
+        const map = L.map('map').setView([32.0, 44.325], 13);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Function to get marker color based on quality
+        function getQualityColor(quality) {
+            if (quality >= 200) return '#FFD700'; // Gold
+            if (quality >= 140) return '#90EE90'; // Light Green
+            if (quality >= 100) return '#FFE4B5'; // Moccasin
+            return '#D3D3D3'; // Light Gray
+        }
+        
+        // Function to get quality badge class
+        function getQualityBadge(quality) {
+            if (quality >= 200) return 'quality-sovereign';
+            if (quality >= 140) return 'quality-active';
+            if (quality >= 100) return 'quality-poor';
+            return 'quality-nonactive';
+        }
+        
+        // Add markers to map
+        SAMPLE_DATA.graves.forEach(grave => {
+            const color = getQualityColor(grave.quality);
+            
+            const marker = L.circleMarker([grave.lat, grave.lon], {
+                radius: 6,
+                fillColor: color,
+                color: '#000',
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).addTo(map);
+            
+            marker.bindPopup(`
+                <div style="direction: rtl; font-family: 'Cairo', Arial, sans-serif;">
+                    <strong>${grave.name}</strong><br>
+                    المنطقة: ${grave.zone}<br>
+                    الجودة: ${grave.quality}<br>
+                    <span class="quality-badge ${getQualityBadge(grave.quality)}">
+                        ${grave.quality >= 200 ? 'Sovereign' : 
+                          grave.quality >= 140 ? 'Active' :
+                          grave.quality >= 100 ? 'Poor' : 'Non-Active'}
+                    </span>
+                </div>
+            `);
+        });
+        
+        // ============================================================
+        // CHARTS
+        // ============================================================
+        
+        // Zone Distribution Chart
+        const zoneCtx = document.getElementById('zoneChart').getContext('2d');
+        new Chart(zoneCtx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(SAMPLE_DATA.zones),
+                datasets: [{
+                    label: 'عدد القبور',
+                    data: Object.values(SAMPLE_DATA.zones),
+                    backgroundColor: 'rgba(102, 126, 234, 0.7)',
+                    borderColor: 'rgba(102, 126, 234, 1)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        // Quality Distribution Chart
+        const qualityCtx = document.getElementById('qualityChart').getContext('2d');
+        new Chart(qualityCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(SAMPLE_DATA.quality),
+                datasets: [{
+                    data: Object.values(SAMPLE_DATA.quality),
+                    backgroundColor: [
+                        '#FFD700',
+                        '#90EE90',
+                        '#FFE4B5',
+                        '#D3D3D3'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+        
+        // ============================================================
+        // SEARCH FUNCTIONALITY
+        // ============================================================
+        const searchInput = document.getElementById('searchInput');
+        const searchResults = document.getElementById('searchResults');
+        
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value;
+            if (query.length < 2) {
+                searchResults.innerHTML = '';
+                return;
+            }
+            
+            // Filter graves by name
+            const results = SAMPLE_DATA.graves.filter(g => 
+                g.name.includes(query)
+            ).slice(0, 10);
+            
+            if (results.length === 0) {
+                searchResults.innerHTML = '<div class="result-item">لم يتم العثور على نتائج</div>';
+                return;
+            }
+            
+            searchResults.innerHTML = results.map(r => `
+                <div class="result-item" onclick="flyToGrave(${r.lat}, ${r.lon})">
+                    <span class="quality-badge ${getQualityBadge(r.quality)}">
+                        ${r.quality}
+                    </span>
+                    <strong>${r.name}</strong><br>
+                    <small>${r.zone}</small>
+                </div>
+            `).join('');
+        });
+        
+        // Function to fly to grave location
+        function flyToGrave(lat, lon) {
+            map.flyTo([lat, lon], 16, {
+                duration: 2
+            });
+        }
+        
+        // ============================================================
+        // PERFORMANCE METRICS UPDATE
+        // ============================================================
+        function updateStats() {
+            // You can replace this with actual API calls
+            document.getElementById('totalRecords').textContent = '340,000';
+            document.getElementById('importTime').textContent = '~20';
+            document.getElementById('importSpeed').textContent = '17,000';
+            document.getElementById('dbSize').textContent = '151 MB';
+        }
+        
+        updateStats();
+        
+        console.log('🎉 NajafWay Visualization Loaded Successfully!');
+        console.log('📊 Total Graves Displayed:', SAMPLE_DATA.graves.length);
+    </script>
+</body>
+</html>

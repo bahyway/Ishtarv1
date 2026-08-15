@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala · nasaru — the Visualization Realm (navigable)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--void:#04060e;--ink:#eaf0fb;--ink-dim:#9aa6c8;--ink-faint:#5a6488;--gold:#E3B458;--signal:#4fd6c4;--line:#1c2440;
+--bench:#b083e0;--body:#4fd6c4;--gate:#e0776a;--derived:#8fe6b0;--sim:#e3b458;--stake:#7fb0e8;
+--f-display:'Fraunces',Georgia,serif;--f-body:'Inter',system-ui,sans-serif;--f-data:'IBM Plex Mono',monospace;}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}button{font-family:inherit}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;z-index:5}
+.scope{top:0;left:0;right:0;background:linear-gradient(90deg,rgba(79,214,196,.10),rgba(176,131,224,.08));border-bottom:1px solid var(--line);font-family:var(--f-data);font-size:9px;color:var(--signal);text-align:center;padding:5px 12px;z-index:7}
+.scope b{color:var(--ink)}
+.title{top:24px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.title h1{font-family:var(--f-display);font-weight:500;font-size:16px;letter-spacing:.06em}
+.title h1 em{font-style:italic;color:var(--signal)}.title .glyph{color:var(--gold)}
+.title .sub{font-size:8.5px;letter-spacing:.1em;color:var(--ink-faint);margin-top:2px}
+.panel{background:rgba(6,10,24,.94);border:1px solid var(--line);border-radius:8px;padding:12px 14px;backdrop-filter:blur(10px)}
+.hud-info{bottom:78px;left:14px;width:330px;font-family:var(--f-data);display:none}
+.hud-info .it{font-family:var(--f-display);font-size:15px;color:var(--gold)}
+.hud-info .ik{font-size:8.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;margin:2px 0 6px}
+.hud-info .ib{font-size:10px;color:var(--ink-dim);line-height:1.55}.hud-info .ib b{color:var(--ink)}
+.hud-info .law{margin-top:7px;font-size:9px;color:var(--signal);border-top:1px solid var(--line);padding-top:6px}
+.hud-info .descend{margin-top:8px;font-size:9.5px;color:var(--gold);cursor:pointer;border:1px solid var(--gold);border-radius:5px;padding:5px 8px;text-align:center;display:none}
+.hud-info .descend:hover{background:rgba(227,180,88,.12)}
+.hud-legend{top:64px;left:14px;font-family:var(--f-data);font-size:9px;background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:7px;padding:9px 11px;line-height:1.9;z-index:5}
+.hud-legend .r{display:flex;gap:7px;align-items:center}
+.hud-legend .sw{width:20px;height:9px;border-radius:2px;flex-shrink:0}
+.hud-legend b{color:var(--ink)}
+.crumb{top:64px;left:50%;transform:translateX(-50%);font-family:var(--f-data);font-size:10px;background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:6px;padding:6px 12px;display:flex;gap:6px;align-items:center;z-index:6}
+.crumb .seg{cursor:pointer;color:var(--ink-dim)}.crumb .seg:hover{color:var(--signal)}.crumb .seg.here{color:var(--gold)}.crumb .arr{color:var(--ink-faint)}
+/* controls moved up, away from the footer, clearly labelled */
+.hud-ctl{bottom:30px;right:14px;display:flex;flex-direction:column;gap:6px;align-items:flex-end;font-family:var(--f-data);z-index:8}
+.hud-ctl .hint{font-size:8.5px;color:var(--ink-faint);max-width:250px;text-align:right;line-height:1.5;background:rgba(4,6,14,.7);padding:4px 7px;border-radius:5px}
+.hud-ctl .row{display:flex;gap:6px}
+.hud-ctl button{background:rgba(6,10,24,.95);border:1px solid var(--signal);color:var(--signal);border-radius:5px;font-size:10px;padding:7px 12px;cursor:pointer;font-weight:600}
+.hud-ctl button:hover{background:rgba(79,214,196,.14)}
+.hud-ctl button.on{background:var(--signal);color:#04231f}
+.hud-ctl button.plain{border-color:var(--line);color:var(--ink-dim)}
+.zoomind{top:64px;right:14px;font-family:var(--f-data);font-size:9px;color:var(--ink-faint);background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:6px;padding:6px 9px;z-index:5}
+.zoomind b{color:var(--signal)}
+.journeybar{top:100px;left:50%;transform:translateX(-50%);font-family:var(--f-data);font-size:9.5px;background:rgba(6,10,24,.92);border:1px solid var(--line);border-radius:7px;padding:8px 13px;z-index:6;display:none;max-width:560px;text-align:center;line-height:1.5}
+.journeybar .step{color:var(--gold);font-family:var(--f-display);font-size:13px}
+.journeybar .prov{display:inline-block;padding:1px 7px;border-radius:100px;font-size:9px;margin-left:6px}
+.prov.derived{color:var(--derived);border:1px solid var(--derived)} .prov.sim{color:var(--sim);border:1px solid var(--sim)}
+.prov.admitted{color:var(--stake);border:1px solid var(--stake)} .prov.stopped{color:var(--gate);border:1px solid var(--gate)}
+/* the naṣāru right-click menu (our own, not the browser's) */
+.ctxmenu{position:fixed;z-index:20;background:rgba(6,10,24,.98);border:1px solid var(--signal);border-radius:8px;padding:6px 0;font-family:var(--f-data);font-size:10.5px;color:var(--ink);min-width:210px;display:none;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.ctxmenu .hd{padding:3px 13px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.ctxmenu .hd .t{color:var(--gold);font-family:var(--f-display);font-size:13px}.ctxmenu .hd .s{font-size:8.5px;color:var(--ink-faint)}
+.ctxmenu .act{padding:6px 13px;cursor:pointer;display:flex;justify-content:space-between;gap:14px}
+.ctxmenu .act:hover{background:rgba(79,214,196,.12)}.ctxmenu .act .k{color:var(--ink-faint);font-size:9px}
+.ctxmenu .act.dim{color:var(--ink-faint);cursor:default}.ctxmenu .act.dim:hover{background:none}
+.hover{position:fixed;font-family:var(--f-data);font-size:10px;background:rgba(4,7,18,.98);border:1px solid var(--signal);border-radius:6px;padding:6px 10px;color:var(--ink);pointer-events:none;z-index:9;display:none;line-height:1.5;max-width:260px}
+.hover b{color:var(--gold)}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,6,14,.95);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8px;color:var(--ink-faint);padding:3px 16px;z-index:6;text-align:center;line-height:1.4}
+</style></head>
+<body>
+<div id="stage"></div>
+<div class="hud scope">This is a <b>MAP OF THE DESIGN</b>, not a running system. Scroll = zoom · drag = pan · <b>click</b> a node = its role + law · <b>right-click</b> a node = descend / focus / inspect · <b>double-click</b> = dive into its sub-process.</div>
+<div class="hud title"><h1><span class="glyph">&#x12079;</span> nasaru <em>&mdash; THE VISUALIZATION REALM</em></h1>
+<div class="sub">BENCH ↔ BODY · DISCOVERY → SIMULATION → STAKEHOLDER · GATED BY GL-GOV-001/002/003 &amp; GL-TOOL-001</div></div>
+
+<div class="hud hud-legend" id="legend"></div>
+<div class="hud crumb" id="crumb"></div>
+<div class="hud zoomind" id="zoomind"></div>
+<div class="hud journeybar" id="journeybar"></div>
+<div class="hud hud-info panel" id="info"></div>
+<div class="hover" id="hover"></div>
+<div class="ctxmenu" id="ctx"></div>
+
+<div class="hud hud-ctl">
+  <div class="hint">right-click any node to descend into its sub-process · breadcrumb (top) climbs back</div>
+  <div class="row">
+    <button id="play-btn" title="watch one shape travel the gates">▶ play journey</button>
+    <button id="fit-btn" class="plain" title="reset zoom to fit">⤢ fit</button>
+    <button id="up-btn" class="plain" title="climb back to the realm">▲ up</button>
+  </div>
+</div>
+<footer>Way-of-Work rule 5 — HTML prototype (Sala rehearsal). Navigable MAP of the sealed architecture. Bench Membrane (GL-TOOL-001) walls tools off from the pure-Rust body; Submission/Earned-Assertion/Compression gates (GL-GOV-001/002/003) govern crossings; ε (GL-HS3-002) is carried. Not a running system. Pending CSR-08.</footer>
+<script>
+/* ================= REALM (top level) ================= */
+const NODES=[
+ {id:'api', label:'Public API data', zone:'bench', x:90, y:250, kind:'source',
+  role:'Raw external data (e.g. 50 CSVs, 1M rows). Downloaded to the Fedora dev host. Not yet particles, not yet trusted.', law:'—'},
+ {id:'julia', label:'Julia (Pluto.jl)', zone:'bench', x:90, y:360, kind:'tool',
+  role:'Bench tool: computes & validates the math (FCA, TDA, gravity field). REVEALS structure & holes; does NOT decide what is clean. Podman container, pinned, dev host. Ships to no one.', law:'GL-TOOL-001 · the Bench Membrane', dive:'julia'},
+ {id:'podman', label:'Podman container', zone:'bench', x:90, y:150, kind:'infra',
+  role:'The container boundary IS the bench boundary made physical. Julia lives here, in the dev manifest, never the ship manifest. Reproducible witness (pinned image).', law:'GL-TOOL-001'},
+ {id:'membrane', label:'⋮ BENCH MEMBRANE ⋮', zone:'wall', x:330, y:260, kind:'gate',
+  role:'The wall. A tool may COMPUTE & WITNESS (pass) — never CLEANSE or SHIP (stop). Julia witnesses Rust across this line; it never crosses it. Hand-off by FILES (Arrow/Parquet), not a live binding.', law:'GL-TOOL-001', dive:'membrane'},
+ {id:'enkisdb', label:'EnkiSDB birth', zone:'body', x:560, y:120, kind:'body',
+  role:'Records land, get KAKI v4.0 + Birth Root Shade. Tribe placement DERIVED by FCA closure (provable), never predicted. Uncertain particles → PARZU quarantine, not a guess.', law:'GL-HS3-002 · placement derived, never predicted', dive:'enkisdb'},
+ {id:'fca', label:'FCA discovery', zone:'body', x:560, y:240, kind:'body',
+  role:'Pure-Rust engine computes the concept lattice, EAV schema, implications — the MEASURED structure. ε = closure gap carried on every particle. The ground-truth layer.', law:'GL-HS3-001 · grounded grammar', dive:'fca'},
+ {id:'lens', label:'ε lens', zone:'body', x:560, y:360, kind:'body',
+  role:'Reads ε as a lens: correlated high-ε = a located Unknown cluster (a hole). DETECTS & LOCATES; never names what fills it. Emits a witnessed proposal to the authority.', law:'GL-HS3-002 · detects, never names', dive:'lens'},
+ {id:'sim', label:'Simulation (Rust)', zone:'body', x:820, y:200, kind:'sim',
+  role:'Wolfram-style generation, SEEDED BY the discovered structure, re-implemented in pure Rust (Julia witnessed the math on the bench). Imagines what the fuller shape COULD be. Marked as imagination.', law:'GL-SIM (draft) · seeded by discovery', dive:'sim'},
+ {id:'dubsar', label:'DubSar Theater', zone:'body', x:820, y:330, kind:'body',
+  role:'Godot + pure-Rust (gdext) + WGPU. Where the Rust SIMULATION and the naṣāru RENDER are combined into one sovereign body. The combiner — running Rust, not Julia.', law:'sovereignty · pure-Rust body', dive:'dubsar'},
+ {id:'submission', label:'Submission gate', zone:'gate', x:690, y:470, kind:'gate',
+  role:'Stakeholder/steward PROPOSES a correction or a name; only the ranked authority ADMITS, with a witness. Proposal ≠ admission. The lens\u2019 Unknown clusters enter here to be named.', law:'GL-GOV-001 · the Sealed Submission Law', dive:'submission'},
+ {id:'authority', label:'Ranked authority', zone:'gate', x:820, y:470, kind:'authority',
+  role:'Architect (1) · Steward (2) · Administrator (3, infra-first). Holds the only content-truth there is — as ADMITTED, WITNESSED, REVISABLE rulings, never oracle pronouncements. Signs crossings.', law:'CSR-08 · GL-GOV-001', dive:'authority'},
+ {id:'compression', label:'Compression gate', zone:'gate', x:1030, y:330, kind:'gate',
+  role:'Nothing crosses into the stakeholder view unsigned. Discovered passes freely; simulated passes ONLY signed, wearing provenance. Default-closed for simulation. STOP: do not show a dream as a finding.', law:'GL-GOV-003 · the Compression Gate', dive:'compression'},
+ {id:'sankey', label:'Stakeholder Sankey', zone:'stake', x:1180, y:330, kind:'stake',
+  role:'The clean, transparent view a clinician/investor reads and acts on. Carries ONLY discovered + signed-admitted shapes, each ribbon confessing its provenance (derived / admitted / candidate). What they see, they can trust.', law:'GL-GOV-003 · provenance survives compression', dive:'sankey'},
+];
+const EDGES=[['api','julia'],['podman','julia'],['julia','membrane'],['membrane','enkisdb'],
+ ['enkisdb','fca'],['fca','lens'],['fca','sim'],['sim','dubsar'],
+ ['lens','submission'],['submission','authority'],['authority','sim'],
+ ['dubsar','compression'],['fca','compression'],['authority','compression'],['compression','sankey']];
+
+/* ================= SUB-PROCESSES (what each node opens into when you dive) ================= */
+const SUB={
+ fca:{title:'FCA discovery · inside',nodes:[
+   {id:'ctx',label:'Formal context',x:120,y:200,kind:'body',role:'The object×attribute table read from birthed particles.'},
+   {id:'closure',label:'Galois closure',x:340,y:140,kind:'body',role:'Compute closed sets → the concept lattice. Deterministic.'},
+   {id:'eav',label:'EAV schema (on-fly)',x:340,y:260,kind:'body',role:'Attribute roles resolved by rule (⊤/∩/◆) — derived, not declared.'},
+   {id:'impl',label:'Implications',x:560,y:200,kind:'body',role:'Discovered attribute implications (the canonical basis).'},
+   {id:'eps',label:'ε per particle',x:780,y:200,kind:'body',role:'Closure gap carried on every particle — the measured uncertainty.'},
+ ],edges:[['ctx','closure'],['ctx','eav'],['closure','impl'],['eav','impl'],['impl','eps']]},
+ compression:{title:'Compression gate · inside',nodes:[
+   {id:'in',label:'Shape presented',x:120,y:200,kind:'gate',role:'A shape asks to cross into the stakeholder view.'},
+   {id:'d',label:'Discovered?',x:340,y:120,kind:'body',role:'Measured/FCA-derived → passes freely, drawn solid.'},
+   {id:'s',label:'Simulated + signed?',x:340,y:220,kind:'sim',role:'Passes ONLY with an authority signature + evidence.'},
+   {id:'u',label:'Unsigned / Unknown',x:340,y:320,kind:'gate',role:'STOP — stays in the workshop, or shows as a dashed candidate only.'},
+   {id:'out',label:'Provenance-tagged ribbon',x:620,y:200,kind:'stake',role:'Whatever crosses wears derived / admitted / candidate. Never stripped.'},
+ ],edges:[['in','d'],['in','s'],['in','u'],['d','out'],['s','out']]},
+ lens:{title:'ε lens · inside',nodes:[
+   {id:'scan',label:'SCAN high-ε',x:120,y:200,kind:'body',role:'Find particles whose closure gap exceeds θ.'},
+   {id:'grp',label:'GROUP BY neighborhood',x:340,y:200,kind:'body',role:'Cluster by closure-neighborhood in Hepta space.'},
+   {id:'test',label:'Correlated vs scattered',x:560,y:140,kind:'body',role:'Tight cluster = a hidden pattern. Scattered = noise. Computable.'},
+   {id:'prop',label:'Witnessed proposal',x:560,y:280,kind:'gate',role:'A located Unknown cluster → PROPOSE to the authority. Never self-names.'},
+ ],edges:[['scan','grp'],['grp','test'],['grp','prop']]},
+ authority:{title:'Ranked authority · inside',nodes:[
+   {id:'arch',label:'Architect (1)',x:200,y:140,kind:'authority',role:'Sovereign (CSR-08). Final admit/reject/seal. Nothing overrides.'},
+   {id:'stew',label:'Steward (2)',x:200,y:240,kind:'authority',role:'Truth/data-quality corrections; adjudicates counterexamples.'},
+   {id:'admin',label:'Administrator (3)',x:200,y:340,kind:'authority',role:'Last in visualization, first in automation/infra. No truth-admit power.'},
+   {id:'rule',label:'Admitted ruling',x:480,y:240,kind:'gate',role:'Witnessed, revisable — never an oracle pronouncement.'},
+ ],edges:[['arch','rule'],['stew','rule'],['admin','rule']]},
+ membrane:{title:'Bench Membrane · inside',nodes:[
+   {id:'compute',label:'COMPUTE ✓',x:160,y:150,kind:'body',role:'The tool may run the math. Passes.'},
+   {id:'witness',label:'WITNESS ✓',x:160,y:250,kind:'body',role:'The tool may serve as the reference Rust is validated against. Passes.'},
+   {id:'cleanse',label:'CLEANSE ✗',x:440,y:150,kind:'gate',role:'Decide what is true/clean — STOPPED. That is the authority\u2019s ruling.'},
+   {id:'ship',label:'SHIP ✗',x:440,y:250,kind:'gate',role:'Enter the sovereign binary — STOPPED. The body is pure Rust.'},
+ ],edges:[]},
+};
+
+/* the journey */
+const JOURNEY=[
+ {node:'api',step:'1 · Raw data lands',prov:'—',note:'50 CSVs on the dev host. Untrusted. Not yet a particle.'},
+ {node:'julia',step:'2 · Julia computes the math',prov:'—',note:'Pluto.jl validates FCA/TDA. Reveals structure & a hole. Decides nothing.'},
+ {node:'membrane',step:'3 · Cross the Bench Membrane',prov:'—',note:'Julia witnesses; only the RESULT crosses (by file). Julia stays behind.'},
+ {node:'enkisdb',step:'4 · Birth at EnkiSDB',prov:'derived',note:'KAKI + Birth Root Shade. Tribe DERIVED by closure.'},
+ {node:'fca',step:'5 · FCA discovery (Rust)',prov:'derived',note:'Measured lattice + EAV + ε. This shape is now provable.'},
+ {node:'lens',step:'6 · ε lens finds a hole',prov:'derived',note:'Correlated high-ε → a located Unknown cluster. Detects; does not name.'},
+ {node:'submission',step:'7 · Proposed to authority',prov:'stopped',note:'The Unknown cannot self-name. It becomes a witnessed PROPOSAL.'},
+ {node:'authority',step:'8 · Authority admits (or not)',prov:'admitted',note:'Steward signs, with evidence. An ADMITTED, revisable ruling — not a fact.'},
+ {node:'sim',step:'9 · Simulation imagines more',prov:'sim',note:'Rust sim, seeded by discovery, explores the fuller shape. Marked imagination.'},
+ {node:'compression',step:'10 · Compression gate',prov:'stopped',note:'Sim is default-STOPPED. Only signed sim + all discovered may cross.'},
+ {node:'sankey',step:'11 · Stakeholder Sankey',prov:'admitted',note:'Clean view. Every ribbon confesses its provenance. What they see, they can trust.'},
+];
+
+/* ================= canvas ================= */
+const stage=document.getElementById('stage');
+const cv=document.createElement('canvas');stage.appendChild(cv);const g=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(devicePixelRatio||1,2);
+let view={s:1,ox:0,oy:0,ts:1,tox:0,toy:0,_init:false},dragging=false,lx=0,ly=0,dragMoved=false,hoverN=null,selN=null;
+let level='realm', curNodes=NODES, curEdges=EDGES, crumbStack=[{name:'realm'}];
+let playing=false,journeyIdx=-1,journeyTimer=0,litNodes=new Set(),litEdges=new Set();
+const kindColor={source:'#9aa6c8',tool:'#b083e0',infra:'#8f9ce8',gate:'#e0776a',authority:'#e3b458',body:'#4fd6c4',sim:'#e3b458',stake:'#7fb0e8'};
+function nodeById(id){return curNodes.find(n=>n.id===id);}
+function w2s(x,y){return [x*view.s+view.ox, y*view.s+view.oy];}
+function fit(nodes){const pad=110;let a=1e9,b=-1e9,c=1e9,d=-1e9;
+  nodes.forEach(n=>{a=Math.min(a,n.x);b=Math.max(b,n.x);c=Math.min(c,n.y);d=Math.max(d,n.y);});
+  const w=(b-a)||1,h=(d-c)||1;view.ts=Math.min((W-2*pad)/w,(H-2*pad-90)/h,1.6);
+  view.tox=W/2-(a+b)/2*view.ts;view.toy=(H/2+20)-(c+d)/2*view.ts;}
+
+function enterRealm(){level='realm';curNodes=NODES;curEdges=EDGES;crumbStack=[{name:'realm'}];setCrumb();fit(curNodes);selN=null;document.getElementById('info').style.display='none';}
+function diveInto(id){const sub=SUB[id];if(!sub)return;level=id;curNodes=sub.nodes;curEdges=sub.edges;
+  crumbStack=[{name:'realm',realm:true},{name:sub.title}];setCrumb();fit(curNodes);selN=null;document.getElementById('info').style.display='none';}
+function setCrumb(){const el=document.getElementById('crumb');
+  el.innerHTML=crumbStack.map((c,i)=>`<span class="seg${i===crumbStack.length-1?' here':''}" data-i="${i}">${c.name}</span>`+(i<crumbStack.length-1?'<span class="arr">›</span>':'')).join('');
+  el.querySelectorAll('.seg').forEach(s=>s.onclick=()=>{if(crumbStack[+s.dataset.i].realm||+s.dataset.i===0)enterRealm();});}
+
+function draw(){
+  W=stage.clientWidth;H=stage.clientHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';g.setTransform(DPR,0,0,DPR,0,0);
+  g.clearRect(0,0,W,H);
+  if(!view._init){fit(curNodes);view.s=view.ts;view.ox=view.tox;view.oy=view.toy;view._init=true;}
+  if(level==='realm'){
+    const bands=[['BENCH · dev host · compute & witness',40,300,'rgba(176,131,224,0.05)','#b083e0'],
+                 ['BODY · pure-Rust · shipped',470,650,'rgba(79,214,196,0.04)','#4fd6c4'],
+                 ['STAKEHOLDER',1130,140,'rgba(127,176,232,0.05)','#7fb0e8']];
+    bands.forEach(bd=>{const A=w2s(bd[1],40),Bx=w2s(bd[1]+bd[2],40);
+      g.fillStyle=bd[3];g.fillRect(A[0],0,Bx[0]-A[0],H);
+      g.fillStyle=bd[4];g.globalAlpha=0.55;g.font='600 10px "IBM Plex Mono"';g.textAlign='left';g.fillText(bd[0],A[0]+10,92);g.globalAlpha=1;});
+    const wA=w2s(445,40);g.strokeStyle='#e0776a';g.globalAlpha=0.5;g.setLineDash([6,6]);g.lineWidth=1.5;
+    g.beginPath();g.moveTo(wA[0],104);g.lineTo(wA[0],H-30);g.stroke();g.setLineDash([]);g.globalAlpha=1;
+  }
+  curEdges.forEach(([a,b])=>{const na=nodeById(a),nb=nodeById(b);if(!na||!nb)return;const A=w2s(na.x,na.y),B=w2s(nb.x,nb.y);
+    const key=a+'>'+b;const lit=litEdges.has(key);
+    g.strokeStyle=lit?'#4fd6c4':'rgba(120,130,170,0.28)';g.lineWidth=lit?2.5:1;g.globalAlpha=lit?1:0.7;
+    g.beginPath();g.moveTo(A[0],A[1]);const mx=(A[0]+B[0])/2;g.bezierCurveTo(mx,A[1],mx,B[1],B[0],B[1]);g.stroke();g.globalAlpha=1;});
+  curNodes.forEach(n=>{const P=w2s(n.x,n.y);const col=kindColor[n.kind]||'#eaf0fb';
+    const lit=litNodes.has(n.id),sel=selN===n,hov=hoverN===n;const rw=76*Math.min(1.3,Math.max(0.75,view.s)),rh=27*Math.min(1.3,Math.max(0.75,view.s));
+    g.save();g.translate(P[0],P[1]);
+    g.fillStyle=lit?col:'rgba(8,12,26,0.92)';g.globalAlpha=lit?0.22:0.9;roundRect(g,-rw/2,-rh/2,rw,rh,7);g.fill();g.globalAlpha=1;
+    g.strokeStyle=sel?'#E3B458':(hov?'#fff':col);g.lineWidth=sel||lit?2:1.2;g.globalAlpha=lit||sel||hov?1:0.72;roundRect(g,-rw/2,-rh/2,rw,rh,7);g.stroke();g.globalAlpha=1;
+    g.fillStyle=col;g.font='600 9px "IBM Plex Mono"';g.textAlign='center';g.textBaseline='middle';wrap(g,n.label,0,0,rw-8,11);
+    // dive affordance dot
+    if(SUB[n.dive]||SUB[n.id]){g.fillStyle=col;g.globalAlpha=0.9;g.beginPath();g.arc(rw/2-6,-rh/2+6,2.2,0,6.28);g.fill();g.globalAlpha=1;}
+    g.restore();});
+}
+function roundRect(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+function wrap(g,t,x,y,maxw,lh){const words=t.split(' ');let line='',lines=[];
+  words.forEach(w=>{const test=line?line+' '+w:w;if(g.measureText(test).width>maxw&&line){lines.push(line);line=w;}else line=test;});
+  if(line)lines.push(line);const oy=-(lines.length-1)*lh/2;lines.forEach((l,i)=>g.fillText(l,x,y+oy+i*lh));}
+function pick(mx,my){for(const n of curNodes){const P=w2s(n.x,n.y);const rw=38*Math.min(1.3,Math.max(0.75,view.s)),rh=14*Math.min(1.3,Math.max(0.75,view.s));
+  if(Math.abs(mx-P[0])<rw&&Math.abs(my-P[1])<rh)return n;}return null;}
+
+/* info panel */
+function showInfo(n){const el=document.getElementById('info');el.style.display='block';const hasDive=!!(SUB[n.dive]||SUB[n.id]);
+  el.innerHTML=`<div class="it">${n.label}</div><div class="ik">${zoneLabel(n)}</div><div class="ib">${n.role}</div>`+
+    (n.law&&n.law!=='—'?`<div class="law">⚖ ${n.law}</div>`:'')+
+    (hasDive?`<div class="descend" id="descend-btn" style="display:block">⤓ dive into this process</div>`:'');
+  if(hasDive){document.getElementById('descend-btn').onclick=()=>diveInto(n.dive||n.id);}}
+function zoneLabel(n){return n.zone==='bench'?'bench · dev host (never ships)':n.zone==='body'?'body · pure-Rust (shipped)':(n.zone==='gate'||n.zone==='wall')?'gate / boundary':n.zone==='stake'?'stakeholder view':'process step';}
+
+/* interaction */
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  if(dragging){if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)dragMoved=true;view.ox+=e.clientX-lx;view.oy+=e.clientY-ly;view.tox=view.ox;view.toy=view.oy;lx=e.clientX;ly=e.clientY;}
+  const n=pick(mx,my);hoverN=n;const hv=document.getElementById('hover');
+  if(n){hv.style.display='block';hv.style.left=(e.clientX+14)+'px';hv.style.top=(e.clientY+14)+'px';
+    const hasDive=!!(SUB[n.dive]||SUB[n.id]);
+    hv.innerHTML=`<b>${n.label}</b><br><span style="color:#5a6488">${zoneLabel(n)}</span>`+(hasDive?'<br><span style="color:#4fd6c4">right-click or double-click to dive ↓</span>':'<br>click for role + law');
+    cv.style.cursor='pointer';}
+  else{hv.style.display='none';cv.style.cursor=dragging?'grabbing':'grab';}});
+cv.addEventListener('mouseleave',()=>{hoverN=null;document.getElementById('hover').style.display='none';});
+cv.addEventListener('click',e=>{if(dragMoved)return;const r=cv.getBoundingClientRect();const n=pick(e.clientX-r.left,e.clientY-r.top);if(n){selN=n;showInfo(n);}});
+cv.addEventListener('dblclick',e=>{const r=cv.getBoundingClientRect();const n=pick(e.clientX-r.left,e.clientY-r.top);if(n&&(SUB[n.dive]||SUB[n.id]))diveInto(n.dive||n.id);});
+/* OUR right-click menu (prevent the browser's) */
+const ctx=document.getElementById('ctx');
+cv.addEventListener('contextmenu',e=>{e.preventDefault();const r=cv.getBoundingClientRect();const n=pick(e.clientX-r.left,e.clientY-r.top);
+  ctx.style.display='block';ctx.style.left=Math.min(e.clientX,innerWidth-220)+'px';ctx.style.top=Math.min(e.clientY,innerHeight-190)+'px';
+  if(n){const hasDive=!!(SUB[n.dive]||SUB[n.id]);
+    ctx.innerHTML=`<div class="hd"><div class="t">${n.label}</div><div class="s">${zoneLabel(n)}</div></div>`+
+      `<div class="act" data-a="info">◉ show role + law</div>`+
+      (hasDive?`<div class="act" data-a="dive">⤓ dive into process<span class="k">2×click</span></div>`:`<div class="act dim">⤓ no sub-process</div>`)+
+      `<div class="act" data-a="focus">⤢ focus / zoom to it</div>`;
+    ctx.querySelectorAll('.act').forEach(a=>a.onclick=()=>{const act=a.dataset.a;
+      if(act==='info'){selN=n;showInfo(n);}else if(act==='dive'){diveInto(n.dive||n.id);}else if(act==='focus'){focusNode(n);}ctx.style.display='none';});
+  } else {
+    ctx.innerHTML=`<div class="hd"><div class="t">${level==='realm'?'The Realm':'Sub-process'}</div><div class="s">right-click a node to dive</div></div>`+
+      `<div class="act" data-a="fit">⤢ fit to view</div>`+(level!=='realm'?`<div class="act" data-a="up">▲ back to realm</div>`:'');
+    ctx.querySelectorAll('.act').forEach(a=>a.onclick=()=>{if(a.dataset.a==='fit')fit(curNodes);else enterRealm();ctx.style.display='none';});
+  }});
+addEventListener('click',e=>{if(!ctx.contains(e.target))ctx.style.display='none';});
+function focusNode(n){view.ts=Math.min(2.4,view.s*1.8);const P=w2s(n.x,n.y);view.tox=W/2-(P[0]-view.ox);view.toy=(H/2)-(P[1]-view.oy);}
+cv.addEventListener('mousedown',e=>{if(e.button!==0)return;dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  const f=Math.exp(-Math.sign(e.deltaY)*0.1);const ns=Math.max(0.4,Math.min(3.2,view.s*f));
+  view.ox=mx-(mx-view.ox)*(ns/view.s);view.oy=my-(my-view.oy)*(ns/view.s);view.s=ns;view.ts=ns;view.tox=view.ox;view.toy=view.oy;},{passive:false});
+
+/* controls */
+document.getElementById('fit-btn').onclick=()=>fit(curNodes);
+document.getElementById('up-btn').onclick=()=>enterRealm();
+document.getElementById('play-btn').onclick=()=>{if(level!=='realm')enterRealm();playing=!playing;document.getElementById('play-btn').classList.toggle('on',playing);
+  document.getElementById('journeybar').style.display=playing?'block':'none';
+  if(playing){journeyIdx=-1;journeyTimer=0;litNodes.clear();litEdges.clear();stepJourney();}else{litNodes.clear();litEdges.clear();}};
+function stepJourney(){journeyIdx++;if(journeyIdx>=JOURNEY.length){playing=false;document.getElementById('play-btn').classList.remove('on');return;}
+  const j=JOURNEY[journeyIdx];litNodes.add(j.node);
+  if(journeyIdx>0)litEdges.add(JOURNEY[journeyIdx-1].node+'>'+j.node);
+  const jb=document.getElementById('journeybar');const pc=j.prov==='derived'?'derived':j.prov==='sim'?'sim':j.prov==='admitted'?'admitted':j.prov==='stopped'?'stopped':'';
+  jb.innerHTML=`<div class="step">${j.step}${j.prov!=='—'?`<span class="prov ${pc}">${j.prov}</span>`:''}</div><div style="color:var(--ink-dim);margin-top:4px">${j.note}</div>`;
+  const n=nodeById(j.node);if(n){selN=n;showInfo(n);}}
+
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  view.s+=(view.ts-view.s)*Math.min(1,dt*6);view.ox+=(view.tox-view.ox)*Math.min(1,dt*6);view.oy+=(view.toy-view.oy)*Math.min(1,dt*6);
+  if(playing){journeyTimer+=dt;if(journeyTimer>2.4){journeyTimer=0;stepJourney();}}
+  document.getElementById('zoomind').innerHTML=`zoom <b>${view.s.toFixed(2)}×</b> · ${level==='realm'?'the realm':'inside '+level}`;
+  draw();}
+requestAnimationFrame(loop);
+addEventListener('resize',()=>{view._init=false;});
+
+document.getElementById('legend').innerHTML=`<div style="color:var(--gold);margin-bottom:4px">ZONES</div>`+
+ [['#b083e0','Bench (dev host)'],['#4fd6c4','Body (pure-Rust, shipped)'],['#e0776a','Gate / membrane'],['#7fb0e8','Stakeholder']]
+ .map(z=>`<div class="r"><span class="sw" style="background:${z[0]}"></span><b>${z[1]}</b></div>`).join('');
+enterRealm();
+</script></body></html>

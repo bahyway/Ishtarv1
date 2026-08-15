@@ -1,0 +1,218 @@
+# =============================================================================
+# PB-262 — Build a real, rebranded Godot 4.3 engine binary for BahyWay.Ecosystem
+# BahyWay.Ecosystem v4.0 — 2026-07-28
+#
+# WHY THIS EXISTS: PB-226 already made DubSar launch in "run" mode (no
+# editor chrome), which stopped the Godot Engine's editor icon/UI from
+# ever showing to a stakeholder. What PB-226 could NOT fix from
+# project.godot alone: the stock, unmodified Godot 4.3 engine binary
+# hardcodes the string "Godot" in THREE places that fire before or
+# alongside a project's own application/config/name --
+#   1. platform/linuxbsd/x11/display_server_x11.cpp's _update_context():
+#      WM_CLASS's res_name (the X11 "instance" component) was
+#      unconditionally "Godot_Engine" for every running project,
+#      regardless of context -- unlike res_class right next to it, which
+#      already respected config_name. Some window managers and remote
+#      viewers key off res_name.
+#   2. Same file, window creation: XStoreName(...) set the window's
+#      INITIAL titlebar text to the literal string "Godot" the instant
+#      the X11 window is created -- before any script or higher-level
+#      engine code has run, i.e. exactly the brief flash a stakeholder
+#      sees before login.tscn's own content paints.
+#   3. platform/linuxbsd/wayland/display_server_wayland.cpp: the same
+#      "Godot" initial-title hardcode, for the Wayland backend.
+# All three were found and verified against this playbook's own clone of
+# the REAL godotengine/godot 4.3-stable source (not guessed from a
+# generic tutorial) -- see the exact before/after in patch_engine_source
+# below. Wayland's app_id (display_server_wayland.cpp's
+# _get_app_id_from_context) was checked too and already correctly uses
+# application/config/name for CONTEXT_ENGINE -- no patch needed there.
+#
+# WHAT THIS PLAYBOOK DOES (run once; the compiled binary is reused by
+# PB-226 forever after, with zero changes to PB-226 itself):
+#   1. Shallow-clones godotengine/godot at the 4.3-stable tag into
+#      engine_src_dir (a sibling build directory, NOT committed into
+#      this repo -- engine source doesn't belong in a project git repo).
+#   2. Applies the three exact source patches above via a Python script
+#      with literal, verified anchor strings -- fails loudly, not
+#      silently, if any anchor doesn't match (e.g. a future Godot
+#      version moved the code).
+#   3. Compiles the full editor-capable binary via SCons
+#      (platform=linuxbsd target=editor -- PB-226's "run" mode launches
+#      via a bare `--path`, which requires the full editor binary, not
+#      an export template).
+#   4. Installs the compiled binary to install_path (default
+#      /usr/local/bin/godot4) -- PB-226's own Godot-discovery logic
+#      already checks `godot4` on PATH FIRST, before Flatpak/$HOME
+#      search/system paths, so this is picked up automatically with NO
+#      changes to PB-226 or any launcher script. "Download once" (the
+#      clone), "build once" (this playbook), "serve forever" (PB-226
+#      just finds it from now on).
+#
+# COST, HONESTLY: this compiles the entire Godot engine from source.
+# Expect a multi-hundred-MB source clone, several GB of scratch space
+# during compilation, and (highly hardware-dependent) anywhere from
+# ~20 minutes on a fast many-core machine to well over an hour on a
+# modest one. This is real work, not a config tweak -- run it once, on
+# a machine with room and time, and never again.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo):
+#   ansible-playbook playbooks/playbook_262_build_rebranded_godot_engine.yml
+#   ansible-playbook playbooks/playbook_262_build_rebranded_godot_engine.yml -e install_path=/usr/local/bin/godot4
+#   ansible-playbook playbooks/playbook_262_build_rebranded_godot_engine.yml -e jobs=8
+# =============================================================================
+
+- name: "PB-262 -- Build a rebranded Godot 4.3 engine binary"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    engine_src_dir: "{{ ansible_env.HOME }}/Forge/godot-dubsar-engine"
+    godot_tag: "4.3-stable"
+    install_path: "/usr/local/bin/godot4"
+    jobs: "{{ ansible_facts['processor_vcpus'] | default(4) }}"
+    build_log: "/tmp/pb262_godot_build.log"
+
+  tasks:
+    # ── 0. Preflight ─────────────────────────────────────────────────
+    - name: "Check required build tools"
+      ansible.builtin.command: "which {{ item }}"
+      register: tool_check
+      failed_when: false
+      changed_when: false
+      loop: [git, scons, python3, g++, pkg-config]
+
+    - name: "Detect package manager for an accurate install hint"
+      ansible.builtin.set_fact:
+        pkg_install_hint: >-
+          {{
+            'sudo dnf install -y scons gcc-c++ pkgconf-pkg-config libX11-devel libXcursor-devel libXinerama-devel libXrandr-devel libXi-devel mesa-libGL-devel mesa-libGLU-devel alsa-lib-devel pulseaudio-libs-devel systemd-devel wayland-devel wayland-protocols-devel'
+            if ansible_facts['pkg_mgr'] == 'dnf'
+            else 'sudo apt-get install -y build-essential scons pkg-config libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev libudev-dev libwayland-dev wayland-protocols'
+          }}
+
+    - name: "Fail clearly if any required tool is missing"
+      ansible.builtin.fail:
+        msg: >-
+          Missing build tool: {{ item.item }}. Install it first:
+          {{ pkg_install_hint }}
+      loop: "{{ tool_check.results }}"
+      when: item.rc != 0
+
+    - name: "Warn about disk/time cost before starting"
+      ansible.builtin.debug:
+        msg: >-
+          About to clone godotengine/godot@{{ godot_tag }} into
+          {{ engine_src_dir }} and compile the full editor binary with
+          {{ jobs }} parallel jobs. This is a one-time, potentially
+          long (tens of minutes to a few hours) operation -- see this
+          playbook's header comment for the honest cost breakdown.
+
+    # ── 1. Clone the real engine source ─────────────────────────────
+    - name: "Check whether the engine source is already cloned"
+      ansible.builtin.stat:
+        path: "{{ engine_src_dir }}/.git"
+      register: engine_git_check
+
+    - name: "Ensure the parent directory exists"
+      ansible.builtin.file:
+        path: "{{ engine_src_dir | dirname }}"
+        state: directory
+        mode: "0755"
+      when: not engine_git_check.stat.exists
+
+    - name: "Shallow-clone godotengine/godot at {{ godot_tag }}"
+      ansible.builtin.git:
+        repo: "https://github.com/godotengine/godot.git"
+        dest: "{{ engine_src_dir }}"
+        version: "{{ godot_tag }}"
+        depth: 1
+      when: not engine_git_check.stat.exists
+
+    # ── 2. Apply the three verified rebrand patches ─────────────────
+    # PB-271 extracted this script's content into a real, shared file
+    # (workspace/bahyway_v4/godot/patch_engine_source.py) so this
+    # playbook and PB-271's assets-node Containerfile both COPY the
+    # exact same patch instead of each carrying their own copy, silently
+    # able to drift apart.
+    - name: "Write the rebrand patch script"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../workspace/bahyway_v4/godot/patch_engine_source.py"
+        dest: /tmp/pb262_patch_engine.py
+        mode: "0755"
+
+    - name: "Apply the rebrand patches"
+      ansible.builtin.command: "python3 /tmp/pb262_patch_engine.py {{ engine_src_dir }}"
+      register: patch_result
+      changed_when: "'OK:' in patch_result.stdout"
+      failed_when: patch_result.rc != 0
+
+    - name: "Show patch results"
+      ansible.builtin.debug:
+        msg: "{{ patch_result.stdout_lines }}"
+
+    # ── 3. Compile ────────────────────────────────────────────────────
+    # use_static_cpp=no: Godot's linuxbsd default (use_static_cpp=True,
+    # see platform/linuxbsd/detect.py) links -static-libgcc
+    # -static-libstdc++ for portability across machines. Confirmed live
+    # on eriduous-vdi: the full engine compiled clean (all source
+    # patches verified), then the final link failed --
+    # "/usr/bin/ld.bfd: cannot find -lstdc++" -- because Fedora 44's
+    # base toolchain doesn't ship the static libstdc++.a archive
+    # (a separate libstdc++-static package). Since this binary is
+    # installed straight to install_path on the SAME machine that
+    # compiled it and never needs to run anywhere else, static linking
+    # buys nothing here -- disabling it avoids a new root-owned package
+    # install and lets the binary link dynamically against the system's
+    # normal libstdc++.so, which is already present by definition.
+    - name: "Compile the engine (this is the long step)"
+      ansible.builtin.shell: >-
+        cd {{ engine_src_dir }} &&
+        scons platform=linuxbsd target=editor use_static_cpp=no -j{{ jobs }} > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      async: 21600
+      poll: 60
+
+    - name: "Fail clearly if the compile failed"
+      ansible.builtin.fail:
+        msg: >-
+          scons build failed (rc={{ build_result.rc }}). Full output in
+          {{ build_log }} -- check the last ~50 lines for the actual
+          compiler error before re-running.
+      when: build_result.rc != 0
+
+    # ── 4. Install ──────────────────────────────────────────────────
+    - name: "Find the compiled binary"
+      ansible.builtin.find:
+        paths: "{{ engine_src_dir }}/bin"
+        patterns: "godot.linuxbsd.editor.*"
+        file_type: file
+      register: compiled_binary
+
+    - name: "Fail clearly if no compiled binary was produced"
+      ansible.builtin.fail:
+        msg: >-
+          scons reported success but no godot.linuxbsd.editor.* binary
+          was found in {{ engine_src_dir }}/bin -- check {{ build_log }}.
+      when: compiled_binary.files | length == 0
+
+    - name: "Install the compiled binary to {{ install_path }}"
+      ansible.builtin.copy:
+        src: "{{ compiled_binary.files[0].path }}"
+        dest: "{{ install_path }}"
+        mode: "0755"
+        remote_src: true
+      become: true
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg:
+          - "PB-262 sealed."
+          - "Rebranded Godot 4.3 engine binary installed at {{ install_path }}."
+          - "PB-226's own binary-discovery already checks 'godot4' on PATH"
+          - "first -- nothing else needs to change. Just run PB-226 as usual"
+          - "from now on and it will use this binary automatically."
+          - "Engine source kept at {{ engine_src_dir }} in case a future"
+          - "Godot upgrade needs re-patching; safe to delete otherwise."

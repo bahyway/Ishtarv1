@@ -1,0 +1,181 @@
+# =====================================================================
+# PB-321 — GulaFederationEngine · Advisory API crate scaffold
+# BahyWay.Ecosystem v4.0 · Suite: GulaFederation (PB-321..PB-326)
+# Way of Work: run FROM the Fedora 44 HOST. Targets localhost only
+# (scaffolding). Ubuntu VDI is monitoring-only — never touched here.
+# Naming: GulaFederationEngine (extends spent Gula candidacy, GL-ORG-001).
+# Sealing of all names remains pending CSR-08 confirmation by DUB.SAR.
+# Role: read-only SUSA-gated advisory face. The phone NEVER touches
+# EnkiDB directly. Responses are Ed25519-signed + timestamped so the
+# client can prove non-tampering (NajafWay client model).
+# =====================================================================
+---
+- name: PB-321 GulaFederation advisory API scaffold
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    bahyway_root: "{{ playbook_dir }}/../workspace/bahyway_v4"  # FIXED 2026-08-15: was ansible_env.HOME + "/BahyWay.Ecosystem", a path that does not exist -- would have silently scaffolded an orphaned crate tree disconnected from the real Cargo workspace
+    crate_dir: "{{ bahyway_root }}/crates/gula-federation-advisory"
+    data_dir: "{{ bahyway_root }}/data/gula-federation"
+  tasks:
+    - name: Ensure crate and data directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crate_dir }}/src"
+        - "{{ data_dir }}"
+
+    - name: Write Cargo.toml
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name = "gula-federation-advisory"
+          version = "0.1.0"
+          edition = "2021"
+          description = "SUSA-gated read-only advisory face of GulaFederationEngine. Advisory-only (Namtila principle): never blocks, never reserves."
+
+          [dependencies]
+          axum = "0.7"
+          tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+          serde = { version = "1", features = ["derive"] }
+          serde_json = "1"
+          ed25519-dalek = { version = "2", features = ["rand_core"] }
+          rand = "0.8"
+          base64 = "0.22"
+          time = { version = "0.3", features = ["formatting"] }
+          tower-http = { version = "0.5", features = ["cors"] }
+
+    - name: Write src/main.rs
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/main.rs"
+        mode: "0644"
+        content: |
+          //! GulaFederationEngine — advisory face (SUSA boundary).
+          //! Read-only. Anonymous queries by design: no patient identity in
+          //! any request or log line (Najaf non-negotiables apply verbatim).
+          //! Every response is Ed25519-signed over its canonical JSON bytes.
+
+          use axum::{extract::{Path, State}, routing::get, Json, Router};
+          use base64::Engine as _;
+          use ed25519_dalek::{Signer, SigningKey};
+          use serde::{Deserialize, Serialize};
+          use std::{fs, net::SocketAddr, sync::Arc};
+
+          #[derive(Clone, Deserialize, Serialize)]
+          struct NodeStock {
+              node_id: String,
+              node_name: String,
+              node_kind: String,        // hospital_pharmacy | public_pharmacy | wholesale
+              lat: f64,
+              lon: f64,
+              open_24h: bool,
+              reported_qty: u32,
+              report_age_min: u32,      // staleness — shown honestly (epsilon)
+          }
+
+          #[derive(Serialize)]
+          struct Advisory {
+              medicine: String,
+              generated_utc: String,
+              // epsilon doctrine: admitting uncertainty is itself transparency
+              staleness_note: &'static str,
+              anchors: Vec<NodeStock>,
+          }
+
+          #[derive(Serialize)]
+          struct SealedAdvisory {
+              advisory: Advisory,
+              seal_alg: &'static str,
+              seal_b64: String,
+              verify_key_b64: String,
+          }
+
+          struct AppState {
+              key: SigningKey,
+              federation: Vec<(String, Vec<NodeStock>)>, // medicine -> nodes
+          }
+
+          fn load_federation(path: &str) -> Vec<(String, Vec<NodeStock>)> {
+              // Reads the synthetic federation read-model produced by PB-322.
+              let raw = fs::read_to_string(path).unwrap_or_else(|_| "[]".into());
+              serde_json::from_str(&raw).unwrap_or_default()
+          }
+
+          async fn advise(
+              Path(medicine): Path<String>,
+              State(st): State<Arc<AppState>>,
+          ) -> Json<SealedAdvisory> {
+              let needle = medicine.to_lowercase();
+              let mut anchors: Vec<NodeStock> = st
+                  .federation
+                  .iter()
+                  .filter(|(m, _)| m.to_lowercase().contains(&needle))
+                  .flat_map(|(_, nodes)| nodes.clone())
+                  .filter(|n| n.reported_qty > 0)
+                  .collect();
+              // Rank: fresh reports first, then quantity. Node character
+              // (24h, kind) is left to the client-side advisory weighting.
+              anchors.sort_by_key(|n| (n.report_age_min, u32::MAX - n.reported_qty));
+              anchors.truncate(8);
+
+              let advisory = Advisory {
+                  medicine,
+                  generated_utc: time::OffsetDateTime::now_utc()
+                      .format(&time::format_description::well_known::Rfc3339)
+                      .unwrap_or_default(),
+                  staleness_note: "reported stock, not a reservation — call or go and ask",
+                  anchors,
+              };
+              let canonical = serde_json::to_vec(&advisory).expect("canonical json");
+              let sig = st.key.sign(&canonical);
+              Json(SealedAdvisory {
+                  advisory,
+                  seal_alg: "Ed25519",
+                  seal_b64: base64::engine::general_purpose::STANDARD.encode(sig.to_bytes()),
+                  verify_key_b64: base64::engine::general_purpose::STANDARD
+                      .encode(st.key.verifying_key().to_bytes()),
+              })
+          }
+
+          #[tokio::main]
+          async fn main() {
+              let data = std::env::var("GULA_FEDERATION_JSON")
+                  .unwrap_or_else(|_| "federation_readmodel.json".into());
+              let key = SigningKey::generate(&mut rand::rngs::OsRng);
+              let state = Arc::new(AppState { key, federation: load_federation(&data) });
+              let app = Router::new()
+                  .route("/advisory/medicine/:name", get(advise))
+                  .with_state(state)
+                  .layer(tower_http::cors::CorsLayer::permissive());
+              let addr = SocketAddr::from(([0, 0, 0, 0], 7011));
+              println!("GulaFederation advisory (read-only, advisory-only) on {addr}");
+              let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+              axum::serve(listener, app).await.unwrap();
+          }
+
+    - name: Write crate README (governance clauses)
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/README.md"
+        mode: "0644"
+        content: |
+          # gula-federation-advisory
+          SUSA-gated advisory face of **GulaFederationEngine** (name pending CSR-08).
+          Non-negotiable clauses (Najaf annex, applied verbatim):
+          1. Offline-first federation — this service serves the last sealed read-model.
+          2. ABAC on node side; this face is anonymous and read-only.
+          3. Append-only evidence chain upstream; this face signs, never writes.
+          4. Advisory-only (Namtila principle): informs the patient, never gates care.
+          Port 7011 (outside the EnkiDB 7001–7007 band).
+
+    - name: Build check (DUB.SAR runs and debugs — this is the CSR-08 confirmation point)
+      ansible.builtin.command:
+        cmd: cargo build
+        chdir: "{{ crate_dir }}"
+      register: build_out
+      changed_when: true
+      failed_when: build_out.rc != 0

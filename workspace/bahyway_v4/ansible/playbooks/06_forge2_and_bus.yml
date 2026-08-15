@@ -1,0 +1,99 @@
+---
+# 𒁾 06_forge2_and_bus.yml
+# Rule 1: Run FROM HOST — targets eriduous-vdi
+- name: "𒁾 Forge2 + BeeMDM Bus — eriduous-vdi"
+  hosts: eriduous_vdi
+  become: false
+
+  vars:
+    remote_scripts: "/home/bahyway/scripts"
+    workspace:      "/home/bahyway/EnkiDB/workspace/bahyway_v4"
+    forge2_root:    "/home/bahyway/EnkiDB/workspace/bahyway_v4/forge2"
+    bus_crate:      "/home/bahyway/EnkiDB/workspace/bahyway_v4/crates/bee-mdm-bus"
+
+  tasks:
+
+    - name: "Verify eriduous-vdi workspace exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}"
+      register: ws
+
+    - name: "Fail if workspace missing on eriduous-vdi"
+      ansible.builtin.fail:
+        msg: "Workspace not found: {{ workspace }} — clone the repo first"
+      when: not ws.stat.exists
+
+    - name: "Create ~/scripts on eriduous-vdi"
+      ansible.builtin.file:
+        path: "{{ remote_scripts }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Copy forge2_eriduous_vdi.sh"
+      ansible.builtin.copy:
+        src:  "{{ playbook_dir }}/../scripts/forge2_eriduous_vdi.sh"
+        dest: "{{ remote_scripts }}/forge2_eriduous_vdi.sh"
+        mode: "0755"
+
+    - name: "Copy setup_bee_mdm_bus.sh"
+      ansible.builtin.copy:
+        src:  "{{ playbook_dir }}/../scripts/setup_bee_mdm_bus.sh"
+        dest: "{{ remote_scripts }}/setup_bee_mdm_bus.sh"
+        mode: "0755"
+
+    - name: "Check if forge2 already carved"
+      ansible.builtin.stat:
+        path: "{{ forge2_root }}/README.md"
+      register: forge2_check
+
+    - name: "Run forge2_eriduous_vdi.sh"
+      ansible.builtin.shell:
+        cmd: "bash {{ remote_scripts }}/forge2_eriduous_vdi.sh"
+        executable: /bin/bash
+      register: forge2_out
+      when: not forge2_check.stat.exists
+      changed_when: forge2_out.rc == 0
+
+    - name: "Forge2 output"
+      ansible.builtin.debug:
+        msg: "{{ forge2_out.stdout_lines | default(['already exists — skipped']) }}"
+
+    - name: "Check if bee-mdm-bus already exists"
+      ansible.builtin.stat:
+        path: "{{ bus_crate }}/src/lib.rs"
+      register: bus_check
+
+    - name: "Run setup_bee_mdm_bus.sh"
+      ansible.builtin.shell:
+        cmd: "bash {{ remote_scripts }}/setup_bee_mdm_bus.sh"
+        chdir: "{{ workspace }}"
+        executable: /bin/bash
+      register: bus_out
+      when: not bus_check.stat.exists
+      changed_when: bus_out.rc == 0
+
+    - name: "Bus script output"
+      ansible.builtin.debug:
+        msg: "{{ bus_out.stdout_lines | default(['already exists — skipped']) }}"
+
+    - name: "Verify draw_bus() exists in etl_flow.rs"
+      ansible.builtin.shell:
+        cmd: "grep -c 'fn draw_bus' {{ workspace }}/crates/dubsar-visualizer/src/panels/etl_flow.rs"
+        executable: /bin/bash
+      register: draw_bus_check
+      changed_when: false
+      failed_when: draw_bus_check.rc > 1
+
+    - name: "𒁾 Final report"
+      ansible.builtin.debug:
+        msg:
+          - "════════════════════════════════════════"
+          - "𒁾 eriduous-vdi setup COMPLETE"
+          - "Forge2:      {{ forge2_root }}"
+          - "Bus crate:   {{ bus_crate }}"
+          - "draw_bus():  {{ draw_bus_check.stdout }} match(es) in etl_flow.rs"
+          - ""
+          - "Next on eriduous-vdi:"
+          - "  WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan \\"
+          - "  cargo run --bin dubsar-visualizer"
+          - "════════════════════════════════════════"

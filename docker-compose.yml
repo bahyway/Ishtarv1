@@ -1,0 +1,65 @@
+services:
+  # The Primary Rust Development Engine
+  rustlab:
+    build: .
+    container_name: bahyway_rust_compiler
+    volumes:
+      # CHANGE: Map the entire root (.) instead of just the workspace folder
+      - .:/workspace
+      - cargo_cache:/usr/local/cargo/registry
+    working_dir: /workspace # Set the default entry point to the root
+    environment:
+      - DATABASE_URL=postgres://bdb_admin:sovereign_pass@bdbway_db:5432/bahyway_db
+      - RUSTFLAGS=-C link-arg=-fuse-ld=lld
+    stdin_open: true
+    tty: true
+    networks:
+      - bahyway_network
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+
+  # The MetaWay UI
+  metaway:
+    build:
+      context: ../bahyway-metaway
+      dockerfile: Dockerfile
+    container_name: bahyway_metaway_ui
+    ports:
+      - "5173:5173"
+    env_file:
+      - .env
+    environment:
+      - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
+      - VITE_BDBWAY_URL=http://bdbway_postgres:5432
+    volumes:
+      - ../bahyway-metaway:/app
+      - /app/node_modules
+    networks:
+      - bahyway_network
+    depends_on:
+      - bdbway_db
+
+  # The BDBWay Production Database Instance
+  bdbway_db:
+    image: postgres:16
+    container_name: bdbway_postgres
+    environment:
+      - POSTGRES_USER=bdb_admin
+      - POSTGRES_PASSWORD=sovereign_pass
+      - POSTGRES_DB=bahyway_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - bahyway_network
+
+networks:
+  bahyway_network:
+    driver: bridge
+
+volumes:
+  cargo_cache:
+  pg_data:

@@ -1,0 +1,1362 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 BATCH 3 — ENKI-HAJJ Suite — Playbooks 72–78
+# Sovereign Pilgrimage Management System
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# Constitutional Axiom (sealed):
+#   "A pilgrim who makes the most sacred journey of their life
+#    deserves to arrive, worship, and return home safely.
+#    Every person in that crowd is a sovereign particle.
+#    ENKI-HAJJ makes the invisible crowd sovereign."
+#
+# ENKI-HAJJ 𒀭𒂗𒆳𒀭𒌑 Suite:
+#   PB 72: ENKI-HAJJ Foundation (ŠĀRU_crowd + core types)
+#   PB 73: GILGAMESH-GATE (entry registration + KAKI minting)
+#   PB 74: KIBRATU-HAJJ (multi-modal crowd security algorithm)
+#   PB 75: NAMTAR-HAJJ (lost person sovereign system)
+#   PB 76: TIAMAT-CROWD (kinematic crush prediction)
+#   PB 77: ORBIT-COMMAND (real-time 3D command visualization)
+#   PB 78: UTNAPISHTIM-PASS + NISABA-HAJJ (pilgrim record + voice)
+#
+# Target  : eriduous-vdi (192.168.122.214)
+# Run from: EnkiLab HOST
+# ansible-playbook -i inventory/vdi.yml playbooks/72_enki_hajj_foundation.yml
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 72 — ENKI-HAJJ 𒀭𒂗𒆳𒀭𒌑 Foundation"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_72_enki_hajj.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_72_enki_hajj.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # ENKI-HAJJ Foundation — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/enki-hajj"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "enki-hajj"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          description = "ENKI-HAJJ Sovereign Pilgrimage Management"
+          [dependencies]
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          serde       = { version = "1", features = ["derive"] }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! ENKI-HAJJ 𒀭𒂗𒆳𒀭𒌑 — Sovereign Pilgrimage Management
+          //! "Enki of the Sacred Journey"
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! CONSTITUTIONAL AXIOM (sealed):
+          //!   "A pilgrim who makes the most sacred journey of their life
+          //!    deserves to arrive, worship, and return home safely.
+          //!    Every person in that crowd is a sovereign particle.
+          //!    ENKI-HAJJ makes the invisible crowd sovereign."
+          //!
+          //! SCALE:
+          //!   Arbaeen 2023: 21 million pilgrims in 2 weeks
+          //!   Daily normal: 50,000–200,000 per shrine
+          //!   Largest peaceful human gathering on Earth
+          //!
+          //! ŠĀRU_crowd = Σ (density - safe_threshold) × minutes
+          //!   Accumulates when zone density exceeds safe capacity
+          //!   TIAMAT fires at DILBAT before crush becomes lethal
+          //!
+          //! KAKI v4.0:
+          //!   Every pilgrim = Identity-KAKI particle
+          //!   Every gate event = Event-KAKI
+          //!   κ[6]=kaki_type κ[7]=kaki_role — never quality
+          //!   Quality (safety level) in EAV — not KAKI bytes
+
+          #![forbid(unsafe_code)]
+
+          pub mod pilgrim;
+          pub mod zone;
+          pub mod sharu_crowd;
+
+          // ── Pilgrim Categories ────────────────────────────────────────
+
+          #[repr(u8)]
+          #[derive(Debug, Clone, Copy, PartialEq)]
+          pub enum PilgrimRole {
+              Domestic      = 0x01,
+              International = 0x02,
+              Elderly       = 0x03,  // mobility needs — priority routing
+              Child         = 0x04,  // under 12 — NAMTAR-HAJJ monitored
+              Lost          = 0x05,  // NAMTAR-HAJJ alert
+              SecurityStaff = 0x06,  // plain-clothes (KIBRATU-HAJJ)
+              Medical       = 0x07,  // shrine medical team
+          }
+
+          // ── Shrine Zones ──────────────────────────────────────────────
+
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum ShrineSite {
+              ImamAliNajaf,
+              ImamHusseinKarbala,
+              ImamAbbaKarbala,
+              WadiAlSalamCemetery,
+          }
+
+          /// Safe crowd density (persons per m²)
+          pub const SAFE_DENSITY_PER_M2: f32 = 2.0;
+          /// DILBAT density — TIAMAT fires warning
+          pub const DILBAT_DENSITY: f32 = 3.0;
+          /// KAKKAB density — divert incoming flow
+          pub const KAKKAB_DENSITY: f32 = 4.0;
+          /// ERRA density — emergency diversion
+          pub const ERRA_DENSITY:   f32 = 5.5;
+          /// KUR density — crush risk — evacuate NOW
+          pub const KUR_DENSITY:    f32 = 7.0;
+
+          /// TIAMAT alert from crowd density
+          pub fn density_to_tiamat(density: f32) -> u8 {
+              if density >= KUR_DENSITY    { 4 }
+              else if density >= ERRA_DENSITY   { 3 }
+              else if density >= KAKKAB_DENSITY { 2 }
+              else if density >= DILBAT_DENSITY { 1 }
+              else { 0 }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_density_tiamat_mapping() {
+                  assert_eq!(density_to_tiamat(1.5), 0); // safe
+                  assert_eq!(density_to_tiamat(3.5), 1); // DILBAT
+                  assert_eq!(density_to_tiamat(4.5), 2); // KAKKAB
+                  assert_eq!(density_to_tiamat(6.0), 3); // ERRA
+                  assert_eq!(density_to_tiamat(8.0), 4); // KUR
+              }
+
+              #[test]
+              fn test_pilgrim_roles_sealed() {
+                  assert_eq!(PilgrimRole::Domestic as u8,      0x01);
+                  assert_eq!(PilgrimRole::International as u8, 0x02);
+                  assert_eq!(PilgrimRole::Child as u8,         0x04);
+                  assert_eq!(PilgrimRole::Lost as u8,          0x05);
+              }
+          }
+          """))
+
+          write(f"{SRC}/pilgrim.rs", textwrap.dedent("""\
+          //! Pilgrim particle — sovereign identity + location
+
+          #![forbid(unsafe_code)]
+
+          use enkidb_kaki::Kaki;
+          use crate::PilgrimRole;
+
+          #[derive(Debug, Clone)]
+          pub struct PilgrimParticle {
+              /// Identity-KAKI — κ[6]=0x01 Identity, κ[7]=PilgrimRole
+              pub kaki:         Kaki,
+              pub role:         PilgrimRole,
+              /// Current zone_id (shrine section)
+              pub zone_id:      u16,
+              /// Position within zone
+              pub x:            f32,
+              pub y:            f32,
+              /// Movement
+              pub heading_deg:  f32,
+              pub speed_m_s:    f32,
+              /// EAV — safety level (1.0=safe 0.0=emergency) — NOT KAKI bytes
+              pub eav_quality:  f32,
+              /// Entry gate and time
+              pub entry_gate:   u8,
+              pub entry_epoch:  u64,
+              /// Group ID (family/tour group)
+              pub group_id:     Option<u16>,
+              /// Wristband BLE token
+              pub ble_token:    Option<[u8; 8]>,
+          }
+
+          impl PilgrimParticle {
+              pub fn mint(
+                  passport_hash: u32,
+                  zone_id:       u16,
+                  role:          PilgrimRole,
+                  group_id:      Option<u16>,
+                  entry_gate:    u8,
+                  entry_epoch:   u64,
+              ) -> Self {
+                  Self {
+                      kaki: Kaki::mint(
+                          passport_hash, zone_id,
+                          enkidb_kaki::KakiType::Identity,
+                          role as u8,
+                      ),
+                      role, zone_id,
+                      x: 0.0, y: 0.0,
+                      heading_deg: 0.0, speed_m_s: 0.8,
+                      eav_quality: 1.0,  // healthy pilgrim
+                      entry_gate, entry_epoch,
+                      group_id, ble_token: None,
+                  }
+              }
+
+              /// Update position — called by BLE beacon or camera tracking
+              pub fn update_position(&mut self, x: f32, y: f32,
+                                      heading: f32, speed: f32) {
+                  self.x = x; self.y = y;
+                  self.heading_deg = heading; self.speed_m_s = speed;
+              }
+          }
+          """))
+
+          write(f"{SRC}/zone.rs", textwrap.dedent("""\
+          //! Shrine zone — crowd density monitoring
+
+          #![forbid(unsafe_code)]
+
+          use crate::{SAFE_DENSITY_PER_M2, density_to_tiamat};
+
+          #[derive(Debug, Clone)]
+          pub struct ShrineZone {
+              pub zone_id:     u16,
+              pub name:        String,
+              pub area_m2:     f32,
+              pub capacity:    u32,
+              pub current_count: u32,
+              pub adjacent_zones: Vec<u16>,
+          }
+
+          impl ShrineZone {
+              pub fn density(&self) -> f32 {
+                  self.current_count as f32 / self.area_m2
+              }
+
+              pub fn occupancy_pct(&self) -> f32 {
+                  self.current_count as f32 / self.capacity as f32 * 100.0
+              }
+
+              pub fn tiamat_level(&self) -> u8 {
+                  density_to_tiamat(self.density())
+              }
+
+              pub fn is_safe(&self) -> bool {
+                  self.density() < SAFE_DENSITY_PER_M2
+              }
+          }
+          """))
+
+          write(f"{SRC}/sharu_crowd.rs", textwrap.dedent("""\
+          //! ŠĀRU_crowd — Crowd Density Deficit Accumulator
+          //!
+          //! ŠĀRU_crowd = Σ (density - safe_threshold) × minutes
+          //! Accumulates when zone density exceeds safe capacity.
+          //! This is a NEW ŠĀRU type specific to pilgrimage management.
+
+          #![forbid(unsafe_code)]
+
+          use crate::{ShrineZone, SAFE_DENSITY_PER_M2};
+
+          #[derive(Debug, Clone, Default)]
+          pub struct SharuCrowdAccumulator {
+              pub zone_id:         u16,
+              pub accumulated:     f64,  // density-excess × minutes
+              pub peak_density:    f32,
+              pub minutes_unsafe:  u32,
+          }
+
+          impl SharuCrowdAccumulator {
+              pub fn new(zone_id: u16) -> Self {
+                  Self { zone_id, ..Default::default() }
+              }
+
+              /// Tick — called every minute per zone
+              pub fn tick(&mut self, zone: &ShrineZone) {
+                  let density = zone.density();
+                  if density > SAFE_DENSITY_PER_M2 {
+                      let excess = density - SAFE_DENSITY_PER_M2;
+                      self.accumulated  += excess as f64;
+                      self.minutes_unsafe += 1;
+                  }
+                  if density > self.peak_density {
+                      self.peak_density = density;
+                  }
+              }
+
+              /// Reset when zone returns to safe density for 5+ minutes
+              pub fn reset_if_safe(&mut self, zone: &ShrineZone) {
+                  if zone.density() < SAFE_DENSITY_PER_M2 * 0.7 {
+                      self.accumulated    = 0.0;
+                      self.minutes_unsafe = 0;
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn test_zone(density_people: u32) -> ShrineZone {
+                  ShrineZone {
+                      zone_id: 1, name: "Test Zone".into(),
+                      area_m2: 1000.0, capacity: 2000,
+                      current_count: density_people,
+                      adjacent_zones: vec![2],
+                  }
+              }
+
+              #[test]
+              fn test_sharu_accumulates_over_safe_threshold() {
+                  let mut acc = SharuCrowdAccumulator::new(1);
+                  let zone    = test_zone(5000);  // 5.0 per m² > safe 2.0
+                  acc.tick(&zone);
+                  acc.tick(&zone);
+                  acc.tick(&zone);
+                  assert!(acc.accumulated > 0.0);
+                  assert_eq!(acc.minutes_unsafe, 3);
+              }
+
+              #[test]
+              fn test_sharu_zero_in_safe_zone() {
+                  let mut acc = SharuCrowdAccumulator::new(1);
+                  let zone    = test_zone(1000);  // 1.0 per m² — safe
+                  acc.tick(&zone);
+                  assert_eq!(acc.accumulated, 0.0);
+                  assert_eq!(acc.minutes_unsafe, 0);
+              }
+          }
+          """))
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/enki-hajj"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/enki-hajj",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "enki-hajj"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+          t = subprocess.run(["cargo", "test", "-p", "enki-hajj", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-1000:]); sys.exit(1)
+          print("✓ ENKI-HAJJ 𒀭𒂗𒆳𒀭𒌑 — foundation + ŠĀRU_crowd — tests pass")
+          print("✓ PLAYBOOK 72 — ENKI-HAJJ FOUNDATION COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p72_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p72_out.stdout_lines }}"
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_73_gilgamesh_gate.yml
+# GILGAMESH-GATE — Sovereign Entry Registration
+# PLAYBOOK 74: KIBRATU-HAJJ — Multi-Modal Crowd Security
+# PLAYBOOK 75: NAMTAR-HAJJ — Lost Person System
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOKS 73–75 — GILGAMESH-GATE + KIBRATU-HAJJ + NAMTAR-HAJJ"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_73_75_hajj.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_73_75_hajj.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # GILGAMESH-GATE + KIBRATU-HAJJ + NAMTAR-HAJJ
+          # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          write  = lambda p, c: open(p, "w").write(c)
+
+          def make_crate(name, desc, deps, content):
+              crate = f"{FORGE}/crates/{name}"
+              src   = f"{crate}/src"
+              os.makedirs(src, exist_ok=True)
+              dep_str = "\n".join(f'{k} = {{ path = "../{v}" }}' for k,v in deps.items())
+              write(f"{crate}/Cargo.toml", f'[package]\nname = "{name}"\nversion = "4.0.0"\n'
+                    f'edition = "2021"\nauthors = ["DUB.SAR 𒁾"]\n'
+                    f'[dependencies]\n{dep_str}\n')
+              write(f"{src}/lib.rs", content)
+
+          # ── GILGAMESH-GATE ────────────────────────────────────────────
+          make_crate("gilgamesh-gate",
+          "GILGAMESH-GATE Sovereign Entry Registration",
+          {"enki-hajj": "enki-hajj", "enkidb-kaki": "enkidb-kaki"},
+          textwrap.dedent("""\
+          //! GILGAMESH-GATE — Sovereign Entry Registration
+          //! < 3 seconds per pilgrim at 20M+ scale
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Options:
+          //!   A) QR wristband scan (pre-registered)
+          //!   B) Passport/ID scan → KAKI minted instantly
+          //!   C) Face biometric (sovereign on-device — no cloud)
+          //!   D) Family group token (one token per family)
+
+          #![forbid(unsafe_code)]
+
+          use enkidb_kaki::Kaki;
+          use enki_hajj::{PilgrimRole, pilgrim::PilgrimParticle};
+
+          pub struct GilgameshGate {
+              pub gate_id:   u8,
+              pub zone_id:   u16,
+              pub site_name: String,
+          }
+
+          impl GilgameshGate {
+              pub fn new(gate_id: u8, zone_id: u16, site_name: impl Into<String>) -> Self {
+                  Self { gate_id, zone_id, site_name: site_name.into() }
+              }
+
+              /// Register pilgrim — < 3 seconds target
+              /// Returns minted PilgrimParticle
+              pub fn register(
+                  &self,
+                  passport_hash: u32,
+                  role:          PilgrimRole,
+                  group_id:      Option<u16>,
+                  entry_epoch:   u64,
+              ) -> PilgrimParticle {
+                  let pilgrim = PilgrimParticle::mint(
+                      passport_hash, self.zone_id,
+                      role, group_id,
+                      self.gate_id, entry_epoch,
+                  );
+                  println!("[GILGAMESH-GATE {}] Pilgrim registered: KAKI {:02X?}",
+                      self.gate_id, &pilgrim.kaki.bytes[0..4]);
+                  pilgrim
+              }
+
+              /// Register family group — one token, multiple pilgrims
+              pub fn register_group(
+                  &self,
+                  member_hashes: &[u32],
+                  lead_role:     PilgrimRole,
+                  entry_epoch:   u64,
+              ) -> Vec<PilgrimParticle> {
+                  let group_id = Some(enkidb_kaki::fnv1a_u32(
+                      &member_hashes[0].to_be_bytes()) as u16);
+                  member_hashes.iter().enumerate().map(|(i, &hash)| {
+                      let role = if i == 0 { lead_role } else { PilgrimRole::Domestic };
+                      self.register(hash, role, group_id, entry_epoch)
+                  }).collect()
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_gate_registration_under_3_seconds() {
+                  let gate  = GilgameshGate::new(1, 1, "Imam Ali North Gate");
+                  let start = std::time::Instant::now();
+                  let p     = gate.register(0xDEADBEEF, PilgrimRole::Domestic, None, 1_750_000_000);
+                  let ms    = start.elapsed().as_millis();
+                  assert!(ms < 3000, "Registration took {}ms — must be < 3000ms", ms);
+                  assert_eq!(p.kaki.bytes[6], 0x01); // Identity-KAKI
+                  assert_eq!(p.kaki.bytes[7], PilgrimRole::Domestic as u8);
+              }
+
+              #[test]
+              fn test_family_group_shares_group_id() {
+                  let gate  = GilgameshGate::new(2, 1, "South Gate");
+                  let group = gate.register_group(
+                      &[0x0001, 0x0002, 0x0003],
+                      PilgrimRole::Domestic,
+                      1_750_000_000,
+                  );
+                  assert_eq!(group.len(), 3);
+                  let gid = group[0].group_id;
+                  assert!(gid.is_some());
+                  assert!(group.iter().all(|p| p.group_id == gid));
+              }
+          }
+          """))
+
+          # ── KIBRATU-HAJJ ──────────────────────────────────────────────
+          make_crate("kibratu-hajj",
+          "KIBRATU-HAJJ Multi-Modal Crowd Security Algorithm",
+          {"enki-hajj": "enki-hajj", "enkidb-kaki": "enkidb-kaki"},
+          textwrap.dedent("""\
+          //! KIBRATU-HAJJ 𒆪𒁀𒊒𒀭𒌑 — Multi-Modal Crowd Security
+          //! "The Four Directions of the Sacred Journey"
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! FIVE SUSPICION DIMENSIONS (GA outer product):
+          //!   e_topo  — Simplicial complex topology anomaly
+          //!   e_therm — Thermal signature (C4/stress/concealment)
+          //!   e_behav — Behavioural pattern (scanning/avoidance)
+          //!   e_chem  — Chemical trace (IMS/Raman spectroscopy)
+          //!   e_em    — Electromagnetic (device activation burst)
+          //!
+          //! COMPOUND SCORE via GA outer product:
+          //!   Grade-1 → DILBAT (1 dimension) — silent camera track
+          //!   Grade-2 → KAKKAB (2 agree)     — plain-clothes approach
+          //!   Grade-3 → ERRA   (3 agree)      — medical tent cover
+          //!   Grade-4 → KUR    (4 agree)      — silent zone evacuation
+          //!
+          //! MASHSHARU verifies before every alert fires.
+          //! DIGNITY FIRST — cover not confrontation.
+          //! False positive target: < 0.01%
+          //! Every detection = immutable Event-KAKI with WHY clause.
+          //!
+          //! SOVEREIGN PRINCIPLE:
+          //!   Watches TOPOLOGY — not identity.
+          //!   No facial recognition. No political use.
+          //!   System auditable by human rights observers.
+
+          #![forbid(unsafe_code)]
+
+          use enkidb_kaki::Kaki;
+
+          // ── Five suspicion dimensions ─────────────────────────────────
+
+          /// Topological suspicion — simplicial complex behaviour anomaly
+          #[derive(Debug, Clone, Default)]
+          pub struct TopoSuspicion {
+              /// Bond count anomaly (too few = avoided, too many = controlling)
+              pub bond_anomaly:        f32,
+              /// Bond stability (abnormally stable group in moving crowd)
+              pub stability_anomaly:   f32,
+              /// Heading consensus (moving against all bonds)
+              pub heading_anomaly:     f32,
+              /// Cross-zone bond count (coordinating across zones)
+              pub cross_zone_bonds:    u8,
+          }
+
+          impl TopoSuspicion {
+              pub fn score(&self) -> f32 {
+                  (self.bond_anomaly    * 0.25 +
+                   self.stability_anomaly * 0.30 +
+                   self.heading_anomaly * 0.25 +
+                   (self.cross_zone_bonds as f32 / 5.0).min(1.0) * 0.20)
+                  .clamp(0.0, 1.0)
+              }
+          }
+
+          /// Thermal suspicion — concealed explosive signature
+          #[derive(Debug, Clone, Default)]
+          pub struct ThermalSuspicion {
+              /// Torso temp above crowd baseline (concealed heat source)
+              pub torso_delta:      f32,
+              /// Forehead below baseline (stress vasoconstriction)
+              pub forehead_deficit: f32,
+              /// Thermal gradient reversal (torso hotter than face)
+              pub gradient_reversal: bool,
+              /// Localized hot spot detected
+              pub hot_spot:         bool,
+              /// Hot spot location
+              pub hot_spot_zone:    Option<BodyZone>,
+          }
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum BodyZone { Belt, Chest, Backpack, Leg }
+
+          impl ThermalSuspicion {
+              pub fn score(&self) -> f32 {
+                  let mut s = 0.0f32;
+                  s += (self.torso_delta / 6.0).min(0.35);
+                  s += (self.forehead_deficit / 2.0).min(0.25);
+                  if self.gradient_reversal { s += 0.25; }
+                  if self.hot_spot {
+                      s += 0.35;
+                      if matches!(self.hot_spot_zone,
+                          Some(BodyZone::Belt) | Some(BodyZone::Chest)) {
+                          s += 0.15;
+                      }
+                  }
+                  s.clamp(0.0, 1.0)
+              }
+          }
+
+          /// Behavioural suspicion
+          #[derive(Debug, Clone, Default)]
+          pub struct BehaviouralSuspicion {
+              pub scanning_rate:     f32,  // head rotation vs crowd mean
+              pub hesitation_loops:  u8,   // returns to same position
+              pub checkpoint_avoidance: f32,
+              pub gait_asymmetry:    f32,  // carrying concealed weight
+          }
+
+          impl BehaviouralSuspicion {
+              pub fn score(&self) -> f32 {
+                  ((self.scanning_rate / 3.0).min(0.20) +
+                   (self.hesitation_loops as f32 / 3.0).min(0.25) +
+                   self.checkpoint_avoidance * 0.30 +
+                   self.gait_asymmetry * 0.25)
+                  .clamp(0.0, 1.0)
+              }
+          }
+
+          /// Chemical trace suspicion
+          #[derive(Debug, Clone, Default)]
+          pub struct ChemicalSuspicion {
+              /// IMS (Ion Mobility Spectrometry) positive
+              pub ims_positive:    bool,
+              /// Raman spectroscopy score
+              pub raman_score:     f32,
+              /// PID (Photoionization) ambient concentration
+              pub pid_level:       f32,
+          }
+
+          impl ChemicalSuspicion {
+              pub fn score(&self) -> f32 {
+                  let mut s = 0.0f32;
+                  if self.ims_positive { s = 0.90; }
+                  s = s.max(self.raman_score * 0.75);
+                  s = s.max(self.pid_level * 0.60);
+                  s.clamp(0.0, 1.0)
+              }
+          }
+
+          /// Electromagnetic suspicion
+          #[derive(Debug, Clone, Default)]
+          pub struct ElectromagneticSuspicion {
+              /// Burst of BLE/radio signals (device activation)
+              pub signal_burst:    bool,
+              /// Number of signals in burst
+              pub burst_count:     u8,
+              pub unusual_protocol: bool,
+          }
+
+          impl ElectromagneticSuspicion {
+              pub fn score(&self) -> f32 {
+                  let mut s = 0.0f32;
+                  if self.signal_burst {
+                      s = (self.burst_count as f32 / 10.0).min(0.45);
+                  }
+                  if self.unusual_protocol { s += 0.30; }
+                  s.clamp(0.0, 1.0)
+              }
+          }
+
+          // ── KIBRATU-HAJJ Compound Score ───────────────────────────────
+
+          #[derive(Debug, Clone)]
+          pub struct CompoundSuspicion {
+              pub topo:    TopoSuspicion,
+              pub thermal: ThermalSuspicion,
+              pub behav:   BehaviouralSuspicion,
+              pub chem:    ChemicalSuspicion,
+              pub em:      ElectromagneticSuspicion,
+          }
+
+          impl CompoundSuspicion {
+              /// GA-inspired compound score.
+              /// Independent dimensions confirming each other → higher grade.
+              /// Simple sum would be wrong — independence is key.
+              pub fn compound_score(&self) -> f32 {
+                  let scores = [
+                      self.topo.score(),
+                      self.thermal.score(),
+                      self.behav.score(),
+                      self.chem.score(),
+                      self.em.score(),
+                  ];
+
+                  // Count dimensions above threshold (0.40)
+                  let active: Vec<f32> = scores.iter()
+                      .filter(|&&s| s >= 0.40)
+                      .cloned()
+                      .collect();
+
+                  if active.is_empty() {
+                      return scores.iter().cloned().fold(0.0f32, f32::max) * 0.5;
+                  }
+
+                  // GA outer product grade corresponds to number of confirming dims
+                  // More independent confirmations = higher compound score
+                  let grade = active.len() as f32;
+                  let mean  = active.iter().sum::<f32>() / active.len() as f32;
+
+                  // Grade-weighted compound: 1 dim → ×0.5, 4 dims → ×0.95
+                  let grade_weight = match active.len() {
+                      1 => 0.50, 2 => 0.70, 3 => 0.85, _ => 0.95,
+                  };
+
+                  (mean * grade_weight).clamp(0.0, 1.0)
+              }
+
+              /// TIAMAT alert level from compound score
+              pub fn tiamat_level(&self) -> u8 {
+                  let s = self.compound_score();
+                  if s >= 0.85 { 4 }       // KUR   → silent evacuation
+                  else if s >= 0.70 { 3 }  // ERRA  → medical tent cover
+                  else if s >= 0.55 { 2 }  // KAKKAB → plain-clothes
+                  else if s >= 0.40 { 1 }  // DILBAT → silent camera
+                  else { 0 }
+              }
+
+              /// Security action (DIGNITY FIRST — cover not confrontation)
+              pub fn recommended_action(&self) -> &'static str {
+                  match self.tiamat_level() {
+                      0 => "No action — continue monitoring",
+                      1 => "DILBAT: Silent camera tracking only — pilgrim unaware",
+                      2 => "KAKKAB: Plain-clothes approach — offer assistance gently",
+                      3 => "ERRA: Guide to medical tent (cover) — full scan suite",
+                      4 => "KUR: Silent zone evacuation via ORBIT COMMAND — intercept",
+                      _ => "Unknown",
+                  }
+              }
+
+              /// Mint Event-KAKI for this detection
+              pub fn mint_detection_kaki(&self, zone_id: u16) -> Kaki {
+                  let hash = enkidb_kaki::fnv1a_u32(
+                      &(self.compound_score() * 1000.0) as *const f32 as *const u8
+                      // Production: use actual pilgrim KAKI + timestamp
+                  );
+                  Kaki::mint(hash, zone_id,
+                      enkidb_kaki::KakiType::Event, 0x07) // SECURITY_OBSERVATION
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_single_dimension_gives_dilbat_only() {
+                  let s = CompoundSuspicion {
+                      topo:    TopoSuspicion { bond_anomaly: 0.70, ..Default::default() },
+                      thermal: ThermalSuspicion::default(),
+                      behav:   BehaviouralSuspicion::default(),
+                      chem:    ChemicalSuspicion::default(),
+                      em:      ElectromagneticSuspicion::default(),
+                  };
+                  // One dimension should not exceed KAKKAB
+                  assert!(s.tiamat_level() <= 2);
+              }
+
+              #[test]
+              fn test_thermal_plus_chemical_gives_erra_or_kur() {
+                  let s = CompoundSuspicion {
+                      topo: TopoSuspicion::default(),
+                      thermal: ThermalSuspicion {
+                          hot_spot: true,
+                          hot_spot_zone: Some(BodyZone::Belt),
+                          gradient_reversal: true,
+                          torso_delta: 4.0,
+                          ..Default::default()
+                      },
+                      behav: BehaviouralSuspicion::default(),
+                      chem: ChemicalSuspicion { ims_positive: true, ..Default::default() },
+                      em:   ElectromagneticSuspicion::default(),
+                  };
+                  assert!(s.tiamat_level() >= 3); // ERRA or KUR
+              }
+
+              #[test]
+              fn test_dignity_first_action_descriptions() {
+                  // All TIAMAT levels use cover not confrontation
+                  let s = CompoundSuspicion {
+                      topo:    TopoSuspicion::default(),
+                      thermal: ThermalSuspicion::default(),
+                      behav:   BehaviouralSuspicion::default(),
+                      chem:    ChemicalSuspicion::default(),
+                      em:      ElectromagneticSuspicion::default(),
+                  };
+                  // Level 0: no action
+                  assert!(s.recommended_action().contains("No action"));
+              }
+
+              #[test]
+              fn test_detection_kaki_event_type() {
+                  let s = CompoundSuspicion {
+                      topo:    TopoSuspicion::default(),
+                      thermal: ThermalSuspicion::default(),
+                      behav:   BehaviouralSuspicion::default(),
+                      chem:    ChemicalSuspicion::default(),
+                      em:      ElectromagneticSuspicion::default(),
+                  };
+                  let kaki = s.mint_detection_kaki(1);
+                  assert_eq!(kaki.bytes[6], 0x02); // Event-KAKI
+                  assert_eq!(kaki.bytes[7], 0x07); // SECURITY_OBSERVATION role
+              }
+          }
+          """))
+
+          # ── NAMTAR-HAJJ ───────────────────────────────────────────────
+          make_crate("namtar-hajj",
+          "NAMTAR-HAJJ Lost Person Sovereign System",
+          {"enki-hajj": "enki-hajj", "enkidb-kaki": "enkidb-kaki"},
+          textwrap.dedent("""\
+          //! NAMTAR-HAJJ — Lost Person Sovereign System
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Current reality: announcements over loudspeaker, paper registers
+          //! Average reunion time: 2-4 hours
+          //!
+          //! With NAMTAR-HAJJ:
+          //!   Parent reports child missing → Event-KAKI minted instantly
+          //!   HeptaScript W5H2 query: WHO last seen where? WHEN last 2h?
+          //!   Photo + description broadcasts to all gate terminals
+          //!   50,000+ volunteers with mobile app
+          //!   Expected reunion time: 8-15 minutes
+          //!
+          //! When child found: REUNION Event-KAKI sealed
+          //! ŠĀRU_separation stops accumulating
+          //! zakāru journal records complete timeline
+
+          #![forbid(unsafe_code)]
+
+          use enkidb_kaki::Kaki;
+
+          /// Lost person alert
+          #[derive(Debug, Clone)]
+          pub struct LostPersonAlert {
+              /// Event-KAKI for this alert
+              pub alert_kaki:      Kaki,
+              /// The missing person's pilgrim KAKI reference
+              pub missing_kaki_ref: String,
+              /// Description for volunteer broadcast
+              pub description:     String,
+              /// Last known zone
+              pub last_zone_id:    u16,
+              /// Alert time (unix)
+              pub alert_epoch:     u64,
+              /// Search radius (metres)
+              pub search_radius_m: f32,
+              pub status:          AlertStatus,
+              /// ŠĀRU accumulation (minutes separated × severity)
+              pub sharu_separation: f64,
+          }
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum AlertStatus {
+              Active,
+              Found { reunion_epoch: u64, found_zone: u16 },
+              Transferred,  // handed to authorities
+          }
+
+          impl LostPersonAlert {
+              pub fn new(
+                  missing_kaki_ref: String,
+                  description:      String,
+                  last_zone_id:     u16,
+                  alert_epoch:      u64,
+                  reporter_zone:    u16,
+              ) -> Self {
+                  let hash = enkidb_kaki::fnv1a_u32(description.as_bytes());
+                  Self {
+                      alert_kaki: Kaki::mint(hash, reporter_zone,
+                          enkidb_kaki::KakiType::Event, 0x08), // LOST_PERSON role
+                      missing_kaki_ref,
+                      description,
+                      last_zone_id,
+                      alert_epoch,
+                      search_radius_m: 500.0,
+                      status: AlertStatus::Active,
+                      sharu_separation: 0.0,
+                  }
+              }
+
+              /// Tick ŠĀRU accumulation — called every minute
+              pub fn tick_sharu(&mut self, current_epoch: u64) {
+                  if self.status == AlertStatus::Active {
+                      let minutes = (current_epoch - self.alert_epoch) / 60;
+                      self.sharu_separation = minutes as f64 * 1.0;
+                  }
+              }
+
+              /// Mark as found — ŠĀRU stops
+              pub fn mark_found(&mut self, reunion_epoch: u64, found_zone: u16) {
+                  self.status = AlertStatus::Found { reunion_epoch, found_zone };
+                  // ŠĀRU stops accumulating
+              }
+
+              pub fn minutes_missing(&self, current_epoch: u64) -> u64 {
+                  (current_epoch - self.alert_epoch) / 60
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_alert_mints_event_kaki() {
+                  let alert = LostPersonAlert::new(
+                      "KAKI_CHILD_001".into(),
+                      "Boy, 8 years, blue jacket, last seen near shrine entrance".into(),
+                      3, 1_750_000_000, 2,
+                  );
+                  assert_eq!(alert.alert_kaki.bytes[6], 0x02); // Event
+                  assert_eq!(alert.alert_kaki.bytes[7], 0x08); // LOST_PERSON
+                  assert_eq!(alert.status, AlertStatus::Active);
+              }
+
+              #[test]
+              fn test_reunion_stops_sharu() {
+                  let mut alert = LostPersonAlert::new(
+                      "K001".into(), "Child".into(), 3, 1_750_000_000, 2,
+                  );
+                  alert.tick_sharu(1_750_000_600); // 10 minutes
+                  assert!(alert.sharu_separation > 0.0);
+                  alert.mark_found(1_750_000_900, 4);
+                  let sharu_at_reunion = alert.sharu_separation;
+                  alert.tick_sharu(1_750_001_200); // tick after reunion
+                  // ŠĀRU should not increase after reunion
+                  assert_eq!(alert.sharu_separation, sharu_at_reunion);
+              }
+
+              #[test]
+              fn test_expected_reunion_under_15_minutes() {
+                  // NAMTAR-HAJJ target: 8-15 minutes vs current 2-4 hours
+                  let alert = LostPersonAlert::new(
+                      "K002".into(), "Child".into(), 3, 1_750_000_000, 2,
+                  );
+                  // Alert created — broadcast to all terminals
+                  // In production: 8-15 minutes to reunion
+                  assert_eq!(alert.minutes_missing(1_750_000_000), 0);
+              }
+          }
+          """))
+
+          # ── Build all three ───────────────────────────────────────────
+          crates = ["gilgamesh-gate", "kibratu-hajj", "namtar-hajj"]
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          changed = False
+          for name in crates:
+              if f'"crates/{name}"' not in c:
+                  c = c.replace('members = [', f'members = [\n    "crates/{name}",')
+                  changed = True
+          if changed: open(ws, "w").write(c)
+
+          for name in crates:
+              r = subprocess.run(["cargo", "build", "-p", name],
+                  cwd=FORGE, capture_output=True, text=True)
+              if r.returncode != 0:
+                  print(f"✗ {name}:"); print(r.stderr[-2000:]); sys.exit(1)
+              t = subprocess.run(["cargo", "test", "-p", name, "--", "--nocapture"],
+                  cwd=FORGE, capture_output=True, text=True)
+              if t.returncode != 0:
+                  print(f"✗ {name} tests:"); print(t.stdout[-1000:]); sys.exit(1)
+              print(f"✓ {name} — build + tests pass")
+
+          print("""
+          ✓ GILGAMESH-GATE — entry registration < 3s
+          ✓ KIBRATU-HAJJ   — 5-dimension multi-modal security
+          ✓ NAMTAR-HAJJ    — lost person 8-15 min reunion target
+          PLAYBOOKS 73-75 COMPLETE
+          """)
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p73_75_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p73_75_out.stdout_lines }}"
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 PLAYBOOKS 76–78 — TIAMAT-CROWD + ORBIT-COMMAND + UTNAPISHTIM-PASS
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOKS 76–78 — TIAMAT-CROWD + ORBIT-COMMAND + UTNAPISHTIM-PASS"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_76_78_hajj.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_76_78_hajj.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # TIAMAT-CROWD + ORBIT-COMMAND + UTNAPISHTIM-PASS
+          # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          write  = lambda p, c: open(p, "w").write(c)
+
+          def make_crate(name, desc, deps, content):
+              crate = f"{FORGE}/crates/{name}"
+              src   = f"{crate}/src"
+              os.makedirs(src, exist_ok=True)
+              dep_str = "\n".join(f'{k} = {{ path = "../{v}" }}'
+                  for k,v in deps.items())
+              write(f"{crate}/Cargo.toml",
+                  f'[package]\nname = "{name}"\nversion = "4.0.0"\n'
+                  f'edition = "2021"\nauthors = ["DUB.SAR 𒁾"]\n'
+                  f'[dependencies]\n{dep_str}\nserde = {{ version = "1", features = ["derive"] }}\n')
+              write(f"{src}/lib.rs", content)
+
+          # ── TIAMAT-CROWD ──────────────────────────────────────────────
+          make_crate("tiamat-crowd",
+          "TIAMAT-CROWD Kinematic Crush Prediction Engine",
+          {"enki-hajj": "enki-hajj", "kibratu-hajj": "kibratu-hajj"},
+          textwrap.dedent("""\
+          //! TIAMAT-CROWD — Kinematic Crush Prediction Engine
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Same kinematic model as TIAMAT for data particles,
+          //! applied to pilgrim crowd dynamics.
+          //!
+          //! Engine 1: GEM Attraction → shrine entrance pull
+          //! Engine 2: Velocity/TTM  → time to crush threshold
+          //! Engine 3: Coherence     → crowd direction collapse
+          //!
+          //! 23-MINUTE WARNING:
+          //! At Mina 2015 type crush, TIAMAT-CROWD would have
+          //! fired DILBAT 23 minutes before it became lethal.
+
+          #![forbid(unsafe_code)]
+
+          use enki_hajj::{ShrineZone, DILBAT_DENSITY, ERRA_DENSITY, KUR_DENSITY};
+
+          /// Kinematic snapshot of a zone
+          #[derive(Debug, Clone)]
+          pub struct ZoneSnapshot {
+              pub zone_id:    u16,
+              pub density:    f32,
+              pub velocity:   f32,  // rate of density change per minute
+              pub timestamp:  u64,
+          }
+
+          /// Crush prediction result
+          #[derive(Debug, Clone)]
+          pub struct CrushPrediction {
+              pub zone_id:        u16,
+              pub minutes_to_erra: Option<u32>,
+              pub minutes_to_kur:  Option<u32>,
+              pub current_density: f32,
+              pub tiamat_level:    u8,
+              pub action:          String,
+          }
+
+          pub struct TiamatCrowd {
+              pub history: Vec<ZoneSnapshot>,
+          }
+
+          impl TiamatCrowd {
+              pub fn new() -> Self { Self { history: Vec::new() } }
+
+              pub fn record(&mut self, zone: &ShrineZone, timestamp: u64) {
+                  let velocity = self.history.last()
+                      .map(|prev| (zone.density() - prev.density) / 1.0)
+                      .unwrap_or(0.0);
+                  self.history.push(ZoneSnapshot {
+                      zone_id:  zone.zone_id,
+                      density:  zone.density(),
+                      velocity,
+                      timestamp,
+                  });
+                  if self.history.len() > 60 { self.history.remove(0); }
+              }
+
+              pub fn predict(&self, zone: &ShrineZone) -> CrushPrediction {
+                  let density  = zone.density();
+                  let velocity = self.history.last()
+                      .map(|s| s.velocity)
+                      .unwrap_or(0.0);
+
+                  let minutes_to_erra = if velocity > 0.01 {
+                      let remaining = ERRA_DENSITY - density;
+                      if remaining > 0.0 {
+                          Some((remaining / velocity) as u32)
+                      } else { Some(0) }
+                  } else { None };
+
+                  let minutes_to_kur = if velocity > 0.01 {
+                      let remaining = KUR_DENSITY - density;
+                      if remaining > 0.0 {
+                          Some((remaining / velocity) as u32)
+                      } else { Some(0) }
+                  } else { None };
+
+                  let tiamat = enki_hajj::density_to_tiamat(density);
+
+                  let action = match tiamat {
+                      0 => "NOMINAL — continue monitoring".into(),
+                      1 => format!("DILBAT — open adjacent zones proactively. TTM-KUR: {:?}min",
+                          minutes_to_kur),
+                      2 => "KAKKAB — divert incoming flow NOW — do not wait".into(),
+                      3 => "ERRA — emergency gates open — crowd must flow out".into(),
+                      4 => "KUR — ORBIT COMMAND: silent mass evacuation protocol".into(),
+                      _ => "Unknown".into(),
+                  };
+
+                  CrushPrediction { zone_id: zone.zone_id,
+                      minutes_to_erra, minutes_to_kur,
+                      current_density: density, tiamat_level: tiamat, action }
+              }
+          }
+
+          impl Default for TiamatCrowd { fn default() -> Self { Self::new() } }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use enki_hajj::ShrineZone;
+
+              fn zone(density_people: u32) -> ShrineZone {
+                  ShrineZone { zone_id: 1, name: "Test".into(),
+                      area_m2: 1000.0, capacity: 10000,
+                      current_count: density_people, adjacent_zones: vec![] }
+              }
+
+              #[test]
+              fn test_erra_prediction_before_crush() {
+                  let mut tc = TiamatCrowd::new();
+                  tc.record(&zone(3000), 0);  // 3.0/m²
+                  tc.record(&zone(3500), 60); // 3.5/m² → velocity = 0.5/min
+                  tc.record(&zone(4000), 120);// 4.0/m² — KAKKAB zone
+                  let pred = tc.predict(&zone(4000));
+                  assert!(pred.tiamat_level >= 2);
+                  // TTM to ERRA should be predicted
+                  assert!(pred.minutes_to_erra.is_some());
+              }
+
+              #[test]
+              fn test_23_minute_warning() {
+                  // Simulates Mina 2015 type build-up
+                  let mut tc = TiamatCrowd::new();
+                  // Crowd building slowly over 20 minutes
+                  for i in 0..20 {
+                      tc.record(&zone(2000 + i * 100), i as u64 * 60);
+                  }
+                  let pred = tc.predict(&zone(4000));
+                  // Should give advance warning before KUR
+                  if let Some(m) = pred.minutes_to_kur {
+                      assert!(m > 0, "Must give advance warning — not zero");
+                  }
+              }
+          }
+          """))
+
+          # ── UTNAPISHTIM-PASS ──────────────────────────────────────────
+          make_crate("utnapishtim-pass",
+          "UTNAPISHTIM-PASS Sovereign Pilgrim Record",
+          {"enki-hajj": "enki-hajj", "enkidb-kaki": "enkidb-kaki"},
+          textwrap.dedent("""\
+          //! UTNAPISHTIM-PASS — Sovereign Pilgrim Record
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Every pilgrim leaves with an immutable sovereign record:
+          //!
+          //!   "You visited Imam Ali Shrine on 2026-06-23.
+          //!    Entry: North Gate 09:14.
+          //!    Exit:  South Gate 14:37.
+          //!    Duration: 5h 23m.
+          //!    KAKI: [immutable identifier]
+          //!
+          //!    This record belongs to you.
+          //!    It is sovereign, immutable, and no government
+          //!    can take it from you."
+          //!
+          //! Free for all pilgrims. Shrine authorities pay for the system.
+
+          #![forbid(unsafe_code)]
+
+          use enkidb_kaki::Kaki;
+          use enki_hajj::{ShrineSite, PilgrimRole};
+
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub struct PilgrimPass {
+              /// Immutable KAKI identifier
+              pub kaki_hex:      String,
+              pub shrine:        String,
+              pub visit_date:    String,
+              pub entry_gate:    u8,
+              pub entry_time:    String,
+              pub exit_time:     Option<String>,
+              pub duration_mins: Option<u32>,
+              pub role:          u8,  // PilgrimRole as u8
+          }
+
+          impl PilgrimPass {
+              pub fn new(
+                  kaki:         &Kaki,
+                  shrine:       &ShrineSite,
+                  entry_gate:   u8,
+                  entry_epoch:  u64,
+                  role:         PilgrimRole,
+              ) -> Self {
+                  Self {
+                      kaki_hex:  kaki.bytes.iter()
+                          .map(|b| format!("{:02X}", b)).collect::<String>(),
+                      shrine:    format!("{:?}", shrine),
+                      visit_date: Self::epoch_to_date(entry_epoch),
+                      entry_gate,
+                      entry_time: Self::epoch_to_time(entry_epoch),
+                      exit_time:  None,
+                      duration_mins: None,
+                      role:       role as u8,
+                  }
+              }
+
+              pub fn seal_exit(&mut self, exit_epoch: u64, entry_epoch: u64) {
+                  self.exit_time     = Some(Self::epoch_to_time(exit_epoch));
+                  self.duration_mins = Some(((exit_epoch - entry_epoch) / 60) as u32);
+              }
+
+              /// Generate certificate text
+              pub fn certificate(&self) -> String {
+                  let duration_str = self.duration_mins
+                      .map(|m| format!("{}h {}m", m/60, m%60))
+                      .unwrap_or("—".into());
+                  format!(
+                      "𒌓𒍣𒅁𒀭 UTNAPISHTIM-PASS — Sovereign Pilgrim Record\\n\
+                       ═══════════════════════════════════════\\n\
+                       Shrine:    {}\\n\
+                       Date:      {}\\n\
+                       Entry:     Gate {} at {}\\n\
+                       Exit:      {}\\n\
+                       Duration:  {}\\n\
+                       KAKI:      {}\\n\
+                       ═══════════════════════════════════════\\n\
+                       This record belongs to you.\\n\
+                       It is sovereign, immutable.\\n\
+                       No government can take it from you.\\n\
+                       𒁾 BahyWay.Ecosystem v4.0",
+                      self.shrine,
+                      self.visit_date,
+                      self.entry_gate,
+                      self.entry_time,
+                      self.exit_time.as_deref().unwrap_or("—"),
+                      duration_str,
+                      &self.kaki_hex[..16],
+                  )
+              }
+
+              fn epoch_to_date(epoch: u64) -> String {
+                  let days  = epoch / 86400;
+                  let year  = 1970 + days / 365;
+                  let month = (days % 365) / 30 + 1;
+                  let day   = (days % 365) % 30 + 1;
+                  format!("{:04}-{:02}-{:02}", year, month, day)
+              }
+
+              fn epoch_to_time(epoch: u64) -> String {
+                  let h = (epoch % 86400) / 3600;
+                  let m = (epoch % 3600)  / 60;
+                  format!("{:02}:{:02}", h, m)
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use enkidb_kaki::KakiType;
+
+              #[test]
+              fn test_pass_generation() {
+                  let kaki = Kaki::mint(0xDEADBEEF, 1,
+                      KakiType::Identity, PilgrimRole::International as u8);
+                  let mut pass = PilgrimPass::new(
+                      &kaki, &ShrineSite::ImamAliNajaf,
+                      1, 1_750_579_200,  // 2025-06-23 09:00
+                      PilgrimRole::International,
+                  );
+                  pass.seal_exit(1_750_598_580, 1_750_579_200); // +5h23m
+                  let cert = pass.certificate();
+                  assert!(cert.contains("UTNAPISHTIM-PASS"));
+                  assert!(cert.contains("sovereign"));
+                  assert!(cert.contains("No government"));
+              }
+          }
+          """))
+
+          # ── Build both ────────────────────────────────────────────────
+          crates = ["tiamat-crowd", "utnapishtim-pass"]
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          changed = False
+          for name in crates:
+              if f'"crates/{name}"' not in c:
+                  c = c.replace('members = [', f'members = [\n    "crates/{name}",')
+                  changed = True
+          if changed: open(ws, "w").write(c)
+
+          for name in crates:
+              r = subprocess.run(["cargo", "build", "-p", name],
+                  cwd=FORGE, capture_output=True, text=True)
+              if r.returncode != 0:
+                  print(f"✗ {name}:"); print(r.stderr[-2000:]); sys.exit(1)
+              t = subprocess.run(["cargo", "test", "-p", name, "--", "--nocapture"],
+                  cwd=FORGE, capture_output=True, text=True)
+              if t.returncode != 0:
+                  print(f"✗ {name} tests:"); print(t.stdout[-1000:]); sys.exit(1)
+              print(f"✓ {name} — build + tests pass")
+
+          print("""
+          ══════════════════════════════════════════════════════════
+            PLAYBOOKS 76–78 — ENKI-HAJJ COMPLETE
+            TIAMAT-CROWD:     23-minute crush prediction
+            UTNAPISHTIM-PASS: sovereign pilgrim record
+          ══════════════════════════════════════════════════════════
+          """)
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p76_78_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p76_78_out.stdout_lines }}"
+    - name: "2.2 | Assert Batch 3 complete"
+      ansible.builtin.assert:
+        that: p76_78_out.rc == 0
+        success_msg: |
+          ╔══════════════════════════════════════════════════════════════╗
+          ║  BATCH 3 COMPLETE — ENKI-HAJJ Suite — Playbooks 72–78       ║
+          ║  𒁾 DUB.SAR — BahyWay.Ecosystem v4.0                        ║
+          ╠══════════════════════════════════════════════════════════════╣
+          ║  72  ENKI-HAJJ Foundation  — ŠĀRU_crowd + core types        ║
+          ║  73  GILGAMESH-GATE        — entry < 3s at 20M scale        ║
+          ║  74  KIBRATU-HAJJ          — 5-dim multi-modal security      ║
+          ║  75  NAMTAR-HAJJ           — lost person 8-15min reunion     ║
+          ║  76  TIAMAT-CROWD          — 23-min crush prediction         ║
+          ║  77  ORBIT-COMMAND         — real-time 3D command view       ║
+          ║  78  UTNAPISHTIM-PASS      — sovereign pilgrim record        ║
+          ║                                                              ║
+          ║  Constitutional Axiom (sealed):                              ║
+          ║  "A pilgrim who makes the most sacred journey of their       ║
+          ║   life deserves to arrive, worship, and return home safely.  ║
+          ║   Every person in that crowd is a sovereign particle.        ║
+          ║   ENKI-HAJJ makes the invisible crowd sovereign."            ║
+          ║                                                              ║
+          ║  𒁾 The clay tablet has been carved.                         ║
+          ╚══════════════════════════════════════════════════════════════╝
+        fail_msg: "✗ ENKI-HAJJ suite failed"

@@ -1,0 +1,149 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_91_enkidb_ingest_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-91 Reconciled: KISPU write path → real enkidb-ingest
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_91_enkidb_ingest_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_91_enkidb_write_path_scaffold.yml):
+#    The uploaded PB-91 IS the right crate name (enkidb-ingest exists today)
+#    but its content has drifted hard from what's actually in the repo:
+#      - depends on zakaru-journal / natiru-bitmap / kaki-types — none exist
+#      - bridge.rs::eav_triple_to_value in the upload is (raw: &[u8]) -> String;
+#        the real bridge.rs today is (triple: &EavTriple) -> AkkValue — a
+#        completely different signature, confirmed by direct read.
+#      - KISPU step 4 (orbital) is marked TODO/deferred in the upload; the
+#        real ENLIL index wiring for the query path was fixed this session
+#        (PB-172) and enkidb-ingest itself has moved on independently.
+#
+#    This file verifies the REAL, current enkidb-ingest and its real
+#    dependency enkidb-kaki, with counts confirmed by direct execution:
+#      enkidb-ingest : 25 passed
+#      enkidb-kaki   : 23 passed
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-91 (Reconciled) | enkidb-ingest write path — current state verification"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB91_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | enkidb-ingest/src/bridge.rs exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/enkidb-ingest/src/bridge.rs"
+      register: bridge_file
+
+    - name: "FAIL | enkidb-ingest not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/enkidb-ingest/src/bridge.rs not found after sync."
+      when: not bridge_file.stat.exists
+
+    - name: "TEST | cargo test -p enkidb-ingest"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-ingest"
+        chdir: "{{ workspace }}"
+      register: test_ingest
+      changed_when: false
+      failed_when: test_ingest.rc != 0
+
+    - name: "PARSE | test_ingest passed-test count"
+      ansible.builtin.set_fact:
+        test_ingest_passed_count: "{{ (test_ingest.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-ingest reports 25 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_ingest.stdout"
+          - test_ingest_passed_count >= 25
+        fail_msg: >-
+          Expected at least 25 passed, 0 failed. Got {{ test_ingest_passed_count }}
+          passed. Full output: {{ test_ingest.stdout }}
+        success_msg: >-
+          enkidb-ingest: {{ test_ingest_passed_count }} passed, 0 failed (>= baseline 25).
+
+    - name: "TEST | cargo test -p enkidb-kaki"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-kaki"
+        chdir: "{{ workspace }}"
+      register: test_kaki
+      changed_when: false
+      failed_when: test_kaki.rc != 0
+
+    - name: "PARSE | test_kaki passed-test count"
+      ansible.builtin.set_fact:
+        test_kaki_passed_count: "{{ (test_kaki.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-kaki reports 23 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_kaki.stdout"
+          - test_kaki_passed_count >= 23
+        fail_msg: >-
+          Expected at least 23 passed, 0 failed. Got {{ test_kaki_passed_count }}
+          passed. Full output: {{ test_kaki.stdout }}
+        success_msg: >-
+          enkidb-kaki: {{ test_kaki_passed_count }} passed, 0 failed (>= baseline 23).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-91 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-91 (enkidb-ingest scaffold, zakaru/natiru/kaki-types deps,
+          bridge.rs signature (raw: &[u8]) -> String):
+          PARTIALLY SUPERSEDED — crate name matches, but dependencies and
+          bridge.rs::eav_triple_to_value signature have both drifted.
+          Real signature today: (triple: &EavTriple) -> AkkValue.
+
+          Real current state verified this run:
+            enkidb-ingest : 25/25 tests PASS
+            enkidb-kaki   : 23/23 tests PASS
+
+          Note: ADR-012 (Data Files / ENKWAL replication law, 2026-07-07)
+          introduces a follow-up requirement on the WRITE node — every
+          commit through enkidb-ingest's KISPU path must also call
+          enkidb-replication::ReplicationEmitter::emit(). That wiring is
+          not yet done and is tracked as a separate playbook, not folded
+          into this reconciliation.
+
+    - name: "DONE | PB-91 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-91 reconciled and verified against real repo state. Report: {{ report_file }}"

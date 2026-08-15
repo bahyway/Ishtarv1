@@ -1,0 +1,168 @@
+# =============================================================================
+# IsimudEngine — Environment Readiness Manifest
+# BahyWay.Ecosystem v4.0+ — 2026-07-28
+#
+# WHAT THIS IS: a data-only config file, not a playbook. playbook_
+# IsimudEngine.yml's PREFLIGHT phase (`include_vars` this file) reads it and
+# checks every declared condition BEFORE running any of the 65+ sub-
+# playbooks in docs/PLAYBOOK_EXECUTION_TRIAGE.md. The point is the one this
+# session already proved the hard way, three separate times, on eriduous-vdi:
+# missing scons, then a Vulkan/GPU renderer mismatch that froze the VDI, then
+# a stale process eating 215% CPU for hours — every one of them discoverable
+# in seconds by a check, but each one actually cost 20-60 minutes of live
+# back-and-forth to diagnose mid-run instead. This file is where that
+# diagnosis gets written down ONCE, as a declared, checkable fact, instead
+# of being rediscovered by hand the next time it happens on a different
+# machine.
+#
+# HONESTY RULE (matches docs/TRANSPARENCY_STANDARD.md): every entry in
+# known_errors below is a REAL error this session actually hit and actually
+# fixed, with the exact fix that was actually applied. This file grows by
+# adding a new real, verified entry the next time IsimudEngine surfaces a
+# new failure class — never by guessing ahead at errors nobody has hit yet.
+# A speculative "might fail on machine X" entry would silently become
+# indistinguishable from a verified one the moment someone reads this file
+# six months from now; better to have a short, 100%-real list than a long,
+# partly-invented one.
+#
+# HOW TO EXTEND: add a new item to hardware/software/network as you would
+# any other, and a matching known_errors entry with the real signature seen
+# in a real ISIMUD_ENGINE_REPORT_*.txt/launch log — not before that.
+# =============================================================================
+
+manifest_version: "1.0"
+sealed_date: "2026-07-28"
+# Sealed against the real, currently-live eriduous-vdi environment this was
+# verified on this session: 16GB RAM (MiB Mem: 15979.6 total, confirmed via
+# `top`), 8GB swap, Fedora 44, no render-capable GPU (llvmpipe/software only
+# -- confirmed via `vulkaninfo` + missing /dev/dri/renderD128).
+
+hardware:
+  cpu_cores_min: 4
+  # Rationale: PB-262's own `jobs` default is
+  # `ansible_facts['processor_vcpus'] | default(4)` -- 4 is the floor this
+  # ecosystem's own build playbooks already assume.
+  ram_gb_min: 8
+  # eriduous-vdi has 16GB; several sub-playbooks (Godot engine compile,
+  # multi-crate cargo builds run in parallel) got genuinely tight on this
+  # machine (as low as 302MB free mid-sweep, real numbers from this
+  # session's own `top` output) -- 8GB is a real floor, not a comfortable one.
+  disk_free_gb_min: 15
+  # Matches playbook_IsimudEngine.yml's own existing disk_free_warn_gb
+  # default -- kept in both places deliberately (the orchestrator's own var
+  # stays the enforced threshold; this manifest documents *why* 15 and lets
+  # a human see the number without opening the orchestrator's source).
+  gpu:
+    render_node_required: false
+    # Set true only for an environment you've confirmed has real GPU
+    # passthrough (a `/dev/dri/renderD128` that a real driver -- not
+    # llvmpipe -- can open). eriduous-vdi does not; PB-226 already forces
+    # gl_compatibility/opengl3 unconditionally to cope, so this is
+    # informational for now, not yet gating.
+    known_software_renderer_signature: "llvmpipe"
+    # If `vulkaninfo --summary 2>&1` or a Godot launch log's "Using Device"
+    # line contains this string, treat GPU-heavy playbooks (PB-226/234, any
+    # 3D DubSar Theater launch) as running at reduced particle counts by
+    # design (theater_controller.gd's own _scale_for_software_rendering()),
+    # not as a bug.
+
+software:
+  required_tools:
+    - git
+    - cargo
+    - ansible-playbook
+    - podman
+    - python3
+    - g++
+    - pkg-config
+    - scons
+    # scons is only actually needed if PB-262 (engine compile) is part of
+    # the run -- listed here anyway since a from-scratch environment won't
+    # know that until it's already 4 minutes into a build, which is exactly
+    # the failure this session hit first.
+  optional_tools:
+    - vulkaninfo
+    - godot4
+    # Neither existing on a fresh environment is not a failure -- PB-226's
+    # own discovery logic finds Godot via PATH/Flatpak/$HOME search/common
+    # paths, and vulkaninfo is a diagnostic tool for the gpu check above,
+    # not a build dependency.
+
+podman:
+  min_version: "4.0"
+  # No specific containers/images are required to exist BEFORE a run --
+  # the CQRS deploy playbooks (PB-205 and others) build and start their own.
+  # Declared here so a preflight check confirms the daemon itself is
+  # reachable (`podman info`) before any sub-playbook assumes it is.
+  daemon_reachable_check: "podman info"
+
+network:
+  # Real hosts this ecosystem's own playbooks already assume reachable --
+  # grepped directly from playbooks/*.yml, not invented. A preflight ping/
+  # port-check against these catches a "the VM isn't up" failure before a
+  # 20-minute sub-playbook gets to the same discovery the slow way.
+  expected_hosts:
+    - host: "192.168.122.107"
+      description: "Core EnkiDB/EnkiMDB/EnkiDDB CQRS VM -- referenced by dozens of playbooks (PB-108, PB-111, PB-112, PB-118, PB-140, PB-144, and more) and by the live DubSar wizard (HEPT ports 7102/7202 seen this session)."
+      ports: [7001, 7002, 7003, 7004, 7005, 7006, 7007, 7102, 7202]
+      # Port-to-database mapping per docs/components/ENKIDB_7_TYPES.md:
+      # 7001 EnkiDB, 7002 EnkiDW, 7003 EnkiSDB, 7004 EnkiODB, 7005 EnkiQDB,
+      # 7006 EnkiMDB, 7007 EnkiDDB. 7102/7202 are read-node ports seen live
+      # in the DubSar EnkiDB Connector Wizard this session.
+
+known_errors:
+  - id: KE-001
+    signature: "Missing build tool: scons"
+    seen_in: "PB-262 (engine compile), first real run on eriduous-vdi"
+    cause: "scons not installed -- required for compiling Godot from source."
+    fix: "dnf (Fedora) or apt (Debian/Ubuntu) install scons + the platform dev packages PB-262's own pkg_install_hint fact already prints."
+    verified: true
+
+  - id: KE-002
+    signature: "'uint32_t' has not been declared"
+    seen_in: "PB-262, thirdparty/glslang/SPIRV/SpvBuilder.h, GCC 16.1.1"
+    cause: "Real, pre-existing upstream bug: missing `#include <cstdint>`, silently tolerated by GCC 13 but not GCC 16's stricter checking."
+    fix: "PB-262 patch 4 -- adds the missing include. Already applied; this entry documents why, for the next Godot version that might reintroduce it."
+    verified: true
+
+  - id: KE-003
+    signature: "found ':' in nested-name-specifier, expected '::'"
+    seen_in: "PB-262, thirdparty/thorvg/inc/thorvg.h, GCC 16.1.1"
+    cause: "Same missing-<cstdint> bug class as KE-002, in a second, independent vendored library -- the undeclared uint8_t makes GCC misparse the enum class's underlying-type syntax, cascading into dozens of further errors."
+    fix: "PB-262 patch 5. Already applied."
+    verified: true
+
+  - id: KE-004
+    signature: "cannot find -lstdc++"
+    seen_in: "PB-262, final link stage, after full source compile succeeded"
+    cause: "Godot's linuxbsd default (use_static_cpp=true) links -static-libgcc -static-libstdc++ for cross-machine portability; Fedora doesn't ship the static libstdc++.a archive in the base toolchain (needs the separate libstdc++-static package)."
+    fix: "PB-262 now passes use_static_cpp=no to scons -- the binary only ever needs to run on the machine that compiled it, so static linking buys nothing and this avoids a new root-owned package install."
+    verified: true
+
+  - id: KE-005
+    signature: "VK_ERROR_INCOMPATIBLE_DRIVER"
+    seen_in: "eriduous-vdi, vulkaninfo, and every DubSar Theater launch log's own 'Using Device' line showing llvmpipe"
+    cause: "No render-capable GPU visible to Vulkan -- /dev/dri has a display node (card0) but no render node (renderD128). Consistent with a VDI's 'GPU' being a virtual display adapter with no real 3D-render capability behind it."
+    fix: "PB-226 forces --rendering-method gl_compatibility --rendering-driver opengl3 at launch (overridable via rendering_method/rendering_driver vars if a future environment gets real GPU passthrough)."
+    verified: true
+
+  - id: KE-006
+    signature: "godot4.*[2-9][0-9][0-9]%.*CPU|sustained high %CPU on a godot4 process across multiple `top` snapshots"
+    seen_in: "eriduous-vdi, repeated PB-226 runs across one session"
+    cause: "PB-226 launched via `nohup ... &` with no matching kill step across many runs -- old instances never exited, each new run added another on top; separately, GPUParticles3D's compute-shader simulation is expensive for llvmpipe to emulate even for one instance (50000-particle CENTER_STAGE alone pegged 2+ cores)."
+    fix: "PB-226 now kills any stale DubSar instance (matched on the project path, never a bare 'godot4' match) before launching a new one. theater_controller.gd's _scale_for_software_rendering() separately cuts CENTER_STAGE to 2000 particles when a software renderer (llvmpipe) is detected via RenderingServer.get_video_adapter_name()."
+    verified: true
+
+  - id: KE-007
+    signature: "compiled against newer Godot version.*but loaded by older Godot binary"
+    seen_in: "PB-262's rebuilt engine (real v4.3.stable) loading GDExtension bridges built with gdext's default API target"
+    cause: "gdext 0.5.4 defaults to its newest-supported API level (v4.6) when no api-N-N feature is pinned; the from-source engine PB-262 builds is genuinely v4.3."
+    fix: "All 8 GDExtension crates (kupru-gdext, marduk-gdext, naming-registry-gd, navi-translate-gdext, dubsar-gridnav-gd, dubsar-config-gd, enkimdb-registry-gd, pdm-gdext) now pin features = [\"api-4-3\"] in their godot dependency. PB-226 rebuilds and redeploys all six bridges dubsar-theater actually loads on every run, not just kupru-gdext."
+    verified: true
+
+  - id: KE-008
+    signature: "no space left on device"
+    seen_in: "PB-205's podman build, real 28-minute failure documented in ISIMUD_ENGINE_MANUAL.md §3"
+    cause: "No .containerignore existed for workspace/bahyway_v4 -- `COPY . .` transferred the entire directory including a 21G+ target/."
+    fix: "workspace/bahyway_v4/.containerignore now excludes target/, .git/, .godot/. Does not reclaim space already consumed by pre-existing artifacts -- IsimudEngine's own disk-space preflight (disk_free_warn_gb, this manifest's hardware.disk_free_gb_min) exists to catch that before a multi-hour run starts, not after."
+    verified: true

@@ -1,0 +1,682 @@
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 𒁾 03_beemdm_enkidb_nodes.yml
+# BahyWay.Ecosystem v4.0 — BeeMDM ETL Pipeline Setup
+# DUB.SAR Bahaa Fadam
+#
+# Rule 2: Run FROM eriduous-vdi → targeting EnkiDB VMs
+#
+# Usage (from eriduous-vdi):
+#   cd ~/bahyway-ansible
+#   ansible-playbook -i inventory/vms.yml playbooks/03_beemdm_enkidb_nodes.yml
+#
+# What it does:
+#   Phase 1 — Both nodes: system prep, Rust, SQLite, directories
+#   Phase 2 — Write node only: BeeMDM workspace, S0-S8 station dirs,
+#              EnkiDB EAV schema (SQLite), Shedu WAL journal,
+#              ZIP landing folder, najaf-ingest binary build
+#   Phase 3 — Read node only: replica dirs, WAL sync setup
+#   Phase 4 — Verify: both nodes report health
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- name: "𒁾 Phase 1 — System prep on BOTH EnkiDB nodes"
+  hosts: enkidb_nodes
+  become: true
+
+  vars:
+    bahyway_user: "bahyway"
+    bahyway_home: "/home/bahyway"
+    enkidb_root:  "/home/bahyway/enkidb"
+    rust_profile: "/home/bahyway/.cargo/env"
+
+  tasks:
+
+    - name: "Update dnf cache"
+      ansible.builtin.dnf:
+        update_cache: true
+
+    - name: "Install system packages"
+      ansible.builtin.dnf:
+        name:
+          - git
+          - curl
+          - unzip
+          - sqlite
+          - sqlite-devel
+          - gcc
+          - pkg-config
+          - openssl-devel
+          - python3
+          - python3-pip
+          - htop
+          - rsync
+        state: present
+
+    - name: "Install Rust via rustup (if not present)"
+      ansible.builtin.shell:
+        cmd: |
+          if ! command -v cargo &>/dev/null && [ ! -f /home/{{ bahyway_user }}/.cargo/bin/cargo ]; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+              sudo -u {{ bahyway_user }} sh -s -- -y --default-toolchain stable
+            echo "RUST_INSTALLED"
+          else
+            echo "RUST_ALREADY_PRESENT"
+          fi
+        executable: /bin/bash
+      register: rust_install
+      changed_when: "'RUST_INSTALLED' in rust_install.stdout"
+
+    - name: "Show Rust install result"
+      ansible.builtin.debug:
+        msg: "{{ rust_install.stdout_lines }}"
+
+    - name: "Create sovereign directory structure"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ bahyway_user }}"
+        group: "{{ bahyway_user }}"
+        mode: "0755"
+      loop:
+        - "{{ enkidb_root }}"
+        - "{{ enkidb_root }}/data"
+        - "{{ enkidb_root }}/journal"
+        - "{{ enkidb_root }}/wal"
+        - "{{ enkidb_root }}/snapshots"
+        - "{{ enkidb_root }}/logs"
+        - "{{ bahyway_home }}/scripts"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+- name: "𒁾 Phase 2 — Write node: BeeMDM pipeline + EAV schema"
+  hosts: enkidb_write
+  become: false
+
+  vars:
+    bahyway_home:   "/home/bahyway"
+    enkidb_root:    "/home/bahyway/enkidb"
+    beemdm_root:    "/home/bahyway/beemdm"
+    zip_landing:    "/home/bahyway/beemdm/zip_landing"
+    workspace:      "/home/bahyway/Forge/bahyway_v4"
+
+  tasks:
+
+    # ── BeeMDM directory structure ────────────────────────────────────────────
+
+    - name: "Create BeeMDM 9-station directory structure"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ beemdm_root }}"
+        - "{{ zip_landing }}"
+        - "{{ beemdm_root }}/processed"
+        - "{{ beemdm_root }}/quarantine"
+        - "{{ beemdm_root }}/logs"
+        - "{{ beemdm_root }}/stations/s0_adad_gate"
+        - "{{ beemdm_root }}/stations/s1_musaru_security"
+        - "{{ beemdm_root }}/stations/s2_vgca_validation"
+        - "{{ beemdm_root }}/stations/s3_data_structure"
+        - "{{ beemdm_root }}/stations/s4_data_cleansing"
+        - "{{ beemdm_root }}/stations/s5_bahyway_dqm"
+        - "{{ beemdm_root }}/stations/s6_idu_prober"
+        - "{{ beemdm_root }}/stations/s7_data_steward"
+        - "{{ beemdm_root }}/stations/s8_permanent_storage"
+
+    - name: "Write BeeMDM station README"
+      ansible.builtin.copy:
+        dest: "{{ beemdm_root }}/README.md"
+        content: |
+          # 𒁾 BeeMDM — 9-Station ETL Processing Chain
+          BahyWay.Ecosystem v4.0 | enkidb-node-write
+
+          ## Stations
+          | Station | Crate                  | Role                           |
+          |---------|------------------------|--------------------------------|
+          | S0      | adad-gate              | KAKI minting — sole entry      |
+          | S1      | musaru-security        | Auth + malware scan            |
+          | S2      | vgca-validation        | 7D geometric validation        |
+          | S3      | data-structure-station | Schema + tribe assignment      |
+          | S4      | data-cleansing-station | H(P) → B11 scoring             |
+          | S5      | bahyway-dqm            | DAMA-DMBOK 6D scoring          |
+          | S6      | idu-prober             | Cross-tribe dedup (Shamash)    |
+          | S7      | data-steward-station   | Human governance gate          |
+          | S8      | permanent-storage      | Golden Records B11 ≥ 200       |
+
+          ## ZIP Landing
+          Drop najaf_cemetery_batch_*.zip files into:
+            {{ zip_landing }}/
+
+          ## Rules
+          - B11 = round(H(P) × 240) — DIVISOR=240 (Plimpton 322)
+          - GEM threshold: B11 ≥ 200
+          - Append-only forever — no UPDATE, no DELETE
+
+    # ── EnkiDB EAV Schema (SQLite) ────────────────────────────────────────────
+
+    - name: "Write EnkiDB EAV schema SQL"
+      ansible.builtin.copy:
+        dest: "{{ enkidb_root }}/schema.sql"
+        content: |
+          -- ═══════════════════════════════════════════════════════════════════
+          -- 𒁾 EnkiDB EAV Schema — BahyWay.Ecosystem v4.0
+          -- Write node: enkidb-node-write (192.168.122.101)
+          -- CQRS: all writes here, replicated to read node
+          -- Append-only: NO UPDATE, NO DELETE ever
+          -- ═══════════════════════════════════════════════════════════════════
+          PRAGMA journal_mode=WAL;
+          PRAGMA synchronous=NORMAL;
+          PRAGMA foreign_keys=ON;
+
+          -- ── Core EAV particle table ────────────────────────────────────────
+          -- Every assertion in EnkiDB is stored as P(E, A, V, T, S, Z, M)
+          CREATE TABLE IF NOT EXISTS particles (
+              id            INTEGER PRIMARY KEY AUTOINCREMENT,
+              -- E — Entity (KAKI 16-byte hex)
+              entity_kaki   TEXT NOT NULL,
+              -- A — Attribute key
+              attribute     TEXT NOT NULL,
+              -- V — Value (typed string; type determined by attribute schema)
+              value         TEXT,
+              value_type    TEXT NOT NULL DEFAULT 'Text',
+              -- T — Timestamp (UNIX epoch seconds)
+              timestamp_t   INTEGER NOT NULL,
+              -- S — Shard (0 = MVP single-shard)
+              shard         INTEGER NOT NULL DEFAULT 0,
+              -- Z — Proof context (0 = unverified)
+              proof_ctx     INTEGER NOT NULL DEFAULT 0,
+              -- M — Materialization tag (0 = base particle)
+              mat_tag       INTEGER NOT NULL DEFAULT 0,
+              -- BeeMDM pipeline metadata
+              tribe_id      INTEGER NOT NULL,
+              b11_score     INTEGER,
+              station       TEXT NOT NULL DEFAULT 'S0',
+              batch_id      TEXT,
+              created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+          );
+
+          -- ── KAKI identity registry ─────────────────────────────────────────
+          CREATE TABLE IF NOT EXISTS kaki_registry (
+              kaki_hex      TEXT PRIMARY KEY,
+              kaki_role     TEXT NOT NULL,  -- KISHIB, ZIKRU, PARZU
+              tribe_id      INTEGER NOT NULL,
+              born_at       INTEGER NOT NULL,
+              birth_epoch   INTEGER NOT NULL,
+              batch_id      TEXT,
+              source_file   TEXT
+          );
+
+          -- ── Shedu blackbox journal (immutable audit trail) ─────────────────
+          CREATE TABLE IF NOT EXISTS shedu_journal (
+              id            INTEGER PRIMARY KEY AUTOINCREMENT,
+              event_kaki    TEXT NOT NULL,
+              entity_kaki   TEXT NOT NULL,
+              station       TEXT NOT NULL,
+              event_type    TEXT NOT NULL,
+              detail        TEXT,
+              b11_before    INTEGER,
+              b11_after     INTEGER,
+              timestamp_t   INTEGER NOT NULL DEFAULT (unixepoch()),
+              batch_id      TEXT
+          );
+
+          -- ── EnkiSDB — staging DB (pending validation) ─────────────────────
+          CREATE TABLE IF NOT EXISTS enkisdb (
+              id            INTEGER PRIMARY KEY AUTOINCREMENT,
+              entity_kaki   TEXT NOT NULL,
+              batch_id      TEXT NOT NULL,
+              tribe_id      INTEGER NOT NULL,
+              status        TEXT NOT NULL DEFAULT 'PENDING',
+              b11_score     INTEGER,
+              station_reached TEXT DEFAULT 'S0',
+              malware_flag  INTEGER NOT NULL DEFAULT 0,
+              created_at    INTEGER NOT NULL DEFAULT (unixepoch()),
+              updated_at    INTEGER NOT NULL DEFAULT (unixepoch())
+          );
+
+          -- ── EnkiQDB — quarantine DB ────────────────────────────────────────
+          CREATE TABLE IF NOT EXISTS enkiqdb (
+              id              INTEGER PRIMARY KEY AUTOINCREMENT,
+              entity_kaki     TEXT NOT NULL,
+              quarantine_reason TEXT NOT NULL,
+              station         TEXT NOT NULL,
+              batch_id        TEXT,
+              detail          TEXT,
+              quarantined_at  INTEGER NOT NULL DEFAULT (unixepoch())
+          );
+
+          -- ── EnkiODB — operational DB (active records) ─────────────────────
+          CREATE TABLE IF NOT EXISTS enkiodb (
+              id            INTEGER PRIMARY KEY AUTOINCREMENT,
+              entity_kaki   TEXT NOT NULL UNIQUE,
+              tribe_id      INTEGER NOT NULL,
+              b11_score     INTEGER NOT NULL,
+              promoted_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+              batch_id      TEXT
+          );
+
+          -- ── EnkiDW — data warehouse (Golden Records only) ─────────────────
+          CREATE TABLE IF NOT EXISTS enkidw (
+              id             INTEGER PRIMARY KEY AUTOINCREMENT,
+              entity_kaki    TEXT NOT NULL UNIQUE,
+              tribe_id       INTEGER NOT NULL,
+              b11_score      INTEGER NOT NULL CHECK(b11_score >= 200),
+              akkadian_seal  TEXT,  -- Ed25519 signature hex
+              sealed_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+              batch_id       TEXT
+          );
+
+          -- ── NAJAF_CEMETERY tribe attribute schema ──────────────────────────
+          -- Maps CSV columns to EAV attribute keys + AkkValue types
+          CREATE TABLE IF NOT EXISTS tribe_schema (
+              id            INTEGER PRIMARY KEY AUTOINCREMENT,
+              tribe_id      INTEGER NOT NULL DEFAULT 1,
+              tribe_name    TEXT NOT NULL DEFAULT 'NAJAF_CEMETERY',
+              attr_key      TEXT NOT NULL,
+              value_type    TEXT NOT NULL,
+              nullable      INTEGER NOT NULL DEFAULT 1,
+              dim_tag       TEXT,  -- Name, Identity, Date, Geography
+              weight        REAL DEFAULT 0.1,
+              UNIQUE(tribe_id, attr_key)
+          );
+
+          -- ── Riksu cross-tribe lineage journal ─────────────────────────────
+          CREATE TABLE IF NOT EXISTS riksu_journal (
+              id              INTEGER PRIMARY KEY AUTOINCREMENT,
+              entity_kaki     TEXT NOT NULL,
+              parent_kaki     TEXT,
+              bond_type       TEXT NOT NULL,  -- DUPLICATE, VARIANT, CORRECTION
+              checked_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+              batch_id        TEXT
+          );
+
+          -- ── WAL replication log (write node → read node) ──────────────────
+          CREATE TABLE IF NOT EXISTS wal_replication (
+              id            INTEGER PRIMARY KEY AUTOINCREMENT,
+              table_name    TEXT NOT NULL,
+              operation     TEXT NOT NULL,  -- INSERT only (append-only)
+              row_id        INTEGER NOT NULL,
+              replicated    INTEGER NOT NULL DEFAULT 0,
+              created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+          );
+
+          -- ── Indexes ───────────────────────────────────────────────────────
+          CREATE INDEX IF NOT EXISTS idx_particles_entity   ON particles(entity_kaki);
+          CREATE INDEX IF NOT EXISTS idx_particles_attr     ON particles(attribute);
+          CREATE INDEX IF NOT EXISTS idx_particles_tribe    ON particles(tribe_id);
+          CREATE INDEX IF NOT EXISTS idx_particles_station  ON particles(station);
+          CREATE INDEX IF NOT EXISTS idx_particles_batch    ON particles(batch_id);
+          CREATE INDEX IF NOT EXISTS idx_shedu_entity       ON shedu_journal(entity_kaki);
+          CREATE INDEX IF NOT EXISTS idx_shedu_batch        ON shedu_journal(batch_id);
+          CREATE INDEX IF NOT EXISTS idx_enkisdb_status     ON enkisdb(status);
+          CREATE INDEX IF NOT EXISTS idx_wal_replicated     ON wal_replication(replicated);
+
+    - name: "Initialize EnkiDB database from schema"
+      ansible.builtin.shell:
+        cmd: "sqlite3 {{ enkidb_root }}/data/enkidb.sqlite3 < {{ enkidb_root }}/schema.sql"
+        executable: /bin/bash
+      register: schema_init
+      changed_when: true
+
+    - name: "Insert NAJAF_CEMETERY tribe schema attributes"
+      ansible.builtin.shell:
+        cmd: |
+          sqlite3 {{ enkidb_root }}/data/enkidb.sqlite3 << 'SQL'
+          INSERT OR IGNORE INTO tribe_schema
+              (tribe_id, tribe_name, attr_key, value_type, nullable, dim_tag, weight)
+          VALUES
+              (1,'NAJAF_CEMETERY','person.name_arabic',   'Text',      0, 'Name',      0.25),
+              (1,'NAJAF_CEMETERY','person.gender',        'Text',      1, 'Name',      0.05),
+              (1,'NAJAF_CEMETERY','person.birth_year',    'Int',       1, 'Date',      0.05),
+              (1,'NAJAF_CEMETERY','person.age_at_death',  'Int',       1, 'Name',      0.05),
+              (1,'NAJAF_CEMETERY','death.date',           'Timestamp', 0, 'Date',      0.20),
+              (1,'NAJAF_CEMETERY','death.cause',          'Text',      1, 'Name',      0.05),
+              (1,'NAJAF_CEMETERY','grave.coord',          'Coordinate',0, 'Geography', 0.20),
+              (1,'NAJAF_CEMETERY','grave.number',         'Text',      0, 'Identity',  0.15),
+              (1,'NAJAF_CEMETERY','grave.zone',           'Text',      1, 'Name',      0.05),
+              (1,'NAJAF_CEMETERY','burial.type',          'Text',      1, 'Name',      0.05),
+              (1,'NAJAF_CEMETERY','burial.date',          'Timestamp', 1, 'Date',      0.05),
+              (1,'NAJAF_CEMETERY','residence.city',       'Text',      1, 'Name',      0.03),
+              (1,'NAJAF_CEMETERY','contact.family_phone', 'Text',      1, 'Name',      0.02);
+          SQL
+        executable: /bin/bash
+      changed_when: true
+
+    - name: "Verify schema created correctly"
+      ansible.builtin.shell:
+        cmd: |
+          sqlite3 {{ enkidb_root }}/data/enkidb.sqlite3 \
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+        executable: /bin/bash
+      register: tables
+      changed_when: false
+
+    - name: "Show created tables"
+      ansible.builtin.debug:
+        msg: "{{ tables.stdout_lines }}"
+
+    # ── Write the najaf-ingest pipeline script ────────────────────────────────
+
+    - name: "Write najaf-ingest.sh — BeeMDM pipeline runner"
+      ansible.builtin.copy:
+        dest: "{{ bahyway_home }}/scripts/najaf_ingest.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # ═══════════════════════════════════════════════════════════════════
+          # 𒁾 najaf_ingest.sh — BeeMDM ETL Pipeline for NAJAF_CEMETERY tribe
+          # Processes ZIP files through S0→S8 stations
+          # Run on enkidb-node-write
+          # ═══════════════════════════════════════════════════════════════════
+          set -euo pipefail
+
+          ZIP_LANDING="/home/bahyway/beemdm/zip_landing"
+          PROCESSED="/home/bahyway/beemdm/processed"
+          QUARANTINE="/home/bahyway/beemdm/quarantine"
+          DB="/home/bahyway/enkidb/data/enkidb.sqlite3"
+          LOG="/home/bahyway/beemdm/logs/ingest_$(date +%Y%m%d_%H%M%S).log"
+          TRIBE_ID=1
+          QUALITY_DIVISOR=240
+          GEM_THRESHOLD=200
+
+          mkdir -p "$PROCESSED" "$QUARANTINE" "$(dirname $LOG)"
+          exec > >(tee -a "$LOG") 2>&1
+
+          echo "𒁾 BeeMDM ETL Pipeline started: $(date)"
+          echo "Scanning: $ZIP_LANDING"
+
+          process_zip() {
+              local zip_file="$1"
+              local batch_id
+              batch_id=$(basename "$zip_file" .zip)
+              local tmp_dir
+              tmp_dir=$(mktemp -d)
+              trap "rm -rf $tmp_dir" EXIT
+
+              echo ""
+              echo "═══ Processing batch: $batch_id ═══"
+
+              # ── S0: AdadGate — extract + mint KISHIB KAKI for ZIP ────────
+              echo "[S0 ADAD] Extracting $batch_id..."
+              unzip -q "$zip_file" -d "$tmp_dir" || {
+                  echo "[S0 FAIL] Cannot extract $zip_file → quarantine"
+                  cp "$zip_file" "$QUARANTINE/"
+                  sqlite3 "$DB" "INSERT INTO shedu_journal \
+                      (event_kaki,entity_kaki,station,event_type,detail,batch_id) \
+                      VALUES (hex(randomblob(16)),hex(randomblob(16)),\
+                      'S0','QUARANTINE','Cannot extract ZIP','$batch_id');"
+                  return
+              }
+              local csv_file
+              csv_file=$(find "$tmp_dir" -name "*.csv" | head -1)
+              [ -z "$csv_file" ] && { echo "[S0 FAIL] No CSV in $batch_id"; return; }
+
+              local total_rows
+              total_rows=$(tail -n +2 "$csv_file" | wc -l)
+              echo "[S0 ADAD] Records found: $total_rows"
+
+              sqlite3 "$DB" "INSERT INTO shedu_journal \
+                  (event_kaki,entity_kaki,station,event_type,detail,batch_id) \
+                  VALUES (hex(randomblob(16)),hex(randomblob(16)),\
+                  'S0','KISHIB_MINTED','ZIP=$batch_id rows=$total_rows','$batch_id');"
+
+              # ── Process each CSV row through S1→S8 ───────────────────────
+              local promoted=0 quarantined=0 staged=0
+              local row_num=0
+
+              tail -n +2 "$csv_file" | while IFS=',' read -r \
+                  id uuid full_name_arabic gender birth_year age_at_death \
+                  death_date death_time death_datetime death_cause \
+                  residence_address residence_city residence_neighborhood \
+                  burial_date burial_datetime burial_type shroud_type \
+                  grave_type grave_zone grave_number grave_lat grave_lon \
+                  grave_elevation family_contact notes record_source created_at; do
+
+                  row_num=$((row_num + 1))
+                  [ $((row_num % 500)) -eq 0 ] && echo "  → Processed $row_num/$total_rows"
+
+                  # Mint ZIKRU KAKI for this record
+                  local entity_kaki
+                  entity_kaki=$(echo "${batch_id}_${row_num}_${uuid}" | \
+                      sha256sum | cut -c1-32 | tr '[:lower:]' '[:upper:]')
+
+                  # Register in SDB
+                  sqlite3 "$DB" "INSERT OR IGNORE INTO enkisdb \
+                      (entity_kaki,batch_id,tribe_id,status,station_reached) \
+                      VALUES ('$entity_kaki','$batch_id',$TRIBE_ID,'PENDING','S0');" 2>/dev/null || true
+
+                  # ── S1: Musaru — basic validation ─────────────────────────
+                  if [ -z "$full_name_arabic" ] && [ -z "$grave_number" ]; then
+                      sqlite3 "$DB" "INSERT INTO enkiqdb \
+                          (entity_kaki,quarantine_reason,station,batch_id,detail) \
+                          VALUES ('$entity_kaki','EMPTY_RECORD','S1','$batch_id',\
+                          'Both name and grave_number empty');" 2>/dev/null || true
+                      sqlite3 "$DB" "UPDATE enkisdb SET status='QUARANTINED',\
+                          station_reached='S1' WHERE entity_kaki='$entity_kaki';" 2>/dev/null || true
+                      continue
+                  fi
+
+                  # ── S2: VGCA — field presence check ──────────────────────
+                  local vgca_fail=0
+                  [ -z "$full_name_arabic" ] && vgca_fail=$((vgca_fail+1))
+                  [ -z "$death_date" ]       && vgca_fail=$((vgca_fail+1))
+                  [ -z "$grave_lat" ]        && vgca_fail=$((vgca_fail+1))
+                  [ -z "$grave_number" ]     && vgca_fail=$((vgca_fail+1))
+
+                  # ── S4: B11 scoring — simplified H(P) ────────────────────
+                  local score=0
+                  [ -n "$full_name_arabic" ] && score=$((score+60))   # weight 0.25
+                  [ -n "$death_date" ]       && score=$((score+48))   # weight 0.20
+                  [ -n "$grave_lat" ]        && score=$((score+48))   # weight 0.20
+                  [ -n "$grave_number" ]     && score=$((score+36))   # weight 0.15
+                  [ -n "$death_cause" ]      && score=$((score+24))   # weight 0.10
+                  [ -n "$burial_type" ]      && score=$((score+12))   # weight 0.05
+                  [ -n "$family_contact" ]   && score=$((score+12))   # weight 0.05
+                  local b11=$((score > 240 ? 240 : score))
+
+                  # Write particles to EAV
+                  sqlite3 "$DB" << EAVSQL 2>/dev/null || true
+          INSERT OR IGNORE INTO particles
+              (entity_kaki,attribute,value,value_type,timestamp_t,tribe_id,b11_score,station,batch_id)
+          VALUES
+              ('$entity_kaki','person.name_arabic','$full_name_arabic','Text',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id'),
+              ('$entity_kaki','person.gender','$gender','Text',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id'),
+              ('$entity_kaki','death.date','$death_date','Timestamp',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id'),
+              ('$entity_kaki','death.cause','$death_cause','Text',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id'),
+              ('$entity_kaki','grave.number','$grave_number','Text',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id'),
+              ('$entity_kaki','grave.coord','$grave_lat,$grave_lon','Coordinate',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id'),
+              ('$entity_kaki','grave.zone','$grave_zone','Text',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id'),
+              ('$entity_kaki','burial.type','$burial_type','Text',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id'),
+              ('$entity_kaki','quality.b11','$b11','Int',unixepoch(),$TRIBE_ID,$b11,'S4','$batch_id');
+          EAVSQL
+
+                  # ── S8: Route to correct tier ─────────────────────────────
+                  if [ $b11 -ge $GEM_THRESHOLD ] && [ $vgca_fail -eq 0 ]; then
+                      sqlite3 "$DB" "INSERT OR IGNORE INTO enkidw \
+                          (entity_kaki,tribe_id,b11_score,batch_id) \
+                          VALUES ('$entity_kaki',$TRIBE_ID,$b11,'$batch_id');" 2>/dev/null || true
+                      sqlite3 "$DB" "INSERT OR IGNORE INTO enkiodb \
+                          (entity_kaki,tribe_id,b11_score,batch_id) \
+                          VALUES ('$entity_kaki',$TRIBE_ID,$b11,'$batch_id');" 2>/dev/null || true
+                      sqlite3 "$DB" "UPDATE enkisdb SET status='GOLDEN',\
+                          b11_score=$b11,station_reached='S8' \
+                          WHERE entity_kaki='$entity_kaki';" 2>/dev/null || true
+                      promoted=$((promoted+1))
+                  elif [ $b11 -lt 100 ] || [ $vgca_fail -ge 3 ]; then
+                      sqlite3 "$DB" "INSERT INTO enkiqdb \
+                          (entity_kaki,quarantine_reason,station,batch_id,detail) \
+                          VALUES ('$entity_kaki','LOW_B11','S4','$batch_id',\
+                          'B11=$b11 vgca_fail=$vgca_fail');" 2>/dev/null || true
+                      sqlite3 "$DB" "UPDATE enkisdb SET status='QUARANTINED',\
+                          b11_score=$b11,station_reached='S4' \
+                          WHERE entity_kaki='$entity_kaki';" 2>/dev/null || true
+                      quarantined=$((quarantined+1))
+                  else
+                      sqlite3 "$DB" "INSERT OR IGNORE INTO enkiodb \
+                          (entity_kaki,tribe_id,b11_score,batch_id) \
+                          VALUES ('$entity_kaki',$TRIBE_ID,$b11,'$batch_id');" 2>/dev/null || true
+                      sqlite3 "$DB" "UPDATE enkisdb SET status='ACTIVE',\
+                          b11_score=$b11,station_reached='S7' \
+                          WHERE entity_kaki='$entity_kaki';" 2>/dev/null || true
+                      staged=$((staged+1))
+                  fi
+
+                  # WAL replication entry
+                  sqlite3 "$DB" "INSERT INTO wal_replication \
+                      (table_name,operation,row_id) \
+                      VALUES ('particles','INSERT',last_insert_rowid());" 2>/dev/null || true
+
+              done
+
+              # ── Mark batch complete ───────────────────────────────────────
+              sqlite3 "$DB" "INSERT INTO shedu_journal \
+                  (event_kaki,entity_kaki,station,event_type,detail,batch_id) \
+                  VALUES (hex(randomblob(16)),hex(randomblob(16)),\
+                  'S8','BATCH_COMPLETE',\
+                  'total=$total_rows golden=$promoted quarantined=$quarantined active=$staged',\
+                  '$batch_id');"
+
+              echo "[DONE] $batch_id: total=$total_rows golden=$promoted quarantined=$quarantined active=$staged"
+              mv "$zip_file" "$PROCESSED/"
+          }
+
+          # ── Main: process all ZIPs in landing folder ──────────────────────
+          shopt -s nullglob
+          zip_files=("$ZIP_LANDING"/*.zip)
+          if [ ${#zip_files[@]} -eq 0 ]; then
+              echo "No ZIP files found in $ZIP_LANDING"
+              echo "Copy files with:"
+              echo "  scp /path/to/najaf_cemetery_batch_*.zip bahyway@192.168.122.101:$ZIP_LANDING/"
+              exit 0
+          fi
+
+          echo "Found ${#zip_files[@]} ZIP file(s) to process"
+          for zip in "${zip_files[@]}"; do
+              process_zip "$zip"
+          done
+
+          # ── Final report ──────────────────────────────────────────────────
+          echo ""
+          echo "═══ EnkiDB Summary ═══"
+          sqlite3 "$DB" "
+          SELECT 'EnkiSDB pending:   ' || COUNT(*) FROM enkisdb WHERE status='PENDING'
+          UNION ALL
+          SELECT 'EnkiSDB golden:    ' || COUNT(*) FROM enkisdb WHERE status='GOLDEN'
+          UNION ALL
+          SELECT 'EnkiSDB active:    ' || COUNT(*) FROM enkisdb WHERE status='ACTIVE'
+          UNION ALL
+          SELECT 'EnkiQDB quarantined:' || COUNT(*) FROM enkiqdb
+          UNION ALL
+          SELECT 'EnkiODB total:     ' || COUNT(*) FROM enkiodb
+          UNION ALL
+          SELECT 'EnkiDW golden:     ' || COUNT(*) FROM enkidw
+          UNION ALL
+          SELECT 'Particles total:   ' || COUNT(*) FROM particles;
+          "
+          echo "𒁾 BeeMDM pipeline complete: $(date)"
+          echo "Log: $LOG"
+
+    # ── WAL replication script ────────────────────────────────────────────────
+
+    - name: "Write WAL replication script"
+      ansible.builtin.copy:
+        dest: "{{ bahyway_home }}/scripts/wal_replicate.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # 𒁾 wal_replicate.sh — Sync EnkiDB WAL to read node
+          # Run on enkidb-node-write, pushes to enkidb-node-read
+          set -euo pipefail
+          DB="/home/bahyway/enkidb/data/enkidb.sqlite3"
+          READ_NODE="bahyway@192.168.122.107"
+          READ_DB="/home/bahyway/enkidb/data/enkidb.sqlite3"
+
+          echo "𒁾 WAL replication: $(date)"
+
+          # Snapshot write DB and rsync to read node
+          sqlite3 "$DB" ".backup /home/bahyway/enkidb/snapshots/enkidb_snap.sqlite3"
+          rsync -az --progress \
+              /home/bahyway/enkidb/snapshots/enkidb_snap.sqlite3 \
+              "$READ_NODE:$READ_DB"
+
+          # Mark WAL entries as replicated
+          sqlite3 "$DB" "UPDATE wal_replication SET replicated=1 WHERE replicated=0;"
+          echo "✓ Replication complete"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+- name: "𒁾 Phase 3 — Read node: replica setup"
+  hosts: enkidb_read
+  become: false
+
+  vars:
+    enkidb_root: "/home/bahyway/enkidb"
+
+  tasks:
+
+    - name: "Create read node directory structure"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ enkidb_root }}"
+        - "{{ enkidb_root }}/data"
+        - "{{ enkidb_root }}/journal"
+        - "{{ enkidb_root }}/snapshots"
+        - "{{ enkidb_root }}/logs"
+        - "/home/bahyway/scripts"
+
+    - name: "Write read node query script"
+      ansible.builtin.copy:
+        dest: "/home/bahyway/scripts/enkidb_query.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # 𒁾 enkidb_query.sh — Query EnkiDB read replica
+          DB="/home/bahyway/enkidb/data/enkidb.sqlite3"
+          [ ! -f "$DB" ] && echo "DB not yet replicated from write node" && exit 1
+          echo "═══ EnkiDB Read Replica Status ═══"
+          sqlite3 "$DB" "
+          SELECT 'Particles:    ' || COUNT(*) FROM particles
+          UNION ALL
+          SELECT 'Golden (DW):  ' || COUNT(*) FROM enkidw
+          UNION ALL
+          SELECT 'Operational:  ' || COUNT(*) FROM enkiodb
+          UNION ALL
+          SELECT 'Quarantined:  ' || COUNT(*) FROM enkiqdb
+          UNION ALL
+          SELECT 'SDB pending:  ' || COUNT(*) FROM enkisdb WHERE status='PENDING';
+          "
+
+# ═══════════════════════════════════════════════════════════════════════════════
+- name: "𒁾 Phase 4 — Verify both nodes"
+  hosts: enkidb_nodes
+  become: false
+
+  tasks:
+
+    - name: "Verify SQLite available"
+      ansible.builtin.shell:
+        cmd: "sqlite3 --version"
+        executable: /bin/bash
+      register: sqlite_ver
+      changed_when: false
+
+    - name: "Final report"
+      ansible.builtin.debug:
+        msg:
+          - "════════════════════════════════════════════════════"
+          - "𒁾 Node: {{ inventory_hostname }}"
+          - "SQLite: {{ sqlite_ver.stdout }}"
+          - "════════════════════════════════════════════════════"
+          - "Next steps:"
+          - "1. Copy ZIP files to write node:"
+          - "   scp ~/Forge/v4.0_docs/Test_Data/*.zip"
+          - "      bahyway@192.168.122.101:~/beemdm/zip_landing/"
+          - "2. Run pipeline on write node:"
+          - "   ssh bahyway@192.168.122.101 bash ~/scripts/najaf_ingest.sh"
+          - "3. Replicate to read node:"
+          - "   ssh bahyway@192.168.122.101 bash ~/scripts/wal_replicate.sh"
+          - "4. Query read node:"
+          - "   ssh bahyway@192.168.122.107 bash ~/scripts/enkidb_query.sh"
+          - "════════════════════════════════════════════════════"

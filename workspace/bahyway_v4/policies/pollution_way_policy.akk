@@ -1,0 +1,320 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 𒁾  PollutionWay v3.5 — AkkadianAOL Policy Script
+--     pollution_way_policy.akk
+--
+--     BahyWay.Ecosystem v3.5 | BAHYWAYOTAP Architecture | DUB.SAR 𒁾
+--
+--     Sovereign orchestration policy for PollutionWay.
+--     Compiled by AkkadianAOL v3.5 compiler → Rust enforcement layer
+--     via AkkadiRulesWay v3.5 (ABAC policy engine).
+--
+--     Sections:
+--       1. NAMESPACE & IMPORTS
+--       2. DOMAIN CONSTANTS
+--       3. PARTICLE FLOW RULES   (allow / deny)
+--       4. ALARM TRIGGERS        (Hepta HPS thresholds)
+--       5. SENSOR FIREWALL       (AkkadiRulesWay ABAC)
+--       6. ENKI WRITE POLICY     (EnkiWay EAV access control)
+--       7. AKKADICIPHERWAY       (encryption directives)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  1. NAMESPACE & IMPORTS
+-- ───────────────────────────────────────────────────────────────────────────
+
+NAMESPACE bahyway.pollution_way.v3_5
+
+IMPORT bahyway.enki_way.v3_5     AS ENKI
+IMPORT bahyway.akkadi_rules_way   AS RULES
+IMPORT bahyway.akkadi_cipher_way  AS CIPHER
+IMPORT bahyway.akkadi_safe_way    AS SAFE
+IMPORT bahyway.vault_way          AS VAULT
+IMPORT bahyway.zero_way           AS ZERO
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  2. DOMAIN CONSTANTS
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Pollution domain codes (mirrors KAKI tribe_id encoding)
+CONSTANT DOMAIN_AIR   := 0x0001
+CONSTANT DOMAIN_WATER := 0x0002
+CONSTANT DOMAIN_OIL   := 0x0003
+
+-- WHO air quality thresholds (µg/m³)
+CONSTANT WHO_PM25_LIMIT  := 15.0
+CONSTANT WHO_PM10_LIMIT  := 45.0
+
+-- AQI alert bands
+CONSTANT AQI_GOOD        := 50
+CONSTANT AQI_MODERATE    := 100
+CONSTANT AQI_UNHEALTHY   := 150
+CONSTANT AQI_HAZARDOUS   := 300
+CONSTANT AQI_CRITICAL    := 400
+
+-- Water quality thresholds
+CONSTANT WQI_SAFE        := 70.0
+CONSTANT WQI_WARNING     := 50.0
+CONSTANT WQI_CRITICAL    := 25.0
+CONSTANT TURBIDITY_DRINK := 1.0     -- NTU, drinking water
+CONSTANT TURBIDITY_SAFE  := 5.0     -- NTU, recreational
+
+-- Oil spill thresholds (TPHC µg/L)
+CONSTANT TPHC_TRACE      := 100.0
+CONSTANT TPHC_MODERATE   := 1000.0
+CONSTANT TPHC_CRITICAL   := 5000.0
+
+-- Hepta HPS thresholds
+CONSTANT HPS_GREEN       := 0.30
+CONSTANT HPS_YELLOW      := 0.50
+CONSTANT HPS_ORANGE      := 0.70
+CONSTANT HPS_RED         := 0.85
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  3. PARTICLE FLOW RULES — ALLOW / DENY
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Allow natural, non-hazardous air particles into rendering pipeline
+POLICY allow_natural_air_particles
+    WHEN  particle.domain   == DOMAIN_AIR
+    AND   particle.origin   == NATURAL
+    AND   particle.aqi      <= AQI_MODERATE
+    ALLOW particle.flow     -> renderer
+    ALLOW particle.write    -> ENKI.store
+
+-- Allow clean water readings for dashboard display
+POLICY allow_clean_water
+    WHEN  particle.domain   == DOMAIN_WATER
+    AND   particle.wqi      >= WQI_SAFE
+    AND   particle.turbidity <= TURBIDITY_SAFE
+    ALLOW particle.flow     -> renderer
+    ALLOW particle.write    -> ENKI.store
+
+-- Always allow oil readings to write — even clean ones need baseline tracking
+POLICY allow_oil_baseline
+    WHEN  particle.domain   == DOMAIN_OIL
+    AND   particle.tphc     <= TPHC_TRACE
+    AND   particle.sheen    == FALSE
+    ALLOW particle.flow     -> renderer
+    ALLOW particle.write    -> ENKI.store
+
+-- Deny stale readings (>24h old) from entering the live renderer
+POLICY deny_stale_readings
+    WHEN  particle.age_minutes > 1440
+    DENY  particle.flow     -> renderer
+    ALLOW particle.write    -> ENKI.archive   -- archive only, not live store
+
+-- Deny particles with unknown origin from direct renderer access
+-- (they still write to EnkiWay for investigation)
+POLICY deny_unknown_origin_to_renderer
+    WHEN  particle.origin   == UNKNOWN
+    DENY  particle.flow     -> renderer
+    ALLOW particle.write    -> ENKI.store
+    ALARM "UNKNOWN_ORIGIN" severity=LOW sensor=particle.sensor_id
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  4. ALARM TRIGGERS — Hepta HPS thresholds
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Yellow alert: elevated HPS, monitoring mode
+ALARM hps_yellow_alert
+    WHEN  particle.hepta.hps > HPS_YELLOW
+    AND   particle.hepta.hps <= HPS_ORANGE
+    EMIT  ALARM "HPS_YELLOW"
+        sensor    = particle.sensor_id
+        domain    = particle.domain
+        hps       = particle.hepta.hps
+        dmw       = particle.hepta.dmw_notation
+    NOTIFY vault_way.log.pollution_events
+    -- No deny: allow through renderer with visual warning flag
+
+-- Orange alert: high HPS, elevated risk
+ALARM hps_orange_alert
+    WHEN  particle.hepta.hps > HPS_ORANGE
+    AND   particle.hepta.hps <= HPS_RED
+    EMIT  ALARM "HPS_ORANGE"
+        sensor    = particle.sensor_id
+        domain    = particle.domain
+        hps       = particle.hepta.hps
+        zscore    = particle.hepta.zscore
+        dmw       = particle.hepta.dmw_notation
+    NOTIFY vault_way.log.pollution_events
+    NOTIFY vault_way.alert.operations_team
+    DENY  particle.flow -> ENKI.public_api    -- restrict public API access
+    ALLOW particle.flow -> renderer           -- still visible in internal HUD
+
+-- Red alert: critical HPS — full incident response
+ALARM hps_red_alert
+    WHEN  particle.hepta.hps > HPS_RED
+    EMIT  ALARM "HPS_RED_CRITICAL"
+        sensor    = particle.sensor_id
+        domain    = particle.domain
+        hps       = particle.hepta.hps
+        zscore    = particle.hepta.zscore
+        lat       = particle.lat
+        lon       = particle.lon
+        dmw       = particle.hepta.dmw_notation
+    NOTIFY vault_way.log.pollution_events
+    NOTIFY vault_way.alert.operations_team
+    NOTIFY vault_way.alert.environmental_authority
+    DENY  particle.flow -> ENKI.public_api
+    ALLOW particle.flow -> renderer
+    -- Trigger AkkadiSafeWay audit trail entry
+    AUDIT SAFE.trail.critical_pollution_event
+        actor   = particle.sensor_id
+        payload = particle.hepta.dmw_notation
+
+-- Air-specific: WHO PM2.5 exceedance
+ALARM who_pm25_breach
+    WHEN  particle.domain == DOMAIN_AIR
+    AND   particle.pm2_5  > WHO_PM25_LIMIT
+    EMIT  ALARM "WHO_PM25_EXCEEDANCE"
+        sensor = particle.sensor_id
+        value  = particle.pm2_5
+        limit  = WHO_PM25_LIMIT
+    NOTIFY vault_way.log.who_compliance
+
+-- Water: WQI critical drop
+ALARM water_wqi_critical
+    WHEN  particle.domain == DOMAIN_WATER
+    AND   particle.wqi    < WQI_CRITICAL
+    EMIT  ALARM "WATER_WQI_CRITICAL"
+        sensor = particle.sensor_id
+        wqi    = particle.wqi
+    NOTIFY vault_way.alert.water_authority
+
+-- Oil: active spill detection
+ALARM oil_spill_active
+    WHEN  particle.domain == DOMAIN_OIL
+    AND   particle.sheen  == TRUE
+    AND   particle.tphc   > TPHC_MODERATE
+    EMIT  ALARM "OIL_SPILL_ACTIVE"
+        sensor       = particle.sensor_id
+        tphc         = particle.tphc
+        pah_ratio    = particle.pah_ratio
+        spill_area   = particle.spill_area_km2
+        lat          = particle.lat
+        lon          = particle.lon
+    NOTIFY vault_way.alert.coast_guard
+    NOTIFY vault_way.alert.environmental_authority
+    -- Trigger causal edge creation in EnkiWay
+    ENKI.edge.create
+        from_domain = DOMAIN_OIL
+        to_domain   = DOMAIN_WATER
+        edge_type   = CAUSALLY_LINKED
+        radius_km   = 10.0
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  5. SENSOR FIREWALL — AkkadiRulesWay ABAC
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Define sensor roles and access tiers
+ROLE sensor_public
+    CAN   read  ENKI.public_api
+    CAN   write ENKI.store
+    CANNOT read ENKI.archive
+    CANNOT read VAULT.*
+
+ROLE sensor_operator
+    CAN   read  ENKI.store
+    CAN   read  ENKI.archive
+    CAN   write ENKI.store
+    CAN   read  VAULT.log.*
+    CANNOT write VAULT.*
+
+ROLE sensor_admin
+    CAN   read  ENKI.*
+    CAN   write ENKI.*
+    CAN   read  VAULT.*
+    CAN   write VAULT.log.*
+
+-- Rate limiting: public sensors max 100 writes/minute
+FIREWALL rate_limit_public_sensors
+    WHEN  actor.role == sensor_public
+    AND   actor.write_rate_per_min > 100
+    DENY  actor.flow -> ENKI.store
+    ALARM "SENSOR_RATE_LIMIT"
+        sensor = actor.sensor_id
+        rate   = actor.write_rate_per_min
+
+-- Block sensors with failed AkkadiCipherWay signature verification
+FIREWALL deny_invalid_sensor_signature
+    WHEN  CIPHER.verify(actor.akkadian_seal) == FALSE
+    DENY  actor.flow -> *
+    ALARM "INVALID_SENSOR_SEAL" severity=HIGH sensor=actor.sensor_id
+    AUDIT SAFE.trail.authentication_failure
+        actor   = actor.sensor_id
+        reason  = "AkkadianSeal Ed25519 verification failed"
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  6. ENKIWAY WRITE POLICY — EAV access control
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Only the PollutionWriter service may write KAKI PKs with OIL domain
+POLICY enki_oil_write_restriction
+    WHEN  ENKI.write.tribe_id == DOMAIN_OIL
+    AND   actor.service       != "pollution_way.writer"
+    DENY  actor.flow          -> ENKI.store
+    ALARM "UNAUTHORIZED_OIL_WRITE"
+        actor  = actor.service
+        domain = DOMAIN_OIL
+
+-- Prevent overwriting CRC-verified records (integrity protection)
+POLICY enki_protect_verified_records
+    WHEN  ENKI.entity.checksum_valid == TRUE
+    AND   ENKI.write.operation       == OVERWRITE
+    AND   actor.role                 != sensor_admin
+    DENY  actor.flow                 -> ENKI.store
+    ALARM "INTEGRITY_OVERWRITE_ATTEMPT"
+        actor  = actor.sensor_id
+        pk     = ENKI.write.entity_pk
+
+-- Archive policy: records older than 30 days move to archive automatically
+POLICY enki_auto_archive
+    WHEN  ENKI.entity.age_days > 30
+    ENKI.move -> ENKI.archive
+    CIPHER.encrypt(ENKI.archive.record, VAULT.key.archive_key)
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+--  7. AKKADICIPHERWAY — Encryption Directives
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- All EAV records containing Critical or Hazardous particles are
+-- encrypted at rest using ChaCha20-Poly1305 with Argon2id KDF
+CIPHER_POLICY encrypt_hazardous_records
+    WHEN  ENKI.record.band == HAZARDOUS
+    OR    ENKI.record.band == CRITICAL
+    ENCRYPT ENKI.record
+        algorithm = CHACHA20_POLY1305
+        kdf       = ARGON2ID
+        key_ref   = VAULT.key.pollution_hazardous_key
+        seal      = AKKADIAN_SEAL_ED25519
+
+-- All alarm payloads transmitted to external authorities are signed
+CIPHER_POLICY sign_external_alarms
+    WHEN  ALARM.target == vault_way.alert.environmental_authority
+    OR    ALARM.target == vault_way.alert.coast_guard
+    SIGN  ALARM.payload
+        algorithm = ED25519
+        key_ref   = VAULT.key.pollution_alarm_signing_key
+
+-- Sensor readings in transit are encrypted (ZeroWay integration)
+CIPHER_POLICY encrypt_sensor_transit
+    WHEN  actor.flow.direction == INBOUND
+    AND   actor.flow.source    != "localhost"
+    REQUIRE ZERO.tls
+        min_version = TLS_1_3
+        cipher      = CHACHA20_POLY1305
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- END pollution_way_policy.akk
+-- Compiled by AkkadianAOL v3.5 → AkkadiRulesWay v3.5 Rust enforcement
+-- BahyWay.Ecosystem v3.5 | BAHYWAYOTAP Architecture | DUB.SAR 𒁾
+-- ═══════════════════════════════════════════════════════════════════════════

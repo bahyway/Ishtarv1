@@ -1,0 +1,399 @@
+# =============================================================================
+# PB-226 — Launch the DubSar Godot IDE. One proven command, every time.
+# BahyWay.Ecosystem v4.0 — 2026-07-22
+#
+# WHY THIS EXISTS: "how do I launch DubSar" has come up repeatedly, with a
+# real, confusing history behind it -- at different points there were up
+# to three candidate project directories on eriduous-vdi (a standalone
+# `~/dubsar-theater/godot/` with its own bundled Godot binary, a
+# never-confirmed `apps/dubsar-ide/`, and this repo's real, git-tracked
+# `workspace/bahyway_v4/godot/dubsar-theater/`), and the Godot binary
+# itself has moved/disappeared between sessions (`~/dubsar-theater/godot/
+# Godot_v4.7-stable_linux.x86_64` no longer exists as of 2026-07-22 --
+# confirmed live, not assumed). This playbook removes the guessing
+# permanently: it always launches the ONE correct project (this repo's
+# own, the only one with any of this session's real work -- the login
+# gate, the Choose-not-Select rename, the OOO vocabulary gate, MEASURE/
+# GRAVITY, all of it), and it finds Godot itself wherever it currently
+# lives rather than assuming a fixed path that keeps going stale.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms the DubSar project (this repo's workspace/bahyway_v4/
+#      godot/dubsar-theater/) really has a project.godot -- fails clearly,
+#      not silently, if run from somewhere that doesn't have this repo.
+#   2. Discovers a real Godot 4 binary, in priority order: PATH (godot4/
+#      godot/Godot), Flatpak (org.godotengine.Godot), a bounded (5-level)
+#      search under $HOME for a real Godot_v4*/godot*.x86_64 executable,
+#      then a handful of common system install locations. Never crawls
+#      the whole filesystem.
+#   3. If nothing is found anywhere: FAILS with the download link and the
+#      exact override flag to use once Godot is installed or located by
+#      hand -- an honest "not found," never a silent no-op.
+#   4. Builds crates/kupru-gdext in release mode, copies the compiled
+#      libkupru_gdext.so into dubsar-theater/bin/, and (if this project
+#      has never been opened before -- no .godot/ cache yet) runs one
+#      headless `--import` priming pass so the KupruBridge GDExtension
+#      actually gets discovered before login.gd tries to use it. Same
+#      fix PB-227 already applies to Sargon/Gilgamesh, needed here too
+#      now that login.gd calls KupruBridge for real passport
+#      verification instead of just checking non-emptiness.
+#   5. Launches Godot, detached (survives this SSH/terminal session
+#      ending), in `run` mode by default -- launches run/main_scene
+#      directly (currently scenes/login.tscn) with NO editor chrome and
+#      the project's own icon (icon.svg, set via config/icon), i.e.
+#      exactly what a stakeholder must see: the login popup, immediately,
+#      nothing else. `editor` mode (full IDE, script/scene panels -- for
+#      the Architect only, never for a stakeholder demo) is available via
+#      `-e dubsar_mode=editor`.
+#
+# 2026-07-22 CHANGE: default flipped from editor to run. Editor mode's
+# window always shows the Godot Engine's own icon and editor chrome no
+# matter what config/icon says -- that icon belongs to the Godot
+# application itself, not to any project it has open -- so it was
+# impossible to satisfy "no stakeholder ever sees anything but the login
+# popup" while editor stayed the default. Run mode has no such ceiling:
+# it shows only what login.gd actually renders, with the real project
+# icon, from the first frame.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo):
+#   ansible-playbook playbooks/playbook_226_launch_dubsar_godot_ide.yml
+#   ansible-playbook playbooks/playbook_226_launch_dubsar_godot_ide.yml -e dubsar_mode=editor
+#   ansible-playbook playbooks/playbook_226_launch_dubsar_godot_ide.yml -e godot_bin=/path/to/Godot
+#   ansible-playbook playbooks/playbook_226_launch_dubsar_godot_ide.yml -e skip_build=true
+#   ansible-playbook playbooks/playbook_226_launch_dubsar_godot_ide.yml -e skip_build=true -e skip_prime=true
+# =============================================================================
+
+- name: PB-226 -- Launch the DubSar Godot IDE
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    dubsar_project: "{{ repo_root }}/godot/dubsar-theater"
+    # "run" (default) = launches run/main_scene directly (today: scenes/
+    # login.tscn) with no editor chrome and the real project icon -- what
+    # a stakeholder must always see. "editor" = full Godot IDE (script/
+    # scene panels) -- Architect-only, always shows the Godot Engine's
+    # own icon regardless of config/icon, never use for a stakeholder demo.
+    dubsar_mode: "run"
+    # Override only if auto-discovery ever picks the wrong binary, or
+    # can't find one at all yet you know exactly where it is.
+    godot_bin: ""
+    godot_log: "/tmp/dubsar_godot_launch.log"
+    # Skip the kupru-gdext build (e.g. it was just built by PB-227 and
+    # nothing in crates/kupru* has changed since).
+    skip_build: false
+    # Skip the headless import-priming scan below -- see that task's own
+    # comment. Default false (always prime) for terminal use; only
+    # PB-288's desktop launcher passes true.
+    skip_prime: false
+    build_log: "/tmp/kupru_gdext_build.log"
+    # 2026-07-22: passed through as the DUBSAR_LAUNCH_MODE env var to the
+    # Godot process. Checked by theater_controller.gd's _ready() *after*
+    # the mandatory login gate succeeds -- "enkidb_connect" auto-opens the
+    # EnkiDB Connector Wizard once the Theater loads; anything else (the
+    # default) leaves the plain Theater. This is what the two desktop
+    # launchers (PB-91) use to keep "EnkiDB Connect" vs "DubSar Theater"
+    # behaving differently again, without reintroducing the old dubsar_
+    # proof.gd patch that bypassed login entirely.
+    dubsar_launch_mode: ""
+    # FIXED 2026-08-02, live -- REVERTED the 2026-07-28 default below.
+    # That override was scoped to eriduous-vdi specifically: no
+    # render-capable GPU visible to Vulkan (confirmed via `vulkaninfo`,
+    # Intel's real driver `anv` failing VK_ERROR_INCOMPATIBLE_DRIVER, only
+    # a display node with no render node), forcing project.godot's
+    # declared Forward Plus (Vulkan-only) through llvmpipe's software
+    # rasterizer, which froze the VDI. The bare-metal host has a REAL
+    # Intel UHD Graphics (CML GT2) iGPU with working Vulkan -- this
+    # override was carried over unexamined during the VDI-to-bare-metal
+    # migration and was live-confirmed to actively BREAK rendering there:
+    # CENTER_STAGE's 50,000-particle BIGRING initialized with no errors
+    # in the launch log, but rendered as two flat, unshaded green shapes
+    # instead of the intended particle ring -- GL Compatibility can't
+    # correctly render whatever GPU-particle/shader features Forward Plus
+    # provides. Default is now empty (Godot uses project.godot's own
+    # forward_plus, correct for this real GPU); the old VDI-era value is
+    # still available as an explicit opt-in for any future host that
+    # genuinely has no working Vulkan driver:
+    #   -e rendering_method=gl_compatibility -e rendering_driver=opengl3
+    rendering_method: ""
+    rendering_driver: ""
+
+  tasks:
+    - name: Confirm the DubSar project really exists at the expected path
+      ansible.builtin.stat:
+        path: "{{ dubsar_project }}/project.godot"
+      register: dubsar_project_check
+
+    - name: Fail clearly if the DubSar project isn't where expected
+      ansible.builtin.fail:
+        msg: >-
+          No project.godot found at {{ dubsar_project }}. This playbook only
+          ever launches the git-tracked DubSar project (this repo's own
+          workspace/bahyway_v4/godot/dubsar-theater/) -- run it from inside
+          a checkout of the EnkiDB repo (the one you `git pull` this branch
+          into), or pass -e dubsar_project=/path/to/project/dir to point at
+          a different one on purpose.
+      when: not dubsar_project_check.stat.exists
+
+    # ── Build and wire in every GDExtension bridge dubsar-theater loads ──
+    # 2026-07-28: this used to build+copy only kupru-gdext. That silently
+    # left marduk-gdext, naming-registry-gd, navi-translate-gdext,
+    # dubsar-gridnav-gd, and enkimdb-registry-gd's .so files stale --
+    # they'd been built once by their own one-off playbooks (PB-231,
+    # PB-240, PB-244/5/6, PB-160) and never touched again. That didn't
+    # matter until PB-262 replaced the engine binary with a real
+    # from-source Godot 4.3 build: every one of those .so files had been
+    # compiled against gdext's default (newest-supported, v4.6) API
+    # level, so ALL SIX failed to load against the real v4.3 engine
+    # ("compiled against newer Godot version... but loaded by older
+    # Godot binary") -- which cascaded into login.gd failing to parse
+    # (it references KupruBridge) and the whole window rendering blank.
+    # Fixed at the source (each crate's Cargo.toml now pins
+    # features = ["api-4-3"]), but the already-built .so files on disk
+    # were still the old, stale ones until rebuilt -- hence rebuilding
+    # and re-copying all six here, every run, not just kupru's.
+    - name: Build every dubsar-theater GDExtension bridge in release mode
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release
+        -p kupru-gdext -p marduk-gdext -p naming-registry-gd
+        -p navi-translate-gdext -p dubsar-gridnav-gd -p enkimdb-registry-gd
+        > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: Fail clearly if the build failed
+      ansible.builtin.fail:
+        msg: >-
+          cargo build --release for the dubsar-theater GDExtension bridges
+          failed (rc={{ build_result.rc }}). Full output: {{ build_log }}
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: Ensure the DubSar project's bin/ directory exists
+      ansible.builtin.file:
+        path: "{{ dubsar_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    # FIXED 2026-08-02, live -- REVERTED to a self-healing check after a
+    # real regression: gating this whole stat+copy chain on the static
+    # `skip_build` flag assumed the bridges had already been copied into
+    # {{ dubsar_project }}/bin/ at least once -- on a bare-metal checkout
+    # where they never had been, `-e skip_build=true` skipped the copy
+    # entirely and DubSar Theater failed to load every bridge
+    # ("GDExtension dynamic library not found", login.gd unable to find
+    # KupruBridge/EnkiEngines, blank gray window). Checking the actual
+    # destination files instead of trusting the flag fixes both cases:
+    # still skipped (fast) when they're really already there, but never
+    # silently skipped when they're not.
+    - name: Check which destination bridge libraries already exist in the DubSar project
+      ansible.builtin.stat:
+        path: "{{ dubsar_project }}/bin/{{ item }}"
+      register: dest_lib_check
+      loop:
+        - libkupru_gdext.so
+        - libmarduk_gdext.so
+        - libnaming_registry_gd.so
+        - libnavi_translate_gdext.so
+        - libdubsar_gridnav_gd.so
+        - libenkimdb_registry_gd.so
+
+    - name: Determine whether every destination bridge library is already present
+      ansible.builtin.set_fact:
+        all_dest_bridges_present: "{{ dest_lib_check.results | map(attribute='stat.exists') | select('equalto', false) | list | length == 0 }}"
+
+    - name: Confirm each compiled bridge library exists
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/{{ item }}"
+      register: lib_check
+      loop:
+        - libkupru_gdext.so
+        - libmarduk_gdext.so
+        - libnaming_registry_gd.so
+        - libnavi_translate_gdext.so
+        - libdubsar_gridnav_gd.so
+        - libenkimdb_registry_gd.so
+      when: not (skip_build and all_dest_bridges_present)
+
+    - name: Fail clearly if any compiled bridge library is missing
+      ansible.builtin.fail:
+        msg: >-
+          {{ repo_root }}/target/release/{{ item.item }} does not exist.
+          Run without -e skip_build=true first, or check {{ build_log }}
+          for a build failure.
+      loop: "{{ lib_check.results }}"
+      when: not (skip_build and all_dest_bridges_present) and not item.stat.exists
+
+    - name: Copy every compiled bridge into the DubSar project
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/{{ item }}"
+        dest: "{{ dubsar_project }}/bin/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - libkupru_gdext.so
+        - libmarduk_gdext.so
+        - libnaming_registry_gd.so
+        - libnavi_translate_gdext.so
+        - libdubsar_gridnav_gd.so
+        - libenkimdb_registry_gd.so
+      when: not (skip_build and all_dest_bridges_present)
+
+    # ── Discover Godot (needed both for priming below and for launch) ──
+    - name: Discover a real Godot 4 binary
+      ansible.builtin.shell: |
+        set -u
+        # 1. Already on PATH under a common name.
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then
+            command -v "$name"
+            exit 0
+          fi
+        done
+        # 2. Flatpak install.
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"
+          exit 0
+        fi
+        # 3. A real executable Godot binary somewhere under $HOME --
+        #    bounded to 5 levels deep, never a full-disk crawl.
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          echo "$found"
+          exit 0
+        fi
+        # 4. A few common system install locations.
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then
+            echo "$path"
+            exit 0
+          fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: Resolve the Godot binary to actually use
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: Fail clearly, with next steps, if no Godot binary was found anywhere
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found on PATH, via Flatpak, under $HOME (searched
+          5 levels deep), or in common system locations. This is an honest
+          "not installed / not found," not a bug in this playbook.
+          Install Godot 4.x from https://godotengine.org/download and
+          re-run this playbook, or if it's already installed somewhere this
+          search didn't cover, point at it directly:
+            ansible-playbook playbooks/playbook_226_launch_dubsar_godot_ide.yml \
+              -e godot_bin=/full/path/to/Godot_v4.x-stable_linux.x86_64
+      when: resolved_godot_bin | length == 0
+
+    # ── Prime the import cache (GDExtension discovery) ────────────────
+    # PB-227 learned this the hard way on brand-new projects: Godot only
+    # discovers .gdextension resources during a project scan, and a bare
+    # `--path` run-mode launch skips it. The FIRST version of this fix
+    # here only primed when {{ dubsar_project }}/.godot didn't exist yet
+    # -- which is wrong for dubsar-theater specifically: unlike Sargon/
+    # Gilgamesh (brand-new projects), DubSar has been launched dozens of
+    # times across this whole session, so it already had a stale .godot/
+    # cache from BEFORE kupru.gdextension ever existed, and the "only if
+    # missing" guard skipped priming entirely -- login.gd's KupruBridge
+    # references then failed to resolve exactly like the original
+    # Sargon/Gilgamesh bug, just for a different reason (stale cache,
+    # not no cache). Fix: prime unconditionally, every run, now that
+    # resolved_godot_bin is already known. A few extra seconds beats a
+    # blank grey window; Godot's own import step is a no-op for anything
+    # already up to date.
+    #
+    # FIXED 2026-08-02, live: "unconditional, every run" above was
+    # deliberate and stays the DEFAULT -- but reported as real, noticeable
+    # slowness on repeat launches from a desktop icon (effectively
+    # starting Godot twice per click). skip_prime is a NEW, explicit
+    # opt-in flag (not a return to the old silent "only if missing"
+    # auto-detection this comment already explains was wrong) -- only
+    # PB-288's desktop launcher passes it, and only because a launch
+    # already primed the project at least once since the bridge .so last
+    # changed. Terminal use keeps priming on unless asked not to.
+    - name: Prime the DubSar project (headless import scan) so KupruBridge gets discovered before launch
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ dubsar_project }} --import
+        > {{ godot_log }}.import 2>&1
+      register: import_result
+      failed_when: false
+      when: not skip_prime
+
+    - name: Warn if the priming import scan reported errors
+      ansible.builtin.debug:
+        msg: >-
+          Headless import priming exited {{ import_result.rc }}. See
+          {{ godot_log }}.import for details. Continuing to launch anyway --
+          but if login.gd can't find KupruBridge, check that log first.
+      when: not skip_prime and import_result.rc is defined and import_result.rc != 0
+
+    - name: Report what is about to launch
+      ansible.builtin.debug:
+        msg:
+          - "Godot binary  : {{ resolved_godot_bin }}"
+          - "DubSar project: {{ dubsar_project }}"
+          - "Bridge libraries: {{ dubsar_project }}/bin/lib{kupru_gdext,marduk_gdext,naming_registry_gd,navi_translate_gdext,dubsar_gridnav_gd,enkimdb_registry_gd}.so"
+          - "Mode          : {{ dubsar_mode }}"
+          - "Renderer      : {{ rendering_method | default('engine default') }} / {{ rendering_driver | default('engine default') }}"
+          - "Launch log    : {{ godot_log }}"
+
+    # 2026-07-28: this playbook has now been run dozens of times across
+    # this session's whole history, always via `nohup ... &` with no
+    # matching kill step -- every run just added another background
+    # Godot process on top of whatever was already there. Harmless on a
+    # machine with a real GPU; on eriduous-vdi (llvmpipe software Vulkan
+    # rendering -- confirmed in /tmp/dubsar_godot_launch.log: "Using
+    # Device #0: Unknown - llvmpipe") several stacked instances of a 3D
+    # particle scene each fighting for the same CPU is exactly what
+    # jammed and froze the VDI. Matching on dubsar_project's own path
+    # (not a bare "godot4" match) so this only ever kills stale DubSar
+    # Theater instances, never Sargon/Gilgamesh or any other Godot tool.
+    - name: Kill any stale DubSar instance from a previous run
+      ansible.builtin.command: "pkill -f {{ dubsar_project }}"
+      register: kill_result
+      failed_when: false
+      changed_when: kill_result.rc == 0
+
+    - name: Give a killed instance a moment to actually release the display/GPU
+      ansible.builtin.pause:
+        seconds: 1
+      when: kill_result.rc == 0
+
+    - name: Launch DubSar in editor mode (full IDE — script/scene panels)
+      ansible.builtin.shell: >-
+        DUBSAR_LAUNCH_MODE={{ dubsar_launch_mode }}
+        nohup {{ resolved_godot_bin }} --editor --path {{ dubsar_project }}
+        {{ '--rendering-method ' + rendering_method if rendering_method | length > 0 else '' }}
+        {{ '--rendering-driver ' + rendering_driver if rendering_driver | length > 0 else '' }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "editor"
+
+    - name: Launch DubSar in run mode (run/main_scene directly, no editor chrome)
+      ansible.builtin.shell: >-
+        DUBSAR_LAUNCH_MODE={{ dubsar_launch_mode }}
+        nohup {{ resolved_godot_bin }} --path {{ dubsar_project }}
+        {{ '--rendering-method ' + rendering_method if rendering_method | length > 0 else '' }}
+        {{ '--rendering-driver ' + rendering_driver if rendering_driver | length > 0 else '' }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+      when: dubsar_mode == "run"
+
+    - name: Confirmation
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 DubSar launching in the background ({{ dubsar_mode }} mode).
+          If a window doesn't appear within a few seconds, check
+          {{ godot_log }} for errors.

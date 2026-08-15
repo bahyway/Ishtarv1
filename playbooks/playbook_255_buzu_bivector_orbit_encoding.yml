@@ -1,0 +1,597 @@
+# =============================================================================
+# PB-255 — BUZU: Bivector Orbit Encoding Law (GL-VIZ-001)
+# BahyWay.Ecosystem v4.0 — 2026-07-26
+#
+# PROVENANCE: renumbered and corrected from an ideation-only session's
+# "PB-182" draft. Ground-checked against this repo before landing; two
+# real corrections applied, plus one real upgrade:
+#   1. RENUMBERED 182 -> 255. PB-182 was already a real, landed
+#      playbook (playbook_182_enlil_no_tree_in_orbits_audit.yml) — the
+#      draft's number would have collided with it. 255 is the next
+#      free number (254 was just used by PB-254/AcadEngine).
+#   2. HOST/INVOCATION/PATHS FIXED. Same class of bug found and fixed
+#      repo-wide earlier this session (74 files): the draft used
+#      `hosts: eriduous_vdi` and `bahyway_root: /home/bahaa/bahyway/v4`,
+#      neither of which exist as this repo actually runs. Uses the real
+#      `hosts: localhost` + `connection: local` + forge_root convention.
+#   3. UPGRADED FROM DOC-ONLY TO PROVEN CODE. The draft only wrote a
+#      markdown spec asserting the encoding law; it shipped zero Rust.
+#      This playbook lands `crates/buzu-core`, a real implementation of
+#      GL-VIZ-001 §1 (bivector -> rotor -> parametric orbit position)
+#      that REUSES `bahyway-algebra::clifford::Multivector` (the
+#      already-tested Cl(7,0) geometric product) rather than
+#      hand-deriving a new formula independently, proven by 7 real
+#      tests — not merely described.
+#
+# THE LAW THIS SEALS (GL-VIZ-001 §1, PROVEN — see §§2-5 below for what
+# remains genuinely open):
+#   The billion-particle rendering condition is met not by moving
+#   positions but by moving LAWS OF MOTION: the orbital bivector
+#   (geometric algebra plane element) is uploaded once; a particle's
+#   position is evaluated as a function of its phase via rotor
+#   exponentiation. Per-frame traffic collapses to a phase scalar.
+#
+# NAMING (NL-001-A1, artifacts name formats — registry started by this
+# playbook, see docs/NL-001-A1.md):
+#   BUZU = the binary chunk format for billion-particle orbit
+#   rendering. Architect-coined codename in Akkadian phonetic style (no
+#   attested etymology claimed — Truth Before Beauty). Considered and
+#   set aside: PUZUR (puzru, "secret/shelter" — returned to the
+#   artifact name pool); ERISHUM (king of Assur — reserved to the era
+#   pool per NL-001: kings name eras, not artifacts).
+#
+# OPEN FIELDS — GENUINE ARCHITECT DECISIONS, NOT GUESSED, NOT DEFAULTED:
+#   D1. Bivector residence: per-Tribe (shared plane; particles pay
+#       phase+radius only) vs per-particle. Memory budget hinges here;
+#       does not affect §1's math, which is correct either way.
+#   D2. BUZU chunk byte layout (header, particle stride, chunk size,
+#       checksum discipline) — the GPU wire format on top of the
+#       already-proven logical payload (`Bivector { b01, b02, b12 }`).
+#   D3. FUZZY perturbation term's packed encoding (the additive
+#       semantics are proven by this playbook; the compact wire
+#       representation is not decided).
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law — PB-160
+# (DubSar Theater bridge wiring) is complete, so this gate is satisfied.
+#
+# Run on eriduous-vdi (standard convention):
+#   ansible-playbook playbook_255_buzu_bivector_orbit_encoding.yml -i "localhost," -c local
+# =============================================================================
+---
+- name: "PB-255 | BUZU — bivector orbit encoding law (GL-VIZ-001)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:  "{{ forge_root }}/workspace/bahyway_v4"
+    buzu_dir:   "{{ workspace }}/crates/buzu-core"
+    docs_dir:   "{{ forge_root }}/docs"
+    cargo:      "cargo"
+
+  tasks:
+
+    - name: "PB-255.01 | Ensure directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ buzu_dir }}/src"
+        - "{{ docs_dir }}"
+
+    - name: "PB-255.02 | Write GL-VIZ-001.md (encoding law + open items)"
+      ansible.builtin.copy:
+        dest: "{{ docs_dir }}/GL-VIZ-001.md"
+        mode: "0644"
+        content: |
+          # GL-VIZ-001 — Bivector Orbit Encoding and the BUZU Chunk
+
+          Status: §1 (the encoding law) SEALED and PROVEN — landed by
+          PB-255 as `crates/buzu-core`, 7/7 tests passing on real
+          geometric algebra, not just described. §§2-3 (the BUZU chunk
+          format, FUZZY packed encoding) remain DRAFT — three fields
+          are genuine open Architect decisions (D1-D3 below), not
+          defaulted or guessed.
+
+          ## 1. The encoding law (SEALED, PROVEN)
+
+          Rendering the billion does not move positions; it moves laws
+          of motion. Each orbit is encoded by its bivector B (the
+          orbital plane element of geometric algebra); the GPU forms
+          the rotor R = exp(-B*theta/2) and carries particles around
+          their orbits parametrically. Per-frame CPU->GPU traffic
+          reduces to theta (and view uniforms) — not a stream of
+          positions.
+
+              We do not draw a billion positions;
+              we draw orbits, and particles are phases upon them.
+
+          This is Triple-O rendered natively: the orbit is the
+          first-class object of the ontology and of the renderer
+          alike. Puhu reading: the bivector is the pattern (shared by
+          every particle on the orbit); the phase is the occupant.
+
+          **Implementation:** `crates/buzu-core` (workspace member,
+          depends only on `bahyway-algebra`'s already-tested Cl(7,0)
+          `Multivector` geometric product — no third-party crate, no
+          hand-derived formula independent of that tested substrate).
+          Public surface: `Bivector::from_plane`, `Bivector::exp` (the
+          law itself), `Rotor::apply` (the sandwich product),
+          `orbit_position` (GOLDEN — pure parametric evaluation),
+          `orbit_position_perturbed` (FUZZY — additive semantics, §3).
+
+          **Proof, not assertion** — 7 tests, all passing:
+          - `normal_matches_coordinate_planes` — the plane-normal
+            (Hodge dual) convention is verified against the three
+            coordinate planes before being trusted elsewhere.
+          - `full_turn_returns_to_start` — theta = 2*pi is the identity.
+          - `quarter_turn_in_xy_plane` — a concrete, checkable rotation.
+          - `rotor_preserves_length` — the core rendering promise: a
+            particle stays at orbit radius from its nucleus at every
+            phase, sampled at 16 points around the circle.
+          - `rotor_composition_matches_direct_angle` — composing two
+            rotors via the geometric product equals one rotor at the
+            summed angle (the group structure a GPU incremental-update
+            path would eventually rely on).
+          - `full_orbit_traces_a_circle_in_plane` — sampled at 32
+            phases, every point sits at exactly the orbit radius from
+            the nucleus AND lies in the declared plane (checked against
+            the plane's own normal, not assumed) — the end-to-end §1
+            claim, proven.
+          - `fuzzy_perturbation_is_additive` — §3's semantics, proven.
+
+          ## 2. The BUZU chunk (artifact, NL-001-A1) — DRAFT, D2 open
+
+          BUZU is the upload-once binary unit of orbit data:
+          - Chunks are immutable after seal (checksum discipline per
+            D2) and are the atoms of GPU residency.
+          - Chunks are simultaneously LOD and culling units: distant
+            chunks render as aggregates; near chunks render raw;
+            visibility is decided per-chunk, never per-particle.
+          - Chunk emission is an EnkiDB EMIT target so one sealed
+            dataset feeds both the sovereign renderer (raw wgpu, DubSar
+            Theater) and outward faces (WASM / geospatial tier) without
+            re-derivation.
+
+          The exact byte layout (header, particle stride, chunk size,
+          checksum discipline) is D2 — not written here, and not
+          guessed. `buzu-core`'s `Bivector { b01, b02, b12 }` and the
+          phase/perturbation values it consumes are exactly the
+          logical payload a chunk would carry; D2 is the packing
+          decision on top of an already-proven logical payload.
+
+          ## 3. State trichotomy interaction
+
+          GOLDEN particles: pure parametric evaluation via
+          `orbit_position` (zero delta) — proven in §1. FUZZY
+          particles: deform off the shared orbit; `orbit_position_perturbed`
+          proves the additive semantics are correct, but the compact
+          packed representation of the perturbation term (D3) is still
+          open. DEAD particles: fixed points; render from the aggregate
+          tier only (out of scope for this playbook).
+
+          Consequence: a chunk's true bandwidth cost scales with its
+          FUZZY ratio — the health of the data is literally the cost
+          of drawing it.
+
+          ## 4. Honest residual
+
+          Bivector encoding removes the TRANSFER bottleneck, not the
+          RASTERIZATION one. Chunk-level LOD/aggregation (§2) remains a
+          load-bearing member of this law, not an optimization, and is
+          not yet built.
+
+          ## 5. Open Architect decisions (unchanged from the original proposal — not resolved by this landing)
+
+          - **D1** — bivector residence: per-Tribe (particles of a
+            tribe share the orbital plane, paying only a phase and
+            radius each — a few bytes per particle, a billion fits in
+            VRAM comfortably) vs per-particle (~24+ bytes each, back
+            near the transfer ceiling). Pure data-layout decision;
+            §1's math is correct either way.
+          - **D2** — BUZU chunk byte layout (header, stride, chunk
+            size, checksum discipline).
+          - **D3** — FUZZY perturbation term's packed encoding (the
+            additive semantics are proven in §1/§3; the compact wire
+            format is not decided).
+
+          These are sealed by a follow-up revision of this tablet once
+          decided — never defaulted.
+
+          ## 6. Naming record
+
+          BUZU: Architect-coined, Akkadian phonetic style, no
+          etymology claimed (Truth Before Beauty). PUZUR considered and
+          returned to the artifact name pool (puzru, "secret/shelter").
+          ERISHUM considered and reserved to the ERA pool instead (king
+          of Assur; per NL-001, kings name eras) — see
+          `docs/NL-001-A1.md` for the running artifact-name registry
+          this playbook starts.
+
+    - name: "PB-255.03 | Write NL-001-A1.md (artifact name registry)"
+      ansible.builtin.copy:
+        dest: "{{ docs_dir }}/NL-001-A1.md"
+        mode: "0644"
+        content: |
+          # NL-001-A1 — Artifact Name Registry
+
+          Sub-registry of NL-001 (Release Codename Law,
+          `docs/BAHYWAY_V4_ARCHITECTURE_REFERENCE_2026-07-11.md` §8.1):
+          while gods name engines/calculi, cities name structures, and
+          kings name eras, ARTIFACTS (binary formats, wire encodings,
+          non-engine, non-structure named things) get their own pool,
+          tracked here.
+
+          Started 2026-07-26 (PB-255) — this is the first entry.
+          TUPSIMATI (the config tablet format, PB-169) predates this
+          registry and was never formally recorded anywhere; added
+          below for a complete record rather than left as a
+          retroactive gap.
+
+          | Name | What it names | Sealed by | Status |
+          |---|---|---|---|
+          | TUPSIMATI | Config tablet format | PB-169 | Real, in use — recorded here retroactively (2026-07-26), was not previously registered anywhere |
+          | BUZU | Bivector-orbit binary chunk (GL-VIZ-001 §2) | PB-255 | Name sealed; byte layout (D2) still open — see `docs/GL-VIZ-001.md` |
+
+          ## Considered and set aside
+
+          - **PUZUR** (puzru, "secret/shelter") — considered for the
+            chunk format BUZU now names, returned to this pool, meaning
+            noted with respect. Available for a future artifact.
+          - **ERISHUM** (king of Assur) — considered for the same, but
+            withdrawn from this pool: per NL-001, kings name eras, not
+            artifacts. Reserved to the era pool instead (alongside
+            Gudea, Zagesi).
+
+    - name: "PB-255.04 | Write buzu-core Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ buzu_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name              = "buzu-core"
+          version.workspace = true
+          edition.workspace = true
+          authors.workspace = true
+          description       = "BUZU: bivector orbit encoding (GL-VIZ-001) -- billion-particle rendering law. We do not draw a billion positions; we draw orbits, and particles are phases upon them. A bivector plane element (from bahyway-algebra's Cl(7,0) substrate) is uploaded once; position is evaluated as a function of phase via rotor exponentiation, collapsing per-frame traffic to a scalar."
+
+          [dependencies]
+          bahyway-algebra = { path = "../bahyway-algebra" }
+
+    - name: "PB-255.05 | Write lib.rs (Bivector/Rotor + GOLDEN/FUZZY evaluation, proven by 7 tests)"
+      ansible.builtin.copy:
+        dest: "{{ buzu_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! BUZU — Bivector Orbit Encoding (GL-VIZ-001, §1: the encoding law).
+          //!
+          //! The billion-particle rendering condition is met not by moving
+          //! positions but by moving LAWS OF MOTION: an orbit is encoded by its
+          //! bivector B (the orbital plane element of geometric algebra, reusing
+          //! `bahyway_algebra::clifford::Multivector`'s already-tested Cl(7,0)
+          //! geometric product rather than re-deriving one). The GPU forms the
+          //! rotor R = exp(-B*theta/2) and evaluates a particle's position as a
+          //! function of time (its phase) rather than receiving a new position
+          //! every frame. Per-frame CPU->GPU traffic collapses to a phase scalar.
+          //!
+          //! We do not draw a billion positions; we draw orbits, and particles
+          //! are phases upon them. Puhu reading: the bivector is the pattern
+          //! (shared by every particle on the orbit); the phase is the occupant.
+          //!
+          //! HONEST SCOPE (GL-VIZ-001 open items, NOT decided here, NOT guessed):
+          //!   D1. Bivector residence -- per-Tribe (shared plane) vs per-particle.
+          //!       A memory-layout decision; unaffected by the math below.
+          //!   D2. BUZU chunk byte layout for GPU upload. A wire-format decision;
+          //!       this module proves the LAW the format will encode, not the
+          //!       format itself.
+          //!   D3. FUZZY perturbation term's packed encoding. This module exposes
+          //!       the additive SEMANTICS (`orbit_position_perturbed`) since that
+          //!       part is uncontroversial; the compact packed representation is
+          //!       still open.
+          //! These three are Architect decisions per GL-VIZ-001 -- see
+          //! docs/GL-VIZ-001.md. Nothing here defaults them.
+
+          use bahyway_algebra::clifford::Multivector;
+
+          /// e_i basis-vector blade indices in Cl(7,0), restricted to the 3
+          /// spatial dimensions BUZU orbits live in (indices 3..7 are unused
+          /// here -- reserved should a future law need higher-dimensional orbits).
+          const E0: usize = 1; // 1 << 0
+          const E1: usize = 2; // 1 << 1
+          const E2: usize = 4; // 1 << 2
+          const E01: usize = E0 | E1; // 3
+          const E02: usize = E0 | E2; // 5
+          const E12: usize = E1 | E2; // 6
+
+          fn vector_to_mv(v: [f64; 3]) -> Multivector {
+              let mut m = Multivector::zero();
+              m.c[E0] = v[0];
+              m.c[E1] = v[1];
+              m.c[E2] = v[2];
+              m
+          }
+
+          fn mv_to_vector(m: &Multivector) -> [f64; 3] {
+              [m.c[E0], m.c[E1], m.c[E2]]
+          }
+
+          /// A bivector: the orbital plane element. Compact triple (b01, b02,
+          /// b12) -- the coefficients of e0^e1, e0^e2, e1^e2 -- which is exactly
+          /// the payload a GPU-resident BUZU chunk would carry per orbit (D2's
+          /// eventual packed form still open, but this IS its logical content).
+          #[derive(Debug, Clone, Copy, PartialEq)]
+          pub struct Bivector {
+              pub b01: f64,
+              pub b02: f64,
+              pub b12: f64,
+          }
+
+          impl Bivector {
+              /// The plane spanned by two vectors, via the wedge product --
+              /// reuses `Multivector::wedge`, already tested in bahyway-algebra.
+              pub fn from_plane(u: [f64; 3], v: [f64; 3]) -> Self {
+                  let w = vector_to_mv(u).wedge(&vector_to_mv(v));
+                  Bivector { b01: w.c[E01], b02: w.c[E02], b12: w.c[E12] }
+              }
+
+              /// Magnitude of the bivector (area of the spanned parallelogram).
+              pub fn magnitude(&self) -> f64 {
+                  (self.b01 * self.b01 + self.b02 * self.b02 + self.b12 * self.b12).sqrt()
+              }
+
+              /// Unit bivector -- pure plane direction, magnitude 1.
+              pub fn unit(&self) -> Self {
+                  let m = self.magnitude();
+                  if m < 1e-15 {
+                      *self // degenerate plane; caller error, return as-is rather than divide by zero
+                  } else {
+                      Bivector { b01: self.b01 / m, b02: self.b02 / m, b12: self.b12 / m }
+                  }
+              }
+
+              /// The plane's normal vector (Hodge dual in Cl(3,0)): a vector v
+              /// lies in this plane iff `dot(v, normal) == 0`. Used to verify
+              /// (not assume) that orbit points stay in-plane.
+              pub fn normal(&self) -> [f64; 3] {
+                  [self.b12, -self.b02, self.b01]
+              }
+
+              /// Exponentiate the bivector into a rotor: R = cos(theta/2) -
+              /// sin(theta/2)*B_hat. This IS the GL-VIZ-001 §1 law -- the orbit's
+              /// law of motion, uploaded once, evaluated at any phase `theta`.
+              pub fn exp(&self, theta: f64) -> Rotor {
+                  let b = self.unit();
+                  let half = theta / 2.0;
+                  let (s, c) = half.sin_cos();
+                  Rotor { s: c, b01: -s * b.b01, b02: -s * b.b02, b12: -s * b.b12 }
+              }
+          }
+
+          /// A rotor: scalar + bivector (grade 0 + grade 2 of a Cl(7,0)
+          /// multivector). Four floats -- the same shape a GPU uniform would
+          /// carry per orbit-evaluation call.
+          #[derive(Debug, Clone, Copy, PartialEq)]
+          pub struct Rotor {
+              pub s: f64,
+              pub b01: f64,
+              pub b02: f64,
+              pub b12: f64,
+          }
+
+          impl Rotor {
+              fn to_mv(self) -> Multivector {
+                  let mut m = Multivector::zero();
+                  m.c[0] = self.s;
+                  m.c[E01] = self.b01;
+                  m.c[E02] = self.b02;
+                  m.c[E12] = self.b12;
+                  m
+              }
+
+              /// Reverse (R~): reversion of a grade-0+2 element negates the
+              /// grade-2 part. R * R~ = 1 for a unit rotor -- the rotor's inverse.
+              pub fn reverse(self) -> Rotor {
+                  Rotor { s: self.s, b01: -self.b01, b02: -self.b02, b12: -self.b12 }
+              }
+
+              /// Rotate a vector via the sandwich product v' = R v R~, built
+              /// directly from the tested `Multivector::geometric` product --
+              /// not a hand-derived closed form, so no independent sign-
+              /// convention risk beyond what bahyway-algebra's own tests cover.
+              pub fn apply(self, v: [f64; 3]) -> [f64; 3] {
+                  let r = self.to_mv();
+                  let r_rev = self.reverse().to_mv();
+                  let rotated = r.geometric(&vector_to_mv(v)).geometric(&r_rev);
+                  mv_to_vector(&rotated)
+              }
+          }
+
+          /// GOLDEN evaluation: pure parametric position on the orbit. No
+          /// per-particle storage of position -- only `reference` (a fixed
+          /// vector in the plane, magnitude = orbit radius) and `theta` (the
+          /// particle's current phase) are needed; `plane` is shared per-orbit.
+          pub fn orbit_position(
+              nucleus: [f64; 3],
+              reference: [f64; 3],
+              plane: &Bivector,
+              theta: f64,
+          ) -> [f64; 3] {
+              let rotated = plane.exp(theta).apply(reference);
+              [
+                  nucleus[0] + rotated[0],
+                  nucleus[1] + rotated[1],
+                  nucleus[2] + rotated[2],
+              ]
+          }
+
+          /// FUZZY evaluation: the additive semantics of a particle deforming
+          /// off its shared orbit (GL-VIZ-001 §3). The compact packed encoding
+          /// of `perturbation` (D3) is still an open Architect decision -- this
+          /// is the uncontroversial part: perturbation is simply added.
+          pub fn orbit_position_perturbed(
+              nucleus: [f64; 3],
+              reference: [f64; 3],
+              plane: &Bivector,
+              theta: f64,
+              perturbation: [f64; 3],
+          ) -> [f64; 3] {
+              let p = orbit_position(nucleus, reference, plane, theta);
+              [p[0] + perturbation[0], p[1] + perturbation[1], p[2] + perturbation[2]]
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+                  a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+              }
+
+              fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
+                  let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+                  dot(d, d).sqrt()
+              }
+
+              /// Sanity-checks the Hodge dual convention used by `Bivector::normal`
+              /// against the three coordinate planes, before trusting it in the
+              /// orbit-circle test below.
+              #[test]
+              fn normal_matches_coordinate_planes() {
+                  let xy = Bivector::from_plane([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+                  assert!(dist(xy.normal(), [0.0, 0.0, 1.0]) < 1e-9);
+
+                  let yz = Bivector::from_plane([0.0, 1.0, 0.0], [0.0, 0.0, 1.0]);
+                  assert!(dist(yz.normal(), [1.0, 0.0, 0.0]) < 1e-9);
+
+                  let zx = Bivector::from_plane([0.0, 0.0, 1.0], [1.0, 0.0, 0.0]);
+                  assert!(dist(zx.normal(), [0.0, 1.0, 0.0]) < 1e-9);
+              }
+
+              #[test]
+              fn full_turn_returns_to_start() {
+                  let plane = Bivector::from_plane([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+                  let start = [3.0, 0.0, 0.0];
+                  let after = plane.exp(std::f64::consts::TAU).apply(start);
+                  assert!(dist(start, after) < 1e-9);
+              }
+
+              #[test]
+              fn quarter_turn_in_xy_plane() {
+                  let plane = Bivector::from_plane([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+                  let start = [1.0, 0.0, 0.0];
+                  let after = plane.exp(std::f64::consts::FRAC_PI_2).apply(start);
+                  // A quarter turn in the e0^e1 plane moves e0 onto +/-e1 depending
+                  // on orientation -- the direction is a convention, but landing
+                  // exactly on the e1 axis (not drifting off-plane) is the claim.
+                  assert!(after[2].abs() < 1e-9, "must stay in the xy plane");
+                  assert!((after[0].abs()) < 1e-9, "must land on the e1 axis, not partway");
+                  assert!((after[1].abs() - 1.0).abs() < 1e-9, "must preserve radius 1");
+              }
+
+              #[test]
+              fn rotor_preserves_length() {
+                  let plane = Bivector::from_plane([0.3, 1.0, -0.4], [1.0, -0.2, 0.7]);
+                  let start = [2.5, -1.1, 0.6];
+                  let r0 = dot(start, start).sqrt();
+                  for i in 0..16 {
+                      let theta = (i as f64) * std::f64::consts::TAU / 16.0;
+                      let p = plane.exp(theta).apply(start);
+                      assert!(
+                          (dot(p, p).sqrt() - r0).abs() < 1e-9,
+                          "orbit must preserve radius at every phase (rendering's core promise)"
+                      );
+                  }
+              }
+
+              #[test]
+              fn rotor_composition_matches_direct_angle() {
+                  let plane = Bivector::from_plane([1.0, 0.2, -0.3], [-0.1, 1.0, 0.4]);
+                  let start = [1.7, 0.0, -2.2];
+                  let theta1 = 0.4;
+                  let theta2 = 1.1;
+
+                  // Two half-steps, composed via the geometric product.
+                  let step = plane
+                      .exp(theta1)
+                      .to_mv()
+                      .geometric(&plane.exp(theta2).to_mv());
+                  let composed = Rotor { s: step.c[0], b01: step.c[E01], b02: step.c[E02], b12: step.c[E12] };
+                  let via_composition = composed.apply(start);
+
+                  // One full step at the summed angle.
+                  let via_direct = plane.exp(theta1 + theta2).apply(start);
+
+                  assert!(
+                      dist(via_composition, via_direct) < 1e-9,
+                      "composing two rotors must equal one rotor at the summed angle"
+                  );
+              }
+
+              #[test]
+              fn full_orbit_traces_a_circle_in_plane() {
+                  let nucleus = [10.0, -5.0, 2.0];
+                  let plane = Bivector::from_plane([1.0, 1.0, 0.0], [0.0, 1.0, 1.0]);
+                  let n = plane.normal();
+                  // A reference vector genuinely in the plane: any linear
+                  // combination of the two spanning vectors qualifies.
+                  let reference = [1.0, 1.0, 0.0];
+                  let radius = dot(reference, reference).sqrt();
+
+                  for i in 0..32 {
+                      let theta = (i as f64) * std::f64::consts::TAU / 32.0;
+                      let p = orbit_position(nucleus, reference, &plane, theta);
+                      let offset = [p[0] - nucleus[0], p[1] - nucleus[1], p[2] - nucleus[2]];
+                      assert!(
+                          (dot(offset, offset).sqrt() - radius).abs() < 1e-9,
+                          "every phase must sit at orbit radius from the nucleus"
+                      );
+                      assert!(
+                          dot(offset, n).abs() < 1e-9,
+                          "every phase must lie in the declared orbital plane"
+                      );
+                  }
+              }
+
+              #[test]
+              fn fuzzy_perturbation_is_additive() {
+                  let nucleus = [0.0, 0.0, 0.0];
+                  let plane = Bivector::from_plane([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+                  let reference = [1.0, 0.0, 0.0];
+                  let theta = 0.9;
+                  let delta = [0.05, -0.02, 0.11];
+
+                  let golden = orbit_position(nucleus, reference, &plane, theta);
+                  let fuzzy = orbit_position_perturbed(nucleus, reference, &plane, theta, delta);
+
+                  assert!(dist([fuzzy[0] - golden[0], fuzzy[1] - golden[1], fuzzy[2] - golden[2]], delta) < 1e-9);
+              }
+          }
+
+    - name: "PB-255.06 | Register buzu-core in workspace Cargo.toml members"
+      ansible.builtin.lineinfile:
+        path: "{{ workspace }}/Cargo.toml"
+        insertafter: '^members = \['
+        line: '    "crates/buzu-core",'
+        state: present
+
+    - name: "PB-255.07 | cargo test -p buzu-core"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test --release -p buzu-core"
+        chdir: "{{ workspace }}"
+      register: buzu_test
+      changed_when: false
+      failed_when: buzu_test.rc != 0
+
+    - name: "PB-255.08 | Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-255 complete — BUZU's GL-VIZ-001 §1 encoding law (bivector
+          -> rotor -> parametric orbit position) is real, tested code
+          in crates/buzu-core, reusing bahyway-algebra's Cl(7,0)
+          substrate, proven by
+          {{ (buzu_test.stdout_lines | select('search', 'test result') | list | first) if buzu_test.stdout_lines is defined else 'cargo test' }}.
+          Genuinely open, not guessed: D1 (bivector residence), D2
+          (BUZU chunk byte layout), D3 (FUZZY packed encoding) — see
+          docs/GL-VIZ-001.md §5.

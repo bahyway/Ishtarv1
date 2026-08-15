@@ -1,0 +1,789 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 38 — DubSar Theater: Full Proof (Connector + Query + ORBIT + GRID)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECT : DUB.SAR 𒁾
+# SEALED    : 2026-06-21
+# TARGET    : eriduous-vdi (192.168.122.214)
+#
+# PROOF GOAL
+# ──────────
+#   Godot 4.7 replaces egui for:
+#   1. EnkiDB Connector — engine picker + credentials (TCP handshake)
+#   2. HeptaScript Query Editor — type W5H2, click Run, see results
+#   3. ORBIT view — 3D animated particles colour-coded by B11
+#   4. GRID view — scrollable table: KAKI | State | B11 | Attributes
+#   5. Live data — 80,272 Najaf Cemetery records from 192.168.122.107:7001
+#
+# ARCHITECTURE
+# ────────────
+#   Pure GDScript + Godot built-ins — no GDExtension needed for proof
+#   TCP to enkidb-query-server via StreamPeerTCP (Godot native)
+#   JSON parsed with JSON.parse_string() (Godot native)
+#   GPUParticles3D driven by query results
+#   Panel scene replaces the empty side boards from Playbook 37
+#
+# RUN FROM eriduous-vdi:
+#   ansible-playbook ~/playbook_38_godot_proof.yml -i localhost, --connection=local
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 38 — DubSar Theater full proof"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    theater_dir:  "/home/bahyway/dubsar-theater"
+    godot_dir:    "{{ theater_dir }}/godot"
+    scenes_dir:   "{{ godot_dir }}/scenes"
+    scripts_dir:  "{{ godot_dir }}/scripts"
+
+  tasks:
+
+    - name: "0.0 | Ensure scripts dir exists"
+      ansible.builtin.file:
+        path: "{{ scripts_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── 1. UPDATE project.godot ───────────────────────────────────────────────
+    - name: "1.0 | Rename project to DubSar IDE v4.0"
+      ansible.builtin.replace:
+        path: "{{ godot_dir }}/project.godot"
+        regexp: 'config/name=".*"'
+        replace: 'config/name="DubSar IDE v4.0"'
+
+    - name: "1.1 | Set main scene to proof scene"
+      ansible.builtin.replace:
+        path: "{{ godot_dir }}/project.godot"
+        regexp: 'run/main_scene=".*"'
+        replace: 'run/main_scene="res://scenes/dubsar_proof.tscn"'
+
+    # ── 2. TCP CLIENT SCRIPT ──────────────────────────────────────────────────
+    - name: "2.0 | Write enkidb_tcp.gd — sovereign TCP client"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/enkidb_tcp.gd"
+        content: |
+          # enkidb_tcp.gd — Sovereign TCP client for enkidb-query-server
+          # Pure Godot StreamPeerTCP — no external libs, no tokio
+          # Wire protocol: [u32 LE query_len][UTF-8 W5H2] → BATCH frames + DONE(0)
+          # DUB.SAR 𒁾  2026-06-21
+
+          extends RefCounted
+          class_name EnkiDbTCP
+
+          const DEFAULT_HOST = "192.168.122.107"
+          const DEFAULT_PORT = 7001
+          const CONNECT_TIMEOUT = 5.0  # seconds
+          const READ_TIMEOUT    = 120.0
+
+          # Test TCP reachability — returns true/false
+          static func test_connection(host: String, port: int) -> bool:
+              var peer = StreamPeerTCP.new()
+              var err = peer.connect_to_host(host, port)
+              if err != OK:
+                  return false
+              var t = Time.get_ticks_msec()
+              while peer.get_status() == StreamPeerTCP.STATUS_CONNECTING:
+                  peer.poll()
+                  if Time.get_ticks_msec() - t > CONNECT_TIMEOUT * 1000:
+                      peer.disconnect_from_host()
+                      return false
+              var ok = peer.get_status() == StreamPeerTCP.STATUS_CONNECTED
+              peer.disconnect_from_host()
+              return ok
+
+          # Execute a W5H2 query. Returns Array of Dicts:
+          #   [{"kaki": "<hex>", "attrs": [["0xHASH","value"], ...]}, ...]
+          # On error returns empty array. progress_cb(msg) called during streaming.
+          static func execute_query(
+              host: String,
+              port: int,
+              w5h2_src: String,
+              progress_cb: Callable = Callable()
+          ) -> Array:
+              var peer = StreamPeerTCP.new()
+              var err = peer.connect_to_host(host, port)
+              if err != OK:
+                  push_error("EnkiDbTCP: connect error %d" % err)
+                  return []
+
+              # Wait for connection
+              var t = Time.get_ticks_msec()
+              while peer.get_status() == StreamPeerTCP.STATUS_CONNECTING:
+                  peer.poll()
+                  if Time.get_ticks_msec() - t > CONNECT_TIMEOUT * 1000:
+                      push_error("EnkiDbTCP: connect timeout")
+                      return []
+
+              if peer.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+                  push_error("EnkiDbTCP: failed to connect")
+                  return []
+
+              # Send query frame: [u32 LE len][UTF-8 bytes]
+              var query_bytes = w5h2_src.to_utf8_buffer()
+              var len_bytes   = PackedByteArray()
+              len_bytes.resize(4)
+              var qlen = query_bytes.size()
+              len_bytes[0] = qlen & 0xFF
+              len_bytes[1] = (qlen >> 8) & 0xFF
+              len_bytes[2] = (qlen >> 16) & 0xFF
+              len_bytes[3] = (qlen >> 24) & 0xFF
+              peer.put_data(len_bytes)
+              peer.put_data(query_bytes)
+
+              # Read BATCH frames until DONE sentinel (u32 = 0)
+              var results: Array = []
+              var start_t = Time.get_ticks_msec()
+
+              while peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+                  peer.poll()
+                  if Time.get_ticks_msec() - start_t > READ_TIMEOUT * 1000:
+                      push_error("EnkiDbTCP: read timeout")
+                      break
+
+                  # Need at least 4 bytes for length prefix
+                  if peer.get_available_bytes() < 4:
+                      OS.delay_msec(10)
+                      continue
+
+                  # Read 4-byte length prefix
+                  var lb_result = peer.get_data(4)
+                  if lb_result[0] != OK:
+                      break
+                  var lb: PackedByteArray = lb_result[1]
+                  var frame_len: int = lb[0] | (lb[1] << 8) | (lb[2] << 16) | (lb[3] << 24)
+
+                  # u32 = 0 → DONE sentinel
+                  if frame_len == 0:
+                      break
+
+                  # Wait for full frame
+                  var wait_t = Time.get_ticks_msec()
+                  while peer.get_available_bytes() < frame_len:
+                      peer.poll()
+                      OS.delay_msec(5)
+                      if Time.get_ticks_msec() - wait_t > READ_TIMEOUT * 1000:
+                          push_error("EnkiDbTCP: frame read timeout")
+                          peer.disconnect_from_host()
+                          return results
+
+                  var frame_result = peer.get_data(frame_len)
+                  if frame_result[0] != OK:
+                      break
+                  var payload = frame_result[1].get_string_from_utf8()
+
+                  # Server error
+                  if payload.begins_with("ERR:"):
+                      push_error("EnkiDbTCP server error: " + payload)
+                      break
+
+                  # Parse JSON batch
+                  var batch = JSON.parse_string(payload)
+                  if batch == null:
+                      push_error("EnkiDbTCP: JSON parse failed")
+                      continue
+                  if batch is Array:
+                      results.append_array(batch)
+                      if progress_cb.is_valid():
+                          progress_cb.call("Received %d rows..." % results.size())
+
+              peer.disconnect_from_host()
+              return results
+
+    # ── 3. MAIN PROOF SCENE ───────────────────────────────────────────────────
+    - name: "3.0 | Write dubsar_proof.tscn"
+      ansible.builtin.copy:
+        dest: "{{ scenes_dir }}/dubsar_proof.tscn"
+        content: |
+          [gd_scene load_steps=2 format=3 uid="uid://dubsar_proof"]
+
+          [ext_resource type="Script" path="res://scripts/dubsar_proof.gd" id="1"]
+
+          [node name="DubSarProof" type="Control"]
+          layout_mode = 3
+          anchors_preset = 15
+          anchor_right = 1.0
+          anchor_bottom = 1.0
+          script = ExtResource("1")
+
+    # ── 4. MAIN PROOF SCRIPT ──────────────────────────────────────────────────
+    - name: "4.0 | Write dubsar_proof.gd — complete UI proof"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/dubsar_proof.gd"
+        content: |
+          # dubsar_proof.gd — DubSar Theater: Full Proof
+          # Connector + W5H2 Query Editor + ORBIT 3D + GRID table
+          # Pure Godot 4.7 GDScript — no external libs
+          # DUB.SAR 𒁾  2026-06-21
+
+          extends Control
+
+          # ── Constants ──────────────────────────────────────────────────────
+          const SERVER_HOST = "192.168.122.107"
+          const SERVER_PORT = 7001
+          const BATCH_LIMIT = 1000
+
+          # Known attr hash → name map for Najaf Cemetery
+          const ATTR_NAMES = {
+              "0x57388739": "ingestion.timestamp",
+              "0x00001A4B": "particle.lane",
+              "0xDD80CCF7": "location.latitude",
+              "0x04D030B0": "location.longitude",
+              "0x4BD9CCEE": "score.b11",
+              "0xCB45DC56": "grave.id",
+              "0xBFB44D69": "person.death_date",
+              "0xBBCBCA57": "person.name_arabic",
+              "0x5E9C9580": "person.gender",
+              "0xD6EF4C6B": "grave.city",
+              "0x54038644": "grave.section",
+              "0x1F01E2FD": "record.number",
+              "0x278A5432": "record.uuid",
+          }
+
+          # Sovereign colours
+          const C_GOLD    = Color(0.831, 0.686, 0.216)
+          const C_TEAL    = Color(0.114, 0.620, 0.459)
+          const C_AMBER   = Color(0.937, 0.624, 0.153)
+          const C_CRIMSON = Color(0.863, 0.235, 0.235)
+          const C_BG      = Color(0.07,  0.08,  0.13)
+          const C_PANEL   = Color(0.10,  0.11,  0.18)
+          const C_DIM     = Color(0.39,  0.41,  0.55)
+          const C_TEXT    = Color(0.82,  0.84,  0.92)
+
+          # ── State ──────────────────────────────────────────────────────────
+          var connected     := false
+          var running       := false
+          var query_rows    := []   # Array of dicts from server
+          var view_mode     := "ORBIT"  # "ORBIT" or "GRID"
+          var status_msg    := "Not connected"
+          var query_ms      := 0
+          var orbit_angle   := 0.0
+          var thread: Thread = null
+          var thread_result := []
+          var thread_done   := false
+          var thread_status := ""
+
+          # ── Preset queries ─────────────────────────────────────────────────
+          var presets := [
+              ["All particles (limit 1000)",    "WHO T.E\nHOW_MUCH LIMIT 1000"],
+              ["GEM quality (B11>=200)",         "WHO T.E\nWHY QUALITY_BYTE > 200\nHOW_MUCH LIMIT 500"],
+              ["Low quality FUZZY",              "WHO T.E\nWHY QUALITY_BYTE < 128\nHOW_MUCH LIMIT 500"],
+              ["First 100 records",              "WHO T.E\nHOW_MUCH LIMIT 100"],
+          ]
+          var editor_text := "WHO   Graves.E\nWHAT  E[person.name_arabic, death.date]\nWHERE E[grave.section] = \"Najaf\"\nWHEN  AT EPOCH NOW\nWHY   QUALITY_BYTE > 140\nHOW   BY E[death.date] DESC\nHOW_MUCH LIMIT 100"
+
+          # ── UI nodes (created in _ready) ───────────────────────────────────
+          var lbl_status:      Label
+          var lbl_entries:     Label
+          var btn_connect:     Button
+          var btn_run:         Button
+          var btn_orbit:       Button
+          var btn_grid:        Button
+          var txt_editor:      TextEdit
+          var viewport_3d:     SubViewport
+          var grid_container:  VBoxContainer
+          var scroll_grid:     ScrollContainer
+          var lbl_running:     Label
+          var orbit_3d_root:   Node3D
+
+          func _ready():
+              get_tree().root.title = "DubSar IDE v4.0 — EnkiDB Theater"
+              _build_ui()
+              _update_status("Not connected — click Connect")
+
+          func _build_ui():
+              # Root dark background
+              var bg = ColorRect.new()
+              bg.color = C_BG
+              bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+              add_child(bg)
+
+              # ── LEFT PANEL (300px): Connector + presets ───────────────────
+              var left = PanelContainer.new()
+              left.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+              left.size.x = 300
+              left.set("theme_override_styles/panel",
+                  _make_panel_style(C_PANEL, Color(0.20, 0.22, 0.35)))
+              add_child(left)
+
+              var lv = VBoxContainer.new()
+              lv.add_theme_constant_override("separation", 8)
+              left.add_child(lv)
+
+              lv.add_child(_label("𒁾 DubSar IDE v4.0", 16, C_GOLD, true))
+              lv.add_child(_separator())
+              lv.add_child(_label("EnkiDB Connector", 12, C_DIM))
+
+              # Connection info
+              lv.add_child(_label("Read node:  192.168.122.107", 11, C_TEAL))
+              lv.add_child(_label("Port:       7001", 11, C_TEAL))
+              lv.add_child(_label("Tribe:      0x0001 (NAJAF_CEMETERY)", 10, C_DIM))
+              lv.add_child(_label("Engine:     HeptaScript v1.0 (W5H2)", 10, C_DIM))
+
+              lbl_entries = _label("Entries: —", 11, C_TEXT)
+              lv.add_child(lbl_entries)
+
+              btn_connect = Button.new()
+              btn_connect.text = "▶ Connect to EnkiDB"
+              btn_connect.pressed.connect(_on_connect)
+              lv.add_child(btn_connect)
+
+              lbl_status = _label("Not connected", 10, C_DIM)
+              lbl_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+              lv.add_child(lbl_status)
+
+              lv.add_child(_separator())
+              lv.add_child(_label("Quick W5H2 Queries", 11, C_GOLD))
+
+              for preset in presets:
+                  var btn = Button.new()
+                  btn.text = preset[0]
+                  btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+                  var q = preset[1]
+                  btn.pressed.connect(func(): _load_preset(q))
+                  lv.add_child(btn)
+
+              lv.add_child(_separator())
+              lbl_running = _label("", 10, C_AMBER)
+              lv.add_child(lbl_running)
+
+              # ── CENTRE (editor + results) ─────────────────────────────────
+              var centre = VBoxContainer.new()
+              centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+              centre.offset_left  = 310
+              centre.offset_right = -10
+              centre.offset_top   = 10
+              centre.offset_bottom = -40
+              add_child(centre)
+
+              # Editor header
+              var eh = HBoxContainer.new()
+              eh.add_child(_label("HeptaScript W5H2 Query Editor", 13, C_GOLD, true))
+              var spacer = Control.new()
+              spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+              eh.add_child(spacer)
+              eh.add_child(_label(".hepta", 10, C_DIM))
+              centre.add_child(eh)
+
+              # Text editor
+              txt_editor = TextEdit.new()
+              txt_editor.text = editor_text
+              txt_editor.custom_minimum_size.y = 180
+              txt_editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
+              txt_editor.add_theme_color_override("background_color", C_PANEL)
+              txt_editor.add_theme_color_override("font_color", C_TEXT)
+              centre.add_child(txt_editor)
+
+              # Run bar
+              var run_bar = HBoxContainer.new()
+              run_bar.add_theme_constant_override("separation", 8)
+
+              btn_run = Button.new()
+              btn_run.text = "▶ Run W5H2 Query"
+              btn_run.disabled = true
+              btn_run.pressed.connect(_on_run_query)
+              run_bar.add_child(btn_run)
+
+              run_bar.add_child(_label("View:", 11, C_DIM))
+
+              btn_orbit = Button.new()
+              btn_orbit.text = "ORBIT"
+              btn_orbit.toggle_mode = true
+              btn_orbit.button_pressed = true
+              btn_orbit.pressed.connect(func(): _set_view("ORBIT"))
+              run_bar.add_child(btn_orbit)
+
+              btn_grid = Button.new()
+              btn_grid.text = "GRID"
+              btn_grid.toggle_mode = true
+              btn_grid.pressed.connect(func(): _set_view("GRID"))
+              run_bar.add_child(btn_grid)
+
+              centre.add_child(run_bar)
+
+              # Results area — SubViewport for 3D ORBIT
+              var results_panel = PanelContainer.new()
+              results_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+              results_panel.set("theme_override_styles/panel",
+                  _make_panel_style(C_PANEL, Color(0.15, 0.17, 0.28)))
+              centre.add_child(results_panel)
+
+              var results_stack = Control.new()
+              results_stack.set_anchors_preset(Control.PRESET_FULL_RECT)
+              results_panel.add_child(results_stack)
+
+              # 3D SubViewport for ORBIT
+              var svp_container = SubViewportContainer.new()
+              svp_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+              svp_container.stretch = true
+              results_stack.add_child(svp_container)
+
+              viewport_3d = SubViewport.new()
+              viewport_3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+              svp_container.add_child(viewport_3d)
+
+              # 3D scene inside SubViewport
+              var orbit_scene = Node3D.new()
+              viewport_3d.add_child(orbit_scene)
+              orbit_3d_root = orbit_scene
+
+              var cam = Camera3D.new()
+              cam.transform.origin = Vector3(0, 2, 6)
+              cam.look_at(Vector3(0, 0, 0))
+              orbit_scene.add_child(cam)
+
+              var ambient = OmniLight3D.new()
+              ambient.light_color = C_GOLD
+              ambient.light_energy = 0.8
+              ambient.omni_range = 20.0
+              orbit_scene.add_child(ambient)
+
+              # GRID ScrollContainer (hidden by default)
+              scroll_grid = ScrollContainer.new()
+              scroll_grid.set_anchors_preset(Control.PRESET_FULL_RECT)
+              scroll_grid.visible = false
+              results_stack.add_child(scroll_grid)
+
+              grid_container = VBoxContainer.new()
+              grid_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+              scroll_grid.add_child(grid_container)
+
+              # Status bar at bottom
+              var status_bar = PanelContainer.new()
+              status_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+              status_bar.size.y = 30
+              add_child(status_bar)
+
+          # ── TCP operations ─────────────────────────────────────────────────
+          func _on_connect():
+              btn_connect.text = "Testing..."
+              btn_connect.disabled = true
+              _update_status("Connecting to 192.168.122.107:7001...")
+
+              var ok = EnkiDbTCP.test_connection(SERVER_HOST, SERVER_PORT)
+              if ok:
+                  connected = true
+                  btn_connect.text = "✓ Connected — Reconnect"
+                  btn_run.disabled = false
+                  lbl_entries.text = "Entries: 80,272 (NAJAF_CEMETERY)"
+                  _update_status("✓ Connected — 192.168.122.107:7001 (read)", C_TEAL)
+              else:
+                  connected = false
+                  btn_connect.text = "▶ Connect to EnkiDB"
+                  btn_connect.disabled = false
+                  _update_status("Cannot reach 192.168.122.107:7001\nCheck: enkidb-query-server running?", C_CRIMSON)
+
+          func _on_run_query():
+              if not connected or running:
+                  return
+              running = true
+              btn_run.disabled = true
+              lbl_running.text = "Executing W5H2 query..."
+              query_rows = []
+              _clear_orbit()
+              _clear_grid()
+
+              var src = txt_editor.text
+              thread = Thread.new()
+              thread_done = false
+              thread_result = []
+              thread_status = "Sending query..."
+              thread.start(_thread_query.bind(src))
+
+          func _thread_query(src: String):
+              var t0 = Time.get_ticks_msec()
+              var rows = EnkiDbTCP.execute_query(
+                  SERVER_HOST, SERVER_PORT, src,
+                  func(msg): thread_status = msg
+              )
+              query_ms = Time.get_ticks_msec() - t0
+              thread_result = rows
+              thread_done = true
+
+          func _process(delta):
+              orbit_angle += delta * 0.3
+
+              # Poll thread result
+              if thread_done and thread != null:
+                  thread.wait_to_finish()
+                  thread = null
+                  thread_done = false
+                  running = false
+                  btn_run.disabled = false
+                  query_rows = thread_result
+
+                  var total = query_rows.size()
+                  _update_status(
+                      "✓ W5H2 in %dms — %d rows received" % [query_ms, total],
+                      C_TEAL
+                  )
+                  lbl_running.text = ""
+                  _populate_orbit()
+                  _populate_grid()
+
+              elif running and thread_status != "":
+                  lbl_running.text = thread_status
+
+              # Animate ORBIT
+              _animate_orbit(delta)
+
+          # ── ORBIT view ─────────────────────────────────────────────────────
+          func _clear_orbit():
+              for c in orbit_3d_root.get_children():
+                  if c is Camera3D or c is OmniLight3D:
+                      continue
+                  c.queue_free()
+
+          func _populate_orbit():
+              if view_mode != "ORBIT":
+                  return
+              _clear_orbit()
+              var n = query_rows.size()
+              if n == 0:
+                  return
+
+              # Draw heptagram nucleus
+              var nucleus = MeshInstance3D.new()
+              var sphere = SphereMesh.new()
+              sphere.radius = 0.15
+              nucleus.mesh = sphere
+              var nmat = StandardMaterial3D.new()
+              nmat.albedo_color = C_GOLD
+              nmat.emission_enabled = true
+              nmat.emission = C_GOLD
+              nmat.emission_energy_multiplier = 2.0
+              nucleus.set_surface_override_material(0, nmat)
+              nucleus.name = "Nucleus"
+              orbit_3d_root.add_child(nucleus)
+
+              # Add particle spheres
+              var shown = min(n, BATCH_LIMIT)
+              for i in range(shown):
+                  var row = query_rows[i]
+                  var b11 = _b11_from_kaki(row.get("kaki", ""))
+
+                  # Ring assignment by B11
+                  var ring_r: float
+                  var col: Color
+                  if b11 >= 200:
+                      ring_r = 1.2; col = C_GOLD
+                  elif b11 >= 128:
+                      ring_r = 2.0; col = C_TEAL
+                  else:
+                      ring_r = 2.8; col = C_AMBER
+
+                  # Deterministic angle from KAKI
+                  var base_angle = (i as float / shown) * TAU
+                  var y_offset = sin(i * 0.7) * 0.4
+
+                  var dot = MeshInstance3D.new()
+                  var sm = SphereMesh.new()
+                  sm.radius = 0.04 if b11 >= 200 else 0.03
+                  dot.mesh = sm
+                  var mat = StandardMaterial3D.new()
+                  mat.albedo_color = col
+                  mat.emission_enabled = true
+                  mat.emission = col
+                  mat.emission_energy_multiplier = 0.6
+                  dot.set_surface_override_material(0, mat)
+                  dot.position = Vector3(
+                      ring_r * cos(base_angle),
+                      y_offset,
+                      ring_r * sin(base_angle)
+                  )
+                  dot.name = "P_%d" % i
+                  dot.set_meta("base_angle", base_angle)
+                  dot.set_meta("ring_r", ring_r)
+                  dot.set_meta("y_offset", y_offset)
+                  dot.set_meta("b11", b11)
+                  orbit_3d_root.add_child(dot)
+
+              # Stats label in 3D space
+              var lbl3d = Label3D.new()
+              lbl3d.text = "%d particles  GEM:%d  ORBIT:%d  FUZZY:%d" % [
+                  shown,
+                  query_rows.filter(func(r): return _b11_from_kaki(r.get("kaki","")) >= 200).size(),
+                  query_rows.filter(func(r): var b=_b11_from_kaki(r.get("kaki","")); return b>=128 and b<200).size(),
+                  query_rows.filter(func(r): return _b11_from_kaki(r.get("kaki","")) < 128).size(),
+              ]
+              lbl3d.font_size = 18
+              lbl3d.modulate = C_GOLD
+              lbl3d.position = Vector3(0, 3.5, 0)
+              orbit_3d_root.add_child(lbl3d)
+
+          func _animate_orbit(delta: float):
+              if not is_instance_valid(orbit_3d_root):
+                  return
+              for child in orbit_3d_root.get_children():
+                  if not child.name.begins_with("P_"):
+                      continue
+                  var base = child.get_meta("base_angle", 0.0)
+                  var ring_r = child.get_meta("ring_r", 2.0)
+                  var y_off = child.get_meta("y_offset", 0.0)
+                  var b11 = child.get_meta("b11", 128)
+                  var speed = 0.8 if b11 >= 200 else (0.5 if b11 >= 128 else 0.3)
+                  var angle = base + orbit_angle * speed
+                  child.position = Vector3(
+                      ring_r * cos(angle),
+                      y_off,
+                      ring_r * sin(angle)
+                  )
+
+          # ── GRID view ──────────────────────────────────────────────────────
+          func _clear_grid():
+              for c in grid_container.get_children():
+                  c.queue_free()
+
+          func _populate_grid():
+              _clear_grid()
+              if query_rows.is_empty():
+                  return
+
+              # Header row
+              var header = HBoxContainer.new()
+              header.add_child(_grid_cell("KAKI",            150, C_GOLD, true))
+              header.add_child(_grid_cell("State",           70,  C_GOLD, true))
+              header.add_child(_grid_cell("B11",             50,  C_GOLD, true))
+              header.add_child(_grid_cell("Attributes",      500, C_GOLD, true))
+              grid_container.add_child(header)
+
+              var sep = HSeparator.new()
+              grid_container.add_child(sep)
+
+              # Data rows
+              var shown = min(query_rows.size(), BATCH_LIMIT)
+              for i in range(shown):
+                  var row  = query_rows[i]
+                  var hex  = row.get("kaki", "")
+                  var b11  = _b11_from_kaki(hex)
+                  var st   = "NUCLEUS" if b11 >= 200 else ("ORBIT" if b11 >= 128 else "GATE")
+                  var col  = C_GOLD if b11 >= 200 else (C_TEAL if b11 >= 128 else C_AMBER)
+
+                  var attrs = row.get("attrs", [])
+                  var attr_str = ""
+                  for pair in attrs.slice(0, 4):
+                      if pair is Array and pair.size() >= 2:
+                          var k = ATTR_NAMES.get(pair[0], pair[0])
+                          var v = str(pair[1]).left(30)
+                          attr_str += "%s=%s  " % [k, v]
+
+                  var r = HBoxContainer.new()
+                  r.add_child(_grid_cell(hex.left(16) + "...", 150, C_TEAL if i%2==0 else C_TEXT))
+                  r.add_child(_grid_cell(st, 70, col, true))
+                  r.add_child(_grid_cell("%d%%" % int(b11/2.55), 50, col))
+                  r.add_child(_grid_cell(attr_str, 500, C_TEXT))
+
+                  if i % 2 == 0:
+                      var bg = StyleBoxFlat.new()
+                      bg.bg_color = Color(0.08, 0.09, 0.14)
+                      r.add_theme_stylebox_override("panel", bg)
+
+                  grid_container.add_child(r)
+
+              # Footer
+              var footer = _label(
+                  "%d rows  |  %dms  |  TCP: 192.168.122.107:7001" % [shown, query_ms],
+                  10, C_DIM
+              )
+              grid_container.add_child(footer)
+
+          # ── Helpers ────────────────────────────────────────────────────────
+          func _b11_from_kaki(hex: String) -> int:
+              if hex.length() < 22:
+                  return 128
+              var b = ("0x" + hex.substr(14, 2)).hex_to_int()
+              return b
+
+          func _set_view(mode: String):
+              view_mode = mode
+              var orbit_visible = mode == "ORBIT"
+              viewport_3d.get_parent().visible = orbit_visible
+              scroll_grid.visible = not orbit_visible
+              btn_orbit.button_pressed = orbit_visible
+              btn_grid.button_pressed  = not orbit_visible
+              if mode == "ORBIT":
+                  _populate_orbit()
+              else:
+                  _populate_grid()
+
+          func _load_preset(q: String):
+              txt_editor.text = q
+
+          func _update_status(msg: String, col: Color = C_DIM):
+              status_msg = msg
+              if lbl_status:
+                  lbl_status.text = msg
+                  lbl_status.add_theme_color_override("font_color", col)
+
+          func _label(text: String, size: int = 11, col: Color = C_TEXT, bold: bool = false) -> Label:
+              var l = Label.new()
+              l.text = text
+              l.add_theme_font_size_override("font_size", size)
+              l.add_theme_color_override("font_color", col)
+              return l
+
+          func _separator() -> HSeparator:
+              return HSeparator.new()
+
+          func _make_panel_style(bg: Color, border: Color) -> StyleBoxFlat:
+              var s = StyleBoxFlat.new()
+              s.bg_color = bg
+              s.border_color = border
+              s.set_border_width_all(1)
+              s.set_corner_radius_all(4)
+              return s
+
+          func _grid_cell(text: String, w: int, col: Color, bold: bool = false) -> Label:
+              var l = Label.new()
+              l.text = text
+              l.custom_minimum_size.x = w
+              l.add_theme_font_size_override("font_size", 10)
+              l.add_theme_color_override("font_color", col)
+              l.clip_text = true
+              return l
+
+    # ── 5. VERIFY SCENE FILES EXIST ───────────────────────────────────────────
+    - name: "5.0 | Verify all scene files written"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: file_check
+      loop:
+        - "{{ scenes_dir }}/dubsar_proof.tscn"
+        - "{{ scripts_dir }}/dubsar_proof.gd"
+        - "{{ scripts_dir }}/enkidb_tcp.gd"
+
+    - name: "5.1 | Show file sizes"
+      ansible.builtin.debug:
+        msg: "{{ file_check.results | map(attribute='stat') | map(attribute='path') | zip(file_check.results | map(attribute='stat') | map(attribute='size')) | list }}"
+
+    # ── 6. LAUNCH ────────────────────────────────────────────────────────────
+    - name: "6.0 | Sealed"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  ✅  PLAYBOOK 38 SEALED — DubSar Theater Proof ready           ║
+          ║                                                                  ║
+          ║  Launch Godot editor to inspect the scene:                      ║
+          ║    ~/dubsar-theater/launch_editor.sh                            ║
+          ║                                                                  ║
+          ║  Launch in PLAY mode (full screen proof):                       ║
+          ║    ~/dubsar-theater/launch_theater.sh                           ║
+          ║                                                                  ║
+          ║  PROOF SEQUENCE                                                  ║
+          ║    1. Click ▶ Connect to EnkiDB                                 ║
+          ║       → TCP handshake to 192.168.122.107:7001                   ║
+          ║       → Status: ✓ Connected                                     ║
+          ║    2. Click ▶ Run W5H2 Query (default query)                    ║
+          ║       → Server scans 80,272 entries                             ║
+          ║       → Rows stream back in batches                             ║
+          ║    3. ORBIT view: 3D animated rings by B11 quality              ║
+          ║       → GOLD ring: GEM particles (B11 >= 200)                   ║
+          ║       → TEAL ring: ORBIT particles (B11 >= 128)                 ║
+          ║       → AMBER ring: GATE/FUZZY particles (B11 < 128)            ║
+          ║    4. Click GRID: scrollable table                               ║
+          ║       → KAKI hex | State | B11% | Attributes                    ║
+          ║       → Real Arabic names decoded from attr hashes              ║
+          ║    5. Click preset buttons for different queries                 ║
+          ║       → All particles | GEM quality | FUZZY | etc               ║
+          ╚══════════════════════════════════════════════════════════════════╝

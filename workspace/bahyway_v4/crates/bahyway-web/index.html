@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BahyWay — Sovereign Database Platform</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* ── Theme variables ──────────────────────────────────── */
+    :root {
+      --bg:         #0b0b10;
+      --surface:    #0e0e18;
+      --surface2:   #131322;
+      --border:     #2a2a4a;
+      --border2:    #44475a;
+      --text:       #cdd6f4;
+      --text-muted: #6c7086;
+      --accent:     #bd93f9;
+      --accent-fg:  #0b0b10;
+      --cyan:       #8be9fd;
+      --green:      #50fa7b;
+      --red:        #ff5555;
+      --yellow:     #f1fa8c;
+      --orange:     #ffb86c;
+      --tok-kw:  #bd93f9;  --tok-fld: #8be9fd;
+      --tok-op:  #ffb86c;  --tok-lit: #50fa7b;
+      --tok-str: #f1fa8c;  --tok-pun: #cdd6f4;
+      --tok-unk: #ff5555;
+      --s-active: #50fa7b;   --s-critical: #ff5555;
+      --s-warning: #ffb86c;  --s-watch: #f1fa8c;
+      --s-pending: #b0b0c0;  --s-archive: #6c7086;
+      --s-dead:  #c05050;    --s-fuzzy:  #c09040;
+      --canvas-bg: #07070f;
+    }
+    [data-theme="light"] {
+      --bg:         #f4f4fb;
+      --surface:    #ffffff;
+      --surface2:   #eeeef8;
+      --border:     #ddddf0;
+      --border2:    #b0b0cc;
+      --text:       #1e1e3a;
+      --text-muted: #6b6b88;
+      --accent:     #7c3aed;
+      --accent-fg:  #ffffff;
+      --cyan:       #0369a1;
+      --green:      #15803d;
+      --red:        #dc2626;
+      --yellow:     #92400e;
+      --orange:     #c2410c;
+      --tok-kw:  #7c3aed;  --tok-fld: #0369a1;
+      --tok-op:  #c2410c;  --tok-lit: #15803d;
+      --tok-str: #854d0e;  --tok-pun: #374151;
+      --tok-unk: #dc2626;
+      --s-active: #15803d;   --s-critical: #dc2626;
+      --s-warning: #c2410c;  --s-watch: #854d0e;
+      --s-pending: #6b7280;  --s-archive: #4b5563;
+      --s-dead:  #991b1b;    --s-fuzzy:  #92400e;
+      --canvas-bg: #eeeef8;
+    }
+
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; min-height: 100vh;
+      background: var(--bg); color: var(--text);
+      font-family: 'JetBrains Mono','Cascadia Code','Fira Code',monospace,sans-serif;
+      font-size: 14px;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    /* ── Nav ───────────────────────────────────────────── */
+    #nav {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 28px; height: 56px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    #nav .logo  { font-size: 19px; font-weight: 700; color: var(--accent); letter-spacing: 1px; margin-right: 20px; }
+    #nav .tagline { color: var(--border2); font-size: 12px; margin-right: auto; }
+    .tab-btn {
+      padding: 7px 20px; border: 1px solid var(--border2); border-radius: 6px;
+      background: transparent; color: var(--text); cursor: pointer;
+      font-family: inherit; font-size: 13px; transition: background 0.12s;
+    }
+    .tab-btn:hover  { background: var(--surface2); }
+    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+    #btn-theme, #btn-tour {
+      padding: 6px 12px; border: 1px solid var(--border2); border-radius: 6px;
+      background: var(--surface2); color: var(--text); cursor: pointer;
+      font-size: 15px; line-height: 1; font-family: inherit; transition: background 0.12s;
+    }
+    #btn-theme:hover, #btn-tour:hover { background: var(--border); }
+
+    /* ── Content area ──────────────────────────────────── */
+    #content { max-width: 1080px; margin: 0 auto; padding: 28px 22px 60px; }
+    .panel-title { font-size: 17px; color: var(--accent); margin: 0 0 6px; }
+    .panel-desc  { color: var(--text-muted); margin: 0 0 20px; font-size: 12px; line-height: 1.6; }
+
+    /* ── Notebook ──────────────────────────────────────── */
+    #preset-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .preset-btn {
+      padding: 5px 13px; border: 1px solid var(--border2); border-radius: 4px;
+      background: var(--surface2); color: var(--cyan); cursor: pointer;
+      font-family: inherit; font-size: 12px; transition: border-color 0.1s, background 0.1s;
+    }
+    .preset-btn:hover { background: var(--border); border-color: var(--cyan); }
+    #nb-query {
+      width: 100%; height: 62px; padding: 10px 12px;
+      background: var(--surface); border: 1px solid var(--border2); border-radius: 6px;
+      color: var(--text); font-family: inherit; font-size: 14px;
+      resize: vertical; outline: none; margin-bottom: 10px;
+    }
+    #nb-query:focus { border-color: var(--accent); }
+    #tok-stream {
+      padding: 9px 14px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; font-size: 13px; min-height: 36px; margin-bottom: 14px;
+      word-break: break-word; line-height: 1.8; letter-spacing: 0.3px;
+    }
+    .tok-kw  { color: var(--tok-kw); }  .tok-fld { color: var(--tok-fld); }
+    .tok-op  { color: var(--tok-op); }  .tok-lit { color: var(--tok-lit); }
+    .tok-str { color: var(--tok-str); } .tok-pun { color: var(--tok-pun); }
+    .tok-unk { color: var(--tok-unk); }
+    .s-active   { color: var(--s-active); }   .s-critical { color: var(--s-critical); }
+    .s-warning  { color: var(--s-warning); }  .s-watch    { color: var(--s-watch); }
+    .s-pending  { color: var(--s-pending); }  .s-archive  { color: var(--s-archive); }
+    #result-count { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+    .results-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .results-table th { text-align: left; padding: 7px 12px; background: var(--surface); color: var(--text-muted); border-bottom: 1px solid var(--border); font-weight: 600; }
+    .results-table td { padding: 7px 12px; border-bottom: 1px solid var(--surface2); }
+    .results-table tr:hover td { background: var(--surface); }
+    .tribe-id { color: var(--green); }
+
+    /* ── Pipeline ──────────────────────────────────────── */
+    #tier-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 18px; }
+    @media(max-width:680px){ #tier-stats{ grid-template-columns:repeat(2,1fr); } }
+    .tier-box { padding: 14px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+    .tier-name { color: var(--cyan); font-size: 11px; margin-bottom: 6px; letter-spacing: 0.5px; }
+    .tier-val  { font-size: 28px; font-weight: 700; line-height: 1; }
+    .tier-val.v-green  { color: var(--green); }
+    .tier-val.v-red    { color: var(--red); }
+    .tier-val.v-yellow { color: var(--yellow); }
+    .tier-sub  { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    #particle-canvas { width: 100%; aspect-ratio: 16/5; display: block; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 16px; background: var(--canvas-bg); }
+    .action-btns { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .action-btn { padding: 8px 20px; border: 1px solid var(--border2); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-family: inherit; font-size: 13px; transition: background 0.12s; }
+    .action-btn:hover  { background: var(--border); }
+    .action-btn.danger { border-color: var(--red);    color: var(--red); }
+    .action-btn.accent { border-color: var(--accent); color: var(--accent); }
+    .log-info    { color: var(--text); }
+    .log-sweep   { color: var(--green); }
+    .log-malware { color: var(--red); }
+    #etl-log { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; max-height: 180px; overflow-y: auto; font-size: 12px; line-height: 1.8; }
+
+    /* ── Scrollbar ─────────────────────────────────────── */
+    ::-webkit-scrollbar       { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* ═══════════════════════════════════════════════════ */
+    /* ── Tour Modal ───────────────────────────────────── */
+    /* ═══════════════════════════════════════════════════ */
+    #tour-backdrop {
+      display: none;
+      position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(3px);
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    #tour-backdrop.open { display: flex; }
+
+    #tour-modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      width: 100%; max-width: 860px;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    }
+    #tour-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 24px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    #tour-head h2 { margin: 0; font-size: 16px; color: var(--accent); }
+    #tour-close {
+      width: 30px; height: 30px; border: none; border-radius: 6px;
+      background: var(--surface2); color: var(--text-muted);
+      cursor: pointer; font-size: 18px; line-height: 1; display: flex;
+      align-items: center; justify-content: center; font-family: inherit;
+    }
+    #tour-close:hover { background: var(--border); color: var(--text); }
+
+    #tour-body {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0; padding: 0;
+    }
+    @media(max-width:640px){ #tour-body{ grid-template-columns: 1fr; } }
+
+    .tour-col {
+      padding: 22px 24px;
+    }
+    .tour-col + .tour-col { border-left: 1px solid var(--border); }
+    @media(max-width:640px){ .tour-col + .tour-col { border-left: none; border-top: 1px solid var(--border); } }
+
+    .tour-col-title {
+      font-size: 13px; font-weight: 700; color: var(--cyan);
+      letter-spacing: 0.5px; margin: 0 0 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .tour-col-title .badge {
+      padding: 2px 8px; border-radius: 4px;
+      background: var(--surface2); color: var(--text-muted);
+      font-size: 10px; font-weight: 400;
+    }
+
+    /* ── Animated step container ──────────────────────── */
+    .step-wrap {
+      position: relative;
+      height: 210px;
+      overflow: hidden;
+    }
+
+    /* Each step fades in → holds → fades out in a 20s cycle (5s per step) */
+    @keyframes step-show {
+      0%       { opacity: 0; transform: translateY(10px); }
+      5%       { opacity: 1; transform: translateY(0); }
+      20%      { opacity: 1; transform: translateY(0); }
+      25%      { opacity: 0; transform: translateY(-8px); }
+      25.01%,
+      100%     { opacity: 0; transform: translateY(0); }
+    }
+
+    .tour-step {
+      position: absolute; top: 0; left: 0; right: 0;
+      opacity: 0;
+      animation: step-show 20s infinite ease-in-out;
+    }
+    .tour-step:nth-child(1) { animation-delay: 0s; }
+    .tour-step:nth-child(2) { animation-delay: 5s; }
+    .tour-step:nth-child(3) { animation-delay: 10s; }
+    .tour-step:nth-child(4) { animation-delay: 15s; }
+
+    /* Step progress dots */
+    .step-dots {
+      display: flex; gap: 6px; justify-content: center; margin-top: 14px;
+    }
+    .step-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--border2);
+      animation: dot-pulse 20s infinite ease-in-out;
+    }
+    .step-dot:nth-child(1) { animation-delay: 0s; }
+    .step-dot:nth-child(2) { animation-delay: 5s; }
+    .step-dot:nth-child(3) { animation-delay: 10s; }
+    .step-dot:nth-child(4) { animation-delay: 15s; }
+
+    @keyframes dot-pulse {
+      0%, 100%        { background: var(--border2); transform: scale(1); }
+      2%, 23%         { background: var(--accent);  transform: scale(1.4); }
+      25%             { background: var(--border2); transform: scale(1); }
+    }
+
+    /* ── Step content styles ──────────────────────────── */
+    .step-num {
+      font-size: 10px; font-weight: 700; color: var(--accent);
+      letter-spacing: 0.8px; margin-bottom: 8px;
+    }
+    .step-title {
+      font-size: 13px; font-weight: 600; color: var(--text);
+      margin-bottom: 10px;
+    }
+    .step-body { font-size: 12px; color: var(--text-muted); line-height: 1.7; }
+
+    /* Mini mock UI elements inside steps */
+    .mock-bar {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 8px 10px;
+      background: var(--surface2); border-radius: 6px;
+      border: 1px solid var(--border); margin: 8px 0;
+    }
+    .mock-chip {
+      padding: 3px 10px; border-radius: 4px; font-size: 11px;
+      border: 1px solid var(--border2); color: var(--cyan); background: var(--surface);
+    }
+    .mock-chip.hi { border-color: var(--accent); color: var(--accent); background: var(--surface2); }
+    .mock-query-box {
+      padding: 8px 10px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      font-size: 12px; margin: 8px 0; color: var(--text); line-height: 1.6;
+    }
+    .mock-toks { line-height: 2.1; font-size: 12px; margin: 6px 0; }
+    .mock-toks span { margin-right: 4px; }
+    .mock-row {
+      display: flex; justify-content: space-between;
+      padding: 5px 8px; border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .mock-row:last-child { border: none; }
+
+    /* Pipeline flow diagram */
+    .flow {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+      font-size: 12px; margin: 8px 0;
+    }
+    .flow-node {
+      padding: 6px 18px; border-radius: 6px;
+      border: 1px solid var(--border2); background: var(--surface2);
+      color: var(--text); text-align: center; min-width: 160px;
+    }
+    .flow-node.hl { border-color: var(--accent); color: var(--accent); }
+    .flow-node.green-node { border-color: var(--green); color: var(--green); }
+    .flow-node.red-node   { border-color: var(--red);   color: var(--red);   }
+    .flow-arrow {
+      color: var(--text-muted); font-size: 16px; line-height: 1.2;
+    }
+    .flow-split {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      width: 100%; margin-top: 4px;
+    }
+    .tick-row {
+      display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap;
+    }
+    .tick-chip {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--surface2); border: 1px solid var(--border2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; color: var(--text-muted);
+    }
+    .tick-chip.done { background: var(--green); border-color: var(--green); color: #000; }
+    .tick-chip.fire { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+
+    .dot-cloud {
+      display: flex; flex-wrap: wrap; gap: 5px; padding: 8px; margin: 6px 0;
+      background: var(--surface2); border-radius: 6px; border: 1px solid var(--border);
+      min-height: 48px; align-items: center;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+
+    /* ── Tribes ────────────────────────────────────────────────────────── */
+    .sub-tabs { display:flex; gap:8px; margin-bottom:16px; }
+    .sub-tab {
+      padding:6px 16px; border:1px solid var(--border2); border-radius:6px;
+      background:transparent; color:var(--text-muted); cursor:pointer;
+      font-family:inherit; font-size:12px;
+    }
+    .sub-tab.active { border-color:var(--accent); color:var(--accent); background:var(--surface2); }
+
+    #tribe-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:14px; }
+    @media(max-width:720px){ #tribe-cards{ grid-template-columns:repeat(2,1fr); } }
+
+    .tribe-card {
+      padding:14px 16px; background:var(--surface); border-radius:8px;
+      border-left:4px solid var(--border2); border-top:1px solid var(--border);
+      border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+      cursor:pointer; transition:opacity 0.15s, box-shadow 0.15s;
+    }
+    .tribe-card:hover   { box-shadow: 0 0 0 1px var(--accent); }
+    .tribe-card.selected{ box-shadow: 0 0 0 2px var(--accent); }
+    .tribe-card .tc-name{ font-size:14px; font-weight:700; margin-bottom:4px; }
+    .tribe-card .tc-id  { font-size:11px; color:var(--text-muted); margin-bottom:4px; }
+    .tribe-card .tc-tag { font-size:11px; color:var(--text-muted); margin-bottom:6px; line-height:1.4; }
+    .tribe-card .tc-stat{ font-size:12px; color:var(--text-muted); }
+
+    #tribes-canvas { width:100%; aspect-ratio:960/520; display:block; border-radius:8px; border:1px solid var(--border); background:var(--canvas-bg); }
+
+    #tribe-detail-drawer {
+      margin-top:16px; padding:16px; background:var(--surface);
+      border:1px solid var(--border); border-radius:8px;
+    }
+    #detail-title { font-size:15px; color:var(--accent); margin-bottom:12px; }
+
+    /* Compare */
+    .cmp-selector-row { display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+    .cmp-label { font-size:12px; color:var(--text-muted); min-width:52px; }
+    #cmp-btns-a, #cmp-btns-b { display:flex; gap:8px; flex-wrap:wrap; }
+    .cmp-tribe-btn {
+      padding:5px 14px; border:1px solid var(--border2); border-radius:5px;
+      background:var(--surface2); cursor:pointer; font-family:inherit; font-size:12px; color:var(--text);
+    }
+    .cmp-tribe-btn.sel { font-weight:700; }
+
+    .compare-cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0; }
+    @media(max-width:640px){ .compare-cols{ grid-template-columns:1fr; } }
+    .cmp-col { padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+    .cmp-col-name { font-size:15px; font-weight:700; margin-bottom:4px; }
+    .cmp-col-tag  { font-size:11px; color:var(--text-muted); margin-bottom:10px; }
+    .cmp-ptype-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+    .cmp-ptype-chip { padding:3px 10px; border-radius:4px; font-size:11px; background:var(--surface2); border:1px solid var(--border2); }
+    #cmp-table { width:100%; }
+    #cmp-table th, #cmp-table td { text-align:left; padding:6px 12px; border-bottom:1px solid var(--surface2); font-size:13px; }
+    #cmp-table th { color:var(--text-muted); background:var(--surface); }
+    #cmp-table td:nth-child(2), #cmp-table td:nth-child(3) { font-weight:600; }
+
+    /* ── Status classes for Dead/Fuzzy ─────────────────────────────────── */
+    .s-dead  { color: var(--s-dead);  font-weight:700; }
+    .s-fuzzy { color: var(--s-fuzzy); font-weight:700; }
+
+    /* ── Context menu ───────────────────────────────────────────────────── */
+    #ctxmenu {
+      position: fixed; z-index: 2000;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      min-width: 200px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+      padding: 6px 0;
+      display: none;
+      user-select: none;
+    }
+    #ctxmenu.open { display: block; }
+    .ctx-particle-name {
+      padding: 6px 14px 8px;
+      font-size: 12px; font-weight: 600;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+    }
+    .ctx-sep { height:1px; background:var(--border); margin:4px 0; }
+    .ctx-item {
+      padding: 8px 16px;
+      font-size: 13px; cursor: pointer;
+      color: var(--text);
+      transition: background 0.1s;
+    }
+    .ctx-item:hover { background: var(--surface2); }
+    .ctx-steward-item { color: var(--s-warning) !important; font-weight: 600; }
+
+    /* ── Data Steward sidebar ───────────────────────────────────────────── */
+    #steward-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 1800;
+      display: none;
+    }
+    #steward-backdrop.open { display: block; }
+    #steward-sidebar {
+      position: fixed;
+      right: 0; top: 0; bottom: 0;
+      width: min(500px, 95vw);
+      background: var(--surface);
+      border-left: 1px solid var(--border2);
+      z-index: 1801;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      box-shadow: -8px 0 40px rgba(0,0,0,0.35);
+      transform: translateX(100%);
+      transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
+    }
+    #steward-backdrop.open #steward-sidebar { transform: translateX(0); }
+    #steward-top-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sd-bar-title {
+      font-size: 13px; font-weight: 700; color: var(--accent);
+      display: flex; align-items: center; gap: 6px;
+    }
+    #steward-close-btn {
+      background: none; border: none;
+      color: var(--text-muted); font-size: 20px; cursor: pointer;
+      line-height: 1; padding: 0 4px;
+    }
+    #steward-close-btn:hover { color: var(--red); }
+    #steward-scroll {
+      flex: 1; overflow-y: auto; padding: 0;
+    }
+    /* Tribe color accent bar at top of sidebar */
+    #steward-tribe-bar { height: 4px; flex-shrink: 0; }
+    /* Mini orbital diagram */
+    .sd-mini-cv {
+      width: 120px; height: 120px; border-radius: 50%;
+      flex-shrink: 0; display: block;
+      border: 1px solid var(--border2);
+      background: var(--canvas-bg);
+    }
+    .sd-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sd-section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+    #steward-header-info .sd-particle-name {
+      font-size: 15px; font-weight: 700; margin-bottom: 6px;
+    }
+    #steward-header-info .sd-meta {
+      font-size: 12px; display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .sd-ovr-badge {
+      color: var(--accent); font-size: 11px;
+      background: var(--surface2); border: 1px solid var(--accent);
+      border-radius: 4px; padding: 1px 7px;
+    }
+    /* Diagnosis banner */
+    .sd-diag-banner {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.5;
+    }
+    .sd-diag-dead  { background: rgba(192,80,80,0.12);  border: 1px solid rgba(192,80,80,0.35); }
+    .sd-diag-fuzzy { background: rgba(192,144,64,0.12); border: 1px solid rgba(192,144,64,0.35); }
+    .sd-diag-ok    { background: rgba(80,192,80,0.10);  border: 1px solid rgba(80,192,80,0.25); }
+    .sd-diag-icon  { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    /* Journal rows */
+    #steward-journal { font-size: 12px; }
+    .sd-ev-row {
+      padding: 7px 0;
+      border-bottom: 1px solid var(--surface2);
+      display: grid;
+      grid-template-columns: 120px 40px 16px 80px auto;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .sd-ev-causal {
+      background: rgba(200,80,80,0.07);
+      border-left: 3px solid var(--s-dead);
+      padding-left: 8px;
+      margin-left: -8px;
+    }
+    .sd-ev-causal[data-fuzzy] {
+      background: rgba(200,144,64,0.07);
+      border-left-color: var(--s-fuzzy);
+    }
+    .sd-ev-icon  { font-size: 12px; }
+    .sd-ev-tick  { color: var(--text-muted); font-size: 11px; }
+    .sd-ev-arrow { color: var(--text-muted); }
+    .sd-ev-state { font-weight: 600; font-size: 11px; }
+    .sd-ev-badge-dead  {
+      font-size: 10px; padding: 1px 7px; border-radius: 4px;
+      background: rgba(192,80,80,0.20); color: var(--s-dead);
+      font-weight: 700; white-space: nowrap;
+    }
+    .sd-ev-badge-fuzzy {
+      font-size: 10px; padding: 1px 7px; border-radius: 4px;
+      background: rgba(192,144,64,0.20); color: var(--s-fuzzy);
+      font-weight: 700; white-space: nowrap;
+    }
+    .sd-ev-detail {
+      grid-column: 1 / -1;
+      color: var(--text-muted); font-size: 11px; padding-top: 3px;
+      line-height: 1.5;
+    }
+    /* Edit pills */
+    .se-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .se-pill {
+      padding: 4px 11px; border-radius: 6px; font-size: 12px; cursor: pointer;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--pill-c, var(--text-muted));
+      transition: all 0.12s;
+    }
+    .se-pill:hover { border-color: var(--pill-c, var(--text-muted)); }
+    .se-pill-sel {
+      background: var(--surface);
+      border-color: var(--pill-c, var(--accent));
+      box-shadow: 0 0 0 1px var(--pill-c, var(--accent));
+      font-weight: 700;
+    }
+    #steward-note-row { display:flex; gap:8px; align-items:center; margin-top: 10px; }
+    #steward-note {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border2);
+      color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 12px;
+    }
+    .sd-action-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    #steward-apply {
+      padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer;
+      background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 13px;
+    }
+    #steward-apply:hover { opacity: 0.88; }
+    #steward-reset {
+      padding: 8px 16px; border-radius: 6px; cursor: pointer;
+      background: none; border: 1px solid var(--border2);
+      color: var(--text-muted); font-size: 13px;
+    }
+    #steward-reset:hover { border-color: var(--red); color: var(--red); }
+    #steward-apply-msg { font-size: 12px; margin-top: 8px; }
+
+    /* ── StoryEngine Panel ──────────────────────────────────────────── */
+    #story-engine-panel {
+      margin-top: 20px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+    #story-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    /* ── Tribe+Orbit context bar ── */
+    #story-context-bar {
+      display: none;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 7px 16px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .scb-tribe  { display:flex; align-items:center; gap:5px; font-weight:600; }
+    .scb-dot    { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .scb-sep    { color:var(--text-muted); }
+    .scb-orbit  { color:var(--text-muted); }
+    .scb-drift-bar { display:flex; align-items:center; gap:5px; }
+    .scb-drift-track { width:60px; height:6px; border-radius:3px;
+                       background:var(--border); overflow:hidden; }
+    .scb-drift-fill  { height:100%; border-radius:3px; }
+    #story-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #story-title .story-sep { color: var(--text-muted); margin: 0 6px; }
+    #story-title .story-event-count { color: var(--text-muted); font-weight: 400; font-size: 12px; }
+    .story-pan-row { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+    .se-nav-btn {
+      background: var(--surface); border: 1px solid var(--border2);
+      color: var(--text-muted); border-radius: 4px;
+      width: 26px; height: 26px; cursor: pointer; font-size: 11px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .se-nav-btn:hover { background: var(--surface2); color: var(--text); }
+    .se-nav-hint { font-size: 11px; color: var(--text-muted); }
+    .se-close-btn {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 18px; cursor: pointer; line-height: 1; padding: 0 4px;
+    }
+    .se-close-btn:hover { color: var(--red); }
+    #story-canvas {
+      width: 100%; display: block;
+      background: var(--canvas-bg);
+      cursor: grab;
+    }
+    #story-canvas:active { cursor: grabbing; }
+
+    /* Event chips row */
+    #story-chips-row {
+      padding: 10px 14px 6px;
+      border-top: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    #story-chips {
+      display: flex;
+      gap: 8px;
+      min-width: max-content;
+    }
+    .se-chip {
+      min-width: 108px;
+      padding: 7px 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-top: 3px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      transition: border-color 0.15s;
+    }
+    .se-chip:hover { border-color: var(--border2); }
+    .se-chip-sel {
+      background: var(--surface);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .se-chip-tick  { color: var(--text-muted); font-size: 10px; }
+    .se-chip-state { color: var(--text-muted); font-size: 10px; }
+
+    /* Detail pane */
+    #story-detail {
+      padding: 12px 16px 14px;
+      border-top: 1px solid var(--border);
+      min-height: 52px;
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .sd-icon  { font-size: 15px; }
+    .sd-kind  { font-weight: 700; font-size: 13px; }
+    .sd-tick  { color: var(--text-muted); font-size: 12px; }
+    .sd-arrow { color: var(--text-muted); }
+    .sd-state { font-weight: 600; font-size: 12px; }
+    .sd-desc  {
+      width: 100%; margin: 6px 0 0;
+      color: var(--text); font-size: 13px; line-height: 1.5;
+    }
+
+    /* ── Dashboard ──────────────────────────────────────────────────── */
+    #dash-metrics {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    @media(max-width:800px){ #dash-metrics{ grid-template-columns:repeat(3,1fr); } }
+    @media(max-width:500px){ #dash-metrics{ grid-template-columns:repeat(2,1fr); } }
+    .dash-metric {
+      padding: 14px 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .dm-label { font-size:11px; color:var(--text-muted); margin-bottom:6px; letter-spacing:0.5px; text-transform:uppercase; }
+    .dm-val   { font-size:28px; font-weight:700; line-height:1; color:var(--text); }
+    .dm-green  { color: var(--green); }
+    .dm-yellow { color: var(--yellow); }
+    .dm-red    { color: var(--red); }
+    .dm-accent { color: var(--accent); }
+
+    .dash-main-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media(max-width:720px){ .dash-main-cols{ grid-template-columns:1fr; } }
+
+    .dash-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .dash-card-title {
+      font-size:11px; font-weight:700; letter-spacing:0.08em;
+      text-transform:uppercase; color:var(--text-muted);
+      margin-bottom:14px;
+    }
+    .thb-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    .thb-name { min-width:72px; font-size:12px; font-weight:600; }
+    .thb-bar  { flex:1; height:16px; border-radius:4px; overflow:hidden; display:flex; background:var(--surface2); }
+    .thb-seg  { height:100%; }
+    .thb-count{ font-size:11px; color:var(--text-muted); min-width:75px; text-align:right; }
+
+    #drift-canvas { width:100%; display:block; border-radius:4px; border:1px solid var(--border); background:var(--canvas-bg); }
+
+    .daq-row {
+      display: grid;
+      grid-template-columns: 1fr 80px 72px 80px auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--surface2);
+      font-size: 12px;
+    }
+    .daq-row:last-child { border-bottom: none; }
+    .daq-name  { font-weight: 600; }
+    .daq-drift { color: var(--text-muted); }
+    .daq-btn {
+      padding: 4px 12px;
+      border: 1px solid var(--s-warning); border-radius: 4px;
+      background: none; color: var(--s-warning);
+      cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .daq-btn:hover { background: var(--surface2); }
+
+    /* ── SC+GA PROBE ────────────────────────────────────────────── */
+    #probe-controls {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    #probe-epsilon {
+      font-family: monospace; font-size: 13px; color: var(--accent);
+      min-width: 110px; text-align: center;
+    }
+    #probe-metrics {
+      display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; min-height: 36px;
+    }
+    .prb-metric {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 14px; min-width: 100px; text-align: center;
+    }
+    .prb-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+               letter-spacing: 0.4px; margin-bottom: 3px; }
+    .prb-val { font-size: 22px; font-weight: 700; line-height: 1; color: var(--text); }
+    .prb-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+    #probe-canvas {
+      display: block; width: 100%; max-width: 960px; height: auto;
+      border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px;
+    }
+    #probe-ga-path {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px; font-family: monospace;
+      font-size: 11px; margin-bottom: 10px; max-height: 200px; overflow-y: auto;
+    }
+    .prb-section-title {
+      color: var(--accent); font-weight: 600; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+    }
+    .prb-step {
+      display: flex; gap: 10px; align-items: baseline;
+      border-bottom: 1px solid var(--border); padding: 3px 0;
+    }
+    .prb-step-i   { min-width: 16px; font-weight: bold; }
+    .prb-step-op  { min-width: 190px; }
+    .prb-step-r   { min-width: 60px; color: var(--text-muted); }
+    .prb-step-note{ color: var(--text-muted); font-size: 10px; }
+    #probe-verdict {
+      background: var(--surface2); border-left: 3px solid #ff5555;
+      border-radius: 4px; padding: 10px 14px; font-size: 11px;
+      color: var(--text-muted); line-height: 1.6;
+    }
+
+    /* ── Hubble-Zooming Service ─────────────────────────────────── */
+    #hubble-stats {
+      display: grid; grid-template-columns: repeat(4,1fr);
+      gap: 10px; margin-bottom: 14px;
+    }
+    @media(max-width:680px){ #hubble-stats{ grid-template-columns:repeat(2,1fr); } }
+    .hub-stat {
+      padding: 10px 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-left: 4px solid transparent; border-radius: 8px;
+    }
+    .hub-stat-lbl { font-size:11px; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px; }
+    .hub-stat-val { font-size:22px; font-weight:700; line-height:1; color:var(--text); }
+    .hub-stat-sub { font-size:11px; color:var(--text-muted); margin-top:3px; }
+    #hubble-breadcrumb {
+      display:flex; align-items:center; gap:6px;
+      font-size:12px; margin-bottom:10px;
+    }
+    .hub-bc-cur  { color:var(--accent); font-weight:600; }
+    .hub-bc-link { color:var(--text-muted); cursor:pointer; }
+    .hub-bc-link:hover { color:var(--text); text-decoration:underline; }
+    #hubble-canvas {
+      width:100%; aspect-ratio:960/520; display:block;
+      border-radius:8px; border:1px solid var(--border);
+      background:var(--canvas-bg); cursor:pointer;
+    }
+    #hubble-hint { font-size:11px; color:var(--text-muted); margin-top:8px; text-align:center; }
+
+    /* ── Schema Config ─────────────────────────────────── */
+    .schema-section-title {
+      font-size:13px; font-weight:700; color:var(--cyan);
+      letter-spacing:0.4px; margin:22px 0 10px;
+      display:flex; align-items:center; gap:8px;
+    }
+    .schema-section-title::before {
+      content:''; display:block; width:3px; height:14px;
+      background:var(--cyan); border-radius:2px;
+    }
+    .schema-load-row {
+      display:flex; gap:10px; align-items:flex-start; margin-bottom:14px;
+    }
+    #schema-input-ta {
+      flex:1; min-height:100px; padding:10px 12px;
+      background:var(--surface); border:1px solid var(--border2);
+      border-radius:6px; color:var(--text); font-family:inherit;
+      font-size:12px; resize:vertical; outline:none;
+    }
+    #schema-input-ta:focus { border-color:var(--cyan); }
+    .schema-load-btn {
+      padding:8px 18px; border:1px solid var(--cyan); border-radius:6px;
+      background:var(--surface2); color:var(--cyan); cursor:pointer;
+      font-family:inherit; font-size:13px; white-space:nowrap;
+      transition:background 0.12s;
+    }
+    .schema-load-btn:hover { background:var(--border); }
+    .schema-meta-grid {
+      display:grid; grid-template-columns:repeat(2,1fr); gap:10px;
+      margin-bottom:16px;
+    }
+    @media(max-width:640px){ .schema-meta-grid{ grid-template-columns:1fr; } }
+    .schema-meta-field {
+      display:flex; flex-direction:column; gap:4px;
+    }
+    .schema-meta-field label {
+      font-size:11px; color:var(--text-muted);
+    }
+    .schema-meta-field select,
+    .schema-meta-field input[type="number"] {
+      padding:6px 10px; background:var(--surface); border:1px solid var(--border2);
+      border-radius:6px; color:var(--text); font-family:inherit; font-size:13px;
+      outline:none;
+    }
+    .schema-meta-field select:focus,
+    .schema-meta-field input:focus { border-color:var(--accent); }
+    #schema-attr-table { margin-bottom:14px; }
+    .schema-export-row { display:flex; gap:10px; align-items:flex-start; margin-bottom:8px; }
+    .schema-export-btn {
+      padding:8px 18px; border:1px solid var(--accent); border-radius:6px;
+      background:var(--surface2); color:var(--accent); cursor:pointer;
+      font-family:inherit; font-size:13px; white-space:nowrap;
+      transition:background 0.12s;
+    }
+    .schema-export-btn:hover { background:var(--border); }
+    #schema-output-ta {
+      flex:1; min-height:140px; padding:10px 12px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:6px; color:var(--green); font-family:inherit;
+      font-size:12px; resize:vertical; outline:none;
+    }
+    #particles-model-canvas {
+      width:100%; aspect-ratio:960/440; display:block;
+      border-radius:8px; border:1px solid var(--border);
+      background:#0e0f14; margin-top:10px;
+    }
+
+    /* ── Live MDM data card ──────────────────────────── */
+    .live-card { border-left: 3px solid var(--green); }
+    .live-card-title {
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .live-title-right { display:flex; align-items:center; gap:10px; }
+    .live-stats-grid {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+      margin-top:4px;
+    }
+    @media(max-width:640px){ .live-stats-grid{ grid-template-columns:repeat(2,1fr); } }
+    .live-stat-box {
+      padding:10px 14px;
+      background:var(--surface); border:1px solid var(--border);
+      border-left:4px solid transparent; border-radius:6px;
+    }
+    .live-stat-label { font-size:11px; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px; }
+    .live-stat-val   { font-size:22px; font-weight:700; line-height:1; color:var(--text); }
+    .live-stat-sub   { font-size:11px; color:var(--text-muted); margin-top:3px; }
+
+    /* ── Batch history table ─────────────────────────────── */
+    .batch-hist-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .batch-hist-table th {
+      text-align:left; padding:6px 10px;
+      background:var(--surface2); color:var(--text-muted);
+      border-bottom:1px solid var(--border); font-weight:600; font-size:11px;
+      text-transform:uppercase; letter-spacing:0.4px;
+    }
+    .batch-hist-table td { padding:7px 10px; border-bottom:1px solid var(--surface2); }
+    .batch-hist-table tr:hover td { background:var(--surface); }
+    .bh-bar-wrap { display:flex; align-items:center; gap:6px; }
+    .bh-bar { flex:1; height:8px; border-radius:4px; overflow:hidden; display:flex; background:var(--surface2); }
+    .bh-gold-seg { height:100%; background:var(--green); }
+    .bh-fuzz-seg { height:100%; background:var(--yellow); }
+    .tc-live-badge {
+      display:inline-block; padding:2px 8px; border-radius:4px;
+      background:rgba(80,250,123,0.15); color:var(--green);
+      font-size:10px; font-weight:700; letter-spacing:0.5px; margin-bottom:6px;
+    }
+    .tc-live-stat { font-size:12px; color:var(--text-muted); margin-top:4px; }
+    .tc-live-stat span { font-weight:600; }
+    .live-detail-header {
+      padding:8px 12px; margin-bottom:10px;
+      background:rgba(80,250,123,0.08); border:1px solid rgba(80,250,123,0.25);
+      border-radius:6px; font-size:12px; color:var(--green);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Navbar ─────────────────────────────────────── -->
+  <div id="nav">
+    <span class="logo">&#11041; BahyWay</span>
+    <span class="tagline">Sovereign Database Platform</span>
+    <button class="tab-btn" id="tab-dashboard">Dashboard</button>
+    <button class="tab-btn" id="tab-hubble">Hubble</button>
+    <button class="tab-btn" id="tab-notebook">Notebook</button>
+    <button class="tab-btn" id="tab-pipeline">Pipeline</button>
+    <button class="tab-btn" id="tab-probe">PROBE</button>
+    <button class="tab-btn" id="tab-tribes">Tribes</button>
+    <button class="tab-btn" id="tab-schema">Schema</button>
+    <button id="btn-tour"  title="How to use">&#63;</button>
+    <button id="btn-theme" title="Toggle light/dark theme">&#9790;</button>
+  </div>
+
+  <!-- ── Main content ───────────────────────────────── -->
+  <div id="content">
+
+    <!-- ═══ SC+GA PROBE — Graveyard Rat Detection ═══ -->
+    <div id="panel-probe">
+      <p class="panel-title">SC+GA PROBE &mdash; Graveyard Rat Detection &#x2620; (Demo)</p>
+      <p class="panel-desc">
+        An ironic demonstration of <strong>Simplicial Complex &amp; Geometric Algebra</strong>
+        applied to the ancient question: <em>"where are the rats?"</em>
+        19 rats modelled as BahyWay particles across 4 graveyard sectors (orbits).
+        The PROBE builds a Vietoris-Rips complex at threshold epsilon,
+        computes Betti numbers &beta;&#8320; (colonies) and &beta;&#8321; (circuit loops),
+        then navigates inward via Cl(2,0) rotors.
+        <br><strong>Adjust &epsilon; to watch topology change in real time &mdash;
+        same engine powers NajafEngine crowd-path analysis and WPDEngine pipeline loop detection.</strong>
+      </p>
+      <div id="probe-controls">
+        <button class="action-btn" id="btn-probe-minus">&epsilon; &minus;</button>
+        <span id="probe-epsilon">epsilon = 0.65</span>
+        <button class="action-btn" id="btn-probe-plus">&epsilon; +</button>
+        <button class="action-btn accent" id="btn-run-probe">Run PROBE</button>
+      </div>
+      <div id="probe-metrics"></div>
+      <canvas id="probe-canvas" width="960" height="480"></canvas>
+      <div id="probe-ga-path"></div>
+      <div id="probe-verdict"></div>
+    </div>
+
+    <!-- ═══ Hubble-Zooming Service ═══ -->
+    <div id="panel-hubble">
+      <p class="panel-title">Hubble-Zooming Service</p>
+      <p class="panel-desc">
+        Multi-level particle density navigator &mdash; zoom from the sovereign
+        universe down to individual tribe orbitals. Color degradation reveals
+        drift decay; escaped dim dots show Dead&nbsp;/&nbsp;Fuzzy particles
+        beyond their orbital boundary. Click a tribe cluster to zoom in.
+      </p>
+      <div id="hubble-breadcrumb"></div>
+      <div id="hubble-stats"></div>
+      <canvas id="hubble-canvas" width="960" height="520"></canvas>
+      <div id="hubble-hint"></div>
+    </div>
+
+    <!-- ═══ System Dashboard ═══ -->
+    <div id="panel-dashboard">
+      <p class="panel-title">System Dashboard</p>
+      <p class="panel-desc">
+        Live health overview of all sovereign tribes and particles &mdash;
+        headline metrics, tribe-by-tribe status breakdown, drift distribution
+        chart, and the active steward alert queue for Dead and Fuzzy particles.
+      </p>
+
+      <!-- ── Live MDM Data (from bee-watchdog via bahyway-api) ── -->
+      <div class="dash-card live-card" style="margin-bottom:16px">
+        <div class="dash-card-title live-card-title">
+          &#9889; Live MDM Data &mdash; bee-watchdog
+          <div class="live-title-right">
+            <span id="dash-live-status" style="font-size:11px;color:var(--text-muted)">not connected</span>
+            <button class="action-btn" id="btn-refresh-live" style="padding:4px 12px;font-size:12px">
+              &#8635; Refresh
+            </button>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px">
+          Requires <code>bahyway-api</code> running on <code>localhost:8082</code>.
+          &nbsp;Start with: &nbsp;<code>bahyway-api --data-dir &lt;your-data-dir&gt;</code>
+          &nbsp;&middot;&nbsp; Auto-refreshes every 10 s when this tab is active.
+        </p>
+        <div id="dash-live-stats">
+          <span style="color:var(--text-muted);font-size:13px">
+            Click <strong>&#8635; Refresh</strong> to load live data from bee-watchdog output.
+          </span>
+        </div>
+      </div>
+
+      <div id="dash-metrics"></div>
+
+      <div class="dash-main-cols">
+        <div class="dash-card">
+          <div class="dash-card-title">Tribe Health Breakdown</div>
+          <div id="dash-tribe-health"></div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-title">Drift Distribution</div>
+          <canvas id="drift-canvas" width="960" height="340"></canvas>
+        </div>
+      </div>
+
+      <div class="dash-card" style="margin-top:16px">
+        <div class="dash-card-title">Steward Alert Queue</div>
+        <div id="dash-alert-queue"></div>
+      </div>
+    </div>
+
+    <!-- ═══ HeptaScript Notebook ═══ -->
+    <div id="panel-notebook">
+      <p class="panel-title">HeptaScript Notebook</p>
+      <p class="panel-desc">
+        Live query language for EnkiDB — type a HeptaScript expression or select a preset below.<br>
+        Tokens are syntax-highlighted in real time. Results reflect the live particle corpus.
+      </p>
+      <!-- Live corpus banner (populated from /api/v1/live when available) -->
+      <div id="nb-live-banner" style="display:none;margin-bottom:12px;padding:8px 14px;
+           background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--green);
+           border-radius:6px;font-size:12px;color:var(--text-muted)">
+        &#9889; Live corpus:&nbsp;<span id="nb-live-summary" style="color:var(--text)"></span>
+      </div>
+      <div id="preset-btns"></div>
+      <textarea id="nb-query" spellcheck="false">SELECT all</textarea>
+      <div id="tok-stream"></div>
+      <div id="result-count"></div>
+      <table class="results-table">
+        <thead>
+          <tr><th>Name</th><th>Tribe</th><th>Epoch</th><th>Status</th><th>Color&nbsp;RGB</th><th>Tags</th></tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+
+    <!-- ═══ EnkiDB Live Pipeline ═══ -->
+    <div id="panel-pipeline">
+      <p class="panel-title">EnkiDB Live Pipeline</p>
+      <p class="panel-desc">
+        Real SchedulerLoop running in WASM — stage particles into SDB, let the ValidationSweep
+        route them to ODB or QDB, and watch the five-tier pipeline in motion.
+      </p>
+      <div id="tier-stats">
+        <div class="tier-box"><div class="tier-name">SDB &mdash; Staging</div><div class="tier-val v-green" id="stat-sdb">0</div><div class="tier-sub">pending</div></div>
+        <div class="tier-box"><div class="tier-name">ODB &mdash; Active</div><div class="tier-val v-green" id="stat-odb">0</div><div class="tier-sub">particles</div></div>
+        <div class="tier-box"><div class="tier-name">QDB &mdash; Quarantine</div><div class="tier-val v-red" id="stat-qdb">0</div><div class="tier-sub">quarantined</div></div>
+        <div class="tier-box"><div class="tier-name">Journal</div><div class="tier-val v-yellow" id="stat-journal">0</div><div class="tier-sub">events</div></div>
+      </div>
+      <canvas id="particle-canvas" width="960" height="300"></canvas>
+      <div class="action-btns">
+        <button class="action-btn"        id="btn-stage-valid">Stage Valid</button>
+        <button class="action-btn danger" id="btn-stage-malware">Stage Malware</button>
+        <button class="action-btn accent" id="btn-tick">Do Tick</button>
+        <button class="action-btn"        id="btn-auto-toggle">Auto: ON</button>
+      </div>
+      <div id="etl-log"></div>
+    </div>
+
+    <!-- ═══ Sovereign Tribes ═══ -->
+    <div id="panel-tribes">
+      <p class="panel-title">Sovereign Tribes</p>
+      <p class="panel-desc">
+        Four sovereign tribes with orbital particle fields. Each tribe maintains its own
+        Color_ID nucleus, orbital rings, and typed particles &mdash; Zikru (identity), Musarû (observer),
+        Kali (archive), Alu (drift), Eresh (alert).
+        Click a <strong>tribe card</strong> to inspect its particles.
+        Click a <strong>particle on the star map</strong> to open its StoryEngine &mdash; a Houdini-style
+        process-editing canvas showing the full event journal from ingestion to current state.
+      </p>
+
+      <!-- sub-tabs -->
+      <div class="sub-tabs">
+        <button class="sub-tab active" id="stab-map">&#9733; Star Map</button>
+        <button class="sub-tab"       id="stab-compare">&#9776; Compare</button>
+      </div>
+
+      <!-- ── Live Batch Feed (bee-watchdog via bahyway-api) ── -->
+      <div class="dash-card live-card" id="tribes-live-card" style="margin-bottom:14px">
+        <div class="dash-card-title live-card-title">
+          &#9889; Live Batch Feed &mdash; bee-watchdog
+          <div class="live-title-right">
+            <span id="tribes-live-status" style="font-size:11px;color:var(--text-muted)">not connected</span>
+            <button class="action-btn" id="btn-refresh-batches" style="padding:4px 12px;font-size:12px">
+              &#8635; Refresh
+            </button>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px">
+          Real batch processing history from <code>bee-watchdog</code>.
+          &nbsp;Requires <code>bahyway-api --data-dir &lt;dir&gt;</code> on <code>localhost:8082</code>.
+        </p>
+        <div id="tribes-batch-history">
+          <span style="color:var(--text-muted);font-size:13px">
+            Click <strong>&#8635; Refresh</strong> to load live batch history.
+          </span>
+        </div>
+      </div>
+
+      <!-- ── Star Map view ── -->
+      <div id="tribes-map-view">
+        <canvas id="tribes-canvas" width="960" height="520"></canvas>
+        <div id="tribe-cards"></div>
+        <!-- detail drawer (shown when a tribe is selected) -->
+        <div id="tribe-detail-drawer" style="display:none">
+          <div id="detail-title"></div>
+          <div id="detail-live-banner" style="display:none"></div>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Name</th><th>Type</th><th>Orbit</th>
+                <th>Status</th><th>Epoch</th><th>Drift</th><th>Tags</th>
+              </tr>
+            </thead>
+            <tbody id="detail-particles-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ StoryEngine Panel ══════════════════════════════════════════════ -->
+      <div id="story-engine-panel" style="display:none">
+        <div id="story-panel-header">
+          <div id="story-title">StoryEngine</div>
+          <div class="story-pan-row">
+            <button class="se-nav-btn" id="story-pan-left" title="Scroll left">&#9664;</button>
+            <span class="se-nav-hint">drag to pan · click node to inspect</span>
+            <button class="se-nav-btn" id="story-pan-right" title="Scroll right">&#9654;</button>
+            <button class="se-close-btn" id="story-close">&#215;</button>
+          </div>
+        </div>
+        <div id="story-context-bar"></div>
+        <canvas id="story-canvas" width="960" height="224"></canvas>
+        <div id="story-chips-row">
+          <div id="story-chips"></div>
+        </div>
+        <div id="story-detail">
+          <span style="color:var(--text-muted);font-size:13px">Click a particle on the star map to open its StoryEngine.</span>
+        </div>
+      </div>
+
+      <!-- ── Compare view ── -->
+      <div id="tribes-compare-view" style="display:none">
+        <div class="cmp-selector-row">
+          <span class="cmp-label">Tribe A</span>
+          <div id="cmp-btns-a"></div>
+        </div>
+        <div class="cmp-selector-row">
+          <span class="cmp-label">Tribe B</span>
+          <div id="cmp-btns-b"></div>
+        </div>
+        <div class="compare-cols" id="compare-cols">
+          <div class="cmp-col" id="cmp-col-a"></div>
+          <div class="cmp-col" id="cmp-col-b"></div>
+        </div>
+        <table class="results-table" id="cmp-table">
+          <thead>
+            <tr><th>Metric</th><th id="cmp-th-a">&mdash;</th><th id="cmp-th-b">&mdash;</th></tr>
+          </thead>
+          <tbody id="cmp-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══ Schema Config + Particles Data Model ═══ -->
+    <div id="panel-schema">
+      <p class="panel-title">Client DQ Profile &mdash; Schema Config &amp; Particles Data Model</p>
+      <p class="panel-desc">
+        Configure the data-quality rules for your organisation's schema.
+        Paste a <code>.schema</code> file, set nullable/fill-threshold/dimension/weight per column,
+        then export a <code>.dqprofile</code> to drop in <code>shard/profiles/</code>.
+        The Particles Data Model diagram below shows how records become particles in EnkiDB.
+      </p>
+
+      <!-- ── DQ Profile Editor ───────────────────────── -->
+      <div class="schema-section-title">DQ Profile Editor</div>
+
+      <div class="schema-load-row">
+        <textarea id="schema-input-ta"
+          placeholder="Paste .schema file contents here&#10;&#10;Example:&#10;schema_name = najaf_cemetery_batch_001_1748873400&#10;[mandatory_attributes]&#10;  name&#10;  national_id&#10;[optional_attributes]&#10;  date_of_death&#10;  notes"></textarea>
+        <button class="schema-load-btn" id="schema-load-btn">Load Schema</button>
+      </div>
+
+      <div class="schema-meta-grid">
+        <div class="schema-meta-field">
+          <label>Format Layer</label>
+          <select id="schema-format">
+            <option value="0">CivilRegistry</option>
+            <option value="1">MedicalRecord</option>
+            <option value="2">PipelineData</option>
+            <option value="3">CuneiformDictionary</option>
+            <option value="4">GenericEav</option>
+          </select>
+        </div>
+        <div class="schema-meta-field">
+          <label>Source Trust</label>
+          <select id="schema-trust">
+            <option value="0">Authoritative</option>
+            <option value="1" selected>Official</option>
+            <option value="2">Community</option>
+            <option value="3">Unknown</option>
+          </select>
+        </div>
+        <div class="schema-meta-field">
+          <label>Gem Threshold (B11, 0&ndash;255)</label>
+          <input type="number" id="schema-gem" min="0" max="255" value="200">
+        </div>
+        <div class="schema-meta-field">
+          <label>Tribe Threshold (B11, 0&ndash;255)</label>
+          <input type="number" id="schema-tribe" min="0" max="255" value="140">
+        </div>
+      </div>
+
+      <div id="schema-attr-table">
+        <p style="color:var(--text-muted);font-style:italic;font-size:13px">
+          Paste your <code>.schema</code> file contents above and click
+          <strong>Load Schema</strong> to configure per-attribute DQ rules.
+        </p>
+      </div>
+
+      <div class="schema-export-row" style="margin-top:14px">
+        <button class="schema-export-btn" id="schema-export-btn">&#8659; Export .dqprofile</button>
+        <textarea id="schema-output-ta" readonly
+          placeholder="Exported .dqprofile will appear here…"></textarea>
+      </div>
+
+      <!-- ── Particles Data Model ────────────────────── -->
+      <div class="schema-section-title" style="margin-top:30px">Particles Data Model</div>
+      <p style="color:var(--text-muted);font-size:12px;margin:0 0 10px">
+        How a CSV record becomes a Particle in EnkiDB &mdash;
+        EAV triples, B11 quality byte, state machine (Golden / Fuzzy / Dead), and ColorID encoding.
+      </p>
+      <canvas id="particles-model-canvas" width="960" height="440"></canvas>
+    </div>
+
+  </div>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- ── Tour Modal ─────────────────────────────────── -->
+  <!-- ════════════════════════════════════════════════ -->
+  <div id="tour-backdrop">
+    <div id="tour-modal">
+
+      <div id="tour-head">
+        <h2>&#127916;&nbsp; How to use BahyWay</h2>
+        <button id="tour-close">&#215;</button>
+      </div>
+
+      <div id="tour-body">
+
+        <!-- ════ Notebook Column ════ -->
+        <div class="tour-col">
+          <div class="tour-col-title">
+            HeptaScript Notebook
+            <span class="badge">live query</span>
+          </div>
+
+          <div class="step-wrap">
+
+            <!-- Step 1 -->
+            <div class="tour-step">
+              <div class="step-num">STEP 1 / 4</div>
+              <div class="step-title">Choose a preset query</div>
+              <div class="step-body">Click any preset to instantly load a HeptaScript query into the editor.</div>
+              <div class="mock-bar">
+                <span class="mock-chip hi">Tribe 0x0001</span>
+                <span class="mock-chip">Active Only</span>
+                <span class="mock-chip">Late Epochs</span>
+              </div>
+              <div class="mock-query-box">
+                <span class="tok-kw">SELECT</span> <span class="tok-kw">ALL</span>
+                <span class="tok-kw">WHERE</span> <span class="tok-fld">tribe_id</span>
+                <span class="tok-op">=</span> <span class="tok-lit">0x0001</span>
+              </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="tour-step">
+              <div class="step-num">STEP 2 / 4</div>
+              <div class="step-title">Real-time token highlighting</div>
+              <div class="step-body">Every character you type is immediately tokenised and colour-coded.</div>
+              <div class="mock-toks">
+                <span class="tok-kw">SELECT</span>
+                <span class="tok-kw">ALL</span>
+                <span class="tok-kw">WHERE</span>
+                <span class="tok-fld">status</span>
+                <span class="tok-op">=</span>
+                <span class="tok-str">"Active"</span>
+              </div>
+              <div class="mock-bar" style="gap:12px; font-size:11px;">
+                <span style="color:var(--tok-kw)">■ Keyword</span>
+                <span style="color:var(--tok-fld)">■ Field</span>
+                <span style="color:var(--tok-op)">■ Operator</span>
+                <span style="color:var(--tok-lit)">■ Literal</span>
+                <span style="color:var(--tok-str)">■ String</span>
+              </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="tour-step">
+              <div class="step-num">STEP 3 / 4</div>
+              <div class="step-title">Supported filter fields</div>
+              <div class="step-body">Combine any field with operators =, &gt;, &lt; to filter the corpus.</div>
+              <div class="mock-query-box">
+                <span class="tok-fld">tribe_id</span> <span class="tok-op">=</span> <span class="tok-lit">0x0001</span><br>
+                <span class="tok-fld">epoch</span> <span class="tok-op">&gt;</span> <span class="tok-lit">2</span><br>
+                <span class="tok-fld">Color_ID.R</span> <span class="tok-op">&gt;</span> <span class="tok-lit">150</span><br>
+                <span class="tok-fld">status</span> <span class="tok-op">=</span> <span class="tok-str">"Active"</span>
+              </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="tour-step">
+              <div class="step-num">STEP 4 / 4</div>
+              <div class="step-title">Live results table</div>
+              <div class="step-body">The results table updates on every keystroke — 1 to 8 particles from the seeded corpus.</div>
+              <div style="border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-top:8px;">
+                <div class="mock-row"><b>Name</b><b>Status</b></div>
+                <div class="mock-row">Ali_Karim <span class="s-active">Active</span></div>
+                <div class="mock-row">Omar_Said <span class="s-critical">Critical</span></div>
+                <div class="mock-row">Ahmed_Fadel <span class="s-warning">Warning</span></div>
+              </div>
+            </div>
+
+          </div><!-- /.step-wrap -->
+
+          <div class="step-dots">
+            <div class="step-dot"></div><div class="step-dot"></div>
+            <div class="step-dot"></div><div class="step-dot"></div>
+          </div>
+        </div><!-- /.tour-col notebook -->
+
+        <!-- ════ Pipeline Column ════ -->
+        <div class="tour-col">
+          <div class="tour-col-title">
+            EnkiDB Live Pipeline
+            <span class="badge">real WASM engine</span>
+          </div>
+
+          <div class="step-wrap">
+
+            <!-- Step 1 -->
+            <div class="tour-step">
+              <div class="step-num">STEP 1 / 4</div>
+              <div class="step-title">Stage particles into SDB</div>
+              <div class="step-body">Click the buttons to push particles into the Staging Database buffer.</div>
+              <div class="mock-bar" style="gap:10px;">
+                <span class="mock-chip" style="border-color:var(--green);color:var(--green)">Stage Valid</span>
+                <span class="mock-chip" style="border-color:var(--red);color:var(--red)">Stage Malware</span>
+              </div>
+              <div class="flow" style="flex-direction:row; justify-content:center; gap:16px; margin-top:10px;">
+                <div class="flow-node green-node">SDB: 3 pending</div>
+                <div class="flow-node red-node">malware_flag</div>
+              </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="tour-step">
+              <div class="step-num">STEP 2 / 4</div>
+              <div class="step-title">SchedulerLoop auto-ticks</div>
+              <div class="step-body">Auto-tick fires every 800 ms. The ValidationSweep triggers every 5 ticks.</div>
+              <div class="tick-row">
+                <div class="tick-chip done">1</div>
+                <div class="tick-chip done">2</div>
+                <div class="tick-chip done">3</div>
+                <div class="tick-chip done">4</div>
+                <div class="tick-chip fire">5&#9733;</div>
+              </div>
+              <div class="step-body" style="margin-top:6px;">
+                Tick 5 → <span style="color:var(--accent)">ValidationSweep runs</span><br>
+                Or press <span class="mock-chip" style="display:inline-block;padding:2px 8px;font-size:11px;">Do Tick</span> manually
+              </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="tour-step">
+              <div class="step-num">STEP 3 / 4</div>
+              <div class="step-title">ValidationSweep routes particles</div>
+              <div class="step-body">Each pending SDB particle is evaluated and routed to ODB or QDB.</div>
+              <div class="flow" style="margin-top:8px;">
+                <div class="flow-node hl">SDB — pending particles</div>
+                <div class="flow-arrow">&#8595;</div>
+                <div class="flow-node hl">ValidationSweep</div>
+                <div class="flow-arrow">&#8595;</div>
+                <div class="flow-split">
+                  <div class="flow-node green-node">&#10003;&nbsp;ODB<br><span style="font-size:10px;color:var(--text-muted)">valid</span></div>
+                  <div class="flow-node red-node">&#9888;&nbsp;QDB<br><span style="font-size:10px;color:var(--text-muted)">malware</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="tour-step">
+              <div class="step-num">STEP 4 / 4</div>
+              <div class="step-title">Watch the 3D particle cloud</div>
+              <div class="step-body">ODB particles appear as coloured, floating dots on the canvas. Each dot's colour = the particle's <span class="tok-fld">Color_ID</span> RGB.</div>
+              <div class="dot-cloud">
+                <div class="dot" style="background:rgba(80,200,255,0.9)"></div>
+                <div class="dot" style="background:rgba(120,200,100,0.9)"></div>
+                <div class="dot" style="background:rgba(180,180,50,0.9)"></div>
+                <div class="dot" style="background:rgba(255,140,0,0.9)"></div>
+                <div class="dot" style="background:rgba(40,40,200,0.9)"></div>
+                <div class="dot" style="background:rgba(200,80,80,0.9)"></div>
+              </div>
+              <div class="step-body" style="margin-top:6px;">Toggle <b>Auto: ON/OFF</b> to pause the sweep.</div>
+            </div>
+
+          </div><!-- /.step-wrap -->
+
+          <div class="step-dots">
+            <div class="step-dot"></div><div class="step-dot"></div>
+            <div class="step-dot"></div><div class="step-dot"></div>
+          </div>
+        </div><!-- /.tour-col pipeline -->
+
+      </div><!-- /#tour-body -->
+    </div><!-- /#tour-modal -->
+  </div><!-- /#tour-backdrop -->
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- ── Right-click Context Menu ─────────────────────────────── -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <div id="ctxmenu">
+    <div class="ctx-particle-name" id="ctx-particle-name">Particle</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" id="ctx-open-story">&#128269; Open StoryEngine</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item ctx-steward-item" id="ctx-steward">&#129657; Diagnose &amp; Steward Edit</div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- ── Data Steward Sidebar ──────────────────────────────────── -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <div id="steward-backdrop">
+    <div id="steward-sidebar">
+
+      <!-- Tribe color accent bar (filled dynamically) -->
+      <div id="steward-tribe-bar"></div>
+
+      <!-- Header bar -->
+      <div id="steward-top-bar">
+        <div class="sd-bar-title">
+          &#129657;&nbsp; Data Steward
+        </div>
+        <button id="steward-close">&#215;</button>
+      </div>
+
+      <div id="steward-scroll">
+
+        <!-- Particle info -->
+        <div class="sd-section">
+          <div class="sd-section-title">Particle</div>
+          <div id="steward-header-info"></div>
+        </div>
+
+        <!-- Diagnosis -->
+        <div class="sd-section">
+          <div class="sd-section-title">Diagnosis</div>
+          <div id="steward-diagnosis"></div>
+        </div>
+
+        <!-- Event Journal -->
+        <div class="sd-section">
+          <div class="sd-section-title">Event Journal &mdash; causal events highlighted</div>
+          <div id="steward-journal"></div>
+        </div>
+
+        <!-- Edit controls -->
+        <div class="sd-section">
+          <div class="sd-section-title">Steward Correction</div>
+
+          <div style="margin-bottom:10px">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Correct Status</div>
+            <div class="se-pills" id="steward-status-pills"></div>
+          </div>
+
+          <div style="margin-bottom:10px">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Correct Type</div>
+            <div class="se-pills" id="steward-ptype-pills"></div>
+          </div>
+
+          <div id="steward-note-row">
+            <input id="steward-note" type="text"
+              placeholder="Steward note (optional)…" autocomplete="off" />
+          </div>
+
+          <div class="sd-action-row">
+            <button id="steward-apply">Apply Override</button>
+            <button id="steward-reset">Reset to Original</button>
+          </div>
+          <div id="steward-apply-msg"></div>
+        </div>
+
+      </div><!-- /#steward-scroll -->
+    </div><!-- /#steward-sidebar -->
+  </div><!-- /#steward-backdrop -->
+
+  <link data-trunk rel="rust" data-wasm-opt="z" />
+</body>
+</html>

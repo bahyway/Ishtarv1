@@ -1,0 +1,41 @@
+# =============================================================================
+# enkidb-write-server — EnkiDB (core operational particle store) Write
+# Node container image.
+#
+# Build (from the repo root):
+#   podman build -t enkidb-write-server:latest \
+#     -f deploy/podman/Containerfile.enkidb-write-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkidb-write \
+#     -p 7011:7011 \
+#     -v enkidb-write-data:/data:Z \
+#     --restart=always \
+#     enkidb-write-server:latest
+#
+# No `/source` mount, no git, no authorship gate -- unlike EnkiDDB's
+# write server, this one has no document-ingest path at all. Its only
+# command is `SEED:<n>` (generate n synthetic particles for a scale
+# test/demo, matching enkidb-readnode's own scale_benchmark example
+# exactly) and `FLUSH`. Real particle ingestion is the ETL station
+# chain's job (BeeMDM), out of scope for this server.
+#
+# `:Z` on the volume mount is required on Fedora/SELinux-enforcing hosts
+# (matches this fleet's existing convention).
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkidb-write-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkidb
+COPY --from=builder /build/target/release/enkidb-write-server /usr/local/bin/enkidb-write-server
+USER enkidb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7011
+ENV DATA_DIR=/data
+EXPOSE 7011
+ENTRYPOINT ["/usr/local/bin/enkidb-write-server"]

@@ -1,0 +1,128 @@
+# =============================================================================
+# PB-282 — Fetch the Sargon vault (sargon_vault.dat) from the retired
+# eriduous-vdi VM onto the bare-metal Fedora Workstation 44 control node.
+# BahyWay.Ecosystem v4.0
+#
+# WHY THIS EXISTS: PB-269 (2026-07-30) retired eriduous-vdi as a VM and
+# moved the control-node role to bare metal, but never migrated data that
+# lived only on that VM's disk. The Architect's Sargon vault -- the
+# passport store `shakkanakku-web`'s login screen requires (Shala's
+# Architect-privilege gate) -- turned out to still be sitting there:
+# `/home/bahyway/.local/share/godot/app_userdata/BahyWay.Ecosystem v4.0
+# -- Sargon Passport Manager/sargon_vault.dat`, found live 2026-08-02 by
+# starting the VM and searching. This playbook makes that a repeatable,
+# one-command fetch instead of a manual `virsh`/`scp` sequence typed by
+# hand -- matching the Architect's standing instruction that every new
+# command becomes a playbook run from Shala, never manual.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms the eriduous-vdi VM is actually running (`virsh domstate`)
+#      -- fails clearly, telling you to start it in virt-manager first,
+#      rather than hanging on an unreachable SSH connection.
+#   2. Resolves the VM's current DHCP IP via `virsh domifaddr` (never
+#      hardcoded -- default-NAT libvirt networks reassign these).
+#   3. `scp`s the vault file from the VM to `dest_path` on the bare-metal
+#      host (default: `~/sargon_vault.dat`), using `ssh-keyscan` to trust
+#      the VM's host key non-interactively (a fresh/rebooted VM's key
+#      changes; this is a local libvirt NAT guest, not a real network
+#      boundary, so accepting-on-first-connect here is a reasonable
+#      default -- override with `-e strict_host_key_checking=true` if
+#      you'd rather confirm the fingerprint by hand first).
+#   4. Never touches or deletes anything on the VM -- read-only fetch.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_282_fetch_sargon_vault_from_eriduous_vdi.yml
+#   ansible-playbook playbooks/playbook_282_fetch_sargon_vault_from_eriduous_vdi.yml \
+#     -e dest_path=~/vaults/sargon_vault.dat -e vm_ssh_user=bahyway
+# =============================================================================
+---
+- name: "PB-282 | Fetch sargon_vault.dat from eriduous-vdi to the bare-metal host"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    vm_name: "eriduous-vdi"
+    # FIXED 2026-08-02, live on the real host: plain `virsh` defaults to
+    # `qemu:///session`, but this VM (and virt-manager itself) runs under
+    # `qemu:///system` -- confirmed via `virsh uri` showing `session` while
+    # `virsh -c qemu:///system domstate eriduous-vdi` showed `running` and
+    # `virsh -c qemu:///session domstate eriduous-vdi` showed `shut off` for
+    # the SAME VM name. Every virsh call below is now explicit about which
+    # connection it means, rather than trusting the ambient default.
+    libvirt_uri: "qemu:///system"
+    vm_ssh_user: "bahyway"
+    vm_vault_path: "/home/bahyway/.local/share/godot/app_userdata/BahyWay.Ecosystem v4.0 -- Sargon Passport Manager/sargon_vault.dat"
+    dest_path: "{{ lookup('env', 'HOME') }}/sargon_vault.dat"
+    strict_host_key_checking: false
+
+  tasks:
+
+    - name: "Confirm the eriduous-vdi VM is running"
+      ansible.builtin.command:
+        cmd: "virsh -c {{ libvirt_uri }} domstate {{ vm_name }}"
+      register: vm_state
+      changed_when: false
+      failed_when: false
+
+    - name: "FAIL | VM not running or virsh unavailable"
+      ansible.builtin.fail:
+        msg: >-
+          Could not confirm {{ vm_name }} is running (virsh said:
+          '{{ vm_state.stdout | default("") | trim }}{{ vm_state.stderr | default("") | trim }}').
+          Start it in virt-manager first (or `virsh start {{ vm_name }}` if
+          you have permission), then re-run this playbook.
+      when: vm_state.rc != 0 or 'running' not in vm_state.stdout
+
+    - name: "Resolve the VM's current IP address"
+      ansible.builtin.command:
+        cmd: "virsh -c {{ libvirt_uri }} domifaddr {{ vm_name }}"
+      register: vm_ifaddr
+      changed_when: false
+
+    - name: "FAIL | could not parse an IP from virsh domifaddr"
+      ansible.builtin.fail:
+        msg: >-
+          No IPv4 address found for {{ vm_name }} in:
+          {{ vm_ifaddr.stdout }}
+          The VM may still be booting -- wait a few seconds and re-run.
+      when: vm_ifaddr.stdout is not regex('\d+\.\d+\.\d+\.\d+/')
+
+    - name: "Extract the VM's IP"
+      ansible.builtin.set_fact:
+        vm_ip: "{{ vm_ifaddr.stdout | regex_search('(\\d+\\.\\d+\\.\\d+\\.\\d+)/') | regex_replace('/', '') }}"
+
+    - name: "Report resolved IP"
+      ansible.builtin.debug:
+        msg: "{{ vm_name }} resolved to {{ vm_ip }}"
+
+    - name: "Trust the VM's current SSH host key (local libvirt NAT guest, not a real network boundary)"
+      ansible.builtin.shell: >-
+        ssh-keygen -R {{ vm_ip }} >/dev/null 2>&1;
+        ssh-keyscan -H {{ vm_ip }} >> {{ lookup('env', 'HOME') }}/.ssh/known_hosts 2>/dev/null
+      changed_when: true
+      when: not (strict_host_key_checking | bool)
+
+    - name: "Fetch sargon_vault.dat from the VM"
+      ansible.builtin.command:
+        cmd: >-
+          scp -o StrictHostKeyChecking={{ 'yes' if (strict_host_key_checking | bool) else 'accept-new' }}
+          "{{ vm_ssh_user }}@{{ vm_ip }}:{{ vm_vault_path }}" "{{ dest_path }}"
+      register: scp_result
+
+    - name: "Confirm the fetched file exists and is non-empty"
+      ansible.builtin.stat:
+        path: "{{ dest_path }}"
+      register: fetched_stat
+
+    - name: "FAIL | fetched file missing or empty"
+      ansible.builtin.fail:
+        msg: "scp reported success but {{ dest_path }} is missing or empty."
+      when: not fetched_stat.stat.exists or fetched_stat.stat.size == 0
+
+    - name: "DONE | PB-282 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 sargon_vault.dat fetched to {{ dest_path }}
+          ({{ fetched_stat.stat.size }} bytes). Upload this file on Shala's
+          login screen along with its passphrase to unlock the Architect view.

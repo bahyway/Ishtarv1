@@ -1,0 +1,218 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_252_standalone_apps_smoke_launch.yml
+#  BahyWay.Ecosystem v4.0 — PB-252: 5 apps that build but had never been run
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_252_standalone_apps_smoke_launch.yml -i "localhost," -c local -v
+#
+#  Context: the last of playbook_248's 56 "zero playbook mention" crates —
+#  bahyway-web, bahyway-api, bahyway-cli, bahyway-server, enkidw-cli — are
+#  real, standalone applications, not libraries. "cargo test passes" proves
+#  nothing about whether these actually run: a binary that compiles can
+#  still panic on startup, fail to bind its port, or hang. This playbook
+#  actually launches each one and checks real, observable behavior — the
+#  literal thing the Architect asked for: "run the working playbooks, not
+#  searching for fragmented manual code."
+#
+#  Verified locally before shipping this playbook (read every main.rs
+#  first, no guessing at flags):
+#    - bahyway-api: pure std::net HTTP server (no external deps), binds a
+#      port, serves /health and /api/v1/{live,batches,tribes} by reading
+#      JSON files from --data-dir, with graceful "no_data" placeholders
+#      when those files don't exist yet. Real curl round-trip confirmed:
+#      /health -> "ok", /api/v1/live -> the documented no-data JSON.
+#    - bahyway-cli: a stdin REPL (.hepta/.akk/.parse/.help/.quit) around a
+#      real EnkiDb + HeptaScript query/AAOL parser. Piping real commands
+#      through stdin and reading stdout works exactly as the REPL loop
+#      implies.
+#    - bahyway-server: parses --tribe/--ticks, runs EriduSupervisor for a
+#      bounded tick count, then shuts down cleanly (rc=0, prints "shutdown
+#      complete"). Confirmed it actually exits — a scheduler daemon that
+#      never returns would make this playbook hang forever without a
+#      bounded --ticks value.
+#    - enkidw-cli: `ingest`/`watch`/`analytics`/`compile` subcommands over
+#      a real EtlPipeline. `ingest` against an empty landing dir prints a
+#      real summary block (files seen: 0, etc.) and exits 0 — no crash on
+#      the empty-input case.
+#    - bahyway-web: this one is different in kind — its native `main.rs`
+#      is a one-line pointer ("run `trunk serve`"), because the crate is
+#      actually a WASM web app (`crate-type = ["cdylib", "rlib"]`) meant to
+#      run in a browser via the `trunk` build tool, not as a native
+#      process. Verifying it for real means starting `trunk serve` and
+#      driving a real browser against it — a materially different (and
+#      much larger) task than smoke-launching a CLI, requiring the `trunk`
+#      + wasm32 toolchain on the target host. Out of scope for this
+#      playbook; this playbook only confirms the crate still builds
+#      (`cargo check`, already covered by PB-248) and states this
+#      limitation honestly rather than claiming a browser-level check that
+#      isn't actually happening.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-252 | Standalone apps — real smoke-launch, not just cargo test"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    session_date: "{{ ansible_date_time.date }}"
+    docs_dir:     "{{ forge_root }}/docs/SHEDU"
+    scratch_dir:  "/tmp/pb252_smoke_{{ ansible_date_time.epoch }}"
+    api_port:     18099
+    report_file:  "{{ docs_dir }}/PB252_STANDALONE_APPS_{{ session_date }}.txt"
+    naru_journal: "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU + scratch directories exist"
+      ansible.builtin.file: { path: "{{ item }}", state: directory, mode: "0755" }
+      loop:
+        - "{{ docs_dir }}"
+        - "{{ scratch_dir }}/api_data"
+        - "{{ scratch_dir }}/dw_data"
+        - "{{ scratch_dir }}/dw_landing"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced"
+      ansible.builtin.fail:
+        msg: "{{ workspace }}/Cargo.toml not found. Sync the workspace from the laptop first."
+      when: not ws_check.stat.exists
+
+    - name: "BUILD | Release binaries for all 5 apps"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build --release -p bahyway-api -p bahyway-cli -p bahyway-server -p enkidw-cli -p bahyway-web"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: false
+      failed_when: build_out.rc != 0
+
+    - name: "LAUNCH | bahyway-server — bounded run, must exit cleanly"
+      ansible.builtin.command:
+        cmd: "{{ workspace }}/target/release/bahyway-server --tribe 0x0001 --ticks 5"
+      register: server_out
+      changed_when: false
+      failed_when: server_out.rc != 0
+
+    - name: "ASSERT | bahyway-server actually shut down (not just exited by crash)"
+      ansible.builtin.assert:
+        that:
+          - "'shutdown complete' in server_out.stderr"
+        fail_msg: "bahyway-server exited 0 but never printed its own shutdown-complete line — that's a crash-shaped success, not a real clean run."
+
+    - name: "LAUNCH | bahyway-cli — real REPL round trip via stdin"
+      ansible.builtin.shell: |
+        printf '.help\n.hepta WHO T.E\n.quit\n' | {{ workspace }}/target/release/bahyway-cli --tribe 0x0001
+      register: cli_out
+      changed_when: false
+      failed_when: cli_out.rc != 0
+
+    - name: "ASSERT | bahyway-cli actually processed the .hepta query, not just echoed help"
+      ansible.builtin.assert:
+        that:
+          - "'matched=' in cli_out.stdout"
+          - "'evaluated=' in cli_out.stdout"
+          - "'bye.' in cli_out.stdout"
+        fail_msg: "bahyway-cli's REPL did not produce real query output or did not exit via .quit."
+
+    - name: "LAUNCH | enkidw-cli ingest — against a real empty landing dir"
+      ansible.builtin.command:
+        cmd: >
+          {{ workspace }}/target/release/enkidw-cli
+          --tribe 0x0001 --data-dir {{ scratch_dir }}/dw_data
+          --landing {{ scratch_dir }}/dw_landing ingest
+      register: dw_out
+      changed_when: false
+      failed_when: dw_out.rc != 0
+
+    - name: "ASSERT | enkidw-cli produced a real ingest summary, not a crash before it"
+      ansible.builtin.assert:
+        that:
+          - "'Ingest summary' in dw_out.stdout"
+          - "'files seen' in dw_out.stdout"
+
+    - name: "LAUNCH | bahyway-api — start as a background service"
+      ansible.builtin.shell: |
+        nohup {{ workspace }}/target/release/bahyway-api \
+          --data-dir {{ scratch_dir }}/api_data --port {{ api_port }} \
+          > {{ scratch_dir }}/api.log 2>&1 &
+        echo $!
+      register: api_pid_out
+      changed_when: true
+
+    - name: "WAIT | bahyway-api port is actually listening"
+      ansible.builtin.wait_for:
+        host: "127.0.0.1"
+        port: "{{ api_port }}"
+        timeout: 10
+
+    - name: "CHECK | GET /health returns the real 'ok' response"
+      ansible.builtin.command:
+        cmd: "curl -s http://127.0.0.1:{{ api_port }}/health"
+      register: health_resp
+      changed_when: false
+
+    - name: "CHECK | GET /api/v1/live returns the real no-data JSON (no export yet)"
+      ansible.builtin.command:
+        cmd: "curl -s http://127.0.0.1:{{ api_port }}/api/v1/live"
+      register: live_resp
+      changed_when: false
+
+    - name: "ASSERT | bahyway-api served both endpoints correctly over a real HTTP round trip"
+      ansible.builtin.assert:
+        that:
+          - "health_resp.stdout == 'ok'"
+          - "'no_data' in live_resp.stdout"
+        fail_msg: "bahyway-api's real HTTP responses didn't match its own documented contract."
+
+    - name: "CLEANUP | Stop the bahyway-api background process"
+      ansible.builtin.command:
+        cmd: "kill {{ api_pid_out.stdout | trim }}"
+      failed_when: false
+      changed_when: false
+
+    - name: "CLEANUP | Remove scratch directory"
+      ansible.builtin.file: { path: "{{ scratch_dir }}", state: absent }
+
+    - name: "WRITE | Verification report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-252 Standalone Apps Smoke-Launch
+          Date : {{ session_date }}
+
+          bahyway-server (--tribe 0x0001 --ticks 5): rc=0, clean shutdown confirmed
+          bahyway-cli (REPL via stdin): real .hepta query + .quit round trip confirmed
+          enkidw-cli ingest (empty landing dir): real summary output, rc=0
+          bahyway-api (real HTTP server on 127.0.0.1:{{ api_port }}):
+            GET /health       -> "{{ health_resp.stdout }}"
+            GET /api/v1/live  -> {{ live_resp.stdout }}
+
+          bahyway-web: NOT smoke-launched by this playbook. It's a WASM web
+          app (trunk + browser), not a native CLI/service — verifying it for
+          real requires a `trunk serve` + browser-driven check, materially
+          different scope from the other 4. Only confirmed to still build
+          (cargo check, already covered by PB-248).
+
+    - name: "NARU | Record standalone apps smoke-launch result"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ session_date }} | PB-252 | Standalone apps smoke-launch | server/cli/enkidw-cli/api all launched+verified live | bahyway-web build-only (WASM, needs browser check) | see {{ report_file }}"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | PB-252 COMPLETE"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════
+          PB-252  STANDALONE APPS SMOKE-LAUNCH  PASS
+          bahyway-server / bahyway-cli / enkidw-cli / bahyway-api: real launch verified
+          bahyway-web: build-only (WASM app — browser check out of scope, noted honestly)
+          Report: {{ report_file }}
+          ═══════════════════════════════════════════════════

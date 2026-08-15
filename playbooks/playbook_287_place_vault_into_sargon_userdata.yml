@@ -1,0 +1,114 @@
+# =============================================================================
+# PB-287 — Place the fetched sargon_vault.dat into Sargon Passport
+# Manager's actual Godot user:// data directory. BahyWay.Ecosystem
+# v4.0 — 2026-08-02
+#
+# WHY THIS EXISTS: PB-282 fetched the real vault from eriduous-vdi to
+# `~/sargon_vault.dat`, and Shala's own web login (PB-284's
+# `vault_path` fallback) reads a file from any path directly -- but
+# `sargon-passport-manager/scripts/main.gd` hardcodes
+# `const VAULT_PATH := "user://sargon_vault.dat"`, which Godot resolves
+# to `~/.local/share/godot/app_userdata/<config/name>/sargon_vault.dat`
+# on Linux -- a THIRD path, different from both of the above. Confirmed
+# live 2026-08-02: on the bare-metal host's first-ever run of this tool
+# (PB-285/286), that directory doesn't exist yet, so the "Unlock Sargon
+# Vault" dialog would either fail outright or silently create a new,
+# empty vault there instead of opening the real one -- never noticed
+# until it was too late to easily tell the difference.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms `src_vault` (default `~/sargon_vault.dat`) exists and is
+#      non-empty.
+#   2. Computes the real Godot user:// directory for
+#      "BahyWay.Ecosystem v4.0 -- Sargon Passport Manager" (read
+#      directly from `config/name` in sargon-passport-manager/
+#      project.godot, not hardcoded twice).
+#   3. If a vault ALREADY exists there: refuses to overwrite silently --
+#      requires `-e confirm_overwrite=true`, and reports both files'
+#      md5sum first so the Architect can tell whether they're already
+#      the same file before deciding.
+#   4. Copies `src_vault` into place, preserving `src_vault` untouched
+#      (copy, not move) -- Shala's own `vault_path` login option keeps
+#      working either way.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_287_place_vault_into_sargon_userdata.yml
+#   ansible-playbook playbooks/playbook_287_place_vault_into_sargon_userdata.yml -e confirm_overwrite=true
+# =============================================================================
+---
+- name: "PB-287 | Place fetched vault into Sargon Passport Manager's user:// data dir"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    src_vault: "{{ lookup('env', 'HOME') }}/sargon_vault.dat"
+    confirm_overwrite: false
+
+  tasks:
+
+    - name: "Confirm src_vault exists"
+      ansible.builtin.stat:
+        path: "{{ src_vault }}"
+      register: src_check
+
+    - name: "FAIL | src_vault missing"
+      ansible.builtin.fail:
+        msg: "{{ src_vault }} does not exist -- run PB-282 first, or pass -e src_vault=/real/path."
+      when: not src_check.stat.exists or src_check.stat.size == 0
+
+    - name: "Read config/name from sargon-passport-manager's project.godot"
+      ansible.builtin.command:
+        cmd: "grep -oP '(?<=config/name=\")[^\"]+' {{ repo_root }}/godot/sargon-passport-manager/project.godot"
+      register: app_name
+      changed_when: false
+
+    - name: "Compute the real Godot user:// directory (Linux XDG data dir convention)"
+      ansible.builtin.set_fact:
+        userdata_dir: "{{ lookup('env', 'HOME') }}/.local/share/godot/app_userdata/{{ app_name.stdout | trim }}"
+        dest_vault: "{{ lookup('env', 'HOME') }}/.local/share/godot/app_userdata/{{ app_name.stdout | trim }}/sargon_vault.dat"
+
+    - name: "Ensure the userdata directory exists (created here if the app has never run)"
+      ansible.builtin.file:
+        path: "{{ userdata_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Check whether a vault already exists at dest_vault"
+      ansible.builtin.stat:
+        path: "{{ dest_vault }}"
+      register: dest_check
+
+    - name: "Compare checksums if a vault already exists there"
+      ansible.builtin.shell: >-
+        echo "src : $(md5sum '{{ src_vault }}' | awk '{print $1}')" ;
+        echo "dest: $(md5sum '{{ dest_vault }}' | awk '{print $1}')"
+      register: checksum_compare
+      changed_when: false
+      when: dest_check.stat.exists
+
+    - name: "FAIL | a different vault already exists at dest_vault -- refuses to overwrite silently"
+      ansible.builtin.fail:
+        msg: >-
+          {{ dest_vault }} already exists.
+          {{ checksum_compare.stdout }}
+          Re-run with -e confirm_overwrite=true once you're sure which one
+          should win -- this playbook never overwrites an existing vault
+          without that explicit flag.
+      when: dest_check.stat.exists and not (confirm_overwrite | bool)
+
+    - name: "Copy src_vault into place (leaves src_vault untouched)"
+      ansible.builtin.copy:
+        src: "{{ src_vault }}"
+        dest: "{{ dest_vault }}"
+        mode: "0644"
+        remote_src: true
+
+    - name: "DONE | PB-287 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 {{ src_vault }} copied to {{ dest_vault }} -- Sargon Passport
+          Manager will now find your real vault at its expected user://
+          path. Kill and relaunch the tool (PB-285) if it's already open,
+          so it picks this up fresh.

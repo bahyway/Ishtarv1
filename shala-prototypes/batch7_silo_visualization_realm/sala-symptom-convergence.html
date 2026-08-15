@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Symptom Convergence — the outbreak differential</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#04060e; --ink:#eaf0fb; --ink-dim:#9aa6c8; --ink-faint:#5a6488;
+  --symptom:#4fd6c4; --fact:#8fe6b0; --weak:#e3b458; --ghost:#b083e0; --none:#3a4266;
+  --gold:#E3B458; --signal:#4fd6c4; --line:#1c2440;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button,select{font-family:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;z-index:5}
+.hud-title{top:14px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:19px;letter-spacing:.09em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--symptom)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:10px;letter-spacing:.16em;color:var(--ink-faint);margin-top:5px}
+.panel{background:rgba(6,10,24,.86);border:1px solid var(--line);border-radius:8px;padding:13px 15px;backdrop-filter:blur(10px)}
+.hud-sym{top:82px;left:18px;width:264px;font-family:var(--f-data)}
+.hud-sym h3{font-size:10px;letter-spacing:.14em;color:var(--symptom);text-transform:uppercase;margin-bottom:4px}
+.hud-sym .lead{font-size:10px;color:var(--ink-faint);margin-bottom:10px;line-height:1.5;font-family:var(--f-body)}
+.sym-item{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:6px;margin:3px 0;cursor:pointer;border:1px solid transparent;font-size:11px;color:var(--ink-dim)}
+.sym-item:hover{background:rgba(79,214,196,.06)}
+.sym-item.on{background:rgba(79,214,196,.14);border-color:var(--symptom);color:var(--ink)}
+.sym-item .box{width:14px;height:14px;border-radius:3px;border:1px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center;font-size:10px}
+.sym-item.on .box{background:var(--symptom);color:#04231f;border-color:var(--symptom)}
+.hud-diff{top:82px;right:18px;width:290px;max-height:calc(100vh - 180px);overflow:auto;font-family:var(--f-data)}
+.hud-diff h3{font-size:10px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:9px}
+.diff-item{border-left:3px solid var(--none);padding:8px 0 8px 10px;margin:8px 0}
+.diff-item.fact{border-left-color:var(--fact)} .diff-item.weak{border-left-color:var(--weak)} .diff-item.ghost{border-left-color:var(--ghost)}
+.diff-name{font-size:13px;color:var(--ink);font-weight:500}
+.diff-badge{font-size:9px;padding:1px 7px;border-radius:100px;margin-left:6px}
+.b-fact{color:var(--fact);border:1px solid var(--fact)} .b-weak{color:var(--weak);border:1px solid var(--weak)} .b-ghost{color:var(--ghost);border:1px solid var(--ghost)}
+.diff-conv{font-size:10px;color:var(--ink-dim);margin-top:3px}
+.diff-conv b{color:var(--symptom)}
+.diff-disc{font-size:10px;color:var(--gold);margin-top:3px}
+.diff-img{font-size:10px;color:var(--ink-dim);background:rgba(227,180,88,.07);border-radius:5px;padding:5px 8px;margin-top:5px;line-height:1.45}
+.diff-img b{color:var(--gold)}
+.diff-src{font-size:8.5px;color:var(--signal);margin-top:3px}
+.diff-empty{font-size:11px;color:var(--ink-faint);line-height:1.5}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,6,14,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:9px;color:var(--ink-faint);padding:5px 18px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">&#x12079;</span> SYMPTOM <em>CONVERGENCE</em></h1>
+  <div class="sub">THE OUTBREAK DIFFERENTIAL A MANUAL CAN'T DO &middot; DROP FIELD SIGNS &middot; WATCH DISEASES CONVERGE</div>
+</div>
+
+<div class="hud hud-sym panel">
+  <h3>&#9670; Field signs observed</h3>
+  <div class="lead">Tick what you see in the animal(s). The store finds every disease these converge on &mdash; ranked.</div>
+  <div id="sym-list"></div>
+</div>
+
+<div class="hud hud-diff panel">
+  <h3>Differential &middot; ranked by convergence</h3>
+  <div id="diff-list"><div class="diff-empty">Tick one or more field signs to begin.</div></div>
+</div>
+
+<footer>Way-of-Work rule 5 &mdash; HTML prototype; production body Godot/WGPU. GOLDEN store = REAL Merck Veterinary Manual + sourced cattle data. Symptom&rarr;disease convergence is checkable; images described are real diagnostic findings. The instrument enters from SYMPTOMS (a manual can't). Not veterinary advice &mdash; a decision aid. Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ===== REAL GOLDEN store: bovine sudden-death differential (Merck + sourced) ===== */
+const SYMPTOMS=[
+  {id:'sudden_death',label:'Sudden death'},
+  {id:'crepitant_swelling',label:'Crepitant muscle swelling (gas under skin)'},
+  {id:'dark_unclotting_blood',label:'Dark blood, fails to clot'},
+  {id:'bleeding_orifices',label:'Bleeding from orifices'},
+  {id:'no_rigor',label:'Absence of rigor mortis'},
+  {id:'fever',label:'High fever'},
+  {id:'lameness',label:'Lameness / depression'},
+];
+/* DISEASE: symptom weights (how characteristic, 0..1), image finding, source, discriminator */
+const DISEASES=[
+  {id:'blackleg',name:'Blackleg', organism:'Clostridium chauvoei',
+    w:{sudden_death:0.8,crepitant_swelling:0.97,fever:0.6,lameness:0.7,dark_unclotting_blood:0.1},
+    disc:'crepitant_swelling',
+    img:'Dark red-to-black, dry, spongy affected muscle with a sweetish odour; crepitant (gas) swelling of large muscles; skin over swelling becomes cold, dry, leathery.',
+    src:'Blackleg in Animals, Merck Vet Manual'},
+  {id:'anthrax',name:'Anthrax', organism:'Bacillus anthracis',
+    w:{sudden_death:0.9,dark_unclotting_blood:0.9,bleeding_orifices:0.85,no_rigor:0.8,fever:0.7,crepitant_swelling:0.05},
+    disc:'no_rigor',
+    img:'Dark tarry blood that fails to clot, oozing from orifices (nose, mouth, anus); marked absence of rigor mortis; carcass bloats rapidly. DO NOT open carcass in field (spore risk).',
+    src:'Anthrax in Animals, Merck Vet Manual + Veterian Key'},
+  {id:'malignant_edema',name:'Malignant edema', organism:'Clostridium septicum',
+    w:{sudden_death:0.7,crepitant_swelling:0.7,fever:0.65,lameness:0.5},
+    disc:null,
+    img:'Wound-associated soft-tissue swelling with edema/gas; necropsy alone unreliable vs blackleg &mdash; needs lab (fluorescent-antibody).',
+    src:'Malignant Edema in Animals, Merck Vet Manual'},
+  {id:'lightning',name:'Lightning strike', organism:'(non-infectious)',
+    w:{sudden_death:0.85,no_rigor:0.3},
+    disc:null,
+    img:'Singe marks / lesions along the body; found dead often near trees/fences after a storm; a diagnosis of exclusion for sudden death.',
+    src:'listed as sudden-death differential, Merck Vet Manual'},
+];
+
+let chosen=new Set();
+
+/* ---- three.js scene: symptoms (left ring) send filaments to diseases (right) ---- */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(58,2,0.1,4000); camera.position.set(0,0,600);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x04060e,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8090c0,0.9));
+
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.5)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+
+/* symptom nodes: left column */
+const symPos={};
+SYMPTOMS.forEach((s,i)=>{ symPos[s.id]=new THREE.Vector3(-230, 150-(i*(300/(SYMPTOMS.length-1))), 0); });
+/* disease nodes: right column */
+const disPos={};
+DISEASES.forEach((d,i)=>{ disPos[d.id]=new THREE.Vector3(230, 120-(i*(240/(DISEASES.length-1))), 0); });
+
+const symSprites={}, disSprites={}, disLabels={}, symLabels={};
+function mkLabel(text,color,size){const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+  g.font='500 '+(size||22)+'px "IBM Plex Mono"';g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';
+  g.shadowColor='rgba(0,0,0,.9)';g.shadowBlur=7;g.fillText(text,256,34);
+  return new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));}
+SYMPTOMS.forEach(s=>{
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX,color:0x4fd6c4,transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending}));
+  sp.scale.set(20,20,1); sp.position.copy(symPos[s.id]); scene.add(sp); symSprites[s.id]=sp;
+  const lab=mkLabel(s.label.length>26?s.label.slice(0,24)+'…':s.label,'#8fa0c8',18); lab.scale.set(180,22,1);
+  lab.position.copy(symPos[s.id]).add(new THREE.Vector3(-120,0,0)); scene.add(lab); symLabels[s.id]=lab;
+});
+DISEASES.forEach(d=>{
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX,color:0xffffff,transparent:true,opacity:0.3,depthWrite:false,blending:THREE.AdditiveBlending}));
+  sp.scale.set(24,24,1); sp.position.copy(disPos[d.id]); scene.add(sp); disSprites[d.id]=sp;
+  const lab=mkLabel(d.name,'#c8d4f0',22); lab.scale.set(150,19,1);
+  lab.position.copy(disPos[d.id]).add(new THREE.Vector3(110,0,0)); scene.add(lab); disLabels[d.id]=lab;
+});
+
+/* filaments: particle streams from chosen symptoms to diseases they present in */
+let filaments=null;
+function classify(conv,maxPossible){
+  if(conv<=0) return 'NONE';
+  const ratio=conv/Math.max(1,maxPossible);
+  if(ratio>=0.55) return 'FACT';
+  if(ratio>=0.28) return 'WEAK';
+  return 'GHOST';
+}
+function rebuildFilaments(){
+  if(filaments)scene.remove(filaments);
+  const pts=[], cols=[];
+  chosen.forEach(sid=>{
+    DISEASES.forEach(d=>{
+      const w=d.w[sid]; if(!w)return;
+      const A=symPos[sid],B=disPos[d.id];
+      const col = w>=0.6?[0.56,0.90,0.69]:w>=0.35?[0.89,0.70,0.35]:[0.69,0.51,0.88];
+      const n=Math.round(w*40)+8;
+      for(let i=0;i<n;i++){const t=i/n;
+        const x=A.x+(B.x-A.x)*t+(Math.random()-.5)*6;
+        const y=A.y+(B.y-A.y)*t+Math.sin(t*3.14)*20+(Math.random()-.5)*6;
+        const z=(Math.random()-.5)*10;
+        pts.push(x,y,z); cols.push(col[0]*(0.5+Math.random()*0.5),col[1]*(0.5+Math.random()*0.5),col[2]*(0.5+Math.random()*0.5));}
+    });
+  });
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pts),3));
+  g.setAttribute('color',new THREE.BufferAttribute(new Float32Array(cols),3));
+  filaments=new THREE.Points(g,new THREE.PointsMaterial({size:3.2,vertexColors:true,transparent:true,opacity:0.85,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX}));
+  scene.add(filaments);
+}
+
+/* compute convergence + render differential */
+function recompute(){
+  // convergence weight per disease = sum of chosen-symptom weights
+  const results=DISEASES.map(d=>{
+    let conv=0, hits=[];
+    chosen.forEach(sid=>{if(d.w[sid]){conv+=d.w[sid];hits.push(sid);}});
+    return {d,conv,hits};
+  });
+  const maxPossible=Math.max(1,...results.map(r=>r.hits.length));
+  results.forEach(r=>r.kind=classify(r.conv, chosen.size||1));
+  results.sort((a,b)=>b.conv-a.conv);
+  // update disease knot brightness/size
+  results.forEach(r=>{
+    const sp=disSprites[r.d.id]; const k=r.kind;
+    const base=24+r.conv*22;
+    sp.scale.set(base,base,1);
+    const col={FACT:0x8fe6b0,WEAK:0xe3b458,GHOST:0xb083e0,NONE:0xffffff}[k];
+    sp.material.color.setHex(col);
+    sp.material.opacity = k==='NONE'?0.25:0.9;
+  });
+  // symptom knots light when chosen
+  SYMPTOMS.forEach(s=>{symSprites[s.id].material.opacity=chosen.has(s.id)?1.0:0.4;
+    symSprites[s.id].scale.set(chosen.has(s.id)?30:20,chosen.has(s.id)?30:20,1);});
+  rebuildFilaments();
+  // panel
+  const list=document.getElementById('diff-list');
+  if(chosen.size===0){list.innerHTML='<div class="diff-empty">Tick one or more field signs to begin.</div>';return;}
+  list.innerHTML=results.map(r=>{
+    if(r.kind==='NONE')return '';
+    const badge={FACT:'b-fact',WEAK:'b-weak',GHOST:'b-ghost'}[r.kind];
+    const hitLabels=r.hits.map(h=>SYMPTOMS.find(s=>s.id===h).label).join(', ');
+    // discriminator: is the chosen set hitting this disease's unique discriminator?
+    let disc='';
+    if(r.d.disc && chosen.has(r.d.disc)) disc=`<div class="diff-disc">▸ discriminating sign present: <b>${SYMPTOMS.find(s=>s.id===r.d.disc).label}</b></div>`;
+    return `<div class="diff-item ${r.kind.toLowerCase()}">
+      <div class="diff-name">${r.d.name}<span class="diff-badge ${badge}">${r.kind}</span></div>
+      <div class="diff-conv">converges on <b>${r.hits.length}/${chosen.size}</b> of your signs (weight ${r.conv.toFixed(2)}) · ${r.d.organism}</div>
+      <div class="diff-conv" style="color:var(--ink-faint)">via: ${hitLabels}</div>
+      ${disc}
+      <div class="diff-img"><b>Field image / finding:</b> ${r.d.img}</div>
+      <div class="diff-src">${r.d.src}</div>
+    </div>`;
+  }).join('') || '<div class="diff-empty">No disease in the store converges on these signs. (NONE — absence shown honestly.)</div>';
+}
+
+/* symptom picker UI */
+const symList=document.getElementById('sym-list');
+SYMPTOMS.forEach(s=>{
+  const el=document.createElement('div'); el.className='sym-item';
+  el.innerHTML=`<div class="box"></div><div>${s.label}</div>`;
+  el.onclick=()=>{ if(chosen.has(s.id)){chosen.delete(s.id);el.classList.remove('on');el.querySelector('.box').textContent='';}
+    else{chosen.add(s.id);el.classList.add('on');el.querySelector('.box').textContent='✓';} recompute(); };
+  symList.appendChild(el);
+});
+
+/* preselect a classic outbreak trio to show convergence immediately */
+['sudden_death','crepitant_swelling','fever'].forEach(id=>{chosen.add(id);});
+document.querySelectorAll('.sym-item').forEach(el=>{const lbl=el.textContent.trim();
+  const s=SYMPTOMS.find(s=>lbl.startsWith(s.label.slice(0,10)));
+  if(s&&chosen.has(s.id)){el.classList.add('on');el.querySelector('.box').textContent='✓';}});
+recompute();
+
+/* camera + render */
+let az=0,el2=0,spin=!reduced;
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  // gentle pulse on lit disease knots
+  DISEASES.forEach(d=>{const sp=disSprites[d.id];if(sp.material.opacity>0.5){const b=1+Math.sin(ts/500+d.id.length)*0.05;const s=sp.scale.x;sp.scale.set(s,s,1);}});
+  if(filaments) filaments.rotation.z=Math.sin(ts/6000)*0.02;
+  camera.position.set(Math.sin(az)*30,0,600); camera.lookAt(0,0,0);
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

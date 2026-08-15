@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>𒀭 NAJAF · The Narrowing Loop</title>
+<style>
+  :root{
+    --bg-base:#2B2D31;--bg-panel:#232527;--bg-widget:#1E2022;--bg-deep:#18191B;
+    --bg-hover:#383A3E;--bg-selected:#404349;--stroke:#3D3F43;
+    --gold:#D6A44C;--teal:#4FB8A8;--crimson:#C34A3F;--orange:#D98E3E;--purple:#9B7FC7;
+    --ink:#E8E6E1;--muted:#9A9C9F;--dim:#6E7074;
+    --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --sans:-apple-system,"Segoe UI","Noto Sans",Ubuntu,Cantarell,sans-serif;
+    --mono:"JetBrains Mono","Fira Code",ui-monospace,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+  button{font-family:inherit;color:inherit;cursor:pointer}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  header{border-bottom:1px solid var(--stroke);background:var(--bg-panel)}
+  .mast{max-width:1200px;margin:0 auto;padding:18px 24px}
+  .mast h1{font-family:var(--serif);font-weight:600;font-size:23px;letter-spacing:.04em}
+  .mast h1 .glyph{color:var(--gold);margin-right:8px}
+  .mast .sub{color:var(--muted);font-size:13px;margin-top:3px}
+
+  main{max-width:1200px;margin:0 auto;padding:22px 24px 60px;
+    display:grid;grid-template-columns:1fr 400px;gap:24px;align-items:start}
+  @media(max-width:920px){main{grid-template-columns:1fr}}
+
+  /* ── Map field (signature) ── */
+  .field{background:var(--bg-deep);border:1px solid var(--stroke);border-radius:12px;
+    padding:16px;position:relative}
+  .field h2{font-family:var(--serif);font-size:15px;margin-bottom:3px}
+  .field .cap{font-size:11.5px;color:var(--dim);margin-bottom:12px;font-family:var(--mono)}
+  svg.map{width:100%;height:auto;display:block;background:#141517;border-radius:8px;border:1px solid var(--stroke)}
+  .compass{position:absolute;top:26px;right:30px;font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center}
+  .compass .n{color:var(--muted)}
+
+  /* candidate count banner */
+  .count{display:flex;align-items:baseline;gap:10px;margin-top:14px;padding:12px 15px;
+    background:var(--bg-panel);border:1px solid var(--stroke);border-radius:9px}
+  .count b{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--gold)}
+  .count .lbl{color:var(--muted);font-size:13px}
+  .count .of{color:var(--dim);font-family:var(--mono);font-size:12px;margin-left:auto}
+  .bar{height:5px;background:var(--bg-widget);border-radius:3px;margin-top:10px;overflow:hidden}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--crimson),var(--orange),var(--gold));
+    transition:width .5s cubic-bezier(.2,.7,.2,1)}
+
+  /* ── Conversation panel ── */
+  aside{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:12px;overflow:hidden}
+  .aHead{padding:14px 18px;border-bottom:1px solid var(--stroke)}
+  .aHead h3{font-family:var(--serif);font-size:15px}
+  .aHead p{font-size:12px;color:var(--dim);margin-top:2px}
+  .thread{padding:14px 18px;max-height:340px;overflow-y:auto}
+  .msg{margin-bottom:12px;font-size:13.5px}
+  .msg.sys .who{color:var(--gold)}.msg.usr .who{color:var(--teal)}
+  .msg .who{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:3px}
+  .msg .txt{background:var(--bg-widget);border:1px solid var(--stroke);border-radius:8px;padding:9px 12px;color:var(--ink)}
+  .msg.usr .txt{background:rgba(79,184,168,.08);border-color:rgba(79,184,168,.3)}
+  .msg .gain{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:4px}
+
+  .ask{border-top:1px solid var(--stroke);padding:14px 18px}
+  .ask .q{font-family:var(--serif);font-size:15.5px;margin-bottom:3px}
+  .ask .qwhy{font-size:11.5px;color:var(--dim);font-family:var(--mono);margin-bottom:11px}
+  .opts{display:flex;flex-direction:column;gap:7px}
+  .opt{display:flex;align-items:center;gap:11px;background:var(--bg-widget);border:1px solid var(--stroke);
+    border-radius:8px;padding:10px 13px;text-align:left;transition:background .12s,border-color .12s}
+  .opt:hover{background:var(--bg-hover);border-color:var(--bg-selected)}
+  .opt .lab{flex:1;font-size:13.5px}
+  .opt .cut{font-family:var(--mono);font-size:11px;color:var(--orange)}
+  .opt.answered{opacity:.5;pointer-events:none}
+
+  .done{padding:18px;text-align:center}
+  .done .big{font-family:var(--serif);font-size:19px;color:var(--gold);margin-bottom:6px}
+  .done .id{font-family:var(--mono);font-size:15px;color:var(--teal);background:var(--bg-widget);
+    border:1px solid rgba(79,184,168,.3);border-radius:8px;padding:9px;margin:8px 0}
+  .done p{font-size:12.5px;color:var(--muted)}
+  .reset{margin-top:12px;background:var(--bg-widget);border:1px solid var(--stroke);border-radius:7px;
+    padding:8px 16px;color:var(--muted);font-size:12.5px}
+  .reset:hover{background:var(--bg-hover);color:var(--ink)}
+
+  /* ── mechanism note ── */
+  .mech{grid-column:1/-1;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:11px;padding:16px 20px;margin-top:2px}
+  .mech h3{font-family:var(--serif);font-size:15px;margin-bottom:8px}.mech h3 .glyph{color:var(--gold)}
+  .mech pre{font-family:var(--mono);font-size:12px;line-height:1.7;color:#C9C7C2;white-space:pre-wrap}
+  .kw{color:var(--gold);font-weight:600}.nn{color:var(--teal)}.vv{color:var(--orange)}.cm{color:var(--dim);font-style:italic}.pu{color:var(--purple)}
+  .mech .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+  @media(max-width:700px){.mech .grid{grid-template-columns:1fr}}
+  .mech .card{background:var(--bg-widget);border:1px solid var(--stroke);border-radius:8px;padding:12px 14px}
+  .mech .card b{color:var(--gold);font-size:13px}.mech .card p{font-size:12px;color:var(--muted);margin-top:4px}
+
+  footer{max-width:1200px;margin:0 auto;padding:6px 24px 40px;color:var(--dim);font-size:12px}
+  footer b{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="mast">
+    <h1><span class="glyph">𒀭</span>NAJAF — The Narrowing Loop</h1>
+    <div class="sub">Finding a grave from a vague memory · each question is a geometric mask · billion particles, sub-second</div>
+  </div>
+</header>
+
+<main>
+  <!-- Map -->
+  <section class="field">
+    <h2>Wādī al-Salām — candidate field</h2>
+    <div class="cap" id="cap">every lit point is still possible · dimmed points ruled out</div>
+    <div class="compass"><div class="n">N</div>W · E<div>S</div></div>
+    <svg class="map" id="map" viewBox="0 0 600 440" role="img" aria-label="Candidate grave field"></svg>
+    <div class="count">
+      <b id="cnum">—</b><span class="lbl">graves still possible</span>
+      <span class="of" id="cof"></span>
+    </div>
+    <div class="bar"><i id="cbar" style="width:100%"></i></div>
+  </section>
+
+  <!-- Conversation -->
+  <aside>
+    <div class="aHead">
+      <h3>The narrowing</h3>
+      <p>The vague sentence starts it. Each answer carves the field.</p>
+    </div>
+    <div class="thread" id="thread"></div>
+    <div id="askZone"></div>
+  </aside>
+
+  <!-- Mechanism -->
+  <section class="mech">
+    <h3><span class="glyph">𒁾</span> How the next question is chosen — not guessed, computed</h3>
+    <div class="grid">
+      <div class="card"><b>Answer = geometric mask</b><p>"To the south" is a half-plane. "Near the big mosque" is a radius query. "Famous grave as anchor" is a bearing from a known point. Each answer is a boolean mask over the particle field — the exact dense, uniform work the engine does at 2.4B particles/sec.</p></div>
+      <div class="card"><b>Question = maximum information gain</b><p>Of all questions available, pick the one whose answer splits the surviving set most evenly. A question that rules out half is worth one bit; a question that rules out three graves is nearly worthless. The loop always asks the most-splitting question next — twenty-questions, made geometric.</p></div>
+    </div>
+<pre style="margin-top:14px">
+<span class="cm">-- the loop, in HeptaScript v2.0</span>
+<span class="kw">PRESENT</span> grave <span class="kw">FROM</span> najaf.field           <span class="cm">-- N candidates</span>
+<span class="kw">WITNESS</span> memory <span class="vv">"...music from the south..."</span>  <span class="cm">-- extract only the grounded part: SOUTH</span>
+<span class="kw">LOOP</span> <span class="kw">UNTIL</span> candidates <span class="pu">&lt;=</span> <span class="vv">3</span>:
+  <span class="kw">ORBIT</span> question <span class="kw">BY</span> <span class="nn">MAX_INFO_GAIN</span>     <span class="cm">-- pick most-splitting mask</span>
+  <span class="kw">SYNC</span> answer <span class="kw">FROM</span> mourner
+  <span class="kw">PROVE</span> field <span class="kw">MASK</span> answer.geometry   <span class="cm">-- billion-particle boolean, &lt;1s</span>
+<span class="kw">EMIT</span> anchor <span class="kw">AS</span> plot_id
+</pre>
+  </section>
+</main>
+
+<footer>
+  <b>Charter notes.</b> Rehearsal only (Way-of-Work rule 5). The sensory fragment (<b>"sad music"</b>) is
+  deliberately dropped — the loop keeps only what maps to geometry (<b>south</b>, landmarks, anchors). The
+  masking step is where the billion-particle law lives: each answer is one dense SIMD pass over the field.
+  Under NL-001 the engine is god-named (Nabû/NajafEngine); Najaf is a city and names the structure. Built
+  with care: for a grieving person, the loop asks for a name or a landmark and does well with those, rather
+  than promising the memory itself will find the grave.
+</footer>
+
+<script>
+/* ── Synthetic candidate field: 800 graves in a plane ──
+   Real Najaf: >1M plots; here 800 stand-in particles.
+   Each answered question applies a geometric mask (alive=true/false). */
+const N=800, W=600, H=440;
+const LANDMARKS=[
+  {name:"Imam Ali Shrine (golden dome)", x:300, y:70, key:"shrine"},
+  {name:"the big new mosque", x:470, y:330, key:"mosque"},
+  {name:"the water tower", x:120, y:300, key:"tower"},
+];
+const FAMOUS=[
+  {name:"the poet's tomb", x:250, y:250, key:"poet"},
+  {name:"the sheikh's white grave", x:400, y:180, key:"sheikh"},
+];
+let field=[];
+function seed(){
+  field=[];
+  for(let i=0;i<N;i++){
+    field.push({x:20+Math.random()*(W-40), y:20+Math.random()*(H-40), alive:true});
+  }
+  // guarantee a true answer exists in the SE quadrant near the mosque
+  field[0].x=455; field[0].y=340; field[0].alive=true; field[0].target=true;
+}
+
+/* ── Question bank: each has a mask fn + the geometry it encodes ── */
+const QUESTIONS=[
+  {id:"south", q:"Were you in the southern half of the cemetery?",
+   why:"half-plane · y > H/2", cuts:"south",
+   mask:g=>g.y> H/2 },
+  {id:"east", q:"Was it toward the east side, away from the shrine?",
+   why:"half-plane · x > W/2", cuts:"east",
+   mask:g=>g.x> W/2 },
+  {id:"mosque", q:"Was there a big building — the new mosque — close by?",
+   why:"radius ≤ 120 around mosque", cuts:"near mosque",
+   mask:g=>Math.hypot(g.x-470,g.y-330)<=120 },
+  {id:"shrine_far",q:"Were you far from the golden dome of the shrine?",
+   why:"radius > 220 from shrine", cuts:"far from shrine",
+   mask:g=>Math.hypot(g.x-300,g.y-70)>220 },
+  {id:"poet", q:"Is the poet's tomb nearby — could you use it as an anchor?",
+   why:"radius ≤ 90 around poet's tomb", cuts:"near anchor",
+   mask:g=>Math.hypot(g.x-250,g.y-250)<=90 },
+  {id:"near_edge",q:"Were you near the outer wall, not deep inside?",
+   why:"within 70 of a boundary", cuts:"near edge",
+   mask:g=>(g.x<70||g.x>W-70||g.y<70||g.y>H-70) },
+];
+let asked=new Set();
+let thread=[];
+
+function aliveCount(){return field.filter(g=>g.alive).length;}
+
+/* information gain proxy: a question that splits the alive set closest to 50/50 scores highest */
+function infoGain(qfn){
+  let yes=0,no=0;
+  for(const g of field){ if(!g.alive)continue; (qfn(g)?yes++:no++); }
+  const t=yes+no; if(!t) return -1;
+  const p=yes/t;
+  if(p===0||p===1) return 0;
+  // entropy in bits
+  return -(p*Math.log2(p)+(1-p)*Math.log2(1-p));
+}
+function bestQuestion(){
+  let best=null,bg=-1;
+  for(const Q of QUESTIONS){
+    if(asked.has(Q.id))continue;
+    const g=infoGain(Q.mask);
+    if(g>bg){bg=g;best=Q;}
+  }
+  return best?{Q:best,gain:bg}:null;
+}
+
+function applyMask(Q,yes){
+  // yes = user says "yes" → keep graves matching mask; "no" → keep the complement
+  for(const g of field){ if(!g.alive)continue;
+    const m=Q.mask(g);
+    if(yes ? !m : m) g.alive=false;
+  }
+}
+
+function drawMap(){
+  const svg=document.getElementById('map');
+  let s='';
+  // landmarks
+  for(const L of LANDMARKS){
+    s+=`<circle cx="${L.x}" cy="${L.y}" r="8" fill="none" stroke="#9B7FC7" stroke-width="1.5"/>`;
+    s+=`<circle cx="${L.x}" cy="${L.y}" r="2.5" fill="#9B7FC7"/>`;
+  }
+  for(const F of FAMOUS){
+    s+=`<rect x="${F.x-4}" y="${F.y-4}" width="8" height="8" fill="none" stroke="#D6A44C" stroke-width="1.5" transform="rotate(45 ${F.x} ${F.y})"/>`;
+  }
+  // graves
+  for(const g of field){
+    if(g.alive){
+      const c = g.target ? '#4FB8A8' : '#D98E3E';
+      const r = g.target ? 3.2 : 2.1;
+      s+=`<circle cx="${g.x.toFixed(1)}" cy="${g.y.toFixed(1)}" r="${r}" fill="${c}" opacity="0.9"/>`;
+    } else {
+      s+=`<circle cx="${g.x.toFixed(1)}" cy="${g.y.toFixed(1)}" r="1.4" fill="#3D3F43" opacity="0.5"/>`;
+    }
+  }
+  svg.innerHTML=s;
+}
+
+function renderThread(){
+  document.getElementById('thread').innerHTML=thread.map(m=>
+    `<div class="msg ${m.role}"><span class="who">${m.role==='sys'?'NAJAF':'MOURNER'}</span>
+     <div class="txt">${m.txt}</div>${m.gain?`<div class="gain">${m.gain}</div>`:''}</div>`
+  ).join('');
+  const t=document.getElementById('thread'); t.scrollTop=t.scrollHeight;
+}
+
+function updateCount(){
+  const a=aliveCount();
+  document.getElementById('cnum').textContent=a;
+  document.getElementById('cof').textContent=`of ${N} · ${asked.size} questions asked`;
+  document.getElementById('cbar').style.width=(100*a/N)+'%';
+}
+
+function step(){
+  drawMap(); updateCount();
+  const a=aliveCount();
+  const zone=document.getElementById('askZone');
+  if(a<=3){
+    const target=field.find(g=>g.alive&&g.target)||field.find(g=>g.alive);
+    zone.innerHTML=`<div class="done">
+      <div class="big">Field narrowed to ${a}.</div>
+      <div class="id">NJF-${(80000+Math.floor(target.x+target.y)).toString()}</div>
+      <p>From a vague memory, ${asked.size} geometric questions carved ${N} graves down to ${a}.
+         The mourner walks the last few steps.</p>
+      <button class="reset" onclick="restart()">Start again</button></div>`;
+    return;
+  }
+  const pick=bestQuestion();
+  if(!pick){
+    zone.innerHTML=`<div class="done"><div class="big">${a} remain.</div>
+      <p>No more questions to split them — these must be walked.</p>
+      <button class="reset" onclick="restart()">Start again</button></div>`;
+    return;
+  }
+  const {Q,gain}=pick;
+  zone.innerHTML=`<div class="ask">
+    <div class="q">${Q.q}</div>
+    <div class="qwhy">chosen: info-gain ${gain.toFixed(2)} bits · mask = ${Q.why}</div>
+    <div class="opts">
+      <button class="opt" onclick="answer('${Q.id}',true)"><span class="lab">Yes — ${Q.cuts}</span><span class="cut">apply mask</span></button>
+      <button class="opt" onclick="answer('${Q.id}',false)"><span class="lab">No</span><span class="cut">apply complement</span></button>
+    </div></div>`;
+}
+
+function answer(qid,yes){
+  const Q=QUESTIONS.find(x=>x.id===qid);
+  const before=aliveCount();
+  asked.add(qid);
+  thread.push({role:'sys',txt:Q.q});
+  applyMask(Q,yes);
+  const after=aliveCount();
+  thread.push({role:'usr',txt:yes?`Yes — ${Q.cuts}`:'No',
+    gain:`ruled out ${before-after} graves · ${after} remain`});
+  renderThread();
+  step();
+}
+
+function restart(){
+  seed(); asked=new Set();
+  thread=[{role:'usr',txt:'"آخر مرة كنا عند القبر سمعنا موسيقى حزينة من جهة الجنوب" — the last time we were by the grave, we heard sad music from the south.'},
+          {role:'sys',txt:'I can\'t use the music — it was never recorded. But "from the south" is a direction I can use. Let me narrow the field with a few questions.'}];
+  renderThread(); step();
+}
+seed(); restart();
+</script>
+</body>
+</html>

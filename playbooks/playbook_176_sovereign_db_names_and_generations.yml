@@ -1,0 +1,63 @@
+# =============================================================================
+# PB-176 — Sovereign Database Names + Versioned Generations
+# BahyWay.Ecosystem v4.0 — 2026-07-12
+#
+# CONTEXT: the Architect wants EnkiDDB and EnkiMDB shown in DubSar Theater
+# with their sovereign names beside the real type name -- "EnkiDDB (Tigris
+# v4.0)", "EnkiMDB (Euphrates v4.1)" -- and wants multiple versioned
+# sessions of the same database (e.g. Euphrates v4.1 and v4.2) to exist
+# side by side so a stakeholder or developer can compare releases.
+#
+# COLLISION CHECK DONE FIRST: grepped for "Tigris"/"Euphrates" anywhere in
+# the repo before using them -- zero hits, clean. Also checked "Enkidu"
+# (the Architect's proposed rename of EnkiduLLM) -- HeptaGate::Enkidu = 5
+# already exists (sector "AI Agents"). Not a collision in the bad sense:
+# EnkiduLLM already IS the AI engine that gate represents. Recorded as an
+# alignment, not applied as a rename yet -- the Architect has not chosen
+# between a full literal crate rename and the same sovereign-name-on-top
+# pattern used here for Tigris/Euphrates.
+#
+# DECISION MADE (per the Architect's own confirmation): sovereign names
+# are a LABELING layer, not a crate rename. enkiddb/enkimdb and the
+# EnkiDDB/EnkiMDB type names are unchanged -- same relationship "GeoEngine"
+# already has to bahyway-algebra. Zero build risk, nothing else in the
+# repo needed touching for the naming half of this request.
+#
+# WHAT WAS BUILT (the versioning half is real code, not just naming):
+#   - crates/enkidb-readnode/src/generation.rs (NEW, shared by both
+#     database types -- reuse, not duplication): formalizes "each
+#     materialization needs a fresh path" (the constraint found while
+#     building PB-174) into a real (sovereign_name, version) -> Data
+#     Files scheme. materialize_generation() builds the path
+#     deterministically; list_generations() enumerates what exists.
+#   - crates/enkiddb/src/readnode.rs: SOVEREIGN_NAME = "tigris",
+#     materialize_version()/list_versions() convenience wrappers.
+#   - crates/enkimdb/src/readnode.rs: SOVEREIGN_NAME = "euphrates", same.
+#   - docs/BAHYWAY_V4_ARCHITECTURE_REFERENCE_2026-07-11.md sec 8.3a:
+#     records the naming decision and the mechanism, including the
+#     Enkidu question left open.
+#
+# TESTS: enkidb-readnode 11/11 (was 7, +4 generation tests). enkiddb
+#   21/21 (was 20, +1 end-to-end Tigris v4.0-vs-v4.1 comparison test).
+#   enkimdb 13/13 (was 12, +1 end-to-end Euphrates v4.1-vs-v4.2
+#   comparison test). Full workspace: 3392 passed, 0 failed.
+#
+# STILL OPEN: the actual DubSar Theater UI (version picker, side-by-side
+# compare view) is Godot-side work, part of the already-queued Grid/
+# PDM/IgigiEngine build -- this playbook lands the real backend
+# mechanism the UI will call, not the UI itself. Enkidu rename scope
+# still awaiting the Architect's choice.
+# =============================================================================
+---
+- name: "PB-176 | Record — sovereign DB names + versioned generations landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-176.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-12. New: crates/enkidb-readnode/src/generation.rs.
+          Run `cargo test -p enkidb-readnode -p enkiddb -p enkimdb` for
+          the standing proof: 45 passed, 0 failed across the three crates.

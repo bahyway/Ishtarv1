@@ -1,0 +1,111 @@
+---
+# =============================================================================
+# PLAYBOOK 97-FIX2 — Fix IdentityKaki::from_bytes in query server
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-26
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_97_fix2.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 97-fix2 — correct IdentityKaki construction"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge:  "/home/bahyway/Forge/bahyway_v4"
+    server: "/home/bahyway/Forge/bahyway_v4/crates/enkidb-query-server/src"
+
+  tasks:
+
+    - name: "Fix fallback journal read — correct IdentityKaki construction"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_fix_identity.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          PATH = "/home/bahyway/Forge/bahyway_v4/crates/enkidb-query-server/src/main.rs"
+          with open(PATH) as f:
+              lines = f.readlines()
+
+          # Find and replace lines 264-280 (the broken fallback block)
+          # Replace with clean version using correct API
+          new_lines = []
+          i = 0
+          while i < len(lines):
+              # Detect start of broken fallback block
+              if 'if let Ok(k) = enkidb_kaki::Kaki::from_bytes(*kaki)' in lines[i]:
+                  # Skip all broken lines until we find the closing of the block
+                  # Insert clean replacement
+                  new_lines.append('                  // Fallback: journal read (KISPU cache miss)\n')
+                  new_lines.append('                  if let Ok(raw_kaki) = enkidb_kaki::Kaki::from_bytes(*kaki) {\n')
+                  new_lines.append('                      if let Ok(ik) = IdentityKaki::try_from_kaki(raw_kaki) {\n')
+                  new_lines.append('                          let history = db.db().journal().read_particle_history(&ik);\n')
+                  new_lines.append('                          let mut seen = HashSet::<u32>::new();\n')
+                  new_lines.append('                          let mut first = true;\n')
+                  new_lines.append('                          for entry in &history {\n')
+                  new_lines.append('                              for triple in &entry.eav {\n')
+                  new_lines.append('                                  if !seen.insert(triple.attr_hash) { continue; }\n')
+                  new_lines.append('                                  if let Ok((v, _)) = akk_decode(&triple.value, 0) {\n')
+                  new_lines.append('                                      if !first { out.push(\',\'); }\n')
+                  new_lines.append('                                      first = false;\n')
+                  new_lines.append('                                      out.push_str(&format!(\n')
+                  new_lines.append('                                          "[\\\"0x{:08X}\\\",\\\"{}\\\"]\",\n')
+                  new_lines.append('                                          triple.attr_hash,\n')
+                  new_lines.append('                                          json_safe(&fmt_val(&v), 80)\n')
+                  new_lines.append('                                      ));\n')
+                  new_lines.append('                                  }\n')
+                  new_lines.append('                              }\n')
+                  new_lines.append('                          }\n')
+                  new_lines.append('                      }\n')
+                  new_lines.append('                  }\n')
+                  # Skip old broken lines until we find the closing brace of the block
+                  i += 1
+                  depth = 1
+                  while i < len(lines) and depth > 0:
+                      if '{' in lines[i]: depth += lines[i].count('{')
+                      if '}' in lines[i]: depth -= lines[i].count('}')
+                      i += 1
+                  continue
+              new_lines.append(lines[i])
+              i += 1
+
+          with open(PATH, 'w') as f:
+              f.writelines(new_lines)
+          print("SUCCESS")
+
+    - name: "Run fix"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_fix_identity.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    - name: "Build release"
+      ansible.builtin.shell: |
+        cargo build -p enkidb-query-server --release 2>&1 | tail -10
+      args:
+        chdir: "{{ forge }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    - name: "Deploy to read node"
+      ansible.builtin.shell: |
+        scp {{ forge }}/target/release/enkidb-query-server \
+            bahyway@192.168.122.107:/home/bahyway/enkidb/enkidb-query-server-new \
+        && echo "deployed $(du -h {{ forge }}/target/release/enkidb-query-server | cut -f1)"
+      register: deploy_out
+      changed_when: true
+      ignore_errors: true
+
+    - name: "Show deploy"
+      ansible.builtin.debug:
+        msg: "{{ deploy_out.stdout_lines }}"

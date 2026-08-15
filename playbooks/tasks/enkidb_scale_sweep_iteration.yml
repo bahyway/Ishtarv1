@@ -1,0 +1,143 @@
+# =============================================================================
+# One iteration of PB-221's scale sweep: SEED:<n> on the Write Node, real
+# cross-host FLUSH+sync+verify, then two timed QUERY calls against the
+# live Read Node. Extracted into its own file because `loop:` is not a
+# valid attribute on a `block:` in Ansible -- looping a whole sequence of
+# tasks means looping the `include_tasks` that pulls this file in, not
+# the block itself.
+#
+# Var the including play must set: `enkidb_seed_n` (the N for this
+# iteration -- named distinctly from `item`/`{{ item }}` so it can never
+# collide with the `item` this file's own `include_tasks` of
+# tasks/enkiddb_cross_host_sync.yml might introduce, or with the outer
+# loop's `item` were this ever included without an explicit loop_var).
+# `enkidb_read_ip` must also already be in scope (set once at the
+# including play's top-level vars).
+# =============================================================================
+---
+- name: "SEED:{{ enkidb_seed_n }} on the Write Node (generate + materialize; delegated, real wall-clock time can be long at 100M/1B)"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 - <<'PYEOF'
+    import socket, struct, time
+    def send_recv(host, port, payload):
+        s = socket.create_connection((host, port), timeout=3600)
+        b = payload.encode('utf-8')
+        s.sendall(struct.pack('<I', len(b)) + b)
+        lb = s.recv(4)
+        (length,) = struct.unpack('<I', lb)
+        buf = b''
+        while len(buf) < length:
+            chunk = s.recv(length - len(buf))
+            if not chunk:
+                raise EOFError('connection closed early')
+            buf += chunk
+        s.close()
+        return buf.decode('utf-8')
+    t0 = time.time()
+    resp = send_recv('127.0.0.1', 7011, 'SEED:{{ enkidb_seed_n }}')
+    print(f'{resp}  (wall_clock={time.time()-t0:.1f}s)')
+    PYEOF
+  delegate_to: enkidb-node-write
+  register: seed_result
+  changed_when: true
+
+- name: "Show SEED result for N={{ enkidb_seed_n }}"
+  ansible.builtin.debug:
+    msg: "{{ seed_result.stdout }}"
+
+# Real cross-host FLUSH + sync + verify -- PB-213's own shared task
+# file, not a direct write-host -> read-host copy (see PB-221's own
+# header for why). SEED already materializes once on its own; the
+# FLUSH this performs is a harmless, idempotent re-run against the same
+# already-materialized state. SEARCH is disabled -- core EnkiDB has no
+# RAG index, unlike EnkiDDB.
+- name: "Cross-host FLUSH + sync + verify (tasks/enkiddb_cross_host_sync.yml)"
+  ansible.builtin.include_tasks: enkiddb_cross_host_sync.yml
+  vars:
+    enkiddb_db_label: "enkidb"
+    enkiddb_write_volume: "enkidb-write-data"
+    enkiddb_read_volume: "enkidb-read-data"
+    enkiddb_write_host: "enkidb-node-write"
+    enkiddb_read_host: "enkidb-node-read"
+    enkiddb_write_port: 7011
+    enkiddb_read_port: 7001
+    enkiddb_read_ip: "{{ enkidb_read_ip }}"
+    enkiddb_query_what: "station"
+    enkiddb_query_where_attr: "station"
+    enkiddb_query_value: "data-cleansing-station"
+    enkiddb_run_search: false
+
+# NOTE: enkidb-read-server answers QUERY: with the fleet's real binary
+# frame, not JSON/UTF-8 text -- [1B tag] 0x00=success+[u32 LE row_count]
+# +rows, 0x01=error+[u32 LE len][utf8 msg]. Only row_count is needed here.
+- name: "Timed QUERY: HOW_MUCH LIMIT 1000, same bounded-page pattern DubSar's Grid/Orbit view uses"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 - <<'PYEOF'
+    import socket, struct, time
+    def send_recv(host, port, payload):
+        s = socket.create_connection((host, port), timeout=30)
+        b = payload.encode('utf-8')
+        s.sendall(struct.pack('<I', len(b)) + b)
+        lb = s.recv(4)
+        (length,) = struct.unpack('<I', lb)
+        buf = b''
+        while len(buf) < length:
+            chunk = s.recv(length - len(buf))
+            if not chunk:
+                raise EOFError('connection closed early')
+            buf += chunk
+        s.close()
+        return buf
+    q = 'QUERY:WHO T.E\nWHAT E[station]\nWHERE E[station] = "data-cleansing-station"\nHOW_MUCH LIMIT 1000'
+    t0 = time.time()
+    resp = send_recv('{{ enkidb_read_ip }}', 7001, q)
+    elapsed_ms = (time.time() - t0) * 1000
+    if resp[0] == 1:
+        msg_len = struct.unpack('<I', resp[1:5])[0]
+        print(f'N={{ enkidb_seed_n }}  LIMIT_1000_query  ERROR={resp[5:5+msg_len].decode("utf-8")}')
+    else:
+        row_count = struct.unpack('<I', resp[1:5])[0]
+        print(f'N={{ enkidb_seed_n }}  LIMIT_1000_query  matched={row_count}  elapsed_ms={elapsed_ms:.2f}')
+    PYEOF
+  register: limit_query_result
+  changed_when: false
+
+# NOTE: same real binary frame as the LIMIT_1000 query above, not JSON.
+- name: "Timed QUERY: single-particle needle lookup"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 - <<'PYEOF'
+    import socket, struct, time
+    def send_recv(host, port, payload):
+        s = socket.create_connection((host, port), timeout=30)
+        b = payload.encode('utf-8')
+        s.sendall(struct.pack('<I', len(b)) + b)
+        lb = s.recv(4)
+        (length,) = struct.unpack('<I', lb)
+        buf = b''
+        while len(buf) < length:
+            chunk = s.recv(length - len(buf))
+            if not chunk:
+                raise EOFError('connection closed early')
+            buf += chunk
+        s.close()
+        return buf
+    q = 'QUERY:WHO T.E\nWHAT E[needle_id]\nWHERE E[needle_id] = "needle-particle-42"'
+    t0 = time.time()
+    resp = send_recv('{{ enkidb_read_ip }}', 7001, q)
+    elapsed_ms = (time.time() - t0) * 1000
+    if resp[0] == 1:
+        msg_len = struct.unpack('<I', resp[1:5])[0]
+        print(f'N={{ enkidb_seed_n }}  needle_query  ERROR={resp[5:5+msg_len].decode("utf-8")}')
+    else:
+        row_count = struct.unpack('<I', resp[1:5])[0]
+        print(f'N={{ enkidb_seed_n }}  needle_query  matched={row_count}  elapsed_ms={elapsed_ms:.2f}')
+    PYEOF
+  register: needle_query_result
+  changed_when: false
+
+- name: "Record N={{ enkidb_seed_n }}'s real results"
+  ansible.builtin.set_fact:
+    enkidb_sweep_results: "{{ (enkidb_sweep_results | default([])) + [seed_result.stdout + ' | ' + limit_query_result.stdout + ' | ' + needle_query_result.stdout] }}"

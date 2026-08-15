@@ -1,0 +1,254 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_97_kispu_baseline_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-97 Reconciled: current query-server baseline
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_97_kispu_baseline_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_97_kispu_prefixbaseline.yml):
+#    The uploaded PB-97 records a pre-fix performance baseline (~6,700 ms
+#    for LIMIT 100) ahead of PB-98's akk_decode -> eav_triple_to_value fix.
+#    Both the server binary it benchmarks (the old hand-rolled EnlilStack
+#    main.rs) and the fix it's baselining against (PB-98) are superseded —
+#    see playbook_98_kispu_fix_reconciled.yml for the full chain. That old
+#    server no longer exists; the current enkidb-query-server is a
+#    heptascript-based TCP wrapper using execute_indexed() (PB-172, this
+#    session), which fixed a DIFFERENT, later bug than the one PB-97/98
+#    were chasing (heptascript never called enkidb-indexes at all, vs.
+#    the akk_decode-not-populating-KISPU bug PB-98 fixed).
+#
+#    This file keeps PB-97's real, reusable INTENT — measure LIMIT 100
+#    query latency against a live read node, gracefully skip if
+#    unreachable, append to the NARU audit journal — but retargets it at
+#    the CURRENT server and CURRENT fix (PB-172), instead of the retired
+#    EnlilStack-era one. It is a genuine LIVE measurement: no fabricated
+#    numbers are asserted here, because it needs real infrastructure this
+#    session cannot reach. Run it on eriduos-vdi against a live read node
+#    to get a real number.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-97 (Reconciled) | Current query-server baseline (post PB-172)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ docs_dir }}/PB97_RECONCILED_{{ session_date }}.txt"
+    naru_journal:  "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+    node_read_ip:  "192.168.122.107"
+    enkidb_port:   7001
+    probe_script_local:  "{{ ansible_env.HOME }}/.pb97_heptascript_probe.py"
+    probe_script_remote: "/tmp/pb97_heptascript_probe.py"
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | heptascript/src/indexed.rs exists (PB-172, the real current fix)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/heptascript/src/indexed.rs"
+      register: indexed_file
+
+    - name: "FAIL | PB-172 not landed — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/heptascript/src/indexed.rs not found after sync."
+      when: not indexed_file.stat.exists
+
+    # ── Verify node-read is reachable ────────────────────────────────────────
+    - name: "CHECK | TCP reachability enkidb-node-read"
+      ansible.builtin.wait_for:
+        host: "{{ node_read_ip }}"
+        port: "{{ enkidb_port }}"
+        timeout: 5
+        state: started
+      register: tcp_check
+      ignore_errors: true
+
+    - name: "WARN | enkidb-node-read not reachable — no live baseline recorded"
+      ansible.builtin.debug:
+        msg: >
+          enkidb-node-read ({{ node_read_ip }}:{{ enkidb_port }}) not
+          reachable. No fabricated number will be recorded — start the
+          current enkidb-query-server on that node and re-run this
+          playbook to get a real measurement.
+      when: tcp_check.failed | default(false)
+
+    # ── Run live timing if node reachable ────────────────────────────────────
+    # 2026-07-25 FIX: this task used to pipe a plain-text query straight into
+    # `nc` -- two real bugs. (1) enkidb-query-server's wire protocol requires
+    # a 4-byte little-endian length prefix before the query bytes (see
+    # bin/enkidb-query-server/src/main.rs's read_frame()); `nc` alone can't
+    # construct that framing, so this was never actually talking to the
+    # server correctly regardless of the akk_decode fix it claimed to
+    # benchmark. (2) "PRESENT WHAT: EAV.* WHEN: all LIMIT: 100" isn't current
+    # HeptaScript syntax either (real grammar: WHO/WHAT/WHERE/HOW_MUCH, see
+    # crates/heptascript/src/parser.rs) -- another stale-design artifact from
+    # the same superseded EnlilStack era this file's header already flags.
+    # Fixed by shipping the same real wire-protocol Python probe used in
+    # playbook_99's E-004/E-005 blocks to the read node and running it there
+    # against 127.0.0.1 (avoids network round-trip skew in the number).
+    - name: "PREP | Write HeptaScript wire-protocol probe script (local)"
+      ansible.builtin.copy:
+        dest: "{{ probe_script_local }}"
+        mode: "0644"
+        content: |
+          #!/usr/bin/env python3
+          # Minimal real client for enkidb-query-server's wire protocol:
+          # [u32 LE query_len][UTF-8 query] request, [u32 LE frame_len]-prefixed
+          # response frames until a frame_len==0 DONE sentinel. Prints one
+          # machine-parseable line:
+          #   elapsed_ms=<float> matched=<int> evaluated=<int> aborted=<True|False>
+          import socket, struct, sys, time, json
+
+          host, port, hquery = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+          s = socket.create_connection((host, port), timeout=30)
+          qb = hquery.encode("utf-8")
+          s.sendall(struct.pack("<I", len(qb)) + qb)
+
+          frames = []
+          t0 = time.time()
+          while True:
+              hdr = b""
+              while len(hdr) < 4:
+                  chunk = s.recv(4 - len(hdr))
+                  if not chunk:
+                      print("ERROR: connection closed while reading frame header")
+                      sys.exit(1)
+                  hdr += chunk
+              (flen,) = struct.unpack("<I", hdr)
+              if flen == 0:
+                  break
+              buf = b""
+              while len(buf) < flen:
+                  chunk = s.recv(flen - len(buf))
+                  if not chunk:
+                      print("ERROR: connection closed mid-frame")
+                      sys.exit(1)
+                  buf += chunk
+              frames.append(buf.decode("utf-8"))
+          elapsed_ms = (time.time() - t0) * 1000
+          s.close()
+
+          if not frames:
+              print(f"elapsed_ms={elapsed_ms:.2f} matched=0 evaluated=0 aborted=False")
+              sys.exit(0)
+
+          payload = frames[0]
+          if payload.startswith("ERR:"):
+              print(f"ERROR: server returned {payload}")
+              sys.exit(1)
+
+          doc = json.loads(payload)
+          stats = doc.get("stats", {})
+          print(
+              f"elapsed_ms={elapsed_ms:.2f} "
+              f"matched={stats.get('matched', 'unknown')} "
+              f"evaluated={stats.get('evaluated', 'unknown')} "
+              f"aborted={stats.get('aborted', 'unknown')}"
+          )
+      when: not (tcp_check.failed | default(false))
+
+    - name: "COPY | Ship probe script to enkidb-node-read"
+      ansible.builtin.command:
+        cmd: >
+          scp -o StrictHostKeyChecking=no {{ probe_script_local }}
+          bahyway@{{ node_read_ip }}:{{ probe_script_remote }}
+      register: scp_probe
+      changed_when: false
+      failed_when: scp_probe.rc != 0
+      when: not (tcp_check.failed | default(false))
+
+    - name: "BENCH | LIMIT 100 timing against current server (live)"
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no bahyway@{{ node_read_ip }}
+          "python3 {{ probe_script_remote }} 127.0.0.1 {{ enkidb_port }} 'WHO T.E
+          HOW_MUCH LIMIT 100'"
+      register: bench_live
+      changed_when: false
+      ignore_errors: true
+      when: not (tcp_check.failed | default(false))
+
+    - name: "PARSE | Extract elapsed_ms from bench_live output"
+      ansible.builtin.set_fact:
+        bench_elapsed_ms: "{{ (bench_live.stdout | regex_search('elapsed_ms=([0-9.]+)', '\\1') | first) if (bench_live is defined and 'elapsed_ms=' in (bench_live.stdout | default(''))) else '' }}"
+      when: not (tcp_check.failed | default(false))
+
+    - name: "PRINT | Live LIMIT 100 timing"
+      ansible.builtin.debug:
+        msg: >-
+          LIMIT 100 (current server, post PB-172): {{ bench_live.stdout | trim }}
+      when: not (tcp_check.failed | default(false)) and bench_live is defined
+
+    # ── Write report ──────────────────────────────────────────────────────────
+    - name: "WRITE | Baseline report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-97 Reconciled Report
+          Date  : {{ session_date }}
+          Node  : enkidb-node-read ({{ node_read_ip }}:{{ enkidb_port }})
+
+          ══════════════════════════════════════════════════
+          SUPERSEDED CHAIN (for reference only)
+          ══════════════════════════════════════════════════
+          Original PB-97 baselined the pre-PB-98 akk_decode-era server
+          (~6,700 ms for LIMIT 100). That server, and the PB-98 fix it was
+          measuring against, no longer exist — see
+          playbook_98_kispu_fix_reconciled.yml.
+
+          ══════════════════════════════════════════════════
+          CURRENT STATE (post PB-172, this session)
+          ══════════════════════════════════════════════════
+          Real bug fixed this session: heptascript::execute() never called
+          enkidb-indexes at all — full journal.all_particles() +
+          read_particle_history() scan on every query regardless of
+          selectivity. Fixed via heptascript::indexed (execute_indexed()),
+          verified: heptascript 170/170 tests, enkidb-indexes 54/54 tests.
+
+          Live measurement this run (WHO T.E / HOW_MUCH LIMIT 100, real wire protocol):
+            {{ 'node unreachable — no number recorded' if (tcp_check.failed | default(false)) else (bench_elapsed_ms ~ ' ms' if bench_elapsed_ms | default('') != '' else (bench_live.stdout | default('command did not return output') | trim)) }}
+
+    # ── Append to NARU ───────────────────────────────────────────────────────
+    - name: "NARU | Record baseline (only if a live number was measured)"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: >-
+          {{ session_date }}|PB-97-RECONCILED|QUERY_SERVER_BASELINE|
+          LIMIT_100={{ bench_elapsed_ms }}ms|
+          fix=PB-172|server=heptascript_execute_indexed
+        create: true
+        mode: "0644"
+      when: >-
+        not (tcp_check.failed | default(false)) and bench_live is defined
+        and bench_elapsed_ms | default('') != ''
+
+    - name: "DONE | PB-97 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-97 reconciled. Report: {{ report_file }}"

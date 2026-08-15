@@ -1,0 +1,194 @@
+# =====================================================================
+# PB-330 — KARÛ COLD ARCHIVE · Bābu clause B-1.R implementation
+# BahyWay.Ecosystem v4.0 · Phase Two · precedes suite PB-331..PB-337
+# karû (Akk.): granary, grain-store — the ecosystem's cold granary.
+# Law implemented (B-1.R, pending CSR-08):
+#   After extraction and BeeMDM ETL, original downloaded archives are
+#   retained in Karû for >= 1 year. License-aware: if a DUA/license
+#   forbids retention, the license wins; mandated destruction is a
+#   sealed Event leaving a tombstone (KAKI + checksum survive content).
+# Tiers: WARM = ZFS dataset on NAS vault (zstd, snapshots, scrubbed).
+#        COLD = zfs send to rotated OFFLINE external disk (sovereign;
+#               no cloud). Annual Verification Rite re-proves checksums.
+# Way of Work: run FROM Fedora 44 host. ZFS lives on NAS vault ONLY
+# (192.168.122.200); Btrfs/LVM host is never touched. Ubuntu VDI
+# (monitoring-only) is never touched. Numbering pending confirmation.
+# =====================================================================
+---
+- name: PB-330 Karu cold archive storage
+  hosts: nas_vault          # inventory: 192.168.122.200 (adjust group/user)
+  become: true
+  vars:
+    pool: vault                       # existing RAID-Z2 pool
+    karu_root: "{{ pool }}/karu"
+    karu_quota: "2T"                  # adjust to pool headroom
+    retention_days_default: 365
+    snapshot_keep: 12                 # monthly snapshots retained
+  tasks:
+    - name: Create Karu datasets (warm tier + manifests + tombstones)
+      community.general.zfs:
+        name: "{{ item.name }}"
+        state: present
+        extra_zfs_properties:
+          compression: zstd
+          atime: "off"
+          exec: "off"
+          setuid: "off"
+          quota: "{{ item.quota | default(omit) }}"
+          readonly: "{{ item.ro | default('off') }}"
+      loop:
+        - { name: "{{ karu_root }}", quota: "{{ karu_quota }}" }
+        - { name: "{{ karu_root }}/warm" }
+        - { name: "{{ karu_root }}/manifests" }
+        - { name: "{{ karu_root }}/tombstones", ro: "off" }
+
+    - name: Install retention policy (license-aware — license wins over the year)
+      ansible.builtin.copy:
+        dest: "/{{ karu_root }}/manifests/retention-policy.yml"
+        mode: "0644"
+        content: |
+          # Karû retention policy — Bābu clause B-1.R (pending CSR-08)
+          default_retention_days: {{ retention_days_default }}
+          rule_order:
+            - license_forbids_retention: destroy_with_tombstone   # license wins
+            - license_min_retention_days: honor_if_longer
+            - default: retain_default_then_review
+          tombstone_required: true      # KAKI + sha256 + license_id + destroy event
+          verification_rite: annual     # full re-hash vs sealed manifest
+          cold_export: monthly          # zfs send to rotated offline disk
+
+    - name: Install karu_admit (admit an archive after ETL completes)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/karu_admit.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Usage: karu_admit.sh <archive-file> <corpus_id> <license_id>
+          # Moves the sealed original into Karû WARM, writes manifest line.
+          set -euo pipefail
+          F="${1:?archive}"; C="${2:?corpus_id}"; L="${3:?license_id}"
+          D="/{{ karu_root }}/warm/$C"; M="/{{ karu_root }}/manifests/$C.manifest"
+          mkdir -p "$D"
+          S=$(sha256sum "$F" | cut -d' ' -f1)
+          mv "$F" "$D/"
+          printf '%s  %s  license=%s  admitted=%s  retain_until=%s\n' \
+            "$S" "$(basename "$F")" "$L" "$(date -u +%FT%TZ)" \
+            "$(date -u -d '+{{ retention_days_default }} days' +%F)" >> "$M"
+          echo "Karû admitted: $(basename "$F") ($C, $L) sha256=$S"
+          # KAKI Event minting for the admission is emitted by the ETL side
+          # (PB-336 hook) — this script records the storage truth only.
+
+    - name: Install karu_verify (annual Verification Rite)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/karu_verify.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Re-hash every archive against its manifest. Exit nonzero on ANY
+          # mismatch; mismatches are incidents (EnkiQDB path), not warnings.
+          set -uo pipefail
+          FAIL=0
+          for M in /{{ karu_root }}/manifests/*.manifest; do
+            C=$(basename "$M" .manifest)
+            while read -r SHA NAME _; do
+              F="/{{ karu_root }}/warm/$C/$NAME"
+              [ -f "$F" ] || { echo "MISSING $C/$NAME"; FAIL=1; continue; }
+              N=$(sha256sum "$F" | cut -d' ' -f1)
+              [ "$N" = "$SHA" ] || { echo "MISMATCH $C/$NAME"; FAIL=1; }
+            done < "$M"
+          done
+          [ $FAIL -eq 0 ] && echo "Karû Verification Rite: all seals hold."
+          exit $FAIL
+
+    - name: Install karu_cold_export (offline COLD tier — rotated external disk)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/karu_cold_export.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Usage: karu_cold_export.sh /dev/disk/by-id/<external-disk-part> 
+          # Sends a replication snapshot of Karû to an OFFLINE rotated disk.
+          # Sovereign COLD: physical disk, stored disconnected. No cloud.
+          set -euo pipefail
+          DISK="${1:?/dev/disk/by-id/... of the mounted cold disk filesystem}"
+          MNT=$(findmnt -no TARGET "$DISK") || { echo "mount the cold disk first"; exit 1; }
+          SNAP="{{ karu_root }}@cold-$(date -u +%Y%m%d)"
+          zfs snapshot -r "$SNAP"
+          zfs send -Rc "$SNAP" | zstd -T0 > "$MNT/karu-cold-$(date -u +%Y%m%d).zfs.zst"
+          sha256sum "$MNT/karu-cold-$(date -u +%Y%m%d).zfs.zst" > "$MNT/karu-cold-$(date -u +%Y%m%d).sha256"
+          echo "COLD export complete. Detach the disk and store it offline."
+
+    - name: Install karu_tombstone (license-mandated destruction, sealed)
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/karu_tombstone.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Usage: karu_tombstone.sh <corpus_id> <filename> <reason>
+          # Destroys content ONLY when license mandates; keeps the memorial.
+          set -euo pipefail
+          C="${1:?}"; N="${2:?}"; R="${3:?reason}"
+          F="/{{ karu_root }}/warm/$C/$N"; T="/{{ karu_root }}/tombstones/$C.$N.tombstone"
+          S=$(sha256sum "$F" | cut -d' ' -f1)
+          shred -u "$F" 2>/dev/null || rm -f "$F"
+          printf 'sha256=%s\nfile=%s\ncorpus=%s\nreason=%s\ndestroyed=%s\n' \
+            "$S" "$N" "$C" "$R" "$(date -u +%FT%TZ)" > "$T"
+          chmod 0444 "$T"
+          echo "Tombstone written: $T — the Plate is a Memorial."
+
+    - name: Monthly snapshot + prune timer (systemd)
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ item.name }}"
+        mode: "0644"
+        content: "{{ item.content }}"
+      loop:
+        - name: karu-snapshot.service
+          content: |
+            [Unit]
+            Description=Karu monthly snapshot + prune
+            [Service]
+            Type=oneshot
+            ExecStart=/bin/sh -c 'zfs snapshot -r {{ karu_root }}@auto-$(date -u +%%Y%%m); \
+              zfs list -H -t snapshot -o name -s creation | grep "^{{ karu_root }}@auto-" | head -n -{{ snapshot_keep }} | xargs -r -n1 zfs destroy'
+        - name: karu-snapshot.timer
+          content: |
+            [Unit]
+            Description=Monthly Karu snapshot
+            [Timer]
+            OnCalendar=monthly
+            Persistent=true
+            [Install]
+            WantedBy=timers.target
+        - name: karu-verify.service
+          content: |
+            [Unit]
+            Description=Karu annual Verification Rite
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/local/bin/karu_verify.sh
+        - name: karu-verify.timer
+          content: |
+            [Unit]
+            Description=Annual Karu verification
+            [Timer]
+            OnCalendar=yearly
+            Persistent=true
+            [Install]
+            WantedBy=timers.target
+
+    - name: Enable timers
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+        daemon_reload: true
+      loop: [karu-snapshot.timer, karu-verify.timer]
+
+    - name: Report (DUB.SAR's run is the CSR-08 confirmation point)
+      ansible.builtin.debug:
+        msg: >-
+          Karû stands: {{ karu_root }} (warm/manifests/tombstones, zstd, quota
+          {{ karu_quota }}). Rites installed: admit, verify (annual timer),
+          cold_export (offline disk), tombstone. Pool scrub remains the
+          existing vault schedule. B-1.R retention: {{ retention_days_default }}d
+          default, license wins, tombstones mandatory.

@@ -1,0 +1,128 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_138_kittu_engine_v1_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-138 Reconciled: kittu-engine built for real
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_138_kittu_engine_v1_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_138_kittu_engine_v1.yml):
+#    Genuine gap — confirmed kittu-engine did not exist anywhere in this
+#    repo. Built it for real this session, same design (ShoWEngine JSON
+#    delivery + sendmail email delivery + delivery-confirmation KAKI +
+#    EnkiSDB poll stub), same separation of concerns (Nisaba detects,
+#    Kittu delivers only). Trimmed the dependency list: dropped
+#    uuid/chrono/thiserror/tracing in favour of hand-rolled IDs/
+#    timestamps and a plain error enum — kept serde/serde_json since
+#    the ShoWEngine JSON delivery channel genuinely needs them.
+#      kittu-engine : 4 passed
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-138 (Reconciled) | Kittu Engine v1 — built for real"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:     "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:      "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:          "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch:  "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    docs_dir:       "{{ forge_root }}/docs/SHEDU"
+    session_date:   "{{ ansible_date_time.date }}"
+    report_file:    "{{ docs_dir }}/PB138_RECONCILED_{{ session_date }}.txt"
+    show_alert_dir: "{{ forge_root }}/runtime/show_alerts"
+
+  tasks:
+
+    - name: "PREP | Ensure directories exist"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ docs_dir }}"
+        - "{{ show_alert_dir }}"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | kittu-engine crate exists (built this session)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/kittu-engine/src/lib.rs"
+      register: kittu_file
+
+    - name: "FAIL | kittu-engine not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/kittu-engine/src/lib.rs not found after sync."
+      when: not kittu_file.stat.exists
+
+    - name: "TEST | cargo test -p kittu-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p kittu-engine"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PARSE | test_out passed-test count"
+      ansible.builtin.set_fact:
+        test_out_passed_count: "{{ (test_out.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | kittu-engine reports 4 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_out.stdout"
+          - test_out_passed_count >= 4
+        fail_msg: >-
+          Expected at least 4 passed, 0 failed. Got {{ test_out_passed_count }}
+          passed. Full output: {{ test_out.stdout }}
+        success_msg: >-
+          kittu-engine: {{ test_out_passed_count }} passed, 0 failed (>= baseline 4).
+
+    - name: "BUILD | cargo build -p kittu-engine --release"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p kittu-engine --release"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: false
+      failed_when: build_out.rc != 0
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-138 Reconciled Report
+          Date : {{ session_date }}
+
+          Genuine gap — kittu-engine did not exist anywhere in the repo.
+          Built for real this session: ShoWEngine JSON delivery + sendmail
+          email delivery + delivery-confirmation + EnkiSDB poll stub.
+          Dependency-trimmed vs the original proposal (no uuid/chrono/
+          thiserror/tracing — hand-rolled IDs/timestamps, plain error enum).
+
+          Verified this run:
+            kittu-engine : 4/4 tests PASS
+            release build : {{ 'PASS' if build_out.rc == 0 else 'FAIL' }}
+
+          Note: email delivery requires /usr/sbin/sendmail on this host,
+          not verified by this playbook — the email-formatting logic is
+          unit-tested independently of the actual sendmail spawn.
+          poll_pending_alerts() is a stub returning empty until real
+          HeptaScript queries against EnkiSDB are wired (matches
+          naramsin-bridge's own documented staging pattern).
+
+    - name: "DONE | PB-138 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-138 reconciled — kittu-engine built and verified. Report: {{ report_file }}"

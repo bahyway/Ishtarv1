@@ -1,0 +1,418 @@
+[gd_scene load_steps=18 format=3 uid="uid://nisaba_hologram_v4"]
+
+; ══════════════════════════════════════════════════════════════════════════════
+; nisaba_hologram.tscn
+; NISABA 𒀭𒉀 — Sovereign Hologram Agent v4.0
+; BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+;
+; Node hierarchy:
+;   NisabaHologram (Node3D)  ← root, has nisaba_mode_controller.gd
+;   ├── Body/                ← torso, limbs, all with hologram shader
+;   │   ├── Torso
+;   │   ├── Head
+;   │   ├── LeftArm / RightArm
+;   │   ├── LeftLeg / RightLeg
+;   │   └── ChestCore (OmniLight3D + small sphere)
+;   ├── Crown/               ← rotates via mode controller
+;   │   ├── CrownPivot
+;   │   │   ├── CrownRing
+;   │   │   ├── CrownParticles (GPUParticles3D)
+;   │   │   └── CuneiformLabel (Label3D)
+;   ├── Eyes/
+;   │   ├── LeftEye  + LeftEyeLight (OmniLight3D)
+;   │   └── RightEye + RightEyeLight
+;   ├── Platform/
+;   │   ├── PlatformRing
+;   │   └── PlatformParticles (GPUParticles3D)
+;   └── ParticleField (GPUParticles3D) ← the β₀/β₁/β₂ network
+;
+; NOTE (this land): the root node's @export node references
+; (body_mesh, head_mesh, crown_pivot, ...) are wired below as explicit
+; NodePath values so the controller works when this scene loads, instead
+; of requiring someone to manually drag each reference into the inspector
+; in the Godot editor first.
+; ══════════════════════════════════════════════════════════════════════════════
+
+; ── External resources ────────────────────────────────────────────────────────
+[ext_resource type="Script" path="res://scenes/nisaba/nisaba_mode_controller.gd" id="1"]
+[ext_resource type="Shader" path="res://scenes/nisaba/nisaba_hologram.gdshader"  id="2"]
+
+; ── Shader materials ─────────────────────────────────────────────────────────
+
+; Body hologram material (cyan, scan lines, fresnel)
+[sub_resource type="ShaderMaterial" id="ShaderMat_Body"]
+shader = ExtResource("2")
+shader_parameter/emission_color   = Color(0, 0.82, 1, 1)
+shader_parameter/edge_color       = Color(0.25, 0.95, 1, 1)
+shader_parameter/scanline_color   = Color(0, 0.65, 0.9, 1)
+shader_parameter/scanline_speed   = 1.6
+shader_parameter/scanline_density = 90.0
+shader_parameter/scanline_width   = 0.35
+shader_parameter/fresnel_power    = 2.8
+shader_parameter/edge_intensity   = 1.4
+shader_parameter/base_opacity     = 0.72
+shader_parameter/flicker_speed    = 6.5
+shader_parameter/flicker_amount   = 0.06
+shader_parameter/pulse_speed      = 1.8
+shader_parameter/pulse_amount     = 0.18
+shader_parameter/band_density     = 8.0
+shader_parameter/band_speed       = 0.3
+shader_parameter/band_intensity   = 0.12
+
+; Crown material (gold emission)
+[sub_resource type="ShaderMaterial" id="ShaderMat_Crown"]
+shader = ExtResource("2")
+shader_parameter/emission_color   = Color(0.78, 0.66, 0.29, 1)
+shader_parameter/edge_color       = Color(1, 0.9, 0.5, 1)
+shader_parameter/scanline_speed   = 2.0
+shader_parameter/scanline_density = 60.0
+shader_parameter/scanline_width   = 0.2
+shader_parameter/fresnel_power    = 1.5
+shader_parameter/edge_intensity   = 2.0
+shader_parameter/base_opacity     = 0.85
+shader_parameter/flicker_amount   = 0.04
+shader_parameter/pulse_speed      = 3.0
+shader_parameter/pulse_amount     = 0.25
+
+; Eye material (bright white-cyan)
+[sub_resource type="ShaderMaterial" id="ShaderMat_Eye"]
+shader = ExtResource("2")
+shader_parameter/emission_color   = Color(0, 1, 1, 1)
+shader_parameter/edge_color       = Color(1, 1, 1, 1)
+shader_parameter/scanline_density = 40.0
+shader_parameter/scanline_width   = 0.5
+shader_parameter/fresnel_power    = 1.2
+shader_parameter/edge_intensity   = 2.5
+shader_parameter/base_opacity     = 0.95
+shader_parameter/flicker_amount   = 0.03
+shader_parameter/pulse_speed      = 2.2
+shader_parameter/pulse_amount     = 0.3
+
+; ── Mesh resources ────────────────────────────────────────────────────────────
+
+; Torso — CapsuleMesh scaled tall
+[sub_resource type="CapsuleMesh" id="Mesh_Torso"]
+radius = 0.18
+height = 0.65
+radial_segments = 16
+rings = 8
+
+; Head — SphereMesh
+[sub_resource type="SphereMesh" id="Mesh_Head"]
+radius = 0.14
+height = 0.28
+radial_segments = 16
+rings = 8
+
+; Upper arm — CapsuleMesh
+[sub_resource type="CapsuleMesh" id="Mesh_UpperArm"]
+radius = 0.055
+height = 0.28
+radial_segments = 8
+rings = 4
+
+; Forearm — CapsuleMesh (slightly thinner)
+[sub_resource type="CapsuleMesh" id="Mesh_Forearm"]
+radius = 0.045
+height = 0.24
+radial_segments = 8
+rings = 4
+
+; Thigh — CapsuleMesh
+[sub_resource type="CapsuleMesh" id="Mesh_Thigh"]
+radius = 0.07
+height = 0.32
+radial_segments = 8
+rings = 4
+
+; Shin — CapsuleMesh
+[sub_resource type="CapsuleMesh" id="Mesh_Shin"]
+radius = 0.055
+height = 0.30
+radial_segments = 8
+rings = 4
+
+; Crown ring — TorusMesh
+[sub_resource type="TorusMesh" id="Mesh_Crown"]
+inner_radius = 0.10
+outer_radius = 0.20
+rings = 32
+ring_segments = 12
+
+; Eye — SphereMesh small
+[sub_resource type="SphereMesh" id="Mesh_Eye"]
+radius = 0.030
+height = 0.060
+radial_segments = 8
+rings = 4
+
+; Chest core — SphereMesh small
+[sub_resource type="SphereMesh" id="Mesh_ChestCore"]
+radius = 0.04
+height = 0.08
+radial_segments = 8
+rings = 4
+
+; Platform ring — TorusMesh flat
+[sub_resource type="TorusMesh" id="Mesh_Platform"]
+inner_radius = 0.30
+outer_radius = 0.50
+rings = 48
+ring_segments = 6
+
+; ── Particle processes ────────────────────────────────────────────────────────
+
+; Crown sparks
+[sub_resource type="ParticleProcessMaterial" id="Particles_Crown"]
+direction           = Vector3(0, 1, 0)
+spread              = 60.0
+gravity             = Vector3(0, -0.5, 0)
+initial_velocity_min = 0.3
+initial_velocity_max = 0.8
+lifetime_randomness  = 0.4
+color               = Color(0.78, 0.66, 0.29, 1)
+emission_shape      = 1  ; RING
+emission_ring_radius = 0.15
+emission_ring_height = 0.01
+emission_ring_inner_radius = 0.08
+scale_min           = 0.02
+scale_max           = 0.05
+
+; Platform mist
+[sub_resource type="ParticleProcessMaterial" id="Particles_Platform"]
+direction           = Vector3(0, 1, 0)
+spread              = 180.0
+gravity             = Vector3(0, 0.1, 0)
+initial_velocity_min = 0.1
+initial_velocity_max = 0.3
+lifetime_randomness  = 0.6
+color               = Color(0, 0.82, 1, 0.4)
+emission_shape      = 1  ; RING
+emission_ring_radius = 0.45
+emission_ring_height = 0.01
+emission_ring_inner_radius = 0.30
+scale_min           = 0.03
+scale_max           = 0.08
+
+; Particle field (β₀/β₁/β₂ network)
+[sub_resource type="ParticleProcessMaterial" id="Particles_Field"]
+direction           = Vector3(0, 0, 0)
+spread              = 180.0
+gravity             = Vector3(0, 0, 0)
+initial_velocity_min = 0.05
+initial_velocity_max = 0.2
+lifetime_randomness  = 0.8
+color               = Color(0, 0.82, 1, 0.7)
+emission_shape      = 2  ; SPHERE
+emission_sphere_radius = 0.6
+scale_min           = 0.02
+scale_max           = 0.06
+
+; ── Scene node tree ───────────────────────────────────────────────────────────
+[node name="NisabaHologram" type="Node3D"]
+script = ExtResource("1")
+body_mesh          = NodePath("Body/Torso")
+head_mesh          = NodePath("Body/Head")
+crown_pivot        = NodePath("Crown/CrownPivot")
+crown_ring         = NodePath("Crown/CrownPivot/CrownRing")
+crown_particles    = NodePath("Crown/CrownPivot/CrownParticles")
+chest_light        = NodePath("Body/ChestCore/ChestCoreLight")
+left_eye_light     = NodePath("Eyes/LeftEyeLight")
+right_eye_light    = NodePath("Eyes/RightEyeLight")
+platform_particles = NodePath("Platform/PlatformParticles")
+particle_field     = NodePath("ParticleField")
+whisper_label      = NodePath("Crown/WhisperLabel")
+animation_player   = NodePath("AnimationPlayer")
+
+; ── Body group ───────────────────────────────────────────────────────────────
+[node name="Body" type="Node3D" parent="."]
+
+[node name="Torso" type="MeshInstance3D" parent="Body"]
+mesh                         = SubResource("Mesh_Torso")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+; Centred at y=0, so torso occupies y = -0.325 to +0.325
+
+[node name="Head" type="MeshInstance3D" parent="Body"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, 0.51, 0)
+mesh                         = SubResource("Mesh_Head")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+[node name="Neck" type="MeshInstance3D" parent="Body"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, 0.38, 0)
+mesh = SubResource("Mesh_Shin")   ; reuse thin capsule for neck
+surface_material_override/0 = SubResource("ShaderMat_Body")
+
+; Left arm assembly
+[node name="LeftShoulder" type="Node3D" parent="Body"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, -0.24, 0.26, 0)
+
+[node name="LeftUpperArm" type="MeshInstance3D" parent="Body/LeftShoulder"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.14, 0)
+mesh                         = SubResource("Mesh_UpperArm")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+[node name="LeftElbow" type="Node3D" parent="Body/LeftShoulder"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.28, 0)
+
+[node name="LeftForearm" type="MeshInstance3D" parent="Body/LeftShoulder/LeftElbow"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.12, 0)
+mesh                         = SubResource("Mesh_Forearm")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+; Right arm assembly
+[node name="RightShoulder" type="Node3D" parent="Body"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0.24, 0.26, 0)
+
+[node name="RightUpperArm" type="MeshInstance3D" parent="Body/RightShoulder"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.14, 0)
+mesh                         = SubResource("Mesh_UpperArm")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+[node name="RightElbow" type="Node3D" parent="Body/RightShoulder"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.28, 0)
+
+[node name="RightForearm" type="MeshInstance3D" parent="Body/RightShoulder/RightElbow"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.12, 0)
+mesh                         = SubResource("Mesh_Forearm")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+; Left leg assembly
+[node name="LeftHip" type="Node3D" parent="Body"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, -0.10, -0.325, 0)
+
+[node name="LeftThigh" type="MeshInstance3D" parent="Body/LeftHip"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.16, 0)
+mesh                         = SubResource("Mesh_Thigh")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+[node name="LeftKnee" type="Node3D" parent="Body/LeftHip"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.32, 0)
+
+[node name="LeftShin" type="MeshInstance3D" parent="Body/LeftHip/LeftKnee"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.15, 0)
+mesh                         = SubResource("Mesh_Shin")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+; Right leg assembly
+[node name="RightHip" type="Node3D" parent="Body"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0.10, -0.325, 0)
+
+[node name="RightThigh" type="MeshInstance3D" parent="Body/RightHip"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.16, 0)
+mesh                         = SubResource("Mesh_Thigh")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+[node name="RightKnee" type="Node3D" parent="Body/RightHip"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.32, 0)
+
+[node name="RightShin" type="MeshInstance3D" parent="Body/RightHip/RightKnee"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.15, 0)
+mesh                         = SubResource("Mesh_Shin")
+surface_material_override/0  = SubResource("ShaderMat_Body")
+
+; Chest core — glowing sphere + OmniLight
+[node name="ChestCore" type="Node3D" parent="Body"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, 0.05, 0.17)
+
+[node name="ChestCoreMesh" type="MeshInstance3D" parent="Body/ChestCore"]
+mesh                         = SubResource("Mesh_ChestCore")
+surface_material_override/0  = SubResource("ShaderMat_Eye")
+
+[node name="ChestCoreLight" type="OmniLight3D" parent="Body/ChestCore"]
+light_color   = Color(0, 0.85, 1, 1)
+light_energy  = 1.2
+omni_range    = 0.6
+
+; ── Eyes ─────────────────────────────────────────────────────────────────────
+[node name="Eyes" type="Node3D" parent="."]
+
+[node name="LeftEye" type="MeshInstance3D" parent="Eyes"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, -0.048, 0.52, 0.11)
+mesh                         = SubResource("Mesh_Eye")
+surface_material_override/0  = SubResource("ShaderMat_Eye")
+
+[node name="LeftEyeLight" type="OmniLight3D" parent="Eyes"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, -0.048, 0.52, 0.14)
+light_color   = Color(0, 1, 1, 1)
+light_energy  = 1.8
+omni_range    = 0.25
+
+[node name="RightEye" type="MeshInstance3D" parent="Eyes"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0.048, 0.52, 0.11)
+mesh                         = SubResource("Mesh_Eye")
+surface_material_override/0  = SubResource("ShaderMat_Eye")
+
+[node name="RightEyeLight" type="OmniLight3D" parent="Eyes"]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0.048, 0.52, 0.14)
+light_color   = Color(0, 1, 1, 1)
+light_energy  = 1.8
+omni_range    = 0.25
+
+; ── Crown ────────────────────────────────────────────────────────────────────
+[node name="Crown" type="Node3D" parent="."]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, 0.72, 0)
+
+[node name="CrownPivot" type="Node3D" parent="Crown"]
+
+[node name="CrownRing" type="MeshInstance3D" parent="Crown/CrownPivot"]
+mesh                         = SubResource("Mesh_Crown")
+surface_material_override/0  = SubResource("ShaderMat_Crown")
+
+[node name="CrownParticles" type="GPUParticles3D" parent="Crown/CrownPivot"]
+amount              = 24
+lifetime            = 1.8
+explosiveness       = 0.0
+randomness          = 0.5
+process_material    = SubResource("Particles_Crown")
+visibility_aabb     = AABB(-0.5, -0.5, -0.5, 1, 1.5, 1)
+
+[node name="CuneiformLabel" type="Label3D" parent="Crown"]
+transform  = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, 0.22, 0)
+text       = "𒀭𒉀"
+font_size  = 24
+modulate   = Color(0.78, 0.66, 0.29, 0.9)
+billboard  = 1   ; BILLBOARD_ENABLED — always faces camera
+
+[node name="WhisperLabel" type="Label3D" parent="Crown"]
+transform  = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.08, 0)
+text       = "𒀭𒉀 watching..."
+font_size  = 14
+modulate   = Color(0, 0.82, 1, 0.7)
+billboard  = 1
+
+; ── Platform ─────────────────────────────────────────────────────────────────
+[node name="Platform" type="Node3D" parent="."]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, -0.98, 0)
+
+[node name="PlatformRing" type="MeshInstance3D" parent="Platform"]
+mesh                         = SubResource("Mesh_Platform")
+surface_material_override/0  = SubResource("ShaderMat_Crown")
+
+[node name="PlatformParticles" type="GPUParticles3D" parent="Platform"]
+amount              = 32
+lifetime            = 2.5
+explosiveness       = 0.0
+randomness          = 0.7
+process_material    = SubResource("Particles_Platform")
+visibility_aabb     = AABB(-0.6, 0, -0.6, 1.2, 0.5, 1.2)
+
+; ── Particle field (the β network around her) ─────────────────────────────────
+[node name="ParticleField" type="GPUParticles3D" parent="."]
+transform = Transform3D(1,0,0, 0,1,0, 0,0,1, 0, 0, 0)
+amount              = 40
+lifetime            = 4.0
+explosiveness       = 0.0
+randomness          = 0.9
+process_material    = SubResource("Particles_Field")
+visibility_aabb     = AABB(-1, -1.2, -1, 2, 2.5, 2)
+
+; ── Animation player ─────────────────────────────────────────────────────────
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+; Animations added in Godot editor:
+;   nisaba_idle        — gentle breathing/sway
+;   nisaba_discovery   — excited vibration
+;   nisaba_proposal    — lean forward slightly
+;   nisaba_teaching    — arm gesture outward
+;   nisaba_sealing     — arms raise + gold flash
+;   nisaba_witness     — slight bow
+;   nisaba_tupsharu    — arms spread, art plate gesture

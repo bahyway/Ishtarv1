@@ -1,0 +1,58 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_137_urnammu_attestationd_gap.yml
+#  PB-137 urnammu_attestationd_impl — GAP, and a deeper one than expected
+#
+#  Run: ansible-playbook playbook_137_urnammu_attestationd_gap.yml -i "localhost," -c local -v
+#
+#  IMPORTANT FINDING (checked directly, not assumed): crates/urnammu-
+#  attestationd does not exist in this repo checkout AT ALL — not even the
+#  stub. playbook_110_session_deliverables_urnammu_nisaba_kittu.yml's own
+#  tasks describe scaffolding it (cargo new --bin + stub main.rs with 5
+#  todo!() functions), but that playbook itself has evidently never been
+#  RUN against this checkout, only committed. So PB-137 has a harder
+#  prerequisite than "implement the stub's TODOs" — the stub isn't there
+#  yet either.
+#
+#  This playbook checks that chain explicitly and tells you exactly which
+#  step you're at, rather than assuming PB-110 already ran.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-137 | urnammu-attestationd Gap Check (depends on PB-110 having run)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    forge_root:  "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:   "{{ forge_root }}/workspace/bahyway_v4"
+    session_date: "{{ ansible_date_time.date }}"
+    report_file: "{{ forge_root }}/docs/PB137_REPORT_{{ session_date }}.txt"
+
+  tasks:
+    - name: "CHECK | Has PB-110 run? (crates/urnammu-attestationd exists?)"
+      ansible.builtin.stat: {path: "{{ workspace }}/crates/urnammu-attestationd/src/main.rs"}
+      register: stub_stat
+
+    - name: "CHECK | If stub exists, how many todo!() stubs remain?"
+      ansible.builtin.shell:
+        cmd: "grep -c 'todo!' {{ workspace }}/crates/urnammu-attestationd/src/main.rs || true"
+      register: todo_count
+      changed_when: false
+      when: stub_stat.stat.exists
+
+    - name: "PRINT | PB-137 status"
+      ansible.builtin.debug:
+        msg: >
+          {{ 'PB-110 has not run against this checkout yet -- crates/urnammu-attestationd does not exist. Run playbook_110_session_deliverables_urnammu_nisaba_kittu.yml FIRST, then re-run this playbook.'
+          if not stub_stat.stat.exists
+          else 'Stub exists with ' + (todo_count.stdout | default('an unknown number of')) + ' todo!() functions remaining: read_pcr_state, compare_to_baseline, emit_attestation_event_kaki, gate_boot_handoff, runtime_recheck_loop. Real TPM integration (tpm2-tools) is genuine new engineering, not yet attempted.' }}
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          PB-137 — {{ session_date }} — {{ ansible_hostname }}
+          PB-110 has run (stub exists): {{ stub_stat.stat.exists }}
+          Remaining todo!() count: {{ todo_count.stdout | default('N/A -- stub missing') }}
+
+    - {name: "DONE", ansible.builtin.debug: {msg: "PB-137 status recorded — report at {{ report_file }}"}}

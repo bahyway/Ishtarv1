@@ -1,0 +1,114 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BahyWay.Ecosystem v4.0 — Sovereign HR Pillar
+-- GovernmentEmployee Particle Template
+--     government_employee.akk
+--
+-- Purpose:
+--   Iraqi government employee / civil servant particle. Represents a single
+--   individual holding a funded civil service position within a ministry,
+--   directorate, or affiliated public body. Used by the BeeMDM HR chain to
+--   enforce canonical identity, organisational hierarchy, and payroll-band
+--   consistency across ministries.
+--
+--   Each particle is anchored to one employee_id_kaki and must carry a
+--   verified national_id cross-reference to the CitizenRegistry tribe,
+--   enabling sovereign-level identity federation.
+--
+-- VGCA-beam enforcement (completeness=1.0 blocks ingestion if absent):
+--   employee_id_kaki, arabic_name, national_id, department_kaki,
+--   position, hire_epoch
+--
+-- Quality-scored optional fields (enrich hepta score, never block):
+--   latin_name, grade, salary_band, ministry_kaki, direct_manager_kaki,
+--   phone, email, clearance_level
+--
+-- Tribe weights (GovEmployeeMDM, 7-component Heptagonal):
+--   accuracy=0.30     — Arabic name and national_id must match civil registry
+--   completeness=0.25 — department_kaki, position, hire_epoch mandatory
+--   consistency=0.15  — hire_epoch < current; salary_band consistent with grade
+--   timeliness=0.15   — position/grade reflect current assignment, not stale
+--   uniqueness=0.10   — one employee_id_kaki per person; national_id unique in tribe
+--   validity=0.05     — national_id format check; hire_epoch plausibility
+--   integrity=0.00    — referential checks handled by cross-tribe policy layer
+--
+-- QUALITY_DIVISOR: 240.0 (ADR-001)
+--
+-- Drop this file at: shard/profiles/{batch_name}.template.akk
+-- bee-watchdog loads it automatically and enforces this schema for every
+-- arriving batch named {batch_name}.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+PARTICLE GovernmentEmployee {
+    -- ── Required employment fields (VGCA-beam enforced) ────────────────────
+    employee_id_kaki:      KAKI                                      -- sovereign civil service employee number; primary key
+    arabic_name:           TEXT(accuracy=1.0, completeness=1.0)      -- full name in Arabic script matching civil registry
+    national_id:           TEXT(accuracy=1.0, completeness=1.0)      -- 12-digit national ID string; cross-ref to CitizenRegistry
+    department_kaki:       KAKI                                      -- employing department/directorate KAKI
+    position:              TEXT(completeness=1.0)                    -- official job title (Arabic)
+    hire_epoch:            TEXT(completeness=1.0)                    -- Unix epoch of first appointment date
+
+    -- ── Optional HR enrichment ─────────────────────────────────────────────
+    latin_name:            TEXT(accuracy=0.95)                       -- Latin-script transliteration
+    grade:                 TEXT(accuracy=0.90)                       -- civil service grade (e.g. DG-4, A1)
+    salary_band:           TEXT(accuracy=0.90)                       -- salary band code per MoF schedule
+    ministry_kaki:         KAKI                                      -- parent ministry KAKI (above department level)
+    direct_manager_kaki:   KAKI                                      -- immediate line manager's employee_id_kaki
+    phone:                 TEXT                                       -- office or mobile phone (E.164 preferred)
+    email:                 TEXT                                       -- official government email address
+    clearance_level:       TEXT(accuracy=0.95)                       -- UNCLASSIFIED | CONFIDENTIAL | SECRET | TOP_SECRET
+
+    TRIBE: GovEmployeeMDM
+}
+
+-- ── Tribe definition — 7-weight Heptagonal ────────────────────────────────
+-- Weights must sum to exactly 1.0
+-- [accuracy, completeness, consistency, timeliness, uniqueness, validity, integrity]
+TRIBE GovEmployeeMDM {
+    WEIGHTS: [0.30, 0.25, 0.15, 0.15, 0.10, 0.05, 0.00]
+    IDEAL:   [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0]
+}
+
+-- ── Rule: Golden employee record ──────────────────────────────────────────
+-- Fully corroborated record: Arabic name matches civil registry, national_id
+-- verified, organisational hierarchy populated, contact data present.
+-- Promotes to GEM for cross-ministry HR federation and payroll processing.
+RULE promote_employee_golden {
+    WHEN particle.hepta.health >= 0.833
+    AND  particle.tribe = GovEmployeeMDM
+    THEN
+        LANE = GEM
+        ORBIT = inner
+        EMIT StoryWay("government_employee_golden")
+}
+
+-- ── Rule: Incomplete / suspect employee record ────────────────────────────
+-- Catches records where required fields passed ingestion but derived hepta
+-- scores reveal accuracy degradation — e.g. national_id format mismatch or
+-- department_kaki pointing to a dissolved directorate. Routes for remediation.
+RULE flag_employee_incomplete {
+    WHEN particle.hepta.health < 0.416
+    AND  particle.tribe = GovEmployeeMDM
+    THEN
+        LANE = DEAD
+        ORBIT = outer
+        EMIT ZeroWay("government_employee_data_quality_failure")
+}
+
+-- ── Observe: Active workforce ─────────────────────────────────────────────
+-- Health-qualified employees available for HR MDM queries, payroll checks,
+-- and cross-ministry identity federation.
+OBSERVE active_government_employees {
+    FROM: TRIBE GovEmployeeMDM
+    WHERE: health >= 0.416
+    SORT: orbital_radius ASC
+    LIMIT: 100000
+}
+
+-- ── Observe: Records requiring HR data remediation ────────────────────────
+-- Surfaces low-quality records for targeted enrichment campaigns.
+OBSERVE employees_requiring_remediation {
+    FROM: TRIBE GovEmployeeMDM
+    WHERE: health < 0.416
+    SORT: orbital_radius DESC
+    LIMIT: 10000
+}

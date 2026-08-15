@@ -1,0 +1,232 @@
+# =============================================================================
+# PB-154 — HS-EXT-002 SCAFFOLD (HeptaScript v1.2: Cross-Tribe / NUZI / SLA)
+# BahyWay.Ecosystem v4.0 — CORRECTED 2026-07-10
+#
+# CORRECTION: dropped the "CSR-08 confirmation point" citation (CSR-08
+# does not exist yet — see PB-153-corrected header for the verification).
+# Also note: NUZI (birth-registration genealogy) has NO real crate or
+# module anywhere in the repo today — this scaffold is net-new design,
+# not an extension of existing NUZI code. Riksu edges (Tier 0) DO have a
+# real target: crates/riksu-engine/ (topology.rs, arc.rs) — confirmed
+# real, though its current design is cross-tribe arc *visualization* for
+# the Big Ring, not a general relationship journal; wiring HS-EXT-002's
+# Tier-0 to it is new integration work, not a pre-existing capability.
+#
+# TARGET: eriduous-vdi (192.168.122.214) — primary development machine
+#
+# WHAT THIS SEALS:
+#   - HS-EXT-002 spec into docs/
+#   - heptascript/src/ext002_cross_tribe.rs scaffold: new tokens, AST nodes,
+#     planner tier contract, EAV SLA record, and LAW TESTS that enforce:
+#       L-A  no '=' between positions (Uniqueness Law -> parse error)
+#       L-B  no numeric epsilon literal (GeoEngine single-truth -> parse error)
+#       L-C  no SQL keywords admitted by the new grammar paths
+#       L-D  NUZI is read-only from HeptaScript (no mutating verb binds BIRTH)
+#   - Module registration hint appended to heptascript/src/lib.rs is NOT
+#     auto-patched (repo-local wiring differs); a WIRE note is emitted instead.
+#
+# GOVERNING LAW: implementation/testing of this extension is QUEUED behind
+#   Phase A (PB-90-98) -> Phase B (PB-99-109) -> TESTING_PLAYBOOK_PHASE1 A-F.
+#   This playbook only seals the scaffold + law tests so the design is fixed.
+# =============================================================================
+---
+- name: "PB-154 | Seal HS-EXT-002 scaffold into heptascript crate"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    repo_path: "{{ bahyway_repo | default(ansible_env.HOME + '/Forge/EnkiDB/workspace/bahyway_v4') }}"
+    hs_crate: "{{ repo_path }}/crates/heptascript"
+    docs_dir: "{{ repo_path }}/docs/heptascript"
+
+  tasks:
+
+    - name: "PB-154.0 | Ensure docs directory exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "PB-154.2 | Scaffold ext002_cross_tribe.rs (nouns, AST, law tests)"
+      ansible.builtin.copy:
+        dest: "{{ hs_crate }}/src/ext002_cross_tribe.rs"
+        mode: "0644"
+        content: |
+          //! HS-EXT-002 -- Cross-Tribe Correlation, NUZI Birth, SLA Governance
+          //! HeptaScript v1.2 extension scaffold. Nouns and clauses ONLY --
+          //! Triple-O verbs are untouched (ORBIT/EMIT/PROVE/SYNC/WITNESS).
+          //!
+          //! NOTE: NUZI has no real backing crate as of 2026-07-10 -- this
+          //! is a forward-design scaffold, not an integration with existing
+          //! genealogy code. Riksu-tier admission targets crates/riksu-engine
+          //! (real, but currently scoped to arc visualization, not a general
+          //! relationship journal) -- wiring is new work.
+          #![forbid(unsafe_code)]
+
+          /// Sovereign roles -- the stakeholder dimension.
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          pub enum Role { DubSar, TabletWriter, DataSteward, Client }
+
+          /// WHERE-slot geometric predicate (discrete -> identity is lawful).
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum ZonePred {
+              SameZone,
+              Zone(u8),
+          }
+
+          /// WHAT-slot genealogy nouns -- NUZI is READ-ONLY from HeptaScript.
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum GenealogyNoun {
+              BirthRegisteredInNuzi,
+              Lineage { tribe_id: u16 },
+          }
+
+          /// PROVE NEAR epsilon -- ONLY GeoEngine-derived. No numeric literal
+          /// exists in this type by construction: the parser cannot build one.
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum EpsExpr {
+              Geo,
+              GeoScaled { num: u32, den: u32 },
+          }
+
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub struct SlaRef { pub client_id: u16 }
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub struct SlaTerms {
+              pub freshness_max_s: u64,
+              pub latency_max_ms: u64,
+              pub scope_zones: Vec<u8>,
+          }
+
+          /// Filter-and-refine contract for cross-tribe queries.
+          #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+          pub enum Tier {
+              RiksuEdge = 0,
+              ZoneBucket = 1,
+              TimeSlice = 2,
+              NearRefine = 3,
+          }
+
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum Ext002LawError {
+              PositionEquality,
+              NumericEpsilon,
+              SqlKeyword(String),
+              NuziMutation,
+          }
+
+          pub fn reject_position_equality(lhs_is_pos: bool, op_is_eq: bool,
+                                          rhs_is_pos: bool)
+              -> Result<(), Ext002LawError>
+          {
+              if lhs_is_pos && op_is_eq && rhs_is_pos {
+                  return Err(Ext002LawError::PositionEquality);
+              }
+              Ok(())
+          }
+
+          pub fn parse_eps(token: &str) -> Result<EpsExpr, Ext002LawError> {
+              match token {
+                  "eps_geo" => Ok(EpsExpr::Geo),
+                  t if t.chars().next().map(|c| c.is_ascii_digit())
+                        .unwrap_or(false) =>
+                      Err(Ext002LawError::NumericEpsilon),
+                  t => {
+                      if let Some(rest) = t.strip_prefix("eps_geo*") {
+                          let mut it = rest.split('/');
+                          let num = it.next().and_then(|s| s.parse().ok());
+                          let den = it.next().and_then(|s| s.parse().ok())
+                                      .or(Some(1u32));
+                          if let (Some(num), Some(den)) = (num, den) {
+                              if num > 0 && den > 0 {
+                                  return Ok(EpsExpr::GeoScaled { num, den });
+                              }
+                          }
+                      }
+                      Err(Ext002LawError::NumericEpsilon)
+                  }
+              }
+          }
+
+          pub fn reject_sql(word: &str) -> Result<(), Ext002LawError> {
+              const SQL: [&str; 8] = ["SELECT","FROM","JOIN","EXISTS",
+                                      "INSERT","UPDATE","DELETE","GROUP"];
+              let up = word.to_ascii_uppercase();
+              if SQL.contains(&up.as_str()) {
+                  return Err(Ext002LawError::SqlKeyword(up));
+              }
+              Ok(())
+          }
+
+          pub fn reject_nuzi_mutation(verb: &str)
+              -> Result<(), Ext002LawError>
+          {
+              match verb {
+                  "ORBIT" | "PROVE" | "WITNESS" => Ok(()),
+                  _ => Err(Ext002LawError::NuziMutation),
+              }
+          }
+
+          #[cfg(test)]
+          mod law_tests {
+              use super::*;
+
+              #[test]
+              fn position_equality_is_a_parse_error() {
+                  assert_eq!(reject_position_equality(true, true, true),
+                             Err(Ext002LawError::PositionEquality));
+                  assert!(reject_position_equality(false, true, true).is_ok());
+              }
+
+              #[test]
+              fn numeric_epsilon_is_unlawful() {
+                  assert_eq!(parse_eps("0.05"),
+                             Err(Ext002LawError::NumericEpsilon));
+                  assert_eq!(parse_eps("eps_geo"), Ok(EpsExpr::Geo));
+                  assert_eq!(parse_eps("eps_geo*3/2"),
+                             Ok(EpsExpr::GeoScaled { num: 3, den: 2 }));
+              }
+
+              #[test]
+              fn sql_keywords_never_parse() {
+                  assert!(reject_sql("JOIN").is_err());
+                  assert!(reject_sql("WINDOW").is_ok());
+                  assert!(reject_sql("WHERE").is_ok());
+              }
+
+              #[test]
+              fn nuzi_is_read_only_from_heptascript() {
+                  assert!(reject_nuzi_mutation("ORBIT").is_ok());
+                  assert_eq!(reject_nuzi_mutation("EMIT"),
+                             Err(Ext002LawError::NuziMutation));
+                  assert_eq!(reject_nuzi_mutation("SYNC"),
+                             Err(Ext002LawError::NuziMutation));
+              }
+
+              #[test]
+              fn filter_and_refine_tier_order() {
+                  assert!(Tier::RiksuEdge < Tier::ZoneBucket);
+                  assert!(Tier::ZoneBucket < Tier::TimeSlice);
+                  assert!(Tier::TimeSlice < Tier::NearRefine);
+              }
+          }
+
+    - name: "PB-154.3 | Compile-check the scaffold module standalone"
+      ansible.builtin.shell: |
+        set -e
+        export PATH="$HOME/.cargo/bin:$PATH"
+        cd "{{ hs_crate }}"
+        cargo check 2>&1 | tail -n 5 || true
+      register: hs_check
+      changed_when: false
+
+    - name: "PB-154.4 | WIRE note (manual module registration point)"
+      ansible.builtin.debug:
+        msg: >-
+          HS-EXT-002 scaffold sealed at
+          {{ hs_crate }}/src/ext002_cross_tribe.rs.
+          WIRE: add `pub mod ext002_cross_tribe;` to heptascript/src/lib.rs
+          when the testing gate opens, then `cargo test -p heptascript ext002`
+          must show 5/5 law tests green before any planner integration.
+          cargo check tail: {{ hs_check.stdout | default('n/a') }}

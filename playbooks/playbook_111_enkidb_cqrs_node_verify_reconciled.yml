@@ -1,0 +1,197 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_111_enkidb_cqrs_node_verify_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-111 Reconciled: live CQRS node health check
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_111_enkidb_cqrs_node_verify_reconciled.yml -i "localhost," -c local -v
+#
+#  NAMING COLLISION — flagging explicitly, not silently resolving it:
+#    This repo already has a DIFFERENT playbook_111_cqrs_kispu_reverify.yml
+#    (build + heptascript test verification, no live SSH). This upload,
+#    playbook_111_enkidb_cqrs_node_verify.yml, is a completely different
+#    playbook that happens to share the PB-111 number — live SSH health
+#    check against the two EnkiDB VMs (TCP reachability, process presence,
+#    journal.bin sanity, disk space). Both are legitimate, non-overlapping
+#    checks; they are just numbered the same by mistake, from what appear
+#    to be two different prior sessions. Keeping both filenames distinct
+#    (this one keeps the original's full descriptive name) so neither
+#    overwrites the other. When you say "run PB-111," specify which one.
+#
+#  Content check: this playbook is read-only (no crate/code changes) and
+#  entirely dependent on live infrastructure at 192.168.122.101/.107 that
+#  this sandbox cannot reach — nothing here to verify by running it
+#  locally. The structure is sound; only the sync-verification pattern
+#  was added (no other changes from the original).
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-111 (Reconciled) | EnkiDB CQRS Node Health Verification (live infra)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:        "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:          "{{ forge_root }}/workspace/bahyway_v4"
+    target_branch:      "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:       "{{ ansible_date_time.date }}"
+    report_file:        "{{ forge_root }}/docs/SHEDU/PB111_CQRS_HEALTH_{{ session_date }}.txt"
+
+    node_write_ip:      "192.168.122.101"
+    node_read_ip:       "192.168.122.107"
+    enkidb_port:        7001
+    min_free_mb:        2048
+    journal_min_bytes:  1024
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU directory exists"
+      ansible.builtin.file:
+        path: "{{ forge_root }}/docs/SHEDU"
+        state: directory
+        mode: "0755"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "CHECK | TCP reachability — enkidb-node-write ({{ node_write_ip }}:{{ enkidb_port }})"
+      ansible.builtin.wait_for:
+        host: "{{ node_write_ip }}"
+        port: "{{ enkidb_port }}"
+        timeout: 5
+        state: started
+      register: tcp_write
+      ignore_errors: true
+
+    - name: "GATE | Fail if enkidb-node-write not reachable"
+      ansible.builtin.fail:
+        msg: >
+          enkidb-node-write ({{ node_write_ip }}:{{ enkidb_port }}) is NOT reachable.
+          Check: is the VM running? is enkidb-query-server started?
+      when: tcp_write.failed | default(false)
+
+    - name: "CHECK | TCP reachability — enkidb-node-read ({{ node_read_ip }}:{{ enkidb_port }})"
+      ansible.builtin.wait_for:
+        host: "{{ node_read_ip }}"
+        port: "{{ enkidb_port }}"
+        timeout: 5
+        state: started
+      register: tcp_read
+      ignore_errors: true
+
+    - name: "GATE | Fail if enkidb-node-read not reachable"
+      ansible.builtin.fail:
+        msg: >
+          enkidb-node-read ({{ node_read_ip }}:{{ enkidb_port }}) is NOT reachable.
+          Check: is the VM running? is enkidb-query-server started?
+      when: tcp_read.failed | default(false)
+
+    - name: "CHECK | enkidb-query-server process on node-write"
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5
+          bahyway@{{ node_write_ip }}
+          "pgrep -c enkidb-query-server || echo 0"
+      register: proc_write
+      changed_when: false
+      ignore_errors: true
+
+    - name: "GATE | Fail if enkidb-query-server not running on node-write"
+      ansible.builtin.fail:
+        msg: >
+          enkidb-query-server is NOT running on enkidb-node-write ({{ node_write_ip }}).
+          Manual start: ssh bahyway@{{ node_write_ip }}
+            cd ~/Forge/EnkiDB/workspace/bahyway_v4
+            cargo run --bin enkidb-query-server --release
+      when: proc_write.stdout | trim == "0"
+
+    - name: "CHECK | enkidb-query-server process on node-read"
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5
+          bahyway@{{ node_read_ip }}
+          "pgrep -c enkidb-query-server || echo 0"
+      register: proc_read
+      changed_when: false
+      ignore_errors: true
+
+    - name: "GATE | Fail if enkidb-query-server not running on node-read"
+      ansible.builtin.fail:
+        msg: >
+          enkidb-query-server is NOT running on enkidb-node-read ({{ node_read_ip }}).
+          Manual start: ssh bahyway@{{ node_read_ip }}
+            cd ~/Forge/EnkiDB/workspace/bahyway_v4
+            cargo run --bin enkidb-query-server --release
+      when: proc_read.stdout | trim == "0"
+
+    - name: "CHECK | journal.bin size on node-write"
+      ansible.builtin.command:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no bahyway@{{ node_write_ip }}
+          "find ~/Forge/EnkiDB/workspace/bahyway_v4 -name journal.bin
+           -exec stat -c '%s' {} \\; 2>/dev/null | head -1 || echo 0"
+      register: journal_write_size
+      changed_when: false
+
+    - name: "WARN | journal.bin on node-write is very small or missing"
+      ansible.builtin.debug:
+        msg: >
+          WARNING: journal.bin on node-write reports {{ journal_write_size.stdout | trim }} bytes.
+          Expected >= {{ journal_min_bytes }} bytes. If this is a fresh node this may be normal.
+      when: (journal_write_size.stdout | trim | int) < journal_min_bytes
+
+    - name: "CHECK | Free disk space on node-write"
+      ansible.builtin.command:
+        cmd: "ssh -o StrictHostKeyChecking=no bahyway@{{ node_write_ip }} \"df --output=avail -m ~ | tail -1\""
+      register: disk_write
+      changed_when: false
+
+    - name: "GATE | Fail if node-write has < {{ min_free_mb }} MB free"
+      ansible.builtin.fail:
+        msg: "enkidb-node-write has only {{ disk_write.stdout | trim }} MB free (minimum {{ min_free_mb }} MB)."
+      when: (disk_write.stdout | trim | int) < min_free_mb
+
+    - name: "CHECK | Free disk space on node-read"
+      ansible.builtin.command:
+        cmd: "ssh -o StrictHostKeyChecking=no bahyway@{{ node_read_ip }} \"df --output=avail -m ~ | tail -1\""
+      register: disk_read
+      changed_when: false
+
+    - name: "GATE | Fail if node-read has < {{ min_free_mb }} MB free"
+      ansible.builtin.fail:
+        msg: "enkidb-node-read has only {{ disk_read.stdout | trim }} MB free (minimum {{ min_free_mb }} MB)."
+      when: (disk_read.stdout | trim | int) < min_free_mb
+
+    - name: "WRITE | Health report file"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-111 CQRS Node Health Report (Reconciled)
+          Date : {{ session_date }}
+
+          enkidb-node-write ({{ node_write_ip }}:{{ enkidb_port }})
+            TCP: PASS  Process: PASS ({{ proc_write.stdout | trim }})  journal.bin: {{ journal_write_size.stdout | trim }} bytes  Disk free: {{ disk_write.stdout | trim }} MB
+
+          enkidb-node-read ({{ node_read_ip }}:{{ enkidb_port }})
+            TCP: PASS  Process: PASS ({{ proc_read.stdout | trim }})  Disk free: {{ disk_read.stdout | trim }} MB
+
+          RESULT: CQRS cluster healthy.
+
+          Note: numbering collides with the pre-existing
+          playbook_111_cqrs_kispu_reverify.yml (build/test verification,
+          not live SSH) — both are real, kept separate.
+
+    - name: "DONE | PB-111 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-111 complete — all gates passed. Report at {{ report_file }}"

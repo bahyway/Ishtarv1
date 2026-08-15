@@ -1,0 +1,87 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_111_cqrs_kispu_reverify.yml
+#  PB-111 (cqrs_node_verify) + PB-112 (kispu_headstore_benchmark), REVERIFIED
+#
+#  Run: ansible-playbook playbook_111_cqrs_kispu_reverify.yml -i "localhost," -c local -v
+#
+#  RM-001_ADDENDUM_PB111-145_VERIFIED_2026-07-01.md marked both 111 and 112
+#  "Superseded — checks a process (enkidb-query-server) that was abandoned
+#  mid-migration." That verdict is now stale in a good way: PB-172
+#  (2026-07-07) rebuilt the query path for real, wiring it to enkidb-indexes
+#  instead of doing a raw journal scan. This playbook re-verifies 111/112's
+#  ORIGINAL INTENT — does the CQRS read/write node pair actually work, and
+#  is the KISPU-path query fast — against TODAY's real code, rather than
+#  leaving the "superseded" verdict as the last word.
+#
+#  Live-node checks are conditional and honestly reported, never faked.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-111 | CQRS Node + KISPU Path Reverification"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ forge_root }}/docs/PB111_REPORT_{{ session_date }}.txt"
+    read_host:  "192.168.122.107"
+    write_host: "192.168.122.101"
+    node_port:  7001
+
+  tasks:
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "BUILD | enkidb-query-server (the rebuilt query path, PB-172's home)"
+      ansible.builtin.command: {cmd: "{{ cargo }} build -p enkidb-query-server --release", chdir: "{{ workspace }}"}
+      register: build_qs
+      changed_when: false
+      failed_when: build_qs.rc != 0
+
+    - name: "CHECK | Read node reachable ({{ read_host }}:{{ node_port }})"
+      ansible.builtin.wait_for: {host: "{{ read_host }}", port: "{{ node_port }}", timeout: 3, state: started}
+      register: read_live
+      ignore_errors: true
+
+    - name: "CHECK | Write node reachable ({{ write_host }}:{{ node_port }})"
+      ansible.builtin.wait_for: {host: "{{ write_host }}", port: "{{ node_port }}", timeout: 3, state: started}
+      register: write_live
+      ignore_errors: true
+
+    - name: "PRINT | CQRS node status"
+      ansible.builtin.debug:
+        msg: |
+          Read  node ({{ read_host }}:{{ node_port }}):  {{ 'LIVE' if read_live is succeeded else 'not answering' }}
+          Write node ({{ write_host }}:{{ node_port }}): {{ 'LIVE' if write_live is succeeded else 'not answering' }}
+          {{ 'Both nodes live -- issue a real HeptaScript query to the read node and confirm sub-second response with a real particle count (this playbook does not yet script the TCP frame protocol; that is the concrete next build if this stays green).' if (read_live is succeeded and write_live is succeeded) else 'At least one node is not running -- start enkidb-query-server on both hosts per the CQRS convention (write node then read node), then re-run this playbook. Cannot benchmark KISPU-path speed without a live, loaded node.' }}
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          PB-111/112 Reverification — {{ session_date }} — {{ ansible_hostname }}
+          enkidb-query-server build: {{ 'CLEAN' if build_qs.rc == 0 else 'FAILED' }}
+          Read node live:  {{ read_live is succeeded }}
+          Write node live: {{ write_live is succeeded }}
+
+    - {name: "DONE", ansible.builtin.debug: {msg: "PB-111 complete — report at {{ report_file }}"}}

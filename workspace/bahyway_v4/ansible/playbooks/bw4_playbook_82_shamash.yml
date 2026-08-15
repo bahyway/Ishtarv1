@@ -1,0 +1,823 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_82_shamash.yml
+# SHAMASH 𒀭𒌓 — Visual Tribe Detector + Dynamic Simplicial Complex
+# "The Sun God — Observer of all things — Judge of truth"
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# SHAMASH sees everything from above.
+# He cannot be deceived. He sees topology, not identity.
+#
+# WHAT SHAMASH DOES:
+#   1. Receives camera frames every 10 seconds
+#   2. Identifies visual tribes (movement, density, clothing, dwell)
+#   3. Builds dynamic simplicial complex from tribe adjacencies
+#   4. Computes GA outer product for crowd risk
+#   5. Detects topological events (birth/death/merge/split)
+#   6. Feeds NISABA (pattern discovery) + TIAMAT-CROWD (safety)
+#
+# FIVE VISUAL TRIBE DIMENSIONS:
+#   D1: Movement vector (heading + speed)
+#   D2: Spatial density (spacing between individuals)
+#   D3: Clothing colour region (fashion shop insight)
+#   D4: Body posture coherence (facing direction)
+#   D5: Dwell time (transit vs stationary)
+#
+# CONSTITUTIONAL PRINCIPLE (sealed):
+#   SHAMASH sees TRIBES not people.
+#   No facial recognition. No personal identification.
+#   Only collective topology.
+#
+# Target  : eriduous-vdi (192.168.122.214)
+# Run from: EnkiLab HOST
+# ansible-playbook -i inventory/vdi.yml playbooks/82_shamash.yml
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 82 — SHAMASH 𒀭𒌓 Visual Tribe Detector"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_82_shamash.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_82_shamash.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # SHAMASH — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/shamash"
+          SRC    = f"{CRATE}/src"
+          for d in [SRC,
+                    f"{SRC}/tribe",
+                    f"{SRC}/complex",
+                    f"{SRC}/topology",
+                    f"{SRC}/ga"]:
+              os.makedirs(d, exist_ok=True)
+
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name        = "shamash"
+          version     = "4.0.0"
+          edition     = "2021"
+          authors     = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          description = "SHAMASH Visual Tribe Detector + Dynamic Simplicial Complex"
+          [dependencies]
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          serde       = { version = "1", features = ["derive"] }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! SHAMASH 𒀭𒌓 — Visual Tribe Detector + Dynamic Simplicial Complex
+          //! "The Sun God — Observer of all things from above"
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! CONSTITUTIONAL PRINCIPLE (sealed):
+          //!   SHAMASH sees TRIBES not people.
+          //!   No facial recognition. No personal identification.
+          //!   Watches collective topology — never individual identity.
+          //!
+          //! FIVE TRIBE DIMENSIONS:
+          //!   D1: Movement vector (heading + speed)
+          //!   D2: Spatial density (mean inter-person spacing)
+          //!   D3: Clothing colour region (hue histogram)
+          //!   D4: Posture coherence (facing direction consensus)
+          //!   D5: Dwell time (seconds in current position)
+          //!
+          //! DYNAMIC SIMPLICIAL COMPLEX:
+          //!   Vertices: visual tribes
+          //!   1-simplex: RIKSU bond (adjacent compatible tribes)
+          //!   2-simplex: TÊRTUM triangle (convergence front)
+          //!   3-simplex: MARKASU tetrahedron (crush volume)
+
+          #![forbid(unsafe_code)]
+
+          pub mod tribe;
+          pub mod complex;
+          pub mod topology;
+          pub mod ga;
+
+          pub use tribe::{VisualTribe, TribeType, TribeDimensions};
+          pub use complex::{SimplicialComplex, Riksu, Tertum, Markasu};
+          pub use topology::{TopologyEvent, TopologyEventType};
+          pub use ga::GaCrowdScore;
+
+          /// SHAMASH scan interval
+          pub const SCAN_INTERVAL_SECS: u64 = 10;
+
+          /// Bond radius — tribes within this distance form RIKSU bonds (metres)
+          pub const BOND_RADIUS_M: f32 = 15.0;
+
+          /// Minimum tribe size to register
+          pub const MIN_TRIBE_SIZE: u32 = 20;
+
+          /// Maximum known pattern age before NISABA is notified (seconds)
+          pub const PATTERN_AGE_THRESHOLD_SECS: u64 = 900;  // 15 minutes
+          """))
+
+          write(f"{SRC}/tribe/mod.rs", textwrap.dedent("""\
+          //! Visual Tribe — the fundamental unit of SHAMASH
+          //! A tribe = a cluster of individuals with similar visual behaviour
+          //! KAKI: Identity-KAKI minted per tribe (not per person)
+
+          #![forbid(unsafe_code)]
+
+          use enkidb_kaki::Kaki;
+
+          /// The type of visual tribe SHAMASH has identified
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum TribeType {
+              /// Moving in coherent direction — normal pilgrimage flow
+              FlowNorth, FlowSouth, FlowEast, FlowWest,
+              FlowNorthEast, FlowNorthWest, FlowSouthEast, FlowSouthWest,
+              /// Stationary cluster (praying/resting/blocked)
+              StaticCluster,
+              /// Dense convergence on a point (gate/shrine/obstacle)
+              DenseConvergence,
+              /// Moving against dominant flow — potentially suspicious
+              CounterFlow,
+              /// Rotating/circular movement
+              Vortex,
+              /// Dispersing outward from a point
+              Dispersal,
+              /// No coherent pattern detected — chaotic
+              Chaotic,
+              /// Not yet classified by NISABA
+              Unknown,
+          }
+
+          impl TribeType {
+              pub fn is_suspicious(&self) -> bool {
+                  matches!(self, Self::CounterFlow | Self::Vortex | Self::Unknown)
+              }
+
+              pub fn is_dangerous(&self) -> bool {
+                  matches!(self, Self::DenseConvergence | Self::Chaotic)
+              }
+
+              /// Maps to Akkadian pattern name prefix
+              pub fn akkadian_prefix(&self) -> &'static str {
+                  match self {
+                      Self::FlowNorth | Self::FlowSouth |
+                      Self::FlowEast  | Self::FlowWest  |
+                      Self::FlowNorthEast | Self::FlowNorthWest |
+                      Self::FlowSouthEast | Self::FlowSouthWest => "ENLIL",
+                      Self::StaticCluster    => "NANNA",
+                      Self::DenseConvergence => "INANNA",
+                      Self::CounterFlow      => "ERESHKIGAL",
+                      Self::Vortex           => "ABZU",
+                      Self::Dispersal        => "ENLIL",
+                      Self::Chaotic          => "TIAMAT",
+                      Self::Unknown          => "NAMMU",
+                  }
+              }
+          }
+
+          /// Five visual dimensions of a tribe
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub struct TribeDimensions {
+              /// D1: Mean heading (degrees, 0-360) + mean speed (m/s)
+              pub heading_deg:        f32,
+              pub speed_m_s:          f32,
+              /// D2: Mean inter-person spacing (m) — lower = denser
+              pub mean_spacing_m:     f32,
+              /// D3: Dominant clothing colour hue (0-360, golden angle tribe)
+              /// (Fashion shop insight: clothing region → tribe colour cluster)
+              pub clothing_hue_deg:   f32,
+              pub clothing_coherence: f32,  // 0=mixed, 1=uniform
+              /// D4: Posture coherence — how many face same direction
+              pub posture_consensus:  f32,  // 0=random, 1=all same direction
+              /// D5: Mean dwell time in current position (seconds)
+              pub dwell_secs:         f32,
+          }
+
+          impl TribeDimensions {
+              /// Convert to 7D HeptaMap vector for NISABA pattern matching
+              pub fn to_hepta_vector(&self) -> [f32; 7] {
+                  [
+                      self.heading_deg / 360.0,       // normalise to 0-1
+                      self.speed_m_s   / 3.0,          // max 3 m/s
+                      1.0 - (self.mean_spacing_m / 5.0).min(1.0), // density
+                      self.clothing_hue_deg / 360.0,
+                      self.clothing_coherence,
+                      self.posture_consensus,
+                      (self.dwell_secs / 900.0).min(1.0), // max 15 min
+                  ]
+              }
+
+              /// Cosine similarity between two tribe dimension vectors
+              pub fn similarity(&self, other: &Self) -> f32 {
+                  let a = self.to_hepta_vector();
+                  let b = other.to_hepta_vector();
+                  let dot: f32 = a.iter().zip(b.iter()).map(|(x,y)| x*y).sum();
+                  let ma: f32  = a.iter().map(|x| x*x).sum::<f32>().sqrt();
+                  let mb: f32  = b.iter().map(|x| x*x).sum::<f32>().sqrt();
+                  if ma * mb < 1e-6 { 0.0 } else { dot / (ma * mb) }
+              }
+          }
+
+          /// A visual tribe — the vertex in SHAMASH's simplicial complex
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub struct VisualTribe {
+              /// Tribe Identity-KAKI (NOT individual people's KAKIs)
+              pub kaki:       Kaki,
+              pub tribe_id:   u32,      // SHAMASH local ID
+              pub tribe_type: TribeType,
+              pub dims:       TribeDimensions,
+              /// Geographic centre of tribe
+              pub centre_x:   f32,
+              pub centre_y:   f32,
+              /// Count of individuals in this tribe (not their identity)
+              pub size:       u32,
+              /// Zone in the shrine complex
+              pub zone_id:    u16,
+              /// First detected epoch
+              pub born_epoch: u64,
+              /// Last updated epoch
+              pub last_epoch: u64,
+              /// How long since birth (seconds)
+              pub age_secs:   u64,
+          }
+
+          impl VisualTribe {
+              pub fn new(
+                  tribe_id: u32, tribe_type: TribeType,
+                  dims: TribeDimensions, cx: f32, cy: f32,
+                  size: u32, zone_id: u16, epoch: u64,
+              ) -> Self {
+                  // Mint tribe Identity-KAKI
+                  // Hash from position + time — not from individuals
+                  let hash = enkidb_kaki::fnv1a_u32(
+                      format!("tribe_{}_{}", tribe_id, epoch).as_bytes()
+                  );
+                  let kaki = Kaki::mint(
+                      hash, zone_id,
+                      enkidb_kaki::KakiType::Identity,
+                      0xC0, // VISUAL_TRIBE role
+                  );
+                  Self {
+                      kaki, tribe_id, tribe_type, dims,
+                      centre_x: cx, centre_y: cy, size, zone_id,
+                      born_epoch: epoch, last_epoch: epoch, age_secs: 0,
+                  }
+              }
+
+              pub fn update(&mut self, dims: TribeDimensions,
+                             cx: f32, cy: f32, size: u32, epoch: u64) {
+                  self.dims       = dims;
+                  self.centre_x   = cx;
+                  self.centre_y   = cy;
+                  self.size       = size;
+                  self.last_epoch = epoch;
+                  self.age_secs   = epoch - self.born_epoch;
+              }
+
+              pub fn distance_to(&self, other: &Self) -> f32 {
+                  let dx = self.centre_x - other.centre_x;
+                  let dy = self.centre_y - other.centre_y;
+                  (dx*dx + dy*dy).sqrt()
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn test_dims() -> TribeDimensions {
+                  TribeDimensions {
+                      heading_deg: 0.0, speed_m_s: 1.2,
+                      mean_spacing_m: 1.5, clothing_hue_deg: 45.0,
+                      clothing_coherence: 0.6, posture_consensus: 0.75,
+                      dwell_secs: 30.0,
+                  }
+              }
+
+              #[test]
+              fn test_tribe_kaki_is_tribe_not_person() {
+                  let t = VisualTribe::new(1, TribeType::FlowNorth,
+                      test_dims(), 100.0, 100.0, 500, 1, 0);
+                  // κ[6] = Identity-KAKI (tribe entity, not person)
+                  assert_eq!(t.kaki.bytes[6], 0x01);
+                  // κ[7] = VISUAL_TRIBE role
+                  assert_eq!(t.kaki.bytes[7], 0xC0);
+              }
+
+              #[test]
+              fn test_hepta_vector_7_dimensions() {
+                  let v = test_dims().to_hepta_vector();
+                  assert_eq!(v.len(), 7);
+                  assert!(v.iter().all(|&x| x >= 0.0 && x <= 1.0));
+              }
+
+              #[test]
+              fn test_similar_tribes_high_score() {
+                  let d1 = test_dims();
+                  let d2 = TribeDimensions {
+                      heading_deg: 5.0, speed_m_s: 1.1,
+                      mean_spacing_m: 1.6, clothing_hue_deg: 47.0,
+                      clothing_coherence: 0.58, posture_consensus: 0.72,
+                      dwell_secs: 32.0,
+                  };
+                  assert!(d1.similarity(&d2) > 0.98);
+              }
+
+              #[test]
+              fn test_no_facial_recognition() {
+                  // Tribe KAKI is computed from position+time, never biometric
+                  let t = VisualTribe::new(1, TribeType::FlowNorth,
+                      test_dims(), 100.0, 100.0, 500, 1, 1_750_000_000);
+                  // κ[0..3] = hash of "tribe_1_1750000000" — NOT biometric data
+                  let expected = enkidb_kaki::fnv1a_u32(b"tribe_1_1750000000");
+                  let stored   = u32::from_be_bytes([
+                      t.kaki.bytes[0], t.kaki.bytes[1],
+                      t.kaki.bytes[2], t.kaki.bytes[3],
+                  ]);
+                  assert_eq!(stored, expected);
+              }
+          }
+          """))
+
+          write(f"{SRC}/complex/mod.rs", textwrap.dedent("""\
+          //! Dynamic Simplicial Complex — built from VisualTribes
+          //! Vertices: tribes | 1-simplices: RIKSU | 2-simplices: TÊRTUM
+          //! 3-simplices: MARKASU
+
+          #![forbid(unsafe_code)]
+
+          use crate::tribe::VisualTribe;
+          use crate::BOND_RADIUS_M;
+
+          /// RIKSU bond between two adjacent tribes (1-simplex)
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub struct Riksu {
+              pub tribe_a:   u32,
+              pub tribe_b:   u32,
+              pub distance_m: f32,
+              pub compatibility: f32,  // 0=incompatible, 1=fully compatible
+              pub bond_age_secs: u64,
+          }
+
+          impl Riksu {
+              pub fn new(a: &VisualTribe, b: &VisualTribe) -> Self {
+                  let dist  = a.distance_to(b);
+                  let compat = a.dims.similarity(&b.dims);
+                  Self {
+                      tribe_a: a.tribe_id, tribe_b: b.tribe_id,
+                      distance_m: dist, compatibility: compat,
+                      bond_age_secs: 0,
+                  }
+              }
+
+              pub fn is_dangerous(&self) -> bool {
+                  // Incompatible tribes bonding = potential conflict/crush
+                  self.compatibility < 0.30 && self.distance_m < BOND_RADIUS_M
+              }
+          }
+
+          /// TÊRTUM triangle — three mutually bonded tribes (2-simplex)
+          #[derive(Debug, Clone)]
+          pub struct Tertum {
+              pub tribes:    [u32; 3],
+              /// GA bivector magnitude — how dangerous is this triangle?
+              pub ga_magnitude: f32,
+              /// True if this represents a convergence front
+              pub is_convergence: bool,
+          }
+
+          /// MARKASU tetrahedron — four mutually bonded tribes (3-simplex)
+          #[derive(Debug, Clone)]
+          pub struct Markasu {
+              pub tribes:     [u32; 4],
+              /// GA trivector magnitude — crush volume
+              pub ga_magnitude: f32,
+              /// Crush risk (0-1)
+              pub crush_risk:   f32,
+          }
+
+          /// The dynamic simplicial complex — rebuilt every SCAN_INTERVAL_SECS
+          #[derive(Debug, Default)]
+          pub struct SimplicialComplex {
+              pub tribes:    Vec<VisualTribe>,
+              pub bonds:     Vec<Riksu>,
+              pub triangles: Vec<Tertum>,
+              pub tetrahedra: Vec<Markasu>,
+              pub epoch:     u64,
+          }
+
+          impl SimplicialComplex {
+              pub fn new() -> Self { Self::default() }
+
+              /// Rebuild complex from current tribe set
+              pub fn rebuild(&mut self, tribes: Vec<VisualTribe>, epoch: u64) {
+                  self.epoch   = epoch;
+                  self.bonds   = Vec::new();
+                  self.triangles = Vec::new();
+                  self.tetrahedra = Vec::new();
+
+                  // Build RIKSU bonds (1-simplices)
+                  for i in 0..tribes.len() {
+                      for j in (i+1)..tribes.len() {
+                          let dist = tribes[i].distance_to(&tribes[j]);
+                          if dist <= BOND_RADIUS_M {
+                              let bond = Riksu::new(&tribes[i], &tribes[j]);
+                              self.bonds.push(bond);
+                          }
+                      }
+                  }
+
+                  // Build TÊRTUM triangles (2-simplices)
+                  // Three tribes where all pairs have RIKSU bonds
+                  for i in 0..tribes.len() {
+                      for j in (i+1)..tribes.len() {
+                          for k in (j+1)..tribes.len() {
+                              let ij = self.has_bond(tribes[i].tribe_id, tribes[j].tribe_id);
+                              let jk = self.has_bond(tribes[j].tribe_id, tribes[k].tribe_id);
+                              let ik = self.has_bond(tribes[i].tribe_id, tribes[k].tribe_id);
+                              if ij && jk && ik {
+                                  let ga_mag = self.compute_bivector_magnitude(
+                                      &tribes[i], &tribes[j], &tribes[k]);
+                                  let is_conv = tribes[i].tribe_type.is_dangerous() ||
+                                               tribes[j].tribe_type.is_dangerous() ||
+                                               tribes[k].tribe_type.is_dangerous();
+                                  self.triangles.push(Tertum {
+                                      tribes: [tribes[i].tribe_id,
+                                               tribes[j].tribe_id,
+                                               tribes[k].tribe_id],
+                                      ga_magnitude: ga_mag,
+                                      is_convergence: is_conv,
+                                  });
+                              }
+                          }
+                      }
+                  }
+
+                  // Build MARKASU tetrahedra (3-simplices)
+                  // Four tribes where all combinations have RIKSU bonds
+                  for i in 0..tribes.len() {
+                      for j in (i+1)..tribes.len() {
+                          for k in (j+1)..tribes.len() {
+                              for l in (k+1)..tribes.len() {
+                                  if self.all_bonded(&[
+                                      tribes[i].tribe_id, tribes[j].tribe_id,
+                                      tribes[k].tribe_id, tribes[l].tribe_id
+                                  ]) {
+                                      let mag = self.compute_trivector_magnitude(
+                                          &tribes[i], &tribes[j],
+                                          &tribes[k], &tribes[l]);
+                                      let crush = (mag * 1.5).min(1.0);
+                                      self.tetrahedra.push(Markasu {
+                                          tribes: [tribes[i].tribe_id,
+                                                   tribes[j].tribe_id,
+                                                   tribes[k].tribe_id,
+                                                   tribes[l].tribe_id],
+                                          ga_magnitude: mag,
+                                          crush_risk: crush,
+                                      });
+                                  }
+                              }
+                          }
+                      }
+                  }
+
+                  self.tribes = tribes;
+              }
+
+              fn has_bond(&self, a: u32, b: u32) -> bool {
+                  self.bonds.iter().any(|r|
+                      (r.tribe_a == a && r.tribe_b == b) ||
+                      (r.tribe_a == b && r.tribe_b == a))
+              }
+
+              fn all_bonded(&self, ids: &[u32]) -> bool {
+                  for i in 0..ids.len() {
+                      for j in (i+1)..ids.len() {
+                          if !self.has_bond(ids[i], ids[j]) { return false; }
+                      }
+                  }
+                  true
+              }
+
+              /// GA bivector magnitude from tribe dimension vectors
+              /// |e₁ ∧ e₂| = sin(angle between) × |e₁| × |e₂|
+              fn compute_bivector_magnitude(
+                  &self, a: &VisualTribe, b: &VisualTribe, c: &VisualTribe
+              ) -> f32 {
+                  let va = a.dims.to_hepta_vector();
+                  let vb = b.dims.to_hepta_vector();
+                  let vc = c.dims.to_hepta_vector();
+                  // Approximate bivector as cross-product magnitude in 2D subspace
+                  let ab_dot: f32 = va.iter().zip(vb.iter()).map(|(x,y)| x*y).sum();
+                  let bc_dot: f32 = vb.iter().zip(vc.iter()).map(|(x,y)| x*y).sum();
+                  let ma = va.iter().map(|x| x*x).sum::<f32>().sqrt();
+                  let mb = vb.iter().map(|x| x*x).sum::<f32>().sqrt();
+                  let mc = vc.iter().map(|x| x*x).sum::<f32>().sqrt();
+                  let cos_ab = if ma * mb > 1e-6 { ab_dot / (ma*mb) } else { 0.0 };
+                  let cos_bc = if mb * mc > 1e-6 { bc_dot / (mb*mc) } else { 0.0 };
+                  let sin_ab = (1.0 - cos_ab*cos_ab).sqrt();
+                  let sin_bc = (1.0 - cos_bc*cos_bc).sqrt();
+                  (sin_ab * sin_bc).clamp(0.0, 1.0)
+              }
+
+              fn compute_trivector_magnitude(
+                  &self, a: &VisualTribe, b: &VisualTribe,
+                  c: &VisualTribe, d: &VisualTribe
+              ) -> f32 {
+                  let biv_abc = self.compute_bivector_magnitude(a, b, c);
+                  let vd = d.dims.to_hepta_vector();
+                  let vc = c.dims.to_hepta_vector();
+                  let cd_dot: f32 = vc.iter().zip(vd.iter()).map(|(x,y)| x*y).sum();
+                  let mc = vc.iter().map(|x| x*x).sum::<f32>().sqrt();
+                  let md = vd.iter().map(|x| x*x).sum::<f32>().sqrt();
+                  let cos_cd = if mc * md > 1e-6 { cd_dot / (mc*md) } else { 0.0 };
+                  let sin_cd = (1.0 - cos_cd*cos_cd).sqrt();
+                  (biv_abc * sin_cd).clamp(0.0, 1.0)
+              }
+
+              pub fn max_crush_risk(&self) -> f32 {
+                  self.tetrahedra.iter()
+                      .map(|m| m.crush_risk)
+                      .fold(0.0f32, f32::max)
+              }
+          }
+          """))
+
+          write(f"{SRC}/topology/mod.rs", textwrap.dedent("""\
+          //! Topological Event Detection
+          //! Tracks: birth / death / merge / split of tribes
+          //! These events are fed to NISABA for pattern discovery
+
+          #![forbid(unsafe_code)]
+
+          use crate::tribe::VisualTribe;
+
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum TopologyEventType {
+              /// New tribe appeared — vertex birth
+              TribeBirth,
+              /// Tribe dispersed — vertex death
+              TribeDeath,
+              /// Two tribes merged — vertex collapse
+              TribeMerge { from_ids: [u32; 2] },
+              /// One tribe split into two — vertex birth x2
+              TribeSplit { from_id: u32 },
+              /// RIKSU bond formed between two tribes
+              BondFormed { tribe_a: u32, tribe_b: u32 },
+              /// RIKSU bond dissolved
+              BondBroken { tribe_a: u32, tribe_b: u32 },
+              /// TÊRTUM convergence front detected
+              ConvergenceDetected { tribes: [u32; 3] },
+              /// MARKASU tetrahedron — crush volume forming
+              CrushVolumeDetected { tribes: [u32; 4], magnitude: f32 },
+              /// Topological void — expected tribe missing
+              TopologicalVoid { expected_zone: u16 },
+          }
+
+          #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+          pub struct TopologyEvent {
+              pub event_type: TopologyEventType,
+              pub epoch:      u64,
+              pub zone_id:    u16,
+              pub tiamat_level: u8,  // alert level this event triggers
+          }
+
+          impl TopologyEvent {
+              pub fn new(event_type: TopologyEventType, epoch: u64,
+                         zone_id: u16) -> Self {
+                  let tiamat = match &event_type {
+                      TopologyEventType::CrushVolumeDetected { magnitude, .. } =>
+                          if *magnitude >= 0.85 { 4 }
+                          else if *magnitude >= 0.70 { 3 }
+                          else if *magnitude >= 0.55 { 2 }
+                          else { 1 },
+                      TopologyEventType::ConvergenceDetected { .. } => 2,
+                      TopologyEventType::TribeMerge { .. }  => 2,
+                      TopologyEventType::TopologicalVoid { .. } => 1,
+                      TopologyEventType::BondFormed { .. }  => 0,
+                      TopologyEventType::BondBroken { .. }  => 1,
+                      _                                     => 0,
+                  };
+                  Self { event_type, epoch, zone_id, tiamat_level: tiamat }
+              }
+          }
+
+          pub struct TopologyTracker {
+              pub previous_tribes:  Vec<u32>,
+              pub previous_bonds:   Vec<(u32, u32)>,
+              pub events:           Vec<TopologyEvent>,
+          }
+
+          impl TopologyTracker {
+              pub fn new() -> Self {
+                  Self {
+                      previous_tribes: Vec::new(),
+                      previous_bonds:  Vec::new(),
+                      events:          Vec::new(),
+                  }
+              }
+
+              pub fn update(&mut self, tribes: &[VisualTribe],
+                             bonds: &[(u32, u32)], epoch: u64) {
+                  self.events.clear();
+                  let current_ids: Vec<u32> = tribes.iter()
+                      .map(|t| t.tribe_id).collect();
+
+                  // Detect births
+                  for &id in &current_ids {
+                      if !self.previous_tribes.contains(&id) {
+                          let zone = tribes.iter()
+                              .find(|t| t.tribe_id == id)
+                              .map(|t| t.zone_id).unwrap_or(0);
+                          self.events.push(TopologyEvent::new(
+                              TopologyEventType::TribeBirth, epoch, zone));
+                      }
+                  }
+
+                  // Detect deaths
+                  for &id in &self.previous_tribes {
+                      if !current_ids.contains(&id) {
+                          self.events.push(TopologyEvent::new(
+                              TopologyEventType::TribeDeath, epoch, 0));
+                      }
+                  }
+
+                  // Detect new bonds
+                  for &(a, b) in bonds {
+                      if !self.previous_bonds.contains(&(a,b)) &&
+                         !self.previous_bonds.contains(&(b,a)) {
+                          let zone = tribes.iter()
+                              .find(|t| t.tribe_id == a)
+                              .map(|t| t.zone_id).unwrap_or(0);
+                          self.events.push(TopologyEvent::new(
+                              TopologyEventType::BondFormed {
+                                  tribe_a: a, tribe_b: b
+                              }, epoch, zone));
+                      }
+                  }
+
+                  // Detect broken bonds
+                  for &(a, b) in &self.previous_bonds {
+                      if !bonds.contains(&(a,b)) && !bonds.contains(&(b,a)) {
+                          self.events.push(TopologyEvent::new(
+                              TopologyEventType::BondBroken {
+                                  tribe_a: a, tribe_b: b
+                              }, epoch, 0));
+                      }
+                  }
+
+                  self.previous_tribes = current_ids;
+                  self.previous_bonds  = bonds.to_vec();
+              }
+
+              pub fn has_crush_warning(&self) -> bool {
+                  self.events.iter().any(|e| e.tiamat_level >= 3)
+              }
+          }
+
+          impl Default for TopologyTracker {
+              fn default() -> Self { Self::new() }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_tribe_birth_detected() {
+                  let mut tracker = TopologyTracker::new();
+                  use crate::tribe::{VisualTribe, TribeType, TribeDimensions};
+                  let dims = TribeDimensions {
+                      heading_deg: 0.0, speed_m_s: 1.0, mean_spacing_m: 1.5,
+                      clothing_hue_deg: 0.0, clothing_coherence: 0.5,
+                      posture_consensus: 0.7, dwell_secs: 30.0,
+                  };
+                  let tribe = VisualTribe::new(1, TribeType::FlowNorth,
+                      dims, 0.0, 0.0, 100, 1, 0);
+                  tracker.update(&[tribe], &[], 1000);
+                  assert!(tracker.events.iter().any(|e|
+                      matches!(e.event_type, TopologyEventType::TribeBirth)));
+              }
+
+              #[test]
+              fn test_crush_warning_from_high_magnitude() {
+                  let event = TopologyEvent::new(
+                      TopologyEventType::CrushVolumeDetected {
+                          tribes: [1,2,3,4], magnitude: 0.90
+                      }, 0, 1
+                  );
+                  assert_eq!(event.tiamat_level, 4); // KUR
+              }
+          }
+          """))
+
+          write(f"{SRC}/ga/mod.rs", textwrap.dedent("""\
+          //! GA Crowd Score — Geometric Algebra outer product for crowd risk
+          //! Grade-1: one tribe anomaly → DILBAT
+          //! Grade-2: two tribes form dangerous pair → KAKKAB
+          //! Grade-3: three tribes form dangerous triangle → ERRA
+          //! Grade-4: four tribes form dangerous volume → KUR
+
+          #![forbid(unsafe_code)]
+
+          use crate::complex::SimplicialComplex;
+
+          #[derive(Debug, Clone)]
+          pub struct GaCrowdScore {
+              pub grade:          u8,    // 0-4 (GA grade)
+              pub magnitude:      f32,   // outer product magnitude
+              pub tiamat_level:   u8,    // 0=nominal 1=DILBAT 2=KAKKAB 3=ERRA 4=KUR
+              pub description:    String,
+          }
+
+          impl GaCrowdScore {
+              pub fn compute(complex: &SimplicialComplex) -> Self {
+                  // Highest grade = most dangerous configuration
+                  let crush = complex.max_crush_risk();
+                  let n_dangerous_triangles = complex.triangles.iter()
+                      .filter(|t| t.is_convergence).count();
+                  let n_dangerous_bonds = complex.bonds.iter()
+                      .filter(|b| b.is_dangerous()).count();
+
+                  let (grade, magnitude, tiamat, desc) =
+                      if crush >= 0.85 {
+                          (4, crush, 4, "MARKASU tetrahedron — crush volume KUR".into())
+                      } else if crush >= 0.55 || n_dangerous_triangles >= 2 {
+                          (3, (crush + n_dangerous_triangles as f32 * 0.1).min(1.0),
+                           3, "TERTUM convergence — crush surface ERRA".into())
+                      } else if n_dangerous_triangles >= 1 || n_dangerous_bonds >= 3 {
+                          (2, 0.60, 2,
+                           "Multiple dangerous bonds — KAKKAB warning".into())
+                      } else if n_dangerous_bonds >= 1 {
+                          (1, 0.35, 1, "Incompatible tribe bond — DILBAT monitor".into())
+                      } else {
+                          (0, 0.0, 0, "Nominal crowd topology".into())
+                      };
+
+                  Self { grade, magnitude, tiamat_level: tiamat, description: desc }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_empty_complex_nominal() {
+                  let complex = SimplicialComplex::new();
+                  let score   = GaCrowdScore::compute(&complex);
+                  assert_eq!(score.tiamat_level, 0);
+                  assert_eq!(score.grade, 0);
+              }
+          }
+          """))
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/shamash"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/shamash",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "shamash"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0:
+              print("✗ BUILD FAILED:"); print(r.stderr[-3000:]); sys.exit(1)
+
+          t = subprocess.run(
+              ["cargo", "test", "-p", "shamash", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0:
+              print("✗ TESTS FAILED:"); print(t.stdout[-2000:]); sys.exit(1)
+
+          print("""
+          ══════════════════════════════════════════════════════════
+            PLAYBOOK 82 — SHAMASH 𒀭𒌓 COMPLETE
+            Visual tribe detection — 5 dimensions
+            Dynamic simplicial complex
+            RIKSU bonds / TÊRTUM triangles / MARKASU tetrahedra
+            GA outer product crowd risk score
+            Topological event detection
+            Constitutional: sees tribes not people
+          ══════════════════════════════════════════════════════════
+          """)
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p82_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p82_out.stdout_lines }}"
+    - name: "2.2 | Assert"
+      ansible.builtin.assert:
+        that: p82_out.rc == 0
+        success_msg: "✓ SHAMASH 𒀭𒌓 sealed — sees tribes not people"
+        fail_msg:    "✗ SHAMASH build failed"

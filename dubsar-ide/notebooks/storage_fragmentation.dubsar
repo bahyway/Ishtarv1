@@ -1,0 +1,188 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 5,
+  "metadata": {
+    "kernelspec": {
+      "display_name": "DubSar (Rust + Vulkan)",
+      "language": "rust",
+      "name": "dubsar"
+    },
+    "language_info": { "name": "rust" },
+    "dubsar": {
+      "version": "0.1.0",
+      "backend": "software",
+      "particle_count": 100000
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "id": "title",
+      "metadata": {},
+      "source": [
+        "# DubSar IDE — Storage Fragmentation Simulation\n",
+        "\n",
+        "This notebook simulates **storage block fragmentation** using a 7D particle model:\n",
+        "\n",
+        "| Dimension | Meaning |\n",
+        "|-----------|---------||\n",
+        "| pos.x | Block address in address space |\n",
+        "| pos.y | Logical track / sector |\n",
+        "| pos.z | Layer (HDD platter, SSD die) |\n",
+        "| mom.x | Migration velocity (defrag direction) |\n",
+        "| mom.y | I/O access rate |\n",
+        "| mom.z | Wear level rate |\n",
+        "| scalar | **Fragmentation index** (0=contiguous, 1=fragmented) |\n",
+        "\n",
+        "**Tribe A** (green) — Database blocks, should stay contiguous  \n",
+        "**Tribe B** (red) — OS/swap blocks, naturally scattered  \n",
+        "**Free** (yellow) — Unallocated space, chaotic motion"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "id": "init",
+      "metadata": {},
+      "source": ["%%dubsar init-storage 100000"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "markdown",
+      "id": "step-note",
+      "metadata": {},
+      "source": [
+        "## Run the Simulation\n",
+        "Each step advances the simulation by 16ms (60 FPS equivalent).\n",
+        "Tribe particles are attracted to their centroid; free blocks dissipate."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "id": "step-100",
+      "metadata": {},
+      "source": ["%%dubsar step 100"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "code",
+      "id": "render-1",
+      "metadata": {},
+      "source": ["%%dubsar render"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "code",
+      "id": "stats-1",
+      "metadata": {},
+      "source": ["%%dubsar stats"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "markdown",
+      "id": "projection-note",
+      "metadata": {},
+      "source": [
+        "## Change Projection\n",
+        "Switch to **phase-space** view to see position vs momentum vs fragmentation index."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "id": "phase-proj",
+      "metadata": {},
+      "source": ["%%dubsar proj-phase-space"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "code",
+      "id": "render-2",
+      "metadata": {},
+      "source": ["%%dubsar render"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "markdown",
+      "id": "custom-proj",
+      "metadata": {},
+      "source": [
+        "## Custom 7D Projection\n",
+        "You can define any 3×7 linear projection. Below: use momentum magnitude on Z."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "id": "custom-proj-code",
+      "metadata": {},
+      "source": [
+        "%%dubsar proj\n",
+        "{\n",
+        "  \"basis\": [\n",
+        "    [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+        "    [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+        "    [0.0, 0.0, 0.5, 0.0, 0.0, 0.5, 0.0]\n",
+        "  ],\n",
+        "  \"origin\": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+        "  \"scale\": 0.01\n",
+        "}"
+      ],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "code",
+      "id": "long-run",
+      "metadata": {},
+      "source": ["%%dubsar step 500"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "code",
+      "id": "final-render",
+      "metadata": {},
+      "source": ["%%dubsar render"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "code",
+      "id": "final-stats",
+      "metadata": {},
+      "source": ["%%dubsar stats"],
+      "outputs": [],
+      "execution_count": null
+    },
+    {
+      "cell_type": "markdown",
+      "id": "gpu-upgrade",
+      "metadata": {},
+      "source": [
+        "## Phase 2: GPU Path (Fedora 44 bare-metal)\n",
+        "\n",
+        "On bare-metal with GTX 1650 (or better), the GLSL compute shader runs natively:\n",
+        "\n",
+        "```\n",
+        "%%glsl\n",
+        "#version 450\n",
+        "layout(local_size_x = 256) in;\n",
+        "\n",
+        "struct Particle7D { vec3 position; float scalar; vec3 momentum; uint tribe_id; };\n",
+        "layout(set=0, binding=0) buffer P { Particle7D data[]; } particles;\n",
+        "\n",
+        "void main() {\n",
+        "    uint idx = gl_GlobalInvocationID.x;\n",
+        "    // ... physics update on GPU ...\n",
+        "}\n",
+        "```\n",
+        "\n",
+        "Phase 3: Scale to **1 billion particles** with multi-GPU and Barnes-Hut O(N log N)."
+      ]
+    }
+  ]
+}

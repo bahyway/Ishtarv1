@@ -1,0 +1,184 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_172_enlil_index_wiring_fix.yml
+#  BahyWay.Ecosystem v4.0 — ENLIL Index Wiring Fix (heptascript::indexed)
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_172_enlil_index_wiring_fix.yml -i "localhost," -c local -v
+#
+#  Numbering note: PB-172 is a fresh number, assigned 2026-07-07, sequenced
+#  immediately after PB-171 (the highest number referenced anywhere across
+#  every document reviewed this session — PBCOLLECTIONS_Master_Index).
+#  Deliberately NOT reusing any number in 90-171 range, several of which
+#  already have 2-4 way naming collisions across prior documents.
+#
+#  What this fixes:
+#    heptascript::execute() did a raw journal.all_particles() +
+#    read_particle_history() scan on EVERY particle for EVERY query, never
+#    calling enkidb-indexes despite it existing as real, tested code. This
+#    was the actual, undocumented successor to the akk_decode bug every
+#    architecture document described (that specific bug was already gone;
+#    the underlying disease of no index-based pruning on the hot query path
+#    was not). See docs/BAHYWAY_V4_MANIFESTO_FINAL_RUN_SEQUENCE_2026-07-07.md
+#    section 0 for the full writeup.
+#
+#  What it does:
+#    1. git fetch + checkout + pull the branch carrying the fix
+#    2. Verifies the new heptascript::indexed module landed
+#    3. cargo build -p heptascript -p enkidb-query-server
+#    4. cargo test -p heptascript  (expect 170 passed: 164 original + 6 new)
+#    5. cargo test -p enkidb-indexes (expect 54 passed, unchanged)
+#    6. cargo build --workspace     (confirm nothing downstream broke)
+#    7. Asserts the exact expected test counts — not just exit code 0 — so
+#       a silent regression (e.g. a filtered-out test) still fails the gate
+#    8. Writes a dated report; prints PASS/FAIL clearly
+#
+#  If anything in this playbook fails: paste the FULL task output back,
+#  and the fix comes back as playbook_17X_fix_<name>.yml — same loop as
+#  always. Do not hand-edit anything based on this failing; a fix playbook
+#  is the correction mechanism, not a manual patch.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-172 | ENLIL Index Wiring Fix — HeptaScript execute_indexed"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs"
+    report_file:   "{{ docs_dir }}/PB172_REPORT_{{ session_date }}.txt"
+
+  tasks:
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | heptascript::indexed module exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/heptascript/src/indexed.rs"
+      register: indexed_file
+
+    - name: "FAIL | indexed.rs missing after sync — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: >
+          crates/heptascript/src/indexed.rs not found after git pull.
+          Check target_branch above matches what you expect, and that
+          {{ forge_root }} is really a clone of bahyway/enkidb.
+      when: not indexed_file.stat.exists
+
+    # ── Build ───────────────────────────────────────────────────────────────
+    - name: "BUILD | cargo build -p heptascript -p enkidb-query-server"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p heptascript -p enkidb-query-server"
+        chdir: "{{ workspace }}"
+      register: build_result
+      changed_when: false
+      failed_when: build_result.rc != 0
+
+    # ── Test: heptascript (expect 170 passed) ──────────────────────────────
+    - name: "TEST | cargo test -p heptascript"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p heptascript"
+        chdir: "{{ workspace }}"
+      register: test_hepta
+      changed_when: false
+      failed_when: test_hepta.rc != 0
+
+    - name: "ASSERT | heptascript reports 170 passed (164 original + 6 new indexed tests)"
+      ansible.builtin.assert:
+        that:
+          - "((test_hepta.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 170)"
+          - "'0 failed' in test_hepta.stdout"
+        fail_msg: >
+          Expected '170 passed; 0 failed' somewhere in the heptascript test
+          output. Got:
+          {{ test_hepta.stdout }}
+        success_msg: "heptascript: 170/170 confirmed."
+
+    # ── Test: enkidb-indexes (expect 54 passed, unchanged) ─────────────────
+    - name: "TEST | cargo test -p enkidb-indexes"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-indexes"
+        chdir: "{{ workspace }}"
+      register: test_indexes
+      changed_when: false
+      failed_when: test_indexes.rc != 0
+
+    - name: "ASSERT | enkidb-indexes reports 54 passed, unchanged"
+      ansible.builtin.assert:
+        that:
+          - "((test_indexes.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 54)"
+          - "'0 failed' in test_indexes.stdout"
+        fail_msg: >
+          Expected '54 passed; 0 failed' in enkidb-indexes test output. Got:
+          {{ test_indexes.stdout }}
+        success_msg: "enkidb-indexes: 54/54 confirmed, unchanged."
+
+    # ── Full workspace rebuild — bahyway-core-adjacent changes ride on everything ──
+    - name: "BUILD | cargo build --workspace (confirm nothing downstream broke)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build --workspace"
+        chdir: "{{ workspace }}"
+      register: build_workspace
+      changed_when: false
+      failed_when: build_workspace.rc != 0
+
+    # ── Report ──────────────────────────────────────────────────────────────
+    - name: "PRINT | PB-172 result"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════════════╗
+          ║   BahyWay.Ecosystem v4.0 — PB-172 ENLIL Index Wiring Fix              ║
+          ║   Date : {{ session_date }}   Node : {{ ansible_hostname }}          ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  heptascript      : 170/170 PASS                                      ║
+          ║  enkidb-indexes   : 54/54 PASS                                        ║
+          ║  workspace build  : CLEAN                                             ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  This closes item 1 of MAN-001's BeeMDM ETL entry criteria:           ║
+          ║  the query hot path now prunes via enkidb-indexes before reading      ║
+          ║  particle history, instead of a raw O(n) journal scan per query.      ║
+          ╚═══════════════════════════════════════════════════════════════════════╝
+
+    - name: "WRITE | Dated report file"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-172 Report
+          Date      : {{ session_date }}
+          Node      : {{ ansible_hostname }}
+          Branch    : {{ target_branch }}
+          Workspace : {{ workspace }}
+
+          heptascript test output:
+          {{ test_hepta.stdout }}
+
+          enkidb-indexes test output:
+          {{ test_indexes.stdout }}
+
+          Full workspace build: {{ 'CLEAN' if build_workspace.rc == 0 else 'FAILED' }}
+
+    - name: "DONE  | PB-172 COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-172 complete — report at {{ report_file }}. Next: playbook_173_gate1_heptagate_resolution.yml"

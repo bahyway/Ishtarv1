@@ -1,0 +1,405 @@
+# =============================================================================
+# PB-224 — Reusable reconfigure tool for the two CQRS nodes
+# (enkidb-node-write, enkidb-node-read): grow their root filesystem into
+# already-available virtual disk space, add/manage a real disk-backed
+# swap file, and adjust vCPU/memory. BahyWay.Ecosystem v4.0 — 2026-07-21
+#
+# WHY THIS EXISTS: PB-223's real diagnostics found that both nodes'
+# qcow2 disks are ALREADY 20GiB virtual (only ~3GB actually allocated),
+# but their GPT partition 3 (btrfs, root+home+var+boot via subvolumes)
+# only claims ~5.26GB of it -- leaving ~15GB already sitting on the
+# virtual disk, unpartitioned, on both nodes. No LVM anywhere. Their
+# active swap is zram (RAM-backed, compressed) -- not real disk swap, so
+# it can't help with genuine memory pressure the way disk-backed swap
+# can. The Architect asked for one reusable playbook to grow storage,
+# add swap from that storage, and adjust RAM/vCPU any time -- this is it.
+#
+# IMPORTANT -- WHERE TO RUN THIS FROM: same as PB-223, invoke this from a
+# terminal ON THE HOST (enkilab), not from eriduous-vdi -- the RAM/vCPU
+# section needs `virsh`, which only exists on the hypervisor.
+#
+# WHAT THIS PLAYBOOK DOES, in order:
+#   A. (localhost) Compute the real vCPU/memory proposal (real measured
+#      RSS-based, same approach as this session's earlier VM-optimize
+#      work) via cqrs_node_optimize.py --report, saved to a plan file.
+#      If cqrs_new_virtual_disk_size is set, also shows each node's real
+#      current qcow2 virtual/allocated size and host-side free space
+#      (reusing PB-223's own host-diag task file) so the disk-grow
+#      proposal is visible before confirmation too, not just applied
+#      blind.
+#   B. (enkidb_write, enkidb_read) Show each node's real available disk
+#      space (parted free-space report) and current swap file status --
+#      read-only, no changes yet.
+#   C. (localhost) Show both reports together, then pause for explicit
+#      confirmation. Only exact 'y'/'yes' proceeds.
+#   D0. (localhost, gated on confirm, only if cqrs_new_virtual_disk_size
+#      is set) Grow the underlying qcow2 virtual disk itself via `virsh
+#      blockresize` -- live, on the running VM, no downtime (this is the
+#      same host-side-only reason PB-224 must run from enkilab: virsh
+#      isn't on eriduous-vdi). A 20GiB virtual disk (this fleet's current
+#      size) only fits ~100M particles at PB-221's own real measured
+#      ~100 bytes/entity; a genuine 1B run needs ~100GB, so growing the
+#      virtual disk itself -- not just the partition -- is the real
+#      prerequisite for that, and the host has 827GB free to do it with.
+#   D. (enkidb_write, enkidb_read, gated on confirm) Grow partition 3 into
+#      the available space (growpart -- picks up whatever headroom exists
+#      on /dev/vda right now, including any D0 just added, idempotent --
+#      skips if already maxed) + `btrfs filesystem resize max /` (fully
+#      online, no reboot, btrfs's own native resize). Then ensure a real
+#      disk-backed swap file exists (`btrfs filesystem mkswapfile`, the
+#      correct btrfs-native way -- handles the NOCOW requirement a plain
+#      dd/fallocate swapfile on btrfs needs), at a LOWER priority than
+#      zram so zram stays preferred and disk swap is only overflow. Only
+#      CREATES a swapfile if one doesn't already exist -- never resizes
+#      an active one in place (that needs swapoff first, which risks OOM
+#      if that swap is actually in use right now; out of scope for an
+#      automated tool, do that step by hand if ever needed).
+#   E. (localhost, gated on confirm) Apply the vCPU/memory plan from step
+#      A (--config only, persistent, next-restart-only, same safe pattern
+#      as this session's earlier VM-optimize work).
+#
+# NOTE on "1B particles in <1s": PB-221's own findings doc is explicit
+# that literally rendering/transferring a billion individual rows in
+# under a second isn't physically possible over any real network (~50-
+# 100GB of data at 50-100 bytes/row -- no database does that). What
+# PB-221 actually proves at 1B scale is a HOW_MUCH LIMIT-bounded query
+# staying flat/sub-second regardless of how many rows *would* match, plus
+# a point/needle lookup staying flat too -- that's the real, honest claim
+# this disk-grow work is in service of.
+#
+# USAGE (from a terminal on enkilab):
+#   ansible-playbook playbooks/playbook_224_cqrs_node_reconfigure.yml
+#   # Grow memory ceiling explicitly (otherwise memory is only ever sized
+#   # DOWN from real RSS, never up automatically):
+#   ansible-playbook playbooks/playbook_224_cqrs_node_reconfigure.yml \
+#     -e '{"cqrs_grow_mem_to_gib": 6}'
+#   # Change the swap file size (default 4G) or skip swap entirely:
+#   ansible-playbook playbooks/playbook_224_cqrs_node_reconfigure.yml \
+#     -e '{"cqrs_swap_size_gb": 8}'
+#   ansible-playbook playbooks/playbook_224_cqrs_node_reconfigure.yml \
+#     -e '{"cqrs_manage_swap": false}'
+#   # Grow the underlying virtual disk itself (needed for a real 1B run;
+#   # 120G leaves headroom above the ~100GB 1B actually needs). Live,
+#   # no downtime -- partition/filesystem grow into it automatically:
+#   ansible-playbook playbooks/playbook_224_cqrs_node_reconfigure.yml \
+#     -e '{"cqrs_new_virtual_disk_size": "120G"}'
+# =============================================================================
+---
+- name: "PB-224a | Compute the real vCPU/memory proposal (run this from enkilab)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    libvirt_uri: "qemu:///system"
+    target_vms:
+      - enkidb-node-write
+      - enkidb-node-read
+    ram_safety_margin: 1.3
+    host_core_reserve: 1
+    helper_script: "{{ playbook_dir }}/scripts/cqrs_node_optimize.py"
+    cqrs_grow_mem_to_gib: ""   # e.g. 6 -- explicit ask, empty = size down from real RSS only
+    cqrs_new_virtual_disk_size: ""   # e.g. "120G" -- explicit ask, empty = don't touch the qcow2 itself
+
+  tasks:
+    - name: "Confirm virsh is available here -- if this fails, you're not running from enkilab"
+      ansible.builtin.command: virsh --version
+      changed_when: false
+
+    - name: "Show each node's current virtual disk size + host free space (only when a disk grow is requested)"
+      ansible.builtin.include_tasks: tasks/cqrs_node_disk_host_diag.yml
+      loop: "{{ target_vms }}"
+      loop_control:
+        loop_var: cqrs_vm_name
+      when: cqrs_new_virtual_disk_size != ""
+
+    - name: "Determine host logical CPU count (real fact, not assumed)"
+      ansible.builtin.set_fact:
+        host_logical_cpus: "{{ ansible_facts['processor_vcpus'] | default(ansible_facts['processor_cores'] | default(1)) }}"
+
+    - name: "Create a plan file so the report and the apply step use the exact same computation"
+      ansible.builtin.tempfile:
+        state: file
+        suffix: cqrs_reconfigure_plan.json
+      register: cqrs_plan_file
+
+    - name: "Compute the real vCPU/memory proposal"
+      ansible.builtin.command:
+        cmd: >
+          python3 {{ helper_script }}
+          --uri {{ libvirt_uri }}
+          {% for vm in target_vms %}--vm {{ vm }} {% endfor %}
+          --ram-margin {{ ram_safety_margin }}
+          --host-cores {{ host_logical_cpus }}
+          --host-core-reserve {{ host_core_reserve }}
+          {% if cqrs_grow_mem_to_gib != "" %}--grow-mem-to {{ cqrs_grow_mem_to_gib }}{% endif %}
+          --plan-file {{ cqrs_plan_file.path }}
+          --report
+      register: cqrs_ram_report
+      changed_when: false
+
+    - name: "Show the vCPU/memory proposal"
+      ansible.builtin.debug:
+        msg: "{{ cqrs_ram_report.stdout_lines }}"
+
+
+- name: "PB-224b | Real available disk space + current swap status on each node"
+  hosts: enkidb_write, enkidb_read
+  gather_facts: false
+  become: false
+  vars:
+    cqrs_swap_size_gb: 4
+    cqrs_manage_swap: true
+
+  tasks:
+    # -s (script/non-interactive) is required here, not optional: without
+    # it, parted on a GPT disk with trailing unpartitioned space (exactly
+    # what we're checking for) hits its classic interactive prompt --
+    # "Not all of the space available to /dev/vda appears to be used...
+    # Fix/Ignore?" -- and blocks forever waiting for stdin Ansible can
+    # never supply. Hit live: this task hung 5+ minutes with no output.
+    - name: "Real free space left on /dev/vda after the current partitions (machine-readable)"
+      ansible.builtin.command: parted -s -m /dev/vda unit MB print free
+      become: true
+      register: cqrs_parted_free
+      changed_when: false
+
+    - name: "Does a real disk-backed swap file already exist here?"
+      ansible.builtin.stat:
+        path: /swapfile
+      register: cqrs_swapfile_stat
+
+    - name: "== {{ inventory_hostname }} -- available disk space + swap status =="
+      ansible.builtin.debug:
+        msg:
+          - "--- parted /dev/vda unit MB print free ---"
+          - "{{ cqrs_parted_free.stdout_lines }}"
+          - "--- /swapfile ---"
+          - "{{ 'Already exists, size=' + (cqrs_swapfile_stat.stat.size | filesizeformat) if cqrs_swapfile_stat.stat.exists else 'Does not exist yet -- would be created at ' + (cqrs_swap_size_gb | string) + 'G if cqrs_manage_swap is left true' }}"
+
+
+- name: "PB-224c | Confirm before applying anything"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: "Ask for confirmation before growing disks / adding swap / changing RAM-vCPU"
+      ansible.builtin.pause:
+        prompt: "Apply the proposals shown above (disk grow + swap + vCPU/memory)? Only exact matches of 'y' or 'yes' will proceed (anything else cancels) [y/N]"
+      register: cqrs_confirm
+
+
+- name: "PB-224d0 | Grow the underlying qcow2 virtual disk itself (only if cqrs_new_virtual_disk_size is set)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    libvirt_uri: "qemu:///system"
+    target_vms:
+      - enkidb-node-write
+      - enkidb-node-read
+    cqrs_new_virtual_disk_size: ""
+
+  tasks:
+    # Resolve the disk's TARGET device name (e.g. "vda"), not the source
+    # path -- virsh blockresize wants the target, same as `virsh
+    # domblklist`'s first column (cqrs_node_disk_host_diag.yml's own
+    # path-resolution grabs column 2, the source; this needs column 1).
+    - name: "Resolve each VM's disk target device name"
+      ansible.builtin.shell: "virsh -c {{ libvirt_uri }} domblklist {{ item }} | awk 'NR==3{print $1}'"
+      loop: "{{ target_vms }}"
+      register: cqrs_disk_targets
+      changed_when: false
+      when:
+        - cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+        - cqrs_new_virtual_disk_size != ""
+
+    # Live, on the running VM -- no downtime, no shutdown needed. This is
+    # QMP-backed (talks to the running qemu process directly), unlike a
+    # raw `qemu-img resize` which needs exclusive access and would
+    # conflict with the VM's own qemu process already holding the image
+    # open (same lock class of issue PB-223 hit with `qemu-img info`,
+    # fixed there with -U; blockresize is the correct live-VM equivalent,
+    # not a workaround).
+    - name: "Live-resize the virtual disk (virsh blockresize)"
+      ansible.builtin.command: "virsh -c {{ libvirt_uri }} blockresize {{ item.item }} {{ item.stdout }} {{ cqrs_new_virtual_disk_size }}"
+      loop: "{{ cqrs_disk_targets.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+        - cqrs_new_virtual_disk_size != ""
+      changed_when: true
+      register: cqrs_blockresize_result
+
+    - name: "Show blockresize result"
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.stdout }}"
+      loop: "{{ cqrs_blockresize_result.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: cqrs_new_virtual_disk_size != ""
+
+    # virtio-blk normally propagates a live capacity change to the guest
+    # automatically (config-change interrupt), but this brief pause gives
+    # it a moment before PB-224d's growpart step re-checks free space.
+    # If the guest hasn't picked up the new size yet for any reason,
+    # growpart there just reports NOCHANGE (safe, no error) -- simply
+    # re-running this whole playbook a second time picks it up on retry.
+    - name: "Give the guest a moment to notice the new virtio-blk capacity"
+      ansible.builtin.pause:
+        seconds: 5
+      when:
+        - cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+        - cqrs_new_virtual_disk_size != ""
+
+
+- name: "PB-224d | Grow root filesystem into available space + ensure real swap file (only on explicit y/yes)"
+  hosts: enkidb_write, enkidb_read
+  gather_facts: false
+  become: true
+  vars:
+    cqrs_swap_size_gb: 4
+    cqrs_manage_swap: true
+    cqrs_swap_priority: 10   # lower than zram's default 100, so zram stays preferred
+
+  tasks:
+    # -s required -- see PB-224b's identical task for why (hangs forever
+    # on the interactive GPT "Fix/Ignore?" prompt without it).
+    - name: "Real free space left on /dev/vda (re-checked at apply time, not reused from the report step)"
+      ansible.builtin.command: parted -s -m /dev/vda unit MB print free
+      register: cqrs_parted_free_apply
+      changed_when: false
+      when: hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+
+    # Real finding, live: even after sgdisk -e removed the GPT-backup
+    # warning, parted's OWN "Partition /dev/vda3 is being used. Are you
+    # sure?" check still hard-refused (rc=1, same error with or without
+    # piping "yes" through ---pretend-input-tty -- that flag isn't
+    # answering this particular prompt on this parted version). This
+    # looks like a non-scriptable safety refusal, not something
+    # answerable via stdin at all -- fighting it further isn't the right
+    # move. growpart (cloud-utils-growpart) is the purpose-built tool for
+    # exactly this "grow the last partition on a live, mounted root disk"
+    # case: it resizes the partition table directly via sfdisk instead of
+    # going through parted's interactive-style checks, so this whole
+    # class of prompt doesn't come up. It also handles GPT-backup
+    # relocation internally, so the separate sgdisk step is no longer
+    # needed either.
+    - name: "Ensure cloud-utils-growpart is installed (the correct tool for growing a live, mounted root partition)"
+      ansible.builtin.dnf:
+        name: cloud-utils-growpart
+        state: present
+      when: hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+
+    # growpart's own exit convention: rc=0 + "CHANGED: ..." on a real
+    # resize; rc=1 + "NOCHANGE: ..." when there's nothing to grow into
+    # (not a real error -- treated as a clean no-op here, on top of the
+    # free-space gate below which should normally prevent this case).
+    - name: "Grow partition 3 to consume all remaining space (idempotent -- skipped if no meaningful free space remains)"
+      ansible.builtin.command: growpart /dev/vda 3
+      when:
+        - hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+        - "'free;' in cqrs_parted_free_apply.stdout"
+      register: cqrs_resizepart
+      changed_when: "'CHANGED' in cqrs_resizepart.stdout"
+      failed_when: cqrs_resizepart.rc != 0 and 'NOCHANGE' not in cqrs_resizepart.stdout
+
+    - name: "Tell the kernel to re-read the (now larger) partition table"
+      ansible.builtin.command: partprobe /dev/vda
+      when: cqrs_resizepart.changed | default(false)
+      changed_when: false
+      failed_when: false
+
+    - name: "Grow the btrfs filesystem to fill the enlarged partition (fully online, no reboot)"
+      ansible.builtin.command: btrfs filesystem resize max /
+      when: cqrs_resizepart.changed | default(false)
+      changed_when: true
+
+    - name: "Show the new root filesystem size"
+      ansible.builtin.command: df -Th /
+      when: hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+      register: cqrs_df_after
+      changed_when: false
+
+    - name: "Show new size"
+      ansible.builtin.debug:
+        msg: "{{ cqrs_df_after.stdout_lines }}"
+      when: hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+
+    - name: "Does a real disk-backed swap file already exist here? (re-checked at apply time)"
+      ansible.builtin.stat:
+        path: /swapfile
+      register: cqrs_swapfile_stat_apply
+      when: hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+
+    # btrfs-native swapfile creation -- handles the NOCOW attribute and
+    # preallocation correctly, which a plain fallocate/dd swapfile on
+    # btrfs would get wrong (btrfs swapfiles MUST be NOCOW, set BEFORE
+    # any data is written).
+    - name: "Create the real disk-backed swap file (btrfs-native, only if one doesn't already exist)"
+      ansible.builtin.command: "btrfs filesystem mkswapfile --size {{ cqrs_swap_size_gb }}G /swapfile"
+      when:
+        - hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+        - cqrs_manage_swap | bool
+        - not cqrs_swapfile_stat_apply.stat.exists
+      changed_when: true
+      register: cqrs_swapfile_created
+
+    - name: "Activate the new swap file"
+      ansible.builtin.command: "swapon --priority {{ cqrs_swap_priority }} /swapfile"
+      when: cqrs_swapfile_created.changed | default(false)
+      changed_when: true
+
+    - name: "Persist the swap file in /etc/fstab so it survives a reboot"
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "/swapfile none swap pri={{ cqrs_swap_priority }} 0 0"
+        state: present
+      when: cqrs_swapfile_created.changed | default(false)
+
+    - name: "Show final swap status"
+      ansible.builtin.command: swapon --show
+      when: hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+      register: cqrs_swap_final
+      changed_when: false
+
+    - name: "Show swap status"
+      ansible.builtin.debug:
+        msg: "{{ cqrs_swap_final.stdout_lines }}"
+      when: hostvars['localhost'].cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+
+
+- name: "PB-224e | Apply the vCPU/memory plan (only on explicit y/yes)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    libvirt_uri: "qemu:///system"
+    helper_script: "{{ playbook_dir }}/scripts/cqrs_node_optimize.py"
+
+  tasks:
+    - name: "Apply the vCPU/memory plan computed in PB-224a"
+      ansible.builtin.command:
+        cmd: >
+          python3 {{ helper_script }}
+          --uri {{ libvirt_uri }}
+          --plan-file {{ cqrs_plan_file.path }}
+          --apply
+      when: cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+      register: cqrs_apply_result
+
+    - name: "Show what was applied"
+      ansible.builtin.debug:
+        var: cqrs_apply_result.stdout_lines
+      when: cqrs_confirm.user_input | default('') | lower in ['y', 'yes']
+
+    - name: "Confirm nothing was applied"
+      ansible.builtin.debug:
+        msg: "No changes applied -- confirmation was not 'y'/'yes'. Re-run any time; nothing was touched."
+      when: cqrs_confirm.user_input | default('') | lower not in ['y', 'yes']
+
+    - name: "Clean up the plan file"
+      ansible.builtin.file:
+        path: "{{ cqrs_plan_file.path }}"
+        state: absent

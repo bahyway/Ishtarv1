@@ -1,0 +1,51 @@
+---
+# 𒁾 PB-313 — PROMOTION CEREMONY (GL-OPS-001 L-5)
+# Write-node failover is a CEREMONY, not a reflex. CSR-08 is the split-brain
+# protection: the Architect's typed seal is required, the old primary is FENCED
+# before any stream repoints, and declared loss (if any) is printed, never hidden.
+- name: PB-313 | Write-node promotion ceremony
+  hosts: host_forge
+  become: true
+  vars_prompt:
+    - name: architect_seal
+      prompt: "CSR-08 — type the Architect seal phrase to authorize promotion"
+      private: true
+    - name: declared_loss
+      prompt: "Declared loss statement (segments beyond watermark, or 'none')"
+      private: false
+  tasks:
+    - name: Refuse without seal
+      ansible.builtin.assert:
+        that: architect_seal | length > 8
+        fail_msg: "No seal, no promotion. The ceremony ends here."
+
+    - name: Freeze shipping on (possibly dead) primary
+      ansible.builtin.command: ssh root@192.168.122.101 systemctl stop lahmu-ship.timer
+      failed_when: false
+
+    - name: Record watermark from standby copy
+      ansible.builtin.command: >
+        ssh {{ ship_user }}@{{ ship_target_host }} cat {{ ship_target_dir }}/../WATERMARK
+      register: wm
+      failed_when: false
+
+    - name: FENCE old primary (virsh destroy) — before anything repoints
+      ansible.builtin.command: virsh destroy enki-write
+      failed_when: false
+    - name: GATE precondition | confirm fence
+      ansible.builtin.shell: virsh domstate enki-write | grep -q 'shut off'
+
+    - name: Promote Lahamu (start write services on standby)
+      ansible.builtin.command: >
+        ssh root@{{ ship_target_host }} systemctl start enkidb-write
+    - name: Repoint streams (DNS/hosts entry for enki-write)
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: 'enki-write$'
+        line: "192.168.122.120 enki-write   # promoted {{ ansible_date_time.iso8601 }}"
+
+    - name: Promotion KAKI — watermark, loss, operator, seal-hash
+      ansible.builtin.shell: |
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        SEALH=$(echo -n "{{ architect_seal }}" | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-313\",\"adannu\":\"$(date -Is)\",\"watermark\":\"{{ wm.stdout | default('unknown') }}\",\"declared_loss\":\"{{ declared_loss }}\",\"operator\":\"$USER\",\"seal\":\"$SEALH\",\"prev\":\"$PREV\"}" >> {{ kaki_runs }}

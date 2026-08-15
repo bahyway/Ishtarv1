@@ -1,0 +1,223 @@
+---
+# ============================================================
+# Playbook 09 — Sovereign VM Restart Sequence v2
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+#
+# Fix: uses sudo virsh for network operations
+# Run on enkilab HOST:
+#   ansible-playbook ~/Downloads/09_sovereign_vm_restart.yml -v
+# ============================================================
+
+- name: "𒁾 Sovereign VM Restart — enkilab HOST"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    vm_eriduous: "eriduous-vdi"
+    vm_write:    "enkidb-node-write"
+    vm_read:     "enkidb-node-read"
+    vm_dubsar:   "dubsar-workstation"
+    ip_eriduous: "192.168.122.214"
+    ip_write:    "192.168.122.101"
+    ip_read:     "192.168.122.107"
+    ip_dubsar:   "192.168.122.121"
+    ssh_user:    "bahyway"
+
+  tasks:
+
+    # ── Step 1: Restart libvirtd ───────────────────────────────────────────
+    - name: "Restart libvirtd"
+      ansible.builtin.shell:
+        cmd: sudo systemctl restart libvirtd
+      changed_when: true
+
+    - name: "Wait 5s for libvirtd to settle"
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: "Verify libvirtd active"
+      ansible.builtin.shell:
+        cmd: sudo systemctl is-active libvirtd
+      register: libvirtd_status
+      changed_when: false
+      failed_when: "'active' not in libvirtd_status.stdout"
+
+    - name: "✓ libvirtd: {{ libvirtd_status.stdout }}"
+      ansible.builtin.debug:
+        msg: "libvirtd is {{ libvirtd_status.stdout }}"
+
+    # ── Step 2: Start default network using sudo virsh ────────────────────
+    - name: "Start default KVM network (sudo virsh)"
+      ansible.builtin.shell:
+        cmd: sudo virsh net-start default
+      register: net_start
+      changed_when: true
+      failed_when:
+        - net_start.rc != 0
+        - "'already active' not in net_start.stderr"
+
+    - name: "Verify network active"
+      ansible.builtin.shell:
+        cmd: sudo virsh net-list --all
+      register: net_list
+      changed_when: false
+
+    - name: "✓ Network list"
+      ansible.builtin.debug:
+        msg: "{{ net_list.stdout_lines }}"
+
+    - name: "Assert default network active"
+      ansible.builtin.assert:
+        that: "'active' in net_list.stdout"
+        success_msg: "✓ default network active"
+        fail_msg:    "default network NOT active"
+
+    # ── Step 3: Start eriduous-vdi ────────────────────────────────────────
+    - name: "Start eriduous-vdi"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_eriduous }}
+      register: start_eriduous
+      changed_when: true
+      failed_when:
+        - start_eriduous.rc != 0
+        - "'already running' not in start_eriduous.stderr"
+
+    - name: "Wait 60s for eriduous-vdi to boot"
+      ansible.builtin.pause:
+        seconds: 60
+
+    - name: "Wait for SSH on eriduous-vdi"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_eriduous }}"
+        port:    22
+        timeout: 120
+        state:   started
+
+    - name: "✓ eriduous-vdi SSH ready ({{ ip_eriduous }})"
+      ansible.builtin.debug:
+        msg: "eriduous-vdi is up"
+
+    # ── Step 4: Start enkidb-node-write ───────────────────────────────────
+    - name: "Start enkidb-node-write"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_write }}
+      register: start_write
+      changed_when: true
+      failed_when:
+        - start_write.rc != 0
+        - "'already running' not in start_write.stderr"
+
+    - name: "Wait 30s for enkidb-node-write"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on enkidb-node-write"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_write }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    - name: "Check journal.bin on write node"
+      ansible.builtin.shell:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no {{ ssh_user }}@{{ ip_write }}
+          "ls -lh /home/bahyway/enkidb/data/tribe-0001/journal.bin
+           2>/dev/null || echo NOT_FOUND"
+      register: journal_write
+      changed_when: false
+
+    - name: "✓ Write node journal.bin"
+      ansible.builtin.debug:
+        msg: "{{ journal_write.stdout }}"
+
+    # ── Step 5: Start enkidb-node-read ────────────────────────────────────
+    - name: "Start enkidb-node-read"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_read }}
+      register: start_read
+      changed_when: true
+      failed_when:
+        - start_read.rc != 0
+        - "'already running' not in start_read.stderr"
+
+    - name: "Wait 30s for enkidb-node-read"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on enkidb-node-read"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_read }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    - name: "Check journal.bin on read node"
+      ansible.builtin.shell:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no {{ ssh_user }}@{{ ip_read }}
+          "ls -lh /home/bahyway/enkidb/data/tribe-0001/journal.bin
+           2>/dev/null || echo NOT_FOUND"
+      register: journal_read
+      changed_when: false
+
+    - name: "✓ Read node journal.bin"
+      ansible.builtin.debug:
+        msg: "{{ journal_read.stdout }}"
+
+    # ── Step 6: Start dubsar-workstation ──────────────────────────────────
+    - name: "Start dubsar-workstation"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_dubsar }}
+      register: start_dubsar
+      changed_when: true
+      failed_when:
+        - start_dubsar.rc != 0
+        - "'already running' not in start_dubsar.stderr"
+
+    - name: "Wait 30s for dubsar-workstation"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on dubsar-workstation"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_dubsar }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    # ── Step 7: Final status ───────────────────────────────────────────────
+    - name: "Final VM list"
+      ansible.builtin.shell:
+        cmd: sudo virsh list --all
+      register: final_list
+      changed_when: false
+
+    - name: "✓ All VMs"
+      ansible.builtin.debug:
+        msg: "{{ final_list.stdout_lines }}"
+
+    # ── Step 8: Open eriduous-vdi console ─────────────────────────────────
+    - name: "Launch virt-viewer for eriduous-vdi"
+      ansible.builtin.shell:
+        cmd: "virt-viewer {{ vm_eriduous }} &"
+      changed_when: true
+      failed_when: false
+
+    # ── Step 9: Done ──────────────────────────────────────────────────────
+    - name: "𒁾 All systems restored"
+      ansible.builtin.debug:
+        msg:
+          - "=============================================="
+          - "𒁾 BahyWay.Ecosystem v4.0 — Systems Online"
+          - "----------------------------------------------"
+          - "eriduous-vdi       {{ ip_eriduous }}  ✓"
+          - "enkidb-node-write  {{ ip_write }}   ✓"
+          - "enkidb-node-read   {{ ip_read }}   ✓"
+          - "dubsar-workstation {{ ip_dubsar }}  ✓"
+          - "----------------------------------------------"
+          - "In eriduous-vdi desktop terminal run:"
+          - "  cd ~/Forge/bahyway_v4"
+          - "  cargo run -p dubsar-visualizer"
+          - "=============================================="

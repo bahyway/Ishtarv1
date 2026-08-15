@@ -1,0 +1,66 @@
+# =============================================================================
+# PB-199 — Mount the repo into enkiddb-write, so INGEST_DIR:<path> (PB-198)
+# has something to scan against a deployed Podman node
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: the Architect asked for the real plan to run PB-192 on their own
+# Eriduos-vdi, then import their real documents into the deployed
+# enkiddb-write container's Journal. PB-198 built INGEST_DIR:<path> (and
+# enkiddb-cli) for exactly that -- but PB-192's enkiddb-write container,
+# as originally written, only mounts its own /data volume. It has no view
+# of the docs/ tree at all, so INGEST_DIR would have nothing to scan
+# against the deployed node. Only enkimdb-write got a /source bind mount
+# in PB-192, because at the time it was written EnkiDDB had no directory-
+# ingest command yet to need one. Asked the Architect directly which of
+# three ways to close this gap; answer: mount /source into enkiddb-write
+# too, matching enkimdb-write's existing pattern exactly (Recommended).
+#
+# WHAT CHANGED:
+#   1. playbooks/playbook_192_enkiddb_enkimdb_podman_deploy_executable.yml
+#      -- task "3.2 | Run enkiddb-write" now also passes
+#      `-v {{ enkidb_repo_root }}:/source:ro,Z` (identical mount
+#      enkimdb-write already uses) and
+#      `-e ENKIDDB_TEAM_ALLOWLIST=/source/config/enkiddb_team_allowlist.txt`
+#      so the authorship gate reads a real, editable file instead of
+#      silently falling back to the built-in seed. Idempotency guard
+#      (`podman container exists`) is unchanged -- an ALREADY-RUNNING
+#      enkiddb-write container from before this change will need a
+#      one-time `podman rm -f enkiddb-write` before re-running the
+#      playbook, or the new mount won't apply (documented in the
+#      Architect-facing plan, not silently assumed here).
+#   2. config/enkiddb_team_allowlist.txt -- NEW. Real file, not a
+#      placeholder: seeded with the same real git identities
+#      `authorship.rs::TeamAllowlist::seed()` already carries
+#      (bfadam@bahyway.com, bfadam@bahyway.example, the bahyway GitHub
+#      account, bahaa.fadam@gmail.com), editable without a rebuild since
+#      it's bind-mounted, not baked into the image.
+#   3. docs/EnkiDDB_PODMAN_DEPLOYMENT.md -- step 2's manual `podman run`
+#      example updated to match; step 5 documents INGEST_DIR:/source/docs
+#      as the real bulk-load path against a deployed node.
+#
+# VERIFIED: `ansible-playbook playbook_192... --syntax-check` passes.
+# The INGEST_DIR command itself (its categorize+authorize+journal+
+# materialize behavior) was already verified for real in PB-198, over
+# both enkiddb-cli and a live enkiddb-write-server process outside a
+# container -- this playbook only changes how the ALREADY-VERIFIED
+# command's target directory becomes visible inside the Podman
+# container. Running the updated playbook for real, on the Architect's
+# own eriduous-vdi, and confirming `podman inspect enkiddb-write` shows
+# the /source mount, is the Architect's own next action.
+# =============================================================================
+---
+- name: "PB-199 | Record — enkiddb-write /source mount + team allowlist file landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-199.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. Changed: playbook_192 (task 3.2, task 6.1),
+          docs/EnkiDDB_PODMAN_DEPLOYMENT.md. New:
+          config/enkiddb_team_allowlist.txt. If enkiddb-write is already
+          running from before this change, `podman rm -f enkiddb-write`
+          before re-running playbook_192 so the new /source mount takes
+          effect.

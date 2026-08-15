@@ -1,0 +1,110 @@
+# =============================================================================
+# PB-322 — OntoGraph crate scaffold, verified (GL-ONT-001)
+# BahyWay.Ecosystem v4.0 — Nasaru instrument · Ontology + Topology -> FCA
+# hypergraph -> Unified Pattern "Nebuchadnezzar" — 2026-08-15
+#
+# WHAT ONTOGRAPH IS: reads scanned particles through EnkiDDB's ontological
+# vocabulary (W5H2/Sowa, GL-DDB-001) and LamassuEngine's topological
+# classes (Betti/state trichotomy), builds an FCA formal context, computes
+# the concept lattice via NextClosure, and mints the lattice + its
+# extent-hyperedges as a template particle -- the Unified Pattern,
+# sovereign-named Nebuchadnezzar (NL-001 SS6b Landmark Pattern Clause: an
+# epoch-marking pattern may share a king's name with the era; the name is
+# not spent from the roster). See docs/GL-ONT-001_OntoGraph_Unified_
+# Pattern_Law.md for the full three-layer attribute law and validation
+# ladder this crate implements.
+#
+# CHANGED during landing (2026-08-15), same reasoning already applied
+# throughout this integration -- see docs/phase2-incoming/RENUMBERING_MAP.md
+# and playbook_301's own header for precedent:
+#   - Original draft targeted `hosts: dubsar_workstation` and assumed the
+#     repo lives at /home/bahaa/BahyWay.Ecosystem/v4.0 -- neither is real;
+#     VDI is retired (ansible/inventory.ini) and the actual repo resolves
+#     via playbook_dir, wherever it's actually cloned.
+#   - Original draft scaffolded the crate under tools/nasaru/ontograph and
+#     a separate tablets/ directory -- neither convention exists anywhere
+#     else in this 188-crate workspace (every crate lives flat under
+#     crates/<name>) or in this repo's docs (every sealed law lives in
+#     docs/, not a Cargo-workspace-internal tablets/ folder). Landed
+#     instead at workspace/bahyway_v4/crates/ontograph (added to the
+#     workspace [workspace] members list) and docs/GL-ONT-001_OntoGraph_
+#     Unified_Pattern_Law.md, matching every sibling crate and law doc.
+#   - The crate's Cargo.toml now uses version.workspace/edition.workspace/
+#     authors.workspace/license.workspace = true, matching every other
+#     crate, instead of hardcoded values and a guessed license string.
+#   - One real compile bug found and fixed: `Layer` (crates/ontograph/
+#     src/eav.rs) needed #[derive(Hash)] for Attribute's own Hash derive
+#     to compile -- `cargo test -p ontograph` failed before this fix.
+#   - Per the same reasoning already applied to playbook_301 and the
+#     PB-533-548 block: since the crate now exists as real, committed,
+#     compiling, tested source under version control, this playbook does
+#     NOT re-materialize it from embedded YAML text on every run (that
+#     would silently overwrite any real hand-edit made directly to the
+#     crate with stale embedded copies). It verifies instead.
+#
+# Running this playbook = CSR-08 confirmation that OntoGraph is landed
+# and its law tests pass -- not a rubber-stamped deploy.
+# =============================================================================
+---
+- name: "PB-322 | Verify — OntoGraph crate (GL-ONT-001) landed and passing"
+  hosts: uruk
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    ws: "{{ repo_root }}/workspace/bahyway_v4"
+    crate_dir: "{{ ws }}/crates/ontograph"
+
+  tasks:
+
+    - name: "VERIFY | crate files present"
+      ansible.builtin.stat:
+        path: "{{ crate_dir }}/{{ item }}"
+      register: file_check
+      loop:
+        - Cargo.toml
+        - src/lib.rs
+        - src/kaki.rs
+        - src/eav.rs
+        - src/rites/mod.rs
+        - src/rites/reading.rs
+        - src/rites/closure.rs
+        - src/rites/minting.rs
+        - tests/law_tests.rs
+      loop_control: { label: "{{ item }}" }
+
+    - name: "FAIL | a crate file is missing"
+      ansible.builtin.fail:
+        msg: "{{ item.item }} not found at {{ crate_dir }} -- crate incomplete."
+      loop: "{{ file_check.results }}"
+      loop_control: { label: "{{ item.item }}" }
+      when: not item.stat.exists
+
+    - name: "VERIFY | crate is a real workspace member"
+      ansible.builtin.command: grep -q '"crates/ontograph"' {{ ws }}/Cargo.toml
+      register: member_check
+      changed_when: false
+      failed_when: member_check.rc != 0
+
+    - name: "VERIFY | cargo test -p ontograph passes"
+      ansible.builtin.command: cargo test -p ontograph
+      args:
+        chdir: "{{ ws }}"
+      register: test_run
+      changed_when: false
+
+    - name: "FAIL | law tests did not pass"
+      ansible.builtin.fail:
+        msg: "cargo test -p ontograph failed (rc={{ test_run.rc }}): {{ test_run.stdout }}"
+      when: test_run.rc != 0
+
+    - name: "DONE | PB-322 complete"
+      ansible.builtin.debug:
+        msg: >-
+          OntoGraph verified: {{ crate_dir }}, a real member of the
+          bahyway_v4 workspace, cargo test -p ontograph passing (4 law
+          tests: KAKI CRC verify+tamper-reject, Mandatory-write-is-a-
+          law-breach, closed-lattice-with-stable-spine, Nebuchadnezzar
+          writes-Optional-only-and-proposes-universals). GL-ONT-001 is
+          committed at docs/GL-ONT-001_OntoGraph_Unified_Pattern_Law.md.
+          PB-323 (LamassuEngine bridge) and PB-324 (KISPU mint + NĀRU
+          witness) remain reserved, not yet scaffolded.

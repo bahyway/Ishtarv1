@@ -1,0 +1,124 @@
+---
+# ============================================================
+# Playbook 20 — Fix pipeline buttons + colour overhaul
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+#
+# Fixes:
+#   1. Remove orphaned }); on line 208 of bahyway_main.rs
+#   2. Colour overhaul — dark grey base, cool tones only
+#      Hot colours reserved for alerts/threats/priority
+#
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/20_fix_pipeline_buttons.yml -v
+# ============================================================
+
+- name: "𒁾 Fix pipeline buttons + colour overhaul"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:   "/home/bahyway/Forge/bahyway_v4"
+    bw_main: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/bahyway_main.rs"
+
+  tasks:
+
+    - name: "Backup bahyway_main.rs"
+      ansible.builtin.copy:
+        src:        "{{ bw_main }}"
+        dest:       "{{ bw_main }}.bak20"
+        remote_src: true
+        mode:       "0644"
+
+    - name: "Fix orphaned }); + colour overhaul via Python"
+      ansible.builtin.shell:
+        cmd: |
+          python3 << 'PYEOF'
+          path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/bahyway_main.rs'
+          with open(path, 'r') as f:
+              lines = f.readlines()
+
+          # ── Fix 1: Remove orphaned }); after Scan Incoming block ─────────────
+          new_lines = []
+          i = 0
+          while i < len(lines):
+              line = lines[i]
+              if 'if pipeline_btn(ui, "Scan Incoming"' in line and '}) {' in line:
+                  new_lines.append(line)
+                  i += 1
+                  if i < len(lines) and 'Command::new' in lines[i]:
+                      new_lines.append(
+                          '            let _ = std::process::Command::new("echo")'
+                          '.arg("musaru_scan_all").spawn();\n')
+                      i += 1
+                  if i < len(lines) and lines[i].strip() in ('});', '}');'):
+                      new_lines.append('        }\n')
+                      i += 1
+                  continue
+              new_lines.append(line)
+              i += 1
+
+          src = ''.join(new_lines)
+
+          # ── Fix 2: Colour overhaul — dark grey + cool tones ─────────────────
+          colour_map = [
+              ('Color32::from_rgb(6, 8, 18)',    'Color32::from_rgb(18, 20, 24)'),
+              ('Color32::from_rgb(10, 12, 28)',  'Color32::from_rgb(22, 25, 30)'),
+              ('Color32::from_rgb(4, 6, 14)',    'Color32::from_rgb(14, 16, 20)'),
+              ('Color32::from_rgb(0, 200, 220)', 'Color32::from_rgb(60, 180, 200)'),
+              ('Color32::from_rgb(0, 220, 120)', 'Color32::from_rgb(60, 160, 120)'),
+              ('Color32::from_rgb(220, 40, 60)', 'Color32::from_rgb(180, 50, 60)'),
+              ('Color32::from_rgb(220, 140, 20)','Color32::from_rgb(180, 120, 30)'),
+              ('Color32::from_rgb(255, 215, 0)', 'Color32::from_rgb(220, 180, 60)'),
+              ('Color32::from_rgb(120, 120, 150)','Color32::from_rgb(100, 108, 120)'),
+              ('Color32::WHITE',                  'Color32::from_rgb(200, 205, 215)'),
+              ('Color32::from_rgb(3, 4, 12)',     'Color32::from_rgb(14, 16, 22)'),
+              ('Color32::from_rgb(12, 2, 4)',     'Color32::from_rgb(20, 18, 22)'),
+          ]
+          for old, new in colour_map:
+              src = src.replace(old, new)
+
+          with open(path, 'w') as f:
+              f.write(src)
+
+          # Verify
+          with open(path, 'r') as f:
+              verify = f.readlines()
+          print("=== Lines 204-212 after fix ===")
+          for i, line in enumerate(verify[203:213], start=204):
+              print(f"{i}: {line.rstrip()}")
+          print("Colours OK:", 'from_rgb(18, 20, 24)' in src)
+          print("No orphan }):", '});' not in ''.join(verify[205:210]))
+          PYEOF
+      register: py_out
+      changed_when: true
+
+    - name: "Show fix output"
+      ansible.builtin.debug:
+        msg: "{{ py_out.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 4 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-4:] }}"
+
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "𒁾 Fix complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Orphaned }); removed"
+          - "✓ Colour overhaul: dark grey + cool tones"
+          - "✓ Hot colours reserved for alerts only"
+          - "✓ Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "Run: cargo run -p dubsar-visualizer"

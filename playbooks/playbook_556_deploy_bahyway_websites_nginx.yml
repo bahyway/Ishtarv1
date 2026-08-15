@@ -1,0 +1,221 @@
+# =============================================================================
+# PB-556 — Deploy the three BahyWay.Ecosystem websites (bahyway.com,
+# beemdm.com, heptascript.com) self-hosted on uruk via nginx + Let's
+# Encrypt. BahyWay.Ecosystem v4.0 — 2026-08-15
+#
+# WHY SELF-HOSTED, NOT GITHUB PAGES: GitHub Pages serves one custom
+# domain per repository; this repo holds all three site sources as
+# subdirectories of one monorepo (website/bahyway.com, website/beemdm.com,
+# website/heptascript.com), which doesn't map cleanly onto that
+# constraint without either three separate mirror repos (reintroduces the
+# "second unsynced copy" problem this repo's own docs warn against
+# elsewhere) or a third-party host. Self-hosting on uruk -- the box
+# already running everything else in this ecosystem -- is consistent with
+# every other "no external dependency, no third-party service" decision
+# already made here, and it's already up 24/7.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Installs nginx + certbot (dnf) if not already present.
+#   2. Writes one nginx server block per site (HTTP first), each serving
+#      directly from this repo's website/<site>/ directory -- no copy
+#      step, no second source of truth, same reasoning PB-263 already
+#      used for shakkanakku.toml living at the repo root rather than
+#      being synced elsewhere.
+#   3. Opens 80/tcp and 443/tcp in firewalld if firewalld is active
+#      (conditional, matching playbook_212's own pattern -- a no-op on a
+#      host that doesn't use it).
+#   4. Requests a Let's Encrypt certificate per domain via
+#      `certbot --nginx`, which upgrades each server block to TLS
+#      in place. This step is SKIPPED by default (`-e request_tls=true`
+#      to enable) because it requires two things this playbook cannot
+#      verify or arrange for you -- see PREREQUISITES below -- and a
+#      failed ACME HTTP-01 challenge is noisy and rate-limited by Let's
+#      Encrypt if retried carelessly.
+#   5. Verifies each site actually answers (curl against localhost with
+#      the right Host header) before declaring success -- never reports
+#      "deployed" without checking, per this repo's own PB-284 precedent.
+#
+# PREREQUISITES ONLY THE ARCHITECT CAN ARRANGE (this playbook checks for
+# but cannot create):
+#   - DNS: an A (and/or AAAA) record at your registrar for each of
+#     bahyway.com, www.bahyway.com, beemdm.com, www.beemdm.com,
+#     heptascript.com, www.heptascript.com, pointing at uruk's public IP.
+#   - If uruk sits behind NAT (a home router), port-forward 80 and 443
+#     to it, or Let's Encrypt's HTTP-01 challenge cannot reach uruk from
+#     the internet and certbot will fail (loudly, not silently).
+#   - This playbook runs HTTP-only (`request_tls=false`, the default)
+#     safely with none of the above in place -- useful for a local/LAN
+#     smoke test before DNS is live. TLS issuance is the step that
+#     actually requires the internet-facing prerequisites.
+#
+# CONTENT ISSUE FOUND AND FIXED SEPARATELY (2026-08-15, same day this
+# playbook was written): all three sites loaded Google Fonts from
+# fonts.googleapis.com -- an external CDN dependency contradicting the
+# "offline-sovereign, no CDN, no webfonts" rule stated everywhere else in
+# this ecosystem (e.g. SHALA-DESIGN-CHARTER.md Sec. 4). Removed the
+# <link> tags from all three index.html files; each site's own style.css
+# already declared Georgia/system-ui/Consolas fallbacks for its
+# --font-display/--font-body/--font-mono variables, so this was a clean
+# removal, not a restructure. Not part of this playbook's own tasks --
+# it's a content fix, this is a deploy playbook -- but no longer an open
+# item when you run this.
+#
+# Running this playbook = CSR-08 confirmation. Review -> --check -> live.
+# =============================================================================
+---
+- name: "PB-556 | Deploy bahyway.com / beemdm.com / heptascript.com on uruk"
+  hosts: uruk
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    request_tls: false
+    admin_email: "webmaster@bahyway.com"
+    sites:
+      - domain: bahyway.com
+        root: "{{ repo_root }}/website/bahyway.com"
+      - domain: beemdm.com
+        root: "{{ repo_root }}/website/beemdm.com"
+      - domain: heptascript.com
+        root: "{{ repo_root }}/website/heptascript.com"
+
+  tasks:
+
+    - name: "0.1 | Confirm each site's index.html actually exists"
+      ansible.builtin.stat:
+        path: "{{ item.root }}/index.html"
+      register: site_check
+      loop: "{{ sites }}"
+      loop_control: { label: "{{ item.domain }}" }
+
+    - name: "FAIL | a site's index.html is missing"
+      ansible.builtin.fail:
+        msg: "{{ item.item.domain }}: no index.html at {{ item.item.root }} -- nothing to deploy."
+      loop: "{{ site_check.results }}"
+      loop_control: { label: "{{ item.item.domain }}" }
+      when: not item.stat.exists
+
+    - name: "1.1 | Install nginx"
+      ansible.builtin.dnf:
+        name: nginx
+        state: present
+      become: true
+
+    - name: "1.2 | Install certbot + the nginx plugin (only needed if request_tls)"
+      ansible.builtin.dnf:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+      become: true
+      when: request_tls
+
+    - name: "2.1 | Write one HTTP server block per site"
+      ansible.builtin.copy:
+        dest: "/etc/nginx/conf.d/{{ item.domain }}.conf"
+        mode: "0644"
+        content: |
+          server {
+              listen 80;
+              listen [::]:80;
+              server_name {{ item.domain }} www.{{ item.domain }};
+
+              root {{ item.root }};
+              index index.html;
+
+              location / {
+                  try_files $uri $uri/ =404;
+              }
+
+              # Let's Encrypt HTTP-01 challenge path -- left open even
+              # before request_tls=true is used, so a later certbot run
+              # doesn't need this file rewritten first.
+              location /.well-known/acme-challenge/ {
+                  root {{ item.root }};
+              }
+          }
+      become: true
+      loop: "{{ sites }}"
+      loop_control: { label: "{{ item.domain }}" }
+      register: nginx_confs
+
+    - name: "2.2 | Validate the nginx config before reloading anything"
+      ansible.builtin.command: nginx -t
+      become: true
+      register: nginx_test
+      changed_when: false
+
+    - name: "FAIL | nginx config is invalid"
+      ansible.builtin.fail:
+        msg: "nginx -t failed: {{ nginx_test.stderr }}"
+      when: nginx_test.rc != 0
+
+    - name: "2.3 | Enable + (re)start nginx"
+      ansible.builtin.systemd:
+        name: nginx
+        enabled: true
+        state: "{{ 'reloaded' if not (nginx_confs.changed) else 'restarted' }}"
+      become: true
+
+    - name: "3.1 | Check if firewalld is active"
+      ansible.builtin.command: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: "3.2 | Open HTTP/HTTPS in firewalld"
+      ansible.builtin.command: "firewall-cmd --permanent --add-service={{ item }}"
+      become: true
+      when: firewalld_status.stdout == "active"
+      register: fw_add
+      changed_when: "'ALREADY_ENABLED' not in (fw_add.stdout | default(''))"
+      loop:
+        - http
+        - https
+
+    - name: "3.3 | Reload firewalld to apply"
+      ansible.builtin.command: firewall-cmd --reload
+      become: true
+      when: firewalld_status.stdout == "active" and (fw_add.changed | default(false))
+      changed_when: true
+
+    - name: "4.1 | Request Let's Encrypt certs (only when -e request_tls=true)"
+      ansible.builtin.command: >-
+        certbot --nginx -n --agree-tos --email {{ admin_email }}
+        -d {{ item.domain }} -d www.{{ item.domain }}
+      become: true
+      when: request_tls
+      loop: "{{ sites }}"
+      loop_control: { label: "{{ item.domain }}" }
+      register: certbot_run
+      failed_when: false
+
+    - name: "FAIL | certbot failed for a domain (check DNS + port 80/443 reachability first)"
+      ansible.builtin.fail:
+        msg: >-
+          certbot failed for {{ item.item.domain }} (rc={{ item.rc }}):
+          {{ item.stderr | default(item.stdout) }}. Most likely cause: DNS
+          doesn't resolve to this host yet, or port 80/443 isn't reachable
+          from the internet (NAT/port-forward). See this playbook's header.
+      loop: "{{ certbot_run.results | default([]) }}"
+      loop_control: { label: "{{ item.item.domain }}" }
+      when: request_tls and item.rc is defined and item.rc != 0
+
+    - name: "5.1 | Verify each site actually answers, don't just assume"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/"
+        headers:
+          Host: "{{ item.domain }}"
+        return_content: true
+        status_code: 200
+      register: site_answer
+      loop: "{{ sites }}"
+      loop_control: { label: "{{ item.domain }}" }
+
+    - name: "DONE | PB-556 complete"
+      ansible.builtin.debug:
+        msg: >-
+          All three sites answer on uruk over HTTP: {{ sites | map(attribute='domain') | join(', ') }}.
+          {{ 'TLS was requested via certbot -- check the certbot_run results above for per-domain status.'
+             if request_tls else
+             'TLS NOT requested (request_tls=false, the default). Point DNS at this host, confirm
+             80/443 are reachable from the internet, then re-run with -e request_tls=true.' }}

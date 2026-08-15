@@ -1,0 +1,110 @@
+# =============================================================================
+# PB-268 -- Create the Architect's 5 privilege groups on the bare-metal
+# Fedora Workstation 44 host. BahyWay.Ecosystem v4.0 -- 2026-07-29
+#
+# WHY THIS EXISTS: the Architect's own instruction, given earlier in this
+# session and NOT yet acted on until now (checked directly: no
+# `ansible.builtin.group` task anywhere in this repo creates any of these
+# 5 groups -- the earlier discussion only reasoned about the model, it
+# never built it): "I Think we need to create 5 groups in Fedora
+# Workstation 44 Host Box; 1- Architectures ,2- dataStewards,
+# 3-Administrators,4-Developers.5-Other-Stakeholders. each has its own
+# Passport type, for the first one is the highest Gilgamesh passport, the
+# second and third, fourth is Sargon Passport (3 types priorities), the
+# final one new temporary passport for 1 day, or halve day, or 1 hour."
+#
+# THE REAL GAP THIS CLOSES: Shakkanakku's run-confirmation registry
+# (PB-269-adjacent work, `shakkanakku_run.*` in EnkiMDB) can already
+# capture an operator's cryptographic vault-passport identity (privilege_
+# level, realm) when `vault_check_enabled=true` -- but that requires a
+# vault to already exist, and even then it only proves "someone who holds
+# this vault file and passphrase ran it," not "which real Fedora host
+# account launched the process." These 5 Linux groups are the missing
+# OS-level identity signal: always present (no vault needed), tied to the
+# real account that invoked `shakkanakku`, and readable by
+# `id -Gn`/`getent group` the same way the runner now reads it (see the
+# companion runner.rs change in this same commit).
+#
+# THIS PLAYBOOK ONLY CREATES THE 5 GROUPS. It deliberately does NOT:
+#   - Assign any real Fedora user account to any of them -- who belongs
+#     in "architect" vs "developer" is a real personnel/trust decision,
+#     the Architect's to make deliberately (CSR-08, Architect Sovereignty),
+#     never a playbook's to guess or automate.
+#   - Mint or touch any Sargon/Gilgamesh vault passport -- Linux group
+#     membership and a cryptographic passport are two SEPARATE identity
+#     signals (host-local vs portable/cryptographic), not the same thing
+#     wearing two names. Shakkanakku's run-confirmation registry records
+#     both, independently, precisely so a mismatch between them (e.g. an
+#     OS "developer" holding an "architect"-tier vault passport) is
+#     itself a visible, queryable fact rather than silently merged away.
+#
+# PRIVILEGE_LEVEL MAPPING (proposed here, matching kupru's own existing
+# 1-7 scale and every default already used elsewhere this session --
+# PB-265's vault gate, kupru-vault::namespace_authz's restricted-namespace
+# threshold -- rather than inventing new numbers; NOT yet Architect-
+# ratified, flagged honestly as a proposal):
+#   bahyway-architect      -> 7 (ŠARRU/king -- kupru::IshtarLayer::architect())
+#   bahyway-datasteward    -> 6 (highest of the 3 Sargon priority tiers)
+#   bahyway-administrator  -> 5 (matches the "Administrator tier" default
+#                                already used by PB-265/namespace_authz)
+#   bahyway-developer      -> 3 (lowest of the 3 Sargon priority tiers)
+#   bahyway-stakeholder    -> 1 (NUKARIB/gardener -- temporary passport,
+#                                1h/half-day/1-day TTL, per the Architect's
+#                                own spec; this playbook does not mint
+#                                that temporary passport, only the group)
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_268_bahyway_host_privilege_groups.yml
+#   # then, deliberately, per real person:
+#   #   sudo usermod -aG bahyway-architect <username>
+# =============================================================================
+---
+- name: "PB-268 -- Create the 5 BahyWay privilege groups on the Fedora host"
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    bahyway_groups:
+      - { name: bahyway-architect,     privilege_level: 7, note: "Gilgamesh passport tier -- highest, king (ŠARRU)" }
+      - { name: bahyway-datasteward,   privilege_level: 6, note: "Sargon passport, highest of 3 priority tiers" }
+      - { name: bahyway-administrator, privilege_level: 5, note: "Sargon passport, middle priority tier" }
+      - { name: bahyway-developer,     privilege_level: 3, note: "Sargon passport, lowest priority tier" }
+      - { name: bahyway-stakeholder,   privilege_level: 1, note: "temporary passport (1h/half-day/1-day TTL), gardener (NUKARIB)" }
+
+  tasks:
+    - name: Create each BahyWay privilege group (idempotent -- safe to re-run)
+      ansible.builtin.group:
+        name: "{{ item.name }}"
+        state: present
+      loop: "{{ bahyway_groups }}"
+      loop_control:
+        label: "{{ item.name }} (privilege_level={{ item.privilege_level }})"
+
+    - name: Confirm every group now exists (real check, not assumed from the task above)
+      ansible.builtin.command: "getent group {{ item.name }}"
+      loop: "{{ bahyway_groups }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: group_check
+      changed_when: false
+
+    - name: Report the real gid Fedora assigned each group
+      ansible.builtin.debug:
+        msg: "{{ item.item.name }}: {{ item.stdout }}"
+      loop: "{{ group_check.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+  post_tasks:
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "5 BahyWay privilege groups created on this host:"
+          - "{{ bahyway_groups | map(attribute='name') | list }}"
+          - "NOT YET DONE (deliberately, per Architect Sovereignty/CSR-08):"
+          - "  no real user account was added to any group -- do that"
+          - "  per person, deliberately: sudo usermod -aG <group> <user>"
+          - "  no Sargon/Gilgamesh vault passport was minted or touched --"
+          - "  group membership and a cryptographic passport are two"
+          - "  separate identity signals, recorded independently by"
+          - "  Shakkanakku's run-confirmation registry."

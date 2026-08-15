@@ -1,0 +1,401 @@
+# =============================================================================
+# Shared tasks: cross-host FLUSH + sync + verify for the real 2-VM CQRS
+# split (PB-212) -- the successor to PB-211's `enkiddb_flush_sync_verify.
+# yml`, which only worked because Write and Read were, at the time, two
+# containers on the SAME host (eriduous-vdi) and could be synced with a
+# local `podman unshare cp`. Now that Write and Read genuinely live on
+# separate VMs (enkidb-node-write, enkidb-node-read), the sync has to
+# cross a real network boundary.
+#
+# WHY THIS RELAYS THROUGH THE CONTROL NODE (eriduous-vdi) INSTEAD OF
+# PUSHING DIRECTLY enkidb-node-write -> enkidb-node-read: the Architect
+# confirmed SSH from eriduous-vdi to both node VMs is already set up, but
+# NOT SSH directly between the two node VMs themselves -- that's a second
+# trust relationship this playbook doesn't assume exists. So every task
+# below either runs on the control node itself, or is `delegate_to`'d to
+# one specific node VM -- never node-to-node.
+#
+# WHY `podman unshare` STILL APPEARS ON BOTH ENDS: this fleet runs
+# rootless Podman. Files the Write/Read containers write into their named
+# volumes are owned by a remapped UID range on each host's filesystem,
+# not the login user's literal UID -- confirmed live, PB-210.2. A plain
+# `cp`/`tar`/`rm` as the login user hits real `Permission denied` on
+# EITHER side of this transfer, not just the destination. Every touch of
+# a volume's actual contents -- staging OUT on the write side, swapping
+# IN on the read side -- goes through `podman unshare`.
+#
+# THE FULL PATH FOR ONE SYNC, PER DATABASE:
+#   1. On enkidb-node-write: podman unshare cp the volume's `current/`
+#      out to a plain-owned staging dir, tar it.
+#   2. fetch (delegate_to: write host) pulls that tarball down to the
+#      control node's own local disk.
+#   3. copy (delegate_to: read host) pushes it from the control node to
+#      enkidb-node-read.
+#   4. On enkidb-node-read: untar into a plain-owned staging dir, then
+#      podman unshare cp/rm/mv it into the volume's `current/`, same
+#      atomic swap PB-211 already established.
+#   5. Wait for RELOAD_SECS, then QUERY (and SEARCH, for databases that
+#      have a RAG index -- EnkiMDB doesn't, see enkiddb_run_search below)
+#      against the read host's real published port, over the network,
+#      not 127.0.0.1 -- proving the whole real path, not just localhost.
+#
+# Vars the including play must set (no defaults -- getting one wrong
+# silently syncs the wrong database, so every call site names them all
+# explicitly rather than relying on a guessable default):
+#   enkiddb_db_label     -- "enkiddb" or "enkimdb", used only in staging
+#                            paths so two databases' syncs never collide
+#   enkiddb_write_volume -- e.g. "enkiddb-write-data"
+#   enkiddb_read_volume  -- e.g. "enkiddb-read-data"
+#   enkiddb_write_host   -- inventory hostname, e.g. "enkidb-node-write"
+#   enkiddb_read_host    -- inventory hostname, e.g. "enkidb-node-read"
+#   enkiddb_write_port   -- e.g. 7101 (used only for the FLUSH call)
+#   enkiddb_read_port    -- e.g. 7102 (used for the network QUERY/SEARCH)
+#   enkiddb_read_ip      -- enkidb-node-read's real IP (hostvars lookup
+#                            would also work, but explicit avoids surprise
+#                            if inventory hostnames ever don't resolve)
+#   enkiddb_query_what    -- WHAT projection, e.g. "meta.title, meta.
+#                            collection" for EnkiDDB, "artifact.name,
+#                            artifact.kind" for EnkiMDB -- the two
+#                            databases don't share an attribute namespace
+#                            (DocOrbit's meta.*/head.*/body.* vs EnkiMDB's
+#                            flat artifact.*, see the Architect Design doc)
+#   enkiddb_query_where_attr -- WHERE's attribute, e.g. "meta.collection"
+#                            for EnkiDDB, "artifact.kind" for EnkiMDB
+#   enkiddb_query_value   -- WHERE's value to match, e.g. "general" for
+#                            EnkiDDB, "Crate" for EnkiMDB (ArtifactKind's
+#                            real string form)
+#   enkiddb_run_search    -- true/false. EnkiMDB has NO RAG index/SEARCH
+#                            command (EnkiMDB_MANUAL.md, EnkiMDB_GLOSSARY.
+#                            md both state this explicitly) -- set false
+#                            for EnkiMDB syncs so this task file doesn't
+#                            send a SEARCH: it can never answer.
+#   enkiddb_search_phrase -- only used when enkiddb_run_search is true.
+#                            Same false-negative trap PB-211 already
+#                            documents: pick a phrase known to be in a
+#                            real document's TEXT BODY, not a filename.
+# =============================================================================
+---
+# timeout=10 was too short -- FLUSH does real, N-proportional materialize
+# work (this file's earlier claim that it's a "cheap idempotent re-run"
+# doesn't hold at scale), hit live: TimeoutError at N=10,000,000 (SEED
+# itself already took 39.4s there). Matches the generous 3600s timeout
+# enkidb_scale_sweep_iteration.yml's own SEED task already uses for the
+# same reason ("real wall-clock time can be long at 100M/1B").
+- name: "[{{ enkiddb_db_label }}] FLUSH the Write Node immediately"
+  ansible.builtin.shell: |
+    python3 -c "
+    import socket, struct
+    def recv_exact(s, n):
+        buf = b''
+        while len(buf) < n:
+            chunk = s.recv(n - len(buf))
+            if not chunk:
+                raise EOFError('connection closed early')
+            buf += chunk
+        return buf
+    s = socket.create_connection(('127.0.0.1', {{ enkiddb_write_port }}), timeout=3600)
+    payload = b'FLUSH'
+    s.sendall(struct.pack('<I', len(payload)) + payload)
+    n = struct.unpack('<I', recv_exact(s, 4))[0]
+    print(recv_exact(s, n).decode())
+    "
+  delegate_to: "{{ enkiddb_write_host }}"
+  register: flush_result
+  changed_when: true
+
+- name: "[{{ enkiddb_db_label }}] Show FLUSH result (expect OK:FLUSHED:<entity_count>)"
+  ansible.builtin.debug:
+    msg: "{{ flush_result.stdout }}"
+
+- name: "[{{ enkiddb_db_label }}] Find the Write volume's real mountpoint on enkidb-node-write"
+  ansible.builtin.command: "podman volume inspect {{ enkiddb_write_volume }}"
+  delegate_to: "{{ enkiddb_write_host }}"
+  register: write_vol
+  changed_when: false
+
+# `podman unshare rm -rf` for the pre-clean, not plain rm: a leftover
+# `current/` from an earlier run (e.g. one interrupted before its own
+# cleanup ran) is container-uid-owned for the same reason the cleanup
+# step near the end of this file needs `podman unshare` -- plain rm as
+# the login user can't recurse into a directory it doesn't have write
+# access to, regardless of read access to list it.
+- name: "[{{ enkiddb_db_label }}] Create a clean staging directory on enkidb-node-write"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    podman unshare rm -rf /tmp/{{ enkiddb_db_label }}-sync-staging
+    mkdir -p /tmp/{{ enkiddb_db_label }}-sync-staging
+  delegate_to: "{{ enkiddb_write_host }}"
+  changed_when: true
+
+# `cp -a src dst` requires dst's PARENT to already exist when dst itself
+# doesn't (found live, PB-213's first real run: "cannot create directory
+# '.../current': No such file or directory") -- the task above creates
+# that parent (`/tmp/<db>-sync-staging`); this cp then creates `current`
+# inside it as a full copy of the volume's materialization.
+- name: "[{{ enkiddb_db_label }}] Stage the fresh materialization out of the volume (podman unshare -- see header)"
+  ansible.builtin.command: >-
+    podman unshare cp -a
+    {{ (write_vol.stdout | from_json)[0].Mountpoint }}/current
+    /tmp/{{ enkiddb_db_label }}-sync-staging/current
+  delegate_to: "{{ enkiddb_write_host }}"
+  changed_when: true
+
+- name: "[{{ enkiddb_db_label }}] Tar the staged directory for transfer"
+  ansible.builtin.command: >-
+    tar czf /tmp/{{ enkiddb_db_label }}-sync.tar.gz
+    -C /tmp/{{ enkiddb_db_label }}-sync-staging current
+  delegate_to: "{{ enkiddb_write_host }}"
+  changed_when: true
+
+- name: "[{{ enkiddb_db_label }}] Pull the tarball from enkidb-node-write down to the control node"
+  ansible.builtin.fetch:
+    src: "/tmp/{{ enkiddb_db_label }}-sync.tar.gz"
+    dest: "/tmp/{{ enkiddb_db_label }}-sync.tar.gz"
+    flat: true
+  delegate_to: "{{ enkiddb_write_host }}"
+
+- name: "[{{ enkiddb_db_label }}] Push the tarball from the control node to enkidb-node-read"
+  ansible.builtin.copy:
+    src: "/tmp/{{ enkiddb_db_label }}-sync.tar.gz"
+    dest: "/tmp/{{ enkiddb_db_label }}-sync.tar.gz"
+    mode: "0644"
+  delegate_to: "{{ enkiddb_read_host }}"
+
+- name: "[{{ enkiddb_db_label }}] Unpack it into a plain-owned staging dir on enkidb-node-read"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    rm -rf /tmp/{{ enkiddb_db_label }}-sync-staging
+    mkdir -p /tmp/{{ enkiddb_db_label }}-sync-staging
+    tar xzf /tmp/{{ enkiddb_db_label }}-sync.tar.gz -C /tmp/{{ enkiddb_db_label }}-sync-staging
+  delegate_to: "{{ enkiddb_read_host }}"
+  changed_when: true
+
+- name: "[{{ enkiddb_db_label }}] Find the Read volume's real mountpoint on enkidb-node-read"
+  ansible.builtin.command: "podman volume inspect {{ enkiddb_read_volume }}"
+  delegate_to: "{{ enkiddb_read_host }}"
+  register: read_vol
+  changed_when: false
+
+# FIXED (2026-07-26): this swap was unconditional -- confirmed live to
+# destroy good data twice in one session. enkiddb-write-server's own
+# doc comment states plainly: "The Journal itself is in-memory only...
+# Documents ingested since the last flush are lost if the container
+# restarts before the next one. This is a real, known v1 limitation."
+# Recreating the Write container (a real, separate, correct fix for a
+# stale-image bug, PB-212.3) discards its in-memory journal exactly as
+# documented; the next FLUSH then legitimately rebuilds `current/` from
+# that now-empty journal (full wipe-and-rebuild, not incremental, per
+# the same doc comment) -- and this task faithfully propagated that
+# real emptiness over the Read Node's previously-good, already-synced
+# data. Not this task's bug originally, but it had no defense against
+# it either. Refuses the swap (rather than silently destroying data)
+# when the freshly staged materialization is suspiciously much smaller
+# than what is already at the destination -- set
+# enkiddb_allow_shrink_sync: true to override for a genuinely expected
+# shrink (e.g. content intentionally removed upstream).
+- name: "[{{ enkiddb_db_label }}] Refuse to overwrite a populated Read Node with a much-smaller/empty staged copy"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    DEST="{{ (read_vol.stdout | from_json)[0].Mountpoint }}"
+    STAGED_BYTES=$(du -sb /tmp/{{ enkiddb_db_label }}-sync-staging/current 2>/dev/null | cut -f1 || echo 0)
+    DEST_BYTES=$(podman unshare du -sb "$DEST/current" 2>/dev/null | cut -f1 || echo 0)
+    echo "staged=${STAGED_BYTES:-0} bytes, destination=${DEST_BYTES:-0} bytes"
+    if [ "{{ enkiddb_allow_shrink_sync | default(false) | lower }}" != "true" ] \
+       && [ "${DEST_BYTES:-0}" -gt 1000 ] \
+       && [ "${STAGED_BYTES:-0}" -lt "$((DEST_BYTES / 10))" ]; then
+      echo "REFUSING SYNC: staged data (${STAGED_BYTES:-0} bytes) is suspiciously smaller than what's already on the Read Node (${DEST_BYTES:-0} bytes)."
+      echo "This looks like a Write Node data-loss event (its in-memory journal was reset, e.g. by a container restart -- see enkiddb-write-server's own 'Durability contract' doc comment), not a legitimate shrink."
+      echo "Re-ingest into the Write Node (PB-208) before syncing again, or set enkiddb_allow_shrink_sync=true if this reduction is genuinely expected."
+      exit 1
+    fi
+  delegate_to: "{{ enkiddb_read_host }}"
+  changed_when: false
+
+- name: "[{{ enkiddb_db_label }}] Atomically swap the fresh data into the volume (podman unshare -- see header)"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    DEST="{{ (read_vol.stdout | from_json)[0].Mountpoint }}"
+    podman unshare cp -a /tmp/{{ enkiddb_db_label }}-sync-staging/current "$DEST/current_new"
+    podman unshare rm -rf "$DEST/current"
+    podman unshare mv "$DEST/current_new" "$DEST/current"
+  delegate_to: "{{ enkiddb_read_host }}"
+  register: sync_result
+  changed_when: true
+
+# PB-214, confirmed live via `ausearch -m avc`: the swap above landed
+# real, correctly-sized data (entities.data at real byte counts, not
+# empty) but enkiddb-read/enkimdb-read still answered "not ready" --
+# `podman unshare cp -a`'s `--preserve=all` (part of `-a`) preserves the
+# SOURCE's SELinux context, and by the time this runs, the source is the
+# /tmp staging copy (labeled `user_tmp_t`, inherited from Ansible's
+# fetch/copy passing through plain `/tmp`), not the original volume
+# (`container_file_t`). PB-211's same-host sync never hit this because
+# it copied directly volume-to-volume, never touching `/tmp`. Confirmed
+# denial: `avc: denied { open } ... comm="enkiddb-read-se" path="/data/
+# current/entities.data" ... tcontext=unconfined_u:object_r:user_tmp_t:s0
+# tclass=file`. Real root (become: true), not `podman unshare`, for the
+# fix -- relabeling needs CAP_MAC_ADMIN, which a rootless user namespace
+# doesn't grant, but real root's CAP_DAC_OVERRIDE also means it doesn't
+# need `podman unshare`'s UID-remapping workaround to reach the files in
+# the first place.
+- name: "[{{ enkiddb_db_label }}] Check if SELinux is enabled on enkidb-node-read"
+  ansible.builtin.command: getenforce
+  delegate_to: "{{ enkiddb_read_host }}"
+  register: read_selinux_status
+  changed_when: false
+  failed_when: false
+
+- name: "[{{ enkiddb_db_label }}] Restore SELinux context on the swapped-in data (PB-214 -- see comment above)"
+  ansible.builtin.command: "restorecon -R {{ (read_vol.stdout | from_json)[0].Mountpoint }}/current"
+  become: true
+  delegate_to: "{{ enkiddb_read_host }}"
+  when: read_selinux_status.stdout in ['Enforcing', 'Permissive']
+  changed_when: true
+
+- name: "[{{ enkiddb_db_label }}] Confirm the swap landed"
+  ansible.builtin.command: "podman unshare ls -la {{ (read_vol.stdout | from_json)[0].Mountpoint }}/current"
+  delegate_to: "{{ enkiddb_read_host }}"
+  register: sync_confirm
+  changed_when: false
+
+- name: "[{{ enkiddb_db_label }}] Show sync result"
+  ansible.builtin.debug:
+    msg: "{{ sync_confirm.stdout_lines }}"
+
+# The write-host's staging dir was populated via `podman unshare cp -a`,
+# which PRESERVES the source volume's ownership (the container-internal
+# remapped UID) onto the staged copy -- unlike the read-host's staging
+# dir, which came from a plain `tar xzf` as the login user and is
+# normally owned. Found live, PB-213's second real run: plain Ansible
+# `file: state=absent` (no sudo, no unshare) could `tar` that write-host
+# copy earlier (world-readable file MODE bits allowed read regardless of
+# owner) but couldn't `rm -rf` it -- deleting requires write permission
+# on the PARENT directory, which the login user doesn't have when the
+# owner is a different (remapped) UID. Needs `podman unshare`, same as
+# every other touch of container-owned data in this file.
+- name: "[{{ enkiddb_db_label }}] Clean up the write host's staging dir (podman unshare -- see above)"
+  ansible.builtin.command: "podman unshare rm -rf /tmp/{{ enkiddb_db_label }}-sync-staging"
+  delegate_to: "{{ enkiddb_write_host }}"
+  changed_when: true
+
+- name: "[{{ enkiddb_db_label }}] Clean up the remaining plain-owned staging files"
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop:
+    - { path: "/tmp/{{ enkiddb_db_label }}-sync.tar.gz",   host: "{{ enkiddb_write_host }}" }
+    - { path: "/tmp/{{ enkiddb_db_label }}-sync-staging", host: "{{ enkiddb_read_host }}" }
+    - { path: "/tmp/{{ enkiddb_db_label }}-sync.tar.gz",   host: "{{ enkiddb_read_host }}" }
+  delegate_to: "{{ item.host }}"
+  changed_when: true
+
+- name: "[{{ enkiddb_db_label }}] Remove the fetched tarball from the control node"
+  ansible.builtin.file:
+    path: "/tmp/{{ enkiddb_db_label }}-sync.tar.gz"
+    state: absent
+  changed_when: true
+
+- name: "[{{ enkiddb_db_label }}] Wait for the Read Node to reload (RELOAD_SECS, default 30s)"
+  ansible.builtin.pause:
+    seconds: 35
+
+# HeptaScript's WHERE clause requires a leading exact-equality condition
+# to index on -- there's no "select everything, no filter" form (found
+# live, PB-208). This QUERY runs FROM the control node AGAINST the read
+# host's real published port over the network -- not 127.0.0.1 -- since
+# Write and Read are now genuinely different machines.
+# NOTE: response is NOT JSON/UTF-8 text -- enkidb-read-server (and its
+# EnkiDDB/EnkiMDB/EnkiSDB/EnkiODB/EnkiQDB/EnkiDW siblings, all migrated to
+# the same in-memory cached engine) answer QUERY: with the fleet's real
+# hand-rolled binary frame: [1B tag] 0x00=success+[u32 LE row_count]+rows,
+# 0x01=error+[u32 LE len][utf8 msg] -- see enkidb-read-server/src/main.rs's
+# own doc comment for the full per-row layout. This only needs the row
+# count, so it reads the tag + row_count and stops there; it does not
+# parse the row payload itself.
+- name: "[{{ enkiddb_db_label }}] Real QUERY over the network against enkidb-node-read"
+  ansible.builtin.shell: |
+    python3 -c "
+    import socket, struct
+    def recv_exact(s, n):
+        buf = b''
+        while len(buf) < n:
+            chunk = s.recv(n - len(buf))
+            if not chunk:
+                raise EOFError('connection closed early')
+            buf += chunk
+        return buf
+    s = socket.create_connection(('{{ enkiddb_read_ip }}', {{ enkiddb_read_port }}), timeout=30)
+    payload = b'QUERY:WHO T.E\nWHAT E[{{ enkiddb_query_what }}]\nWHERE E[{{ enkiddb_query_where_attr }}] = \"{{ enkiddb_query_value }}\"\nHOW_MUCH LIMIT 20'
+    s.sendall(struct.pack('<I', len(payload)) + payload)
+    n = struct.unpack('<I', recv_exact(s, 4))[0]
+    body = recv_exact(s, n)
+    if body[0] == 0x01:
+        msg_len = struct.unpack('<I', body[1:5])[0]
+        print('ERROR: ' + body[5:5+msg_len].decode('utf-8'))
+    else:
+        row_count = struct.unpack('<I', body[1:5])[0]
+        print(f'OK: matched={row_count} rows')
+    "
+  register: query_result
+  changed_when: false
+
+- name: "[{{ enkiddb_db_label }}] Show real QUERY results"
+  ansible.builtin.debug:
+    msg: "{{ query_result.stdout }}"
+
+# EnkiMDB has no RAG index/SEARCH command (EnkiMDB_MANUAL.md,
+# EnkiMDB_GLOSSARY.md) -- callers set enkiddb_run_search: false for it.
+#
+# FIXED (2026-07-26): this task predated 02a6216's JSON->binary rewrite
+# and was never updated -- it did a raw `s.recv(n).decode()` with no
+# tag-byte handling at all, so once the server actually started
+# answering with the real binary frame (tag 0x02 + u32 hit-count + per-
+# hit [16B kaki][4B f32 score][4B text_len][text]), this printed
+# unreadable control-character bytes instead of readable results
+# (confirmed live: a genuine 0-hit response decoded straight to
+# unprintable control characters -- that response WAS correct, it was
+# just never parsed). See enkiddb-read-server's
+# send_search_success (bin/enkiddb-read-server/src/main.rs) and
+# RagHit's real field types (crates/enkiddb/src/rag.rs: section is
+# IdentityKaki/16 bytes, score is f32/4 bytes) for the exact layout this
+# now decodes.
+- name: "[{{ enkiddb_db_label }}] Real SEARCH over the network against enkidb-node-read"
+  ansible.builtin.shell: |
+    python3 -c "
+    import socket, struct
+    def recv_exact(s, n):
+        buf = b''
+        while len(buf) < n:
+            chunk = s.recv(n - len(buf))
+            if not chunk:
+                raise EOFError('connection closed early')
+            buf += chunk
+        return buf
+    s = socket.create_connection(('{{ enkiddb_read_ip }}', {{ enkiddb_read_port }}), timeout=10)
+    payload = b'SEARCH:5:{{ enkiddb_search_phrase | default('') }}'
+    s.sendall(struct.pack('<I', len(payload)) + payload)
+    n = struct.unpack('<I', recv_exact(s, 4))[0]
+    body = recv_exact(s, n)
+    if body[0] == 0x01:
+        msg_len = struct.unpack('<I', body[1:5])[0]
+        print('ERROR: ' + body[5:5+msg_len].decode('utf-8'))
+    else:
+        hit_count = struct.unpack('<I', body[1:5])[0]
+        off = 5
+        print(f'{hit_count} hit(s):')
+        for _ in range(hit_count):
+            kaki = body[off:off+16].hex(); off += 16
+            score = struct.unpack('<f', body[off:off+4])[0]; off += 4
+            text_len = struct.unpack('<I', body[off:off+4])[0]; off += 4
+            text = body[off:off+text_len].decode('utf-8', errors='replace'); off += text_len
+            snippet = text[:120].replace(chr(10), ' ')
+            print(f'  score={score:.4f} kaki={kaki[:16]}... text={snippet}')
+    "
+  register: search_result
+  changed_when: false
+  when: enkiddb_run_search | default(true)
+
+- name: "[{{ enkiddb_db_label }}] Show real SEARCH results (ranked hits, real scores, real text)"
+  ansible.builtin.debug:
+    msg: "{{ search_result.stdout }}"
+  when: enkiddb_run_search | default(true)

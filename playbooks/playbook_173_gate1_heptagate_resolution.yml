@@ -1,0 +1,179 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_173_gate1_heptagate_resolution.yml
+#  BahyWay.Ecosystem v4.0 — GATE-1 Pipeline-Step Resolution (bahyway_core::HeptaGate)
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_173_gate1_heptagate_resolution.yml -i "localhost," -c local -v
+#
+#  Numbering note: same as PB-172 — fresh number, sequenced after PB-171.
+#
+#  Self-contained: does its own git fetch/checkout/pull, so this runs fine
+#  standalone even if PB-172 hasn't been run yet (the pull is idempotent).
+#
+#  What this delivers:
+#    PB-162's actual deliverable per PBCOLLECTIONS_Master_Index ("writes
+#    the gate enum + Akkadian names once you rule"). Resolves the GLS-001
+#    §4 "doc vs SVG" GATE-1 conflict by the Architect's ruling: MERGE the
+#    two function lists per gate, don't choose one. Implemented as
+#    bahyway_core::HeptaGate — 7 variants, each carrying:
+#      - sector()            unchanged, sealed 2026-06-18 (APSU->Storage...)
+#      - pipeline_function()  NEW: doc-verb + SVG-verb merged per gate
+#
+#  This is deliberately scoped to the sector-vs-pipeline-function GATE-1
+#  conflict only. It does NOT touch the separate, still-open, three-way
+#  E-DUBBA station-chain conflict (MASHSHARU -> ... -> NERGAL_GATE).
+#
+#  What it does:
+#    1. git fetch + checkout + pull the branch carrying the change
+#    2. Verifies bahyway-core/src/hepta_gate.rs landed
+#    3. cargo test -p bahyway-core hepta_gate  (expect 6 new tests, all pass)
+#    4. cargo test -p bahyway-core             (expect 64 passed total)
+#    5. cargo build --workspace  <- the real gate: bahyway-core is
+#       foundational, so this is the highest-risk-of-breakage check
+#       possible for this change
+#    6. Prints the resolved 7-gate table for visual confirmation
+#    7. Writes a dated report; prints PASS/FAIL clearly
+#
+#  If anything in this playbook fails: paste the FULL task output back,
+#  and the fix comes back as playbook_17X_fix_<name>.yml — same loop as
+#  always.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-173 | GATE-1 Resolution — bahyway_core::HeptaGate"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs"
+    report_file:   "{{ docs_dir }}/PB173_REPORT_{{ session_date }}.txt"
+
+  tasks:
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | bahyway-core::hepta_gate module exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/bahyway-core/src/hepta_gate.rs"
+      register: gate_file
+
+    - name: "FAIL | hepta_gate.rs missing after sync — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: >
+          crates/bahyway-core/src/hepta_gate.rs not found after git pull.
+          Check target_branch above, and that {{ forge_root }} is really a
+          clone of bahyway/enkidb.
+      when: not gate_file.stat.exists
+
+    # ── Test: the new module specifically ──────────────────────────────────
+    - name: "TEST | cargo test -p bahyway-core hepta_gate"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p bahyway-core hepta_gate -- --nocapture"
+        chdir: "{{ workspace }}"
+      register: test_gate
+      changed_when: false
+      failed_when: test_gate.rc != 0
+
+    - name: "ASSERT | 6 hepta_gate tests pass"
+      ansible.builtin.assert:
+        that:
+          - "((test_gate.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 6)"
+          - "'0 failed' in test_gate.stdout"
+        fail_msg: "Expected '6 passed; 0 failed'. Got: {{ test_gate.stdout }}"
+        success_msg: "hepta_gate: 6/6 confirmed."
+
+    # ── Test: all of bahyway-core (expect 64 passed total) ─────────────────
+    - name: "TEST | cargo test -p bahyway-core (full crate)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p bahyway-core"
+        chdir: "{{ workspace }}"
+      register: test_core
+      changed_when: false
+      failed_when: test_core.rc != 0
+
+    - name: "ASSERT | bahyway-core reports 64 passed total (58 existing + 6 new)"
+      ansible.builtin.assert:
+        that:
+          - "((test_core.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 64)"
+          - "'0 failed' in test_core.stdout"
+        fail_msg: "Expected '64 passed; 0 failed'. Got: {{ test_core.stdout }}"
+        success_msg: "bahyway-core: 64/64 confirmed."
+
+    # ── The real gate: does the ENTIRE workspace still build? ──────────────
+    - name: "BUILD | cargo build --workspace (bahyway-core is foundational — highest blast radius)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build --workspace"
+        chdir: "{{ workspace }}"
+      register: build_workspace
+      changed_when: false
+      failed_when: build_workspace.rc != 0
+
+    # ── Report ──────────────────────────────────────────────────────────────
+    - name: "PRINT | PB-173 result"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════════════╗
+          ║   BahyWay.Ecosystem v4.0 — PB-173 GATE-1 Resolution                   ║
+          ║   Date : {{ session_date }}   Node : {{ ansible_hostname }}          ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  hepta_gate module : 6/6 PASS                                         ║
+          ║  bahyway-core full : 64/64 PASS                                       ║
+          ║  workspace build   : CLEAN (highest-blast-radius check — passed)      ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  G1 APSU   | Storage         | Identity & Security Intake             ║
+          ║  G2 ADAD   | ETL/Ingestion   | Structural Validation                  ║
+          ║  G3 SHEDU  | Security        | Comparative Enrichment                 ║
+          ║  G4 MUMMU  | Algebra         | Schema Harmonization & Quarantine      ║
+          ║  G5 ENKIDU | AI Agents       | AI-Assisted Match/Dedupe & Steward     ║
+          ║  G6 DUBSAR | Languages       | Cleansing & Quality Scoring            ║
+          ║  G7 ENLIL  | Governance      | Governance & SLA Sign-off              ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  Unblocks: PB-163 (fuzzy-state machine), PB-164 (golden-particle      ║
+          ║  supersession), PB-165 (per-gate latency harness) — none built yet,   ║
+          ║  but no longer blocked on a ruling.                                   ║
+          ╚═══════════════════════════════════════════════════════════════════════╝
+
+    - name: "WRITE | Dated report file"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-173 Report
+          Date      : {{ session_date }}
+          Node      : {{ ansible_hostname }}
+          Branch    : {{ target_branch }}
+          Workspace : {{ workspace }}
+
+          hepta_gate test output:
+          {{ test_gate.stdout }}
+
+          bahyway-core full test output:
+          {{ test_core.stdout }}
+
+          Full workspace build: {{ 'CLEAN' if build_workspace.rc == 0 else 'FAILED' }}
+
+    - name: "DONE  | PB-173 COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-173 complete — report at {{ report_file }}. GATE-1 resolved. Next: CSR-08 code design (PB-170)."

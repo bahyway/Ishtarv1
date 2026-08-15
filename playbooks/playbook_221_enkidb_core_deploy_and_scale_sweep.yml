@@ -1,0 +1,325 @@
+# =============================================================================
+# PB-221 — EnkiDB (core operational particle store) real CQRS deployment +
+# the real 1M/10M/100M/1B HeptaScript scale sweep.
+# BahyWay.Ecosystem v4.0 — 2026-07-21
+#
+# WHY THIS EXISTS: the Architect asked to see HeptaScript actually querying
+# 1M, 10M, 100M, and up to 1B particles in <1s, with DubSar's Grid/Orbit
+# view showing it live. Investigating that claim found two real things:
+#
+#   1. A genuine bug + a genuine bottleneck in `ReadNode::query_parsed`
+#      (crates/enkidb-readnode/src/readnode.rs) — HOW_MUCH LIMIT was
+#      applied AFTER fetching every matched entity's full content from
+#      disk, one random-access read each. Measured live in this sandbox:
+#      1.95s for 200K matches out of 1M particles, 26.4s for 2M matches
+#      out of 10M — nowhere near <1s, and getting worse, not better, with
+#      scale. Root cause and fix are in this same commit (see readnode.rs
+#      ::safe_early_limit and engine.rs's early_limit fix) — with the fix,
+#      the identical LIMIT 1000 query against the identical data dropped
+#      to 10ms (1M) / 30ms (10M). Point/needle lookups were already flat
+#      and fast at every scale tested (30-110µs, unaffected by N) — that
+#      part of the original claim was already true.
+#
+#   2. No deployed server existed for the core EnkiDB particle store at
+#      all — only the old, never-deployed `enkidb-query-server` (a
+#      different, incompatible wire protocol). This playbook deploys the
+#      real thing: `enkidb-write-server` (SEED:<n>/FLUSH, port 7011) +
+#      `enkidb-read-server` (QUERY:<heptascript>, port 7001), on the same
+#      2-VM CQRS split (enkidb-node-write / enkidb-node-read) PB-212
+#      already established for EnkiDDB/EnkiMDB, reusing PB-213's own
+#      `tasks/enkiddb_cross_host_sync.yml` for the actual sync step — NOT
+#      a direct write-host -> read-host rsync/scp, since
+#      `ansible/inventory.ini`'s own header states plainly that SSH
+#      directly between the two node VMs is NOT assumed to exist (only
+#      eriduous-vdi, the control node, has SSH to both). That shared task
+#      file already handles this fleet's real, previously-found-live
+#      wrinkles (rootless Podman's remapped UIDs needing `podman
+#      unshare`, SELinux relabeling after a `/tmp`-staged copy) — reusing
+#      it here is the correct move, not a shortcut.
+#
+# WHAT THIS PLAYBOOK DOES, in order:
+#   A. (hosts: enkidb_write) Build + run enkidb-write-server.
+#   B. (hosts: enkidb_read)  Build + run enkidb-read-server.
+#   C. (hosts: eriduous-vdi, the control node) For each N in [1000000,
+#      10000000, 100000000, 1000000000]: SEED:<n> on the Write Node
+#      (delegated), the real cross-host FLUSH+sync+verify (imported from
+#      tasks/enkiddb_cross_host_sync.yml, SEARCH disabled — core EnkiDB
+#      has no RAG index), then two additional timed QUERY calls of our
+#      own against the real published Read port over the network: one
+#      HOW_MUCH LIMIT 1000 (the bounded-page pattern DubSar's Grid/Orbit
+#      view now uses) and one single-particle needle lookup.
+#   D. Print every N's real numbers together, so a single run of this
+#      playbook is the actual evidence for "1M/10M/100M/1B in <1s" —
+#      not a claim, a log.
+#
+# WHY 100M/1B COULDN'T BE PROVEN IN THE SANDBOX THIS WAS BUILT IN: the
+# sandbox's total writable disk allowance was ~12GB free at the time this
+# was written; 1B materialized particles (entities + EAV posting index)
+# is comfortably past that. 1M and 10M WERE run for real there (see this
+# commit's own writeup) — this playbook is what actually proves 100M and
+# 1B, on real hardware with real disk.
+#
+# WHAT "SHOW IT IN <1s" MEANS AT 100M-1B, STATED PLAINLY: no visualization
+# — DubSar's or anyone else's — can render or transfer literally a
+# billion individual rows across a network in under a second; that's
+# network/serialization physics, not a HeptaScript limitation, and no
+# real database (Postgres, ClickHouse, anything) does that either. The
+# honest and correct target is what this playbook actually measures: a
+# HOW_MUCH LIMIT-bounded page (DubSar renders exactly this many rows,
+# fast, regardless of how many rows *would* match) plus a fast point
+# lookup (proving the index itself stays flat at any N). That is what
+# "HeptaScript queries a billion-particle store in under a second"
+# honestly means, and it's what this playbook's Step C actually proves.
+#
+# PREREQUISITES this playbook does NOT automate (same as PB-212/PB-215):
+#   - `~/Forge/EnkiDB` checked out on eriduous-vdi, enkidb-node-write,
+#     AND enkidb-node-read, at a commit including this playbook.
+#   - SSH from eriduous-vdi to both node VMs already working (per
+#     ansible/inventory.ini) -- no new trust relationship needed.
+#   - Enough real disk on enkidb-node-write's data volume for whichever
+#     N you actually run — override `enkidb_seed_sizes` (see vars below)
+#     to skip 100M/1B on a smaller box; do not run 1B blind against a
+#     volume you haven't sized for it.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_221_enkidb_core_deploy_and_scale_sweep.yml
+#   ansible-playbook playbooks/playbook_221_enkidb_core_deploy_and_scale_sweep.yml \
+#     -e '{"enkidb_seed_sizes": [1000000, 10000000]}'   # skip 100M/1B
+#
+# KNOWN ISSUE, not yet fixed (flagged 2026-07-27): tasks 3.1/3.2 below use
+# "check if the container exists, only run it if it doesn't" -- the exact
+# pattern PB-212 (EnkiDDB/EnkiMDB's deploy) shipped with the same shortcoming
+# under, and had to walk back (see PB-212's own PB-212.3 comment): a rebuilt
+# image (step 1.1) never reaches an already-running container, so
+# `enkidb-write`/`enkidb-read` will keep serving whatever binary was running
+# the FIRST time this playbook ever created them, no matter how many times
+# it's re-run afterward. This hasn't bitten anyone yet only because neither
+# container has been re-run after a real code change to their image since
+# this playbook was first written. PB-212's later PB-212.4 fix (compare the
+# running container's image ID to the freshly-built one; recreate only on a
+# real difference) is the correct pattern to bring here too -- not done in
+# this pass to keep that fix scoped to the playbook the Architect actually
+# hit the problem in.
+# =============================================================================
+---
+- name: "PB-221a | Build + run enkidb-write-server on enkidb-node-write"
+  hosts: enkidb_write
+  become: false
+  vars:
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+
+  tasks:
+    - name: "0.1 | Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: "0.2 | Show podman version"
+      ansible.builtin.debug:
+        msg: "{{ podman_version.stdout }}"
+
+    - name: "0.3 | Confirm the repo checkout exists"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      register: repo_head
+      changed_when: false
+
+    - name: "0.4 | Show current commit on enkidb-node-write"
+      ansible.builtin.debug:
+        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-221's own commit (needs the ReadNode LIMIT fix)."
+
+    - name: "1.1 | Build enkidb-write-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkidb-write-server:latest -f workspace/bahyway_v4/deploy/podman/Containerfile.enkidb-write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "2.1 | Create Write-side data volume"
+      ansible.builtin.command: podman volume create enkidb-write-data
+      register: vol_create
+      failed_when: vol_create.rc != 0 and 'already exists' not in (vol_create.stderr | default(''))
+      changed_when: vol_create.rc == 0
+
+    - name: "3.1 | Check if enkidb-write container exists"
+      ansible.builtin.command: podman container exists enkidb-write
+      register: enkidb_write_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "3.2 | Run enkidb-write (port 7011)"
+      ansible.builtin.command: >
+        podman run -d --name enkidb-write
+        -p 7011:7011
+        -v enkidb-write-data:/data:Z
+        -e TRIBE_ID=0x7001
+        --restart=always
+        enkidb-write-server:latest
+      when: enkidb_write_exists.rc != 0
+      changed_when: true
+
+    - name: "3.2b | Ensure enkidb-write is actually running"
+      ansible.builtin.command: podman start enkidb-write
+      changed_when: true
+
+    - name: "3.3a | Check if firewalld is active"
+      ansible.builtin.command: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: "3.3b | Open Write port in firewalld (PB-212.2's same finding applies here)"
+      ansible.builtin.command: firewall-cmd --permanent --add-port=7011/tcp
+      become: true
+      when: firewalld_status.stdout == "active"
+      register: fw_add
+      changed_when: "'ALREADY_ENABLED' not in (fw_add.stdout | default(''))"
+
+    - name: "3.3c | Reload firewalld to apply"
+      ansible.builtin.command: firewall-cmd --reload
+      become: true
+      when: firewalld_status.stdout == "active" and (fw_add.changed | default(false))
+      changed_when: true
+
+    - name: "4.1 | Wait for the Write port to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 7011
+        timeout: 60
+
+
+- name: "PB-221b | Build + run enkidb-read-server on enkidb-node-read"
+  hosts: enkidb_read
+  become: false
+  vars:
+    enkidb_repo_root_fallback: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+
+  tasks:
+    - name: "0.1 | Confirm podman is installed"
+      ansible.builtin.command: podman --version
+      register: podman_version
+      changed_when: false
+
+    - name: "0.2 | Show podman version"
+      ansible.builtin.debug:
+        msg: "{{ podman_version.stdout }}"
+
+    - name: "0.3 | Confirm the repo checkout exists (build context only -- this container never reads /source)"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      register: repo_head
+      changed_when: false
+
+    - name: "0.4 | Show current commit on enkidb-node-read"
+      ansible.builtin.debug:
+        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-221's own commit (needs the ReadNode LIMIT fix)."
+
+    - name: "1.1 | Build enkidb-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkidb-read-server:latest -f workspace/bahyway_v4/deploy/podman/Containerfile.enkidb-read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "2.1 | Create Read-side data volume"
+      ansible.builtin.command: podman volume create enkidb-read-data
+      register: vol_create
+      failed_when: vol_create.rc != 0 and 'already exists' not in (vol_create.stderr | default(''))
+      changed_when: vol_create.rc == 0
+
+    - name: "3.1 | Check if enkidb-read container exists"
+      ansible.builtin.command: podman container exists enkidb-read
+      register: enkidb_read_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "3.2 | Run enkidb-read (port 7001)"
+      ansible.builtin.command: >
+        podman run -d --name enkidb-read
+        -p 7001:7001
+        -v enkidb-read-data:/data:Z
+        -e RELOAD_SECS=10
+        --restart=always
+        enkidb-read-server:latest
+      when: enkidb_read_exists.rc != 0
+      changed_when: true
+
+    - name: "3.2b | Ensure enkidb-read is actually running"
+      ansible.builtin.command: podman start enkidb-read
+      changed_when: true
+
+    - name: "3.3a | Check if firewalld is active"
+      ansible.builtin.command: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: "3.3b | Open Read port in firewalld"
+      ansible.builtin.command: firewall-cmd --permanent --add-port=7001/tcp
+      become: true
+      when: firewalld_status.stdout == "active"
+      register: fw_add
+      changed_when: "'ALREADY_ENABLED' not in (fw_add.stdout | default(''))"
+
+    - name: "3.3c | Reload firewalld to apply"
+      ansible.builtin.command: firewall-cmd --reload
+      become: true
+      when: firewalld_status.stdout == "active" and (fw_add.changed | default(false))
+      changed_when: true
+
+    - name: "4.1 | Wait for the Read port to accept connections"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 7001
+        timeout: 60
+
+
+- name: "PB-221c | Run the real 1M/10M/100M/1B scale sweep"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    enkidb_read_ip: "192.168.122.107"   # enkidb-node-read, per ansible/inventory.ini
+    # Override with -e '{"enkidb_seed_sizes": [1000000, 10000000]}' to
+    # skip 100M/1B on a box not sized for them -- see this file's own
+    # header for the disk-sizing warning.
+    enkidb_seed_sizes:
+      - 1000000
+      - 10000000
+      - 100000000
+      - 1000000000
+
+  tasks:
+    - name: "0.1 | Confirm both containers are up before touching anything"
+      ansible.builtin.command: podman ps --filter "name=enkidb-write" --filter "name=enkidb-read"
+      delegate_to: "{{ item }}"
+      loop:
+        - enkidb-node-write
+        - enkidb-node-read
+      register: containers_up
+      changed_when: false
+
+    - name: "0.2 | Show container status on each node"
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.stdout_lines }}"
+      loop: "{{ containers_up.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "1 | SEED, sync, and time real queries for each N"
+      ansible.builtin.include_tasks: tasks/enkidb_scale_sweep_iteration.yml
+      loop: "{{ enkidb_seed_sizes }}"
+      loop_control:
+        loop_var: enkidb_seed_n
+
+    - name: "2.1 | Print the full sweep -- the actual evidence, not a claim"
+      ansible.builtin.debug:
+        # default([]) matters here specifically: with enkidb_seed_sizes
+        # overridden to [] (the documented "deploy containers, skip the
+        # synthetic sweep" path), task 1's loop runs zero iterations, so
+        # tasks/enkidb_scale_sweep_iteration.yml's own set_fact (which
+        # already handles enkidb_sweep_results | default([]) on ITS side)
+        # never runs at all -- enkidb_sweep_results stays wholly undefined,
+        # not an empty list, and this task failed outright before this fix
+        # (found live 2026-08-01 running exactly that documented path).
+        msg: "{{ enkidb_sweep_results | default([]) if enkidb_seed_sizes | length > 0 else '(no sweep run -- enkidb_seed_sizes was empty, containers deployed without synthetic seeding)' }}"

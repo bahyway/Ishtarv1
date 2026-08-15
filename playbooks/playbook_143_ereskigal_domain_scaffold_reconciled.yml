@@ -1,0 +1,185 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_143_ereskigal_domain_scaffold_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-143 Reconciled: crate already built, query fixed
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_143_ereskigal_domain_scaffold_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_143_ereskigal_domain_scaffold.yml):
+#    Same situation as PB-142/NAMTAR: ereskigal-kaki already exists (a
+#    prior session built it for real — crates/ereskigal-kaki, 4 passing
+#    tests, already registered in the workspace Cargo.toml). Its embedded
+#    HeptaScript query template used the old colon-separated syntax
+#    confirmed broken against the current parser (see PB-112/PB-141/PB-142
+#    reconciliations). Rewrote it in the v2.0 WHO/ORBITAL/HOW_MUCH dialect
+#    and parse-verified it, and runs the crate's own test suite to prove
+#    it's real.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-143 (Reconciled) | EREŠKIGAL Domain Module — crate confirmed real, query fixed"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    crates_dir:    "{{ workspace }}/crates"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    docs_dir:      "{{ forge_root }}/docs"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ forge_root }}/docs/SHEDU/PB143_RECONCILED_{{ session_date }}.txt"
+    crate_name:    "ereskigal-kaki"
+    config_dir:    "{{ forge_root }}/config/ereskigal"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+
+  tasks:
+
+    - name: "PREP  | Ensure directories exist"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ docs_dir }}/ERESKIGAL"
+        - "{{ forge_root }}/docs/SHEDU"
+        - "{{ config_dir }}"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "CHECK | Does {{ crate_name }} already exist?"
+      ansible.builtin.stat:
+        path: "{{ crates_dir }}/{{ crate_name }}/Cargo.toml"
+      register: crate_stat
+
+    - name: "SCAFFOLD | cargo new --lib {{ crate_name }} (only if genuinely missing)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} new --lib {{ crate_name }}"
+        chdir: "{{ crates_dir }}"
+      when: not crate_stat.stat.exists
+      register: cargo_new
+      changed_when: cargo_new.rc == 0
+
+    - name: "TEST  | ereskigal-kaki test suite (proves it's real, not just present)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p ereskigal-kaki"
+        chdir: "{{ workspace }}"
+      register: ereskigal_test
+      changed_when: false
+      failed_when: "'test result: ok' not in ereskigal_test.stdout"
+
+    # ── BC-ERESKIGAL-001 ADR stub (only if missing) ─────────────────────────────
+    - name: "CHECK | BC-ERESKIGAL-001 stub already present?"
+      ansible.builtin.find:
+        paths: "{{ docs_dir }}/ERESKIGAL"
+        patterns: "BC-ERESKIGAL-001_*.md"
+      register: bc_ereskigal_find
+
+    - name: "WRITE | BC-ERESKIGAL-001 Architecture Design Reference stub (if missing)"
+      ansible.builtin.copy:
+        dest: "{{ docs_dir }}/ERESKIGAL/BC-ERESKIGAL-001_ERESKIGAL_STUB_{{ session_date }}.md"
+        mode: "0644"
+        content: |
+          # BC-ERESKIGAL-001 — EREŠKIGAL Informal Settlement Intelligence
+          ## BahyWay.Ecosystem v4.0 | Status: SCAFFOLD (crate: IMPLEMENTED, tests passing) | {{ session_date }}
+
+          ### Deity Reference
+          EREŠKIGAL — Queen of the Great Below, ruler of the underworld,
+          sister of Inanna. Sovereign over those who dwell in the margins.
+
+          ### Domain
+          Informal settlement (slum/IDP camp) infrastructure mapping,
+          service access monitoring (water/electricity/sanitation),
+          population flow tracking, humanitarian needs assessment.
+
+          ### Particle Classes
+          | Class          | kaki_type | kaki_role | Description |
+          |---|---|---|---|
+          | SettlementSite | 0x01 | KISHIB | Settlement identity (GPS boundary, population) |
+          | ServiceEvent   | 0x02 | ZIKRU  | Service delivery event |
+          | NeedsSignal    | 0x02 | PARZU  | Unmet need signal |
+          | ExternalReport | 0x03 | CrossTribe | UNHCR/OCHA/govt report |
+
+          ### TIAMAT Index
+          SVI (Settlement Vulnerability Index), stub formula implemented in
+          `ereskigal-kaki::compute_svi()`.
+
+          ### Tribe ID
+          `ereskigal_iraq` (primary), `ereskigal_regional` (extension, not yet built)
+
+          ### Status
+          Crate `ereskigal-kaki` is real: 4 tests passing, registered in the
+          workspace. Full BC-ERESKIGAL-001 ADR (UNHCR CrossTribe adapter,
+          satellite settlement boundary ingestion) still pending.
+      when: bc_ereskigal_find.matched == 0
+
+    - name: "WRITE | EREŠKIGAL HeptaScript query template (v2.0 syntax, parse-verified)"
+      ansible.builtin.copy:
+        dest: "{{ config_dir }}/ereskigal_crisis_query.hs"
+        mode: "0644"
+        content: |
+          # EREŠKIGAL — Active settlement crisis query (Anti-SQL HeptaScript)
+          # v2.0 syntax (WHO/ORBITAL/HOW_MUCH) — the original PRESENT/WHO:/
+          # WHAT:/WHEN:/WHERE:/HOW:/LIMIT: colon-syntax is confirmed broken
+          # against the current parser (see PB-112 reconciliation).
+
+          WHO ereskigal_iraq.E
+          ORBITAL 0 .. 99999999
+          HOW_MUCH LIMIT 50
+          ANCHOR AUTO
+
+    - name: "VERIFY | EREŠKIGAL query parses against the real current parser"
+      ansible.builtin.shell: |
+        cat > /tmp/pb143_parse_check.rs << 'EOF'
+        fn main() {
+            let q = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
+            let q: String = q.lines().filter(|l| !l.trim_start().starts_with('#')).collect::<Vec<_>>().join("\n");
+            match heptascript::parse_query(&q) {
+                Ok(_)  => println!("PARSE_OK"),
+                Err(e) => { println!("PARSE_FAIL: {:?}", e); std::process::exit(1); }
+            }
+        }
+        EOF
+        mkdir -p "{{ workspace }}/crates/heptascript/examples"
+        cp /tmp/pb143_parse_check.rs "{{ workspace }}/crates/heptascript/examples/pb143_parse_check.rs"
+        cd "{{ workspace }}"
+        {{ cargo }} run -p heptascript --example pb143_parse_check -- "{{ config_dir }}/ereskigal_crisis_query.hs"
+        rm -f "{{ workspace }}/crates/heptascript/examples/pb143_parse_check.rs"
+      register: parse_check
+      changed_when: false
+      failed_when: "'PARSE_OK' not in parse_check.stdout"
+
+    - name: "PATCH | Confirm {{ crate_name }} registered in workspace Cargo.toml"
+      ansible.builtin.lineinfile:
+        path: "{{ workspace }}/Cargo.toml"
+        insertafter: '^members = \['
+        line: '    "crates/{{ crate_name }}",'
+        state: present
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-143 Reconciled Report
+          Date   : {{ session_date }}
+          Crate  : ereskigal-kaki — CONFIRMED REAL, tests: {{ ereskigal_test.stdout | trim }}
+          Query  : ereskigal_crisis_query.hs rewritten to v2.0 syntax, parse-verified:
+            {{ parse_check.stdout | trim }}
+          Next   : PB-144 — Grafana+Prometheus monitoring setup
+
+    - name: "DONE  | PB-143 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-143 reconciled — ereskigal-kaki confirmed real (4 tests), query fixed and verified. Report: {{ report_file }}"

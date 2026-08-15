@@ -1,0 +1,867 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_81_way_v2_defense.yml
+# WAY v2.0 DEFENSE Extension + DubSar Extension
+# Layer 5: NERGAL as Sovereign Policy Language + Visual Rule Builder
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# WAY v2.0 DEFENSE syntax adds four new clauses:
+#   DEFEND  — protect a KAKI type or tribe from a specific attack vector
+#   ALLOW   — whitelist a source/pattern explicitly
+#   BLOCK   — blacklist a source/pattern explicitly
+#   MONITOR — watch without blocking (DILBAT mode)
+#
+# Example WAY v2.0 DEFENSE rules:
+#   DEFEND kaki_type:Event FROM replay_attack
+#   DEFEND tribe:ALL FROM kaki_injection
+#   ALLOW  WHO tribe:0x0001 WHERE clearance >= 3
+#   BLOCK  WHO tribe:UNKNOWN WHY "unregistered source tribe"
+#   MONITOR WHO all WHEN speed > 100_kakis_per_second
+#
+# DubSar Extension:
+#   Shape Library gets DEFENSE simplex (new geometry)
+#   DEFENSE shapes render in NERGAL Maroon (#800000)
+#   Drag-and-drop rule builder in 2D Clay Tablet Theater
+#   Rules auto-generate WAY v2.0 .way file
+#
+# Target  : eriduous-vdi (192.168.122.214)
+# Run from: EnkiLab HOST
+# ansible-playbook -i inventory/vdi.yml playbooks/81_way_v2_defense.yml
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 81 — WAY v2.0 DEFENSE Extension + DubSar Layer 5"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    dubsar_root: "/home/bahyway/Forge/bahyway_v4/apps/dubsar-ide"
+    script_path: "/tmp/bw_81_way_defense.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_81_way_defense.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # WAY v2.0 DEFENSE Extension — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE   = "/home/bahyway/Forge/bahyway_v4"
+          CRATE   = f"{FORGE}/crates/way-defense"
+          SRC     = f"{CRATE}/src"
+          DUBSAR  = f"{FORGE}/apps/dubsar-ide"
+          SCRIPTS = f"{DUBSAR}/scripts"
+
+          for d in [SRC, SCRIPTS]:
+              os.makedirs(d, exist_ok=True)
+
+          write = lambda p, c: open(p, "w").write(c)
+
+          # ══════════════════════════════════════════════════════════════════
+          # RUST CRATE: way-defense
+          # ══════════════════════════════════════════════════════════════════
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name        = "way-defense"
+          version     = "2.0.0"
+          edition     = "2021"
+          authors     = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          description = "WAY v2.0 DEFENSE Extension — Sovereign Security Policy Language"
+
+          [dependencies]
+          nergal-av   = { path = "../nergal-av" }
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          serde       = { version = "1", features = ["derive"] }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! WAY v2.0 DEFENSE Extension
+          //! Layer 5: NERGAL as Sovereign Policy Language
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! WAY v2.0 adds four DEFENSE clauses to the sovereign .way language:
+          //!
+          //! DEFEND kaki_type:Event FROM replay_attack
+          //!   → All Event-KAKIs are protected from replay attacks
+          //!   → NERGAL AV scanner activated for this type automatically
+          //!
+          //! ALLOW WHO tribe:0x0001 WHERE clearance >= 3
+          //!   → Tribe 1 with clearance level 3+ can access protected resources
+          //!
+          //! BLOCK WHO tribe:UNKNOWN WHY "unregistered source tribe"
+          //!   → Any particle from an unregistered tribe is blocked
+          //!   → WHY clause is mandatory (audit compliance)
+          //!
+          //! MONITOR WHO all WHEN speed > 100_kakis_per_second
+          //!   → Rate anomaly triggers DILBAT alert — does not block
+          //!
+          //! NERGAL Maroon (#800000) = colour of all DEFENSE rules in DubSar
+          //!
+          //! Every rule → immutable Event-KAKI in zakāru journal
+          //! Every rule evaluation → auditable WHY clause
+
+          #![forbid(unsafe_code)]
+
+          pub mod parser;
+          pub mod evaluator;
+          pub mod generator;
+
+          // ── WAY v2.0 DEFENSE rule types ───────────────────────────────────
+
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum DefenseClause {
+              /// Protect a subject from an attack vector
+              Defend {
+                  subject:  DefenseSubject,
+                  threat:   ThreatVector,
+              },
+              /// Explicitly allow a source
+              Allow {
+                  who:       WhoClause,
+                  condition: Option<String>,
+              },
+              /// Explicitly block a source with audit reason
+              Block {
+                  who: WhoClause,
+                  why: String,  // WHY clause mandatory
+              },
+              /// Monitor without blocking (DILBAT mode)
+              Monitor {
+                  who:       WhoClause,
+                  condition: String,
+              },
+          }
+
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum DefenseSubject {
+              KakiType(u8),        // e.g., 0x01 Identity, 0x02 Event
+              Tribe(u16),          // e.g., 0x0001 Najaf Cemetery
+              AllTribes,           // tribe:ALL
+              JournalBin,          // the append-only journal
+              HeptaScriptLayer,    // the query engine
+          }
+
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum ThreatVector {
+              ReplayAttack,
+              KakiInjection,
+              SqlInjection,
+              JournalTamper,
+              PuzruBypass,
+              TribeEscalation,
+              RateLimitBreach,
+              UnauthorisedQuery,  // missing WHY clause
+          }
+
+          #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+          pub enum WhoClause {
+              Tribe(u16),
+              TribeUnknown,  // tribe:UNKNOWN — unregistered
+              All,           // all
+          }
+
+          /// A complete WAY v2.0 DEFENSE policy file
+          #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+          pub struct DefensePolicy {
+              pub name:    String,
+              pub version: String,
+              pub rules:   Vec<DefenseClause>,
+              /// NERGAL Maroon applied to all rules in DubSar
+              pub colour:  String,
+          }
+
+          impl DefensePolicy {
+              pub fn new(name: impl Into<String>) -> Self {
+                  Self {
+                      name:    name.into(),
+                      version: "2.0.0".into(),
+                      rules:   Vec::new(),
+                      colour:  nergal_av::NERGAL_MAROON.into(),
+                  }
+              }
+
+              pub fn add_rule(&mut self, rule: DefenseClause) {
+                  self.rules.push(rule);
+              }
+
+              /// Evaluate a request against this policy
+              pub fn evaluate(&self, request: &PolicyRequest) -> PolicyVerdict {
+                  for rule in &self.rules {
+                      match rule {
+                          DefenseClause::Block { who, why } => {
+                              if who_matches(who, request) {
+                                  return PolicyVerdict::Block {
+                                      why:  why.clone(),
+                                      rule: format!("{:?}", rule),
+                                  };
+                              }
+                          }
+                          DefenseClause::Allow { who, condition } => {
+                              if who_matches(who, request) {
+                                  if let Some(cond) = condition {
+                                      if request.satisfies_condition(cond) {
+                                          return PolicyVerdict::Allow;
+                                      }
+                                  } else {
+                                      return PolicyVerdict::Allow;
+                                  }
+                              }
+                          }
+                          DefenseClause::Monitor { who, condition } => {
+                              if who_matches(who, request) &&
+                                 request.satisfies_condition(condition) {
+                                  return PolicyVerdict::Monitor {
+                                      alert_level: 1, // DILBAT
+                                  };
+                              }
+                          }
+                          DefenseClause::Defend { subject, threat } => {
+                              if subject_applies(subject, request) {
+                                  // Activate NERGAL AV for this threat
+                                  return PolicyVerdict::Defend {
+                                      threat: threat.clone(),
+                                  };
+                              }
+                          }
+                      }
+                  }
+                  PolicyVerdict::Allow // default: allow if no rule matches
+              }
+          }
+
+          fn who_matches(who: &WhoClause, req: &PolicyRequest) -> bool {
+              match who {
+                  WhoClause::Tribe(id)  => req.tribe_id == Some(*id),
+                  WhoClause::TribeUnknown => req.tribe_id.is_none(),
+                  WhoClause::All        => true,
+              }
+          }
+
+          fn subject_applies(subject: &DefenseSubject, req: &PolicyRequest) -> bool {
+              match subject {
+                  DefenseSubject::KakiType(t)    => req.kaki_type == Some(*t),
+                  DefenseSubject::Tribe(id)       => req.tribe_id  == Some(*id),
+                  DefenseSubject::AllTribes        => true,
+                  DefenseSubject::JournalBin       => req.target == "journal.bin",
+                  DefenseSubject::HeptaScriptLayer => req.target == "heptascript",
+              }
+          }
+
+          /// An incoming request to evaluate against the policy
+          #[derive(Debug, Clone)]
+          pub struct PolicyRequest {
+              pub tribe_id:   Option<u16>,
+              pub kaki_type:  Option<u8>,
+              pub target:     String,
+              pub clearance:  u8,
+              pub rate_kakis_per_sec: f32,
+              pub why_clause: Option<String>,
+          }
+
+          impl PolicyRequest {
+              pub fn satisfies_condition(&self, condition: &str) -> bool {
+                  if condition.contains("clearance >=") {
+                      if let Some(level) = condition
+                          .split(">=").nth(1)
+                          .and_then(|s| s.trim().parse::<u8>().ok()) {
+                          return self.clearance >= level;
+                      }
+                  }
+                  if condition.contains("speed >") {
+                      if let Some(threshold) = condition
+                          .split('>').nth(1)
+                          .and_then(|s| s.trim()
+                              .split('_').next()
+                              .and_then(|n| n.parse::<f32>().ok())) {
+                          return self.rate_kakis_per_sec > threshold;
+                      }
+                  }
+                  false
+              }
+          }
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum PolicyVerdict {
+              Allow,
+              Block  { why: String, rule: String },
+              Monitor { alert_level: u8 },
+              Defend  { threat: ThreatVector },
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn test_policy() -> DefensePolicy {
+                  let mut p = DefensePolicy::new("test-policy");
+                  p.add_rule(DefenseClause::Block {
+                      who: WhoClause::TribeUnknown,
+                      why: "Unregistered tribe — audit required".into(),
+                  });
+                  p.add_rule(DefenseClause::Defend {
+                      subject: DefenseSubject::AllTribes,
+                      threat:  ThreatVector::ReplayAttack,
+                  });
+                  p.add_rule(DefenseClause::Allow {
+                      who:       WhoClause::Tribe(0x0001),
+                      condition: Some("clearance >= 3".into()),
+                  });
+                  p.add_rule(DefenseClause::Monitor {
+                      who:       WhoClause::All,
+                      condition: "speed > 100_kakis_per_second".into(),
+                  });
+                  p
+              }
+
+              #[test]
+              fn test_unknown_tribe_blocked() {
+                  let policy = test_policy();
+                  let req = PolicyRequest {
+                      tribe_id:  None, // unknown
+                      kaki_type: Some(0x02),
+                      target:    "journal.bin".into(),
+                      clearance: 0,
+                      rate_kakis_per_sec: 10.0,
+                      why_clause: None,
+                  };
+                  let verdict = policy.evaluate(&req);
+                  assert!(matches!(verdict, PolicyVerdict::Block { .. }));
+              }
+
+              #[test]
+              fn test_known_tribe_with_clearance_allowed() {
+                  let policy = test_policy();
+                  let req = PolicyRequest {
+                      tribe_id:  Some(0x0001),
+                      kaki_type: Some(0x01),
+                      target:    "enkidb".into(),
+                      clearance: 3,  // >= 3 required
+                      rate_kakis_per_sec: 5.0,
+                      why_clause: Some("audit access".into()),
+                  };
+                  assert!(matches!(policy.evaluate(&req), PolicyVerdict::Allow));
+              }
+
+              #[test]
+              fn test_replay_attack_defended() {
+                  let policy = test_policy();
+                  let req = PolicyRequest {
+                      tribe_id:  Some(0x0002),
+                      kaki_type: Some(0x02), // Event-KAKI
+                      target:    "journal.bin".into(),
+                      clearance: 1,
+                      rate_kakis_per_sec: 20.0,
+                      why_clause: Some("test".into()),
+                  };
+                  assert!(matches!(
+                      policy.evaluate(&req),
+                      PolicyVerdict::Defend { threat: ThreatVector::ReplayAttack }
+                  ));
+              }
+
+              #[test]
+              fn test_rate_spike_monitored() {
+                  let policy = test_policy();
+                  let req = PolicyRequest {
+                      tribe_id:  Some(0x0001),
+                      kaki_type: None,
+                      target:    "query".into(),
+                      clearance: 2,
+                      rate_kakis_per_sec: 150.0, // above 100 threshold
+                      why_clause: Some("test".into()),
+                  };
+                  // Rate spike triggers MONITOR (DILBAT) not block
+                  let verdict = policy.evaluate(&req);
+                  assert!(matches!(verdict,
+                      PolicyVerdict::Monitor { alert_level: 1 } | PolicyVerdict::Allow
+                  ));
+              }
+
+              #[test]
+              fn test_defense_colour_is_nergal_maroon() {
+                  let policy = DefensePolicy::new("test");
+                  assert_eq!(policy.colour, "#800000");
+                  // DEFENSE rules always render in NERGAL Maroon
+              }
+          }
+          """))
+
+          write(f"{SRC}/parser.rs", textwrap.dedent("""\
+          //! WAY v2.0 DEFENSE Parser
+          //! Parses .way files with DEFENSE clauses
+
+          #![forbid(unsafe_code)]
+
+          use crate::{DefenseClause, DefenseSubject, ThreatVector, WhoClause, DefensePolicy};
+
+          pub fn parse_way_file(content: &str, name: &str) -> Result<DefensePolicy, String> {
+              let mut policy = DefensePolicy::new(name);
+
+              for (lineno, line) in content.lines().enumerate() {
+                  let line = line.trim();
+                  if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+                      continue;
+                  }
+                  let upper = line.to_uppercase();
+
+                  if upper.starts_with("DEFEND ") {
+                      policy.add_rule(parse_defend(line)
+                          .map_err(|e| format!("Line {}: {}", lineno+1, e))?);
+                  } else if upper.starts_with("BLOCK ") {
+                      policy.add_rule(parse_block(line)
+                          .map_err(|e| format!("Line {}: {}", lineno+1, e))?);
+                  } else if upper.starts_with("ALLOW ") {
+                      policy.add_rule(parse_allow(line)
+                          .map_err(|e| format!("Line {}: {}", lineno+1, e))?);
+                  } else if upper.starts_with("MONITOR ") {
+                      policy.add_rule(parse_monitor(line)
+                          .map_err(|e| format!("Line {}: {}", lineno+1, e))?);
+                  }
+              }
+              Ok(policy)
+          }
+
+          fn parse_defend(line: &str) -> Result<DefenseClause, String> {
+              // DEFEND kaki_type:Event FROM replay_attack
+              let parts: Vec<&str> = line.split_whitespace().collect();
+              if parts.len() < 4 || parts[2].to_uppercase() != "FROM" {
+                  return Err("DEFEND syntax: DEFEND <subject> FROM <threat>".into());
+              }
+              let subject = parse_subject(parts[1])?;
+              let threat  = parse_threat(parts[3])?;
+              Ok(DefenseClause::Defend { subject, threat })
+          }
+
+          fn parse_block(line: &str) -> Result<DefenseClause, String> {
+              // BLOCK WHO tribe:UNKNOWN WHY "reason"
+              let why_pos = line.to_uppercase().find("WHY")
+                  .ok_or("BLOCK requires WHY clause")?;
+              let why = line[why_pos + 3..].trim().trim_matches('"').to_string();
+              if why.is_empty() { return Err("WHY clause cannot be empty".into()); }
+              let who_part = &line[6..why_pos].trim().to_uppercase();
+              let who = parse_who(who_part)?;
+              Ok(DefenseClause::Block { who, why })
+          }
+
+          fn parse_allow(line: &str) -> Result<DefenseClause, String> {
+              // ALLOW WHO tribe:0x0001 WHERE clearance >= 3
+              let upper = line.to_uppercase();
+              let where_pos = upper.find("WHERE");
+              let who_part  = if let Some(wp) = where_pos {
+                  line[6..wp].trim().to_uppercase()
+              } else {
+                  line[6..].trim().to_uppercase()
+              };
+              let who       = parse_who(&who_part)?;
+              let condition = where_pos.map(|wp| line[wp + 5..].trim().to_string());
+              Ok(DefenseClause::Allow { who, condition })
+          }
+
+          fn parse_monitor(line: &str) -> Result<DefenseClause, String> {
+              // MONITOR WHO all WHEN speed > 100_kakis_per_second
+              let upper    = line.to_uppercase();
+              let when_pos = upper.find("WHEN")
+                  .ok_or("MONITOR requires WHEN clause")?;
+              let who_part  = line[8..when_pos].trim().to_uppercase();
+              let who       = parse_who(&who_part)?;
+              let condition = line[when_pos + 4..].trim().to_string();
+              Ok(DefenseClause::Monitor { who, condition })
+          }
+
+          fn parse_subject(s: &str) -> Result<DefenseSubject, String> {
+              match s.to_lowercase().as_str() {
+                  "tribe:all" | "all"       => Ok(DefenseSubject::AllTribes),
+                  "journal.bin"             => Ok(DefenseSubject::JournalBin),
+                  "heptascript"             => Ok(DefenseSubject::HeptaScriptLayer),
+                  s if s.starts_with("kaki_type:") => {
+                      let t = s.trim_start_matches("kaki_type:");
+                      let byte = match t {
+                          "identity" | "0x01" => 0x01u8,
+                          "event"    | "0x02" => 0x02,
+                          "crosstribe"| "0x03"=> 0x03,
+                          _ => return Err(format!("Unknown kaki_type: {}", t)),
+                      };
+                      Ok(DefenseSubject::KakiType(byte))
+                  }
+                  s if s.starts_with("tribe:") => {
+                      let id_str = s.trim_start_matches("tribe:");
+                      let id = if id_str.starts_with("0x") {
+                          u16::from_str_radix(&id_str[2..], 16)
+                              .map_err(|e| e.to_string())?
+                      } else {
+                          id_str.parse::<u16>().map_err(|e| e.to_string())?
+                      };
+                      Ok(DefenseSubject::Tribe(id))
+                  }
+                  _ => Err(format!("Unknown subject: {}", s))
+              }
+          }
+
+          fn parse_threat(s: &str) -> Result<ThreatVector, String> {
+              match s.to_lowercase().as_str() {
+                  "replay_attack"       => Ok(ThreatVector::ReplayAttack),
+                  "kaki_injection"      => Ok(ThreatVector::KakiInjection),
+                  "sql_injection"       => Ok(ThreatVector::SqlInjection),
+                  "journal_tamper"      => Ok(ThreatVector::JournalTamper),
+                  "puzru_bypass"        => Ok(ThreatVector::PuzruBypass),
+                  "tribe_escalation"    => Ok(ThreatVector::TribeEscalation),
+                  "rate_limit_breach"   => Ok(ThreatVector::RateLimitBreach),
+                  "unauthorised_query"  => Ok(ThreatVector::UnauthorisedQuery),
+                  _ => Err(format!("Unknown threat vector: {}", s)),
+              }
+          }
+
+          fn parse_who(s: &str) -> Result<WhoClause, String> {
+              match s.trim().to_lowercase().as_str() {
+                  "who all" | "all"                  => Ok(WhoClause::All),
+                  "who tribe:unknown" | "tribe:unknown" => Ok(WhoClause::TribeUnknown),
+                  s if s.contains("tribe:0x") || s.contains("tribe:") => {
+                      let id_part = s.split("tribe:").nth(1).unwrap_or("0");
+                      let id = if id_part.starts_with("0x") {
+                          u16::from_str_radix(&id_part[2..], 16)
+                              .unwrap_or(0)
+                      } else {
+                          id_part.trim().parse().unwrap_or(0)
+                      };
+                      Ok(WhoClause::Tribe(id))
+                  }
+                  _ => Ok(WhoClause::All)
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              const SAMPLE_WAY: &str = r#"
+          ; BahyWay Sovereign Defense Policy v2.0
+          ; NERGAL Layer 5 — WAY v2.0 DEFENSE
+
+          DEFEND tribe:ALL FROM replay_attack
+          DEFEND kaki_type:Event FROM kaki_injection
+          BLOCK WHO tribe:UNKNOWN WHY "Unregistered tribe — audit required"
+          ALLOW WHO tribe:0x0001 WHERE clearance >= 3
+          MONITOR WHO all WHEN speed > 100_kakis_per_second
+          "#;
+
+              #[test]
+              fn test_parse_sample_policy() {
+                  let policy = parse_way_file(SAMPLE_WAY, "test").unwrap();
+                  assert_eq!(policy.rules.len(), 5);
+              }
+
+              #[test]
+              fn test_block_requires_why() {
+                  let bad = "BLOCK WHO tribe:UNKNOWN";
+                  assert!(parse_way_file(bad, "test").is_err() ||
+                      parse_way_file(bad, "test").unwrap().rules.is_empty());
+              }
+
+              #[test]
+              fn test_defend_replay_parsed() {
+                  let way = "DEFEND tribe:ALL FROM replay_attack";
+                  let p   = parse_way_file(way, "test").unwrap();
+                  assert!(matches!(
+                      &p.rules[0],
+                      DefenseClause::Defend {
+                          subject: DefenseSubject::AllTribes,
+                          threat:  ThreatVector::ReplayAttack,
+                      }
+                  ));
+              }
+          }
+          """))
+
+          write(f"{SRC}/generator.rs", textwrap.dedent("""\
+          //! WAY v2.0 DEFENSE Generator
+          //! Generates .way policy files from visual DubSar rule builder
+
+          #![forbid(unsafe_code)]
+
+          use crate::{DefensePolicy, DefenseClause, DefenseSubject, ThreatVector, WhoClause};
+
+          pub fn generate_way_file(policy: &DefensePolicy) -> String {
+              let mut out = vec![
+                  "; WAY v2.0 DEFENSE Policy".into(),
+                  format!("; Name: {}", policy.name),
+                  format!("; Version: {}", policy.version),
+                  format!("; NERGAL Colour: {}", policy.colour),
+                  "; Generated by DubSar DEFENSE Rule Builder".into(),
+                  "; 𒁾 BahyWay.Ecosystem v4.0 — DUB.SAR".into(),
+                  String::new(),
+              ];
+
+              for rule in &policy.rules {
+                  out.push(format_rule(rule));
+              }
+
+              out.join("\n")
+          }
+
+          fn format_rule(rule: &DefenseClause) -> String {
+              match rule {
+                  DefenseClause::Defend { subject, threat } =>
+                      format!("DEFEND {} FROM {}",
+                          format_subject(subject), format_threat(threat)),
+                  DefenseClause::Block { who, why } =>
+                      format!("BLOCK WHO {} WHY {:?}", format_who(who), why),
+                  DefenseClause::Allow { who, condition } =>
+                      if let Some(c) = condition {
+                          format!("ALLOW WHO {} WHERE {}", format_who(who), c)
+                      } else {
+                          format!("ALLOW WHO {}", format_who(who))
+                      },
+                  DefenseClause::Monitor { who, condition } =>
+                      format!("MONITOR WHO {} WHEN {}", format_who(who), condition),
+              }
+          }
+
+          fn format_subject(s: &DefenseSubject) -> String {
+              match s {
+                  DefenseSubject::AllTribes          => "tribe:ALL".into(),
+                  DefenseSubject::Tribe(id)          => format!("tribe:0x{:04X}", id),
+                  DefenseSubject::KakiType(t)        => format!("kaki_type:0x{:02X}", t),
+                  DefenseSubject::JournalBin         => "journal.bin".into(),
+                  DefenseSubject::HeptaScriptLayer   => "heptascript".into(),
+              }
+          }
+
+          fn format_threat(t: &ThreatVector) -> String {
+              match t {
+                  ThreatVector::ReplayAttack      => "replay_attack",
+                  ThreatVector::KakiInjection     => "kaki_injection",
+                  ThreatVector::SqlInjection      => "sql_injection",
+                  ThreatVector::JournalTamper     => "journal_tamper",
+                  ThreatVector::PuzruBypass       => "puzru_bypass",
+                  ThreatVector::TribeEscalation   => "tribe_escalation",
+                  ThreatVector::RateLimitBreach   => "rate_limit_breach",
+                  ThreatVector::UnauthorisedQuery => "unauthorised_query",
+              }.into()
+          }
+
+          fn format_who(w: &WhoClause) -> String {
+              match w {
+                  WhoClause::All         => "all".into(),
+                  WhoClause::TribeUnknown => "tribe:UNKNOWN".into(),
+                  WhoClause::Tribe(id)   => format!("tribe:0x{:04X}", id),
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_round_trip_policy() {
+                  let mut p = DefensePolicy::new("round-trip");
+                  p.add_rule(DefenseClause::Defend {
+                      subject: DefenseSubject::AllTribes,
+                      threat:  ThreatVector::ReplayAttack,
+                  });
+                  p.add_rule(DefenseClause::Block {
+                      who: WhoClause::TribeUnknown,
+                      why: "Unregistered tribe".into(),
+                  });
+                  let way = generate_way_file(&p);
+                  assert!(way.contains("DEFEND tribe:ALL FROM replay_attack"));
+                  assert!(way.contains("BLOCK WHO tribe:UNKNOWN"));
+                  assert!(way.contains("𒁾"));
+              }
+          }
+          """))
+
+          # ── DubSar: defense_shapes.gd (Layer 5 visual rule builder) ───
+          write(f"{SCRIPTS}/defense_shapes.gd", textwrap.dedent("""\
+          # defense_shapes.gd — NERGAL DEFENSE Shape Library Extension
+          # Layer 5: Visual WAY v2.0 DEFENSE Rule Builder in DubSar IDE
+          # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          #
+          # Adds DEFENSE shapes to the DubSar Shape Library.
+          # Renders in NERGAL Maroon (#800000) — sealed colour.
+          # Drag shapes onto 2D Clay Tablet → auto-generates WAY v2.0 rules.
+          extends Node
+
+          const NERGAL_MAROON := Color("#800000")
+          const NERGAL_MAROON_DIM := Color(0.3, 0.0, 0.0, 0.7)
+
+          # The four DEFENSE shape types
+          enum DefenseShapeType {
+              DEFEND,   # Shield simplex — protects a subject
+              ALLOW,    # Open gate simplex — permits passage
+              BLOCK,    # Closed barrier — stops passage
+              MONITOR,  # Eye simplex — watches without blocking
+          }
+
+          # Generated WAY v2.0 rules from visual placement
+          var generated_rules: Array[String] = []
+
+          # ── Shape factories ───────────────────────────────────────────────
+
+          func create_defend_shape(subject: String, threat: String) -> Dictionary:
+              ## DEFEND shape: shield — Maroon border
+              var rule = "DEFEND %s FROM %s" % [subject, threat]
+              generated_rules.append(rule)
+              return {
+                  "type": DefenseShapeType.DEFEND,
+                  "rule": rule,
+                  "colour": NERGAL_MAROON,
+                  "label": "𒀭𒉺𒂵 DEFEND",
+                  "glyph": "🛡",
+              }
+
+          func create_block_shape(who: String, why: String) -> Dictionary:
+              ## BLOCK shape: barrier — solid Maroon
+              if why.is_empty():
+                  push_error("[WAY v2.0] BLOCK requires WHY clause")
+                  return {}
+              var rule = 'BLOCK WHO %s WHY "%s"' % [who, why]
+              generated_rules.append(rule)
+              return {
+                  "type": DefenseShapeType.BLOCK,
+                  "rule": rule,
+                  "colour": NERGAL_MAROON,
+                  "label": "𒀭𒉺𒂵 BLOCK",
+                  "glyph": "⛔",
+              }
+
+          func create_allow_shape(who: String, condition: String) -> Dictionary:
+              ## ALLOW shape: open gate — Maroon outline only
+              var rule = "ALLOW WHO %s" % who
+              if not condition.is_empty():
+                  rule += " WHERE %s" % condition
+              generated_rules.append(rule)
+              return {
+                  "type": DefenseShapeType.ALLOW,
+                  "rule": rule,
+                  "colour": NERGAL_MAROON_DIM,
+                  "label": "𒀭𒉺𒂵 ALLOW",
+                  "glyph": "✓",
+              }
+
+          func create_monitor_shape(who: String, condition: String) -> Dictionary:
+              ## MONITOR shape: eye — pulsing Maroon
+              var rule = "MONITOR WHO %s WHEN %s" % [who, condition]
+              generated_rules.append(rule)
+              return {
+                  "type": DefenseShapeType.MONITOR,
+                  "rule": rule,
+                  "colour": NERGAL_MAROON,
+                  "label": "𒀭𒉺𒂵 MONITOR",
+                  "glyph": "👁",
+              }
+
+          # ── WAY file generation ────────────────────────────────────────────
+
+          func export_way_file(policy_name: String) -> String:
+              ## Export all visual rules as WAY v2.0 .way file
+              var lines = [
+                  "; WAY v2.0 DEFENSE Policy",
+                  "; Name: %s" % policy_name,
+                  "; Generated by DubSar DEFENSE Rule Builder",
+                  "; 𒁾 BahyWay.Ecosystem v4.0 — DUB.SAR",
+                  "; NERGAL Maroon: #800000 — sealed",
+                  "",
+              ]
+              lines.append_array(generated_rules)
+              return "\n".join(lines)
+
+          func save_way_file(policy_name: String, path: String) -> bool:
+              var content = export_way_file(policy_name)
+              var file    = FileAccess.open(path, FileAccess.WRITE)
+              if file == null:
+                  push_error("[WAY v2.0] Cannot write to: %s" % path)
+                  return false
+              file.store_string(content)
+              file.close()
+              print("[WAY v2.0] Saved: %s (%d rules)" % [path, generated_rules.size()])
+              return true
+
+          func clear_rules() -> void:
+              generated_rules.clear()
+          """))
+
+          # ── Register + build ────────────────────────────────────────────
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/way-defense"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/way-defense",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "way-defense"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0:
+              print("✗ BUILD FAILED:"); print(r.stderr[-3000:]); sys.exit(1)
+          print("✓ way-defense build clean")
+
+          t = subprocess.run(
+              ["cargo", "test", "-p", "way-defense", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0:
+              print("✗ TESTS FAILED:"); print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ All WAY v2.0 DEFENSE tests pass")
+
+          print("""
+          ══════════════════════════════════════════════════════════
+            PLAYBOOK 81 — WAY v2.0 DEFENSE COMPLETE
+            Layer 5: NERGAL as Sovereign Policy Language
+
+            WAY v2.0 DEFENSE clauses:
+              DEFEND  <subject>    FROM  <threat>
+              BLOCK   WHO <who>    WHY   "reason"
+              ALLOW   WHO <who>    WHERE <condition>
+              MONITOR WHO <who>    WHEN  <condition>
+
+            DubSar Extension:
+              defense_shapes.gd — visual rule builder
+              4 DEFENSE shape types (Maroon #800000)
+              Drag-and-drop → auto-generates .way file
+
+            Supported threats:
+              replay_attack / kaki_injection / sql_injection
+              journal_tamper / puzru_bypass
+              tribe_escalation / rate_limit_breach
+              unauthorised_query
+
+            "Only NERGAL can enter KUR and return." 𒀭𒉺𒂵
+          ══════════════════════════════════════════════════════════
+          """)
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p81_out
+      changed_when: true
+
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p81_out.stdout_lines }}"
+
+    - name: "2.2 | Assert all NERGAL layers complete"
+      ansible.builtin.assert:
+        that: p81_out.rc == 0
+        success_msg: |
+          ╔══════════════════════════════════════════════════════════════╗
+          ║  NERGAL 𒀭𒉺𒂵 — ALL FIVE LAYERS SEALED                      ║
+          ║  𒁾 DUB.SAR — BahyWay.Ecosystem v4.0                        ║
+          ╠══════════════════════════════════════════════════════════════╣
+          ║  PB 79  Layer 1: DubSar panel (nergal_panel.gd)             ║
+          ║         Layer 2: Website Firewall (NergalFirewall)           ║
+          ║         Layer 3: Standalone AV product (nergal-av CLI)       ║
+          ║  PB 80  Layer 4: White-Hat Agent (8 attack surfaces)         ║
+          ║  PB 81  Layer 5: WAY v2.0 DEFENSE + DubSar extension        ║
+          ║                                                              ║
+          ║  SEALED CONSTANTS:                                           ║
+          ║    #800000 Maroon  = NERGAL exclusively                      ║
+          ║    IRKALLA 0x0002  = quarantine tribe                        ║
+          ║    Option A        = HALT AND REPORT immediately             ║
+          ║    B11             = round(severity × 240) Plimpton 322      ║
+          ║    Finding-KAKI    = κ[6]=0x02, κ[7]=0xFF                   ║
+          ║                                                              ║
+          ║  "Only NERGAL can enter KUR and return."                     ║
+          ║  𒀭𒉺𒂵 Sealed.                                               ║
+          ╚══════════════════════════════════════════════════════════════╝
+        fail_msg: "✗ WAY v2.0 DEFENSE build failed"

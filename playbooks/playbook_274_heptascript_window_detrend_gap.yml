@@ -1,0 +1,112 @@
+# =============================================================================
+# PB-274 — HeptaScript WINDOW/DETREND grammar gap (documented, DEFERRED)
+# BahyWay.Ecosystem v4.0
+#
+# This playbook does NOT change the HeptaScript grammar. It exists to
+# verify and record, honestly, that the WINDOW/WITHIN/DETREND/OBSERVE
+# tokens the Girsu CSD Notebook pipeline (ADR-019, GL-CSD-001) needs are
+# NOT yet real, and that no "HS-EXT-001" source document exists to claim
+# otherwise -- a citation the uploaded design tablets made that does not
+# hold up against crates/heptascript/src/token.rs.
+#
+# Why this is its own playbook rather than folded into PB-272/273: adding
+# tokens to a sealed language's parser is real risk (every existing
+# HeptaScript program must keep parsing correctly; a new reserved word
+# can silently break an existing identifier). Per this ecosystem's own
+# CSR-08 (Architect/DataSteward ratification for high-impact changes),
+# that design deserves the Architect's own sign-off on the exact grammar
+# (token spelling, clause precedence, how WINDOW composes with the
+# existing ANCHOR/GRAVITY/MEASURE clauses) BEFORE code changes, not
+# after. This playbook is that sign-off request, made concrete and
+# checkable rather than left as prose in a chat.
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# =============================================================================
+---
+- name: "PB-274 | HeptaScript WINDOW/DETREND grammar gap -- verify and report, do not build"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    repo_root:   "{{ playbook_dir }}/.."
+    workspace:   "{{ repo_root }}/workspace/bahyway_v4"
+    token_file:  "{{ workspace }}/crates/heptascript/src/token.rs"
+    docs_dir:    "{{ workspace }}/docs/testing"
+    session_date: "{{ ansible_date_time.date }}"
+    report_file: "{{ docs_dir }}/PB274_HEPTASCRIPT_WINDOW_GAP_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "VERIFY | WITNESS and SYNC are real tokens (the pipeline's own confirmed-real parts)"
+      ansible.builtin.command:
+        cmd: "grep -c 'VerbWitness\\|VerbSync' {{ token_file }}"
+      register: real_tokens
+      changed_when: false
+      failed_when: real_tokens.rc != 0
+
+    - name: "VERIFY | WINDOW is NOT a real token (confirms the gap, does not close it)"
+      ansible.builtin.command:
+        cmd: "grep -c '\"WINDOW\"' {{ token_file }}"
+      register: window_token
+      changed_when: false
+      failed_when: false
+
+    - name: "ASSERT | WINDOW is genuinely absent -- if this ever fails, someone built it; update ADR-019/this playbook, do not just delete the check"
+      ansible.builtin.assert:
+        that:
+          - window_token.rc != 0
+        fail_msg: >-
+          WINDOW now appears in token.rs. The grammar gap this playbook
+          documents may be closed -- update docs/14_decisions_adr/
+          adr_019_girsu_csd_notebook.md's Consequences section and this
+          playbook's own header rather than silently deleting this check.
+        success_msg: "Confirmed: WINDOW is not yet a real HeptaScript token (gap still open, as documented)."
+
+    - name: "VERIFY | HS-EXT-001 does not exist anywhere in the repo"
+      ansible.builtin.command:
+        cmd: "find {{ repo_root }} -iname '*HS-EXT-001*' -o -iname '*HS_EXT_001*'"
+      register: hs_ext_search
+      changed_when: false
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "WRITE | Gap report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-274 HeptaScript WINDOW/DETREND Gap Report
+          Date : {{ session_date }}
+
+          CONFIRMED REAL (no action needed):
+            Token::VerbWitness, Token::VerbSync -- crates/heptascript/src/token.rs
+
+          CONFIRMED NOT REAL (the gap):
+            WINDOW / WITHIN clause tokens -- absent from token.rs
+            DETREND, OBSERVE tokens -- absent from token.rs
+            HS-EXT-001 source document -- {{ 'FOUND (unexpected -- re-check citation)' if hs_ext_search.stdout | trim | length > 0 else 'not found anywhere in the repo, as expected' }}
+
+          WHAT THIS BLOCKS:
+            The Girsu CSD Notebook pipeline (ADR-019 / GL-CSD-001) as literally
+            written cannot run today -- ninurta_engine::render_verdict is real
+            and callable directly from Rust, but no HeptaScript cell can express
+            "WINDOW LAST 90 TICKS ... DETREND running_mean" yet.
+
+          RECOMMENDATION (for the Architect's ratification, not auto-applied):
+            Design WINDOW as a temporal-scope clause composing with the existing
+            ANCHOR/GRAVITY/MEASURE clauses (see crates/heptascript/src/token.rs
+            for the real precedent those two set), specify exact token spelling
+            and precedence, then implement as its own PB with real parser tests
+            -- the same rigor MEASURE/GRAVITY were built and tested under.
+
+          This playbook intentionally stops here. No parser code was touched.
+
+    - name: "DONE | PB-274 gap documented, no grammar change made"
+      ansible.builtin.debug:
+        msg: "Report written to {{ report_file }}. Awaiting Architect design sign-off before any parser change."

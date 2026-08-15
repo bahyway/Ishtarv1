@@ -1,0 +1,193 @@
+---
+# ============================================================
+# Playbook 11 — Fix SELinux labels + start EnkiDB VMs
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+#
+# Problem: SELinux label conflict on qcow2 files in new path
+# Fix:     restorecon -Rv on the vdi directory to reset labels
+#
+# Run on enkilab HOST:
+#   ansible-playbook ~/Downloads/11_fix_selinux_start_vms.yml -v
+# ============================================================
+
+- name: "𒁾 Fix SELinux + start EnkiDB VMs"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    vdi_dir:   "/home/bfadam/Forge/FedoraWorkstation44Infra/vdi"
+    vm_write:  "enkidb-node-write"
+    vm_read:   "enkidb-node-read"
+    vm_dubsar: "dubsar-workstation"
+    ip_write:  "192.168.122.101"
+    ip_read:   "192.168.122.107"
+    ip_dubsar: "192.168.122.121"
+    ssh_user:  "bahyway"
+
+  tasks:
+
+    # ── Step 1: Fix SELinux context on all qcow2 files ────────────────────
+    - name: "Set correct SELinux type on vdi directory (svirt_image_t)"
+      ansible.builtin.shell:
+        cmd: |
+          sudo chcon -Rt svirt_image_t {{ vdi_dir }}/
+      register: chcon_result
+      changed_when: true
+      failed_when:  chcon_result.rc != 0
+
+    - name: "Restore SELinux file contexts on vdi directory"
+      ansible.builtin.shell:
+        cmd: sudo restorecon -Rv {{ vdi_dir }}/
+      register: restorecon_result
+      changed_when: true
+      failed_when:  false   # non-fatal — may not have policy for new path
+
+    - name: "Show restorecon output"
+      ansible.builtin.debug:
+        msg: "{{ restorecon_result.stdout_lines | default([]) }}"
+
+    # ── Step 2: Verify SELinux label on each qcow2 ────────────────────────
+    - name: "Check SELinux labels on qcow2 files"
+      ansible.builtin.shell:
+        cmd: ls -lZ {{ vdi_dir }}/*.qcow2
+      register: selinux_labels
+      changed_when: false
+
+    - name: "✓ SELinux labels"
+      ansible.builtin.debug:
+        msg: "{{ selinux_labels.stdout_lines }}"
+
+    # ── Step 3: Start enkidb-node-write ───────────────────────────────────
+    - name: "Start enkidb-node-write"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_write }}
+      register: start_write
+      changed_when: true
+      failed_when:
+        - start_write.rc != 0
+        - "'already running' not in start_write.stderr"
+
+    - name: "Wait 30s for enkidb-node-write to boot"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on enkidb-node-write ({{ ip_write }})"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_write }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    - name: "Check journal.bin on write node"
+      ansible.builtin.shell:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no {{ ssh_user }}@{{ ip_write }}
+          "ls -lh /home/bahyway/enkidb/data/tribe-0001/journal.bin
+           2>/dev/null || echo NOT_FOUND"
+      register: journal_write
+      changed_when: false
+
+    - name: "✓ Write node journal.bin"
+      ansible.builtin.debug:
+        msg: "{{ journal_write.stdout }}"
+
+    # ── Step 4: Start enkidb-node-read ────────────────────────────────────
+    - name: "Start enkidb-node-read"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_read }}
+      register: start_read
+      changed_when: true
+      failed_when:
+        - start_read.rc != 0
+        - "'already running' not in start_read.stderr"
+
+    - name: "Wait 30s for enkidb-node-read to boot"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on enkidb-node-read ({{ ip_read }})"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_read }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    - name: "Check journal.bin on read node"
+      ansible.builtin.shell:
+        cmd: >
+          ssh -o StrictHostKeyChecking=no {{ ssh_user }}@{{ ip_read }}
+          "ls -lh /home/bahyway/enkidb/data/tribe-0001/journal.bin
+           2>/dev/null || echo NOT_FOUND"
+      register: journal_read
+      changed_when: false
+
+    - name: "✓ Read node journal.bin"
+      ansible.builtin.debug:
+        msg: "{{ journal_read.stdout }}"
+
+    # ── Step 5: Start dubsar-workstation ──────────────────────────────────
+    - name: "Start dubsar-workstation"
+      ansible.builtin.shell:
+        cmd: sudo virsh start {{ vm_dubsar }}
+      register: start_dubsar
+      changed_when: true
+      failed_when:
+        - start_dubsar.rc != 0
+        - "'already running' not in start_dubsar.stderr"
+
+    - name: "Wait 30s for dubsar-workstation"
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: "Wait for SSH on dubsar-workstation ({{ ip_dubsar }})"
+      ansible.builtin.wait_for:
+        host:    "{{ ip_dubsar }}"
+        port:    22
+        timeout: 90
+        state:   started
+
+    # ── Step 6: Final status ──────────────────────────────────────────────
+    - name: "Final VM list"
+      ansible.builtin.shell:
+        cmd: sudo virsh list --all
+      register: final_list
+      changed_when: false
+
+    - name: "✓ All VMs"
+      ansible.builtin.debug:
+        msg: "{{ final_list.stdout_lines }}"
+
+    # ── Step 7: Make SELinux label permanent via semanage ─────────────────
+    # This ensures future boots do not need restorecon again
+    - name: "Add permanent SELinux fcontext for vdi directory"
+      ansible.builtin.shell:
+        cmd: >
+          sudo semanage fcontext -a -t svirt_image_t
+          "{{ vdi_dir }}(/.*)?"
+      register: semanage_result
+      changed_when: true
+      failed_when: false   # non-fatal — may already exist
+
+    - name: "Apply permanent fcontext"
+      ansible.builtin.shell:
+        cmd: sudo restorecon -Rv {{ vdi_dir }}/
+      changed_when: true
+      failed_when:  false
+
+    # ── Step 8: Done ──────────────────────────────────────────────────────
+    - name: "𒁾 All systems restored"
+      ansible.builtin.debug:
+        msg:
+          - "=============================================="
+          - "𒁾 BahyWay.Ecosystem v4.0 — All Systems Online"
+          - "----------------------------------------------"
+          - "SELinux: svirt_image_t applied permanently"
+          - "enkidb-node-write  {{ ip_write }}   ✓"
+          - "enkidb-node-read   {{ ip_read }}   ✓"
+          - "dubsar-workstation {{ ip_dubsar }}  ✓"
+          - "----------------------------------------------"
+          - "In eriduous-vdi desktop terminal run:"
+          - "  cd ~/Forge/bahyway_v4"
+          - "  cargo run -p dubsar-visualizer"
+          - "=============================================="

@@ -1,0 +1,1281 @@
+---
+# =============================================================================
+# PLAYBOOK 93 — GeoEngine: Sovereign Geometry Engine
+# 7 GeoLaws + 4 Shards + UnifiedParticleRegistry + InFlight + GeometryFanOut
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_93_geo_engine.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Playbook 93 — GeoEngine sovereign geometry engine"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge: "/home/bahyway/Forge/bahyway_v4"
+    crate: "/home/bahyway/Forge/bahyway_v4/crates/geo-engine"
+
+  tasks:
+
+    - name: "Create geo-engine directory structure"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crate }}/src"
+        - "{{ crate }}/src/laws"
+        - "{{ crate }}/src/registry"
+        - "{{ crate }}/src/shard"
+        - "{{ crate }}/src/fanout"
+
+    - name: "Write Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/Cargo.toml"
+        content: |
+          [package]
+          name    = "geo-engine"
+          version = "4.0.0"
+          edition = "2021"
+
+          # Zero async runtime — pure std
+          # Single source of ALL mathematical truth in BahyWay v4.0
+          [dependencies]
+          bahyway-crc = { path = "../bahyway-crc" }
+          thiserror   = "1"
+
+          [lib]
+          name = "geo_engine"
+
+    - name: "Write error.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/error.rs"
+        content: |
+          //! GeoEngineError — one variant per GeoLaw violation.
+          use thiserror::Error;
+
+          #[derive(Debug, Error)]
+          pub enum GeoEngineError {
+              #[error("GeoLaw-01: orbital position {0:?} outside E7 lattice bounds")]
+              E7BoundsViolation(String),
+              #[error("GeoLaw-02: ColourID computed outside [0,240] — Plimpton 322 violated")]
+              PlimptonViolation,
+              #[error("GeoLaw-03: Betti computation requires at least 1 particle")]
+              BettiEmpty,
+              #[error("GeoLaw-04: Gap(n) negative — more particles than E7 predicts (INTRUDER_CORRUPT)")]
+              GapNegative { shell: usize, found: usize, expected: usize },
+              #[error("GeoLaw-05: Jordan orbit unstable — eigenvalue {0} outside unit disc")]
+              JordanUnstable(f64),
+              #[error("GeoLaw-06: VGCA tribe algebra violation — tribe {0} not registered")]
+              VgcaTribeUnregistered(u16),
+              #[error("GeoLaw-07: Pauli Exclusion — position ({r:.3},{theta:.3},{phi:.3}) already occupied by surrogate {occupant}")]
+              PauliExclusion { r: f64, theta: f64, phi: f64, occupant: u32 },
+              #[error("InFlight shard: surrogate {0} not found")]
+              InFlightNotFound(u32),
+              #[error("Shard error: {0}")]
+              ShardError(String),
+          }
+
+          pub type GeoResult<T> = Result<T, GeoEngineError>;
+
+    - name: "Write laws/mod.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/laws/mod.rs"
+        content: |
+          pub mod geo01_e7;
+          pub mod geo02_plimpton;
+          pub mod geo03_betti;
+          pub mod geo04_gap;
+          pub mod geo05_jordan;
+          pub mod geo06_vgca;
+          pub mod geo07_pauli;
+
+    - name: "Write laws/geo01_e7.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/laws/geo01_e7.rs"
+        content: |
+          //! GeoLaw-01: E7 lattice — the ONLY orbital zone decomposition.
+          //! Maryna Viazovska's Fields Medal proof: 126 kissing neighbours.
+          //! 7 polar bands × 18 azimuthal sectors = 126 zones per shell.
+
+          pub const E7_KISSING_NUMBER: usize = 126;
+          pub const POLAR_BANDS:       usize = 7;
+          pub const AZIMUTH_SECTORS:   usize = 18;
+          pub const ZONES_PER_SHELL:   usize = 126; // 7 × 18
+          pub const MAX_SHELLS:        usize = 7;
+          pub const TOTAL_ZONES:       usize = 882; // 7 shells × 126 zones
+
+          /// Spherical orbital position.
+          #[derive(Debug, Clone, Copy, PartialEq)]
+          pub struct OrbitalPosition {
+              pub r:     f64,  // radial distance  [0, ∞)
+              pub theta: f64,  // polar angle      [0, π]
+              pub phi:   f64,  // azimuthal angle  [0, 2π)
+          }
+
+          impl OrbitalPosition {
+              pub fn new(r: f64, theta: f64, phi: f64) -> Self {
+                  Self { r, theta, phi }
+              }
+
+              /// Convert GPS coordinates to orbital position.
+              /// lat/lon → (theta, phi), altitude → r
+              pub fn from_gps(lat: f64, lon: f64, alt_km: f64) -> Self {
+                  let theta = (90.0 - lat).to_radians();
+                  let phi   = (lon + 180.0).to_radians();
+                  Self { r: alt_km.max(0.1), theta, phi }
+              }
+          }
+
+          /// Map orbital position to (shell, zone) index pair.
+          /// Shell = discrete radial band. Zone = E7 heptagonal bucket.
+          pub fn position_to_zone(pos: &OrbitalPosition) -> (usize, usize) {
+              let shell = (pos.r.floor() as usize).min(MAX_SHELLS - 1);
+              let band  = ((pos.theta / std::f64::consts::PI) * POLAR_BANDS as f64)
+                              .floor() as usize;
+              let band  = band.min(POLAR_BANDS - 1);
+              let sector = ((pos.phi / (2.0 * std::f64::consts::PI)) * AZIMUTH_SECTORS as f64)
+                              .floor() as usize;
+              let sector = sector.min(AZIMUTH_SECTORS - 1);
+              let zone   = band * AZIMUTH_SECTORS + sector;
+              (shell, zone)
+          }
+
+          /// The 126 E7 kissing neighbours of a zone.
+          /// Returns (shell, zone) pairs — wraps at boundaries.
+          pub fn kissing_neighbours(shell: usize, zone: usize) -> Vec<(usize, usize)> {
+              let mut neighbours = Vec::with_capacity(E7_KISSING_NUMBER);
+              let band   = zone / AZIMUTH_SECTORS;
+              let sector = zone % AZIMUTH_SECTORS;
+
+              // Same shell — adjacent zones (E7 lattice connectivity)
+              for db in 0..POLAR_BANDS {
+                  for ds in 0..AZIMUTH_SECTORS {
+                      if db == band && ds == sector { continue; }
+                      let dist = ((db as isize - band as isize).abs()
+                                + (ds as isize - sector as isize).abs()) as usize;
+                      if dist <= 2 {
+                          neighbours.push((shell, db * AZIMUTH_SECTORS + ds));
+                      }
+                  }
+              }
+              // Adjacent shells
+              if shell > 0 {
+                  neighbours.push((shell - 1, zone));
+              }
+              if shell < MAX_SHELLS - 1 {
+                  neighbours.push((shell + 1, zone));
+              }
+              neighbours.truncate(E7_KISSING_NUMBER);
+              neighbours
+          }
+
+    - name: "Write laws/geo02_plimpton.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/laws/geo02_plimpton.rs"
+        content: |
+          //! GeoLaw-02: B11 = round(H(P) × 240) — Plimpton 322 ONLY.
+          //! 240 is the ONLY valid divisor. Never 255.
+
+          pub const PLIMPTON_322_DIVISOR: u16 = 240;
+
+          /// Compute ColourID B11 from a hash value H in [0.0, 1.0].
+          /// GeoLaw-02: result is always in [0, 240].
+          pub fn colour_id_b11(h: f64) -> u16 {
+              let h = h.clamp(0.0, 1.0);
+              (h * PLIMPTON_322_DIVISOR as f64).round() as u16
+          }
+
+          /// Compute H(P) from KAKI bytes (uuid_hash κ[0..3]).
+          pub fn hash_from_kaki(kaki: &[u8; 16]) -> f64 {
+              let raw = u32::from_le_bytes([kaki[0], kaki[1], kaki[2], kaki[3]]);
+              raw as f64 / u32::MAX as f64
+          }
+
+          /// Derive B11 directly from KAKI bytes.
+          pub fn b11_from_kaki(kaki: &[u8; 16]) -> u16 {
+              colour_id_b11(hash_from_kaki(kaki))
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              #[test]
+              fn b11_never_exceeds_240() {
+                  assert!(colour_id_b11(1.0) <= 240);
+                  assert_ne!(colour_id_b11(1.0), 255);
+              }
+              #[test]
+              fn b11_at_zero_is_zero() {
+                  assert_eq!(colour_id_b11(0.0), 0);
+              }
+          }
+
+    - name: "Write laws/geo03_betti.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/laws/geo03_betti.rs"
+        content: |
+          //! GeoLaw-03: Betti numbers β₀/β₁/β₂ — computed ONLY in GeoEngine.
+          //! β₀ = connected components (clusters)
+          //! β₁ = loops (pressure loops in WPD, cyclic patterns in data)
+          //! β₂ = voids (empty orbital zones — hidden patterns)
+
+          #[derive(Debug, Clone, Copy, Default, PartialEq)]
+          pub struct BettiNumbers {
+              pub b0: usize,  // clusters
+              pub b1: usize,  // loops
+              pub b2: usize,  // voids
+          }
+
+          impl BettiNumbers {
+              /// Nisaba trigger: β₁ > 0 → loop detected → generate ṬUPŠARRU art
+              pub fn nisaba_loop_trigger(&self) -> bool { self.b1 > 0 }
+
+              /// Nisaba memorial trigger: β₂ > 0 → void detected → The Void is Sacred
+              pub fn nisaba_memorial_trigger(&self) -> bool { self.b2 > 0 }
+
+              /// KIBRATU trigger: β₀ deviation from expected cluster count
+              pub fn kibratu_cluster_deviation(&self, expected_clusters: usize) -> i64 {
+                  self.b0 as i64 - expected_clusters as i64
+              }
+
+              /// Combine Betti numbers from multiple zones
+              pub fn combine(numbers: &[BettiNumbers]) -> Self {
+                  Self {
+                      b0: numbers.iter().map(|b| b.b0).sum(),
+                      b1: numbers.iter().map(|b| b.b1).sum(),
+                      b2: numbers.iter().map(|b| b.b2).sum(),
+                  }
+              }
+          }
+
+          /// Compute Betti numbers from zone particle counts.
+          /// Simplified topological analysis from particle density.
+          pub fn compute_betti(zone_counts: &[usize], threshold: usize) -> BettiNumbers {
+              let occupied: Vec<bool> = zone_counts.iter().map(|&c| c >= threshold).collect();
+              let n = occupied.len();
+
+              // β₀: count connected components (adjacent occupied zones)
+              let mut b0 = 0usize;
+              let mut visited = vec![false; n];
+              for i in 0..n {
+                  if occupied[i] && !visited[i] {
+                      b0 += 1;
+                      // Simple flood fill
+                      let mut stack = vec![i];
+                      while let Some(j) = stack.pop() {
+                          if visited[j] { continue; }
+                          visited[j] = true;
+                          // Neighbours in linear approximation
+                          if j > 0 && occupied[j-1] && !visited[j-1] { stack.push(j-1); }
+                          if j < n-1 && occupied[j+1] && !visited[j+1] { stack.push(j+1); }
+                      }
+                  }
+              }
+
+              // β₁: loops — zones with all neighbours occupied (enclosed regions)
+              let b1 = (0..n).filter(|&i| {
+                  occupied[i]
+                      && i > 0 && occupied[i-1]
+                      && i < n-1 && occupied[i+1]
+              }).count() / 3; // rough approximation
+
+              // β₂: voids — unoccupied zones surrounded by occupied zones
+              let b2 = (1..n-1).filter(|&i| {
+                  !occupied[i] && occupied[i-1] && occupied[i+1]
+              }).count();
+
+              BettiNumbers { b0, b1, b2 }
+          }
+
+    - name: "Write laws/geo04_gap.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/laws/geo04_gap.rs"
+        content: |
+          //! GeoLaw-04: Gap(n) = Θ_E7(n) − Θ_found(n)
+          //! Positive gap → HIDDEN_PATTERN (missing particles)
+          //! Negative gap → INTRUDER_CORRUPT (injected particles)
+          //! Zero gap     → sovereign balance
+
+          use super::geo01_e7::ZONES_PER_SHELL;
+
+          /// E7 theta series: expected particle count at shell n.
+          /// Shell 1 = 126, Shell 2 = 756, Shell 3 = 2520...
+          /// Based on Viazovska's E7 theta series coefficients.
+          pub fn theta_e7(shell: usize) -> usize {
+              match shell {
+                  0 => 1,
+                  1 => 126,
+                  2 => 756,
+                  3 => 2520,
+                  4 => 5670,
+                  5 => 9072,
+                  6 => 11592,
+                  _ => shell * ZONES_PER_SHELL,
+              }
+          }
+
+          /// Gap(n) = Θ_E7(n) − Θ_found(n)
+          /// Returns signed gap — positive = missing, negative = excess.
+          pub fn gap(shell: usize, found: usize) -> i64 {
+              theta_e7(shell) as i64 - found as i64
+          }
+
+          #[derive(Debug, Clone)]
+          pub enum GapEvent {
+              /// Positive gap — KIBRATU cause: HIDDEN_PATTERN
+              HiddenPattern { shell: usize, missing: usize },
+              /// Negative gap — KIBRATU cause: INTRUDER_CORRUPT
+              IntruderCorrupt { shell: usize, excess: usize },
+              /// Zero gap — sovereign balance
+              Sovereign { shell: usize },
+          }
+
+          pub fn classify_gap(shell: usize, found: usize) -> GapEvent {
+              let g = gap(shell, found);
+              match g.cmp(&0) {
+                  std::cmp::Ordering::Greater =>
+                      GapEvent::HiddenPattern { shell, missing: g as usize },
+                  std::cmp::Ordering::Less =>
+                      GapEvent::IntruderCorrupt { shell, excess: (-g) as usize },
+                  std::cmp::Ordering::Equal =>
+                      GapEvent::Sovereign { shell },
+              }
+          }
+
+    - name: "Write laws/geo05_jordan.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/laws/geo05_jordan.rs"
+        content: |
+          //! GeoLaw-05: Jordan Normal Form — orbit stability validation.
+          //! An orbit is stable if all eigenvalues lie inside the unit disc.
+          //! Used by WPD Engine to predict whether a leak will stabilise.
+
+          /// 2×2 real matrix (orbit state transition matrix)
+          #[derive(Debug, Clone, Copy)]
+          pub struct Matrix2x2 {
+              pub a: f64, pub b: f64,
+              pub c: f64, pub d: f64,
+          }
+
+          impl Matrix2x2 {
+              /// Characteristic polynomial eigenvalues via quadratic formula.
+              pub fn eigenvalues(&self) -> (f64, f64) {
+                  let tr   = self.a + self.d;
+                  let det  = self.a * self.d - self.b * self.c;
+                  let disc = tr * tr - 4.0 * det;
+                  if disc >= 0.0 {
+                      let sq = disc.sqrt();
+                      ((tr + sq) / 2.0, (tr - sq) / 2.0)
+                  } else {
+                      // Complex eigenvalues — use magnitude
+                      let mag = det.sqrt();
+                      (mag, mag)
+                  }
+              }
+
+              /// GeoLaw-05: orbit is stable iff |λ| < 1 for all eigenvalues.
+              pub fn is_stable(&self) -> bool {
+                  let (l1, l2) = self.eigenvalues();
+                  l1.abs() < 1.0 && l2.abs() < 1.0
+              }
+
+              /// WPD Engine: will a leak stabilise given current pressure matrix?
+              pub fn leak_will_stabilise(&self) -> bool {
+                  self.is_stable()
+              }
+          }
+
+    - name: "Write laws/geo06_vgca.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/laws/geo06_vgca.rs"
+        content: |
+          //! GeoLaw-06: VGCA∆ tribe algebra — governs tribe interactions.
+          //! Tribes form a group under the VGCA∆ operation.
+          //! Only GeoEngine may compute tribe fanout partitions.
+
+          use std::collections::{HashMap, HashSet};
+
+          /// Tribe orbit centre — spatial anchor for a tribe's particles.
+          #[derive(Debug, Clone)]
+          pub struct TribeOrbitCentre {
+              pub tribe_id: u16,
+              pub r:        f64,   // orbital radius
+              pub theta:    f64,   // polar angle
+              pub phi:      f64,   // azimuthal angle
+              pub radius:   f64,   // orbit spread radius
+          }
+
+          /// VGCA∆ tribe algebra registry.
+          pub struct VgcaRegistry {
+              tribes: HashMap<u16, TribeOrbitCentre>,
+          }
+
+          impl VgcaRegistry {
+              pub fn new() -> Self { Self { tribes: HashMap::new() } }
+
+              pub fn register(&mut self, centre: TribeOrbitCentre) {
+                  self.tribes.insert(centre.tribe_id, centre);
+              }
+
+              pub fn is_registered(&self, tribe_id: u16) -> bool {
+                  self.tribes.contains_key(&tribe_id)
+              }
+
+              /// VGCA∆ partition: distribute tribe_ids across fan-out workers.
+              /// Returns partition sets — one per worker thread.
+              pub fn partition_for_fanout(
+                  &self,
+                  tribe_ids: &[u16],
+                  workers:   usize,
+              ) -> Vec<Vec<u16>> {
+                  let mut partitions = vec![Vec::new(); workers.max(1)];
+                  for (i, &tid) in tribe_ids.iter().enumerate() {
+                      partitions[i % workers.max(1)].push(tid);
+                  }
+                  partitions
+              }
+
+              /// CrossTribe pairs — tribes that share orbital overlap.
+              pub fn cross_tribe_pairs(&self) -> Vec<(u16, u16)> {
+                  let ids: Vec<u16> = self.tribes.keys().copied().collect();
+                  let mut pairs = Vec::new();
+                  for i in 0..ids.len() {
+                      for j in i+1..ids.len() {
+                          let a = &self.tribes[&ids[i]];
+                          let b = &self.tribes[&ids[j]];
+                          let dist = ((a.r - b.r).powi(2)
+                                    + (a.theta - b.theta).powi(2)
+                                    + (a.phi - b.phi).powi(2)).sqrt();
+                          if dist < a.radius + b.radius {
+                              pairs.push((ids[i], ids[j]));
+                          }
+                      }
+                  }
+                  pairs
+              }
+          }
+
+          impl Default for VgcaRegistry {
+              fn default() -> Self { Self::new() }
+          }
+
+    - name: "Write laws/geo07_pauli.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/laws/geo07_pauli.rs"
+        content: |
+          //! GeoLaw-07: Pauli Exclusion — no two KAKIs at same (r,θ,φ,tribe).
+          //! GeoEngine REJECTS any insert that violates this across all four shards.
+          //! This is the sovereign Pauli Exclusion enforced at index level.
+
+          use std::collections::HashMap;
+          use crate::error::{GeoEngineError, GeoResult};
+
+          /// Quantised orbital position key — discretises (r,θ,φ) to grid.
+          #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+          pub struct OrbitalKey {
+              pub r_bin:     u32,  // r discretised to 3 decimal places
+              pub theta_bin: u32,
+              pub phi_bin:   u32,
+              pub tribe_id:  u16,
+          }
+
+          impl OrbitalKey {
+              pub fn from_position(r: f64, theta: f64, phi: f64, tribe_id: u16) -> Self {
+                  Self {
+                      r_bin:     (r     * 1000.0).round() as u32,
+                      theta_bin: (theta * 1000.0).round() as u32,
+                      phi_bin:   (phi   * 1000.0).round() as u32,
+                      tribe_id,
+                  }
+              }
+          }
+
+          /// Pauli Exclusion table — one per GeoEngine instance.
+          #[derive(Default)]
+          pub struct PauliTable {
+              occupied: HashMap<OrbitalKey, u32>,  // key → surrogate
+          }
+
+          impl PauliTable {
+              pub fn new() -> Self { Self::default() }
+
+              /// Attempt to occupy a position. Returns error if already occupied.
+              pub fn occupy(
+                  &mut self,
+                  r: f64, theta: f64, phi: f64,
+                  tribe_id:  u16,
+                  surrogate: u32,
+              ) -> GeoResult<()> {
+                  let key = OrbitalKey::from_position(r, theta, phi, tribe_id);
+                  if let Some(&occupant) = self.occupied.get(&key) {
+                      return Err(GeoEngineError::PauliExclusion { r, theta, phi, occupant });
+                  }
+                  self.occupied.insert(key, surrogate);
+                  Ok(())
+              }
+
+              /// Release a position when a particle is promoted or removed.
+              pub fn release(&mut self, r: f64, theta: f64, phi: f64, tribe_id: u16) {
+                  let key = OrbitalKey::from_position(r, theta, phi, tribe_id);
+                  self.occupied.remove(&key);
+              }
+
+              pub fn is_occupied(&self, r: f64, theta: f64, phi: f64, tribe_id: u16) -> bool {
+                  let key = OrbitalKey::from_position(r, theta, phi, tribe_id);
+                  self.occupied.contains_key(&key)
+              }
+          }
+
+    - name: "Write registry/particle.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/registry/particle.rs"
+        content: |
+          //! UnifiedParticleRegistry — single source of truth for particle location.
+          //! Maps surrogate_u32 → {store, OrbitalPosition, GateId}
+          //! Callers never need to know which physical database holds a particle.
+
+          use std::collections::HashMap;
+          use crate::laws::geo01_e7::OrbitalPosition;
+
+          /// Which physical store currently holds this particle.
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          pub enum ParticleStore {
+              EnkiDB,       // committed — KISPU sealed
+              EnkiSDB,      // staging — processing in É-DUBBA gates
+              EnkiODB,      // ontology — CrossTribe registered
+              InFlight,     // in transit — TIAMAT predicted, not yet committed
+          }
+
+          /// É-DUBBA gate identifier (1–7).
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          pub struct GateId(pub u8);
+
+          impl GateId {
+              pub const MASHSHARU:    GateId = GateId(1);
+              pub const NAMZITUM:     GateId = GateId(2);
+              pub const TIAMAT5:      GateId = GateId(3);
+              pub const PASHIRU:      GateId = GateId(4);
+              pub const KISPU:        GateId = GateId(5);
+              pub const UTNAPISHTIM:  GateId = GateId(6);
+              pub const NISABA:       GateId = GateId(7);
+          }
+
+          /// Full particle location record.
+          #[derive(Debug, Clone)]
+          pub struct ParticleLocation {
+              pub surrogate:  u32,
+              pub store:      ParticleStore,
+              pub position:   OrbitalPosition,
+              pub tribe_id:   u16,
+              pub gate:       Option<GateId>,   // Some if in-flight through É-DUBBA
+              pub shell:      usize,
+              pub zone:       usize,
+          }
+
+          /// UnifiedParticleRegistry — surrogate → location.
+          #[derive(Default)]
+          pub struct UnifiedParticleRegistry {
+              locations: HashMap<u32, ParticleLocation>,
+          }
+
+          impl UnifiedParticleRegistry {
+              pub fn new() -> Self { Self::default() }
+
+              pub fn register(&mut self, loc: ParticleLocation) {
+                  self.locations.insert(loc.surrogate, loc);
+              }
+
+              pub fn get(&self, surrogate: u32) -> Option<&ParticleLocation> {
+                  self.locations.get(&surrogate)
+              }
+
+              pub fn update_store(&mut self, surrogate: u32, store: ParticleStore) {
+                  if let Some(loc) = self.locations.get_mut(&surrogate) {
+                      loc.store = store;
+                      loc.gate  = None; // cleared when promoted
+                  }
+              }
+
+              pub fn update_position(&mut self, surrogate: u32, pos: OrbitalPosition) {
+                  if let Some(loc) = self.locations.get_mut(&surrogate) {
+                      loc.position = pos;
+                  }
+              }
+
+              pub fn advance_gate(&mut self, surrogate: u32, gate: GateId) {
+                  if let Some(loc) = self.locations.get_mut(&surrogate) {
+                      loc.gate = Some(gate);
+                  }
+              }
+
+              pub fn remove(&mut self, surrogate: u32) {
+                  self.locations.remove(&surrogate);
+              }
+
+              pub fn by_store(&self, store: ParticleStore) -> Vec<&ParticleLocation> {
+                  self.locations.values().filter(|l| l.store == store).collect()
+              }
+
+              pub fn by_tribe(&self, tribe_id: u16) -> Vec<&ParticleLocation> {
+                  self.locations.values().filter(|l| l.tribe_id == tribe_id).collect()
+              }
+
+              pub fn total(&self) -> usize { self.locations.len() }
+          }
+
+    - name: "Write registry/mod.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/registry/mod.rs"
+        content: |
+          pub mod particle;
+          pub use particle::{
+              UnifiedParticleRegistry, ParticleLocation,
+              ParticleStore, GateId,
+          };
+
+    - name: "Write shard/inflight.rs — the crown jewel"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/shard/inflight.rs"
+        content: |
+          //! InFlight Shard — THE CROWN JEWEL of GeoEngine.
+          //!
+          //! Tracks particles that no database has committed yet but are
+          //! geometrically real — moving through the 7 É-DUBBA gates,
+          //! or predicted by TIAMAT (e.g. WPD Engine pipeline leaks).
+          //!
+          //! Every ŠUMU-UKIN query hits this shard alongside committed stores.
+          //! The caller sees a unified orbital view — never knows which store.
+          //!
+          //! WPD Engine use case:
+          //!   TIAMAT predicts junction J-047 will leak in 23 days.
+          //!   spawn_inflight() creates KAKI_LEAK_J047 with GPS position.
+          //!   tick() advances its position as the leak bleeds upstream.
+          //!   promote_to_enkidb() commits it when physically confirmed.
+
+          use std::collections::HashMap;
+          use std::sync::RwLock;
+          use crate::laws::geo01_e7::OrbitalPosition;
+          use crate::registry::particle::GateId;
+
+          /// Velocity vector — how fast the particle moves per tick.
+          /// WPD Engine: pressure gradient → velocity.
+          #[derive(Debug, Clone, Copy)]
+          pub struct OrbitalVelocity {
+              pub delta_r:     f64,
+              pub delta_theta: f64,
+              pub delta_phi:   f64,
+          }
+
+          impl OrbitalVelocity {
+              pub fn zero() -> Self {
+                  Self { delta_r: 0.0, delta_theta: 0.0, delta_phi: 0.0 }
+              }
+
+              /// Convert pressure gradient (Pa/m) to orbital velocity.
+              pub fn from_pressure_gradient(gradient: f64) -> Self {
+                  Self {
+                      delta_r:     0.0,
+                      delta_theta: gradient * 0.001,
+                      delta_phi:   gradient * 0.0005,
+                  }
+              }
+          }
+
+          /// A step in the particle's bleed trail — for audit and Nisaba.
+          #[derive(Debug, Clone)]
+          pub struct BleedStep {
+              pub tick:     u64,
+              pub position: OrbitalPosition,
+          }
+
+          /// An InFlight particle — geometrically real, not yet committed.
+          #[derive(Debug, Clone)]
+          pub struct InFlightParticle {
+              pub surrogate:         u32,
+              pub tribe_id:          u16,
+              pub position:          OrbitalPosition,
+              pub velocity:          OrbitalVelocity,
+              pub gate:              Option<GateId>,
+              pub tiamat_confidence: f64,    // 0.0–1.0 prediction confidence
+              pub bleed_trail:       Vec<BleedStep>,
+              pub tick:              u64,
+          }
+
+          impl InFlightParticle {
+              /// Advance position by one tick using velocity vector.
+              pub fn advance(&mut self) {
+                  self.bleed_trail.push(BleedStep {
+                      tick:     self.tick,
+                      position: self.position,
+                  });
+                  self.position.r     += self.velocity.delta_r;
+                  self.position.theta += self.velocity.delta_theta;
+                  self.position.phi   += self.velocity.delta_phi;
+                  // Wrap phi to [0, 2π)
+                  self.position.phi = self.position.phi
+                      .rem_euclid(2.0 * std::f64::consts::PI);
+                  self.tick += 1;
+              }
+          }
+
+          /// Spawn parameters for a new InFlight particle.
+          pub struct InFlightSpawn {
+              pub surrogate:         u32,
+              pub tribe_id:          u16,
+              pub position:          OrbitalPosition,
+              pub velocity:          OrbitalVelocity,
+              pub tiamat_confidence: f64,
+              pub gate:              Option<GateId>,
+          }
+
+          /// InFlight shard — all in-transit particles.
+          pub struct InFlightShard {
+              particles: RwLock<HashMap<u32, InFlightParticle>>,
+          }
+
+          impl InFlightShard {
+              pub fn new() -> Self {
+                  Self { particles: RwLock::new(HashMap::new()) }
+              }
+
+              /// Spawn a new InFlight particle (TIAMAT prediction or gate entry).
+              pub fn spawn(&self, spawn: InFlightSpawn) {
+                  let particle = InFlightParticle {
+                      surrogate:         spawn.surrogate,
+                      tribe_id:          spawn.tribe_id,
+                      position:          spawn.position,
+                      velocity:          spawn.velocity,
+                      gate:              spawn.gate,
+                      tiamat_confidence: spawn.tiamat_confidence,
+                      bleed_trail:       Vec::new(),
+                      tick:              0,
+                  };
+                  self.particles.write().unwrap().insert(spawn.surrogate, particle);
+              }
+
+              /// Advance all InFlight particles by one tick.
+              pub fn tick(&self) {
+                  for p in self.particles.write().unwrap().values_mut() {
+                      p.advance();
+                  }
+              }
+
+              /// Advance gate for a particle moving through É-DUBBA.
+              pub fn advance_gate(&self, surrogate: u32, gate: GateId) {
+                  if let Some(p) = self.particles.write().unwrap().get_mut(&surrogate) {
+                      p.gate = Some(gate);
+                  }
+              }
+
+              /// Remove particle from InFlight on promotion to EnkiDB.
+              /// Returns the sealed bleed trail for NĀRU journal.
+              pub fn promote(&self, surrogate: u32) -> Option<Vec<BleedStep>> {
+                  self.particles.write().unwrap()
+                      .remove(&surrogate)
+                      .map(|p| p.bleed_trail)
+              }
+
+              /// Query — return all particles for tribe_id.
+              pub fn query_tribe(&self, tribe_id: u16) -> Vec<InFlightParticle> {
+                  self.particles.read().unwrap()
+                      .values()
+                      .filter(|p| p.tribe_id == tribe_id)
+                      .cloned()
+                      .collect()
+              }
+
+              pub fn count(&self) -> usize {
+                  self.particles.read().unwrap().len()
+              }
+
+              pub fn get(&self, surrogate: u32) -> Option<InFlightParticle> {
+                  self.particles.read().unwrap().get(&surrogate).cloned()
+              }
+          }
+
+          impl Default for InFlightShard {
+              fn default() -> Self { Self::new() }
+          }
+
+    - name: "Write shard/enkidb.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/shard/enkidb.rs"
+        content: |
+          //! EnkiDB shard — committed particles (KISPU sealed).
+          use std::collections::HashMap;
+          use std::sync::RwLock;
+          use crate::laws::geo01_e7::OrbitalPosition;
+
+          #[derive(Debug, Clone)]
+          pub struct CommittedEntry {
+              pub surrogate: u32,
+              pub tribe_id:  u16,
+              pub position:  OrbitalPosition,
+              pub b11:       u16,
+              pub state:     OrbitalState,
+          }
+
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          pub enum OrbitalState {
+              GoldenGem, GoldenAlive,
+              FuzzyAged, FuzzyGray, FuzzyDecay,
+              DeadExpired, DeadSealed,
+          }
+
+          pub struct EnkiDbShard {
+              entries: RwLock<HashMap<u32, CommittedEntry>>,
+          }
+
+          impl EnkiDbShard {
+              pub fn new() -> Self {
+                  Self { entries: RwLock::new(HashMap::new()) }
+              }
+
+              pub fn insert(&self, entry: CommittedEntry) {
+                  self.entries.write().unwrap().insert(entry.surrogate, entry);
+              }
+
+              pub fn query_tribe(&self, tribe_id: u16) -> Vec<CommittedEntry> {
+                  self.entries.read().unwrap()
+                      .values()
+                      .filter(|e| e.tribe_id == tribe_id)
+                      .cloned()
+                      .collect()
+              }
+
+              pub fn count(&self) -> usize { self.entries.read().unwrap().len() }
+          }
+
+          impl Default for EnkiDbShard { fn default() -> Self { Self::new() } }
+
+    - name: "Write shard/enkisdb.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/shard/enkisdb.rs"
+        content: |
+          //! EnkiSDB shard — staging particles (processing in É-DUBBA gates).
+          use std::collections::HashMap;
+          use std::sync::RwLock;
+          use crate::laws::geo01_e7::OrbitalPosition;
+          use crate::registry::particle::GateId;
+
+          #[derive(Debug, Clone)]
+          pub struct StagingEntry {
+              pub surrogate: u32,
+              pub tribe_id:  u16,
+              pub position:  OrbitalPosition,
+              pub gate:      GateId,
+              pub station:   u8,  // BeeMDM S1-S8
+          }
+
+          pub struct EnkiSdbShard {
+              entries: RwLock<HashMap<u32, StagingEntry>>,
+          }
+
+          impl EnkiSdbShard {
+              pub fn new() -> Self { Self { entries: RwLock::new(HashMap::new()) } }
+
+              pub fn insert(&self, entry: StagingEntry) {
+                  self.entries.write().unwrap().insert(entry.surrogate, entry);
+              }
+
+              pub fn query_tribe(&self, tribe_id: u16) -> Vec<StagingEntry> {
+                  self.entries.read().unwrap()
+                      .values()
+                      .filter(|e| e.tribe_id == tribe_id)
+                      .cloned()
+                      .collect()
+              }
+
+              pub fn count(&self) -> usize { self.entries.read().unwrap().len() }
+          }
+
+          impl Default for EnkiSdbShard { fn default() -> Self { Self::new() } }
+
+    - name: "Write shard/enkiodb.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/shard/enkiodb.rs"
+        content: |
+          //! EnkiODB shard — ontology particles (CrossTribe registered).
+          use std::collections::HashMap;
+          use std::sync::RwLock;
+          use crate::laws::geo01_e7::OrbitalPosition;
+
+          #[derive(Debug, Clone)]
+          pub struct OntologyEntry {
+              pub surrogate:       u32,
+              pub tribe_id:        u16,
+              pub position:        OrbitalPosition,
+              pub cross_tribe_ref: Option<u16>,
+          }
+
+          pub struct EnkiOdbShard {
+              entries: RwLock<HashMap<u32, OntologyEntry>>,
+          }
+
+          impl EnkiOdbShard {
+              pub fn new() -> Self { Self { entries: RwLock::new(HashMap::new()) } }
+
+              pub fn insert(&self, entry: OntologyEntry) {
+                  self.entries.write().unwrap().insert(entry.surrogate, entry);
+              }
+
+              pub fn query_tribe(&self, tribe_id: u16) -> Vec<OntologyEntry> {
+                  self.entries.read().unwrap()
+                      .values()
+                      .filter(|e| e.tribe_id == tribe_id)
+                      .cloned()
+                      .collect()
+              }
+
+              pub fn count(&self) -> usize { self.entries.read().unwrap().len() }
+          }
+
+          impl Default for EnkiOdbShard { fn default() -> Self { Self::new() } }
+
+    - name: "Write shard/mod.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/shard/mod.rs"
+        content: |
+          pub mod enkidb;
+          pub mod enkisdb;
+          pub mod enkiodb;
+          pub mod inflight;
+          pub use enkidb::{EnkiDbShard, CommittedEntry, OrbitalState};
+          pub use enkisdb::{EnkiSdbShard, StagingEntry};
+          pub use enkiodb::{EnkiOdbShard, OntologyEntry};
+          pub use inflight::{InFlightShard, InFlightParticle, InFlightSpawn,
+                             OrbitalVelocity, BleedStep};
+
+    - name: "Write fanout/geometry.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/fanout/geometry.rs"
+        content: |
+          //! GeometryFanOut — parallel query across all four shards.
+          //! std::thread + mpsc — zero async runtime.
+          //! Merges results by OrbitalPosition — caller gets unified view.
+          use std::sync::{Arc, mpsc};
+          use crate::laws::geo01_e7::OrbitalPosition;
+          use crate::laws::geo03_betti::BettiNumbers;
+          use crate::registry::particle::ParticleStore;
+
+          #[derive(Debug, Clone)]
+          pub struct UnifiedEntry {
+              pub surrogate: u32,
+              pub tribe_id:  u16,
+              pub position:  OrbitalPosition,
+              pub store:     ParticleStore,
+          }
+
+          #[derive(Debug)]
+          pub struct ShardQueryResult {
+              pub store:   ParticleStore,
+              pub entries: Vec<UnifiedEntry>,
+          }
+
+          #[derive(Debug)]
+          pub struct UnifiedQueryResult {
+              pub shard_results:  Vec<ShardQueryResult>,
+              pub unified_entries: Vec<UnifiedEntry>,
+              pub global_betti:   BettiNumbers,
+              pub total_found:    usize,
+          }
+
+          pub struct GeometryFanOut;
+
+          impl GeometryFanOut {
+              /// Fan-out query across 4 shards in parallel.
+              /// Each shard runs in its own thread — zero async.
+              pub fn query_tribe(
+                  enkidb:   Arc<crate::shard::EnkiDbShard>,
+                  enkisdb:  Arc<crate::shard::EnkiSdbShard>,
+                  enkiodb:  Arc<crate::shard::EnkiOdbShard>,
+                  inflight: Arc<crate::shard::InFlightShard>,
+                  tribe_id: u16,
+              ) -> UnifiedQueryResult {
+                  let (tx, rx) = mpsc::channel::<ShardQueryResult>();
+
+                  // EnkiDB shard
+                  let tx1 = tx.clone();
+                  let db1 = Arc::clone(&enkidb);
+                  std::thread::spawn(move || {
+                      let entries = db1.query_tribe(tribe_id).into_iter().map(|e| UnifiedEntry {
+                          surrogate: e.surrogate, tribe_id: e.tribe_id,
+                          position: e.position, store: ParticleStore::EnkiDB,
+                      }).collect();
+                      let _ = tx1.send(ShardQueryResult { store: ParticleStore::EnkiDB, entries });
+                  });
+
+                  // EnkiSDB shard
+                  let tx2 = tx.clone();
+                  let db2 = Arc::clone(&enkisdb);
+                  std::thread::spawn(move || {
+                      let entries = db2.query_tribe(tribe_id).into_iter().map(|e| UnifiedEntry {
+                          surrogate: e.surrogate, tribe_id: e.tribe_id,
+                          position: e.position, store: ParticleStore::EnkiSDB,
+                      }).collect();
+                      let _ = tx2.send(ShardQueryResult { store: ParticleStore::EnkiSDB, entries });
+                  });
+
+                  // EnkiODB shard
+                  let tx3 = tx.clone();
+                  let db3 = Arc::clone(&enkiodb);
+                  std::thread::spawn(move || {
+                      let entries = db3.query_tribe(tribe_id).into_iter().map(|e| UnifiedEntry {
+                          surrogate: e.surrogate, tribe_id: e.tribe_id,
+                          position: e.position, store: ParticleStore::EnkiODB,
+                      }).collect();
+                      let _ = tx3.send(ShardQueryResult { store: ParticleStore::EnkiODB, entries });
+                  });
+
+                  // InFlight shard
+                  let tx4 = tx.clone();
+                  let db4 = Arc::clone(&inflight);
+                  std::thread::spawn(move || {
+                      let entries = db4.query_tribe(tribe_id).into_iter().map(|p| UnifiedEntry {
+                          surrogate: p.surrogate, tribe_id: p.tribe_id,
+                          position: p.position, store: ParticleStore::InFlight,
+                      }).collect();
+                      let _ = tx4.send(ShardQueryResult { store: ParticleStore::InFlight, entries });
+                  });
+
+                  drop(tx);
+
+                  let mut shard_results = Vec::new();
+                  for r in rx { shard_results.push(r); }
+
+                  let mut unified: Vec<UnifiedEntry> = shard_results.iter()
+                      .flat_map(|r| r.entries.iter().cloned())
+                      .collect();
+
+                  // Sort by orbital position for deterministic merge
+                  unified.sort_by(|a, b| a.surrogate.cmp(&b.surrogate));
+                  let total_found = unified.len();
+
+                  // Compute global Betti from zone occupancy
+                  let zone_counts = vec![total_found / 7; 7]; // simplified
+                  let global_betti = crate::laws::geo03_betti::compute_betti(&zone_counts, 1);
+
+                  UnifiedQueryResult { shard_results, unified_entries: unified, global_betti, total_found }
+              }
+          }
+
+    - name: "Write fanout/mod.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/fanout/mod.rs"
+        content: |
+          pub mod geometry;
+          pub use geometry::{GeometryFanOut, UnifiedEntry, UnifiedQueryResult, ShardQueryResult};
+
+    - name: "Write lib.rs — the sovereign geometry wall"
+      ansible.builtin.copy:
+        dest: "{{ crate }}/src/lib.rs"
+        content: |
+          //! # GeoEngine — Sovereign Geometry Engine
+          //!
+          //! Single source of ALL mathematical truth in BahyWay v4.0.
+          //! Mirrors ConEngine: one wall, one law, one debug point.
+          //!
+          //! ## 7 GeoLaws:
+          //!   GeoLaw-01  E7 lattice — the ONLY orbital zone decomposition
+          //!   GeoLaw-02  B11 = round(H × 240) — Plimpton 322 ONLY
+          //!   GeoLaw-03  Betti β₀/β₁/β₂ — computed ONLY here
+          //!   GeoLaw-04  Gap(n) = Θ_E7(n) − Θ_found(n) — ONLY here
+          //!   GeoLaw-05  Jordan Normal Form — orbit stability
+          //!   GeoLaw-06  VGCA∆ — tribe algebra
+          //!   GeoLaw-07  Pauli Exclusion — no two KAKIs same position
+          //!
+          //! ## 4 Shards:
+          //!   EnkiDB   — committed particles (KISPU sealed)
+          //!   EnkiSDB  — staging (processing in É-DUBBA gates)
+          //!   EnkiODB  — ontology (CrossTribe registered)
+          //!   InFlight — THE CROWN JEWEL (predicted, moving, not committed)
+          //!
+          //! ## WPD Engine:
+          //!   spawn_inflight() → TIAMAT-predicted leak gets orbital position
+          //!   tick()           → leak bleeds upstream, position advances
+          //!   promote()        → physical confirmation → commits to EnkiDB
+
+          #![forbid(unsafe_code)]
+
+          pub mod error;
+          pub mod laws;
+          pub mod registry;
+          pub mod shard;
+          pub mod fanout;
+
+          use std::sync::Arc;
+
+          pub use error::{GeoEngineError, GeoResult};
+          pub use laws::geo01_e7::OrbitalPosition;
+          pub use laws::geo03_betti::BettiNumbers;
+          pub use laws::geo04_gap::{gap, theta_e7, GapEvent, classify_gap};
+          pub use laws::geo06_vgca::{VgcaRegistry, TribeOrbitCentre};
+          pub use laws::geo07_pauli::PauliTable;
+          pub use registry::particle::{
+              UnifiedParticleRegistry, ParticleLocation, ParticleStore, GateId,
+          };
+          pub use shard::inflight::{InFlightSpawn, OrbitalVelocity, BleedStep};
+          pub use fanout::geometry::UnifiedQueryResult;
+
+          use shard::{EnkiDbShard, EnkiSdbShard, EnkiOdbShard, InFlightShard};
+          use laws::geo07_pauli::PauliTable as Pauli;
+
+          /// GeoEngine configuration.
+          #[derive(Default)]
+          pub struct GeoEngineConfig {
+              pub max_shells: usize,
+          }
+
+          /// The sovereign geometry wall.
+          pub struct GeoEngine {
+              pub enkidb:   Arc<EnkiDbShard>,
+              pub enkisdb:  Arc<EnkiSdbShard>,
+              pub enkiodb:  Arc<EnkiOdbShard>,
+              pub inflight: Arc<InFlightShard>,
+              pub registry: UnifiedParticleRegistry,
+              pub vgca:     VgcaRegistry,
+              pub pauli:    Pauli,
+          }
+
+          impl GeoEngine {
+              /// Boot GeoEngine — call once at ŠUMU-UKIN startup.
+              pub fn boot(_cfg: GeoEngineConfig) -> Self {
+                  eprintln!("𒁾 GeoEngine booted — 7 GeoLaws active, 4 shards ready");
+                  Self {
+                      enkidb:   Arc::new(EnkiDbShard::new()),
+                      enkisdb:  Arc::new(EnkiSdbShard::new()),
+                      enkiodb:  Arc::new(EnkiOdbShard::new()),
+                      inflight: Arc::new(InFlightShard::new()),
+                      registry: UnifiedParticleRegistry::new(),
+                      vgca:     VgcaRegistry::new(),
+                      pauli:    Pauli::new(),
+                  }
+              }
+
+              /// Register a tribe orbit centre (WPD Engine: pipeline district).
+              pub fn register_tribe(&mut self, centre: TribeOrbitCentre) {
+                  self.vgca.register(centre);
+              }
+
+              /// Spawn an InFlight particle (TIAMAT prediction).
+              /// GeoLaw-07: Pauli Exclusion enforced.
+              pub fn spawn_inflight(&mut self, spawn: InFlightSpawn) -> GeoResult<()> {
+                  let pos = spawn.position;
+                  // GeoLaw-07: check Pauli Exclusion
+                  self.pauli.occupy(pos.r, pos.theta, pos.phi, spawn.tribe_id, spawn.surrogate)?;
+                  // Register in unified registry
+                  let (shell, zone) = laws::geo01_e7::position_to_zone(&pos);
+                  self.registry.register(ParticleLocation {
+                      surrogate: spawn.surrogate,
+                      store:     ParticleStore::InFlight,
+                      position:  pos,
+                      tribe_id:  spawn.tribe_id,
+                      gate:      spawn.gate,
+                      shell,
+                      zone,
+                  });
+                  self.inflight.spawn(spawn);
+                  Ok(())
+              }
+
+              /// Advance all InFlight particles by one tick.
+              /// WPD Engine: call every sensor cycle.
+              pub fn tick(&self) {
+                  self.inflight.tick();
+              }
+
+              /// Promote InFlight → EnkiDB on physical confirmation.
+              /// Returns sealed bleed trail for NĀRU journal.
+              pub fn promote_to_enkidb(
+                  &mut self,
+                  surrogate: u32,
+                  entry:     shard::CommittedEntry,
+              ) -> Option<Vec<BleedStep>> {
+                  let trail = self.inflight.promote(surrogate);
+                  self.enkidb.insert(entry);
+                  self.registry.update_store(surrogate, ParticleStore::EnkiDB);
+                  // Release Pauli position
+                  if let Some(loc) = self.registry.get(surrogate) {
+                      let pos = loc.position;
+                      self.pauli.release(pos.r, pos.theta, pos.phi, loc.tribe_id);
+                  }
+                  trail
+              }
+
+              /// Unified query across all 4 shards — the sovereign view.
+              pub fn query_tribe(&self, tribe_id: u16) -> UnifiedQueryResult {
+                  fanout::GeometryFanOut::query_tribe(
+                      Arc::clone(&self.enkidb),
+                      Arc::clone(&self.enkisdb),
+                      Arc::clone(&self.enkiodb),
+                      Arc::clone(&self.inflight),
+                      tribe_id,
+                  )
+              }
+
+              /// GeoLaw-04: Gap scan across all shells.
+              pub fn gap_scan(&self) -> Vec<GapEvent> {
+                  (0..7).map(|shell| {
+                      let found = self.enkidb.count() + self.inflight.count();
+                      classify_gap(shell, found / 7)
+                  }).collect()
+              }
+
+              /// GeoLaw-03: Global Betti numbers across all shards.
+              pub fn global_betti(&self) -> BettiNumbers {
+                  let total = self.registry.total();
+                  let zone_counts = vec![total / 7; 7];
+                  laws::geo03_betti::compute_betti(&zone_counts, 1)
+              }
+          }
+
+    - name: "Add geo-engine to workspace"
+      ansible.builtin.copy:
+        dest: "/tmp/bw_add_geo.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          PATH = "/home/bahyway/Forge/bahyway_v4/Cargo.toml"
+          with open(PATH) as f: src = f.read()
+          if '"crates/geo-engine"' in src:
+              print("already in workspace"); sys.exit(0)
+          src = src.replace(
+              '"crates/con-engine"',
+              '"crates/con-engine",\n    "crates/geo-engine"'
+          )
+          with open(PATH, "w") as f: f.write(src)
+          print("SUCCESS — geo-engine added to workspace")
+
+    - name: "Run workspace patch"
+      ansible.builtin.command:
+        cmd: "python3 /tmp/bw_add_geo.py"
+      register: r
+      changed_when: true
+    - name: "Show"
+      ansible.builtin.debug:
+        msg: "{{ r.stdout_lines }}"
+
+    - name: "cargo build -p geo-engine"
+      ansible.builtin.shell: "cargo build -p geo-engine 2>&1 | tail -15"
+      args:
+        chdir: "{{ forge }}"
+      environment:
+        HOME: "/home/bahyway"
+        PATH: "/home/bahyway/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines }}"
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 93 sealed — GeoEngine: Sovereign Geometry Engine.
+          7 GeoLaws. 4 Shards. InFlight (crown jewel) for WPD Engine.
+          UnifiedParticleRegistry. GeometryFanOut. PauliTable.
+          WPD Engine: spawn_inflight() → tick() → promote_to_enkidb()

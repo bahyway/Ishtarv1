@@ -1,0 +1,66 @@
+# =============================================================================
+# PB-215 — Full environment bootstrap: recreate the whole EnkiDDB/EnkiMDB
+# CQRS fleet with one command, in the correct order.
+# BahyWay.Ecosystem v4.0 — 2026-07-20
+#
+# WHY THIS EXISTS: bringing the environment up from scratch had become
+# "run PB-212, then PB-213, then PB-208, in that order" -- correct, but
+# only discoverable by reading chat history or piecing together each
+# playbook's own header comments. The Architect asked directly for this
+# not to be a manual sequence to remember or hunt for: one command,
+# every time, that recreates the whole environment correctly ordered.
+#
+# WHAT IT DOES, in order (via `import_playbook`, Ansible's own mechanism
+# for chaining whole playbooks -- not a new pattern invented here):
+#   1. PB-212 -- build + run all four database containers on the real
+#      2-VM CQRS split (enkiddb-write/enkimdb-write on enkidb-node-write,
+#      enkiddb-read/enkimdb-read on enkidb-node-read), including the
+#      systemd-linger and firewalld fixes found live (PB-212.1/PB-212.2).
+#   2. PB-208 -- ingest the full repo corpus into EnkiDDB via
+#      enkiddb-cli --remote, then FLUSH/sync/verify (its own step 3/4).
+#   3. PB-213 -- a final combined FLUSH + cross-host sync pass for BOTH
+#      EnkiDDB and EnkiMDB, verified with QUERY (both databases) and
+#      SEARCH (EnkiDDB only -- EnkiMDB has no RAG index).
+#
+# PB-215.1 FIX (found live, 2026-07-27): the order used to be 212 -> 213
+# -> 208 -- sync BEFORE ingest. PB-212's own step 3.1/3.3 unconditionally
+# stops+removes+recreates every container on every run (deliberately --
+# see PB-212's own PB-212.3 comment: this is what makes a rebuilt image
+# actually take effect). That recreate empties the Write Node's in-memory
+# journal every time, so immediately afterward PB-213's FLUSH legitimately
+# returns `OK:FLUSHED:0` -- there's nothing to sync yet, because nothing
+# has been (re-)ingested since the redeploy. PB-213's own safety guard
+# ("refuse to overwrite a populated Read Node with a much-smaller/empty
+# staged copy") then correctly refused to let that 0-byte sync stomp the
+# Read Node's real, already-populated data -- it did its job, but the
+# whole run still failed every time this bootstrap was re-run against an
+# already-live environment, which is every time except a genuinely first,
+# empty bring-up. Swapping to 212 -> 208 -> 213 means EnkiDDB always has
+# real freshly-ingested content by the time any FLUSH/sync runs against
+# it. (EnkiMDB's own catalog population is intentionally NOT part of this
+# chain -- see PB-216's header for why that stays a deliberate, separate
+# step; PB-213 above still syncs whatever EnkiMDB content already rests
+# in its volume from an earlier PB-216 run.)
+#
+# USAGE (run from eriduous-vdi, the Ansible control node):
+#   ansible-playbook playbooks/playbook_215_full_environment_bootstrap.yml
+#
+# PREREQUISITES this playbook does NOT automate (real one-time setup,
+# not part of a routine bring-up):
+#   - `~/Forge/EnkiDB` checked out on all three VMs (eriduous-vdi,
+#     enkidb-node-write, enkidb-node-read) at the branch/commit you want.
+#   - SSH from eriduous-vdi to both node VMs already working.
+#   - `config/enkiddb_team_allowlist.txt` containing every git author
+#     whose documents should be ingestable.
+#
+# IF PB-213's QUERY/SEARCH still report "not ready" after this whole run
+# completes: that is a known open question (see PB-214's own header) --
+# run `ansible-playbook playbooks/playbook_214_diagnose_read_node_not_
+# ready.yml` next, separately. Not chained into this bootstrap because
+# it's a diagnostic tool for an unresolved question, not a routine step
+# every bring-up needs.
+# =============================================================================
+---
+- import_playbook: playbook_212_deploy_cqrs_2node_split.yml
+- import_playbook: playbook_208_full_corpus_ingestion_runbook.yml
+- import_playbook: playbook_213_cross_host_flush_sync_verify.yml

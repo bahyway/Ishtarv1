@@ -1,0 +1,51 @@
+# =============================================================================
+# enkiddb-asset-server — Central Shared Asset Storage container image.
+#
+# Build (from the repo root):
+#   podman build -t enkiddb-asset-server:latest \
+#     -f deploy/podman/Containerfile.asset-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkiddb-assets \
+#     -p 7301:7301 \
+#     -v enkiddb-assets-data:/data/assets:Z \
+#     --restart=always \
+#     enkiddb-asset-server:latest
+#
+# `:Z` is correct here (not `:z`): this volume is claimed by exactly ONE
+# container. That is the whole point of this image -- enkiddb-write and
+# enkiddb-read never bind-mount this host path themselves, they fetch by
+# pointer path over HTTP from this server instead. With this container as
+# the volume's sole claimant, PB-200's class of bug (two containers each
+# claiming `:Z` on the same shared host mount, one silently locking the
+# other out via SELinux) has no second claimant left to conflict with.
+#
+# Deliberately does NOT install git, does NOT bind-mount the repo's .git
+# tree, and never runs `git log` against anything -- this container's only
+# job is serving already-vetted files by path over plain HTTP GET. The
+# vetting (git-authorship check) now happens on the VDI host, before a
+# file ever reaches this volume (see `enkiddb-cli ingest --remote`, PB-205)
+# -- proof that PB-201/PB-202 (missing git binary, dubious ownership) were
+# properties of ONE specific job (scanning a bind-mounted git checkout
+# inside a container), not of containers in general.
+#
+# Backup: same convention as the write/read servers -- the volume, not the
+# container, holds state (`podman volume inspect enkiddb-assets-data` for
+# its host path, then tar/rsync that directly).
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkiddb-asset-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkiddb-assets
+COPY --from=builder /build/target/release/enkiddb-asset-server /usr/local/bin/enkiddb-asset-server
+USER enkiddb-assets
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7301
+ENV ASSET_ROOT=/data/assets
+EXPOSE 7301
+ENTRYPOINT ["/usr/local/bin/enkiddb-asset-server"]

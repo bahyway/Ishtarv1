@@ -1,0 +1,120 @@
+-- EnkiDB Replication Protocol Policy
+-- Governs the sovereign 7-layer ENKWAL replication pipeline.
+-- Defines the security contract between Write Pod → Broker → Read Pod.
+--
+-- Maps to: enkidb-replication::{ReplicationEmitter, ReplicationBroker, ReplicationConsumer}
+-- Wire format: .enkwal frames with FRAME_MAGIC [0xEE,0x4B,0x57,0x04]
+
+NAMESPACE bahyway.enkidb.replication.v4
+
+IMPORT bahyway.enki_way.v4   AS ENKI
+IMPORT bahyway.kaki_way.v4   AS KAKI
+IMPORT bahyway.heptasec.v4   AS SEC
+IMPORT bahyway.kupru.v4      AS KUPRU
+
+-- ── Constants ──────────────────────────────────────────────────────────────
+
+CONSTANT REPL_MAX_AGE_SECS    := 300          -- 5-minute event freshness window
+CONSTANT GENESIS_DIGEST       := 0x00000000   -- all-zero anchor for chain head
+CONSTANT MAX_DELTA_BYTES      := 65_536       -- 64 KiB per replication event
+CONSTANT BROKER_SWEEP_INTERVAL:= 1            -- seconds between broker sweeps
+
+-- ── Roles ──────────────────────────────────────────────────────────────────
+
+ROLE WritePodKaki   { SCOPE: emit    REQUIRE: passport.scope == "replication:emit" }
+ROLE BrokerKaki     { SCOPE: broker  REQUIRE: passport.valid  NETWORK: none }
+ROLE ReadPodKaki    { SCOPE: consume REQUIRE: passport.scope == "replication:consume" }
+
+-- ── Replication Protocol ───────────────────────────────────────────────────
+
+PROTOCOL enkwal_emit
+    -- Write Pod emits one ENKWAL frame per database mutation.
+    -- Seven properties must hold simultaneously or the frame is rejected.
+
+    GUARD check_frame_magic {
+        REQUIRE: frame[0..4] == [0xEE, 0x4B, 0x57, 0x04]
+        ON FAIL: DENY frame.append ALARM "INVALID_FRAME_MAGIC" severity=CRITICAL
+    }
+
+    GUARD check_epoch_freshness {
+        REQUIRE: now_epoch - frame.epoch <= REPL_MAX_AGE_SECS
+        ON FAIL: DENY frame.append ALARM "STALE_REPL_EVENT" severity=HIGH
+    }
+
+    GUARD check_sequence_monotonic {
+        REQUIRE: frame.seq == last_committed_seq + 1
+        ON FAIL: DENY frame.append ALARM "SEQUENCE_GAP" severity=CRITICAL
+    }
+
+    GUARD check_chain_digest {
+        -- SHA3-256(frame[0..frame.len-32]) must equal stored last_digest
+        REQUIRE: KUPRU.sha3_256(frame.pre_digest_bytes) == frame.prev_digest
+        ON FAIL: DENY frame.append ALARM "CHAIN_BROKEN" severity=CRITICAL
+    }
+
+    GUARD check_kaki_identity {
+        REQUIRE: frame.write_pod_kaki_hash == write_pod.registered_hash
+        ON FAIL: DENY frame.append ALARM "KAKI_MISMATCH" severity=CRITICAL
+    }
+
+    GUARD check_kanaku_seal {
+        -- Ed25519 signature over canonical bytes (domain-separated)
+        REQUIRE: KUPRU.ed25519_verify(frame.canonical_bytes, frame.seal, write_pod.verifying_key)
+        ON FAIL: DENY frame.append ALARM "SEAL_INVALID" severity=CRITICAL
+    }
+
+    GUARD check_sipir_sarri {
+        -- ŠIPIR ŠARRI: SHA3-256 digest of full pre-digest frame
+        REQUIRE: KUPRU.sha3_256(frame.pre_digest_bytes) == frame.digest
+        ON FAIL: DENY frame.append ALARM "DIGEST_MISMATCH" severity=CRITICAL
+    }
+
+    GUARD check_heptasec_sentinel {
+        REQUIRE: SEC.inspect_packet(frame.as_kaki_packet) == ALLOW
+        ON FAIL: DENY frame.append ALARM "SENTINEL_BLOCKED" severity=HIGH
+    }
+
+    -- All 7 guards passed → append to sovereign log
+    ALLOW frame.append -> write_pod.log_file
+
+PROTOCOL enkwal_broker_sweep
+    -- Broker reads from Write Pod log (:ro volume) with no network access.
+    -- Verified frames are forwarded to Read Pod input (:rw volume).
+
+    OBSERVE write_pod.log_file INTERVAL BROKER_SWEEP_INTERVAL SECONDS
+    FOR EACH frame IN write_pod.new_frames {
+        RUN enkwal_emit.guards ON frame
+        ON ALL_PASS: ALLOW frame.forward -> read_pod.delta_file
+        ON ANY_FAIL: DENY  frame.forward
+                     ALARM "BROKER_VERIFICATION_FAILED" severity=HIGH
+    }
+
+PROTOCOL enkwal_consume
+    -- Read Pod consumer applies verified deltas to the read-only EnkiDB.
+    -- Performs second-pass verification (broker's KANĀKU seal, chain).
+
+    GUARD consumer_check_chain {
+        REQUIRE: frame.prev_digest == read_pod.last_digest
+        ON FAIL: DENY frame.apply ALARM "CONSUMER_CHAIN_BROKEN" severity=CRITICAL
+    }
+
+    GUARD consumer_check_broker_seal {
+        REQUIRE: KUPRU.ed25519_verify(frame.canonical_bytes, frame.seal, broker.verifying_key)
+        ON FAIL: DENY frame.apply ALARM "CONSUMER_SEAL_INVALID" severity=CRITICAL
+    }
+
+    ALLOW frame.apply -> read_pod.enkidb
+
+-- ── Alarm routing ──────────────────────────────────────────────────────────
+
+ALARM "INVALID_FRAME_MAGIC"         severity=CRITICAL  route=SEC.audit_log
+ALARM "STALE_REPL_EVENT"            severity=HIGH      route=SEC.audit_log
+ALARM "SEQUENCE_GAP"                severity=CRITICAL  route=SEC.audit_log
+ALARM "CHAIN_BROKEN"                severity=CRITICAL  route=SEC.audit_log
+ALARM "KAKI_MISMATCH"               severity=CRITICAL  route=SEC.audit_log
+ALARM "SEAL_INVALID"                severity=CRITICAL  route=SEC.audit_log
+ALARM "DIGEST_MISMATCH"             severity=CRITICAL  route=SEC.audit_log
+ALARM "SENTINEL_BLOCKED"            severity=HIGH      route=SEC.audit_log
+ALARM "BROKER_VERIFICATION_FAILED"  severity=HIGH      route=SEC.audit_log
+ALARM "CONSUMER_CHAIN_BROKEN"       severity=CRITICAL  route=SEC.audit_log
+ALARM "CONSUMER_SEAL_INVALID"       severity=CRITICAL  route=SEC.audit_log

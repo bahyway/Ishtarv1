@@ -1,0 +1,257 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_106_corpus_50files.yml
+#  BahyWay.Ecosystem v4.0 — Generate the 50-File Archive Test Corpus
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_106_corpus_50files.yml
+#
+#  Generates 50 compressed archive files in ~/Forge/enkidb-corpus/:
+#
+#   GROUP 1  — 5 valid ZIP STORE files
+#   GROUP 2  — 5 valid ZIP DEFLATE files
+#   GROUP 3  — 5 valid ZIP MIXED (STORE + DEFLATE entries)
+#   GROUP 4  — 5 valid tar.gz files
+#   GROUP 5  — 5 valid NESTED ZIP (ZIP inside ZIP)
+#   GROUP 6  — 5 CORRUPT ZIP  (truncated — expected: ArchiveError::Truncated)
+#   GROUP 7  — 5 CORRUPT tar.gz (truncated gzip)
+#   GROUP 8  — 5 MALICIOUS but structurally valid
+#              (path traversal, zip-bomb seed, null-byte filename, long name)
+#   GROUP 9  — 5 STUB-format (bzip2 / xz / 7z — expected: UnsupportedFormat)
+#
+#  TOTAL: 50 files
+#  Requires: Python 3.6+ (standard library only — no pip needed)
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-106 | Generate 50-File Archive Test Corpus"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    corpus_dir:   "{{ ansible_env.HOME }}/Forge/enkidb-corpus"
+    results_dir:  "{{ forge_root }}/test_results"
+    python:       "/usr/bin/python3"
+
+  tasks:
+
+    - name: "SETUP | Create corpus directory"
+      ansible.builtin.file:
+        path: "{{ corpus_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "SETUP | Create results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Write the Python3 generator ───────────────────────────────────────
+    - name: "WRITE | Upload corpus generator script"
+      ansible.builtin.copy:
+        dest: "{{ corpus_dir }}/gen_corpus.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          """BahyWay.Ecosystem v4.0 — 50-File Test Corpus Generator
+          Standard library only. Run: python3 gen_corpus.py
+          """
+          import os, struct, zlib, gzip, io
+
+          OUT = os.path.dirname(os.path.abspath(__file__))
+
+          def crc32(data):
+              return zlib.crc32(data) & 0xFFFFFFFF
+
+          def zip_local(name, method, crc, csize, usize):
+              return (b'PK\x03\x04'
+                  + struct.pack('<HHH', 20, 0, method)
+                  + struct.pack('<HH', 0, 0)
+                  + struct.pack('<III', crc, csize, usize)
+                  + struct.pack('<HH', len(name), 0)
+                  + name)
+
+          def zip_central(name, method, crc, csize, usize, off):
+              return (b'PK\x01\x02'
+                  + struct.pack('<HHHHHH', 20, 20, 0, method, 0, 0)
+                  + struct.pack('<III', crc, csize, usize)
+                  + struct.pack('<HHHI', len(name), 0, 0, 0)
+                  + struct.pack('<HHI', 0, 0, off)
+                  + name)
+
+          def zip_eocd(n, cd_size, cd_off):
+              return (b'PK\x05\x06' + b'\x00'*8
+                  + struct.pack('<HH', n, n)
+                  + struct.pack('<II', cd_size, cd_off)
+                  + b'\x00\x00')
+
+          def make_zip(entries):
+              parts, cents = [], []
+              for name_str, method, udata in entries:
+                  name  = name_str.encode()
+                  cdata = zlib.compress(udata)[2:-4] if method == 8 else udata
+                  crc   = crc32(udata)
+                  off   = sum(len(p) for p in parts)
+                  parts.append(zip_local(name, method, crc, len(cdata), len(udata)) + cdata)
+                  cents.append(zip_central(name, method, crc, len(cdata), len(udata), off))
+              cd_off = sum(len(p) for p in parts)
+              cd     = b''.join(cents)
+              return b''.join(parts) + cd + zip_eocd(len(entries), len(cd), cd_off)
+
+          def tar_hdr(name, size):
+              h = bytearray(512)
+              nb = name.encode()[:100]
+              h[:len(nb)] = nb
+              h[100:108]  = b'0000644\0'
+              h[108:116]  = b'0001750\0'
+              h[116:124]  = b'0001750\0'
+              h[124:136]  = '{:011o}\0'.format(size).encode()
+              h[136:148]  = b'00000000000\0'
+              h[156]      = ord('0')
+              h[257:263]  = b'ustar '
+              h[148:156]  = b'        '
+              ck = sum(h) & 0xFFFF
+              h[148:155]  = '{:06o}\0'.format(ck).encode()[:7]
+              h[155]      = 0x20
+              return bytes(h)
+
+          def make_tar_gz(entries):
+              raw = b''
+              for name, data in entries:
+                  raw += tar_hdr(name, len(data))
+                  pad  = (512 - len(data) % 512) % 512
+                  raw += data + bytes(pad)
+              raw += bytes(1024)
+              buf = io.BytesIO()
+              with gzip.GzipFile(fileobj=buf, mode='wb', mtime=0) as gz:
+                  gz.write(raw)
+              return buf.getvalue()
+
+          generated = []
+
+          def write(fname, data):
+              with open(os.path.join(OUT, fname), 'wb') as f: f.write(data)
+              generated.append((fname, len(data)))
+
+          # GROUP 1 — 5 valid ZIP STORE
+          for i in range(1, 6):
+              entries = [(f"particle_{j:05}.dat", 0,
+                          f"KAKI={j:016x} tribe=Citizens orbital={j*10}".encode())
+                         for j in range(1, 6)]
+              write(f"valid_store_{i:02}.zip", make_zip(entries))
+
+          # GROUP 2 — 5 valid ZIP DEFLATE
+          for i in range(1, 6):
+              entries = [(f"citizens_{j:04}.eav", 8,
+                          (f"city.name=Baghdad birth.year=197{j} quality=GOLD\n" * 80).encode())
+                         for j in range(5)]
+              write(f"valid_deflate_{i:02}.zip", make_zip(entries))
+
+          # GROUP 3 — 5 valid ZIP MIXED
+          for i in range(1, 6):
+              entries = [
+                  ("readme.txt",    0, b"EnkiDB v4.0 archive"),
+                  ("citizens.eav",  8, b"city=Baghdad\n" * 200),
+              ]
+              write(f"valid_mixed_{i:02}.zip", make_zip(entries))
+
+          # GROUP 4 — 5 valid tar.gz
+          for i in range(1, 6):
+              entries = [(f"enkidb_{j:04}.dat",
+                          f"particle_data_{j} tribe=Archive orbital={j*100}".encode() * 20)
+                         for j in range(1, 4)]
+              write(f"valid_targz_{i:02}.tar.gz", make_tar_gz(entries))
+
+          # GROUP 5 — 5 nested ZIP (ZIP inside ZIP)
+          for i in range(1, 6):
+              inner = make_zip([("inner.dat", 0, b"depth=1 content")])
+              outer = make_zip([("nested.zip", 0, inner), ("outer.dat", 0, b"depth=0")])
+              write(f"valid_nested_{i:02}.zip", outer)
+
+          # GROUP 6 — 5 CORRUPT ZIP (truncated)
+          for i in range(1, 6):
+              good = make_zip([("data.dat", 0, b"X" * 1000)])
+              cut  = max(10, len(good) // (i + 1))
+              write(f"corrupt_zip_{i:02}.zip", good[:cut])
+
+          # GROUP 7 — 5 CORRUPT tar.gz (truncated)
+          for i in range(1, 6):
+              good = make_tar_gz([("data.dat", b"Y" * 500)])
+              cut  = max(10, len(good) // (i + 1))
+              write(f"corrupt_targz_{i:02}.tar.gz", good[:cut])
+
+          # GROUP 8 — 5 MALICIOUS but structurally valid
+          write("malicious_path_traversal_01.zip",
+                make_zip([("../../etc/passwd", 0, b"root:x:0:0:root:/root:/bin/bash")]))
+          write("malicious_path_traversal_02.zip",
+                make_zip([("/absolute/attack.dat", 0, b"absolute path")]))
+          # zip-bomb seed: 4 MB zeros → compresses tiny
+          write("malicious_zipbomb_01.zip",
+                make_zip([("bomb.dat", 8, b'\x00' * (4 * 1024 * 1024))]))
+          write("malicious_null_name_01.zip",
+                make_zip([("\x00hidden.dat", 0, b"null byte in name")]))
+          write("malicious_longname_01.zip",
+                make_zip([("a" * 250 + ".dat", 0, b"long filename")]))
+
+          # GROUP 9 — 5 STUB formats (UnsupportedFormat expected)
+          write("stub_bzip2_01.bz2",  b'BZh91AY&SY' + b'\x00' * 50)
+          write("stub_bzip2_02.bz2",  b'BZh91AY&SY' + b'\xFF' * 80)
+          write("stub_xz_01.xz",      b'\xfd7zXZ\x00' + b'\x00' * 50)
+          write("stub_7z_01.7z",      b'7z\xbc\xaf\x27\x1c' + b'\x00' * 50)
+          write("stub_7z_02.7z",      b'7z\xbc\xaf\x27\x1c' + b'\x01' * 80)
+
+          print(f"\n{'FILE':<52} {'SIZE':>10}")
+          print("─" * 65)
+          for fname, size in generated:
+              print(f"{fname:<52} {size:>10} bytes")
+          print("─" * 65)
+          print(f"TOTAL: {len(generated)} files generated in {OUT}")
+
+    # ── Run the generator ─────────────────────────────────────────────────
+    - name: "RUN   | Generate 50 corpus files"
+      ansible.builtin.command:
+        cmd: "{{ python }} {{ corpus_dir }}/gen_corpus.py"
+      register: gen_out
+      changed_when: true
+
+    - name: "PRINT | Generation output"
+      ansible.builtin.debug:
+        msg: "{{ gen_out.stdout_lines }}"
+
+    # ── Count and verify ───────────────────────────────────────────────────
+    - name: "COUNT | List generated files"
+      ansible.builtin.find:
+        paths: "{{ corpus_dir }}"
+        patterns: "*.zip,*.tar.gz,*.bz2,*.xz,*.7z"
+      register: corpus_files
+
+    - name: "ASSERT | Exactly 50 files"
+      ansible.builtin.assert:
+        that: corpus_files.matched == 50
+        fail_msg: "Expected 50 files, found {{ corpus_files.matched }}"
+        success_msg: "Corpus: 50/50 files generated ✓"
+
+    - name: "PRINT | Summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌─────────────────────────────────────────────────────────────────┐
+          │  PB-106  50-File Archive Corpus Generated                        │
+          ├─────────────────────────────────────────────────────────────────┤
+          │  Location: {{ corpus_dir }}
+          │  Total:    {{ corpus_files.matched }} files
+          ├─────────────────────────────────────────────────────────────────┤
+          │  valid_store_01-05.zip    (5)  ZIP STORE                        │
+          │  valid_deflate_01-05.zip  (5)  ZIP DEFLATE                      │
+          │  valid_mixed_01-05.zip    (5)  ZIP STORE+DEFLATE                │
+          │  valid_targz_01-05.tar.gz (5)  tar.gz                           │
+          │  valid_nested_01-05.zip   (5)  ZIP inside ZIP                   │
+          │  corrupt_zip_01-05.zip    (5)  TRUNCATED (expected error)        │
+          │  corrupt_targz_01-05.tar.gz(5) TRUNCATED gzip (expected error)  │
+          │  malicious_*.zip          (5)  path traversal/bomb (expected)    │
+          │  stub_bzip2/xz/7z         (5)  UnsupportedFormat (expected)      │
+          └─────────────────────────────────────────────────────────────────┘
+
+    - name: "DONE  | PB-106 Corpus Generated → Run PB-107 next"
+      ansible.builtin.debug:
+        msg: "50 files ready in {{ corpus_dir }} — Run playbook_107_archive_corpus_run.yml"

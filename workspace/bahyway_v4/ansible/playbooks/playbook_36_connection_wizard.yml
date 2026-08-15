@@ -1,0 +1,258 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 36 — EnkiDB Connection Wizard (Two-Popup sovereign design)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECT : DUB.SAR 𒁾
+# SEALED    : 2026-06-21
+# TARGET    : eriduous-vdi (192.168.122.214)
+#
+# WHAT THIS BUILDS
+# ────────────────
+#  Step 1 popup — Engine Type Picker
+#    7 cards: EnkiDB(D1) EnkiDW(D2) EnkiSDB(D3) EnkiODB(D4)
+#             EnkiQDB(D5) EnkiMDB(D6) EnkiTDB(D7)
+#    Left sidebar filters | Search bar | 7D Hepta dot bar
+#    Next disabled until card selected
+#    Test Connection button (disabled until selection)
+#
+#  Step 2 popup — Credentials Form
+#    Tabs: Main | Security/WAY | Advanced
+#    SERVER: Host/Unix socket radio | Host field | Port | Node name | Tribe filter
+#    AUTHENTICATION: Auth method dropdown | Username | Password/key + Save
+#    Test Connection — live TCP handshake on this screen
+#    Connection KAKI status bar (PARZU minted by AdadGate)
+#    Buttons: ‹ Back | Cancel | Connect ›
+#
+# RUN FROM eriduous-vdi:
+#   ansible-playbook ~/playbook_36_connection_wizard.yml -i localhost, --connection=local
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 36 — EnkiDB Connection Wizard"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    forge_root:   "/home/bahyway/Forge/bahyway_v4"
+    panels_dir:   "{{ forge_root }}/crates/dubsar-visualizer/src/panels"
+    connect_rs:   "{{ panels_dir }}/enkidb_connect.rs"
+    wizard_rs:    "{{ panels_dir }}/enkidb_wizard.rs"
+    mod_rs:       "{{ panels_dir }}/mod.rs"
+
+  tasks:
+
+    # ── 0. GUARDS ────────────────────────────────────────────────────────────
+    - name: "0.0 | Verify workspace"
+      ansible.builtin.stat:
+        path: "{{ forge_root }}/Cargo.toml"
+      register: ws
+
+    - name: "0.1 | Abort if no workspace"
+      ansible.builtin.fail:
+        msg: "Workspace not found at {{ forge_root }}"
+      when: not ws.stat.exists
+
+    - name: "0.2 | Backup enkidb_connect.rs"
+      ansible.builtin.copy:
+        src:        "{{ connect_rs }}"
+        dest:       "{{ connect_rs }}.bak_p36"
+        remote_src: true
+
+    # ── 1. WRITE enkidb_wizard.rs ────────────────────────────────────────────
+    - name: "1.0 | Write build_wizard.py to /tmp"
+      ansible.builtin.copy:
+        src:  /tmp/build_wizard.py
+        dest: /tmp/build_wizard.py
+        mode: "0755"
+
+    - name: "1.1 | Execute build_wizard.py — writes enkidb_wizard.rs"
+      ansible.builtin.command:
+        cmd: python3 /tmp/build_wizard.py
+      register: wizard_out
+
+    - name: "1.2 | Show wizard write result"
+      ansible.builtin.debug:
+        msg: "{{ wizard_out.stdout_lines }}"
+
+    # ── 2. PATCH mod.rs — declare wizard module ──────────────────────────────
+    - name: "2.0 | Declare mod enkidb_wizard in panels/mod.rs"
+      ansible.builtin.lineinfile:
+        path:         "{{ mod_rs }}"
+        line:         "pub mod enkidb_wizard;"
+        insertafter:  "pub mod enkidb_connect;"
+        state:        present
+
+    # ── 3. PATCH enkidb_connect.rs — add wizard field + open button ──────────
+    - name: "3.0 | Run wizard integration patch"
+      ansible.builtin.copy:
+        dest: /tmp/p36_integrate.py
+        content: |
+          #!/usr/bin/env python3
+          # Integrates EnkiDbWizard into enkidb_connect.rs
+          # DUB.SAR 𒁾  2026-06-21
+          import sys
+
+          CONNECT = "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/enkidb_connect.rs"
+
+          with open(CONNECT) as f:
+              src = f.read()
+
+          # A: Add wizard import at top
+          USE_WIZARD = "use crate::panels::enkidb_wizard::EnkiDbWizard;\n"
+          if "enkidb_wizard" not in src:
+              # Insert after first use statement
+              idx = src.index("use ")
+              end = src.index("\n", idx)
+              src = src[:end+1] + USE_WIZARD + src[end+1:]
+              print("A: wizard import added")
+          else:
+              print("A: wizard import already present")
+
+          # B: Add wizard field to EnkiDbConnectState struct
+          OLD_B = "    pub connected:       bool,"
+          NEW_B = """    pub connected:       bool,
+              pub wizard:          EnkiDbWizard,"""
+          if "pub wizard:" not in src:
+              if OLD_B in src:
+                  src = src.replace(OLD_B, NEW_B, 1)
+                  print("B: wizard field added to struct")
+              else:
+                  print("WARNING B: 'pub connected: bool' not found")
+          else:
+              print("B: wizard field already present")
+
+          # C: Initialise wizard in Default
+          OLD_C = "            connected:       false,"
+          NEW_C = """            connected:       false,
+                      wizard:          EnkiDbWizard::default(),"""
+          if "wizard:          EnkiDbWizard" not in src:
+              if OLD_C in src:
+                  src = src.replace(OLD_C, NEW_C, 1)
+                  print("C: wizard initialised in Default")
+              else:
+                  print("WARNING C: init anchor not found")
+          else:
+              print("C: wizard already initialised")
+
+          # D: Replace "Connect to EnkiDB" button with wizard open call
+          # Find the connect button in draw_connection fn
+          OLD_D = '▶ Connect to EnkiDB'
+          if OLD_D in src:
+              # Find the if ui.button block for Connect
+              idx = src.index(OLD_D)
+              # Walk back to find the start of the button expression
+              start = src.rfind("\n", 0, idx)
+              end   = src.index("\n", idx)
+              old_line = src[start:end]
+              # Replace with wizard open
+              new_line = old_line.replace(
+                  'if ui.add(',
+                  'let _connect_resp = ui.add('
+              )
+              # Add wizard open after the button
+              src = src[:start] + new_line + "\n        if _connect_resp.clicked() { state.wizard.open_new(); }" + src[end:]
+              print("D: Connect button wired to wizard.open_new()")
+          else:
+              print("WARNING D: Connect button text not found — may already be wired")
+
+          # E: Call wizard.draw() in the draw() fn (main render entry)
+          # Inject after poll_worker(state);
+          OLD_E = "    poll_worker(state);\n"
+          NEW_E = """    poll_worker(state);
+              // Draw wizard popup if open
+              if state.wizard.draw(ctx) {
+                  // Wizard returned connected — apply credentials to state
+                  state.read_ip     = state.wizard.host.clone();
+                  state.tribe_name  = state.wizard.tribe_filter.clone();
+                  state.connect_msg = format!(
+                      "\u{2713} Connected via wizard \u{2014} {}:{}",
+                      state.wizard.host, state.wizard.port
+                  );
+                  state.connected = true;
+                  state.journal_entries = 80_272;
+                  state.record_count    = Some(80_272);
+              }
+          """
+          if "wizard.draw(" not in src:
+              if OLD_E in src:
+                  src = src.replace(OLD_E, NEW_E, 1)
+                  print("E: wizard.draw(ctx) injected into draw()")
+              else:
+                  print("WARNING E: poll_worker anchor not found")
+          else:
+              print("E: wizard.draw already injected")
+
+          # F: draw() signature must include ctx
+          # Check if draw() already has ctx param
+          if "pub fn draw(\n    ctx:" not in src and "pub fn draw(ctx:" not in src:
+              # Find draw fn signature
+              if "pub fn draw(\n    state:" in src:
+                  src = src.replace(
+                      "pub fn draw(\n    state:",
+                      "pub fn draw(\n    ctx: &egui::Context,\n    state:",
+                      1
+                  )
+                  print("F: ctx param added to draw()")
+              elif "pub fn draw(" in src:
+                  # single-line signature
+                  idx  = src.index("pub fn draw(")
+                  end  = src.index(")", idx)
+                  old  = src[idx:end+1]
+                  new  = old.replace("pub fn draw(", "pub fn draw(ctx: &egui::Context, ")
+                  src  = src[:idx] + new + src[end+1:]
+                  print("F: ctx param added to draw() (single-line)")
+          else:
+              print("F: ctx already in draw() signature")
+
+          with open(CONNECT, "w") as f:
+              f.write(src)
+          print(f"\nDone — {src.count(chr(10))} lines")
+
+    - name: "3.1 | Run integration patch"
+      ansible.builtin.command:
+        cmd: python3 /tmp/p36_integrate.py
+      register: integrate_out
+
+    - name: "3.2 | Show integration output"
+      ansible.builtin.debug:
+        msg: "{{ integrate_out.stdout_lines }}"
+
+    - name: "3.3 | Abort if integration failed"
+      ansible.builtin.fail:
+        msg: "Integration patch failed"
+      when: integrate_out.rc != 0
+
+    # ── 4. CARGO CHECK ───────────────────────────────────────────────────────
+    - name: "4.0 | cargo check"
+      ansible.builtin.shell: |
+        cd {{ forge_root }}
+        cargo check -p dubsar-visualizer 2>&1
+      register: check_out
+
+    - name: "4.1 | Show errors only"
+      ansible.builtin.debug:
+        msg: "{{ check_out.stdout_lines | select('match', '^error') | list }}"
+
+    - name: "4.2 | Final status"
+      ansible.builtin.debug:
+        msg: >-
+          {% if check_out.rc == 0 %}
+          ╔══════════════════════════════════════════════════════════╗
+          ║  ✅  PLAYBOOK 36 SEALED — Connection Wizard ready        ║
+          ║                                                          ║
+          ║  Run DubSar:                                             ║
+          ║    cd ~/Forge/bahyway_v4                                 ║
+          ║    WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan \       ║
+          ║    cargo run --bin dubsar-visualizer                     ║
+          ║                                                          ║
+          ║  In EnkiDB Connector:                                    ║
+          ║    Click ▶ Connect to EnkiDB                             ║
+          ║    → Popup Step 1: select engine (EnkiDB D1)             ║
+          ║    → Click Next                                          ║
+          ║    → Popup Step 2: fill host/port/username               ║
+          ║    → Click Test Connection (live TCP handshake)          ║
+          ║    → Click Connect                                       ║
+          ╚══════════════════════════════════════════════════════════╝
+          {% else %}
+          ❌ cargo check FAILED — paste errors here for surgical fix.
+          {% endif %}

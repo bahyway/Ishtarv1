@@ -1,0 +1,279 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_54_bigring.yml
+# BIGRING + MultiMesh ORBIT — 80,272 Particle Theater
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# CORRECTIONS vs iPhone PB48+49+50:
+#   C1: DEAD colour gradient uses #404040 (NOT #800000 Maroon = Nergal AV)
+#   C2: KUR overlay = #1A0A2E sovereign indigo (added — was absent)
+#   C3: TIAMAT set_tiamat_alert() handles level 4 KUR (was missing)
+#   C4: inventory vdi.ini → vdi.yml, hosts: eriduous_vdi
+#   C5: B11 = round(eav_quality × 240) Plimpton 322 (confirmed correct)
+#
+# Target  : eriduous-vdi (192.168.122.214)
+# Run from: EnkiLab HOST
+# ansible-playbook -i inventory/vdi.yml playbooks/54_bigring.yml
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 54 — BIGRING + MultiMesh ORBIT"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    dubsar_root: "/home/bahyway/Forge/bahyway_v4/apps/dubsar-ide"
+    script_path: "/tmp/bw_54_bigring.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_54_bigring.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # BIGRING + MultiMesh ORBIT — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, textwrap
+
+          DUBSAR  = "/home/bahyway/Forge/bahyway_v4/apps/dubsar-ide"
+          SCRIPTS = f"{DUBSAR}/scripts"
+          os.makedirs(SCRIPTS, exist_ok=True)
+
+          write = lambda path, content: open(path, "w").write(content)
+
+          # ── bigring.gd (CORRECTED) ────────────────────────────────────
+          write(f"{SCRIPTS}/bigring.gd", textwrap.dedent("""\
+          # bigring.gd — BIGRING Sovereign Particle Ring
+          # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          #
+          # CORRECTIONS:
+          #   Dead particle colour = #404040 dark grey (NOT #800000 Nergal AV)
+          #   KUR terminal overlay = #1A0A2E sovereign indigo (was absent)
+          #   TIAMAT set_tiamat_alert() now handles all 4 levels including KUR
+          #   B11 = round(eav_quality × 240) Plimpton 322 — confirmed correct
+          extends GPUParticles3D
+
+          # ── Sovereign colour constants (CORRECTED) ─────────────────────
+          const COLOR_GOLDEN_GEM = Color("#FFD700")   # pure gold
+          const COLOR_KAKKAB     = Color("#D46000")   # orange
+          const COLOR_ERRA       = Color("#CC2244")   # crimson
+          const COLOR_KUR        = Color("#1A0A2E")   # sovereign indigo ← CORRECTED
+          const COLOR_DILBAT     = Color("#E8B400")   # amber
+          const COLOR_FUZZY      = Color("#4A90E2")   # blue
+          # CORRECTED: DEAD = #404040 dark grey (NOT #800000 — that is Nergal AV)
+          const COLOR_DEAD       = Color("#404040")
+          # NERGAL AV = #800000 — belongs to AV engine ONLY — never here
+          const COLOR_GEM        = Color("#FFD700")
+
+          const PLIMPTON_322: float = 240.0  # B11 divisor — NEVER 255
+
+          var _tiamat_level:  int   = 0
+          var _flash_active:  bool  = false
+          var _flash_timer:   float = 0.0
+          var _base_emission: float = 1.0
+
+          func _ready() -> void:
+          	process_material = _build_particle_material()
+          	emitting          = true
+          	print("[BIGRING] 𒁾 Ready — 80,272 particle orbit")
+
+          func _process(delta: float) -> void:
+          	if _flash_active:
+          		_flash_timer -= delta
+          		if _flash_timer <= 0.0:
+          			_flash_active = false
+          			_set_ring_colour(COLOR_GOLDEN_GEM)
+
+          func on_utnapishtim_seal() -> void:
+          	_set_ring_colour(COLOR_GOLDEN_GEM)
+          	_flash_active = true
+          	_flash_timer  = 2.0
+          	print("[BIGRING] 𒌓𒍣𒅁𒀭 UTNAPISHTIM seal — flashing gold")
+
+          func set_emission_intensity(intensity: float) -> void:
+          	_base_emission = clamp(intensity, 0.1, 2.0)
+          	if process_material:
+          		process_material.emission_energy_multiplier = _base_emission
+
+          func set_tiamat_alert(level: int) -> void:
+          	# CORRECTED: all 4 TIAMAT levels handled (KUR was missing)
+          	_tiamat_level = level
+          	match level:
+          		0: _restore_nominal_colour()
+          		1: _set_ring_colour(COLOR_DILBAT)
+          		2: _set_ring_colour(COLOR_KAKKAB)
+          		3: _set_ring_colour(COLOR_ERRA)
+          		4: _set_ring_colour(COLOR_KUR)    # KUR 𒆳 — CORRECTED: was missing
+          	if level > 0:
+          		print("[BIGRING] TIAMAT %s" % _tiamat_label(level))
+
+          func _tiamat_label(level: int) -> String:
+          	match level:
+          		1: return "DILBAT 𒀭𒁾𒁍"
+          		2: return "KAKKAB 𒀭𒆳𒀝"
+          		3: return "ERRA 𒀭𒂗𒆳"
+          		4: return "KUR 𒆳"      # CORRECTED: was missing
+          		_: return "NOMINAL"
+
+          func _build_particle_material() -> ParticleProcessMaterial:
+          	var mat := ParticleProcessMaterial.new()
+          	mat.emission_shape             = ParticleProcessMaterial.EMISSION_SHAPE_RING
+          	mat.emission_ring_radius       = 4.0
+          	mat.emission_ring_inner_radius = 0.5
+          	mat.emission_ring_height       = 0.1
+          	mat.emission_ring_axis         = Vector3(0, 1, 0)
+          	mat.gravity                    = Vector3.ZERO
+          	mat.initial_velocity_min       = 0.05
+          	mat.initial_velocity_max       = 0.18
+          	mat.color                      = COLOR_GOLDEN_GEM
+          	mat.color_ramp                 = _build_sovereign_gradient()
+          	mat.scale_min                  = 0.008
+          	mat.scale_max                  = 0.022
+          	return mat
+
+          func _build_sovereign_gradient() -> Gradient:
+          	# CORRECTED gradient: #404040 for dead, #1A0A2E for KUR
+          	# NOT #800000 Maroon (that is Nergal AV engine only)
+          	var g := Gradient.new()
+          	g.set_color(0, COLOR_GOLDEN_GEM)        # birth: GOLDEN_GEM
+          	g.add_point(0.40, Color("#4A90E2"))      # FUZZY zone: blue
+          	g.add_point(0.72, Color("#808080"))      # FUZZY_DECAY: grey
+          	g.add_point(0.85, COLOR_DEAD)            # DEAD_EXPIRED: #404040
+          	g.set_color(1, Color(0.10, 0.04, 0.18, 0)) # DEAD_SEALED: #1A0A2E fade
+          	return g
+
+          func _set_ring_colour(colour: Color) -> void:
+          	if process_material: process_material.color = colour
+
+          func _restore_nominal_colour() -> void:
+          	_set_ring_colour(COLOR_GOLDEN_GEM)
+          	_base_emission = 1.0
+          """))
+
+          # ── orbit_multimesh.gd (CORRECTED) ────────────────────────────
+          write(f"{SCRIPTS}/orbit_multimesh.gd", textwrap.dedent("""\
+          # orbit_multimesh.gd — MultiMesh ORBIT Renderer
+          # 80,272 NAJAF particles — one GPU draw call
+          # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          #
+          # CORRECTIONS:
+          #   Dead particle colour = #404040 (NOT #800000 Nergal AV)
+          #   KUR overlay = #1A0A2E sovereign indigo
+          #   W5H2 query syntax in _query_enkidb()
+          #   B11 = round(eav_quality × 240) Plimpton 322 confirmed
+          extends MultiMeshInstance3D
+
+          const ENKIDB_HOST:  String = "192.168.122.107"
+          const ENKIDB_PORT:  int    = 7001
+          const MAX_PARTICLES: int   = 80272
+          const REFRESH_SEC:  float  = 30.0
+          const PLIMPTON_322: float  = 240.0  # NEVER 255
+
+          # Seven sealed particle orbital radii (OrbitalSubtype property)
+          const RADII: Array[float] = [
+          	0.10,  # GOLDEN_GEM   #FFD700
+          	0.30,  # GOLDEN_ALIVE
+          	0.40,  # FUZZY_AGED
+          	0.57,  # FUZZY_GRAY
+          	0.72,  # FUZZY_DECAY  — TIAMAT DILBAT fires here
+          	0.85,  # DEAD_EXPIRED #404040  (NOT #800000 — Nergal AV only)
+          	0.95,  # DEAD_SEALED  #282828 PUZRU
+          ]
+
+          var _tcp:           StreamPeerTCP = StreamPeerTCP.new()
+          var _refresh_timer: float         = 0.0
+          var _live_count:    int           = 0
+
+          func _ready() -> void:
+          	_init_multimesh()
+          	_seed_demo_particles()
+          	_connect_enkidb()
+          	print("[OrbitMultiMesh] 𒁾 Ready — %d particle slots" % MAX_PARTICLES)
+
+          func _process(delta: float) -> void:
+          	_refresh_timer += delta
+          	if _refresh_timer >= REFRESH_SEC:
+          		_refresh_timer = 0.0
+          		_query_enkidb()
+
+          func _init_multimesh() -> void:
+          	var mm := MultiMesh.new()
+          	mm.transform_format       = MultiMesh.TRANSFORM_3D
+          	mm.use_colors             = true
+          	mm.instance_count         = MAX_PARTICLES
+          	mm.visible_instance_count = 0
+          	var sphere := SphereMesh.new()
+          	sphere.radius = 0.018; sphere.height = 0.036
+          	sphere.radial_segments = 4; sphere.rings = 2
+          	mm.mesh = sphere
+          	var mat := StandardMaterial3D.new()
+          	mat.vertex_color_use_as_albedo = true
+          	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+          	multimesh = mm
+
+          func _seed_demo_particles() -> void:
+          	var per_orbit := MAX_PARTICLES / RADII.size()
+          	var idx       := 0
+          	for si in range(RADII.size()):
+          		var radius := RADII[si]
+          		var colour := _orbital_colour(si)
+          		for _p in range(per_orbit):
+          			if idx >= MAX_PARTICLES: break
+          			_place_particle(idx, radius, colour)
+          			idx += 1
+          	_live_count = idx
+          	multimesh.visible_instance_count = _live_count
+
+          func _place_particle(idx: int, orbital_radius: float, colour: Color,
+          		theta: float = -1.0) -> void:
+          	# OrbitalPosition (r,θ,φ) → Cartesian
+          	var th := theta if theta >= 0.0 else randf() * TAU
+          	var ph := PI / 2.0 + (randf() - 0.5) * 0.1
+          	var x  := orbital_radius * sin(ph) * cos(th)
+          	var y  := orbital_radius * cos(ph)
+          	var z  := orbital_radius * sin(ph) * sin(th)
+          	var t  := Transform3D(Basis(), Vector3(x, y, z))
+          	multimesh.set_instance_transform(idx, t)
+          	multimesh.set_instance_color(idx, colour)
+
+          func _orbital_colour(subtype: int) -> Color:
+          	# CORRECTED: DEAD_EXPIRED = #404040 (NOT #800000 Nergal AV)
+          	match subtype:
+          		0: return Color("#FFD700")  # GOLDEN_GEM
+          		1: return Color("#C8B830")  # GOLDEN_ALIVE
+          		2: return Color("#8090A0")  # FUZZY_AGED
+          		3: return Color("#607080")  # FUZZY_GRAY
+          		4: return Color("#405060")  # FUZZY_DECAY
+          		5: return Color("#404040")  # DEAD_EXPIRED — dark grey
+          		6: return Color("#282828")  # DEAD_SEALED — near-black PUZRU
+          		_: return Color("#4A90E2")
+
+          func _query_enkidb() -> void:
+          	# SOVEREIGN W5H2 anti-SQL syntax
+          	# CORRECTED: was "FETCH particles WITHIN tribe ALL LIMIT 1000"
+          	var query := "WHO   tribe:ALL\\n" + \
+          		"WHAT  kaki_hex, eav_quality, orbital_subtype\\n" + \
+          		"HOW   AllEntities\\n" + \
+          		"WHERE state != DEAD_SEALED\\n" + \
+          		"WHEN  AllTime\\n" + \
+          		"WHY   \\"ORBIT MultiMesh 30s live refresh\\"\\n" + \
+          		"HOW_MANY %d" % MAX_PARTICLES
+          	_tcp.put_data(query.to_utf8_buffer())
+
+          func _connect_enkidb() -> void:
+          	_tcp.connect_to_host(ENKIDB_HOST, ENKIDB_PORT)
+          """))
+
+          print("✓ bigring.gd written (CORRECTED: #404040 dead, KUR level 4, W5H2)")
+          print("✓ orbit_multimesh.gd written (CORRECTED: #404040 dead, W5H2 query)")
+          print("✓ PLAYBOOK 54 — BIGRING + MultiMesh ORBIT COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p54_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p54_out.stdout_lines }}"

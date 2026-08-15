@@ -1,0 +1,133 @@
+# =============================================================================
+# PB-214 — Diagnose EnkiDDB Read Node "not ready" after a real sync.
+# BahyWay.Ecosystem v4.0 — 2026-07-20
+#
+# CONTEXT: PB-208's first full run against the real 2-VM CQRS split
+# ingested 201 real documents (FLUSHED:4228 entities) and PB-213's sync
+# swapped real, non-empty data into place on enkidb-node-read
+# (entities.data 7,014,919 bytes, eav.data 483,936 bytes -- confirmed
+# real, not placeholder-empty). Despite that, QUERY and SEARCH both
+# returned `ERR:not ready -- Data Files not synced from the Write Node
+# yet` after PB-213's fixed 35-second wait. Two live hypotheses, checked
+# here in order rather than guessed at in chat:
+#
+#   1. TIMING: a ~4200-entity materialization (with RAG sections/
+#      concepts on top) may genuinely take longer than 35s to open and
+#      index -- PB-211's own tests only ever exercised much smaller
+#      batches. If retrying the QUERY over a longer window succeeds,
+#      this is the answer, and PB-213's fixed wait needs to become a
+#      retry loop instead of a flat pause.
+#   2. SELINUX CONTEXT: PB-211's same-host sync copied directly between
+#      two Podman-managed volumes (`podman unshare cp -a`), which
+#      correctly preserves the `container_file_t` SELinux label
+#      throughout. PB-213's cross-host sync routes data through `/tmp`
+#      staging, `tar`, and Ansible's `fetch`/`copy` -- none of which are
+#      SELinux-context-aware -- before the final `podman unshare cp -a`
+#      swap-in, which tries to *preserve* the source's context (now the
+#      wrong one, inherited from the /tmp staging area, not
+#      `container_file_t`). Standard Unix permissions on the swapped-in
+#      files look completely fine (644, world-readable) -- an SELinux
+#      denial would be invisible to a plain `ls -la` check but would
+#      still block the `enkiddb-read` container process from opening
+#      those files, which the Rust server would report generically as
+#      "not ready" rather than a specific permission error.
+#
+# USAGE: ansible-playbook playbooks/playbook_214_diagnose_read_node_not_ready.yml
+#
+# This playbook only diagnoses -- it does not apply a fix. Once the real
+# cause is confirmed here, the permanent fix belongs in
+# tasks/enkiddb_cross_host_sync.yml (either a longer/smarter reload wait,
+# or an explicit `restorecon` step), not as a recurring manual step.
+# =============================================================================
+---
+- name: "PB-214 | Diagnose EnkiDDB Read Node not-ready state"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    enkiddb_read_ip: "192.168.122.107"
+    enkiddb_read_port: 7102
+    enkiddb_query_collection: "general"
+
+  tasks:
+    # ── 1. Hypothesis 1: just needs more time ──────────────────────────
+    - name: "1.1 | Retry QUERY against the Read Node over the network (up to 6 attempts, 15s apart = 90s total)"
+      ansible.builtin.shell: |
+        python3 -c "
+        import socket, struct
+        s = socket.create_connection(('{{ enkiddb_read_ip }}', {{ enkiddb_read_port }}), timeout=10)
+        payload = b'QUERY:WHO T.E\nWHAT E[meta.title, meta.collection]\nWHERE E[meta.collection] = \"{{ enkiddb_query_collection }}\"\nHOW_MUCH LIMIT 5'
+        s.sendall(struct.pack('<I', len(payload)) + payload)
+        lb = s.recv(4)
+        n = struct.unpack('<I', lb)[0]
+        print(s.recv(n).decode())
+        "
+      register: query_attempt
+      retries: 6
+      delay: 15
+      until: "'ERR:not ready' not in query_attempt.stdout"
+      changed_when: false
+      failed_when: false
+
+    - name: "1.2 | Show final QUERY result after retries"
+      ansible.builtin.debug:
+        msg: "{{ query_attempt.stdout }}"
+
+    # ── 2. Hypothesis 2: SELinux, only checked if still not ready ──────
+    - name: "2.1 | Check SELinux enforcement mode on enkidb-node-read"
+      ansible.builtin.command: getenforce
+      delegate_to: enkidb-node-read
+      register: selinux_mode
+      changed_when: false
+      failed_when: false
+      when: "'ERR:not ready' in query_attempt.stdout"
+
+    - name: "2.2 | Show SELinux mode"
+      ansible.builtin.debug:
+        msg: "SELinux on enkidb-node-read: {{ selinux_mode.stdout | default('(not checked -- QUERY already succeeded)') }}"
+      when: "'ERR:not ready' in query_attempt.stdout"
+
+    - name: "2.3 | Check for recent AVC denials (sudo required for ausearch)"
+      ansible.builtin.shell: "ausearch -m avc -ts recent 2>/dev/null | tail -50 || echo 'NO_AVC_LOG_OR_AUSEARCH_UNAVAILABLE'"
+      delegate_to: enkidb-node-read
+      become: true
+      register: avc_log
+      changed_when: false
+      failed_when: false
+      when: "'ERR:not ready' in query_attempt.stdout and (selinux_mode.stdout | default('')) == 'Enforcing'"
+
+    - name: "2.4 | Show AVC denial log"
+      ansible.builtin.debug:
+        msg: "{{ avc_log.stdout_lines | default(['(skipped -- SELinux not Enforcing, or QUERY already succeeded)']) }}"
+      when: "'ERR:not ready' in query_attempt.stdout"
+
+    # ── 3. Verdict ───────────────────────────────────────────────────
+    - name: "3.1 | Diagnosis summary"
+      ansible.builtin.debug:
+        msg: >-
+          {% if 'ERR:not ready' not in query_attempt.stdout %}
+          RESOLVED BY RETRYING: the Read Node became ready within the
+          retry window. This confirms hypothesis 1 -- a real ~4200-entity
+          materialization takes longer to open/index than PB-213's fixed
+          35s wait assumed. Fix: replace that fixed pause with a retry
+          loop (like this one) in tasks/enkiddb_cross_host_sync.yml.
+          {% elif (selinux_mode.stdout | default('')) == 'Enforcing' and 'denied' in (avc_log.stdout | default('')) %}
+          LIKELY CAUSE: SELinux -- Enforcing on enkidb-node-read, and AVC
+          denials were found above (search them for "enkiddb-read" or the
+          data file paths). This confirms hypothesis 2. Fix: add an
+          explicit `podman unshare restorecon -R <dest>/current` step
+          after the swap-in cp in tasks/enkiddb_cross_host_sync.yml.
+          {% elif (selinux_mode.stdout | default('')) == 'Enforcing' %}
+          SELinux IS Enforcing but no AVC denial was found in the recent
+          log -- hypothesis 2 not confirmed. Check `journalctl -t
+          setroubleshoot` or `ls -Z` on the swapped-in files directly
+          against the container_file_t label the volume expects, rather
+          than assuming.
+          {% else %}
+          NEITHER HYPOTHESIS CONFIRMED: still not ready after 90s of
+          retries, and SELinux is not Enforcing (or wasn't checked).
+          Needs direct investigation on enkidb-node-read -- check the
+          enkiddb-read container's own logs (`podman logs enkiddb-read`)
+          for the actual error `try_load` hit when opening the swapped-in
+          data files, rather than guessing further.
+          {% endif %}

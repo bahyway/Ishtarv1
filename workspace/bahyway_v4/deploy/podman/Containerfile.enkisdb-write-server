@@ -1,0 +1,47 @@
+# =============================================================================
+# enkisdb-write-server — EnkiSDB/EnkiODB/EnkiQDB staging pipeline daemon
+# container image.
+#
+# This one process owns the whole real LandingZone -> SdbPipeline ->
+# ValidationSweep -> {OdbStore, QdbStore} pipeline (see the binary's own
+# module doc comment for why it is colocated rather than split into three
+# write processes) -- so it needs four volumes: the landing zone particles
+# arrive in, and three separate materialized-Data-File roots, one per
+# type, each served independently by its own Read Node.
+#
+# Build (from the repo root):
+#   podman build -t enkisdb-write-server:latest \
+#     -f deploy/podman/Containerfile.enkisdb-write-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkisdb-write \
+#     -p 7013:7013 \
+#     -v enkisdb-landing:/data/sdb/landing:Z \
+#     -v enkisdb-data:/data/sdb:Z \
+#     -v enkiodb-data:/data/odb:Z \
+#     -v enkiqdb-data:/data/qdb:Z \
+#     --restart=always \
+#     enkisdb-write-server:latest
+#
+# `:Z` on every volume mount is required on Fedora/SELinux-enforcing hosts
+# (matches this fleet's existing convention).
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkisdb-write-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkisdb
+COPY --from=builder /build/target/release/enkisdb-write-server /usr/local/bin/enkisdb-write-server
+USER enkisdb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7013
+ENV LANDING_DIR=/data/sdb/landing
+ENV SDB_DATA_DIR=/data/sdb
+ENV ODB_DATA_DIR=/data/odb
+ENV QDB_DATA_DIR=/data/qdb
+EXPOSE 7013
+ENTRYPOINT ["/usr/local/bin/enkisdb-write-server"]

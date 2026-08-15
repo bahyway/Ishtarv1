@@ -1,0 +1,49 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_138_kittu_engine_v1_gap.yml
+#  PB-138 kittu_engine_v1 — GAP, confirmed not started
+#
+#  Run: ansible-playbook playbook_138_kittu_engine_v1_gap.yml -i "localhost," -c local -v
+#
+#  Confirmed: no kittu-engine crate exists anywhere in this repo. Per the
+#  PB-110 glossary addendum, v1 scope is internal-only: consumes Nisaba's
+#  signed Alert Event KAKI particles, delivers via ShoWEngine dashboard +
+#  email, no telephony/external API, writes delivery-confirmation KAKI
+#  back to close the loop. Real, scoped design work — not yet attempted.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-138 | Kittu Engine v1 Gap Check"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    forge_root:  "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:   "{{ forge_root }}/workspace/bahyway_v4"
+    session_date: "{{ ansible_date_time.date }}"
+    report_file: "{{ forge_root }}/docs/PB138_REPORT_{{ session_date }}.txt"
+
+  tasks:
+    - name: "CHECK | Does crates/kittu-engine exist?"
+      ansible.builtin.stat: {path: "{{ workspace }}/crates/kittu-engine/Cargo.toml"}
+      register: kittu_stat
+
+    - name: "CHECK | Does the ShoWEngine dashboard target exist (delivery surface)?"
+      ansible.builtin.find: {paths: "{{ workspace }}/crates", patterns: "*show*", file_type: directory}
+      register: show_dirs
+
+    - name: "PRINT | PB-138 status"
+      ansible.builtin.debug:
+        msg: |
+          kittu-engine exists: {{ kittu_stat.stat.exists }}
+          ShoWEngine-like crates found: {{ show_dirs.files | map(attribute='path') | list }}
+          {{ 'UNEXPECTED: kittu-engine now exists, verify and consider this playbook superseded.' if kittu_stat.stat.exists else 'Confirmed not started. Real work: signed Alert Event KAKI consumption from Nisaba, ShoWEngine dashboard surfacing, SMTP email dispatch, delivery-confirmation KAKI writeback.' }}
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          PB-138 — {{ session_date }} — {{ ansible_hostname }}
+          kittu-engine exists: {{ kittu_stat.stat.exists }}
+          ShoWEngine-like crates: {{ show_dirs.files | map(attribute='path') | list }}
+
+    - {name: "DONE", ansible.builtin.debug: {msg: "PB-138 status recorded — report at {{ report_file }}"}}

@@ -1,0 +1,283 @@
+# =============================================================================
+# PB-281 — Uruinimgina git-history recovery & retry: diagnose / reclone /
+# retry-pulse, all in one Ansible playbook -- so a corrupted-local-history
+# incident never again requires copy-pasting a live terminal session into
+# a chat to get talked through it by hand.
+# BahyWay.Ecosystem v4.0
+#
+# WHY THIS EXISTS (2026-08-01 incident, told here so no one has to dig up
+# the chat log again):
+#
+#   The Architect ran `git filter-repo --strip-blobs-bigger-than 90M
+#   --force` against a local clone to fix a GitHub GH001 "file over 100MB"
+#   push rejection coming out of `uruinimgina-cli`. `filter-repo` rewrites
+#   the hash of every commit it touches -- so the local clone's history no
+#   longer shared a common ancestor with `origin`. Next `uruinimgina-cli`
+#   run hit `push devVM` rejected ("fetch first"), then `pull main` refused
+#   with "fatal: refusing to merge unrelated histories".
+#
+#   Two real traps followed, both worth automating away:
+#
+#   1. TWO DIRECTORIES SHARE THE BASENAME "bahyway_v4" -- the actual repo
+#      config's `repo` field pointed at `~/Forge/bahyway_v4` (a SEPARATE,
+#      personal, multi-machine "DailyWorks" repo -- BahyWay-Ecosystem/
+#      bahyway_v4.git, synced across devLenovo/devMSI/devVM), while the
+#      shell's CWD was `~/Forge/EnkiDB/workspace/bahyway_v4` (a subfolder
+#      of the shared bahyway/EnkiDB clone -- totally unrelated, never
+#      touched by filter-repo). A shell prompt showing just the basename
+#      made these two look like the same repo. This playbook always
+#      requires an explicit `repo_dir` and prints `git remote -v` up
+#      front specifically so this confusion cannot happen silently again.
+#
+#   2. NOTHING WAS EVER FORCE-PUSHED -- every push attempt was rejected,
+#      never forced. That means `origin` on GitHub was, the whole time,
+#      exactly what it was before `filter-repo` ran: intact, with every
+#      machine's real history. The safe recovery was never "force-push
+#      the rewritten history over origin" (which would have destroyed
+#      devLenovo/devMSI-only commits on the DailyWorks repo) -- it was
+#      "throw away the corrupted LOCAL clone and re-clone fresh from
+#      origin," which loses nothing precisely because nothing was ever
+#      force-pushed. THIS PLAYBOOK NEVER FORCE-PUSHES, ANYWHERE, EVER.
+#      If a real force-push is ever genuinely the right call, that stays
+#      a manual, explicit, hand-run decision outside this playbook.
+#
+#   The one genuine loose end re-clone-from-origin creates: any local,
+#   UNTRACKED file (e.g. `uruinimgina.toml`, which holds host-local paths
+#   and is deliberately not committed) is not on GitHub and would be lost
+#   by a plain re-clone. `reclone` mode preserves files matching
+#   `preserve_globs` by copying them out of the old directory into the
+#   fresh clone before the old one is (optionally) discarded.
+#
+# THREE MODES, selected via `-e git_action=<mode>` (default: diagnose):
+#
+#   diagnose (default, always safe, read-only) --
+#     For every LOCAL branch: `git rev-list --left-right --count
+#     <branch>...origin/<branch>`, reporting ahead/behind. Both nonzero on
+#     several branches at once is the signature of a local history
+#     rewrite (e.g. filter-repo) diverging from an untouched origin --
+#     flagged in the output, never acted on automatically. Also scans
+#     `git_branch`'s full history for any blob over `blob_limit_mb` (does
+#     NOT touch history -- report only).
+#
+#   reclone -- backs up `repo_dir` to `<repo_dir>.corrupted-backup-
+#     <timestamp>` (never deleted by this playbook), records `origin`'s
+#     URL from the OLD clone before backing it up, fresh-`git clone`s that
+#     same URL into `repo_dir`, then copies any file matching
+#     `preserve_globs` (default: `uruinimgina.toml`) from the backup into
+#     the new clone at the same relative path. Requires `-e
+#     confirm_reclone=true` -- `git_action=reclone` alone is not enough.
+#
+#   retry_pulse -- builds `uruinimgina-cli` (release) from
+#     `uruinimgina_workspace_dir` and runs it against `uruinimgina_toml`.
+#     NOTE: `uruinimgina-cli` asks an interactive (r)etry/(s)kip/(a)bort
+#     question on stdin at every HALT (blob audit failure, a failed git
+#     step) -- Ansible gives it no TTY, so any HALT here reads EOF and
+#     the CLI's own documented behavior takes over: auto-Abort, the safe
+#     default when no one is there to answer (see
+#     `crates/shakkanakku/src/bin/uruinimgina_cli.rs`). This mode is for
+#     re-running a pulse that's expected to go cleanly (e.g. right after
+#     `reclone` fixed the actual problem) -- not for babysitting a HALT
+#     loop. Run `uruinimgina-cli` by hand, interactively, for that.
+#
+# USAGE (the exact sequence from the 2026-08-01 incident, mechanized):
+#   ansible-playbook playbook_281_uruinimgina_git_recovery_and_retry.yml \
+#     -e git_action=diagnose -e repo_dir=~/Forge/bahyway_v4 -e git_branch=devVM
+#   ansible-playbook playbook_281_uruinimgina_git_recovery_and_retry.yml \
+#     -e git_action=reclone  -e repo_dir=~/Forge/bahyway_v4 -e confirm_reclone=true
+#   ansible-playbook playbook_281_uruinimgina_git_recovery_and_retry.yml \
+#     -e git_action=retry_pulse
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# =============================================================================
+---
+- name: "PB-281 | Uruinimgina git-history recovery & retry (diagnose / reclone / retry_pulse)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # lookup('env', ...), not the ansible_env FACT -- gather_facts is false
+    # on this play, and ansible_env.HOME silently falls back to '/root'
+    # under gather_facts:false (the exact bug caught in PB-278, 2026-08-01).
+    home_dir:      "{{ lookup('env', 'HOME') }}"
+    cargo:         "{{ home_dir }}/.cargo/bin/cargo"
+
+    git_action:    "diagnose"
+    repo_dir:      ""
+    git_branch:    "main"
+    blob_limit_mb: 90
+    confirm_reclone: false
+    preserve_globs:
+      - "uruinimgina.toml"
+
+    # retry_pulse mode only -- where the uruinimgina-cli binary + its
+    # config actually live (this repo, not the DailyWorks repo_dir above).
+    uruinimgina_workspace_dir: "{{ home_dir }}/Forge/EnkiDB/workspace/bahyway_v4"
+    uruinimgina_toml:          "uruinimgina.toml"
+
+  tasks:
+
+    - name: "GUARD | git_action must be one of diagnose/reclone/retry_pulse"
+      ansible.builtin.fail:
+        msg: "git_action='{{ git_action }}' is not diagnose/reclone/retry_pulse."
+      when: git_action not in ['diagnose', 'reclone', 'retry_pulse']
+
+    - name: "GUARD | repo_dir is required for diagnose/reclone"
+      ansible.builtin.fail:
+        msg: "-e repo_dir=<path> is required for git_action={{ git_action }} -- this playbook never guesses which repo you mean (two directories sharing the basename 'bahyway_v4' is exactly the confusion that caused the 2026-08-01 incident)."
+      when: git_action in ['diagnose', 'reclone'] and repo_dir == ''
+
+    - name: "GUARD | repo_dir must be a real git repo"
+      ansible.builtin.stat:
+        path: "{{ repo_dir }}/.git"
+      register: repo_git_dir
+      when: git_action in ['diagnose', 'reclone']
+
+    - name: "FAIL | repo_dir has no .git"
+      ansible.builtin.fail:
+        msg: "{{ repo_dir }} is not a git repository (no .git found)."
+      when: git_action in ['diagnose', 'reclone'] and not repo_git_dir.stat.exists
+
+    # ── IDENTIFY -- printed for BOTH diagnose and reclone, always, so the
+    #    "which repo am I actually looking at" question is answered by the
+    #    playbook's own output, not assumed from a shell prompt basename ──
+    - name: "IDENTIFY | resolved path"
+      ansible.builtin.command:
+        cmd: "readlink -f {{ repo_dir }}"
+      register: resolved_path
+      changed_when: false
+      when: git_action in ['diagnose', 'reclone']
+
+    - name: "IDENTIFY | origin remote"
+      ansible.builtin.command:
+        cmd: "git config --get remote.origin.url"
+        chdir: "{{ repo_dir }}"
+      register: origin_url
+      changed_when: false
+      when: git_action in ['diagnose', 'reclone']
+
+    - name: "REPORT | this is the repo we're about to act on"
+      ansible.builtin.debug:
+        msg: "repo_dir resolves to {{ resolved_path.stdout }} -- origin: {{ origin_url.stdout }}"
+      when: git_action in ['diagnose', 'reclone']
+
+    # ── DIAGNOSE ──────────────────────────────────────────────────────
+    - name: "DIAGNOSE | local branch list"
+      ansible.builtin.command:
+        cmd: "git branch --format=%(refname:short)"
+        chdir: "{{ repo_dir }}"
+      register: local_branches
+      changed_when: false
+      when: git_action == 'diagnose'
+
+    - name: "DIAGNOSE | ahead/behind vs origin, per local branch"
+      ansible.builtin.command:
+        cmd: "git rev-list --left-right --count {{ item }}...origin/{{ item }}"
+        chdir: "{{ repo_dir }}"
+      register: divergence
+      changed_when: false
+      failed_when: false
+      loop: "{{ local_branches.stdout_lines }}"
+      when: git_action == 'diagnose'
+
+    - name: "REPORT | divergence per branch (both nonzero on several = rewritten-history signature)"
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item }}:
+          {{ 'no upstream / not comparable' if item.rc != 0 else
+             ('ahead ' ~ (item.stdout.split() | first) ~ ', behind ' ~ (item.stdout.split() | last) ~
+              (' ⚠ BOTH NONZERO -- possible rewritten-history divergence, see this playbook''s header' if
+                ((item.stdout.split() | first | int) > 0 and (item.stdout.split() | last | int) > 0) else '')) }}
+      loop: "{{ divergence.results }}"
+      when: git_action == 'diagnose'
+
+    - name: "DIAGNOSE | scan git_branch's history for oversized blobs (report only, never rewrites)"
+      ansible.builtin.shell:
+        cmd: >-
+          git rev-list --objects {{ git_branch }} |
+          git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' |
+          awk -v limit={{ (blob_limit_mb | int) * 1024 * 1024 }} '$1=="blob" && $3+0 > limit {print $3, $4}' |
+          sort -rn
+        chdir: "{{ repo_dir }}"
+      register: oversized_blobs
+      changed_when: false
+      when: git_action == 'diagnose'
+
+    - name: "REPORT | oversized blobs on {{ git_branch }}"
+      ansible.builtin.debug:
+        msg: "{{ ('no blobs over ' ~ blob_limit_mb ~ 'MB on ' ~ git_branch ~ ' -- origin history is clean') if oversized_blobs.stdout | trim == '' else oversized_blobs.stdout_lines }}"
+      when: git_action == 'diagnose'
+
+    # ── RECLONE ───────────────────────────────────────────────────────
+    - name: "FAIL | reclone requires explicit confirm_reclone=true"
+      ansible.builtin.fail:
+        msg: "git_action=reclone also requires -e confirm_reclone=true -- refusing to back up and replace {{ repo_dir }} on git_action alone."
+      when: git_action == 'reclone' and not (confirm_reclone | bool)
+
+    - name: "RECLONE | find local files matching preserve_globs (untracked config etc.)"
+      ansible.builtin.find:
+        paths: "{{ repo_dir }}"
+        patterns: "{{ preserve_globs }}"
+        recurse: true
+      register: preserved_files
+      when: git_action == 'reclone' and (confirm_reclone | bool)
+
+    - name: "RECLONE | compute timestamped backup path"
+      ansible.builtin.set_fact:
+        backup_dir: "{{ repo_dir }}.corrupted-backup-{{ lookup('pipe', 'date -u +%Y%m%dT%H%M%SZ') }}"
+      when: git_action == 'reclone' and (confirm_reclone | bool)
+
+    - name: "RECLONE | move the old (possibly corrupted) clone aside -- never deleted"
+      ansible.builtin.command:
+        cmd: "mv {{ repo_dir }} {{ backup_dir }}"
+      when: git_action == 'reclone' and (confirm_reclone | bool)
+
+    - name: "RECLONE | fresh git clone from the recorded origin URL"
+      ansible.builtin.command:
+        cmd: "git clone {{ origin_url.stdout }} {{ repo_dir }}"
+      when: git_action == 'reclone' and (confirm_reclone | bool)
+
+    - name: "RECLONE | restore preserved untracked files into the fresh clone"
+      ansible.builtin.copy:
+        src: "{{ item.path }}"
+        dest: "{{ repo_dir }}/{{ item.path | relpath(backup_dir) }}"
+        remote_src: true
+      loop: "{{ preserved_files.files }}"
+      when: git_action == 'reclone' and (confirm_reclone | bool)
+
+    - name: "REPORT | reclone complete"
+      ansible.builtin.debug:
+        msg: >-
+          {{ repo_dir }} replaced with a fresh clone of {{ origin_url.stdout }}.
+          Old (possibly corrupted) clone preserved at {{ backup_dir }} -- delete
+          it by hand once you've confirmed everything is fine.
+          Restored {{ preserved_files.files | length }} preserved file(s):
+          {{ preserved_files.files | map(attribute='path') | list }}.
+      when: git_action == 'reclone' and (confirm_reclone | bool)
+
+    # ── RETRY_PULSE ───────────────────────────────────────────────────
+    - name: "RETRY_PULSE | build uruinimgina-cli (release)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build --release --bin uruinimgina-cli"
+        chdir: "{{ uruinimgina_workspace_dir }}"
+      when: git_action == 'retry_pulse'
+
+    - name: "RETRY_PULSE | run uruinimgina-cli against uruinimgina_toml (non-interactive -- any HALT auto-aborts, see header)"
+      ansible.builtin.command:
+        cmd: "./target/release/uruinimgina-cli {{ uruinimgina_toml }}"
+        chdir: "{{ uruinimgina_workspace_dir }}"
+        stdin: "/dev/null"
+      register: pulse_result
+      changed_when: "'Uruinimgina pulse finished' in pulse_result.stdout"
+      failed_when: pulse_result.rc != 0
+      when: git_action == 'retry_pulse'
+
+    - name: "REPORT | retry_pulse output"
+      ansible.builtin.debug:
+        msg: "{{ pulse_result.stdout_lines }}"
+      when: git_action == 'retry_pulse'
+
+    - name: "DONE | PB-281 COMPLETE"
+      ansible.builtin.debug:
+        msg: "git_action={{ git_action }} finished."

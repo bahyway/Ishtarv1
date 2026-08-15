@@ -1,0 +1,121 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_115_naramsin_mashsharu_bridge_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-115 Reconciled: naramsin-bridge is already real
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_115_naramsin_mashsharu_bridge_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_115_naramsin_mashsharu_bridge.yml):
+#    Same naramsin-core dependency problem as PB-114. Checked the real
+#    repo: crates/naramsin-bridge already exists, depending on the real
+#    naramsin-archive + naramsin-format + naramsin-integrity + a fourth
+#    real crate, naramsin-audit (not seen in the uploaded design at all).
+#
+#    The real API differs from the upload's proposal: instead of
+#    process(bytes, FileProvenance, &mut NaruJournal, &mut SchemaRegistry)
+#    -> Result<PipelineResult, BridgeError>, the real signature is
+#    process(raw, source_filename: &'static str, destination:
+#    DestinationModule, archive_id: u128, processing_start_ms: u32)
+#    -> NaramsinOutcome (Clean/Partial/Rejected enum, not a flat struct).
+#
+#    Important honesty note, confirmed by reading the source directly:
+#    the real naramsin-bridge is an intentionally incomplete "Phase 1
+#    scaffold" per its own doc comment — it currently only calls
+#    detect_format(), NOT the full archive-unwrap/format-parse pipeline.
+#    On the happy path it always returns NaramsinOutcome::Clean(vec![])
+#    regardless of file content. Its own roadmap says full wiring lands
+#    in "Playbooks 198-217" — this is not a bug, it's documented,
+#    deliberately staged work. This playbook verifies what's real today;
+#    it does not pretend the pipeline is more complete than it is.
+#      naramsin-bridge : 0 dedicated unit tests (compiles clean; exercised
+#      indirectly via nanshe-ingest/esarhaddon-ingest/ashnan-ingest, each
+#      3 tests — see playbook_116's reconciliation)
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-115 (Reconciled) | naramsin-bridge — real, honestly a Phase 1 scaffold"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB115_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "VERIFY | naramsin-bridge crate exists"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/crates/naramsin-bridge/src/lib.rs"
+      register: bridge_file
+
+    - name: "FAIL | naramsin-bridge not found — stale sync — re-run the laptop scp step"
+      ansible.builtin.fail:
+        msg: "crates/naramsin-bridge/src/lib.rs not found after sync."
+      when: not bridge_file.stat.exists
+
+    - name: "BUILD | cargo build -p naramsin-bridge"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p naramsin-bridge"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: false
+      failed_when: build_out.rc != 0
+
+    - name: "CHECK | Confirm bridge is honestly staged (references future playbook range)"
+      ansible.builtin.command:
+        cmd: "grep -c 'Playbooks 198' {{ workspace }}/crates/naramsin-bridge/src/lib.rs"
+      register: staged_check
+      changed_when: false
+      failed_when: false
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-115 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-115 depended on naramsin-core and proposed
+          FileProvenance/NaruJournal/SchemaRegistry types. SUPERSEDED by
+          the real naramsin-bridge (uses naramsin-archive + naramsin-
+          format + naramsin-integrity + naramsin-audit, returns
+          NaramsinOutcome, not PipelineResult).
+
+          Verified this run:
+            naramsin-bridge build: {{ 'PASS' if build_out.rc == 0 else 'FAIL' }}
+            Documented as a Phase 1 scaffold (full pipeline in later
+            playbooks): {{ 'confirmed' if (staged_check.stdout | trim | int) > 0 else 'not found — check manually' }}
+
+          Honest note: the real bridge currently only calls
+          detect_format() and always returns Clean(vec![]) on the happy
+          path — full archive-unwrap + format-parse wiring is deliberately
+          deferred, not broken. Do not expect NRM_TRUNCATED detection from
+          this bridge yet (see playbook_118's reconciliation for the
+          direct consequence of this on corrupt-archive testing).
+
+    - name: "DONE | PB-115 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-115 reconciled. Report: {{ report_file }}"

@@ -1,0 +1,112 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_102_con_engine_v4.yml
+#  BahyWay.Ecosystem v4.0 — CON Engine 7-CSR Rules (BLOCK D) — Build + Test
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_102_con_engine_v4.yml
+#
+#  Crate: enkidb-con-engine
+#  Tests: 22 integration tests (playbook_csr)
+#  Covers all 7 CSR Sovereign Rules:
+#    CSR-01 Sargon Gate      — passport validity
+#    CSR-02 Role Check       — SovereignRole hierarchy
+#    CSR-03 NĀRU Audit       — 64-byte WAL entries, CRC-16
+#    CSR-04 Credential       — credential expiry
+#    CSR-05 Gilgamesh Gate   — cross-tribe write privilege
+#    CSR-06 KIBRATU          — event bus stub
+#    CSR-07 Tribe Isolation  — caller_tribe vs target_tribe
+#    PAZUZU-01/02/07         — threat simulations
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-102 | CON Engine 7-CSR Rules — Build & Integration Tests"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    crate:        "enkidb-con-engine"
+    test_bin:     "playbook_csr"
+    results_dir:  "{{ forge_root }}/test_results"
+
+  tasks:
+
+    - name: "SETUP | Results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Build ─────────────────────────────────────────────────────────────
+    - name: "BUILD | cargo build -p {{ crate }}"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p {{ crate }} 2>&1"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: true
+
+    - name: "FAIL  | Build failed"
+      ansible.builtin.fail:
+        msg: "cargo build -p {{ crate }} FAILED\n{{ build_out.stderr }}"
+      when: build_out.rc != 0
+
+    - name: "PASS  | Build OK"
+      ansible.builtin.debug:
+        msg: "enkidb-con-engine → BUILD PASS ✓"
+
+    # ── Integration tests ─────────────────────────────────────────────────
+    - name: "TEST  | cargo test -p {{ crate }} --test {{ test_bin }} --nocapture"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p {{ crate }} --test {{ test_bin }} -- --nocapture 2>&1"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+
+    - name: "SAVE  | Write test log"
+      ansible.builtin.copy:
+        content: "{{ test_out.stdout }}\n{{ test_out.stderr }}"
+        dest: "{{ results_dir }}/pb102_con_engine.log"
+        mode: "0644"
+
+    - name: "PRINT | Test output"
+      ansible.builtin.debug:
+        msg: "{{ test_out.stdout_lines }}"
+
+    - name: "PARSE | Result line"
+      ansible.builtin.set_fact:
+        result_line: >-
+          {{ test_out.stdout_lines
+             | select('match', '^test result')
+             | list | last | default('no result line') }}
+
+    - name: "PRINT | Summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌─────────────────────────────────────────────────────────────────┐
+          │  PB-102  enkidb-con-engine  BLOCK D  (7-CSR Rules)              │
+          ├─────────────────────────────────────────────────────────────────┤
+          │  Expected tests:  22                                            │
+          │  {{ result_line }}
+          │  Log: {{ results_dir }}/pb102_con_engine.log
+          ├─────────────────────────────────────────────────────────────────┤
+          │  CSR-01  Sargon Gate      invalid passport → Forbidden          │
+          │  CSR-02  Role Check       Client WRITE → InsufficientRole       │
+          │  CSR-03  NĀRU Audit       64-byte CRC-16 WAL                   │
+          │  CSR-04  Credential       expired → CredentialExpired           │
+          │  CSR-05  Gilgamesh Gate   TabletWriter cross-tribe blocked      │
+          │  CSR-07  Tribe Isolation  caller ≠ target → TribeIsolation      │
+          │  DubSar  Sovereign        cross-tribe WRITE exempt              │
+          │  NĀRU    1000 ops         verify_all() PASS                     │
+          │  PAZUZU-01/02/07          threat simulations blocked            │
+          └─────────────────────────────────────────────────────────────────┘
+
+    - name: "FAIL  | Tests failed"
+      ansible.builtin.fail:
+        msg: "CON Engine CSR tests FAILED — check {{ results_dir }}/pb102_con_engine.log"
+      when: test_out.rc != 0
+
+    - name: "DONE  | PB-102 CON Engine COMPLETE → Run PB-103 next"
+      ansible.builtin.debug:
+        msg: "BLOCK D PASS ✓ — 22/22 tests — Run playbook_103_enkidb_indexes.yml next"

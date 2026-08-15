@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Particle Monism — everything dissolves into particles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#02030a; --ink:#eaf0fb; --ink-dim:#9aa6c8; --ink-faint:#5a6488;
+  --symptom:#4fd6c4; --fact:#8fe6b0; --weak:#e3b458; --ghost:#b083e0;
+  --gold:#E3B458; --signal:#4fd6c4; --line:#1c2440;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+body.light{--void:#eef1f7;--ink:#1a2340;--ink-dim:#3a4670;--ink-faint:#7a84a8;--line:#c4cce0;--panel:#ffffff}
+body.light .panel{background:rgba(255,255,255,.9);border-color:#c4cce0}
+body.light .hud-title h1{color:#1a2340;text-shadow:none}
+body.light #stage{background:#eef1f7}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+#stage{position:fixed;inset:0;cursor:grab}
+#stage:active{cursor:grabbing}
+.hud{position:fixed;z-index:5}
+.hud-title{top:12px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:18px;letter-spacing:.09em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--symptom)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:9px;letter-spacing:.15em;color:var(--ink-faint);margin-top:4px}
+.panel{background:rgba(6,10,24,.86);border:1px solid var(--line);border-radius:8px;padding:12px 14px;backdrop-filter:blur(10px)}
+/* query bar */
+.hud-q{top:70px;left:50%;transform:translateX(-50%);width:min(620px,92vw);font-family:var(--f-data)}
+.hud-q .lab{font-size:9.5px;letter-spacing:.14em;color:var(--signal);text-transform:uppercase;margin-bottom:7px}
+.qrow{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:11px}
+.qrow select{flex:1;min-width:130px;background:rgba(4,7,18,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:8px;font-family:var(--f-data);font-size:11px}
+.qrow .kw{color:var(--ghost)}
+.qrow button{background:var(--signal);border:none;color:#04231f;border-radius:5px;padding:8px 15px;font-family:var(--f-display);font-size:12px;cursor:pointer}
+/* breadcrumb (local depth stack) */
+.hud-crumb{top:150px;left:50%;transform:translateX(-50%);font-family:var(--f-data);font-size:10px;color:var(--ink-dim);background:rgba(6,10,24,.8);border:1px solid var(--line);border-radius:6px;padding:6px 12px;display:flex;gap:6px;align-items:center;max-width:92vw;overflow:hidden}
+.hud-crumb .seg{color:var(--ink-dim);cursor:pointer}
+.hud-crumb .seg:hover{color:var(--signal)}
+.hud-crumb .seg.here{color:var(--gold)}
+.hud-crumb .arr{color:var(--ink-faint)}
+/* inspector */
+.hud-insp{bottom:16px;left:16px;width:300px;font-family:var(--f-data);display:none}
+.hud-insp .it{font-family:var(--f-display);font-size:15px;color:var(--gold)}
+.hud-insp .ik{font-size:9px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.1em;margin:2px 0 7px}
+.hud-insp .ib{font-size:10.5px;color:var(--ink-dim);line-height:1.5}
+.hud-insp .ib b{color:var(--ink)}
+.hud-insp .img{background:rgba(227,180,88,.08);border-radius:5px;padding:7px 9px;margin-top:6px;font-size:10.5px;line-height:1.45}
+.hud-insp .img b{color:var(--gold)}
+.hud-insp .zoom{margin-top:8px;font-size:9.5px;color:var(--signal)}
+.hud-insp button{margin-top:8px;background:rgba(79,214,196,.15);border:1px solid var(--signal);color:var(--signal);border-radius:5px;padding:6px 12px;font-size:10px;cursor:pointer;font-family:var(--f-data)}
+/* help */
+.hud-help{bottom:16px;right:16px;font-family:var(--f-data);font-size:9.5px;color:var(--ink-faint);text-align:right;line-height:1.7;max-width:280px}
+.hud-help b{color:var(--ink-dim)}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(2,3,10,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8.5px;color:var(--ink-faint);padding:4px 16px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">&#x12079;</span> PARTICLE <em>MONISM</em></h1>
+  <div class="sub">EVERYTHING IS PARTICLES &middot; NODE / EDGE / LABEL ARE PATTERNS AT A ZOOM DEPTH &middot; CLICK ANY ELEMENT TO DISSOLVE IT</div>
+</div>
+
+<div class="hud hud-q panel">
+  <div class="lab">&#9670; Query &mdash; generates the particle scene at runtime</div>
+  <div class="qrow">
+    <span class="kw">ASK relation BETWEEN</span>
+    <select id="q-a"></select>
+    <span class="kw">AND</span>
+    <select id="q-b"></select>
+    <button id="q-run">GENERATE &#9654;</button>
+    <button id="theme-btn" style="background:rgba(4,7,18,.9);border:1px solid var(--line);color:var(--ink-dim);border-radius:5px;padding:8px 12px;font-size:10px;cursor:pointer">◐ LIGHT</button>
+  </div>
+</div>
+
+<div class="hud hud-crumb" id="crumb"><span class="seg here">field</span></div>
+
+<div class="hud hud-insp panel" id="insp"></div>
+
+<div class="hud hud-help">
+  <div><b>Everything here is particles.</b></div>
+  <div>a <b>node</b> = a dense particle cluster</div>
+  <div>an <b>edge</b> = a particle filament</div>
+  <div><b>click any cluster OR filament</b> → it dissolves into ITS particles</div>
+  <div>keep clicking → down to one record</div>
+  <div>breadcrumb ↑ = climb back out</div>
+</div>
+
+<footer>Way-of-Work rule 5 &mdash; HTML prototype; production body Godot/WGPU. Proves GL-VIZ-003 Particle Monism: ONE primitive (the particle). Nodes & edges are particle patterns; clicking EITHER dissolves it into its constituent particles (local per-element depth). A relation is not a line — it is records. GOLDEN = REAL Merck data. Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ===== GOLDEN store: entities, relations, and the PARTICLES that constitute each ===== */
+const ENTITIES={
+  sudden_death:{label:'Sudden death',kind:'symptom'},
+  crepitant_swelling:{label:'Crepitant swelling',kind:'symptom'},
+  dark_unclotting_blood:{label:'Dark unclotting blood',kind:'symptom'},
+  no_rigor:{label:'No rigor mortis',kind:'symptom'},
+  fever:{label:'High fever',kind:'symptom'},
+  blackleg:{label:'Blackleg',kind:'disease',organism:'Clostridium chauvoei',
+    img:'Dark red-to-black spongy muscle, sweetish odour, crepitant gas swelling of large muscles.'},
+  anthrax:{label:'Anthrax',kind:'disease',organism:'Bacillus anthracis',
+    img:'Dark tarry unclotting blood from orifices; absent rigor mortis; rapid bloat. DO NOT open carcass (spore risk).'},
+  malignant_edema:{label:'Malignant edema',kind:'disease',organism:'Clostridium septicum',
+    img:'Wound-associated edema/gas; necropsy unreliable vs blackleg — needs lab.'},
+};
+/* relations: each carries CONSTITUENT PARTICLES (the records that ARE this relation) */
+const RELATIONS=[
+  {a:'sudden_death',b:'blackleg',rel:'presents_in',w:0.8,
+   records:['Merck: blackleg — rapidly fatal febrile disease of young cattle','case: sudden death in beef calf, enzootic farm','field note: found dead, no prior signs']},
+  {a:'crepitant_swelling',b:'blackleg',rel:'discriminates',w:0.97,
+   records:['Merck: crepitant swelling of large muscles suggests blackleg','path: emphysematous myositis, gas in tissue','the DISCRIMINATOR — separates blackleg from anthrax']},
+  {a:'fever',b:'blackleg',rel:'presents_in',w:0.6,records:['Merck: febrile disease','clinical: pyrexia early course']},
+  {a:'sudden_death',b:'anthrax',rel:'presents_in',w:0.9,records:['Merck: anthrax — acute septicemia, high fatality','cattle often found dead','sudden death in seemingly healthy animal']},
+  {a:'dark_unclotting_blood',b:'anthrax',rel:'discriminates',w:0.9,records:['Veterian Key: dark blood fails to clot','oozing from orifices','the DISCRIMINATOR — separates anthrax from blackleg']},
+  {a:'no_rigor',b:'anthrax',rel:'presents_in',w:0.8,records:['absence of rigor mortis','rapid carcass bloat','Merck differential feature']},
+  {a:'fever',b:'anthrax',rel:'presents_in',w:0.7,records:['high fever early','Merck: febrile']},
+  {a:'sudden_death',b:'malignant_edema',rel:'presents_in',w:0.7,records:['Merck: highly fatal','wound-associated sudden death']},
+  {a:'crepitant_swelling',b:'malignant_edema',rel:'may_present',w:0.7,records:['gas/edema in wound','Merck: necropsy unreliable vs blackleg']},
+];
+
+/* ===== three.js ===== */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(60,2,0.1,7000); camera.position.set(0,0,700);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x02030a,1);
+stage.appendChild(renderer.domElement);
+
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.5)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+/* ===== THEME: dark (glowing additive) vs light (legible, normal-blend dark particles + connector lines) ===== */
+let THEME='dark';
+function blendMode(){return THEME==='dark'?THREE.AdditiveBlending:THREE.NormalBlending;}
+function bgColor(){return THEME==='dark'?0x02030a:0xeef1f7;}
+function themeLabelColor(base){ // darken bright labels on light theme
+  if(THEME==='dark')return base;
+  // map light label colors to dark equivalents for contrast on white
+  const map={'#e8ecf6':'#1a2340','#b8c4e8':'#33406b','#9fb0d8':'#3a4670','#7fd0c8':'#0d7d70','#8fa0c8':'#40507e','#8fe6b0':'#1f8f56','#E3B458':'#9a7212','#5a6488':'#7a84a8'};
+  return map[base]||'#1a2340';
+}
+function particleOpacity(){return THEME==='dark'?0.9:0.85;}
+function partColorAdjust(c){ // on light theme, darken particle colors so they show on white
+  if(THEME==='dark')return c;
+  return [c[0]*0.55,c[1]*0.55,c[2]*0.6];
+}
+function mkLabel(text,color,scale){const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+  g.font='600 26px "IBM Plex Mono"';g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';g.shadowColor='rgba(0,0,0,.95)';g.shadowBlur=9;
+  g.fillText(text.length>28?text.slice(0,26)+'…':text,256,34);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));s.scale.set(scale||150,(scale||150)/8,1);return s;}
+
+/* ===== the scene is a LIST OF ELEMENTS, each a particle-cluster with an interior =====
+   element = {id, kind:'cluster'|'filament', center, particleMesh, label, data, children()} */
+let elements=[]; // current visible elements
+let sceneObjs=[]; // three objects to clear
+let depthStack=[]; // local depth: what we've entered [{name, build}]
+
+function clearScene(){ sceneObjs.forEach(o=>scene.remove(o)); sceneObjs=[]; elements=[]; }
+function addParticleCloud(center,n,spread,color,bright,shape){
+  const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    let dx,dy,dz;
+    if(shape==='filament'){ // handled by caller via center list; here gaussian
+      dx=(Math.random()-.5)*spread;dy=(Math.random()-.5)*spread;dz=(Math.random()-.5)*spread;
+    } else { // cluster: gaussian ball
+      const r=spread*Math.pow(Math.random(),0.6);const th=Math.random()*6.28,ph=Math.acos(2*Math.random()-1);
+      dx=r*Math.sin(ph)*Math.cos(th);dy=r*Math.sin(ph)*Math.sin(th);dz=r*Math.cos(ph);
+    }
+    pos[i*3]=center.x+dx;pos[i*3+1]=center.y+dy;pos[i*3+2]=center.z+dz;
+    const cc=partColorAdjust(color);
+    const b=bright*(0.45+Math.random()*0.55);col[i*3]=cc[0]*b;col[i*3+1]=cc[1]*b;col[i*3+2]=cc[2]*b;
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  const m=new THREE.Points(g,new THREE.PointsMaterial({size:shape==='filament'?2.4:2.8,vertexColors:true,transparent:true,opacity:particleOpacity(),depthWrite:false,blending:blendMode(),map:TEX}));
+  scene.add(m);sceneObjs.push(m);return m;
+}
+function addFilamentCloud(A,B,n,spread,color,bright){
+  const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+  const mid=new THREE.Vector3((A.x+B.x)/2,(A.y+B.y)/2,(A.z+B.z)/2).multiplyScalar(0.75);
+  for(let i=0;i<n;i++){const t=Math.random();
+    const x=A.x*(1-t)*(1-t)+mid.x*2*(1-t)*t+B.x*t*t+(Math.random()-.5)*spread;
+    const y=A.y*(1-t)*(1-t)+mid.y*2*(1-t)*t+B.y*t*t+(Math.random()-.5)*spread;
+    const z=A.z*(1-t)*(1-t)+mid.z*2*(1-t)*t+B.z*t*t+(Math.random()-.5)*spread;
+    pos[i*3]=x;pos[i*3+1]=y;pos[i*3+2]=z;const cc=partColorAdjust(color);const b=bright*(0.45+Math.random()*0.55);col[i*3]=cc[0]*b;col[i*3+1]=cc[1]*b;col[i*3+2]=cc[2]*b;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  const m=new THREE.Points(g,new THREE.PointsMaterial({size:2.2,vertexColors:true,transparent:true,opacity:THEME==='dark'?0.85:0.8,depthWrite:false,blending:blendMode(),map:TEX}));
+  scene.add(m);sceneObjs.push(m);return m;
+}
+function addLabel(center,text,color){const l=mkLabel(text,themeLabelColor(color));l.position.set(center.x,center.y+22,center.z);scene.add(l);sceneObjs.push(l);return l;}
+
+const COLORS={symptom:[0.31,0.84,0.77],disease:[0.95,0.72,0.4],record:[0.7,0.8,1.0],
+  FACT:[0.56,0.90,0.69],WEAK:[0.89,0.70,0.35],GHOST:[0.69,0.51,0.88]};
+
+/* ===== BUILD LEVEL 0: the query result as clusters + filaments (all particles) ===== */
+let qA='sudden_death', qB='blackleg';
+function buildQueryScene(){
+  clearScene(); depthStack=[{name:'field',build:buildQueryScene}]; renderCrumb();
+  // gather entities involved: the two queried + everything connected to them
+  const involved=new Set([qA,qB]);
+  RELATIONS.forEach(r=>{if(r.a===qA||r.b===qA||r.a===qB||r.b===qB){involved.add(r.a);involved.add(r.b);}});
+  const ids=[...involved];
+  // place clusters
+  const anchors={};
+  ids.forEach((id,i)=>{const a=i/ids.length*6.28;anchors[id]=new THREE.Vector3(Math.cos(a)*230,Math.sin(a)*140,Math.sin(a*1.7)*60);});
+  // clusters (nodes = particle clusters, NOT solid spheres)
+  ids.forEach(id=>{const E=ENTITIES[id];const c=COLORS[E.kind];
+    const isQ=(id===qA||id===qB);
+    const mesh=addParticleCloud(anchors[id],isQ?2200:1100,isQ?26:20,c,isQ?1.0:0.7,'cluster');
+    const lab=addLabel(anchors[id],E.label,E.kind==='disease'?'#e8ecf6':'#7fd0c8');
+    elements.push({id,kind:'cluster',center:anchors[id],mesh,label:lab,radius:isQ?40:30,data:E});
+  });
+  // filaments (edges = particle filaments) for relations among involved entities
+  RELATIONS.forEach(r=>{if(!involved.has(r.a)||!involved.has(r.b))return;
+    const A=anchors[r.a],B=anchors[r.b];const kind=r.w>=0.6?'FACT':r.w>=0.35?'WEAK':'GHOST';
+    const col=COLORS[kind];const n=Math.round(r.w*r.w*2000)+400;
+    const mesh=addFilamentCloud(A,B,n,r.rel==='discriminates'?6:9,col,r.w);
+    // filament is clickable: its center is the midpoint
+    const mid=new THREE.Vector3((A.x+B.x)/2,(A.y+B.y)/2,(A.z+B.z)/2);
+    elements.push({id:r.a+'|'+r.b,kind:'filament',center:mid,mesh,radius:34,data:r});
+  });
+}
+
+/* ===== DISSOLVE: click an element → enter it → rebuild scene as ITS constituent particles ===== */
+function dissolveInto(elem){
+  if(elem.kind==='cluster'){
+    // a node dissolves into its member particles: the relations that ground it + its facets
+    const id=elem.id;const E=elem.data;
+    const build=()=>{
+      clearScene();
+      const center=new THREE.Vector3(0,0,0);
+      // the entity itself as a loose central cloud
+      addParticleCloud(center,1600,40,COLORS[E.kind],0.6,'cluster');
+      addLabel(center,E.label+(E.organism?(' · '+E.organism):''),'#e8ecf6');
+      // each relation touching this entity becomes a child cluster of particles around it
+      const rels=RELATIONS.filter(r=>r.a===id||r.b===id);
+      rels.forEach((r,i)=>{const a=i/rels.length*6.28;const p=new THREE.Vector3(Math.cos(a)*200,Math.sin(a)*130,Math.sin(a*1.5)*50);
+        const other=r.a===id?r.b:r.a;const kind=r.w>=0.6?'FACT':r.w>=0.35?'WEAK':'GHOST';
+        const mesh=addParticleCloud(p,Math.round(r.w*900)+300,22,COLORS[kind],r.w,'cluster');
+        addFilamentCloud(center,p,Math.round(r.w*700)+200,7,COLORS[kind],r.w*0.8);
+        addLabel(p,r.rel+' → '+ENTITIES[other].label,r.rel==='discriminates'?'#E3B458':'#9fb0d8');
+        elements.push({id:r.a+'|'+r.b,kind:'filament',center:p,mesh,radius:30,data:r});
+      });
+      // image facet (also particles) for a disease
+      if(E.img){const p=new THREE.Vector3(0,-190,0);addParticleCloud(p,700,26,COLORS.WEAK,0.7,'cluster');addLabel(p,'▶ diagnostic image','#E3B458');
+        elements.push({id:id+'|img',kind:'image',center:p,radius:30,data:E});}
+    };
+    pushDepth(ENTITIES[id].label,build); build(); inspect(elem);
+  }
+  else if(elem.kind==='filament'){
+    // THE KEY PROOF: a relation dissolves into its constituent RECORD particles
+    const r=elem.data;
+    const build=()=>{
+      clearScene();
+      const A=ENTITIES[r.a],B=ENTITIES[r.b];
+      // the two endpoints as faint clusters, far apart
+      const pA=new THREE.Vector3(-230,0,0),pB=new THREE.Vector3(230,0,0);
+      addParticleCloud(pA,700,26,COLORS[A.kind],0.5,'cluster');addLabel(pA,A.label,'#7fd0c8');
+      addParticleCloud(pB,700,26,COLORS[B.kind],0.5,'cluster');addLabel(pB,B.label,'#e8ecf6');
+      // the relation's RECORDS become distinct particle-clusters strung along the filament
+      const kind=r.w>=0.6?'FACT':r.w>=0.35?'WEAK':'GHOST';
+      r.records.forEach((rec,i)=>{const t=(i+1)/(r.records.length+1);
+        const p=new THREE.Vector3(pA.x+(pB.x-pA.x)*t,Math.sin(t*3.14)*70+(i%2?30:-30),(i%2?40:-40));
+        const mesh=addParticleCloud(p,420,14,COLORS[kind],r.w,'cluster');
+        addFilamentCloud(i===0?pA:new THREE.Vector3(pA.x+(pB.x-pA.x)*((i)/(r.records.length+1)),0,0),p,220,5,COLORS[kind],0.6);
+        // real identity: KAKI short-id + a snippet of what the record holds — NOT "record N"
+        const P=goldenParticleFor({text:rec});
+        const snippet=rec.length>26?rec.slice(0,24)+'…':rec;
+        addLabel(p,'κ '+P.kaki.short,rgbCss(COLORS[kind]));
+        addLabel({x:p.x,y:p.y-16,z:p.z},snippet,'#8fa0c8');
+        elements.push({id:elem.id+'|rec'+i,kind:'record',center:p,mesh,radius:22,data:{text:rec,rel:r}});
+      });
+      // connect last record to B
+    };
+    pushDepth(r.rel+'('+ENTITIES[r.a].label+'→'+ENTITIES[r.b].label+')',build); build(); inspect(elem);
+  }
+  else if(elem.kind==='record'){
+    // A GOLDEN record dissolves into its ACTUAL KAKI v4.0 particle anatomy as read
+    // from EnkiDDB's schema — NOT token-dust. No StoryEngine (that is upstream in BeeMDM).
+    const rec=elem.data;
+    const P=goldenParticleFor(rec);
+    const build=()=>{
+      clearScene();
+      const center=new THREE.Vector3(0,0,-40);
+      // the particle itself: colour = its ColourID/state
+      addParticleCloud(center,1400,44,P.stateColor,0.85,'cluster');
+      addLabel(center,P.title,'#e8ecf6');
+      addLabel({x:center.x,y:center.y-30,z:center.z},'KAKI '+P.kaki.short+' · '+P.state,rgbCss(P.stateColor));
+      // facets arranged around it, each a clickable particle-cluster
+      const facets=[
+        {k:'identity',name:'KAKI v4.0 identity',col:COLORS.record},
+        ...P.mandatory.map(a=>({k:'attr',name:a.name+' = '+a.value,col:phaseColor(a),attr:a,band:'MANDATORY'})),
+        ...P.optional.map(a=>({k:'attr',name:a.name+' = '+a.value,col:phaseColor(a),attr:a,band:'OPTIONAL'})),
+        {k:'colour',name:'ColourID · '+P.state,col:P.stateColor},
+        ...(P.media?[{k:'media',name:'▶ '+P.media.type+': '+P.media.name,col:COLORS.WEAK,media:P.media}]:[]),
+        ...P.links.map(l=>({k:'link',name:'→ '+l.name,col:COLORS.FACT,link:l})),
+      ];
+      facets.forEach((f,i)=>{const a=i/facets.length*6.28;const rr=175+((i%3)*22);
+        const p=new THREE.Vector3(Math.cos(a)*rr,Math.sin(a)*rr*0.62,Math.sin(a*1.7)*40);
+        addParticleCloud(p,f.k==='attr'?Math.round((f.attr.weight||0.6)*520)+180:340,f.k==='link'?11:15,f.col,0.85,'cluster');
+        addFilamentCloud(center,p,180,5,f.col,0.5);
+        addLabel(p,f.name,rgbCss(f.col));
+        elements.push({id:elem.id+'|'+i,kind:f.k==='attr'?'attr':(f.k==='link'?'plink':(f.k==='media'?'media':(f.k==='colour'?'colour':'identity'))),
+          center:p,radius:26,data:f.k==='attr'?f.attr:(f.k==='link'?f.link:(f.k==='media'?f.media:P))});
+      });
+    };
+    pushDepth('particle '+P.kaki.short,build); build(); inspectParticle(P);
+  }
+  else if(elem.kind==='attr'){
+    // an attribute dissolves into its fuzzy-membership detail: concept + weight + phase
+    const a=elem.data;
+    const build=()=>{clearScene();const center=new THREE.Vector3(0,0,0);
+      addParticleCloud(center,900,40,phaseColor(a),0.85,'cluster');
+      addLabel(center,a.name+' = '+a.value,'#e8ecf6');
+      addLabel({x:0,y:-28,z:0},'concept: '+a.concept,'#9fb0d8');
+      // three phase-clusters showing the SAME value weighted differently by disease phase
+      const phases=[['acute',a.phaseWeights.acute,[0.95,0.45,0.35]],['near-death',a.phaseWeights.dead,[0.55,0.6,0.72]],['healing',a.phaseWeights.heal,[0.56,0.9,0.69]]];
+      phases.forEach((ph,i)=>{const x=(i-1)*180;const p=new THREE.Vector3(x,90,0);
+        addParticleCloud(p,Math.round(ph[1]*900)+80,18,ph[2],0.4+ph[1]*0.6,'cluster');
+        addLabel(p,ph[0]+' · μ='+ph[1].toFixed(2),rgbCss(ph[2]));
+      });
+      addLabel({x:0,y:170,z:0},'same value — different meaning per phase (fuzzy μ)','#5a6488');
+    };
+    pushDepth(a.name,build); build(); inspectAttr(a);
+  }
+  else if(elem.kind==='plink'){ inspectLink(elem.data); }
+  else if(elem.kind==='identity'){ inspectIdentity(elem.data); }
+  else if(elem.kind==='colour'){ inspectColour(elem.data); }
+  else if(elem.kind==='image'){
+    const E=elem.data;
+    const build=()=>{clearScene();const center=new THREE.Vector3(0,0,0);
+      addParticleCloud(center,2000,70,COLORS.WEAK,0.7,'cluster');addLabel(center,E.label+' · diagnostic image','#E3B458');};
+    pushDepth('image',build);build();inspect(elem);
+  }
+  else if(elem.kind==='media'){
+    const md=elem.data;const build=()=>{clearScene();const center=new THREE.Vector3(0,0,0);
+      addParticleCloud(center,1600,64,COLORS.WEAK,0.7,'cluster');addLabel(center,'▶ '+md.type+' · '+md.name,'#E3B458');};
+    pushDepth('media',build);build();inspectMedia(md);
+  }
+  else if(elem.kind==='atom'){ inspect(elem); }
+}
+
+/* ===== GOLDEN particle model — built from a record, as EnkiDDB would hold it ===== */
+function goldenParticleFor(rec){
+  // deterministic pseudo-KAKI from the record text
+  let h=0;for(const c of rec.text)h=(h*131+c.charCodeAt(0))&0xffffffff;
+  const hex=(n,d)=>((n>>>0).toString(16).padStart(8,'0')).slice(0,d);
+  const uuid=hex(h,8), tribe=hex(h>>>3,4), ts=hex(h>>>7,4), crc=hex(h>>>11,4);
+  const short=uuid.slice(0,4)+'…'+crc;
+  // state + colour (GOLDEN/FUZZY/DEAD) — here GOLDEN by definition of the store
+  const state='GOLDEN', stateColor=COLORS.FACT;
+  // attributes with score-concept + fuzzy weight + phase weighting (NOT bare High/Low)
+  const isAcute=/acute|septicemia|fatal|rapid/i.test(rec.text);
+  const mk=(name,value,concept,weight,pa,pd,ph)=>({name,value,concept,weight,
+    phaseWeights:{acute:pa,dead:pd,heal:ph}});
+  const mandatory=[
+    mk('fatality', isAcute?'HIGH':'MODERATE', 'case_fatality_rate', isAcute?0.9:0.5, isAcute?0.92:0.5, 0.7, 0.15),
+    mk('onset', 'ACUTE', 'time_to_signs', 0.85, 0.9, 0.4, 0.2),
+    mk('severity', 'HIGH', 'clinical_severity_index', 0.8, 0.88, 0.6, 0.2),
+  ];
+  const optional=[
+    mk('gas_production', /gas|crepit|emphysem/i.test(rec.text)?'PRESENT':'ABSENT','tissue_gas', /gas|crepit/i.test(rec.text)?0.85:0.2, 0.7,0.5,0.1),
+    mk('confidence', 'HIGH', 'source_confidence', 0.9, 0.9,0.9,0.9),
+  ];
+  const media = /image|swelling|blood|muscle|lesion/i.test(rec.text)
+    ? {type:'diagnostic image', name:'field photo (necropsy/lesion)'} : null;
+  const links=[
+    {name:'organism particle', kind:'organism'},
+    {name:'differential particles', kind:'differential'},
+  ];
+  return {title:'GOLDEN record particle', kaki:{uuid,tribe,ts,crc,short}, state, stateColor, mandatory, optional, media, links, text:rec.text};
+}
+function phaseColor(a){const w=a.weight||0.5;return w>=0.6?COLORS.FACT:w>=0.35?COLORS.WEAK:COLORS.GHOST;}
+function rgbCss(c){return`rgb(${(c[0]*255)|0},${(c[1]*255)|0},${(c[2]*255)|0})`;}
+
+function inspectParticle(P){const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">GOLDEN particle</div><div class="ik">KAKI v4.0 · read from EnkiDDB schema</div>
+    <div class="ib" style="font-size:9.5px"><b>KAKI</b> uuid:${P.kaki.uuid} · tribe:${P.kaki.tribe} · ts:${P.kaki.ts} · crc:${P.kaki.crc}</div>
+    <div class="ib"><b>state:</b> <span style="color:${rgbCss(P.stateColor)}">${P.state}</span> · <b>${P.mandatory.length}</b> mandatory + <b>${P.optional.length}</b> optional attrs · <b>${P.links.length}</b> links${P.media?' · media ▶':''}</div>
+    <div class="ib" style="color:var(--ink-faint)">"${P.text}"</div>
+    <div class="zoom">▸ click any facet: attribute → its fuzzy μ by phase · link → dependent particle · media → the asset. NO event journal (that is upstream in BeeMDM).</div>`;}
+function inspectAttr(a){const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">${a.name} = ${a.value}</div><div class="ik">EAV attribute · scored, not a bare fragment</div>
+    <div class="ib"><b>concept:</b> ${a.concept}<br><b>fuzzy weight μ:</b> ${(a.weight).toFixed(2)}</div>
+    <div class="ib"><b>phase-dependent meaning:</b><br>acute μ=${a.phaseWeights.acute.toFixed(2)} · near-death μ=${a.phaseWeights.dead.toFixed(2)} · healing μ=${a.phaseWeights.heal.toFixed(2)}</div>
+    <div class="zoom">"${a.value}" is not a fact — it is a fuzzy membership in "${a.concept}", weighted by disease phase.</div>`;}
+function inspectLink(l){const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">→ ${l.name}</div><div class="ik">dependency · link to another particle</div>
+    <div class="ib">This particle depends on / connects to a <b>${l.kind}</b> particle. Following links across the field is how the Bārû anticipates the pattern that computes related symptoms toward a disease.</div>`;}
+function inspectIdentity(P){const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">KAKI v4.0 identity</div><div class="ik">16-byte particle ID</div>
+    <div class="ib" style="font-family:var(--f-data);font-size:10px;line-height:1.7">
+      κ[0..3] uuid_hash = <b>${P.kaki.uuid}</b><br>κ[4..5] tribe_id = <b>${P.kaki.tribe}</b><br>κ[6] kaki_type · κ[7] kaki_role<br>κ[12..13] timestamp = <b>${P.kaki.ts}</b><br>κ[14..15] CRC-16 = <b>${P.kaki.crc}</b></div>
+    <div class="zoom">state/quality/colour live in EAV, never in these bytes (v4.0 law).</div>`;}
+function inspectColour(P){const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">ColourID · ${P.state}</div><div class="ik">colour = what the particle IS (via PASHIRU/EAV)</div>
+    <div class="ib">The particle's colour is <span style="color:${rgbCss(P.stateColor)}">${P.state}</span> — assigned from EAV, not from KAKI bytes. Colour is a reading of state/quality, so the Bārû sees a particle's condition at a glance.</div>`;}
+function inspectMedia(md){const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">▶ ${md.type}</div><div class="ik">linked asset · also a particle</div>
+    <div class="ib">${md.name}. Images, video, SVG, diagrams, animations are themselves particle assemblies (they have KAKI) — so they exist in EnkiDDB and are visualizable by BWVL like anything else.</div>`;}
+
+/* depth stack + breadcrumb */
+function pushDepth(name,build){depthStack.push({name,build});renderCrumb();fitCamera();}
+function popTo(i){depthStack=depthStack.slice(0,i+1);const top=depthStack[depthStack.length-1];clearScene();top.build();renderCrumb();fitCamera();document.getElementById('insp').style.display='none';}
+function renderCrumb(){const c=document.getElementById('crumb');
+  c.innerHTML=depthStack.map((d,i)=>`<span class="seg${i===depthStack.length-1?' here':''}" data-i="${i}">${d.name}</span>`+(i<depthStack.length-1?'<span class="arr">›</span>':'')).join('');
+  c.querySelectorAll('.seg').forEach(s=>s.onclick=()=>popTo(+s.dataset.i));}
+
+/* inspector */
+function inspect(elem){const el=document.getElementById('insp');el.style.display='block';
+  if(elem.kind==='cluster'){const E=elem.data;
+    el.innerHTML=`<div class="it">${E.label}</div><div class="ik">particle cluster · reads as "${E.kind}"</div>
+      <div class="ib">This looks like a node, but it is a <b>cluster of particles</b>. ${E.organism?('Organism: '+E.organism+'. '):''}Click it again in the view to dissolve into the relations & facets that constitute it.</div>
+      ${E.img?`<div class="img"><b>Field image:</b> ${E.img}</div>`:''}
+      <div class="zoom">▸ click the cluster to enter its particles</div>`;}
+  else if(elem.kind==='filament'){const r=elem.data;
+    el.innerHTML=`<div class="it">${r.rel}</div><div class="ik">particle filament · reads as "edge"</div>
+      <div class="ib">This looks like an edge, but it is a <b>filament of particles</b> — and those particles ARE the ${r.records.length} GOLDEN records that ground this relation. ${ENTITIES[r.a].label} —${r.rel}→ ${ENTITIES[r.b].label}. Weight ${r.w.toFixed(2)}.</div>
+      <div class="zoom">▸ click the filament to dissolve it into its record-particles</div>`;}
+  else if(elem.kind==='record'){
+    el.innerHTML=`<div class="it">GOLDEN record</div><div class="ik">particle cluster · one grounded record</div>
+      <div class="ib">"${elem.data.text}"</div>
+      <div class="zoom">▸ click to dissolve into its essential particles (tokens)</div>`;}
+  else if(elem.kind==='atom'){
+    el.innerHTML=`<div class="it">${elem.data.text}</div><div class="ik">essential particle</div>
+      <div class="ib">The bottom of the dissolve — an essential particle. In production this is one KAKI-identified atom of GOLDEN data.</div>`;}
+  else if(elem.kind==='image'){
+    el.innerHTML=`<div class="it">Diagnostic image</div><div class="ik">particle field · reads as image</div>
+      <div class="ib">${elem.data.img}</div>`;}
+}
+
+/* picking: click an element (cluster/filament) → dissolve */
+function pick(cx,cy){const r=renderer.domElement.getBoundingClientRect();let best=null,bd=1e9;
+  elements.forEach(e=>{const v=e.center.clone().project(camera);if(v.z>=1)return;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);
+    if(d<(e.radius||30)&&d<bd){bd=d;best=e;}});return best;}
+let dragMoved=false;
+renderer.domElement.addEventListener('mousemove',e=>{if(dragging&&(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4))dragMoved=true;
+  renderer.domElement.style.cursor=pick(e.clientX,e.clientY)?'pointer':(dragging?'grabbing':'grab');});
+renderer.domElement.addEventListener('click',e=>{if(dragMoved)return;const el=pick(e.clientX,e.clientY);if(el)dissolveInto(el);});
+
+/* query UI */
+function fillSelect(sel){Object.keys(ENTITIES).forEach(id=>sel.insertAdjacentHTML('beforeend',`<option value="${id}">${ENTITIES[id].label}</option>`));}
+fillSelect(document.getElementById('q-a'));fillSelect(document.getElementById('q-b'));
+document.getElementById('q-a').value='sudden_death';document.getElementById('q-b').value='blackleg';
+document.getElementById('q-run').onclick=()=>{qA=document.getElementById('q-a').value;qB=document.getElementById('q-b').value;
+  if(qA===qB)return;document.getElementById('insp').style.display='none';buildQueryScene();fitCamera();};
+document.getElementById('theme-btn').onclick=()=>{
+  THEME=THEME==='dark'?'light':'dark';
+  document.body.classList.toggle('light',THEME==='light');
+  renderer.setClearColor(bgColor(),1);
+  document.getElementById('theme-btn').textContent=THEME==='dark'?'◐ LIGHT':'◑ DARK';
+  // rebuild current depth so particles re-render with the theme's blend mode + colors
+  const top=depthStack[depthStack.length-1]; clearScene(); top.build();
+};
+
+/* camera */
+let az=0.3,el=0.2,camDist=700,camDistT=700,camTarget=new THREE.Vector3(),ct=new THREE.Vector3(),dragging=false,lx=0,ly=0,spin=!reduced;
+function fitCamera(){camTarget.set(0,0,0);camDistT=depthStack.length<=1?700:520;}
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(120,Math.min(1500,camDistT*(1+Math.sign(e.deltaY)*0.09)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{if(!dragging)return;az-=(e.clientX-lx)*0.005;el=Math.max(-1.4,Math.min(1.4,el+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY;});
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+buildQueryScene(); fitCamera();
+
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin&&!dragging)az+=dt*0.03;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.2);ct.lerp(camTarget,Math.min(1,dt*2.5));
+  camera.position.set(ct.x+Math.cos(az)*Math.cos(el)*camDist,ct.y+Math.sin(el)*camDist,ct.z+Math.sin(az)*Math.cos(el)*camDist);
+  camera.lookAt(ct);renderer.render(scene,camera);}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,262 @@
+# =============================================================================
+# PB-280 — bahyway/EnkiDB git lifecycle: clone / sync / push / restore, all
+# in one Ansible playbook -- no manual git commands during a bare-metal
+# bring-up.
+# BahyWay.Ecosystem v4.0
+#
+# WHY THIS EXISTS: the Architect asked for a full git commands plan (SSH
+# clone, pull, push, restore) that never has to be typed by hand during a
+# host bring-up -- part of the "automation is pillar 1" standing goal.
+# This playbook is that plan, made mechanical. It never force-pushes, never
+# pushes to master/main directly, and never discards local work without a
+# restore point (a local-only git tag) created first.
+#
+# FOUR MODES, selected via `-e git_action=<mode>` (default: sync):
+#
+#   clone   -- SSH-clones bahyway/EnkiDB to `git_repo_dir` if it doesn't
+#              already exist there. No-op (reported, not an error) if it
+#              does. Requires SSH access to GitHub already working (this
+#              playbook checks it first, fails with a clear message if not
+#              -- it does not attempt to set up keys for you).
+#
+#   sync    -- (default) `git fetch origin`, reports ahead/behind vs.
+#              `origin/<git_branch>`, and fast-forward-pulls ONLY if the
+#              working tree is clean and a fast-forward is possible.
+#              A DIRTY working tree or a real divergence (needs merge/
+#              rebase) is reported and the playbook stops -- it never
+#              guesses which side should win. Before any pull, tags the
+#              current HEAD `pre-sync-<timestamp>` (local only, never
+#              pushed) as a restore point.
+#
+#   push    -- pushes the CURRENT branch to `origin/<same-branch-name>`
+#              only -- refuses if `git_branch` is master or main (a PR is
+#              the only path into those, per this repo's own standing
+#              convention). Never force. Requires `-e confirm_push=true`
+#              as an explicit second flag -- `git_action=push` alone is
+#              not enough, so a scripted/looped run can never push by
+#              accident.
+#
+#   restore -- `git reset --hard <restore_tag>` to undo a sync that went
+#              wrong. Requires `-e restore_tag=<tag>` naming a real,
+#              existing tag (e.g. one PB-280's own `sync` mode created).
+#              Refuses if the working tree is dirty AND `-e
+#              confirm_restore=true` wasn't also passed -- dirty + no
+#              confirm means "stop and let the Architect look," never a
+#              silent discard.
+#
+# USAGE:
+#   ansible-playbook playbook_280_git_repo_lifecycle.yml \
+#     -e git_action=clone -e git_repo_dir=~/Forge/EnkiDB
+#   ansible-playbook playbook_280_git_repo_lifecycle.yml \
+#     -e git_action=sync  -e git_repo_dir=~/Forge/EnkiDB -e git_branch=master
+#   ansible-playbook playbook_280_git_repo_lifecycle.yml \
+#     -e git_action=push  -e git_repo_dir=~/Forge/EnkiDB -e confirm_push=true
+#   ansible-playbook playbook_280_git_repo_lifecycle.yml \
+#     -e git_action=restore -e git_repo_dir=~/Forge/EnkiDB \
+#     -e restore_tag=pre-sync-20260801T193000Z -e confirm_restore=true
+#
+# Author:    DUB.SAR -- Bahaa Fadam
+# Date:      2026-08-01
+# =============================================================================
+---
+- name: "PB-280 | bahyway/EnkiDB git lifecycle (clone / sync / push / restore)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # lookup('env', ...), not the ansible_env FACT -- gather_facts is false
+    # on this play, so ansible_env.HOME silently fell back to '/root'
+    # instead of the real invoking user's home (caught 2026-08-01 when
+    # this exact pattern broke playbook_278 with a real Permission denied).
+    home_dir:      "{{ lookup('env', 'HOME') }}"
+    git_repo_dir:  "{{ home_dir }}/Forge/EnkiDB"
+    git_ssh_url:   "git@github.com:bahyway/EnkiDB.git"
+    git_branch:    "master"
+    git_action:    "sync"
+    confirm_push:    false
+    confirm_restore: false
+    restore_tag:   ""
+
+  tasks:
+
+    - name: "GUARD | git_action must be one of clone/sync/push/restore"
+      ansible.builtin.fail:
+        msg: "git_action='{{ git_action }}' is not clone/sync/push/restore."
+      when: git_action not in ['clone', 'sync', 'push', 'restore']
+
+    # ── CLONE ─────────────────────────────────────────────────────────
+    - name: "CLONE | check whether the repo already exists locally"
+      ansible.builtin.stat:
+        path: "{{ git_repo_dir }}/.git"
+      register: repo_git_dir
+      when: git_action == 'clone'
+
+    - name: "CLONE | verify SSH access to GitHub before cloning"
+      ansible.builtin.command:
+        cmd: "ssh -T -o StrictHostKeyChecking=accept-new git@github.com"
+      register: ssh_check
+      changed_when: false
+      # GitHub's SSH auth check always exits 1 on SUCCESS (no shell access
+      # granted, by design) -- the real signal is the greeting text, not rc.
+      failed_when: "'successfully authenticated' not in (ssh_check.stdout + ssh_check.stderr)"
+      when: git_action == 'clone' and not repo_git_dir.stat.exists
+
+    - name: "CLONE | git clone (SSH) into git_repo_dir"
+      ansible.builtin.command:
+        cmd: "git clone {{ git_ssh_url }} {{ git_repo_dir }}"
+      when: git_action == 'clone' and not repo_git_dir.stat.exists
+
+    - name: "CLONE | already present -- no-op"
+      ansible.builtin.debug:
+        msg: "{{ git_repo_dir }} already has a .git directory -- nothing cloned. Use git_action=sync to update it."
+      when: git_action == 'clone' and repo_git_dir.stat.exists
+
+    # ── SYNC ──────────────────────────────────────────────────────────
+    - name: "SYNC | verify the repo exists before syncing"
+      ansible.builtin.stat:
+        path: "{{ git_repo_dir }}/.git"
+      register: sync_repo_dir
+      when: git_action in ['sync', 'push', 'restore']
+
+    - name: "FAIL | repo not found, run git_action=clone first"
+      ansible.builtin.fail:
+        msg: "{{ git_repo_dir }} is not a git repo. Run this playbook with -e git_action=clone first."
+      when: git_action in ['sync', 'push', 'restore'] and not sync_repo_dir.stat.exists
+
+    - name: "SYNC | fetch origin"
+      ansible.builtin.command:
+        cmd: "git fetch origin"
+        chdir: "{{ git_repo_dir }}"
+      register: fetch_result
+      changed_when: "'up to date' not in fetch_result.stderr"
+      when: git_action == 'sync'
+
+    - name: "SYNC | working tree status"
+      ansible.builtin.command:
+        cmd: "git status --porcelain"
+        chdir: "{{ git_repo_dir }}"
+      register: tree_status
+      changed_when: false
+      when: git_action == 'sync'
+
+    - name: "FAIL | working tree is dirty -- sync refuses to pull over local changes"
+      ansible.builtin.fail:
+        msg: >-
+          {{ git_repo_dir }} has uncommitted changes. Commit, stash
+          (`git -C {{ git_repo_dir }} stash push -u`), or investigate
+          before syncing -- PB-280 never pulls over dirty local state.
+      when: git_action == 'sync' and tree_status.stdout | trim != ''
+
+    - name: "SYNC | ahead/behind vs origin/{{ git_branch }}"
+      ansible.builtin.command:
+        cmd: "git rev-list --left-right --count HEAD...origin/{{ git_branch }}"
+        chdir: "{{ git_repo_dir }}"
+      register: ahead_behind
+      changed_when: false
+      when: git_action == 'sync'
+
+    - name: "SYNC | create a local-only restore-point tag before pulling"
+      ansible.builtin.command:
+        cmd: "git tag pre-sync-{{ lookup('pipe', 'date -u +%Y%m%dT%H%M%SZ') }}"
+        chdir: "{{ git_repo_dir }}"
+      when: git_action == 'sync' and (ahead_behind.stdout.split() | first | int) > 0
+
+    - name: "SYNC | fast-forward pull (only when behind and not diverged)"
+      ansible.builtin.command:
+        cmd: "git merge --ff-only origin/{{ git_branch }}"
+        chdir: "{{ git_repo_dir }}"
+      register: ff_pull
+      failed_when: false
+      when: git_action == 'sync' and (ahead_behind.stdout.split() | last | int) > 0
+
+    - name: "REPORT | sync could not fast-forward (real divergence -- needs a human decision)"
+      ansible.builtin.debug:
+        msg: >-
+          {{ git_repo_dir }} has local commits AND upstream commits
+          origin/{{ git_branch }} doesn't have -- not a fast-forward.
+          A restore-point tag was made before this check; resolve by hand
+          (merge or rebase) rather than letting this playbook guess.
+      when: git_action == 'sync' and ff_pull is defined and ff_pull.rc is defined and ff_pull.rc != 0
+
+    # ── PUSH ──────────────────────────────────────────────────────────
+    # GATE (added 2026-08-01): pushing is the one PB-280 mode that
+    # actually reaches shared infrastructure (GitHub, and whatever CI/
+    # deploy that push triggers), so it requires -e target_env=... same
+    # as PB-259 -- see tasks/require_gilgamesh_for_production.yml.
+    # clone/sync/restore stay ungated: they're local-only or read-only.
+    - name: "PUSH GATE | target_env-based Production check"
+      ansible.builtin.import_tasks: tasks/require_gilgamesh_for_production.yml
+      when: git_action == 'push'
+
+    - name: "PUSH | current branch name"
+      ansible.builtin.command:
+        cmd: "git rev-parse --abbrev-ref HEAD"
+        chdir: "{{ git_repo_dir }}"
+      register: current_branch
+      changed_when: false
+      when: git_action == 'push'
+
+    - name: "FAIL | push refuses master/main directly"
+      ansible.builtin.fail:
+        msg: "Refusing to push directly to '{{ current_branch.stdout | trim }}'. Push a session/feature branch and open a PR instead."
+      when: git_action == 'push' and (current_branch.stdout | trim) in ['master', 'main']
+
+    - name: "FAIL | push requires explicit confirm_push=true"
+      ansible.builtin.fail:
+        msg: "git_action=push also requires -e confirm_push=true -- refusing to push on git_action alone."
+      when: git_action == 'push' and not (confirm_push | bool)
+
+    - name: "PUSH | git push -u origin <current-branch>"
+      ansible.builtin.command:
+        cmd: "git push -u origin {{ current_branch.stdout | trim }}"
+        chdir: "{{ git_repo_dir }}"
+      when: git_action == 'push' and (confirm_push | bool) and (current_branch.stdout | trim) not in ['master', 'main']
+
+    # ── RESTORE ───────────────────────────────────────────────────────
+    - name: "FAIL | restore requires restore_tag"
+      ansible.builtin.fail:
+        msg: "git_action=restore requires -e restore_tag=<tag-name>."
+      when: git_action == 'restore' and restore_tag == ''
+
+    - name: "RESTORE | verify the tag exists"
+      ansible.builtin.command:
+        cmd: "git rev-parse --verify {{ restore_tag }}"
+        chdir: "{{ git_repo_dir }}"
+      register: tag_check
+      changed_when: false
+      failed_when: false
+      when: git_action == 'restore'
+
+    - name: "FAIL | restore_tag does not exist"
+      ansible.builtin.fail:
+        msg: "Tag '{{ restore_tag }}' not found in {{ git_repo_dir }}. List tags with: git -C {{ git_repo_dir }} tag -l 'pre-sync-*'"
+      when: git_action == 'restore' and tag_check.rc is defined and tag_check.rc != 0
+
+    - name: "RESTORE | working tree status"
+      ansible.builtin.command:
+        cmd: "git status --porcelain"
+        chdir: "{{ git_repo_dir }}"
+      register: restore_tree_status
+      changed_when: false
+      when: git_action == 'restore' and tag_check.rc == 0
+
+    - name: "FAIL | dirty tree needs confirm_restore=true"
+      ansible.builtin.fail:
+        msg: >-
+          {{ git_repo_dir }} has uncommitted changes that `git reset --hard`
+          would discard permanently. Re-run with -e confirm_restore=true
+          only once you're sure, or commit/stash first to keep them.
+      when: git_action == 'restore' and tag_check.rc == 0 and (restore_tree_status.stdout | trim != '') and not (confirm_restore | bool)
+
+    - name: "RESTORE | git reset --hard <restore_tag>"
+      ansible.builtin.command:
+        cmd: "git reset --hard {{ restore_tag }}"
+        chdir: "{{ git_repo_dir }}"
+      when: >-
+        git_action == 'restore' and tag_check.rc == 0 and
+        (restore_tree_status.stdout | trim == '' or (confirm_restore | bool))
+
+    - name: "DONE | PB-280 COMPLETE"
+      ansible.builtin.debug:
+        msg: "git_action={{ git_action }} finished against {{ git_repo_dir }}."

@@ -1,0 +1,151 @@
+# =============================================================================
+# PB-232 — Impact Gate: deterministic-only (blast radius + cargo check/test/
+# semver-checks). BahyWay.Ecosystem v4.0 — 2026-07-24
+#
+# WHY THIS EXISTS: an iPhone-session playbook (reviewed this session, its own
+# working number "PB-153") proposed a two-stage CI gate for this repo: a
+# deterministic stage (cargo check/test/cargo-semver-checks, BLOCKING) and a
+# non-blocking "Fable" stage that sent git diffs to Anthropic's cloud API for
+# a semantic sovereignty-law audit. Asked directly whether "sovereign" means
+# zero cloud calls ever, including CI, the Architect answered yes -- no
+# exception for design-time-only cloud AI. That rules the AI stage out
+# entirely. This playbook lands only the half that was always sovereign: the
+# deterministic gate. No network call to anywhere leaves this playbook.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Ensures cargo-semver-checks is installed (local cargo install, no
+#      cloud API -- crates.io package fetch only, same trust boundary as
+#      every other cargo dependency this workspace already has).
+#   2. Deploys impact_gate.sh: blast-radius calc (which crates does a diff
+#      reach, via `cargo tree --invert`), then cargo check --workspace,
+#      cargo test --workspace, and per-changed-crate
+#      cargo-semver-checks -- all local, all blocking, all exit-code-driven.
+#   3. Reports the reviewed sovereignty-law list (L1-L10) as a companion
+#      checklist doc -- the iPhone-session playbook's own research on this
+#      was independently verified against real code (KAKI byte layout,
+#      forbid(unsafe_code), GeoEngine-as-truth-source, Z3 design-time-only,
+#      the 1B-particles-under-1s law all checked out) and is worth keeping
+#      even though the AI-driven automatic audit of it is dropped.
+#
+# HONEST LIMIT: without the AI stage, this gate can no longer semantically
+# judge whether a diff violates a sovereignty law it can't mechanically
+# check (e.g. "GeoEngine is the single source of mathematical truth" is not
+# something `cargo check` can verify). It can only catch what compiles,
+# what breaks tests, and what breaks a public API's semver contract. The
+# semantic laws remain a human review responsibility until/unless a local
+# (non-cloud) checker is built for them -- explicitly out of scope here.
+#
+# TARGET: eriduous-vdi (or any dev host with this repo checked out).
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_232_impact_gate_deterministic.yml
+#   Then, to run the gate against a diff:
+#   /opt/bahyway/impact-gate/impact_gate.sh <repo_path> <base_ref> [head_ref]
+# =============================================================================
+
+- name: "PB-232 | Impact Gate -- deterministic-only (no cloud calls)"
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    gate_root: /opt/bahyway/impact-gate
+
+  tasks:
+    - name: "PB-232.0 | Create gate directory"
+      ansible.builtin.file:
+        path: "{{ gate_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: "PB-232.1 | Install cargo-semver-checks (local cargo install, no cloud API)"
+      ansible.builtin.shell: |
+        set -e
+        export PATH="$HOME/.cargo/bin:$PATH"
+        cargo install cargo-semver-checks --locked || true
+      args:
+        creates: "/root/.cargo/bin/cargo-semver-checks"
+      become: false
+
+    - name: "PB-232.2 | Deploy the reviewed sovereignty-law checklist (for human review, not automated)"
+      ansible.builtin.copy:
+        dest: "{{ gate_root }}/sovereignty_laws.txt"
+        mode: "0644"
+        content: |
+          Impact Gate sovereignty-law checklist -- HUMAN REVIEW, not automated.
+          Independently verified against real code this session (dated where
+          checked): KAKI byte layout, #![forbid(unsafe_code)], GeoEngine as
+          single math-truth source, Z3 design-time-only placement, and the
+          1-billion-particles-under-1-second law all check out against the
+          real repo as of this writing.
+
+          L1  #![forbid(unsafe_code)] everywhere. No unsafe blocks introduced.
+          L2  No tokio, no external async runtime, no SQL, no SQL-like syntax.
+          L3  KAKI v4.0 byte layout is locked (uuid_hash/tribe_id/kaki_type/
+              kaki_role/reserved/timestamp/CRC-16). No layout drift. All
+              quality/colour/state lives in EAV Mandatory Attributes only.
+          L4  HeptaScript is Anti-SQL: PRESENT clause + W5H2 constructs only.
+              Triple-O verbs EMIT/PROVE/SYNC/WITNESS confirmed real; PRESENT/
+              ORBIT as verbs are unconfirmed in the real parser as of this
+              writing -- verify before relying on this line.
+          L5  KAKI minting only in enkidb-ingest::bridge.
+          L6  GeoEngine (bahyway-algebra) is the single source of
+              mathematical truth -- no duplicated math constants or geometry
+              logic in other crates.
+          L7  Z3 and any cloud AI are design-time only, never in a shipped
+              binary. Runtime performs zero API calls. (This playbook takes
+              that one step further per the Architect's explicit ruling:
+              zero cloud calls anywhere, including CI/design-time.)
+          L8  "-Engine" suffix only; "-Way" suffix is deprecated.
+          L9  Hepta Space Uniqueness Law: no change may permit two particles
+              at the same 7D position.
+          L10 Runtime performance law: 1 billion particles in under 1 second.
+              Flag any change that plausibly regresses the hot path
+              (allocations in loops, lock contention, index bypass).
+
+    - name: "PB-232.3 | Deploy impact_gate.sh (deterministic only)"
+      ansible.builtin.copy:
+        dest: "{{ gate_root }}/impact_gate.sh"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # PB-232 Impact Gate -- deterministic only, zero cloud calls.
+          # Usage: impact_gate.sh <repo_path> <base_ref> [head_ref]
+          set -euo pipefail
+          REPO="${1:?repo path required}"
+          BASE="${2:?base ref required}"
+          HEAD="${3:-HEAD}"
+          cd "$REPO"
+
+          echo "== STAGE 1: blast radius =="
+          CHANGED_CRATES=$(git diff --name-only "$BASE" "$HEAD" \
+            | grep -oP '^crates/[^/]+' | sort -u | sed 's|crates/||' || true)
+          echo "$CHANGED_CRATES"
+          AFFECTED=""
+          for c in $CHANGED_CRATES; do
+            AFFECTED+=$'\n'"$(cargo tree --invert -p "$c" 2>/dev/null \
+              | grep -oP '^\S+' || true)"
+          done
+          AFFECTED=$(echo "$AFFECTED" | sort -u | grep -v '^$' || true)
+          echo "Downstream crates reached: $AFFECTED"
+
+          echo "== STAGE 2: deterministic gates (BLOCKING) =="
+          cargo check --workspace
+          cargo test --workspace
+          for c in $CHANGED_CRATES; do
+            cargo semver-checks check-release -p "$c" --baseline-rev "$BASE" || {
+              echo "SEMVER BREAK in $c -- gate BLOCKED"; exit 1; }
+          done
+
+          echo "== GATE PASSED (deterministic only -- see sovereignty_laws.txt for the human-review checklist) =="
+          exit 0
+
+    - name: "PB-232.4 | Seal confirmation"
+      ansible.builtin.debug:
+        msg: >-
+          PB-232 deployed. Run:
+          {{ gate_root }}/impact_gate.sh <repo_path> <base_ref> [head_ref]
+          Deterministic gates block on check/test/semver failure. No cloud
+          call anywhere in this playbook or its script. The 10-law
+          checklist at {{ gate_root }}/sovereignty_laws.txt is for human
+          review only -- automating it would require a local, non-cloud
+          checker, explicitly out of scope here.

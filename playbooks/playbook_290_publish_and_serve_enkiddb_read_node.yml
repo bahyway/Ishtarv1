@@ -1,0 +1,178 @@
+# =============================================================================
+# PB-290 — Publish the latest EnkiDDB Tigris generation as `current` and
+# serve it locally, so DubSar Theater's Graph Explorer has something real
+# to query. BahyWay.Ecosystem v4.0 — 2026-08-02
+#
+# WHY THIS EXISTS: PB-289 materializes real, versioned EnkiDDB generations
+# under `~/Forge/enkiddb_local/tigris/<timestamp>/{entities,eav}` --
+# real, but `enkiddb-read-server`'s own header comment is explicit that
+# it "never writes -- it only opens `DATA_DIR/current/{entities,eav}`
+# read-only. Getting the Write Node's materialized generation into that
+# path is a separate, external sync step... not this server's job." No
+# playbook in this repo currently runs a LOCAL, bare-metal
+# enkiddb-read-server at all (every existing `enkiddb-read-server`
+# reference is an old VDI/Podman deployment) -- so after a real PB-289
+# run, there was nothing actually serving that data for Graph Explorer
+# to reach. This playbook is that missing "current" promotion + local
+# serve step, kept as its own playbook (not folded into PB-289) on
+# purpose -- materializing (a write concern) and serving (a read
+# concern) staying separate playbooks mirrors the same CQRS split
+# ADR-012 already establishes for the engine itself.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Finds every `tigris/<timestamp>` generation under
+#      `enkiddb_output_root` and picks the lexically-latest (the
+#      `YYYYMMDD_HHMMSS.mmm` stamp format sorts correctly as a plain
+#      string) -- fails clearly if none exist yet (run PB-289 first).
+#   2. Points `enkiddb_output_root/current` at it (a real symlink,
+#      replaced every run, never a copy -- so this stays cheap even as
+#      generations grow).
+#   3. Builds `enkiddb-read-server` (unless `-e skip_build=true`).
+#   4. Kills any stale instance, launches it detached, bound to
+#      `127.0.0.1:7007` (the corrected canonical EnkiDDB port -- see
+#      that server's own `bind_addr()` comment), reloading its data
+#      every 10s so a later PB-289 re-run + PB-290 re-run becomes
+#      visible without yet another restart.
+#   5. Verifies it's actually listening before declaring success.
+#
+# HOW TO ACTUALLY EXPLORE THE GRAPH AFTER THIS RUNS:
+#   1. Launch DubSar Theater (desktop icon, or `ansible-playbook
+#      playbooks/playbook_226_launch_dubsar_godot_ide.yml -e
+#      skip_build=true -e skip_prime=true`) and log in as usual.
+#   2. Press Ctrl+K to open the Graph Explorer overlay.
+#   3. In its Host field, enter `127.0.0.1:7007` (this playbook's
+#      bind_addr) if it isn't already the default shown.
+#   4. In its title field, enter the EXACT text
+#      `Playbook catalog location: in-repo/playbooks` (or any other
+#      location name PB-289 reported) and press Expand.
+#   5. Click through the `found-in`/`same-PB-number-as (unreconciled)`
+#      edges from there.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_290_publish_and_serve_enkiddb_read_node.yml
+#   ansible-playbook playbooks/playbook_290_publish_and_serve_enkiddb_read_node.yml -e skip_build=true
+# =============================================================================
+---
+- name: "PB-290 | Publish latest EnkiDDB generation as current + serve it locally"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    enkidb_root: "{{ (playbook_dir + '/..') | realpath }}"
+    home_dir: "{{ lookup('env', 'HOME') }}"
+    enkiddb_output_root: "{{ home_dir }}/Forge/enkiddb_local"
+    bind_addr: "127.0.0.1:7007"
+    reload_secs: "10"
+    read_log: "/tmp/enkiddb_read_server.log"
+    skip_build: false
+    build_log: "/tmp/enkiddb_read_server_build.log"
+
+  tasks:
+
+    - name: "Find every materialized Tigris generation"
+      ansible.builtin.find:
+        paths: "{{ enkiddb_output_root }}/tigris"
+        file_type: directory
+        recurse: false
+      register: generations
+
+    - name: "FAIL | no EnkiDDB generation has ever been materialized here"
+      ansible.builtin.fail:
+        msg: >-
+          No {{ enkiddb_output_root }}/tigris/<timestamp> generation found.
+          Run playbook_289_multi_location_playbook_catalog.yml (or any
+          other EnkiDDB-minting playbook pointed at this root) first.
+      when: generations.files | default([]) | length == 0
+
+    - name: "Pick the lexically-latest generation (timestamp format sorts correctly as a string)"
+      ansible.builtin.set_fact:
+        latest_generation: "{{ (generations.files | map(attribute='path') | sort | last) }}"
+
+    - name: "Report which generation is being published"
+      ansible.builtin.debug:
+        msg: "𒁾 publishing {{ latest_generation }} as current ({{ generations.files | length }} generation(s) found total)"
+
+    - name: "Remove any existing current symlink/dir before re-pointing it"
+      ansible.builtin.file:
+        path: "{{ enkiddb_output_root }}/current"
+        state: absent
+
+    - name: "Point current at the latest generation"
+      ansible.builtin.file:
+        src: "{{ latest_generation }}"
+        dest: "{{ enkiddb_output_root }}/current"
+        state: link
+
+    - name: "Build enkiddb-read-server"
+      ansible.builtin.shell: >-
+        cd {{ enkidb_root }}/workspace/bahyway_v4 &&
+        cargo build --release -p enkiddb-read-server
+        > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: "FAIL | build failed"
+      ansible.builtin.fail:
+        msg: "cargo build --release -p enkiddb-read-server failed (rc={{ build_result.rc }}). Full output: {{ build_log }}"
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: "Confirm enkiddb-read-server binary exists"
+      ansible.builtin.stat:
+        path: "{{ enkidb_root }}/workspace/bahyway_v4/target/release/enkiddb-read-server"
+      register: bin_check
+
+    - name: "FAIL | enkiddb-read-server binary missing"
+      ansible.builtin.fail:
+        msg: "enkiddb-read-server not found. Run without -e skip_build=true first, or check {{ build_log }}."
+      when: not bin_check.stat.exists
+
+    - name: "Kill any stale enkiddb-read-server instance"
+      ansible.builtin.command: "pkill -f target/release/enkiddb-read-server"
+      register: kill_result
+      failed_when: false
+      changed_when: kill_result.rc == 0
+
+    - name: "Give a killed instance a moment to release the port"
+      ansible.builtin.pause:
+        seconds: 1
+      when: kill_result.rc == 0
+
+    - name: "Launch enkiddb-read-server, detached"
+      ansible.builtin.shell: >-
+        BIND_ADDR={{ bind_addr }} DATA_DIR={{ enkiddb_output_root }} RELOAD_SECS={{ reload_secs }}
+        nohup {{ enkidb_root }}/workspace/bahyway_v4/target/release/enkiddb-read-server
+        > {{ read_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+
+    - name: "Give it a moment to bind"
+      ansible.builtin.pause:
+        seconds: 2
+
+    - name: "Verify it's actually listening"
+      ansible.builtin.wait_for:
+        host: "{{ bind_addr.split(':')[0] }}"
+        port: "{{ bind_addr.split(':')[1] | int }}"
+        timeout: 10
+      register: listen_check
+      failed_when: false
+
+    - name: "FAIL | enkiddb-read-server never came up listening"
+      ansible.builtin.fail:
+        msg: "enkiddb-read-server did not start listening on {{ bind_addr }} within 10s. Check {{ read_log }}."
+      when: listen_check.failed | default(false)
+
+    - name: "DONE | PB-290 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 enkiddb-read-server is live at {{ bind_addr }}, serving
+          {{ latest_generation }} (as `current`). In DubSar Theater's
+          Graph Explorer (Ctrl+K), set Host to {{ bind_addr }} and type
+          the exact title of a playbook-catalog location (e.g.
+          "Playbook catalog location: in-repo/playbooks") to start
+          exploring. Re-run this playbook any time after a fresh PB-289
+          run to publish the newest generation -- it reloads its own
+          data every {{ reload_secs }}s too, so re-pointing `current`
+          alone (without restarting) becomes visible within that window.

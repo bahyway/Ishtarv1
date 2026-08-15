@@ -1,0 +1,265 @@
+---
+# ============================================================
+# Playbook 15 — EriduOS three fixes
+# 1. Window title → EriduOS v4.0 (Point 1)
+# 2. Particles crash fix — pass real journal/identities (Point 2)
+# 3. Nergal + ETL HTML views open in Firefox (Point 3)
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/15_eridu_fixes.yml -v
+# ============================================================
+
+- name: "𒁾 EriduOS — three fixes"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    main_rs:    "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/main.rs"
+    app_rs:     "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+    eridu_rs:   "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/eridu_layout.rs"
+    viz_dir:    "/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese"
+    nergal_html: "/home/bahyway/Downloads/nergal_av_dashboard_v2.html"
+
+  tasks:
+
+    # ── Backups ────────────────────────────────────────────────────────────
+    - name: "Backup main.rs"
+      ansible.builtin.copy:
+        src:        "{{ main_rs }}"
+        dest:       "{{ main_rs }}.bak15"
+        remote_src: true
+        mode:       "0644"
+
+    - name: "Backup app.rs"
+      ansible.builtin.copy:
+        src:        "{{ app_rs }}"
+        dest:       "{{ app_rs }}.bak15"
+        remote_src: true
+        mode:       "0644"
+
+    - name: "Backup eridu_layout.rs"
+      ansible.builtin.copy:
+        src:        "{{ eridu_rs }}"
+        dest:       "{{ eridu_rs }}.bak15"
+        remote_src: true
+        mode:       "0644"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # FIX 1 — Window title: EriduOS v4.0 above DubSar
+    # ══════════════════════════════════════════════════════════════════════
+    - name: "Fix 1 — Update window title to EriduOS v4.0"
+      ansible.builtin.replace:
+        path:    "{{ main_rs }}"
+        regexp:  '\.with_title\("DubSar IDE v4\.0.*?"\)'
+        replace: '.with_title("𒁾 EriduOS v4.0  —  DubSar Sovereign IDE  |  EnkiDB")'
+
+    - name: "Fix 1 — Increase window size for EriduOS"
+      ansible.builtin.replace:
+        path:    "{{ main_rs }}"
+        regexp:  '\.with_inner_size\(\[1400\.0, 860\.0\]\)'
+        replace: '.with_inner_size([1600.0, 960.0])'
+
+    - name: "Verify main.rs title fix"
+      ansible.builtin.command:
+        cmd: grep -n "with_title\|with_inner_size" "{{ main_rs }}"
+      register: title_check
+      changed_when: false
+
+    - name: "✓ Title fix"
+      ansible.builtin.debug:
+        msg: "{{ title_check.stdout_lines }}"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # FIX 2 — Particles crash: pass real journal + identities + snapshots
+    # The eridu_layout draw() signature needs journal/identities/snapshots
+    # from DubSarApp. We fix by: removing the particles float call that
+    # passes empty data, replacing with a safe particle list view.
+    # ══════════════════════════════════════════════════════════════════════
+
+    # Step 2a: Update eridu_layout draw() signature to accept journal etc.
+    - name: "Fix 2a — Update eridu_layout::draw() signature"
+      ansible.builtin.replace:
+        path:    "{{ eridu_rs }}"
+        regexp:  'pub fn draw\(\s*ui:\s*&mut Ui,\s*state:\s*&mut EriduState,\s*bus:\s*&Arc<RwLock<BeeMdmBusState>>,\s*particles:\s*&\[ParticleDemo\],\s*tick:\s*f64,\s*\)'
+        replace: |
+          pub fn draw(
+              ui:         &mut Ui,
+              state:      &mut EriduState,
+              bus:        &Arc<RwLock<BeeMdmBusState>>,
+              particles:  &[ParticleDemo],
+              tick:       f64,
+              journal:    &enkidb_journal::Journal,
+              identities: &[enkidb_kaki::IdentityKaki],
+              snapshots:  &[enkidb_snapshot::SnapshotRecord],
+          )
+
+    # Step 2b: Fix the particles float — pass real data instead of empty
+    - name: "Fix 2b — Pass real journal/identities/snapshots to particles float"
+      ansible.builtin.replace:
+        path:    "{{ eridu_rs }}"
+        regexp:  'crate::panels::particles::draw\(\s*ui, particles,\s*&mut state\.selected_p,\s*&mut crate::panels::InspectorTab::default\(\),\s*&enkidb_journal::Journal::new\(0\),\s*&\[\],\s*&\[\],\s*\);'
+        replace: |
+          crate::panels::particles::draw(
+                              ui, particles,
+                              &mut state.selected_p,
+                              &mut crate::panels::InspectorTab::default(),
+                              journal,
+                              identities,
+                              snapshots,
+                          );
+
+    # Step 2c: Add journal/identities/snapshots to the inner float calls
+    - name: "Fix 2c — Update app.rs EriduOS match arm with new signature"
+      ansible.builtin.replace:
+        path:    "{{ app_rs }}"
+        regexp:  'ActivePanel::EriduOS => crate::panels::eridu_layout::draw\(\s*ui, &mut self\.eridu, &self\.bus,\s*&self\.particles, self\.tick,\s*\),'
+        replace: |
+          ActivePanel::EriduOS => crate::panels::eridu_layout::draw(
+                        ui, &mut self.eridu, &self.bus,
+                        &self.particles, self.tick,
+                        &self.journal, &self.identities, &self.snapshots,
+                    ),
+
+    # ══════════════════════════════════════════════════════════════════════
+    # FIX 3 — Nergal + ETL HTML views: copy HTML to viz dir + open Firefox
+    # ══════════════════════════════════════════════════════════════════════
+
+    # Step 3a: Check if nergal HTML is in Downloads
+    - name: "Check nergal_av_dashboard_v2.html location"
+      ansible.builtin.stat:
+        path: "{{ nergal_html }}"
+      register: nergal_stat
+
+    # Step 3b: Copy nergal HTML to viz dir if not already there
+    - name: "Copy nergal HTML to visualization_examples/_UseThese/"
+      ansible.builtin.copy:
+        src:        "{{ nergal_html }}"
+        dest:       "{{ viz_dir }}/nergal_av_dashboard_v2.html"
+        remote_src: true
+        mode:       "0644"
+      when: nergal_stat.stat.exists
+
+    # Step 3c: Add Firefox launcher functions to eridu_layout.rs
+    - name: "Fix 3 — Add Firefox launcher for HTML dashboards"
+      ansible.builtin.replace:
+        path:    "{{ eridu_rs }}"
+        regexp:  '(// ── Sidebar helpers ───────────────────────────────────────────────────)'
+        replace: |
+          // ── Firefox HTML dashboard launcher ──────────────────────────────────
+          fn open_html_dashboard(path: &str) {
+              let _ = std::process::Command::new("firefox")
+                  .arg(path)
+                  .spawn();
+          }
+
+          // ── Sidebar helpers ───────────────────────────────────────────────────
+
+    # Step 3d: Wire ETL 3D mini panel to open Firefox ETL HTML
+    - name: "Fix 3b — Wire ETL3D mini panel to Firefox launcher"
+      ansible.builtin.replace:
+        path:    "{{ eridu_rs }}"
+        regexp:  'mini_panel\(ui, "⇄  ETL 3D", "Transparency Dashboard",\s*Color32::from_rgb\(0, 180, 255\), &mut state\.float\.etl_3d\);'
+        replace: |
+          if mini_panel_btn(ui, "⇄  ETL 3D", "Transparency Dashboard",
+                  Color32::from_rgb(0, 180, 255), &mut state.float.etl_3d) {
+                  open_html_dashboard(
+                      "/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/01_Data_Steward_Station_Explorer_v4.html"
+                  );
+              }
+
+    # Step 3e: Wire Nergal mini panel to open Firefox Nergal HTML
+    - name: "Fix 3c — Wire Nergal mini panel to Firefox launcher"
+      ansible.builtin.replace:
+        path:    "{{ eridu_rs }}"
+        regexp:  'mini_panel\(ui, "𒀭𒉺𒂵 Nergal", "Irkalla Threat Towers",\s*Color32::from_rgb\(128, 0, 32\), &mut state\.float\.nergal\);'
+        replace: |
+          if mini_panel_btn(ui, "𒀭𒉺𒂵 Nergal", "Irkalla Threat Towers",
+                  Color32::from_rgb(128, 0, 32), &mut state.float.nergal) {
+                  open_html_dashboard(
+                      "/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/nergal_av_dashboard_v2.html"
+                  );
+              }
+
+    # Step 3f: Add mini_panel_btn() — returns true when ⊞ clicked
+    - name: "Fix 3d — Add mini_panel_btn() returning bool"
+      ansible.builtin.replace:
+        path:    "{{ eridu_rs }}"
+        regexp:  '(fn mini_panel\(ui: &mut Ui, title: &str, desc: &str, col: Color32, open: &mut bool\) \{)'
+        replace: |
+          // Returns true when the launch button is clicked
+          fn mini_panel_btn(ui: &mut Ui, title: &str, desc: &str,
+              col: Color32, open: &mut bool) -> bool {
+              let mut clicked = false;
+              let is_open  = *open;
+              let border   = if is_open { col } else { Color32::from_rgb(30,30,60) };
+              let fill     = if is_open {
+                  Color32::from_rgba_premultiplied(col.r(), col.g(), col.b(), 18)
+              } else { Color32::from_rgb(8,8,24) };
+              egui::Frame::none()
+                  .fill(fill)
+                  .stroke(Stroke::new(0.8, border))
+                  .rounding(Rounding::same(5.0))
+                  .inner_margin(egui::Margin::symmetric(8.0, 6.0))
+                  .show(ui, |ui| {
+                      ui.set_min_width(ui.available_width() - 4.0);
+                      ui.horizontal(|ui| {
+                          ui.label(RichText::new(title).color(col).size(11.0).strong());
+                          ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                              if ui.small_button("⊞").clicked() {
+                                  *open  = !*open;
+                                  clicked = true;
+                              }
+                          });
+                      });
+                      ui.label(RichText::new(desc).color(theme::TEXT_DIM).size(9.0));
+                  });
+              ui.add_space(4.0);
+              clicked
+          }
+
+          fn mini_panel(ui: &mut Ui, title: &str, desc: &str, col: Color32, open: &mut bool) {
+
+    # ── Step 4: Build ──────────────────────────────────────────────────────
+    - name: "cargo build -p dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Build output"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-6:] }}"
+
+    # ── Step 5: Verify ─────────────────────────────────────────────────────
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "Assert binary"
+      ansible.builtin.assert:
+        that:
+          - bin_stat.stat.exists
+          - bin_stat.stat.size > 0
+        success_msg: "✓ {{ bin_stat.stat.size | filesizeformat }}"
+        fail_msg:    "Binary not produced"
+
+    # ── Step 6: Done ───────────────────────────────────────────────────────
+    - name: "𒁾 Three fixes applied"
+      ansible.builtin.debug:
+        msg:
+          - "=================================================="
+          - "𒁾 EriduOS v4.0 — fixes applied"
+          - "Fix 1: Window title → EriduOS v4.0 | 1600×960"
+          - "Fix 2: Particles crash → real journal/identities"
+          - "Fix 3: ETL3D + Nergal → Firefox HTML launcher"
+          - "Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "--------------------------------------------------"
+          - "Run: cargo run -p dubsar-visualizer"
+          - "  Click ETL3D ⊞  → Firefox ETL Transparency HTML"
+          - "  Click Nergal ⊞ → Firefox Nergal AV Dashboard"
+          - "  Click Particles ⊞ → egui floating inspector (fixed)"
+          - "=================================================="

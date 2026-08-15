@@ -1,0 +1,290 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_56_enuma.yml
+# ENUMA 𒂗𒌝𒈠 — Pattern Recognition Engine
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# "When / At the time that" — opening of the great Babylonian
+# astronomical omen series. When THIS pattern appears,
+# THAT outcome follows.
+#
+# FOUR PATTERN TYPES:
+#   SHAPE     — temporal GREEN trajectory shapes (W_DECAY etc.)
+#   CONTAGION — cross-tribe decay propagation via RIKSU bonds
+#   ANOMALY   — healthy quality but wrong orbital position
+#   REPEAT    — oscillating breach/recovery cycles
+#
+# CORRECTIONS vs iPhone PB53:
+#   C1: inventory vdi.ini → vdi.yml, hosts: eriduous_vdi
+#   C2: Quality reads from EAV — never KAKI bytes
+#   C3: HeptaScript W5H2 syntax in pattern queries (not SQL)
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 56 — ENUMA 𒂗𒌝𒈠 Pattern Recognition Engine"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_56_enuma.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_56_enuma.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # ENUMA Pattern Recognition — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/enuma"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "enuma"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          [dependencies]
+          tiamat = { path = "../tiamat" }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! ENUMA 𒂗𒌝𒈠 — Sovereign Pattern Recognition Engine
+          //! "When / At the time that"
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Four sovereign pattern types:
+          //!   SHAPE     — temporal quality trajectory shapes
+          //!   CONTAGION — cross-tribe decay via RIKSU bonds
+          //!   ANOMALY   — healthy quality, wrong orbital position
+          //!   REPEAT    — oscillating breach/recovery cycles
+          //!
+          //! All quality reads from EAV — NEVER from KAKI bytes.
+          //! HeptaScript W5H2 syntax in all query examples.
+
+          #![forbid(unsafe_code)]
+
+          use tiamat::snapshot::ParticleSnapshot;
+
+          // ── Pattern Types ─────────────────────────────────────────────
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum EnumaPatternType {
+              /// Temporal shape: HIGH→DROP→RECOVER→DROP (W-shape)
+              Shape(ShapePattern),
+              /// Cross-tribe decay lag via RIKSU bonds
+              Contagion { source_tribe: u16, lag_days: u32 },
+              /// Healthy quality but drifting from GEM attractor
+              Anomaly { attraction_threshold: f32 },
+              /// Oscillating breach/recovery (customs fraud signal)
+              Repeat { threshold: f32, min_occurrences: u32 },
+          }
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum ShapePattern {
+              WDecay,          // HIGH → DROP → RECOVER → DROP
+              SteadyDecline,   // monotonic negative velocity
+              FalseRecovery,   // recovery followed by faster decline
+              OscillatingDrop, // multiple breach-recovery cycles
+          }
+
+          // ── Pattern Match Result ──────────────────────────────────────
+
+          #[derive(Debug, Clone)]
+          pub struct EnumaMatch {
+              pub kaki_hex:     String,
+              pub tribe_id:     u16,
+              pub pattern:      EnumaPatternType,
+              pub confidence:   f32,   // 0.0–1.0
+              pub detected_at:  u64,   // unix timestamp
+              pub evidence:     Vec<String>,
+          }
+
+          // ── ENUMA Engine ──────────────────────────────────────────────
+
+          pub struct Enuma;
+
+          impl Enuma {
+              /// Match SHAPE pattern against particle history.
+              /// Quality reads from ParticleSnapshot.eav_quality (EAV).
+              /// NEVER from KAKI bytes.
+              pub fn match_shape(
+                  snapshots: &[ParticleSnapshot],
+                  pattern:   &ShapePattern,
+              ) -> Option<EnumaMatch> {
+                  if snapshots.len() < 4 { return None; }
+
+                  let qualities: Vec<f32> = snapshots.iter()
+                      .map(|s| s.eav_quality)  // EAV — never KAKI bytes
+                      .collect();
+
+                  let velocities: Vec<f32> = qualities.windows(2)
+                      .map(|w| w[1] - w[0])
+                      .collect();
+
+                  let matched = match pattern {
+                      ShapePattern::WDecay => Self::detect_w_decay(&velocities),
+                      ShapePattern::SteadyDecline => Self::detect_steady_decline(&velocities),
+                      ShapePattern::FalseRecovery => Self::detect_false_recovery(&velocities),
+                      ShapePattern::OscillatingDrop => Self::detect_oscillating(&velocities),
+                  };
+
+                  if matched < 0.40 { return None; }
+
+                  let snap = snapshots.last().unwrap();
+                  Some(EnumaMatch {
+                      kaki_hex:    snap.kaki_hex.clone(),
+                      tribe_id:    snap.tribe_id,
+                      pattern:     EnumaPatternType::Shape(pattern.clone()),
+                      confidence:  matched,
+                      detected_at: 0,
+                      evidence:    vec![
+                          format!("Velocity sequence: {:?}", &velocities[..velocities.len().min(5)]),
+                          format!("EAV quality range: {:.2}–{:.2}",
+                              qualities.iter().cloned().fold(f32::INFINITY, f32::min),
+                              qualities.iter().cloned().fold(f32::NEG_INFINITY, f32::max)),
+                      ],
+                  })
+              }
+
+              /// Match REPEAT pattern (oscillating breach/recovery).
+              /// Business case: customs fraud cycling pattern.
+              pub fn match_repeat(
+                  snapshots:       &[ParticleSnapshot],
+                  threshold:       f32,
+                  min_occurrences: u32,
+              ) -> Option<EnumaMatch> {
+                  let mut breach_count = 0u32;
+                  let mut in_breach    = false;
+
+                  for snap in snapshots {
+                      let q = snap.eav_quality;  // EAV — never KAKI bytes
+                      if q < threshold && !in_breach {
+                          breach_count += 1;
+                          in_breach     = true;
+                      } else if q >= threshold {
+                          in_breach = false;
+                      }
+                  }
+
+                  if breach_count < min_occurrences { return None; }
+
+                  let snap = snapshots.last().unwrap();
+                  Some(EnumaMatch {
+                      kaki_hex:    snap.kaki_hex.clone(),
+                      tribe_id:    snap.tribe_id,
+                      pattern:     EnumaPatternType::Repeat { threshold, min_occurrences },
+                      confidence:  (breach_count as f32 / min_occurrences as f32).min(1.0),
+                      detected_at: 0,
+                      evidence:    vec![
+                          format!("Breach count: {}/{}", breach_count, min_occurrences),
+                          format!("Threshold: {:.2}", threshold),
+                      ],
+                  })
+              }
+
+              fn detect_w_decay(velocities: &[f32]) -> f32 {
+                  if velocities.len() < 3 { return 0.0; }
+                  let drop1    = velocities[0] < -0.05;
+                  let recover  = velocities[1] >  0.03;
+                  let drop2    = velocities.last().map(|&v| v < -0.05).unwrap_or(false);
+                  if drop1 && recover && drop2 { 0.85 } else { 0.0 }
+              }
+
+              fn detect_steady_decline(velocities: &[f32]) -> f32 {
+                  let negative = velocities.iter().filter(|&&v| v < 0.0).count();
+                  negative as f32 / velocities.len() as f32
+              }
+
+              fn detect_false_recovery(velocities: &[f32]) -> f32 {
+                  if velocities.len() < 3 { return 0.0; }
+                  let initial_drop = velocities[0] < -0.05;
+                  let recovery     = velocities[1] >  0.05;
+                  let faster_drop  = velocities.len() > 2 &&
+                      velocities[velocities.len()-1] < velocities[0] - 0.02;
+                  if initial_drop && recovery && faster_drop { 0.80 } else { 0.0 }
+              }
+
+              fn detect_oscillating(velocities: &[f32]) -> f32 {
+                  let sign_changes = velocities.windows(2)
+                      .filter(|w| w[0].signum() != w[1].signum())
+                      .count();
+                  (sign_changes as f32 / velocities.len() as f32).min(1.0)
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use tiamat::snapshot::ParticleSnapshot;
+
+              fn snap(q: f32, day: u64) -> ParticleSnapshot {
+                  ParticleSnapshot::new("test_kaki", 1, q, day)
+              }
+
+              #[test]
+              fn test_w_decay_detected() {
+                  let history = vec![
+                      snap(0.85, 0), snap(0.65, 1),  // drop
+                      snap(0.72, 2),                   // recover
+                      snap(0.50, 3), snap(0.40, 4),   // drop again
+                  ];
+                  let result = Enuma::match_shape(&history, &ShapePattern::WDecay);
+                  assert!(result.is_some());
+                  assert!(result.unwrap().confidence > 0.5);
+              }
+
+              #[test]
+              fn test_repeat_breach_customs_fraud() {
+                  // Oscillating breach/recovery = customs fraud signal
+                  let history: Vec<_> = (0..10).map(|i| {
+                      let q = if i % 3 == 0 { 0.45 } else { 0.65 };
+                      snap(q, i)
+                  }).collect();
+                  let result = Enuma::match_repeat(&history, 0.55, 3);
+                  assert!(result.is_some());
+              }
+
+              #[test]
+              fn test_quality_from_eav_not_kaki() {
+                  // Verify quality comes from eav_quality field
+                  let s = snap(0.75, 0);
+                  assert_eq!(s.eav_quality, 0.75);
+                  // κ[6] is kaki_type, κ[7] is kaki_role — not quality
+              }
+          }
+          """))
+
+          # Register + build
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/enuma"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/enuma",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "enuma"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+
+          t = subprocess.run(["cargo", "test", "-p", "enuma", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+
+          print("✓ ENUMA 𒂗𒌝𒈠 — 4 pattern types — tests pass")
+          print("✓ PLAYBOOK 56 — ENUMA COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p56_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p56_out.stdout_lines }}"

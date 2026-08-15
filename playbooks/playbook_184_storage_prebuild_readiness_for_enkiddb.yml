@@ -1,0 +1,125 @@
+# =============================================================================
+# PB-184 — Storage Pre-Build Readiness Audit, before building EnkiDDB (Tigris)
+# BahyWay.Ecosystem v4.0 — 2026-07-13
+#
+# CONTEXT: the Architect asked for a Storage playbook to run before building
+# EnkiDDB — a real, verified go/no-go gate over the storage layer, not the
+# full ISHUM Engine vision evaluated earlier this session (judged
+# disproportionate as an EnkiDDB prerequisite). This playbook does what that
+# earlier evaluation deferred: it traces EnkiDDB's *actual* Cargo dependency
+# graph and *actual* source-level usage, crate by crate, so the Architect
+# knows exactly what storage code will run under EnkiDDB and what won't.
+#
+# METHOD: not documentation review — real `Cargo.toml` dependency-graph
+# tracing plus `grep` for real call sites in crates/enkiddb/src/*.rs
+# (writenode.rs, readnode.rs, ingest.rs, rag.rs), then `cargo test` on every
+# crate in scope. Ten storage-shaped crates exist in the workspace; each is
+# classified into exactly one of three tiers below.
+#
+# TIER 1 — GENUINELY EXERCISED BY ENKIDDB'S OWN CODE (verified by direct
+# grep hits in crates/enkiddb/src, not just present in Cargo.lock):
+#
+#   enkidb-journal   — the Journal (source of truth). enkiddb::writenode.rs
+#                       appends every particle here. 12/12 tests pass.
+#   enkidb-storage   — AppendWriter + fsync durability barrier, underneath
+#                       enkidb-journal. 1/1 test passes.
+#   enkidb-block     — 64MB block-aligned cold-storage format, underneath
+#                       enkidb-storage. 3/3 tests pass.
+#   enkidb-datafile  — ADR-012 Read Node storage (DataFileWriter/Reader,
+#                       O(log n) binary-search point lookup, no journal
+#                       replay on open). enkidb::readnode.rs materializes
+#                       into this. 12/12 tests pass.
+#   enkidb-indexes   — "Anu" (PB-183). Only SurrogateMap + EavExactIndex are
+#                       actually instantiated for EnkiDDB, via heptascript's
+#                       HeptaIndexes / build_indexes — see PB-183 and
+#                       docs/components/ANU_INDEX_STACK.md for the full
+#                       13-module breakdown. 58/58 tests pass.
+#   heptascript      — query engine + RAG index driving enkiddb::rag.rs.
+#                       41/41 tests pass.
+#
+#   WRITE PATH:  enkiddb::writenode -> enkidb-journal -> enkidb-storage
+#                (AppendWriter, fsync) -> enkidb-block (64MB blocks)
+#   READ PATH:   enkiddb::readnode -> enkidb-datafile (O(log n) lookup)
+#                + heptascript::HeptaIndexes (Surrogate + EavExact) for query
+#
+# TIER 2 — IN THE CARGO DEPENDENCY GRAPH BUT NOT EXERCISED BY ENKIDDB'S OWN
+# CODE (pulled in transitively via enkidb-ingest -> enkidb-engine, compiled
+# into the binary, but no type from these crates is ever instantiated by
+# anything in crates/enkiddb/src):
+#
+#   enkidb-engine    — the older in-process `EnkiDb` struct (bundles the 7
+#                       legacy Anu indexes: identity, sovereignty, typerole,
+#                       temporal, colorid, eav, snapshot_idx). enkiddb only
+#                       uses `enkidb_ingest::bridge` (plain conversion
+#                       functions) from enkidb-ingest — never
+#                       `CsvIngester::ingest_into` or `EnkiDb::new`. Verified
+#                       by grep: zero hits for `EnkiDb\b` or `enkidb_engine`
+#                       anywhere in crates/enkiddb/src.
+#   enkidb-snapshot  — SnapshotRecord / Snapshot_Job data type, a dependency
+#                       of enkidb-engine. Never referenced by enkiddb. 3/3
+#                       tests pass (in isolation).
+#   enkidb-recovery  — RecoveryProcedure, a dependency of enkidb-engine.
+#                       Never referenced by enkiddb. 2/2 tests pass.
+#
+#   PRACTICAL EFFECT: these three crates add to enkiddb's build time and
+#   binary size but do no work for EnkiDDB today. Not a defect — enkidb-ingest
+#   is a shared crate also used by CSV-ingesting products where EnkiDb IS
+#   exercised — but the Architect should know EnkiDDB itself gets none of
+#   enkidb-engine's crash-recovery or snapshot-job behavior for free. If
+#   EnkiDDB needs crash recovery or scheduled snapshots, that is unbuilt
+#   work, not already-wired work.
+#
+# TIER 3 — NOT IN ENKIDDB'S DEPENDENCY GRAPH AT ALL (real, tested, but for
+# other products):
+#
+#   enkidb-persist    — PersistedDb (EnkiDb + disk journal wrapper). Used by
+#                        `enkidw` (a sibling product), not enkiddb. 8/8 tests
+#                        pass. Contains this session's one remaining
+#                        BTreeSet in the whole storage stack — a throwaway
+#                        dedup set scoped to a single `open()` call during
+#                        journal replay (dropped after use, not a standing
+#                        index), and irrelevant to EnkiDDB regardless since
+#                        this crate isn't in its graph.
+#   permanent-storage  — Golden Record commit station (§10.7). Zero
+#                         consumers anywhere in the workspace. 2/2 tests pass.
+#   snapshot-job       — the Snapshot_Job *scheduler* mechanism (distinct
+#                         from the enkidb-snapshot *data* crate above). Zero
+#                         consumers anywhere in the workspace. 5/5 tests pass.
+#   storage-sector     — BlackBox Station's terminal jail for confirmed-
+#                         harmful particles. Used by blackbox-station,
+#                         data-steward-station, eridu-runtime — the AI Agent
+#                         / Steward subsystem, not EnkiDDB. 3/3 tests pass.
+#
+# NO TREE IN THE ORBITS, EXTENDED TO STORAGE: grep for BTreeMap/BTreeSet
+# across all ten crates' src/ found exactly one hit (enkidb-persist, Tier 3,
+# described above — a scoped local set, not a standing index, and not in
+# EnkiDDB's graph anyway). Every Tier 1 and Tier 2 crate is tree-free.
+#
+# VERDICT: GO. EnkiDDB's real storage chain (journal -> storage -> block for
+# writes; datafile for reads; Anu's Surrogate + EavExact for query) is fully
+# built, tree-free, and passes 127/127 tests across the six Tier-1 crates
+# (12+1+3+12+58+41). The Architect's open decision, not resolved by this
+# audit: whether EnkiDDB should also wire in enkidb-recovery (crash
+# recovery) and enkidb-snapshot (scheduled snapshots) before going further,
+# or defer them — both compile into the binary today but do nothing for
+# EnkiDDB until explicitly called.
+# =============================================================================
+---
+- name: "PB-184 | Record — Storage pre-build readiness audit for EnkiDDB"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-184.1 | Verdict"
+      ansible.builtin.debug:
+        msg: >-
+          GO. Real write path: enkiddb::writenode -> enkidb-journal ->
+          enkidb-storage -> enkidb-block. Real read path: enkiddb::readnode
+          -> enkidb-datafile, query via heptascript::HeptaIndexes
+          (Surrogate + EavExact). All six Tier-1 crates: 127/127 tests pass,
+          zero BTreeMap/BTreeSet. Tier 2 (enkidb-engine, enkidb-snapshot,
+          enkidb-recovery) compiles into the binary via enkidb-ingest but is
+          never called by enkiddb's own code -- crash recovery and scheduled
+          snapshots are NOT wired into EnkiDDB today. Tier 3 (enkidb-persist,
+          permanent-storage, snapshot-job, storage-sector) is outside
+          EnkiDDB's dependency graph entirely, serving sibling products.

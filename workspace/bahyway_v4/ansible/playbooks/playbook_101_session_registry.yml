@@ -1,0 +1,110 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_101_session_registry.yml
+#  BahyWay.Ecosystem v4.0 — Session Registry (BLOCK C) — Build + Test
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_101_session_registry.yml
+#
+#  Crate: enkidb-session-registry
+#  Tests: 12 integration tests (playbook_registry)
+#  Covers:
+#    TOML parsing for all 7 NodeType variants
+#      (EnkiDB / EnkiDW / EnkiSDB / EnkiODB / EnkiQDB / EnkiMDB / EnkiDDB)
+#    SessionRole: WRITE / READ
+#    Enabled / disabled filter
+#    by_tribe() — empty tribe_ids = serves ALL tribes
+#    by_role(), by_id() lookups
+#    RegistryError: InvalidRole / InvalidNodeType / InvalidPort
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-101 | Session Registry — Build & Integration Tests"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    crate:        "enkidb-session-registry"
+    test_bin:     "playbook_registry"
+    results_dir:  "{{ forge_root }}/test_results"
+
+  tasks:
+
+    - name: "SETUP | Results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Build ─────────────────────────────────────────────────────────────
+    - name: "BUILD | cargo build -p {{ crate }}"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p {{ crate }} 2>&1"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: true
+
+    - name: "FAIL  | Build failed"
+      ansible.builtin.fail:
+        msg: "cargo build -p {{ crate }} FAILED\n{{ build_out.stderr }}"
+      when: build_out.rc != 0
+
+    - name: "PASS  | Build OK"
+      ansible.builtin.debug:
+        msg: "enkidb-session-registry → BUILD PASS ✓"
+
+    # ── Integration tests ─────────────────────────────────────────────────
+    - name: "TEST  | cargo test -p {{ crate }} --test {{ test_bin }} --nocapture"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p {{ crate }} --test {{ test_bin }} -- --nocapture 2>&1"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+
+    - name: "SAVE  | Write test log"
+      ansible.builtin.copy:
+        content: "{{ test_out.stdout }}\n{{ test_out.stderr }}"
+        dest: "{{ results_dir }}/pb101_session_registry.log"
+        mode: "0644"
+
+    - name: "PRINT | Test output"
+      ansible.builtin.debug:
+        msg: "{{ test_out.stdout_lines }}"
+
+    - name: "PARSE | Result line"
+      ansible.builtin.set_fact:
+        result_line: >-
+          {{ test_out.stdout_lines
+             | select('match', '^test result')
+             | list | last | default('no result line') }}
+
+    - name: "PRINT | Summary"
+      ansible.builtin.debug:
+        msg: |
+          ┌─────────────────────────────────────────────────────────────┐
+          │  PB-101  enkidb-session-registry  BLOCK C                   │
+          ├─────────────────────────────────────────────────────────────┤
+          │  Expected tests:  12                                        │
+          │  {{ result_line }}
+          │  Log: {{ results_dir }}/pb101_session_registry.log
+          ├─────────────────────────────────────────────────────────────┤
+          │  C-001 Parse 5 sessions from TOML                           │
+          │  C-002 Enabled filter (4 enabled, 1 disabled standby)       │
+          │  C-003 Role filter WRITE=2 READ=3                           │
+          │  C-004 Tribe filter (empty tribe_ids = all tribes)          │
+          │  C-005 by_id() lookup                                       │
+          │  C-006 Error handling (InvalidRole/NodeType/Port)           │
+          │  C-007 All 7 NodeType variants                              │
+          │  C-008 tribe_ids [] / [42] / [1,2,3,4,5]                   │
+          └─────────────────────────────────────────────────────────────┘
+
+    - name: "FAIL  | Tests failed"
+      ansible.builtin.fail:
+        msg: "Session Registry tests FAILED — check {{ results_dir }}/pb101_session_registry.log"
+      when: test_out.rc != 0
+
+    - name: "DONE  | PB-101 Session Registry COMPLETE → Run PB-102 next"
+      ansible.builtin.debug:
+        msg: "BLOCK C PASS ✓ — 12/12 tests — Run playbook_102_con_engine_v4.yml next"

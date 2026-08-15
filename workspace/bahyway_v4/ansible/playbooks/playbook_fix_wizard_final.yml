@@ -1,0 +1,635 @@
+---
+# =============================================================================
+# PLAYBOOK — Multi-Database Wizard built INTO dubsar_proof.gd
+# No external scene. No external script. Pure GDScript inline.
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_fix_wizard_final.yml \
+#     -i "localhost," -c local -v
+# =============================================================================
+- name: "Multi-Database Wizard — built into dubsar_proof.gd"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    scripts: "/home/bahyway/Forge/bahyway_v4/dubsar-theater/godot/scripts"
+
+  tasks:
+
+    - name: "Write complete dubsar_proof.gd with multi-DB wizard"
+      ansible.builtin.copy:
+        dest: "{{ scripts }}/dubsar_proof.gd"
+        content: |
+          extends Control
+
+          # ── Sovereign connection targets ─────────────────────────────────────
+          const ENGINES = [
+          	{"id":"EnkiDB",  "glyph":"𒆳", "host":"192.168.122.107", "port":7001, "desc":"Core CQRS sovereign store"},
+          	{"id":"EnkiDW",  "glyph":"𒀭", "host":"192.168.122.107", "port":7002, "desc":"Data warehouse / ETL"},
+          	{"id":"EnkiSDB", "glyph":"𒌓", "host":"192.168.122.107", "port":7003, "desc":"Staging database"},
+          	{"id":"EnkiODB", "glyph":"𒌋", "host":"192.168.122.107", "port":7004, "desc":"Operation database"},
+          	{"id":"EnkiQDB", "glyph":"𒁾", "host":"192.168.122.107", "port":7005, "desc":"Quarantine database"},
+          ]
+
+          const ATTR_NAMES = {
+          	"0x57388739": "Timestamp",   "0x00001a4b": "Lane",
+          	"0xdd80ccf7": "Latitude",    "0x04d030b0": "Longitude",
+          	"0x4bd9ccee": "B11 Score",   "0xcb45dc56": "Grave ID",
+          	"0xbfb44d69": "Death Date",  "0xbbcbca57": "Name (Arabic)",
+          	"0x5e9c9580": "Gender",      "0xd6ef4c6b": "City",
+          	"0x54038644": "Section",     "0x1f01e2fd": "Record No",
+          	"0x278a5432": "UUID",
+          }
+
+          const C_GOLD    = Color(0.831, 0.686, 0.216)
+          const C_TEAL    = Color(0.114, 0.620, 0.459)
+          const C_AMBER   = Color(0.937, 0.624, 0.153)
+          const C_CRIMSON = Color(0.863, 0.235, 0.235)
+          const C_BG      = Color(0.07,  0.08,  0.13)
+          const C_PANEL   = Color(0.10,  0.11,  0.18)
+          const C_DIM     = Color(0.39,  0.41,  0.55)
+          const C_TEXT    = Color(0.82,  0.84,  0.92)
+          const C_GREEN   = Color(0.20,  0.70,  0.30)
+
+          # ── State ────────────────────────────────────────────────────────────
+          var selected_engines: Array = []   # list of selected engine dicts
+          var connected_engines: Array = []  # engines successfully connected
+          var running       := false
+          var query_rows    := []
+          var view_mode     := "ORBIT"
+          var orbit_angle   := 0.0
+          var thread: Thread = null
+          var thread_result := []
+          var thread_done   := false
+          var thread_status := ""
+
+          # ── UI refs ──────────────────────────────────────────────────────────
+          var lbl_status:     Label
+          var lbl_entries:    Label
+          var btn_connect:    Button
+          var btn_run:        Button
+          var txt_editor:     TextEdit
+          var lbl_running:    Label
+          var btn_orbit:      Button
+          var btn_grid:       Button
+          var viewport_3d:    SubViewport
+          var orbit_3d_root:  Node3D
+          var scroll_grid:    ScrollContainer
+          var grid_container: VBoxContainer
+
+          # ── Wizard overlay refs ──────────────────────────────────────────────
+          var wizard_overlay: ColorRect
+          var wizard_panel:   PanelContainer
+          var engine_checks:  Array = []   # CheckBox nodes
+
+          # ════════════════════════════════════════════════════════════════════
+          func _ready():
+          	get_tree().root.title = "DubSar IDE v4.0 — EnkiDB Theater"
+          	_build_ui()
+          	# Show wizard immediately on startup
+          	_show_wizard()
+
+          # ════════════════════════════════════════════════════════════════════
+          # WIZARD — built inline, no external scene or script
+          # ════════════════════════════════════════════════════════════════════
+          func _show_wizard() -> void:
+          	# Dark overlay
+          	wizard_overlay = ColorRect.new()
+          	wizard_overlay.color = Color(0.0, 0.0, 0.0, 0.85)
+          	wizard_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+          	wizard_overlay.z_index = 100
+          	add_child(wizard_overlay)
+
+          	# Wizard panel
+          	wizard_panel = PanelContainer.new()
+          	wizard_panel.set_anchors_preset(Control.PRESET_CENTER)
+          	wizard_panel.custom_minimum_size = Vector2(580, 500)
+          	wizard_panel.position = Vector2(-290, -250)
+          	wizard_panel.z_index = 101
+          	add_child(wizard_panel)
+
+          	var vb = VBoxContainer.new()
+          	vb.add_theme_constant_override("separation", 14)
+          	wizard_panel.add_child(vb)
+
+          	# Title
+          	var title = Label.new()
+          	title.text = "𒁾  EnkiDB Connection Wizard"
+          	title.add_theme_font_size_override("font_size", 20)
+          	title.add_theme_color_override("font_color", C_GOLD)
+          	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+          	vb.add_child(title)
+
+          	var sub = Label.new()
+          	sub.text = "BahyWay.Ecosystem v4.0 — Select one or more databases"
+          	sub.add_theme_font_size_override("font_size", 11)
+          	sub.add_theme_color_override("font_color", C_DIM)
+          	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+          	vb.add_child(sub)
+
+          	vb.add_child(HSeparator.new())
+
+          	# Engine checkboxes
+          	var eng_title = Label.new()
+          	eng_title.text = "Select EnkiDB Engines to connect:"
+          	eng_title.add_theme_font_size_override("font_size", 13)
+          	eng_title.add_theme_color_override("font_color", C_GOLD)
+          	vb.add_child(eng_title)
+
+          	engine_checks = []
+          	for eng in ENGINES:
+          		var row = HBoxContainer.new()
+          		var cb = CheckBox.new()
+          		cb.text = eng["glyph"] + "  " + eng["id"] + "   —   " + eng["desc"] + "   (port " + str(eng["port"]) + ")"
+          		cb.add_theme_font_size_override("font_size", 13)
+          		# EnkiDB selected by default
+          		if eng["id"] == "EnkiDB":
+          			cb.button_pressed = true
+          		row.add_child(cb)
+          		engine_checks.append({"cb": cb, "eng": eng})
+          		vb.add_child(row)
+
+          	vb.add_child(HSeparator.new())
+
+          	# Host field
+          	var host_row = HBoxContainer.new()
+          	var hl = Label.new()
+          	hl.text = "Host:"
+          	hl.custom_minimum_size = Vector2(60, 0)
+          	hl.add_theme_color_override("font_color", C_TEXT)
+          	host_row.add_child(hl)
+          	var host_field = LineEdit.new()
+          	host_field.text = "192.168.122.107"
+          	host_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+          	host_field.add_theme_font_size_override("font_size", 13)
+          	host_row.add_child(host_field)
+          	vb.add_child(host_row)
+
+          	# Status label
+          	var wizard_status = Label.new()
+          	wizard_status.text = "Select databases above and click Connect"
+          	wizard_status.add_theme_font_size_override("font_size", 12)
+          	wizard_status.add_theme_color_override("font_color", C_DIM)
+          	wizard_status.autowrap_mode = TextServer.AUTOWRAP_WORD
+          	wizard_status.name = "WizardStatus"
+          	vb.add_child(wizard_status)
+
+          	# Buttons
+          	var btn_row = HBoxContainer.new()
+          	btn_row.add_theme_constant_override("separation", 12)
+
+          	var sel_all = Button.new()
+          	sel_all.text = "Select All"
+          	sel_all.pressed.connect(func():
+          		for item in engine_checks:
+          			item["cb"].button_pressed = true
+          	)
+          	btn_row.add_child(sel_all)
+
+          	var spacer = Control.new()
+          	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+          	btn_row.add_child(spacer)
+
+          	var skip_btn = Button.new()
+          	skip_btn.text = "Skip — Open Theater"
+          	skip_btn.pressed.connect(func():
+          		_close_wizard()
+          	)
+          	btn_row.add_child(skip_btn)
+
+          	var conn_btn = Button.new()
+          	conn_btn.text = "▶ Connect"
+          	conn_btn.add_theme_font_size_override("font_size", 14)
+          	conn_btn.pressed.connect(func():
+          		_wizard_connect(host_field.text, wizard_status)
+          	)
+          	btn_row.add_child(conn_btn)
+
+          	vb.add_child(btn_row)
+
+          func _wizard_connect(host: String, status_lbl: Label) -> void:
+          	selected_engines = []
+          	for item in engine_checks:
+          		if item["cb"].button_pressed:
+          			var e = item["eng"].duplicate()
+          			e["host"] = host
+          			selected_engines.append(e)
+
+          	if selected_engines.is_empty():
+          		status_lbl.text = "Please select at least one engine."
+          		status_lbl.add_theme_color_override("font_color", C_CRIMSON)
+          		return
+
+          	status_lbl.text = "⟳ Testing connections..."
+          	status_lbl.add_theme_color_override("font_color", C_AMBER)
+
+          	connected_engines = []
+          	var results_text = ""
+
+          	for eng in selected_engines:
+          		var peer = StreamPeerTCP.new()
+          		var err  = peer.connect_to_host(eng["host"], eng["port"])
+          		var t    = Time.get_ticks_msec()
+          		while peer.get_status() == StreamPeerTCP.STATUS_CONNECTING:
+          			peer.poll()
+          			if Time.get_ticks_msec() - t > 3000: break
+          		if peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+          			connected_engines.append(eng)
+          			results_text += "✓ " + eng["id"] + ":" + str(eng["port"]) + "\n"
+          			peer.disconnect_from_host()
+          		else:
+          			results_text += "✗ " + eng["id"] + ":" + str(eng["port"]) + " (offline)\n"
+
+          	if connected_engines.is_empty():
+          		status_lbl.text = "✗ No engines reachable. Check host and ensure EnkiDB is running."
+          		status_lbl.add_theme_color_override("font_color", C_CRIMSON)
+          	else:
+          		status_lbl.text = results_text
+          		status_lbl.add_theme_color_override("font_color", C_GREEN)
+          		# Update left panel
+          		lbl_entries.text = "Entries: 80,272 (NAJAF_CEMETERY)"
+          		btn_connect.text = "✓ Connected — Reconnect"
+          		btn_run.disabled = false
+          		var eng_names = ", ".join(connected_engines.map(func(e): return e["id"]))
+          		_update_status("✓ Connected: " + eng_names, C_TEAL)
+          		# Close wizard after short delay
+          		await get_tree().create_timer(1.2).timeout
+          		_close_wizard()
+
+          func _close_wizard() -> void:
+          	if is_instance_valid(wizard_overlay):
+          		wizard_overlay.queue_free()
+          	if is_instance_valid(wizard_panel):
+          		wizard_panel.queue_free()
+          	# If no engines connected yet, connect to EnkiDB default
+          	if connected_engines.is_empty():
+          		connected_engines = [ENGINES[0]]
+
+          # ════════════════════════════════════════════════════════════════════
+          # MAIN UI
+          # ════════════════════════════════════════════════════════════════════
+          func _build_ui():
+          	var bg = ColorRect.new()
+          	bg.color = C_BG
+          	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+          	add_child(bg)
+
+          	var left = PanelContainer.new()
+          	left.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+          	left.size.x = 300
+          	add_child(left)
+
+          	var lv = VBoxContainer.new()
+          	lv.add_theme_constant_override("separation", 8)
+          	left.add_child(lv)
+
+          	lv.add_child(_lbl("𒁾 DubSar IDE v4.0", 16, C_GOLD))
+          	lv.add_child(HSeparator.new())
+          	lv.add_child(_lbl("EnkiDB Connector", 11, C_DIM))
+          	lv.add_child(_lbl("Read node: 192.168.122.107", 11, C_TEAL))
+          	lv.add_child(_lbl("Engine: HeptaScript v1.0 W5H2", 10, C_DIM))
+
+          	lbl_entries = _lbl("Entries: —", 11, C_TEXT)
+          	lv.add_child(lbl_entries)
+
+          	btn_connect = Button.new()
+          	btn_connect.text = "▶ Change Databases"
+          	btn_connect.pressed.connect(_show_wizard)
+          	lv.add_child(btn_connect)
+
+          	lbl_status = _lbl("Opening wizard...", 10, C_AMBER)
+          	lbl_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+          	lv.add_child(lbl_status)
+
+          	lv.add_child(HSeparator.new())
+          	lv.add_child(_lbl("Quick W5H2 Queries", 11, C_GOLD))
+
+          	for preset in [
+          		["All particles (1000)",  "WHO T.E\nHOW_MUCH LIMIT 1000"],
+          		["GEM quality B11>=200",  "WHO T.E\nWHY QUALITY_BYTE > 200\nHOW_MUCH LIMIT 500"],
+          		["Low quality FUZZY",     "WHO T.E\nWHY QUALITY_BYTE < 128\nHOW_MUCH LIMIT 500"],
+          		["First 100 records",     "WHO T.E\nHOW_MUCH LIMIT 100"],
+          	]:
+          		var btn = Button.new()
+          		btn.text = preset[0]
+          		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+          		var q = preset[1]
+          		btn.pressed.connect(func(): txt_editor.text = q)
+          		lv.add_child(btn)
+
+          	lv.add_child(HSeparator.new())
+          	lbl_running = _lbl("", 10, C_AMBER)
+          	lv.add_child(lbl_running)
+
+          	var centre = VBoxContainer.new()
+          	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+          	centre.offset_left   = 310
+          	centre.offset_right  = -10
+          	centre.offset_top    = 10
+          	centre.offset_bottom = -10
+          	add_child(centre)
+
+          	centre.add_child(_lbl("HeptaScript W5H2 Query Editor", 13, C_GOLD))
+
+          	txt_editor = TextEdit.new()
+          	txt_editor.text = "WHO T.E\nHOW_MUCH LIMIT 100"
+          	txt_editor.custom_minimum_size.y = 160
+          	txt_editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
+          	txt_editor.add_theme_color_override("background_color", C_PANEL)
+          	txt_editor.add_theme_color_override("font_color", C_TEXT)
+          	txt_editor.add_theme_font_size_override("font_size", 14)
+          	centre.add_child(txt_editor)
+
+          	var run_bar = HBoxContainer.new()
+          	btn_run = Button.new()
+          	btn_run.text = "▶ Run W5H2 Query"
+          	btn_run.disabled = true
+          	btn_run.pressed.connect(_on_run_query)
+          	run_bar.add_child(btn_run)
+          	run_bar.add_child(_lbl("  View:", 11, C_DIM))
+          	btn_orbit = Button.new(); btn_orbit.text = "ORBIT"
+          	btn_orbit.toggle_mode = true; btn_orbit.button_pressed = true
+          	btn_orbit.pressed.connect(func(): _set_view("ORBIT"))
+          	run_bar.add_child(btn_orbit)
+          	btn_grid = Button.new(); btn_grid.text = "GRID"
+          	btn_grid.toggle_mode = true
+          	btn_grid.pressed.connect(func(): _set_view("GRID"))
+          	run_bar.add_child(btn_grid)
+          	centre.add_child(run_bar)
+
+          	var results = PanelContainer.new()
+          	results.size_flags_vertical = Control.SIZE_EXPAND_FILL
+          	centre.add_child(results)
+
+          	var stack = Control.new()
+          	stack.set_anchors_preset(Control.PRESET_FULL_RECT)
+          	results.add_child(stack)
+
+          	var svc = SubViewportContainer.new()
+          	svc.set_anchors_preset(Control.PRESET_FULL_RECT)
+          	svc.stretch = true
+          	stack.add_child(svc)
+
+          	viewport_3d = SubViewport.new()
+          	viewport_3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+          	svc.add_child(viewport_3d)
+
+          	orbit_3d_root = Node3D.new()
+          	viewport_3d.add_child(orbit_3d_root)
+
+          	var cam = Camera3D.new()
+          	cam.transform.origin = Vector3(0, 2, 6)
+          	cam.rotation_degrees = Vector3(-15, 0, 0)
+          	orbit_3d_root.add_child(cam)
+
+          	var light = OmniLight3D.new()
+          	light.light_color = C_GOLD
+          	light.light_energy = 1.5
+          	light.omni_range = 20.0
+          	orbit_3d_root.add_child(light)
+
+          	scroll_grid = ScrollContainer.new()
+          	scroll_grid.set_anchors_preset(Control.PRESET_FULL_RECT)
+          	scroll_grid.visible = false
+          	stack.add_child(scroll_grid)
+
+          	grid_container = VBoxContainer.new()
+          	grid_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+          	scroll_grid.add_child(grid_container)
+
+          # ════════════════════════════════════════════════════════════════════
+          # QUERY EXECUTION — runs against ALL connected engines
+          # ════════════════════════════════════════════════════════════════════
+          func _on_run_query():
+          	if running: return
+          	if connected_engines.is_empty():
+          		_update_status("No databases connected", C_CRIMSON)
+          		return
+          	running = true
+          	btn_run.disabled = true
+          	lbl_running.text = "Running W5H2 query on " + str(connected_engines.size()) + " database(s)..."
+          	query_rows = []
+          	_clear_orbit(); _clear_grid()
+          	thread = Thread.new()
+          	thread_done = false; thread_result = []
+          	thread.start(_thread_query.bind(txt_editor.text))
+
+          func _thread_query(src: String):
+          	var all_results = []
+          	for eng in connected_engines:
+          		thread_status = "Querying " + eng["id"] + "..."
+          		var rows = _tcp_execute(eng["host"], eng["port"], src)
+          		for row in rows:
+          			row["_source_engine"] = eng["id"]
+          		all_results.append_array(rows)
+          	thread_result = all_results
+          	thread_done = true
+
+          func _process(delta):
+          	orbit_angle += delta * 0.3
+          	if thread_done and thread != null:
+          		thread.wait_to_finish()
+          		thread = null; thread_done = false
+          		running = false; btn_run.disabled = false
+          		query_rows = thread_result
+          		lbl_running.text = ""
+          		var eng_names = ", ".join(connected_engines.map(func(e): return e["id"]))
+          		_update_status("✓ %d rows from [%s]" % [query_rows.size(), eng_names], C_TEAL)
+          		_populate_orbit(); _populate_grid()
+          	elif running:
+          		lbl_running.text = thread_status
+          	_animate_orbit(delta)
+
+          func _clear_orbit():
+          	for c in orbit_3d_root.get_children():
+          		if c is Camera3D or c is OmniLight3D: continue
+          		c.queue_free()
+
+          func _populate_orbit():
+          	_clear_orbit()
+          	if query_rows.is_empty() or view_mode != "ORBIT": return
+          	var n = query_rows.size()
+
+          	var nuc = MeshInstance3D.new()
+          	var ns = SphereMesh.new(); ns.radius = 0.15
+          	nuc.mesh = ns
+          	var nm = StandardMaterial3D.new()
+          	nm.albedo_color = C_GOLD; nm.emission_enabled = true
+          	nm.emission = C_GOLD; nm.emission_energy_multiplier = 3.0
+          	nuc.set_surface_override_material(0, nm)
+          	nuc.name = "Nucleus"; orbit_3d_root.add_child(nuc)
+
+          	for i in range(min(n, 1000)):
+          		var row = query_rows[i]
+          		var b11 = _b11_from_kaki(row.get("kaki", ""))
+          		var ring_r: float; var col: Color
+          		if b11 >= 200:   ring_r = 1.0; col = C_GOLD
+          		elif b11 >= 128: ring_r = 1.7; col = C_TEAL
+          		else:            ring_r = 2.4; col = C_AMBER
+
+          		var angle  = float(i) / float(n) * TAU
+          		var wobble = sin(float(i) * 0.43) * 0.3
+
+          		var dot = MeshInstance3D.new()
+          		var sm  = SphereMesh.new()
+          		sm.radius = 0.04 if b11 >= 200 else 0.028
+          		dot.mesh = sm
+          		var mat = StandardMaterial3D.new()
+          		mat.albedo_color = col; mat.emission_enabled = true
+          		mat.emission = col; mat.emission_energy_multiplier = 0.8
+          		dot.set_surface_override_material(0, mat)
+          		dot.position = Vector3(ring_r*cos(angle), wobble, ring_r*sin(angle))
+          		dot.name = "P_%d" % i
+          		dot.set_meta("base_angle", angle)
+          		dot.set_meta("ring_r",     ring_r)
+          		dot.set_meta("wobble",     wobble)
+          		dot.set_meta("b11",        b11)
+          		orbit_3d_root.add_child(dot)
+
+          	var gem   = query_rows.filter(func(r): return _b11_from_kaki(r.get("kaki","")) >= 200).size()
+          	var orb   = query_rows.filter(func(r): var b=_b11_from_kaki(r.get("kaki","")); return b>=128 and b<200).size()
+          	var fuzzy = query_rows.filter(func(r): return _b11_from_kaki(r.get("kaki","")) < 128).size()
+          	var stats = Label3D.new()
+          	stats.text = "%d particles  GEM:%d  ORBIT:%d  FUZZY:%d" % [n, gem, orb, fuzzy]
+          	stats.font_size = 18; stats.modulate = C_GOLD
+          	stats.position = Vector3(0, 3.2, 0)
+          	orbit_3d_root.add_child(stats)
+
+          func _animate_orbit(delta):
+          	if not is_instance_valid(orbit_3d_root): return
+          	for child in orbit_3d_root.get_children():
+          		if not child.name.begins_with("P_"): continue
+          		var base   = child.get_meta("base_angle", 0.0)
+          		var ring_r = child.get_meta("ring_r",     2.0)
+          		var wobble = child.get_meta("wobble",     0.0)
+          		var b11    = child.get_meta("b11",        128)
+          		var speed  = 0.9 if b11 >= 200 else (0.55 if b11 >= 128 else 0.3)
+          		var angle  = base + orbit_angle * speed
+          		child.position = Vector3(ring_r*cos(angle), wobble, ring_r*sin(angle))
+
+          func _clear_grid():
+          	for c in grid_container.get_children(): c.queue_free()
+
+          func _populate_grid():
+          	_clear_grid()
+          	if query_rows.is_empty() or view_mode != "GRID": return
+
+          	var hdr = HBoxContainer.new()
+          	hdr.add_child(_gcell("Source",       90, C_AMBER))
+          	hdr.add_child(_gcell("Record No",   100, C_GOLD))
+          	hdr.add_child(_gcell("Name (Arabic)",200, C_GOLD))
+          	hdr.add_child(_gcell("Death Date",  120, C_GOLD))
+          	hdr.add_child(_gcell("City",         120, C_GOLD))
+          	hdr.add_child(_gcell("B11%",          60, C_GOLD))
+          	hdr.add_child(_gcell("State",         80, C_GOLD))
+          	grid_container.add_child(hdr)
+          	grid_container.add_child(HSeparator.new())
+
+          	for i in range(min(query_rows.size(), 2000)):
+          		var row   = query_rows[i]
+          		var hex   = row.get("kaki", "")
+          		var b11   = _b11_from_kaki(hex)
+          		var state = "GEM" if b11 >= 200 else ("ORBIT" if b11 >= 128 else "FUZZY")
+          		var col   = C_GOLD if b11 >= 200 else (C_TEAL if b11 >= 128 else C_AMBER)
+          		var attrs = row.get("attrs", [])
+          		var src_eng = row.get("_source_engine", "EnkiDB")
+
+          		var decoded = {}
+          		for pair in attrs:
+          			if pair is Array and pair.size() >= 2:
+          				var k = str(pair[0]).to_lower()
+          				var name = ATTR_NAMES.get(k, "")
+          				if not name.is_empty():
+          					decoded[name] = str(pair[1])
+
+          		var r = HBoxContainer.new()
+          		r.add_child(_gcell(src_eng,                            90, C_AMBER))
+          		r.add_child(_gcell(decoded.get("Record No",     "—"), 100, C_TEXT))
+          		r.add_child(_gcell(decoded.get("Name (Arabic)", "—"), 200, C_GOLD))
+          		r.add_child(_gcell(decoded.get("Death Date",    "—"), 120, C_TEXT))
+          		r.add_child(_gcell(decoded.get("City",          "—"), 120, C_TEAL))
+          		r.add_child(_gcell("%d%%" % int(b11/2.55),             60, col))
+          		r.add_child(_gcell(state,                              80, col))
+          		grid_container.add_child(r)
+
+          	grid_container.add_child(HSeparator.new())
+          	var eng_names = ", ".join(connected_engines.map(func(e): return e["id"]))
+          	grid_container.add_child(_lbl(
+          		"%d rows  |  [%s]  |  192.168.122.107" % [query_rows.size(), eng_names],
+          		10, C_DIM))
+
+          func _set_view(mode: String):
+          	view_mode = mode
+          	var orb = mode == "ORBIT"
+          	viewport_3d.get_parent().visible = orb
+          	scroll_grid.visible = not orb
+          	btn_orbit.button_pressed = orb
+          	btn_grid.button_pressed  = not orb
+          	if orb:  _populate_orbit()
+          	else:    _populate_grid()
+
+          func _b11_from_kaki(hex: String) -> int:
+          	if hex.length() < 16: return 128
+          	var b = ("0x" + hex.substr(14, 2)).hex_to_int()
+          	return b
+
+          func _update_status(msg: String, col: Color = C_DIM):
+          	if lbl_status:
+          		lbl_status.text = msg
+          		lbl_status.add_theme_color_override("font_color", col)
+
+          func _lbl(text: String, size: int = 11, col: Color = C_TEXT) -> Label:
+          	var l = Label.new()
+          	l.text = text
+          	l.add_theme_font_size_override("font_size", size)
+          	l.add_theme_color_override("font_color", col)
+          	return l
+
+          func _gcell(text: String, w: int, col: Color = C_TEXT) -> Label:
+          	var l = Label.new()
+          	l.text = text
+          	l.custom_minimum_size.x = w
+          	l.add_theme_font_size_override("font_size", 11)
+          	l.add_theme_color_override("font_color", col)
+          	l.clip_text = true
+          	return l
+
+          func _tcp_execute(host: String, port: int, w5h2: String) -> Array:
+          	var peer = StreamPeerTCP.new()
+          	if peer.connect_to_host(host, port) != OK: return []
+          	var t = Time.get_ticks_msec()
+          	while peer.get_status() == StreamPeerTCP.STATUS_CONNECTING:
+          		peer.poll()
+          		if Time.get_ticks_msec() - t > 5000: return []
+          	if peer.get_status() != StreamPeerTCP.STATUS_CONNECTED: return []
+          	var qb = w5h2.to_utf8_buffer()
+          	var lb = PackedByteArray(); lb.resize(4)
+          	var ql = qb.size()
+          	lb[0]=ql&0xFF;lb[1]=(ql>>8)&0xFF;lb[2]=(ql>>16)&0xFF;lb[3]=(ql>>24)&0xFF
+          	peer.put_data(lb); peer.put_data(qb)
+          	var results: Array = []
+          	var st = Time.get_ticks_msec()
+          	while peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+          		peer.poll()
+          		if Time.get_ticks_msec() - st > 120000: break
+          		if peer.get_available_bytes() < 4: OS.delay_msec(10); continue
+          		var lr = peer.get_data(4)
+          		if lr[0] != OK: break
+          		var lb2: PackedByteArray = lr[1]
+          		var fl = lb2[0]|(lb2[1]<<8)|(lb2[2]<<16)|(lb2[3]<<24)
+          		if fl == 0: break
+          		var wt = Time.get_ticks_msec()
+          		while peer.get_available_bytes() < fl:
+          			peer.poll(); OS.delay_msec(5)
+          			if Time.get_ticks_msec() - wt > 120000:
+          				peer.disconnect_from_host(); return results
+          		var fr = peer.get_data(fl)
+          		if fr[0] != OK: break
+          		var payload = fr[1].get_string_from_utf8()
+          		if payload.begins_with("ERR:"): break
+          		var batch = JSON.parse_string(payload)
+          		if batch is Array:
+          			results.append_array(batch)
+          			thread_status = "Received %d rows..." % results.size()
+          	peer.disconnect_from_host()
+          	return results

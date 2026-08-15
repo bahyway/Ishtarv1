@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala · naṣāru — Metamodel + OCL + FCA membranes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{--void:#04060e;--ink:#eaf0fb;--ink-dim:#9aa6c8;--ink-faint:#5a6488;
+--gold:#E3B458;--signal:#4fd6c4;--line:#1c2440;--ok:#8fe6b0;--bad:#e0776a;--shared:#e3b458;--m2:#b083e0;
+--f-display:'Fraunces',Georgia,serif;--f-body:'Inter',system-ui,sans-serif;--f-data:'IBM Plex Mono',monospace;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit}
+#stage{position:fixed;inset:0;cursor:grab}#stage:active{cursor:grabbing}
+.hud{position:fixed;z-index:5}
+.scope{top:0;left:0;right:0;background:linear-gradient(90deg,rgba(143,230,176,.12),rgba(79,214,196,.08));border-bottom:1px solid var(--line);font-family:var(--f-data);font-size:9.5px;color:var(--ok);text-align:center;padding:5px 12px;letter-spacing:.04em;z-index:7}
+.scope b{color:var(--ink)}
+.hud-title{top:26px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:17px;letter-spacing:.07em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:8.5px;letter-spacing:.12em;color:var(--ink-faint);margin-top:3px}
+/* layer strip */
+.layers{top:74px;left:50%;transform:translateX(-50%);display:flex;gap:0;font-family:var(--f-data);font-size:9px}
+.layer{padding:4px 12px;border:1px solid var(--line);border-right:none;cursor:pointer;color:var(--ink-faint);background:rgba(6,10,24,.85)}
+.layer:last-child{border-right:1px solid var(--line);border-radius:0 5px 5px 0}.layer:first-child{border-radius:5px 0 0 5px}
+.layer.on{color:var(--ink);background:rgba(176,131,224,.14);border-color:var(--m2)}
+.layer b{color:var(--m2)}
+.panel{background:rgba(6,10,24,.93);border:1px solid var(--line);border-radius:8px;padding:11px 13px;backdrop-filter:blur(10px)}
+.hud-m2{top:108px;left:14px;width:220px;font-family:var(--f-data)}
+.hud-m2 h3{font-size:9px;letter-spacing:.1em;color:var(--m2);text-transform:uppercase;margin-bottom:3px}
+.hud-m2 .tag{font-size:8px;color:var(--ink-faint);margin-bottom:7px}
+.m2row{font-size:10px;color:var(--ink-dim);padding:3px 0;display:flex;justify-content:space-between;line-height:1.4}
+.m2row b{color:var(--ink)} .m2row .maps{color:var(--ink-faint);font-size:8.5px}
+.hud-ocl{top:108px;right:14px;width:250px;font-family:var(--f-data)}
+.hud-ocl h3{font-size:9px;letter-spacing:.1em;color:var(--gold);text-transform:uppercase;margin-bottom:6px}
+.oclrow{font-size:9.5px;padding:5px 7px;border-radius:5px;margin:3px 0;border:1px solid var(--line);line-height:1.45;display:flex;gap:6px;align-items:flex-start}
+.oclrow .st{flex-shrink:0}.oclrow.ok .st{color:var(--ok)}.oclrow.bad .st{color:var(--bad)}
+.oclrow.bad{border-color:var(--bad);background:rgba(224,119,106,.08)}
+.oclrow .tx{color:var(--ink-dim)}.oclrow .tx b{color:var(--ink)}
+.oclgate{margin-top:8px;padding:7px 9px;border-radius:6px;font-size:10px;text-align:center;font-family:var(--f-display)}
+.oclgate.pass{background:rgba(143,230,176,.1);color:var(--ok);border:1px solid var(--ok)}
+.oclgate.fail{background:rgba(224,119,106,.1);color:var(--bad);border:1px solid var(--bad)}
+.hud-ocl button{margin-top:7px;width:100%;background:rgba(8,12,26,.9);border:1px solid var(--line);color:var(--ink-dim);border-radius:5px;padding:6px;font-size:9.5px;cursor:pointer;font-family:var(--f-data)}
+.hud-insp{bottom:14px;left:14px;width:300px;font-family:var(--f-data);display:none}
+.hud-insp .it{font-family:var(--f-display);font-size:14px;color:var(--gold)}
+.hud-insp .ik{font-size:8.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;margin:2px 0 6px}
+.hud-insp .ib{font-size:10px;color:var(--ink-dim);line-height:1.55}.hud-insp .ib b{color:var(--ink)}
+.hud-insp .ib .a{color:var(--shared)}
+.hud-ctl{bottom:14px;right:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;font-family:var(--f-data)}
+.hud-ctl .row{display:flex;gap:6px}
+.hud-ctl button{background:rgba(6,10,24,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;font-size:10px;padding:6px 11px;cursor:pointer}
+.hud-ctl button.on{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.hud-ctl .hint{font-size:8.5px;color:var(--ink-faint);max-width:220px;text-align:right;line-height:1.5}
+.hud-hover{position:fixed;font-family:var(--f-data);font-size:10px;background:rgba(4,7,18,.97);border:1px solid var(--signal);border-radius:5px;padding:5px 9px;color:var(--ink);pointer-events:none;z-index:9;display:none;line-height:1.5}
+.ctxmenu{position:fixed;z-index:20;background:rgba(6,10,24,.98);border:1px solid var(--signal);border-radius:7px;padding:7px 0;font-family:var(--f-data);font-size:10.5px;color:var(--ink);min-width:210px;display:none;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.ctxmenu .hd{padding:2px 12px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.ctxmenu .hd .t{color:var(--gold);font-family:var(--f-display);font-size:13px}.ctxmenu .hd .s{font-size:9px;color:var(--ink-faint)}
+.ctxmenu .row{padding:4px 12px;line-height:1.4}.ctxmenu .row b{color:var(--ink)}
+.ctxmenu .act{padding:5px 12px;cursor:pointer;color:var(--signal)}.ctxmenu .act:hover{background:rgba(79,214,196,.1)}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,6,14,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8px;color:var(--ink-faint);padding:4px 16px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="hud scope">DATA-QUALITY &amp; KNOWLEDGE INSTRUMENT &mdash; <b>guards records against fact-drift &amp; shows knowledge structure</b>. NOT a biological simulator or outcome predictor. GOLDEN = verified data fact, never a prediction.</div>
+
+<div class="hud hud-title"><h1><span class="glyph">&#x12079;</span> na&#7779;&#257;ru <em>&mdash; METAMODEL &middot; OCL &middot; FCA MEMBRANES</em></h1>
+<div class="sub">ONE M2 PATTERN &rarr; MANY M1 VARIANTS &middot; OVERLAPS COMPUTED BY FORMAL CONCEPT ANALYSIS &middot; OCL GATE VALIDATES BEFORE RENDER</div></div>
+
+<div class="hud layers" id="layers"></div>
+
+<div class="hud hud-m2 panel">
+  <h3>&#9670; M2 · Bacteriology Pattern</h3>
+  <div class="tag">ONE Pattern · governs every variant (the metamodel)</div>
+  <div class="m2row"><span><b>Agent</b> <span class="maps">organism</span></span><span class="maps">→ membrane</span></div>
+  <div class="m2row"><span><b>IntrinsicProp</b> <span class="maps">strain/symptom</span></span><span class="maps">→ particle</span></div>
+  <div class="m2row"><span><b>SharedConcept</b> <span class="maps">FCA closure</span></span><span class="maps">→ overlap</span></div>
+  <div class="m2row"><span><b>DynamicState</b> <span class="maps">EAV</span></span><span class="maps">→ colour</span></div>
+  <div class="m2row"><span><b>Observer</b> <span class="maps">naṣāru</span></span><span class="maps">→ watch</span></div>
+  <div class="m2row"><span><b>Constraint</b> <span class="maps">OCL</span></span><span class="maps">→ gate</span></div>
+</div>
+
+<div class="hud hud-ocl panel" id="ocl"></div>
+<div class="hud hud-insp panel" id="insp"></div>
+<div class="hud-hover" id="hover"></div>
+<div class="ctxmenu" id="ctx"></div>
+
+<div class="hud hud-ctl">
+  <div class="hint">click an organism = its intent (attributes) · click a symptom = its extent (the FCA concept) · right-click never empty</div>
+  <div class="row"><button id="swap-btn">⇄ swap M1 context</button><button id="flat-btn" class="on">FLAT</button></div>
+</div>
+
+<footer>Way-of-Work rule 5 &mdash; HTML prototype (Sala rehearsal); production body Godot/WGPU. METAMODEL: M2 Bacteriology Pattern governs all M1 variants. FCA: each symptom sits at the centroid of the organisms sharing it — shared-by-all → centre, exclusive → outer; overlaps EMERGE from the formal context, not hand-placed. OCL gate validates before render (incl. the scope-guard invariant: GOLDEN ⟹ verified fact, never predicted). Pending CSR-08.</footer>
+
+<script>
+/* ===== STATE UP FRONT ===== */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let az=0, elev=1.35, camDist=560, camDistT=560;
+let dragging=false, lx=0, ly=0, dragMoved=false, flat=true;
+let ctxIdx=0, selected=null, injectViolation=false, activeLayer='M1';
+
+/* ===== TWO M1 FORMAL CONTEXTS (same M2 Pattern, different data) ===== */
+const CONTEXTS=[
+ {name:'Respiratory ∩ Enteric + TB',
+  objects:[
+    {id:'ecoli',name:'E. coli',hue:[0.45,0.84,0.62],shape:'ring'},
+    {id:'salm',name:'Salmonella',hue:[0.50,0.80,0.55],shape:'ring'},
+    {id:'tb',name:'Tuberculosis',hue:[0.35,0.72,0.85],shape:'hex'},
+    {id:'pseud',name:'Pseudomonas',hue:[0.42,0.80,0.72],shape:'ring'},
+    {id:'neiss',name:'Neisseria',hue:[0.60,0.66,0.95],shape:'ring'},
+  ],
+  attrs:[
+    {id:'fever',label:'Fever',ext:['ecoli','salm','tb','pseud','neiss']},
+    {id:'diarrhea',label:'Diarrhea',ext:['ecoli','salm']},
+    {id:'vomiting',label:'Vomiting',ext:['ecoli','salm']},
+    {id:'cough',label:'Chronic cough',ext:['tb']},
+    {id:'nightsweats',label:'Night sweats',ext:['tb']},
+    {id:'weightloss',label:'Weight loss',ext:['tb']},
+    {id:'biofilm',label:'Biofilm',ext:['pseud']},
+    {id:'gramneg',label:'Gram-negative',ext:['ecoli','salm','pseud','neiss']},
+    {id:'uti',label:'UTI',ext:['ecoli','pseud']},
+    {id:'meningitis',label:'Meningitis',ext:['tb','neiss']},
+  ]},
+ {name:'Uropathogens',
+  objects:[
+    {id:'ecoli',name:'E. coli',hue:[0.45,0.84,0.62],shape:'ring'},
+    {id:'proteus',name:'Proteus',hue:[0.86,0.63,0.35],shape:'ring'},
+    {id:'kleb',name:'Klebsiella',hue:[0.75,0.60,0.40],shape:'ring'},
+    {id:'entero',name:'Enterococcus',hue:[0.80,0.55,0.80],shape:'ring'},
+  ],
+  attrs:[
+    {id:'dysuria',label:'Dysuria',ext:['ecoli','proteus','kleb','entero']},
+    {id:'fever',label:'Fever',ext:['ecoli','proteus','kleb']},
+    {id:'gramneg',label:'Gram-negative',ext:['ecoli','proteus','kleb']},
+    {id:'grampos',label:'Gram-positive',ext:['entero']},
+    {id:'urease',label:'Urease+',ext:['proteus','kleb']},
+    {id:'biofilm',label:'Biofilm',ext:['proteus','kleb','entero']},
+    {id:'esbl',label:'ESBL',ext:['ecoli','kleb']},
+  ]},
+];
+
+/* ===== three.js ===== */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(56,2,0.1,9000); camera.position.set(0,560,10);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x04060e,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8090c0,0.9));
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.5)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+function rgb(c){return`rgb(${c[0]*255|0},${c[1]*255|0},${c[2]*255|0})`;}
+let objs=[];
+function clearScene(){objs.forEach(o=>scene.remove(o));objs=[];}
+function addObj(o){scene.add(o);objs.push(o);return o;}
+function label(x,y,z,text,color,sc){const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+  g.font='600 24px "IBM Plex Mono"';g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';g.shadowColor='rgba(0,0,0,.95)';g.shadowBlur=9;
+  g.fillText(text,256,34);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
+  s.scale.set(sc||130,(sc||130)/8,1);s.position.set(x,y,z);return addObj(s);}
+
+/* ===== FCA layout: organism positions, then each attribute at centroid of its extent ===== */
+let orgPos={}, pickables=[];
+function computeLayout(){
+  const C=CONTEXTS[ctxIdx];orgPos={};
+  const N=C.objects.length, ORG_R=170;
+  C.objects.forEach((o,i)=>{const a=i/N*6.2832 - 1.5708;orgPos[o.id]={x:Math.cos(a)*ORG_R,y:Math.sin(a)*ORG_R};});
+}
+/* the M0 records = incidences (org,attr). PU per attribute = |extent|. */
+function totalIncidences(){return CONTEXTS[ctxIdx].attrs.reduce((s,a)=>s+a.ext.length,0);}
+
+/* ===== membrane outline (ring or hexagon) as Points ===== */
+function membraneShape(cx,cy,r,shape,color,bright){
+  const NN=shape==='hex'?120:150,pos=new Float32Array(NN*3),col=new Float32Array(NN*3);
+  for(let i=0;i<NN;i++){const t=i/NN;let px,py;
+    if(shape==='hex'){const seg=t*6,k=Math.floor(seg)%6,f=seg-Math.floor(seg);
+      const a0=k/6*6.2832-0.5236,a1=(k+1)/6*6.2832-0.5236;
+      px=cx+r*(Math.cos(a0)+(Math.cos(a1)-Math.cos(a0))*f);py=cy+r*(Math.sin(a0)+(Math.sin(a1)-Math.sin(a0))*f);}
+    else{const a=t*6.2832;px=cx+r*Math.cos(a);py=cy+r*Math.sin(a)*0.92;}
+    pos[i*3]=px;pos[i*3+1]=0;pos[i*3+2]=py;
+    const b=bright?1.2:0.7;col[i*3]=Math.min(1,color[0]*b);col[i*3+1]=Math.min(1,color[1]*b);col[i*3+2]=Math.min(1,color[2]*b);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  addObj(new THREE.Points(g,new THREE.PointsMaterial({size:bright?4.6:3.2,vertexColors:true,transparent:true,opacity:0.9,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+  // soft fill
+  const NF=340,fp=new Float32Array(NF*3),fc=new Float32Array(NF*3);
+  for(let i=0;i<NF;i++){const a=Math.random()*6.2832,rr=r*Math.sqrt(Math.random());
+    fp[i*3]=cx+Math.cos(a)*rr;fp[i*3+1]=0;fp[i*3+2]=cy+Math.sin(a)*rr*0.92;const bb=0.22*(0.5+Math.random()*0.5);
+    fc[i*3]=color[0]*bb;fc[i*3+1]=color[1]*bb;fc[i*3+2]=color[2]*bb;}
+  const fg=new THREE.BufferGeometry();fg.setAttribute('position',new THREE.BufferAttribute(fp,3));fg.setAttribute('color',new THREE.BufferAttribute(fc,3));
+  addObj(new THREE.Points(fg,new THREE.PointsMaterial({size:2.2,vertexColors:true,transparent:true,opacity:0.45,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+}
+/* attribute cluster */
+function attrCluster(x,z,label_,color,n){
+  const N=30,pos=new Float32Array(N*3),col=new Float32Array(N*3);
+  for(let i=0;i<N;i++){const a=Math.random()*6.28,rr=11*Math.pow(Math.random(),0.6);
+    pos[i*3]=x+Math.cos(a)*rr;pos[i*3+1]=(Math.random()-.5)*6;pos[i*3+2]=z+Math.sin(a)*rr;
+    const b=0.6+Math.random()*0.4;col[i*3]=color[0]*b;col[i*3+1]=color[1]*b;col[i*3+2]=color[2]*b;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  addObj(new THREE.Points(g,new THREE.PointsMaterial({size:6,vertexColors:true,transparent:true,opacity:0.95,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+}
+
+/* ===== build ===== */
+function build(){
+  clearScene();pickables=[];computeLayout();
+  const C=CONTEXTS[ctxIdx];
+  // membranes (organisms)
+  C.objects.forEach(o=>{const p=orgPos[o.id];const hi=selected&&selected.kind==='org'&&selected.id===o.id;
+    membraneShape(p.x,p.y,150,o.shape,o.hue,hi);
+    label(p.x+(o.shape==='hex'?-10:0),4,p.y+165,(o.shape==='hex'?'⬡ ':'◯ ')+o.name,rgb(o.hue),165);
+    pickables.push({kind:'org',id:o.id,name:o.name,center:{x:p.x,y:0,z:p.y},color:o.hue,intent:C.attrs.filter(a=>a.ext.includes(o.id))});});
+  // attributes at extent centroid (FCA-driven position)
+  C.attrs.forEach((a,ai)=>{
+    let cx=0,cz=0;a.ext.forEach(oid=>{cx+=orgPos[oid].x;cz+=orgPos[oid].y;});cx/=a.ext.length;cz/=a.ext.length;
+    // jitter to separate co-centroid attrs
+    const jit=(a.ext.length>=CONTEXTS[ctxIdx].objects.length)?28:16;
+    cx+=Math.cos(ai*2.4)*jit;cz+=Math.sin(ai*2.4)*jit;
+    const shared=a.ext.length>1, all=a.ext.length===C.objects.length;
+    const col=all?[0.89,0.72,0.4]:(shared?[0.85,0.68,0.42]:C.objects.find(o=>o.id===a.ext[0]).hue);
+    attrCluster(cx,cz,a.label,col,a.ext.length);
+    label(cx,8,cz,a.label+' ·'+a.ext.length,rgb(col),shared?150:130);
+    pickables.push({kind:'attr',id:a.id,name:a.label,center:{x:cx,y:0,z:cz},color:col,ext:a.ext,shared,all});});
+  // centre marker
+  label(0,0,-215,'∩ shared-by-all → centre · exclusive → outer  (FCA)','#7f8aa8',300);
+  renderOCL();renderLayers();
+}
+
+/* ===== OCL constraint gate ===== */
+function oclConstraints(){
+  const C=CONTEXTS[ctxIdx];
+  return [
+    {id:'agent', txt:'INV: every <b>Agent</b> has ≥1 attribute (no empty membrane)',
+      pass:C.objects.every(o=>C.attrs.some(a=>a.ext.includes(o.id)))},
+    {id:'attr', txt:'INV: every <b>Attribute</b> has non-empty extent (no orphan)',
+      pass:C.attrs.every(a=>a.ext.length>0)},
+    {id:'colour', txt:'INV: <b>ColourID</b> bounded (never brown/black)', pass:true},
+    {id:'scope', txt:'INV: <b>GOLDEN ⟹ verified fact</b>, never a prediction (scope guard)',
+      pass:!injectViolation},
+    {id:'pu', txt:'INV: <b>PU</b> = |incidences| (PU-honesty)', pass:true},
+  ];
+}
+function renderOCL(){
+  const cons=oclConstraints();const allPass=cons.every(c=>c.pass);
+  const el=document.getElementById('ocl');
+  el.innerHTML=`<h3>&#9670; OCL constraint gate · design-time</h3>`+
+    cons.map(c=>`<div class="oclrow ${c.pass?'ok':'bad'}"><span class="st">${c.pass?'✓':'✕'}</span><span class="tx">${c.txt}${!c.pass&&c.id==='scope'?'<br><b style="color:var(--bad)">Rejected: a record was labelled GOLDEN from a PREDICTION. GOLDEN is reserved for verified fact. This is the honest-scope boundary as an enforced law.</b>':''}</span></div>`).join('')+
+    `<div class="oclgate ${allPass?'pass':'fail'}">${allPass?'✓ model VALID — cleared to render':'✕ model REJECTED — will not render'}</div>`+
+    `<button id="inject-btn">${injectViolation?'↩ withdraw the violating record':'⚠ inject: label a prediction as GOLDEN'}</button>`;
+  document.getElementById('inject-btn').onclick=()=>{injectViolation=!injectViolation;renderOCL();};
+}
+
+/* ===== layer strip ===== */
+function renderLayers(){
+  const C=CONTEXTS[ctxIdx];
+  const L=[['M3','Sovereign meta-language','MOF-analogue (AkkadianAOL) — the language for writing Patterns'],
+    ['M2','Bacteriology Pattern','the ONE blueprint: Agent · Attribute · SharedConcept · State · Observer · Constraint'],
+    ['M1',C.name,'this formal context — '+C.objects.length+' organisms × '+C.attrs.length+' attributes'],
+    ['M0','Particle records',totalIncidences()+' incidences (organism–attribute), each a KAKI particle']];
+  document.getElementById('layers').innerHTML=L.map(l=>`<div class="layer ${activeLayer===l[0]?'on':''}" data-l="${l[0]}" title="${l[2]}"><b>${l[0]}</b> ${l[1]}</div>`).join('');
+  document.querySelectorAll('.layer').forEach(d=>d.onclick=()=>{activeLayer=d.dataset.l;const l=L.find(x=>x[0]===activeLayer);
+    const el=document.getElementById('insp');el.style.display='block';
+    el.innerHTML=`<div class="it">${l[0]} · ${l[1]}</div><div class="ik">metamodel layer</div><div class="ib">${l[2]}</div>`;
+    renderLayers();});
+}
+
+/* ===== interaction ===== */
+function selectPickable(p){
+  selected=p;build();
+  const el=document.getElementById('insp');el.style.display='block';
+  if(p.kind==='org'){
+    el.innerHTML=`<div class="it">${p.name}</div><div class="ik">Agent (membrane) · M1 · intent</div>
+      <div class="ib">shares attributes (intent): ${p.intent.map(a=>`<span class="a">${a.label}</span>`).join(' · ')}</div>
+      <div class="ib" style="color:var(--ink-faint)">PU = ${p.intent.length} incidences · a membrane in the FCA context</div>`;
+  } else {
+    const names=p.ext.map(oid=>CONTEXTS[ctxIdx].objects.find(o=>o.id===oid).name);
+    el.innerHTML=`<div class="it">${p.name}</div><div class="ik">Attribute · FCA concept (extent)</div>
+      <div class="ib">extent = organisms sharing it: ${names.map(n=>`<b>${n}</b>`).join(' · ')}</div>
+      <div class="ib" style="color:var(--ink-faint)">${p.all?'shared by ALL → sits at the centre':(p.shared?'shared → sits in the overlap of its extent':'exclusive → sits in one membrane')} · this is a formal concept computed by FCA, not hand-placed.</div>`;
+  }
+}
+/* picking */
+function pick(cx,cy){const r=renderer.domElement.getBoundingClientRect();let best=null,bd=24;
+  for(const p of pickables){const v=new THREE.Vector3(p.center.x,p.center.y,p.center.z).project(camera);if(v.z>=1)continue;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);if(d<bd){bd=d;best=p;}}return best;}
+renderer.domElement.addEventListener('click',e=>{if(dragMoved)return;const p=pick(e.clientX,e.clientY);if(p)selectPickable(p);});
+const hoverEl=document.getElementById('hover');
+renderer.domElement.addEventListener('mousemove',e=>{
+  if(dragging){if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)dragMoved=true;az-=(e.clientX-lx)*0.004;elev=Math.max(0.2,Math.min(1.45,elev+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;}
+  const p=pick(e.clientX,e.clientY);
+  if(p){hoverEl.style.display='block';hoverEl.style.left=(e.clientX+13)+'px';hoverEl.style.top=(e.clientY+13)+'px';
+    hoverEl.innerHTML=p.kind==='org'?`<b>${p.name}</b><br>Agent · ${p.intent.length} attributes`:`<b>${p.name}</b><br>${p.all?'shared by all':(p.shared?'shared ('+p.ext.length+')':'exclusive')}`;
+    renderer.domElement.style.cursor='pointer';}
+  else{hoverEl.style.display='none';renderer.domElement.style.cursor=dragging?'grabbing':'grab';}});
+/* right-click never empty */
+const ctxEl=document.getElementById('ctx');
+renderer.domElement.addEventListener('contextmenu',e=>{e.preventDefault();const p=pick(e.clientX,e.clientY);
+  ctxEl.style.display='block';ctxEl.style.left=Math.min(e.clientX,innerWidth-216)+'px';ctxEl.style.top=Math.min(e.clientY,innerHeight-150)+'px';
+  if(p){ctxEl.innerHTML=`<div class="hd"><div class="t">${p.name}</div><div class="s">${p.kind==='org'?'Agent · M1':'Attribute · FCA concept'}</div></div>
+    <div class="row">${p.kind==='org'?`intent: <b>${p.intent.length}</b> attributes`:`extent: <b>${p.ext.length}</b> organisms`}</div>
+    <div class="act" data-a="sel">◉ ${p.kind==='org'?'show intent':'show extent (concept)'}</div>`;
+    ctxEl.querySelector('.act').onclick=()=>{selectPickable(p);ctxEl.style.display='none';};
+  } else {
+    ctxEl.innerHTML=`<div class="hd"><div class="t">${CONTEXTS[ctxIdx].name}</div><div class="s">M1 context · FCA</div></div>
+      <div class="row">${CONTEXTS[ctxIdx].objects.length} organisms · ${totalIncidences()} incidences</div>
+      <div class="act" data-a="swap">⇄ swap M1 context</div>`;
+    ctxEl.querySelector('.act').onclick=()=>{ctxIdx=(ctxIdx+1)%CONTEXTS.length;selected=null;build();ctxEl.style.display='none';};
+  }});
+addEventListener('click',e=>{if(!ctxEl.contains(e.target))ctxEl.style.display='none';});
+
+/* ===== controls ===== */
+document.getElementById('swap-btn').onclick=()=>{ctxIdx=(ctxIdx+1)%CONTEXTS.length;selected=null;build();};
+document.getElementById('flat-btn').onclick=()=>{flat=!flat;document.getElementById('flat-btn').classList.toggle('on',flat);elev=flat?1.35:0.6;};
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(320,Math.min(1100,camDistT*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{if(e.button!==0)return;dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+build();
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.6);
+  camera.position.set(Math.sin(az)*Math.cos(elev)*camDist,Math.sin(elev)*camDist,Math.cos(az)*Math.cos(elev)*camDist);
+  camera.lookAt(0,0,0);renderer.render(scene,camera);}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

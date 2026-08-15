@@ -1,0 +1,160 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_253_fedora44_io_tuning_application.yml
+#  BahyWay.Ecosystem v4.0 — PB-253: apply FEDORA44_IO_TUNING_GUIDANCE.md
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_253_fedora44_io_tuning_application.yml -i "localhost," -c local -v [-e data_dir=/var/enkidb]
+#
+#  Context: a docs-sweep for the Architect's "get every manual procedure
+#  into a playbook" goal found docs/FEDORA44_IO_TUNING_GUIDANCE.md ends
+#  with a concrete "What to actually do next" checklist (noatime/ZFS
+#  atime=off, ZFS recordsize=1M + compression=lz4 on DATA_DIR) that had
+#  never been wrapped in a playbook — only step 3 of that checklist
+#  (running playbook_221's scale sweep) already existed as automation.
+#
+#  This playbook closes that gap for steps 1-2. Both are real host-level
+#  filesystem changes, so this playbook is deliberately conservative:
+#    - noatime is only applied via remount if it isn't already active
+#      (idempotent — checked via `findmnt`, not blindly re-mounted).
+#    - The ZFS dataset properties are only touched if DATA_DIR's
+#      filesystem actually IS ZFS (checked via `findmnt -no FSTYPE`) —
+#      on ext4/xfs/btrfs hosts, those tasks are skipped outright rather
+#      than failing, since the guidance doc itself frames the ZFS step as
+#      conditional ("if ZFS is already the Architect's chosen
+#      filesystem").
+#    - `zfs set` changes to recordsize/compression/atime are dataset
+#      *properties*, not destructive operations — safe to apply to a
+#      dataset already holding data (they affect newly-written blocks
+#      going forward, per ZFS's own documented semantics), and safe to
+#      re-run (idempotent).
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-253 | Apply Fedora44 I/O tuning guidance to DATA_DIR"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    data_dir:     "/var/enkidb"
+    session_date: "{{ ansible_date_time.date }}"
+    docs_dir:     "{{ forge_root }}/docs/SHEDU"
+    report_file:  "{{ docs_dir }}/PB253_IO_TUNING_{{ session_date }}.txt"
+    naru_journal: "{{ docs_dir }}/NARU_AUDIT_JOURNAL.md"
+
+  tasks:
+
+    - name: "PREP | Ensure docs/SHEDU directory exists"
+      become: false
+      ansible.builtin.file: { path: "{{ docs_dir }}", state: directory, mode: "0755" }
+
+    - name: "VERIFY | DATA_DIR exists"
+      ansible.builtin.stat:
+        path: "{{ data_dir }}"
+      register: dd_check
+
+    - name: "FAIL | DATA_DIR does not exist on this host"
+      ansible.builtin.fail:
+        msg: "{{ data_dir }} not found. Pass -e data_dir=<real path> or create it first."
+      when: not dd_check.stat.exists
+
+    - name: "DETECT | Filesystem type + current mount options for DATA_DIR"
+      ansible.builtin.command:
+        cmd: "findmnt -no FSTYPE,OPTIONS,SOURCE,TARGET --target {{ data_dir }}"
+      register: findmnt_out
+      changed_when: false
+
+    - name: "PARSE | Split findmnt fields"
+      ansible.builtin.set_fact:
+        fs_type:    "{{ findmnt_out.stdout.split()[0] }}"
+        mount_opts: "{{ findmnt_out.stdout.split()[1] }}"
+        mount_src:  "{{ findmnt_out.stdout.split()[2] }}"
+        mount_tgt:  "{{ findmnt_out.stdout.split()[3] }}"
+
+    - name: "STEP 1 | Remount with noatime (only if not already set)"
+      ansible.builtin.command:
+        cmd: "mount -o remount,noatime {{ mount_tgt }}"
+      register: noatime_result
+      changed_when: true
+      when: "'noatime' not in mount_opts"
+
+    - name: "INFO | noatime already active — nothing to do"
+      ansible.builtin.debug:
+        msg: "{{ mount_tgt }} already mounted with noatime (opts: {{ mount_opts }}) — step 1 is a no-op."
+      when: "'noatime' in mount_opts"
+
+    - name: "STEP 2 | ZFS dataset tuning (only if DATA_DIR is actually on ZFS)"
+      block:
+        - name: "ZFS | Resolve the dataset name owning DATA_DIR"
+          ansible.builtin.command:
+            cmd: "zfs list -H -o name {{ data_dir }}"
+          register: zfs_dataset
+          changed_when: false
+
+        - name: "ZFS | Set recordsize=1M"
+          ansible.builtin.command:
+            cmd: "zfs set recordsize=1M {{ zfs_dataset.stdout | trim }}"
+          register: zfs_recordsize
+          changed_when: "'cannot' not in zfs_recordsize.stderr"
+
+        - name: "ZFS | Set compression=lz4"
+          ansible.builtin.command:
+            cmd: "zfs set compression=lz4 {{ zfs_dataset.stdout | trim }}"
+          register: zfs_compression
+          changed_when: "'cannot' not in zfs_compression.stderr"
+
+        - name: "ZFS | Set atime=off"
+          ansible.builtin.command:
+            cmd: "zfs set atime=off {{ zfs_dataset.stdout | trim }}"
+          register: zfs_atime
+          changed_when: "'cannot' not in zfs_atime.stderr"
+
+        - name: "ZFS | Confirm applied properties"
+          ansible.builtin.command:
+            cmd: "zfs get recordsize,compression,atime {{ zfs_dataset.stdout | trim }}"
+          register: zfs_confirm
+          changed_when: false
+      when: fs_type == 'zfs'
+
+    - name: "INFO | Not ZFS — dataset tuning steps skipped (guidance doc frames these as ZFS-conditional)"
+      ansible.builtin.debug:
+        msg: "{{ data_dir }} is on {{ fs_type }}, not zfs — recordsize/compression/atime dataset tuning does not apply."
+      when: fs_type != 'zfs'
+
+    - name: "WRITE | Tuning report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-253 Fedora44 I/O Tuning
+          Date : {{ session_date }}
+          DATA_DIR: {{ data_dir }} (fs={{ fs_type }}, source={{ mount_src }})
+
+          Step 1 (noatime): {{ 'applied this run' if noatime_result is defined and noatime_result is changed else 'already active' }}
+          Step 2 (ZFS recordsize/compression/atime): {{ 'applied — see zfs get output in playbook run log' if fs_type == 'zfs' else 'skipped — not a ZFS filesystem' }}
+
+          Reference: docs/FEDORA44_IO_TUNING_GUIDANCE.md "What to actually
+          do next" checklist, steps 1-2. Step 3 (real-scale sweep) is
+          playbook_221_enkidb_core_deploy_and_scale_sweep.yml, run separately.
+
+    - name: "NARU | Record I/O tuning application"
+      become: false
+      ansible.builtin.lineinfile:
+        path: "{{ naru_journal }}"
+        line: "{{ session_date }} | PB-253 | Fedora44 I/O tuning applied | DATA_DIR={{ data_dir }} fs={{ fs_type }} | see {{ report_file }}"
+        create: true
+        mode: "0644"
+
+    - name: "DONE | PB-253 COMPLETE"
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════
+          PB-253  FEDORA44 I/O TUNING  APPLIED
+          DATA_DIR: {{ data_dir }} (fs={{ fs_type }})
+          noatime : {{ 'applied' if noatime_result is defined and noatime_result is changed else 'already active' }}
+          ZFS tuning: {{ 'applied' if fs_type == 'zfs' else 'skipped (not ZFS)' }}
+          Report: {{ report_file }}
+          Next: run playbook_221 for the real 100M/1B measurement these
+          changes are meant to speed up.
+          ═══════════════════════════════════════════════════

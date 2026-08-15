@@ -1,0 +1,100 @@
+# =============================================================================
+# PB-213 — Cross-host FLUSH + sync + verify for the real 2-VM CQRS split.
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# WHY THIS EXISTS: PB-211 was the standalone flush/sync/verify tool for
+# the topology that existed then -- Write and Read as two containers on
+# the SAME host (eriduous-vdi), synced with a local `podman unshare cp`.
+# PB-212 moved Write and Read onto two genuinely separate VMs
+# (enkidb-node-write, enkidb-node-read), which makes PB-211's local-copy
+# sync physically impossible -- there's no shared filesystem between two
+# VMs. This playbook is PB-211's real successor: same purpose (repeatable
+# post-ingest sync/verify without re-running a full ingestion), same
+# podman-unshare care around rootless-Podman UID remapping, but crossing
+# a real network boundary via `playbooks/tasks/enkiddb_cross_host_sync.
+# yml`'s control-node relay instead of a same-host file copy.
+#
+# PB-211 itself is kept in the repo, unmodified, as the historical record
+# of the single-host topology that was real and live-verified at the
+# time -- not deleted, per this ecosystem's "old state is never erased"
+# convention. Run PB-213, not PB-211, against the current topology.
+#
+# Runs BOTH databases in one pass -- EnkiDDB (with SEARCH, since it has a
+# real RAG index) and EnkiMDB (QUERY only -- no SEARCH command exists for
+# it, documented in EnkiMDB_MANUAL.md/GLOSSARY.md).
+#
+# USAGE (run from eriduous-vdi, the Ansible control node):
+#   ansible-playbook playbooks/playbook_213_cross_host_flush_sync_verify.yml
+#
+#   To prove a specific just-ingested EnkiDDB document landed (not stale
+#   data), override the search phrase with something in that document's
+#   real text body, not its filename:
+#   ansible-playbook playbooks/playbook_213_cross_host_flush_sync_verify.yml \
+#     -e enkiddb_search_phrase="<phrase in that document's body>"
+# =============================================================================
+---
+- name: "PB-213 | Cross-host FLUSH + sync + verify -- EnkiDDB and EnkiMDB"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    enkiddb_read_ip: "192.168.122.107"   # enkidb-node-read, per ansible/inventory.ini
+    enkiddb_search_phrase: "Onion Layers"  # PB-211's own proven-good default (see that
+                                            # playbook's header for why "WebGPU" was a
+                                            # false-negative trap) -- still applies here.
+
+  tasks:
+    - name: "0.1 | Confirm all four containers are up before touching anything"
+      ansible.builtin.command: podman ps --filter "name=enkiddb" --filter "name=enkimdb"
+      delegate_to: "{{ item }}"
+      loop:
+        - enkidb-node-write
+        - enkidb-node-read
+      register: containers_up
+      changed_when: false
+
+    - name: "0.2 | Show container status on each node"
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.stdout_lines }}"
+      loop: "{{ containers_up.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "1 | EnkiDDB -- FLUSH, sync, QUERY, SEARCH"
+      ansible.builtin.import_tasks: tasks/enkiddb_cross_host_sync.yml
+      vars:
+        enkiddb_db_label: "enkiddb"
+        enkiddb_write_volume: "enkiddb-write-data"
+        enkiddb_read_volume: "enkiddb-read-data"
+        enkiddb_write_host: "enkidb-node-write"
+        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_port: 7101
+        enkiddb_read_port: 7102
+        enkiddb_query_what: "meta.title, meta.collection"
+        enkiddb_query_where_attr: "meta.collection"
+        enkiddb_query_value: "general"
+        enkiddb_run_search: true
+
+    - name: "2 | EnkiMDB -- FLUSH, sync, QUERY only (no SEARCH -- no RAG index exists)"
+      ansible.builtin.import_tasks: tasks/enkiddb_cross_host_sync.yml
+      vars:
+        enkiddb_db_label: "enkimdb"
+        enkiddb_write_volume: "enkimdb-write-data"
+        enkiddb_read_volume: "enkimdb-read-data"
+        enkiddb_write_host: "enkidb-node-write"
+        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_port: 7201
+        enkiddb_read_port: 7202
+        enkiddb_query_what: "artifact.name, artifact.kind"
+        enkiddb_query_where_attr: "artifact.kind"
+        enkiddb_query_value: "Crate"
+        enkiddb_run_search: false
+
+    - name: "3 | What 'done' looks like"
+      ansible.builtin.debug:
+        msg:
+          - "Done means: EnkiDDB's QUERY step lists real document titles, its SEARCH step"
+          - "returns ranked hits for the configured phrase, and EnkiMDB's QUERY step lists"
+          - "real crate/playbook artifact rows. An empty result after a real sync (no"
+          - "Permission denied above) means re-check the swap actually landed on the"
+          - "correct node before assuming the data itself is missing."

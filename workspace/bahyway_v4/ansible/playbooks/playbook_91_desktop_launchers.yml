@@ -1,0 +1,256 @@
+---
+# =============================================================================
+# PLAYBOOK 91 — DubSar Theater desktop launchers (two sovereign icons)
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-25
+# Run ON eriduous-vdi:
+#   ansible-playbook ~/Forge/bahyway_v4/bahyway-ansible/playbooks/playbook_91_desktop_launchers.yml \
+#     -i "localhost," -c local -v
+#
+# 2026-07-22 REWRITE: this playbook was pointing both desktop icons at a
+# separate, standalone project (/home/bahyway/Forge/bahyway_v4/dubsar-theater/
+# godot/) with its own bundled Godot binary -- NOT this repo's git-tracked
+# project (workspace/bahyway_v4/godot/dubsar-theater/). That standalone copy
+# never received any of this repo's work (the login gate, the Choose-not-
+# Select rename, the real DB engine list, the BahyWay icon, the boot-splash
+# fix -- none of it), so clicking either desktop icon silently opened a
+# months-stale build showing the old, already-rejected EnkiDB Connector
+# Wizard. Also removed: the DUBSAR_LAUNCH_MODE env var + dubsar_proof.gd
+# patch mechanism, which patched a script that no longer exists in this
+# repo (superseded when the 3 competing wizards were consolidated) and which
+# pre-dates the mandatory login gate (scenes/login.tscn is now always
+# run/main_scene -- nothing should ever auto-skip past it).
+#
+# Both launchers below now do exactly one thing: invoke PB-226
+# (playbooks/playbook_226_launch_dubsar_godot_ide.yml) against the real
+# repo checkout, in run mode. This is deliberate -- PB-226 is the single
+# proven place Godot-binary discovery and launch-mode logic live; these
+# desktop icons must never duplicate that logic again, or they will drift
+# out of sync with it exactly as they just did.
+# =============================================================================
+- name: "Playbook 91 — DubSar Theater desktop launchers"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    repo_root:  "/home/bahyway/Forge/EnkiDB"
+    icons_dir:  "/home/bahyway/.local/share/icons/dubsar"
+    apps_dir:   "/home/bahyway/.local/share/applications"
+    desktop_dir: "/home/bahyway/Desktop"
+    scripts_dir: "/home/bahyway/Forge/bahyway_v4/dubsar-theater"
+
+  tasks:
+
+    # ── Create directories ────────────────────────────────────────────────────
+    - name: "Create icons directory"
+      ansible.builtin.file:
+        path: "{{ icons_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Create Desktop directory"
+      ansible.builtin.file:
+        path: "{{ desktop_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Create applications directory"
+      ansible.builtin.file:
+        path: "{{ apps_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── SVG Icon 1 — EnkiDB Connect (blue/gold) ───────────────────────────────
+    - name: "Write enkidb-connect icon SVG"
+      ansible.builtin.copy:
+        dest: "{{ icons_dir }}/enkidb-connect.svg"
+        mode: "0644"
+        content: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+            <!-- Background -->
+            <rect width="64" height="64" rx="12" fill="#0E1018"/>
+            <!-- Outer ring -->
+            <circle cx="32" cy="32" r="28" fill="none" stroke="#4A8FD4" stroke-width="1.5" opacity="0.6"/>
+            <!-- Middle ring -->
+            <circle cx="32" cy="32" r="20" fill="none" stroke="#4A8FD4" stroke-width="1" opacity="0.4"/>
+            <!-- Inner ring -->
+            <circle cx="32" cy="32" r="12" fill="none" stroke="#C8A228" stroke-width="1" opacity="0.6"/>
+            <!-- 7 spoke lines -->
+            <line x1="32" y1="32" x2="32" y2="4"  stroke="#4A8FD4" stroke-width="0.8" opacity="0.5"/>
+            <line x1="32" y1="32" x2="56" y2="17" stroke="#4A8FD4" stroke-width="0.8" opacity="0.5"/>
+            <line x1="32" y1="32" x2="56" y2="47" stroke="#4A8FD4" stroke-width="0.8" opacity="0.5"/>
+            <line x1="32" y1="32" x2="32" y2="60" stroke="#4A8FD4" stroke-width="0.8" opacity="0.5"/>
+            <line x1="32" y1="32" x2="8"  y2="47" stroke="#4A8FD4" stroke-width="0.8" opacity="0.5"/>
+            <line x1="32" y1="32" x2="8"  y2="17" stroke="#4A8FD4" stroke-width="0.8" opacity="0.5"/>
+            <line x1="32" y1="32" x2="32" y2="4"  stroke="#4A8FD4" stroke-width="0.8" opacity="0.5"/>
+            <!-- Particles on outer ring -->
+            <circle cx="32" cy="4"  r="2.5" fill="#4A8FD4"/>
+            <circle cx="56" cy="17" r="2"   fill="#4A8FD4" opacity="0.8"/>
+            <circle cx="56" cy="47" r="2.5" fill="#C8A228"/>
+            <circle cx="32" cy="60" r="2"   fill="#4A8FD4" opacity="0.8"/>
+            <circle cx="8"  cy="47" r="2.5" fill="#4A8FD4"/>
+            <circle cx="8"  cy="17" r="2"   fill="#C8A228" opacity="0.8"/>
+            <!-- Golden nucleus -->
+            <circle cx="32" cy="32" r="5" fill="#C8A228" opacity="0.3"/>
+            <circle cx="32" cy="32" r="3" fill="#C8A228"/>
+            <!-- Cuneiform glyph 𒆳 -->
+            <text x="32" y="36" font-size="10" text-anchor="middle"
+                  fill="#FFFFFF" font-family="serif" opacity="0.9">𒆳</text>
+          </svg>
+
+    # ── SVG Icon 2 — DubSar Theater (gold/purple) ─────────────────────────────
+    - name: "Write dubsar-theater icon SVG"
+      ansible.builtin.copy:
+        dest: "{{ icons_dir }}/dubsar-theater.svg"
+        mode: "0644"
+        content: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+            <!-- Background -->
+            <rect width="64" height="64" rx="12" fill="#0E100A"/>
+            <!-- Theater stage arch -->
+            <path d="M 8 52 Q 8 12 32 12 Q 56 12 56 52"
+                  fill="none" stroke="#C8A228" stroke-width="2" opacity="0.8"/>
+            <!-- Stage floor -->
+            <line x1="8" y1="52" x2="56" y2="52" stroke="#C8A228" stroke-width="1.5" opacity="0.6"/>
+            <!-- Curtain left -->
+            <path d="M 8 12 Q 14 20 10 52" fill="#9C80E8" opacity="0.4"/>
+            <!-- Curtain right -->
+            <path d="M 56 12 Q 50 20 54 52" fill="#9C80E8" opacity="0.4"/>
+            <!-- Light cone from top -->
+            <path d="M 32 12 L 16 52 L 48 52 Z" fill="#C8A228" opacity="0.08"/>
+            <!-- Heptagram star -->
+            <polygon points="32,20 34,28 42,28 36,33 38,41 32,36 26,41 28,33 22,28 30,28"
+                     fill="#C8A228" opacity="0.7"/>
+            <!-- Cuneiform glyph 𒁾 -->
+            <text x="32" y="50" font-size="10" text-anchor="middle"
+                  fill="#C8A228" font-family="serif" opacity="0.95">𒁾</text>
+          </svg>
+
+    # ── Launcher script 1 — EnkiDB Connect ───────────────────────────────────
+    # 2026-07-22: both launchers below delegate to PB-226 -- the one
+    # proven place Godot discovery + launch-mode logic lives. Login
+    # (scenes/login.tscn) is now the mandatory first screen regardless of
+    # which icon was clicked -- nothing may ever bypass it. The distinction
+    # between the two icons is restored via PB-226's dubsar_launch_mode var:
+    # EnkiDB Connect auto-opens the wizard once the Theater loads AFTER
+    # login succeeds (see theater_controller.gd's _ready()), instead of
+    # the old dubsar_proof.gd patch that skipped login outright.
+    - name: "Write enkidb-connect launcher script"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/launch-enkidb-connect.sh"
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # DubSar Theater — EnkiDB Connect launcher
+          # Delegates to PB-226; auto-opens the wizard after login succeeds.
+          # DUB.SAR 𒁾  BahyWay.Ecosystem v4.0
+          cd "{{ repo_root }}" || exit 1
+          exec bash -lc 'ansible-playbook playbooks/playbook_226_launch_dubsar_godot_ide.yml -e dubsar_launch_mode=enkidb_connect' \
+              > /tmp/dubsar-enkidb-connect-launcher.log 2>&1
+
+    # ── Launcher script 2 — DubSar Theater ───────────────────────────────────
+    - name: "Write dubsar-theater launcher script"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/launch-dubsar-theater.sh"
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # DubSar Theater — sovereign launcher
+          # Delegates to PB-226 against the real, git-tracked project.
+          # DUB.SAR 𒁾  BahyWay.Ecosystem v4.0
+          cd "{{ repo_root }}" || exit 1
+          exec bash -lc 'ansible-playbook playbooks/playbook_226_launch_dubsar_godot_ide.yml' \
+              > /tmp/dubsar-theater-launcher.log 2>&1
+
+    # ── .desktop file 1 — EnkiDB Connect ─────────────────────────────────────
+    - name: "Write EnkiDB Connect .desktop (applications)"
+      ansible.builtin.copy:
+        dest: "{{ apps_dir }}/dubsar-enkidb-connect.desktop"
+        mode: "0755"
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Type=Application
+          Name=𒆳 EnkiDB Connect
+          Comment=DubSar Theater — Connect to sovereign EnkiDB databases
+          Exec=/home/bahyway/Forge/bahyway_v4/dubsar-theater/launch-enkidb-connect.sh
+          Icon=/home/bahyway/.local/share/icons/dubsar/enkidb-connect.svg
+          Terminal=false
+          Categories=Development;Database;
+          StartupWMClass=Godot_v4.7-stable_linux.x86_64
+          Keywords=EnkiDB;HeptaScript;BahyWay;Sovereign;
+
+    - name: "Write EnkiDB Connect .desktop (Desktop)"
+      ansible.builtin.copy:
+        dest: "{{ desktop_dir }}/dubsar-enkidb-connect.desktop"
+        mode: "0755"
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Type=Application
+          Name=𒆳 EnkiDB Connect
+          Comment=DubSar Theater — Connect to sovereign EnkiDB databases
+          Exec=/home/bahyway/Forge/bahyway_v4/dubsar-theater/launch-enkidb-connect.sh
+          Icon=/home/bahyway/.local/share/icons/dubsar/enkidb-connect.svg
+          Terminal=false
+          Categories=Development;Database;
+          StartupWMClass=Godot_v4.7-stable_linux.x86_64
+          Keywords=EnkiDB;HeptaScript;BahyWay;Sovereign;
+
+    # ── .desktop file 2 — DubSar Theater ─────────────────────────────────────
+    - name: "Write DubSar Theater .desktop (applications)"
+      ansible.builtin.copy:
+        dest: "{{ apps_dir }}/dubsar-theater.desktop"
+        mode: "0755"
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Type=Application
+          Name=𒁾 DubSar Theater
+          Comment=DubSar Theater — AkkadianAOL · WAY v2.0 · Templates authoring
+          Exec=/home/bahyway/Forge/bahyway_v4/dubsar-theater/launch-dubsar-theater.sh
+          Icon=/home/bahyway/.local/share/icons/dubsar/dubsar-theater.svg
+          Terminal=false
+          Categories=Development;IDE;
+          StartupWMClass=Godot_v4.7-stable_linux.x86_64
+          Keywords=DubSar;AkkadianAOL;WAY;Templates;BahyWay;Sovereign;
+
+    - name: "Write DubSar Theater .desktop (Desktop)"
+      ansible.builtin.copy:
+        dest: "{{ desktop_dir }}/dubsar-theater.desktop"
+        mode: "0755"
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Type=Application
+          Name=𒁾 DubSar Theater
+          Comment=DubSar Theater — AkkadianAOL · WAY v2.0 · Templates authoring
+          Exec=/home/bahyway/Forge/bahyway_v4/dubsar-theater/launch-dubsar-theater.sh
+          Icon=/home/bahyway/.local/share/icons/dubsar/dubsar-theater.svg
+          Terminal=false
+          Categories=Development;IDE;
+          StartupWMClass=Godot_v4.7-stable_linux.x86_64
+          Keywords=DubSar;AkkadianAOL;WAY;Templates;BahyWay;Sovereign;
+
+    # ── Update desktop database ───────────────────────────────────────────────
+    - name: "Update desktop database"
+      ansible.builtin.shell: |
+        update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
+        gtk-update-icon-cache ~/.local/share/icons/ 2>/dev/null || true
+      changed_when: false
+
+    - name: "Sealed"
+      ansible.builtin.debug:
+        msg: >
+          Playbook 91 sealed.
+          Two sovereign launchers created, both now delegating to PB-226
+          (playbooks/playbook_226_launch_dubsar_godot_ide.yml) against the
+          real git-tracked project at {{ repo_root }}:
+            𒆳 EnkiDB Connect
+            𒁾 DubSar Theater
+          Icons on Desktop AND in applications menu.
+          Launch scripts at ~/Forge/bahyway_v4/dubsar-theater/
+          Every launch starts at the mandatory login popup -- no editor
+          chrome, no Godot boot splash, no stale standalone project.

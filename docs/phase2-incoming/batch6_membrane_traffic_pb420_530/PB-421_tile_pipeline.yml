@@ -1,0 +1,34 @@
+---
+# PB-421 · orthophoto → tiles → MBTiles · DRAFT (GL-NAV-001 Annex A)
+# The map is our own survey. No OSM. Ever.
+- name: "PB-421 · build the offline tile vault for Wadi al-Salam"
+  hosts: dubsar_workstation
+  vars:
+    survey_ortho: "/srv/najaf/ortho/wadi_al_salam_2026.tif"
+    tile_dir: "/srv/najaf/tiles"
+    mbtiles_out: "/srv/najaf/wadi_al_salam.mbtiles"
+    zoom: "14-21"
+  tasks:
+    - name: tooling (gdal for raster tiles)
+      ansible.builtin.dnf: {name: [gdal, python3-gdal], state: present}
+      become: yes
+
+    - name: raster tiles from the drone orthophoto
+      ansible.builtin.command:
+        cmd: "gdal2tiles.py -z {{ zoom }} --xyz {{ survey_ortho }} {{ tile_dir }}"
+        creates: "{{ tile_dir }}/14"
+
+    - name: pack tiles into MBTiles (single-file vault for the SD card)
+      ansible.builtin.command:
+        cmd: "gdal_translate -of MBTILES {{ survey_ortho }} {{ mbtiles_out }}"
+        creates: "{{ mbtiles_out }}"
+
+    - name: checksum the vault
+      ansible.builtin.command: "sha256sum {{ mbtiles_out }}"
+      register: vault_sum
+
+    - name: dual-seal note — the Architect signs by running, the journal witnesses
+      ansible.builtin.lineinfile:
+        path: /srv/najaf/NARU.journal
+        line: "{{ ansible_date_time.iso8601 }} · PB-421 · mbtiles sealed · {{ vault_sum.stdout }}"
+        create: yes

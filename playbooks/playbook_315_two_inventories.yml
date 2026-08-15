@@ -1,0 +1,40 @@
+---
+# 𒁾 PB-315 — THE TWO INVENTORIES (GL-OPS-002 K-2)
+# Clone by playbook, never by image: an image proves a machine once existed;
+# a playbook proves it can exist again. Asserts both streams define themselves.
+- name: PB-315 | Validate Uruk and Kish inventories
+  hosts: host_forge
+  gather_facts: false
+  vars:
+    required_vars: [bahyway_stream, bahyway_root, kaki_runs, enkidb_ports,
+                    ledger_dir, vault_pool, vault_datasets, signing_key]
+  tasks:
+    - name: Load both inventories' group_vars
+      ansible.builtin.include_vars: { file: "inventories/{{ item }}/group_vars/all.yml", name: "gv_{{ item }}" }
+      loop: [uruk, kish]
+
+    - name: Assert required variables present in both streams
+      ansible.builtin.assert:
+        that: "lookup('vars','gv_'+item.0)[item.1] is defined"
+        fail_msg: "{{ item.0 }} missing {{ item.1 }}"
+      loop: "{{ ['uruk','kish'] | product(required_vars) | list }}"
+
+    - name: Assert Kish is pinned (conservative stream builds only from a manifest)
+      ansible.builtin.assert:
+        that: gv_kish.pinned_manifest is defined
+        fail_msg: "Kish without a pinned Zagesi manifest is Uruk in a tie."
+
+    - name: Forbid image-derived hosts (marker written only by playbooks)
+      ansible.builtin.shell: |
+        for h in 192.168.122.101 192.168.122.107; do
+          ssh root@$h 'test -f /etc/bahyway_built_by_playbook' || {
+            echo "$h lacks playbook marker — image-derived host suspected"; exit 1; }
+        done
+      changed_when: false
+      failed_when: false   # advisory on first bring-up; flip to hard after PB-319/320
+
+    - name: Run-KAKI
+      ansible.builtin.shell: |
+        PREV=$(tail -n1 {{ hostvars[inventory_hostname].kaki_runs | default('/var/lib/bahyway/kaki/pb_runs.jsonl') }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-315\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"streams-self-defined\"}" >> /var/lib/bahyway/kaki/pb_runs.jsonl
+      become: true

@@ -1,0 +1,153 @@
+# =============================================================================
+# PB-223 — Real disk/LVM/swap diagnostics for the two CQRS node VMs
+# (enkidb-node-write, enkidb-node-read). BahyWay.Ecosystem v4.0 — 2026-07-21
+#
+# WHY THIS EXISTS: PB-221's real 10M-particle sync run hit a genuine
+# capacity wall -- enkidb-node-read's /tmp turned out to be tmpfs (RAM-
+# backed, ~978M cap tied to its 2GB memory allocation) and its root
+# partition is only 4.9GB with 2.1GB free, nowhere near enough for the
+# ~10GB (100M) or ~100GB (1B) a full materialization actually needs (real
+# measured cost: ~100 bytes/entity from PB-221's own numbers). Growing
+# these nodes' disks -- and adding swap if more RAM isn't available --
+# needs their REAL partition/filesystem/LVM layout first; guessing wrong
+# here risks a live resize going sideways. This playbook only READS state,
+# it changes nothing. It's step 1 of 2: the actual grow-disk/add-swap/
+# change-RAM playbook (reusable, run any time) gets designed from
+# whatever this one reports back for real, not from assumptions.
+#
+# IMPORTANT -- WHERE TO RUN THIS FROM: unlike PB-221 and friends, this
+# playbook must be invoked from a terminal ON THE HOST (enkilab), NOT from
+# eriduous-vdi. Confirmed live: `virsh` is not installed on eriduous-vdi
+# (it's a guest VM, not the hypervisor) -- ansible/inventory.ini's own
+# `eriduous-vdi ansible_connection=local` entry only works because
+# playbooks using it are meant to be run FROM eriduous-vdi's own shell;
+# this playbook's host-side play instead uses `localhost`+`connection:
+# local`, which means "run locally on whatever machine invoked
+# ansible-playbook" -- so it only sees the real qcow2 disk images and
+# virsh/qemu-img when that machine IS enkilab. The guest-side play (SSH to
+# enkidb-node-write/enkidb-node-read via the existing inventory groups)
+# works fine either way, since both eriduous-vdi and enkilab already have
+# SSH access to those two nodes -- but since the whole playbook runs from
+# wherever you invoke it, invoke it from enkilab so BOTH plays succeed.
+#
+# WHAT THIS PLAYBOOK DOES, in order (read-only, no changes made):
+#   A. (hosts: localhost/enkilab) For each node: resolve its real qcow2
+#      path via `virsh domblklist` (not assumed), `qemu-img info` (real
+#      virtual vs. actually-allocated size), and the host filesystem's
+#      real free space where that image lives (the true ceiling on how
+#      far it can grow).
+#   B. (hosts: enkidb_write, enkidb_read, over SSH) For each node: block
+#      device layout (lsblk), partition table (parted print), root
+#      filesystem type (df -Th), LVM physical/volume/logical volumes (pvs/
+#      vgs/lvs -- tells us whether growing needs pvresize+lvextend or a
+#      simpler growpart+resize2fs/xfs_growfs), current memory + active
+#      swap (free -h, swapon --show), and /etc/fstab (whether swap is
+#      already configured there).
+#
+# USAGE (from a terminal on enkilab, the physical host):
+#   ansible-playbook playbooks/playbook_223_cqrs_node_disk_diagnostics.yml
+# =============================================================================
+---
+- name: "PB-223a | Host-side real disk image info for both CQRS nodes (run this from enkilab)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    target_vms:
+      - enkidb-node-write
+      - enkidb-node-read
+
+  tasks:
+    - name: "Confirm virsh is available here -- if this fails, you're not running from enkilab"
+      ansible.builtin.command: virsh --version
+      register: virsh_check
+      changed_when: false
+
+    - name: "Gather real host-side disk info for each CQRS node"
+      ansible.builtin.include_tasks: tasks/cqrs_node_disk_host_diag.yml
+      loop: "{{ target_vms }}"
+      loop_control:
+        loop_var: cqrs_vm_name
+
+
+- name: "PB-223b | Guest-side real partition/filesystem/LVM/swap layout"
+  hosts: enkidb_write, enkidb_read
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: "Block device layout (lsblk)"
+      ansible.builtin.command: lsblk
+      register: lsblk_out
+      changed_when: false
+
+    - name: "Partition table (parted /dev/vda print)"
+      ansible.builtin.command: parted -s /dev/vda print
+      become: true
+      register: parted_out
+      changed_when: false
+      failed_when: false
+
+    - name: "Root filesystem type and size (df -Th)"
+      ansible.builtin.command: df -Th /
+      register: dfT_out
+      changed_when: false
+
+    - name: "LVM physical volumes (pvs) -- empty/failed is normal if this node isn't using LVM"
+      ansible.builtin.command: pvs
+      become: true
+      register: pvs_out
+      changed_when: false
+      failed_when: false
+
+    - name: "LVM volume groups (vgs)"
+      ansible.builtin.command: vgs
+      become: true
+      register: vgs_out
+      changed_when: false
+      failed_when: false
+
+    - name: "LVM logical volumes (lvs)"
+      ansible.builtin.command: lvs
+      become: true
+      register: lvs_out
+      changed_when: false
+      failed_when: false
+
+    - name: "Current memory + swap usage (free -h)"
+      ansible.builtin.command: free -h
+      register: free_out
+      changed_when: false
+
+    - name: "Active swap devices (swapon --show)"
+      ansible.builtin.command: swapon --show
+      register: swapon_out
+      changed_when: false
+      failed_when: false
+
+    - name: "/etc/fstab contents (is swap already configured there?)"
+      ansible.builtin.command: cat /etc/fstab
+      register: fstab_out
+      changed_when: false
+
+    - name: "== {{ inventory_hostname }} -- real disk / LVM / swap report =="
+      ansible.builtin.debug:
+        msg:
+          - "--- lsblk ---"
+          - "{{ lsblk_out.stdout_lines }}"
+          - "--- parted /dev/vda print ---"
+          - "{{ parted_out.stdout_lines | default(['(parted failed or /dev/vda not found -- see rc/stderr above if needed)']) }}"
+          - "--- df -Th / ---"
+          - "{{ dfT_out.stdout_lines }}"
+          - "--- pvs (LVM physical volumes) ---"
+          - "{{ pvs_out.stdout_lines | default(['(no LVM physical volumes, or lvm2 not installed)']) }}"
+          - "--- vgs (LVM volume groups) ---"
+          - "{{ vgs_out.stdout_lines | default(['(no LVM volume groups)']) }}"
+          - "--- lvs (LVM logical volumes) ---"
+          - "{{ lvs_out.stdout_lines | default(['(no LVM logical volumes)']) }}"
+          - "--- free -h ---"
+          - "{{ free_out.stdout_lines }}"
+          - "--- swapon --show ---"
+          - "{{ swapon_out.stdout_lines | default(['(no active swap right now)']) }}"
+          - "--- /etc/fstab ---"
+          - "{{ fstab_out.stdout_lines }}"

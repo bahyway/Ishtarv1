@@ -1,0 +1,37 @@
+---
+# PB-424 · position feed + vendored Leaflet UI · DRAFT (GL-NAV-001 Annex A)
+# The UI is a borrowed vessel: vendored files, local tiles only, no CDN, no OSM.
+- name: "PB-424 · deploy the :9000 feed and the local-only UI"
+  hosts: najaf_field_sbc
+  become: yes
+  vars:
+    ui_root: /srv/hendursaga/ui
+  tasks:
+    - name: UI root
+      ansible.builtin.file: {path: "{{ ui_root }}/vendor", state: directory}
+
+    - name: vendor Leaflet locally (copied from the sealed artifact store, NOT fetched at runtime)
+      ansible.builtin.copy: {src: "files/vendor/leaflet/", dest: "{{ ui_root }}/vendor/leaflet/"}
+
+    - name: guard — the tile-source list may contain only local endpoints
+      ansible.builtin.command: "grep -RniE 'openstreetmap|unpkg|tile\\.' {{ ui_root }} --include=*.html"
+      register: cdn_grep
+      failed_when: cdn_grep.rc == 0
+      changed_when: false
+      # If this task fails, an online map source crept into the vessel. Remove it. The edge
+      # where transparency ends is the edge this engine does not cross.
+
+    - name: feed service (hendursaga-feed · ws://:9000/position · schema v1 sealed)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/hendursaga-feed.service
+        content: |
+          [Unit]
+          Description=Hendursaga position feed (PB-424)
+          After=network.target
+          [Service]
+          ExecStart=/usr/local/bin/hendursaga-feed --port 9000 --mbtiles /srv/najaf/wadi_al_salam.mbtiles
+          Restart=always
+          WatchdogSec=30
+          [Install]
+          WantedBy=multi-user.target
+    - ansible.builtin.systemd: {name: hendursaga-feed, enabled: yes, state: started, daemon_reload: yes}

@@ -1,0 +1,109 @@
+# =============================================================================
+# PB-244 -- Naming Registry (Glossary Phase 1): naming-registry crate,
+# a structured, tested catalog of the Akkadian/Sumerian names used
+# across this ecosystem. BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHY THIS EXISTS: the Architect asked for a DubSar dashboard panel
+# letting new team members and authorized clients look up every
+# Akkadian deity/city/king/term used in this ecosystem, its category,
+# which domain(s) it plays a role in, and a real code snippet -- to
+# speed up onboarding comprehension of a very large, deeply-themed
+# codebase. This playbook lands Phase 1 only: the data layer. Phase 2
+# (playbook_245, a new DubSar "Glossary" tab via a naming-registry-gd
+# GDExtension bridge) and Phase 3 (playbook_246, kupru-passport-tier
+# redaction of internal fields for external/client viewers) are
+# explicitly deferred, not silently implied by this playbook.
+#
+# HONEST SCOPE: the seed registry (~22 entries) is manually compiled
+# from documents this build actually read, not the output of an
+# automated markdown-parsing pipeline -- this ecosystem's naming
+# decisions live as free-text prose across ~15+ SPEC-*/GL-*/PH-*/BC-*
+# tablets with no single consistent structured format, so a reliable
+# automated extractor is real follow-on engineering, not something to
+# fake with a brittle regex pass. Every entry's `crate_path` (where
+# one exists) is verified against the real filesystem by the crate's
+# own test suite -- see docs comment in
+# crates/naming-registry/src/lib.rs. This is NOT an exhaustive
+# registry: the workspace has ~250 crates and many more Akkadian names
+# than the ~22 seeded here; growing it is ongoing curation work.
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Running
+# this playbook = CSR-08 Architect confirmation of the Phase 1 data
+# model and seed entries.
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_244_naming_registry_glossary_phase1.yml
+# =============================================================================
+
+- name: "PB-244 -- Naming Registry (Glossary Phase 1)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    build_log: "/tmp/pb244_build.log"
+
+  tasks:
+    - name: "Confirm naming-registry is present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: file_checks
+      loop:
+        - "{{ repo_root }}/crates/naming-registry/Cargo.toml"
+        - "{{ repo_root }}/crates/naming-registry/src/lib.rs"
+
+    - name: "Fail clearly if any expected file is missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found. Run
+          `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- this is committed source, this playbook only builds
+          and verifies it.
+      loop: "{{ file_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "Confirm naming-registry is registered in the workspace Cargo.toml"
+      ansible.builtin.shell: >-
+        grep -q '"crates/naming-registry"' {{ repo_root }}/Cargo.toml
+      changed_when: false
+
+    - name: "cargo test naming-registry (release) -- includes the real crate_path existence check"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p naming-registry > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "cargo build --release for the whole workspace (confirm the new crate doesn't break anything else)"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release --workspace >> {{ build_log }} 2>&1
+      register: workspace_build_result
+      failed_when: workspace_build_result.rc != 0
+
+    - name: "Fail clearly if the full workspace build failed"
+      ansible.builtin.fail:
+        msg: "Workspace build failed (rc={{ workspace_build_result.rc }}). Full output: {{ build_log }}"
+      when: workspace_build_result.rc is defined and workspace_build_result.rc != 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-244 complete -- naming-registry's Phase 1 data layer is
+          real and tested: MythoCategory (Deity/City/KingOrEra/
+          GenericTerm), SystemRole (Engine/Calculus/AlertClass/
+          Pattern/Agent/Suite/Tool/Protocol/IndexStack/Language),
+          NamingStatus (SealedByLaw/ExistingUnverified/Reserved), and
+          ~22 manually-curated seed entries whose crate_path fields
+          are verified against the real filesystem. Full workspace
+          build stayed clean. Deferred: the DubSar Glossary panel
+          (Phase 2, playbook_245) and passport-tier redaction of
+          internal fields for external/client viewers (Phase 3,
+          playbook_246) -- neither is built by this playbook.

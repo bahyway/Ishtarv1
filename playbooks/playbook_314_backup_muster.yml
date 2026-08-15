@@ -1,0 +1,49 @@
+---
+# 𒁾 PB-314 — THE BACKUP MUSTER (GL-OPS-001 L-6, PIQITTU on ourselves)
+# A backup that has never been restored is a ghost backup: it passes every
+# payday and fails every muster. Restore = the seal's liveness (its eta).
+- name: PB-314 | Backup muster (restore drill)
+  hosts: vault_librarian
+  become: true
+  tasks:
+    - name: Select seals — newest and oldest retained (per tier)
+      ansible.builtin.shell: |
+        ls -t {{ vault_mount }}/enkidb/*.img.zst | sed -n '1p;$p'
+      register: seals
+      changed_when: false
+
+    - name: Restore each into scratch and time it (measured RTO)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        mkdir -p /scratch/muster && cd /scratch/muster
+        for f in {{ seals.stdout_lines | join(' ') }}; do
+          ssh-keygen -Y verify -f {{ signing_key }}.pub -I bahyway -n bahyway-seal \
+            -s $f.sig < $f
+          START=$(date +%s)
+          zstd -d < $f > restored.img
+          # smoke: mount ro and list ledger heads
+          LOOP=$(losetup -f --show restored.img)
+          mkdir -p /mnt/muster && mount -o ro $LOOP /mnt/muster
+          ls /mnt/muster | head -n 3
+          umount /mnt/muster && losetup -d $LOOP && rm restored.img
+          echo "RTO_SECONDS=$(( $(date +%s) - START )) SEAL=$f"
+        done
+      register: muster
+
+    - name: Flag ghost backups (seals with empty restore history)
+      ansible.builtin.shell: |
+        comm -23 <(ls {{ vault_mount }}/enkidb/*.img.zst | sort) \
+                 <(grep -o 'SEAL=[^ ]*' {{ bahyway_root }}/muster.log 2>/dev/null | cut -d= -f2 | sort) \
+          | tee {{ bahyway_root }}/ghost_backups.txt
+      changed_when: false
+      failed_when: false
+
+    - name: Append muster log
+      ansible.builtin.shell: |
+        mkdir -p {{ bahyway_root }}
+        echo "{{ muster.stdout | regex_replace('\n',' | ') }}" >> {{ bahyway_root }}/muster.log
+
+    - name: Run-KAKI (muster-KAKI with measured RTO)
+      ansible.builtin.shell: |
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-314\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"tier-mustered\",\"detail\":\"see muster.log\"}" >> {{ kaki_runs }}

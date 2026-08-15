@@ -1,0 +1,195 @@
+# =============================================================================
+# PB-216 — Populate EnkiMDB's catalog (crates + playbooks) and verify it
+# for real, on the new 2-VM CQRS split.
+# BahyWay.Ecosystem v4.0 — 2026-07-20
+#
+# CONTEXT: PB-213's cross-host sync has run against EnkiMDB several times
+# now (proving the sync/verify mechanics work end to end), but always
+# reported `FLUSHED:0` -- correctly, because nothing has ever actually
+# been scanned into EnkiMDB on the new split. `enkimdb-write` mounts the
+# repo checkout read-only at `/source` (same as `enkiddb-write`), and
+# needs an explicit `SCAN_CRATES:<path>`/`SCAN_PLAYBOOKS:<path>` command
+# before there's anything to FLUSH -- these are one-time catalog-scan
+# actions, not something PB-212's deploy or PB-213's sync automate (see
+# EnkiMDB_MANUAL.md's own "no deduplication across re-scans" caveat for
+# why this stays a deliberate, explicit action, not something re-run
+# automatically on every deploy).
+#
+# WHAT IT DOES:
+#   1. SCAN_CRATES against enkidb-node-write:7201 -- walks
+#      /source/workspace/bahyway_v4/crates/*/Cargo.toml (the path INSIDE
+#      the container, per its own /source mount, not the host path).
+#   2. SCAN_PLAYBOOKS against the same node -- walks /source/playbooks/*.yml.
+#   3. Imports tasks/enkiddb_cross_host_sync.yml for EnkiMDB (FLUSH ->
+#      cross-host sync via the control node -> podman unshare swap ->
+#      restorecon -> QUERY for real Crate rows).
+#   4. A second QUERY, direct in this playbook, for real Playbook rows --
+#      the shared task file only checks one WHERE value per call, and
+#      seeing both artifact kinds is the actual point of this pass.
+#
+# USAGE: ansible-playbook playbooks/playbook_216_populate_enkimdb_catalog.yml
+# =============================================================================
+---
+- name: "PB-216 | Populate + verify EnkiMDB's real crate/playbook catalog"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    enkiddb_read_ip: "192.168.122.107"
+
+  tasks:
+    - name: "0.1 | Confirm enkimdb-write is up on enkidb-node-write"
+      ansible.builtin.command: podman ps --filter "name=enkimdb-write"
+      delegate_to: enkidb-node-write
+      register: write_up
+      changed_when: false
+
+    - name: "0.2 | Show container status"
+      ansible.builtin.debug:
+        msg: "{{ write_up.stdout_lines }}"
+
+    - name: "1.1 | SCAN_CRATES -- walk /source/workspace/bahyway_v4/crates/*/Cargo.toml"
+      ansible.builtin.shell: |
+        python3 -c "
+        import socket, struct
+        s = socket.create_connection(('127.0.0.1', 7201), timeout=30)
+        payload = b'SCAN_CRATES:/source/workspace/bahyway_v4'
+        s.sendall(struct.pack('<I', len(payload)) + payload)
+        lb = s.recv(4)
+        n = struct.unpack('<I', lb)[0]
+        print(s.recv(n).decode())
+        "
+      delegate_to: enkidb-node-write
+      register: scan_crates_result
+      changed_when: true
+
+    - name: "1.2 | Show SCAN_CRATES result (expect OK:INGESTED:<count>)"
+      ansible.builtin.debug:
+        msg: "{{ scan_crates_result.stdout }}"
+
+    - name: "1.3 | SCAN_PLAYBOOKS -- walk /source/playbooks/*.yml"
+      ansible.builtin.shell: |
+        python3 -c "
+        import socket, struct
+        s = socket.create_connection(('127.0.0.1', 7201), timeout=30)
+        payload = b'SCAN_PLAYBOOKS:/source'
+        s.sendall(struct.pack('<I', len(payload)) + payload)
+        lb = s.recv(4)
+        n = struct.unpack('<I', lb)[0]
+        print(s.recv(n).decode())
+        "
+      delegate_to: enkidb-node-write
+      register: scan_playbooks_result
+      changed_when: true
+
+    - name: "1.4 | Show SCAN_PLAYBOOKS result (expect OK:INGESTED:<count>)"
+      ansible.builtin.debug:
+        msg: "{{ scan_playbooks_result.stdout }}"
+
+    - name: "2 | EnkiMDB -- FLUSH, cross-host sync, verify with a real Crate QUERY"
+      ansible.builtin.import_tasks: tasks/enkiddb_cross_host_sync.yml
+      vars:
+        enkiddb_db_label: "enkimdb"
+        enkiddb_write_volume: "enkimdb-write-data"
+        enkiddb_read_volume: "enkimdb-read-data"
+        enkiddb_write_host: "enkidb-node-write"
+        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_port: 7201
+        enkiddb_read_port: 7202
+        enkiddb_query_what: "artifact.name, artifact.kind, artifact.path"
+        enkiddb_query_where_attr: "artifact.kind"
+        enkiddb_query_value: "Crate"
+        enkiddb_run_search: false
+
+    # FIXED 2026-08-01 (found live: UnicodeDecodeError, invalid start byte
+    # 0xb5): this script used to blindly `.decode()` the whole response as
+    # UTF-8, copied from the SCAN_CRATES/SCAN_PLAYBOOKS scripts above --
+    # but those get a plain OK:/ERR: text reply, while QUERY: gets the
+    # fleet's real binary frame (see bin/enkidb-read-server/src/main.rs's
+    # own doc comment: [1B tag][u32 LE row_count], then per row [16B kaki]
+    # [u16 LE attr_count]{attrs}[u16 LE history_count]{history}, attr =
+    # [u8 name_len][name][u8 type_tag][value], trailer byte last). Task 2
+    # above (the shared tasks/enkiddb_cross_host_sync.yml) already knew
+    # this and deliberately stopped at the row_count without decoding --
+    # this task actually wants the row VALUES (name/kind/path), so it now
+    # parses the real frame instead of pretending it's plain text.
+    - name: "3.1 | A second real QUERY -- Playbook rows, not just Crate rows"
+      ansible.builtin.shell: |
+        python3 -c "
+        import socket, struct
+
+        def recv_exact(s, n):
+            buf = b''
+            while len(buf) < n:
+                chunk = s.recv(n - len(buf))
+                if not chunk:
+                    raise EOFError('connection closed early')
+                buf += chunk
+            return buf
+
+        def read_attr(body, pos):
+            name_len = body[pos]; pos += 1
+            name = body[pos:pos+name_len].decode('utf-8'); pos += name_len
+            type_tag = body[pos]; pos += 1
+            if type_tag == 0:
+                value = None
+            elif type_tag == 1:
+                value = bool(body[pos]); pos += 1
+            elif type_tag == 2:
+                value = struct.unpack_from('<q', body, pos)[0]; pos += 8
+            elif type_tag == 3:
+                value = struct.unpack_from('<d', body, pos)[0]; pos += 8
+            elif type_tag == 4:
+                tlen = struct.unpack_from('<I', body, pos)[0]; pos += 4
+                value = body[pos:pos+tlen].decode('utf-8', 'replace'); pos += tlen
+            elif type_tag == 5:
+                value = body[pos:pos+16].hex(); pos += 16
+            else:
+                value = '<unknown type_tag %d>' % type_tag
+            return name, value, pos
+
+        s = socket.create_connection(('{{ enkiddb_read_ip }}', 7202), timeout=10)
+        payload = b'QUERY:WHO T.E\nWHAT E[artifact.name, artifact.kind, artifact.path]\nWHERE E[artifact.kind] = \"Playbook\"\nHOW_MUCH LIMIT 20'
+        s.sendall(struct.pack('<I', len(payload)) + payload)
+        flen = struct.unpack('<I', recv_exact(s, 4))[0]
+        body = recv_exact(s, flen)
+        pos = 0
+        tag = body[pos]; pos += 1
+        if tag == 0x01:
+            mlen = struct.unpack_from('<I', body, pos)[0]; pos += 4
+            print('ERROR: ' + body[pos:pos+mlen].decode('utf-8', 'replace'))
+        else:
+            row_count = struct.unpack_from('<I', body, pos)[0]; pos += 4
+            print('row_count=%d' % row_count)
+            for _ in range(row_count):
+                kaki = body[pos:pos+16]; pos += 16
+                attr_count = struct.unpack_from('<H', body, pos)[0]; pos += 2
+                attrs = {}
+                for _ in range(attr_count):
+                    name, value, pos = read_attr(body, pos)
+                    attrs[name] = value
+                history_count = struct.unpack_from('<H', body, pos)[0]; pos += 2
+                for _ in range(history_count):
+                    pos += 4
+                    h_attr_count = struct.unpack_from('<H', body, pos)[0]; pos += 2
+                    for _ in range(h_attr_count):
+                        _, _, pos = read_attr(body, pos)
+                print('kaki=%s %s' % (kaki.hex(), attrs))
+        "
+      register: playbook_query_result
+      changed_when: false
+
+    - name: "3.2 | Show real Playbook rows"
+      ansible.builtin.debug:
+        msg: "{{ playbook_query_result.stdout }}"
+
+    - name: "4 | What 'done' looks like"
+      ansible.builtin.debug:
+        msg:
+          - "Done means: 1.2/1.4 show real OK:INGESTED:<n> counts (not 0),"
+          - "the imported task file's QUERY step lists real crate rows"
+          - "(artifact.name/artifact.kind/artifact.path), and 3.2 lists real"
+          - "playbook rows the same way. This is EnkiMDB's real EAV schema --"
+          - "flat artifact.* attributes, no DocOrbit namespace, no RAG/SEARCH --"
+          - "see docs/ARCHITECT_DESIGN_ENKIDDB_ENKIMDB_PODMAN.md section 3.3"
+          - "for the full schema explanation."

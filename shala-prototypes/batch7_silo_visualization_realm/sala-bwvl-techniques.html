@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala · naṣāru — the BWVL techniques hub (EnkiDDB + EnkiMDB)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{--void:#04060e;--ink:#eaf0fb;--ink-dim:#9aa6c8;--ink-faint:#5a6488;
+--gold:#E3B458;--signal:#4fd6c4;--line:#1c2440;--ddb:#e3b458;--mdb:#8f9ce8;
+--fact:#8fe6b0;--weak:#e3b458;--ghost:#b083e0;
+--f-display:'Fraunces',Georgia,serif;--f-body:'Inter',system-ui,sans-serif;--f-data:'IBM Plex Mono',monospace;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit}
+#stage{position:fixed;inset:0;cursor:grab}#stage:active{cursor:grabbing}
+.hud{position:fixed;z-index:5}
+.hud-title{top:12px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:18px;letter-spacing:.09em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:9px;letter-spacing:.14em;color:var(--ink-faint);margin-top:4px}
+.panel{background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:8px;padding:11px 13px;backdrop-filter:blur(10px)}
+.hud-list{top:70px;left:14px;width:216px;font-family:var(--f-data);max-height:calc(100vh - 150px);overflow:auto}
+.hud-list h3{font-size:9px;letter-spacing:.12em;color:var(--ink-faint);text-transform:uppercase;margin:8px 0 4px}
+.hud-list h3.ddb{color:var(--ddb)} .hud-list h3.mdb{color:var(--mdb)}
+.tech{padding:6px 8px;border-radius:5px;margin:2px 0;cursor:pointer;font-size:10.5px;color:var(--ink-dim);border:1px solid transparent;display:flex;align-items:center;gap:7px}
+.tech:hover{background:rgba(79,214,196,.07)}
+.tech.active{background:rgba(79,214,196,.14);border-color:var(--signal);color:var(--ink)}
+.tech .g{font-size:12px;width:15px;text-align:center}
+.hud-crumb{top:70px;left:50%;transform:translateX(-50%);font-family:var(--f-data);font-size:10px;background:rgba(6,10,24,.85);border:1px solid var(--line);border-radius:6px;padding:6px 12px;display:flex;gap:6px;align-items:center}
+.hud-crumb .seg{cursor:pointer;color:var(--ink-dim)}.hud-crumb .seg:hover{color:var(--signal)}.hud-crumb .seg.here{color:var(--gold)}.hud-crumb .arr{color:var(--ink-faint)}
+.hud-desc{bottom:16px;left:14px;width:320px;font-family:var(--f-data);display:none}
+.hud-desc .it{font-family:var(--f-display);font-size:15px;color:var(--gold)}
+.hud-desc .ik{font-size:9px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.1em;margin:2px 0 6px}
+.hud-desc .ib{font-size:10.5px;color:var(--ink-dim);line-height:1.55}
+.hud-desc .ib b{color:var(--ink)}
+.hud-desc button{margin-top:8px;background:rgba(79,214,196,.14);border:1px solid var(--signal);color:var(--signal);border-radius:5px;padding:6px 12px;font-size:10px;cursor:pointer;font-family:var(--f-data)}
+.hud-ctl{bottom:16px;right:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;font-family:var(--f-data)}
+.hud-ctl .row{display:flex;gap:6px}
+.hud-ctl button{background:rgba(6,10,24,.9);border:1px solid var(--line);color:var(--ink);border-radius:5px;font-size:10px;padding:7px 12px;cursor:pointer}
+.hud-ctl button.on{background:var(--signal);color:#04231f;border-color:var(--signal)}
+.hud-ctl .hint{font-size:9px;color:var(--ink-faint);max-width:210px;text-align:right;line-height:1.5}
+.hud-hover{position:fixed;font-family:var(--f-data);font-size:10px;background:rgba(4,7,18,.96);border:1px solid var(--signal);border-radius:5px;padding:5px 9px;color:var(--ink);pointer-events:none;z-index:9;display:none;line-height:1.5}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(4,6,14,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8.5px;color:var(--ink-faint);padding:4px 16px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="hud hud-title"><h1><span class="glyph">&#x12079;</span> na&#7779;&#257;ru <em>&mdash; BWVL TECHNIQUES</em></h1>
+<div class="sub">THE GENERAL PATTERN &middot; EnkiDDB (PATTERNS) + EnkiMDB (GENEALOGY) &middot; FLY TO ANY TECHNIQUE &middot; DESCEND INTO IT &middot; CLIMB BACK</div></div>
+
+<div class="hud hud-list panel">
+  <h3 class="ddb">&#9670; EnkiDDB · patterns instrument</h3>
+  <div id="list-ddb"></div>
+  <h3 class="mdb">&#9670; EnkiMDB · NUZI genealogy</h3>
+  <div id="list-mdb"></div>
+</div>
+
+<div class="hud hud-crumb" id="crumb"><span class="seg here">hub</span></div>
+<div class="hud hud-desc panel" id="desc"></div>
+<div class="hud-hover" id="hover"></div>
+
+<div class="hud hud-ctl">
+  <div class="hint">drag = orbit · scroll = zoom · click a technique (list or in view) → fly in + open</div>
+  <div class="row"><button id="hub-btn">&#9664; hub</button><button id="spin-btn" class="on">ORBIT</button></div>
+</div>
+
+<footer>Way-of-Work rule 5 &mdash; HTML prototype (Sala rehearsal); production body Godot/WGPU (DubSar Theater). The GENERAL PATTERN: every BWVL technique as a navigable icon-symbol under EnkiDDB (Graph-RAG patterns) &amp; EnkiMDB (NUZI genealogy). Once it works for medical data it works for ANY enterprise data. Fly (bird's-eye) + descend (Hubble) per GL-VIZ-006. GOLDEN = REAL Merck data. Pending CSR-08.</footer>
+
+<script>
+/* ===== ALL STATE UP FRONT (no TDZ) ===== */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let az=0.25, elev=0.18, camDist=1000, camDistT=1000;
+let ctx=0,cty=0,ctz=0, tgx=0,tgy=0,tgz=0;   // camera target (current, target)
+let dragging=false, lx=0, ly=0, dragMoved=false, spin=!reduced;
+let mode='hub';           // 'hub' | 'focus'
+let current=null;         // focused technique
+let hoverParts=[];        // hoverable particles in focus demos
+
+/* ===== three.js ===== */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(58,2,0.1,9000); camera.position.set(0,0,1000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x04060e,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8090c0,0.9));
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.5)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+
+let objs=[];
+function clearScene(){objs.forEach(o=>scene.remove(o));objs=[];hoverParts=[];}
+function addObj(o){scene.add(o);objs.push(o);return o;}
+function cloud(center,n,spread,color,bright){
+  const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+  for(let i=0;i<n;i++){const r=spread*Math.pow(Math.random(),0.6),th=Math.random()*6.28,ph=Math.acos(2*Math.random()-1);
+    pos[i*3]=center.x+r*Math.sin(ph)*Math.cos(th);pos[i*3+1]=center.y+r*Math.sin(ph)*Math.sin(th);pos[i*3+2]=center.z+r*Math.cos(ph);
+    const b=bright*(0.45+Math.random()*0.55);col[i*3]=color[0]*b;col[i*3+1]=color[1]*b;col[i*3+2]=color[2]*b;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  return addObj(new THREE.Points(g,new THREE.PointsMaterial({size:2.8,vertexColors:true,transparent:true,opacity:0.9,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+}
+function filament(A,B,n,spread,color,bright){
+  const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+  const mid={x:(A.x+B.x)/2,y:(A.y+B.y)/2-24,z:(A.z+B.z)/2};
+  for(let i=0;i<n;i++){const t=Math.random();
+    pos[i*3]=A.x*(1-t)*(1-t)+mid.x*2*(1-t)*t+B.x*t*t+(Math.random()-.5)*spread;
+    pos[i*3+1]=A.y*(1-t)*(1-t)+mid.y*2*(1-t)*t+B.y*t*t+(Math.random()-.5)*spread;
+    pos[i*3+2]=A.z*(1-t)*(1-t)+mid.z*2*(1-t)*t+B.z*t*t+(Math.random()-.5)*spread;
+    const b=bright*(0.5+Math.random()*0.5);col[i*3]=color[0]*b;col[i*3+1]=color[1]*b;col[i*3+2]=color[2]*b;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  return addObj(new THREE.Points(g,new THREE.PointsMaterial({size:2.2,vertexColors:true,transparent:true,opacity:0.75,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+}
+function label(center,text,color,sc){const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+  g.font='600 24px "IBM Plex Mono"';g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';g.shadowColor='rgba(0,0,0,.95)';g.shadowBlur=8;
+  g.fillText(text,256,34);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));
+  s.scale.set(sc||150,(sc||150)/8,1);s.position.set(center.x,center.y+22,center.z);return addObj(s);}
+function rgb(c){return`rgb(${c[0]*255|0},${c[1]*255|0},${c[2]*255|0})`;}
+
+/* ===== tribes / colours ===== */
+const TRIBES=[{name:'Clostridial',hue:[0.45,0.84,0.62]},{name:'Bacillus',hue:[0.90,0.63,0.32]},{name:'Fungal',hue:[0.60,0.66,0.95]},{name:'Vascular',hue:[0.86,0.5,0.62]}];
+function shade(base,f){return[Math.min(1,base[0]*f+0.05),Math.min(1,base[1]*f+0.05),Math.min(1,base[2]*f+0.05)];}
+
+/* ===== THE TECHNIQUE CATALOG (the general pattern) ===== */
+const C={fact:[0.56,0.90,0.62],weak:[0.89,0.70,0.35],ghost:[0.69,0.51,0.88],rec:[0.7,0.8,1.0]};
+const TECH=[
+  /* --- EnkiDDB: patterns instrument --- */
+  {id:'density', db:'ddb', glyph:'✧', name:'Density Field', anchor:{x:-320,y:120,z:0},
+   blurb:'The bird\u2019s-eye. A billion GOLDEN particles read AS A FIELD \u2014 tribes, densities, voids \u2014 by looking, not clicking. The whole, at a glance.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};
+     for(let t=0;t<TRIBES.length;t++){const a=t/TRIBES.length*6.28;const cc={x:A.x+Math.cos(a)*80,y:A.y+Math.sin(a)*55,z:Math.sin(a)*30};
+       const g=cloud(cc,1500,55,TRIBES[t].hue,0.7);}
+     label(A,'Density Field · read the whole','#eaf0fb');}},
+  {id:'filament', db:'ddb', glyph:'⟿', name:'Filament Relations', anchor:{x:-120,y:150,z:-40},
+   blurb:'An edge is NOT a line \u2014 it is a filament of particles, and those particles ARE the GOLDEN records that ground the relation. presents_in, discriminates.',
+   build(o){const A={x:o.x-90,y:o.y,z:o.z},B={x:o.x+90,y:o.y,z:o.z};
+     cloud(A,700,26,TRIBES[0].hue,0.7);label(A,'Sudden death','#8fd0c8');
+     cloud(B,700,26,TRIBES[1].hue,0.7);label(B,'Blackleg','#e8d0a0');
+     filament(A,B,1400,7,C.fact,0.9);label({x:o.x,y:o.y+40,z:o.z},'presents_in (= records)','#8fe6b0');}},
+  {id:'colourid', db:'ddb', glyph:'◑', name:'ColourID Fingerprint', anchor:{x:120,y:150,z:-40},
+   blurb:'Root HUE = tribe/lineage; unique SHADE-DEGREE = the individual particle. A per-particle visual fingerprint \u2014 distinguishable by eye at billion-scale WITHOUT reading KAKI. Hover to prove it.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};
+     for(let t=0;t<TRIBES.length;t++){const a=t/TRIBES.length*6.28;const cc={x:A.x+Math.cos(a)*70,y:A.y+Math.sin(a)*48,z:0};
+       // individual hoverable particles with unique shade-degree
+       for(let k=0;k<10;k++){const sd=0.5+Math.random()*0.5;const p={x:cc.x+(Math.random()-.5)*36,y:cc.y+(Math.random()-.5)*36,z:(Math.random()-.5)*20};
+         cloud(p,60,7,shade(TRIBES[t].hue,sd),0.95);hoverParts.push({x:p.x,y:p.y,z:p.z,tribe:TRIBES[t].name,sd:sd.toFixed(3)});}
+       label(cc,TRIBES[t].name,rgb(TRIBES[t].hue),120);}
+     label({x:A.x,y:A.y+70,z:0},'hue = tribe · shade = the one','#eaf0fb');}},
+  {id:'federation', db:'ddb', glyph:'◎', name:'Federation of BIGRINGs', anchor:{x:320,y:110,z:0},
+   blurb:'Each tribe a BIGRING in its root colour-band; CrossTribe-KAKI (7D near-adjacency) federates them. Read tribe-families by band, relations by the between-ring structure.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};const centers=[];
+     for(let t=0;t<TRIBES.length;t++){const a=t/TRIBES.length*6.28;const cc={x:A.x+Math.cos(a)*95,y:A.y+Math.sin(a)*65,z:Math.sin(a)*20};centers.push(cc);
+       for(let k=0;k<600;k++){const ang=k/600*6.28;const rr=44+Math.random()*8;
+         cloud({x:cc.x+Math.cos(ang)*rr,y:cc.y+Math.sin(ang)*rr*0.8,z:Math.sin(ang*2)*10},2,0,shade(TRIBES[t].hue,0.6+Math.random()*0.4),0.9);}
+       label(cc,TRIBES[t].name,rgb(TRIBES[t].hue),110);}
+     // crosstribe links
+     for(let i=0;i<centers.length;i++)for(let j=i+1;j<centers.length;j++){filament(centers[i],centers[j],120,4,[0.42,0.53,0.75],0.4);}
+     label({x:A.x,y:A.y+110,z:0},'Federation · CrossTribe-KAKI','#eaf0fb');}},
+  {id:'convergence', db:'ddb', glyph:'⤳', name:'Convergence Query', anchor:{x:-120,y:-80,z:40},
+   blurb:'Symptom-first: observed signs send filaments to every disease they ground; disease-knots rank by weighted convergence. The discriminating sign is the finding.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};
+     const syms=[{n:'Sudden death',y:60},{n:'Crepitant swelling',y:0},{n:'High fever',y:-60}];
+     const dis=[{n:'Blackleg',w:[0.8,0.97,0.6],x:120,col:C.fact},{n:'Malignant edema',w:[0.7,0.7,0.65],x:120,y:-70,col:C.weak}];
+     const sp=syms.map(s=>{const p={x:A.x-110,y:A.y+s.y,z:0};cloud(p,300,16,[0.31,0.84,0.77],0.8);label(p,s.n,'#8fd0c8',120);return p;});
+     dis.forEach((d,di)=>{const p={x:A.x+d.x,y:A.y+(d.y||40)-di*0,z:0};const dp={x:A.x+110,y:A.y+(di?-60:60),z:0};
+       cloud(dp,Math.round((d.w.reduce((a,b)=>a+b,0))*260),20,d.col,0.9);label(dp,d.n,rgb(d.col),130);
+       sp.forEach((s,si)=>{if(d.w[si]>0.3)filament(s,dp,Math.round(d.w[si]*400),6,d.col,d.w[si]);});});
+     label({x:A.x,y:A.y+95,z:0},'Convergence · signs → disease','#eaf0fb');}},
+  {id:'honesty', db:'ddb', glyph:'⊘', name:'Four-Outcome Honesty', anchor:{x:120,y:-80,z:40},
+   blurb:'BWVL never fakes a link. FACT = grounded, bright & solid. WEAK = thin. GHOST = unproven, dim (\u201cneeds research\u201d). NONE = absence shown, dark. The contract that separates BWVL from every KG.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};const outs=[['FACT',C.fact,1.0,60],['WEAK',C.weak,0.6,20],['GHOST',C.ghost,0.35,-20],['NONE',[0.22,0.25,0.4],0.15,-60]];
+     outs.forEach(ot=>{const p={x:A.x,y:A.y+ot[3],z:0};cloud(p,Math.round(ot[2]*500)+60,ot[0]==='NONE'?10:18,ot[1],ot[2]);label({x:A.x+150,y:A.y+ot[3],z:0},ot[0],rgb(ot[1]),120);});
+     label({x:A.x,y:A.y+95,z:0},'Honesty contract','#eaf0fb');}},
+  {id:'kaki', db:'ddb', glyph:'◆', name:'KAKI Anatomy', anchor:{x:-320,y:-100,z:0},
+   blurb:'Descend to a single GOLDEN particle: its immutable KAKI v4.0 identity, its EAV Mandatory/Optional attributes (each value carrying score-concept + fuzzy weight + phase), its ColourID, its links. The particle IS the meaning.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};cloud(A,1200,40,C.fact,0.85);label(A,'GOLDEN particle','#e8ecf6');
+     const facets=[['Identity-KAKI',C.rec],['EAV mandatory',C.fact],['EAV optional',C.weak],['ColourID',TRIBES[0].hue],['links',C.fact]];
+     facets.forEach((f,i)=>{const a=i/facets.length*6.28;const p={x:A.x+Math.cos(a)*95,y:A.y+Math.sin(a)*65,z:Math.sin(a)*20};
+       cloud(p,300,15,f[1],0.85);filament(A,p,150,5,f[1],0.5);label(p,f[0],rgb(f[1]),120);});
+     label({x:A.x,y:A.y-95,z:0},'KAKI + EAV = identity','#eaf0fb');}},
+  {id:'cascade', db:'ddb', glyph:'⊟', name:'Depth Cascade', anchor:{x:320,y:-100,z:0},
+   blurb:'The zoom IS the read-path: far out = pure density (no labels); descend and names emerge, then edge relationship-labels, then the fully traceable graph + image. Cosmic web and labeled graph are the SAME thing at different depths.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};const depths=['D1 density','D3 filament','D5 named','D7 particle'];
+     depths.forEach((dn,i)=>{const p={x:A.x+(i-1.5)*72,y:A.y,z:0};const bright=0.5+i*0.15;
+       cloud(p,400-i*60,26-i*4,shade(TRIBES[0].hue,0.5+i*0.15),bright);
+       label({x:p.x,y:A.y-46,z:0},dn,i>=2?'#eaf0fb':'#5a6488',110);
+       if(i>0)filament({x:A.x+(i-2.5)*72,y:A.y,z:0},p,120,4,[0.5,0.7,0.7],0.4);});
+     label({x:A.x,y:A.y+60,z:0},'labels emerge by depth','#eaf0fb');}},
+  /* --- EnkiMDB: NUZI genealogy --- */
+  {id:'nuzi', db:'mdb', glyph:'⑃', name:'NUZI Genealogy', anchor:{x:0,y:20,z:260},
+   blurb:'EnkiMDB holds the NUZI Tribe Genealogy Registry \u2014 the lineage tree. Each tribe\u2019s Birth Root Shade traced to its ancestry; provenance of every category. This is where a particle\u2019s origin & tribe are recovered.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};
+     const root={x:A.x,y:A.y+90,z:A.z};cloud(root,500,22,[0.8,0.82,0.9],0.7);label(root,'Root lineage','#c8d0e8',120);
+     TRIBES.forEach((t,i)=>{const p={x:A.x+(i-1.5)*70,y:A.y-20,z:A.z};cloud(p,400,18,t.hue,0.85);filament(root,p,200,5,t.hue,0.5);label(p,t.name,rgb(t.hue),110);
+       // children (sub-families)
+       for(let k=0;k<2;k++){const cp={x:p.x+(k-0.5)*36,y:A.y-90,z:A.z};cloud(cp,150,10,shade(t.hue,0.7),0.8);filament(p,cp,90,4,t.hue,0.4);}});
+     label({x:A.x,y:A.y+130,z:A.z},'NUZI · tribe genealogy','#eaf0fb');}},
+  {id:'provenance', db:'mdb', glyph:'⟲', name:'Origin / Birth Root Shade', anchor:{x:-220,y:-10,z:230},
+   blurb:'Right-click any particle \u2192 the Event-KAKI chain reveals its immutable Birth Root Shade: the exact hue-degree it was born with, and thus its origin tribe \u2014 even if its surface now shows a different state-colour.',
+   build(o){const A={x:o.x,y:o.y,z:o.z};
+     const now={x:A.x-70,y:A.y,z:A.z};cloud(now,500,22,C.fact,0.85);label(now,'now: GOLDEN','#8fe6b0',110);
+     const birth={x:A.x+70,y:A.y,z:A.z};cloud(birth,500,22,shade(TRIBES[0].hue,0.5),0.85);label(birth,'birth: root shade','#8fd0a8',120);
+     filament(now,birth,300,6,[0.6,0.7,0.85],0.5);label({x:A.x,y:A.y+55,z:A.z},'Event-KAKI reveals origin','#eaf0fb');}},
+];
+
+/* ===== HUB ===== */
+const hubIcons=[];
+function buildHub(){
+  clearScene();mode='hub';current=null;hubIcons.length=0;
+  // two DB anchors
+  const ddbC={x:0,y:150,z:-140},mdbC={x:0,y:0,z:260};
+  cloud(ddbC,900,60,[0.89,0.70,0.35],0.35);label(ddbC,'EnkiDDB · patterns',rgb([0.89,0.70,0.35]),200);
+  cloud(mdbC,700,55,[0.56,0.61,0.91],0.32);label(mdbC,'EnkiMDB · NUZI genealogy',rgb([0.56,0.61,0.91]),240);
+  // each technique as an icon (particle assembly) at its anchor
+  TECH.forEach(t=>{
+    const a=t.anchor;const c=t.db==='ddb'?[0.89,0.70,0.35]:[0.56,0.61,0.91];
+    cloud(a,320,26,c,0.6);
+    label(a,t.glyph+' '+t.name,rgb(c),150);
+    hubIcons.push({t,center:{x:a.x,y:a.y,z:a.z},radius:60});
+  });
+  setCrumb([{name:'hub'}]);
+  document.getElementById('desc').style.display='none';
+  document.querySelectorAll('.tech').forEach(el=>el.classList.remove('active'));
+  flyTo(0,60,60,1050);
+}
+
+/* ===== FOCUS a technique: fly camera to it + open its demo ===== */
+function focusTech(t){
+  clearScene();mode='focus';current=t;
+  // render the demo centered at origin for a clean read
+  const o={x:0,y:0,z:0};
+  t.build(o);
+  setCrumb([{name:'hub',hub:true},{name:t.name}]);
+  // desc panel
+  const d=document.getElementById('desc');d.style.display='block';
+  d.innerHTML=`<div class="it">${t.glyph} ${t.name}</div><div class="ik">${t.db==='ddb'?'EnkiDDB · patterns':'EnkiMDB · genealogy'} · BWVL technique</div>
+    <div class="ib">${t.blurb}</div><button id="desc-back">◄ back to hub</button>`;
+  document.getElementById('desc-back').onclick=buildHub;
+  document.querySelectorAll('.tech').forEach(el=>el.classList.toggle('active',el.dataset.id===t.id));
+  flyTo(0,0,0,430);
+}
+function flyTo(x,y,z,dist){tgx=x;tgy=y;tgz=z;camDistT=dist;}
+
+/* ===== breadcrumb ===== */
+function setCrumb(items){const c=document.getElementById('crumb');
+  c.innerHTML=items.map((it,i)=>`<span class="seg${i===items.length-1?' here':''}" data-hub="${it.hub?1:0}">${it.name}</span>`+(i<items.length-1?'<span class="arr">›</span>':'')).join('');
+  c.querySelectorAll('.seg').forEach(s=>{s.onclick=()=>{if(s.dataset.hub==='1'||s.textContent==='hub')buildHub();};});}
+
+/* ===== technique list panel ===== */
+function fillList(){
+  const ld=document.getElementById('list-ddb'),lm=document.getElementById('list-mdb');
+  TECH.forEach(t=>{const el=document.createElement('div');el.className='tech';el.dataset.id=t.id;
+    el.innerHTML=`<span class="g">${t.glyph}</span>${t.name}`;el.onclick=()=>focusTech(t);
+    (t.db==='ddb'?ld:lm).appendChild(el);});
+}
+fillList();
+
+/* ===== picking (hub icons) + hover (colourid particles) ===== */
+function pickHub(cx,cy){const r=renderer.domElement.getBoundingClientRect();let best=null,bd=1e9;
+  hubIcons.forEach(h=>{const v=new THREE.Vector3(h.center.x,h.center.y,h.center.z).project(camera);if(v.z>=1)return;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);
+    if(d<h.radius&&d<bd){bd=d;best=h;}});return best;}
+renderer.domElement.addEventListener('click',e=>{if(dragMoved)return;if(mode==='hub'){const h=pickHub(e.clientX,e.clientY);if(h)focusTech(h.t);}});
+const hoverEl=document.getElementById('hover');
+renderer.domElement.addEventListener('mousemove',e=>{
+  if(dragging){if(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4)dragMoved=true;az-=(e.clientX-lx)*0.004;elev=Math.max(-1.2,Math.min(1.2,elev+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;}
+  // hover read on colourid demo
+  if(mode==='focus'&&current&&current.id==='colourid'&&hoverParts.length){const r=renderer.domElement.getBoundingClientRect();let best=null,bd=14;
+    for(const p of hoverParts){const v=new THREE.Vector3(p.x,p.y,p.z).project(camera);if(v.z>=1)continue;
+      const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(e.clientX-r.left-sx,e.clientY-r.top-sy);if(d<bd){bd=d;best=p;}}
+    if(best){hoverEl.style.display='block';hoverEl.style.left=(e.clientX+13)+'px';hoverEl.style.top=(e.clientY+13)+'px';
+      hoverEl.innerHTML=`tribe: <b style="color:#4fd6c4">${best.tribe}</b><br>shade-degree: ${best.sd}`;}
+    else hoverEl.style.display='none';
+  } else hoverEl.style.display='none';
+  // cursor
+  if(mode==='hub')renderer.domElement.style.cursor=pickHub(e.clientX,e.clientY)?'pointer':(dragging?'grabbing':'grab');
+});
+
+/* ===== controls ===== */
+document.getElementById('hub-btn').onclick=buildHub;
+document.getElementById('spin-btn').onclick=()=>{spin=!spin;document.getElementById('spin-btn').classList.toggle('on',spin);};
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(180,Math.min(1900,camDistT*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+buildHub();
+
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  if(spin&&!dragging)az+=dt*0.03;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.6);
+  ctx+=(tgx-ctx)*Math.min(1,dt*2.6);cty+=(tgy-cty)*Math.min(1,dt*2.6);ctz+=(tgz-ctz)*Math.min(1,dt*2.6);
+  camera.position.set(ctx+Math.sin(az)*Math.cos(elev)*camDist,cty+Math.sin(elev)*camDist,ctz+Math.cos(az)*Math.cos(elev)*camDist);
+  camera.lookAt(ctx,cty,ctz);renderer.render(scene,camera);}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

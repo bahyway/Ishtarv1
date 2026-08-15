@@ -1,0 +1,58 @@
+# isimud_tasks/run_one_pb.yml — one iteration of the RUN loop.
+#
+# Included (not a bare command task with `loop:`) specifically so
+# stop_on_error can actually stop early. A plain `loop:` on a single task
+# always runs every item first regardless of `ignore_errors` -- Ansible
+# has no mid-loop break for that shape -- so this file's three tasks each
+# guard on `not (isimud_stopped | default(false))`: once the third task
+# below sets that fact, every later iteration's tasks skip immediately.
+# Verified with a standalone 3-item repro (item 2 fails) before wiring
+# this in: stop_on_error=true stopped at item 2, item 3 never ran;
+# stop_on_error=false ran all three, exactly as the existing "continues
+# past failures" default always has.
+
+- name: "RUN | {{ pb_item.file }}"
+  ansible.builtin.command:
+    cmd: "ansible-playbook {{ pb_item.file }} -i \"localhost,\" -c local -e forge_root={{ forge_root }}{{ secrets_extra_vars_flag }}"
+    chdir: "{{ playbooks_dir }}"
+  register: pb_run_one
+  changed_when: false
+  failed_when: false
+  when: not (isimud_stopped | default(false))
+
+- name: "RUN | Score PB-{{ pb_item.number }}"
+  ansible.builtin.set_fact:
+    pb_results: "{{ pb_results | default([]) + [ record ] }}"
+  vars:
+    no_hosts_matched: "{{ 'no hosts matched' in (pb_run_one.stdout | default('')) }}"
+    record:
+      number:   "{{ pb_item.number }}"
+      file:     "{{ pb_item.file }}"
+      phase:    "{{ pb_item.phase }}"
+      weight: >-
+        {{ 3 if (pb_item.file | regex_search(critical_pattern))
+           else (1 if (pb_item.file | regex_search(low_pattern)) else 2) }}
+      passed:   "{{ (pb_run_one.rc | default(-1)) == 0 and not no_hosts_matched }}"
+      rc:       "{{ pb_run_one.rc | default(-1) }}"
+      start:    "{{ pb_run_one.start | default('') }}"
+      end:      "{{ pb_run_one.end | default('') }}"
+      duration: "{{ pb_run_one.delta | default('') }}"
+      error: >-
+        {{ 'rc=0 but no hosts matched the inventory pattern -- the play ran ZERO tasks; check this playbook''s hosts: line' if no_hosts_matched
+           else ((pb_run_one.stderr | default('') | trim)[-800:] if (pb_run_one.rc | default(1)) != 0 else '') }}
+      output_tail: "{{ (pb_run_one.stdout | default('') | trim)[-1500:] }}"
+      error_lines: >-
+        {{ ((pb_run_one.stdout | default('')) + '\n' + (pb_run_one.stderr | default(''))).split('\n')
+           | select('search', 'fatal: \[|FAILED!|ERROR!|unreachable=[1-9]|failed=[1-9]|\"failed\": ?true')
+           | list }}
+  when: not (isimud_stopped | default(false))
+
+- name: "RUN | Trigger stop_on_error if PB-{{ pb_item.number }} failed"
+  ansible.builtin.set_fact:
+    isimud_stopped: true
+    isimud_stop_pb: "{{ pb_item }}"
+  vars:
+    no_hosts_matched: "{{ 'no hosts matched' in (pb_run_one.stdout | default('')) }}"
+    this_failed: "{{ (pb_run_one.rc | default(-1)) != 0 or no_hosts_matched }}"
+  when: >-
+    stop_on_error | bool and not (isimud_stopped | default(false)) and this_failed

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · The Fuzzy Lens — seeing what's blurred</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ---- The Fuzzy Lens ----
+   Palette: a clinical dusk. Deep slate 'fog' that literally clears where the
+   lens focuses. Signal-teal for what emerges, warm amber for what's uncertain.
+   Display face Fraunces (humane, medical-humanist, not techy); body Inter;
+   data IBM Plex Mono. Signature: the lens itself — a focus disc that de-blurs
+   the FUZZY band it hovers over. */
+:root{
+  --fog-0:#141b26; --fog-1:#1b2532; --fog-2:#243141;
+  --ink:#eaf0f6; --ink-dim:#9aa9bb; --ink-faint:#6b7a8d;
+  --signal:#4fd6c4; --signal-deep:#1c7a70;
+  --warm:#e8b24a; --warm-deep:#8a6620;
+  --alert:#e07a5f; --calm:#8fb8d6;
+  --line:#2c3a4c;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--fog-0);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;overflow-x:hidden}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+header{padding:22px 26px 0;max-width:1180px;margin:0 auto}
+.brow{font-family:var(--f-data);font-size:11px;letter-spacing:.24em;color:var(--signal);text-transform:uppercase}
+h1{font-family:var(--f-display);font-weight:500;font-size:clamp(30px,5vw,46px);letter-spacing:-.01em;line-height:1.05;margin:8px 0 6px}
+h1 em{font-style:italic;color:var(--signal)}
+.lede{color:var(--ink-dim);max-width:620px;font-size:16px}
+.modewrap{display:flex;gap:6px;margin:18px 0 4px;align-items:center;flex-wrap:wrap}
+.modewrap .lbl{font-family:var(--f-data);font-size:11px;color:var(--ink-faint);letter-spacing:.1em;margin-right:4px}
+.mbtn{background:var(--fog-1);border:1px solid var(--line);color:var(--ink-dim);border-radius:100px;padding:8px 16px;font-size:13px;font-weight:500;transition:.15s}
+.mbtn.on{background:var(--signal);color:#062420;border-color:var(--signal)}
+.disclaim{font-family:var(--f-data);font-size:11px;color:var(--warm);border:1px solid var(--warm-deep);background:rgba(232,178,74,.06);border-radius:6px;padding:9px 13px;margin:14px 0 0;max-width:1180px}
+
+main{max-width:1180px;margin:0 auto;padding:20px 26px 80px;display:grid;grid-template-columns:1fr 340px;gap:26px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+
+/* the lens stage */
+.stage{position:relative}
+.stage h2{font-family:var(--f-display);font-weight:500;font-size:20px;margin-bottom:4px}
+.stage .sub{color:var(--ink-faint);font-size:13px;margin-bottom:14px}
+.lens-frame{position:relative;background:var(--fog-1);border:1px solid var(--line);border-radius:14px;overflow:hidden;height:440px}
+canvas{display:block;width:100%;height:100%}
+.lens-hint{position:absolute;left:14px;bottom:12px;font-family:var(--f-data);font-size:11px;color:var(--ink-faint);pointer-events:none}
+
+/* signal cards */
+.aside h3{font-family:var(--f-data);font-size:11px;letter-spacing:.16em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:10px}
+.signal{background:var(--fog-1);border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:12px;transition:.15s;cursor:pointer}
+.signal:hover{border-color:var(--signal-deep)}
+.signal.active{border-color:var(--signal);background:var(--fog-2)}
+.signal .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.signal .name{font-family:var(--f-display);font-size:17px;font-weight:500}
+.conf{font-family:var(--f-data);font-size:11px;padding:2px 8px;border-radius:100px;white-space:nowrap}
+.conf.low{color:var(--warm);border:1px solid var(--warm-deep)}
+.conf.med{color:var(--calm);border:1px solid #3a5a72}
+.conf.high{color:var(--signal);border:1px solid var(--signal-deep)}
+.signal .body{margin-top:9px;font-size:14px;color:var(--ink-dim)}
+.signal .conf-bar{height:5px;background:var(--fog-0);border-radius:3px;margin:11px 0 4px;overflow:hidden}
+.signal .conf-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--warm),var(--calm),var(--signal))}
+.signal .conf-note{font-family:var(--f-data);font-size:10px;color:var(--ink-faint)}
+.reveal{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);display:none}
+.signal.active .reveal{display:block}
+.reveal .rlab{font-family:var(--f-data);font-size:10px;letter-spacing:.12em;color:var(--signal);text-transform:uppercase;margin-bottom:4px}
+.reveal p{font-size:13.5px;color:var(--ink-dim);margin-bottom:10px}
+.reveal .ask{background:rgba(79,214,196,.07);border-left:2px solid var(--signal);padding:9px 12px;border-radius:0 6px 6px 0;font-size:14px;color:var(--ink)}
+.reveal .method{font-family:var(--f-data);font-size:11px;color:var(--calm);margin-top:8px}
+.reveal .method b{color:var(--ink)}
+.reveal .status{font-family:var(--f-data);font-size:10px;color:var(--warm);margin-top:6px}
+
+footer{max-width:1180px;margin:0 auto;padding:0 26px 30px;font-family:var(--f-data);font-size:10.5px;color:var(--ink-faint);line-height:1.7}
+.r-only{display:none} body.researcher .r-only{display:block} body.researcher .p-only{display:none}
+</style>
+</head>
+<body class="patient">
+<header>
+  <div class="brow">Šala · The Fuzzy Lens</div>
+  <h1>See what the blur is <em>hiding</em>.</h1>
+  <p class="lede">Vague and uncertain data doesn't mean nothing is there — it means the view is fogged. This lens brings the fogged regions forward instead of hiding them, and hands you the questions worth asking.</p>
+  <div class="modewrap">
+    <span class="lbl">READING FOR</span>
+    <button class="mbtn on" id="m-patient">You, the patient</button>
+    <button class="mbtn" id="m-research">A researcher</button>
+  </div>
+  <div class="disclaim" id="disclaim">This is not a diagnosis. It shows where your data is uncertain and what to ask a clinician — it never tells you what is wrong or what to do. A tool that sounded certain about vague data would put you back in the dark, not out of it.</div>
+</header>
+
+<main>
+  <section class="stage">
+    <h2 id="stage-title">Your data, brought into focus</h2>
+    <div class="sub" id="stage-sub">Move the lens over the fog. Where it passes, near-threshold signals sharpen. Amber points are uncertain; teal points are emerging clearly.</div>
+    <div class="lens-frame">
+      <canvas id="lens"></canvas>
+      <div class="lens-hint">move your cursor — the lens follows · click a signal at right to spotlight it</div>
+    </div>
+  </section>
+
+  <aside class="aside">
+    <h3>Signals in the fog</h3>
+    <div id="signal-list"></div>
+  </aside>
+</main>
+
+<footer>
+  Way-of-Work rule 5 — HTML prototype; production body Godot/WGPU. In production, every point, confidence, and method is read from sealed LamassuEngine/EAV values, never simulated. Morphology proposes; the algebra and your clinician prove (GL-VIZ-001 D-1, GL-MED-001 Namtila). Nothing here is medical advice.
+</footer>
+
+<script>
+/* ------------------------------------------------------------------ *
+ * The Fuzzy Lens. A field of data points sits in fog. FUZZY points
+ * (near a decision threshold) are blurred amber; as the focus disc
+ * passes over them they sharpen — the uncertainty is made the subject,
+ * not hidden. Each named signal maps to a real academic method and a
+ * plain question. Dual voice: patient plain-speak / researcher depth.
+ * ------------------------------------------------------------------ */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cv=document.getElementById('lens'), ctx=cv.getContext('2d');
+let W,H,DPR=Math.min(devicePixelRatio,2);
+function resize(){const r=cv.parentElement.getBoundingClientRect();
+  cv.width=(W=r.width)*DPR;cv.height=(H=r.height)*DPR;cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',resize);resize();
+
+/* signals: each is a cluster in the field + patient & researcher framing */
+const SIGNALS=[
+  { id:'trend', name:'A slow drift',
+    cx:0.30, cy:0.42, conf:0.38, confClass:'low',
+    p_body:"One of your repeated measurements has been creeping in one direction over time — too slowly to notice visit-to-visit, but visible across years.",
+    r_body:"Monotonic drift in a longitudinal marker below single-visit detection threshold; candidate for trend-change analysis.",
+    ask:"Ask: “Has this value been trending over my history, not just today’s number?”",
+    method:"Change-point detection / Mann–Kendall trend test",
+    status:"Common in academia; rarely run on routine records." },
+  { id:'loop', name:'A pattern that keeps returning',
+    cx:0.62, cy:0.32, conf:0.55, confClass:'med',
+    p_body:"Something in your data seems to cycle back — a pattern that recurs rather than resolves. It’s faint, which is why it may not have been flagged.",
+    r_body:"Persistent H₁ loop in the marker’s state-space embedding — a recurring cycle that short-lived analyses miss.",
+    ask:"Ask: “Is there a recurring or cyclical pattern in my results over time?”",
+    method:"Topological data analysis — persistent homology (β₁)",
+    status:"Established in research; almost never in clinical tooling." },
+  { id:'edge', name:'Sitting on a threshold',
+    cx:0.48, cy:0.66, conf:0.61, confClass:'med',
+    p_body:"A value of yours sits right at the border between “normal” and “not” — close enough that which side it lands on depends on the day and the lab. That borderline itself is worth attention.",
+    r_body:"Marker persistently within the ε-band of a decision boundary; classification is unstable to measurement noise.",
+    ask:"Ask: “Some of my results are borderline — should we watch them more closely or repeat them?”",
+    method:"Fuzzy membership / uncertainty-band analysis",
+    status:"Well understood; industry usually rounds it away." },
+  { id:'cluster', name:'Several small things together',
+    cx:0.76, cy:0.58, conf:0.44, confClass:'low',
+    p_body:"No single result here is alarming — but a few mild ones point the same way at once. The combination can matter more than any one alone.",
+    r_body:"Weak-but-concordant multivariate signal; individually sub-threshold features with shared direction.",
+    ask:"Ask: “Looking at all my results together, not one at a time — do any point the same way?”",
+    method:"Multivariate / latent-factor analysis",
+    status:"Standard in research; siloed results hide it in practice." },
+];
+
+/* build the point field: each signal seeds a cluster; rest is fog */
+const pts=[];
+function seedField(){
+  pts.length=0;
+  SIGNALS.forEach(s=>{
+    const n=90;
+    for(let i=0;i<n;i++){
+      const a=Math.random()*Math.PI*2, r=Math.random()*46;
+      pts.push({x:s.cx*W+Math.cos(a)*r, y:s.cy*H+Math.sin(a)*r,
+        fuzz:0.4+Math.random()*0.6, sig:s.id, base:s.confClass});
+    }
+  });
+  for(let i=0;i<340;i++) pts.push({x:Math.random()*W,y:Math.random()*H,fuzz:0.7+Math.random()*0.3,sig:null});
+}
+seedField();
+let relayout=()=>{resize();seedField();}; addEventListener('resize',relayout);
+
+let lens={x:-999,y:-999,r:110}, active=null;
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();lens.x=e.clientX-r.left;lens.y=e.clientY-r.top;});
+cv.addEventListener('mouseleave',()=>{lens.x=lens.y=-999;});
+
+function colFor(cls,sharp){
+  // amber when blurred/uncertain, teal as it sharpens
+  if(cls==='high') return `rgba(79,214,196,${0.5+sharp*0.5})`;
+  if(cls==='med')  return `rgba(${143-sharp*64},${184},${214-sharp*18},${0.45+sharp*0.5})`;
+  return `rgba(${232-sharp*153},${178-sharp*0},${74+sharp*122},${0.4+sharp*0.55})`; // amber→teal
+}
+let t=0;
+function draw(){
+  requestAnimationFrame(draw);
+  t+=0.016;
+  ctx.clearRect(0,0,W,H);
+  // fog wash
+  const g=ctx.createRadialGradient(W*0.5,H*0.5,20,W*0.5,H*0.5,Math.max(W,H)*0.7);
+  g.addColorStop(0,'rgba(36,49,65,0.5)');g.addColorStop(1,'rgba(20,27,38,0.9)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // the focus disc
+  if(lens.x>-500){
+    const lg=ctx.createRadialGradient(lens.x,lens.y,0,lens.x,lens.y,lens.r);
+    lg.addColorStop(0,'rgba(79,214,196,0.10)');lg.addColorStop(0.7,'rgba(79,214,196,0.04)');lg.addColorStop(1,'rgba(79,214,196,0)');
+    ctx.fillStyle=lg;ctx.beginPath();ctx.arc(lens.x,lens.y,lens.r,0,7);ctx.fill();
+    ctx.strokeStyle='rgba(79,214,196,0.35)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(lens.x,lens.y,lens.r,0,7);ctx.stroke();
+  }
+  pts.forEach(p=>{
+    const d=Math.hypot(p.x-lens.x,p.y-lens.y);
+    const inLens=Math.max(0,1-d/lens.r);           // 0..1 sharpen inside lens
+    const spot=(active&&p.sig===active)?1:0;         // spotlight active signal
+    const sharp=Math.max(inLens, spot);
+    const jit=(1-sharp)*p.fuzz*3.2;                  // blur = positional jitter (ε)
+    const jx=Math.sin(t*2+p.x)*jit, jy=Math.cos(t*2.3+p.y)*jit;
+    const size=(p.sig? (sharp>0.15?3.4:2.4):1.6)+sharp*1.6;
+    if(p.sig){
+      ctx.fillStyle=colFor(p.base,sharp);
+      // soft halo when blurred (the "blur")
+      if(sharp<0.6){ctx.globalAlpha=0.5;ctx.beginPath();ctx.arc(p.x+jx,p.y+jy,size+ (1-sharp)*4,0,7);ctx.fillStyle=colFor(p.base,sharp*0.3);ctx.fill();ctx.globalAlpha=1;}
+      ctx.beginPath();ctx.arc(p.x+jx,p.y+jy,size,0,7);ctx.fillStyle=colFor(p.base,sharp);ctx.fill();
+    } else {
+      ctx.fillStyle=`rgba(107,122,141,${0.15+inLens*0.4})`;
+      ctx.beginPath();ctx.arc(p.x+jx,p.y+jy,size,0,7);ctx.fill();
+    }
+  });
+  // label active cluster
+  if(active){const s=SIGNALS.find(x=>x.id===active);
+    ctx.fillStyle='rgba(79,214,196,0.9)';ctx.font='500 13px Fraunces, serif';ctx.textAlign='center';
+    ctx.fillText(s.name, s.cx*W, s.cy*H-58);}
+}
+requestAnimationFrame(draw);
+
+/* signal cards */
+function render(){
+  const research=document.body.classList.contains('researcher');
+  document.getElementById('signal-list').innerHTML=SIGNALS.map(s=>`
+    <div class="signal ${active===s.id?'active':''}" data-id="${s.id}">
+      <div class="top"><span class="name">${s.name}</span>
+        <span class="conf ${s.confClass}">${Math.round(s.conf*100)}% conf</span></div>
+      <div class="body">${research?s.r_body:s.p_body}</div>
+      <div class="conf-bar"><i style="width:${s.conf*100}%"></i></div>
+      <div class="conf-note">confidence is ${s.confClass.toUpperCase()} — ${s.confClass==='low'?'a hint worth checking, not a finding':s.confClass==='med'?'suggestive; worth a closer look':'fairly clear; still ask'}</div>
+      <div class="reveal">
+        <div class="rlab">${research?'Method & status':'What to do with this'}</div>
+        ${research
+          ? `<div class="method"><b>${s.method}</b></div><div class="status">${s.status}</div><p style="margin-top:8px">${s.p_body}</p>`
+          : `<div class="ask">${s.ask}</div><div class="method">Academic method behind it: <b>${s.method}</b></div><div class="status">${s.status}</div>`}
+      </div>
+    </div>`).join('');
+  document.querySelectorAll('.signal').forEach(el=>el.onclick=()=>{
+    active=active===el.dataset.id?null:el.dataset.id; render();
+  });
+}
+render();
+
+/* mode toggle */
+document.getElementById('m-patient').onclick=()=>{
+  document.body.className='patient';
+  document.getElementById('m-patient').classList.add('on');
+  document.getElementById('m-research').classList.remove('on');
+  document.getElementById('stage-title').textContent='Your data, brought into focus';
+  document.getElementById('disclaim').textContent='This is not a diagnosis. It shows where your data is uncertain and what to ask a clinician — it never tells you what is wrong or what to do. A tool that sounded certain about vague data would put you back in the dark, not out of it.';
+  render();
+};
+document.getElementById('m-research').onclick=()=>{
+  document.body.className='researcher';
+  document.getElementById('m-research').classList.add('on');
+  document.getElementById('m-patient').classList.remove('on');
+  document.getElementById('stage-title').textContent='The FUZZY band, foregrounded';
+  document.getElementById('disclaim').textContent='Candidate signals below decision thresholds, surfaced with honest confidence and ε. Morphology proposes; persistence/change-point/fuzzy-membership methods and clinical evidence prove. Not validated findings — hypotheses for investigation.';
+  render();
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BahyWay.Ecosystem v4.0 — Sovereign Infrastructure Pillar
+-- InfrastructureAsset Particle Template
+--     infrastructure_asset.akk
+--
+-- Purpose:
+--   Sovereign infrastructure asset particle. Covers physical assets under
+--   government ownership or administration: roads, bridges, tunnels,
+--   utilities (water, power, sewage), public buildings, and operational
+--   facilities. Each particle represents one discrete asset identified by
+--   asset_id_kaki and carries spatial, operational, and maintenance state.
+--
+-- VGCA-beam enforcement (completeness=1.0 blocks ingestion if absent):
+--   asset_id_kaki, asset_name, asset_type, gps_latitude, gps_longitude,
+--   construction_epoch
+--
+-- Quality-scored optional fields (enrich hepta score, never block):
+--   governorate, city, operator_kaki, capacity, condition_score,
+--   last_inspection_epoch, next_maintenance_epoch, gis_ref, notes
+--
+-- Tribe weights (InfrastructureAssetMDM, 7-component Heptagonal):
+--   accuracy=0.30     — GPS coordinates and asset classification must be exact
+--   completeness=0.25 — operational fields needed for maintenance scheduling
+--   consistency=0.15  — construction_epoch < last_inspection_epoch checks
+--   timeliness=0.15   — condition data degrades if not refreshed post-inspection
+--   uniqueness=0.10   — one KAKI per physical asset; GIS ref must be unique
+--   validity=0.05     — GPS range checks, condition_score 0–100 range
+--   integrity=0.00    — no referential KAKI links required at this tier
+--
+-- QUALITY_DIVISOR: 240.0 (ADR-001)
+--
+-- Drop this file at: shard/profiles/{batch_name}.template.akk
+-- bee-watchdog loads it automatically and enforces this schema for every
+-- arriving batch named {batch_name}.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+PARTICLE InfrastructureAsset {
+    -- ── Required asset identity fields (VGCA-beam enforced) ────────────────
+    asset_id_kaki:          KAKI                                     -- sovereign asset identifier; primary key
+    asset_name:             TEXT(accuracy=1.0, completeness=1.0)     -- official asset name (Arabic preferred)
+    asset_type:             TEXT(completeness=1.0)                   -- ROAD | BRIDGE | BUILDING | UTILITY | FACILITY | TUNNEL
+    gps_latitude:           TEXT(accuracy=1.0, completeness=1.0)     -- WGS-84 latitude (decimal degrees)
+    gps_longitude:          TEXT(accuracy=1.0, completeness=1.0)     -- WGS-84 longitude (decimal degrees)
+    construction_epoch:     TEXT(completeness=1.0)                   -- Unix epoch of construction completion
+
+    -- ── Optional operational enrichment ────────────────────────────────────
+    governorate:            TEXT(accuracy=0.90)                      -- host governorate (Arabic)
+    city:                   TEXT(accuracy=0.90)                      -- host city or district
+    operator_kaki:          KAKI                                     -- operating ministry or agency KAKI
+    capacity:               TEXT                                      -- design capacity (free-form, unit depends on asset_type)
+    condition_score:        TEXT(accuracy=0.95)                      -- 0–100 numeric condition index
+    last_inspection_epoch:  TEXT(accuracy=0.95)                      -- Unix epoch of most recent inspection
+    next_maintenance_epoch: TEXT                                      -- Unix epoch of scheduled next maintenance
+    gis_ref:                TEXT(accuracy=0.95)                      -- national GIS layer reference code
+    notes:                  TEXT                                      -- free-text operational notes
+
+    TRIBE: InfrastructureAssetMDM
+}
+
+-- ── Tribe definition — 7-weight Heptagonal ────────────────────────────────
+-- Weights must sum to exactly 1.0
+-- [accuracy, completeness, consistency, timeliness, uniqueness, validity, integrity]
+TRIBE InfrastructureAssetMDM {
+    WEIGHTS: [0.30, 0.25, 0.15, 0.15, 0.10, 0.05, 0.00]
+    IDEAL:   [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0]
+}
+
+-- ── Rule: Critical asset condition alert ──────────────────────────────────
+-- If condition_score indicates structural risk (encoded as hepta health drop)
+-- and the particle is overdue for maintenance (next_maintenance_epoch passed),
+-- emit an alert so the maintenance scheduling system can intervene.
+-- Threshold: hepta.health < 0.500 signals degraded condition data quality
+-- or a critically low condition_score fed into the hepta pipeline.
+RULE alert_critical_asset {
+    WHEN particle.hepta.health < 0.500
+    AND  particle.tribe = InfrastructureAssetMDM
+    THEN
+        LANE = ACTIVE
+        ORBIT = outer
+        EMIT ZeroWay("infrastructure_asset_critical_condition")
+}
+
+-- ── Rule: Golden asset record ─────────────────────────────────────────────
+-- Fully documented, recently inspected, spatially accurate asset.
+-- Promotes to GEM for priority rendering in sovereign GIS dashboards.
+RULE promote_asset_golden {
+    WHEN particle.hepta.health >= 0.833
+    AND  particle.tribe = InfrastructureAssetMDM
+    THEN
+        LANE = GEM
+        ORBIT = inner
+        EMIT StoryWay("infrastructure_asset_golden")
+}
+
+-- ── Observe: Assets requiring maintenance attention ────────────────────────
+-- Surfaces assets whose quality score indicates degraded condition data or
+-- overdue inspection. Priority ordered by worst orbital stability first.
+OBSERVE assets_needing_maintenance {
+    FROM: TRIBE InfrastructureAssetMDM
+    WHERE: health < 0.700
+    SORT: orbital_radius DESC
+    LIMIT: 50000
+}
+
+-- ── Observe: Full sovereign asset inventory ────────────────────────────────
+-- All health-qualified assets available for GIS rendering and planning queries.
+OBSERVE sovereign_asset_inventory {
+    FROM: TRIBE InfrastructureAssetMDM
+    WHERE: health >= 0.416
+    SORT: orbital_radius ASC
+    LIMIT: 100000
+}

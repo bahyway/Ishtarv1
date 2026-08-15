@@ -1,0 +1,278 @@
+---
+# Playbook 25 — Fix dropdowns + StoryEngine readability
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/25_fix_dropdowns_story.yml -v
+
+- name: "𒁾 Fix dropdowns + StoryEngine readability"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_25.py"
+
+  tasks:
+
+    - name: "Write fix script"
+      ansible.builtin.copy:
+        dest:    "{{ fix_script }}"
+        mode:    "0755"
+        content: |
+          import re
+
+          app_path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+          bw_path  = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/bahyway_main.rs'
+
+          # ── Fix 1: Replace popup_below_widget with egui::Window floating menus ─
+          # popup_below_widget clips inside TopBottomPanel — use Window instead
+          with open(app_path, 'r') as f:
+              app = f.read()
+
+          # Replace the Enterprise Apps popup block
+          app = re.sub(
+              r'if ui\.memory\(\|m\| m\.data\.get_temp::<bool>\(ent_id\)\.unwrap_or\(false\)\) \{.*?egui::popup_below_widget\(ui, ent_id, &ent_r,.*?egui::PopupCloseBehavior::CloseOnClickOutside, \|ui\| \{.*?\}\);\s*\}',
+              '''if ui.memory(|m| m.data.get_temp::<bool>(ent_id).unwrap_or(false)) {
+                          egui::Window::new("ent_menu_win")
+                              .title_bar(false)
+                              .resizable(false)
+                              .collapsible(false)
+                              .fixed_pos(ent_r.rect.left_bottom())
+                              .frame(egui::Frame::none()
+                                  .fill(egui::Color32::from_rgb(18,22,32))
+                                  .stroke(egui::Stroke::new(1.0,
+                                      egui::Color32::from_rgb(60,80,120)))
+                                  .rounding(egui::Rounding::same(4.0))
+                                  .inner_margin(egui::Margin::same(6.0)))
+                              .show(ui.ctx(), |ui| {
+                                  ui.set_min_width(180.0);
+                                  for (panel, label) in ent_panels {
+                                      let active = self.panel == *panel;
+                                      let col = if active {
+                                          egui::Color32::from_rgb(200,160,40)
+                                      } else {
+                                          egui::Color32::from_rgb(180,190,205)
+                                      };
+                                      if ui.add(egui::Button::new(
+                                          egui::RichText::new(*label).color(col).size(13.0))
+                                          .fill(if active {
+                                              egui::Color32::from_rgb(28,26,14)
+                                          } else {
+                                              egui::Color32::TRANSPARENT
+                                          })
+                                          .min_size(egui::Vec2::new(170.0, 26.0))
+                                      ).clicked() {
+                                          self.panel = *panel;
+                                          ui.memory_mut(|m| m.data.insert_temp(ent_id, false));
+                                      }
+                                  }
+                              });
+                      }''',
+              app, flags=re.DOTALL
+          )
+
+          # Replace the AI Agents popup block
+          app = re.sub(
+              r'if ui\.memory\(\|m\| m\.data\.get_temp::<bool>\(ai_id\)\.unwrap_or\(false\)\) \{.*?egui::popup_below_widget\(ui, ai_id, &ai_r,.*?egui::PopupCloseBehavior::CloseOnClickOutside, \|ui\| \{.*?\}\);\s*\}',
+              '''if ui.memory(|m| m.data.get_temp::<bool>(ai_id).unwrap_or(false)) {
+                          egui::Window::new("ai_menu_win")
+                              .title_bar(false)
+                              .resizable(false)
+                              .collapsible(false)
+                              .fixed_pos(ai_r.rect.left_bottom())
+                              .frame(egui::Frame::none()
+                                  .fill(egui::Color32::from_rgb(18,22,32))
+                                  .stroke(egui::Stroke::new(1.0,
+                                      egui::Color32::from_rgb(60,80,120)))
+                                  .rounding(egui::Rounding::same(4.0))
+                                  .inner_margin(egui::Margin::same(6.0)))
+                              .show(ui.ctx(), |ui| {
+                                  ui.set_min_width(160.0);
+                                  for (panel, label) in ai_panels {
+                                      let active = self.panel == *panel;
+                                      let col = if active {
+                                          egui::Color32::from_rgb(200,160,40)
+                                      } else {
+                                          egui::Color32::from_rgb(180,190,205)
+                                      };
+                                      if ui.add(egui::Button::new(
+                                          egui::RichText::new(*label).color(col).size(13.0))
+                                          .fill(egui::Color32::TRANSPARENT)
+                                          .min_size(egui::Vec2::new(150.0, 26.0))
+                                      ).clicked() {
+                                          self.panel = *panel;
+                                          ui.memory_mut(|m| m.data.insert_temp(ai_id, false));
+                                      }
+                                  }
+                              });
+                      }''',
+              app, flags=re.DOTALL
+          )
+
+          # Replace the Web Show popup block
+          app = re.sub(
+              r'if ui\.memory\(\|m\| m\.data\.get_temp::<bool>\(ws_id\)\.unwrap_or\(false\)\) \{.*?egui::popup_below_widget\(ui, ws_id, &ws_r,.*?egui::PopupCloseBehavior::CloseOnClickOutside, \|ui\| \{.*?\}\);\s*\}',
+              '''if ui.memory(|m| m.data.get_temp::<bool>(ws_id).unwrap_or(false)) {
+                          egui::Window::new("ws_menu_win")
+                              .title_bar(false)
+                              .resizable(false)
+                              .collapsible(false)
+                              .fixed_pos(ws_r.rect.left_bottom())
+                              .frame(egui::Frame::none()
+                                  .fill(egui::Color32::from_rgb(18,22,32))
+                                  .stroke(egui::Stroke::new(1.0,
+                                      egui::Color32::from_rgb(40,100,120)))
+                                  .rounding(egui::Rounding::same(4.0))
+                                  .inner_margin(egui::Margin::same(6.0)))
+                              .show(ui.ctx(), |ui| {
+                                  ui.set_min_width(220.0);
+                                  ui.label(egui::RichText::new("Web Show")
+                                      .color(egui::Color32::from_rgb(100,180,200))
+                                      .size(12.0).strong());
+                                  ui.separator();
+                                  if ui.add(egui::Button::new(
+                                      egui::RichText::new("ETL — Tribe Orbits + 7 Gates")
+                                          .color(egui::Color32::from_rgb(80,160,180))
+                                          .size(12.0))
+                                      .fill(egui::Color32::TRANSPARENT)
+                                      .min_size(egui::Vec2::new(210.0, 26.0))
+                                  ).clicked() {
+                                      let _ = std::process::Command::new("firefox")
+                                          .arg("/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/01_Data_Steward_Station_Explorer_v4.html")
+                                          .spawn();
+                                      ui.memory_mut(|m| m.data.insert_temp(ws_id, false));
+                                  }
+                                  if ui.add(egui::Button::new(
+                                      egui::RichText::new("Nergal — Irkalla 7 Sectors")
+                                          .color(egui::Color32::from_rgb(160,80,100))
+                                          .size(12.0))
+                                      .fill(egui::Color32::TRANSPARENT)
+                                      .min_size(egui::Vec2::new(210.0, 26.0))
+                                  ).clicked() {
+                                      let _ = std::process::Command::new("firefox")
+                                          .arg("/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/nergal_av_dashboard_v2.html")
+                                          .spawn();
+                                      ui.memory_mut(|m| m.data.insert_temp(ws_id, false));
+                                  }
+                                  if ui.add(egui::Button::new(
+                                      egui::RichText::new("BigRing — Particle Universe")
+                                          .color(egui::Color32::from_rgb(100,140,180))
+                                          .size(12.0))
+                                      .fill(egui::Color32::TRANSPARENT)
+                                      .min_size(egui::Vec2::new(210.0, 26.0))
+                                  ).clicked() {
+                                      let _ = std::process::Command::new("firefox")
+                                          .arg("/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/00_BIGRING.html")
+                                          .spawn();
+                                      ui.memory_mut(|m| m.data.insert_temp(ws_id, false));
+                                  }
+                              });
+                      }''',
+              app, flags=re.DOTALL
+          )
+
+          with open(app_path, 'w') as f:
+              f.write(app)
+          print("Dropdowns replaced with egui::Window")
+          print("Window count:", app.count('egui::Window::new("ent_menu') +
+                app.count('egui::Window::new("ai_menu') +
+                app.count('egui::Window::new("ws_menu'))
+
+          # ── Fix 2: StoryEngine — brighter readable colours ────────────────────
+          with open(bw_path, 'r') as f:
+              bw = f.read()
+
+          # Make frame fills lighter so text is readable
+          bw = bw.replace(
+              'Color32::from_rgb(20, 24, 30)',
+              'Color32::from_rgb(28, 34, 44)'
+          )
+          bw = bw.replace(
+              '.fill(Color32::from_rgb(20,24,30))',
+              '.fill(Color32::from_rgb(28, 34, 44))'
+          )
+
+          # Make demo text colours brighter — fully readable
+          bw = bw.replace(
+              'Color32::from_rgb(80,120,160)',
+              'Color32::from_rgb(120,160,200)'
+          )
+          bw = bw.replace(
+              'Color32::from_rgb(100,130,110)',
+              'Color32::from_rgb(140,180,150)'
+          )
+          bw = bw.replace(
+              'Color32::from_rgb(80,140,120)',
+              'Color32::from_rgb(120,180,160)'
+          )
+          bw = bw.replace(
+              'Color32::from_rgb(100,140,150)',
+              'Color32::from_rgb(140,180,195)'
+          )
+          bw = bw.replace(
+              'Color32::from_rgb(140,130,80)',
+              'Color32::from_rgb(200,180,100)'
+          )
+
+          # Make log message text WHITE so it is always readable
+          bw = bw.replace(
+              '.color(TEXT_MAIN).size(10.0));',
+              '.color(Color32::from_rgb(210,215,225)).size(11.0));'
+          )
+
+          # Filter toggle buttons — brighter labels
+          bw = bw.replace(
+              '"Critical", Color32::from_rgb(140,80,90)',
+              '"Critical", Color32::from_rgb(200,100,110)'
+          )
+          bw = bw.replace(
+              '"Errors", Color32::from_rgb(130,110,70)',
+              '"Errors", Color32::from_rgb(190,160,80)'
+          )
+          bw = bw.replace(
+              '"Warnings", Color32::from_rgb(70,130,110)',
+              '"Warnings", Color32::from_rgb(100,185,155)'
+          )
+
+          # Section label — make it brighter
+          bw = bw.replace(
+              'fn section_label(ui: &mut Ui, text: &str) {\n              ui.label(RichText::new(text).color(DIM).size(10.0)\n                  .strong());',
+              'fn section_label(ui: &mut Ui, text: &str) {\n              ui.label(RichText::new(text)\n                  .color(Color32::from_rgb(140,155,175)).size(11.0).strong());'
+          )
+
+          with open(bw_path, 'w') as f:
+              f.write(bw)
+          print("StoryEngine colours brightened")
+
+    - name: "Run fix script"
+      ansible.builtin.command:
+        cmd: python3 {{ fix_script }}
+      register: py_out
+      changed_when: true
+      failed_when:  py_out.rc != 0
+
+    - name: "Show output"
+      ansible.builtin.debug:
+        msg: "{{ py_out.stdout_lines }}"
+
+    - name: "Force clean rebuild"
+      ansible.builtin.shell:
+        cmd: |
+          cd /home/bahyway/Forge/bahyway_v4
+          cargo clean -p dubsar-visualizer
+          cargo build -p dubsar-visualizer 2>&1 | grep -E "Compiling|error|Finished"
+      register: build
+      changed_when: true
+      failed_when:  "'error[' in build.stdout"
+
+    - name: "Build output"
+      ansible.builtin.debug:
+        msg: "{{ build.stdout_lines }}"
+
+    - name: "𒁾 Complete"
+      ansible.builtin.debug:
+        msg:
+          - "Dropdowns: egui::Window floating menus (no panel clipping)"
+          - "StoryEngine: bright readable text on dark frames"
+          - "Run: cargo run -p dubsar-visualizer"

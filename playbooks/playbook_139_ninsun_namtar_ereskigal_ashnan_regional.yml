@@ -1,0 +1,112 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_139_ninsun_namtar_ereskigal_ashnan_regional.yml
+#  PB-139/141/142/143 coverage confirmation
+#
+#  Run: ansible-playbook playbook_139_ninsun_namtar_ereskigal_ashnan_regional.yml -i "localhost," -c local -v
+#
+#  Per RM-001_ADDENDUM_PB111-145_VERIFIED_2026-07-01.md, all four were
+#  "Implemented this session": ninsun-agent (7 tests), ashnan_regional
+#  (config JSON, not a crate), namtar-kaki (4 tests), ereskigal-kaki
+#  (4 tests). Re-verified here against today's actual code.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-139 | NINSUN + NAMTAR + EREŠKIGAL + ASHNAN-Regional Confirmation"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ forge_root }}/docs/PB139_REPORT_{{ session_date }}.txt"
+    regions_dir:   "{{ forge_root }}/config/ashnan/regions"
+
+  tasks:
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "TEST | ninsun-agent (PB-139)"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p ninsun-agent", chdir: "{{ workspace }}"}
+      register: t_ninsun
+      changed_when: false
+      failed_when: t_ninsun.rc != 0
+    - {name: "ASSERT | ninsun-agent 7 passed", ansible.builtin.assert: {that: ["((t_ninsun.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 7)"], fail_msg: "{{ t_ninsun.stdout }}"}}
+
+    - name: "TEST | namtar-kaki (PB-142)"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p namtar-kaki", chdir: "{{ workspace }}"}
+      register: t_namtar
+      changed_when: false
+      failed_when: t_namtar.rc != 0
+    - {name: "ASSERT | namtar-kaki 4 passed", ansible.builtin.assert: {that: ["((t_namtar.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 4)"], fail_msg: "{{ t_namtar.stdout }}"}}
+
+    - name: "TEST | ereskigal-kaki (PB-143)"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p ereskigal-kaki", chdir: "{{ workspace }}"}
+      register: t_eresh
+      changed_when: false
+      failed_when: t_eresh.rc != 0
+    - {name: "ASSERT | ereskigal-kaki 4 passed", ansible.builtin.assert: {that: ["((t_eresh.stdout | regex_search('([0-9]+) passed', '\\\\1') | first | int) >= 4)"], fail_msg: "{{ t_eresh.stdout }}"}}
+
+    - name: "CHECK | ASHNAN regional registries present (PB-141, config not a crate)"
+      ansible.builtin.find: {paths: "{{ regions_dir }}", patterns: "*.json"}
+      register: regions_found
+
+    - name: "ASSERT | 3 region registries present"
+      ansible.builtin.assert:
+        that: ["regions_found.matched == 3"]
+        fail_msg: "Expected 3 region JSON files in {{ regions_dir }}, found {{ regions_found.matched }}: {{ regions_found.files | map(attribute='path') | list }}"
+
+    - name: "TEST | ashnan crate itself"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p ashnan", chdir: "{{ workspace }}"}
+      register: t_ashnan
+      changed_when: false
+      failed_when: t_ashnan.rc != 0
+
+    - name: "BUILD | cargo build --workspace"
+      ansible.builtin.command: {cmd: "{{ cargo }} build --workspace", chdir: "{{ workspace }}"}
+      register: build_ws
+      changed_when: false
+      failed_when: build_ws.rc != 0
+
+    - name: "PRINT | PB-139/141/142/143 verdict"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════════╗
+          ║  PB-139 ninsun-agent    : 7/7 PASS                                  ║
+          ║  PB-142 namtar-kaki     : 4/4 PASS                                  ║
+          ║  PB-143 ereskigal-kaki  : 4/4 PASS                                  ║
+          ║  PB-141 ASHNAN regions  : 3/3 registries present                    ║
+          ║  workspace build        : CLEAN                                    ║
+          ╚═══════════════════════════════════════════════════════════════════╝
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          PB-139/141/142/143 — {{ session_date }} — {{ ansible_hostname }}
+          ninsun-agent: {{ t_ninsun.stdout }}
+          namtar-kaki: {{ t_namtar.stdout }}
+          ereskigal-kaki: {{ t_eresh.stdout }}
+          ASHNAN regions found: {{ regions_found.files | map(attribute='path') | list }}
+          ashnan crate: {{ t_ashnan.stdout }}
+          workspace build: {{ 'CLEAN' if build_ws.rc == 0 else 'FAILED' }}
+
+    - {name: "DONE", ansible.builtin.debug: {msg: "PB-139 complete — report at {{ report_file }}"}}

@@ -1,0 +1,34 @@
+# =============================================================================
+# enkisdb-read-server — EnkiSDB (Stage Database) Read Node container image.
+#
+# Build (from the repo root):
+#   podman build -t enkisdb-read-server:latest \
+#     -f deploy/podman/Containerfile.enkisdb-read-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkisdb-read \
+#     -p 7003:7003 \
+#     -v enkisdb-data:/data:Z,ro \
+#     --restart=always \
+#     enkisdb-read-server:latest
+#
+# The volume here is the same `enkisdb-data` volume `enkisdb-write-server`
+# materializes into via its SDB_DATA_DIR -- read-only here (CQRS split,
+# ADR-012).
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkisdb-read-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkisdb
+COPY --from=builder /build/target/release/enkisdb-read-server /usr/local/bin/enkisdb-read-server
+USER enkisdb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7003
+ENV DATA_DIR=/data
+EXPOSE 7003
+ENTRYPOINT ["/usr/local/bin/enkisdb-read-server"]

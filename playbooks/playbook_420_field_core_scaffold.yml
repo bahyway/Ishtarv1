@@ -1,0 +1,57 @@
+---
+# PB-420 · ḪendursagaEngine field core scaffold · DRAFT (GL-NAV-001 Annex A)
+# Running this playbook is the Architect's CSR-08 confirmation.
+- name: "PB-420 · scaffold the pure-Rust field core workspace"
+  hosts: uruk
+  vars:
+    forge_root: "/home/bfadam/Forge/hendursaga_v4"
+    crates: [hendursaga-core, hendursaga-gnss, hendursaga-imu, hendursaga-fusion-ekf, hendursaga-navcore, hendursaga-tileserver, hendursaga-feed]
+  tasks:
+    - name: create workspace root
+      ansible.builtin.file: {path: "{{ forge_root }}", state: directory, mode: "0755"}
+
+    - name: workspace Cargo.toml
+      ansible.builtin.copy:
+        dest: "{{ forge_root }}/Cargo.toml"
+        content: |
+          [workspace]
+          resolver = "2"
+          members = [{% for c in crates %}"{{ c }}"{{ "," if not loop.last }}{% endfor %}]
+          # pure Rust · no runtime Z3 · no CDN · feed contract ws://:9000/position (sealed)
+
+    - name: member crates
+      ansible.builtin.command:
+        cmd: "cargo new --lib {{ item }}"
+        chdir: "{{ forge_root }}"
+        creates: "{{ forge_root }}/{{ item }}/Cargo.toml"
+      loop: "{{ crates }}"
+
+    - name: pin the sovereign dependency set (gnss/imu/ekf/serve)
+      ansible.builtin.blockinfile:
+        path: "{{ forge_root }}/hendursaga-core/Cargo.toml"
+        marker: "# {mark} PB-420 deps"
+        block: |
+          [dependencies]
+          nalgebra = "0.33"          # EKF linear algebra
+          nmea = "0.6"               # GNSS sentence parsing (UBX parser in hendursaga-gnss)
+          rusqlite = { version = "0.31", features = ["bundled"] }   # MBTiles
+          axum = "0.7"               # local HTTP + ws feed
+          tokio = { version = "1", features = ["rt-multi-thread","net","time"] }
+          serde = { version = "1", features = ["derive"] }
+          rkyv = "0.7"               # append-only telemetry journal
+          ed25519-dalek = "2"        # seals
+
+    - name: feed contract stub (constitutional schema, versioned)
+      ansible.builtin.copy:
+        dest: "{{ forge_root }}/hendursaga-feed/src/contract.rs"
+        content: |
+          //! ws://:9000/position · sealed message schema v1 — consumers adapt to it, never it to them.
+          #[derive(serde::Serialize, serde::Deserialize)]
+          pub struct PositionV1 { pub lat: f64, pub lng: f64, pub alt: f64,
+                                  pub heading: f64, pub speed: f64, pub t: u64 }
+
+    - name: journal the scaffold (NARU discipline)
+      ansible.builtin.lineinfile:
+        path: "{{ forge_root }}/NARU.journal"
+        line: "{{ ansible_date_time.iso8601 }} · PB-420 · workspace scaffolded · DRAFT"
+        create: yes

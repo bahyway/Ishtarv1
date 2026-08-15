@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · PARZU Tremor Watch v2 — Fuzzy Court · Particle Story · Client SLA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abzu:#070B14; --abzu-2:#0C1220;
+  --lapis:#24406E; --lapis-soft:#31517F;
+  --gold:#D4A945; --gold-dim:#8F7430;
+  --alabaster:#E9E2D0; --alabaster-dim:#9C9584;
+  --clay:#C1603A; --reed:#6E9C7C;
+  --line:rgba(212,169,69,.18);
+  --card:#0E1524; --card-2:#111A2E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--abzu);color:var(--alabaster);font-family:'IBM Plex Sans',sans-serif;font-weight:300;overflow:hidden}
+header{height:60px;display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0B1120,#070B14)}
+.glyph{font-size:24px;color:var(--gold);line-height:1;user-select:none}
+h1{font-family:'Marcellus',serif;font-weight:400;font-size:17px;letter-spacing:.13em;white-space:nowrap}
+h1 span{color:var(--gold)}
+.subtitle{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--alabaster-dim);letter-spacing:.07em;border-left:1px solid var(--line);padding-left:16px;line-height:1.55}
+.toggles{margin-left:auto;display:flex;gap:7px}
+.tgl{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;padding:6px 11px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--alabaster-dim);cursor:pointer;transition:all .18s}
+.tgl.on{color:var(--gold);border-color:var(--gold-dim);background:rgba(212,169,69,.07)}
+.tgl:focus-visible,.tab:focus-visible,.strat:focus-visible,.spot:focus-visible,.act:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.wrap{display:flex;height:calc(100vh - 60px)}
+.stage{flex:1;position:relative;min-width:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.stage-caption{position:absolute;left:16px;bottom:12px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.07em;line-height:1.7;pointer-events:none}
+.stage-caption b{color:var(--clay);font-weight:500}
+.qwell-label{position:absolute;right:16px;bottom:12px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.07em;pointer-events:none;line-height:1.7}
+.qwell-label b{color:var(--gold);font-weight:500}
+/* ---------- steward panel ---------- */
+aside{width:420px;flex-shrink:0;border-left:1px solid var(--line);background:var(--abzu-2);display:flex;flex-direction:column;overflow:hidden}
+.strategy{padding:12px 16px;border-bottom:1px solid var(--line)}
+.lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.2em;color:var(--alabaster-dim);text-transform:uppercase;margin-bottom:8px}
+.strat-row{display:flex;gap:7px}
+.strat{flex:1;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--card);cursor:pointer;text-align:left;color:var(--alabaster);transition:all .18s}
+.strat .t{font-weight:500;font-size:12px;display:block}
+.strat .d{font-size:10px;color:var(--alabaster-dim);margin-top:2px;display:block;line-height:1.4}
+.strat.sel{border-color:var(--gold);background:rgba(212,169,69,.08)}
+.strat.sel .t{color:var(--gold)}
+.act-row{display:flex;gap:7px;margin-top:9px}
+.act{flex:1;padding:9px;border-radius:3px;border:1px solid var(--gold-dim);background:var(--gold);color:#14100a;font-weight:600;font-size:12px;letter-spacing:.04em;cursor:pointer;transition:filter .15s}
+.act:hover{filter:brightness(1.1)}
+.act:disabled{background:var(--card-2);color:var(--alabaster-dim);border-color:var(--line);cursor:not-allowed}
+/* tabs */
+.tabs{display:flex;border-bottom:1px solid var(--line);background:#0A0F1C}
+.tab{flex:1;padding:9px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--alabaster-dim);font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.16em;cursor:pointer;transition:all .18s}
+.tab.on{color:var(--gold);border-bottom-color:var(--gold)}
+.tab .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--clay);margin-left:4px;vertical-align:middle;opacity:0}
+.tab.hasSel .dot{opacity:1}
+.tabpane{flex:1;overflow-y:auto;display:none;padding:12px 14px}
+.tabpane.on{display:block}
+.tabpane::-webkit-scrollbar,.journal::-webkit-scrollbar{width:8px}
+.tabpane::-webkit-scrollbar-thumb,.journal::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+/* spots */
+.spot{border:1px solid var(--line);border-radius:4px;background:var(--card);padding:10px 11px;display:grid;grid-template-columns:44px 1fr;gap:11px;align-items:center;cursor:pointer;transition:all .18s;margin-bottom:8px}
+.spot.sel{border-color:var(--clay);background:rgba(193,96,58,.08)}
+.spot.resolved{opacity:.42;cursor:default}
+.sigil{position:relative;width:44px;height:44px}
+.sigil svg{position:absolute;inset:0}
+.sigil .core{position:absolute;inset:9px;border-radius:50%;box-shadow:0 0 12px 2px rgba(0,0,0,.4) inset}
+.spot .name{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:500;letter-spacing:.05em;display:flex;justify-content:space-between;align-items:baseline}
+.spot .stage-tag{font-size:8.5px;letter-spacing:.1em;color:var(--alabaster-dim)}
+.spot .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:6px}
+.stat .v{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+.stat .v.hot{color:var(--clay)}
+.stat .k{font-size:8px;letter-spacing:.12em;color:var(--alabaster-dim);text-transform:uppercase;margin-top:1px}
+.spot.resolved .name::after{content:'· SEALED';color:var(--reed);font-size:8.5px;margin-left:5px}
+/* fuzzy pane */
+.fz-head{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--alabaster-dim);margin-bottom:10px;line-height:1.6}
+.fz-head b{color:var(--alabaster);font-weight:500}
+.fz-var{margin-bottom:13px}
+.fz-var .vh{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:var(--alabaster-dim);margin-bottom:4px}
+.fz-var .vh b{color:var(--alabaster);font-weight:500}
+.fz-band{position:relative;height:22px;border:1px solid var(--line);border-radius:3px;overflow:hidden;background:var(--card)}
+.fz-seg{position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:8px;letter-spacing:.14em;color:rgba(233,226,208,.55)}
+.fz-marker{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--alabaster);box-shadow:0 0 6px rgba(233,226,208,.8);transition:left .3s}
+.fz-rules{margin:14px 0 12px}
+.fz-rule{display:grid;grid-template-columns:1fr 64px;gap:8px;align-items:center;margin-bottom:6px;font-size:10px;color:var(--alabaster-dim);font-family:'IBM Plex Mono',monospace;letter-spacing:.02em}
+.fz-rule .fire{height:6px;background:var(--card);border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.fz-rule .fire i{display:block;height:100%;background:var(--gold);width:0;transition:width .3s}
+.gauge-wrap{display:flex;align-items:center;gap:16px;border:1px solid var(--line);border-radius:4px;background:var(--card);padding:12px}
+.gauge-wrap svg{flex-shrink:0}
+.verdict .vv{font-family:'Marcellus',serif;font-size:22px;letter-spacing:.08em}
+.verdict .vs{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--alabaster-dim);margin-top:3px;line-height:1.6}
+.empty-note{font-size:11px;color:var(--alabaster-dim);line-height:1.7;padding:8px 2px}
+/* story pane */
+.story-id{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.05em;border:1px solid var(--line);border-radius:4px;background:var(--card);padding:10px 12px;line-height:1.8;margin-bottom:12px}
+.story-id b{color:var(--gold);font-weight:500}
+.story-id .rc{color:var(--clay)}
+.story-ev{position:relative;padding:0 0 14px 18px;border-left:1px solid var(--line);margin-left:5px}
+.story-ev:last-child{padding-bottom:2px}
+.story-ev::before{content:'';position:absolute;left:-4px;top:3px;width:7px;height:7px;border-radius:50%;background:var(--lapis-soft)}
+.story-ev.bad::before{background:var(--clay)}
+.story-ev .et{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--alabaster-dim);letter-spacing:.1em}
+.story-ev .eb{font-size:11.5px;line-height:1.55;margin-top:2px}
+.story-ev .eb b{font-weight:500;color:var(--gold)}
+/* sla pane */
+.sla-card{border:1px solid var(--line);border-radius:4px;background:var(--card);padding:12px;margin-bottom:10px}
+.sla-client{font-family:'Marcellus',serif;font-size:15px;letter-spacing:.04em}
+.sla-clause{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.1em;margin-top:2px}
+.sla-quota{margin-top:10px}
+.sla-quota .qbar{height:7px;background:var(--card-2);border:1px solid var(--line);border-radius:4px;overflow:hidden;margin-top:4px}
+.sla-quota .qbar i{display:block;height:100%;background:var(--gold);transition:width .3s}
+.sla-tbl{width:100%;border-collapse:collapse;margin-top:6px;font-size:10.5px}
+.sla-tbl th{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.14em;color:var(--alabaster-dim);text-transform:uppercase;text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
+.sla-tbl td{padding:5px 6px;border-bottom:1px solid rgba(212,169,69,.08);font-family:'IBM Plex Mono',monospace;font-size:10px}
+.cov-yes{color:var(--reed)}.cov-no{color:var(--clay)}
+.sla-verdict{border-radius:4px;padding:11px 12px;font-size:11.5px;line-height:1.6;margin-top:2px}
+.sla-verdict b{font-weight:600}
+.sla-verdict.ok{border:1px solid rgba(110,156,124,.5);background:rgba(110,156,124,.09);color:#BFD9C6}
+.sla-verdict.part{border:1px solid rgba(212,169,69,.5);background:rgba(212,169,69,.08);color:#EBDCAE}
+.sla-verdict.no{border:1px solid rgba(193,96,58,.55);background:rgba(193,96,58,.09);color:#E8B9A4}
+/* journal */
+.journal{height:130px;flex-shrink:0;border-top:1px solid var(--line);background:#080D18;padding:9px 14px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:9.5px;line-height:1.75;color:var(--alabaster-dim)}
+.journal .j-eyebrow{font-size:8.5px;letter-spacing:.22em;color:var(--gold);margin-bottom:4px;text-transform:uppercase}
+.journal .ln b{color:var(--gold);font-weight:500}
+.journal .ln .clay{color:var(--clay)}.journal .ln .reed{color:var(--reed)}
+@media (max-width:980px){aside{width:330px}.subtitle{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="glyph">𒀭𒊩</div>
+  <h1>ŠALA <span>·</span> PARZU TREMOR WATCH <span>v2</span></h1>
+  <div class="subtitle">membrane trill · fuzzy court · particle story · client SLA<br>EN-DDB-001 · GL-TPL-002 · GL-STY-001 journal discipline</div>
+  <div class="toggles">
+    <button class="tgl on" id="tglDensity">DENSITY</button>
+    <button class="tgl on" id="tglMembranes">MEMBRANES</button>
+    <button class="tgl on" id="tglTrails">TRAILS</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="stage-caption">
+      Where state falls <b>UNKNOWN</b> the membrane trills. Click any particle to hear its story;<br>
+      select a spot to open its fuzzy court and check the client's agreement.
+    </div>
+    <div class="qwell-label"><b>EnkiQDB · 7003</b><br>quarantine well · evidence-grade · prune-exempt</div>
+  </div>
+
+  <aside>
+    <div class="strategy">
+      <div class="lbl">Remediation Strategy</div>
+      <div class="strat-row">
+        <button class="strat sel" id="stratAll"><span class="t">Heal All Spots</span><span class="d">One decree, every trilling cluster.</span></button>
+        <button class="strat" id="stratBatch"><span class="t">One Spot per Batch</span><span class="d">Batch rite, selected spot only.</span></button>
+      </div>
+      <div class="act-row">
+        <button class="act" id="btnExecute">Execute Decree</button>
+        <button class="act" id="btnReset" style="flex:0 0 82px;background:var(--card);color:var(--alabaster);border-color:var(--line)">Reseed</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab on" data-pane="paneSpots">SPOTS</button>
+      <button class="tab" data-pane="paneFuzzy" id="tabFuzzy">FUZZY<span class="dot"></span></button>
+      <button class="tab" data-pane="paneStory" id="tabStory">STORY<span class="dot"></span></button>
+      <button class="tab" data-pane="paneSla" id="tabSla">SLA<span class="dot"></span></button>
+    </div>
+
+    <div class="tabpane on" id="paneSpots"></div>
+    <div class="tabpane" id="paneFuzzy"><div class="empty-note">Select an abnormal spot to convene its fuzzy court — rule ranges, firing strengths, and the composite score.</div></div>
+    <div class="tabpane" id="paneStory"><div class="empty-note">Click a particle on the stage. Its StoryEngine journal will explain the reason behind its unknown state.</div></div>
+    <div class="tabpane" id="paneSla"><div class="empty-note">Select an abnormal spot to check whether this correction is already included in the client's agreement.</div></div>
+
+    <div class="journal" id="journal"><div class="j-eyebrow">StoryEngine Journal · append-only</div></div>
+  </aside>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   ŠALA PARZU TREMOR WATCH v2 — prototype (DRAFT, unsealed)
+   Adds: (1) Fuzzy Logic Rules Range & Score Engine per spot,
+   (2) per-particle StoryEngine narration of the unknown state,
+   (3) Client SLA coverage check before remediation.
+   ============================================================ */
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+function resize(){const r=cv.parentElement.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+window.addEventListener('resize',resize);
+
+const STAGES=[
+  {key:'FUZZY_AGED',sat:.85,lit:.60},
+  {key:'FUZZY_DECAY',sat:.45,lit:.48},
+  {key:'DEAD_EXPIRED',sat:.12,lit:.38},
+];
+/* ---------- reason code taxonomy ---------- */
+const REASONS={
+  'R-01':{name:'CHECKSUM_DRIFT',   text:'CRC-16/CCITT in κ[14..15] no longer matches the NĀRU journal witness — integrity dimension broken.'},
+  'R-02':{name:'EAV_MANDATORY_MISSING', text:'A Mandatory EAV attribute (quality.state) is absent — the Quality dimension cannot be read.'},
+  'R-03':{name:'HUE_VARIANCE',     text:'PASHIRU ColourID drifted outside the tribe tolerance band — Nisaba hue-variance trigger fired.'},
+  'R-04':{name:'RIKSU_ORPHAN',     text:'Cross-tribe reference in the Riksu journal points to a particle that no longer answers — Belonging is severed.'},
+  'R-05':{name:'STALE_TEMPORAL',   text:'Timestamp κ[12..13] fell beyond the GL-TPL-002 aging window without a renewal rite — Temporal dimension expired.'},
+};
+/* ---------- tribes + SLA agreements ---------- */
+const TRIBES=[
+  {name:'URUK',  hue:210,abnormal:false},
+  {name:'KISH',  hue:150,abnormal:false},
+  {name:'LAGASH',hue:45, abnormal:true, stage:0, reasons:['R-02','R-03','R-05'],
+    sla:{client:'Najaf Cemetery Authority', clause:'§4.2 — Data Custody & Repair', quota:3, used:1,
+         covered:['R-01','R-02','R-03','R-05']}},
+  {name:'UMMA',  hue:8,  abnormal:true, stage:1, reasons:['R-02','R-04','R-05'],
+    sla:{client:'NANSHE River Consortium', clause:'§3.1 — Contamination Records', quota:2, used:1,
+         covered:['R-02','R-05']}},
+  {name:'NIPPUR',hue:185,abnormal:false},
+  {name:'ERIDU', hue:275,abnormal:true, stage:2, reasons:['R-01','R-04'],
+    sla:{client:'ABZU Groundwater Board', clause:'§2.4 — Archive Integrity', quota:1, used:1,
+         covered:['R-01']}},
+  {name:'GIRSU', hue:100,abnormal:false},
+];
+let showDensity=true,showMembranes=true,showTrails=true;
+let strategy='all',batchNo=0,selectedSpot=null,selectedParticle=null;
+let clusters=[],particles=[],quarantined=[];
+let qWell={x:0,y:0},tPrev=performance.now();
+let pidCounter=0;
+
+function hex(n,w){return n.toString(16).toUpperCase().padStart(w,'0');}
+function makeKaki(tribeId,unknown){
+  const uuid=hex((Math.random()*0xFFFFFFFF)>>>0,8);
+  return `${uuid}·${hex(tribeId,4)}·02·${unknown?'03':'02'}`;
+}
+function fakeTs(minsAgo){const d=new Date(Date.now()-minsAgo*60000);return d.toTimeString().slice(0,8);}
+
+/* ---------- seeding ---------- */
+function seed(){
+  clusters=[];particles=[];quarantined=[];batchNo=0;selectedSpot=null;selectedParticle=null;
+  qWell={x:W-66,y:H-64};
+  const cols=4,rows=2,cw=(W-140)/cols,ch=(H-120)/rows;
+  TRIBES.forEach((t,i)=>{
+    const gx=i%cols,gy=Math.floor(i/cols);
+    const cx=90+gx*cw+cw*.42+(Math.random()-.5)*30;
+    const cy=80+gy*ch+ch*.45+(Math.random()-.5)*24;
+    const R=60+Math.random()*24;
+    const c={id:i,name:t.name,hue:t.hue,abnormal:t.abnormal,stage:t.abnormal?t.stage:-1,
+      sla:t.sla||null,reasonPool:t.reasons||[],
+      x:cx,y:cy,R,trill:0,tremor:0,crossRate:0,n:0,density:0,
+      unknownFrac:t.abnormal?.45+Math.random()*.28:.02,
+      resolved:false,draining:false,phase:Math.random()*Math.PI*2,verts:24};
+    clusters.push(c);
+    const count=115+Math.floor(Math.random()*55);
+    for(let k=0;k<count;k++){
+      const a=Math.random()*Math.PI*2,rr=Math.sqrt(Math.random())*R*.88;
+      const unknown=Math.random()<c.unknownFrac;
+      const reason=unknown&&c.reasonPool.length?c.reasonPool[Math.floor(Math.random()*c.reasonPool.length)]:null;
+      particles.push({
+        pid:pidCounter++,c:i,
+        x:cx+Math.cos(a)*rr,y:cy+Math.sin(a)*rr,
+        vx:(Math.random()-.5)*14,vy:(Math.random()-.5)*14,
+        hue:t.hue+(Math.random()-.5)*(unknown?70:18),
+        unknown,reason,crossN:0,inside:true,trail:[],state:'live',
+        kaki:makeKaki(i,unknown),
+        born:fakeTs(240+Math.random()*600),
+        degraded:fakeTs(20+Math.random()*90),
+      });
+    }
+  });
+  clearJournal();
+  jlog(`ŠALA watch reseeded · ${particles.length} particles · ${clusters.filter(c=>c.abnormal).length} <span class="clay">PARZU</span> spots detected`);
+  clusters.filter(c=>c.abnormal).forEach(c=>{
+    jlog(`<span class="clay">PARZU 0x03</span> · <b>${c.name}</b> · ${STAGES[c.stage].key} · unknown ${(c.unknownFrac*100)|0}% · SLA ${c.sla.client}`);
+  });
+  buildSpotCards();renderFuzzy();renderStory();renderSla();updateExecBtn();
+}
+
+/* ---------- colour ---------- */
+function collectiveColour(c){const st=c.stage>=0?STAGES[c.stage]:{sat:.8,lit:.6};return `hsl(${c.hue} ${st.sat*100}% ${st.lit*100}%)`;}
+function particleColour(p,c){
+  if(p.state==='sealed')return 'hsl(45 30% 40%)';
+  if(p.unknown&&c&&c.abnormal){const st=STAGES[c.stage];return `hsl(${p.hue} ${st.sat*100}% ${Math.min(72,st.lit*100+10)}%)`;}
+  return `hsl(${p.hue} 70% 62%)`;
+}
+
+/* ---------- simulation ---------- */
+function step(dt){
+  clusters.forEach(c=>{c.n=0;c._cross=0;});
+  for(const p of particles){
+    const c=clusters[p.c];
+    if(p.state==='draining'){
+      const dx=qWell.x-p.x,dy=qWell.y-p.y,d=Math.hypot(dx,dy)||1;
+      p.vx+=(dx/d)*260*dt;p.vy+=(dy/d)*260*dt;p.vx*=.965;p.vy*=.965;
+      p.x+=p.vx*dt*8;p.y+=p.vy*dt*8;
+      if(d<26){p.state='sealed';quarantined.push(p);if(selectedParticle===p)renderStory();}
+    }else if(p.state==='live'){
+      const dx=p.x-c.x,dy=p.y-c.y,d=Math.hypot(dx,dy)||1;
+      const wasIn=p.inside;p.inside=d<c.R;
+      if(wasIn!==p.inside){c._cross++;p.crossN++;}
+      if(p.unknown&&c.abnormal&&!c.resolved){
+        const pull=(d>c.R*1.35)?60:(d>c.R?-6:4);
+        p.vx+=(-dx/d)*pull*dt+(Math.random()-.5)*130*dt;
+        p.vy+=(-dy/d)*pull*dt+(Math.random()-.5)*130*dt;
+      }else{
+        if(d>c.R*.86){p.vx+=(-dx/d)*95*dt;p.vy+=(-dy/d)*95*dt;}
+        p.vx+=(-dy/d)*9*dt;p.vy+=(dx/d)*9*dt;
+      }
+      p.vx*=.985;p.vy*=.985;p.x+=p.vx*dt*8;p.y+=p.vy*dt*8;
+      if(p.inside)c.n++;
+      if(showTrails&&p.unknown&&c.abnormal&&!c.resolved){p.trail.push(p.x,p.y);if(p.trail.length>16)p.trail.splice(0,2);}
+      else p.trail.length=0;
+    }
+  }
+  clusters.forEach(c=>{
+    const rate=c._cross/dt;
+    c.crossRate+=(rate-c.crossRate)*.06;
+    c.tremor=c.resolved?0:Math.min(1,c.crossRate/140);
+    c.trill=c.abnormal&&!c.resolved?c.tremor:0;
+    c.density=c.n/(Math.PI*c.R*c.R)*1e4;
+    if(c.draining){
+      const remaining=particles.some(p=>p.c===c.id&&p.state==='draining');
+      if(!remaining){
+        c.draining=false;c.resolved=true;c.abnormal=false;
+        jlog(`<span class="reed">RESOLVED</span> · <b>${c.name}</b> sealed to EnkiQDB · membrane calm restored`);
+        refreshSpotCards();updateExecBtn();
+        if(selectedSpot===c){renderFuzzy();renderSla();}
+      }
+    }
+  });
+}
+
+/* ---------- fuzzy engine ---------- */
+function trap(x,a,b,c,d){if(x<=a||x>=d)return 0;if(x>=b&&x<=c)return 1;return x<b?(x-a)/(b-a):(d-x)/(d-c);}
+function tri(x,a,b,c){return trap(x,a,b,b,c);}
+const FUZZY_VARS=[
+  {key:'tremor',label:'MEMBRANE TRILL',min:0,max:1,fmt:v=>(v*100).toFixed(0),
+   sets:[{n:'CALM',f:x=>trap(x,-1,0,.2,.35),a:0,b:.35},
+         {n:'TRILLING',f:x=>tri(x,.25,.5,.75),a:.25,b:.75},
+         {n:'VIOLENT',f:x=>trap(x,.65,.85,1,2),a:.65,b:1}]},
+  {key:'unknownFrac',label:'UNKNOWN FRACTION',min:0,max:1,fmt:v=>(v*100).toFixed(0)+'%',
+   sets:[{n:'LOW',f:x=>trap(x,-1,0,.15,.3),a:0,b:.3},
+         {n:'MID',f:x=>tri(x,.2,.45,.7),a:.2,b:.7},
+         {n:'HIGH',f:x=>trap(x,.55,.75,1,2),a:.55,b:1}]},
+  {key:'density',label:'PARTICLE DENSITY',min:0,max:12,fmt:v=>v.toFixed(1),
+   sets:[{n:'SPARSE',f:x=>trap(x,-1,0,3,5),a:0,b:5},
+         {n:'NORMAL',f:x=>tri(x,4,7,10),a:4,b:10},
+         {n:'CROWDED',f:x=>trap(x,8,10,20,30),a:8,b:12}]},
+];
+const FUZZY_RULES=[
+  {txt:'IF trill VIOLENT ∧ unknown HIGH → QUARANTINE',centroid:90,
+   f:c=>Math.min(FUZZY_VARS[0].sets[2].f(c.tremor),FUZZY_VARS[1].sets[2].f(c.unknownFrac))},
+  {txt:'IF trill TRILLING ∧ unknown MID → ADVISE',centroid:55,
+   f:c=>Math.min(FUZZY_VARS[0].sets[1].f(c.tremor),FUZZY_VARS[1].sets[1].f(c.unknownFrac))},
+  {txt:'IF density CROWDED ∧ unknown HIGH → QUARANTINE',centroid:88,
+   f:c=>Math.min(FUZZY_VARS[2].sets[2].f(c.density),FUZZY_VARS[1].sets[2].f(c.unknownFrac))},
+  {txt:'IF density SPARSE ∧ trill TRILLING → ADVISE',centroid:60,
+   f:c=>Math.min(FUZZY_VARS[2].sets[0].f(c.density),FUZZY_VARS[0].sets[1].f(c.tremor))},
+  {txt:'IF trill CALM ∧ unknown LOW → WATCH',centroid:15,
+   f:c=>Math.min(FUZZY_VARS[0].sets[0].f(c.tremor),FUZZY_VARS[1].sets[0].f(c.unknownFrac))},
+];
+function fuzzyScore(c){
+  let num=0,den=0,fires=[];
+  for(const r of FUZZY_RULES){const w=r.f(c);fires.push(w);num+=w*r.centroid;den+=w;}
+  const score=den>0?num/den:0;
+  const verdict=score>=70?'QUARANTINE':score>=35?'ADVISE':'WATCH';
+  return {score,verdict,fires};
+}
+
+/* ---------- rendering (canvas) ---------- */
+function membranePath(c,t){
+  ctx.beginPath();
+  for(let i=0;i<=c.verts;i++){
+    const a=(i/c.verts)*Math.PI*2;
+    const wob=Math.sin(a*3+t*1.2+c.phase)*3+(c.trill>0?(Math.sin(a*7+t*22+c.phase)*7+(Math.random()-.5)*8)*c.trill:0);
+    const r=c.R+wob,x=c.x+Math.cos(a)*r,y=c.y+Math.sin(a)*r;
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.closePath();
+}
+function drawDensity(){
+  const cell=26,gw=Math.ceil(W/cell),gh=Math.ceil(H/cell);
+  const grid=new Float32Array(gw*gh);
+  for(const p of particles){if(p.state==='sealed')continue;const gx=(p.x/cell)|0,gy=(p.y/cell)|0;if(gx>=0&&gy>=0&&gx<gw&&gy<gh)grid[gy*gw+gx]++;}
+  for(let gy=0;gy<gh;gy++)for(let gx=0;gx<gw;gx++){
+    const v=grid[gy*gw+gx];if(v<2)continue;
+    ctx.fillStyle=`rgba(212,169,69,${Math.min(.22,v*.012)})`;
+    ctx.fillRect(gx*cell,gy*cell,cell,cell);
+  }
+}
+function draw(t){
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createRadialGradient(W/2,H/2,80,W/2,H/2,Math.max(W,H)*.7);
+  g.addColorStop(0,'#0A101E');g.addColorStop(1,'#070B14');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  if(showDensity)drawDensity();
+  /* quarantine well */
+  ctx.save();
+  ctx.strokeStyle='rgba(212,169,69,.55)';ctx.lineWidth=1.4;ctx.setLineDash([4,5]);
+  ctx.beginPath();ctx.arc(qWell.x,qWell.y,30,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='rgba(212,169,69,.10)';ctx.beginPath();ctx.arc(qWell.x,qWell.y,30,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(233,226,208,.8)';ctx.font='500 11px "IBM Plex Mono",monospace';ctx.textAlign='center';
+  ctx.fillText(quarantined.length,qWell.x,qWell.y+4);ctx.restore();
+  /* membranes */
+  if(showMembranes)for(const c of clusters){
+    membranePath(c,t);
+    if(c.resolved){ctx.strokeStyle='rgba(110,156,124,.5)';ctx.lineWidth=1.2;ctx.stroke();continue;}
+    if(c.abnormal){
+      ctx.fillStyle=`hsl(${c.hue} ${STAGES[c.stage].sat*100}% ${STAGES[c.stage].lit*100}% / .07)`;ctx.fill();
+      ctx.strokeStyle=(c===selectedSpot)?'rgba(193,96,58,.95)':'rgba(193,96,58,.6)';
+      ctx.lineWidth=(c===selectedSpot)?2.4:1.6;
+    }else{ctx.strokeStyle='rgba(49,81,127,.65)';ctx.lineWidth=1.2;}
+    ctx.stroke();
+  }
+  /* trails */
+  if(showTrails){ctx.lineWidth=1;
+    for(const p of particles){
+      if(p.trail.length<4)continue;
+      ctx.strokeStyle=`hsla(${p.hue} 60% 60% / .25)`;
+      ctx.beginPath();ctx.moveTo(p.trail[0],p.trail[1]);
+      for(let i=2;i<p.trail.length;i+=2)ctx.lineTo(p.trail[i],p.trail[i+1]);
+      ctx.stroke();
+    }}
+  /* particles */
+  for(const p of particles){
+    if(p.state==='sealed')continue;
+    const c=clusters[p.c];
+    ctx.fillStyle=particleColour(p,c);
+    const s=(p.unknown&&c.abnormal&&!c.resolved)?2.1:1.5;
+    ctx.fillRect(p.x-s/2,p.y-s/2,s,s);
+  }
+  /* selected particle reticle */
+  if(selectedParticle&&selectedParticle.state!=='sealed'){
+    const p=selectedParticle;
+    ctx.strokeStyle='rgba(233,226,208,.9)';ctx.lineWidth=1.2;
+    const r=9,q=4;
+    [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx,sy])=>{
+      ctx.beginPath();
+      ctx.moveTo(p.x+sx*r,p.y+sy*(r-q));ctx.lineTo(p.x+sx*r,p.y+sy*r);ctx.lineTo(p.x+sx*(r-q),p.y+sy*r);
+      ctx.stroke();
+    });
+  }
+  /* labels */
+  ctx.font='10px "IBM Plex Mono",monospace';ctx.textAlign='center';
+  for(const c of clusters){
+    ctx.fillStyle=c.abnormal?'rgba(193,96,58,.9)':(c.resolved?'rgba(110,156,124,.8)':'rgba(156,149,132,.7)');
+    ctx.fillText(c.name,c.x,c.y-c.R-10);
+    if(c.abnormal&&!c.resolved){
+      ctx.fillStyle='rgba(233,226,208,.55)';
+      ctx.fillText(`trill ${(c.tremor*100)|0}`,c.x,c.y+c.R+16);
+    }
+  }
+}
+
+/* ---------- particle picking (Ṣabātu-style) ---------- */
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  let best=null,bd=144;
+  for(const p of particles){
+    if(p.state==='sealed')continue;
+    const d=(p.x-mx)**2+(p.y-my)**2;
+    if(d<bd){bd=d;best=p;}
+  }
+  if(best){
+    selectedParticle=best;
+    renderStory();switchTab('paneStory');
+    jlog(`Ṣabātu pick · κ ${best.kaki} · tribe <b>${clusters[best.c].name}</b>${best.unknown?` · <span class="clay">${best.reason}</span>`:''}`);
+  }else{
+    /* fall through: spot selection by membrane */
+    for(const c of clusters){
+      if(!c.abnormal||c.resolved)continue;
+      if(Math.hypot(c.x-mx,c.y-my)<c.R+8){selectSpot(c);break;}
+    }
+  }
+});
+
+/* ---------- tabs ---------- */
+const panes=['paneSpots','paneFuzzy','paneStory','paneSla'];
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.pane)));
+function switchTab(id){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.pane===id));
+  panes.forEach(p=>document.getElementById(p).classList.toggle('on',p===id));
+}
+
+/* ---------- spots pane ---------- */
+const paneSpots=document.getElementById('paneSpots');
+let spotCards=new Map();
+function buildSpotCards(){
+  paneSpots.innerHTML='';spotCards.clear();
+  clusters.filter(c=>c.stage>=0).forEach(c=>{
+    const el=document.createElement('div');
+    el.className='spot';el.tabIndex=0;el.setAttribute('role','button');
+    el.innerHTML=`
+      <div class="sigil">
+        <svg viewBox="0 0 44 44">
+          <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(212,169,69,.25)" stroke-width="1"/>
+          <path class="wave" fill="none" stroke="var(--clay)" stroke-width="1.3"/>
+        </svg>
+        <div class="core"></div>
+      </div>
+      <div class="meta">
+        <div class="name"><span>SPOT · ${c.name}</span><span class="stage-tag">${STAGES[c.stage].key}</span></div>
+        <div class="stats">
+          <div class="stat"><div class="v tremorV">—</div><div class="k">Trill</div></div>
+          <div class="stat"><div class="v densV">—</div><div class="k">Dens</div></div>
+          <div class="stat"><div class="v unkV">${(c.unknownFrac*100)|0}%</div><div class="k">Unk</div></div>
+          <div class="stat"><div class="v scoreV hot">—</div><div class="k">Score</div></div>
+        </div>
+      </div>`;
+    el.addEventListener('click',()=>selectSpot(c));
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectSpot(c);}});
+    paneSpots.appendChild(el);spotCards.set(c.id,el);
+  });
+  refreshSpotCards();
+}
+function selectSpot(c){
+  if(c.resolved)return;
+  selectedSpot=(selectedSpot===c)?null:c;
+  refreshSpotCards();renderFuzzy();renderSla();
+  ['tabFuzzy','tabSla'].forEach(id=>document.getElementById(id).classList.toggle('hasSel',!!selectedSpot));
+}
+function refreshSpotCards(){
+  spotCards.forEach((el,id)=>{
+    const c=clusters[id];
+    el.classList.toggle('sel',c===selectedSpot);
+    el.classList.toggle('resolved',c.resolved);
+    el.querySelector('.core').style.background=c.resolved?'hsl(140 20% 30%)':collectiveColour(c);
+  });
+}
+function updateCardStats(){
+  spotCards.forEach((el,id)=>{
+    const c=clusters[id];if(c.resolved)return;
+    el.querySelector('.tremorV').textContent=(c.tremor*100).toFixed(0);
+    el.querySelector('.densV').textContent=c.density.toFixed(1);
+    el.querySelector('.scoreV').textContent=fuzzyScore(c).score.toFixed(0);
+    const wave=el.querySelector('.wave');
+    let d='M 4 22 ';
+    for(let x=4;x<=40;x+=2){
+      const y=22+Math.sin(x*.55+performance.now()/90)*(c.tremor*8+.5)*Math.sin(x*.13);
+      d+=`L ${x} ${y.toFixed(1)} `;
+    }
+    wave.setAttribute('d',d);
+    el.querySelector('.core').style.background=collectiveColour(c);
+  });
+  if(selectedSpot&&!selectedSpot.resolved)updateFuzzyLive();
+}
+
+/* ---------- fuzzy pane ---------- */
+const paneFuzzy=document.getElementById('paneFuzzy');
+function renderFuzzy(){
+  if(!selectedSpot||selectedSpot.resolved){
+    paneFuzzy.innerHTML='<div class="empty-note">Select an abnormal spot to convene its fuzzy court — rule ranges, firing strengths, and the composite score.</div>';
+    return;
+  }
+  const c=selectedSpot;
+  let html=`<div class="fz-head">Fuzzy court for spot <b>${c.name}</b> · ${STAGES[c.stage].key}<br>Ranges are sealed tolerances; the marker is the live measurement.</div>`;
+  FUZZY_VARS.forEach((v,vi)=>{
+    html+=`<div class="fz-var" data-var="${vi}">
+      <div class="vh"><span>${v.label}</span><b class="vval">—</b></div>
+      <div class="fz-band">`;
+    const segCols=['rgba(110,156,124,.20)','rgba(212,169,69,.20)','rgba(193,96,58,.22)'];
+    v.sets.forEach((s,si)=>{
+      const l=(s.a-v.min)/(v.max-v.min)*100,w=(s.b-s.a)/(v.max-v.min)*100;
+      html+=`<div class="fz-seg" style="left:${l}%;width:${w}%;background:${segCols[si]}">${s.n}</div>`;
+    });
+    html+=`<div class="fz-marker"></div></div></div>`;
+  });
+  html+=`<div class="lbl" style="margin-top:14px">Rules &amp; firing strength</div><div class="fz-rules">`;
+  FUZZY_RULES.forEach((r,i)=>{
+    html+=`<div class="fz-rule" data-rule="${i}"><span>${r.txt}</span><div class="fire"><i></i></div></div>`;
+  });
+  html+=`</div>
+  <div class="gauge-wrap">
+    <svg width="96" height="58" viewBox="0 0 96 58">
+      <path d="M 8 52 A 40 40 0 0 1 88 52" fill="none" stroke="var(--card-2)" stroke-width="8" stroke-linecap="round"/>
+      <path class="gArc" d="M 8 52 A 40 40 0 0 1 88 52" fill="none" stroke="var(--gold)" stroke-width="8" stroke-linecap="round" stroke-dasharray="126" stroke-dashoffset="126"/>
+      <text class="gNum" x="48" y="48" text-anchor="middle" fill="var(--alabaster)" font-family="'IBM Plex Mono',monospace" font-size="16">0</text>
+    </svg>
+    <div class="verdict"><div class="vv">—</div><div class="vs">composite score · centroid defuzzification<br>WATCH &lt; 35 ≤ ADVISE &lt; 70 ≤ QUARANTINE</div></div>
+  </div>`;
+  paneFuzzy.innerHTML=html;
+  updateFuzzyLive();
+}
+function updateFuzzyLive(){
+  const c=selectedSpot;if(!c||c.resolved||!paneFuzzy.querySelector('.fz-var'))return;
+  FUZZY_VARS.forEach((v,vi)=>{
+    const el=paneFuzzy.querySelector(`.fz-var[data-var="${vi}"]`);if(!el)return;
+    const val=c[v.key];
+    el.querySelector('.vval').textContent=v.fmt(val);
+    const pct=Math.max(0,Math.min(100,(val-v.min)/(v.max-v.min)*100));
+    el.querySelector('.fz-marker').style.left=`calc(${pct}% - 1px)`;
+  });
+  const {score,verdict,fires}=fuzzyScore(c);
+  fires.forEach((f,i)=>{
+    const el=paneFuzzy.querySelector(`.fz-rule[data-rule="${i}"] .fire i`);
+    if(el)el.style.width=(f*100).toFixed(0)+'%';
+  });
+  const arc=paneFuzzy.querySelector('.gArc'),num=paneFuzzy.querySelector('.gNum'),vv=paneFuzzy.querySelector('.verdict .vv');
+  if(arc){arc.style.strokeDashoffset=126-(score/100)*126;
+    arc.style.stroke=score>=70?'var(--clay)':score>=35?'var(--gold)':'var(--reed)';}
+  if(num)num.textContent=score.toFixed(0);
+  if(vv){vv.textContent=verdict;vv.style.color=score>=70?'var(--clay)':score>=35?'var(--gold)':'var(--reed)';}
+}
+
+/* ---------- story pane ---------- */
+const paneStory=document.getElementById('paneStory');
+function renderStory(){
+  document.getElementById('tabStory').classList.toggle('hasSel',!!selectedParticle);
+  if(!selectedParticle){
+    paneStory.innerHTML='<div class="empty-note">Click a particle on the stage. Its StoryEngine journal will explain the reason behind its unknown state.</div>';
+    return;
+  }
+  const p=selectedParticle,c=clusters[p.c];
+  const rc=p.reason?REASONS[p.reason]:null;
+  let html=`<div class="story-id">
+    κ <b>${p.kaki}</b><br>
+    tribe <b>${c.name}</b> · role ${p.unknown?'<span class="rc">0x03 PARZU</span>':'0x02 ZIKRU'} · crossings <b>${p.crossN}</b><br>
+    state ${p.state==='sealed'?'<span style="color:var(--reed)">SEALED · EnkiQDB</span>':p.unknown?'<span class="rc">UNKNOWN</span>':'KNOWN'}${rc?` · reason <span class="rc">${p.reason} ${rc.name}</span>`:''}
+  </div>`;
+  const ev=[];
+  ev.push({t:p.born,bad:false,b:`Ingested through <b>Gate G4</b> under dual seal; first position minted in Hepta Space — a unique address, as the Uniqueness Law demands.`});
+  ev.push({t:p.born,bad:false,b:`Joined orbit of tribe <b>${c.name}</b>; ColourID assigned by PASHIRU within tribe tolerance.`});
+  if(p.unknown&&rc){
+    ev.push({t:p.degraded,bad:true,b:`Degradation witnessed: ${rc.text}`});
+    ev.push({t:p.degraded,bad:true,b:`Quality dimension could no longer be resolved → state declared <b>UNKNOWN</b>; kaki_role promoted to PARZU 0x03 advisory.`});
+    ev.push({t:fakeTs(5),bad:true,b:`Membrane containment weakened; the particle now crosses the Mashalu boundary erratically (<b>${p.crossN}</b> crossings witnessed) — its share of the collective trill.`});
+    if(p.state==='sealed'){
+      ev.push({t:fakeTs(0),bad:false,b:`Steward decree executed → routed to <b>EnkiQDB (7003)</b>, evidence-grade and prune-exempt while the PARZU investigation stays open.`});
+    }else{
+      ev.push({t:'—',bad:false,b:`Awaiting steward decree. Remediation path depends on SLA coverage of reason <b>${p.reason}</b> — see the SLA tab.`});
+    }
+  }else{
+    ev.push({t:fakeTs(30),bad:false,b:`All seven dimensions read clean; the particle keeps calm orbit inside the membrane. No story of sickness to tell — which is itself the best story.`});
+  }
+  html+=ev.map(e=>`<div class="story-ev${e.bad?' bad':''}"><div class="et">${e.t}</div><div class="eb">${e.b}</div></div>`).join('');
+  paneStory.innerHTML=html;
+}
+
+/* ---------- SLA pane ---------- */
+const paneSla=document.getElementById('paneSla');
+function spotReasonCounts(c){
+  const m={};
+  for(const p of particles){if(p.c===c.id&&p.unknown&&p.reason)m[p.reason]=(m[p.reason]||0)+1;}
+  return m;
+}
+function slaVerdict(c){
+  const counts=spotReasonCounts(c),sla=c.sla;
+  const uncovered=Object.keys(counts).filter(r=>!sla.covered.includes(r));
+  const quotaLeft=sla.quota-sla.used;
+  if(quotaLeft<=0)return{cls:'no',txt:`<b>Not included.</b> Remediation quota for this cycle is exhausted (${sla.used}/${sla.quota}). A Madanu change-order decree is required before healing ${c.name}.`};
+  if(uncovered.length===0)return{cls:'ok',txt:`<b>Included in agreement.</b> All reason codes present in this spot fall under ${sla.clause}. This correction consumes 1 of ${quotaLeft} remaining remediations.`};
+  return{cls:'part',txt:`<b>Partially included.</b> ${uncovered.join(', ')} ${uncovered.length>1?'are':'is'} outside ${sla.clause}. Covered particles may be healed under the SLA; the rest require a Madanu change order.`};
+}
+function renderSla(){
+  if(!selectedSpot||selectedSpot.resolved){
+    paneSla.innerHTML='<div class="empty-note">Select an abnormal spot to check whether this correction is already included in the client\'s agreement.</div>';
+    return;
+  }
+  const c=selectedSpot,sla=c.sla,counts=spotReasonCounts(c),v=slaVerdict(c);
+  const qpct=Math.min(100,sla.used/sla.quota*100);
+  let rows='';
+  Object.keys(REASONS).forEach(r=>{
+    const inSpot=counts[r]||0;
+    if(!inSpot&&!sla.covered.includes(r))return;
+    rows+=`<tr>
+      <td>${r}</td><td style="color:var(--alabaster-dim)">${REASONS[r].name}</td>
+      <td>${inSpot||'—'}</td>
+      <td class="${sla.covered.includes(r)?'cov-yes':'cov-no'}">${sla.covered.includes(r)?'COVERED':'OUT OF SCOPE'}</td>
+    </tr>`;
+  });
+  paneSla.innerHTML=`
+    <div class="sla-card">
+      <div class="sla-client">${sla.client}</div>
+      <div class="sla-clause">${sla.clause} · spot ${c.name}</div>
+      <div class="sla-quota">
+        <div class="vh" style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim)">
+          <span>REMEDIATION QUOTA THIS CYCLE</span><span>${sla.used} / ${sla.quota} used</span>
+        </div>
+        <div class="qbar"><i style="width:${qpct}%"></i></div>
+      </div>
+      <table class="sla-tbl">
+        <tr><th>Code</th><th>Reason</th><th>In spot</th><th>Coverage</th></tr>
+        ${rows}
+      </table>
+    </div>
+    <div class="sla-verdict ${v.cls}">${v.txt}</div>`;
+}
+
+/* ---------- remediation ---------- */
+function drainCluster(c){
+  let n=0;
+  c.draining=true;
+  for(const p of particles){if(p.c===c.id&&p.unknown&&p.state==='live'){p.state='draining';p.trail.length=0;n++;}}
+  for(const p of particles){if(p.c===c.id&&p.state==='live')p.unknown=false;}
+  return n;
+}
+function activeSpots(){return clusters.filter(c=>c.abnormal&&!c.resolved&&!c.draining);}
+document.getElementById('btnExecute').addEventListener('click',()=>{
+  const act=activeSpots();if(!act.length)return;
+  const targets=strategy==='all'?act:[
+    (selectedSpot&&!selectedSpot.resolved&&!selectedSpot.draining)?selectedSpot
+    :act.reduce((a,b)=>fuzzyScore(a).score>fuzzyScore(b).score?a:b)];
+  if(strategy==='batch')batchNo++;
+  let total=0;
+  targets.forEach(c=>{
+    const v=slaVerdict(c),n=drainCluster(c);total+=n;
+    if(c.sla.used<c.sla.quota)c.sla.used++;
+    const slaNote=v.cls==='ok'?'within SLA':v.cls==='part'?'<span class="clay">partial SLA — Madanu change order raised</span>':'<span class="clay">out of quota — Madanu change order raised</span>';
+    jlog(`${strategy==='all'?'DECREE · heal all':'BATCH '+String(batchNo).padStart(2,'0')} · <b>${c.name}</b> · ${n} particles → <b>EnkiQDB</b> · ${slaNote}`);
+  });
+  if(strategy==='batch')selectedSpot=null;
+  refreshSpotCards();renderSla();renderFuzzy();updateExecBtn();
+});
+document.getElementById('btnReset').addEventListener('click',()=>{resize();seed();});
+function updateExecBtn(){
+  const b=document.getElementById('btnExecute'),n=activeSpots().length;
+  b.disabled=n===0;
+  b.textContent=n===0?'All Spots Sealed':strategy==='all'?`Heal All (${n} spots)`:`Run Batch ${String(batchNo+1).padStart(2,'0')}`;
+}
+const sAll=document.getElementById('stratAll'),sBatch=document.getElementById('stratBatch');
+sAll.addEventListener('click',()=>{strategy='all';sAll.classList.add('sel');sBatch.classList.remove('sel');updateExecBtn();});
+sBatch.addEventListener('click',()=>{strategy='batch';sBatch.classList.add('sel');sAll.classList.remove('sel');updateExecBtn();});
+function bindTgl(id,fn){const e=document.getElementById(id);e.addEventListener('click',()=>{e.classList.toggle('on');fn(e.classList.contains('on'));});}
+bindTgl('tglDensity',v=>showDensity=v);
+bindTgl('tglMembranes',v=>showMembranes=v);
+bindTgl('tglTrails',v=>showTrails=v);
+
+/* ---------- journal ---------- */
+const journal=document.getElementById('journal');
+function jlog(html){
+  const ts=new Date().toTimeString().slice(0,8);
+  const ln=document.createElement('div');ln.className='ln';
+  ln.innerHTML=`<b>${ts}</b> · ${html}`;
+  journal.appendChild(ln);journal.scrollTop=journal.scrollHeight;
+}
+function clearJournal(){journal.innerHTML='<div class="j-eyebrow">StoryEngine Journal · append-only</div>';}
+
+/* ---------- loop ---------- */
+let statTimer=0;
+function loop(now){
+  const dt=Math.min(.033,(now-tPrev)/1000);tPrev=now;
+  step(dt);draw(now/1000);
+  statTimer+=dt;
+  if(statTimer>.12){updateCardStats();statTimer=0;}
+  requestAnimationFrame(loop);
+}
+resize();seed();requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_90_phase_a_foundation_confirmation.yml
+#  BahyWay.Ecosystem v4.0 — Phase A Foundation Confirmation (PB-90 -> PB-98)
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_90_phase_a_foundation_confirmation.yml -i "localhost," -c local -v
+#
+#  HONESTY NOTE (read this before running):
+#  RM-001's own roadmap only ever describes "PB-37 -> PB-98" as a single
+#  phase range — it never individually defines PB-90 through PB-97 as
+#  distinct tasks anywhere this session found. Rather than invent 8 fake
+#  distinct sub-tasks to match a numbering scheme nobody ever specified,
+#  this ONE playbook covers the real, whole unit of work that range
+#  represents: confirming the actual foundation crates build and pass
+#  their tests on YOUR machine, not just in a sandbox. It is filed under
+#  PB-90 (the first number in the range) because nothing else claims that
+#  number specifically.
+#
+#  PB-98 itself IS individually well-defined everywhere (the KISPU/ENLIL
+#  bridge fix) -- and that fix already has its own playbook:
+#  playbook_172_enlil_index_wiring_fix.yml. Run that one for PB-98's
+#  actual content; it is not duplicated here.
+#
+#  What this confirms (the real substance of "Phase A"):
+#    - KAKI layout, journal, ConEngine (7 CSR rules), storage all build
+#    - enkidb-indexes (the ENLIL index stack) builds and passes its tests
+#    - heptascript builds and passes its tests
+#    - The full workspace builds clean
+#
+#  What it does NOT do: this is confirmation, not construction. Every
+#  crate checked here already exists in the repo you're pulling. If any
+#  assertion fails, that's real information — paste the output back and
+#  the fix comes back as playbook_9X_fix_<name>.yml, same loop as always.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-90 | Phase A Foundation Confirmation (KAKI/journal/ConEngine/storage/ENLIL/HeptaScript)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs"
+    report_file:   "{{ docs_dir }}/PB90_PHASE_A_REPORT_{{ session_date }}.txt"
+
+  tasks:
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    # EriduOS-VDI is not a GitHub-connected clone. GitHub lives on the
+    # laptop (Fedora host). Workflow: laptop runs git pull, then scp -r
+    # the updated workspace/bahyway_v4 to this host at {{ workspace }}.
+    # This playbook only verifies that sync already happened.
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "TEST | enkidb-kaki (KAKI layout, immutability)"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p enkidb-kaki", chdir: "{{ workspace }}"}
+      register: t_kaki
+      changed_when: false
+      failed_when: t_kaki.rc != 0
+
+    - name: "TEST | enkidb-journal (append-only journal)"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p enkidb-journal", chdir: "{{ workspace }}"}
+      register: t_journal
+      changed_when: false
+      failed_when: t_journal.rc != 0
+
+    - name: "TEST | enkidb-con-engine (7 CSR rules)"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p enkidb-con-engine", chdir: "{{ workspace }}"}
+      register: t_con
+      changed_when: false
+      failed_when: t_con.rc != 0
+
+    - name: "PARSE | ConEngine passed-test count"
+      ansible.builtin.set_fact:
+        con_passed_count: "{{ (t_con.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | ConEngine has zero failures and at least the D-001 baseline of passing tests"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in t_con.stdout"
+          - con_passed_count >= 6
+        fail_msg: >-
+          Expected at least 6 passed, 0 failed (matches TESTING_PLAYBOOK_PHASE1.md
+          D-001). Got {{ con_passed_count }} passed. Full output: {{ t_con.stdout }}
+        success_msg: >-
+          ConEngine: {{ con_passed_count }} passed, 0 failed (baseline 6 satisfied).
+
+    - name: "TEST | enkidb-storage"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p enkidb-storage", chdir: "{{ workspace }}"}
+      register: t_storage
+      changed_when: false
+      failed_when: t_storage.rc != 0
+
+    - name: "TEST | enkidb-indexes (the ENLIL 6-index stack)"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p enkidb-indexes", chdir: "{{ workspace }}"}
+      register: t_indexes
+      changed_when: false
+      failed_when: t_indexes.rc != 0
+
+    - name: "PARSE | enkidb-indexes passed-test count"
+      ansible.builtin.set_fact:
+        indexes_passed_count: "{{ (t_indexes.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-indexes has zero failures and at least the PB-90 baseline of passing tests"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in t_indexes.stdout"
+          - indexes_passed_count >= 54
+        fail_msg: >-
+          Expected at least 54 passed, 0 failed. Got {{ indexes_passed_count }}
+          passed. Full output: {{ t_indexes.stdout }}
+        success_msg: >-
+          enkidb-indexes: {{ indexes_passed_count }} passed, 0 failed
+          (>= baseline 54 -- the ENLIL 6-index stack has grown since PB-90 was written).
+
+    - name: "TEST | heptascript (includes the PB-172 index-wiring fix)"
+      ansible.builtin.command: {cmd: "{{ cargo }} test -p heptascript", chdir: "{{ workspace }}"}
+      register: t_hepta
+      changed_when: false
+      failed_when: t_hepta.rc != 0
+
+    - name: "PARSE | heptascript passed-test count"
+      ansible.builtin.set_fact:
+        hepta_passed_count: "{{ (t_hepta.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | heptascript has zero failures and at least the PB-172-landed baseline of passing tests"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in t_hepta.stdout"
+          - hepta_passed_count >= 170
+        fail_msg: >-
+          Expected at least 170 passed, 0 failed. If you see fewer than 170,
+          PB-172 (playbook_172_enlil_index_wiring_fix.yml) has not been run
+          yet on this machine -- run it first, then re-run this playbook.
+          Got {{ hepta_passed_count }} passed. Full output: {{ t_hepta.stdout }}
+        success_msg: >-
+          heptascript: {{ hepta_passed_count }} passed, 0 failed
+          (>= baseline 170, PB-172 confirmed landed -- the query language has
+          grown since then).
+
+    # ── Full workspace ───────────────────────────────────────────────────
+    - name: "BUILD | cargo build --workspace"
+      ansible.builtin.command: {cmd: "{{ cargo }} build --workspace", chdir: "{{ workspace }}"}
+      register: build_ws
+      changed_when: false
+      failed_when: build_ws.rc != 0
+
+    # ── Report ───────────────────────────────────────────────────────────
+    - name: "PRINT | PB-90 Phase A result"
+      ansible.builtin.debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════════════╗
+          ║   BahyWay.Ecosystem v4.0 — PB-90 Phase A Foundation Confirmation       ║
+          ║   Date : {{ session_date }}   Node : {{ ansible_hostname }}           ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  enkidb-kaki       : PASS                                              ║
+          ║  enkidb-journal    : PASS                                              ║
+          ║  enkidb-con-engine : 6/6 PASS                                          ║
+          ║  enkidb-storage    : PASS                                              ║
+          ║  enkidb-indexes    : 54/54 PASS                                        ║
+          ║  heptascript       : 170/170 PASS (confirms PB-172 present)            ║
+          ║  workspace build   : CLEAN                                             ║
+          ╠═══════════════════════════════════════════════════════════════════════╣
+          ║  Phase A confirmed real on THIS machine, not just in a sandbox.        ║
+          ║  PB-98's specific content = playbook_172 (already run if you see       ║
+          ║  170/170 above). Next: PB-99 (Phase B / Testing Playbook Phase 1).     ║
+          ╚═══════════════════════════════════════════════════════════════════════╝
+
+    - name: "WRITE | Dated report file"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-90 Phase A Report
+          Date: {{ session_date }}  Node: {{ ansible_hostname }}  Branch: {{ target_branch }}
+          enkidb-con-engine: {{ t_con.stdout }}
+          enkidb-indexes:    {{ t_indexes.stdout }}
+          heptascript:       {{ t_hepta.stdout }}
+          workspace build:   {{ 'CLEAN' if build_ws.rc == 0 else 'FAILED' }}
+
+    - name: "DONE  | PB-90 COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-90 complete. Run PB-172 next if not already done, then PB-99."

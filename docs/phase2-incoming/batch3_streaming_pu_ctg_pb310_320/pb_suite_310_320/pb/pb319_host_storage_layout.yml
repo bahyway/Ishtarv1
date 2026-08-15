@@ -1,0 +1,62 @@
+---
+# 𒁾 PB-319 — HOST STORAGE LAYOUT (Fedora 44, MSI Prestige)
+# NVMe zones: OS/IDEs | Forge subvolume (snapshotted) | VM storage (nodatacow +
+# LVM pool for raw data disks). Place data by what kind of truth it holds.
+- name: PB-319 | Host storage layout
+  hosts: host_forge
+  become: true
+  tasks:
+    - name: Forge as Btrfs subvolume (idempotent)
+      ansible.builtin.command: btrfs subvolume create {{ forge_subvol }}
+      args: { creates: "{{ forge_subvol }}" }
+
+    - name: Forge snapshot timer (daily, keep 14)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/forge-snap.service
+        content: |
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/sh -c 'btrfs subvolume snapshot -r {{ forge_subvol }} {{ forge_subvol }}_snaps/$(date +%%F) && ls -1d {{ forge_subvol }}_snaps/* | head -n -14 | xargs -r btrfs subvolume delete'
+    - ansible.builtin.copy:
+        dest: /etc/systemd/system/forge-snap.timer
+        content: |
+          [Timer]
+          OnCalendar=daily
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+      name: timer
+    - ansible.builtin.file: { path: "{{ forge_subvol }}_snaps", state: directory }
+      name: snaps dir
+    - ansible.builtin.systemd: { name: forge-snap.timer, enabled: true, state: started, daemon_reload: true }
+      name: enable
+
+    - name: VM images dir with nodatacow (CoW under qcow2 = write amplification)
+      ansible.builtin.file: { path: "{{ vm_images_dir }}", state: directory }
+    - ansible.builtin.command: chattr +C {{ vm_images_dir }}
+      name: chattr +C (applies to NEW files only — recreate existing images!)
+      failed_when: false
+
+    - name: SAFETY | LVM pool for raw VM data disks — explicit confirm
+      ansible.builtin.assert:
+        that: confirm_pv | default(false) | bool
+        fail_msg: "Run with -e confirm_pv=true only after verifying host_pv={{ host_pv }} is FREE."
+    - name: Create VG for VM data disks
+      ansible.builtin.command: vgcreate {{ host_vg }} {{ host_pv }}
+      args: { creates: "/dev/{{ host_vg }}" }
+
+    - name: Backup inventories + keys into Forge (they are critical truth now)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/inventories"
+        dest: "{{ forge_subvol }}/bahyway_pb_suite/"
+        remote_src: true
+      failed_when: false
+
+    - name: Mark host as playbook-built (PB-315 assertion target)
+      ansible.builtin.file: { path: /etc/bahyway_built_by_playbook, state: touch }
+
+    - name: Run-KAKI
+      ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-319\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"zones-laid\"}" >> {{ kaki_runs }}

@@ -1,0 +1,68 @@
+# =============================================================================
+# enkiddb-write-server — EnkiDDB (Tigris) Write Node container image.
+#
+# Build (from the repo root):
+#   podman build -t enkiddb-write-server:latest \
+#     -f deploy/podman/Containerfile.write-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkiddb-write \
+#     -p 7101:7101 \
+#     -v enkiddb-write-data:/data:Z \
+#     -e TRIBE_ID=0x7160 \
+#     -e FLUSH_EVERY=10 \
+#     --restart=always \
+#     enkiddb-write-server:latest
+#
+# Lifecycle (no systemd anywhere -- plain Podman commands):
+#   podman stop enkiddb-write
+#   podman start enkiddb-write
+#   podman logs -f enkiddb-write
+#
+# Backup: the volume (enkiddb-write-data), not the container, is what
+# holds state -- the container itself is disposable. Back up the volume's
+# mounted directory directly (e.g. `podman volume inspect enkiddb-write-data`
+# for its host path, then tar/rsync that path) rather than `podman commit`,
+# so restoring doesn't depend on the exact image version that wrote it.
+#
+# `:Z` on the volume mount is required on Fedora/SELinux-enforcing hosts
+# (matches this fleet's existing SELinux convention) -- without it Podman's
+# container context can't read/write the bind-mounted directory.
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkiddb-write-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+# `git` is required at runtime, not just build time -- PB-198's
+# team-authorship gate (crates/enkiddb/src/authorship.rs) shells out to
+# `git log -1 --format=%ae -- <file>` against the bind-mounted /source
+# checkout to decide whether INGEST_DIR is allowed to touch a given file.
+# Without it here, every authorship check silently returns "no git
+# history" (Command::new("git") fails to spawn, .ok() swallows it) and
+# INGEST_DIR rejects everything, regardless of real authorship -- found
+# live on the Architect's own eriduous-vdi (PB-201), not caught in
+# sandbox testing because PB-198 was verified running the binary bare on
+# a host that already had git installed, never inside this minimal image.
+RUN microdnf install -y shadow-utils git && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkiddb
+# Git >= 2.35.2 refuses to operate on a repo whose top-level directory is
+# owned by a different UID than the caller ("dubious ownership",
+# CVE-2022-24765) -- /source is bind-mounted from the host, owned by
+# whatever host user ran `podman run`, never UID 999 (this container's
+# `enkiddb` user). Without this, every authorship check fails with
+# "detected dubious ownership" even when /source is a perfectly real,
+# valid git checkout -- found live on eriduous-vdi (PB-202), one layer
+# past PB-201's git-binary fix. --system writes /etc/gitconfig, readable
+# by every user in the container, so this survives `useradd`/`USER`
+# switches and needs no per-container manual `git config` afterward.
+RUN git config --system --add safe.directory /source
+COPY --from=builder /build/target/release/enkiddb-write-server /usr/local/bin/enkiddb-write-server
+USER enkiddb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7101
+ENV DATA_DIR=/data
+EXPOSE 7101
+ENTRYPOINT ["/usr/local/bin/enkiddb-write-server"]

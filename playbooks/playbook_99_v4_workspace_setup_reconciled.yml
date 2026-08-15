@@ -1,0 +1,185 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_99_v4_workspace_setup_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-99 Reconciled: 4-crate scaffold → 4 real, built crates
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_99_v4_workspace_setup_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_99_v4_workspace_setup.yml):
+#    The uploaded PB-99 scaffolds 4 crates at the OLD flat path
+#    /home/bahyway/Forge/bahyway_v4: naramsin-archive, enkidb-session-registry,
+#    enkidb-con-engine, enkidb-indexes — but only writes directories +
+#    Cargo.toml for each, with [[test]]/[[example]] entries pointing at
+#    files it never creates (tests/playbook_archive.rs,
+#    tests/playbook_csr.rs, examples/cqrs_smoke.rs, tests/playbook_indexes.rs,
+#    tests/playbook_registry.rs — none written). Running this today would
+#    be actively harmful: it would silently no-op on directories that
+#    already exist, but if it ever touched the Cargo.toml files it WOULD
+#    overwrite the current real ones with the old broken-reference version.
+#
+#    All 4 crates exist today with substantial real content, confirmed by
+#    direct execution (not the bare scaffold this playbook would produce):
+#      naramsin-archive       : 9 passed  (real archive decompression: zip/tar.gz/tar.bz2/tar.xz)
+#      enkidb-session-registry: 6 passed
+#      enkidb-con-engine      : 6 passed  (already covered — see
+#                                playbook_92_con_engine_reconciled.yml)
+#      enkidb-indexes         : 54 passed (already covered — see
+#                                playbook_90_zakaru_natiru_reconciled.yml,
+#                                playbook_93_geo_engine_reconciled.yml,
+#                                playbook_95_enlil_index_stack_reconciled.yml)
+#
+#    This file verifies all 4 in one pass, without touching any existing
+#    Cargo.toml.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-99 (Reconciled) | 4-crate workspace — current state verification, no overwrite"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB99_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Sync verification — NO git on this host ────────────────────────────
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "TEST | cargo test -p naramsin-archive"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p naramsin-archive"
+        chdir: "{{ workspace }}"
+      register: test_naramsin
+      changed_when: false
+      failed_when: test_naramsin.rc != 0
+
+    - name: "PARSE | test_naramsin passed-test count"
+      ansible.builtin.set_fact:
+        test_naramsin_passed_count: "{{ (test_naramsin.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | naramsin-archive reports 9 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_naramsin.stdout"
+          - test_naramsin_passed_count >= 9
+        fail_msg: >-
+          Expected at least 9 passed, 0 failed. Got {{ test_naramsin_passed_count }}
+          passed. Full output: {{ test_naramsin.stdout }}
+        success_msg: >-
+          naramsin-archive: {{ test_naramsin_passed_count }} passed, 0 failed (>= baseline 9).
+
+    - name: "TEST | cargo test -p enkidb-session-registry"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-session-registry"
+        chdir: "{{ workspace }}"
+      register: test_registry
+      changed_when: false
+      failed_when: test_registry.rc != 0
+
+    - name: "PARSE | test_registry passed-test count"
+      ansible.builtin.set_fact:
+        test_registry_passed_count: "{{ (test_registry.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-session-registry reports 6 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_registry.stdout"
+          - test_registry_passed_count >= 6
+        fail_msg: >-
+          Expected at least 6 passed, 0 failed. Got {{ test_registry_passed_count }}
+          passed. Full output: {{ test_registry.stdout }}
+        success_msg: >-
+          enkidb-session-registry: {{ test_registry_passed_count }} passed, 0 failed (>= baseline 6).
+
+    - name: "TEST | cargo test -p enkidb-con-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-con-engine"
+        chdir: "{{ workspace }}"
+      register: test_con
+      changed_when: false
+      failed_when: test_con.rc != 0
+
+    - name: "PARSE | test_con passed-test count"
+      ansible.builtin.set_fact:
+        test_con_passed_count: "{{ (test_con.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-con-engine reports 6 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_con.stdout"
+          - test_con_passed_count >= 6
+        fail_msg: >-
+          Expected at least 6 passed, 0 failed. Got {{ test_con_passed_count }}
+          passed. Full output: {{ test_con.stdout }}
+        success_msg: >-
+          enkidb-con-engine: {{ test_con_passed_count }} passed, 0 failed (>= baseline 6).
+
+    - name: "TEST | cargo test -p enkidb-indexes"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-indexes"
+        chdir: "{{ workspace }}"
+      register: test_indexes
+      changed_when: false
+      failed_when: test_indexes.rc != 0
+
+    - name: "PARSE | test_indexes passed-test count"
+      ansible.builtin.set_fact:
+        test_indexes_passed_count: "{{ (test_indexes.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-indexes reports 54 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_indexes.stdout"
+          - test_indexes_passed_count >= 54
+        fail_msg: >-
+          Expected at least 54 passed, 0 failed. Got {{ test_indexes_passed_count }}
+          passed. Full output: {{ test_indexes.stdout }}
+        success_msg: >-
+          enkidb-indexes: {{ test_indexes_passed_count }} passed, 0 failed (>= baseline 54).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-99 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-99 (bare 4-crate scaffold, dangling [[test]]/
+          [[example]] entries, old flat path): SUPERSEDED. All 4 crates
+          exist today with real, substantial content — this playbook
+          deliberately does NOT touch any Cargo.toml, only verifies.
+
+          Verified this run:
+            naramsin-archive        : 9/9  tests PASS
+            enkidb-session-registry : 6/6  tests PASS
+            enkidb-con-engine       : 6/6  tests PASS
+            enkidb-indexes          : 54/54 tests PASS
+
+    - name: "DONE | PB-99 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-99 reconciled — all 4 crates verified, nothing overwritten. Report: {{ report_file }}"

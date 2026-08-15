@@ -1,0 +1,81 @@
+# =============================================================================
+# PB-174 — EnkiDDB CQRS: WriteNode (Journal/WAL) + ReadNode (Data Files)
+# BahyWay.Ecosystem v4.0 — 2026-07-12
+#
+# CONTEXT: the Architect decided to build EnkiDDB (port 7007, Documentation
+# Database) for real, ahead of BeeMDM ETL testing, so there is a working
+# documentation store to rely on before the Core ETL test begins. Explicit
+# requirement: "Full Database with WAL in CQRS AND 2 NODES (Read as Data
+# files and Write as Journal)."
+#
+# GROUND CHECKED FIRST (per this session's standing discipline): `enkiddb`
+# existed only as a particle *producer* -- DocumentParser -> DocumentEmitter
+# -> Vec<enkidb_particles::Particle> -- with its own doc comment saying
+# "Storage/persistence is the caller's concern." No WAL, no CQRS split, no
+# read path existed anywhere in the crate before this playbook. Zero matches
+# for WAL/CQRS/write_node/read_node in enkiddb/src/*.rs, confirmed by grep.
+#
+# REUSE, NOT REINVENT: EnkiDB (port 7001) already has exactly this pattern,
+# real and tested -- `enkidb-readnode` (ADR-012: materializes a Journal into
+# Data Files, then serves HeptaScript queries with no journal replay) +
+# `enkidb-datafile` (append-only Data Files + sorted on-disk index). This
+# playbook wires enkiddb to the SAME crates rather than building a parallel
+# WAL/CQRS scheme from scratch.
+#
+# WHAT WAS BUILT:
+#   - crates/enkiddb/src/writenode.rs (NEW): WriteNode wraps a real
+#     enkidb_journal::Journal (the WAL) + KakiMinter. ingest_document()
+#     mints a document's Identity-Kaki via the existing DocumentEmitter,
+#     converts each Particle to an EavTriple via the real
+#     enkidb_ingest::bridge::particle_to_eav_triple (the same bridge
+#     EnkiDB's own ingest path uses -- not a new converter), and appends
+#     one JournalEntry per document. Durable in the Journal before the
+#     call returns.
+#   - crates/enkiddb/src/readnode.rs (NEW): thin wrapper over the real
+#     enkidb-readnode crate. materialize_now() performs the one-time O(n)
+#     pass from a WriteNode's Journal into two Data Files; ReadNode::open
+#     (re-exported from enkidb-readnode, not reimplemented) is O(1) after
+#     that and serves HeptaScript queries touching only matched entities.
+#   - crates/enkiddb/Cargo.toml: added enkidb-journal, enkidb-ingest,
+#     enkidb-readnode, heptascript as dependencies.
+#
+# REAL CONSTRAINT FOUND DURING BUILD, DOCUMENTED, NOT PAPERED OVER:
+#   enkidb_datafile::DataFileWriter::open always opens in append mode
+#   (OpenOptions::append(true)) -- it never truncates. Re-materializing to
+#   the SAME base path does not refresh the Read Node's view; it appends a
+#   duplicate copy of every entity. This is a real property of the
+#   pre-existing enkidb-datafile/enkidb-readnode crates (proven by a
+#   dedicated test, rematerializing_to_the_same_path_appends_rather_than_
+#   replaces), not something introduced here. Each materialization
+#   generation needs a fresh base path. Documented directly in
+#   materialize_now's doc comment so no future caller re-discovers this
+#   the hard way.
+#
+# WHAT THIS IS NOT (stated plainly): this is a single-process, in-memory
+# Journal CQRS split -- it proves the write/read decoupling is real and
+# correct (a dedicated test proves the Read Node sees nothing until
+# materialize_now runs). It is NOT yet the 2-VM deployment (enkidb-node-
+# write / enkidb-node-read) the Architect's infrastructure uses for EnkiDB
+# itself -- that deployment step is separate, operational work on
+# eriduous-vdi, not a code gap.
+#
+# TESTS: enkiddb 20/20 (was 14 before this playbook -- 6 new: 3 writenode
+#   tests proving journaling is real and durable, 3 readnode tests proving
+#   the CQRS decoupling, the fresh-generation requirement, and the
+#   same-path-append constraint). Full workspace cargo build --workspace
+#   clean, no new warnings.
+# =============================================================================
+---
+- name: "PB-174 | Record — EnkiDDB CQRS WriteNode/ReadNode landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-174.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-12. New: crates/enkiddb/src/{writenode,readnode}.rs.
+          Run `cargo test -p enkiddb` for the standing proof: 20 passed,
+          0 failed, including the CQRS-decoupling and append-only-writer
+          constraint tests.

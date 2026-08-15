@@ -1,0 +1,126 @@
+# =============================================================================
+# PB-269 -- Retire eriduous-vdi as a VDI VM; confirm the bare-metal Fedora
+# Workstation 44 host as the real control node. BahyWay.Ecosystem v4.0 --
+# 2026-07-30
+#
+# WHY THIS EXISTS: the Architect's own instruction this session -- EriduOS-
+# VDI (the KVM/libvirt VM at 192.168.122.214 that every playbook's
+# `hosts: eriduous-vdi` and the CI self-hosted runner have targeted since
+# PB-210/212) is no longer used in v4.0. The control-node role moves to
+# the bare-metal Fedora Workstation 44 host PB-265/268 already reference.
+# The two EnkiDB node VMs (`enkidb-node-write` 192.168.122.101,
+# `enkidb-node-read` 192.168.122.107) are UNCHANGED by this decision --
+# the Architect's own call was to keep the 3-host topology and move only
+# the control node, not collapse everything onto one box.
+#
+# THE DELIBERATE, LOW-RISK FIX: ~89 playbooks in this repo hardcode
+# `hosts: eriduous-vdi`, and `.github/workflows/isimud-engine.yml`'s
+# self-hosted CI runner is registered under the label `eriduous-vdi`. A
+# mass rename across every numbered playbook (this repo's own audit-trail
+# convention -- see PB-263/265/268's header comments) would be invasive
+# and historically disruptive for zero real benefit: `eriduous-vdi` is
+# just an Ansible inventory alias / CI runner label, not a claim about
+# what kind of machine answers to it. So this playbook does NOT rename
+# anything. It:
+#   1. Confirms (best-effort, via `systemd-detect-virt`) that the host
+#      this play actually runs on reports bare metal, not a VM -- a real
+#      signal, not a rename.
+#   2. Leaves `ansible/inventory.ini`'s `[all] eriduous-vdi
+#      ansible_connection=local` line untouched (still correct: whatever
+#      machine invokes `ansible-playbook`, local connection, no
+#      `ansible_host` needed) -- only its header comment changes, to
+#      record that this alias now denotes the bare-metal box, not the
+#      retired VM.
+#   3. Leaves `enkidb_write`/`enkidb_read` (192.168.122.101/.107)
+#      completely alone, per the Architect's explicit choice to keep them
+#      as separate hosts.
+#   4. Prints the one manual step this playbook cannot do for the
+#      Architect: physically registering a NEW GitHub Actions self-hosted
+#      runner from the bare-metal box. Runner registration mints a
+#      one-time token from GitHub Settings -> Actions -> Runners and must
+#      run on the real machine with real credentials -- not something any
+#      playbook (or this session, running remotely) can do. Registering
+#      the new runner under the SAME label `eriduous-vdi` means
+#      `.github/workflows/isimud-engine.yml`'s `runs-on:` needs no edit at
+#      all; the old VDI-registered runner should then be removed from
+#      Settings -> Actions -> Runners once retired.
+#
+# THIS PLAYBOOK DELIBERATELY DOES NOT:
+#   - Rename the `eriduous-vdi` alias/label anywhere (see above).
+#   - Touch `enkidb_write`/`enkidb_read` inventory entries or connectivity
+#     -- out of scope per the Architect's own topology decision.
+#   - Register the GitHub Actions runner itself (needs a real token +
+#     physical access to the host -- printed as a manual step instead).
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_269_retire_eriduous_vdi_confirm_baremetal_control_node.yml
+# =============================================================================
+- name: "PB-269 -- Retire eriduous-vdi VM; confirm bare-metal Fedora Workstation 44 control node"
+  hosts: eriduous-vdi
+  connection: local
+  vars:
+    forge_root: "{{ playbook_dir }}/.."
+    inventory_file: "{{ forge_root }}/ansible/inventory.ini"
+
+  tasks:
+    - name: detect whether this host is a VM or bare metal (best-effort, non-fatal)
+      ansible.builtin.command: systemd-detect-virt
+      register: virt_check
+      changed_when: false
+      failed_when: false
+
+    - name: report virtualization status
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'BARE METAL confirmed (systemd-detect-virt reported "none")'
+             if virt_check.stdout | default('') == 'none'
+             else 'WARNING: systemd-detect-virt reported "' + (virt_check.stdout | default('unknown')) +
+                  '" -- this does not look like bare metal. If this is still the retired '
+                  'eriduous-vdi VM, stop and re-point this run at the real Fedora Workstation 44 host '
+                  'before treating it as the new control node.' }}
+
+    - name: gather Fedora release info
+      ansible.builtin.command: cat /etc/fedora-release
+      register: fedora_release
+      changed_when: false
+      failed_when: false
+
+    - name: report Fedora release
+      ansible.builtin.debug:
+        msg: "{{ fedora_release.stdout | default('could not read /etc/fedora-release -- is this actually Fedora?') }}"
+
+    - name: confirm rust toolchain present (needed for every Shakkanakku/EnkiDB build on this host)
+      ansible.builtin.command: rustc --version
+      register: rustc_version
+      changed_when: false
+      failed_when: false
+
+    - name: report rust toolchain
+      ansible.builtin.debug:
+        msg: "{{ rustc_version.stdout | default('rustc not found -- run dubsar-ide/scripts/setup_fedora44_baremetal.sh or install via rustup') }}"
+
+    - name: confirm the inventory file exists
+      ansible.builtin.stat:
+        path: "{{ inventory_file }}"
+      register: inv
+      failed_when: not inv.stat.exists
+
+    - name: confirm enkidb_write/enkidb_read entries are still present and untouched
+      ansible.builtin.command: grep -c "enkidb-node-write\|enkidb-node-read" "{{ inventory_file }}"
+      register: node_entries
+      changed_when: false
+      failed_when: node_entries.stdout | int < 2
+
+    - name: final report
+      ansible.builtin.debug:
+        msg: >-
+          eriduous-vdi (the Ansible alias / CI runner label) now denotes the bare-metal
+          Fedora Workstation 44 control node -- ansible/inventory.ini's connectivity
+          entries are unchanged (still ansible_connection=local for the control node;
+          enkidb-node-write/enkidb-node-read still at 192.168.122.101/.107 over SSH,
+          per the Architect's explicit choice to keep the 3-host topology).
+          MANUAL STEP NOT DONE BY THIS PLAYBOOK: register a new GitHub Actions
+          self-hosted runner from THIS machine (GitHub repo -> Settings -> Actions ->
+          Runners -> New self-hosted runner), using the label "eriduous-vdi" so
+          .github/workflows/isimud-engine.yml needs no edit -- then remove the old
+          VDI-registered runner from that same Settings page once confirmed retired.

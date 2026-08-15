@@ -1,0 +1,116 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_100_naramsin_archive_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-100 Reconciled: naramsin-archive, real test path
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_100_naramsin_archive_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_100_naramsin_archive.yml):
+#    The uploaded PB-100 is a build+test runner (it doesn't scaffold any
+#    source) targeting `cargo test -p naramsin-archive --test playbook_archive`
+#    — a named integration-test binary at tests/playbook_archive.rs. That
+#    file does not exist, and naramsin-archive's Cargo.toml has no [[test]]
+#    entry at all — confirmed by direct check. Running the original
+#    verbatim would fail immediately with "no test target named
+#    playbook_archive".
+#
+#    The crate itself is real and current (gzip.rs, format.rs, tar.rs,
+#    zip.rs, detect.rs, error.rs — genuine archive decompression, matching
+#    PB-100's described scope). Its tests just live inline
+#    (#[cfg(test)] mod tests) instead of in a separate integration binary.
+#    This file retargets the same build+test intent at the real path:
+#      naramsin-archive : 9 passed (not 19 — real count, not the planned
+#                          integration-suite count that was never built)
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-100 (Reconciled) | naramsin-archive — real test path"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB100_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "BUILD | cargo build -p naramsin-archive"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p naramsin-archive"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: false
+      failed_when: build_out.rc != 0
+
+    - name: "TEST | cargo test -p naramsin-archive"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p naramsin-archive"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PARSE | test_out passed-test count"
+      ansible.builtin.set_fact:
+        test_out_passed_count: "{{ (test_out.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | naramsin-archive reports 9 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_out.stdout"
+          - test_out_passed_count >= 9
+        fail_msg: >-
+          Expected at least 9 passed, 0 failed. Got {{ test_out_passed_count }}
+          passed. Full output: {{ test_out.stdout }}
+        success_msg: >-
+          naramsin-archive: {{ test_out_passed_count }} passed, 0 failed (>= baseline 9).
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-100 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-100 targeted `--test playbook_archive`, a named
+          integration binary that was never written (no tests/ dir, no
+          [[test]] entry in Cargo.toml). The crate itself is real and
+          current. Retargeted at the real inline test suite.
+
+          Verified this run:
+            naramsin-archive : 9/9 tests PASS
+
+          Note: this crate was already verified once this session, at the
+          same count, in playbook_99_v4_workspace_setup_reconciled.yml.
+          This file exists for PB-100's own numbering slot and to record
+          the specific "named test binary never built" finding.
+
+    - name: "DONE | PB-100 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-100 reconciled. Report: {{ report_file }}"

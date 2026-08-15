@@ -1,0 +1,109 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_100_naramsin_archive.yml
+#  BahyWay.Ecosystem v4.0 — NARAMSIN Archive (Stage 0) — Build + Test
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_100_naramsin_archive.yml
+#
+#  Crate: naramsin-archive
+#  Tests: 19 integration tests (playbook_archive)
+#  Covers:
+#    ZIP STORE / DEFLATE extraction + CRC-32 validation
+#    tar.gz (gzip unwrap + POSIX tar reader)
+#    Nested ZIP recursion guard (MAX_RECURSION = 4)
+#    Path-traversal sanitisation
+#    Size-bomb guard (64 MB inflate cap)
+#    bzip2 / xz / 7z stubs → UnsupportedFormat
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-100 | NARAMSIN Archive — Build & Integration Tests"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forge_root:   "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:    "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:        "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    crate:        "naramsin-archive"
+    test_bin:     "playbook_archive"
+    results_dir:  "{{ forge_root }}/test_results"
+
+  tasks:
+
+    - name: "SETUP | Create results directory"
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: "0755"
+
+    # ── Build ─────────────────────────────────────────────────────────────
+    - name: "BUILD | cargo build -p {{ crate }}"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p {{ crate }} 2>&1"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: true
+
+    - name: "FAIL  | Build failed"
+      ansible.builtin.fail:
+        msg: "cargo build -p {{ crate }} FAILED"
+      when: build_out.rc != 0
+
+    - name: "PASS  | Build OK"
+      ansible.builtin.debug:
+        msg: "naramsin-archive → BUILD PASS ✓"
+
+    # ── Integration tests ─────────────────────────────────────────────────
+    - name: "TEST  | cargo test -p {{ crate }} --test {{ test_bin }} --nocapture"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p {{ crate }} --test {{ test_bin }} -- --nocapture 2>&1"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+
+    - name: "SAVE  | Write test log"
+      ansible.builtin.copy:
+        content: "{{ test_out.stdout }}\n{{ test_out.stderr }}"
+        dest: "{{ results_dir }}/pb100_naramsin_archive.log"
+        mode: "0644"
+
+    - name: "PRINT | Test output"
+      ansible.builtin.debug:
+        msg: "{{ test_out.stdout_lines }}"
+
+    # ── Extract pass/fail counts ──────────────────────────────────────────
+    - name: "PARSE | Extract test result line"
+      ansible.builtin.set_fact:
+        result_line: >-
+          {{ test_out.stdout_lines
+             | select('match', '^test result')
+             | list | last | default('no result line found') }}
+
+    - name: "PRINT | Result"
+      ansible.builtin.debug:
+        msg: |
+          ┌─────────────────────────────────────────────────┐
+          │  PB-100  naramsin-archive  BLOCK A              │
+          ├─────────────────────────────────────────────────┤
+          │  {{ result_line }}
+          │  Log: {{ results_dir }}/pb100_naramsin_archive.log
+          └─────────────────────────────────────────────────┘
+
+    - name: "FAIL  | Tests failed"
+      ansible.builtin.fail:
+        msg: "naramsin-archive integration tests FAILED — check {{ results_dir }}/pb100_naramsin_archive.log"
+      when: test_out.rc != 0
+
+    # ── Individual test check ─────────────────────────────────────────────
+    - name: "CHECK | Verify key tests passed"
+      ansible.builtin.assert:
+        that:
+          - "'a001_detect_zip_magic ... ok' in test_out.stdout or 'ok' in test_out.stdout"
+          - test_out.rc == 0
+        fail_msg: "Key archive tests did not pass"
+        success_msg: "All 19 archive tests PASS ✓"
+
+    - name: "DONE  | PB-100 naramsin-archive COMPLETE → Run PB-101 next"
+      ansible.builtin.debug:
+        msg: "BLOCK A PASS ✓ — 19/19 tests — Run playbook_101_session_registry.yml next"

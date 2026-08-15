@@ -1,0 +1,184 @@
+# =====================================================================
+# PB-326 — GulaFederationEngine · Medicine batch audit sweep
+# Suite: GulaFederation (PB-321..PB-326) · Run FROM Fedora 44 HOST.
+# THE BACKEND OF THE ŠALA INSPECTOR SUB-TAB: sweeps every batch in
+# every warehouse, checks all attributes + metadata, and discovers
+# defect / invalidity / expiry conditions. Four rules, all composed
+# from sealed mathematics — nothing new is invented here:
+#   R1 EXPIRY HORIZON   — decay calculus: days-to-DEAD, FUZZY band
+#   R2 ASSAY DEVIATION  — mix/structure ratio vs spec tolerance
+#   R3 TAU PRICE SPREAD — official vs black-market opacity signal
+#   R4 COLD-CHAIN SLOPE — Asakku-style weakening restoring force
+# Quarantine candidates route conceptually to EnkiQDB (evidence-grade,
+# prune-exempt). Audit report is append-only JSON, one line per run.
+# =====================================================================
+---
+- name: PB-326 medicine batch audit
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    bahyway_root: "{{ playbook_dir }}/../workspace/bahyway_v4"  # FIXED 2026-08-15: was ansible_env.HOME + "/BahyWay.Ecosystem", a path that does not exist -- would have silently scaffolded an orphaned crate tree disconnected from the real Cargo workspace
+    crate_dir: "{{ bahyway_root }}/crates/gula-batch-audit"
+    data_dir: "{{ bahyway_root }}/data/gula-federation"
+  tasks:
+    - name: Ensure directories
+      ansible.builtin.file:
+        path: "{{ crate_dir }}/src"
+        state: directory
+        mode: "0755"
+
+    - name: Write Cargo.toml
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name = "gula-batch-audit"
+          version = "0.1.0"
+          edition = "2021"
+          description = "Province-wide batch attribute + metadata audit: expiry, assay, tau price spread, cold-chain slope."
+
+          [dependencies]
+          serde = { version = "1", features = ["derive"] }
+          serde_json = "1"
+
+    - name: Write src/main.rs (audit rules)
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/main.rs"
+        mode: "0644"
+        content: |
+          //! Batch audit sweep. Reads batches.json from PB-322.
+          //! State law (GOLDEN/FUZZY/DEAD) lives in EAV-space, never in
+          //! KAKI bytes. This audit ASSIGNS state from evidence:
+          //!   DEAD  : expired, rejected, or assay < 90%
+          //!   FUZZY : horizon < 120d, |assay-100| > 3.5, spread tau > 1.8,
+          //!           or cold slope < -0.15 (restoring force failing)
+          //!   GOLDEN: everything else
+
+          use serde::{Deserialize, Serialize};
+          use std::fs;
+
+          #[derive(Deserialize)]
+          struct Batch {
+              batch_id: String, product: String, node_id: String,
+              qty: u32, expiry_day: i64, assay_pct: f64,
+              storage: String, accept_state: String,
+              price_official: f64, price_black: f64,
+              cold_recovery_slope: Option<f64>,
+          }
+
+          #[derive(Serialize)]
+          struct Finding {
+              batch_id: String, product: String, node_id: String,
+              state: &'static str, reasons: Vec<&'static str>,
+              expiry_horizon_days: i64, assay_pct: f64,
+              tau_spread: f64, quarantine_candidate: bool,
+          }
+
+          const FUZZY_HORIZON_DAYS: i64 = 120;
+          const ASSAY_TOL: f64 = 3.5;      // FUZZY beyond this deviation
+          const ASSAY_DEAD: f64 = 90.0;    // DEAD below this
+          const TAU_SPREAD_FUZZY: f64 = 1.8;
+          const COLD_SLOPE_FUZZY: f64 = -0.15;
+
+          fn audit(b: &Batch) -> Finding {
+              let mut reasons = Vec::new();
+              let tau = if b.price_official > 0.0 { b.price_black / b.price_official } else { 0.0 };
+
+              let dead = {
+                  if b.expiry_day <= 0 { reasons.push("expired"); }
+                  if b.accept_state == "rejected" { reasons.push("rejected_lot"); }
+                  if b.assay_pct < ASSAY_DEAD { reasons.push("assay_below_90"); }
+                  !reasons.is_empty()
+              };
+              let mut fuzzy = false;
+              if !dead {
+                  if b.expiry_day < FUZZY_HORIZON_DAYS { reasons.push("expiry_horizon"); fuzzy = true; }
+                  if (b.assay_pct - 100.0).abs() > ASSAY_TOL { reasons.push("assay_drift"); fuzzy = true; }
+                  if tau > TAU_SPREAD_FUZZY { reasons.push("tau_price_spread"); fuzzy = true; }
+                  if b.storage == "cold_2_8" {
+                      if let Some(s) = b.cold_recovery_slope {
+                          if s < COLD_SLOPE_FUZZY { reasons.push("cold_chain_weakening"); fuzzy = true; }
+                      }
+                  }
+                  if b.accept_state == "held" { reasons.push("held_pending"); fuzzy = true; }
+              }
+              let state = if dead { "DEAD" } else if fuzzy { "FUZZY" } else { "GOLDEN" };
+              Finding {
+                  batch_id: b.batch_id.clone(), product: b.product.clone(),
+                  node_id: b.node_id.clone(), state, quarantine_candidate:
+                      reasons.contains(&"rejected_lot") || reasons.contains(&"assay_below_90"),
+                  reasons, expiry_horizon_days: b.expiry_day,
+                  assay_pct: b.assay_pct, tau_spread: (tau * 100.0).round() / 100.0,
+              }
+          }
+
+          fn main() {
+              let path = std::env::var("GULA_BATCHES_JSON")
+                  .unwrap_or_else(|_| "batches.json".into());
+              let raw = fs::read_to_string(&path).expect("batches.json from PB-322");
+              let batches: Vec<Batch> = serde_json::from_str(&raw).expect("parse");
+              let findings: Vec<Finding> = batches.iter().map(audit).collect();
+
+              let (mut g, mut f, mut d, mut q) = (0u32, 0u32, 0u32, 0u32);
+              for x in &findings {
+                  match x.state { "GOLDEN" => g += 1, "FUZZY" => f += 1, _ => d += 1 }
+                  if x.quarantine_candidate { q += 1 }
+              }
+              fs::write("audit_report.json", serde_json::to_string_pretty(&findings).unwrap()).unwrap();
+              let quarantine: Vec<&Finding> = findings.iter().filter(|x| x.quarantine_candidate).collect();
+              fs::write("enkiqdb_candidates.json", serde_json::to_string_pretty(&quarantine).unwrap()).unwrap();
+              println!("audited={} GOLDEN={} FUZZY={} DEAD={} quarantine_candidates={}",
+                       findings.len(), g, f, d, q);
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              fn base() -> Batch { Batch { batch_id: "T".into(), product: "P".into(),
+                  node_id: "N".into(), qty: 10, expiry_day: 400, assay_pct: 100.0,
+                  storage: "ambient".into(), accept_state: "accepted".into(),
+                  price_official: 10.0, price_black: 12.0, cold_recovery_slope: None } }
+
+              #[test] fn golden_when_clean() { assert_eq!(audit(&base()).state, "GOLDEN"); }
+              #[test] fn dead_when_expired() {
+                  let mut b = base(); b.expiry_day = -1;
+                  let f = audit(&b); assert_eq!(f.state, "DEAD");
+                  assert!(f.reasons.contains(&"expired")); }
+              #[test] fn dead_and_quarantine_on_low_assay() {
+                  let mut b = base(); b.assay_pct = 84.0;
+                  let f = audit(&b); assert_eq!(f.state, "DEAD");
+                  assert!(f.quarantine_candidate); }
+              #[test] fn fuzzy_on_tau_spread() {
+                  let mut b = base(); b.price_black = 25.0;   // tau = 2.5
+                  let f = audit(&b); assert_eq!(f.state, "FUZZY");
+                  assert!(f.reasons.contains(&"tau_price_spread")); }
+              #[test] fn fuzzy_on_cold_slope() {
+                  let mut b = base(); b.storage = "cold_2_8".into();
+                  b.cold_recovery_slope = Some(-0.22);
+                  let f = audit(&b); assert_eq!(f.state, "FUZZY");
+                  assert!(f.reasons.contains(&"cold_chain_weakening")); }
+          }
+
+    - name: Test rules
+      ansible.builtin.command:
+        cmd: cargo test
+        chdir: "{{ crate_dir }}"
+      register: t
+      changed_when: true
+      failed_when: t.rc != 0
+
+    - name: Run sweep against PB-322 dataset (if present)
+      ansible.builtin.command:
+        cmd: cargo run --release
+        chdir: "{{ crate_dir }}"
+      environment:
+        GULA_BATCHES_JSON: "{{ data_dir }}/batches.json"
+      register: sweep
+      changed_when: true
+      failed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ sweep.stdout | default('Dataset not present yet — run PB-322 first, then re-run PB-326.') }}"

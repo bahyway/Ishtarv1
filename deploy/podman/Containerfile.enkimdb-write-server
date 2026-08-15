@@ -1,0 +1,52 @@
+# =============================================================================
+# enkimdb-write-server — EnkiMDB (Euphrates) Write Node container image.
+#
+# Build (from the repo root):
+#   podman build -t enkimdb-write-server:latest \
+#     -f deploy/podman/Containerfile.enkimdb-write-server \
+#     workspace/bahyway_v4
+#
+# Run — note the extra read-only bind mount of the actual source checkout,
+# since this server catalogs crates/playbooks that live on disk outside
+# its own /data volume:
+#   podman run -d --name enkimdb-write \
+#     -p 7201:7201 \
+#     -v enkimdb-write-data:/data:Z \
+#     -v ~/Forge/EnkiDB:/source:ro,Z \
+#     -e TRIBE_ID=0xFF01 \
+#     -e FLUSH_EVERY=50 \
+#     --restart=always \
+#     enkimdb-write-server:latest
+#
+# Trigger a catalog scan (any TCP client, wire protocol in this server's
+# own module doc):
+#   SCAN_CRATES:/source/workspace/bahyway_v4
+#   SCAN_PLAYBOOKS:/source
+#   FLUSH
+#
+# Lifecycle (no systemd anywhere -- plain Podman commands):
+#   podman stop enkimdb-write
+#   podman start enkimdb-write
+#   podman logs -f enkimdb-write
+#
+# Backup: the volume (enkimdb-write-data), not the container, is what
+# holds state -- back up its mounted directory directly rather than
+# `podman commit`.
+#
+# `:Z` on both mounts is required on Fedora/SELinux-enforcing hosts.
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkimdb-write-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkimdb
+COPY --from=builder /build/target/release/enkimdb-write-server /usr/local/bin/enkimdb-write-server
+USER enkimdb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7201
+ENV DATA_DIR=/data
+EXPOSE 7201
+ENTRYPOINT ["/usr/local/bin/enkimdb-write-server"]

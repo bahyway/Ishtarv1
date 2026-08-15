@@ -1,0 +1,47 @@
+---
+# PB-422 · RTK base station at the cemetery office · DRAFT (GL-NAV-001 Annex A)
+# INVARIANT 4: a moved base without a re-seal invalidates the day's fixes.
+- name: "PB-422 · provision the ZED-F9P base and RTCM caster"
+  hosts: najaf_base_station
+  vars:
+    base_lat: "REPLACE_SURVEYED_LAT"     # surveyed-in, then SEALED — never eyeballed
+    base_lon: "REPLACE_SURVEYED_LON"
+    base_alt: "REPLACE_SURVEYED_ALT"
+    rtcm_port: 2101
+  tasks:
+    - name: refuse to run with unsurveyed coordinates
+      ansible.builtin.assert:
+        that: ["'REPLACE' not in base_lat"]
+        fail_msg: "Base position not surveyed. Survey-in first; the seal is the survey."
+
+    - name: ubx tooling
+      ansible.builtin.dnf: {name: [gpsd, gpsd-clients, python3-pyubx2], state: present}
+      become: yes
+
+    - name: configure F9P as fixed base (TMODE3 fixed, RTCM3 out)
+      ansible.builtin.command: >
+        ubxtool -f /dev/ttyACM0
+        --tmode3-fixed {{ base_lat }} {{ base_lon }} {{ base_alt }}
+        --rtcm3 1005,1077,1087,1097,1230
+      register: f9p_cfg
+
+    - name: RTCM caster unit (serves corrections to the survey cart)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/hendursaga-rtcm.service
+        content: |
+          [Unit]
+          Description=Hendursaga RTCM caster (PB-422)
+          [Service]
+          ExecStart=/usr/local/bin/str2str -in serial://ttyACM0 -out tcpsvr://:{{ rtcm_port }}
+          Restart=always
+          [Install]
+          WantedBy=multi-user.target
+      become: yes
+
+    - name: enable caster + journal the base seal
+      become: yes
+      ansible.builtin.systemd: {name: hendursaga-rtcm, enabled: yes, state: started, daemon_reload: yes}
+    - ansible.builtin.lineinfile:
+        path: /var/lib/hendursaga/NARU.journal
+        line: "{{ ansible_date_time.iso8601 }} · PB-422 · base sealed at {{ base_lat }},{{ base_lon }},{{ base_alt }}"
+        create: yes

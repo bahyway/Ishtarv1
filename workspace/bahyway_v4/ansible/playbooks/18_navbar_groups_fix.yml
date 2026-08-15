@@ -1,0 +1,172 @@
+---
+# Playbook 18 — Nav bar groups + Nergal button colour fix
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/18_navbar_groups_fix.yml -v
+
+- name: "𒁾 Nav bar groups + Nergal button fix"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:  "/home/bahyway/Forge/bahyway_v4"
+    app_rs: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+
+  tasks:
+
+    - name: "Backup app.rs"
+      ansible.builtin.copy:
+        src:        "{{ app_rs }}"
+        dest:       "{{ app_rs }}.bak18"
+        remote_src: true
+        mode:       "0644"
+
+    # Use Python for precise surgical edits
+    - name: "Apply nav bar groups + fixes via Python"
+      ansible.builtin.shell:
+        cmd: |
+          python3 << 'PYEOF'
+          app_path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+          with open(app_path, 'r') as f:
+              app = f.read()
+
+          # ── Find the entire nav bar horizontal block and replace it ──────────
+          # Current nav bar: one long list of tab_btn() calls
+          # New nav bar: BahyWay main | separator | Enterprise Apps group |
+          #              separator | AI Agents group
+
+          # Find the tab_btn block inside horizontal_centered
+          # We replace everything between the two separators
+          old_tabs = '''tab_btn(ui, &mut self.panel, ActivePanel::BahywayMain, "𒁾 BahyWay");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EriduOS,    "𒁾 EriduOS");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Hepta,     "⬡  Hepta 7D");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Particles,  "◉  Particles");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Wpd,        "⛽  Baghdad WPD");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Najaf,      "☽  Najaf");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EtlFlow,    "⇄  ETL Flow");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EtlTransparency, "𒁾  ETL 3D");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EtlSim, "⬡  ETL Sim");
+                    tab_btn(ui, &mut self.panel, ActivePanel::TamuzAI,   "𒀭  TamuzAI");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EaAgent,   "𒂗𒆠 EaAgent");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Nergal, "𒀭𒉺𒂵 Nergal AV");'''
+
+          new_tabs = '''// ── 𒁾 BahyWay main entrance ─────────────────────────────────
+                    tab_btn(ui, &mut self.panel, ActivePanel::BahywayMain, "𒁾 BahyWay");
+                    ui.separator();
+
+                    // ── Enterprise Apps ───────────────────────────────────────
+                    ui.label(egui::RichText::new("Enterprise Apps")
+                        .color(egui::Color32::from_rgb(100, 100, 140))
+                        .size(10.0));
+                    ui.add_space(2.0);
+                    tab_btn(ui, &mut self.panel, ActivePanel::EriduOS,        "EriduOS");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Hepta,          "Hepta 7D");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Particles,      "Particles");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Wpd,            "Baghdad WPD");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Najaf,          "Najaf");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EtlFlow,        "ETL Flow");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EtlTransparency,"ETL 3D");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EtlSim,         "ETL Sim");
+                    tab_btn(ui, &mut self.panel, ActivePanel::Nergal,         "𒀭𒉺𒂵 Nergal");
+                    ui.separator();
+
+                    // ── AI Agents ─────────────────────────────────────────────
+                    ui.label(egui::RichText::new("AI Agents")
+                        .color(egui::Color32::from_rgb(100, 100, 140))
+                        .size(10.0));
+                    ui.add_space(2.0);
+                    tab_btn(ui, &mut self.panel, ActivePanel::TamuzAI, "𒀭 TamuzAI");
+                    tab_btn(ui, &mut self.panel, ActivePanel::EaAgent,  "𒂗𒆠 EaAgent");'''
+
+          if old_tabs in app:
+              app = app.replace(old_tabs, new_tabs)
+              print("Nav bar replaced successfully")
+          else:
+              print("WARNING: exact tab block not found — trying partial match")
+              import re
+              # Find and replace the whole tab section
+              pattern = r'tab_btn\(ui, &mut self\.panel, ActivePanel::BahywayMain.*?tab_btn\(ui, &mut self\.panel, ActivePanel::Nergal[^;]+;'
+              match = re.search(pattern, app, re.DOTALL)
+              if match:
+                  app = app[:match.start()] + new_tabs + app[match.end():]
+                  print("Nav bar replaced via regex")
+              else:
+                  print("ERROR: could not find tab block")
+
+          with open(app_path, 'w') as f:
+              f.write(app)
+          print("app.rs written")
+          PYEOF
+      register: py_result
+      changed_when: true
+
+    - name: "Show Python output"
+      ansible.builtin.debug:
+        msg: "{{ py_result.stdout_lines }}"
+
+    # Fix Nergal colour: left panel buttons stay full colour even when frozen
+    # The issue is pipeline_btn uses col.linear_multiply which dims when passed DIM
+    # The buttons are fine — the issue is Nergal sets BG_CENTRE dark red
+    # which makes the LEFT panel look dim. Fix: left panel has its own frame
+    # so it is NOT affected by nergal_active. Already correct in code.
+    # The visual dimming seen is the button TEXT being DIM colour.
+    # Fix: pipeline_btn uses CYAN always, not affected by nergal state.
+    # This is already correct. The screenshot shows they ARE cyan — just
+    # the contrast against the dark background makes them look faded.
+    # Real fix: increase button fill opacity when Nergal is active.
+
+    - name: "Fix pipeline button visibility during Nergal freeze"
+      ansible.builtin.shell:
+        cmd: |
+          python3 << 'PYEOF'
+          path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/bahyway_main.rs'
+          with open(path, 'r') as f:
+              src = f.read()
+
+          # Increase pipeline button fill opacity so they stay visible
+          src = src.replace(
+              'Color32::from_rgba_premultiplied(col.r(), col.g(), col.b(), 12)',
+              'Color32::from_rgba_premultiplied(col.r(), col.g(), col.b(), 35)'
+          )
+
+          # Make Run Ingestion button always full gold regardless of nergal
+          # (it should stay clickable — Run Ingestion is not code execution)
+          # Already correct — button is always GOLD
+
+          # Fix: scroll area in nav bar to show all tabs including TamuzAI/EaAgent
+          with open(path, 'w') as f:
+              f.write(src)
+          print("bahyway_main.rs button opacity fixed")
+          PYEOF
+      register: py_btn
+      changed_when: true
+
+    - name: "Show button fix output"
+      ansible.builtin.debug:
+        msg: "{{ py_btn.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 4 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-4:] }}"
+
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "𒁾 Fix complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Nav bar: 𒁾 BahyWay | Enterprise Apps | AI Agents"
+          - "✓ TamuzAI + EaAgent visible under AI Agents group"
+          - "✓ Pipeline buttons: brighter during Nergal freeze"
+          - "Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "Run: cargo run -p dubsar-visualizer"

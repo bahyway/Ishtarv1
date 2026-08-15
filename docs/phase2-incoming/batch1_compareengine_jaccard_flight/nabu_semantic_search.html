@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>𒀭 NABÛ · Semantic Playbook Search</title>
+<style>
+  :root{
+    --bg-base:#2B2D31;--bg-panel:#232527;--bg-widget:#1E2022;--bg-deep:#18191B;
+    --bg-hover:#383A3E;--bg-selected:#404349;--stroke:#3D3F43;
+    --gold:#D6A44C;--teal:#4FB8A8;--crimson:#C34A3F;--orange:#D98E3E;--purple:#9B7FC7;
+    --ink:#E8E6E1;--muted:#9A9C9F;--dim:#6E7074;
+    --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --sans:-apple-system,"Segoe UI","Noto Sans",Ubuntu,Cantarell,sans-serif;
+    --mono:"JetBrains Mono","Fira Code",ui-monospace,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+  input{font-family:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  header{border-bottom:1px solid var(--stroke);background:var(--bg-panel)}
+  .mast{max-width:1180px;margin:0 auto;padding:18px 24px}
+  .mast h1{font-family:var(--serif);font-weight:600;font-size:23px;letter-spacing:.04em}
+  .mast h1 .glyph{color:var(--gold);margin-right:8px}
+  .mast .sub{color:var(--muted);font-size:13px;margin-top:3px}
+
+  main{max-width:1180px;margin:0 auto;padding:24px}
+  .searchWrap{position:relative;margin-bottom:8px}
+  .searchWrap input{width:100%;background:var(--bg-widget);border:1px solid var(--stroke);
+    border-radius:10px;padding:15px 52px 15px 18px;font-size:16px;color:var(--ink)}
+  .searchWrap input:focus{border-color:var(--gold)}
+  .searchWrap .g{position:absolute;right:16px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:19px}
+  .hint{color:var(--dim);font-size:12.5px;margin-bottom:18px}
+  .hint b{color:var(--muted)}
+  .try{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 22px}
+  .try button{background:var(--bg-widget);border:1px solid var(--stroke);color:var(--muted);
+    border-radius:20px;padding:6px 13px;font-size:12.5px;cursor:pointer;font-family:var(--sans)}
+  .try button:hover{background:var(--bg-hover);color:var(--ink)}
+
+  .split{display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start}
+  @media(max-width:900px){.split{grid-template-columns:1fr}}
+
+  .resHead{font-family:var(--serif);font-size:16px;margin-bottom:4px}
+  .resHead span{font-family:var(--mono);font-size:12px;color:var(--dim);margin-left:8px}
+  .row{display:flex;align-items:center;gap:14px;padding:13px 15px;border:1px solid var(--stroke);
+    border-radius:9px;background:var(--bg-panel);margin-top:9px;cursor:default;transition:border-color .12s}
+  .row:hover{border-color:var(--bg-selected)}
+  .score{flex-shrink:0;width:52px;height:52px;position:relative}
+  .score svg{transform:rotate(-90deg)}
+  .score .v{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:12px;font-weight:600}
+  .rowMain{min-width:0;flex:1}
+  .rowMain .name{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:600;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rowMain .why{font-size:12px;color:var(--muted);margin-top:3px}
+  .rowMain .why em{color:var(--teal);font-style:normal}
+  .rowClass{flex-shrink:0;font-family:var(--mono);font-size:10.5px;padding:3px 9px;border-radius:5px;
+    background:var(--bg-widget);color:var(--dim);border:1px solid var(--stroke)}
+
+  aside{background:var(--bg-deep);border:1px solid var(--stroke);border-radius:11px;padding:16px 18px}
+  aside h3{font-family:var(--serif);font-size:14.5px;margin-bottom:4px}
+  aside h3 .glyph{color:var(--gold)}
+  aside .lead{font-size:12px;color:var(--dim);margin-bottom:12px}
+  pre{font-family:var(--mono);font-size:12px;line-height:1.75;color:#C9C7C2;white-space:pre-wrap}
+  .kw{color:var(--gold);font-weight:600}.nn{color:var(--teal)}.vv{color:var(--orange)}
+  .cm{color:var(--dim);font-style:italic}.pu{color:var(--purple)}
+  .pipe{margin-top:16px;border-top:1px solid var(--stroke);padding-top:13px}
+  .pstep{display:flex;gap:10px;align-items:baseline;font-size:12px;margin-bottom:8px}
+  .pstep .n{font-family:var(--mono);color:var(--gold);flex-shrink:0}
+  .pstep .t{color:var(--muted)}.pstep .t b{color:var(--ink)}
+
+  footer{max-width:1180px;margin:0 auto;padding:20px 24px 40px;color:var(--dim);font-size:12px}
+  footer b{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="mast">
+    <h1><span class="glyph">𒀭</span>NABÛ — Semantic Playbook Search</h1>
+    <div class="sub">Meaning over keywords · sovereign pure-Rust rehearsal · embed → HNSW → PRESENT WITH RESONANCE semantic</div>
+  </div>
+</header>
+
+<main>
+  <div class="searchWrap">
+    <input id="q" type="text" placeholder="Describe what you're looking for — in your own words" aria-label="Semantic query">
+    <span class="g">⌕</span>
+  </div>
+  <div class="hint">Not keyword match. <b>"tablet about fixing schema drift"</b> finds the KAKI reconciliation playbook even with no shared words.</div>
+  <div class="try">
+    <button onclick="run('fixing when two file versions stop lining up')">fixing when two file versions stop lining up</button>
+    <button onclick="run('protect the machine at boot time')">protect the machine at boot time</button>
+    <button onclick="run('draw a billion points on screen')">draw a billion points on screen</button>
+    <button onclick="run('sad music near a grave')">sad music near a grave</button>
+  </div>
+
+  <div class="split">
+    <div>
+      <div class="resHead">Results <span id="rescount"></span></div>
+      <div id="results"></div>
+    </div>
+    <aside>
+      <h3><span class="glyph">𒁾</span> The query, spoken sovereignly</h3>
+      <div class="lead">Same retrieval, in HeptaScript v2.0</div>
+<pre id="hepta"><span class="cm">-- type a query above</span></pre>
+      <div class="pipe">
+        <div class="pstep"><span class="n">1</span><span class="t"><b>Embed</b> — fastembed-rs turns text → 384-dim vector, fully offline</span></div>
+        <div class="pstep"><span class="n">2</span><span class="t"><b>Seek</b> — HNSW orbit ring returns nearest particles by cosine, O(log n)</span></div>
+        <div class="pstep"><span class="n">3</span><span class="t"><b>Present</b> — ranked tablets, no keyword needed</span></div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <b>Charter notes.</b> Rehearsal only (Way-of-Work rule 5). Vectors live as a KAKI attribute inside an
+  EnkiDB orbit ring — the HNSW proximity graph is another ring, no tree. <b>Nabû</b> (god of scribes and
+  the written word) lawfully names this engine under NL-001. The similarity numbers here are a hand-tuned
+  stand-in for real sentence-embedding cosine; production swaps in fastembed-rs / hnsw_rs. Note the
+  <b>"sad music near a grave"</b> query: it retrieves nothing useful — semantic search can't find a feature
+  the tablets don't contain. That query belongs to NabûEngine's sibling, the Najaf narrowing loop.
+</footer>
+
+<script>
+/* ── Corpus: representative playbooks with hand-authored concept tags ──
+   Stands in for real 384-dim embeddings. Query "embedding" is the union
+   of its concept tokens; score = weighted concept overlap → cosine-like. */
+const CORPUS=[
+  {name:"playbook_117_ashnan_kaki_schema_v2_reconciled",cls:"EnkiDB",
+   concepts:{schema:3,drift:3,reconcile:3,version:2,kaki:2,compare:2,attribute:1,fix:2}},
+  {name:"PB-160_completion_gate_before_new_work",cls:"Governance",
+   concepts:{gate:3,completion:2,block:2,governance:2,process:2}},
+  {name:"pb-177_massartu_guardian_pattern_seal",cls:"Pattern",
+   concepts:{guardian:3,security:2,watch:2,pattern:2,defend:2,arsenal:1}},
+  {name:"UrNammu_boot_integrity_TPM_secureboot",cls:"Security",
+   concepts:{boot:3,integrity:3,security:3,protect:2,attest:2,tpm:2,machine:2,startup:2}},
+  {name:"GL-VIZ-001_buzu_billion_particle_render",cls:"Visualization",
+   concepts:{render:3,billion:3,particle:3,visual:2,draw:2,screen:2,orbit:2,gpu:2}},
+  {name:"pb-164_theater_as_workbench_law",cls:"Visualization",
+   concepts:{theater:3,workbench:2,visual:2,stage:2,lens:2,godot:2}},
+  {name:"playbook_96_tiamat_engine4_opacity_monitor",cls:"Monitoring",
+   concepts:{opacity:3,monitor:3,transparency:2,tau:2,watch:2,quality:2}},
+  {name:"CompareEngine_jaccard_sigmoid_two_file",cls:"ETL",
+   concepts:{compare:3,similarity:3,jaccard:3,file:2,schema:2,drift:2,version:2,fix:1,attribute:2}},
+  {name:"NuskuEngine_sovereign_rust_monitoring",cls:"Monitoring",
+   concepts:{monitor:3,dashboard:2,rust:2,sovereign:2,watch:2,metric:2}},
+  {name:"EGDEngine_girra_electricity_grid_defect",cls:"Domain",
+   concepts:{electricity:3,grid:3,defect:3,detect:2,iraq:2,power:2}},
+  {name:"WPDEngine_enbilulu_water_defect_calculus",cls:"Domain",
+   concepts:{water:3,defect:3,junction:2,detect:2,iraq:2,grid:2}},
+  {name:"IsimudEngine_playbook_automation_governor",cls:"Automation",
+   concepts:{automation:3,playbook:3,govern:2,orchestrate:2,run:2}},
+];
+
+/* Query concept lexicon — maps natural words → concept tokens with weights */
+const LEX={
+  fix:["fix","reconcile","drift"],fixing:["fix","reconcile","drift"],repair:["fix","reconcile"],
+  schema:["schema","attribute"],version:["version","drift"],versions:["version","drift"],
+  "lining":["reconcile","compare"],"line":["reconcile","compare"],align:["reconcile","compare"],
+  file:["file","compare"],files:["file","compare"],stop:["drift"],
+  protect:["protect","security","defend"],machine:["machine","boot"],boot:["boot","startup"],
+  startup:["startup","boot"],security:["security","protect"],
+  draw:["draw","render","visual"],billion:["billion","particle"],points:["particle","render"],
+  screen:["screen","render","visual"],render:["render","visual"],visual:["visual","render"],
+  monitor:["monitor","watch"],watch:["watch","monitor"],dashboard:["dashboard","monitor"],
+  water:["water"],electricity:["electricity","power"],power:["power","electricity"],grid:["grid"],
+  compare:["compare","similarity"],similar:["similarity","compare"],similarity:["similarity"],
+  sad:["_none"],music:["_none"],grave:["_none"],near:["_none"]
+};
+
+function embed(q){
+  const v={};
+  for(const raw of q.toLowerCase().split(/[^a-z]+/)){
+    if(!raw) continue;
+    const toks=LEX[raw]||[];
+    for(const t of toks){ if(t==="_none")continue; v[t]=(v[t]||0)+1; }
+  }
+  return v;
+}
+function cosine(qv,cc){
+  let dot=0,qn=0,cn=0;
+  const keys=new Set([...Object.keys(qv),...Object.keys(cc)]);
+  for(const k of keys){const a=qv[k]||0,b=cc[k]||0;dot+=a*b;qn+=a*a;cn+=b*b;}
+  return (qn&&cn)?dot/(Math.sqrt(qn)*Math.sqrt(cn)):0;
+}
+function topWhy(qv,cc){
+  const shared=Object.keys(qv).filter(k=>cc[k]).sort((a,b)=>cc[b]-cc[a]).slice(0,3);
+  return shared;
+}
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+function run(q){
+  document.getElementById('q').value=q;
+  search(q);
+}
+function search(q){
+  const qv=embed(q);
+  const scored=CORPUS.map(p=>({...p,s:cosine(qv,p.concepts),why:topWhy(qv,p.concepts)}))
+                     .filter(p=>p.s>0.01).sort((a,b)=>b.s-a.s).slice(0,7);
+  const host=document.getElementById('results');
+  document.getElementById('rescount').textContent =
+    scored.length? `${scored.length} tablets by meaning` : "";
+  if(!scored.length){
+    host.innerHTML=`<div class="row" style="cursor:default"><div class="rowMain">
+      <div class="name" style="color:var(--muted)">No tablet carries this meaning.</div>
+      <div class="why">Semantic search only finds what the tablets contain. A memory like
+      <em>sad music</em> isn't a stored feature — that query belongs to the Najaf narrowing loop, not here.</div>
+      </div></div>`;
+  } else {
+    host.innerHTML=scored.map(p=>{
+      const pct=Math.round(p.s*100), C=138.2, off=C*(1-p.s);
+      const col=p.s>=0.5?'var(--gold)':p.s>=0.3?'var(--teal)':'var(--orange)';
+      const why=p.why.length?`close in meaning to <em>${p.why.join(", ")}</em>`:"";
+      return `<div class="row">
+        <div class="score"><svg width="52" height="52" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="22" fill="none" stroke="#3D3F43" stroke-width="4"/>
+          <circle cx="26" cy="26" r="22" fill="none" stroke="${col}" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
+          <div class="v" style="color:${col}">${pct}</div></div>
+        <div class="rowMain"><div class="name">${esc(p.name)}</div>
+          <div class="why">${why}</div></div>
+        <div class="rowClass">${p.cls}</div></div>`;
+    }).join('');
+  }
+  const qvStr=Object.keys(qv).length?Object.keys(qv).join(" · "):"∅";
+  document.getElementById('hepta').innerHTML=
+`<span class="cm">-- meaning, not keywords</span>
+<span class="kw">PRESENT</span> tablet <span class="kw">FROM</span> playbooks
+<span class="kw">WITH</span> <span class="nn">RESONANCE</span> semantic
+  <span class="kw">OF</span> <span class="vv">"${esc(q).slice(0,42)}${q.length>42?'…':''}"</span>
+<span class="cm">-- embedding concepts: ${qvStr}</span>
+<span class="kw">SEEK</span> <span class="nn">NEAREST</span> 7 <span class="kw">BY</span> cosine
+<span class="kw">ORDER</span> <span class="kw">BY</span> resonance <span class="kw">DESC</span>`;
+}
+
+document.getElementById('q').addEventListener('input',e=>search(e.target.value));
+run('fixing when two file versions stop lining up');
+</script>
+</body>
+</html>

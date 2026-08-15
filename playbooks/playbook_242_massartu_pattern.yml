@@ -1,0 +1,130 @@
+# =============================================================================
+# PB-242 -- Massartu pattern: massartu-core crate (DETECT -> PROVE ->
+# PREDICT -> PRESCRIBE, literally executed) + docs/SPEC-MAS-001.md.
+# BahyWay.Ecosystem v4.0 -- 2026-07-25
+#
+# WHY THIS SUPERSEDES THE EARLIER PB-177 DRAFT: that draft named the
+# four-step chain but its own `watch_cycle` skipped PROVE entirely, and
+# its test suite drove two scenarios off byte-identical hardcoded
+# kappa data (varying only exposure) -- real evidence of exposure-
+# separation, but not of nucleus-exchange invariance (PH-002 Corollary
+# 1), since no genuine domain-specific ResidualLaw/Prover was ever
+# exercised. docs/SPEC-MAS-001.md carries the full before/after
+# reasoning, including a real bug this build found and fixed while
+# adapting the original tests: every KappaHistory was built with
+# ascending non-negative time values, inverting trend-core's own
+# t=0-is-now/negative-t-is-past contract, which silently made every
+# degrading trend evaluate as already past its prediction window.
+#
+# WHAT THIS PLAYBOOK ADDS:
+#   - massartu-core: ResidualLaw, Prover (residual_trustworthy +
+#     isolation_proven, both real gates watch_cycle now actually
+#     calls), Horizon (TrendHorizon, wired to trend-core), Exposure,
+#     RiskFis, Prescriber, Escalator (with a real silence-window
+#     check), Chronicler, and the Tier::Unproven tier.
+#   - A real cross-domain proof test driving the identical watch_cycle
+#     against an electricity nucleus (real fdd-core residuals over a
+#     real egd-engine Network<Phasor>, real
+#     egd_engine::exclusion::simulate_exclusion) and a generic/manual
+#     nucleus with no dedicated engine at all -- the actual empirical
+#     evidence PH-002 Corollary 1 needs (see playbook_243).
+#   - docs/SPEC-MAS-001.md: the pattern's boundary spec, honest scope
+#     notes, and the NL-001 amendment A2 (pattern naming) that reserves
+#     "Ishum" for a future gas-pipeline calculus (the original draft's
+#     "Nergal" example collided with the real, shipped
+#     steward-lens::AlertSeverity::Nergal; no gas-pipeline engine
+#     exists in this workspace yet, so none is built here -- only the
+#     name is reserved, the same way Gibil was reserved for
+#     electricity before egd-engine existed).
+#
+# GOVERNING LAW NOTICE: Gated behind PB-160 completion law. Running
+# this playbook = CSR-08 Architect confirmation, including ratification
+# of the Massartu/Ishum naming (NL-001 amendment A2).
+#
+# USAGE (run from eriduous-vdi, inside a checkout of this repo, after
+# `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`):
+#   ansible-playbook playbooks/playbook_242_massartu_pattern.yml
+# =============================================================================
+
+- name: "PB-242 -- Massartu pattern: massartu-core"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    spec_path: "{{ playbook_dir }}/../docs/SPEC-MAS-001.md"
+    build_log: "/tmp/pb242_build.log"
+
+  tasks:
+    - name: "Confirm massartu-core and its spec are present (committed source, not authored here)"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: file_checks
+      loop:
+        - "{{ repo_root }}/crates/massartu-core/Cargo.toml"
+        - "{{ repo_root }}/crates/massartu-core/src/lib.rs"
+        - "{{ spec_path }}"
+
+    - name: "Fail clearly if any expected file is missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ item.item }} not found. Run
+          `git pull origin claude/iphone-playbooks-crosstribe-eval-nbc5sw`
+          first -- these are committed source, this playbook only
+          builds and verifies them.
+      loop: "{{ file_checks.results }}"
+      when: not item.stat.exists
+
+    - name: "Confirm massartu-core is registered in the workspace Cargo.toml"
+      ansible.builtin.shell: >-
+        grep -q '"crates/massartu-core"' {{ repo_root }}/Cargo.toml
+      changed_when: false
+
+    - name: "cargo test massartu-core (release) -- includes the real cross-domain proof test"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo test --release -p massartu-core > {{ build_log }} 2>&1
+      register: test_result
+      failed_when: test_result.rc != 0
+
+    - name: "Fail clearly if tests failed"
+      ansible.builtin.fail:
+        msg: "Tests failed (rc={{ test_result.rc }}). Full output: {{ build_log }}"
+      when: test_result.rc is defined and test_result.rc != 0
+
+    - name: "Confirm the nucleus-exchange proof test specifically ran and passed"
+      ansible.builtin.shell: >-
+        grep -q 'nucleus_exchange::same_watch_cycle_drives_a_real_physics_nucleus_and_a_manual_one ... ok' {{ build_log }}
+      changed_when: false
+
+    - name: "cargo build --release for the whole workspace (confirm massartu-core's new dependency edge doesn't break anything else)"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} &&
+        cargo build --release --workspace >> {{ build_log }} 2>&1
+      register: workspace_build_result
+      failed_when: workspace_build_result.rc != 0
+
+    - name: "Fail clearly if the full workspace build failed"
+      ansible.builtin.fail:
+        msg: "Workspace build failed (rc={{ workspace_build_result.rc }}). Full output: {{ build_log }}"
+      when: workspace_build_result.rc is defined and workspace_build_result.rc != 0
+
+    - name: "Report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-242 complete -- massartu-core is real: DETECT -> PROVE ->
+          PREDICT -> PRESCRIBE is literally executed by watch_cycle
+          (PROVE's two gates -- residual_trustworthy and
+          isolation_proven -- now actually short-circuit escalation
+          and prescription, closing the gap the PB-177 draft left
+          open). The nucleus-exchange proof test passed: the identical
+          watch_cycle correctly triaged a real-physics electricity
+          nucleus (fdd-core + egd-engine, including a real
+          simulate_exclusion call) and a generic/manual nucleus with
+          no dedicated engine at all. docs/SPEC-MAS-001.md records the
+          honest scope (no King-plot classifier anywhere yet, so
+          residual_trustworthy stays at its trusting default) and the
+          Ishum naming reservation. Full workspace build stayed clean.
+          Next: playbook_243 lands docs/PH-002_Puhu_Law.md, whose
+          Corollary 1 cites this exact test as its evidence.

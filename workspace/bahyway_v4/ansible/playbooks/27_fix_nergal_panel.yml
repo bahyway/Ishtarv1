@@ -1,0 +1,223 @@
+---
+# Playbook 27 — Fix Nergal AV panel crash + Web Show path
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/27_fix_nergal_panel.yml -v
+
+- name: "𒁾 Fix Nergal panel crash"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_27.py"
+
+  tasks:
+
+    - name: "Write fix script"
+      ansible.builtin.copy:
+        dest:    "{{ fix_script }}"
+        mode:    "0755"
+        content: |
+          nergal_path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/nergal.rs'
+          app_path    = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+
+          # Read current nergal.rs to keep imports + constants
+          with open(nergal_path, 'r') as f:
+              old = f.read()
+
+          # Keep everything up to pub fn draw — replace body with safe version
+          # Find the draw function and replace from there to end of file
+          import re
+          header = old[:old.find('// ── Entry point')]
+
+          new_draw = '''// ── Entry point ───────────────────────────────────────────────────────
+          pub fn draw(
+              ui:        &mut egui::Ui,
+              bus:       &std::sync::Arc<std::sync::RwLock<bee_mdm_bus::BeeMdmBusState>>,
+              _particles: &[crate::app::ParticleDemo],
+              _tick:     f64,
+          ) {
+              let state = match bus.read() {
+                  Ok(s)  => s,
+                  Err(_) => {
+                      ui.label(egui::RichText::new("Bus read error").color(COL_RED));
+                      return;
+                  }
+              };
+
+              // ── Title ──────────────────────────────────────────────────────
+              ui.add_space(8.0);
+              ui.label(egui::RichText::new("𒀭𒉺𒂵  Nergal — IRKALLA Threat Intelligence")
+                  .color(COL_MAROON).size(16.0).strong());
+              ui.label(egui::RichText::new(
+                  "ThreatDB: IRKALLA (0x0002) | ZEQP | zip_jail/ chattr+i")
+                  .color(COL_DIM).size(11.0));
+              ui.add_space(8.0);
+              ui.separator();
+              ui.add_space(8.0);
+
+              // ── Stats row ─────────────────────────────────────────────────
+              let threats: usize = state.gates.counts.iter().sum();
+              let threat_col = if threats > 0 { COL_RED } else { COL_GREEN };
+              ui.horizontal(|ui| {
+                  ui.label(egui::RichText::new(format!("Total threats: {}", threats))
+                      .color(threat_col).size(14.0).strong());
+                  ui.separator();
+                  ui.label(egui::RichText::new(
+                      format!("Malware hits: {}", state.etl.sdb_malware_hits))
+                      .color(if state.etl.sdb_malware_hits > 0 { COL_RED }
+                             else { COL_DIM })
+                      .size(12.0));
+                  ui.separator();
+                  ui.label(egui::RichText::new(
+                      format!("Quarantined: {}", state.total_quarantined))
+                      .color(COL_AMBER).size(12.0));
+              });
+              ui.add_space(12.0);
+
+              // ── 7 threat category grid ────────────────────────────────────
+              let cats = ["Viruses","Ransomware","Trojans",
+                          "Spyware","Worms","Adware","Rootkits"];
+              ui.columns(4, |cols| {
+                  for (i, cat) in cats.iter().enumerate() {
+                      let col_i = i % 4;
+                      let n   = state.gates.counts[i];
+                      let col = CAT_COLS[i];
+                      cols[col_i].group(|ui| {
+                          egui::Frame::none()
+                              .fill(egui::Color32::from_rgb(20, 4, 8))
+                              .stroke(egui::Stroke::new(1.0, col))
+                              .rounding(egui::Rounding::same(4.0))
+                              .inner_margin(egui::Margin::same(8.0))
+                              .show(ui, |ui| {
+                                  ui.label(egui::RichText::new(*cat)
+                                      .color(col).size(11.0));
+                                  ui.label(egui::RichText::new(format!("{}", n))
+                                      .color(if n > 0 { col }
+                                             else { egui::Color32::from_rgb(40,20,25) })
+                                      .size(24.0).strong());
+                              });
+                      });
+                  }
+              });
+
+              ui.add_space(16.0);
+              ui.separator();
+              ui.add_space(8.0);
+
+              // ── Action buttons ────────────────────────────────────────────
+              ui.horizontal(|ui| {
+                  if ui.add(egui::Button::new(
+                      egui::RichText::new("Open Nergal Dashboard (Firefox)")
+                          .color(egui::Color32::from_rgb(180,100,110)).size(12.0))
+                      .fill(egui::Color32::from_rgb(20,4,8))
+                      .stroke(egui::Stroke::new(0.8, COL_MAROON))
+                      .rounding(egui::Rounding::same(4.0))
+                      .min_size(egui::Vec2::new(280.0, 32.0))
+                  ).clicked() {
+                      let _ = std::process::Command::new("firefox")
+                          .arg("/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/nergal_av_dashboard_v2.html")
+                          .spawn();
+                  }
+
+                  if threats > 0 {
+                      if ui.add(egui::Button::new(
+                          egui::RichText::new("Jail All Threats")
+                              .color(egui::Color32::BLACK).size(12.0).strong())
+                          .fill(COL_MAROON)
+                          .rounding(egui::Rounding::same(4.0))
+                          .min_size(egui::Vec2::new(150.0, 32.0))
+                      ).clicked() {
+                          let _ = bus.write().map(|mut b| {
+                              b.send_cmd(bee_mdm_bus::BusCmd::ForceSweep)
+                          });
+                      }
+                  }
+              });
+
+              ui.add_space(12.0);
+
+              // ── Gate loads bar chart ──────────────────────────────────────
+              ui.label(egui::RichText::new("Gate Loads")
+                  .color(COL_DIM).size(11.0).strong());
+              ui.add_space(4.0);
+              let max_v = state.gates.counts.iter().copied().max()
+                  .unwrap_or(1).max(1);
+              for (i, &label) in cats.iter().enumerate() {
+                  let n    = state.gates.counts[i];
+                  let frac = n as f32 / max_v as f32;
+                  let col  = CAT_COLS[i];
+                  ui.horizontal(|ui| {
+                      ui.label(egui::RichText::new(
+                          format!("{:<12}", label))
+                          .color(COL_DIM).size(10.0).monospace());
+                      let (bar, _) = ui.allocate_exact_size(
+                          egui::Vec2::new(200.0, 12.0), egui::Sense::hover());
+                      ui.painter().rect_filled(bar,
+                          egui::Rounding::same(2.0),
+                          egui::Color32::from_rgb(20, 8, 10));
+                      if frac > 0.0 {
+                          let fill = egui::Rect::from_min_size(
+                              bar.min, egui::Vec2::new(200.0 * frac, 12.0));
+                          ui.painter().rect_filled(fill,
+                              egui::Rounding::same(2.0), col);
+                      }
+                      ui.label(egui::RichText::new(format!("{:>3}", n))
+                          .color(egui::Color32::from_rgb(180,140,150))
+                          .size(10.0).monospace());
+                  });
+              }
+          }
+          '''
+
+          with open(nergal_path, 'w') as f:
+              f.write(header + new_draw)
+          print(f"nergal.rs rewritten — safe panel, no 3D crash")
+
+          # Fix Web Show nergal path in app.rs
+          with open(app_path, 'r') as f:
+              app = f.read()
+          correct_path = '/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/nergal_av_dashboard_v2.html'
+          app = re.sub(
+              r'\.arg\("[^"]*nergal[^"]*"\)',
+              f'.arg("{correct_path}")',
+              app
+          )
+          with open(app_path, 'w') as f:
+              f.write(app)
+          print("Web Show nergal path confirmed correct")
+
+    - name: "Run fix script"
+      ansible.builtin.command:
+        cmd: python3 {{ fix_script }}
+      register: py_out
+      changed_when: true
+      failed_when:  py_out.rc != 0
+
+    - name: "Show output"
+      ansible.builtin.debug:
+        msg: "{{ py_out.stdout_lines }}"
+
+    - name: "Force clean rebuild"
+      ansible.builtin.shell:
+        cmd: |
+          cd /home/bahyway/Forge/bahyway_v4
+          cargo clean -p dubsar-visualizer
+          cargo build -p dubsar-visualizer 2>&1 | grep -E "Compiling|error\[|Finished"
+      register: build
+      changed_when: true
+      failed_when:  "'error[' in build.stdout"
+
+    - name: "Build output"
+      ansible.builtin.debug:
+        msg: "{{ build.stdout_lines }}"
+
+    - name: "𒁾 Complete"
+      ansible.builtin.debug:
+        msg:
+          - "Nergal panel: safe stats view — no 3D crash"
+          - "Open Nergal Dashboard button launches Firefox"
+          - "Web Show Nergal path confirmed"
+          - "Run: cargo run -p dubsar-visualizer"

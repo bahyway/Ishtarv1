@@ -1,0 +1,227 @@
+# =============================================================================
+# PB-283 — Fetch eriduous-vdi's EnkiDB checkout to a NEW location on the
+# bare-metal host, then report how it diverges from GitHub. Never
+# overwrites the real ~/Forge/EnkiDB checkout, never pushes anything.
+# BahyWay.Ecosystem v4.0
+#
+# WHY THIS EXISTS: PB-282 (2026-08-02) found the Architect's real Sargon
+# vault sitting only on the retired eriduous-vdi VM, never migrated when
+# PB-269 moved the control-node role to bare metal. That raised the
+# obvious follow-up: what ELSE is sitting on that VM's checkout that
+# never got committed or pushed? This playbook answers that safely --
+# fetch a full copy to `dest_path` (default `~/Forge/EriduOS-EnkiDB`, a
+# BRAND NEW directory, never the real working checkout) and report
+# git-level divergence, rather than guessing file-by-file by hand.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Confirms eriduous-vdi is running (same check as PB-282).
+#   2. Locates the EnkiDB checkout on the VM: tries `vm_enkidb_path`
+#      first (default `/home/<vm_ssh_user>/Forge/EnkiDB`), falls back to
+#      a bounded (4-level) `find ... -iname .git -type d` search under
+#      the VM user's home if that default isn't there -- same discovery
+#      pattern PB-226 already uses for finding the Godot binary.
+#   3. `rsync`-copies it to `dest_path` on the bare-metal host, excluding
+#      the usual heavy/regenerable dirs (`target/`, `.godot/`,
+#      `node_modules/`, `_Backups*/`) -- same FENCED_PATTERNS list
+#      `docpulse.rs` uses -- so this doesn't repeat today's earlier
+#      lesson about multi-GB build artifacts. `.git/` IS copied (needed
+#      for the divergence report below). NEVER writes to the existing
+#      `~/Forge/EnkiDB` checkout -- `dest_path` must not already exist,
+#      or the playbook fails rather than merging into it.
+#   4. If the fetched copy is a real git repo: reports `git status
+#      --porcelain` (uncommitted changes), `git log --oneline -10`, and
+#      ahead/behind vs `origin/<its current branch>` (same diagnostic as
+#      PB-281's `diagnose` mode) -- surfacing anything that exists ONLY
+#      on the VM and never reached GitHub. If it's not a git repo at all,
+#      says so plainly rather than guessing a file-diff strategy.
+#
+# THIS PLAYBOOK NEVER: overwrites `~/Forge/EnkiDB`, pushes anything to
+# GitHub, deletes anything on the VM, or force-pushes anywhere -- purely
+# a read-only fetch-and-report, same posture as PB-281/282.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_283_fetch_and_diff_eriduous_vdi_enkidb.yml
+#   ansible-playbook playbooks/playbook_283_fetch_and_diff_eriduous_vdi_enkidb.yml \
+#     -e vm_enkidb_path=/home/bahyway/EnkiDB -e dest_path=~/Forge/EriduOS-EnkiDB
+# =============================================================================
+---
+- name: "PB-283 | Fetch + diff eriduous-vdi's EnkiDB checkout against GitHub"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    vm_name: "eriduous-vdi"
+    # See PB-282's header/vars comment: plain `virsh` defaults to
+    # `qemu:///session` on this host, but eriduous-vdi runs under
+    # `qemu:///system` (confirmed live 2026-08-02) -- explicit everywhere.
+    libvirt_uri: "qemu:///system"
+    vm_ssh_user: "bahyway"
+    vm_enkidb_path: "/home/{{ vm_ssh_user }}/Forge/EnkiDB"
+    dest_path: "{{ lookup('env', 'HOME') }}/Forge/EriduOS-EnkiDB"
+    strict_host_key_checking: false
+
+  tasks:
+
+    - name: "GUARD | dest_path must not already exist -- this playbook never merges into an existing directory"
+      ansible.builtin.stat:
+        path: "{{ dest_path }}"
+      register: dest_check
+
+    - name: "FAIL | dest_path already exists"
+      ansible.builtin.fail:
+        msg: >-
+          {{ dest_path }} already exists. This playbook only ever creates a
+          brand-new comparison copy -- pass a different -e dest_path=... , or
+          remove/rename the existing one yourself first if you're sure it's
+          safe to replace.
+      when: dest_check.stat.exists
+
+    - name: "Confirm the eriduous-vdi VM is running"
+      ansible.builtin.command:
+        cmd: "virsh -c {{ libvirt_uri }} domstate {{ vm_name }}"
+      register: vm_state
+      changed_when: false
+      failed_when: false
+
+    - name: "FAIL | VM not running or virsh unavailable"
+      ansible.builtin.fail:
+        msg: >-
+          Could not confirm {{ vm_name }} is running (virsh said:
+          '{{ vm_state.stdout | default("") | trim }}{{ vm_state.stderr | default("") | trim }}').
+          Start it in virt-manager first, then re-run this playbook.
+      when: vm_state.rc != 0 or 'running' not in vm_state.stdout
+
+    - name: "Resolve the VM's current IP address"
+      ansible.builtin.command:
+        cmd: "virsh -c {{ libvirt_uri }} domifaddr {{ vm_name }}"
+      register: vm_ifaddr
+      changed_when: false
+
+    - name: "FAIL | could not parse an IP from virsh domifaddr"
+      ansible.builtin.fail:
+        msg: "No IPv4 address found for {{ vm_name }} in: {{ vm_ifaddr.stdout }}"
+      when: vm_ifaddr.stdout is not regex('\d+\.\d+\.\d+\.\d+/')
+
+    - name: "Extract the VM's IP"
+      ansible.builtin.set_fact:
+        vm_ip: "{{ vm_ifaddr.stdout | regex_search('(\\d+\\.\\d+\\.\\d+\\.\\d+)/') | regex_replace('/', '') }}"
+
+    - name: "Trust the VM's current SSH host key (local libvirt NAT guest, not a real network boundary)"
+      ansible.builtin.shell: >-
+        ssh-keygen -R {{ vm_ip }} >/dev/null 2>&1;
+        ssh-keyscan -H {{ vm_ip }} >> {{ lookup('env', 'HOME') }}/.ssh/known_hosts 2>/dev/null
+      changed_when: true
+      when: not (strict_host_key_checking | bool)
+
+    - name: "Check the expected default EnkiDB path exists on the VM"
+      ansible.builtin.command:
+        cmd: >-
+          ssh -o StrictHostKeyChecking={{ 'yes' if (strict_host_key_checking | bool) else 'accept-new' }}
+          {{ vm_ssh_user }}@{{ vm_ip }} "test -d '{{ vm_enkidb_path }}/.git' && echo FOUND || echo MISSING"
+      register: default_path_check
+      changed_when: false
+
+    - name: "Fall back to a bounded search under the VM user's home if the default path has no .git"
+      ansible.builtin.command:
+        cmd: >-
+          ssh -o StrictHostKeyChecking={{ 'yes' if (strict_host_key_checking | bool) else 'accept-new' }}
+          {{ vm_ssh_user }}@{{ vm_ip }}
+          "find /home/{{ vm_ssh_user }} -maxdepth 4 -iname .git -type d 2>/dev/null | grep -i enkidb | head -1"
+      register: vm_search_result
+      changed_when: false
+      when: "'FOUND' not in default_path_check.stdout"
+
+    - name: "Resolve the real remote EnkiDB path to fetch"
+      ansible.builtin.set_fact:
+        resolved_vm_enkidb_path: >-
+          {{ vm_enkidb_path if 'FOUND' in default_path_check.stdout
+             else (vm_search_result.stdout | trim | regex_replace('/\\.git$', '')) }}
+
+    - name: "FAIL | no EnkiDB .git checkout found anywhere searched on the VM"
+      ansible.builtin.fail:
+        msg: >-
+          No EnkiDB checkout (a directory containing .git) found at
+          {{ vm_enkidb_path }} or under /home/{{ vm_ssh_user }} (searched 4
+          levels deep) on {{ vm_name }}. Point at the real path directly:
+          -e vm_enkidb_path=/actual/path/on/the/vm
+      when: resolved_vm_enkidb_path | length == 0
+
+    - name: "Report what's about to be fetched"
+      ansible.builtin.debug:
+        msg: "Fetching {{ vm_ssh_user }}@{{ vm_ip }}:{{ resolved_vm_enkidb_path }} -> {{ dest_path }}"
+
+    - name: "Ensure the parent of dest_path exists"
+      ansible.builtin.file:
+        path: "{{ dest_path | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: "rsync the VM's EnkiDB checkout to dest_path (excludes heavy/regenerable dirs, keeps .git)"
+      ansible.builtin.command:
+        cmd: >-
+          rsync -az --info=progress2
+          -e "ssh -o StrictHostKeyChecking={{ 'yes' if (strict_host_key_checking | bool) else 'accept-new' }}"
+          --exclude=target/ --exclude=.godot/ --exclude=node_modules/ --exclude=_Backups*/
+          "{{ vm_ssh_user }}@{{ vm_ip }}:{{ resolved_vm_enkidb_path }}/"
+          "{{ dest_path }}/"
+      register: rsync_result
+
+    - name: "Check whether the fetched copy is a real git repo"
+      ansible.builtin.stat:
+        path: "{{ dest_path }}/.git"
+      register: fetched_git_check
+
+    - name: "REPORT | fetched copy has no .git -- cannot do a git-level comparison"
+      ansible.builtin.debug:
+        msg: >-
+          {{ dest_path }} was fetched but has no .git directory -- it isn't
+          a git checkout. A git-level divergence report isn't possible;
+          compare file-by-file by hand (e.g. `diff -rq {{ dest_path }}
+          ~/Forge/EnkiDB`) if you want to know what differs.
+      when: not fetched_git_check.stat.exists
+
+    - name: "GIT | current branch in the fetched copy"
+      ansible.builtin.command:
+        cmd: "git rev-parse --abbrev-ref HEAD"
+        chdir: "{{ dest_path }}"
+      register: fetched_branch
+      changed_when: false
+      when: fetched_git_check.stat.exists
+
+    - name: "GIT | fetch origin inside the fetched copy (read-only -- does not merge/pull)"
+      ansible.builtin.command:
+        cmd: "git fetch origin"
+        chdir: "{{ dest_path }}"
+      changed_when: false
+      when: fetched_git_check.stat.exists
+
+    - name: "GIT | uncommitted changes in the fetched copy"
+      ansible.builtin.command:
+        cmd: "git status --porcelain"
+        chdir: "{{ dest_path }}"
+      register: fetched_status
+      changed_when: false
+      when: fetched_git_check.stat.exists
+
+    - name: "GIT | ahead/behind vs origin/<branch>"
+      ansible.builtin.command:
+        cmd: "git rev-list --left-right --count {{ fetched_branch.stdout | trim }}...origin/{{ fetched_branch.stdout | trim }}"
+        chdir: "{{ dest_path }}"
+      register: fetched_ahead_behind
+      changed_when: false
+      failed_when: false
+      when: fetched_git_check.stat.exists
+
+    - name: "REPORT | git-level divergence between the VM's copy and GitHub"
+      ansible.builtin.debug:
+        msg:
+          - "Branch on VM's copy: {{ fetched_branch.stdout | trim }}"
+          - "Uncommitted changes: {{ 'NONE -- clean working tree' if fetched_status.stdout | trim == '' else fetched_status.stdout_lines }}"
+          - "{{ ('Ahead/behind origin/' ~ (fetched_branch.stdout | trim) ~ ': ' ~ fetched_ahead_behind.stdout) if fetched_ahead_behind.rc is defined and fetched_ahead_behind.rc == 0 else 'No upstream to compare against for this branch.' }}"
+          - "Full copy is at {{ dest_path }} -- inspect directly with `git -C {{ dest_path }} log`/`diff` for details."
+      when: fetched_git_check.stat.exists
+
+    - name: "DONE | PB-283 COMPLETE"
+      ansible.builtin.debug:
+        msg: "𒁾 Fetch and comparison complete. Nothing on the VM, on GitHub, or in ~/Forge/EnkiDB was modified."

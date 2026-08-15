@@ -1,0 +1,299 @@
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 𒁾 07_forge_structure.yml
+# Rule 1: Run FROM HOST — targets eriduous-vdi
+# Creates ~/Forge/ matching HOST ~/Forge/ exactly
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- name: "𒁾 Sovereign Forge Structure — eriduous-vdi"
+  hosts: eriduous_vdi
+  become: false
+
+  vars:
+    forge_root:      "/home/bahyway/Forge"
+    old_workspace:   "/home/bahyway/EnkiDB/workspace/bahyway_v4"
+    new_workspace:   "/home/bahyway/Forge/bahyway_v4"
+    repos:
+      - name: "EnkiDB"
+        url:  "git@github.com:bahyway/EnkiDB.git"
+      - name: "FedoraLAB"
+        url:  "git@github.com:BahyWay-Ecosystem/FedoraLAB.git"
+      - name: "FedoraWorkstation44Infra"
+        url:  "git@github.com:BahyWay-Ecosystem/FedoraWorkstation44Infra.git"
+    plain_dirs:
+      - "v4.0_docs"
+      - "vdi"
+    # Extra workspace folders to move alongside bahyway_v4
+    extra_workspace_dirs:
+      - "_deprecated_bdbway_extension_v3x"
+      - "docs"
+      - "eriduu_stack"
+      - "scripts"
+    old_workspace_root: "/home/bahyway/EnkiDB/workspace"
+
+  tasks:
+
+    # ── Pre-flight ────────────────────────────────────────────────────────────
+
+    - name: "Check SSH agent has GitHub key loaded"
+      ansible.builtin.shell:
+        cmd: "ssh -o ConnectTimeout=5 -T git@github.com 2>&1 || true"
+        executable: /bin/bash
+      register: github_ssh
+      changed_when: false
+
+    - name: "Show GitHub SSH status"
+      ansible.builtin.debug:
+        msg: "GitHub SSH: {{ github_ssh.stdout }}"
+
+    - name: "Check old workspace path (~/EnkiDB/workspace/bahyway_v4)"
+      ansible.builtin.stat:
+        path: "{{ old_workspace }}"
+      register: old_ws
+
+    - name: "Check new workspace path (~/Forge/bahyway_v4)"
+      ansible.builtin.stat:
+        path: "{{ new_workspace }}"
+      register: new_ws
+
+    - name: "Fail only if NEITHER old nor new location exists"
+      ansible.builtin.fail:
+        msg: >
+          bahyway_v4 not found at either location.
+          Old: {{ old_workspace }}
+          New: {{ new_workspace }}
+          Workspace is missing entirely — cannot continue.
+      when:
+        - not old_ws.stat.exists
+        - not new_ws.stat.exists
+
+    - name: "Report bahyway_v4 current location"
+      ansible.builtin.debug:
+        msg: >
+          bahyway_v4 found at:
+          {{ new_workspace if new_ws.stat.exists else old_workspace }}
+
+    # ── Create ~/Forge/ ───────────────────────────────────────────────────────
+
+    - name: "Create ~/Forge/ root"
+      ansible.builtin.file:
+        path: "{{ forge_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Create plain dirs (v4.0_docs, vdi)"
+      ansible.builtin.file:
+        path: "{{ forge_root }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ plain_dirs }}"
+
+    # ── Move bahyway_v4 only if still at old location ────────────────────────
+
+    - name: "Move bahyway_v4 → ~/Forge/bahyway_v4"
+      ansible.builtin.shell:
+        cmd: "mv {{ old_workspace }} {{ new_workspace }}"
+        executable: /bin/bash
+      when:
+        - old_ws.stat.exists
+        - not new_ws.stat.exists
+      changed_when: true
+
+    - name: "bahyway_v4 already at ~/Forge/ — no move needed"
+      ansible.builtin.debug:
+        msg: "~/Forge/bahyway_v4 already in place — skipped"
+      when: new_ws.stat.exists
+
+
+    # ── Move extra workspace folders alongside bahyway_v4 ────────────────────
+
+    - name: "Check which extra workspace dirs exist on eriduous-vdi"
+      ansible.builtin.stat:
+        path: "{{ old_workspace_root }}/{{ item }}"
+      register: extra_checks
+      loop: "{{ extra_workspace_dirs }}"
+
+    - name: "Move extra workspace dirs into ~/Forge/"
+      ansible.builtin.shell:
+        cmd: "if [ -d '{{ old_workspace_root }}/{{ item.item }}' ] && [ ! -e '{{ forge_root }}/{{ item.item }}' ]; then mv {{ old_workspace_root }}/{{ item.item }} {{ forge_root }}/{{ item.item }}; fi"
+        executable: /bin/bash
+      when: item.stat.exists
+      loop: "{{ extra_checks.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      changed_when: true
+      ignore_errors: true
+
+    # ── Update Cargo.toml workspace path if needed ────────────────────────────
+
+    - name: "Check Cargo.toml exists in new location"
+      ansible.builtin.stat:
+        path: "{{ new_workspace }}/Cargo.toml"
+      register: cargo_stat
+
+    - name: "Update any hardcoded old paths in Cargo.toml"
+      ansible.builtin.replace:
+        path: "{{ new_workspace }}/Cargo.toml"
+        regexp: "/home/bahyway/EnkiDB/workspace/bahyway_v4"
+        replace: "/home/bahyway/Forge/bahyway_v4"
+      when: cargo_stat.stat.exists
+
+    # ── Update bee-mdm-bus script path references ─────────────────────────────
+
+    - name: "Update path in setup_bee_mdm_bus.sh if present"
+      ansible.builtin.replace:
+        path: "/home/bahyway/scripts/setup_bee_mdm_bus.sh"
+        regexp: "/home/bahyway/EnkiDB/workspace/bahyway_v4"
+        replace: "/home/bahyway/Forge/bahyway_v4"
+      ignore_errors: true
+
+    # ── Clone GitHub repos ────────────────────────────────────────────────────
+
+    - name: "Check which repos already exist"
+      ansible.builtin.stat:
+        path: "{{ forge_root }}/{{ item.name }}"
+      register: repo_checks
+      loop: "{{ repos }}"
+
+    - name: "Clone repos that do not exist yet"
+      ansible.builtin.shell:
+        cmd: "git clone {{ item.item.url }} {{ forge_root }}/{{ item.item.name }}"
+        executable: /bin/bash
+      when: not item.stat.exists
+      loop: "{{ repo_checks.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      register: clone_results
+      changed_when: true
+
+    - name: "Show clone results"
+      ansible.builtin.debug:
+        msg: "{{ item.item.item.name }}: {{ 'cloned' if item.changed else 'already exists' }}"
+      loop: "{{ clone_results.results }}"
+      loop_control:
+        label: "{{ item.item.item.name }}"
+      when: clone_results.results is defined
+
+    # ── Create vdi/ README ────────────────────────────────────────────────────
+
+    - name: "Write vdi/README.md"
+      ansible.builtin.copy:
+        dest: "{{ forge_root }}/vdi/README.md"
+        content: |
+          # VDI Configuration
+          Sovereign VDI configs for BahyWay.Ecosystem v4.0
+
+          ## Nodes
+          - eriduous-vdi  192.168.122.214  Fedora VDI — DubSar Visualizer
+          - ubuntu-vdi    192.168.122.121  Ubuntu VDI — Grafana + Prometheus
+          - enkidb-write  192.168.122.101  EnkiDB CQRS write node
+          - enkidb-read   192.168.122.107  EnkiDB CQRS read replica
+
+    # ── Create v4.0_docs/ README ──────────────────────────────────────────────
+
+    - name: "Write v4.0_docs/README.md"
+      ansible.builtin.copy:
+        dest: "{{ forge_root }}/v4.0_docs/README.md"
+        content: |
+          # BahyWay.Ecosystem v4.0 — Architecture Documents
+          Sovereign architecture documents for v4.0.
+
+          ## Contents
+          - KAKI v4.0 specification
+          - PA-13 through PA-16
+          - PMPVD Manual v354
+          - MDM Governance Framework
+
+    # ── Write ~/Forge/README.md ───────────────────────────────────────────────
+
+    - name: "Write ~/Forge/README.md"
+      ansible.builtin.copy:
+        dest: "{{ forge_root }}/README.md"
+        content: |
+          # 𒁾 ~/Forge — BahyWay.Ecosystem v4.0 Sovereign Workspace
+          DUB.SAR Bahaa Fadam — eriduous-vdi
+
+          ## Structure
+          ```
+          ~/Forge/
+          ├── bahyway_v4/               ← Main workspace (100+ crates, forge2 inside)
+          ├── EnkiDB/                   ← git@github.com:bahyway/EnkiDB.git
+          ├── FedoraLAB/                ← git@github.com:bahyway/FedoraLAB.git
+          ├── FedoraWorkstation44Infra/ ← git@github.com:bahyway/FedoraWorkstation44Infra.git
+          ├── v4.0_docs/                ← Architecture documents
+          └── vdi/                      ← VDI node configurations
+          ```
+
+          ## Launch DubSar Visualizer
+          ```bash
+          cd ~/Forge/bahyway_v4
+          WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan cargo run --bin dubsar-visualizer
+          ```
+
+    # ── Verify final structure ────────────────────────────────────────────────
+
+    - name: "Verify ~/Forge/ structure"
+      ansible.builtin.stat:
+        path: "{{ forge_root }}/{{ item }}"
+      register: verify_checks
+      loop:
+        - "bahyway_v4"
+        - "bahyway_v4/Cargo.toml"
+        - "bahyway_v4/forge2"
+        - "bahyway_v4/crates/bee-mdm-bus"
+        - "EnkiDB"
+        - "FedoraLAB"
+        - "FedoraWorkstation44Infra"
+        - "v4.0_docs"
+        - "vdi"
+        - "README.md"
+        - "docs"
+        - "scripts"
+        - "eriduu_stack"
+
+    - name: "Verify all expected paths exist"
+      ansible.builtin.fail:
+        msg: "MISSING: {{ forge_root }}/{{ item.item }}"
+      when: not item.stat.exists
+      loop: "{{ verify_checks.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # ── Final report ──────────────────────────────────────────────────────────
+
+    - name: "List ~/Forge/ contents"
+      ansible.builtin.shell:
+        cmd: "ls -la {{ forge_root }}"
+        executable: /bin/bash
+      register: forge_ls
+      changed_when: false
+
+    - name: "𒁾 Forge structure report"
+      ansible.builtin.debug:
+        msg:
+          - "════════════════════════════════════════════════════"
+          - "𒁾 ~/Forge/ on eriduous-vdi — COMPLETE"
+          - "════════════════════════════════════════════════════"
+          - "{{ forge_ls.stdout }}"
+          - ""
+          - "Matches HOST ~/Forge/ structure ✓"
+          - ""
+          - "Full structure:"
+          - "  ~/Forge/bahyway_v4/              ← moved from ~/EnkiDB/workspace/"
+          - "  ~/Forge/EnkiDB/                 ← git@github.com:bahyway/EnkiDB.git"
+          - "  ~/Forge/FedoraLAB/              ← git@github.com:BahyWay-Ecosystem/FedoraLAB.git"
+          - "  ~/Forge/FedoraWorkstation44Infra/ ← git@github.com:BahyWay-Ecosystem/..."
+          - "  ~/Forge/docs/                   ← moved from workspace"
+          - "  ~/Forge/scripts/               ← moved from workspace"
+          - "  ~/Forge/eriduu_stack/           ← moved from workspace"
+          - "  ~/Forge/v4.0_docs/             ← created"
+          - "  ~/Forge/vdi/                   ← created"
+          - ""
+          - "Forge2 (7-gate) lives at:"
+          - "  ~/Forge/bahyway_v4/forge2/"
+          - ""
+          - "Launch DubSar Visualizer:"
+          - "  cd ~/Forge/bahyway_v4"
+          - "  WAYLAND_DISPLAY=wayland-0 WGPU_BACKEND=vulkan \\"
+          - "  cargo run --bin dubsar-visualizer"
+          - "════════════════════════════════════════════════════"

@@ -1,0 +1,751 @@
+---
+# =============================================================================
+# PB-228 -- Build the BahyWay Codium theme extension.
+# BahyWay.Ecosystem v4.0 -- 2026-07-24
+#
+# WHY THIS EXISTS: the Architect uploaded a generic "build a Cobalt2-based
+# VSCodium theme extension" playbook for evaluation. See
+# docs/components/ERIDUOS_THEME_PLAYBOOKS_EVALUATION.md for the full
+# evaluation. This playbook is that draft, corrected:
+#   - BahyWay branding instead of "your-publisher-name" / example.com.
+#   - `theme_source` picks which real palette drives the extension:
+#     "dubsar_dark" (default) is the actual palette already governing
+#     DubSar Theater / Sargon Passport Manager / Gilgamesh Master Key
+#     (workspace/bahyway_v4/godot/*/scripts/dubsar_theme.gd -- identical
+#     file across all three, sourced from the Architect's own reference
+#     screenshots). "cobalt2" reproduces the uploaded draft's original
+#     palette, opt-in via `-e theme_source=cobalt2`.
+#   - Fixed an invalid JSON escape in the product icon theme (`\E002`
+#     is not legal JSON -- only `\uXXXX` is; the uploaded file would
+#     have failed to parse in Codium).
+#   - Node.js install tries `nodejs20` first, falls back to plain
+#     `nodejs` rather than hard-failing if the versioned package name
+#     doesn't resolve on the Architect's actual Fedora mirror (unverified
+#     from this sandbox -- no Fedora host reachable here).
+#
+# This is a STANDALONE theme extension -- a different Codium extension
+# from the real "dubsar-ide" one (dubsar-ide/dubsar-extension, a
+# notebook/particle-visualization tool, not a theme). No name/publisher
+# collision: this one is "bahyway-cobalt2-theme" / publisher "bahyway".
+#
+# USAGE (run from eriduous-vdi or any Fedora Workstation 44 desktop):
+#   ansible-playbook playbooks/playbook_228_build_bahyway_codium_theme_extension.yml
+#   ansible-playbook playbooks/playbook_228_build_bahyway_codium_theme_extension.yml -e theme_source=cobalt2
+#   ansible-playbook playbooks/playbook_228_build_bahyway_codium_theme_extension.yml -e skip_install=true
+#
+# See PB-229 for the matching system-wide (GTK/env/Codium-settings) theme,
+# which points its own workbench.colorTheme at whatever this playbook
+# builds -- run this one first if you want both.
+# =============================================================================
+
+- name: PB-228 -- Build the BahyWay Codium theme extension
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    # -------------------------------------------------------------------------
+    # BRANDING
+    # -------------------------------------------------------------------------
+    extension_name: "bahyway-cobalt2-theme"
+    extension_display_name: "BahyWay Cobalt2"
+    extension_description: "BahyWay.Ecosystem v4.0 color theme for VSCodium/DubSar IDE"
+    publisher_name: "bahyway"
+    extension_version: "1.0.0"
+    extension_license: "MIT"
+    extension_repository: "https://github.com/bahyway/EnkiDB"
+    extension_homepage: "https://github.com/bahyway/EnkiDB#readme"
+    extension_bugs_url: "https://github.com/bahyway/EnkiDB/issues"
+    author_name: "Bahaa Fadam"
+    author_email: "bahaa.fadam@gmail.com"
+
+    # -------------------------------------------------------------------------
+    # PALETTE SELECTION
+    # -------------------------------------------------------------------------
+    # "dubsar_dark" = the REAL palette already shared, byte-identical,
+    # across dubsar-theater / sargon-passport-manager / gilgamesh-master-key
+    # (see dubsar_theme.gd in each project). "cobalt2" = the uploaded
+    # draft's original Wes-Bos-Cobalt2-inspired palette, unrelated to the
+    # Godot apps' own theme -- pick it deliberately with -e, not by default.
+    # -------------------------------------------------------------------------
+    theme_source: "dubsar_dark"
+
+    palettes:
+      dubsar_dark:
+        bg: "#0a0e1a"
+        bg_dark: "#0d1220"
+        bg_darker: "#0a0e1a"
+        bg_light: "#171d2e"
+        fg: "#e8eaf0"
+        fg_dim: "#8b93a7"
+        fg_dark: "#5b6478"
+        accent_blue: "#22d3ee"
+        accent_yellow: "#fbbf24"
+        accent_green: "#4ade80"
+        accent_red: "#f87171"
+        accent_orange: "#fbbf24"
+        accent_purple: "#8b7ff5"
+        accent_cyan: "#22d3ee"
+        accent_pink: "#f87171"
+        border: "#212940"
+        selection: "#22d3ee40"
+        shadow: "#000000"
+      cobalt2:
+        bg: "#193549"
+        bg_dark: "#122738"
+        bg_darker: "#0d1f2d"
+        bg_light: "#1e4b6e"
+        fg: "#ffffff"
+        fg_dim: "#aaaaaa"
+        fg_dark: "#5f7e97"
+        accent_blue: "#1478db"
+        accent_yellow: "#ffc600"
+        accent_green: "#3ad900"
+        accent_red: "#ff628c"
+        accent_orange: "#ff9d00"
+        accent_purple: "#967efb"
+        accent_cyan: "#80fcff"
+        accent_pink: "#ff80bf"
+        border: "#0d3a58"
+        selection: "#0050a4"
+        shadow: "#000000"
+
+    p: "{{ palettes[theme_source] }}"
+
+    skip_install: false
+
+    # -------------------------------------------------------------------------
+    # PATHS -- lives inside the repo (versioned), not scattered in $HOME
+    # -------------------------------------------------------------------------
+    home_dir: "{{ ansible_env.HOME }}"
+    repo_root: "{{ playbook_dir }}/.."
+    project_dir: "{{ repo_root }}/eriduos-theme/{{ extension_name }}"
+    themes_dir: "{{ project_dir }}/themes"
+    fileicons_dir: "{{ project_dir }}/fileicons"
+    producticons_dir: "{{ project_dir }}/producticons"
+
+  tasks:
+    # =========================================================================
+    # TASK 1: Ensure Node.js is Installed
+    # =========================================================================
+    - name: "[NODE] Check if Node.js is installed"
+      ansible.builtin.command: "node --version"
+      register: node_version
+      changed_when: false
+      ignore_errors: true
+      check_mode: false  # read-only probe -- always run, even under --check,
+                          # so the version-gated tasks below have a real
+                          # rc/stdout to evaluate instead of an Undefined
+
+    - name: "[NODE] Try nodejs20 via dnf (if missing or outdated)"
+      ansible.builtin.dnf:
+        name: nodejs20
+        state: present
+      become: true
+      register: nodejs20_install
+      ignore_errors: true
+      when: node_version.rc != 0 or (node_version.stdout | regex_replace('v', '') is version('18.0.0', '<'))
+
+    - name: "[NODE] Fall back to plain nodejs if nodejs20 package doesn't resolve"
+      ansible.builtin.dnf:
+        name: nodejs
+        state: present
+      become: true
+      when:
+        - node_version.rc != 0 or (node_version.stdout | regex_replace('v', '') is version('18.0.0', '<'))
+        - nodejs20_install is failed
+
+    # =========================================================================
+    # TASK 2: Install vsce CLI
+    # =========================================================================
+    # NOTE (fixed vs. the uploaded draft): `ansible.builtin.npm` does not
+    # exist -- the npm module lives in the `community.general` collection,
+    # not ansible-core. Rather than adding a collection dependency the
+    # Architect's control host may not have installed, this just runs npm
+    # directly -- npm itself is idempotent about "already installed at
+    # this version" (creates guard below skips the reinstall).
+    # -------------------------------------------------------------------------
+    - name: "[NPM] Check if vsce is already installed"
+      ansible.builtin.command: "vsce --version"
+      register: vsce_version
+      changed_when: false
+      ignore_errors: true
+      check_mode: false  # read-only probe -- see the same note above
+
+    - name: "[NPM] Install vsce globally"
+      ansible.builtin.command: "npm install -g @vscode/vsce"
+      become: true
+      when: vsce_version.rc != 0
+
+    # =========================================================================
+    # TASK 3: Create Extension Directory Structure
+    # =========================================================================
+    - name: "[DIRS] Create extension project directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ project_dir }}"
+        - "{{ themes_dir }}"
+        - "{{ fileicons_dir }}"
+        - "{{ fileicons_dir }}/icons"
+        - "{{ producticons_dir }}"
+
+    # =========================================================================
+    # TASK 4: Generate Extension Logo
+    # =========================================================================
+    - name: "[LOGO] Generate branded SVG logo"
+      ansible.builtin.copy:
+        dest: "{{ project_dir }}/logo.svg"
+        content: |
+          <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+            <rect width="128" height="128" rx="20" fill="{{ p.bg }}"/>
+            <rect x="10" y="10" width="108" height="108" rx="14" fill="none" stroke="{{ p.accent_blue }}" stroke-width="4"/>
+            <text x="64" y="78" text-anchor="middle" font-family="Arial, sans-serif" font-size="40" font-weight="bold" fill="{{ p.accent_cyan }}">BW</text>
+            <circle cx="100" cy="28" r="8" fill="{{ p.accent_yellow }}"/>
+          </svg>
+        mode: '0644'
+
+    - name: "[LOGO] Convert SVG to PNG"
+      ansible.builtin.shell: |
+        if command -v rsvg-convert &> /dev/null; then
+          rsvg-convert -w 128 -h 128 "{{ project_dir }}/logo.svg" -o "{{ project_dir }}/icon.png"
+        elif command -v convert &> /dev/null; then
+          convert -background none -resize 128x128 "{{ project_dir }}/logo.svg" "{{ project_dir }}/icon.png"
+        else
+          python3 -c "
+          from PIL import Image, ImageDraw, ImageFont
+          img = Image.new('RGBA', (128, 128), '{{ p.bg }}')
+          draw = ImageDraw.Draw(img)
+          draw.rounded_rectangle([8, 8, 120, 120], radius=16, outline='{{ p.accent_blue }}', width=4)
+          draw.ellipse([92, 20, 108, 36], fill='{{ p.accent_yellow }}')
+          try:
+              font = ImageFont.truetype('/usr/share/fonts/cantarell/Cantarell-Bold.otf', 40)
+              draw.text((64, 64), 'BW', fill='{{ p.accent_cyan }}', font=font, anchor='mm')
+          except Exception:
+              draw.rectangle([40, 48, 88, 80], fill='{{ p.accent_cyan }}')
+          img.save('{{ project_dir }}/icon.png')
+          "
+        fi
+      args:
+        creates: "{{ project_dir }}/icon.png"
+
+    # =========================================================================
+    # TASK 5: package.json
+    # =========================================================================
+    - name: "[MANIFEST] Generate package.json"
+      ansible.builtin.copy:
+        dest: "{{ project_dir }}/package.json"
+        content: |
+          {
+            "name": "{{ extension_name }}",
+            "displayName": "{{ extension_display_name }}",
+            "description": "{{ extension_description }}",
+            "version": "{{ extension_version }}",
+            "publisher": "{{ publisher_name }}",
+            "license": "{{ extension_license }}",
+            "icon": "icon.png",
+            "repository": { "type": "git", "url": "{{ extension_repository }}" },
+            "homepage": "{{ extension_homepage }}",
+            "bugs": { "url": "{{ extension_bugs_url }}" },
+            "author": { "name": "{{ author_name }}", "email": "{{ author_email }}" },
+            "engines": { "vscode": "^1.74.0" },
+            "categories": ["Themes"],
+            "keywords": ["theme", "color-theme", "bahyway", "dubsar", "eriduos", "dark"],
+            "contributes": {
+              "themes": [
+                { "label": "{{ extension_display_name }}", "uiTheme": "vs-dark", "path": "./themes/{{ extension_name }}.json" }
+              ],
+              "iconThemes": [
+                { "id": "{{ extension_name }}-icons", "label": "{{ extension_display_name }} Icons", "path": "./fileicons/{{ extension_name }}-icons.json" }
+              ],
+              "productIconThemes": [
+                { "id": "{{ extension_name }}-product-icons", "label": "{{ extension_display_name }} Product Icons", "path": "./producticons/{{ extension_name }}-product-icons.json" }
+              ]
+            },
+            "scripts": {
+              "package": "vsce package",
+              "publish:vsx": "vsce publish"
+            }
+          }
+        mode: '0644'
+
+    # =========================================================================
+    # TASK 6: Full Color Theme JSON
+    # =========================================================================
+    - name: "[THEME] Generate {{ extension_name }}.json"
+      ansible.builtin.copy:
+        dest: "{{ themes_dir }}/{{ extension_name }}.json"
+        content: |
+          {
+            "name": "{{ extension_display_name }}",
+            "type": "dark",
+            "colors": {
+              "editor.background": "{{ p.bg }}",
+              "editor.foreground": "{{ p.fg }}",
+              "editorLineNumber.foreground": "{{ p.fg_dark }}",
+              "editorLineNumber.activeForeground": "{{ p.accent_yellow }}",
+              "editorCursor.foreground": "{{ p.accent_yellow }}",
+              "editor.selectionBackground": "{{ p.selection }}",
+              "editor.lineHighlightBackground": "{{ p.bg_light }}20",
+              "editor.lineHighlightBorder": "{{ p.border }}",
+              "editorLink.activeForeground": "{{ p.accent_cyan }}",
+              "editorWhitespace.foreground": "{{ p.fg_dark }}",
+              "editorIndentGuide.background": "{{ p.border }}",
+              "editorIndentGuide.activeBackground": "{{ p.accent_blue }}",
+              "editorRuler.foreground": "{{ p.border }}",
+
+              "diffEditor.insertedTextBackground": "{{ p.accent_green }}20",
+              "diffEditor.removedTextBackground": "{{ p.accent_red }}20",
+
+              "scrollbarSlider.background": "{{ p.border }}",
+              "scrollbarSlider.hoverBackground": "{{ p.accent_blue }}",
+              "scrollbarSlider.activeBackground": "{{ p.accent_blue }}cc",
+
+              "panel.background": "{{ p.bg_dark }}",
+              "panel.border": "{{ p.border }}",
+              "panelTitle.activeForeground": "{{ p.fg }}",
+              "panelTitle.activeBorder": "{{ p.accent_blue }}",
+
+              "terminal.background": "{{ p.bg }}",
+              "terminal.foreground": "{{ p.fg }}",
+              "terminal.ansiBlack": "{{ p.bg_darker }}",
+              "terminal.ansiRed": "{{ p.accent_red }}",
+              "terminal.ansiGreen": "{{ p.accent_green }}",
+              "terminal.ansiYellow": "{{ p.accent_yellow }}",
+              "terminal.ansiBlue": "{{ p.accent_blue }}",
+              "terminal.ansiMagenta": "{{ p.accent_purple }}",
+              "terminal.ansiCyan": "{{ p.accent_cyan }}",
+              "terminal.ansiWhite": "{{ p.fg }}",
+              "terminalCursor.foreground": "{{ p.accent_yellow }}",
+              "terminal.selectionBackground": "{{ p.selection }}",
+
+              "activityBar.background": "{{ p.bg_darker }}",
+              "activityBar.foreground": "{{ p.fg }}",
+              "activityBar.inactiveForeground": "{{ p.fg_dark }}",
+              "activityBarBadge.background": "{{ p.accent_blue }}",
+              "activityBarBadge.foreground": "{{ p.fg }}",
+              "activityBar.activeBorder": "{{ p.accent_yellow }}",
+
+              "sideBar.background": "{{ p.bg_dark }}",
+              "sideBar.foreground": "{{ p.fg }}",
+              "sideBar.border": "{{ p.border }}",
+              "sideBarSectionHeader.background": "{{ p.bg_darker }}",
+              "sideBarSectionHeader.foreground": "{{ p.fg_dim }}",
+
+              "list.activeSelectionBackground": "{{ p.selection }}",
+              "list.activeSelectionForeground": "{{ p.fg }}",
+              "list.inactiveSelectionBackground": "{{ p.bg_light }}",
+              "list.hoverBackground": "{{ p.bg_light }}30",
+              "list.highlightForeground": "{{ p.accent_yellow }}",
+              "list.errorForeground": "{{ p.accent_red }}",
+              "list.warningForeground": "{{ p.accent_yellow }}",
+
+              "titleBar.activeBackground": "{{ p.bg_darker }}",
+              "titleBar.activeForeground": "{{ p.fg }}",
+              "titleBar.inactiveBackground": "{{ p.bg_darker }}",
+              "titleBar.border": "{{ p.border }}",
+
+              "menu.background": "{{ p.bg_dark }}",
+              "menu.foreground": "{{ p.fg }}",
+              "menu.selectionBackground": "{{ p.selection }}",
+              "menu.border": "{{ p.border }}",
+
+              "button.background": "{{ p.accent_blue }}",
+              "button.foreground": "{{ p.fg }}",
+              "button.hoverBackground": "{{ p.accent_blue }}cc",
+              "button.secondaryBackground": "{{ p.bg_light }}",
+              "button.secondaryForeground": "{{ p.fg }}",
+
+              "input.background": "{{ p.bg_darker }}",
+              "input.foreground": "{{ p.fg }}",
+              "input.border": "{{ p.border }}",
+              "input.placeholderForeground": "{{ p.fg_dark }}",
+              "inputValidation.errorForeground": "{{ p.accent_red }}",
+              "inputValidation.warningForeground": "{{ p.accent_yellow }}",
+              "inputValidation.infoForeground": "{{ p.accent_blue }}",
+
+              "dropdown.background": "{{ p.bg_darker }}",
+              "dropdown.foreground": "{{ p.fg }}",
+              "dropdown.border": "{{ p.border }}",
+
+              "badge.background": "{{ p.accent_blue }}",
+              "badge.foreground": "{{ p.fg }}",
+              "progressBar.background": "{{ p.accent_blue }}",
+
+              "editorWidget.background": "{{ p.bg_dark }}",
+              "editorWidget.border": "{{ p.border }}",
+              "editorHoverWidget.background": "{{ p.bg_dark }}",
+              "editorHoverWidget.border": "{{ p.border }}",
+              "editorSuggestWidget.background": "{{ p.bg_dark }}",
+              "editorSuggestWidget.border": "{{ p.border }}",
+              "editorSuggestWidget.highlightForeground": "{{ p.accent_yellow }}",
+              "editorSuggestWidget.selectedBackground": "{{ p.selection }}",
+
+              "peekViewEditor.background": "{{ p.bg }}",
+              "peekViewResult.background": "{{ p.bg_dark }}",
+              "peekViewTitle.background": "{{ p.bg_darker }}",
+
+              "merge.currentContentBackground": "{{ p.accent_green }}20",
+              "merge.currentHeaderBackground": "{{ p.accent_green }}40",
+              "merge.incomingContentBackground": "{{ p.accent_blue }}20",
+              "merge.incomingHeaderBackground": "{{ p.accent_blue }}40",
+              "merge.border": "{{ p.border }}",
+
+              "editorOverviewRuler.border": "{{ p.border }}",
+              "editorOverviewRuler.modifiedForeground": "{{ p.accent_blue }}",
+              "editorOverviewRuler.addedForeground": "{{ p.accent_green }}",
+              "editorOverviewRuler.deletedForeground": "{{ p.accent_red }}",
+              "editorOverviewRuler.errorForeground": "{{ p.accent_red }}",
+              "editorOverviewRuler.warningForeground": "{{ p.accent_yellow }}",
+
+              "editorGutter.modifiedBackground": "{{ p.accent_blue }}",
+              "editorGutter.addedBackground": "{{ p.accent_green }}",
+              "editorGutter.deletedBackground": "{{ p.accent_red }}",
+
+              "tab.activeBackground": "{{ p.bg }}",
+              "tab.activeForeground": "{{ p.fg }}",
+              "tab.activeBorder": "{{ p.accent_blue }}",
+              "tab.inactiveBackground": "{{ p.bg_dark }}",
+              "tab.inactiveForeground": "{{ p.fg_dim }}",
+              "tab.hoverBackground": "{{ p.bg_light }}20",
+              "tab.border": "{{ p.border }}",
+
+              "editorGroupHeader.tabsBackground": "{{ p.bg_darker }}",
+              "editorGroupHeader.tabsBorder": "{{ p.border }}",
+
+              "statusBar.background": "{{ p.accent_blue }}",
+              "statusBar.foreground": "{{ p.fg }}",
+              "statusBar.border": "{{ p.border }}",
+              "statusBar.debuggingBackground": "{{ p.accent_orange }}",
+              "statusBar.debuggingForeground": "{{ p.bg_darker }}",
+              "statusBarItem.remoteBackground": "{{ p.accent_purple }}",
+              "statusBarItem.remoteForeground": "{{ p.fg }}",
+              "statusBarItem.errorBackground": "{{ p.accent_red }}",
+              "statusBarItem.warningBackground": "{{ p.accent_yellow }}",
+              "statusBarItem.warningForeground": "{{ p.bg_darker }}",
+
+              "notifications.foreground": "{{ p.fg }}",
+              "notifications.background": "{{ p.bg_dark }}",
+              "notifications.border": "{{ p.border }}",
+              "notificationLink.foreground": "{{ p.accent_cyan }}",
+              "notificationsErrorIcon.foreground": "{{ p.accent_red }}",
+              "notificationsWarningIcon.foreground": "{{ p.accent_yellow }}",
+              "notificationsInfoIcon.foreground": "{{ p.accent_blue }}",
+
+              "pickerGroup.foreground": "{{ p.accent_blue }}",
+              "quickInput.background": "{{ p.bg_dark }}",
+              "quickInput.foreground": "{{ p.fg }}",
+              "quickInputList.focusBackground": "{{ p.selection }}",
+
+              "breadcrumb.foreground": "{{ p.fg_dim }}",
+              "breadcrumb.background": "{{ p.bg }}",
+              "breadcrumb.activeSelectionForeground": "{{ p.accent_yellow }}",
+
+              "settings.headerForeground": "{{ p.fg }}",
+              "settings.modifiedItemIndicator": "{{ p.accent_blue }}",
+              "settings.dropdownBackground": "{{ p.bg_darker }}",
+              "settings.checkboxBackground": "{{ p.bg_darker }}",
+              "settings.textInputBackground": "{{ p.bg_darker }}",
+
+              "debugToolBar.background": "{{ p.bg_dark }}",
+              "debugToolBar.border": "{{ p.border }}",
+              "debugTokenExpression.name": "{{ p.accent_cyan }}",
+              "debugTokenExpression.value": "{{ p.accent_green }}",
+              "debugTokenExpression.string": "{{ p.accent_green }}",
+              "debugTokenExpression.boolean": "{{ p.accent_purple }}",
+              "debugTokenExpression.number": "{{ p.accent_orange }}",
+              "debugTokenExpression.error": "{{ p.accent_red }}",
+
+              "welcomePage.background": "{{ p.bg }}",
+              "welcomePage.buttonBackground": "{{ p.accent_blue }}",
+
+              "gitDecoration.modifiedResourceForeground": "{{ p.accent_blue }}",
+              "gitDecoration.deletedResourceForeground": "{{ p.accent_red }}",
+              "gitDecoration.untrackedResourceForeground": "{{ p.accent_green }}",
+              "gitDecoration.ignoredResourceForeground": "{{ p.fg_dark }}",
+              "gitDecoration.conflictingResourceForeground": "{{ p.accent_orange }}",
+
+              "symbolIcon.classForeground": "{{ p.accent_yellow }}",
+              "symbolIcon.constantForeground": "{{ p.accent_orange }}",
+              "symbolIcon.constructorForeground": "{{ p.accent_cyan }}",
+              "symbolIcon.fieldForeground": "{{ p.accent_blue }}",
+              "symbolIcon.functionForeground": "{{ p.accent_cyan }}",
+              "symbolIcon.interfaceForeground": "{{ p.accent_yellow }}",
+              "symbolIcon.keywordForeground": "{{ p.accent_purple }}",
+              "symbolIcon.methodForeground": "{{ p.accent_cyan }}",
+              "symbolIcon.numberForeground": "{{ p.accent_orange }}",
+              "symbolIcon.propertyForeground": "{{ p.accent_blue }}",
+              "symbolIcon.stringForeground": "{{ p.accent_green }}",
+              "symbolIcon.variableForeground": "{{ p.accent_blue }}",
+
+              "textLink.foreground": "{{ p.accent_cyan }}",
+              "textLink.activeForeground": "{{ p.accent_blue }}",
+              "textBlockQuote.background": "{{ p.bg_dark }}",
+              "textBlockQuote.border": "{{ p.accent_blue }}",
+              "textCodeBlock.background": "{{ p.bg_darker }}",
+              "textPreformat.foreground": "{{ p.accent_yellow }}",
+              "textSeparator.foreground": "{{ p.border }}"
+            },
+            "tokenColors": [
+              { "name": "Comment", "scope": ["comment", "punctuation.definition.comment"], "settings": { "fontStyle": "italic", "foreground": "{{ p.fg_dim }}" } },
+              { "name": "Variables", "scope": ["variable", "string constant.other.placeholder"], "settings": { "foreground": "{{ p.fg }}" } },
+              { "name": "Invalid", "scope": ["invalid", "invalid.illegal"], "settings": { "foreground": "{{ p.accent_red }}" } },
+              { "name": "Keyword, Storage", "scope": ["keyword", "storage.type", "storage.modifier"], "settings": { "foreground": "{{ p.accent_purple }}" } },
+              {
+                "name": "Operator, Misc",
+                "scope": ["keyword.control", "punctuation", "meta.tag", "punctuation.definition.tag", "punctuation.section.embedded"],
+                "settings": { "foreground": "{{ p.accent_cyan }}" }
+              },
+              { "name": "Tag", "scope": ["entity.name.tag", "meta.tag.sgml", "markup.deleted.git_gutter"], "settings": { "foreground": "{{ p.accent_red }}" } },
+              {
+                "name": "Function, Special Method",
+                "scope": ["entity.name.function", "meta.function-call", "variable.function", "support.function"],
+                "settings": { "foreground": "{{ p.accent_cyan }}" }
+              },
+              {
+                "name": "Number, Constant, Tag Attribute",
+                "scope": ["constant.numeric", "constant.language", "support.constant", "constant.character", "constant.escape", "variable.parameter", "keyword.other.unit"],
+                "settings": { "foreground": "{{ p.accent_orange }}" }
+              },
+              {
+                "name": "String, Symbols, Markup Heading",
+                "scope": ["string", "constant.other.symbol", "entity.other.inherited-class", "markup.heading", "markup.inserted.git_gutter"],
+                "settings": { "fontStyle": "normal", "foreground": "{{ p.accent_green }}" }
+              },
+              {
+                "name": "Class, Support",
+                "scope": ["entity.name", "support.type", "support.class", "markup.changed.git_gutter"],
+                "settings": { "foreground": "{{ p.accent_yellow }}" }
+              },
+              { "name": "Attributes", "scope": ["entity.other.attribute-name"], "settings": { "foreground": "{{ p.accent_yellow }}" } },
+              { "name": "Inserted", "scope": ["markup.inserted"], "settings": { "foreground": "{{ p.accent_green }}" } },
+              { "name": "Deleted", "scope": ["markup.deleted"], "settings": { "foreground": "{{ p.accent_red }}" } },
+              { "name": "Changed", "scope": ["markup.changed"], "settings": { "foreground": "{{ p.accent_purple }}" } },
+              { "name": "Regular Expressions", "scope": ["string.regexp"], "settings": { "foreground": "{{ p.accent_cyan }}" } },
+              { "name": "Escape Characters", "scope": ["constant.character.escape"], "settings": { "foreground": "{{ p.accent_orange }}" } },
+              { "name": "URL", "scope": ["*url*", "*link*", "*uri*"], "settings": { "fontStyle": "underline" } },
+              {
+                "name": "JSON Key - Level 0",
+                "scope": ["source.json meta.structure.dictionary.json support.type.property-name.json"],
+                "settings": { "foreground": "{{ p.accent_purple }}" }
+              },
+              {
+                "name": "JSON Key - Level 1",
+                "scope": ["source.json meta.structure.dictionary.json meta.structure.dictionary.value.json meta.structure.dictionary.json support.type.property-name.json"],
+                "settings": { "foreground": "{{ p.accent_yellow }}" }
+              },
+              { "name": "Markdown - Heading", "scope": ["markup.heading", "markup.heading.markdown punctuation.definition.heading.markdown"], "settings": { "foreground": "{{ p.accent_yellow }}" } },
+              { "name": "Markup - Italic", "scope": ["markup.italic"], "settings": { "fontStyle": "italic", "foreground": "{{ p.accent_red }}" } },
+              { "name": "Markup - Bold", "scope": ["markup.bold", "markup.bold string"], "settings": { "fontStyle": "bold", "foreground": "{{ p.accent_yellow }}" } },
+              { "name": "Markup - Raw Block", "scope": ["markup.raw.block"], "settings": { "foreground": "{{ p.accent_green }}" } },
+              { "name": "Markdown - Link", "scope": ["string.other.link.title.markdown"], "settings": { "foreground": "{{ p.accent_cyan }}" } }
+            ],
+            "semanticHighlighting": true,
+            "semanticTokenColors": {
+              "newOperator": "{{ p.accent_purple }}",
+              "stringLiteral": "{{ p.accent_green }}",
+              "customLiteral": "{{ p.accent_orange }}",
+              "numberLiteral": "{{ p.accent_orange }}"
+            }
+          }
+        mode: '0644'
+
+    # =========================================================================
+    # TASK 7: File Icon Theme -- covers this repo's real file types
+    # =========================================================================
+    - name: "[ICONS] Generate file icon theme JSON"
+      ansible.builtin.copy:
+        dest: "{{ fileicons_dir }}/{{ extension_name }}-icons.json"
+        content: |
+          {
+            "iconDefinitions": {
+              "_file": { "iconPath": "./icons/file.svg" },
+              "_folder": { "iconPath": "./icons/folder.svg" },
+              "_folder_open": { "iconPath": "./icons/folder-open.svg" },
+              "_rust": { "iconPath": "./icons/rust.svg" },
+              "_godot": { "iconPath": "./icons/godot.svg" },
+              "_ansible": { "iconPath": "./icons/ansible.svg" },
+              "_json": { "iconPath": "./icons/json.svg" },
+              "_markdown": { "iconPath": "./icons/markdown.svg" },
+              "_dubsar": { "iconPath": "./icons/dubsar.svg" }
+            },
+            "file": "_file",
+            "folder": "_folder",
+            "folderExpanded": "_folder_open",
+            "fileExtensions": {
+              "rs": "_rust",
+              "gd": "_godot",
+              "tscn": "_godot",
+              "yml": "_ansible",
+              "yaml": "_ansible",
+              "json": "_json",
+              "md": "_markdown",
+              "dubsar": "_dubsar"
+            },
+            "fileNames": {
+              "Cargo.toml": "_rust",
+              "Cargo.lock": "_rust",
+              "package.json": "_json",
+              "README.md": "_markdown"
+            },
+            "languageIds": {
+              "rust": "_rust",
+              "gdscript": "_godot",
+              "ansible": "_ansible",
+              "markdown": "_markdown",
+              "json": "_json",
+              "dubsar": "_dubsar"
+            }
+          }
+        mode: '0644'
+
+    - name: "[ICONS] Generate placeholder file icon SVG"
+      ansible.builtin.copy:
+        dest: "{{ fileicons_dir }}/icons/file.svg"
+        content: |
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+            <path fill="{{ p.fg_dim }}" d="M10 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V4l-4-3z"/>
+            <path fill="{{ p.bg_dark }}" d="M10 1v3h3"/>
+          </svg>
+        mode: '0644'
+
+    - name: "[ICONS] Generate placeholder folder icon SVG"
+      ansible.builtin.copy:
+        dest: "{{ fileicons_dir }}/icons/folder.svg"
+        content: |
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+            <path fill="{{ p.accent_blue }}" d="M14 4H8L6 2H2a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1V5a1 1 0 00-1-1z"/>
+          </svg>
+        mode: '0644'
+
+    - name: "[ICONS] Generate placeholder Rust icon SVG"
+      ansible.builtin.copy:
+        dest: "{{ fileicons_dir }}/icons/rust.svg"
+        content: |
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+            <circle cx="8" cy="8" r="7" fill="none" stroke="{{ p.accent_orange }}" stroke-width="1.5"/>
+            <text x="8" y="12" text-anchor="middle" font-size="8" fill="{{ p.accent_orange }}" font-family="Arial">R</text>
+          </svg>
+        mode: '0644'
+
+    - name: "[ICONS] Generate placeholder DubSar (.dubsar notebook) icon SVG"
+      ansible.builtin.copy:
+        dest: "{{ fileicons_dir }}/icons/dubsar.svg"
+        content: |
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+            <circle cx="8" cy="8" r="6" fill="none" stroke="{{ p.accent_cyan }}" stroke-width="1.5"/>
+            <circle cx="8" cy="8" r="2" fill="{{ p.accent_cyan }}"/>
+          </svg>
+        mode: '0644'
+
+    # =========================================================================
+    # TASK 8: Product Icon Theme
+    # =========================================================================
+    # NOTE (fixed vs. the uploaded draft): the uploaded file wrote these
+    # as the literal 4-character text "\E002" -- not legal JSON, since
+    # JSON only recognizes a raw code point via the 6-character \uXXXX
+    # escape. Below, each `fontCharacter` is the actual Private Use Area
+    # glyph itself, embedded directly as a raw JSON string character
+    # (valid per the JSON spec -- any Unicode scalar value is legal in a
+    # string literal except the control characters and unescaped " / \),
+    # which is equivalent to what the correct escape form would decode to.
+    # -------------------------------------------------------------------------
+    - name: "[PRODUCT] Generate product icon theme JSON"
+      ansible.builtin.copy:
+        dest: "{{ producticons_dir }}/{{ extension_name }}-product-icons.json"
+        content: |
+          {
+            "iconDefinitions": {
+              "files": { "fontCharacter": "", "fontColor": "{{ p.accent_blue }}" },
+              "search": { "fontCharacter": "", "fontColor": "{{ p.accent_yellow }}" },
+              "source-control": { "fontCharacter": "", "fontColor": "{{ p.accent_green }}" },
+              "debug": { "fontCharacter": "", "fontColor": "{{ p.accent_red }}" },
+              "extensions": { "fontCharacter": "", "fontColor": "{{ p.accent_purple }}" },
+              "settings": { "fontCharacter": "", "fontColor": "{{ p.fg_dim }}" },
+              "account": { "fontCharacter": "", "fontColor": "{{ p.accent_cyan }}" }
+            }
+          }
+        mode: '0644'
+
+    # =========================================================================
+    # TASK 9: README + CHANGELOG
+    # =========================================================================
+    - name: "[DOCS] Generate README.md"
+      ansible.builtin.copy:
+        dest: "{{ project_dir }}/README.md"
+        content: |
+          # {{ extension_display_name }}
+
+          Codium/VSCode color theme for BahyWay.Ecosystem v4.0, built from
+          `{{ theme_source }}` -- {{ 'the real palette shared across DubSar Theater, Sargon Passport Manager, and Gilgamesh Master Key' if theme_source == 'dubsar_dark' else 'the Cobalt2-inspired palette' }}.
+
+          ## Installation
+
+          ```bash
+          codium --install-extension {{ extension_name }}-{{ extension_version }}.vsix
+          ```
+
+          ## Activation
+
+          Command Palette (`Ctrl+Shift+P`) -> "Color Theme" -> "{{ extension_display_name }}"
+
+          ## Regenerating with the other palette
+
+          ```bash
+          ansible-playbook playbooks/playbook_228_build_bahyway_codium_theme_extension.yml -e theme_source={{ 'cobalt2' if theme_source == 'dubsar_dark' else 'dubsar_dark' }}
+          ```
+        mode: '0644'
+
+    - name: "[DOCS] Generate CHANGELOG.md"
+      ansible.builtin.copy:
+        dest: "{{ project_dir }}/CHANGELOG.md"
+        content: |
+          # Change Log
+
+          ## [{{ extension_version }}] - {{ ansible_date_time.date }}
+
+          ### Added
+          - Initial release of {{ extension_display_name }}, palette source: {{ theme_source }}
+        mode: '0644'
+
+    # =========================================================================
+    # TASK 10: Package the Extension into .vsix
+    # =========================================================================
+    - name: "[PACKAGE] Build .vsix extension package"
+      ansible.builtin.shell: |
+        cd "{{ project_dir }}"
+        npx vsce package --no-dependencies
+      args:
+        creates: "{{ project_dir }}/{{ extension_name }}-{{ extension_version }}.vsix"
+
+    # =========================================================================
+    # TASK 11: Install Locally
+    # =========================================================================
+    - name: "[INSTALL] Install extension in Codium"
+      ansible.builtin.shell: |
+        codium --install-extension "{{ project_dir }}/{{ extension_name }}-{{ extension_version }}.vsix" --force
+      register: codium_install
+      changed_when: "'was successfully installed' in codium_install.stdout"
+      when: not (skip_install | bool)
+
+    # =========================================================================
+    # TASK 12: Summary
+    # =========================================================================
+    - name: "[SUMMARY] Display completion message"
+      ansible.builtin.debug:
+        msg:
+          - ""
+          - "============================================================"
+          - "  {{ extension_display_name }} v{{ extension_version }} -- BUILD COMPLETE"
+          - "  Palette source: {{ theme_source }}"
+          - "============================================================"
+          - "  Package:   {{ project_dir }}/{{ extension_name }}-{{ extension_version }}.vsix"
+          - "  {{ 'Installed and active in Codium.' if not (skip_install | bool) else 'Not installed (skip_install=true) -- install manually with codium --install-extension.' }}"
+          - ""
+          - "  Run PB-229 (eriduos_unified_desktop_theme.yml) next to point"
+          - "  GTK / env vars / Codium settings.json at this same palette."
+          - ""
+          - "  Uninstall: codium --uninstall-extension {{ publisher_name }}.{{ extension_name }}"
+          - "============================================================"

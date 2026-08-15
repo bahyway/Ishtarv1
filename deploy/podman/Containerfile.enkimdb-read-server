@@ -1,0 +1,43 @@
+# =============================================================================
+# enkimdb-read-server — EnkiMDB (Euphrates) Read Node container image.
+#
+# Build (from the repo root):
+#   podman build -t enkimdb-read-server:latest \
+#     -f deploy/podman/Containerfile.enkimdb-read-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkimdb-read \
+#     -p 7202:7202 \
+#     -v enkimdb-read-data:/data:Z \
+#     -e RELOAD_SECS=30 \
+#     --restart=always \
+#     enkimdb-read-server:latest
+#
+# Lifecycle (no systemd anywhere -- plain Podman commands):
+#   podman stop enkimdb-read
+#   podman start enkimdb-read
+#   podman logs -f enkimdb-read
+#
+# Data path: this container never writes -- it only opens
+# /data/current/{entities,eav} read-only and reloads on a timer. Getting
+# the Write Node's materialized generation into that path is a separate
+# step; see scripts/enkimdb-sync-data.sh.
+#
+# `:Z` on the volume mount is required on Fedora/SELinux-enforcing hosts.
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkimdb-read-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkimdb
+COPY --from=builder /build/target/release/enkimdb-read-server /usr/local/bin/enkimdb-read-server
+USER enkimdb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7202
+ENV DATA_DIR=/data
+EXPOSE 7202
+ENTRYPOINT ["/usr/local/bin/enkimdb-read-server"]

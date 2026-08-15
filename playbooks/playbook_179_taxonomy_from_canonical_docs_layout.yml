@@ -1,0 +1,90 @@
+# =============================================================================
+# PB-179 — meta.collection mirrors the canonical numbered docs/ taxonomy
+# BahyWay.Ecosystem v4.0 — 2026-07-12
+#
+# CONTEXT: direct follow-up to PB-177/PB-178. The Architect has four local
+# documentation locations on their own machine (not this repo/sandbox):
+#   1. /home/bfadam/Forge/bahyway_v4/docs
+#   2. /home/bfadam/Forge/EnkiDB/workspace/bahyway_v4/docs
+#   3. /home/bfadam/Forge/EnkiDB/docs        (fewest files, but the real,
+#      deliberately-designed numbered taxonomy: 00_codex, 01_mathematics,
+#      02_identity, ... 20_meta_engine, 99_index, plus _start_here/_meta/
+#      _diagrams)
+#   4. /home/bfadam/Forge/EnkiDB/lab_creation_docs
+# and proposed: consolidate the other three into location 3's structure
+# first, then make EnkiDDB's EAV categorization mirror that same
+# structure, then upload. Agreed this is better than the ad hoc heuristic
+# PB-177 shipped (playbook-record/component/glossary/...) -- location 3's
+# layout IS the real, intended information architecture, not a guess at
+# one.
+#
+# WHAT WAS BUILT:
+#   - crates/enkiddb/src/ingest.rs: infer_collection() now tries the
+#     canonical layout FIRST (new docs_subfolder_collection() helper): if
+#     a file sits inside a subfolder of any `docs/` directory, that
+#     subfolder's name -- numeric prefix and leading underscore stripped,
+#     kebab-cased -- IS the collection. `docs/02_identity/identity_kaki.md`
+#     -> "identity". `docs/06_governance_parzu/parzu_laws.md` ->
+#     "governance-parzu". `docs/_start_here/for_architects.md` ->
+#     "start-here". Nesting deeper than one level still collapses to the
+#     top folder (`docs/_meta/01_templates/x.md` -> "meta"). Falls back to
+#     the PB-177 filename heuristics only for files sitting directly in a
+#     `docs/` root (no subfolder) or with no `docs` segment in their path
+#     at all (e.g. `playbooks/`, still "playbook-record").
+#     One deliberate behavior change: `docs/components/KAKI_V4.md` now
+#     tags "components" (from the real folder name) instead of the old
+#     hardcoded singular "component" special case -- the generic rule
+#     subsumes it; no reason to keep two mechanisms doing the same job.
+#   - scripts/diff-doc-locations.sh (NEW, runs on the Architect's own
+#     machine, not this sandbox -- it has no access to /home/bfadam/Forge):
+#     read-only collision report across N documentation folders. Hashes
+#     every .md file by content, then reports three buckets per filename
+#     seen in more than one location: IDENTICAL (same sha256 everywhere --
+#     safe to dedupe, no decision needed), DIFFERS (same filename, real
+#     content divergence -- needs a human to pick a winner or merge), and
+#     files UNIQUE to one location (nothing to reconcile, just needs
+#     moving). Deliberately zero dependencies beyond bash/find/sha256sum
+#     (shasum fallback for macOS) -- matches this ecosystem's "runs
+#     anywhere, installs nothing" convention. This is the tool for BEFORE
+#     any of the four locations get merged into location 3's structure --
+#     answers "is this actually a duplicate or did it drift" without
+#     guessing.
+#
+# WHY THE ORDER MATTERS (consolidate first, then re-taxonomize, then
+# upload, as the Architect proposed): running enkiddb-ingest against an
+# unconsolidated tree would tag files from all four locations by their
+# CURRENT scattered paths, producing duplicate/conflicting collection
+# tags for what's really the same document living in two places. Doing
+# the diff/consolidate pass first means every document gets exactly one
+# canonical collection tag, matching its one canonical folder.
+#
+# HONEST SCOPE: the actual file consolidation (deciding DIFFERS cases,
+# moving files into location 3) has to happen on the Architect's own
+# machine using this script's report -- this sandbox has no access to
+# /home/bfadam/Forge to do it directly.
+#
+# TESTS: enkiddb 38/38 -> 39/39 (+1: infer_collection_maps_the_canonical_numbered_taxonomy;
+#   updated 2 existing assertions from "component" to "components" to match
+#   the new generic rule). diff-doc-locations.sh smoke-tested manually
+#   against a throwaway 3-location fixture (identical/diverged/unique
+#   cases all correctly bucketed) -- not a Rust crate, no automated test
+#   harness for it, matches consolidate-branches.sh's precedent in this
+#   same scripts/ directory. Full workspace: 3410 passed, 0 failed (was
+#   3409).
+# =============================================================================
+---
+- name: "PB-179 | Record — collection taxonomy mirrors canonical docs/ layout, collision script landed"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-179.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-12. Changed: crates/enkiddb/src/ingest.rs
+          (docs_subfolder_collection). New: scripts/diff-doc-locations.sh.
+          Run `cargo test -p enkiddb` for the standing proof: 39 passed,
+          0 failed. Run `bash scripts/diff-doc-locations.sh <loc1> <loc2>
+          ...` on the Architect's own machine against the four Forge
+          documentation trees before consolidating them.

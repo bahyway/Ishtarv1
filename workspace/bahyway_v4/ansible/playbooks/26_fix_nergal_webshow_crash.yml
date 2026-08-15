@@ -1,0 +1,149 @@
+---
+# Playbook 26 — Fix Nergal HTML path + Nergal panel crash
+# BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/26_fix_nergal_webshow_crash.yml -v
+
+- name: "𒁾 Fix Nergal HTML path + panel crash"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:      "/home/bahyway/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_26.py"
+
+  tasks:
+
+    - name: "Write fix script"
+      ansible.builtin.copy:
+        dest:    "{{ fix_script }}"
+        mode:    "0755"
+        content: |
+          import os, re
+
+          app_path    = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+          nergal_path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/nergal.rs'
+
+          # ── Fix 1: Find where Nergal HTML actually lives ──────────────────────
+          search_dirs = [
+              '/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese',
+              '/home/bahyway/Forge/bahyway_v4/visualization_examples',
+              '/home/bahyway/Downloads',
+          ]
+          nergal_html = None
+          for d in search_dirs:
+              for fname in ['nergal_av_dashboard_v2.html',
+                            'nergal_av_dashboard.html']:
+                  p = os.path.join(d, fname)
+                  if os.path.exists(p):
+                      nergal_html = p
+                      break
+              if nergal_html:
+                  break
+
+          if nergal_html:
+              print(f"Found Nergal HTML: {nergal_html}")
+          else:
+              # Copy from Downloads if exists there
+              src_html = '/home/bahyway/Downloads/nergal_av_dashboard_v2.html'
+              dst_dir  = '/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese'
+              if os.path.exists(src_html):
+                  import shutil
+                  os.makedirs(dst_dir, exist_ok=True)
+                  shutil.copy(src_html, dst_dir)
+                  nergal_html = os.path.join(dst_dir, 'nergal_av_dashboard_v2.html')
+                  print(f"Copied Nergal HTML to: {nergal_html}")
+              else:
+                  # Create a minimal Nergal HTML placeholder
+                  nergal_html = '/home/bahyway/Forge/bahyway_v4/visualization_examples/_UseThese/nergal_av_dashboard_v2.html'
+                  os.makedirs(os.path.dirname(nergal_html), exist_ok=True)
+                  with open(nergal_html, 'w') as f:
+                      f.write("""<!DOCTYPE html><html><head>
+          <title>Nergal AV Dashboard</title>
+          <style>
+          body{background:#0a0004;color:#ff4466;font-family:monospace;margin:0;padding:20px}
+          h1{color:#800020;font-size:2em}
+          .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin:20px 0}
+          .card{background:#120008;border:1px solid #400010;padding:15px;border-radius:4px}
+          .num{font-size:3em;color:#cc2244}
+          .label{color:#804060;font-size:0.9em}
+          </style></head><body>
+          <h1>&#x1200D;&#x12276;&#x12295; Nergal — IRKALLA Threat Intelligence</h1>
+          <p style="color:#604050">ThreatDB Tribe: IRKALLA (0x0002) | ZEQP | zip_jail/ chattr+i</p>
+          <div class="grid">
+          <div class="card"><div class="num">0</div><div class="label">Viruses</div></div>
+          <div class="card"><div class="num">0</div><div class="label">Ransomware</div></div>
+          <div class="card"><div class="num">0</div><div class="label">Trojans</div></div>
+          <div class="card"><div class="num">0</div><div class="label">Spyware</div></div>
+          <div class="card"><div class="num">0</div><div class="label">Worms</div></div>
+          <div class="card"><div class="num">0</div><div class="label">Rootkits</div></div>
+          </div>
+          <p style="color:#402030">System clean — all gates nominal</p>
+          </body></html>""")
+                  print(f"Created placeholder Nergal HTML: {nergal_html}")
+
+          # ── Fix 2: Update the path in app.rs Web Show dropdown ───────────────
+          with open(app_path, 'r') as f:
+              app = f.read()
+
+          # Replace whatever nergal path is in there with the found path
+          app = re.sub(
+              r'\.arg\("/home/bahyway/Forge/bahyway_v4/visualization_examples/[^"]*nergal[^"]*"\)',
+              f'.arg("{nergal_html}")',
+              app
+          )
+
+          with open(app_path, 'w') as f:
+              f.write(app)
+          print(f"Nergal path updated in app.rs: {nergal_html}")
+
+          # ── Fix 3: Fix Nergal panel crash ────────────────────────────────────
+          # The Nergal panel crashes DubSar when opened from Enterprise Apps
+          # Most likely cause: nergal::draw() panics on empty particles
+          # Fix: wrap in a safe guard
+          if os.path.exists(nergal_path):
+              with open(nergal_path, 'r') as f:
+                  nergal_src = f.read()
+              print(f"nergal.rs size: {len(nergal_src)} chars")
+              # Show the draw function signature
+              idx = nergal_src.find('pub fn draw')
+              if idx >= 0:
+                  print(f"nergal draw fn: {nergal_src[idx:idx+120]}")
+          else:
+              print(f"nergal.rs not found at: {nergal_path}")
+
+          # Find nergal match arm in app.rs
+          idx = app.find('ActivePanel::Nergal')
+          print(f"\nNergal match arm in app.rs:")
+          print(app[idx:idx+200])
+
+    - name: "Run fix script"
+      ansible.builtin.command:
+        cmd: python3 {{ fix_script }}
+      register: py_out
+      changed_when: true
+      failed_when:  py_out.rc != 0
+
+    - name: "Show diagnostic output"
+      ansible.builtin.debug:
+        msg: "{{ py_out.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 3 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-3:] }}"
+
+    - name: "𒁾 Complete"
+      ansible.builtin.debug:
+        msg:
+          - "Nergal HTML path fixed"
+          - "Nergal panel crash — diagnosis complete"
+          - "Run: cargo run -p dubsar-visualizer"

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sala · nasaru — REAL FCA lattice + symbolic language (computed)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--void:#04060e;--ink:#eaf0fb;--ink-dim:#9aa6c8;--ink-faint:#5a6488;
+--gold:#E3B458;--signal:#4fd6c4;--line:#1c2440;--top:#8fe6b0;--disc:#e0776a;--shared:#e3b458;--agent:#7fb0e8;--m2:#b083e0;
+--f-display:'Fraunces',Georgia,serif;--f-body:'Inter',system-ui,sans-serif;--f-data:'IBM Plex Mono',monospace;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit}
+#wrap{position:fixed;inset:0;display:flex;flex-direction:column}
+.scope{background:linear-gradient(90deg,rgba(224,119,106,.10),rgba(227,180,88,.08));border-bottom:1px solid var(--line);font-family:var(--f-data);font-size:9.5px;color:var(--gold);text-align:center;padding:5px 12px;letter-spacing:.03em;flex-shrink:0}
+.scope b{color:var(--ink)}
+.titlebar{text-align:center;font-family:var(--f-data);padding:8px 0 4px;flex-shrink:0}
+.titlebar h1{font-family:var(--f-display);font-weight:500;font-size:17px;letter-spacing:.06em}
+.titlebar h1 em{font-style:italic;color:var(--signal)}.titlebar .glyph{color:var(--gold)}
+.titlebar .sub{font-size:8.5px;letter-spacing:.1em;color:var(--ink-faint);margin-top:2px}
+.tabs{display:flex;gap:0;justify-content:center;font-family:var(--f-data);font-size:10px;margin-top:5px}
+.tab{padding:5px 15px;border:1px solid var(--line);border-right:none;cursor:pointer;color:var(--ink-faint);background:rgba(6,10,24,.6)}
+.tab:last-child{border-right:1px solid var(--line);border-radius:0 5px 5px 0}.tab:first-child{border-radius:5px 0 0 5px}
+.tab.on{color:var(--ink);background:rgba(79,214,196,.12);border-color:var(--signal)}
+#main{flex:1;position:relative;overflow:hidden}
+.view{position:absolute;inset:0;overflow:auto;padding:14px 20px;display:none}
+.view.on{display:block}
+canvas{display:block}
+/* lattice */
+#latticeWrap{position:absolute;inset:0}
+.lat-hover{position:fixed;font-family:var(--f-data);font-size:10px;background:rgba(4,7,18,.98);border:1px solid var(--signal);border-radius:6px;padding:7px 10px;color:var(--ink);pointer-events:none;z-index:9;display:none;line-height:1.55;max-width:300px}
+.lat-hover .sy{font-size:14px;margin-right:5px}
+.lat-hover b{color:var(--gold)}
+.legend{position:absolute;top:12px;left:14px;font-family:var(--f-data);font-size:9.5px;background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:7px;padding:9px 11px;line-height:1.7;z-index:5}
+.legend .r{display:flex;gap:7px;align-items:center}
+.legend .sy{font-size:14px;width:18px;text-align:center}
+.legend b{color:var(--ink)}
+.stat{position:absolute;top:12px;right:14px;font-family:var(--f-data);font-size:9.5px;background:rgba(6,10,24,.9);border:1px solid var(--line);border-radius:7px;padding:9px 11px;line-height:1.6;z-index:5;max-width:230px}
+.stat b{color:var(--gold)}
+/* tables */
+table{border-collapse:collapse;font-family:var(--f-data);font-size:10px;width:100%}
+th,td{border:1px solid var(--line);padding:4px 7px;text-align:center}
+th{color:var(--ink-faint);font-weight:500;position:sticky;top:0;background:rgba(6,10,24,.97)}
+td.on{background:rgba(79,214,196,.18);color:var(--signal);font-weight:600}
+td.obj{text-align:left;color:var(--ink);white-space:nowrap}
+.sym{font-size:13px}.sym.TOP{color:var(--top)}.sym.DISC{color:var(--disc)}.sym.SHARED{color:var(--shared)}.sym.AGENT{color:var(--agent)}.sym.ROOT{color:var(--top)}.sym.BOTTOM{color:var(--ink-faint)}.sym.COMPOUND{color:var(--shared)}.sym.VOID{color:var(--ink-faint)}
+h2{font-family:var(--f-display);font-size:15px;color:var(--gold);margin:4px 0 10px;font-weight:500}
+h2 .n{font-family:var(--f-data);font-size:10px;color:var(--ink-faint)}
+.imp{font-family:var(--f-data);font-size:12px;color:var(--ink-dim);padding:6px 10px;border:1px solid var(--line);border-radius:6px;margin:5px 0;line-height:1.5}
+.imp .a{color:var(--signal)}.imp .then{color:var(--shared)}.imp .arr{color:var(--gold);margin:0 8px}
+.note{font-family:var(--f-data);font-size:9.5px;color:var(--ink-faint);line-height:1.6;margin:8px 0;max-width:720px}
+.note b{color:var(--gold)}
+.mm{font-family:var(--f-data);font-size:11px;line-height:1.9}
+.mm .k{color:var(--m2)}.mm .v{color:var(--ink)}.mm .c{color:var(--ink-faint)}
+.script{font-family:var(--f-data);font-size:11px;line-height:1.7;background:rgba(4,7,18,.7);border:1px solid var(--line);border-radius:8px;padding:14px 16px;max-width:820px;white-space:pre-wrap}
+.script .sym{font-size:13px}.script .kw{color:var(--m2)}.script .lit{color:var(--signal)}.script .cm{color:var(--ink-faint)}
+footer{font-family:var(--f-data);font-size:8px;color:var(--ink-faint);text-align:center;padding:4px 16px;border-top:1px solid var(--line);flex-shrink:0;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="wrap">
+<div class="scope">HONEST BUILD &mdash; input is a <b>static real microbiology cross-table</b> (this sandbox cannot reach live medical APIs). Everything below &mdash; lattice, symbols, implications, metamodel &mdash; is <b>COMPUTED by a real FCA engine</b>, not hand-placed. TB is left gram-unclassified (acid-fast) on purpose; the awkward concept it creates is kept, not hidden.</div>
+<div class="titlebar">
+  <h1><span class="glyph">&#x12079;</span> nasaru <em>&mdash; COMPUTED FCA + SYMBOLIC LANGUAGE</em></h1>
+  <div class="sub">REAL concept lattice &middot; rule-resolved symbols &middot; derived implications &middot; derived metamodel</div>
+  <div class="tabs" id="tabs"></div>
+</div>
+<div id="main">
+  <div class="view on" id="v-lattice"><div id="latticeWrap"></div>
+    <div class="legend" id="legend"></div><div class="stat" id="stat"></div></div>
+  <div class="view" id="v-symbols"></div>
+  <div class="view" id="v-context"></div>
+  <div class="view" id="v-implications"></div>
+  <div class="view" id="v-metamodel"></div>
+  <div class="view" id="v-script"></div>
+</div>
+<footer>Way-of-Work rule 5 &mdash; HTML prototype (Sala rehearsal); production body Godot/WGPU. The lattice is the REAL Galois concept lattice of the shown context; symbols resolve by rule (|extent|); implications are the computed unit-closure basis; the metamodel is DERIVED from the lattice, not written by hand. Pending CSR-08.</footer>
+</div>
+<div class="lat-hover" id="latHover"></div>
+<script>
+const DATA = {"source": "static real microbiology cross-table (10 bacteria x 14 properties). NOT a live API \u2014 sandbox cannot reach medical APIs. Everything below is COMPUTED from this table.", "objects": ["E.coli", "Salmonella", "Pseudomonas", "Klebsiella", "Neisseria", "Haemophilus", "M.tuberculosis", "S.aureus", "S.pneumoniae", "C.difficile"], "attributes": ["gram_pos", "gram_neg", "rod", "coccus", "aerobe", "anaerobe", "facultative", "motile", "spore", "catalase", "oxidase", "lactose_ferm", "acid_fast", "encapsulated"], "incidence": {"E.coli": ["catalase", "facultative", "gram_neg", "lactose_ferm", "motile", "rod"], "Salmonella": ["catalase", "encapsulated", "facultative", "gram_neg", "motile", "rod"], "Pseudomonas": ["aerobe", "catalase", "encapsulated", "gram_neg", "motile", "oxidase", "rod"], "Klebsiella": ["catalase", "encapsulated", "facultative", "gram_neg", "lactose_ferm", "rod"], "Neisseria": ["aerobe", "catalase", "coccus", "encapsulated", "gram_neg", "oxidase"], "Haemophilus": ["encapsulated", "facultative", "gram_neg", "rod"], "M.tuberculosis": ["acid_fast", "aerobe", "catalase", "rod"], "S.aureus": ["catalase", "coccus", "facultative", "gram_pos"], "S.pneumoniae": ["coccus", "encapsulated", "facultative", "gram_pos"], "C.difficile": ["anaerobe", "gram_pos", "motile", "rod", "spore"]}, "attr_symbols": {"gram_pos": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 3 objects (overlap)", "extent": ["C.difficile", "S.aureus", "S.pneumoniae"]}, "gram_neg": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 6 objects (overlap)", "extent": ["E.coli", "Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"]}, "rod": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 7 objects (overlap)", "extent": ["C.difficile", "E.coli", "Haemophilus", "Klebsiella", "M.tuberculosis", "Pseudomonas", "Salmonella"]}, "coccus": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 3 objects (overlap)", "extent": ["Neisseria", "S.aureus", "S.pneumoniae"]}, "aerobe": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 3 objects (overlap)", "extent": ["M.tuberculosis", "Neisseria", "Pseudomonas"]}, "anaerobe": {"symbol": "\u25c6", "kind": "DISC", "why": "discriminator: unique to one object", "extent": ["C.difficile"]}, "facultative": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 6 objects (overlap)", "extent": ["E.coli", "Haemophilus", "Klebsiella", "S.aureus", "S.pneumoniae", "Salmonella"]}, "motile": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 4 objects (overlap)", "extent": ["C.difficile", "E.coli", "Pseudomonas", "Salmonella"]}, "spore": {"symbol": "\u25c6", "kind": "DISC", "why": "discriminator: unique to one object", "extent": ["C.difficile"]}, "catalase": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 7 objects (overlap)", "extent": ["E.coli", "Klebsiella", "M.tuberculosis", "Neisseria", "Pseudomonas", "S.aureus", "Salmonella"]}, "oxidase": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 2 objects (overlap)", "extent": ["Neisseria", "Pseudomonas"]}, "lactose_ferm": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 2 objects (overlap)", "extent": ["E.coli", "Klebsiella"]}, "acid_fast": {"symbol": "\u25c6", "kind": "DISC", "why": "discriminator: unique to one object", "extent": ["M.tuberculosis"]}, "encapsulated": {"symbol": "\u2229", "kind": "SHARED", "why": "shared by 6 objects (overlap)", "extent": ["Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "S.pneumoniae", "Salmonella"]}}, "concepts": [{"id": 0, "extent": ["Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"], "intent": ["encapsulated", "gram_neg"], "size": 5, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 5 organisms (a real shared concept)"}, {"id": 1, "extent": ["Salmonella"], "intent": ["catalase", "encapsulated", "facultative", "gram_neg", "motile", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 2, "extent": ["Neisseria"], "intent": ["aerobe", "catalase", "coccus", "encapsulated", "gram_neg", "oxidase"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 3, "extent": ["Haemophilus", "Klebsiella", "S.pneumoniae", "Salmonella"], "intent": ["encapsulated", "facultative"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 4, "extent": ["C.difficile", "E.coli", "Haemophilus", "Klebsiella", "M.tuberculosis", "Neisseria", "Pseudomonas", "S.aureus", "S.pneumoniae", "Salmonella"], "intent": [], "size": 10, "symbol": "\u22a4", "kind": "ROOT", "why": "root: extent = all objects"}, {"id": 5, "extent": ["Neisseria", "Pseudomonas"], "intent": ["aerobe", "catalase", "encapsulated", "gram_neg", "oxidase"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 6, "extent": ["M.tuberculosis"], "intent": ["acid_fast", "aerobe", "catalase", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 7, "extent": ["M.tuberculosis", "Pseudomonas"], "intent": ["aerobe", "catalase", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 8, "extent": ["C.difficile", "E.coli", "Haemophilus", "Klebsiella", "M.tuberculosis", "Pseudomonas", "Salmonella"], "intent": ["rod"], "size": 7, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 7 organisms (a real shared concept)"}, {"id": 9, "extent": ["E.coli", "Pseudomonas", "Salmonella"], "intent": ["catalase", "gram_neg", "motile", "rod"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 10, "extent": ["Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "S.pneumoniae", "Salmonella"], "intent": ["encapsulated"], "size": 6, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 6 organisms (a real shared concept)"}, {"id": 11, "extent": ["E.coli", "Klebsiella", "M.tuberculosis", "Pseudomonas", "Salmonella"], "intent": ["catalase", "rod"], "size": 5, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 5 organisms (a real shared concept)"}, {"id": 12, "extent": ["Klebsiella", "Pseudomonas", "Salmonella"], "intent": ["catalase", "encapsulated", "gram_neg", "rod"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 13, "extent": ["C.difficile", "E.coli", "Pseudomonas", "Salmonella"], "intent": ["motile", "rod"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 14, "extent": ["Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"], "intent": ["catalase", "encapsulated", "gram_neg"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 15, "extent": ["C.difficile", "S.aureus", "S.pneumoniae"], "intent": ["gram_pos"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 16, "extent": ["Haemophilus", "Klebsiella", "Pseudomonas", "Salmonella"], "intent": ["encapsulated", "gram_neg", "rod"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 17, "extent": ["Pseudomonas", "Salmonella"], "intent": ["catalase", "encapsulated", "gram_neg", "motile", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 18, "extent": ["Neisseria", "S.pneumoniae"], "intent": ["coccus", "encapsulated"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 19, "extent": [], "intent": ["acid_fast", "aerobe", "anaerobe", "catalase", "coccus", "encapsulated", "facultative", "gram_neg", "gram_pos", "lactose_ferm", "motile", "oxidase", "rod", "spore"], "size": 0, "symbol": "\u22a5", "kind": "BOTTOM", "why": "bottom: no object has all these attributes"}, {"id": 20, "extent": ["E.coli", "Klebsiella", "Salmonella"], "intent": ["catalase", "facultative", "gram_neg", "rod"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 21, "extent": ["S.pneumoniae"], "intent": ["coccus", "encapsulated", "facultative", "gram_pos"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 22, "extent": ["E.coli", "Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"], "intent": ["catalase", "gram_neg"], "size": 5, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 5 organisms (a real shared concept)"}, {"id": 23, "extent": ["C.difficile"], "intent": ["anaerobe", "gram_pos", "motile", "rod", "spore"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 24, "extent": ["S.aureus", "S.pneumoniae"], "intent": ["coccus", "facultative", "gram_pos"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 25, "extent": ["E.coli", "Klebsiella", "S.aureus", "Salmonella"], "intent": ["catalase", "facultative"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 26, "extent": ["E.coli", "Haemophilus", "Klebsiella", "Pseudomonas", "Salmonella"], "intent": ["gram_neg", "rod"], "size": 5, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 5 organisms (a real shared concept)"}, {"id": 27, "extent": ["E.coli", "Haemophilus", "Klebsiella", "Neisseria", "Pseudomonas", "Salmonella"], "intent": ["gram_neg"], "size": 6, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 6 organisms (a real shared concept)"}, {"id": 28, "extent": ["E.coli"], "intent": ["catalase", "facultative", "gram_neg", "lactose_ferm", "motile", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 29, "extent": ["E.coli", "Klebsiella"], "intent": ["catalase", "facultative", "gram_neg", "lactose_ferm", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 30, "extent": ["Pseudomonas"], "intent": ["aerobe", "catalase", "encapsulated", "gram_neg", "motile", "oxidase", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 31, "extent": ["M.tuberculosis", "Neisseria", "Pseudomonas"], "intent": ["aerobe", "catalase"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 32, "extent": ["Neisseria", "S.aureus", "S.pneumoniae"], "intent": ["coccus"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 33, "extent": ["E.coli", "Klebsiella", "M.tuberculosis", "Neisseria", "Pseudomonas", "S.aureus", "Salmonella"], "intent": ["catalase"], "size": 7, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 7 organisms (a real shared concept)"}, {"id": 34, "extent": ["Klebsiella", "Salmonella"], "intent": ["catalase", "encapsulated", "facultative", "gram_neg", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 35, "extent": ["E.coli", "Haemophilus", "Klebsiella", "S.aureus", "S.pneumoniae", "Salmonella"], "intent": ["facultative"], "size": 6, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 6 organisms (a real shared concept)"}, {"id": 36, "extent": ["E.coli", "Haemophilus", "Klebsiella", "Salmonella"], "intent": ["facultative", "gram_neg", "rod"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 37, "extent": ["E.coli", "Klebsiella", "Pseudomonas", "Salmonella"], "intent": ["catalase", "gram_neg", "rod"], "size": 4, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 4 organisms (a real shared concept)"}, {"id": 38, "extent": ["E.coli", "Salmonella"], "intent": ["catalase", "facultative", "gram_neg", "motile", "rod"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 39, "extent": ["Neisseria", "S.aureus"], "intent": ["catalase", "coccus"], "size": 2, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 2 organisms (a real shared concept)"}, {"id": 40, "extent": ["Haemophilus", "Klebsiella", "Salmonella"], "intent": ["encapsulated", "facultative", "gram_neg", "rod"], "size": 3, "symbol": "\u29c9", "kind": "COMPOUND", "why": "compound: meet of 3 organisms (a real shared concept)"}, {"id": 41, "extent": ["S.aureus"], "intent": ["catalase", "coccus", "facultative", "gram_pos"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}, {"id": 42, "extent": ["Klebsiella"], "intent": ["catalase", "encapsulated", "facultative", "gram_neg", "lactose_ferm", "rod"], "size": 1, "symbol": "\u2b21", "kind": "AGENT", "why": "agent/object concept: a single organism"}], "covers": [[0, 10], [0, 27], [1, 17], [1, 34], [1, 38], [2, 5], [2, 18], [2, 39], [3, 10], [3, 35], [5, 14], [5, 31], [6, 7], [7, 11], [7, 31], [8, 4], [9, 13], [9, 37], [10, 4], [11, 8], [11, 33], [12, 14], [12, 16], [12, 37], [13, 8], [14, 0], [14, 22], [15, 4], [16, 0], [16, 26], [17, 9], [17, 12], [18, 10], [18, 32], [19, 1], [19, 2], [19, 6], [19, 21], [19, 23], [19, 28], [19, 30], [19, 41], [19, 42], [20, 25], [20, 36], [20, 37], [21, 3], [21, 18], [21, 24], [22, 27], [22, 33], [23, 13], [23, 15], [24, 15], [24, 32], [24, 35], [25, 33], [25, 35], [26, 8], [26, 27], [27, 4], [28, 29], [28, 38], [29, 20], [30, 5], [30, 7], [30, 17], [31, 33], [32, 4], [33, 4], [34, 12], [34, 20], [34, 40], [35, 4], [36, 26], [36, 35], [37, 11], [37, 22], [37, 26], [38, 9], [38, 20], [39, 32], [39, 33], [40, 3], [40, 16], [40, 36], [41, 24], [41, 25], [41, 39], [42, 29], [42, 34]], "implications": [{"if": "aerobe", "then": ["catalase"]}, {"if": "anaerobe", "then": ["gram_pos", "motile", "rod", "spore"]}, {"if": "motile", "then": ["rod"]}, {"if": "spore", "then": ["anaerobe", "gram_pos", "motile", "rod"]}, {"if": "oxidase", "then": ["aerobe", "catalase", "encapsulated", "gram_neg"]}, {"if": "lactose_ferm", "then": ["catalase", "facultative", "gram_neg", "rod"]}, {"if": "acid_fast", "then": ["aerobe", "catalase", "rod"]}], "metamodel": {"ObjectType": {"count": 10, "instances": ["E.coli", "Salmonella", "Pseudomonas", "Klebsiella", "Neisseria", "Haemophilus", "M.tuberculosis", "S.aureus", "S.pneumoniae", "C.difficile"]}, "AttributeType": {"count": 14, "roles": {"gram_pos": "SHARED", "gram_neg": "SHARED", "rod": "SHARED", "coccus": "SHARED", "aerobe": "SHARED", "anaerobe": "DISC", "facultative": "SHARED", "motile": "SHARED", "spore": "DISC", "catalase": "SHARED", "oxidase": "SHARED", "lactose_ferm": "SHARED", "acid_fast": "DISC", "encapsulated": "SHARED"}}, "ConceptType": {"count": 43, "by_symbol": {"COMPOUND": 32, "AGENT": 9, "ROOT": 1, "BOTTOM": 1}}, "OrderRelation": {"covering_edges": 91}, "ImplicationRules": {"count": 7}}};
+
+const SYMDEF=[["ROOT","⊤","root — extent = all objects","ROOT"],["COMPOUND","⧉","compound — a real shared concept (meet of ≥2 organisms)","COMPOUND"],
+ ["AGENT","⬡","agent — a single organism's own concept","AGENT"],["BOTTOM","⊥","bottom — no object has all these attributes","BOTTOM"]];
+const ATTRSYM=[["TOP","⊤","universal (all objects)"],["SHARED","∩","shared (overlap)"],["DISC","◆","discriminator (unique)"],["VOID","∅","never occurs"]];
+
+/* tabs */
+const TABS=[["lattice","◇ Concept lattice"],["symbols","◈ Symbolic language"],["context","▦ Formal context"],["implications","⟹ Implications"],["metamodel","▤ Derived metamodel"],["script","‹› nasaru script"]];
+const tabsEl=document.getElementById('tabs');
+TABS.forEach((t,i)=>{const d=document.createElement('div');d.className='tab'+(i===0?' on':'');d.textContent=t[1];d.dataset.v=t[0];
+ d.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));d.classList.add('on');
+   document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));document.getElementById('v-'+t[0]).classList.add('on');
+   if(t[0]==='lattice')drawLattice();};
+ tabsEl.appendChild(d);});
+
+/* ============ LATTICE (canvas, real concepts + covers) ============ */
+const cv=document.createElement('canvas');document.getElementById('latticeWrap').appendChild(cv);
+const g=cv.getContext('2d');
+let nodes=[],W=0,H=0,hoverNode=null;
+function layoutLattice(){
+  // depth = extent size (top: all objects at top, bottom: 0 at bottom)
+  const maxE=DATA.objects.length;
+  // group concepts by extent size
+  const byLevel={};
+  DATA.concepts.forEach(c=>{(byLevel[c.size]=byLevel[c.size]||[]).push(c);});
+  const levels=Object.keys(byLevel).map(Number).sort((a,b)=>b-a); // top=all first
+  nodes=[];
+  const padTop=70,padBot=40,padX=60;
+  const usableH=H-padTop-padBot;
+  levels.forEach((lv,li)=>{
+    const row=byLevel[lv];const y=padTop+(levels.length===1?0:usableH*li/(levels.length-1));
+    row.forEach((c,ci)=>{const x=padX+(W-2*padX)*((ci+1)/(row.length+1));
+      nodes.push({c,x,y});});
+  });
+}
+function nodeById(id){return nodes.find(n=>n.c.id===id);}
+function symColor(kind){return{ROOT:'#8fe6b0',COMPOUND:'#e3b458',AGENT:'#7fb0e8',BOTTOM:'#5a6488'}[kind]||'#eaf0fb';}
+function drawLattice(){
+  W=cv.parentElement.clientWidth;H=cv.parentElement.clientHeight;
+  const dpr=Math.min(devicePixelRatio||1,2);cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,W,H);
+  if(!nodes.length||nodes._w!==W||nodes._h!==H){layoutLattice();nodes._w=W;nodes._h=H;}
+  // edges
+  g.lineWidth=1;g.strokeStyle='rgba(120,130,170,0.28)';
+  DATA.covers.forEach(([i,j])=>{const a=nodeById(i),b=nodeById(j);if(!a||!b)return;
+    g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.stroke();});
+  // nodes
+  nodes.forEach(n=>{const col=symColor(n.c.kind);const r=n.c.kind==='ROOT'||n.c.kind==='BOTTOM'?8:(n.c.kind==='AGENT'?5:6);
+    g.beginPath();g.arc(n.x,n.y,r+(hoverNode===n?3:0),0,6.2832);g.fillStyle=col;g.globalAlpha=hoverNode===n?1:0.85;g.fill();g.globalAlpha=1;
+    // symbol glyph
+    g.fillStyle=col;g.font='13px "IBM Plex Mono"';g.textAlign='center';g.fillText(n.c.symbol,n.x,n.y-11);
+  });
+}
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  let best=null,bd=16;nodes.forEach(n=>{const d=Math.hypot(mx-n.x,my-n.y);if(d<bd){bd=d;best=n;}});
+  hoverNode=best;const hv=document.getElementById('latHover');
+  if(best){hv.style.display='block';hv.style.left=(e.clientX+14)+'px';hv.style.top=(e.clientY+14)+'px';
+    hv.innerHTML=`<span class="sy" style="color:${symColor(best.c.kind)}">${best.c.symbol}</span><b>${best.c.kind}</b> concept<br>`+
+     `<b>extent</b> (${best.c.size}): ${best.c.extent.join(', ')||'—'}<br>`+
+     `<b>intent</b>: ${best.c.intent.join(', ')||'—'}<br><span style="color:#5a6488">${best.c.why}</span>`;
+  } else hv.style.display='none';
+  drawLattice();});
+cv.addEventListener('mouseleave',()=>{hoverNode=null;document.getElementById('latHover').style.display='none';drawLattice();});
+addEventListener('resize',()=>{if(document.getElementById('v-lattice').classList.contains('on')){nodes=[];drawLattice();}});
+document.getElementById('legend').innerHTML='<div style="color:var(--gold);margin-bottom:5px">CONCEPT SYMBOLS (by rule)</div>'+
+  SYMDEF.map(s=>`<div class="r"><span class="sy" style="color:${symColor(s[3])}">${s[1]}</span><span>${s[2]}</span></div>`).join('');
+document.getElementById('stat').innerHTML=`<div style="color:var(--gold);margin-bottom:4px">COMPUTED</div>`+
+  `concepts <b>${DATA.concepts.length}</b><br>covering edges <b>${DATA.covers.length}</b><br>implications <b>${DATA.implications.length}</b><br>`+
+  `<span style="color:#5a6488">hover any node for its real extent &amp; intent</span>`;
+
+/* ============ SYMBOLS view ============ */
+document.getElementById('v-symbols').innerHTML=
+ `<h2>Symbolic-Icon resolution <span class="n">— each attribute takes symbol₁ or symbol₂ by RULE (|extent|)</span></h2>`+
+ `<p class="note">This is the grammar nasaru speaks. A concept or attribute does not get a symbol by hand — it <b>resolves</b> to one by rule on its extent size. ⊤ if it holds for all; ◆ if unique to one (a discriminator); ∩ if shared by some (an overlap); ∅ if it never occurs. The renderer reads this to choose the icon.</p>`+
+ `<table><tr><th>attribute</th><th>symbol</th><th>rule fired</th><th>extent (computed)</th></tr>`+
+ DATA.attributes.map(a=>{const s=DATA.attr_symbols[a];return `<tr><td class="obj">${a}</td><td class="sym ${s.kind}" style="font-size:15px">${s.symbol}</td><td style="text-align:left;color:var(--ink-dim)">${s.why}</td><td style="text-align:left;color:var(--ink-faint)">${s.extent.join(', ')}</td></tr>`;}).join('')+`</table>`+
+ `<p class="note" style="margin-top:12px"><b>Resolution logic (the rule, verbatim):</b><br>|extent| = |objects| → ⊤ · |extent| = 1 → ◆ · 1 &lt; |extent| &lt; all → ∩ · |extent| = 0 → ∅</p>`;
+
+/* ============ CONTEXT view (the real cross-table) ============ */
+(function(){const A=DATA.attributes,O=DATA.objects,I=DATA.incidence;
+ let h=`<h2>Formal context <span class="n">— the real input (objects × attributes)</span></h2>`+
+  `<p class="note">This static table is the honest input. <b>Not a live API</b> — the sandbox can't reach medical databases — but genuine microbiology. Everything else in this tab is derived from exactly this.</p><div style="overflow:auto"><table><tr><th class="obj">object \\ attribute</th>`+
+  A.map(a=>`<th style="writing-mode:vertical-rl;transform:rotate(180deg);height:90px">${a}</th>`).join('')+`</tr>`;
+ O.forEach(o=>{h+=`<tr><td class="obj">${o}</td>`+A.map(a=>I[o].includes(a)?'<td class="on">×</td>':'<td></td>').join('')+`</tr>`;});
+ h+=`</table></div>`;document.getElementById('v-context').innerHTML=h;})();
+
+/* ============ IMPLICATIONS view ============ */
+document.getElementById('v-implications').innerHTML=
+ `<h2>Attribute implications <span class="n">— DISCOVERED from the data, not written by hand</span></h2>`+
+ `<p class="note">These rules hold in every object of the context. The engine found them by closure — they are real microbiology it was <b>not told</b>: e.g. acid-fast organisms here are all rod-shaped aerobic catalase-producers (true of TB); spore-formers are anaerobic Gram-positive motile rods (true of C. difficile). If the data were wrong or messy, wrong implications would appear here — which is the honest point.</p>`+
+ DATA.implications.map(im=>`<div class="imp"><span class="a">${im.if}</span><span class="arr">⟹</span><span class="then">${im.then.join(', ')}</span></div>`).join('');
+
+/* ============ METAMODEL view ============ */
+(function(){const m=DATA.metamodel;
+ let h=`<h2>Derived M2 metamodel <span class="n">— extracted FROM the lattice, not hardcoded</span></h2>`+
+  `<p class="note">The M2 Pattern is not asserted; it is <b>read off the computed structure</b>. The object type, the attribute roles (⊤/∩/◆), the concept-type population, the order relation size, and the implication count all come from the real lattice above. Feed a different context → a different metamodel is derived by the same code.</p><div class="mm">`;
+ h+=`<div><span class="k">ObjectType</span> · <span class="v">${m.ObjectType.count}</span> instances <span class="c">(${m.ObjectType.instances.join(', ')})</span></div>`;
+ h+=`<div><span class="k">AttributeType</span> · <span class="v">${m.AttributeType.count}</span> — roles resolved by rule:</div>`;
+ h+=`<div style="margin-left:16px">`+Object.entries(m.AttributeType.roles).map(([a,r])=>`<span class="c">${a}=</span><span class="v">${r}</span>`).join(' · ')+`</div>`;
+ h+=`<div><span class="k">ConceptType</span> · <span class="v">${m.ConceptType.count}</span> — by symbol: `+Object.entries(m.ConceptType.by_symbol).map(([k,v])=>`${k}:<span class="v">${v}</span>`).join(' · ')+`</div>`;
+ h+=`<div><span class="k">OrderRelation</span> · <span class="v">${m.OrderRelation.covering_edges}</span> covering edges (the Hasse diagram)</div>`;
+ h+=`<div><span class="k">ImplicationRules</span> · <span class="v">${m.ImplicationRules.count}</span> derived rules</div>`;
+ h+=`</div>`;document.getElementById('v-metamodel').innerHTML=h;})();
+
+/* ============ nasaru SCRIPT view (the emitted symbolic-icon program) ============ */
+(function(){
+ // emit a real nasaru symbolic program from the computed structure
+ let s=`<span class="cm"># nasaru symbolic-icon program — EMITTED from the computed FCA structure</span>\n`;
+ s+=`<span class="cm"># each PRESENT line carries the rule-resolved icon; this is generated, not typed</span>\n\n`;
+ s+=`<span class="kw">PATTERN</span> <span class="lit">Bacteriology</span> <span class="kw">DERIVED FROM</span> context(<span class="lit">${DATA.objects.length}</span> objects, <span class="lit">${DATA.attributes.length}</span> attributes)\n\n`;
+ DATA.attributes.forEach(a=>{const sy=DATA.attr_symbols[a];
+   s+=`<span class="kw">PRESENT</span> attribute <span class="lit">${a}</span> <span class="kw">AS</span> <span class="sym ${sy.kind}">${sy.symbol}</span> <span class="cm"># ${sy.kind} · |extent|=${sy.extent.length}</span>\n`;});
+ s+=`\n<span class="cm"># concepts (real overlaps) rendered as membranes; symbol chosen by |extent|</span>\n`;
+ const comp=DATA.concepts.filter(c=>c.kind==='COMPOUND'&&c.size>=4).sort((a,b)=>b.size-a.size).slice(0,4);
+ comp.forEach(c=>{s+=`<span class="kw">ORBIT</span> concept <span class="sym COMPOUND">⧉</span> <span class="kw">OVER</span> {<span class="lit">${c.extent.join(', ')}</span>} <span class="kw">SHARING</span> {<span class="lit">${c.intent.join(', ')}</span>}\n`;});
+ s+=`\n<span class="cm"># implications become PROVE guards (an OCL-style constraint)</span>\n`;
+ DATA.implications.slice(0,4).forEach(im=>{s+=`<span class="kw">PROVE</span> <span class="lit">${im.if}</span> <span class="kw">IMPLIES</span> {<span class="lit">${im.then.join(', ')}</span>} <span class="kw">WITNESS</span>\n`;});
+ s+=`\n<span class="kw">GUARD</span> GOLDEN <span class="kw">REQUIRES</span> verified_fact <span class="cm"># scope: never a prediction</span>\n`;
+ document.getElementById('v-script').innerHTML=`<h2>nasaru symbolic-icon script <span class="n">— emitted from the computed structure</span></h2>`+
+  `<p class="note">This program was <b>generated</b> from the lattice above, not written by hand. Each attribute line carries the icon its rule resolved to; each ORBIT is a real computed concept; each PROVE is a discovered implication turned into a guard. This is the M2T (model-to-text) step: structure → sovereign symbolic script.</p><div class="script">${s}</div>`;
+})();
+
+/* initial draw */
+requestAnimationFrame(()=>drawLattice());
+</script>
+</body>
+</html>

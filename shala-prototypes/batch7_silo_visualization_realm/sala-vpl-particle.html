@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · VPL ⇄ Particle — one monist substance at two scales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --void:#070a12; --grid:#0e1420; --ink:#eaf0fb; --ink-dim:#9aa6c8; --ink-faint:#5a6488;
+  --exec:#e8ecf2; --data-flow:#7fd0e8; --gold:#E3B458; --signal:#4fd6c4; --line:#26304e;
+  --f-display:'Fraunces',Georgia,serif; --f-body:'Inter',system-ui,sans-serif; --f-data:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body)}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+#stage{position:fixed;inset:0}
+.hud{position:fixed;z-index:5}
+.hud-title{top:12px;left:0;right:0;text-align:center;pointer-events:none;font-family:var(--f-data)}
+.hud-title h1{font-family:var(--f-display);font-weight:500;font-size:18px;letter-spacing:.09em;color:var(--ink)}
+.hud-title h1 em{font-style:italic;color:var(--signal)}
+.hud-title .glyph{color:var(--gold)}
+.hud-title .sub{font-size:9px;letter-spacing:.15em;color:var(--ink-faint);margin-top:4px}
+.panel{background:rgba(10,15,30,.9);border:1px solid var(--line);border-radius:8px;padding:12px 14px;backdrop-filter:blur(10px)}
+.hud-crumb{top:70px;left:50%;transform:translateX(-50%);font-family:var(--f-data);font-size:10px;color:var(--ink-dim);background:rgba(10,15,30,.85);border:1px solid var(--line);border-radius:6px;padding:6px 12px;display:flex;gap:6px;align-items:center}
+.hud-crumb .seg{cursor:pointer}.hud-crumb .seg:hover{color:var(--signal)}.hud-crumb .seg.here{color:var(--gold)}.hud-crumb .arr{color:var(--ink-faint)}
+.hud-scale{top:70px;left:16px;font-family:var(--f-data);font-size:10px;color:var(--ink-faint);background:rgba(10,15,30,.85);border:1px solid var(--line);border-radius:6px;padding:8px 12px;line-height:1.6}
+.hud-scale .now{color:var(--signal)}
+.hud-insp{bottom:16px;left:16px;width:296px;font-family:var(--f-data);display:none}
+.hud-insp .it{font-family:var(--f-display);font-size:15px;color:var(--gold)}
+.hud-insp .ik{font-size:9px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.1em;margin:2px 0 7px}
+.hud-insp .ib{font-size:10.5px;color:var(--ink-dim);line-height:1.5}
+.hud-insp .ib b{color:var(--ink)}
+.hud-insp .zoom{margin-top:8px;font-size:9.5px;color:var(--signal)}
+.hud-help{bottom:16px;right:16px;font-family:var(--f-data);font-size:9.5px;color:var(--ink-faint);text-align:right;line-height:1.7;max-width:300px}
+.hud-help b{color:var(--ink-dim)}
+footer{position:fixed;bottom:0;left:0;right:0;background:rgba(7,10,18,.92);border-top:1px solid var(--line);font-family:var(--f-data);font-size:8.5px;color:var(--ink-faint);padding:4px 16px;z-index:6;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud hud-title">
+  <h1><span class="glyph">&#x12079;</span> VPL &#8644; <em>PARTICLE</em></h1>
+  <div class="sub">AN ICON IS A PARTICLE ASSEMBLY &middot; THE SAME DISSOLVE GESTURE WORKS ON ICONS AND PARTICLES &middot; ONE MONIST SUBSTANCE</div>
+</div>
+
+<div class="hud hud-scale" id="scalebox">
+  scale: <span class="now" id="scalenow">VPL · icon-node graph</span><br>
+  <span style="color:var(--ink-faint)">zoom in (scroll) or click an icon →<br>it dissolves into its particles</span>
+</div>
+
+<div class="hud hud-crumb" id="crumb"><span class="seg here">blueprint</span></div>
+
+<div class="hud hud-insp panel" id="insp"></div>
+
+<div class="hud hud-help">
+  <div><b>Blueprint ⇄ Cosmic Web — same substance.</b></div>
+  <div>far out = <b>VPL icons</b> wired like Unreal Blueprint</div>
+  <div>zoom / click an icon → it <b>dissolves into particles</b></div>
+  <div>(GL-VIZ-003: an icon is a particle assembly)</div>
+  <div>keep going → down to one KAKI particle</div>
+  <div>breadcrumb ↑ = climb back to the graph</div>
+</div>
+
+<footer>Way-of-Work rule 5 &mdash; HTML prototype; production body Godot/WGPU (DubSar Theater). Demonstrates the VPL⇄particle unification: Blueprint-style zoomable icon-nodes where each icon IS a particle assembly (GL-VIZ-003). In production: WGPU compute shaders render the particles (Niagara's technique, ported sovereign), Godot draws the icon-graph. Pending CSR-08.</footer>
+
+<script>
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ===== the VPL graph: icon-nodes wired like a Blueprint ===== *
+ * each node has: a position, an icon (drawn as a rounded panel + title + pins),
+ * and — the point — an INTERIOR of particles it dissolves into. */
+const NODES=[
+  {id:'ingest', title:'BeeMDM · Ingest', x:-360, y:80, tribe:'root', pins:['exec','file'],
+   interior:'Raw records entering the pipeline — each becomes a particle at birth (Identity-KAKI + Birth Root Shade assigned).'},
+  {id:'score', title:'GOLDEN · Score', x:-120, y:-40, tribe:'process', pins:['exec','eav'],
+   interior:'Each particle scored to GOLDEN; state ColourID transitions here (witnessed by Event-KAKI).'},
+  {id:'store', title:'EnkiDB → EnkiDW', x:-120, y:200, tribe:'store', pins:['exec','golden'],
+   interior:'GOLDEN particles settle; distinguished by KAKI + EAV; coloured by root-band + shade-degree.'},
+  {id:'ask', title:'HeptaScript · ASK', x:140, y:40, tribe:'query', pins:['exec','query'],
+   interior:'The Bārû query — arranges retrieved particles into clusters (nodes) and filaments (edges).'},
+  {id:'render', title:'BWVL · Render', x:380, y:40, tribe:'render', pins:['exec','scene'],
+   interior:'WGPU compute shaders render the billion particles — Niagara technique, sovereign in DubSar.'},
+];
+const WIRES=[['ingest','score'],['ingest','store'],['score','store'],['store','ask'],['ask','render']];
+const TRIBE_HUE={root:[0.45,0.85,0.75],process:[0.9,0.7,0.4],store:[0.6,0.66,0.95],query:[0.75,0.55,0.88],render:[0.95,0.55,0.6]};
+
+/* ===== three.js ===== */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(55,2,0.1,6000); camera.position.set(0,0,760);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x070a12,1);
+stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8090c0,0.9));
+
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const rad=g.createRadialGradient(32,32,0,32,32,32);rad.addColorStop(0,'rgba(255,255,255,1)');rad.addColorStop(0.3,'rgba(255,255,255,0.5)');rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const TEX=glowTex();
+
+/* an ICON node drawn as a canvas sprite (rounded panel, title bar, pins) — looks like a Blueprint node */
+function iconSprite(node){
+  const cv=document.createElement('canvas');cv.width=256;cv.height=140;const g=cv.getContext('2d');
+  const hue=TRIBE_HUE[node.tribe],rgb=`rgb(${hue[0]*255|0},${hue[1]*255|0},${hue[2]*255|0})`;
+  // panel
+  g.fillStyle='rgba(16,22,38,0.96)';roundRect(g,6,6,244,128,10);g.fill();
+  g.strokeStyle=rgb;g.lineWidth=2;roundRect(g,6,6,244,128,10);g.stroke();
+  // title bar
+  g.fillStyle=rgb;roundRect(g,6,6,244,30,10);g.fill();g.fillRect(6,26,244,10);
+  g.fillStyle='#0a0f1e';g.font='600 17px "IBM Plex Mono"';g.textBaseline='middle';g.textAlign='left';
+  g.fillText(node.title,18,22);
+  // pins
+  g.font='12px "IBM Plex Mono"';g.textBaseline='middle';
+  node.pins.forEach((p,i)=>{const y=52+i*24;
+    g.fillStyle=p==='exec'?'#e8ecf2':'#7fd0e8';g.beginPath();g.arc(20,y,5,0,6.28);g.fill();
+    g.fillStyle='#9aa6c8';g.textAlign='left';g.fillText(p,32,y);
+    g.fillStyle=p==='exec'?'#e8ecf2':'#7fd0e8';g.beginPath();g.arc(236,y,5,0,6.28);g.fill();});
+  const t=new THREE.CanvasTexture(cv);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false}));
+  s.scale.set(150,82,1);return s;
+}
+function roundRect(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+
+let sceneObjs=[],elements=[],depthStack=[];
+function clearScene(){sceneObjs.forEach(o=>scene.remove(o));sceneObjs=[];elements=[];}
+function addObj(o){scene.add(o);sceneObjs.push(o);return o;}
+
+function addParticleCloud(center,n,spread,color,bright){
+  const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+  for(let i=0;i<n;i++){const r=spread*Math.pow(Math.random(),0.6),th=Math.random()*6.28,ph=Math.acos(2*Math.random()-1);
+    pos[i*3]=center.x+r*Math.sin(ph)*Math.cos(th);pos[i*3+1]=center.y+r*Math.sin(ph)*Math.sin(th);pos[i*3+2]=center.z+r*Math.cos(ph);
+    const b=bright*(0.45+Math.random()*0.55);col[i*3]=color[0]*b;col[i*3+1]=color[1]*b;col[i*3+2]=color[2]*b;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  return addObj(new THREE.Points(g,new THREE.PointsMaterial({size:2.8,vertexColors:true,transparent:true,opacity:0.9,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+}
+function addWireParticles(A,B,n,color){
+  const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+  const mid={x:(A.x+B.x)/2,y:(A.y+B.y)/2-30,z:0};
+  for(let i=0;i<n;i++){const t=i/n;
+    pos[i*3]=A.x*(1-t)*(1-t)+mid.x*2*(1-t)*t+B.x*t*t;
+    pos[i*3+1]=A.y*(1-t)*(1-t)+mid.y*2*(1-t)*t+B.y*t*t;
+    pos[i*3+2]=(Math.random()-.5)*4;
+    const b=0.4+Math.random()*0.5;col[i*3]=color[0]*b;col[i*3+1]=color[1]*b;col[i*3+2]=color[2]*b;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  return addObj(new THREE.Points(g,new THREE.PointsMaterial({size:2.0,vertexColors:true,transparent:true,opacity:0.6,depthWrite:false,blending:THREE.AdditiveBlending,map:TEX})));
+}
+function mkLabel(text,color){const cv=document.createElement('canvas');cv.width=512;cv.height=64;const g=cv.getContext('2d');
+  g.font='600 26px "IBM Plex Mono"';g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';g.shadowColor='rgba(0,0,0,.95)';g.shadowBlur=9;
+  g.fillText(text,256,34);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));s.scale.set(150,19,1);return s;}
+function addLabel(center,text,color){const l=mkLabel(text,color);l.position.set(center.x,center.y+24,center.z);return addObj(l);}
+
+/* ===== LEVEL 0: the VPL icon-node graph (Blueprint) ===== */
+function buildGraph(){
+  clearScene();depthStack=[{name:'blueprint',build:buildGraph}];renderCrumb();
+  document.getElementById('scalenow').textContent='VPL · icon-node graph';
+  // wires first (behind icons), as particle streams (they too are particles)
+  WIRES.forEach(([a,b])=>{const A=NODES.find(n=>n.id===a),B=NODES.find(n=>n.id===b);
+    addWireParticles({x:A.x+75,y:A.y},{x:B.x-75,y:B.y},240,[0.9,0.92,0.96]);});
+  // icon nodes
+  NODES.forEach(node=>{
+    const spr=iconSprite(node);spr.position.set(node.x,node.y,0);addObj(spr);
+    // faint particle halo behind the icon — the hint that the icon IS particles
+    addParticleCloud({x:node.x,y:node.y,z:-8},260,44,TRIBE_HUE[node.tribe],0.35);
+    elements.push({id:node.id,kind:'icon',center:new THREE.Vector3(node.x,node.y,0),radius:80,data:node});
+  });
+}
+
+/* ===== dissolve an ICON → it becomes its particle assembly ===== */
+function dissolveIcon(node){
+  const build=()=>{
+    clearScene();
+    document.getElementById('scalenow').textContent='PARTICLE · '+node.title+' dissolved';
+    const center=new THREE.Vector3(0,0,0);
+    // the icon's interior: a dense particle cluster in the tribe's colour band
+    addParticleCloud(center,2600,70,TRIBE_HUE[node.tribe],0.85);
+    addLabel(center,node.title,rgbCss(TRIBE_HUE[node.tribe]));
+    addLabel({x:0,y:-30,z:0},'this icon IS a particle assembly','#5a6488');
+    // its constituent sub-particles as clickable child clusters (each its own shade-degree)
+    const kids=['Identity-KAKI','EAV attrs','ColourID','links'];
+    kids.forEach((k,i)=>{const a=i/kids.length*6.28;const p=new THREE.Vector3(Math.cos(a)*190,Math.sin(a)*120,Math.sin(a*1.7)*40);
+      const shade=shadeDegree(TRIBE_HUE[node.tribe],i,kids.length);
+      addParticleCloud(p,420,16,shade,0.85);addLabel(p,k,rgbCss(shade));
+      elements.push({id:node.id+'|'+k,kind:'subparticle',center:p,radius:26,data:{name:k,node,shade}});});
+  };
+  pushDepth(node.title,build);build();inspectIcon(node);
+}
+function dissolveSub(sub){
+  const build=()=>{clearScene();
+    document.getElementById('scalenow').textContent='ESSENTIAL · '+sub.name;
+    const center=new THREE.Vector3(0,0,0);
+    addParticleCloud(center,1400,54,sub.shade,0.85);
+    addLabel(center,sub.name,rgbCss(sub.shade));
+    addLabel({x:0,y:-28,z:0},'essential particles (KAKI-level)','#5a6488');
+    // a scatter of essential particles, each a unique shade-degree in the band
+    for(let i=0;i<14;i++){const a=i/14*6.28;const p=new THREE.Vector3(Math.cos(a)*150,Math.sin(a)*100,Math.sin(a*2)*30);
+      addParticleCloud(p,90,7,shadeDegree(sub.shade,i,14),0.9);}
+  };
+  pushDepth(sub.name,build);build();inspectSub(sub);
+}
+function shadeDegree(base,i,n){const f=0.6+0.4*(i/Math.max(1,n-1));return [Math.min(1,base[0]*f+0.1),Math.min(1,base[1]*f+0.1),Math.min(1,base[2]*f+0.1)];}
+function rgbCss(c){return`rgb(${(c[0]*255)|0},${(c[1]*255)|0},${(c[2]*255)|0})`;}
+
+/* depth + crumb */
+function pushDepth(name,build){depthStack.push({name,build});renderCrumb();}
+function popTo(i){depthStack=depthStack.slice(0,i+1);const top=depthStack[depthStack.length-1];clearScene();top.build();renderCrumb();document.getElementById('insp').style.display='none';
+  if(i===0)document.getElementById('scalenow').textContent='VPL · icon-node graph';}
+function renderCrumb(){const c=document.getElementById('crumb');
+  c.innerHTML=depthStack.map((d,i)=>`<span class="seg${i===depthStack.length-1?' here':''}" data-i="${i}">${d.name}</span>`+(i<depthStack.length-1?'<span class="arr">›</span>':'')).join('');
+  c.querySelectorAll('.seg').forEach(s=>s.onclick=()=>popTo(+s.dataset.i));}
+
+/* inspectors */
+function inspectIcon(node){const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">${node.title}</div><div class="ik">VPL icon · = a particle assembly</div>
+    <div class="ib">${node.interior}</div>
+    <div class="ib" style="margin-top:6px"><b>The unification:</b> this looked like a Blueprint icon, but it dissolved into particles — because in BWVL an icon and a cosmic-web particle are the <b>same monist substance at different scales</b> (GL-VIZ-003).</div>
+    <div class="zoom">▸ click a sub-cluster to go deeper</div>`;}
+function inspectSub(sub){const el=document.getElementById('insp');el.style.display='block';
+  el.innerHTML=`<div class="it">${sub.name}</div><div class="ik">constituent of ${sub.node.title}</div>
+    <div class="ib">A sub-assembly of particles, each with its own <b>shade-degree</b> within the tribe's colour band — visually distinct without reading KAKI (GL-VIZ-004).</div>
+    <div class="zoom">▸ dissolved to essential particles</div>`;}
+
+/* picking */
+function pick(cx,cy){const r=renderer.domElement.getBoundingClientRect();let best=null,bd=1e9;
+  elements.forEach(e=>{const v=e.center.clone().project(camera);if(v.z>=1)return;
+    const sx=(v.x*.5+.5)*r.width,sy=(-v.y*.5+.5)*r.height;const d=Math.hypot(cx-r.left-sx,cy-r.top-sy);
+    if(d<(e.radius||40)&&d<bd){bd=d;best=e;}});return best;}
+let dragMoved=false;
+renderer.domElement.addEventListener('mousemove',e=>{if(dragging&&(Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly)>4))dragMoved=true;
+  renderer.domElement.style.cursor=pick(e.clientX,e.clientY)?'pointer':(dragging?'grabbing':'grab');});
+renderer.domElement.addEventListener('click',e=>{if(dragMoved)return;const el=pick(e.clientX,e.clientY);if(!el)return;
+  if(el.kind==='icon')dissolveIcon(el.data);else if(el.kind==='subparticle')dissolveSub(el.data);});
+
+/* camera + zoom-drives-dissolve hint */
+let az=0,el=0,camDist=760,camDistT=760,dragging=false,lx=0,ly=0;
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();camDistT=Math.max(150,Math.min(1400,camDistT*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;dragMoved=false;lx=e.clientX;ly=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{if(!dragging)return;az-=(e.clientX-lx)*0.004;el=Math.max(-1.0,Math.min(1.0,el+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;});
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+buildGraph();
+
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,last?(ts-last)/1000:0);last=ts;
+  camDist+=(camDistT-camDist)*Math.min(1,dt*2.5);
+  camera.position.set(Math.sin(az)*camDist*0.3,Math.sin(el)*camDist*0.3,Math.cos(az)*camDist);
+  camera.lookAt(0,0,0);renderer.render(scene,camera);}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

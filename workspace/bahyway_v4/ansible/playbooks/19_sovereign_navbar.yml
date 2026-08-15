@@ -1,0 +1,231 @@
+---
+# Playbook 19 — Sovereign nav bar with dropdown menus
+# Replaces horizontal tab list with:
+#   [𒁾 BahyWay] [▼ Enterprise Apps ▼] [▼ AI Agents ▼]
+# Run from eriduous-vdi:
+#   ansible-playbook playbooks/19_sovereign_navbar.yml -v
+
+- name: "𒁾 Sovereign nav bar — dropdown menus"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    forge:  "/home/bahyway/Forge/bahyway_v4"
+    app_rs: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
+
+  tasks:
+
+    - name: "Backup app.rs"
+      ansible.builtin.copy:
+        src: "{{ app_rs }}"
+        dest: "{{ app_rs }}.bak19"
+        remote_src: true
+        mode: "0644"
+
+    - name: "Rewrite nav bar with dropdown menus"
+      ansible.builtin.shell:
+        cmd: |
+          python3 << 'PYEOF'
+          import re
+
+          app_path = '/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs'
+          with open(app_path, 'r') as f:
+              app = f.read()
+
+          # Find the entire nav bar show block
+          # Replace the contents of TopBottomPanel nav_bar
+          old_nav = re.search(
+              r'(egui::TopBottomPanel::top\("nav_bar"\).*?\.show\(ctx, \|ui\| \{)(.*?)(\}\);.*?egui::CentralPanel)',
+              app, re.DOTALL
+          )
+
+          if not old_nav:
+              print("ERROR: nav_bar block not found")
+              exit(1)
+
+          new_inner = '''
+                  ui.horizontal_centered(|ui| {
+                      ui.add_space(8.0);
+
+                      // ── 𒁾 BahyWay main entrance ─────────────────────────
+                      let is_bw = self.panel == ActivePanel::BahywayMain;
+                      let bw_btn = egui::Button::new(
+                          egui::RichText::new("𒁾  BahyWay")
+                              .color(if is_bw { theme::GOLD } else { theme::TEXT_DIM })
+                              .size(14.0).strong())
+                          .fill(if is_bw { theme::BG_HOVER } else { egui::Color32::TRANSPARENT })
+                          .rounding(egui::Rounding::same(4.0));
+                      if ui.add(bw_btn).clicked() {
+                          self.panel = ActivePanel::BahywayMain;
+                      }
+
+                      ui.add_space(6.0);
+                      ui.separator();
+                      ui.add_space(6.0);
+
+                      // ── Enterprise Apps dropdown ──────────────────────────
+                      let enterprise_panels = [
+                          (ActivePanel::EriduOS,          "𒁾  EriduOS"),
+                          (ActivePanel::Hepta,             "⬡  Hepta 7D"),
+                          (ActivePanel::Particles,         "◉  Particles"),
+                          (ActivePanel::Wpd,               "⛽  Baghdad WPD"),
+                          (ActivePanel::Najaf,             "☽  Najaf"),
+                          (ActivePanel::EtlFlow,           "⇄  ETL Flow"),
+                          (ActivePanel::EtlTransparency,   "𒁾  ETL 3D"),
+                          (ActivePanel::EtlSim,            "⬡  ETL Sim"),
+                          (ActivePanel::Nergal,            "𒀭𒉺𒂵  Nergal AV"),
+                      ];
+                      let ent_active = enterprise_panels.iter()
+                          .any(|(p, _)| *p == self.panel);
+                      let ent_col = if ent_active { theme::GOLD } else { theme::TEXT_DIM };
+                      let ent_btn = egui::Button::new(
+                          egui::RichText::new("Enterprise Apps  ▾")
+                              .color(ent_col).size(13.0))
+                          .fill(if ent_active { theme::BG_HOVER }
+                                else { egui::Color32::TRANSPARENT })
+                          .rounding(egui::Rounding::same(4.0));
+                      let ent_resp = ui.add(ent_btn);
+                      let ent_id   = ui.make_persistent_id("ent_menu");
+                      if ent_resp.clicked() {
+                          ui.memory_mut(|m| {
+                              let open = m.data.get_temp_mut_or_default::<bool>(ent_id);
+                              *open = !*open;
+                          });
+                      }
+                      let ent_open = ui.memory(|m| {
+                          m.data.get_temp::<bool>(ent_id).unwrap_or(false)
+                      });
+                      if ent_open {
+                          let popup_id = ent_id;
+                          egui::popup_below_widget(ui, popup_id, &ent_resp,
+                              egui::PopupCloseBehavior::CloseOnClickOutside,
+                              |ui| {
+                              ui.set_min_width(200.0);
+                              egui::Frame::none()
+                                  .fill(egui::Color32::from_rgb(10, 10, 28))
+                                  .stroke(egui::Stroke::new(1.0, theme::GOLD))
+                                  .inner_margin(egui::Margin::same(4.0))
+                                  .show(ui, |ui| {
+                                  ui.label(egui::RichText::new("Enterprise Apps")
+                                      .color(theme::GOLD).size(11.0).strong());
+                                  ui.separator();
+                                  for (panel, label) in &enterprise_panels {
+                                      let active = self.panel == *panel;
+                                      let txt = egui::RichText::new(*label)
+                                          .color(if active { theme::GOLD }
+                                                 else { theme::TEXT_MAIN })
+                                          .size(12.0);
+                                      if ui.selectable_label(active, txt).clicked() {
+                                          self.panel = *panel;
+                                          ui.memory_mut(|m| {
+                                              m.data.insert_temp(ent_id, false);
+                                          });
+                                      }
+                                  }
+                              });
+                          });
+                      }
+
+                      ui.add_space(4.0);
+                      ui.separator();
+                      ui.add_space(4.0);
+
+                      // ── AI Agents dropdown ────────────────────────────────
+                      let ai_panels = [
+                          (ActivePanel::TamuzAI, "𒀭  TamuzAI"),
+                          (ActivePanel::EaAgent,  "𒂗𒆠 EaAgent"),
+                      ];
+                      let ai_active = ai_panels.iter()
+                          .any(|(p, _)| *p == self.panel);
+                      let ai_col = if ai_active { theme::GOLD } else { theme::TEXT_DIM };
+                      let ai_btn = egui::Button::new(
+                          egui::RichText::new("AI Agents  ▾")
+                              .color(ai_col).size(13.0))
+                          .fill(if ai_active { theme::BG_HOVER }
+                                else { egui::Color32::TRANSPARENT })
+                          .rounding(egui::Rounding::same(4.0));
+                      let ai_resp = ui.add(ai_btn);
+                      let ai_id   = ui.make_persistent_id("ai_menu");
+                      if ai_resp.clicked() {
+                          ui.memory_mut(|m| {
+                              let open = m.data.get_temp_mut_or_default::<bool>(ai_id);
+                              *open = !*open;
+                          });
+                      }
+                      let ai_open = ui.memory(|m| {
+                          m.data.get_temp::<bool>(ai_id).unwrap_or(false)
+                      });
+                      if ai_open {
+                          egui::popup_below_widget(ui, ai_id, &ai_resp,
+                              egui::PopupCloseBehavior::CloseOnClickOutside,
+                              |ui| {
+                              ui.set_min_width(160.0);
+                              egui::Frame::none()
+                                  .fill(egui::Color32::from_rgb(10, 10, 28))
+                                  .stroke(egui::Stroke::new(1.0, theme::GOLD))
+                                  .inner_margin(egui::Margin::same(4.0))
+                                  .show(ui, |ui| {
+                                  ui.label(egui::RichText::new("AI Agents")
+                                      .color(theme::GOLD).size(11.0).strong());
+                                  ui.separator();
+                                  for (panel, label) in &ai_panels {
+                                      let active = self.panel == *panel;
+                                      let txt = egui::RichText::new(*label)
+                                          .color(if active { theme::GOLD }
+                                                 else { theme::TEXT_MAIN })
+                                          .size(12.0);
+                                      if ui.selectable_label(active, txt).clicked() {
+                                          self.panel = *panel;
+                                          ui.memory_mut(|m| {
+                                              m.data.insert_temp(ai_id, false);
+                                          });
+                                      }
+                                  }
+                              });
+                          });
+                      }
+                  });
+          '''
+
+          # Replace the inner content of the nav bar show block
+          start = old_nav.start(2)
+          end   = old_nav.end(2)
+          app   = app[:start] + new_inner + app[end:]
+
+          with open(app_path, 'w') as f:
+              f.write(app)
+          print("Nav bar rewritten with dropdown menus")
+          PYEOF
+      register: py_result
+      changed_when: true
+
+    - name: "Show Python output"
+      ansible.builtin.debug:
+        msg: "{{ py_result.stdout_lines }}"
+
+    - name: "Build dubsar-visualizer"
+      ansible.builtin.command:
+        cmd:   cargo build -p dubsar-visualizer
+        chdir: "{{ forge }}"
+      register: build
+      changed_when: true
+      failed_when:  build.rc != 0
+
+    - name: "Last 5 build lines"
+      ansible.builtin.debug:
+        msg: "{{ build.stderr_lines[-5:] }}"
+
+    - name: "Stat binary"
+      ansible.builtin.stat:
+        path: "{{ forge }}/target/debug/dubsar-visualizer"
+      register: bin_stat
+
+    - name: "𒁾 Sovereign nav bar complete"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Nav bar: [𒁾 BahyWay] [▼ Enterprise Apps] [▼ AI Agents]"
+          - "✓ Dropdown: 9 Enterprise Apps + 2 AI Agents"
+          - "✓ Active panel highlighted in GOLD"
+          - "✓ Binary: {{ bin_stat.stat.size | filesizeformat }}"
+          - "Run: cargo run -p dubsar-visualizer"

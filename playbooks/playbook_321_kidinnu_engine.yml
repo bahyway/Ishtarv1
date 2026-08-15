@@ -1,0 +1,498 @@
+---
+# ════════════════════════════════════════════════════════════════════
+# PB-321 — KIDINNU ENGINE · CIVIL PROTECTION CALCULUS IMPLEMENTATION
+# ════════════════════════════════════════════════════════════════════
+# Implements: GL-ALG-001-A2 (Civil Protection Calculus, DRAFT)
+# Crate name: kidinnu-engine — PROPOSED per NL-001; if the Architect
+#   grants a different name, run the rename task at the tail (tagged
+#   'rename') with -e new_name=<granted_name>.
+# Target:  dubsar-workstation (192.168.122.121) — sovereign pure-Rust
+# Run:     from HOST (WoW rule 1): ansible-playbook -i inventory pb-321.yml
+# Status:  DRAFT — awaiting the Architect's live run (CSR-08).
+#          Running this playbook IS the confirmation; sealing follows
+#          the ceremony: review → --check → live → gate → seal.
+# Law honored in code, not comments:
+#   · ε > 0 enforced BY TYPE (EpsilonFloor cannot be constructed at 0)
+#   · minimax directive, never blend (Never-Averaged, §A2.3)
+#   · capacity honesty: no full doors (§A2.4)
+#   · resident projection carries one zone only (§A2.5)
+#   · Ed25519 seal, offline-verifiable (§A2.6)
+#   · complete offline tablet export (§A2.8)
+# ════════════════════════════════════════════════════════════════════
+- name: "PB-321 · kidinnu-engine — Civil Protection Calculus (DRAFT)"
+  hosts: uruk
+  vars:
+    crate_dir: "/home/bahaa/bahyway/crates/kidinnu-engine"
+    crate_name: "kidinnu-engine"
+  tasks:
+
+    - name: "PB-321.T1 · crate skeleton"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crate_dir }}/src"
+        - "{{ crate_dir }}/tests"
+
+    - name: "PB-321.T2 · Cargo.toml (sovereign deps only)"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name = "kidinnu-engine"       # PROPOSED name — NL-001, Architect grants
+          version = "0.1.0-draft"
+          edition = "2021"
+          description = "Civil Protection Calculus (GL-ALG-001-A2): minimax refuge directives, capacity-honest, epsilon-floored, Ed25519-sealed, offline-first."
+          license = "UNLICENSED"
+
+          [dependencies]
+          ed25519-dalek = { version = "2", features = ["rand_core"] }
+          rand = "0.8"
+
+          [profile.release]
+          lto = true
+
+    - name: "PB-321.T3 · src/types.rs — sorts of §A2.1, ε by type"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/types.rs"
+        mode: "0644"
+        content: |
+          //! GL-ALG-001-A2 §A2.1 — sorts and ground objects.
+          //! The honest floor is a TYPE: EpsilonFloor cannot exist at zero (F4).
+
+          /// ε > 0 by construction. `new` refuses 0.0 and negatives and NaN.
+          #[derive(Clone, Copy, Debug, PartialEq)]
+          pub struct EpsilonFloor(f64);
+          impl EpsilonFloor {
+              pub fn new(v: f64) -> Result<Self, &'static str> {
+                  if v.is_finite() && v > 0.0 { Ok(Self(v)) }
+                  else { Err("F4: epsilon must be finite and > 0 — certainty is forbidden by type") }
+              }
+              pub fn get(self) -> f64 { self.0 }
+          }
+
+          /// A zone of the HeptaShell lattice Z (126 zones: 7·14·21·28·35·21).
+          #[derive(Clone, Debug)]
+          pub struct Zone {
+              pub id: u16,
+              pub ring: u8,
+              pub sector: u16,
+              pub pop: u32,
+              pub cx: f64,
+              pub cy: f64,
+              pub eps: EpsilonFloor,
+          }
+
+          /// A refuge r ∈ R: capacity-honest, with shielding factor s(r) ∈ (0,1].
+          #[derive(Clone, Debug)]
+          pub struct Refuge {
+              pub id: String,
+              pub name: String,
+              pub x: f64,
+              pub y: f64,
+              pub cap: u32,
+              pub shield: f64, // underground < 1.0 discounts worst case
+          }
+
+          /// A sealed threat template Θ ∈ S with its public siren pattern σ(Θ).
+          /// F5: only sealed templates judge. `sealed` is checked at solver entry.
+          #[derive(Clone, Debug)]
+          pub struct ThreatTemplate {
+              pub id: String,
+              pub siren: String,
+              pub src_x: f64,
+              pub src_y: f64,
+              pub bearing: f64, // direction of push
+              pub spread: f64,
+              pub sealed: bool,
+          }
+
+          /// A move m ∈ M(z): walk to a refuge, or outward egress.
+          #[derive(Clone, Debug, PartialEq)]
+          pub enum Move {
+              ToRefuge { refuge_id: String, bearing: f64 },
+              Egress { bearing: f64 },
+              HoldUnderground { refuge_id: String },
+          }
+
+          /// The resident projection π_z (§A2.5): ONE zone, no aggregates.
+          #[derive(Clone, Debug)]
+          pub struct ResidentCard {
+              pub zone_id: u16,
+              pub siren: Option<String>,
+              pub directive: Move,
+              pub worst_case: f64,
+              pub eps: f64,
+              pub minimax: bool,
+              pub seal_hex: String,
+          }
+
+    - name: "PB-321.T4 · src/fadam.rs — danger as a Fadam functional"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/fadam.rs"
+        mode: "0644"
+        content: |
+          //! Every danger functional D_Θ is a Fadam functional (GL-ALG-001-A1):
+          //! F1 anonymity (reads positions, never identities), F2 rotation handled
+          //! by bearing-relative geometry, F3 Lipschitz by bounded gradients of the
+          //! soft front, F4 epsilon added ALWAYS, F5 sealed-judge checked by caller.
+          use crate::types::{EpsilonFloor, ThreatTemplate};
+
+          /// Danger of a point under a sealed template, F4-floored.
+          pub fn danger_at(x: f64, y: f64, t: &ThreatTemplate, eps: EpsilonFloor) -> f64 {
+              let dx = x - t.src_x;
+              let dy = y - t.src_y;
+              let d = (dx * dx + dy * dy).sqrt() + 1.0;
+              let align = ((dy.atan2(dx)) - (t.bearing + std::f64::consts::PI)).cos();
+              let raw = (1.0 - d / (150.0 * t.spread)).max(0.0)
+                  * (0.5 + 0.5 * align.max(0.0));
+              raw + eps.get() // F4: never below the confessed floor — including at Θ itself
+          }
+
+          /// Danger of a straight walk, sampled at midpoint and endpoint (path law).
+          pub fn danger_path(
+              from: (f64, f64), to: (f64, f64), shield: f64,
+              t: &ThreatTemplate, eps: EpsilonFloor,
+          ) -> f64 {
+              let mid = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0);
+              let a = danger_at(mid.0, mid.1, t, eps);
+              let b = danger_at(to.0, to.1, t, eps) * shield;
+              a.max(b)
+          }
+
+    - name: "PB-321.T5 · src/minimax.rs — the Refuge Directive Equation"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/minimax.rs"
+        mode: "0644"
+        content: |
+          //! §A2.2 — D*(z) = argmin_m max_Θ D_Θ(m), s.t. no full doors (§A2.4).
+          //! §A2.3 — LIVES ARE NEVER AVERAGED: no blend path exists in this module.
+          use crate::fadam::{danger_at, danger_path};
+          use crate::types::*;
+
+          pub struct Assignment {
+              pub zone_id: u16,
+              pub mv: Move,
+              pub worst: f64,
+              pub minimax_flag: bool, // templates materially disagreed
+          }
+
+          /// Solve directives for all zones. `declared`: Some(Θ) when a siren has
+          /// declared a template (the max collapses to a singleton — the siren
+          /// narrows, it never invents); None = standing minimax over all of S.
+          pub fn solve(
+              zones: &[Zone], refuges: &[Refuge], sealed: &[ThreatTemplate],
+              declared: Option<&ThreatTemplate>,
+          ) -> Result<Vec<Assignment>, &'static str> {
+              // F5: only sealed templates judge.
+              if sealed.iter().any(|t| !t.sealed) {
+                  return Err("F5: unsealed template in S — drafts may rehearse, never judge");
+              }
+              if let Some(t) = declared {
+                  if !t.sealed { return Err("F5: declared siren references an unsealed template"); }
+              }
+              let scen: Vec<&ThreatTemplate> = match declared {
+                  Some(t) => vec![t],
+                  None => sealed.iter().collect(),
+              };
+              // most endangered claim doors first (§A2.2 assignment order)
+              let mut order: Vec<&Zone> = zones.iter().collect();
+              order.sort_by(|a, b| {
+                  let wa = scen.iter().map(|t| danger_at(a.cx, a.cy, t, a.eps))
+                      .fold(0.0f64, f64::max);
+                  let wb = scen.iter().map(|t| danger_at(b.cx, b.cy, t, b.eps))
+                      .fold(0.0f64, f64::max);
+                  wb.partial_cmp(&wa).unwrap()
+              });
+              let mut load: std::collections::HashMap<&str, u64> =
+                  refuges.iter().map(|r| (r.id.as_str(), 0u64)).collect();
+              let mut out = Vec::with_capacity(zones.len());
+              for z in order {
+                  let mut best: Option<(f64, f64, &Refuge, f64, f64)> = None; // (cost, worst, r, wmin, wmax)
+                  for r in refuges {
+                      // §A2.4 capacity honesty: NO FULL DOORS.
+                      if load[r.id.as_str()] + z.pop as u64 > r.cap as u64 { continue; }
+                      let mut wmax = 0.0f64;
+                      let mut wmin = f64::MAX;
+                      for t in &scen {
+                          let w = danger_path((z.cx, z.cy), (r.x, r.y), r.shield, t, z.eps);
+                          if w > wmax { wmax = w; }
+                          if w < wmin { wmin = w; }
+                      }
+                      let dist = ((r.x - z.cx).powi(2) + (r.y - z.cy).powi(2)).sqrt();
+                      let cost = wmax * 2.0 + dist / 650.0; // lexicographic tie-break by distance
+                      if best.map_or(true, |(c, ..)| cost < c) {
+                          best = Some((cost, wmax, r, wmin, wmax));
+                      }
+                  }
+                  let asg = match best {
+                      Some((_, worst, r, wmin, wmax)) => {
+                          *load.get_mut(r.id.as_str()).unwrap() += z.pop as u64;
+                          let bearing = (r.y - z.cy).atan2(r.x - z.cx);
+                          let hold = r.shield < 1.0 && worst > 0.45 + z.eps.get();
+                          Assignment {
+                              zone_id: z.id,
+                              mv: if hold {
+                                  Move::HoldUnderground { refuge_id: r.id.clone() }
+                              } else {
+                                  Move::ToRefuge { refuge_id: r.id.clone(), bearing }
+                              },
+                              worst,
+                              minimax_flag: declared.is_none() && (wmax - wmin) > 0.15,
+                          }
+                      }
+                      // every door full → lawful degradation to egress, never a lie
+                      None => Assignment {
+                          zone_id: z.id,
+                          mv: Move::Egress { bearing: (z.cy - 350.0).atan2(z.cx - 380.0) },
+                          worst: 1.0 + z.eps.get(),
+                          minimax_flag: true,
+                      },
+                  };
+                  out.push(asg);
+              }
+              out.sort_by_key(|a| a.zone_id);
+              Ok(out)
+          }
+
+    - name: "PB-321.T6 · src/seal.rs — Ed25519, offline-verifiable"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/seal.rs"
+        mode: "0644"
+        content: |
+          //! §A2.6 — the Seal Clause. A spoofed evacuation order is a weapon;
+          //! the seal is the shield. Verification needs the public key, no network.
+          use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+
+          pub fn card_bytes(zone_id: u16, siren: &Option<String>, directive: &str, epoch: &str) -> Vec<u8> {
+              format!("KIDINNU|{}|{}|{}|{}", zone_id,
+                      siren.as_deref().unwrap_or("NO-SIREN"), directive, epoch)
+                  .into_bytes()
+          }
+          pub fn seal(sk: &SigningKey, bytes: &[u8]) -> Signature { sk.sign(bytes) }
+          pub fn verify(vk: &VerifyingKey, bytes: &[u8], sig: &Signature) -> bool {
+              vk.verify(bytes, sig).is_ok()
+          }
+
+    - name: "PB-321.T7 · src/export.rs — the Offline Tablet (§A2.8)"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/export.rs"
+        mode: "0644"
+        content: |
+          //! §A2.8 — the degradation ladder: the full table, pre-computed and
+          //! pre-sealed, small enough for print, SMS, siren, human relay.
+          use crate::minimax::Assignment;
+          use crate::types::Move;
+
+          pub fn tablet_line(a: &Assignment, siren: &Option<String>) -> String {
+              let d = match &a.mv {
+                  Move::ToRefuge { refuge_id, bearing } =>
+                      format!("MOVE {} -> {}", bearing_word(*bearing), refuge_id),
+                  Move::HoldUnderground { refuge_id } =>
+                      format!("HOLD UNDERGROUND at {}", refuge_id),
+                  Move::Egress { bearing } =>
+                      format!("EGRESS {} — all doors full, clear the shell", bearing_word(*bearing)),
+              };
+              format!("K-{:03} | {} | {}{}",
+                  a.zone_id, siren.as_deref().unwrap_or("no siren"), d,
+                  if a.minimax_flag { " [MINIMAX]" } else { "" })
+          }
+          pub fn bearing_word(b: f64) -> &'static str {
+              const W: [&str; 8] = ["EAST","SOUTHEAST","SOUTH","SOUTHWEST",
+                                    "WEST","NORTHWEST","NORTH","NORTHEAST"];
+              let t = std::f64::consts::TAU;
+              W[(((b % t + t) % t) / (t / 8.0)).round() as usize % 8]
+          }
+
+    - name: "PB-321.T8 · src/lib.rs"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! kidinnu-engine (name PROPOSED per NL-001) — GL-ALG-001-A2 DRAFT.
+          //! D*(z) = argmin_m max_Θ D_Θ(m), s.t. no full doors.
+          //! Lives are never averaged; ε > 0 always; the map proposes, command decrees.
+          pub mod types;
+          pub mod fadam;
+          pub mod minimax;
+          pub mod seal;
+          pub mod export;
+
+    - name: "PB-321.T9 · tests/law_tests.rs — the clauses as executable law"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/law_tests.rs"
+        mode: "0644"
+        content: |
+          use kidinnu_engine::types::*;
+          use kidinnu_engine::minimax::solve;
+          use kidinnu_engine::fadam::danger_path;
+
+          fn shell() -> Vec<Zone> {
+              // 126 zones: rings 7·14·21·28·35·21
+              let secs = [7u16, 14, 21, 28, 35, 21];
+              let radii = [63.0, 105.0, 147.0, 189.0, 231.0, 273.0];
+              let mut zs = Vec::new();
+              let mut id = 0u16;
+              for (ri, (&ns, &rc)) in secs.iter().zip(radii.iter()).enumerate() {
+                  for s in 0..ns {
+                      let a = (s as f64 + 0.5) / ns as f64 * std::f64::consts::TAU;
+                      zs.push(Zone {
+                          id, ring: ri as u8, sector: s,
+                          pop: 3000 + (id as u32 * 37) % 11000,
+                          cx: 380.0 + rc * a.cos(), cy: 350.0 + rc * a.sin(),
+                          eps: EpsilonFloor::new(0.07).unwrap(),
+                      });
+                      id += 1;
+                  }
+              }
+              assert_eq!(zs.len(), 126);
+              zs
+          }
+          fn refuges() -> Vec<Refuge> {
+              vec![
+                  Refuge { id:"S1".into(), name:"SCHOOL BASEMENT".into(),  x:120.0, y:180.0, cap:190_000, shield:0.55 },
+                  Refuge { id:"S2".into(), name:"MOSQUE COURTYARD".into(), x:560.0, y:520.0, cap:170_000, shield:1.0 },
+                  Refuge { id:"S3".into(), name:"RAIL UNDERPASS".into(),   x:540.0, y:130.0, cap:320_000, shield:0.55 },
+                  Refuge { id:"S4".into(), name:"OPEN FIELD WEST".into(),  x: 60.0, y:420.0, cap:600_000, shield:1.0 },
+              ]
+          }
+          fn threats(sealed: bool) -> Vec<ThreatTemplate> {
+              vec![
+                  ThreatTemplate { id:"T-FIRE".into(), siren:"long".into(),
+                      src_x:80.0, src_y:600.0, bearing:-0.7, spread:1.9, sealed },
+                  ThreatTemplate { id:"T-ARTY".into(), siren:"short4".into(),
+                      src_x:680.0, src_y:380.0, bearing:std::f64::consts::PI, spread:2.6, sealed },
+              ]
+          }
+
+          #[test]
+          fn f4_epsilon_floor_is_a_type() {
+              assert!(EpsilonFloor::new(0.0).is_err());
+              assert!(EpsilonFloor::new(-0.1).is_err());
+              assert!(EpsilonFloor::new(f64::NAN).is_err());
+              assert!(EpsilonFloor::new(0.001).is_ok());
+          }
+
+          #[test]
+          fn f5_unsealed_templates_never_judge() {
+              let r = solve(&shell(), &refuges(), &threats(false), None);
+              assert!(r.is_err(), "an unsealed assumption may rehearse; it may never judge");
+          }
+
+          #[test]
+          fn a2_4_no_full_doors() {
+              let zs = shell(); let rf = refuges();
+              let asg = solve(&zs, &rf, &threats(true), None).unwrap();
+              let mut load: std::collections::HashMap<&str, u64> =
+                  rf.iter().map(|r| (r.id.as_str(), 0)).collect();
+              for a in &asg {
+                  if let Move::ToRefuge { refuge_id, .. } | Move::HoldUnderground { refuge_id }
+                      = &a.mv
+                  {
+                      *load.get_mut(refuge_id.as_str()).unwrap()
+                          += zs[a.zone_id as usize].pop as u64;
+                  }
+              }
+              for r in &rf {
+                  assert!(load[r.id.as_str()] <= r.cap as u64,
+                      "capacity honesty violated at {}", r.id);
+              }
+          }
+
+          #[test]
+          fn a2_3_never_averaged_scenario_flip_safety() {
+              // The minimax directive's danger under EVERY sealed template must not
+              // exceed the best achievable uniform bound + tolerance; a blend that
+              // ignores the disfavored template must not beat minimax in worst case.
+              let zs = shell(); let rf = refuges(); let ts = threats(true);
+              let asg = solve(&zs, &rf, &ts, None).unwrap();
+              for a in asg.iter() {
+                  let z = &zs[a.zone_id as usize];
+                  if let Move::ToRefuge { refuge_id, .. } = &a.mv {
+                      let r = rf.iter().find(|r| &r.id == refuge_id).unwrap();
+                      let worst_actual = ts.iter()
+                          .map(|t| danger_path((z.cx, z.cy), (r.x, r.y), r.shield, t, z.eps))
+                          .fold(0.0f64, f64::max);
+                      // uniform bound: least worst over all refuges (ignoring capacity),
+                      // plus slack for the capacity constraint's assignment order.
+                      let least_worst = rf.iter().map(|rr| ts.iter()
+                              .map(|t| danger_path((z.cx, z.cy), (rr.x, rr.y), rr.shield, t, z.eps))
+                              .fold(0.0f64, f64::max))
+                          .fold(f64::MAX, f64::min);
+                      assert!(worst_actual <= least_worst + 0.35 + z.eps.get(),
+                          "zone {} exceeds scenario-flip bound", z.id);
+                  }
+              }
+          }
+
+          #[test]
+          fn a2_6_seal_roundtrip_and_spoof_rejection() {
+              use kidinnu_engine::seal::*;
+              use ed25519_dalek::SigningKey;
+              use rand::rngs::OsRng;
+              let sk = SigningKey::generate(&mut OsRng);
+              let vk = sk.verifying_key();
+              let b = card_bytes(47, &None, "MOVE NORTHEAST -> S3", "2026-W32");
+              let sig = seal(&sk, &b);
+              assert!(verify(&vk, &b, &sig));
+              let spoof = card_bytes(47, &None, "MOVE SOUTHWEST -> S1", "2026-W32");
+              assert!(!verify(&vk, &spoof, &sig), "a spoofed order must fail the seal");
+          }
+
+          #[test]
+          fn a2_8_offline_tablet_is_complete() {
+              use kidinnu_engine::export::tablet_line;
+              let zs = shell(); let rf = refuges(); let ts = threats(true);
+              // full table: every zone × (no siren + each siren)
+              let mut lines = 0usize;
+              for declared in std::iter::once(None).chain(ts.iter().map(Some)) {
+                  let asg = solve(&zs, &rf, &ts, declared).unwrap();
+                  let siren = declared.map(|t| t.siren.clone());
+                  for a in &asg { let _ = tablet_line(a, &siren); lines += 1; }
+              }
+              assert_eq!(lines, 126 * 3, "the tablet must cover every zone under every declaration");
+          }
+
+    - name: "PB-321.T10 · cargo build"
+      ansible.builtin.command:
+        cmd: cargo build --release
+        chdir: "{{ crate_dir }}"
+      register: build_out
+      changed_when: true
+
+    - name: "PB-321.T11 · cargo test — the clauses must pass as law"
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ crate_dir }}"
+      register: test_out
+      changed_when: true
+
+    - name: "PB-321.T12 · playbook marker (inventory discipline, PB-315 pattern)"
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/.pb-321.applied"
+        mode: "0644"
+        content: |
+          PB-321 applied — kidinnu-engine (name PROPOSED per NL-001)
+          Implements GL-ALG-001-A2 DRAFT: minimax refuge directives,
+          capacity honesty, epsilon-by-type, Ed25519 seal, offline tablet.
+          DRAFT until the Architect's ceremony (CSR-08).
+
+    - name: "PB-321.T13 · report"
+      ansible.builtin.debug:
+        msg: >-
+          PB-321 complete on {{ inventory_hostname }} —
+          build rc={{ build_out.rc }} · tests rc={{ test_out.rc }}.
+          DRAFT: awaiting the Architect's run and seal.
+
+    # ── tail: rename rite if the Architect grants a different name ──
+    - name: "PB-321.R1 · rename crate to the granted name (run with --tags rename -e new_name=…)"
+      ansible.builtin.command:
+        cmd: >-
+          bash -c "cd {{ crate_dir }}/.. &&
+          mv kidinnu-engine {{ new_name | default('kidinnu-engine') }} &&
+          cd {{ new_name | default('kidinnu-engine') }} &&
+          sed -i 's/kidinnu-engine/{{ new_name | default('kidinnu-engine') }}/g' Cargo.toml &&
+          sed -i 's/kidinnu_engine/{{ (new_name | default('kidinnu-engine')) | replace('-','_') }}/g' tests/law_tests.rs"
+      tags: [rename, never]

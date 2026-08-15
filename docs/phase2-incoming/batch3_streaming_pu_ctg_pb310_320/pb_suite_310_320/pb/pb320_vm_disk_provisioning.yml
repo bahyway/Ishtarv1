@@ -1,0 +1,46 @@
+---
+# 𒁾 PB-320 — VM DISK PROVISIONING (per-role cache policies)
+# The ledger disk: raw LV, cache=none, io=native — an acknowledged KAKI must
+# exist on metal, not in host RAM (L-7 wall condition, L-8 Link 2).
+# The projections disk: thin, writeback, deliberately faithless (L-2).
+- name: PB-320 | VM disk provisioning
+  hosts: host_forge
+  become: true
+  vars:
+    disks:
+      - { vm: enki-write, lv: enkidb_ledger, size: 60G, target: vdb, cache: none,      io: native }
+      - { vm: enki-read,  lv: enki_projections, size: 40G, target: vdb, cache: writeback, io: threads }
+      - { vm: vault-lib,  lv: vault_hot,     size: 40G, target: vdb, cache: none,      io: native }
+  tasks:
+    - name: Create raw LVs
+      ansible.builtin.command: lvcreate -L {{ item.size }} -n {{ item.lv }} {{ host_vg }}
+      args: { creates: "/dev/{{ host_vg }}/{{ item.lv }}" }
+      loop: "{{ disks }}"
+
+    - name: VMs must be shut off before attach
+      ansible.builtin.shell: virsh domstate {{ item.vm }} | grep -q 'shut off'
+      loop: "{{ disks }}"
+      changed_when: false
+
+    - name: Attach with per-role cache policy (persistent)
+      ansible.builtin.command: >
+        virsh attach-disk {{ item.vm }} /dev/{{ host_vg }}/{{ item.lv }} {{ item.target }}
+        --persistent --cache {{ item.cache }} --io {{ item.io }} --subdriver raw
+      loop: "{{ disks }}"
+      register: att
+      failed_when: att.rc != 0 and 'already' not in att.stderr
+
+    - name: GATE | ledger disk policy verified in domain XML
+      ansible.builtin.shell: |
+        virsh dumpxml enki-write | grep -A3 enkidb_ledger | grep -q "cache='none'"
+        virsh dumpxml enki-write | grep -A3 enkidb_ledger | grep -q "io='native'"
+      changed_when: false
+
+    - name: Mark guests as playbook-built (via first boot)
+      ansible.builtin.debug:
+        msg: "On first guest boot: mkfs.xfs the ledger disk, mount, touch /etc/bahyway_built_by_playbook (guest-side role, next revision)."
+
+    - name: Run-KAKI
+      ansible.builtin.shell: |
+        PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "{\"pb\":\"PB-320\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"cache-policies-verified\"}" >> {{ kaki_runs }}

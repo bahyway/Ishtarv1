@@ -1,0 +1,136 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_102_con_engine_v4_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-102 Reconciled: enkidb-con-engine, real test path
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_102_con_engine_v4_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_102_con_engine_v4.yml):
+#    Same pattern: targets `--test playbook_csr`, a named integration
+#    binary that doesn't exist. But there's a second, real finding here:
+#    PB-102 claims PAZUZU-01/02/07 threat simulations are part of
+#    enkidb-con-engine's test suite. Checked directly — PAZUZU exists in
+#    this repo, but lives entirely in a different, unrelated crate
+#    (agent-council — agent voting/council system), not in
+#    enkidb-con-engine. It is not part of the CSR rule engine today.
+#
+#    The 7 CSR rules themselves are real and current (confirmed already
+#    in playbook_92_con_engine_reconciled.yml and
+#    playbook_99_v4_workspace_setup_reconciled.yml this session):
+#      enkidb-con-engine : 6 passed (not 22 — consolidated, no PAZUZU here)
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-102 (Reconciled) | enkidb-con-engine — real test path, PAZUZU location corrected"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+    session_date:  "{{ ansible_date_time.date }}"
+    docs_dir:      "{{ forge_root }}/docs/SHEDU"
+    report_file:   "{{ docs_dir }}/PB102_RECONCILED_{{ session_date }}.txt"
+
+  tasks:
+
+    - name: "PREP | Ensure report dir exists"
+      ansible.builtin.file:
+        path: "{{ docs_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "BUILD | cargo build -p enkidb-con-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} build -p enkidb-con-engine"
+        chdir: "{{ workspace }}"
+      register: build_out
+      changed_when: false
+      failed_when: build_out.rc != 0
+
+    - name: "TEST | cargo test -p enkidb-con-engine"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p enkidb-con-engine"
+        chdir: "{{ workspace }}"
+      register: test_out
+      changed_when: false
+      failed_when: test_out.rc != 0
+
+    - name: "PARSE | test_out passed-test count"
+      ansible.builtin.set_fact:
+        test_out_passed_count: "{{ (test_out.stdout | regex_search('([0-9]+) passed', '\\1') | first) | int }}"
+
+    - name: "ASSERT | enkidb-con-engine reports 6 passed"
+      ansible.builtin.assert:
+        that:
+          - "'0 failed' in test_out.stdout"
+          - test_out_passed_count >= 6
+        fail_msg: >-
+          Expected at least 6 passed, 0 failed. Got {{ test_out_passed_count }}
+          passed. Full output: {{ test_out.stdout }}
+        success_msg: >-
+          enkidb-con-engine: {{ test_out_passed_count }} passed, 0 failed (>= baseline 6).
+
+    # 2026-07-25 FIX: ansible.builtin.command does not invoke a shell, so
+    # the `2>/dev/null || true` here was never interpreted -- it was passed
+    # to grep as three more literal filename arguments, which grep
+    # (correctly) errored on: "grep: 2>/dev/null: No such file or
+    # directory" etc, confirmed live on eriduous-vdi. This check is
+    # genuinely informational (PAZUZU legitimately not being here is the
+    # expected, correct case, which is why the follow-up PRINT task treats
+    # empty output as "correct" rather than a failure) -- `failed_when:
+    # false` is ansible's own native way to say that, no shell trick needed.
+    - name: "CHECK | PAZUZU does NOT live in enkidb-con-engine (informational)"
+      ansible.builtin.command:
+        cmd: "grep -rl PAZUZU {{ workspace }}/crates/enkidb-con-engine/"
+      register: pazuzu_check
+      changed_when: false
+      failed_when: false
+
+    - name: "PRINT | PAZUZU location note"
+      ansible.builtin.debug:
+        msg: >
+          PAZUZU references in enkidb-con-engine:
+          {{ 'NONE (correct — it lives in crates/agent-council instead)' if pazuzu_check.stdout | trim == '' else pazuzu_check.stdout }}
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-102 Reconciled Report
+          Date : {{ session_date }}
+
+          Original PB-102 targeted `--test playbook_csr` (never written)
+          and claimed PAZUZU-01/02/07 threat simulations as part of
+          enkidb-con-engine's suite. PAZUZU is real in this repo but lives
+          entirely in crates/agent-council — not in enkidb-con-engine.
+          The 7 CSR rules themselves are real and current.
+
+          Verified this run:
+            enkidb-con-engine : 6/6 tests PASS
+            PAZUZU in this crate: {{ 'none (confirmed correct)' if pazuzu_check.stdout | trim == '' else 'unexpectedly found' }}
+
+          Note: already verified once this session at the same count in
+          playbook_92_con_engine_reconciled.yml and
+          playbook_99_v4_workspace_setup_reconciled.yml.
+
+    - name: "DONE | PB-102 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-102 reconciled. Report: {{ report_file }}"

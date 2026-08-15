@@ -1,0 +1,994 @@
+---
+# =============================================================================
+# PLAYBOOK 29 — EnkiDB Connection Dialog (DBeaver-style floating popup)
+#               + HeptaScript Runner with ORBIT / GRID toggle
+# Architect:    DUB.SAR 𒁾 Bahaa Fadam
+# Date:         2026-06-18
+# Target:       eriduous-vdi (192.168.122.214) — Fedora VDI
+# Pattern:      ansible.builtin.copy → Python → cargo build
+# =============================================================================
+- name: "Playbook 29 — EnkiDB Connection Dialog + HeptaScript Orbit Visualizer"
+  hosts: eriduous_vdi
+  gather_facts: false
+
+  vars:
+    workspace: "/home/bfadam/Forge/bahyway_v4"
+    fix_script: "/tmp/bw_fix_29.py"
+
+  tasks:
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 1 — Write the Python patch script
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "Write bw_fix_29.py to /tmp"
+      ansible.builtin.copy:
+        dest: "{{ fix_script }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          """
+          Playbook 29 patch script.
+          Writes / replaces the following source files inside the DubSar Visualizer:
+            1. crates/dubsar-visualizer/src/panels/enkidb_connect/connection_dialog.rs
+               → EnkiDB floating connection dialog (egui::Window)
+            2. crates/dubsar-visualizer/src/panels/enkidb_connect/heptascript_runner.rs
+               → HeptaScript W5H2 editor + ORBIT / GRID result views
+            3. Patches crates/dubsar-visualizer/src/panels/enkidb_connect/mod.rs
+               → wires both modules + dialog open/close state
+          """
+
+          import os, re, sys, textwrap
+
+          WORKSPACE = "/home/bfadam/Forge/bahyway_v4"
+          PANEL_DIR = f"{WORKSPACE}/crates/dubsar-visualizer/src/panels/enkidb_connect"
+
+          def write(path: str, content: str):
+              os.makedirs(os.path.dirname(path), exist_ok=True)
+              with open(path, "w") as f:
+                  f.write(content)
+              print(f"  ✓  wrote {path}")
+
+          def patch_file(path: str, marker: str, insertion: str):
+              """Insert `insertion` after the line containing `marker` — idempotent."""
+              with open(path) as f:
+                  src = f.read()
+              if insertion.strip() in src:
+                  print(f"  ⟳  already patched: {path}")
+                  return
+              if marker not in src:
+                  print(f"  ✗  marker not found in {path}: {marker!r}", file=sys.stderr)
+                  sys.exit(1)
+              patched = src.replace(marker, marker + "\n" + insertion, 1)
+              with open(path, "w") as f:
+                  f.write(patched)
+              print(f"  ✓  patched {path}")
+
+
+          # ──────────────────────────────────────────────────────────────────
+          # 1. connection_dialog.rs
+          # ──────────────────────────────────────────────────────────────────
+          CONNECTION_DIALOG = r'''
+          //! EnkiDB Connection Dialog — DBeaver-style floating popup
+          //! Playbook 29  |  DUB.SAR 𒁾 Bahaa Fadam
+
+          use egui::{Align2, Color32, RichText, TextEdit, Ui, Vec2, Window};
+          use std::process::Command;
+
+          // ── Colour palette (sovereign: dark-grey base, cool primary, HOT = alerts) ──
+          const COL_BG:        Color32 = Color32::from_rgb(0x1C, 0x1C, 0x22);
+          const COL_ACCENT:    Color32 = Color32::from_rgb(0x4A, 0x8F, 0xD4);
+          const COL_OK:        Color32 = Color32::from_rgb(0x4C, 0xAF, 0x50);
+          const COL_ERR:       Color32 = Color32::from_rgb(0xE5, 0x39, 0x35);
+          const COL_TEXT_DIM:  Color32 = Color32::from_rgb(0x7A, 0x7A, 0x8A);
+          const COL_BORDER:    Color32 = Color32::from_rgb(0x33, 0x33, 0x44);
+
+          /// A saved connection profile (persisted across opens).
+          #[derive(Clone, Debug)]
+          pub struct ConnectionProfile {
+              pub name:         String,
+              pub host:         String,
+              pub port:         String,
+              pub username:     String,
+              pub password:     String,
+              pub journal_path: String,
+              pub tribe:        String,
+              pub node_type:    NodeType,
+          }
+
+          #[derive(Clone, Debug, PartialEq)]
+          pub enum NodeType { Read, Write }
+
+          impl Default for NodeType {
+              fn default() -> Self { NodeType::Read }
+          }
+
+          impl Default for ConnectionProfile {
+              fn default() -> Self {
+                  Self {
+                      name:         "Najaf Cemetery Read Node".into(),
+                      host:         "192.168.122.107".into(),
+                      port:         "22".into(),
+                      username:     "bahyway".into(),
+                      password:     String::new(),
+                      journal_path: "/home/bahyway/enkidb/data/tribe-0001/journal.bin".into(),
+                      tribe:        "NAJAF_CEMETERY  0x0001".into(),
+                      node_type:    NodeType::Read,
+                  }
+              }
+          }
+
+          /// Status shown at the bottom of the dialog.
+          #[derive(Clone, Debug, Default)]
+          pub enum ConnStatus {
+              #[default]
+              Idle,
+              Testing,
+              Ok  { latency_ms: u32, journal_mb: f32 },
+              Err (String),
+              Connected,
+          }
+
+          /// The floating connection dialog — open/close via `open` flag.
+          #[derive(Default)]
+          pub struct EnkiDbConnectionDialog {
+              pub open:     bool,
+              pub profile:  ConnectionProfile,
+              pub status:   ConnStatus,
+              /// Two saved profiles: [0] = read, [1] = write.
+              pub profiles: [ConnectionProfile; 2],
+          }
+
+          impl EnkiDbConnectionDialog {
+              pub fn new() -> Self {
+                  let read_profile = ConnectionProfile::default();
+                  let write_profile = ConnectionProfile {
+                      name:      "Najaf Cemetery Write Node".into(),
+                      host:      "192.168.122.101".into(),
+                      node_type: NodeType::Write,
+                      ..ConnectionProfile::default()
+                  };
+                  Self {
+                      open:     false,
+                      profile:  read_profile.clone(),
+                      status:   ConnStatus::Idle,
+                      profiles: [read_profile, write_profile],
+                  }
+              }
+
+              /// Load saved profile into the form.
+              fn load_profile(&mut self, idx: usize) {
+                  if idx < 2 {
+                      self.profile = self.profiles[idx].clone();
+                  }
+              }
+
+              /// SSH ping — returns (latency_ms, journal_bytes).
+              fn ssh_test(profile: &ConnectionProfile) -> Result<(u32, u64), String> {
+                  // Test SSH reachability + journal size in one round-trip.
+                  let cmd_str = format!(
+                      r#"stat -c%s {journal} 2>/dev/null || echo 0"#,
+                      journal = profile.journal_path
+                  );
+                  let start = std::time::Instant::now();
+                  let out = Command::new("ssh")
+                      .args([
+                          "-o", "StrictHostKeyChecking=no",
+                          "-o", "ConnectTimeout=5",
+                          "-p", &profile.port,
+                          &format!("{}@{}", profile.username, profile.host),
+                          &cmd_str,
+                      ])
+                      .output()
+                      .map_err(|e| format!("SSH spawn failed: {e}"))?;
+                  let elapsed = start.elapsed().as_millis() as u32;
+                  if !out.status.success() {
+                      let err = String::from_utf8_lossy(&out.stderr).to_string();
+                      return Err(format!("SSH error: {}", err.trim()));
+                  }
+                  let bytes_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                  let bytes: u64 = bytes_str.parse().unwrap_or(0);
+                  Ok((elapsed, bytes))
+              }
+
+              /// Draw the dialog.  Returns `true` if a Connect was confirmed.
+              pub fn show(&mut self, ctx: &egui::Context) -> bool {
+                  if !self.open { return false; }
+                  let mut confirmed = false;
+                  let mut close    = false;
+
+                  // ── Shadow backdrop ──────────────────────────────────────
+                  egui::Area::new("enkidb_backdrop")
+                      .fixed_pos([0.0, 0.0])
+                      .order(egui::Order::Background)
+                      .show(ctx, |ui| {
+                          let screen = ctx.screen_rect();
+                          ui.painter().rect_filled(
+                              screen,
+                              0.0,
+                              Color32::from_rgba_unmultiplied(0, 0, 0, 140),
+                          );
+                      });
+
+                  // ── Main floating window ─────────────────────────────────
+                  Window::new(
+                      RichText::new("𒁾 EnkiDB Connection")
+                          .color(COL_ACCENT)
+                          .strong()
+                  )
+                  .id(egui::Id::new("enkidb_connection_dialog"))
+                  .default_size(Vec2::new(460.0, 0.0))
+                  .collapsible(false)
+                  .resizable(false)
+                  .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+                  .frame(
+                      egui::Frame::window(&ctx.style())
+                          .fill(COL_BG)
+                          .stroke(egui::Stroke::new(1.5, COL_BORDER))
+                          .inner_margin(egui::Margin::same(16.0))
+                          .rounding(egui::Rounding::same(6.0))
+                  )
+                  .show(ctx, |ui| {
+                      ui.set_min_width(440.0);
+                      ui.spacing_mut().item_spacing = Vec2::new(6.0, 8.0);
+
+                      // ── Profile quick-load bar ───────────────────────────
+                      ui.horizontal(|ui| {
+                          ui.label(
+                              RichText::new("Profile:").color(COL_TEXT_DIM).small()
+                          );
+                          if ui.small_button("Read Node").clicked() {
+                              self.load_profile(0);
+                          }
+                          if ui.small_button("Write Node").clicked() {
+                              self.load_profile(1);
+                          }
+                      });
+
+                      ui.add(egui::Separator::default().spacing(4.0));
+
+                      // ── Form fields ──────────────────────────────────────
+                      egui::Grid::new("conn_form")
+                          .num_columns(2)
+                          .spacing([8.0, 6.0])
+                          .min_col_width(110.0)
+                          .show(ui, |ui| {
+                              // Connection name
+                              ui.label(RichText::new("Name:").color(COL_TEXT_DIM));
+                              ui.add(
+                                  TextEdit::singleline(&mut self.profile.name)
+                                      .desired_width(290.0)
+                                      .hint_text("Najaf Cemetery Read Node")
+                              );
+                              ui.end_row();
+
+                              // Host
+                              ui.label(RichText::new("Hostname / IP:").color(COL_TEXT_DIM));
+                              ui.add(
+                                  TextEdit::singleline(&mut self.profile.host)
+                                      .desired_width(200.0)
+                                      .hint_text("192.168.122.107")
+                              );
+                              ui.end_row();
+
+                              // Port
+                              ui.label(RichText::new("Port:").color(COL_TEXT_DIM));
+                              ui.add(
+                                  TextEdit::singleline(&mut self.profile.port)
+                                      .desired_width(80.0)
+                                      .hint_text("22")
+                              );
+                              ui.end_row();
+
+                              // Username
+                              ui.label(RichText::new("Username:").color(COL_TEXT_DIM));
+                              ui.add(
+                                  TextEdit::singleline(&mut self.profile.username)
+                                      .desired_width(200.0)
+                                      .hint_text("bahyway")
+                              );
+                              ui.end_row();
+
+                              // Password
+                              ui.label(RichText::new("Password:").color(COL_TEXT_DIM));
+                              ui.add(
+                                  TextEdit::singleline(&mut self.profile.password)
+                                      .desired_width(200.0)
+                                      .password(true)
+                              );
+                              ui.end_row();
+
+                              // Journal path
+                              ui.label(RichText::new("Journal path:").color(COL_TEXT_DIM));
+                              ui.add(
+                                  TextEdit::singleline(&mut self.profile.journal_path)
+                                      .desired_width(290.0)
+                                      .hint_text("/home/bahyway/enkidb/data/tribe-0001/journal.bin")
+                              );
+                              ui.end_row();
+
+                              // Tribe
+                              ui.label(RichText::new("Tribe:").color(COL_TEXT_DIM));
+                              ui.add(
+                                  TextEdit::singleline(&mut self.profile.tribe)
+                                      .desired_width(200.0)
+                                      .hint_text("NAJAF_CEMETERY  0x0001")
+                              );
+                              ui.end_row();
+                          });
+
+                      ui.add_space(4.0);
+
+                      // ── Node type radio ──────────────────────────────────
+                      ui.horizontal(|ui| {
+                          ui.label(RichText::new("Node type:").color(COL_TEXT_DIM));
+                          ui.radio_value(
+                              &mut self.profile.node_type,
+                              NodeType::Read,
+                              RichText::new("Read").color(COL_ACCENT),
+                          );
+                          ui.radio_value(
+                              &mut self.profile.node_type,
+                              NodeType::Write,
+                              RichText::new("Write").color(COL_ACCENT),
+                          );
+                      });
+
+                      ui.add_space(8.0);
+                      ui.add(egui::Separator::default().spacing(4.0));
+                      ui.add_space(4.0);
+
+                      // ── Action buttons ───────────────────────────────────
+                      ui.horizontal(|ui| {
+                          // Test Connection
+                          if ui.button(
+                              RichText::new("⚡ Test Connection").color(COL_ACCENT)
+                          ).clicked() {
+                              self.status = ConnStatus::Testing;
+                              match Self::ssh_test(&self.profile) {
+                                  Ok((ms, bytes)) => {
+                                      self.status = ConnStatus::Ok {
+                                          latency_ms: ms,
+                                          journal_mb: bytes as f32 / 1_048_576.0,
+                                      };
+                                  }
+                                  Err(e) => {
+                                      self.status = ConnStatus::Err(e);
+                                  }
+                              }
+                          }
+
+                          ui.add_space(8.0);
+
+                          // Connect
+                          let can_connect = matches!(
+                              &self.status,
+                              ConnStatus::Ok { .. } | ConnStatus::Idle
+                          );
+                          ui.add_enabled_ui(can_connect, |ui| {
+                              if ui.button(
+                                  RichText::new("▶ Connect").color(COL_OK).strong()
+                              ).clicked() {
+                                  self.status = ConnStatus::Connected;
+                                  confirmed = true;
+                                  close     = true;
+                              }
+                          });
+
+                          ui.add_space(8.0);
+
+                          // Cancel
+                          if ui.button(
+                              RichText::new("✕ Cancel").color(COL_TEXT_DIM)
+                          ).clicked() {
+                              close = true;
+                          }
+                      });
+
+                      // ── Status bar ───────────────────────────────────────
+                      ui.add_space(6.0);
+                      match &self.status {
+                          ConnStatus::Idle => {
+                              ui.label(
+                                  RichText::new("Status: idle")
+                                      .color(COL_TEXT_DIM)
+                                      .small()
+                              );
+                          }
+                          ConnStatus::Testing => {
+                              ui.label(
+                                  RichText::new("Status: testing SSH…")
+                                      .color(COL_ACCENT)
+                                      .small()
+                              );
+                          }
+                          ConnStatus::Ok { latency_ms, journal_mb } => {
+                              ui.label(
+                                  RichText::new(format!(
+                                      "✓ SSH tunnel established — {:.1} MB  ({} ms)",
+                                      journal_mb, latency_ms
+                                  ))
+                                  .color(COL_OK)
+                                  .small()
+                              );
+                          }
+                          ConnStatus::Err(msg) => {
+                              ui.label(
+                                  RichText::new(format!("✗ {msg}"))
+                                      .color(COL_ERR)
+                                      .small()
+                              );
+                          }
+                          ConnStatus::Connected => {
+                              ui.label(
+                                  RichText::new("✓ Connected to EnkiDB")
+                                      .color(COL_OK)
+                                      .small()
+                              );
+                          }
+                      }
+                  });
+
+                  if close {
+                      self.open = false;
+                  }
+                  confirmed
+              }
+          }
+          '''.strip()
+
+          # ──────────────────────────────────────────────────────────────────
+          # 2. heptascript_runner.rs
+          # ──────────────────────────────────────────────────────────────────
+          HEPTASCRIPT_RUNNER = r'''
+          //! HeptaScript W5H2 Query Runner — ORBIT / GRID result views
+          //! Playbook 29  |  DUB.SAR 𒁾 Bahaa Fadam
+          //!
+          //! HeptaScript verbs: ORBIT · STORY · PROJECT   (never SELECT/FROM/JOIN)
+
+          use egui::{Color32, RichText, ScrollArea, TextEdit, Ui, Vec2};
+          use std::f32::consts::TAU;
+
+          // ── Palette ──────────────────────────────────────────────────────
+          const COL_BG:         Color32 = Color32::from_rgb(0x1C, 0x1C, 0x22);
+          const COL_ACCENT:     Color32 = Color32::from_rgb(0x4A, 0x8F, 0xD4);
+          const COL_OK:         Color32 = Color32::from_rgb(0x4C, 0xAF, 0x50);
+          const COL_DIM:        Color32 = Color32::from_rgb(0x55, 0x55, 0x66);
+          const COL_BORDER:     Color32 = Color32::from_rgb(0x33, 0x33, 0x44);
+          const COL_KAKI_MAROON:Color32 = Color32::from_rgb(0x8B, 0x00, 0x00);
+          const COL_KAKI_CRIMSON:Color32 = Color32::from_rgb(0xDC, 0x14, 0x3C);
+          const COL_NUCLEUS:    Color32 = Color32::from_rgb(0xB8, 0x89, 0x00);
+
+          /// One result row (KAKI particle).
+          #[derive(Clone, Debug)]
+          pub struct ParticleRow {
+              pub kaki:        [u8; 16],   // 16-byte PK
+              pub arabic_name: String,
+              pub date:        String,
+              pub b11:         u16,        // round(H(P) × 240)
+              pub state:       String,
+              pub tribe_id:    u16,
+          }
+
+          impl ParticleRow {
+              /// Derive orbit angle from B11 (0..240 → 0..TAU).
+              pub fn orbit_angle(&self) -> f32 {
+                  (self.b11 as f32 / 240.0) * TAU
+              }
+              /// Orbit radius — encode tribe_id as band.
+              pub fn orbit_radius(&self, base: f32) -> f32 {
+                  base + (self.tribe_id as f32 * 12.0)
+              }
+              /// KAKI as hex string for display.
+              pub fn kaki_hex(&self) -> String {
+                  self.kaki.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join("")
+              }
+          }
+
+          /// View mode toggle.
+          #[derive(PartialEq, Clone, Copy, Debug, Default)]
+          pub enum ResultView { #[default] Orbit, Grid }
+
+          /// Four pre-baked query presets.
+          const PRESETS: &[(&str, &str)] = &[
+              (
+                  "All recent — last 100",
+                  "ORBIT tribe: NAJAF_CEMETERY\n  STORY: recent\n  PROJECT: kaki, arabic_name, date, b11, state\n  LIMIT: 100",
+              ),
+              (
+                  "Active only",
+                  "ORBIT tribe: NAJAF_CEMETERY\n  STORY: active\n  PROJECT: kaki, arabic_name, date, b11, state",
+              ),
+              (
+                  "B11 > 120",
+                  "ORBIT tribe: NAJAF_CEMETERY\n  STORY: b11_above 120\n  PROJECT: kaki, arabic_name, b11\n  ORDER: b11 DESC",
+              ),
+              (
+                  "W5H2 full audit",
+                  "ORBIT tribe: NAJAF_CEMETERY\n  STORY: all\n  PROJECT: *\n  SHAPE: w5h2",
+              ),
+          ];
+
+          /// The HeptaScript runner panel.
+          pub struct HeptaScriptRunner {
+              pub editor_text: String,
+              pub view_mode:   ResultView,
+              pub rows:        Vec<ParticleRow>,
+              pub error:       Option<String>,
+              pub running:     bool,
+              orbit_time:      f32,
+          }
+
+          impl Default for HeptaScriptRunner {
+              fn default() -> Self {
+                  Self {
+                      editor_text: PRESETS[0].1.into(),
+                      view_mode:   ResultView::Orbit,
+                      rows:        Vec::new(),
+                      error:       None,
+                      running:     false,
+                      orbit_time:  0.0,
+                  }
+              }
+          }
+
+          impl HeptaScriptRunner {
+              /// Draw the full three-column panel.
+              pub fn show(&mut self, ui: &mut Ui, dt: f32, connected: bool) {
+                  // Advance orbit animation clock.
+                  if self.view_mode == ResultView::Orbit {
+                      self.orbit_time += dt * 0.25;
+                  }
+
+                  ui.columns(3, |cols| {
+                      // ── LEFT: editor + presets ─────────────────────────
+                      Self::draw_editor_col(
+                          &mut cols[0],
+                          &mut self.editor_text,
+                          &mut self.running,
+                          connected,
+                      );
+
+                      // ── CENTRE: view toggle + results ─────────────────
+                      Self::draw_toggle(
+                          &mut cols[1],
+                          &mut self.view_mode,
+                          &self.error,
+                      );
+
+                      // ── RIGHT: ORBIT or GRID ──────────────────────────
+                      match self.view_mode {
+                          ResultView::Orbit => {
+                              Self::draw_orbit(
+                                  &mut cols[2],
+                                  &self.rows,
+                                  self.orbit_time,
+                              );
+                          }
+                          ResultView::Grid => {
+                              Self::draw_grid(&mut cols[2], &self.rows);
+                          }
+                      }
+                  });
+
+                  // Simulate result population when running=true.
+                  if self.running {
+                      self.rows = Self::demo_rows();
+                      self.error = None;
+                      self.running = false;
+                  }
+              }
+
+              // ── Editor column ─────────────────────────────────────────
+              fn draw_editor_col(
+                  ui: &mut Ui,
+                  text: &mut String,
+                  running: &mut bool,
+                  connected: bool,
+              ) {
+                  ui.vertical(|ui| {
+                      ui.label(
+                          RichText::new("HeptaScript — W5H2")
+                              .color(COL_ACCENT)
+                              .strong()
+                      );
+                      ui.add_space(4.0);
+
+                      // Preset buttons
+                      for (label, query) in PRESETS {
+                          if ui.small_button(*label).clicked() {
+                              *text = (*query).into();
+                          }
+                      }
+
+                      ui.add_space(6.0);
+
+                      // Code editor
+                      ScrollArea::vertical()
+                          .id_source("hepta_editor")
+                          .max_height(220.0)
+                          .show(ui, |ui| {
+                              ui.add(
+                                  TextEdit::multiline(text)
+                                      .desired_width(f32::INFINITY)
+                                      .desired_rows(10)
+                                      .code_editor()
+                                      .text_color(Color32::from_rgb(0xCC, 0xCC, 0xEE))
+                              );
+                          });
+
+                      ui.add_space(8.0);
+
+                      // Run button
+                      ui.add_enabled_ui(connected, |ui| {
+                          let run_btn = ui.button(
+                              RichText::new("▶  Run Query").color(COL_OK).strong()
+                          );
+                          if run_btn.clicked() {
+                              *running = true;
+                          }
+                          if !connected {
+                              ui.label(
+                                  RichText::new("Connect first (nav → EnkiDB Connect)")
+                                      .color(COL_DIM)
+                                      .small()
+                              );
+                          }
+                      });
+                  });
+              }
+
+              // ── Toggle column ─────────────────────────────────────────
+              fn draw_toggle(
+                  ui: &mut Ui,
+                  mode: &mut ResultView,
+                  error: &Option<String>,
+              ) {
+                  ui.vertical(|ui| {
+                      ui.label(
+                          RichText::new("Result view").color(COL_ACCENT).strong()
+                      );
+                      ui.add_space(8.0);
+                      ui.selectable_value(
+                          mode,
+                          ResultView::Orbit,
+                          RichText::new("◉ ORBIT").color(COL_ACCENT),
+                      );
+                      ui.selectable_value(
+                          mode,
+                          ResultView::Grid,
+                          RichText::new("▦ GRID").color(COL_ACCENT),
+                      );
+
+                      if let Some(err) = error {
+                          ui.add_space(8.0);
+                          ui.label(
+                              RichText::new(format!("✗ {err}"))
+                                  .color(Color32::from_rgb(0xE5, 0x39, 0x35))
+                                  .small()
+                          );
+                      }
+                  });
+              }
+
+              // ── ORBIT view — animated particles around heptagram ──────
+              fn draw_orbit(ui: &mut Ui, rows: &[ParticleRow], t: f32) {
+                  let (resp, painter) = ui.allocate_painter(
+                      Vec2::new(ui.available_width(), 320.0),
+                      egui::Sense::hover(),
+                  );
+                  let rect   = resp.rect;
+                  let centre = rect.center();
+                  let base_r = rect.width().min(rect.height()) * 0.30;
+
+                  // Background fill
+                  painter.rect_filled(rect, 4.0, COL_BG);
+
+                  // Heptagram nucleus — 7 spoke lines
+                  for k in 0..7_u8 {
+                      let a = (k as f32 / 7.0) * TAU;
+                      let spoke_end = egui::pos2(
+                          centre.x + (base_r * 0.18) * a.cos(),
+                          centre.y + (base_r * 0.18) * a.sin(),
+                      );
+                      painter.line_segment(
+                          [centre, spoke_end],
+                          egui::Stroke::new(1.0, COL_DIM),
+                      );
+                  }
+                  // Nucleus dot
+                  painter.circle_filled(centre, 5.0, COL_NUCLEUS);
+
+                  // Orbit rings (per tribe_id band)
+                  for band in 0..3_u8 {
+                      let r = base_r * (0.45 + band as f32 * 0.20);
+                      painter.circle_stroke(
+                          centre,
+                          r,
+                          egui::Stroke::new(0.6, COL_BORDER),
+                      );
+                  }
+
+                  // Particle dots
+                  for (i, row) in rows.iter().enumerate() {
+                      let base_angle  = row.orbit_angle();
+                      let drift       = t * (0.8 + (i % 5) as f32 * 0.08);
+                      let angle       = base_angle + drift;
+                      let r           = row.orbit_radius(base_r * 0.45);
+
+                      let px = centre.x + r * angle.cos();
+                      let py = centre.y + r * angle.sin();
+                      let pos = egui::pos2(px, py);
+
+                      // Particle colour: Maroon base, Crimson for high B11
+                      let col = if row.b11 > 180 {
+                          COL_KAKI_CRIMSON
+                      } else {
+                          COL_KAKI_MAROON
+                      };
+
+                      painter.circle_filled(pos, 3.5, col);
+
+                      // Hover tooltip
+                      if resp.rect.contains(pos) {
+                          let tooltip = format!(
+                              "{}\nB11:{} | {}",
+                              row.arabic_name, row.b11, row.state
+                          );
+                          painter.text(
+                              egui::pos2(px + 6.0, py - 8.0),
+                              Align2::LEFT_TOP,
+                              &tooltip,
+                              egui::FontId::proportional(9.0),
+                              Color32::from_rgb(0xCC, 0xCC, 0xEE),
+                          );
+                      }
+                  }
+
+                  // Legend
+                  painter.text(
+                      egui::pos2(rect.left() + 6.0, rect.bottom() - 14.0),
+                      Align2::LEFT_BOTTOM,
+                      &format!("{} particles", rows.len()),
+                      egui::FontId::proportional(10.0),
+                      COL_DIM,
+                  );
+              }
+
+              // ── GRID view — tabular ───────────────────────────────────
+              fn draw_grid(ui: &mut Ui, rows: &[ParticleRow]) {
+                  ui.label(
+                      RichText::new("KAKI Particles — Grid").color(COL_ACCENT).strong()
+                  );
+                  ui.add_space(4.0);
+
+                  ScrollArea::both()
+                      .id_source("hepta_grid")
+                      .max_height(300.0)
+                      .show(ui, |ui| {
+                          egui::Grid::new("particle_grid")
+                              .num_columns(5)
+                              .spacing([8.0, 3.0])
+                              .striped(true)
+                              .show(ui, |ui| {
+                                  // Header
+                                  for h in ["KAKI (hex)", "Arabic name", "Date", "B11", "State"] {
+                                      ui.label(
+                                          RichText::new(h).color(COL_ACCENT).small().strong()
+                                      );
+                                  }
+                                  ui.end_row();
+
+                                  // Rows
+                                  for row in rows {
+                                      ui.label(
+                                          RichText::new(row.kaki_hex())
+                                              .monospace()
+                                              .color(Color32::from_rgb(0xCC, 0xCC, 0xEE))
+                                              .small()
+                                      );
+                                      ui.label(
+                                          RichText::new(&row.arabic_name)
+                                              .color(Color32::from_rgb(0xCC, 0xCC, 0xEE))
+                                      );
+                                      ui.label(
+                                          RichText::new(&row.date).color(COL_DIM).small()
+                                      );
+                                      let b11_col = if row.b11 > 180 {
+                                          COL_KAKI_CRIMSON
+                                      } else {
+                                          COL_ACCENT
+                                      };
+                                      ui.label(
+                                          RichText::new(row.b11.to_string())
+                                              .color(b11_col)
+                                              .strong()
+                                      );
+                                      ui.label(
+                                          RichText::new(&row.state).color(COL_OK).small()
+                                      );
+                                      ui.end_row();
+                                  }
+                              });
+                      });
+              }
+
+              /// Demo data for development / not-yet-connected state.
+              fn demo_rows() -> Vec<ParticleRow> {
+                  vec![
+                      ParticleRow {
+                          kaki:        [0xA1,0x2B,0x3C,0x4D,0x5E,0x6F,0x70,0x81,
+                                        0x92,0xA3,0xB4,0xC5,0xD6,0xE7,0xF8,0x09],
+                          arabic_name: "عبد الرضا محمد".into(),
+                          date:        "2024-11-12".into(),
+                          b11:         192,
+                          state:       "active".into(),
+                          tribe_id:    1,
+                      },
+                      ParticleRow {
+                          kaki:        [0xB2,0xC3,0xD4,0xE5,0xF6,0x07,0x18,0x29,
+                                        0x3A,0x4B,0x5C,0x6D,0x7E,0x8F,0x90,0xA1],
+                          arabic_name: "فاطمة علي حسن".into(),
+                          date:        "2024-09-03".into(),
+                          b11:         88,
+                          state:       "archived".into(),
+                          tribe_id:    1,
+                      },
+                      ParticleRow {
+                          kaki:        [0xC3,0xD4,0xE5,0xF6,0x07,0x18,0x29,0x3A,
+                                        0x4B,0x5C,0x6D,0x7E,0x8F,0x90,0xA1,0xB2],
+                          arabic_name: "حسين جعفر الموسوي".into(),
+                          date:        "2025-01-20".into(),
+                          b11:         212,
+                          state:       "active".into(),
+                          tribe_id:    1,
+                      },
+                      ParticleRow {
+                          kaki:        [0xD4,0xE5,0xF6,0x07,0x18,0x29,0x3A,0x4B,
+                                        0x5C,0x6D,0x7E,0x8F,0x90,0xA1,0xB2,0xC3],
+                          arabic_name: "زينب كريم سلمان".into(),
+                          date:        "2023-06-15".into(),
+                          b11:         145,
+                          state:       "active".into(),
+                          tribe_id:    1,
+                      },
+                      ParticleRow {
+                          kaki:        [0xE5,0xF6,0x07,0x18,0x29,0x3A,0x4B,0x5C,
+                                        0x6D,0x7E,0x8F,0x90,0xA1,0xB2,0xC3,0xD4],
+                          arabic_name: "محمد صادق الحيدري".into(),
+                          date:        "2024-03-08".into(),
+                          b11:         67,
+                          state:       "pending".into(),
+                          tribe_id:    1,
+                      },
+                  ]
+              }
+          }
+          '''.strip()
+
+          # ──────────────────────────────────────────────────────────────────
+          # 3. Rewrite mod.rs  (keeps existing Connection panel, adds dialog)
+          # ──────────────────────────────────────────────────────────────────
+          MOD_RS = r'''
+          //! EnkiDB Connect panel — mod.rs
+          //! Playbook 29  |  DUB.SAR 𒁾 Bahaa Fadam
+
+          pub mod connection_dialog;
+          pub mod heptascript_runner;
+
+          use connection_dialog::{ConnStatus, EnkiDbConnectionDialog};
+          use egui::{Color32, RichText, Ui};
+          use heptascript_runner::{HeptaScriptRunner, ResultView};
+
+          const COL_ACCENT: Color32 = Color32::from_rgb(0x4A, 0x8F, 0xD4);
+          const COL_DIM:    Color32 = Color32::from_rgb(0x55, 0x55, 0x66);
+
+          pub struct EnkiDbConnectPanel {
+              pub dialog:  EnkiDbConnectionDialog,
+              pub runner:  HeptaScriptRunner,
+              /// True once a Connect was confirmed.
+              pub connected: bool,
+          }
+
+          impl Default for EnkiDbConnectPanel {
+              fn default() -> Self {
+                  Self {
+                      dialog:    EnkiDbConnectionDialog::new(),
+                      runner:    HeptaScriptRunner::default(),
+                      connected: false,
+                  }
+              }
+          }
+
+          impl EnkiDbConnectPanel {
+              /// Top bar: shows connection status + "⊞ New Connection" button.
+              pub fn show_toolbar(&mut self, ui: &mut Ui) {
+                  ui.horizontal(|ui| {
+                      if self.connected {
+                          ui.label(
+                              RichText::new(format!(
+                                  "⬤  {}",
+                                  self.dialog.profile.name
+                              ))
+                              .color(Color32::from_rgb(0x4C, 0xAF, 0x50))
+                              .strong()
+                          );
+                      } else {
+                          ui.label(
+                              RichText::new("⬤  Not connected")
+                                  .color(COL_DIM)
+                          );
+                      }
+                      ui.add_space(12.0);
+                      if ui.button(
+                          RichText::new("⊞ New Connection").color(COL_ACCENT)
+                      ).clicked() {
+                          self.dialog.open = true;
+                      }
+                  });
+              }
+
+              /// Call this every frame — draws dialog overlay + runner panel.
+              pub fn show(&mut self, ctx: &egui::Context, ui: &mut Ui, dt: f32) {
+                  // Toolbar
+                  self.show_toolbar(ui);
+                  ui.add(egui::Separator::default().spacing(4.0));
+
+                  // HeptaScript runner (always visible)
+                  self.runner.show(ui, dt, self.connected);
+
+                  // Floating dialog (renders on top via egui::Window)
+                  if self.dialog.show(ctx) {
+                      self.connected = true;
+                  }
+              }
+          }
+          '''.strip()
+
+          # ──────────────────────────────────────────────────────────────────
+          # Write files
+          # ──────────────────────────────────────────────────────────────────
+          write(f"{PANEL_DIR}/connection_dialog.rs",  CONNECTION_DIALOG  + "\n")
+          write(f"{PANEL_DIR}/heptascript_runner.rs", HEPTASCRIPT_RUNNER + "\n")
+          write(f"{PANEL_DIR}/mod.rs",                MOD_RS             + "\n")
+
+          print("\nPlaybook 29 patch complete.")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 2 — Run the Python patch on eriduous-vdi
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "Execute bw_fix_29.py"
+      ansible.builtin.command:
+        cmd: "python3 {{ fix_script }}"
+      register: patch_out
+      changed_when: true
+
+    - name: "Show patch output"
+      ansible.builtin.debug:
+        msg: "{{ patch_out.stdout_lines }}"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TASK 3 — Cargo build
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: "cargo build — dubsar-visualizer"
+      ansible.builtin.command:
+        cmd: "cargo build -p dubsar-visualizer 2>&1"
+        chdir: "{{ workspace }}"
+      environment:
+        WAYLAND_DISPLAY: "wayland-0"
+        WGPU_BACKEND:    "vulkan"
+        HOME:            "/home/bfadam"
+        PATH:            "/home/bfadam/.cargo/bin:/usr/bin:/bin"
+      register: build_out
+      changed_when: true
+
+    - name: "Show build result"
+      ansible.builtin.debug:
+        msg: "{{ build_out.stdout_lines[-20:] }}"
+
+    - name: "Confirm success"
+      ansible.builtin.debug:
+        msg: >
+          ✓ Playbook 29 sealed.
+          EnkiDB Connection Dialog + HeptaScript Runner compiled.
+          Run: cd ~/Forge/bahyway_v4 && cargo run -p dubsar-visualizer
+          Then: Enterprise Apps → 𒁾 EnkiDB Connect → ⊞ New Connection

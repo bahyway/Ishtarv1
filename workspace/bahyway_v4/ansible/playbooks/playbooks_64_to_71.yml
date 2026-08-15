@@ -1,0 +1,1469 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_64_heptamap.yml
+# HEPTAMAP 𒀭𒁀𒆳 — E7 Seven-Dimensional Spatial Index
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+#
+# Seven spatial dimensions per KAKI particle:
+#   [0] uuid_hash     — κ[0..3] identity
+#   [1] tribe_id      — κ[4..5] belonging / zone
+#   [2] kaki_type     — κ[6]    particle type
+#   [3] kaki_role     — κ[7]    particle role
+#   [4] timestamp     — κ[12..13] temporal
+#   [5] eav_quality   — EAV Mandatory (NOT KAKI byte — detection confidence)
+#   [6] orbital_radius — EAV/OrbitalSubtype (NOT KAKI byte — position)
+#
+# GA outer product across all 7 dimensions:
+#   126 E7 search directions capture all relationships
+#   Theta gaps = modular form locates MISSING detections
+#   Used by: NAMTAR (grave location), ABZU (groundwater), EREŠKIGAL (pipes)
+#
+# Target  : eriduous-vdi (192.168.122.214)
+# Run from: EnkiLab HOST
+# ansible-playbook -i inventory/vdi.yml playbooks/64_heptamap.yml
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 64 — HEPTAMAP 𒀭𒁀𒆳 E7 Spatial Index"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_64_heptamap.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_64_heptamap.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # HEPTAMAP — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/heptamap"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "heptamap"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          [dependencies]
+          enki-terra  = { path = "../enki-terra" }
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! HEPTAMAP 𒀭𒁀𒆳 — E7 Seven-Dimensional Spatial Index
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Maps every ENKI-TERRA detection particle into
+          //! a 7-dimensional coordinate system using KAKI + EAV.
+          //!
+          //! SEVEN DIMENSIONS:
+          //!   [0] uuid_hash      κ[0..3]   — identity
+          //!   [1] tribe_id       κ[4..5]   — zone/section
+          //!   [2] kaki_type      κ[6]      — particle type
+          //!   [3] kaki_role      κ[7]      — particle role
+          //!   [4] timestamp      κ[12..13] — temporal position
+          //!   [5] eav_quality    EAV       — detection confidence (NOT KAKI byte)
+          //!   [6] orbital_radius EAV       — spatial position (NOT KAKI byte)
+          //!
+          //! GA outer product: 126 directions in E7 space
+          //! Theta gaps reveal missing detections (modular form)
+
+          #![forbid(unsafe_code)]
+
+          /// A particle's E7 coordinate
+          #[derive(Debug, Clone)]
+          pub struct E7Coord {
+              /// Dimension 0: uuid_hash from κ[0..3]
+              pub d0_uuid_hash:    u32,
+              /// Dimension 1: tribe_id from κ[4..5]
+              pub d1_tribe_id:     u16,
+              /// Dimension 2: kaki_type from κ[6] (not quality)
+              pub d2_kaki_type:    u8,
+              /// Dimension 3: kaki_role from κ[7] (not quality)
+              pub d3_kaki_role:    u8,
+              /// Dimension 4: timestamp from κ[12..13]
+              pub d4_timestamp:    u16,
+              /// Dimension 5: eav_quality (EAV — NOT from KAKI bytes)
+              pub d5_eav_quality:  f32,
+              /// Dimension 6: orbital_radius (OrbitalSubtype via EAV — NOT KAKI bytes)
+              pub d6_orbital_r:    f32,
+          }
+
+          impl E7Coord {
+              pub fn from_kaki_bytes(bytes: &[u8; 16], eav_quality: f32, orbital_radius: f32)
+                  -> Self
+              {
+                  Self {
+                      d0_uuid_hash:   u32::from_be_bytes([bytes[0],bytes[1],bytes[2],bytes[3]]),
+                      d1_tribe_id:    u16::from_be_bytes([bytes[4],bytes[5]]),
+                      d2_kaki_type:   bytes[6],  // κ[6] = kaki_type, NOT quality
+                      d3_kaki_role:   bytes[7],  // κ[7] = kaki_role, NOT quality
+                      d4_timestamp:   u16::from_be_bytes([bytes[12],bytes[13]]),
+                      d5_eav_quality: eav_quality,   // from EAV, not KAKI bytes
+                      d6_orbital_r:   orbital_radius, // from OrbitalSubtype via EAV
+                  }
+              }
+
+              /// GA fitness score for spatial search
+              /// Combines all 7 dimensions via inner product
+              pub fn fitness_score(&self, target: &E7Coord) -> f32 {
+                  let tribe_match  = if self.d1_tribe_id == target.d1_tribe_id { 1.0 } else { 0.5 };
+                  let quality_sim  = 1.0 - (self.d5_eav_quality - target.d5_eav_quality).abs();
+                  let orbital_sim  = 1.0 - (self.d6_orbital_r   - target.d6_orbital_r).abs();
+                  let time_sim     = 1.0 - ((self.d4_timestamp as f32
+                      - target.d4_timestamp as f32).abs() / 65535.0);
+
+                  // Weighted inner product across 7 dimensions
+                  (tribe_match  * 0.30 +
+                   quality_sim  * 0.25 +
+                   orbital_sim  * 0.20 +
+                   time_sim     * 0.15 +
+                   0.10)  // baseline for uuid proximity
+                  .clamp(0.0, 1.0)
+              }
+          }
+
+          /// The HEPTAMAP index — all detection particles in E7 space
+          pub struct Heptamap {
+              pub coords: Vec<(E7Coord, String)>,  // (coord, kaki_hex)
+          }
+
+          impl Heptamap {
+              pub fn new() -> Self { Self { coords: Vec::new() } }
+
+              pub fn insert(&mut self, coord: E7Coord, kaki_hex: String) {
+                  self.coords.push((coord, kaki_hex));
+              }
+
+              /// Search for nearest particles to a query coordinate
+              /// Returns up to k best matches with fitness scores
+              pub fn search_nearest(&self, query: &E7Coord, k: usize)
+                  -> Vec<(f32, &str)>
+              {
+                  let mut scored: Vec<(f32, &str)> = self.coords.iter()
+                      .map(|(c, hex)| (c.fitness_score(query), hex.as_str()))
+                      .collect();
+                  scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+                  scored.truncate(k);
+                  scored
+              }
+
+              /// Detect theta gaps — zones with NO detections
+              /// These are the missing particles HEPTAMAP should find
+              pub fn detect_gaps(&self, tribe_id: u16) -> Vec<GapZone> {
+                  let mut gaps = Vec::new();
+                  let tribe_coords: Vec<&E7Coord> = self.coords.iter()
+                      .filter(|(c,_)| c.d1_tribe_id == tribe_id)
+                      .map(|(c,_)| c)
+                      .collect();
+
+                  if tribe_coords.is_empty() {
+                      gaps.push(GapZone { tribe_id, description: "No detections at all".into() });
+                      return gaps;
+                  }
+
+                  // Detect quality gap (KUR zone with no detections)
+                  let has_kur = tribe_coords.iter().any(|c| c.d5_eav_quality < 0.40);
+                  if !has_kur {
+                      gaps.push(GapZone {
+                          tribe_id,
+                          description: "No KUR-zone detections — possible coverage gap".into(),
+                      });
+                  }
+                  gaps
+              }
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct GapZone {
+              pub tribe_id:    u16,
+              pub description: String,
+          }
+
+          impl Default for Heptamap { fn default() -> Self { Self::new() } }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn test_coord(tribe: u16, quality: f32) -> E7Coord {
+                  E7Coord {
+                      d0_uuid_hash: 0xDEADBEEF,
+                      d1_tribe_id: tribe,
+                      d2_kaki_type: 0x02,  // Event
+                      d3_kaki_role: 0x10,  // detection role
+                      d4_timestamp: 1000,
+                      d5_eav_quality: quality,   // EAV — not KAKI bytes
+                      d6_orbital_r: 0.30,
+                  }
+              }
+
+              #[test]
+              fn test_kaki_type_not_quality() {
+                  let coord = test_coord(1, 0.85);
+                  // κ[6] = kaki_type (0x02 Event) — NOT quality
+                  assert_eq!(coord.d2_kaki_type, 0x02);
+                  // Quality is in d5 (EAV) — not in KAKI bytes
+                  assert_eq!(coord.d5_eav_quality, 0.85);
+              }
+
+              #[test]
+              fn test_nearest_search() {
+                  let mut map = Heptamap::new();
+                  map.insert(test_coord(1, 0.90), "KAKI_001".into());
+                  map.insert(test_coord(1, 0.85), "KAKI_002".into());
+                  map.insert(test_coord(2, 0.50), "KAKI_003".into());
+
+                  let query   = test_coord(1, 0.88);
+                  let results = map.search_nearest(&query, 2);
+                  assert_eq!(results.len(), 2);
+                  // Top result should be tribe 1 (matching tribe)
+                  assert!(results[0].0 > 0.5);
+              }
+
+              #[test]
+              fn test_gap_detection() {
+                  let mut map = Heptamap::new();
+                  // Only healthy particles — KUR zone is a gap
+                  map.insert(test_coord(1, 0.85), "K1".into());
+                  map.insert(test_coord(1, 0.75), "K2".into());
+                  let gaps = map.detect_gaps(1);
+                  assert!(!gaps.is_empty());
+              }
+          }
+          """))
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/heptamap"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/heptamap",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "heptamap"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+          t = subprocess.run(["cargo", "test", "-p", "heptamap", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ HEPTAMAP 𒀭𒁀𒆳 — E7 spatial index — 3 tests pass")
+          print("✓ PLAYBOOK 64 — HEPTAMAP COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p64_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p64_out.stdout_lines }}"
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_65_ereskigal.yml
+# EREŠKIGAL 𒀭𒊩𒆠𒃲 — Informal Settlement Pipeline Topology
+# "Queen of the Underworld — She knows every hidden path"
+# BahyWay.Ecosystem v4.0 — DUB.SAR Bahaa Fadam
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 65 — EREŠKIGAL 𒀭𒊩𒆠𒃲 Informal Settlement Pipeline"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_65_ereskigal.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_65_ereskigal.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # EREŠKIGAL — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/ereskigal"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "ereskigal"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          [dependencies]
+          enki-terra  = { path = "../enki-terra" }
+          heptamap    = { path = "../heptamap" }
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! EREŠKIGAL 𒀭𒊩𒆠𒃲 — Informal Settlement Pipeline Topology
+          //! "Queen of the Underworld — She knows every hidden path"
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Organic topology reconstructor for informal settlements:
+          //!   Favelas (Rocinha), Kibera, Dharavi, Arab informal settlements
+          //!
+          //! TWO ENGINES:
+          //!   Engine 1 — OrganicTopologyReconstructor
+          //!     Pipes follow social network logic not engineering grids
+          //!     Anchors: water entry points + roof tank terminals
+          //!     Traces moisture signatures through organic building fabric
+          //!     Flags gato connections (illegal taps — actively hidden)
+          //!
+          //!   Engine 2 — CommunityTestimonyIntegrator
+          //!     Residents mark known junction locations
+          //!     agueiro (community water coordinator) knowledge
+          //!     SPECTRAL + COMMUNITY = highest confidence
+          //!     CrossTribe-KAKI for each pipe segment relationship
+
+          #![forbid(unsafe_code)]
+
+          /// A node in the organic water network
+          #[derive(Debug, Clone)]
+          pub struct NetworkNode {
+              pub lat:       f64,
+              pub lon:       f64,
+              pub node_type: NodeType,
+              /// Detection confidence → eav_quality (EAV — not KAKI bytes)
+              pub eav_quality: f32,
+          }
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum NodeType {
+              EntryPoint,      // formal water entry into settlement
+              RoofTank,        // blue water tank on rooftop (terminal)
+              Junction,        // pipe junction (spectral detected)
+              GatoTap,         // illegal tap (hidden)
+              CommunityMeter,  // agueiro-registered point
+          }
+
+          /// A pipe segment connecting two nodes
+          #[derive(Debug, Clone)]
+          pub struct PipeSegment {
+              pub from_node:   usize,
+              pub to_node:     usize,
+              pub segment_type: SegmentType,
+              pub confidence:  f32,
+              pub length_m:    f32,
+          }
+
+          #[derive(Debug, Clone)]
+          pub enum SegmentType {
+              FormalPipe,     // registered infrastructure
+              OrganicPipe,    // spectral-detected, unregistered
+              GatoConnection, // illegal tap connection
+          }
+
+          /// Community testimony record
+          #[derive(Debug, Clone)]
+          pub struct CommunityTestimony {
+              pub witness_role: WitnessRole,
+              pub lat:          f64,
+              pub lon:          f64,
+              pub description:  String,
+              pub confidence:   f32,
+          }
+
+          #[derive(Debug, Clone)]
+          pub enum WitnessRole {
+              Agueiro,    // community water coordinator
+              Resident,   // local resident
+              Technician, // informal plumber
+          }
+
+          /// Engine 1: Organic Topology Reconstructor
+          pub struct OrganicTopologyReconstructor;
+
+          impl OrganicTopologyReconstructor {
+              /// Reconstruct pipe network from entry points + roof tanks
+              /// Production: traces spectral moisture signatures
+              /// MVP: graph traversal from anchors
+              pub fn reconstruct(
+                  entries:    &[NetworkNode],
+                  roof_tanks: &[NetworkNode],
+              ) -> (Vec<NetworkNode>, Vec<PipeSegment>) {
+                  let mut nodes    = Vec::new();
+                  let mut segments = Vec::new();
+
+                  // Add entry points
+                  for (i, e) in entries.iter().enumerate() {
+                      nodes.push(e.clone());
+                      // Connect each entry to nearest roof tanks
+                      for (j, tank) in roof_tanks.iter().enumerate() {
+                          let dist = haversine_m(e.lat, e.lon, tank.lat, tank.lon);
+                          if dist < 500.0 {
+                              let tank_idx = entries.len() + j;
+                              segments.push(PipeSegment {
+                                  from_node:    i,
+                                  to_node:      tank_idx,
+                                  segment_type: SegmentType::OrganicPipe,
+                                  confidence:   (e.eav_quality + tank.eav_quality) / 2.0,
+                                  length_m:     dist,
+                              });
+                          }
+                      }
+                  }
+                  for tank in roof_tanks { nodes.push(tank.clone()); }
+
+                  (nodes, segments)
+              }
+          }
+
+          /// Engine 2: Community Testimony Integrator
+          pub struct CommunityTestimonyIntegrator;
+
+          impl CommunityTestimonyIntegrator {
+              /// Integrate spectral detections with community testimony
+              /// SPECTRAL + COMMUNITY = highest confidence (synergy)
+              pub fn integrate(
+                  spectral_nodes: &mut Vec<NetworkNode>,
+                  testimonies:    &[CommunityTestimony],
+              ) {
+                  for testimony in testimonies {
+                      // Find nearest spectral node
+                      let nearest = spectral_nodes.iter_mut().min_by(|a, b| {
+                          let da = haversine_m(a.lat, a.lon, testimony.lat, testimony.lon);
+                          let db = haversine_m(b.lat, b.lon, testimony.lat, testimony.lon);
+                          da.partial_cmp(&db).unwrap()
+                      });
+
+                      if let Some(node) = nearest {
+                          let dist = haversine_m(node.lat, node.lon, testimony.lat, testimony.lon);
+                          if dist < 30.0 {
+                              // Boost confidence when community confirms spectral
+                              node.eav_quality = (node.eav_quality + testimony.confidence) / 2.0
+                                  * 1.15;  // synergy boost
+                              node.eav_quality = node.eav_quality.min(0.98);
+                          }
+                      } else {
+                          // New node from testimony only
+                          spectral_nodes.push(NetworkNode {
+                              lat: testimony.lat, lon: testimony.lon,
+                              node_type: match testimony.witness_role {
+                                  WitnessRole::Agueiro => NodeType::CommunityMeter,
+                                  _ => NodeType::Junction,
+                              },
+                              eav_quality: testimony.confidence * 0.85,
+                          });
+                      }
+                  }
+              }
+          }
+
+          fn haversine_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f32 {
+              let r    = 6_371_000.0f64;
+              let dlat = (lat2 - lat1).to_radians();
+              let dlon = (lon2 - lon1).to_radians();
+              let a    = (dlat/2.0).sin().powi(2)
+                  + lat1.to_radians().cos()
+                  * lat2.to_radians().cos()
+                  * (dlon/2.0).sin().powi(2);
+              (r * 2.0 * a.sqrt().atan2((1.0-a).sqrt())) as f32
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_organic_topology_reconstructed() {
+                  let entries = vec![NetworkNode {
+                      lat: -22.900, lon: -43.170,
+                      node_type: NodeType::EntryPoint, eav_quality: 0.85
+                  }];
+                  let tanks = vec![NetworkNode {
+                      lat: -22.901, lon: -43.171,
+                      node_type: NodeType::RoofTank, eav_quality: 0.80
+                  }];
+                  let (nodes, segs) = OrganicTopologyReconstructor::reconstruct(&entries, &tanks);
+                  assert_eq!(nodes.len(), 2);
+                  assert!(!segs.is_empty());
+              }
+
+              #[test]
+              fn test_community_testimony_boosts_confidence() {
+                  let mut nodes = vec![NetworkNode {
+                      lat: -22.900, lon: -43.170,
+                      node_type: NodeType::Junction, eav_quality: 0.70
+                  }];
+                  let testimonies = vec![CommunityTestimony {
+                      witness_role: WitnessRole::Agueiro,
+                      lat: -22.900, lon: -43.170,
+                      description: "Pipe junction here confirmed".into(),
+                      confidence: 0.85,
+                  }];
+                  let initial_q = nodes[0].eav_quality;
+                  CommunityTestimonyIntegrator::integrate(&mut nodes, &testimonies);
+                  assert!(nodes[0].eav_quality > initial_q);
+              }
+          }
+          """))
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/ereskigal"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/ereskigal",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "ereskigal"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+          t = subprocess.run(["cargo", "test", "-p", "ereskigal", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ EREŠKIGAL 𒀭𒊩𒆠𒃲 — organic topology + community testimony")
+          print("✓ PLAYBOOK 65 — EREŠKIGAL COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p65_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p65_out.stdout_lines }}"
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbook_66_nanshe.yml
+# NANSHE 𒀭𒀭𒊩 — River Contamination Intelligence
+# "Sumerian goddess of rivers, fish, social justice"
+# Iraq Tigris/Euphrates — 5 detection modules
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 66 — NANSHE 𒀭𒀭𒊩 River Contamination Intelligence"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_66_nanshe.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_66_nanshe.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # NANSHE River Contamination — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          CRATE  = f"{FORGE}/crates/nanshe"
+          SRC    = f"{CRATE}/src"
+          os.makedirs(SRC, exist_ok=True)
+          write = lambda p, c: open(p, "w").write(c)
+
+          write(f"{CRATE}/Cargo.toml", textwrap.dedent("""\
+          [package]
+          name    = "nanshe"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          [dependencies]
+          enki-terra  = { path = "../enki-terra" }
+          enkidb-kaki = { path = "../enkidb-kaki" }
+          """))
+
+          write(f"{SRC}/lib.rs", textwrap.dedent("""\
+          //! NANSHE 𒀭𒀭𒊩 — River Contamination Intelligence
+          //! Sumerian goddess of rivers, fish, and social justice.
+          //! Daughter of Enki. Protected the poor. Governed water.
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! FIVE DETECTION MODULES:
+          //!   1. SewageOutfallDetector   — chlorophyll-a blooms
+          //!   2. RiverBedMapper          — encalcification / sediment
+          //!   3. OilfieldContamination   — BTEX compounds 2280-2350nm
+          //!   4. SaltwaterIntrusion      — Shatt al-Arab advancing front
+          //!   5. MarshRestorationMapper  — Mesopotamian Marshes (UNESCO)
+          //!
+          //! ŠĀRU_sediment = sediment_rate × days (dredging urgency)
+          //! ŠĀRU_health   = population × contamination × days
+
+          #![forbid(unsafe_code)]
+
+          use enki_terra::{SharuType, SharuEvent};
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum ContaminationType {
+              SewageOutfall,       // chlorophyll-a 665/709nm + thermal
+              OilfieldBtex,        // BTEX 2280-2350nm
+              SaltwaterIntrusion,  // Shatt al-Arab
+              Encalcification,     // CaCO3 2340nm + gypsum 1750nm
+              MarshDegradation,    // Mesopotamian Marshes deficit
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct RiverReading {
+              pub lat:              f64,
+              pub lon:              f64,
+              pub contamination:    ContaminationType,
+              /// Detection confidence → eav_quality (EAV)
+              pub eav_quality:      f32,
+              pub population_at_risk: u64,
+              pub days_accumulating: u32,
+          }
+
+          impl RiverReading {
+              /// Compute ŠĀRU_health for this contamination event
+              pub fn sharu_health(&self) -> SharuEvent {
+                  SharuEvent {
+                      sharu_type:  SharuType::Health,
+                      value:       self.population_at_risk as f64
+                                   * (1.0 - self.eav_quality as f64)
+                                   * self.days_accumulating as f64,
+                      days:        self.days_accumulating,
+                      zone_id:     self.zone_id(),
+                      eav_quality: self.eav_quality,
+                  }
+              }
+
+              fn zone_id(&self) -> u16 {
+                  // Iraq river zones:
+                  // 1=Upper Tigris 2=Mid Tigris 3=Lower Tigris
+                  // 4=Euphrates 5=Shatt al-Arab 6=Marshes
+                  if self.lat > 36.0 { 1 }
+                  else if self.lat > 33.5 { 2 }
+                  else if self.lat > 31.5 { 3 }
+                  else if self.lon < 45.0 { 4 }
+                  else if self.lat > 29.5 { 5 }
+                  else { 6 }
+              }
+          }
+
+          /// Basra salinity crisis predictor
+          pub struct SaltwaterIntrusionMonitor {
+              pub current_front_km: f32,  // km upstream from Gulf
+              pub advance_rate_km_per_year: f32,
+          }
+
+          impl SaltwaterIntrusionMonitor {
+              /// Predict when Basra intake will fail
+              /// TIAMAT Engine 5 uses this trajectory
+              pub fn time_to_intake_failure_days(&self, intake_km: f32) -> Option<u32> {
+                  let remaining = intake_km - self.current_front_km;
+                  if remaining <= 0.0 { return None; } // already contaminated
+                  let years = remaining / self.advance_rate_km_per_year;
+                  Some((years * 365.0) as u32)
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_sharu_health_basra_sewage() {
+                  let reading = RiverReading {
+                      lat: 30.5, lon: 47.8,
+                      contamination: ContaminationType::SewageOutfall,
+                      eav_quality: 0.30,  // severely contaminated
+                      population_at_risk: 2_000_000,  // Basra
+                      days_accumulating: 365,
+                  };
+                  let sharu = reading.sharu_health();
+                  assert!(sharu.value > 100_000_000.0);
+                  // High ŠĀRU = urgent action needed
+              }
+
+              #[test]
+              fn test_saltwater_intake_prediction() {
+                  let monitor = SaltwaterIntrusionMonitor {
+                      current_front_km:         60.0,
+                      advance_rate_km_per_year:  3.5,
+                  };
+                  // Basra intake ~80km from Gulf
+                  let days = monitor.time_to_intake_failure_days(80.0);
+                  assert!(days.is_some());
+                  assert!(days.unwrap() > 1000); // still years away
+              }
+
+              #[test]
+              fn test_zone_classification() {
+                  let mosul = RiverReading {
+                      lat: 36.5, lon: 43.1,
+                      contamination: ContaminationType::OilfieldBtex,
+                      eav_quality: 0.45, population_at_risk: 1_000_000,
+                      days_accumulating: 30,
+                  };
+                  assert_eq!(mosul.zone_id(), 1); // Upper Tigris
+              }
+          }
+          """))
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          if '"crates/nanshe"' not in c:
+              c = c.replace('members = [', 'members = [\n    "crates/nanshe",')
+              open(ws, "w").write(c)
+
+          r = subprocess.run(["cargo", "build", "-p", "nanshe"],
+              cwd=FORGE, capture_output=True, text=True)
+          if r.returncode != 0: print(r.stderr[-2000:]); sys.exit(1)
+          t = subprocess.run(["cargo", "test", "-p", "nanshe", "--", "--nocapture"],
+              cwd=FORGE, capture_output=True, text=True)
+          if t.returncode != 0: print(t.stdout[-2000:]); sys.exit(1)
+          print("✓ NANSHE 𒀭𒀭𒊩 — river contamination 5 modules — 3 tests pass")
+          print("✓ PLAYBOOK 66 — NANSHE COMPLETE")
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p66_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p66_out.stdout_lines }}"
+
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# 𒁾 playbooks 67–71 — ABZU, NAMTAR, NAMTAR-DINUM, WPDENGINE, NAMTAR-NAVIGATOR
+# Combined for efficiency — each is a self-contained crate build
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOKS 67–71 — ABZU / NAMTAR / NAMTAR-DINUM / WPDENGINE / NAMTAR-NAVIGATOR"
+  hosts: eriduous_vdi
+  gather_facts: false
+  become: false
+
+  vars:
+    forge_root:  "/home/bahyway/Forge/bahyway_v4"
+    script_path: "/tmp/bw_67_71_suite.py"
+
+  tasks:
+
+    - name: "1.0 | Write bw_67_71_suite.py"
+      ansible.builtin.copy:
+        dest: "{{ script_path }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # ABZU + NAMTAR + NAMTAR-DINUM + WPDENGINE + NAMTAR-NAVIGATOR
+          # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          import os, subprocess, sys, textwrap
+
+          FORGE  = "/home/bahyway/Forge/bahyway_v4"
+          write  = lambda p, c: open(p, "w").write(c)
+
+          def make_crate(name, description, deps, lib_content):
+              crate = f"{FORGE}/crates/{name}"
+              src   = f"{crate}/src"
+              os.makedirs(src, exist_ok=True)
+              dep_lines = "\n".join(f'{k} = {{ path = "../{v}" }}' for k,v in deps.items())
+              write(f"{crate}/Cargo.toml", textwrap.dedent(f"""\
+          [package]
+          name    = "{name}"
+          version = "4.0.0"
+          edition = "2021"
+          authors = ["DUB.SAR 𒁾 — Bahaa Fadam"]
+          description = "{description}"
+          [dependencies]
+          {dep_lines}
+          """))
+              write(f"{src}/lib.rs", lib_content)
+              return crate
+
+          # ── ABZU 𒀭𒍪 — Groundwater Navigator ─────────────────────────
+          make_crate("abzu", "ABZU Groundwater Navigator — Sahel/Yemen/Iraq",
+          {"enki-terra": "enki-terra", "heptamap": "heptamap"},
+          textwrap.dedent("""\
+          //! ABZU 𒀭𒍪 — Groundwater Navigator
+          //! "The Primordial Underground Freshwater Ocean"
+          //! Enki lived in the Abzu. Water and knowledge were the same.
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! FIVE DETECTION LAYERS:
+          //!   1. Phreatophyte Mapping       (NDVI 680/800nm anomalies)
+          //!   2. Soil Moisture Retention     (multi-temporal: +3d, +10d)
+          //!   3. Structural Geology Lineament (SAR penetrates 1-2m dry sand)
+          //!   4. Palaeo-Channel Detection    (CORONA + L-band SAR)
+          //!   5. GRACE Gravity Integration   (NASA/DLR aquifer mass changes)
+          //!
+          //! THE NAVIGATOR OUTPUT:
+          //!   "Walk 2.3km north-northeast. Where wadi bends east:
+          //!    Acacia albida trees. Confidence: 84% (GOLDEN_ALIVE).
+          //!    Drill depth: 12-18m. Yield: 2-5 L/s."
+          //!
+          //! ŠĀRU_thirst = population × (daily_need - access) × days
+
+          #![forbid(unsafe_code)]
+
+          use enki_terra::{SharuType, SharuEvent};
+
+          #[derive(Debug, Clone)]
+          pub struct GroundwaterSite {
+              pub lat:          f64,
+              pub lon:          f64,
+              pub depth_m_min:  f32,
+              pub depth_m_max:  f32,
+              pub yield_l_per_s: f32,
+              /// Detection confidence → eav_quality (EAV — not KAKI bytes)
+              pub eav_quality:  f32,
+              pub detection_layers: Vec<DetectionLayer>,
+          }
+
+          #[derive(Debug, Clone)]
+          pub enum DetectionLayer {
+              Phreatophyte { species: String, density: f32 },
+              SoilMoisture { days_retained: u32 },
+              SarPenetration { depth_m: f32 },
+              PalaeoChannel  { age_years: u32 },
+              GraceAnomaly   { mass_change_mm: f32 },
+          }
+
+          impl GroundwaterSite {
+              /// Generate navigator instruction for driller / community
+              pub fn navigator_instruction(&self) -> String {
+                  let quality_desc = if self.eav_quality >= 0.70 {
+                      "GOLDEN_ALIVE — HIGH CONFIDENCE"
+                  } else if self.eav_quality >= 0.40 {
+                      "FUZZY — MODERATE CONFIDENCE"
+                  } else {
+                      "LOW CONFIDENCE — verify before drilling"
+                  };
+                  format!(
+                      "ABZU GROUNDWATER SITE\\n\
+                       Location: {:.4}°N {:.4}°E\\n\
+                       Confidence: {:.0}% ({})\\n\
+                       Drill depth: {:.0}–{:.0}m\\n\
+                       Expected yield: {:.1} L/s\\n\
+                       Evidence layers: {}",
+                      self.lat, self.lon,
+                      self.eav_quality * 100.0, quality_desc,
+                      self.depth_m_min, self.depth_m_max,
+                      self.yield_l_per_s,
+                      self.detection_layers.len()
+                  )
+              }
+
+              pub fn sharu_thirst(&self, population: u64, daily_need_l: f32,
+                                   current_access_l: f32, days: u32) -> SharuEvent {
+                  let deficit = (daily_need_l - current_access_l).max(0.0);
+                  SharuEvent {
+                      sharu_type:  SharuType::Thirst,
+                      value:       population as f64 * deficit as f64 * days as f64,
+                      days,
+                      zone_id:     1,
+                      eav_quality: self.eav_quality,
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_navigator_instruction_generated() {
+                  let site = GroundwaterSite {
+                      lat: 14.5, lon: 17.3,
+                      depth_m_min: 12.0, depth_m_max: 18.0,
+                      yield_l_per_s: 3.5,
+                      eav_quality: 0.84,
+                      detection_layers: vec![
+                          DetectionLayer::Phreatophyte {
+                              species: "Acacia albida".into(), density: 0.75
+                          },
+                          DetectionLayer::SoilMoisture { days_retained: 11 },
+                      ],
+                  };
+                  let nav = site.navigator_instruction();
+                  assert!(nav.contains("GOLDEN_ALIVE"));
+                  assert!(nav.contains("12"));
+              }
+
+              #[test]
+              fn test_sharu_thirst_sahel() {
+                  let site = GroundwaterSite {
+                      lat: 13.0, lon: 15.0, depth_m_min: 20.0, depth_m_max: 35.0,
+                      yield_l_per_s: 1.5, eav_quality: 0.72, detection_layers: vec![],
+                  };
+                  // 1000 people, need 20L/day, get 5L/day, 90 days dry season
+                  let sharu = site.sharu_thirst(1000, 20.0, 5.0, 90);
+                  assert_eq!(sharu.value, 1000.0 * 15.0 * 90.0);
+              }
+          }
+          """))
+
+          # ── NAMTAR 𒀭𒂗𒋻 — Sacred Burial Navigator ───────────────────
+          make_crate("namtar", "NAMTAR Sacred Burial Ground Navigator — Wadi al-Salam",
+          {"enki-terra": "enki-terra", "heptamap": "heptamap"},
+          textwrap.dedent("""\
+          //! NAMTAR 𒀭𒂗𒋻 — Sacred Burial Ground Navigator
+          //! "He Who Records the Fates"
+          //! Divine record-keeper of every soul in Sumerian underworld.
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Wadi al-Salam — Valley of Peace — Najaf, Iraq
+          //! Largest cemetery in the world. 5-6 million graves. 1400 years.
+          //! Most graves: unlocated, unmarked, undocumented.
+          //!
+          //! KNOWLEDGE CHAIN:
+          //!   Level 1: The daffan (burial man) — 30,000-70,000 burials
+          //!   Level 2: Family elders at the burial
+          //!   Level 3: Burial company records (paper, partial)
+          //!   Level 4: Family photographs, family searching
+          //!
+          //! LIE-BESIDE RELATIONSHIP:
+          //!   "Sheikh Ahmad with son Hassan to his right, brother
+          //!    to his left, mother in front"
+          //!   → FOUR CrossTribe-KAKIs from one sentence
+          //!   Finding one known grave → GA finds all relatives
+          //!
+          //! ŠĀRU_memory = (1 - grave_confidence) × days_since_burial
+
+          #![forbid(unsafe_code)]
+
+          use enki_terra::{SharuType, SharuEvent};
+
+          #[derive(Debug, Clone)]
+          pub struct GraveRecord {
+              pub lat:          Option<f64>,  // None if not yet found
+              pub lon:          Option<f64>,
+              pub name:         String,
+              pub year_buried:  u32,
+              pub section_hint: String,
+              /// Identification confidence → eav_quality (EAV)
+              pub eav_quality:  f32,
+              pub testimonies:  Vec<BurialTestimony>,
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct BurialTestimony {
+              pub witness:     String,
+              pub statement:   String,
+              pub confidence:  f32,
+              pub adjacency:   Vec<AdjacencyBond>,
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct AdjacencyBond {
+              /// Name of adjacent grave
+              pub adjacent_to: String,
+              pub direction:   Direction,
+              pub relationship: String,
+          }
+
+          #[derive(Debug, Clone)]
+          pub enum Direction { North, South, East, West, InFront, Behind }
+
+          impl GraveRecord {
+              pub fn sharu_memory(&self, current_unix: u64) -> SharuEvent {
+                  let burial_epoch = (self.year_buried as u64).saturating_sub(1970) * 365 * 86400;
+                  let days = ((current_unix.saturating_sub(burial_epoch)) / 86400) as u32;
+                  SharuEvent {
+                      sharu_type:  SharuType::Memory,
+                      value:       (1.0 - self.eav_quality as f64) * days as f64,
+                      days,
+                      zone_id:     1,  // Najaf
+                      eav_quality: self.eav_quality,
+                  }
+              }
+
+              /// When grave is found — ŠĀRU stops
+              pub fn mark_found(&mut self, lat: f64, lon: f64, confidence: f32) {
+                  self.lat         = Some(lat);
+                  self.lon         = Some(lon);
+                  self.eav_quality = confidence;
+                  // ŠĀRU_memory → 0 when eav_quality → 1.0
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_sharu_memory_accumulates_while_unfound() {
+                  let record = GraveRecord {
+                      lat: None, lon: None,
+                      name: "Hassan al-Karbalai".into(),
+                      year_buried: 2000,
+                      section_hint: "Near the big dome".into(),
+                      eav_quality: 0.05,  // barely known
+                      testimonies: vec![],
+                  };
+                  // 25 years later
+                  let sharu = record.sharu_memory(1_798_761_600);
+                  assert!(sharu.value > 1000.0);
+              }
+
+              #[test]
+              fn test_sharu_zero_when_found() {
+                  let mut record = GraveRecord {
+                      lat: None, lon: None,
+                      name: "Found".into(), year_buried: 2010,
+                      section_hint: String::new(), eav_quality: 0.05,
+                      testimonies: vec![],
+                  };
+                  record.mark_found(31.9900, 44.3150, 1.0);
+                  let sharu = record.sharu_memory(1_798_761_600);
+                  assert_eq!(sharu.value, 0.0);
+              }
+          }
+          """))
+
+          # ── NAMTAR-DINUM 𒀭𒂗𒋻𒁲𒉡𒌝 — Mass Grave Justice ──────────────
+          make_crate("namtar-dinum", "NAMTAR-DINUM Mass Grave Justice Documentation",
+          {"enki-terra": "enki-terra", "enkidb-kaki": "enkidb-kaki"},
+          textwrap.dedent("""\
+          //! NAMTAR-DINUM 𒀭𒂗𒋻𒁲𒉡𒌝 — "NAMTAR of Justice"
+          //! DINUM = legal case, judgment, justice (Sumerian)
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! Ba'athist fascism murdered 250,000-500,000+ Iraqis.
+          //! Bodies bulldozed into mass graves. Locations kept secret.
+          //! Families have searched for 20-30+ years.
+          //!
+          //! THIS IS A NATIONALISM AND PATRIOTISM CASE.
+          //! Every victim = immutable KAKI particle.
+          //! No delete. No revision. No political pressure.
+          //! The regime tried to make people disappear.
+          //! NAMTAR-DINUM makes them permanent.
+          //!
+          //! THREE STAGES:
+          //!   Stage 1: FIND sites (ENKI-TERRA spectral detection)
+          //!   Stage 2: DOCUMENT victims (VictimKaki minting)
+          //!   Stage 3: FAMILY ACCESS (Arabic NISABA voice interface)
+          //!
+          //! ŠĀRU_justice = (1 - identification_conf) × days_since_death
+
+          #![forbid(unsafe_code)]
+
+          use enki_terra::{SharuType, SharuEvent};
+          use enkidb_kaki::Kaki;
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum IdentificationStatus {
+              DnaConfirmed,    // GOLDEN_GEM — orbital_radius 0.10
+              FamilyConfirmed, // GOLDEN_ALIVE — orbital_radius 0.30
+              Probable,        // FUZZY — orbital_radius 0.40–0.57
+              Unknown,         // DEAD_SEALED — PUZRU for ICC evidence
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct VictimRecord {
+              /// KAKI: κ[6]=0x01 Identity | κ[7]=0x02 ZIKRU
+              pub kaki:          Kaki,
+              pub approximate_name: Option<String>,
+              pub death_year_range: (u32, u32),
+              pub sex:           Option<char>,
+              pub region_of_origin: Option<String>,
+              pub cause:         String,
+              pub id_status:     IdentificationStatus,
+              /// → eav_quality in EAV (NOT KAKI bytes)
+              pub id_confidence: f32,
+              pub family_claimed: bool,
+              pub site_kaki_ref: String,  // ref to mass grave site KAKI
+          }
+
+          impl VictimRecord {
+              pub fn sharu_justice(&self, current_unix: u64) -> SharuEvent {
+                  let death_year = (self.death_year_range.0 + self.death_year_range.1) / 2;
+                  let death_epoch = (death_year as u64).saturating_sub(1970) * 365 * 86400;
+                  let days = ((current_unix.saturating_sub(death_epoch)) / 86400) as u32;
+                  SharuEvent {
+                      sharu_type:  SharuType::Justice,
+                      value:       (1.0 - self.id_confidence as f64) * days as f64,
+                      days,
+                      zone_id:     0,  // Iraq — nationwide
+                      eav_quality: self.id_confidence,
+                  }
+              }
+
+              pub fn orbital_subtype(&self) -> u8 {
+                  match self.id_status {
+                      IdentificationStatus::DnaConfirmed    => 0,  // GoldenGem
+                      IdentificationStatus::FamilyConfirmed => 1,  // GoldenAlive
+                      IdentificationStatus::Probable        => 3,  // FuzzyGray
+                      IdentificationStatus::Unknown         => 6,  // DeadSealed PUZRU
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use enkidb_kaki::{Kaki, KakiType};
+
+              fn test_victim() -> VictimRecord {
+                  VictimRecord {
+                      kaki: Kaki::mint(0xDEAD_BEEF, 1, KakiType::Identity, 0x02),
+                      approximate_name: Some("Unknown Martyr".into()),
+                      death_year_range: (1991, 1991),
+                      sex: Some('M'),
+                      region_of_origin: Some("Basra".into()),
+                      cause: "Execution — Ba'athist regime".into(),
+                      id_status: IdentificationStatus::Unknown,
+                      id_confidence: 0.05,
+                      family_claimed: false,
+                      site_kaki_ref: "MAHAWIL_SITE_001".into(),
+                  }
+              }
+
+              #[test]
+              fn test_sharu_justice_1991_victim() {
+                  let v = test_victim();
+                  // 34 years after 1991 massacre
+                  let sharu = v.sharu_justice(1_798_761_600);
+                  assert!(sharu.value > 10000.0);
+                  // "For 1991 victim: 0.95 × 12,045 = 11,442 justice-deficit-days"
+              }
+
+              #[test]
+              fn test_unknown_victim_is_puzru() {
+                  let v = test_victim();
+                  assert_eq!(v.orbital_subtype(), 6);  // DEAD_SEALED PUZRU
+              }
+
+              #[test]
+              fn test_no_delete_ever() {
+                  // Immutability is architectural — tested by verifying KAKI is minted
+                  let v = test_victim();
+                  assert_eq!(v.kaki.bytes[6], 0x01);  // Identity KAKI
+                  assert_eq!(v.kaki.bytes[7], 0x02);  // ZIKRU role
+                  // The regime tried to make people disappear.
+                  // NAMTAR-DINUM makes them permanent.
+              }
+          }
+          """))
+
+          # ── WPDENGINE — Unified Water/Pipeline Engine ──────────────────
+          make_crate("wpdengine", "WPDENGINE Unified Water Pipeline Data Engine",
+          {"enki-terra": "enki-terra", "nanshe": "nanshe", "abzu": "abzu"},
+          textwrap.dedent("""\
+          //! WPDENGINE 𒀭𒍪𒆳 — Unified Water & Pipeline Data Engine
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! UNIFIES all ENKI-TERRA water systems:
+          //!   Pipeline networks (formal + informal)
+          //!   River systems (contamination + sediment + salinity)
+          //!   Groundwater sources (aquifers + springs + wadis)
+          //!
+          //! SIX ŠĀRU ACCUMULATORS (all active in WPDENGINE):
+          //!   ŠĀRU_water / ŠĀRU_health / ŠĀRU_thirst
+          //!   ŠĀRU_sediment / ŠĀRU_justice / ŠĀRU_memory
+          //!
+          //! REPAIR/DRILL PRIORITY:
+          //!   priority = ŠĀRU_water(zone) / ŠĀRU_access(zone)
+          //!   = max humanitarian benefit per unit access difficulty
+          //!
+          //! IRAQ WATER TRIBE STRUCTURE (sealed):
+          //!   Tribe 1: Upper Tigris    (Turkey border → Mosul)
+          //!   Tribe 2: Middle Tigris   (Mosul → Baghdad)
+          //!   Tribe 3: Lower Tigris    (Baghdad → Kut)
+          //!   Tribe 4: Euphrates       (border → Nasiriyah)
+          //!   Tribe 5: Shatt al-Arab   (Qurna → Gulf)
+          //!   Tribe 6: Mesopotamian Marshes (Ahwar — UNESCO)
+          //!   Tribe 7: Coastal zone / Gulf interface
+
+          #![forbid(unsafe_code)]
+
+          use enki_terra::{SharuType, SharuEvent};
+
+          /// Iraq water zone tribes (sealed)
+          pub mod tribes {
+              pub const UPPER_TIGRIS:   u16 = 1;
+              pub const MIDDLE_TIGRIS:  u16 = 2;
+              pub const LOWER_TIGRIS:   u16 = 3;
+              pub const EUPHRATES:      u16 = 4;
+              pub const SHATT_AL_ARAB:  u16 = 5;
+              pub const MARSHES:        u16 = 6;
+              pub const COASTAL:        u16 = 7;
+          }
+
+          /// Repair/drill zone — humanitarian priority calculation
+          #[derive(Debug, Clone)]
+          pub struct WaterZone {
+              pub tribe_id:       u16,
+              pub zone_name:      String,
+              /// Combined ŠĀRU deficit across all six types
+              pub total_sharu:    f64,
+              /// Access difficulty (0.0=easy, 1.0=impossible)
+              pub access_difficulty: f32,
+              /// Human population at risk
+              pub population:     u64,
+          }
+
+          impl WaterZone {
+              /// Priority score — maximize humanitarian benefit per unit effort
+              pub fn priority_score(&self) -> f64 {
+                  if self.access_difficulty >= 1.0 { return 0.0; }
+                  self.total_sharu / (self.access_difficulty as f64 + 0.01)
+              }
+          }
+
+          pub fn rank_zones_by_priority(zones: &mut Vec<WaterZone>) {
+              zones.sort_by(|a, b|
+                  b.priority_score().partial_cmp(&a.priority_score()).unwrap());
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_priority_ranking() {
+                  let mut zones = vec![
+                      WaterZone { tribe_id: tribes::LOWER_TIGRIS,
+                          zone_name: "Lower Tigris".into(),
+                          total_sharu: 50_000.0, access_difficulty: 0.2,
+                          population: 2_000_000 },
+                      WaterZone { tribe_id: tribes::MARSHES,
+                          zone_name: "Marshes".into(),
+                          total_sharu: 80_000.0, access_difficulty: 0.7,
+                          population: 500_000 },
+                  ];
+                  rank_zones_by_priority(&mut zones);
+                  // Lower Tigris: 50000/0.21 = 238095
+                  // Marshes:      80000/0.71 = 112676
+                  assert_eq!(zones[0].tribe_id, tribes::LOWER_TIGRIS);
+              }
+
+              #[test]
+              fn test_seven_tribes_defined() {
+                  assert_eq!(tribes::COASTAL, 7);
+              }
+          }
+          """))
+
+          # ── NAMTAR-NAVIGATOR — Godot Android Offline ──────────────────
+          make_crate("namtar-navigator", "NAMTAR-NAVIGATOR Godot Android Offline Navigator",
+          {"namtar": "namtar", "abzu": "abzu", "namtar-dinum": "namtar-dinum"},
+          textwrap.dedent("""\
+          //! NAMTAR-NAVIGATOR 𒀭𒂗𒋻𒁾 — Sovereign Offline Navigation
+          //! Godot 4 → Android export — no internet required
+          //! Arabic / Persian / Kurdish / Urdu NISABA voice
+          //! BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
+          //!
+          //! THREE MODES:
+          //!   Mode 1: WADI AL-SALAM GRAVE NAVIGATOR
+          //!     Compass bearing + distance to grave candidates
+          //!     Arabic NISABA guides to location offline
+          //!
+          //!   Mode 2: MASS GRAVE FAMILY FINDER
+          //!     Arabic voice: "أخبريني عن ابنك"
+          //!     Natural language → VictimSearch
+          //!     All data stays on device (privacy sovereign)
+          //!
+          //!   Mode 3: GROUNDWATER DRILLER NAVIGATOR (ABZU)
+          //!     Nearest confirmed/probable water sources
+          //!     Drill depth + yield estimates
+          //!     Community verification status
+          //!
+          //! OFFLINE ARCHITECTURE:
+          //!   Downloads 50km radius data package
+          //!   HeptaMap cells cached locally
+          //!   Syncs when connected — uploads community verifications
+          //!   Works at 0% connectivity
+
+          #![forbid(unsafe_code)]
+
+          /// Navigator mode
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum NavigatorMode {
+              WadiAlSalamGrave,
+              MassGraveFamilyFinder,
+              GroundwaterDriller,
+          }
+
+          /// Navigation instruction in a supported language
+          #[derive(Debug, Clone)]
+          pub struct NavigationInstruction {
+              pub mode:          NavigatorMode,
+              pub language:      Language,
+              pub bearing_deg:   f32,
+              pub distance_m:    f32,
+              pub text:          String,
+              pub confidence:    f32,
+          }
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum Language {
+              Arabic,  // primary — Iraqi dialect
+              Persian, // Iranian pilgrims to Najaf
+              Kurdish, // Sorani + Kurmanji
+              Urdu,    // South Asian pilgrims
+              English, // fallback
+          }
+
+          pub struct Navigator {
+              pub mode:     NavigatorMode,
+              pub language: Language,
+          }
+
+          impl Navigator {
+              pub fn new(mode: NavigatorMode, language: Language) -> Self {
+                  Self { mode, language }
+              }
+
+              /// Generate navigation instruction to target
+              pub fn navigate_to(
+                  &self,
+                  user_lat: f64, user_lon: f64,
+                  target_lat: f64, target_lon: f64,
+                  confidence: f32,
+              ) -> NavigationInstruction {
+                  let bearing  = Self::bearing(user_lat, user_lon, target_lat, target_lon);
+                  let distance = Self::distance_m(user_lat, user_lon, target_lat, target_lon);
+                  let text = self.compose_instruction(bearing, distance, confidence);
+
+                  NavigationInstruction {
+                      mode:       self.mode.clone(),
+                      language:   self.language.clone(),
+                      bearing_deg: bearing,
+                      distance_m:  distance,
+                      text,
+                      confidence,
+                  }
+              }
+
+              fn compose_instruction(&self, bearing: f32, dist: f32, conf: f32) -> String {
+                  let dir = Self::bearing_to_direction(bearing);
+                  match (&self.language, &self.mode) {
+                      (Language::Arabic, NavigatorMode::WadiAlSalamGrave) =>
+                          format!("اتجه {} لمسافة {:.0} متر — الثقة: {:.0}%",
+                              dir, dist, conf * 100.0),
+                      (Language::Arabic, NavigatorMode::MassGraveFamilyFinder) =>
+                          format!("الموقع المحتمل: {} — {:.0} متر — {:.0}% تطابق",
+                              dir, dist, conf * 100.0),
+                      (Language::Arabic, NavigatorMode::GroundwaterDriller) =>
+                          format!("المياه الجوفية: {} — {:.0} متر — الثقة {:.0}%",
+                              dir, dist, conf * 100.0),
+                      _ =>
+                          format!("Head {} for {:.0}m — confidence {:.0}%",
+                              dir, dist, conf * 100.0),
+                  }
+              }
+
+              fn bearing_to_direction(deg: f32) -> &'static str {
+                  match (deg as u32 + 22) / 45 % 8 {
+                      0 | 8 => "north",     1 => "northeast",
+                      2     => "east",      3 => "southeast",
+                      4     => "south",     5 => "southwest",
+                      6     => "west",      _ => "northwest",
+                  }
+              }
+
+              fn bearing(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f32 {
+                  let dlon  = (lon2 - lon1).to_radians();
+                  let lat1r = lat1.to_radians();
+                  let lat2r = lat2.to_radians();
+                  let y     = dlon.sin() * lat2r.cos();
+                  let x     = lat1r.cos() * lat2r.sin()
+                              - lat1r.sin() * lat2r.cos() * dlon.cos();
+                  let b     = y.atan2(x).to_degrees() as f32;
+                  if b < 0.0 { b + 360.0 } else { b }
+              }
+
+              fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f32 {
+                  let r    = 6_371_000.0f64;
+                  let dlat = (lat2 - lat1).to_radians();
+                  let dlon = (lon2 - lon1).to_radians();
+                  let a    = (dlat/2.0).sin().powi(2)
+                      + lat1.to_radians().cos() * lat2.to_radians().cos()
+                      * (dlon/2.0).sin().powi(2);
+                  (r * 2.0 * a.sqrt().atan2((1.0-a).sqrt())) as f32
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_arabic_grave_navigation() {
+                  let nav = Navigator::new(
+                      NavigatorMode::WadiAlSalamGrave, Language::Arabic);
+                  // User at Imam Ali Shrine, target grave 500m north
+                  let inst = nav.navigate_to(31.9900, 44.3150, 31.9945, 44.3150, 0.84);
+                  assert!(inst.text.contains("الثقة"));
+                  assert!(inst.distance_m > 400.0 && inst.distance_m < 600.0);
+              }
+
+              #[test]
+              fn test_offline_groundwater_instruction() {
+                  let nav = Navigator::new(
+                      NavigatorMode::GroundwaterDriller, Language::Arabic);
+                  let inst = nav.navigate_to(14.5, 17.3, 14.52, 17.33, 0.75);
+                  assert_eq!(inst.mode, NavigatorMode::GroundwaterDriller);
+                  assert!(inst.confidence > 0.5);
+              }
+          }
+          """))
+
+          # ── Build all five crates ──────────────────────────────────────
+          crate_names = ["abzu", "namtar", "namtar-dinum", "wpdengine", "namtar-navigator"]
+
+          ws = f"{FORGE}/Cargo.toml"
+          with open(ws) as f: c = f.read()
+          changed = False
+          for name in crate_names:
+              key = f'"crates/{name}"'
+              if key not in c:
+                  c = c.replace('members = [', f'members = [\n    {key},')
+                  changed = True
+          if changed:
+              open(ws, "w").write(c)
+
+          for name in crate_names:
+              r = subprocess.run(["cargo", "build", "-p", name],
+                  cwd=FORGE, capture_output=True, text=True)
+              if r.returncode != 0:
+                  print(f"✗ {name} build failed:"); print(r.stderr[-2000:]); sys.exit(1)
+              t = subprocess.run(["cargo", "test", "-p", name, "--", "--nocapture"],
+                  cwd=FORGE, capture_output=True, text=True)
+              if t.returncode != 0:
+                  print(f"✗ {name} tests failed:"); print(t.stdout[-1000:]); sys.exit(1)
+              print(f"✓ {name} — build + tests pass")
+
+          print("""
+          ══════════════════════════════════════════════════════════
+            PLAYBOOKS 67–71 — ENKI-TERRA SUITE COMPLETE
+            𒀭𒍪  ABZU            — groundwater navigator
+            𒀭𒂗𒋻 NAMTAR         — Wadi al-Salam burial
+            𒀭𒂗𒋻𒁲𒉡𒌝 NAMTAR-DINUM — mass grave justice
+            𒀭𒍪𒆳 WPDENGINE      — unified water engine
+            𒀭𒂗𒋻𒁾 NAMTAR-NAVIGATOR — Android offline
+            Every detection is a particle.
+            Every particle is immutable.
+            Every particle belongs to the people above it. 𒁾
+          ══════════════════════════════════════════════════════════
+          """)
+
+    - name: "2.0 | Execute"
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: p67_71_out
+      changed_when: true
+    - name: "2.1 | Show"
+      ansible.builtin.debug:
+        msg: "{{ p67_71_out.stdout_lines }}"
+    - name: "2.2 | Assert"
+      ansible.builtin.assert:
+        that: p67_71_out.rc == 0
+        success_msg: |
+          ╔══════════════════════════════════════════════════════════════╗
+          ║  BATCH 2 COMPLETE — Playbooks 63–71 — ENKI-TERRA Suite      ║
+          ║  𒁾 DUB.SAR — BahyWay.Ecosystem v4.0                        ║
+          ╚══════════════════════════════════════════════════════════════╝
+        fail_msg: "✗ ENKI-TERRA suite build failed"

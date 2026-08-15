@@ -1,0 +1,40 @@
+---
+# PB-423 · field SBC hardening · DRAFT (GL-NAV-001 Annex A)
+# 50°C, dust, no grid power: the machine must outlast the day and forget nothing.
+- name: "PB-423 · harden the survey-cart computer"
+  hosts: najaf_field_sbc
+  become: yes
+  tasks:
+    - name: watchdog + sensors + chrony(PPS)
+      ansible.builtin.dnf: {name: [watchdog, lm_sensors, chrony], state: present}
+
+    - name: hardware watchdog on
+      ansible.builtin.lineinfile: {path: /etc/watchdog.conf, line: "watchdog-device = /dev/watchdog", create: yes}
+    - ansible.builtin.systemd: {name: watchdog, enabled: yes, state: started}
+
+    - name: PPS from GNSS into chrony (timestamps are the hinge)
+      ansible.builtin.lineinfile:
+        path: /etc/chrony.conf
+        line: "refclock PPS /dev/pps0 refid GNSS"
+    - ansible.builtin.systemd: {name: chronyd, state: restarted}
+
+    - name: journaled, size-bounded logging (flash wear discipline)
+      ansible.builtin.blockinfile:
+        path: /etc/systemd/journald.conf
+        marker: "# {mark} PB-423"
+        block: |
+          Storage=persistent
+          SystemMaxUse=512M
+          Compress=yes
+
+    - name: power monitor timer (LiFePO4 + solar telemetry into the journal)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/hendursaga-power.timer
+        content: |
+          [Unit]
+          Description=power telemetry (PB-423)
+          [Timer]
+          OnUnitActiveSec=60
+          [Install]
+          WantedBy=timers.target
+    - ansible.builtin.systemd: {name: hendursaga-power.timer, enabled: yes, state: started, daemon_reload: yes}

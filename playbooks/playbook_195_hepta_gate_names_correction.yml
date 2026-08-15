@@ -1,0 +1,67 @@
+# =============================================================================
+# PB-195 — Correction: EnkiDDB's ConceptRegistry used the wrong Hepta Gate
+# names; the real, sealed set is APSU/ADAD/SHEDU/MUMMU/ENKIDU/DUBSAR/ENLIL
+# BahyWay.Ecosystem v4.0 — 2026-07-19
+#
+# CONTEXT: PB-194's `ConceptRegistry::with_known_gates()` claimed only two
+# Hepta Gates had a real, code-confirmed name ("Adad" at G1, "Nergal" at
+# G7), sourced from `bee_mdm_bus::GateLoads::g1_adad`/`g7_nergal`, and that
+# G2..G6 had no canonical name anywhere in the codebase. The Architect
+# corrected this directly, pointing at real dashboard screenshots showing
+# all 7 gates named and asking specifically: "Only Check in the code-base
+# which names are sealed?"
+#
+# WHAT WAS FOUND: `crates/bahyway-core/src/hepta_gate.rs` -- a real, sealed,
+# tested `HeptaGate` enum, resolving what its own doc comment calls a
+# long-standing "doc vs SVG" naming conflict (GATE-1 ruling, sealed
+# 2026-06-18, pipeline functions merged 2026-07-07):
+#   G1 APSU · G2 ADAD · G3 SHEDU · G4 MUMMU · G5 ENKIDU · G6 DUBSAR · G7 ENLIL
+# This is the real source of truth PB-194 should have checked and did not --
+# an earlier grep for gate names only searched for accessor-method call
+# sites (`g2_`, `g3_`, ...), a pattern that doesn't match `hepta_gate.rs`'s
+# actual shape (an enum with `gate_number()`/`akkadian_name()` methods, not
+# per-gate accessor functions), and never searched for the gate names
+# themselves. A real, avoidable research gap, not a judgment call.
+#
+# ALSO FOUND, flagged but not fixed in this pass: `bee_mdm_bus::GateLoads::
+# g1_adad`/`g7_nergal` -- the two accessor methods PB-194 mistakenly took
+# as its source of truth -- themselves contradict the sealed HeptaGate
+# ruling (Adad is G2, not G1; no gate is named Nergal at all). Checked
+# directly: nothing else in the codebase calls either accessor, so this is
+# dead/misleading code, not a behavioral bug anywhere live -- a separate,
+# smaller cleanup left for a future pass rather than folded silently into
+# this correction.
+#
+# WHAT WAS CHANGED: `ConceptRegistry::with_known_gates()`
+# (crates/enkiddb/src/concepts.rs) now builds its gate entries from
+# `bahyway_core::hepta_gate::HeptaGate::all()` directly -- reusing the real
+# sealed enum rather than re-hardcoding strings a second time, so future
+# drift is structurally impossible (add a gate to `HeptaGate`, the
+# registry picks it up automatically). All 7 sealed names are now
+# scannable, not 2. Every test across concepts.rs/exposure.rs/writenode.rs
+# that referenced the wrong "Adad"/"Nergal" pairing was corrected to use
+# real sealed names (APSU for G1, ENLIL for G7 in the worked examples), and
+# a new test (`finds_all_seven_sealed_hepta_gate_names`) asserts every one
+# of the 7 real names is scannable, not just two.
+#
+# VERIFICATION: cargo build --workspace clean. cargo test --workspace:
+#   3497 passed, 0 failed (up from PB-194's 3496 by the one new
+#   completeness test; zero regressions).
+# =============================================================================
+---
+- name: "PB-195 | Record — Hepta Gate name correction, real sealed HeptaGate enum wired in"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-195.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-19. Changed: crates/enkiddb/src/concepts.rs
+          (with_known_gates now sources from bahyway_core::hepta_gate::
+          HeptaGate::all()). Changed: crates/enkiddb/src/exposure.rs,
+          crates/enkiddb/src/writenode.rs (test fixtures corrected to real
+          sealed gate names). Run `cargo test -p enkiddb` for the standing
+          proof: 57 passed, 0 failed. Full workspace:
+          `cargo test --workspace`: 3497 passed, 0 failed.

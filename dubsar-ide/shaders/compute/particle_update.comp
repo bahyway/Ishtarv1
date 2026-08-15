@@ -1,0 +1,66 @@
+// DubSar IDE — 7D Particle Update Compute Shader
+// Target: Vulkan 1.3 / SPIR-V via glslang
+// Used on bare-metal Fedora 44; ignored on Hyper-V VM (software path)
+#version 450
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+// 7D particle: pos(3) + mom(3) + scalar(1) + tribe_id(1) = 32 bytes
+struct Particle7D {
+    vec3 position;   // 0..12
+    float scalar;    // 12..16  (interleaved for alignment)
+    vec3 momentum;   // 16..28
+    uint tribe_id;   // 28..32
+};
+
+layout(set = 0, binding = 0) buffer Particles {
+    Particle7D data[];
+} particles;
+
+layout(push_constant) uniform SimParams {
+    float dt;
+    float gravity;
+    float interaction_radius;
+    float damping;
+    vec3  tribe_a_centroid;
+    float pad0;
+    vec3  tribe_b_centroid;
+    float pad1;
+} params;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= particles.data.length()) return;
+
+    Particle7D p = particles.data[idx];
+
+    // Pull toward tribe centroid
+    vec3 target;
+    float damp_factor;
+    if (p.tribe_id == 0u) {
+        target = params.tribe_a_centroid;
+        damp_factor = 0.995;
+    } else if (p.tribe_id == 1u) {
+        target = params.tribe_b_centroid;
+        damp_factor = 0.990;
+    } else {
+        target = vec3(0.0);
+        damp_factor = 0.980;  // Free blocks dissipate faster
+    }
+
+    vec3 delta = target - p.position;
+    float dist = length(delta) + 0.001;
+    vec3 force = params.gravity * normalize(delta) / dist;
+
+    p.momentum += force * params.dt;
+    p.momentum *= damp_factor;
+    p.position += p.momentum * params.dt;
+
+    // Fragmentation scalar decays for assigned blocks
+    if (p.tribe_id != 2u) {
+        p.scalar = max(0.0, p.scalar - 0.001 * params.dt);
+    }
+
+    particles.data[idx] = p;
+}

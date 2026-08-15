@@ -1,0 +1,226 @@
+# =============================================================================
+# PB-285 — Launch the Sargon Passport Manager or the Gilgamesh Master Key
+# tool on the bare-metal host, detached. BahyWay.Ecosystem v4.0 — 2026-08-02
+#
+# WHY THIS EXISTS: PB-283 (fetch + diff eriduous-vdi's EnkiDB checkout)
+# confirmed there's nothing VDI-only in source form -- `godot/sargon-
+# passport-manager/` and `godot/gilgamesh-master-key/` already exist,
+# fully, in the bare-metal host's own `~/Forge/EnkiDB` checkout (same
+# git history). The only thing that ever lived only on the VDI was the
+# RUNTIME vault file itself (`sargon_vault.dat`, already fetched by
+# PB-282) -- these tools generate that file at first run; it was never
+# part of git. So "migrate Sargon from the VDI to the host" doesn't mean
+# copying more files -- it means running these two Godot tools ON the
+# host for the first time, exactly like PB-226 already does for DubSar
+# Theater. This playbook is that, for these two tools instead.
+#
+# WHAT THIS PLAYBOOK DOES (same proven shape as PB-226):
+#   1. Confirms the chosen tool's project.godot exists at the expected
+#      path -- fails clearly if not.
+#   2. Builds crates/kupru-gdext in release mode (the only GDExtension
+#      bridge either tool needs) unless `-e skip_build=true`.
+#   3. Copies the compiled libkupru_gdext.so into the tool's own bin/.
+#   4. Discovers a real Godot 4 binary (PATH / Flatpak / bounded $HOME
+#      search / common install paths -- identical logic to PB-226).
+#   5. Primes the import cache (headless `--import`) so the KupruBridge
+#      GDExtension is discovered before the UI needs it -- same fix
+#      PB-226/227 already needed for the same underlying reason.
+#   6. Kills any stale instance of the SAME tool from a previous run
+#      (matched on the tool's own project path, never touches the other
+#      tool or DubSar Theater), then launches it detached (survives this
+#      terminal/session ending).
+#
+# A fresh vault created here (if the old passphrase is truly lost) is a
+# NEW identity, not a recovery of the old one -- Argon2id has no
+# backdoor by design. Minting an Architect-tier (Gilgamesh) passport is
+# the `gilgamesh-master-key` tool's own ceremony; `sargon-passport-
+# manager` is for day-to-day passport/vault management afterward.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_285_launch_sargon_or_gilgamesh_key_tool.yml
+#   ansible-playbook playbooks/playbook_285_launch_sargon_or_gilgamesh_key_tool.yml -e tool=gilgamesh
+#   ansible-playbook playbooks/playbook_285_launch_sargon_or_gilgamesh_key_tool.yml -e skip_build=true
+#   ansible-playbook playbooks/playbook_285_launch_sargon_or_gilgamesh_key_tool.yml -e skip_build=true -e skip_prime=true
+# =============================================================================
+---
+- name: "PB-285 | Launch Sargon Passport Manager or Gilgamesh Master Key, detached"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_root: "{{ playbook_dir }}/../workspace/bahyway_v4"
+    tool: "sargon"   # "sargon" (Sargon Passport Manager) or "gilgamesh" (Gilgamesh Master Key)
+    godot_bin: ""
+    godot_log: "/tmp/{{ tool }}_key_tool_launch.log"
+    skip_build: false
+    # Skip the headless import-priming scan (see that task's own comment)
+    # -- safe once the project has already been opened successfully at
+    # least once since the last time the bridge .so actually changed.
+    skip_prime: false
+    build_log: "/tmp/kupru_gdext_build_for_{{ tool }}.log"
+    rendering_method: "gl_compatibility"
+    rendering_driver: "opengl3"
+
+  tasks:
+
+    - name: "GUARD | tool must be sargon or gilgamesh"
+      ansible.builtin.fail:
+        msg: "tool='{{ tool }}' is not 'sargon' or 'gilgamesh'."
+      when: tool not in ['sargon', 'gilgamesh']
+
+    - name: "Resolve the tool's project directory"
+      ansible.builtin.set_fact:
+        tool_project: "{{ (repo_root + '/godot/sargon-passport-manager') if tool == 'sargon' else (repo_root + '/godot/gilgamesh-master-key') }}"
+
+    - name: "Confirm the tool's project really exists"
+      ansible.builtin.stat:
+        path: "{{ tool_project }}/project.godot"
+      register: project_check
+
+    - name: "FAIL | project.godot not found"
+      ansible.builtin.fail:
+        msg: "No project.godot found at {{ tool_project }} -- run this from inside a checkout of the EnkiDB repo."
+      when: not project_check.stat.exists
+
+    - name: "Build kupru-gdext in release mode"
+      ansible.builtin.shell: >-
+        cd {{ repo_root }} && cargo build --release -p kupru-gdext > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: "FAIL | build failed"
+      ansible.builtin.fail:
+        msg: "cargo build --release -p kupru-gdext failed (rc={{ build_result.rc }}). Full output: {{ build_log }}"
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    # FIXED 2026-08-02, live -- REVERTED to a self-healing check after a
+    # real regression: gating this whole stat+copy pair on the static
+    # `skip_build` flag assumed the bridge had already been copied into
+    # {{ tool_project }}/bin/ at least once -- on a bare-metal checkout
+    # where it never had been, `-e skip_build=true` skipped the copy
+    # entirely and the tool failed to load ("GDExtension dynamic library
+    # not found", login.gd unable to find KupruBridge, blank gray
+    # window -- the same failure DubSar Theater hit). Checking the actual
+    # destination file instead of trusting the flag fixes both cases:
+    # still skipped (fast) when it's really already there, but never
+    # silently skipped when it's not.
+    - name: "Ensure the tool project's bin/ directory exists"
+      ansible.builtin.file:
+        path: "{{ tool_project }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "Check whether the destination bridge library already exists in the tool project"
+      ansible.builtin.stat:
+        path: "{{ tool_project }}/bin/libkupru_gdext.so"
+      register: dest_lib_check
+
+    - name: "Confirm the compiled bridge library exists"
+      ansible.builtin.stat:
+        path: "{{ repo_root }}/target/release/libkupru_gdext.so"
+      register: lib_check
+      when: not (skip_build and dest_lib_check.stat.exists)
+
+    - name: "FAIL | compiled bridge library missing"
+      ansible.builtin.fail:
+        msg: >-
+          {{ repo_root }}/target/release/libkupru_gdext.so does not exist.
+          Run without -e skip_build=true first, or check {{ build_log }}.
+      when: not (skip_build and dest_lib_check.stat.exists) and not lib_check.stat.exists
+
+    - name: "Copy the compiled bridge into the tool project"
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/target/release/libkupru_gdext.so"
+        dest: "{{ tool_project }}/bin/libkupru_gdext.so"
+        mode: "0755"
+        remote_src: true
+      when: not (skip_build and dest_lib_check.stat.exists)
+
+    - name: "Discover a real Godot 4 binary"
+      ansible.builtin.shell: |
+        set -u
+        for name in godot4 godot Godot; do
+          if command -v "$name" >/dev/null 2>&1; then command -v "$name"; exit 0; fi
+        done
+        if command -v flatpak >/dev/null 2>&1 && flatpak list --app 2>/dev/null | grep -qi godot; then
+          echo "flatpak run org.godotengine.Godot"; exit 0
+        fi
+        found=$(find "$HOME" -maxdepth 5 \( -iname "Godot_v4*" -o -iname "godot*.x86_64" \) -type f -executable 2>/dev/null | head -1)
+        if [ -n "$found" ]; then echo "$found"; exit 0; fi
+        for path in /usr/local/bin/godot4 /usr/local/bin/godot /opt/godot/godot /usr/bin/godot4; do
+          if [ -x "$path" ]; then echo "$path"; exit 0; fi
+        done
+        exit 1
+      register: godot_discovery
+      changed_when: false
+      failed_when: false
+      when: godot_bin | length == 0
+
+    - name: "Resolve the Godot binary to actually use"
+      ansible.builtin.set_fact:
+        resolved_godot_bin: "{{ godot_bin if godot_bin | length > 0 else (godot_discovery.stdout | trim if (godot_discovery is defined and godot_discovery.rc == 0) else '') }}"
+
+    - name: "FAIL | no Godot 4 binary found anywhere"
+      ansible.builtin.fail:
+        msg: >-
+          No Godot 4 binary found on PATH, via Flatpak, under $HOME (5
+          levels deep), or common system locations. Install from
+          https://godotengine.org/download and re-run, or point at one
+          directly: -e godot_bin=/full/path/to/Godot_v4.x-stable_linux.x86_64
+      when: resolved_godot_bin | length == 0
+
+    - name: "Prime the tool project (headless import scan) so KupruBridge is discovered before launch"
+      # FIXED 2026-08-02, live: this ran unconditionally on EVERY launch --
+      # effectively starting Godot twice per click (once headless just to
+      # re-scan, once for real), reported as real, noticeable slowness on
+      # repeat launches from the desktop icon. Only the FIRST launch (or
+      # one after the bridge .so actually changed) needs this; skip_prime
+      # lets a repeat launch skip straight to the real one. Terminal use
+      # keeps priming on by default -- only the desktop launcher (PB-288)
+      # passes -e skip_prime=true, and only after the very first launch
+      # has already primed the project once.
+      ansible.builtin.shell: >-
+        {{ resolved_godot_bin }} --headless --path {{ tool_project }} --import
+        > {{ godot_log }}.import 2>&1
+      register: import_result
+      failed_when: false
+      when: not skip_prime
+
+    - name: "Warn if the priming import scan reported errors"
+      ansible.builtin.debug:
+        msg: "Headless import priming exited {{ import_result.rc }}. See {{ godot_log }}.import if the launch fails."
+      when: not skip_prime and import_result.rc is defined and import_result.rc != 0
+
+    - name: "Kill any stale instance of THIS tool from a previous run (never touches the other tool or DubSar Theater)"
+      ansible.builtin.command: "pkill -f {{ tool_project }}"
+      register: kill_result
+      failed_when: false
+      changed_when: kill_result.rc == 0
+
+    - name: "Give a killed instance a moment to release the display"
+      ansible.builtin.pause:
+        seconds: 1
+      when: kill_result.rc == 0
+
+    - name: "Report what is about to launch"
+      ansible.builtin.debug:
+        msg:
+          - "Tool          : {{ tool }} ({{ tool_project }})"
+          - "Godot binary  : {{ resolved_godot_bin }}"
+          - "Launch log    : {{ godot_log }}"
+
+    - name: "Launch the tool, detached"
+      ansible.builtin.shell: >-
+        nohup {{ resolved_godot_bin }} --path {{ tool_project }}
+        --rendering-method {{ rendering_method }} --rendering-driver {{ rendering_driver }}
+        > {{ godot_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+
+    - name: "DONE | PB-285 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 {{ tool }} launching in the background. If a window doesn't
+          appear within a few seconds, check {{ godot_log }} for errors.

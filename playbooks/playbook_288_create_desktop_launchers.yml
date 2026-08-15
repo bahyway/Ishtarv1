@@ -1,0 +1,279 @@
+# =============================================================================
+# PB-288 — Create real desktop app-launcher icons (.desktop files) for
+# DubSar Theater, Sargon Passport Manager, and Gilgamesh Master Key.
+# BahyWay.Ecosystem v4.0 — 2026-08-02
+#
+# WHY THIS EXISTS: the Architect had already built these as launcher icons
+# on the retired eriduous-vdi VM's desktop and asked for the bare-metal
+# equivalent -- the fastest way to open Sargon Passport Manager (needed to
+# even create a first vault, before Shala has anyone to log in) is a
+# double-click from the GNOME app grid, not a terminal command or a
+# Shala login that circularly needs a vault to reach in the first place.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Converts each tool's real icon.svg to PNGs at 5 sizes (512 down to
+#      48px) and installs them into the standard freedesktop hicolor icon
+#      theme (~/.local/share/icons/hicolor/<size>/apps/<id>.png) via
+#      rsvg-convert (preferred) or ImageMagick's convert -- whichever is
+#      on PATH; fails clearly if neither is, with the exact dnf install
+#      command. This is the SAME pattern an already-working launcher on
+#      this host uses (a "Girsu" VSCodium shortcut, built in an earlier
+#      session) -- confirmed live that a raw absolute SVG path in Icon=
+#      renders blank, while a bare name resolved through hicolor works.
+#   2. Writes one `.desktop` file per tool into
+#      `~/.local/share/applications/`, `Icon=` referencing the bare name
+#      installed above, not a path.
+#   3. Each launcher's `Exec=` runs the SAME playbook Shala2's own
+#      launcher configs use (PB-226 for DubSar Theater, PB-285 with
+#      `-e tool=...` for the other two) -- one source of truth for "how
+#      to launch this tool," reachable from a terminal, from Shala, AND
+#      now from the desktop, never three different launch mechanisms
+#      that can drift apart.
+#   4. `Terminal=false` -- clicking the icon launches silently, no bash
+#      window, no "Press Enter to close" left sitting on the desktop.
+#      Output still goes somewhere real: `/tmp/<id>_launch.log`. A
+#      failure (missing Godot, a build error) fires a desktop
+#      notification pointing at that log if `notify-send` is available,
+#      rather than failing invisibly with nothing to look at.
+#   5. Tints each tool's generated PNGs with a distinct hue (ImageMagick
+#      `mogrify -modulate`, best-effort/cosmetic) -- found live that all
+#      three tools share one byte-identical icon.svg, so even once icons
+#      rendered at all they were indistinguishable from each other in
+#      the app grid. Same glyph, three colors, until real per-tool
+#      artwork exists.
+#   6. Removes each `.desktop` file before rewriting it (not an in-place
+#      edit) and refreshes both the desktop and icon caches
+#      (`update-desktop-database`, `gtk-update-icon-cache`, both best-
+#      effort) so GNOME notices the change without a logout/login.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_288_create_desktop_launchers.yml
+# =============================================================================
+---
+- name: "PB-288 | Create desktop launcher icons for DubSar/Sargon/Gilgamesh"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # FIXED 2026-08-02, live: canonicalized (no literal ".." segments) --
+    # a raw ".../playbooks/../workspace/..." path in a .desktop file's
+    # Icon= key rendered as a blank icon (the app entry itself still
+    # showed fine) on the Architect's real GNOME desktop, even though
+    # the filesystem resolves ".." transparently -- GTK/GIO's icon
+    # loader is stricter about the string it's given than the kernel is.
+    repo_root: "{{ (playbook_dir + '/../workspace/bahyway_v4') | realpath }}"
+    enkidb_root: "{{ (playbook_dir + '/..') | realpath }}"
+    desktop_dir: "{{ lookup('env', 'HOME') }}/.local/share/applications"
+    # FIXED 2026-08-02, live: a GNOME app-grid launch does NOT source
+    # ~/.bashrc, so ~/.local/bin (where PB-286 installs Godot) is missing
+    # from PATH in that context even though it's on PATH in every
+    # terminal -- PB-226/285's own PATH-based auto-discovery came up
+    # empty here (their bounded $HOME search doesn't match a plain
+    # "godot4" filename either, only "Godot_v4*"/"godot*.x86_64"
+    # patterns). Passing -e godot_bin explicitly sidesteps discovery
+    # entirely for these desktop launchers, where the real path is
+    # already known -- terminal use of PB-226/285 directly is unaffected
+    # and keeps using its own auto-discovery.
+    godot_bin_path: "{{ lookup('env', 'HOME') }}/.local/bin/godot4"
+    # FIXED 2026-08-02, live: a raw absolute SVG path in Icon= rendered
+    # blank on the Architect's real GNOME desktop even after canonicalizing
+    # it. Found the actual working pattern already proven on this exact
+    # host -- an existing "Girsu" launcher (built by an earlier session,
+    # unrelated to Godot) uses a bare icon NAME resolved through the
+    # standard freedesktop hicolor icon theme (~/.local/share/icons/
+    # hicolor/<size>/apps/<name>.png), not a raw path. Converting each
+    # tool's icon.svg to PNGs installed the same way, referenced by name.
+    icon_theme_dir: "{{ lookup('env', 'HOME') }}/.local/share/icons/hicolor"
+    icon_sizes: [512, 256, 128, 64, 48]
+    # FIXED 2026-08-02, live: all three tools share the exact same
+    # icon.svg (byte-identical, confirmed via md5sum -- nobody ever made
+    # distinct art for Sargon/Gilgamesh, they just inherited DubSar
+    # Theater's placeholder), so all three showed the SAME icon in the
+    # app grid even once icons rendered at all. No new artwork exists to
+    # swap in, so each tool's generated PNGs get a distinct hue shift
+    # applied (ImageMagick -modulate, 100=unchanged) -- same glyph, three
+    # visually distinguishable colors, until real per-tool art exists.
+    launchers:
+      - id: "bahyway-dubsar-theater"
+        name: "DubSar Theater"
+        comment: "BahyWay.Ecosystem v4.0 -- EnkiDDB HeptaScript Notebook & Grid/Orbit Viewer"
+        icon_svg: "{{ repo_root }}/godot/dubsar-theater/icon.svg"
+        hue_modulate: 100
+        # FIXED 2026-08-02, live: PB-226 was running a full headless Godot
+        # --import priming scan on EVERY launch, unconditionally -- an icon
+        # click effectively started Godot twice, reported as real
+        # slowness. skip_prime=true is safe here because the desktop
+        # launcher is never the FIRST launch on a fresh checkout (that's
+        # always PB-226/285 run directly, without -e skip_build=true,
+        # per the DONE message below) -- by the time an icon exists to
+        # click, the project has already been primed at least once.
+        exec_cmd: "playbook_226_launch_dubsar_godot_ide.yml -e godot_bin={{ godot_bin_path }} -e skip_prime=true"
+      - id: "bahyway-sargon-passport-manager"
+        name: "Sargon Passport Manager"
+        comment: "BahyWay.Ecosystem v4.0 -- generate, verify, and renew SargonPassport credentials"
+        icon_svg: "{{ repo_root }}/godot/sargon-passport-manager/icon.svg"
+        hue_modulate: 160
+        exec_cmd: "playbook_285_launch_sargon_or_gilgamesh_key_tool.yml -e tool=sargon -e godot_bin={{ godot_bin_path }} -e skip_prime=true"
+      - id: "bahyway-gilgamesh-master-key"
+        name: "Gilgamesh Master Key"
+        comment: "BahyWay.Ecosystem v4.0 -- Architect Key ceremony: Shamir split/reconstruct, mint architect passport"
+        icon_svg: "{{ repo_root }}/godot/gilgamesh-master-key/icon.svg"
+        hue_modulate: 40
+        exec_cmd: "playbook_285_launch_sargon_or_gilgamesh_key_tool.yml -e tool=gilgamesh -e godot_bin={{ godot_bin_path }} -e skip_prime=true"
+
+  tasks:
+
+    - name: "Ensure the user applications directory exists"
+      ansible.builtin.file:
+        path: "{{ desktop_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "Detect an SVG-to-PNG converter"
+      ansible.builtin.shell: |
+        if command -v rsvg-convert >/dev/null 2>&1; then echo rsvg-convert;
+        elif command -v convert >/dev/null 2>&1; then echo convert;
+        else echo NONE; fi
+      register: converter_check
+      changed_when: false
+
+    - name: "FAIL | no SVG-to-PNG converter available"
+      ansible.builtin.fail:
+        msg: >-
+          Neither rsvg-convert nor ImageMagick's convert is on PATH --
+          can't install real icons into the hicolor theme. Install one:
+          `sudo dnf install librsvg2-tools` (rsvg-convert, smaller/faster)
+          or `sudo dnf install ImageMagick`, then re-run this playbook.
+      when: converter_check.stdout | trim == 'NONE'
+
+    - name: "Ensure each hicolor/<size>/apps directory exists"
+      ansible.builtin.file:
+        path: "{{ icon_theme_dir }}/{{ item }}x{{ item }}/apps"
+        state: directory
+        mode: "0755"
+      loop: "{{ icon_sizes }}"
+
+    # Two separate tasks (not one templated command line) -- rsvg-convert
+    # and ImageMagick's convert take their input/output arguments in a
+    # DIFFERENT order (-o OUTPUT INPUT vs. INPUT OUTPUT); trying to share
+    # one command template between them is exactly the kind of thing that
+    # silently swaps the two and writes garbage, so each gets its own
+    # explicit, correctly-ordered command instead.
+    # with_nested (not `loop: ... | product() | list`) -- Jinja2/Ansible
+    # has no built-in `product` filter; with_nested is the standard,
+    # actually-supported way to get a cross product of two lists here.
+    - name: "Convert icon.svg to PNG via rsvg-convert"
+      ansible.builtin.command:
+        cmd: >-
+          rsvg-convert -w {{ item.1 }} -h {{ item.1 }}
+          -o {{ icon_theme_dir }}/{{ item.1 }}x{{ item.1 }}/apps/{{ item.0.id }}.png
+          {{ item.0.icon_svg }}
+      with_nested:
+        - "{{ launchers }}"
+        - "{{ icon_sizes }}"
+      loop_control:
+        label: "{{ item.0.name }} @ {{ item.1 }}px"
+      when: converter_check.stdout | trim == 'rsvg-convert'
+
+    - name: "Convert icon.svg to PNG via ImageMagick convert"
+      ansible.builtin.command:
+        cmd: >-
+          convert -background none -resize {{ item.1 }}x{{ item.1 }}
+          {{ item.0.icon_svg }}
+          {{ icon_theme_dir }}/{{ item.1 }}x{{ item.1 }}/apps/{{ item.0.id }}.png
+      with_nested:
+        - "{{ launchers }}"
+        - "{{ icon_sizes }}"
+      loop_control:
+        label: "{{ item.0.name }} @ {{ item.1 }}px"
+      when: converter_check.stdout | trim == 'convert'
+
+    - name: "Detect mogrify (ImageMagick) for the hue-tint step, independent of which converter made the PNG"
+      ansible.builtin.shell: "command -v mogrify >/dev/null 2>&1 && echo YES || echo NO"
+      register: mogrify_check
+      changed_when: false
+
+    - name: "Tint each tool's generated PNGs so the 3 tools are visually distinguishable (best-effort -- cosmetic, never fails the run)"
+      ansible.builtin.command:
+        cmd: >-
+          mogrify -modulate 100,100,{{ item.0.hue_modulate }}
+          {{ icon_theme_dir }}/{{ item.1 }}x{{ item.1 }}/apps/{{ item.0.id }}.png
+      with_nested:
+        - "{{ launchers }}"
+        - "{{ icon_sizes }}"
+      loop_control:
+        label: "{{ item.0.name }} @ {{ item.1 }}px (hue {{ item.0.hue_modulate }})"
+      when: mogrify_check.stdout | trim == 'YES' and item.0.hue_modulate != 100
+      failed_when: false
+      changed_when: true
+
+    - name: "Refresh the hicolor icon cache (best-effort -- not always installed)"
+      ansible.builtin.command:
+        cmd: "gtk-update-icon-cache {{ icon_theme_dir }}"
+      register: icon_cache_result
+      failed_when: false
+      changed_when: icon_cache_result.rc == 0
+
+    # FIXED 2026-08-02, live: GNOME Shell's app-grid cache did not pick up
+    # an in-place content change to an already-known .desktop file --
+    # clicking the icon kept running the OLD cached Exec= command (no
+    # godot_bin) even after the file on disk was confirmed correct and
+    # even after re-running this playbook. Removing the file first forces
+    # a real "file removed" event before the "file added" event the
+    # rewrite below produces, which GNOME reliably notices; an in-place
+    # rewrite alone was not reliably noticed.
+    - name: "Remove any existing launcher first, so GNOME sees a real remove+add, not just a content change"
+      ansible.builtin.file:
+        path: "{{ desktop_dir }}/{{ item.id }}.desktop"
+        state: absent
+      loop: "{{ launchers }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: "Write one .desktop launcher per tool"
+      ansible.builtin.copy:
+        dest: "{{ desktop_dir }}/{{ item.id }}.desktop"
+        mode: "0755"
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Version=1.0
+          Name={{ item.name }}
+          Comment={{ item.comment }}
+          Icon={{ item.id }}
+          Exec=bash -c 'cd "{{ enkidb_root }}/playbooks" && ansible-playbook {{ item.exec_cmd }} -e skip_build=true > /tmp/{{ item.id }}_launch.log 2>&1 || (command -v notify-send >/dev/null 2>&1 && notify-send -u critical "{{ item.name }} failed to launch" "See /tmp/{{ item.id }}_launch.log" || true)'
+          Terminal=false
+          Categories=Utility;
+          StartupNotify=true
+      loop: "{{ launchers }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: "Refresh the desktop database so icons appear without a logout (best-effort)"
+      ansible.builtin.command:
+        cmd: "update-desktop-database {{ desktop_dir }}"
+      register: refresh_result
+      failed_when: false
+      changed_when: refresh_result.rc == 0
+
+    - name: "DONE | PB-288 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 {{ launchers | length }} desktop launcher(s) written to
+          {{ desktop_dir }}. Search for "DubSar Theater", "Sargon Passport
+          Manager", or "Gilgamesh Master Key" in your app grid/Activities.
+          Each one runs -e skip_build=true -e skip_prime=true (assumes
+          each tool's own GDExtension bridge is already built AND the
+          project already primed once -- run PB-226/285 directly, without
+          those flags, first if this is the very first launch on this
+          host). skip_prime=true is what makes repeat icon clicks fast --
+          it was previously priming (a full headless Godot re-scan) on
+          EVERY launch. Launches silently now (no terminal window)
+          -- output goes to /tmp/<id>_launch.log, and a failure fires a
+          desktop notification pointing at that log if notify-send is
+          available. Files are removed and rewritten fresh every run (not
+          edited in place) so GNOME notices the change -- if an icon still
+          launches an old command after this, log out and back in once;
+          GNOME Shell's app cache can hold onto a launch command in memory
+          even after the file is gone and back.

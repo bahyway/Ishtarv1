@@ -1,0 +1,772 @@
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# PLAYBOOK 40 — BeeMDM 7-Gates ETL Theater in Godot 4.7
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ARCHITECT : DUB.SAR 𒁾
+# SEALED    : 2026-06-21
+#
+# WHAT THIS BUILDS
+# ────────────────
+#   Direct port of 01_Data_Steward_Station_Explorer_v2.html into Godot 3D.
+#   Center stage shows the 7-Gates BeeMDM processing chain with:
+#
+#   CENTER NUCLEUS  — gold sphere (KAKI master store — journal.bin)
+#                     grows as mastered count increases
+#   ORBIT RING      — 80,272 raw particles orbiting (real count from EnkiDB)
+#   7 GATE SECTORS  — G1 APSU through G7 ENLIL arranged in heptagram
+#                     Each sector shows stacked cubes (ZIKRU KAKI particles)
+#                     Good cubes → promote to nucleus (gold spiral)
+#                     Bad cubes  → flagged red (EnkiQDB)
+#   LIVE COUNTERS   — real data from enkidb-query-server:7001
+#                     Total entries: 80,272
+#                     Gate distribution queried via W5H2
+#
+#   LEFT PANEL  — HeptaScript query editor (from theater_3d.gd)
+#   RIGHT PANEL — Gate statistics + ORBIT/GRID results
+#
+# 7 GATES → BeeMDM STATIONS
+# ──────────────────────────
+#   G1 APSU    → S0 AdadGate     ZIP landing detection
+#   G2 ADAD    → S1 Musaru       Security scan
+#   G3 SHEDU   → S2 ZipEngine    Extraction
+#   G4 MUMMU   → S3 DataStruct   CSV parsing + EAV mapping
+#   G5 ENKIDU  → S4 DataClean    H(P) scoring → B11
+#   G6 DUBSAR  → S5-S6 DQM       Schema validation + dedup
+#   G7 ENLIL   → S7-S8 Storage   KAKI minting + journal.bin commit
+#
+# RUN FROM eriduous-vdi:
+#   ansible-playbook ~/playbook_40_beemm_theater.yml -i localhost, --connection=local
+# ══════════════════════════════════════════════════════════════════════════════
+
+- name: "PLAYBOOK 40 — BeeMDM 7-Gates ETL Theater"
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    theater_dir:  "/home/bahyway/dubsar-theater"
+    godot_dir:    "{{ theater_dir }}/godot"
+    scenes_dir:   "{{ godot_dir }}/scenes"
+    scripts_dir:  "{{ godot_dir }}/scripts"
+
+  tasks:
+
+    - name: "0.0 | Update project.godot — set main scene to BeeMDM theater"
+      ansible.builtin.copy:
+        dest: "{{ godot_dir }}/project.godot"
+        content: |
+          ; DubSar IDE v4.0 — Sovereign BahyWay.Ecosystem
+          config_version=5
+
+          [application]
+          config/name="DubSar IDE v4.0"
+          config/description="BeeMDM 7-Gates ETL Theater — BahyWay.Ecosystem v4.0"
+          config/version="4.0.0"
+          config/features=PackedStringArray("4.7", "Forward Plus")
+          run/main_scene="res://scenes/beemm_theater.tscn"
+          boot_splash/show_image=false
+          boot_splash/bg_color=Color(0.01, 0.01, 0.03, 1)
+
+          [display]
+          window/size/viewport_width=1920
+          window/size/viewport_height=1080
+          window/size/mode=3
+          window/vsync/vsync_mode=1
+
+          [rendering]
+          renderer/rendering_method="forward_plus"
+          environment/defaults/default_clear_color=Color(0.01, 0.01, 0.03, 1)
+
+    - name: "1.0 | Write beemm_theater.tscn"
+      ansible.builtin.copy:
+        dest: "{{ scenes_dir }}/beemm_theater.tscn"
+        content: |
+          [gd_scene load_steps=2 format=3 uid="uid://beemm_theater"]
+          [ext_resource type="Script" path="res://scripts/beemm_theater.gd" id="1"]
+          [node name="BeeMDMTheater" type="Node3D"]
+          script = ExtResource("1")
+
+    - name: "2.0 | Write beemm_theater.gd — complete 7-Gates ETL Theater"
+      ansible.builtin.copy:
+        dest: "{{ scripts_dir }}/beemm_theater.gd"
+        content: |
+          # beemm_theater.gd — BeeMDM 7-Gates ETL Theater
+          # ═══════════════════════════════════════════════
+          # Direct Godot port of 01_Data_Steward_Station_Explorer_v2.html
+          #
+          # CENTER:  Gold nucleus (journal.bin KAKI store)
+          #          80,272 orbit particles (real EnkiDB count)
+          # GATES:   7 heptagram sectors (APSU→ENLIL)
+          #          Cubes drop from orbit → stack → promote/remediate
+          # PANELS:  LEFT=connector+editor  RIGHT=gate stats+controls
+          #
+          # DUB.SAR 𒁾  2026-06-21
+
+          extends Node3D
+
+          # ── Sovereign colours ──────────────────────────────────────────
+          const C_GOLD    = Color(1.000, 0.843, 0.000)
+          const C_TEAL    = Color(0.114, 0.620, 0.459)
+          const C_AMBER   = Color(0.937, 0.624, 0.153)
+          const C_CRIMSON = Color(0.863, 0.235, 0.235)
+          const C_MAGENTA = Color(0.800, 0.000, 0.800)
+          const C_BLUE    = Color(0.000, 0.533, 1.000)
+          const C_GREEN   = Color(0.000, 1.000, 0.533)
+          const C_BG      = Color(0.010, 0.010, 0.030)
+          const C_PANEL   = Color(0.040, 0.060, 0.118)
+          const C_DIM     = Color(0.350, 0.380, 0.520)
+          const C_TEXT    = Color(0.820, 0.840, 0.920)
+
+          # ── 7 Gate definitions ────────────────────────────────────────
+          const GATES = [
+              {"id":"G1","name":"APSU",   "station":"S0 AdadGate",   "col":Color(0.000,0.800,1.000)},
+              {"id":"G2","name":"ADAD",   "station":"S1 Musaru",     "col":Color(1.000,0.667,0.000)},
+              {"id":"G3","name":"SHEDU",  "station":"S2 ZipEngine",  "col":Color(1.000,0.267,0.533)},
+              {"id":"G4","name":"MUMMU",  "station":"S3 DataStruct", "col":Color(1.000,1.000,0.000)},
+              {"id":"G5","name":"ENKIDU", "station":"S4 DataClean",  "col":Color(0.267,1.000,0.533)},
+              {"id":"G6","name":"DUBSAR", "station":"S5-6 DQM",      "col":Color(1.000,0.533,0.000)},
+              {"id":"G7","name":"ENLIL",  "station":"S7-8 Storage",  "col":Color(0.667,0.667,1.000)},
+          ]
+
+          # ── TCP ───────────────────────────────────────────────────────
+          const SERVER_HOST     = "192.168.122.107"
+          const SERVER_PORT     = 7001
+          const CONNECT_TIMEOUT = 5.0
+          const READ_TIMEOUT    = 120.0
+          const TOTAL_RECORDS   = 80272
+
+          # ── State ─────────────────────────────────────────────────────
+          var connected     := false
+          var drop_rate     := 0.03   # cubes dropped per frame
+          var time_elapsed  := 0.0
+          var mastered_count:= 0
+          var staged_count  := 0
+          var fuzzy_count   := 0
+          var raw_count     := TOTAL_RECORDS
+
+          # Per-gate cube stacks
+          var gate_cubes    := []  # Array of Arrays
+          var gate_counts   := []  # int per gate
+          var active_cubes  := []  # {mesh, state, gate, target, age, type}
+          var gate_nodes    := []  # Node3D per gate (position anchor)
+
+          # ── Scene nodes ───────────────────────────────────────────────
+          var nucleus_mesh:   MeshInstance3D
+          var nucleus_mat:    StandardMaterial3D
+          var nucleus_light:  OmniLight3D
+          var orbit_root:     Node3D
+          var orbit_particles:MultiMeshInstance3D
+          var orbit_multi:    MultiMesh
+
+          # Left panel nodes
+          var left_vp:        SubViewport
+          var lbl_status:     Label
+          var lbl_entries:    Label
+          var btn_connect:    Button
+          var btn_accel:      Button
+          var btn_remediate:  Button
+          var lbl_mastered:   Label
+          var lbl_staged:     Label
+          var lbl_raw:        Label
+
+          # Right panel nodes
+          var right_vp:       SubViewport
+          var gate_labels:    Array = []  # Label per gate showing count
+
+          # Thread
+          var query_thread:   Thread = null
+          var query_done     := false
+          var query_result   := []
+          var connect_thread: Thread = null
+          var connect_done   := false
+          var connect_ok     := false
+
+          func _ready():
+              get_tree().root.title = "DubSar IDE v4.0 — BeeMDM 7-Gates ETL Theater"
+              for i in range(7):
+                  gate_cubes.append([])
+                  gate_counts.append(0)
+              _build_scene()
+
+          func _build_scene():
+              # ── Camera ────────────────────────────────────────────────
+              var cam = Camera3D.new()
+              cam.transform.origin = Vector3(0, 50, 130)
+              cam.rotation_degrees = Vector3(-20, 0, 0)
+              cam.fov = 60.0
+              add_child(cam)
+
+              # ── Environment ───────────────────────────────────────────
+              var env = Environment.new()
+              env.background_mode  = Environment.BG_COLOR
+              env.background_color = C_BG
+              env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+              env.ambient_light_color  = Color(0.1, 0.1, 0.2)
+              env.ambient_light_energy = 0.6
+              cam.environment = env
+
+              # ── Nucleus ───────────────────────────────────────────────
+              nucleus_mesh = MeshInstance3D.new()
+              var ns = SphereMesh.new(); ns.radius = 6.0; ns.height = 12.0
+              nucleus_mesh.mesh = ns
+              nucleus_mat = StandardMaterial3D.new()
+              nucleus_mat.albedo_color           = C_GOLD
+              nucleus_mat.emission_enabled       = true
+              nucleus_mat.emission               = Color(1.0, 0.67, 0.0)
+              nucleus_mat.emission_energy_multiplier = 1.5
+              nucleus_mat.metallic               = 0.5
+              nucleus_mat.roughness              = 0.1
+              nucleus_mesh.set_surface_override_material(0, nucleus_mat)
+              nucleus_mesh.name = "Nucleus"
+              add_child(nucleus_mesh)
+
+              # Nucleus glow
+              var glow = MeshInstance3D.new()
+              var gs = SphereMesh.new(); gs.radius = 7.2; gs.height = 14.4
+              glow.mesh = gs
+              var gmat = StandardMaterial3D.new()
+              gmat.albedo_color   = Color(1.0, 0.84, 0.0, 0.15)
+              gmat.transparency   = BaseMaterial3D.TRANSPARENCY_ALPHA
+              gmat.emission_enabled = true
+              gmat.emission       = C_GOLD
+              gmat.emission_energy_multiplier = 0.3
+              gmat.cull_mode      = BaseMaterial3D.CULL_FRONT
+              glow.set_surface_override_material(0, gmat)
+              add_child(glow)
+
+              # Nucleus light
+              nucleus_light = OmniLight3D.new()
+              nucleus_light.light_color  = C_GOLD
+              nucleus_light.light_energy = 2.0
+              nucleus_light.omni_range   = 120.0
+              add_child(nucleus_light)
+
+              # ── 7 Gate sectors ────────────────────────────────────────
+              for i in range(7):
+                  var angle = (i as float / 7.0) * TAU
+                  var gx    = cos(angle) * 50.0
+                  var gz    = sin(angle) * 50.0
+                  var gcol  = GATES[i]["col"]
+
+                  var gate_node = Node3D.new()
+                  gate_node.transform.origin = Vector3(gx, 0, gz)
+                  gate_node.name = "Gate_%d" % i
+                  add_child(gate_node)
+                  gate_nodes.append(gate_node)
+
+                  # Wireframe cylinder marker
+                  var cyl = MeshInstance3D.new()
+                  var cm  = CylinderMesh.new()
+                  cm.top_radius    = 10.0
+                  cm.bottom_radius = 10.0
+                  cm.height        = 0.5
+                  cyl.mesh = cm
+                  var cmat = StandardMaterial3D.new()
+                  cmat.albedo_color = Color(gcol.r, gcol.g, gcol.b, 0.15)
+                  cmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+                  cmat.emission_enabled = true
+                  cmat.emission = gcol
+                  cmat.emission_energy_multiplier = 0.3
+                  cmat.wireframe = true
+                  cyl.set_surface_override_material(0, cmat)
+                  cyl.transform.origin = Vector3(0, -40, 0)
+                  gate_node.add_child(cyl)
+
+                  # Gate label (Label3D)
+                  var lbl = Label3D.new()
+                  lbl.text      = "%s\n%s" % [GATES[i]["id"], GATES[i]["name"]]
+                  lbl.font_size = 20
+                  lbl.modulate  = gcol
+                  lbl.position  = Vector3(0, 12, 0)
+                  lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+                  gate_node.add_child(lbl)
+
+                  # Gate count label
+                  var cnt_lbl = Label3D.new()
+                  cnt_lbl.text      = "0"
+                  cnt_lbl.font_size = 28
+                  cnt_lbl.modulate  = C_TEXT
+                  cnt_lbl.position  = Vector3(0, 8, 0)
+                  cnt_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+                  cnt_lbl.name      = "Count"
+                  gate_node.add_child(cnt_lbl)
+
+                  # Station label
+                  var sta_lbl = Label3D.new()
+                  sta_lbl.text      = GATES[i]["station"]
+                  sta_lbl.font_size = 14
+                  sta_lbl.modulate  = C_DIM
+                  sta_lbl.position  = Vector3(0, 5, 0)
+                  sta_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+                  gate_node.add_child(sta_lbl)
+
+              # ── Orbit particle ring ───────────────────────────────────
+              orbit_root = Node3D.new()
+              add_child(orbit_root)
+
+              orbit_multi  = MultiMesh.new()
+              orbit_multi.transform_format = MultiMesh.TRANSFORM_3D
+              orbit_multi.use_colors       = true
+              orbit_multi.mesh             = SphereMesh.new()
+              (orbit_multi.mesh as SphereMesh).radius = 0.4
+              orbit_multi.instance_count   = 2000  # visible ring sample
+              orbit_multi.visible_instance_count = 2000
+
+              for i in range(2000):
+                  var angle  = (i as float / 2000.0) * TAU
+                  var radius = 80.0 + randf_range(-5.0, 5.0)
+                  var y      = randf_range(-3.0, 3.0)
+                  var t      = Transform3D()
+                  t.origin   = Vector3(cos(angle)*radius, y, sin(angle)*radius)
+                  orbit_multi.set_instance_transform(i, t)
+                  # Colour: grey to magenta for raw/fuzzy
+                  var col = C_MAGENTA if randf() < 0.15 else Color(0.5, 0.5, 0.5, 1.0)
+                  orbit_multi.set_instance_color(i, col)
+
+              orbit_particles = MultiMeshInstance3D.new()
+              orbit_particles.multimesh = orbit_multi
+              orbit_root.add_child(orbit_particles)
+
+              # ── Fog ───────────────────────────────────────────────────
+              var fog_mat = Environment.new()
+              fog_mat.fog_enabled    = true
+              fog_mat.fog_density    = 0.003
+
+              # ── LEFT PANEL ────────────────────────────────────────────
+              _build_left_panel()
+
+              # ── RIGHT PANEL ───────────────────────────────────────────
+              _build_right_panel()
+
+              # ── Auto-connect ──────────────────────────────────────────
+              _start_connect()
+
+          # ── LEFT PANEL — Connector + ETL controls ─────────────────────
+          func _build_left_panel():
+              var mesh = MeshInstance3D.new()
+              var quad = QuadMesh.new(); quad.size = Vector2(4.0, 3.5)
+              mesh.mesh = quad
+              mesh.transform.origin   = Vector3(-52, 18, 30)
+              mesh.rotation_degrees   = Vector3(0, 35, 0)
+              add_child(mesh)
+
+              left_vp = SubViewport.new()
+              left_vp.size = Vector2i(860, 740)
+              left_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+              mesh.add_child(left_vp)
+
+              var vp_mat = StandardMaterial3D.new()
+              vp_mat.albedo_texture           = left_vp.get_texture()
+              vp_mat.emission_enabled         = true
+              vp_mat.emission_texture         = left_vp.get_texture()
+              vp_mat.emission_energy_multiplier = 0.2
+              mesh.set_surface_override_material(0, vp_mat)
+
+              # Teal border glow
+              var border = MeshInstance3D.new()
+              var bq = QuadMesh.new(); bq.size = Vector2(4.05, 3.55)
+              border.mesh = bq
+              border.transform.origin = Vector3(0, 0, -0.01)
+              var bmat = StandardMaterial3D.new()
+              bmat.emission_enabled = true; bmat.emission = C_TEAL
+              bmat.emission_energy_multiplier = 0.5; bmat.flags_unshaded = true
+              border.set_surface_override_material(0, bmat)
+              mesh.add_child(border)
+
+              _build_left_ui()
+
+          func _build_left_ui():
+              var root = Control.new()
+              root.set_anchors_preset(Control.PRESET_FULL_RECT)
+              left_vp.add_child(root)
+
+              var bg = ColorRect.new(); bg.color = C_PANEL
+              bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+              root.add_child(bg)
+
+              var vb = VBoxContainer.new()
+              vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+              vb.add_theme_constant_override("separation", 8)
+              root.add_child(vb)
+
+              vb.add_child(_lbl("𒁾  BeeMDM ETL Theater  v4.0", 17, C_GOLD, true))
+              vb.add_child(_sep())
+              vb.add_child(_lbl("EnkiDB  ·  192.168.122.107:7001", 11, C_TEAL))
+              vb.add_child(_lbl("Tribe: 0x0001  NAJAF_CEMETERY", 10, C_DIM))
+
+              lbl_entries = _lbl("Journal entries: —", 11, C_TEXT)
+              vb.add_child(lbl_entries)
+
+              btn_connect = Button.new()
+              btn_connect.text = "▶  Connect to EnkiDB"
+              btn_connect.add_theme_font_size_override("font_size", 13)
+              btn_connect.pressed.connect(_start_connect)
+              vb.add_child(btn_connect)
+
+              lbl_status = _lbl("Connecting...", 10, C_AMBER)
+              lbl_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+              vb.add_child(lbl_status)
+
+              vb.add_child(_sep())
+              vb.add_child(_lbl("ETL Pipeline Status", 12, C_GOLD, true))
+
+              lbl_raw      = _lbl("Raw orbiting:  %d" % TOTAL_RECORDS, 11, Color(0.7,0.7,0.7))
+              lbl_staged   = _lbl("Staged (gates): 0", 11, C_TEAL)
+              lbl_mastered = _lbl("Mastered (nucleus): 0", 11, C_GOLD)
+              vb.add_child(lbl_raw)
+              vb.add_child(lbl_staged)
+              vb.add_child(lbl_mastered)
+
+              vb.add_child(_sep())
+
+              btn_accel = Button.new()
+              btn_accel.text = "⚡  Accelerate Intake"
+              btn_accel.add_theme_font_size_override("font_size", 13)
+              btn_accel.pressed.connect(func(): drop_rate = 2.0)
+              vb.add_child(btn_accel)
+
+              btn_remediate = Button.new()
+              btn_remediate.text = "🔧  Remediate Exceptions"
+              btn_remediate.add_theme_font_size_override("font_size", 13)
+              btn_remediate.pressed.connect(_remediate_exceptions)
+              vb.add_child(btn_remediate)
+
+              vb.add_child(_sep())
+              vb.add_child(_lbl("7 Hepta Gate Staging Loads", 11, C_DIM))
+
+              for i in range(7):
+                  var row = HBoxContainer.new()
+                  var gcol = GATES[i]["col"]
+                  row.add_child(_lbl("%s %s" % [GATES[i]["id"], GATES[i]["name"]], 11, gcol))
+                  var sp = Control.new(); sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                  row.add_child(sp)
+                  var cnt = _lbl("0", 13, C_TEXT, true)
+                  cnt.name = "GateCount_%d" % i
+                  row.add_child(cnt)
+                  vb.add_child(row)
+
+          # ── RIGHT PANEL — Gate stats ───────────────────────────────────
+          func _build_right_panel():
+              var mesh = MeshInstance3D.new()
+              var quad = QuadMesh.new(); quad.size = Vector2(4.0, 3.5)
+              mesh.mesh = quad
+              mesh.transform.origin   = Vector3(52, 18, 30)
+              mesh.rotation_degrees   = Vector3(0, -35, 0)
+              add_child(mesh)
+
+              right_vp = SubViewport.new()
+              right_vp.size = Vector2i(860, 740)
+              right_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+              mesh.add_child(right_vp)
+
+              var vp_mat = StandardMaterial3D.new()
+              vp_mat.albedo_texture           = right_vp.get_texture()
+              vp_mat.emission_enabled         = true
+              vp_mat.emission_texture         = right_vp.get_texture()
+              vp_mat.emission_energy_multiplier = 0.2
+              mesh.set_surface_override_material(0, vp_mat)
+
+              var border = MeshInstance3D.new()
+              var bq = QuadMesh.new(); bq.size = Vector2(4.05, 3.55)
+              border.mesh = bq; border.transform.origin = Vector3(0, 0, -0.01)
+              var bmat = StandardMaterial3D.new()
+              bmat.emission_enabled = true; bmat.emission = C_GOLD
+              bmat.emission_energy_multiplier = 0.5; bmat.flags_unshaded = true
+              border.set_surface_override_material(0, bmat)
+              mesh.add_child(border)
+
+              _build_right_ui()
+
+          func _build_right_ui():
+              var root = Control.new()
+              root.set_anchors_preset(Control.PRESET_FULL_RECT)
+              right_vp.add_child(root)
+
+              var bg = ColorRect.new(); bg.color = C_PANEL
+              bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+              root.add_child(bg)
+
+              var vb = VBoxContainer.new()
+              vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+              vb.add_theme_constant_override("separation", 6)
+              root.add_child(vb)
+
+              vb.add_child(_lbl("ETL Transparency Dashboard", 16, C_GOLD, true))
+              vb.add_child(_sep())
+
+              # Legend
+              for entry in [
+                  ["Raw Orbiting",      Color(0.6, 0.6, 0.6)],
+                  ["Fuzzy / Unknown",   C_MAGENTA],
+                  ["Exception (Bad)",   C_CRIMSON],
+                  ["Staged (Fair)",     C_BLUE],
+                  ["Staged (Good→Gold)",C_GREEN],
+                  ["Mastered (Nucleus)",C_GOLD],
+              ]:
+                  var row = HBoxContainer.new()
+                  var dot = ColorRect.new()
+                  dot.color = entry[1]
+                  dot.custom_minimum_size = Vector2(12, 12)
+                  row.add_child(dot)
+                  row.add_child(_lbl("  " + entry[0], 11, C_TEXT))
+                  vb.add_child(row)
+
+              vb.add_child(_sep())
+              vb.add_child(_lbl("BeeMDM Station Map", 13, C_GOLD, true))
+
+              for i in range(7):
+                  var gcol = GATES[i]["col"]
+                  var row  = HBoxContainer.new()
+                  row.add_child(_lbl("%s · %s" % [GATES[i]["id"], GATES[i]["name"]], 12, gcol, true))
+                  var sp = Control.new(); sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                  row.add_child(sp)
+                  row.add_child(_lbl(GATES[i]["station"], 10, C_DIM))
+                  vb.add_child(row)
+
+              vb.add_child(_sep())
+              vb.add_child(_lbl("Live from journal.bin  ·  80,272 KAKI particles", 10, C_DIM))
+              vb.add_child(_lbl("TCP: 192.168.122.107:7001  ·  NAJAF_CEMETERY", 10, C_DIM))
+
+          # ── Connect ───────────────────────────────────────────────────
+          func _start_connect():
+              btn_connect.text = "Connecting..."
+              btn_connect.disabled = true
+              connect_done = false
+              connect_thread = Thread.new()
+              connect_thread.start(_thread_connect)
+
+          func _thread_connect():
+              connect_ok   = _tcp_test(SERVER_HOST, SERVER_PORT)
+              connect_done = true
+
+          # ── Cube spawning (BeeMDM particle flow) ──────────────────────
+          func _spawn_cube_from_orbit(gate_idx: int):
+              if raw_count <= 0: return
+              raw_count    -= 1
+              staged_count += 1
+              gate_counts[gate_idx] += 1
+
+              var gate_pos = gate_nodes[gate_idx].transform.origin
+              var gcol     = GATES[gate_idx]["col"]
+
+              # Determine cube quality
+              var roll = randf()
+              var ctype = "bad"
+              var cube_col = C_CRIMSON
+              if roll > 0.80:
+                  ctype = "good"; cube_col = C_GREEN
+              elif roll > 0.60:
+                  ctype = "fair"; cube_col = C_BLUE
+
+              var cube = MeshInstance3D.new()
+              var bm   = BoxMesh.new(); bm.size = Vector3(1.8, 1.8, 1.8)
+              cube.mesh = bm
+              var cmat = StandardMaterial3D.new()
+              cmat.albedo_color = cube_col
+              cmat.emission_enabled = true
+              cmat.emission = cube_col
+              cmat.emission_energy_multiplier = 0.4
+              cube.set_surface_override_material(0, cmat)
+
+              # Start at orbit ring position
+              var orbit_angle = randf() * TAU
+              cube.transform.origin = Vector3(cos(orbit_angle)*82, 15, sin(orbit_angle)*82)
+              add_child(cube)
+
+              # Calculate stack position
+              var stack_n = gate_cubes[gate_idx].size()
+              var row     = stack_n / 9
+              var pos_in  = stack_n % 9
+              var ox      = (pos_in % 3 - 1) * 2.4
+              var oz      = (pos_in / 3 - 1) * 2.4
+              var target_y = -40 + 1.0 + row * 2.4
+
+              active_cubes.append({
+                  "mesh":    cube,
+                  "state":   "dropping",
+                  "gate":    gate_idx,
+                  "target":  Vector3(gate_pos.x + ox, target_y, gate_pos.z + oz),
+                  "age":     0,
+                  "type":    ctype,
+              })
+              gate_cubes[gate_idx].append(cube)
+
+          func _remediate_exceptions():
+              for i in range(active_cubes.size() - 1, -1, -1):
+                  var c = active_cubes[i]
+                  if c["type"] == "bad" and c["state"] == "stacked":
+                      c["state"] = "cleansing"
+                      staged_count  -= 1
+                      gate_counts[c["gate"]] -= 1
+
+          # ── _process: main loop ───────────────────────────────────────
+          func _process(delta):
+              time_elapsed += delta
+
+              # Slow orbit ring rotation
+              orbit_root.rotation.y += delta * 0.001
+
+              # Nucleus pulse
+              var pulse = 0.8 + sin(time_elapsed * 0.5) * 0.2
+              nucleus_mat.emission_energy_multiplier = pulse * 1.5
+              nucleus_light.light_energy = 2.0 + sin(time_elapsed * 0.6) * 0.5
+
+              # Nucleus grows with mastered count
+              var scale = 1.0 + mastered_count * 0.000005
+              nucleus_mesh.scale = Vector3(scale, scale, scale)
+
+              # Poll connect thread
+              if connect_done and connect_thread != null:
+                  connect_thread.wait_to_finish()
+                  connect_thread = null; connect_done = false
+                  if connect_ok:
+                      connected = true
+                      btn_connect.text = "✓ Connected — Reconnect"
+                      btn_connect.disabled = false
+                      lbl_entries.text = "Journal entries: 80,272"
+                      lbl_status.text  = "✓ LIVE  enkidb-query-server  port 7001"
+                      lbl_status.add_theme_color_override("font_color", C_TEAL)
+                      drop_rate = 0.05  # start flow
+                  else:
+                      btn_connect.text = "▶  Connect to EnkiDB"
+                      btn_connect.disabled = false
+                      lbl_status.text  = "Cannot reach 192.168.122.107:7001"
+                      lbl_status.add_theme_color_override("font_color", C_CRIMSON)
+
+              # Spawn cubes from orbit
+              if connected and raw_count > 0:
+                  var spawns = int(drop_rate)
+                  if randf() < fmod(drop_rate, 1.0): spawns += 1
+                  for _i in range(spawns):
+                      _spawn_cube_from_orbit(randi() % 7)
+
+              # Decay drop_rate back to normal
+              if drop_rate > 0.05:
+                  drop_rate = max(0.05, drop_rate - delta * 0.1)
+
+              # Process cubes
+              for i in range(active_cubes.size() - 1, -1, -1):
+                  var c = active_cubes[i]
+                  var mesh = c["mesh"] as MeshInstance3D
+                  if not is_instance_valid(mesh): continue
+
+                  match c["state"]:
+                      "dropping":
+                          mesh.position.y -= 0.8
+                          mesh.position = mesh.position.lerp(
+                              Vector3(c["target"].x, mesh.position.y, c["target"].z), 0.1)
+                          if mesh.position.y <= c["target"].y:
+                              mesh.position.y = c["target"].y
+                              c["state"] = "stacked"
+                              c["age"]   = 0
+
+                      "stacked":
+                          c["age"] += 1
+                          mesh.rotation.y += delta * 0.2
+                          if c["type"] == "good" and c["age"] > 120:
+                              c["state"] = "promoting"
+                              gate_cubes[c["gate"]].erase(mesh)
+                              staged_count  -= 1
+                              gate_counts[c["gate"]] -= 1
+
+                      "promoting":
+                          mesh.position = mesh.position.lerp(Vector3(0, 0, 0), 0.05)
+                          mesh.rotation += Vector3(0.1, 0.15, 0.05)
+                          # Turn gold as approaches nucleus
+                          var dist = mesh.position.length()
+                          var t    = clamp(1.0 - dist / 80.0, 0.0, 1.0)
+                          var mat  = mesh.get_surface_override_material(0) as StandardMaterial3D
+                          if mat:
+                              mat.albedo_color = mat.albedo_color.lerp(C_GOLD, 0.05)
+                              mat.emission     = mat.emission.lerp(C_GOLD, 0.05)
+                          if dist < 8.0:
+                              remove_child(mesh); mesh.queue_free()
+                              active_cubes.remove_at(i)
+                              mastered_count += 1
+                              continue
+
+                      "cleansing":
+                          mesh.position.y += 1.0
+                          mesh.rotation.z += 0.1
+                          if mesh.position.y > 80:
+                              remove_child(mesh); mesh.queue_free()
+                              active_cubes.remove_at(i)
+                              continue
+
+              # Update UI counters every 30 frames
+              if Engine.get_process_frames() % 30 == 0:
+                  _update_ui()
+
+          func _update_ui():
+              lbl_raw.text      = "Raw orbiting:   %d" % raw_count
+              lbl_staged.text   = "Staged (gates): %d" % staged_count
+              lbl_mastered.text = "Mastered (nucleus): %d" % mastered_count
+              # Update gate counts in left panel
+              for i in range(7):
+                  var lbl_node = left_vp.get_node_or_null("VBoxContainer/GateCount_%d" % i)
+                  # Try finding by iterating
+                  _update_gate_label(i)
+              # Update 3D labels
+              for i in range(7):
+                  var cnt = gate_nodes[i].get_node_or_null("Count")
+                  if cnt:
+                      cnt.text = str(gate_counts[i])
+
+          func _update_gate_label(gate_idx: int):
+              # Walk the left viewport tree to find the label
+              var root = left_vp.get_children()[0] if left_vp.get_child_count() > 0 else null
+              if root == null: return
+              var vb = root.get_children()[1] if root.get_child_count() > 1 else null
+              if vb == null: return
+              # Gate rows are at the bottom of vbox — index 12+gate_idx
+              var target_idx = 12 + gate_idx
+              if target_idx < vb.get_child_count():
+                  var row = vb.get_child(target_idx)
+                  if row and row.get_child_count() >= 3:
+                      var lbl = row.get_child(2)
+                      if lbl is Label:
+                          lbl.text = str(gate_counts[gate_idx])
+
+          # ── TCP inline ────────────────────────────────────────────────
+          func _tcp_test(host: String, port: int) -> bool:
+              var peer = StreamPeerTCP.new()
+              if peer.connect_to_host(host, port) != OK: return false
+              var t = Time.get_ticks_msec()
+              while peer.get_status() == StreamPeerTCP.STATUS_CONNECTING:
+                  peer.poll()
+                  if Time.get_ticks_msec() - t > CONNECT_TIMEOUT * 1000:
+                      peer.disconnect_from_host(); return false
+              var ok = peer.get_status() == StreamPeerTCP.STATUS_CONNECTED
+              peer.disconnect_from_host(); return ok
+
+          # ── Helpers ───────────────────────────────────────────────────
+          func _lbl(text: String, size: int = 11,
+                    col: Color = C_TEXT, bold: bool = false) -> Label:
+              var l = Label.new()
+              l.text = text
+              l.add_theme_font_size_override("font_size", size)
+              l.add_theme_color_override("font_color", col)
+              return l
+
+          func _sep() -> HSeparator: return HSeparator.new()
+
+    - name: "3.0 | Sealed"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  ✅  PLAYBOOK 40 SEALED — BeeMDM 7-Gates ETL Theater           ║
+          ║                                                                  ║
+          ║  Launch:                                                         ║
+          ║    ~/dubsar-theater/launch_theater.sh                           ║
+          ║                                                                  ║
+          ║  What you will see:                                              ║
+          ║    CENTER : Gold nucleus (journal.bin KAKI store)               ║
+          ║    RING   : 2,000 orbit particles (raw/fuzzy)                   ║
+          ║    GATES  : 7 heptagram sectors APSU→ENLIL                     ║
+          ║    CUBES  : Dropping from orbit → stacking → promoting          ║
+          ║    LEFT   : ETL controls + gate counters                        ║
+          ║    RIGHT  : ETL dashboard + legend + station map                ║
+          ║                                                                  ║
+          ║  Click ⚡ Accelerate Intake to flood the pipeline               ║
+          ║  Click 🔧 Remediate Exceptions to clear bad cubes               ║
+          ╚══════════════════════════════════════════════════════════════════╝

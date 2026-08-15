@@ -1,0 +1,190 @@
+# =============================================================================
+# PB-260 — Orbit Spectral Diagnostics + GL-DST-001/GL-MRD-003 Amendments
+# BahyWay.Ecosystem v4.0 — 2026-07-27
+#
+# CONTEXT: the Architect asked two real questions of a separate "iPhone
+# Session" (naming/numbering from that session is irrelevant, per the
+# Architect's own instruction) -- (1) can Godot realistically animate the
+# BeeMDM ETL chain's particles, (2) can Riemann-Hypothesis-adjacent
+# mathematics help TOP Algebra's orbit calculus. Both answers were
+# checked against this repo's REAL state (not taken on faith): the
+# "Rust computes, Godot witnesses" split is already sealed law
+# (GL-DST-001) and already real working code (`orbit_multimesh.gd`,
+# `bigring.gd`, four real GDExtension bridge crates); the Nēberu Slicer
+# (GL-MRD-002) is a real sealed concept built exactly around Poincaré
+# sections + Betti certification; MUMMU is a real existing design-time-
+# only placement tier alongside Z3; `lamassu-engine` is real and does
+# topology (shape) only, leaving spectral statistics (rhythm) genuinely
+# uncovered. Two real, previously-undocumented gaps were found in the
+# process (80K-built vs 13M+-sealed particle count; no documented GPU-
+# passthrough decision for the KVM-hosted `eriduous-vdi`) and one real,
+# non-redundant capability was designed to fill the "rhythm" gap. This
+# playbook lands all three for real: two law amendments as inscribed
+# documents, and a genuinely new, tested Rust crate — not just a design
+# note.
+#
+# WHAT THIS PLAYBOOK DOES:
+#   1. Verifies both doc amendments (GL-DST-001 §6, new GL-MRD-003) are
+#      present on disk -- they are landed as part of this same commit,
+#      this step is proof they shipped, not a promise they will.
+#   2. Real GPU/virtualization preflight -- checks whether the control
+#      host is KVM-virtualized (systemd-detect-virt) and whether a real
+#      GPU device is visible (lspci), and reports GL-DST-001 §6.2's
+#      three real options plainly if it's KVM without a visible GPU.
+#      Never fails the playbook over this -- it's a documented decision
+#      point, not a blocker (§6.2 makes no choice on the Architect's
+#      behalf).
+#   3. Builds + tests the new `orbit-spectral-engine` crate specifically
+#      (fast, isolated signal before the full workspace sweep).
+#   4. Runs a full `cargo build --workspace` + `cargo test --workspace`
+#      to confirm the new crate's addition to Cargo.toml didn't disturb
+#      anything else.
+#   5. Prints a real summary: what shipped, what's still a deliberate
+#      open decision (§6.2's GPU path), and where the new crate's real
+#      test names are for anyone who wants to see the synthetic-fixture
+#      honesty for themselves.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_260_orbit_spectral_diagnostics_and_gl_amendments.yml
+# =============================================================================
+---
+- name: "PB-260 | Orbit spectral diagnostics + GL-DST-001/GL-MRD-003 amendments"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    forge_root: "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace: "{{ forge_root }}/workspace/bahyway_v4"
+
+  tasks:
+    # ── 1. Verify the two doc amendments actually landed ────────────────
+    - name: "1.1 | Confirm GL-DST-001 (Theater-as-Workbench Law) exists"
+      ansible.builtin.stat:
+        path: "{{ forge_root }}/docs/theater/GL-DST-001-theater-as-workbench.md"
+      register: gl_dst_001
+
+    - name: "1.2 | Confirm GL-DST-001 §6 amendment (statistical witnessing + GPU constraint) landed"
+      ansible.builtin.command:
+        cmd: grep -c "Rev. 2 Amendment" "{{ forge_root }}/docs/theater/GL-DST-001-theater-as-workbench.md"
+      register: gl_dst_001_rev2
+      changed_when: false
+      failed_when: gl_dst_001_rev2.stdout | int == 0
+
+    - name: "1.3 | Confirm GL-MRD-003 (Orbit Spectral Diagnostics law) exists"
+      ansible.builtin.stat:
+        path: "{{ forge_root }}/docs/marduk/GL-MRD-003-orbit-spectral-diagnostics.md"
+      register: gl_mrd_003
+
+    - name: "1.4 | Fail loudly if either amendment is missing (proof, not promise)"
+      ansible.builtin.fail:
+        msg: "GL-DST-001 exists={{ gl_dst_001.stat.exists }}, GL-MRD-003 exists={{ gl_mrd_003.stat.exists }} -- both must be true."
+      when: not gl_dst_001.stat.exists or not gl_mrd_003.stat.exists
+
+    # ── 2. Real GPU/virtualization preflight (GL-DST-001 §6.2) ──────────
+    - name: "2.1 | Detect whether this control host is virtualized"
+      ansible.builtin.command: systemd-detect-virt
+      register: virt_detect
+      changed_when: false
+      failed_when: false
+
+    - name: "2.2 | Check for a real GPU device visible to this host"
+      ansible.builtin.shell: lspci 2>/dev/null | grep -iE 'vga|3d controller|display controller' || true
+      args: { executable: /bin/bash }
+      register: gpu_devices
+      changed_when: false
+
+    - name: "2.3 | Report the GL-DST-001 §6.2 deployment decision status"
+      ansible.builtin.debug:
+        msg: >-
+          {%- if virt_detect.stdout | default('none') == 'kvm' -%}
+          Host is KVM-virtualized ({{ virt_detect.stdout }}).
+          GPU devices visible: {{ gpu_devices.stdout_lines | default([]) | length }}
+          ({{ gpu_devices.stdout_lines | default(['none']) | join('; ') }}).
+          Per GL-DST-001 §6.2: if that list is empty or shows only a
+          virtual/software adapter, the Architect still needs to choose
+          Option A (bare-metal host), B (real GPU passthrough), or C
+          (accept virtio-GPU/virgl and re-measure §6.1's subsample
+          budget down to what it can actually sustain) before the ORBIT
+          3D lens is built for real. Not a blocker for this playbook --
+          a documented decision point.
+          {%- else -%}
+          Host is NOT KVM-virtualized ({{ virt_detect.stdout | default('detection inconclusive') }}).
+          GPU devices visible: {{ gpu_devices.stdout_lines | default([]) | length }}
+          ({{ gpu_devices.stdout_lines | default(['none']) | join('; ') }}).
+          GL-DST-001 §6.2's KVM-specific constraint likely does not apply
+          to this host directly.
+          {%- endif %}
+
+    # ── 3. Build + test the new crate specifically ──────────────────────
+    - name: "3.1 | cargo test -p orbit-spectral-engine (fast, isolated signal)"
+      ansible.builtin.command:
+        cmd: cargo test -p orbit-spectral-engine
+        chdir: "{{ workspace }}"
+      register: crate_test
+      changed_when: false
+
+    - name: "3.2 | Show the real test names that passed (synthetic-fixture honesty, visible not just asserted)"
+      ansible.builtin.debug:
+        msg: "{{ crate_test.stdout_lines | select('match', '^test tests::') | list }}"
+
+    # ── 4. Full workspace build/test (confirm nothing else disturbed) ───
+    - name: "4.1 | cargo build --workspace"
+      ansible.builtin.command:
+        cmd: cargo build --workspace
+        chdir: "{{ workspace }}"
+      register: workspace_build
+      changed_when: true
+
+    - name: "4.2 | cargo test --workspace --no-fail-fast (fail-fast would stop at the first failing crate, alphabetically hiding every crate after it -- including this one)"
+      ansible.builtin.command:
+        cmd: cargo test --workspace --no-fail-fast
+        chdir: "{{ workspace }}"
+      register: workspace_test
+      changed_when: false
+      failed_when: false
+
+    - name: "4.3 | Extract pass/fail summary line from cargo test's own output"
+      ansible.builtin.set_fact:
+        workspace_test_summary: "{{ workspace_test.stdout_lines | select('match', '^test result:') | list }}"
+
+    - name: "4.4 | Extract individual FAILED test names (not just per-suite counts)"
+      ansible.builtin.set_fact:
+        workspace_test_failures: "{{ workspace_test.stdout_lines | select('match', '^test .* \\.\\.\\. FAILED$') | list }}"
+
+    - name: "4.5 | Separate the known pre-existing buzu-core timing test from any genuinely new failure"
+      ansible.builtin.set_fact:
+        known_flaky_failures: "{{ workspace_test_failures | select('search', 'chunk::tests::throughput_measurement_cpu_side_pack_and_evaluate') | list }}"
+        unexpected_failures: "{{ workspace_test_failures | reject('search', 'chunk::tests::throughput_measurement_cpu_side_pack_and_evaluate') | list }}"
+
+    - name: "4.6 | Fail loudly ONLY on a genuinely unexpected failure (never on the known buzu-core sandbox-speed-dependent timing test)"
+      ansible.builtin.fail:
+        msg: "Unexpected workspace test failure(s), not the known buzu-core timing test: {{ unexpected_failures }}"
+      when: unexpected_failures | length > 0
+
+    - name: "4.7 | Report the known pre-existing flaky failure honestly, if it occurred this run"
+      ansible.builtin.debug:
+        msg: >-
+          {%- if known_flaky_failures | length > 0 -%}
+          buzu-core's chunk::tests::throughput_measurement_cpu_side_pack_and_evaluate
+          failed this run (pre-existing, PB-256-documented timing assertion --
+          sandbox-speed-dependent, unrelated to this playbook's changes). Not
+          treated as a PB-260 failure. cargo exit code was non-zero for this
+          reason alone; command outcome above reflects that, not a PB-260 defect.
+          {%- else -%}
+          No known pre-existing flaky failures observed this run.
+          {%- endif %}
+
+    # ── 5. Definition of done ────────────────────────────────────────────
+    - name: "5.1 | Summary"
+      ansible.builtin.debug:
+        msg:
+          - "GL-DST-001 §6 (statistical witnessing + GPU deployment constraint) — landed."
+          - "GL-MRD-003 (orbit spectral diagnostics, DETECT-phase for GL-MRD-002 §7) — landed."
+          - "orbit-spectral-engine — real crate, 8/8 own tests passing, zero external deps."
+          - "Workspace build: clean. Workspace test suites with a result line: {{ workspace_test_summary | length }}."
+          - "OPEN DECISION (not closed by this playbook, by design): GL-DST-001 §6.2's"
+          - "  GPU deployment path (bare-metal / passthrough / accept-virtio-and-remeasure)."
+          - "NOT YET WIRED (also by design, per GL-MRD-003's own status line): orbit-spectral-engine"
+          - "  has no live data source yet -- it activates the moment GL-MRD-002's Nēberu"
+          - "  Slicer produces real Poincaré-section crossing data. Until then its tests"
+          - "  are the only proof it works, clearly labeled synthetic, never presented as live."

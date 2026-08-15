@@ -1,0 +1,186 @@
+---
+# ════════════════════════════════════════════════════════════════════════════
+#  playbook_142_namtar_domain_scaffold_reconciled.yml
+#  BahyWay.Ecosystem v4.0 — PB-142 Reconciled: crate already built, query fixed
+#
+#  SCP to EriduOS-VDI then run:
+#    ansible-playbook playbook_142_namtar_domain_scaffold_reconciled.yml -i "localhost," -c local -v
+#
+#  Why this file exists (not the original playbook_142_namtar_domain_scaffold.yml):
+#    The original assumed namtar-kaki did not exist yet. It already does —
+#    a prior session built it for real (crates/namtar-kaki, 4 passing
+#    tests, already registered in the workspace Cargo.toml). Re-running
+#    the original's `cargo new` task is harmless (it's already guarded by
+#    `when: not crate_stat.stat.exists`), but its embedded HeptaScript
+#    query template uses the old colon-separated syntax confirmed broken
+#    against the current parser (see PB-112/PB-141 reconciliations).
+#    Rewrote it in the current v2.0 WHO/ORBITAL/HOW_MUCH dialect and
+#    parse-verified it against the real parser. Also runs the crate's own
+#    test suite to prove it's real, not just present.
+# ════════════════════════════════════════════════════════════════════════════
+- name: "PB-142 (Reconciled) | NAMTAR Domain Module — crate confirmed real, query fixed"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    forge_root:    "{{ ansible_env.HOME }}/Forge/EnkiDB"
+    workspace:     "{{ forge_root }}/workspace/bahyway_v4"
+    crates_dir:    "{{ workspace }}/crates"
+    cargo:         "{{ ansible_env.HOME }}/.cargo/bin/cargo"
+    docs_dir:      "{{ forge_root }}/docs"
+    session_date:  "{{ ansible_date_time.date }}"
+    report_file:   "{{ forge_root }}/docs/SHEDU/PB142_RECONCILED_{{ session_date }}.txt"
+    crate_name:    "namtar-kaki"
+    config_dir:    "{{ forge_root }}/config/namtar"
+    target_branch: "claude/iphone-playbooks-crosstribe-eval-nbc5sw"
+
+  tasks:
+
+    - name: "PREP  | Ensure directories exist"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ docs_dir }}/NAMTAR"
+        - "{{ forge_root }}/docs/SHEDU"
+        - "{{ config_dir }}"
+
+    - name: "VERIFY | Workspace present (scp'd from laptop)"
+      ansible.builtin.stat:
+        path: "{{ workspace }}/Cargo.toml"
+      register: ws_check
+
+    - name: "FAIL | Workspace not synced — run the laptop-side sync first"
+      ansible.builtin.fail:
+        msg: >
+          {{ workspace }}/Cargo.toml not found on this host. EriduOS-VDI has
+          no GitHub access. On your Fedora laptop: git pull origin
+          {{ target_branch }}, then scp -r workspace/bahyway_v4
+          bahaa@eriduos-vdi:{{ workspace }}. Re-run this playbook after that.
+      when: not ws_check.stat.exists
+
+    - name: "CHECK | Does {{ crate_name }} already exist?"
+      ansible.builtin.stat:
+        path: "{{ crates_dir }}/{{ crate_name }}/Cargo.toml"
+      register: crate_stat
+
+    - name: "SCAFFOLD | cargo new --lib {{ crate_name }} (only if genuinely missing)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} new --lib {{ crate_name }}"
+        chdir: "{{ crates_dir }}"
+      when: not crate_stat.stat.exists
+      register: cargo_new
+      changed_when: cargo_new.rc == 0
+
+    - name: "TEST  | namtar-kaki test suite (proves it's real, not just present)"
+      ansible.builtin.command:
+        cmd: "{{ cargo }} test -p namtar-kaki"
+        chdir: "{{ workspace }}"
+      register: namtar_test
+      changed_when: false
+      failed_when: "'test result: ok' not in namtar_test.stdout"
+
+    # ── BC-NAMTAR-001 ADR stub (only if missing — don't clobber a real one) ────
+    - name: "CHECK | BC-NAMTAR-001 stub already present?"
+      ansible.builtin.find:
+        paths: "{{ docs_dir }}/NAMTAR"
+        patterns: "BC-NAMTAR-001_*.md"
+      register: bc_namtar_find
+
+    - name: "WRITE | BC-NAMTAR-001 Architecture Design Reference stub (if missing)"
+      ansible.builtin.copy:
+        dest: "{{ docs_dir }}/NAMTAR/BC-NAMTAR-001_NAMTAR_STUB_{{ session_date }}.md"
+        mode: "0644"
+        content: |
+          # BC-NAMTAR-001 — NAMTAR Sacred Burial Intelligence
+          ## BahyWay.Ecosystem v4.0 | Status: SCAFFOLD (crate: IMPLEMENTED, tests passing) | {{ session_date }}
+
+          ### Deity Reference
+          NAMTAR — Mesopotamian messenger of fate, attendant of Ereškigal,
+          queen of the underworld. Guardian between the living and the dead.
+
+          ### Domain
+          Sacred burial site mapping, preservation status monitoring,
+          archaeological risk assessment, cultural heritage provenance.
+
+          ### Particle Classes
+          | Class       | kaki_type | kaki_role | Description |
+          |---|---|---|---|
+          | SiteRecord  | 0x01 | KISHIB | Site identity (GPS, heritage tier) |
+          | StatusEvent | 0x02 | ZIKRU  | Preservation state change |
+          | ThreatSignal| 0x02 | PARZU  | Risk event (looting/conflict/construction) |
+          | ExternalRef | 0x03 | CrossTribe | UNESCO/govt/satellite imagery reference |
+
+          ### TIAMAT Index
+          PHI (Preservation Health Index), stub formula implemented in
+          `namtar-kaki::compute_phi()` — full Mamdani FIS still pending.
+
+          ### Tribe ID
+          `namtar_iraq` (primary), `namtar_regional` (extension, not yet built)
+
+          ### Status
+          Crate `namtar-kaki` is real: 4 tests passing, registered in the
+          workspace. Full BC-NAMTAR-001 ADR (Mamdani FIS, satellite imagery
+          adapter, UNESCO CrossTribe feed) still pending.
+      when: bc_namtar_find.matched == 0
+
+    - name: "WRITE | NAMTAR HeptaScript query template (v2.0 syntax, parse-verified)"
+      ansible.builtin.copy:
+        dest: "{{ config_dir }}/namtar_threat_query.hs"
+        mode: "0644"
+        content: |
+          # NAMTAR — Active threat sites query (Anti-SQL HeptaScript)
+          # v2.0 syntax (WHO/ORBITAL/HOW_MUCH) — the original PRESENT/WHO:/
+          # WHAT:/WHEN:/WHERE:/HOW:/LIMIT: colon-syntax is confirmed broken
+          # against the current parser (see PB-112 reconciliation).
+
+          WHO namtar_iraq.E
+          ORBITAL 0 .. 99999999
+          HOW_MUCH LIMIT 100
+          ANCHOR AUTO
+
+    - name: "VERIFY | NAMTAR query parses against the real current parser"
+      ansible.builtin.shell: |
+        cat > /tmp/pb142_parse_check.rs << 'EOF'
+        fn main() {
+            let q = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
+            let q: String = q.lines().filter(|l| !l.trim_start().starts_with('#')).collect::<Vec<_>>().join("\n");
+            match heptascript::parse_query(&q) {
+                Ok(_)  => println!("PARSE_OK"),
+                Err(e) => { println!("PARSE_FAIL: {:?}", e); std::process::exit(1); }
+            }
+        }
+        EOF
+        mkdir -p "{{ workspace }}/crates/heptascript/examples"
+        cp /tmp/pb142_parse_check.rs "{{ workspace }}/crates/heptascript/examples/pb142_parse_check.rs"
+        cd "{{ workspace }}"
+        {{ cargo }} run -p heptascript --example pb142_parse_check -- "{{ config_dir }}/namtar_threat_query.hs"
+        rm -f "{{ workspace }}/crates/heptascript/examples/pb142_parse_check.rs"
+      register: parse_check
+      changed_when: false
+      failed_when: "'PARSE_OK' not in parse_check.stdout"
+
+    - name: "PATCH | Confirm {{ crate_name }} registered in workspace Cargo.toml"
+      ansible.builtin.lineinfile:
+        path: "{{ workspace }}/Cargo.toml"
+        insertafter: '^members = \['
+        line: '    "crates/{{ crate_name }}",'
+        state: present
+
+    - name: "WRITE | Report"
+      ansible.builtin.copy:
+        dest: "{{ report_file }}"
+        mode: "0644"
+        content: |
+          BahyWay.Ecosystem v4.0 — PB-142 Reconciled Report
+          Date   : {{ session_date }}
+          Crate  : namtar-kaki — CONFIRMED REAL, tests: {{ namtar_test.stdout | trim }}
+          Query  : namtar_threat_query.hs rewritten to v2.0 syntax, parse-verified:
+            {{ parse_check.stdout | trim }}
+          Next   : PB-143 — EREŠKIGAL domain reconciliation
+
+    - name: "DONE  | PB-142 Reconciled COMPLETE"
+      ansible.builtin.debug:
+        msg: "PB-142 reconciled — namtar-kaki confirmed real (4 tests), query fixed and verified. Report: {{ report_file }}"
