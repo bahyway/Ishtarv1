@@ -3,7 +3,7 @@ extends Node3D
 # =============================================================================
 # Onion Layers — 3D Interactive Tower — 2026-07-21
 #
-# Real data, transcribed directly from docs/BAHYWAY_ONION_LAYERS.html (itself
+# Real data, transcribed directly from docs/09_observatory/BAHYWAY_ONION_LAYERS.html (itself
 # transcribed from the real workspace/bahyway_v4/Cargo.toml, 163 members,
 # sealed by playbook_197_onion_layers_design_and_artifact.yml, 2026-07-19).
 # Same 25 layers + 1 ghost layer, same 5 functional band colors -- this is a

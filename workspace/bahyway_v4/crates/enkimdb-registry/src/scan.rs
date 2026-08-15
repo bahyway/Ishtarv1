@@ -183,7 +183,7 @@ description       = "analysis"
         let names: Vec<&str> = profiles.iter().map(|p| p.crate_name.as_str()).collect();
         assert!(names.contains(&"dagan-engine"));
         assert!(names.contains(&"girra-engine"));
-        assert!(names.contains(&"anu-tribe-hotindex"));
+        assert!(names.contains(&"elu-tribe-hotindex"));
         assert!(names.contains(&"acoustic-leak-engine"));
         assert!(names.contains(&"tupsimati"));
         assert!(names.contains(&"enkimdb-registry")); // finds itself

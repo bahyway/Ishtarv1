@@ -4,11 +4,11 @@
 //! (`AkkadianRoot::from_phrase` + `SargonKdf::with_salt` +
 //! `AkkadianCipher::open` + per-entry `verify_seal()` + "keep the
 //! strongest passport") lived twice: once in
-//! `shakkanakku::web_auth::open_vault_and_authenticate` (private,
+//! `anu_governor::web_auth::open_vault_and_authenticate` (private,
 //! HTTP-session-shaped), once duplicated in `kupru-vault-cli` (shell-
 //! callable). A third copy for a server-side authorizer would be one too
 //! many — this crate is that one real implementation, callable from any
-//! Rust caller. `shakkanakku`'s own module is left untouched (BLK-1: no
+//! Rust caller. `anu_governor`'s own module is left untouched (BLK-1: no
 //! blind edits to sealed source) — it can migrate to this crate later,
 //! that migration is not done here.
 
@@ -18,7 +18,7 @@ use kupru::{AkkadianCipher, AkkadianRoot, SargonKdf, SargonPassport};
 use serde::Deserialize;
 
 /// Must match `kupru-gdext`'s `VAULT_ROOT_PHRASE` and
-/// `shakkanakku::web_auth::VAULT_ROOT_PHRASE` exactly, or every real
+/// `anu_governor::web_auth::VAULT_ROOT_PHRASE` exactly, or every real
 /// vault the Sargon Passport Manager / Gilgamesh Master Key tools write
 /// fails to decrypt here.
 pub const VAULT_ROOT_PHRASE: &str = "sargon-vault-root";

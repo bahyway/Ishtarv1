@@ -85,7 +85,7 @@ session:
 - `enkiddb::writenode::WriteNode::supersede_document(old, new, reason,
   epoch)` — journals it under the new `EventCause::DocumentSuperseded`
   (`enkidb_journal::EventCause`, discriminant `0x77`).
-- Wired into Uruinimgina (`crates/shakkanakku/src/docpulse.rs` stage 4): a
+- Wired into Uruinimgina (`crates/anu-governor/src/docpulse.rs` stage 4): a
   durable `doc_kaki_registry.jsonl` (path → last-minted Kaki, later lines
   win) is read at the start of each pulse; when a promoted document's path
   already has a prior real Kaki on record, this run's fresh mint calls
@@ -114,7 +114,7 @@ drive it); the pattern above is the template when one is needed.
 per ingested document (`ingest_document_from_path`) before this ADR was
 written — `enkiddb-ingest`'s bulk CLI has treated "authoring" as "walked and
 ingested" all along. This session wires the same real pipeline into
-Shakkanakku's Uruinimgina tab (`crates/shakkanakku/src/docpulse.rs`, stage
+Shakkanakku's Uruinimgina tab (`crates/anu-governor/src/docpulse.rs`, stage
 4), so a document promoted through Uruinimgina gets the identical treatment
 one file at a time, per pulse, instead of only in a bulk directory walk:
 
@@ -143,7 +143,7 @@ The equivalent for PBs is real, tested code as of this session:
 
 - `enkimdb::pb::PbProfile`/`scan_pbs(repo_root, triage_doc)` — scans
   `playbooks/*.yml` for real, numbered files (`playbook_<N>_...yml`),
-  cross-referenced against `docs/PLAYBOOK_EXECUTION_TRIAGE.md`'s own
+  cross-referenced against `docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md`'s own
   Status/Note columns when a row exists. A real bug was caught and fixed
   while building this: two different files CAN legitimately share one PB
   number (the triage doc's own fixture documents this — `playbook_90_a.yml`
@@ -159,7 +159,7 @@ The equivalent for PBs is real, tested code as of this session:
   triage row exists. Mirrors `RegistryEmitter`'s exact shape.
 - `enkimdb::writenode::WriteNode::ingest_pb` — journals it under the new
   `EventCause::PbRegistered` (`0x76`).
-- `crates/shakkanakku/src/pb_mint.rs` — the corpus-scan trigger: every
+- `crates/anu-governor/src/pb_mint.rs` — the corpus-scan trigger: every
   real Corpus-tab run (`runner.rs`) scans `playbooks/` and mints any real,
   numbered PB not yet in a durable JSONL registry
   (`<chronicle_dir>/pb_kaki_registry.jsonl`, keyed by filename, matching
@@ -222,9 +222,9 @@ The equivalent for PBs is real, tested code as of this session:
 - `crates/enkiddb/src/emitter.rs` (`emit_supersession`), `writenode.rs`
   (`supersede_document`, `ingest_document_from_path`): the real document
   mint + supersession pipeline
-- `crates/shakkanakku/src/docpulse.rs`: Uruinimgina's stage 4 (real mint +
+- `crates/anu-governor/src/docpulse.rs`: Uruinimgina's stage 4 (real mint +
   supersession + materialize) and stage 5 (gated official-repo landing)
-- `crates/shakkanakku/src/pb_mint.rs`: the real PB corpus-scan trigger,
+- `crates/anu-governor/src/pb_mint.rs`: the real PB corpus-scan trigger,
   wired into `runner.rs`
 - `crates/enkidb-journal/src/event_cause.rs`: `EventCause::PbRegistered`
   (`0x76`), `EventCause::DocumentSuperseded` (`0x77`)

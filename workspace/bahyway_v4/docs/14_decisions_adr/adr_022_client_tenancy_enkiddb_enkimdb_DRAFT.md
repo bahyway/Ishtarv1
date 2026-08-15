@@ -24,7 +24,7 @@ where it doesn't match intent, not assume it's already right.**
 
 ## The real 7 Types, for reference
 
-Per `docs/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`: EnkiDB (7001), EnkiDW (7002),
+Per `docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`: EnkiDB (7001), EnkiDW (7002),
 EnkiSDB (7003), EnkiODB (7004), EnkiQDB (7005), EnkiMDB (7006), EnkiDDB
 (7007) — each a CQRS Write/Read pair. This session's own real work
 confirms EnkiDDB holds documentation (Markdown/playbook-doc corpus,

@@ -20,7 +20,7 @@ use crate::pattern_emitter::PatternEmitter;
 use crate::pb::PbProfile;
 use crate::pb_emitter::PbEmitter;
 use crate::registry_emitter::RegistryEmitter;
-use crate::run_record::ShakkanakkuRunRecordSpec;
+use crate::run_record::AnuGovernorRunRecordSpec;
 use crate::tablet::TabletProfile;
 use crate::tablet_emitter::TabletEmitter;
 
@@ -73,7 +73,7 @@ impl WriteNode {
 
     /// Mint a real, numbered playbook's Identity-Kaki (role=Parzu),
     /// journal its `pb.*` particles under `EventCause::PbRegistered`.
-    /// Callers (Shakkanakku's corpus scan) are responsible for calling
+    /// Callers (AnuGovernor's corpus scan) are responsible for calling
     /// this only for a PB that doesn't already have a minted Identity —
     /// this method itself always mints a fresh one, it does not check.
     pub fn ingest_pb(&mut self, profile: &PbProfile, epoch: u32) -> IdentityKaki {
@@ -269,9 +269,9 @@ impl WriteNode {
         record_kaki
     }
 
-    // ── Shakkanakku run-confirmation registry (2026-07-29) ─────────────
+    // ── AnuGovernor run-confirmation registry (2026-07-29) ─────────────
     //
-    // Daily-workflow request: "run Shakkanakku, get report, debug,
+    // Daily-workflow request: "run AnuGovernor, get report, debug,
     // re-run" was missing a queryable confirmation registry that also
     // records who ran it and at what privilege level, specifically so an
     // authority block is distinguishable from a genuine technical
@@ -279,12 +279,12 @@ impl WriteNode {
     // when the run was unauthenticated (`vault_check_enabled=false`) --
     // never a fabricated identity.
 
-    /// Ingest one Shakkanakku run's confirmation record — mints its own
+    /// Ingest one AnuGovernor run's confirmation record — mints its own
     /// Identity-Kaki (role=Zikru), journals it under
-    /// `EventCause::ShakkanakkuRunRecorded`.
-    pub fn ingest_shakkanakku_run_record(&mut self, spec: &ShakkanakkuRunRecordSpec, epoch: u32) -> IdentityKaki {
+    /// `EventCause::AnuGovernorRunRecorded`.
+    pub fn ingest_anu_governor_run_record(&mut self, spec: &AnuGovernorRunRecordSpec, epoch: u32) -> IdentityKaki {
         let emitter = RegistryEmitter::new(&self.minter);
-        let (record_kaki, particles) = emitter.emit_shakkanakku_run(spec);
+        let (record_kaki, particles) = emitter.emit_anu_governor_run(spec);
 
         let eav = particles.iter().map(particle_to_eav_triple).collect();
         let event_kaki = EventKaki::try_from_kaki(self.minter.event(KakiRole::Zikru))
@@ -293,7 +293,7 @@ impl WriteNode {
         self.journal
             .append(
                 JournalEntry::new(event_kaki, record_kaki, epoch, eav)
-                    .with_event_cause(EventCause::ShakkanakkuRunRecorded),
+                    .with_event_cause(EventCause::AnuGovernorRunRecorded),
             )
             .expect("append to an in-memory Journal is infallible in this shard config");
 
@@ -430,10 +430,10 @@ mod tests {
         assert_eq!(kaki.role(), KakiRole::Zikru);
     }
 
-    // ── Shakkanakku run-confirmation registry ───────────────────────────
+    // ── AnuGovernor run-confirmation registry ───────────────────────────
 
-    fn sample_run_spec() -> ShakkanakkuRunRecordSpec {
-        ShakkanakkuRunRecordSpec {
+    fn sample_run_spec() -> AnuGovernorRunRecordSpec {
+        AnuGovernorRunRecordSpec {
             run_id: "20260729T120000Z".to_string(),
             started_at: 1_000,
             finished_at: 1_060,
@@ -450,18 +450,18 @@ mod tests {
             os_username: Some("architect".to_string()),
             os_groups_csv: Some("architect,wheel,bahyway-architect".to_string()),
             os_bahyway_role: Some("bahyway-architect".to_string()),
-            report_path: "docs/SHEDU/shakkanakku_reports/report_20260729T120000Z.md".to_string(),
+            report_path: "docs/SHEDU/anu_governor_reports/report_20260729T120000Z.md".to_string(),
         }
     }
 
     #[test]
-    fn ingest_shakkanakku_run_record_journals_a_real_entry_under_run_recorded() {
+    fn ingest_anu_governor_run_record_journals_a_real_entry_under_run_recorded() {
         let mut wn = write_node();
-        let kaki = wn.ingest_shakkanakku_run_record(&sample_run_spec(), 1);
+        let kaki = wn.ingest_anu_governor_run_record(&sample_run_spec(), 1);
 
         let history = wn.journal().read_particle_history(&kaki);
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0].event_cause(), Some(EventCause::ShakkanakkuRunRecorded));
+        assert_eq!(history[0].event_cause(), Some(EventCause::AnuGovernorRunRecorded));
         // 10 base fields + 3 operator_* + 3 os_* + 1 event_cause triple = 17.
         assert_eq!(history[0].eav.len(), 17);
     }
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn run_record_kaki_is_zikru_role() {
         let mut wn = write_node();
-        let kaki = wn.ingest_shakkanakku_run_record(&sample_run_spec(), 1);
+        let kaki = wn.ingest_anu_governor_run_record(&sample_run_spec(), 1);
         assert_eq!(kaki.role(), KakiRole::Zikru);
     }
 }

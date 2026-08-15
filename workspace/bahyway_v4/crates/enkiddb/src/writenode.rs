@@ -105,7 +105,7 @@ impl WriteNode {
     /// FIXED (superseded an earlier version of this method that wrote
     /// `link.target`/`link.description` directly onto `source`'s own
     /// entity, one call per edge): a `source` with more than one outgoing
-    /// edge -- exactly `shakkanakku::pb_catalog`'s case, one location
+    /// edge -- exactly `anu_governor::pb_catalog`'s case, one location
     /// linked to every playbook found there -- silently lost all but the
     /// last-journaled edge the moment it was read back through the Read
     /// Node. Both `ReadNode::query` and `CachedReadNode::query` fold a
@@ -192,7 +192,7 @@ impl WriteNode {
     /// Mint a bare, title-only marker document -- no headers/body/code,
     /// just `meta.title` plus a `meta.collection` tag. Used for nodes that
     /// exist to be linked TO rather than to carry real document content of
-    /// their own (e.g. `shakkanakku::pb_catalog`'s one marker per source
+    /// their own (e.g. `anu_governor::pb_catalog`'s one marker per source
     /// location, so a location becomes a real, navigable graph node in
     /// Graph Explorer rather than a plain string attribute).
     pub fn mint_marker(&mut self, title: &str, collection: &str, epoch: u32) -> IdentityKaki {
@@ -232,7 +232,7 @@ impl WriteNode {
     /// same shape and same reasoning as `tag_gate`: a single `meta.domain`
     /// particle per entity, last-write-wins is the correct semantics for
     /// a single current classification. The domain taxonomy itself
-    /// (7 names per gate) is `shakkanakku`'s own concern, not a sealed
+    /// (7 names per gate) is `anu_governor`'s own concern, not a sealed
     /// ecosystem-wide concept like `HeptaGate` -- this method only ever
     /// writes whatever domain name string it's given.
     pub fn tag_domain(&mut self, doc: IdentityKaki, domain_name: &str, epoch: u32) {
@@ -278,7 +278,7 @@ impl WriteNode {
     ///
     /// For a caller that deliberately reuses one stable identity for
     /// content it has seen before (content-hash dedup, e.g.
-    /// `shakkanakku::pb_catalog`) -- see `DocumentEmitter::emit_document_for`'s
+    /// `anu_governor::pb_catalog`) -- see `DocumentEmitter::emit_document_for`'s
     /// own doc comment for why skipping this step silently loses that
     /// document's content the moment a NEW generation is materialized and
     /// promoted, even though its identity and any fresh links to it still

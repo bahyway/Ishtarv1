@@ -19,6 +19,15 @@
 
 ---
 
+**This is the working development repository.** For the official,
+final-build snapshot of BahyWay.Ecosystem v4.0 — the one to trust among
+the many `bahyway_v4`-related repositories that have accumulated over
+time — see **[bahyway/Ishtarv1](https://github.com/bahyway/Ishtarv1)**.
+Its initial cut was taken from this repo's commit
+`ed5f0eb7c093fd4e1131b12e9be6d05a481cff42` (2026-08-15).
+
+---
+
 ## KAKI — Sovereign Declaration
 
 **KAKI (Knowledge–Akkadian–Keyword–Identity)**

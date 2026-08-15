@@ -63,8 +63,8 @@ const READ_TIMEOUT: u64 = 30;
 const WRITE_TIMEOUT: u64 = 120;
 
 fn bind_addr() -> String {
-    // 7007 is the canonical EnkiDDB port (docs/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md,
-    // docs/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md, docs/dubsar-theater/WIZ-001);
+    // 7007 is the canonical EnkiDDB port (docs/00_codex/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md,
+    // docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md, docs/dubsar-theater/WIZ-001);
     // corrected 2026-07-31 from the stray 7102 default, which matched no doc
     // and no other server's write=read+10 convention.
     env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:7007".to_string())

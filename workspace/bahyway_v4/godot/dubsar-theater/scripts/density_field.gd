@@ -3,7 +3,7 @@
 #
 # Built 2026-07-29, from validating a shared document on ParaView/vaex/
 # HOOMD-blue's billion-element visualization patterns against this repo's
-# real Sage-pattern conventions (docs/WHAT_IS_BAHYWAY.md's "Patterns
+# real Sage-pattern conventions (docs/00_codex/WHAT_IS_BAHYWAY.md's "Patterns
 # Arsenal"). vaex's own honesty about what "visualizing a billion" means
 # is the pattern here: it never draws individual points at all -- it
 # renders a binned density image where every pixel is an EXACT aggregate

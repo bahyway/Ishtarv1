@@ -1,7 +1,7 @@
 //! orbit-spectral-engine — nearest-neighbor spacing statistics for orbit
 //! return-time sequences. Rhythm, not shape: this crate complements
 //! `lamassu-engine` (persistent homology — GOLDEN/FUZZY/DEAD shape
-//! signatures) rather than duplicating it. See `docs/marduk/
+//! signatures) rather than duplicating it. See `docs/01_mathematics/
 //! GL-MRD-003-orbit-spectral-diagnostics.md` for the sealed concept this
 //! implements and its place in GL-MRD-002's Analysis-to-Solution Law
 //! (this crate is the DETECT-phase signal).

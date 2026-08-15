@@ -49,8 +49,8 @@ const READ_TIMEOUT: u64 = 30;
 const WRITE_TIMEOUT: u64 = 120;
 
 fn bind_addr() -> String {
-    // 7006 is the canonical EnkiMDB port (docs/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md,
-    // docs/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md, docs/dubsar-theater/WIZ-001);
+    // 7006 is the canonical EnkiMDB port (docs/00_codex/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md,
+    // docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md, docs/dubsar-theater/WIZ-001);
     // corrected 2026-07-31 from the stray 7202 default, which matched no doc
     // and no other server's write=read+10 convention.
     env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:7006".to_string())
@@ -143,7 +143,7 @@ fn handle(mut stream: TcpStream, state: &RwLock<Option<Arc<Live>>>) -> io::Resul
         // caller's privilege_level, built for exactly this connection.
         // It is not called here because this connection carries no
         // credential to check it against -- this server has neither TLS
-        // nor any per-connection identity today (only shakkanakku-web
+        // nor any per-connection identity today (only anu-governor-web
         // does). Every `passport.*` row is currently readable by any
         // caller who can reach this port, same as every other namespace.
         // Wiring this for real needs TLS + a per-connection credential

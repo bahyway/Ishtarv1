@@ -232,7 +232,7 @@ func open_document_explorer() -> void:
 
 # 2026-07-21: Onion Layers 3D Tower (scenes/onion_tower_3d.tscn) -- the same
 # real 25-layer/163-crate dataset as the sealed 2D artifact
-# (docs/BAHYWAY_ONION_LAYERS.html), rendered as a stacked, interactive 3D
+# (docs/09_observatory/BAHYWAY_ONION_LAYERS.html), rendered as a stacked, interactive 3D
 # tower instead of nested flat circles. Owns its own Camera3D/Environment,
 # so it's a full scene switch like Grid & Orbit, not an overlay. Escape
 # inside onion_tower_3d.gd switches back to this scene.

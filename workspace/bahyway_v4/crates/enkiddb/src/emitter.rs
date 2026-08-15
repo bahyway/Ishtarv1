@@ -43,7 +43,7 @@ impl<'a> DocumentEmitter<'a> {
     /// an ALREADY-KNOWN `doc_kaki` instead of minting a fresh one.
     ///
     /// FIXED: without this, a caller that reuses a stable identity for
-    /// content it has already seen before (e.g. `shakkanakku::pb_catalog`'s
+    /// content it has already seen before (e.g. `anu_governor::pb_catalog`'s
     /// content-hash dedup, which deliberately reuses the same
     /// `IdentityKaki` for identical bytes seen again) had no way to
     /// re-journal that document's own particles under its known identity —

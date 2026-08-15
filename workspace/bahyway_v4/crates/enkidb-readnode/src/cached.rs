@@ -144,7 +144,7 @@ impl CachedReadNode {
 
         // One more O(n) pass over the already-resident `by_surrogate` (no
         // extra disk I/O -- everything here is already in RAM) to build the
-        // three Anu Index Stack members `heptascript::indexed::HeptaIndexes`
+        // three Elu Index Stack members `heptascript::indexed::HeptaIndexes`
         // also builds, for the reasons this struct's own doc comment gives.
         let spatial_hashes: [u32; 7] = SPATIAL_ATTRS.map(|name| bahyway_crc::crc16(name.as_bytes()) as u32);
         let mut orbital_pairs: Vec<(u64, u32)> = Vec::new();
@@ -712,7 +712,7 @@ mod tests {
         assert_eq!(res.measured, Some(heptascript::MeasureValue::Dense(500)));
     }
 
-    // ── Anu Index Stack wiring: nairu / radix / hepta_shell ─────────────────
+    // ── Elu Index Stack wiring: nairu / radix / hepta_shell ─────────────────
     //
     // These prove the same three previously-unwired indexes
     // (`heptascript::indexed`'s own tests prove them at the `HeptaIndexes`

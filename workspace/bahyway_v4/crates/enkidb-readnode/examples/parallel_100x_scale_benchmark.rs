@@ -2,7 +2,7 @@
 //!
 //! HONEST FRAMING (2026-07-21): this does not materialize 1 billion
 //! distinct particles on disk -- at ~96MB per 10M particles (measured,
-//! see docs/PB-221_SCALE_BENCHMARK_FINDINGS.md), 1B unique particles is
+//! see docs/17_troubleshooting/PB-221_SCALE_BENCHMARK_FINDINGS.md), 1B unique particles is
 //! ~9.6GB, which does not reliably fit this project's dev sandbox
 //! alongside everything else on the volume. What this DOES do, for
 //! real: generate and materialize one real 10M-particle corpus, load it

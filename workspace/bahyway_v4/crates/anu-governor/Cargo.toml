@@ -1,0 +1,108 @@
+[package]
+name              = "anu-governor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description       = "AnuGovernor 𒀭 (formerly Shakkanakku) — the BahyWay Governor: executes the playbook corpus, halts on MAJOR failures pending Architect ratification (CSR-08), generates remedy playbooks, seals reports with AkkadianSeal"
+
+[lib]
+name = "anu_governor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "anu-governor"
+path = "src/main.rs"
+
+[[bin]]
+# Browser-facing face: same engine (config/runner/remedy/report/chronicle),
+# served over plain HTTP so the browser — not a native window on a
+# decoration-less, GPU-less VDI compositor — owns resize and layout reflow.
+name              = "anu-governor-web"
+path              = "src/bin/anu_governor_web.rs"
+required-features = ["web"]
+
+[[bin]]
+# Headless face for Uruinimgina's docpulse (Reform & Pulse) engine -- runs
+# document ingestion into EnkiDDB from a TOML config and a terminal, no
+# "gui" feature required. See docs/20_meta_engine/URUINIMGINA_EXTERNAL_DOCS.md.
+name = "uruinimgina-cli"
+path = "src/bin/uruinimgina_cli.rs"
+
+[[bin]]
+# Headless multi-location playbook catalog (src/pb_catalog.rs) -- gathers
+# every real playbook file across every known historical/backup location
+# and mints/dedupes/collision-flags them into EnkiDDB's
+# PLAYBOOK_CATALOG_TRIBE_ID, so PB-289 can run it from a TOML config with
+# no windowing session required (same rationale as uruinimgina-cli).
+name = "pb-catalog-cli"
+path = "src/bin/pb_catalog_cli.rs"
+
+[features]
+default = ["gui"]
+gui = ["eframe", "egui", "egui_extras"]
+# Real auth (kupru passport sessions), real TLS (rustls, self-signed via
+# rcgen), real per-IP login defender — see src/web_auth.rs. HTTP itself is
+# still hand-rolled on std::net (this is a single-Architect local tool, not
+# a public service, so a minimal server is the right amount of machinery
+# and avoids pulling in a new async runtime) — only the security layer
+# needed new dependencies.
+web = ["dep:kupru", "dep:rustls", "dep:rustls-pemfile", "dep:rcgen", "dep:rand", "dep:subtle", "dep:base64"]
+
+[dependencies]
+serde             = { version = "1", features = ["derive"] }
+serde_json        = { version = "1" }
+toml              = { version = "0.8" }
+crossbeam-channel = { version = "0.5" }
+chrono            = { version = "0.4", default-features = false, features = ["clock"] }
+anyhow            = { version = "1" }
+ed25519-dalek     = { version = "2", features = ["rand_core"] }
+rand_core         = { version = "0.6", features = ["getrandom"] }
+hex               = { version = "0.4" }
+# Uruinimgina's EnkiDDB ingestion manifest (docpulse.rs): canonical SHA-256
+# for document identity. Already resolved in this workspace's lockfile via
+# ed25519-dalek's own dependency tree, so this is a direct-dependency
+# promotion, not a new crate in the build.
+sha2              = { version = "0.10" }
+# Required (not web-only): the run-confirmation registry's vault-auth gate
+# lives in the actual runner (runner.rs), which both `anu-governor` and
+# `anu-governor-web` share -- must work in the headless/default build too,
+# not only when `--features web` is on. No GUI/TLS deps of its own.
+kupru-vault       = { path = "../kupru-vault" }
+enkimdb           = { path = "../enkimdb" }
+# Uruinimgina's EnkiDDB ingestion stage (docpulse.rs): mints a real
+# Identity-Kaki per promoted document via enkiddb's own WriteNode/
+# DocumentEmitter pipeline (the same one enkiddb-ingest's bulk CLI uses),
+# instead of only writing a flat JSONL S0-inbox record.
+enkiddb           = { path = "../enkiddb" }
+enkidb-kaki       = { path = "../enkidb-kaki" }
+# Test-only (pb_catalog.rs's read-node round-trip regression test decodes
+# a queried AkkValue directly) -- everywhere else in this crate goes
+# through enkiddb's own re-exports.
+akkvalue          = { path = "../akkvalue" }
+bahyway-core      = { path = "../bahyway-core" }
+# web-only: real kupru-backed session auth + TLS (see src/web_auth.rs and
+# src/bin/anu_governor_web.rs's tls module).
+kupru             = { path = "../kupru", optional = true }
+# default-features off: rustls otherwise pulls aws-lc-rs, which needs
+# cmake to build its C/asm core -- this exact VDI (eriduous-vdi) has
+# already hit real native-toolchain pain once (PB-90, GCC 16 vs z3-sys).
+# "ring" is rustls's other crypto provider: a plain `cc`-based build, no
+# cmake, and the one thing already proven to work here.
+rustls            = { version = "0.23", optional = true, default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-pemfile    = { version = "2", optional = true }
+rcgen             = { version = "0.13", optional = true }
+rand              = { version = "0.8", optional = true }
+subtle            = { version = "2.6", optional = true }
+# Already resolved in this workspace's lockfile (via rcgen -> pem) at
+# 0.22.1 — reused directly for /api/login's vault-upload decoding rather
+# than hand-rolling a codec for something security-adjacent.
+base64            = { version = "0.22", optional = true }
+# glow (EGL/OpenGL), not wgpu (Vulkan): eriduous-vdi's compositor has no
+# real GPU and falls back through Mesa's Zink Vulkan-on-GL emulation,
+# which the launch log shows failing ("ZINK: failed to choose pdev",
+# "failed to create dri2 screen") and produced visible frame-ghosting
+# during resize. glow talks to llvmpipe's native software GL path
+# directly, skipping that translation layer.
+eframe            = { version = "0.29", default-features = false, features = ["glow", "x11", "wayland"], optional = true }
+egui              = { version = "0.29", optional = true }
+egui_extras       = { version = "0.29", optional = true }

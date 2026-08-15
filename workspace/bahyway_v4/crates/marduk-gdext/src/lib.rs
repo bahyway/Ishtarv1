@@ -3,7 +3,7 @@
 //! stateless methods, Godot-native types only. Wraps exactly the three
 //! verbs `marduk-engine` implements (Position, Horizon, Topology) --
 //! Motion and Curvature aren't here because they aren't built yet
-//! (see docs/marduk/IMPL-MRD-001-position-horizon-first-slice.md), not
+//! (see docs/01_mathematics/IMPL-MRD-001-position-horizon-first-slice.md), not
 //! because this bridge forgot them.
 //!
 //! A Hepta Space point is always a `PackedFloat64Array` of exactly 7

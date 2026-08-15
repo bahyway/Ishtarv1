@@ -68,8 +68,8 @@ pub enum EventCause {
     // ── Passport audit trail (2026-07-29) ──────────────────────────────────
     PassportMinted             = 0x74, // a SargonPassport was issued; audit-metadata-only record born
 
-    // ── Shakkanakku run-confirmation registry (2026-07-29) ─────────────────
-    ShakkanakkuRunRecorded     = 0x75, // one Shakkanakku corpus run's outcome + operator identity recorded
+    // ── AnuGovernor run-confirmation registry (2026-07-29) ─────────────────
+    AnuGovernorRunRecorded     = 0x75, // one AnuGovernor corpus run's outcome + operator identity recorded
 
     // ── KAKI-at-authoring-time (ADR-014, 2026-07-30) ────────────────────────
     // A playbook is a Particle: it gets a real Identity-Kaki (role=Parzu) the
@@ -124,7 +124,7 @@ pub enum EventCause {
     // deliberately DISTINCT from DocumentSuperseded (0x77): this cause
     // never implies either side replaces the other. Used by
     // enkiddb::writenode::WriteNode::mint_link_edge, the mechanism
-    // shakkanakku::pb_catalog uses to graph playbook sightings across
+    // anu_governor::pb_catalog uses to graph playbook sightings across
     // multiple historical/backup locations without silently picking a
     // winner -- that stays the Architect's call.
     DocumentCrossReferenced    = 0x7C, // a neutral link between two documents (location, unreconciled collision)
@@ -171,7 +171,7 @@ impl EventCause {
             0x72 => Some(Self::ErrorTypeUnknown),
             0x73 => Some(Self::AttrTypeRegistered),
             0x74 => Some(Self::PassportMinted),
-            0x75 => Some(Self::ShakkanakkuRunRecorded),
+            0x75 => Some(Self::AnuGovernorRunRecorded),
             0x76 => Some(Self::PbRegistered),
             0x77 => Some(Self::DocumentSuperseded),
             0x78 => Some(Self::TabletRegistered),
@@ -234,7 +234,7 @@ mod tests {
             EventCause::ErrorTypeUnknown,
             EventCause::AttrTypeRegistered,
             EventCause::PassportMinted,
-            EventCause::ShakkanakkuRunRecorded,
+            EventCause::AnuGovernorRunRecorded,
             EventCause::PbRegistered,
             EventCause::DocumentSuperseded,
             EventCause::TabletRegistered,

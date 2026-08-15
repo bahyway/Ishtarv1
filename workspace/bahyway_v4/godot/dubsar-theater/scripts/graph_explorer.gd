@@ -39,7 +39,7 @@ extends Control
 # uses against enkiddb-read-server -- no new wire protocol code here.
 #
 # UPDATED 2026-08-02, live: v1's "one QUERY per Expand" scope above turned
-# out to be exactly the gap that made shakkanakku::pb_catalog's location
+# out to be exactly the gap that made anu_governor::pb_catalog's location
 # nodes look empty -- a location can have hundreds of "contains" edges, but
 # a single meta.title match only ever returns THAT ONE entity's own folded
 # current-state row (heptascript::engine::apply_entry_to_map is last-write-
@@ -166,7 +166,7 @@ func _on_search_complete(result: Dictionary, thread: Thread, title: String, host
 # location entity, and heptascript::engine::apply_entry_to_map folds an
 # entity's whole history into a single-slot (attr_hash -> value) map before
 # projecting -- so only the LAST edge written ever survived a query. Fixed
-# at the source in enkiddb::WriteNode::mint_link_edge (shakkanakku::
+# at the source in enkiddb::WriteNode::mint_link_edge (anu_governor::
 # pb_catalog now calls it): every edge is its OWN dedicated entity, carrying
 # a plain-Text link.source_title/link.target_title pair alongside the real
 # KakiPk link.source/link.target (which can never be compared in a WHERE

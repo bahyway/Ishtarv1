@@ -9,8 +9,8 @@
 There is no static "master PB roadmap" file anywhere in the `bahyway/EnkiDB`
 repository, and there never has been one — checked directly: `playbooks/`
 is not a tracked directory on any branch of this repo, and
-`docs/PLAYBOOK_EXECUTION_TRIAGE.md` (the triage doc `crates/enkimdb::pb`
-and `crates/shakkanakku::runner` are written to consume, per their own
+`docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md` (the triage doc `crates/enkimdb::pb`
+and `crates/anu-governor::runner` are written to consume, per their own
 module docs) does not exist in this checkout either. That is by design,
 not an oversight: the real, numbered `playbook_<N>_*.yml` corpus Shakkanakku
 runs against lives only where it is actually executed — the Architect's own
@@ -21,7 +21,7 @@ What this document **is**: a real roadmap reconstructed from the only PB
 evidence that *does* live in this repo — the 15 commits in this
 repository's own history (across all branches) whose message starts with
 a real `PB-<number>` tag — plus the forward milestones from
-`docs/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`, the one static roadmap document
+`docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`, the one static roadmap document
 that does exist here.
 
 What this document **is not**: a complete enumeration of every PB the
@@ -104,7 +104,7 @@ queryable, never erased.
 
 ---
 
-## Part 3 — Forward roadmap (from `docs/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`)
+## Part 3 — Forward roadmap (from `docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`)
 
 The static roadmap already in this repo defines the scale gates every
 future PB run is measured against. Reproduced here (see that document for
@@ -128,7 +128,7 @@ For a complete "All PBs Roadmap" to exist as a single committed document,
 one of the following would need to happen, and neither has yet:
 
 1. The Architect exports (or points Shakkanakku's `--triage-doc` flag at)
-   a real `docs/PLAYBOOK_EXECUTION_TRIAGE.md` from the Fedora W44 host,
+   a real `docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md` from the Fedora W44 host,
    and it gets committed here (or ingested into EnkiDDB directly per
    Part 4 below, without ever touching the shared GitHub repo — see
    `docs/20_meta_engine/URUINIMGINA_EXTERNAL_DOCS.md` for exactly how).

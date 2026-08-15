@@ -51,7 +51,7 @@ impl TabletKind {
 
     /// Fixed tribe id per kind -- single source of truth, continuing the
     /// 0x716x sequence (`enkiddb::DOCS_TRIBE_ID` = 0x7160,
-    /// `shakkanakku::pb_mint::PB_TRIBE_ID` = 0x7161).
+    /// `anu_governor::pb_mint::PB_TRIBE_ID` = 0x7161).
     pub fn tribe_id(&self) -> u16 {
         match self {
             Self::Akk => 0x7162,

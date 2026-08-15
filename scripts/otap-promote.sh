@@ -4,7 +4,7 @@
 #
 # WHAT IT DOES:
 #   Promotes work from one OTAP stage branch to the next. See
-#   docs/OTAP_PIPELINE.md for the full stage/branch mapping. In short:
+#   docs/08_pipeline_alaktu/OTAP_PIPELINE.md for the full stage/branch mapping. In short:
 #     otap/dev -> otap/test -> otap/accept -> master (Production)
 #
 #   Every promotion:
@@ -19,7 +19,7 @@
 #   --i-understand-this-is-production flag. Without it, the script prints
 #   what it *would* do and exits without touching anything -- master is
 #   the one promotion that results in a real systemd redeploy on
-#   enkidb-node-write/enkidb-node-read (see docs/OTAP_PIPELINE.md), so it
+#   enkidb-node-write/enkidb-node-read (see docs/08_pipeline_alaktu/OTAP_PIPELINE.md), so it
 #   is never automatic.
 #
 # USAGE:

@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shala 𒊮 — BahyWay Bring-Up Dashboard</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header id="titlebar">
+    <div class="title-left">
+      <span class="glyph">𒊮</span>
+      <span class="title">Shala</span>
+      <span id="phase-badge" class="phase-badge">IDLE</span>
+    </div>
+    <div class="title-left">
+      <span id="identity-badge" class="identity-badge"></span>
+      <button id="btn-logout" class="btn">Sign out</button>
+      <div id="status-line" class="status-line">load a config to begin</div>
+    </div>
+  </header>
+
+  <!-- Every new command this ecosystem needs -- git, build, launch, recovery,
+       anything -- becomes an Ansible playbook, registered in
+       docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md, and run from one of the three tabs
+       below. No manual terminal commands (standing rule, 2026-08-01). -->
+  <nav id="tab-nav" class="bar">
+    <button id="tab-btn-resource" class="tab-btn active" data-tab="resource">Shala1 · Box Resources</button>
+    <button id="tab-btn-anu" class="tab-btn" data-tab="anu">Shala2 · AnuGovernor</button>
+    <button id="tab-btn-hala" class="tab-btn" data-tab="hala">Shala3 · Hala 𒄩𒆷</button>
+    <button id="tab-btn-gates" class="tab-btn" data-tab="gates">Shala4 · Gate Orbits</button>
+    <span id="gate-status" class="mono gate-status"></span>
+  </nav>
+
+  <!-- ══════════════════ TAB 1: RESOURCE CHECK ══════════════════ -->
+  <div id="tab-resource" class="tab-panel">
+    <section class="bar">
+      <button id="btn-check-now" class="btn btn-primary">▶ Check Now</button>
+      <span id="resource-summary" class="mono">no check run yet this session</span>
+    </section>
+    <main id="resource-content">
+      <section class="panel">
+        <h2>Host resource snapshot</h2>
+        <div id="resource-grid" class="resource-grid">
+          <div class="resource-tile"><span class="rt-label">Available RAM</span><span id="rt-ram" class="rt-value mono">—</span></div>
+          <div class="resource-tile"><span class="rt-label">Swap used</span><span id="rt-swap" class="rt-value mono">—</span></div>
+          <div class="resource-tile"><span class="rt-label">Load / vCPU</span><span id="rt-load" class="rt-value mono">—</span></div>
+          <div class="resource-tile"><span class="rt-label">Checked at</span><span id="rt-time" class="rt-value mono">—</span></div>
+        </div>
+        <div id="resource-warnings"></div>
+      </section>
+      <section class="panel">
+        <h2>What gates Tabs 2 &amp; 3</h2>
+        <p class="dim">Starting a AnuGovernor run or an Uruinimgina pulse requires a resource check that is
+          both <strong>green</strong> (no threshold crossed) and <strong>recent</strong> (within 5 minutes) —
+          enforced server-side, not just by the disabled buttons you see here. Re-run the check any time; it's
+          read-only and safe to run as often as you like.</p>
+      </section>
+    </main>
+  </div>
+
+  <!-- ══════════════════ TAB 2: ANU GOVERNOR ══════════════════ -->
+  <div id="tab-anu" class="tab-panel hidden">
+    <section id="toolbar" class="bar">
+      <label class="field">
+        <span class="field-label">config</span>
+        <input id="cfg-path" type="text" value="anu-governor.toml">
+      </label>
+      <button id="btn-load" class="btn">Load</button>
+      <div class="spacer-line"></div>
+      <button id="btn-run" class="btn btn-primary">▶ Run</button>
+      <button id="btn-abort" class="btn btn-danger">■ Abort</button>
+    </section>
+
+    <section id="params-bar" class="bar wrap">
+      <span class="field-label">PARAMETERS</span>
+      <div id="params-chips" class="chips"></div>
+      <input id="param-key" type="text" placeholder="key" class="small">
+      <input id="param-value" type="text" placeholder="value" class="small">
+      <button id="btn-add-param" class="btn">+ add</button>
+    </section>
+
+    <section id="progress-bar-section" class="bar column">
+      <div class="row spread">
+        <span id="pb-counter" class="mono">PB 0/0</span>
+        <span id="counts" class="mono dim">ok 0 · warnings 0 · errors 0</span>
+      </div>
+      <div class="progress-track">
+        <div id="progress-fill" class="progress-fill" style="width:0%"></div>
+      </div>
+      <div id="halt-banner" class="halt-banner hidden">
+        <span id="halt-text" class="mono"></span>
+        <button id="btn-skip" class="btn">Skip &amp; continue</button>
+        <button id="btn-retry" class="btn btn-primary">Apply remedy playbook &amp; retry</button>
+      </div>
+    </section>
+
+    <main id="content">
+      <section id="queue-panel" class="panel">
+        <h2>Playbook queue</h2>
+        <div id="queue-list" class="scroll"></div>
+      </section>
+
+      <section id="grid-panel" class="panel">
+        <h2 id="grid-title">Errors &amp; warnings — 0 events</h2>
+        <div class="scroll">
+          <table id="events-table">
+            <thead>
+              <tr><th>PB</th><th>TASK</th><th>SEV</th><th>ERROR TYPE</th></tr>
+            </thead>
+            <tbody id="events-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="remedy-panel" class="panel">
+        <h2>Remedy</h2>
+        <div id="remedy-body" class="scroll">
+          <p class="dim">select a playbook in the queue or an event in the grid</p>
+        </div>
+      </section>
+    </main>
+
+    <footer id="footer" class="bar">
+      <button id="btn-report" class="btn btn-primary">Generate final report 𒁾</button>
+      <span id="report-line" class="mono dim">run summary · per-PB outcomes · errors &amp; remedies · parameter manifest · AkkadianSeal</span>
+      <div id="save-as" class="save-as hidden">
+        <select id="save-format">
+          <option value="md">Markdown (.md)</option>
+          <option value="html">HTML (.html)</option>
+          <option value="pdf">PDF (via print)</option>
+          <option value="docx">Word (.docx, needs pandoc)</option>
+        </select>
+        <button id="btn-save" class="btn">Save as…</button>
+        <span id="save-status" class="mono dim"></span>
+      </div>
+      <span id="log-line" class="mono dim last-log"></span>
+    </footer>
+  </div>
+
+  <!-- ══════════════════ TAB 3: HALA (was Uruinimgina) ══════════════════ -->
+  <div id="tab-hala" class="tab-panel hidden">
+    <section id="dp-toolbar" class="bar wrap">
+      <label class="field"><span class="field-label">repo</span><input id="dp-repo" type="text" placeholder="~/Forge/bahyway_v4"></label>
+      <label class="field"><span class="field-label">message</span><input id="dp-message" type="text" placeholder="daily document pulse"></label>
+      <label class="field"><span class="field-label">docs tribe</span>
+        <select id="dp-tribe"><option value="architect_docs">architect_docs</option><option value="docs">docs</option></select>
+      </label>
+      <label class="field"><span class="field-label">archive</span><input id="dp-archive" type="text" placeholder="~/Forge/hala_archive"></label>
+      <label class="field"><span class="field-label">manifest dir</span><input id="dp-manifest" type="text" placeholder="~/Forge/hala_manifests"></label>
+      <label class="field"><span class="field-label">EnkiDDB root</span><input id="dp-enkiddb" type="text" placeholder="~/Forge/enkiddb_local"></label>
+      <div class="spacer-line"></div>
+      <button id="btn-dp-start" class="btn btn-primary">▶ Reform &amp; Pulse</button>
+      <button id="btn-dp-abort" class="btn btn-danger">■ Abort</button>
+    </section>
+
+    <section id="dp-progress" class="bar column">
+      <div id="dp-halt-banner" class="halt-banner hidden">
+        <span id="dp-halt-text" class="mono"></span>
+        <button id="btn-dp-skip" class="btn">Skip-continue</button>
+        <button id="btn-dp-retry" class="btn btn-primary">Retry</button>
+      </div>
+    </section>
+
+    <main id="dp-content">
+      <section id="dp-queue-panel" class="panel">
+        <h2>Pulse stages</h2>
+        <div id="dp-queue-list" class="scroll"></div>
+      </section>
+      <section id="dp-log-panel" class="panel">
+        <h2>Log</h2>
+        <div id="dp-log-body" class="scroll mono"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ══════════════════ TAB 4: GATE ORBITS ══════════════════ -->
+  <div id="tab-gates" class="tab-panel hidden">
+    <section id="gates-toolbar" class="bar">
+      <span id="gates-summary-line" class="mono dim">loading…</span>
+      <div class="spacer-line"></div>
+      <input id="gates-search-input" type="text" placeholder="Search playbooks by title or path…">
+      <button id="btn-gates-search" class="btn">🔍 Search</button>
+      <button id="btn-gates-review" class="btn hidden">Review N unclassified</button>
+      <button id="btn-gates-dep-review" class="btn hidden">Review Dependencies</button>
+      <button id="btn-gates-refresh" class="btn hidden" title="Rebuild and republish the EnkiDDB generation Gate Orbits reads from -- fixes 'not published yet' and republishes every approved tag/edge after a fresh catalog scan">🔄 Refresh Knowledge Graph</button>
+    </section>
+    <main id="gates-content">
+      <section id="gates-canvas-panel" class="panel">
+        <div id="gates-buttons" class="bar wrap"></div>
+        <div id="gate-orbit-canvas"></div>
+        <!-- Ṣabātu catcher reticle -- replaces the OS cursor over the canvas
+             (see app.css `#gate-orbit-canvas canvas { cursor: none; }`).
+             Locks (shrinks, turns gold) over a clickable cube/station;
+             the CAUGHT (clicked) cube's own squash-and-stretch bounce in
+             gate_orbits.js is the "you got it" feedback, not this reticle. -->
+        <div id="gates-reticle" class="hidden">
+          <div class="rb tl"></div><div class="rb tr"></div>
+          <div class="rb bl"></div><div class="rb br"></div>
+        </div>
+        <div id="gates-hoverchip"></div>
+      </section>
+      <section id="gates-detail-panel" class="panel">
+        <h2 id="gates-detail-title">Pick a gate</h2>
+        <div id="gates-detail-body" class="scroll"></div>
+      </section>
+    </main>
+    <div id="gates-review-overlay" class="hidden">
+      <div id="gates-review-modal" class="panel">
+        <h2>Review gate suggestions</h2>
+        <p class="dim">Each row's dropdown is pre-set to whatever real HeptaGate name(s) that playbook's own text
+          mentions — a suggestion, never a ruling. Change any of them, then Approve only the ones you agree with.</p>
+        <div id="gates-review-list" class="scroll"></div>
+        <div class="bar">
+          <button id="btn-gates-review-approve" class="btn btn-primary">Approve selected</button>
+          <button id="btn-gates-review-close" class="btn">Close</button>
+          <span id="gates-review-status" class="mono dim"></span>
+        </div>
+      </div>
+    </div>
+    <div id="gates-dep-review-overlay" class="hidden">
+      <div id="gates-dep-review-modal" class="panel">
+        <h2>Review dependency suggestions</h2>
+        <p class="dim">Each row is a real whole-word mention of one catalogued playbook's identity found inside
+          another's own text — a candidate "depends-on" edge, never a ruling. A mention isn't proof of a real
+          dependency: uncheck any row that isn't one, then Approve only the ones you agree with.</p>
+        <div id="gates-dep-review-list" class="scroll"></div>
+        <div class="bar">
+          <button id="btn-gates-dep-review-approve" class="btn btn-primary">Approve selected</button>
+          <button id="btn-gates-dep-review-close" class="btn">Close</button>
+          <span id="gates-dep-review-status" class="mono dim"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/vendor/three.module.js",
+      "three/addons/controls/OrbitControls.js": "/vendor/OrbitControls.js"
+    }
+  }
+  </script>
+  <script src="/app.js"></script>
+  <script type="module" src="/gate_orbits.js"></script>
+</body>
+</html>

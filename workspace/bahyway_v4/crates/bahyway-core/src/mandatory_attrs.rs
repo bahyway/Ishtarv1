@@ -2,7 +2,7 @@
 //! 7 Types EnkiDB carries — the Architect's law, extended this session
 //! from an original 5-attribute design (`State`, `ColorID(RGB)`,
 //! `UserName`, `Fresh`, `Velocity`) to 7, adding `SystemUser`/`UserGroup`
-//! so Shakkanakku's OTAP provenance ("who ran this, in which
+//! so AnuGovernor's OTAP provenance ("who ran this, in which
 //! environment") is a real, queryable EAV attribute rather than
 //! unrecorded.
 //!

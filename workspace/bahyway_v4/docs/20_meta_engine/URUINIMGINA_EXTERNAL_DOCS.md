@@ -3,8 +3,8 @@
 ## The short answer
 
 **This is already the pipeline's default mode, not a special case.** Uruinimgina
-(`crates/shakkanakku/src/docpulse.rs`, wired into Shakkanakku's own "Uruinimgina"
-GUI tab, `crates/shakkanakku/src/app.rs::show_uruinimgina_tab`) takes a `repo`
+(`crates/anu-governor/src/docpulse.rs`, wired into Shakkanakku's own "Uruinimgina"
+GUI tab, `crates/anu-governor/src/app.rs::show_uruinimgina_tab`) takes a `repo`
 field the app's own hint text sets to `~/Forge/bahyway_v4_docs` — a personal,
 external, non-`bahyway/EnkiDB` repository. Landing a promoted document into the
 official repo is a **separate, opt-in, sixth stage** ("official repo landing")
@@ -125,7 +125,7 @@ shared repo until the Architect explicitly turns it on for that run.
 ## Applying this to the 3 documents already ingested this session
 
 `docs/20_meta_engine/ALL_PBS_ROADMAP.md`, `docs/20_meta_engine/
-BAHYWAY_ECOSYSTEM_MANUAL_V4.md`, and `docs/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md`
+BAHYWAY_ECOSYSTEM_MANUAL_V4.md`, and `docs/00_codex/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md`
 were minted directly via `WriteNode::ingest_document_categorized` in
 `crates/enkiddb/tests/preparing_bare_metal_pbs_run.rs` (a real, passing test,
 not a simulation) because they already live inside this checkout of

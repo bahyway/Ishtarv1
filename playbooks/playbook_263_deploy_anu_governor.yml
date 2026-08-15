@@ -1,0 +1,135 @@
+# ── PB-263 — Deploy AnuGovernor, the BahyWay Governor ──────────────────
+# Corrects an ideation-only draft (`PB1XX_shakkanakku_deploy.yml`,
+# authored by a separate "iPhone Session" against a standalone-crate
+# assumption) the same way PB-254 corrected AcadEngine's draft: renumbered
+# to a real, unused PB slot and ground-checked against how this repo
+# actually works.
+#
+# What the draft got wrong: it assumed AnuGovernor was a decoupled crate
+# with its own Cargo.toml as a workspace root, to be `ansible.builtin.copy`
+# synced into /opt/bahyway/shakkanakku/src_tree and built there in
+# isolation. It's actually a real member of this repo's existing
+# `workspace/bahyway_v4` Cargo workspace (crates/anu-governor) — building it
+# in place with `cargo build --release -p anu-governor` is correct, faster
+# (shares the workspace's already-warm target/ and Cargo.lock), and avoids
+# maintaining a second, unsynced copy of the source tree.
+#
+# `anu-governor.toml` (the decree) is NOT copied anywhere either — it lives
+# at the EnkiDB repo root because its own `playbook_dir`/`triage_doc`
+# fields are relative paths that only resolve correctly from there. The
+# binary is portable (installed to /usr/local/bin); the decree is not —
+# `anu-governor` is meant to be run FROM the repo root, exactly like every
+# other playbook in this corpus.
+#
+# Running this playbook = CSR-08 confirmation (Number assignment is the
+# Architect's act; this row is already recorded in
+# docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md's Phase 12).
+- name: "PB-263 -- Build and install the AnuGovernor binary"
+  hosts: localhost
+  connection: local
+  vars:
+    forge_root: "{{ playbook_dir }}/.."
+    workspace_root: "{{ forge_root }}/workspace/bahyway_v4"
+    install_bin: /usr/local/bin/anu-governor
+    install_web_bin: /usr/local/bin/anu-governor-web
+    # gui by default (matches crates/anu-governor/Cargo.toml's own
+    # `default = ["gui"]`); pass -e anu_governor_features=headless for a
+    # CI/unattended host with no display -- auto-aborts on MAJOR with no
+    # Architect present to click Skip/Retry, per main.rs's own headless
+    # mode doc comment.
+    #
+    # -e anu_governor_features=web instead builds+installs anu-governor-web,
+    # the browser-facing face: same engine, served over plain HTTP so the
+    # Architect drives it from any browser tab instead of a native window.
+    # Recommended over the gui face on eriduous-vdi and similar bare/GPU-less
+    # VDI compositors, where native-window decorations, resize, and
+    # maximize semantics are unreliable (see ISIMUD_ENGINE_MANUAL.md §13).
+    anu_governor_features: "gui"
+
+  tasks:
+    # GATE (added 2026-08-01): installing AnuGovernor system-wide affects
+    # real infrastructure, so this now requires -e target_env=... same as
+    # PB-259/PB-280 -- see tasks/require_gilgamesh_for_production.yml.
+    - name: "GATE | target_env-based Production check"
+      ansible.builtin.import_tasks: tasks/require_gilgamesh_for_production.yml
+
+    - name: ensure rust toolchain present (Fedora)
+      ansible.builtin.dnf:
+        name: [rust, cargo]
+        state: present
+      become: true
+
+    - name: build release binary
+      ansible.builtin.command:
+        cmd: >-
+          cargo build --release -p anu-governor
+          {{ '--bin anu-governor-web --no-default-features --features web' if anu_governor_features == 'web'
+             else ('--no-default-features' if anu_governor_features == 'headless' else '') }}
+        chdir: "{{ workspace_root }}"
+      register: build
+      changed_when: "'Compiling anu-governor' in build.stderr or 'Finished' in build.stderr"
+
+    - name: confirm the built binary exists (native/headless face)
+      ansible.builtin.stat:
+        path: "{{ workspace_root }}/target/release/anu-governor"
+      register: built_bin
+      failed_when: not built_bin.stat.exists
+      when: anu_governor_features != 'web'
+
+    - name: confirm the built binary exists (web face)
+      ansible.builtin.stat:
+        path: "{{ workspace_root }}/target/release/anu-governor-web"
+      register: built_web_bin
+      failed_when: not built_web_bin.stat.exists
+      when: anu_governor_features == 'web'
+
+    - name: install binary to /usr/local/bin (native/headless face)
+      ansible.builtin.copy:
+        src: "{{ workspace_root }}/target/release/anu-governor"
+        dest: "{{ install_bin }}"
+        mode: "0755"
+        remote_src: true
+      become: true
+      when: anu_governor_features != 'web'
+
+    - name: install binary to /usr/local/bin (web face)
+      ansible.builtin.copy:
+        src: "{{ workspace_root }}/target/release/anu-governor-web"
+        dest: "{{ install_web_bin }}"
+        mode: "0755"
+        remote_src: true
+      become: true
+      when: anu_governor_features == 'web'
+
+    - name: confirm the decree (anu-governor.toml) exists at the repo root
+      ansible.builtin.stat:
+        path: "{{ forge_root }}/anu-governor.toml"
+      register: decree
+      failed_when: not decree.stat.exists
+
+    - name: report (native/headless face)
+      ansible.builtin.debug:
+        msg: >-
+          AnuGovernor installed at {{ install_bin }}
+          ({{ 'gui' if anu_governor_features == 'gui' else 'headless' }} build).
+          Run it from the repo root: cd {{ forge_root }} && anu-governor
+          -- anu-governor.toml's playbook_dir/triage_doc paths are relative
+          to that directory, not this one.
+      when: anu_governor_features != 'web'
+
+    - name: report (web face)
+      ansible.builtin.debug:
+        msg: >-
+          AnuGovernor web governor installed at {{ install_web_bin }}.
+          Run it from the repo root: cd {{ forge_root }} && anu-governor-web
+          -- then open https://localhost:8763/ (real TLS, self-signed on
+          first run -- trust the certificate warning once; set
+          ANU_GOVERNOR_WEB_PORT to change the port, ANU_GOVERNOR_WEB_BIND to
+          serve beyond loopback, off by default). Sign in at /login with a
+          Sargon-format passport vault (sargon_vault.dat from the Sargon
+          Passport Manager or Gilgamesh Master Key tools) + its passphrase
+          -- a gardener-privilege passport can watch a run and export the
+          report; only an Architect-privilege (Gilgamesh-minted) passport
+          can start, abort, skip, or retry. Same anu-governor.toml
+          relative-path rule as the native face applies.
+      when: anu_governor_features == 'web'

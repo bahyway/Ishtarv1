@@ -16,9 +16,9 @@ system is NOT exercised by this guide — it's a real but currently
 disconnected second pipeline (fed by whoever calls `SdbStore::stage()`,
 not by `bee-watchdog`), out of scope for "the BeeMDM ETL Processing
 Stations Chain" as that phrase is used in this repo's own docs
-(`docs/components/BEEMDM_ETL_PIPELINE.md`'s subject).
+(`docs/08_pipeline_alaktu/BEEMDM_ETL_PIPELINE.md`'s subject).
 
-No `docs/TESTING_PLAYBOOK_PHASE1.md` exists in this checkout (checked
+No `docs/17_troubleshooting/TESTING_PLAYBOOK_PHASE1.md` exists in this checkout (checked
 directly — the 50-file/10M-particle test manual referenced in an external
 document is not part of this repo). This guide is a fresh, from-scratch
 1B-row procedure built directly from the two real binaries this session
@@ -74,7 +74,7 @@ cargo build --release -p najaf-gen -p bee-watchdog
 **Optional — test the pipeline shape at smaller scale first.** Given the
 real, multi-hour cost above, run the exact same command with
 `--total-rows 10000000` (10M, matching this repo's own Phase 1 gate in
-`docs/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`) into a separate `--out-dir`
+`docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`) into a separate `--out-dir`
 first, confirm the full procedure below works end to end, THEN commit to
 the 1B run. This is not a required step, but is the honest, low-risk way
 to catch a configuration mistake before it costs hours instead of minutes.
@@ -153,7 +153,7 @@ only reading the raw JSON exports.
 
 ## 4. Pass criteria (adapted from this repo's own Phase 3 gate)
 
-`docs/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`'s Phase 3 defines the 1B-particle
+`docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md`'s Phase 3 defines the 1B-particle
 production gate in terms of HeptaScript query latency across all 7 EnkiDB
 types. For this specific test (the BeeMDM station chain itself, not
 HeptaScript querying afterward), the honest pass criteria are:

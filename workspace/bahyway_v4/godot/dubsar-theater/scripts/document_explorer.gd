@@ -9,7 +9,7 @@ class_name DocumentExplorer
 # different thing, a GraphEdit node-link view). Built against EnkiDDB
 # (Tigris) specifically, since it's the one real document-shaped type
 # (meta.title/meta.collection/body.summary/body.text/link.target/
-# link.description -- see docs/ARCHITECT_DESIGN_ENKIDDB_ENKIMDB_PODMAN.md
+# link.description -- see docs/05_storage/ARCHITECT_DESIGN_ENKIDDB_ENKIMDB_PODMAN.md
 # §3 for the real EAV schema this reads).
 #
 # Real data only, two honest omissions from the reference mockup rather

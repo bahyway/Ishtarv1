@@ -16,8 +16,8 @@ class_name DashboardTheater
 # query against that engine's real, currently-deployed Read Node (via
 # SumuUkinClient, the same binary-wire client every other real panel in
 # this project now uses). Honesty boundary, stated plainly: HeptaScript
-# has no COUNT/aggregate verb (the anti-SQL law -- see docs/components/
-# HEPTASCRIPT_QUERY_LANGUAGE.md), so there is no real way to show a true
+# has no COUNT/aggregate verb (the anti-SQL law -- see
+# docs/08_pipeline_alaktu/HEPTASCRIPT_QUERY_LANGUAGE.md), so there is no real way to show a true
 # global entity count without asking every one of possibly a billion
 # particles. What this dashboard shows instead is real and honestly
 # labeled: whether the engine is reachable right now, how many rows a

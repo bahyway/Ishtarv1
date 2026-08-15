@@ -9,7 +9,7 @@ extends MarginContainer
 # horizon, topology in marduk-engine). What's synthetic here is the SOURCE
 # data -- a small 3-bus radial feeder and a figure-eight relation graph,
 # not real telemetry -- because the live EnkiDB feed into these engines is
-# a separate, still-deferred item (see docs/GL-EGD-001.md). Every number
+# a separate, still-deferred item (see docs/07_file_formats/GL-EGD-001.md). Every number
 # shown is a real function call through the FFI boundary, not a mock.
 # =============================================================================
 
@@ -37,7 +37,7 @@ func _build_ui() -> void:
 	root_vb.add_child(title)
 
 	var subtitle = Label.new()
-	subtitle.text = "Real state estimation, KCL residuals, N-1 contingency, dispatch priority, and Betti topology, computed through the FFI boundary on a demo feeder, not mocked. Live EnkiDB feed remains a deferred item (docs/GL-EGD-001.md)."
+	subtitle.text = "Real state estimation, KCL residuals, N-1 contingency, dispatch priority, and Betti topology, computed through the FFI boundary on a demo feeder, not mocked. Live EnkiDB feed remains a deferred item (docs/07_file_formats/GL-EGD-001.md)."
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD
 	subtitle.add_theme_font_size_override("font_size", DubSarTheme.SIZE_LABEL)
 	subtitle.add_theme_color_override("font_color", DubSarTheme.TEXT_DIM)

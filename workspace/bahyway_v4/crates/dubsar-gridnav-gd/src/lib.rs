@@ -106,7 +106,7 @@ impl GridNavLens {
 
     /// Solves the linear KCL system for every node's voltage
     /// (`egd_engine::state_estimate`, exact solve -- see
-    /// docs/GL-EGD-001.md for what that does and doesn't cover).
+    /// docs/07_file_formats/GL-EGD-001.md for what that does and doesn't cover).
     /// Returns false (and logs why) if the system is singular, e.g. no
     /// known-voltage node reaches some component of the network.
     #[func]

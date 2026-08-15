@@ -1,5 +1,5 @@
 //! enkidb-seed — bulk particle seeder for enkidb-query-server's PersistedDb
-//! store, built to exercise E-004/E-005 (docs/TESTING_PLAYBOOK_PHASE1.md) at
+//! store, built to exercise E-004/E-005 (docs/17_troubleshooting/TESTING_PLAYBOOK_PHASE1.md) at
 //! real 10M-particle scale. Writes directly through the same
 //! `enkidb_persist::persisted_db::PersistedDb` API and on-disk layout
 //! (`{data_dir}/tribe-{tribe_id:04x}/journal.bin`) enkidb-query-server reads

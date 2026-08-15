@@ -6,11 +6,11 @@
 
 /// Fixed tribe id for the generic crate/playbook artifact catalog --
 /// single source of truth, matching `enkiddb::DOCS_TRIBE_ID`/
-/// `shakkanakku::pb_mint::PB_TRIBE_ID`/`TabletKind::tribe_id`'s own
+/// `anu_governor::pb_mint::PB_TRIBE_ID`/`TabletKind::tribe_id`'s own
 /// pattern. Was previously only a private default inside
 /// `enkimdb-write-server`'s `tribe_id()` (still overridable there via
 /// `TRIBE_ID` env) -- centralized here so every caller (that server, and
-/// Shakkanakku's own crate-mint pass) mints under the same identity.
+/// AnuGovernor's own crate-mint pass) mints under the same identity.
 pub const ARTIFACT_TRIBE_ID: u16 = 0xFF01;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

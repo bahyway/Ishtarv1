@@ -13,7 +13,7 @@
 #   A container can only see its own host's volumes -- bridging two
 #   remote hosts needs either a shared network filesystem (heavier ops
 #   burden, new infra) or a network copy. This repo's own established
-#   convention (see docs/OTAP_PIPELINE.md's citation of playbook_145) is
+#   convention (see docs/08_pipeline_alaktu/OTAP_PIPELINE.md's citation of playbook_145) is
 #   already scp between machines -- this script is that same pattern,
 #   just automated and run on a loop, not a new mechanism.
 #

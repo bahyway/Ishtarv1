@@ -23,9 +23,9 @@
 //!   - `FLUSH`                          -> force-materialize now, respond
 //!                                         `OK:FLUSHED:<entity_count>`
 //!   - `INGEST_RUN_RECORD:<json>`       -> parse `<json>` as a real
-//!                                         `enkimdb::ShakkanakkuRunRecordSpec`,
+//!                                         `enkimdb::AnuGovernorRunRecordSpec`,
 //!                                         ingest it (role=Zikru,
-//!                                         `shakkanakku_run.*` namespace),
+//!                                         `anu_governor_run.*` namespace),
 //!                                         respond `OK:INGESTED:1`
 //!                                         (2026-07-29, the run-confirmation
 //!                                         registry -- see that type's own
@@ -56,7 +56,7 @@ use std::time::Duration;
 
 use bahyway_core::TribeId;
 use enkidb_kaki::KakiMinter;
-use enkimdb::{readnode, scan_crates, scan_playbooks, ShakkanakkuRunRecordSpec, WriteNode};
+use enkimdb::{readnode, scan_crates, scan_playbooks, AnuGovernorRunRecordSpec, WriteNode};
 
 const MAX_FRAME: u32 = 16 * 1024 * 1024;
 const READ_TIMEOUT: u64 = 30;
@@ -172,12 +172,12 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path, fl
     }
 
     if let Some(json) = trimmed.strip_prefix("INGEST_RUN_RECORD:") {
-        return match serde_json::from_str::<ShakkanakkuRunRecordSpec>(json) {
+        return match serde_json::from_str::<AnuGovernorRunRecordSpec>(json) {
             Ok(spec) => {
                 let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
                 st.epoch += 1;
                 let epoch = st.epoch;
-                let kaki = st.write_node.ingest_shakkanakku_run_record(&spec, epoch);
+                let kaki = st.write_node.ingest_anu_governor_run_record(&spec, epoch);
                 st.since_flush += 1;
                 let should_flush = st.since_flush >= flush_every;
                 if should_flush {

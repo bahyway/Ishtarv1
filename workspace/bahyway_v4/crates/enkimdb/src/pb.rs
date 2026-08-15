@@ -1,5 +1,5 @@
 //! PB scanning — real, numbered playbooks as a scannable profile,
-//! cross-referenced against `docs/PLAYBOOK_EXECUTION_TRIAGE.md`'s own
+//! cross-referenced against `docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md`'s own
 //! Status/Note columns when available. Mirrors `scan.rs`'s own
 //! "no bootstrap/demo data" law: every `PbProfile` corresponds to a real
 //! file on disk at scan time. The triage doc's filename cell is never
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn two_files_sharing_one_pb_number_keep_their_own_distinct_status_and_note() {
-        // The exact scenario docs/PLAYBOOK_EXECUTION_TRIAGE.md's own
+        // The exact scenario docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md's own
         // parser test fixture documents: two different files, same
         // leading number, genuinely different content and status. Keying
         // by number instead of filename would let one overwrite the
@@ -174,7 +174,7 @@ mod tests {
             .parent().unwrap() // workspace/
             .parent().unwrap() // repo root
             .to_path_buf();
-        let triage = repo_root.join("docs/PLAYBOOK_EXECUTION_TRIAGE.md");
+        let triage = repo_root.join("docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md");
         let found = scan_pbs(&repo_root, &triage).expect("scan_pbs should succeed against the real repo");
         assert!(found.iter().any(|p| p.number == 269), "expected to find real PB-269 on disk");
         // Two real files CAN legitimately share one PB number (the triage

@@ -1,7 +1,7 @@
 # Šala Prototype Index
 
 122 files across 7 batches. All DRAFT/rehearsal unless noted. See
-`docs/BAHYWAY_PHASE2_GLOSSARY.md` for the concepts named here.
+`docs/99_index/BAHYWAY_PHASE2_GLOSSARY.md` for the concepts named here.
 
 ## batch1 — CompareEngine · BIGRING · Flight-to-Location (8)
 - `shala_tab5_compareengine.html` — CompareEngine Jaccard comparison tab (schema-presence + value cf/df, Sigmoid gauge, EAV trichotomy verdicts).

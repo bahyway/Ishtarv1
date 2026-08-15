@@ -45,7 +45,7 @@ There is no SQL. Five sovereign operations govern all access — ORBIT, EMIT, PR
 
 ### See
 
-The DubSar Theater renders tribes as constellations and mastering as motion: swarms of source particles converging into golden cells, at any scale, powered by the Anu Index Stack.
+The DubSar Theater renders tribes as constellations and mastering as motion: swarms of source particles converging into golden cells, at any scale, powered by the Elu Index Stack.
 
 ## Get started
 

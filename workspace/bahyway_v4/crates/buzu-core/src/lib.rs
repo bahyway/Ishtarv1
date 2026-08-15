@@ -24,7 +24,7 @@
 //!       part is uncontroversial; the compact packed representation is
 //!       still open.
 //! These three are Architect decisions per GL-VIZ-001 -- see
-//! docs/GL-VIZ-001.md. Nothing here defaults them. AS OF PB-256, D1-D3
+//! docs/07_file_formats/GL-VIZ-001.md. Nothing here defaults them. AS OF PB-256, D1-D3
 //! ARE RATIFIED and implemented in the `chunk` module below -- this
 //! module's own math and its own honest scope remain unchanged.
 

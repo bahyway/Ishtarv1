@@ -172,7 +172,7 @@ fn handle(mut stream: TcpStream, db: &PersistedDb, indexes: &HeptaIndexes) -> io
 /// "evaluated": N, "aborted": bool}}`. Previously a bare `[...]` array —
 /// changed so `ABORT_SCAN`'s `QueryResult.aborted` (see heptascript::engine)
 /// is observable over the wire at all, which E-005
-/// (docs/TESTING_PLAYBOOK_PHASE1.md) requires. Every Godot caller goes
+/// (docs/17_troubleshooting/TESTING_PLAYBOOK_PHASE1.md) requires. Every Godot caller goes
 /// through `enkidb_tcp.gd`'s `execute_query()`, updated in the same pass to
 /// unwrap this shape back into the flat `Array` its own callers still expect.
 fn result_to_json(result: &QueryResult, bigring: bool) -> String {

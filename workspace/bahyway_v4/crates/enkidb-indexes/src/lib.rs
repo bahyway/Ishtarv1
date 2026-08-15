@@ -1,16 +1,20 @@
 //! enkidb-indexes — the native EnkiDB indexes (§9.3).
 //!
-//! Sovereign name (2026-07-13): this index stack is **Anu** —
-//! [`SOVEREIGN_NAME`]. Not a crate/type rename: `enkidb-indexes` and every
-//! type below are unchanged identifiers -- same relationship "Tigris" has
-//! to `enkiddb` and "Euphrates" has to `enkimdb`. The Architect's own
-//! reason: "ENLIL" was already spoken for -- it names the Total Algebra
-//! Content of BahyWay.Ecosystem (GeoLaw-05's Jordan Normal Form / orbit
-//! stability), not this index stack. "Anu" was previously a reserved name
-//! (NL-001 §9, "held for an ecosystem-supreme purpose," flagged but not
-//! spent) -- spent now by the Architect's own deliberate choice (CSR-08),
-//! not by drift. See `docs/components/ANU_INDEX_STACK.md` for the full
-//! per-index W5H2 reference this rename accompanies.
+//! Sovereign name (2026-08-15, second rename): this index stack is
+//! **Elu** (elû, Akkadian "high, upper, superior") — [`SOVEREIGN_NAME`].
+//! Not a crate/type rename: `enkidb-indexes` and every type below are
+//! unchanged identifiers -- same relationship "Tigris" has to `enkiddb`
+//! and "Euphrates" has to `enkimdb`. Previously named "Anu" (2026-07-13);
+//! the Architect reclaimed "Anu" for the AnuGovernor (formerly
+//! Shakkanakku) rename and chose "Elu" here to free it without another
+//! collision. Per NL-001's Orthography Clause (§6a), the plain-Latin
+//! form "Elu" is used in every identifier; the diacritic form "elû" is
+//! reserved for prose/documentation, same convention as Hala/naṣāru.
+//! See `docs/05_storage/ELU_INDEX_STACK.md` for the full per-index W5H2
+//! reference this rename accompanies. The original "ENLIL" rejection
+//! reasoning (that name already spent on the Total Algebra Content,
+//! GeoLaw-05's Jordan Normal Form / orbit stability) still applies and
+//! is preserved there.
 //!
 //! All indexes are built natively in Rust from primitives.
 //! NO TREE IN THE ORBITS: no LSM-tree, no B-tree, no R-tree, anywhere in this
@@ -47,11 +51,10 @@
 //!                2026-07-13, PB-182)
 //! bloom          probabilistic membership BloomFilter bitset          all KAKIs
 
-/// This index stack's sovereign name — Anu, per the Architect's naming
-/// (2026-07-13). See the crate doc comment for why "ENLIL" was rejected
-/// (already spent on the Total Algebra Content) and why "Anu" was
-/// available to spend (a reserved name, now deliberately used).
-pub const SOVEREIGN_NAME: &str = "anu";
+/// This index stack's sovereign name — Elu, per the Architect's naming
+/// (2026-08-15, second rename; previously "Anu," 2026-07-13). See the
+/// crate doc comment for the full provenance of both renames.
+pub const SOVEREIGN_NAME: &str = "elu";
 
 pub mod identity;
 pub mod sovereignty;

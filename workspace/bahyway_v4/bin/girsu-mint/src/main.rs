@@ -6,7 +6,7 @@
 //! records the mint in a durable JSONL registry keyed by canonical path
 //! — so re-running "mark as final" on an already-finalized tablet is a
 //! no-op (reports "already finalized", does not re-mint), matching
-//! `shakkanakku::pb_mint`'s idempotent-by-identity convention exactly.
+//! `anu_governor::pb_mint`'s idempotent-by-identity convention exactly.
 //!
 //! On a genuine new mint, also materializes a fresh, HeptaScript-
 //! queryable Euphrates generation, so the Identity-Kaki is queryable

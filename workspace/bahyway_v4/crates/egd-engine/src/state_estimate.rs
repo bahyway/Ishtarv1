@@ -15,7 +15,7 @@
 //! exactly determined (as many equations as unknowns), never
 //! over/under-determined.
 //!
-//! HONEST SCOPE, matching docs/GL-EGD-001.md: this is NOT the
+//! HONEST SCOPE, matching docs/07_file_formats/GL-EGD-001.md: this is NOT the
 //! weighted-least-squares, bad-data-rejecting state estimator real
 //! SCADA/EMS systems run against REDUNDANT telemetry (more
 //! measurements than unknowns, with King-plot-style systematic-vs-

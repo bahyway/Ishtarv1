@@ -1,0 +1,186 @@
+# ── AnuGovernor decree — BahyWay.Ecosystem v4.0 ─────────────────────────
+# The Governor's config: run this from the repo root
+# (`anu-governor` or `anu-governor anu-governor.toml`).
+#
+# playbooks is intentionally left empty below: triage_doc is set, so
+# Config::load overwrites it at load time by parsing
+# docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md's own tables — the exact same document
+# playbook_IsimudEngine.yml's PLAN phase parses (equivalent logic: awk
+# there, anu_governor::config::playbooks_from_triage here). One
+# hand-maintained playbook list, not two that can silently drift apart.
+# SKIP rows are dropped; duplicate PB numbers (two files sharing one
+# number) are both kept, doc order preserved.
+#
+# simulate = true by default on purpose — this is the checked-in template;
+# an Architect flips it to false deliberately (or passes `-e simulate=false`
+# equivalent by editing a local copy) to run for real. Never defaults to
+# touching real infrastructure.
+
+[run]
+playbook_dir = "playbooks"
+triage_doc = "docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md"
+playbooks = []
+inventory = "ansible/inventory.ini"
+simulate = true
+# Run-confirmation registry (2026-07-29): off by default, same as
+# PB-265's own vault_check_enabled -- flip vault_check_enabled=true and
+# set vault_path once a real Sargon vault exists on this host to require
+# a cryptographically verified operator identity before ANY playbook in
+# this run executes; the whole run is refused (BlockedByAuthority, never
+# a silently-unauthenticated pass) if the passphrase/vault/privilege
+# don't check out. KUPRU_VAULT_PASSPHRASE must be exported in the
+# environment, never written here. Every run -- authenticated, refused,
+# or unauthenticated -- mints a real anu_governor_run.* particle in
+# EnkiMDB (see enkimdb_write_host/_port below) so an authority-related
+# block is distinguishable from a genuine technical failure at a glance.
+vault_check_enabled = false
+# vault_path = "/home/architect/.config/bahyway/sargon_vault.dat"
+vault_min_privilege = 5
+enkimdb_write_host = "192.168.122.101"
+enkimdb_write_port = 7201
+# simulate_fail_at intentionally unset — the triage doc's real corpus order
+# isn't fixed (it grows every session), so a hardcoded rehearsal index would
+# go stale immediately. Rehearse against a small hand-written playbooks list
+# with an explicit simulate_fail_at instead, if a scripted-halt demo is
+# needed (see crates/anu-governor's own test fixtures for the pattern).
+fix_dir = "fixes"
+report_dir = "docs/SHEDU/anu_governor_reports"
+chronicle_dir = "docs/SHEDU/anu_governor_chronicle"
+# Gitignored per .gitignore's own `secrets/` rule — never commit this file.
+# Floor only, not the destination: see docs/16_runbooks/PLAYBOOK_EXECUTION_TRIAGE.md's
+# "Secrets" section and report.rs's own doc comment — real custody is the
+# Sargon Passport Manager vault (crates/kupru), not a bare key file.
+seal_key = "secrets/anu_governor_seal.key"
+
+[[parameters]]
+key = "env"
+value = "production"
+[[parameters]]
+key = "enkidb_write"
+value = "192.168.122.101"
+[[parameters]]
+key = "enkidb_read"
+value = "192.168.122.107"
+
+# ── severity rules: unmatched failures are MAJOR by law ────────────────
+[[severity]]
+pattern = "deprecat"
+severity = "warning"
+error_type = "DeprecatedParam"
+[[severity]]
+pattern = "already configured"
+severity = "warning"
+[[severity]]
+pattern = "retry succeeded"
+severity = "warning"
+
+# ── remedy knowledge base ───────────────────────────────────────────────
+# Every rule below is sourced from playbooks/isimud_environment_manifest.yml
+# known_errors — real errors this ecosystem's own sessions actually hit on
+# eriduous-vdi and actually fixed (that file's own HONESTY RULE: no
+# speculative "might fail on machine X" entries). KE-006 (stale-process high
+# CPU) is deliberately not ported here — it's a `top`-output pattern, not an
+# ansible task failure message, so it has no ErrorEvent.message to match
+# against; its fix is already unconditional inside playbook_226 itself
+# (kill-stale-instance step), not something AnuGovernor's remedy engine
+# needs to react to.
+
+[[remedy]]
+id = "KE-001"
+pattern = "Missing build tool: scons"
+diagnosis = "scons not installed -- required for compiling Godot from source (PB-262)."
+solution = "dnf (Fedora) or apt (Debian/Ubuntu) install scons + platform dev packages."
+fix_template = """
+- hosts: localhost
+  connection: local
+  become: true
+  tasks:
+    - name: "remedy KE-001 for {task}"
+      ansible.builtin.package:
+        name: [scons, gcc-c++, pkgconfig]
+        state: present
+"""
+
+[[remedy]]
+id = "KE-002"
+pattern = "'uint32_t' has not been declared"
+diagnosis = "Real upstream bug in vendored thirdparty/glslang: missing #include <cstdint>, tolerated by GCC 13 but not GCC 16's stricter checking."
+solution = "playbook_262's own patch 4 adds the missing include and is idempotent -- re-running it self-heals this."
+fix_template = """
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: "remedy KE-002 for {task}: re-run PB-262's idempotent glslang <cstdint> patch"
+      ansible.builtin.debug:
+        msg: "Re-run playbook_262_build_rebranded_godot_engine.yml. Original message: {message}"
+"""
+
+[[remedy]]
+id = "KE-003"
+pattern = "found ':' in nested-name-specifier, expected '::'"
+diagnosis = "Same missing-<cstdint> bug class as KE-002, in a second independent vendored library (thirdparty/thorvg) -- the undeclared uint8_t makes GCC misparse enum class syntax."
+solution = "playbook_262's own patch 5 adds the missing include and is idempotent -- re-running it self-heals this."
+fix_template = """
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: "remedy KE-003 for {task}: re-run PB-262's idempotent thorvg <cstdint> patch"
+      ansible.builtin.debug:
+        msg: "Re-run playbook_262_build_rebranded_godot_engine.yml. Original message: {message}"
+"""
+
+[[remedy]]
+id = "KE-004"
+pattern = "cannot find -lstdc++"
+diagnosis = "Godot's linuxbsd default (use_static_cpp=true) links -static-libstdc++; Fedora doesn't ship the static libstdc++.a archive in the base toolchain."
+solution = "playbook_262 already passes use_static_cpp=no to scons by default -- the binary only needs to run on the machine that compiled it."
+fix_template = """
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: "remedy KE-004 for {task}: confirm use_static_cpp=no"
+      ansible.builtin.debug:
+        msg: "Re-run playbook_262_build_rebranded_godot_engine.yml (use_static_cpp=no is already its default). Original message: {message}"
+"""
+
+[[remedy]]
+id = "KE-005"
+pattern = "VK_ERROR_INCOMPATIBLE_DRIVER"
+diagnosis = "No render-capable GPU visible to Vulkan on this host -- /dev/dri has a display node but no render node (llvmpipe/software only)."
+solution = "playbook_226 already forces --rendering-method gl_compatibility --rendering-driver opengl3 at launch by default."
+fix_template = """
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: "remedy KE-005 for {task}: confirm gl_compatibility rendering"
+      ansible.builtin.debug:
+        msg: "Re-run playbook_226_launch_dubsar_godot_ide.yml (gl_compatibility/opengl3 is already its default). Original message: {message}"
+"""
+
+[[remedy]]
+id = "KE-007"
+pattern = "compiled against newer Godot version"
+diagnosis = "gdext defaults to its newest-supported API level unless pinned; a from-source engine build (PB-262) may genuinely be an older real version than that default targets."
+solution = "All 8 GDExtension crates must pin features = [\"api-4-3\"] in their godot dependency; playbook_226 rebuilds+redeploys all six bridges dubsar-theater loads on every run."
+fix_template = """
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: "remedy KE-007 for {task}: confirm gdext api-4-3 pin, then rebuild bridges"
+      ansible.builtin.debug:
+        msg: "Verify every GDExtension crate's Cargo.toml carries features=[\\\"api-4-3\\\"], then re-run playbook_226_launch_dubsar_godot_ide.yml. Original message: {message}"
+"""
+
+[[remedy]]
+id = "KE-008"
+pattern = "no space left on device"
+diagnosis = "No .containerignore existed for workspace/bahyway_v4 -- a podman build's COPY . . transferred the entire directory including target/."
+solution = "workspace/bahyway_v4/.containerignore now excludes target/, .git/, .godot/. Does not reclaim space already consumed -- check disk_free_gb_min in isimud_environment_manifest.yml before a multi-hour run."
+fix_template = """
+- hosts: "{{ inventory_hostname }}"
+  become: true
+  tasks:
+    - name: "remedy KE-008 for {task}: confirm .containerignore excludes target/.git/.godot"
+      ansible.builtin.debug:
+        msg: "Check workspace/bahyway_v4/.containerignore, then retry the podman build. Original message: {message}"
+"""

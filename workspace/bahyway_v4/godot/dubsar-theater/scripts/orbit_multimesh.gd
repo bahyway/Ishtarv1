@@ -29,7 +29,7 @@
 #
 # 2. Interaction-cadence LOD added — the ParaView pattern validated
 #    against this repo's real Sage-pattern conventions
-#    (docs/WHAT_IS_BAHYWAY.md's "Patterns Arsenal"): while the camera is
+#    (docs/00_codex/WHAT_IS_BAHYWAY.md's "Patterns Arsenal"): while the camera is
 #    being dragged, render a decimated prefix of the already-uploaded
 #    MultiMesh buffer; once the camera has been still for
 #    LOD_STILLNESS_DELAY_SEC, restore full resolution. No re-query and

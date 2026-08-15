@@ -1,0 +1,413 @@
+# =============================================================================
+# PB-265 -- AnuGovernor Type-1 Infrastructure: create the CQRS write/read
+# VMs from nothing (libvirt/KVM), on the bare-metal Fedora Workstation 44
+# host. BahyWay.Ecosystem v4.0 -- 2026-07-29
+#
+# WHY THIS EXISTS: grep confirmed, before this playbook, zero playbooks
+# anywhere in this repo create a VM -- every existing playbook (PB-192,
+# PB-205, PB-212, ...) assumes `enkidb-node-write` (192.168.122.101) and
+# `enkidb-node-read` (192.168.122.107) already exist and are reachable
+# over SSH, then configures/deploys onto them. The Architect's own prior
+# infra work toward this (Vagrant+Hyper-V `bahyway-infra`, and a later
+# libvirt-targeted `03_enkidb_nodes` script tree) does not directly port:
+# the Vagrant/Hyper-V material targets a different hypervisor and a
+# 4-VM OTAP toolchain topology, not this 2-VM CQRS pair; the libvirt
+# tree's actual script/playbook contents were not available to build
+# from. This is fresh work, following the *shape* the Architect specified
+# (KVM, cloud-init per node role, TLS per node) without assuming its
+# unseen contents.
+#
+# SCOPE BOUNDARY (deliberately stated, not implied): this playbook creates
+# the two VMs and gets Podman ready on each. It stops there. Deploying the
+# 7 EnkiDB Types' write/read server containers onto these VMs is already
+# covered by the existing configuration playbooks (PB-192/205/212-class
+# work) once SSH is reachable -- this playbook does not duplicate that.
+#
+# TWO REAL SAFETY MECHANISMS, per the Architect's explicit design:
+#   1. Duplicate-CQRS-pair guard: before creating anything for the
+#      `production` environment, check whether a VM matching either node
+#      name already exists on this host's libvirt. If so, HALT --
+#      Ansible has no native GUI popup, so this halt is a clear `fail`
+#      with the actionable alternative spelled out (re-run with
+#      `-e cqrs_environment=dev` or `=test` or `=acc`), which is the
+#      honest equivalent of "show a message and let the stakeholder
+#      choose" in a CLI/AnuGovernor-driven tool. When AnuGovernor itself
+#      runs this playbook, a MAJOR failure here halts the whole corpus
+#      run pending Architect ratification (CSR-08), same as any other
+#      MAJOR failure AnuGovernor already handles -- no new escalation
+#      path needed.
+#   2. The SAME guard applies to every environment, not just production
+#      -- an existing dev/test/acc pair blocks a second one from being
+#      silently created on top of it. Idempotent by refusal, not by
+#      silent overwrite.
+#
+# ENVIRONMENT-SCOPED NAMING: node names and IPs are derived from
+# `cqrs_environment` (default `production`), not hardcoded to the
+# production pair -- `enkidb-node-write-{{ cqrs_environment }}` etc. for
+# non-production environments, so a `dev` pair can never collide with
+# the real `production` VM names this repo's other playbooks already
+# assume.
+#
+# WHAT THIS PLAYBOOK DELIBERATELY DOES NOT DO YET (real gaps, not hidden):
+#   - Does not mint a KAKI for the generated per-run cloud-init files.
+#     The playbook file itself is picked up for free by the existing
+#     `enkimdb::scan_playbooks` scanner once it lives in `playbooks/`;
+#     minting KAKIs for *generated* config artifacts needs a new
+#     `ArtifactKind` + scanner (deliberately closed today, per
+#     `enkimdb/src/artifact.rs`'s own "no speculative variants" rule) --
+#     tracked as real follow-on work, not silently assumed done here.
+#   - Still generates a local self-signed TLS keypair per node -- NOT
+#     sourced from the kupru/Sargon vault. Checked before wiring the vault
+#     in (2026-07-29): the real Sargon vault format
+#     (`anu_governor::web_auth::open_vault_and_authenticate`) is a PASSPORT
+#     store -- signed `SargonPassport` identities -- not a generic
+#     secrets vault, so it has no TLS/SSH material to source in the first
+#     place. What the vault genuinely IS good for -- proving the operator
+#     running this playbook holds a real, cryptographically verified
+#     passport, not running unauthenticated -- IS wired in below (see
+#     "Safety mechanism 3"). A genuine secrets store for TLS/SSH material
+#     is separate, not-yet-built scope.
+#   - Cannot be executed or verified in the sandbox this was authored in
+#     (no libvirt, no /dev/kvm, no systemd) -- syntax-checked, not
+#     live-run. Must be run for real on the Architect's own Fedora
+#     Workstation 44 host.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml
+#   ansible-playbook playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml \
+#     -e cqrs_environment=dev
+#   # override the base image location if it isn't at the default path:
+#   ansible-playbook playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml \
+#     -e base_image_path=/path/to/fedora-44-base.qcow2
+#   # require real Sargon-vault passport authentication before provisioning
+#   # anything (off by default -- see "Safety mechanism 3" and vars below):
+#   KUPRU_VAULT_PASSPHRASE='...' ansible-playbook \
+#     playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml \
+#     -e vault_check_enabled=true
+# =============================================================================
+
+- name: "PB-265 -- Create CQRS write/read VMs via libvirt/KVM"
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    cqrs_environment: production
+    # Production keeps the exact node names/IPs every other playbook in
+    # this repo already assumes. Non-production environments get a
+    # distinct name/IP so they can never collide with production or with
+    # each other.
+    node_write_name: "{{ 'enkidb-node-write' if cqrs_environment == 'production' else 'enkidb-node-write-' + cqrs_environment }}"
+    node_read_name:  "{{ 'enkidb-node-read'  if cqrs_environment == 'production' else 'enkidb-node-read-'  + cqrs_environment }}"
+    node_write_ip:   "{{ '192.168.122.101' if cqrs_environment == 'production' else '192.168.122.' + (151 + (['dev','test','acc'].index(cqrs_environment) * 2)) | string }}"
+    node_read_ip:    "{{ '192.168.122.107' if cqrs_environment == 'production' else '192.168.122.' + (152 + (['dev','test','acc'].index(cqrs_environment) * 2)) | string }}"
+
+    libvirt_pool_dir: "{{ ansible_env.HOME }}/vdi"
+    base_image_path:  "{{ libvirt_pool_dir }}/fedora-44-base.qcow2"
+    node_vcpus: 4
+    node_memory_mb: 8192
+    node_disk_gb: 40
+    ssh_pubkey_path: "{{ ansible_env.HOME }}/.ssh/id_ed25519.pub"
+    tls_dir: "{{ ansible_env.HOME }}/vdi/tls"
+
+    # ── Safety mechanism 3: real Sargon-vault operator authentication ──
+    # Off by default reasons this playbook would otherwise be unusable
+    # before the Architect has ever minted a passport into a vault file;
+    # once one exists, run with -e vault_check_enabled=true (or flip the
+    # default below once that's the norm on the real host). Gate, not a
+    # secrets source -- see the header's amended note.
+    vault_check_enabled: false
+    vault_path: "{{ ansible_env.HOME }}/.config/bahyway/sargon_vault.dat"
+    # 5 = Administrator tier in the Architect's own 5-group model
+    # (Architect=7/Gilgamesh, dataSteward/Administrator/Developer=Sargon
+    # 3 priorities, Other-Stakeholders=temporary) -- infra creation is a
+    # real, destructive-capable operation, so this defaults conservative
+    # rather than guessing a number the Architect hasn't yet ratified.
+    # Override with -e vault_min_privilege=<1-7> once the group-to-level
+    # mapping is formally decided.
+    vault_min_privilege: 5
+
+  pre_tasks:
+    - name: Confirm this environment isn't dev/test/acc/production outside the known set
+      ansible.builtin.fail:
+        msg: "cqrs_environment must be one of production, dev, test, acc -- got '{{ cqrs_environment }}'"
+      when: cqrs_environment not in ['production', 'dev', 'test', 'acc']
+
+    # GATE (added 2026-08-01, unifying with tasks/require_gilgamesh_for_
+    # production.yml's rule elsewhere in this repo): cqrs_environment=
+    # production now ALWAYS requires the vault check at privilege_level=7
+    # ("Gilgamesh"), regardless of what -e vault_check_enabled/vault_min_
+    # privilege were passed -- creating production infrastructure is not
+    # something a lower-tier ("Sargon") passport, or no check at all, may
+    # authorize. dev/test/acc are untouched: still opt-in, still default
+    # off, exactly as this playbook already had it.
+    - name: "GATE | production forces the vault check on, at Gilgamesh tier (7)"
+      ansible.builtin.set_fact:
+        vault_check_enabled: true
+        vault_min_privilege: 7
+      when: cqrs_environment == 'production'
+
+    # kupru-vault-cli lives at workspace/bahyway_v4/bin/kupru-vault-cli --
+    # built here (cached by cargo, cheap on a no-op re-run) rather than
+    # assuming the Architect has already run `cargo build` for it.
+    - name: "Vault gate 1 | Build kupru-vault-cli if this run wants the vault check"
+      ansible.builtin.command:
+        cmd: cargo build --release -p kupru-vault-cli
+        chdir: "{{ playbook_dir }}/../workspace/bahyway_v4"
+      when: vault_check_enabled | bool
+      changed_when: true
+
+    - name: "Vault gate 2 | Confirm KUPRU_VAULT_PASSPHRASE is set (never accepted as a -e var -- would leak into logs)"
+      ansible.builtin.fail:
+        msg: >-
+          vault_check_enabled=true but KUPRU_VAULT_PASSPHRASE is not set in the
+          environment. Run as:
+          KUPRU_VAULT_PASSPHRASE='...' ansible-playbook playbooks/playbook_265... -e vault_check_enabled=true
+          -- the passphrase is deliberately never accepted as an Ansible -e var,
+          which would leak it into shell history / process args / Ansible logs.
+      when: vault_check_enabled | bool and (lookup('env', 'KUPRU_VAULT_PASSPHRASE') | length == 0)
+
+    - name: "Vault gate 3 | Confirm the vault file exists"
+      ansible.builtin.stat:
+        path: "{{ vault_path }}"
+      register: vault_stat
+      when: vault_check_enabled | bool
+
+    - name: "Vault gate 4 | Fail clearly if the vault file is missing"
+      ansible.builtin.fail:
+        msg: >-
+          No vault file at {{ vault_path }}. Export a passport into a Sargon-format
+          vault via the Sargon Passport Manager or Gilgamesh Master Key Godot tool
+          first (PB-227), or pass -e vault_path=/real/path.
+      when: vault_check_enabled | bool and not vault_stat.stat.exists
+
+    # Real cryptographic gate: decrypts the vault, verifies the strongest
+    # passport's Ed25519 seal, and only proceeds if its privilege_level
+    # meets vault_min_privilege. No bypass path if this fails -- Advisory
+    # Never Authority in the inverse direction: automation doesn't touch
+    # real infra without a human-ratified, cryptographically real identity.
+    - name: "Vault gate 5 | Authenticate the operator against the real vault"
+      ansible.builtin.command:
+        cmd: >-
+          {{ playbook_dir }}/../workspace/bahyway_v4/target/release/kupru-vault-cli
+          check --vault {{ vault_path }} --min-privilege {{ vault_min_privilege }}
+        chdir: "{{ playbook_dir }}/.."
+      environment:
+        KUPRU_VAULT_PASSPHRASE: "{{ lookup('env', 'KUPRU_VAULT_PASSPHRASE') }}"
+      register: vault_auth_result
+      changed_when: false
+      when: vault_check_enabled | bool
+      no_log: true
+
+    - name: "Vault gate 6 | Fail loudly (without echoing vault internals) if authentication was denied"
+      ansible.builtin.fail:
+        msg: >-
+          Vault authentication DENIED (KUPRU_VAULT_PASSPHRASE wrong, vault
+          corrupted, or no passport meets privilege_level {{ vault_min_privilege }}).
+          Re-run kupru-vault-cli directly for the specific reason (it writes to
+          stderr, not captured here to avoid logging vault internals).
+      when: vault_check_enabled | bool and vault_auth_result.rc != 0
+
+    - name: "Vault gate 7 | Report the authenticated identity (safe fields only)"
+      ansible.builtin.debug:
+        msg: "{{ vault_auth_result.stdout }}"
+      when: vault_check_enabled | bool and vault_auth_result.rc == 0
+
+    - name: Confirm required tools are present (real preflight, not assumed)
+      ansible.builtin.command: "which {{ item }}"
+      loop: [virsh, virt-install, qemu-img]
+      register: tool_check
+      changed_when: false
+      failed_when: false
+
+    - name: Fail clearly if libvirt tooling is missing
+      ansible.builtin.fail:
+        msg: >-
+          Required tool '{{ item.item }}' not found on PATH. This playbook needs
+          libvirt + virtinst on the bare-metal Fedora host:
+          `sudo dnf install -y libvirt virt-install qemu-img && sudo systemctl enable --now libvirtd`.
+          This is an honest "not installed," not a bug in this playbook.
+      loop: "{{ tool_check.results }}"
+      when: item.rc != 0
+
+    - name: Confirm the base Fedora 44 cloud image exists
+      ansible.builtin.stat:
+        path: "{{ base_image_path }}"
+      register: base_image_stat
+
+    - name: Fail clearly if the base image is missing
+      ansible.builtin.fail:
+        msg: >-
+          Base image not found at {{ base_image_path }}. Download the real Fedora
+          Cloud Base qcow2 (https://fedoraproject.org/cloud/download) to this path,
+          or pass -e base_image_path=/real/path.
+      when: not base_image_stat.stat.exists
+
+    # ── Safety mechanism 1 & 2: duplicate-CQRS-pair guard, every environment ──
+    - name: Check whether either target VM already exists
+      ansible.builtin.command: "virsh dominfo {{ item }}"
+      loop:
+        - "{{ node_write_name }}"
+        - "{{ node_read_name }}"
+      register: existing_vm_check
+      changed_when: false
+      failed_when: false
+
+    - name: HALT -- a CQRS pair already exists for this environment
+      ansible.builtin.fail:
+        msg: >-
+          '{{ item.item }}' already exists on this host's libvirt. Refusing to
+          create a second CQRS pair on top of it -- this is the block the
+          Architect specified, applied to every environment, not just
+          production. If you meant to provision a DIFFERENT environment,
+          re-run with -e cqrs_environment=dev (or test, or acc). If you
+          intended to rebuild THIS environment, destroy it first, deliberately
+          (this playbook never destroys anything on your behalf):
+            virsh destroy {{ item.item }} ; virsh undefine {{ item.item }} --remove-all-storage
+      loop: "{{ existing_vm_check.results }}"
+      when: item.rc == 0
+
+    - name: Ensure the libvirt storage pool directory exists
+      ansible.builtin.file:
+        path: "{{ libvirt_pool_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Ensure the TLS output directory exists
+      ansible.builtin.file:
+        path: "{{ tls_dir }}"
+        state: directory
+        mode: "0700"
+
+  tasks:
+    # ── Per-node interim TLS keypair (real, self-signed -- kupru/Sargon
+    #    vault sourcing is tracked separately, see this file's header) ──
+    - name: Generate a per-node self-signed TLS keypair
+      ansible.builtin.command: >-
+        openssl req -x509 -newkey ed25519 -days 397 -nodes
+        -keyout {{ tls_dir }}/{{ item }}.key
+        -out {{ tls_dir }}/{{ item }}.crt
+        -subj "/O=BahyWay.Ecosystem/CN={{ item }}"
+      args:
+        creates: "{{ tls_dir }}/{{ item }}.crt"
+      loop:
+        - "{{ node_write_name }}"
+        - "{{ node_read_name }}"
+
+    # ── Per-node cloud-init: hostname, static IP on the libvirt default
+    #    NAT network, a real user with the Architect's own real pubkey
+    #    (never a shared/default password), and Podman preinstalled ──
+    - name: Render per-node cloud-init user-data
+      ansible.builtin.copy:
+        dest: "{{ libvirt_pool_dir }}/{{ item.name }}-user-data.yaml"
+        mode: "0600"
+        content: |
+          #cloud-config
+          hostname: {{ item.name }}
+          fqdn: {{ item.name }}.bahyway.local
+          users:
+            - name: bahyway
+              groups: [wheel]
+              shell: /bin/bash
+              sudo: "ALL=(ALL) NOPASSWD:ALL"
+              ssh_authorized_keys:
+                - "{{ lookup('file', ssh_pubkey_path) }}"
+          package_update: true
+          packages:
+            - podman
+            - openssl
+          write_files:
+            - path: /etc/bahyway-node-role
+              content: "{{ item.role }}"
+            - path: /etc/pki/tls/certs/bahyway-node.crt
+              content: "{{ lookup('file', tls_dir + '/' + item.name + '.crt') }}"
+            - path: /etc/pki/tls/private/bahyway-node.key
+              content: "{{ lookup('file', tls_dir + '/' + item.name + '.key') }}"
+              permissions: "0600"
+          runcmd:
+            - [systemctl, enable, --now, podman.socket]
+      loop:
+        - { name: "{{ node_write_name }}", role: "cqrs-write" }
+        - { name: "{{ node_read_name }}",  role: "cqrs-read" }
+
+    - name: Render per-node cloud-init network-config (static IP on the libvirt default NAT network)
+      ansible.builtin.copy:
+        dest: "{{ libvirt_pool_dir }}/{{ item.name }}-network-config.yaml"
+        mode: "0600"
+        content: |
+          version: 2
+          ethernets:
+            eth0:
+              addresses: [{{ item.ip }}/24]
+              gateway4: 192.168.122.1
+              nameservers:
+                addresses: [192.168.122.1, 1.1.1.1]
+      loop:
+        - { name: "{{ node_write_name }}", ip: "{{ node_write_ip }}" }
+        - { name: "{{ node_read_name }}",  ip: "{{ node_read_ip }}" }
+
+    - name: Create the per-node cloud-init seed ISO
+      ansible.builtin.command: >-
+        cloud-localds {{ libvirt_pool_dir }}/{{ item }}-seed.iso
+        {{ libvirt_pool_dir }}/{{ item }}-user-data.yaml
+        {{ libvirt_pool_dir }}/{{ item }}-network-config.yaml
+      args:
+        creates: "{{ libvirt_pool_dir }}/{{ item }}-seed.iso"
+      loop:
+        - "{{ node_write_name }}"
+        - "{{ node_read_name }}"
+
+    - name: Create each node's copy-on-write disk from the base image
+      ansible.builtin.command: >-
+        qemu-img create -f qcow2
+        -F qcow2 -b {{ base_image_path }}
+        {{ libvirt_pool_dir }}/{{ item }}.qcow2
+        {{ node_disk_gb }}G
+      args:
+        creates: "{{ libvirt_pool_dir }}/{{ item }}.qcow2"
+      loop:
+        - "{{ node_write_name }}"
+        - "{{ node_read_name }}"
+
+    - name: Define and start each VM via virt-install
+      ansible.builtin.command: >-
+        virt-install
+        --name {{ item }}
+        --vcpus {{ node_vcpus }}
+        --memory {{ node_memory_mb }}
+        --disk path={{ libvirt_pool_dir }}/{{ item }}.qcow2,format=qcow2
+        --disk path={{ libvirt_pool_dir }}/{{ item }}-seed.iso,device=cdrom
+        --network network=default,model=virtio
+        --os-variant fedora-unknown
+        --import
+        --graphics none
+        --noautoconsole
+      args:
+        creates: null
+      register: vm_create_result
+      changed_when: "'Domain creation completed' in vm_create_result.stdout or vm_create_result.rc == 0"
+      loop:
+        - "{{ node_write_name }}"
+        - "{{ node_read_name }}"
+
+    - name: Wait for cloud-init to finish on each node (SSH reachable)
+      ansible.builtin.wait_for:
+        host: "{{ item }}"
+        port: 22
+        timeout: 300
+      loop:
+        - "{{ node_write_ip }}"
+        - "{{ node_read_ip }}"
+
+  post_tasks:
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "PB-265 complete for environment '{{ cqrs_environment }}'."
+          - "Write node: {{ node_write_name }} ({{ node_write_ip }})"
+          - "Read node : {{ node_read_name }} ({{ node_read_ip }})"
+          - "Podman is enabled on both; hand off to the existing deploy playbooks"
+          - "(PB-192/205/212-class) to install the 7 EnkiDB Types' server containers."
+          - "{{ 'Vault-gated: operator authenticated via a real Sargon-vault passport.' if vault_check_enabled | bool else 'Vault gate was OFF this run (vault_check_enabled=false) -- ran unauthenticated.' }}"
+          - "NOT YET DONE (tracked separately): a genuine secrets store for"
+          - "TLS/SSH material (the Sargon vault holds passports, not secrets --"
+          - "see header), KAKI-minting of these generated config files."

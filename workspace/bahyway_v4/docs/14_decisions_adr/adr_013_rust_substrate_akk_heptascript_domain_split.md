@@ -65,7 +65,7 @@ there is no `MINT`/`APPEND`/write verb in this crate. So the *query* half of
 Decision 2's table below is real and available today; the *mint/write* half
 (creating a new particle in the first place) genuinely still requires a
 Rust-side emitter (`enkimdb::RegistryEmitter`, `enkiddb::DocumentEmitter` —
-see `crates/shakkanakku/src/docpulse.rs`'s EnkiDDB stage for a live example),
+see `crates/anu-governor/src/docpulse.rs`'s EnkiDDB stage for a live example),
 not HeptaScript syntax. Decision 2's table and the Negative/Mitigation
 consequences below are corrected accordingly; Decisions 1 and 3 (Rust as the
 permanent substrate, no version-boundary cutover) are unaffected — a mature,
@@ -197,7 +197,7 @@ directly, exactly as `docpulse.rs` was.
 
 - `crates/heptascript`: the real, shipped v2.0/v2.1 W5H2 query engine (227 tests, wired into all 7 EnkiDB read-servers) — the actual ground truth this correction is based on, not `heptascript_design.md`'s stale table
 - `crates/enkimdb/src/registry_emitter.rs`, `crates/enkiddb/src/emitter.rs`/`writenode.rs`: the real Rust mint/emit pattern every new particle type follows
-- `crates/shakkanakku/src/docpulse.rs`: worked example wiring both together — Rust mints via `enkiddb::WriteNode`, HeptaScript queries the result once materialized
+- `crates/anu-governor/src/docpulse.rs`: worked example wiring both together — Rust mints via `enkiddb::WriteNode`, HeptaScript queries the result once materialized
 - ADR-010: HeptaScript Language Design (canonical vocabulary; crate ownership table — now known to describe a different design than `crates/heptascript`, unreconciled)
 - `docs/07_file_formats/akk_format.md`: `.akk` grammar — governance law, not a systems language
 - `docs/09_languages/heptascript_design.md`: the HeptaScript spec ADR-010 canonicalized — its crate-ownership table does not describe `crates/heptascript`'s real state

@@ -57,8 +57,8 @@
 /// any tribe used for ingested external/third-party content — single
 /// source of truth for every caller that mints documentation Identity-
 /// Kakis, whether that's `enkiddb-ingest`'s bulk directory walk or
-/// Shakkanakku's Hala tab (prior name Uruinimgina) minting one promoted document at a time
-/// (see `crates/shakkanakku/src/docpulse.rs`). Both enter the same
+/// AnuGovernor's Hala tab (prior name Uruinimgina) minting one promoted document at a time
+/// (see `crates/anu-governor/src/docpulse.rs`). Both enter the same
 /// EnkiDDB documentation corpus, so both use the same tribe. See
 /// `enkidb_kaki::KakiMinter::new`'s doc comment on tribe id conventions.
 pub const DOCS_TRIBE_ID: u16 = 0x7160;
@@ -66,7 +66,7 @@ pub const DOCS_TRIBE_ID: u16 = 0x7160;
 /// Fixed tribe id for playbook DOCUMENTATION specifically (the header
 /// comment block each numbered playbook carries) -- distinct from
 /// `DOCS_TRIBE_ID` (markdown docs) and from
-/// `shakkanakku::pb_mint::PB_TRIBE_ID` (the playbook FILE's own
+/// `anu_governor::pb_mint::PB_TRIBE_ID` (the playbook FILE's own
 /// existence/registration identity, in EnkiMDB, not EnkiDDB). Continues
 /// the 0x716x sequence (0x7160 docs, 0x7161 PB, 0x7162/63/64 tablets).
 /// PB-270's decree: EnkiMDB catalogs that a playbook exists; this tribe
@@ -78,7 +78,7 @@ pub const PB_DOCS_TRIBE_ID: u16 = 0x7165;
 /// Fixed tribe id for the Architect's own personal daily-work documentation
 /// corpus (ideas, discussions, drafts, and complete write-ups alike) --
 /// deliberately DISTINCT from `DOCS_TRIBE_ID`. Both corpora are minted
-/// through the same Hala pipeline (`crates/shakkanakku/src/
+/// through the same Hala pipeline (`crates/anu-governor/src/
 /// docpulse.rs`, via `DocPulseCfg::docs_tribe_id`) and both are real,
 /// queryable EnkiDDB content -- the separation exists so a HeptaScript
 /// `WHERE tribe=...` query (or any RagIndex search) never silently mixes
@@ -88,7 +88,7 @@ pub const PB_DOCS_TRIBE_ID: u16 = 0x7165;
 pub const ARCHITECT_DOCS_TRIBE_ID: u16 = 0x7166;
 
 /// Fixed tribe id for MULTI-LOCATION playbook catalog candidates --
-/// deliberately NOT the sealed corpus (`shakkanakku::pb_mint::PB_TRIBE_ID`
+/// deliberately NOT the sealed corpus (`anu_governor::pb_mint::PB_TRIBE_ID`
 /// in EnkiMDB for file registration, `PB_DOCS_TRIBE_ID` above for this
 /// repo's own canonical `playbooks/` documentation). Historical/backup/
 /// duplicate playbook sightings gathered from every known location (the
@@ -97,7 +97,7 @@ pub const ARCHITECT_DOCS_TRIBE_ID: u16 = 0x7166;
 /// HeptaScript `WHERE tribe=...` query never silently mixes an
 /// unreconciled backup copy with the sealed, current corpus -- same
 /// separation principle `ARCHITECT_DOCS_TRIBE_ID` already established.
-/// See `shakkanakku::pb_catalog`. Continues the 0x716x sequence (0x7160
+/// See `anu_governor::pb_catalog`. Continues the 0x716x sequence (0x7160
 /// docs, 0x7161 PB, 0x7162/63/64 tablets, 0x7165 PB docs, 0x7166
 /// architect docs).
 pub const PLAYBOOK_CATALOG_TRIBE_ID: u16 = 0x7167;

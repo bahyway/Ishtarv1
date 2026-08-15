@@ -1,9 +1,9 @@
-//! Shakkanakku run-confirmation records — every Shakkanakku corpus run
-//! becomes a real EnkiMDB particle, `shakkanakku_run.*` EAV namespace
+//! AnuGovernor run-confirmation records — every AnuGovernor corpus run
+//! becomes a real EnkiMDB particle, `anu_governor_run.*` EAV namespace
 //! (mirrors `passport.*`'s shape and read-authorization treatment).
 //!
 //! WHY THIS EXISTS: the Architect's own instruction — a daily workflow
-//! of "run Shakkanakku, get report, debug, re-run" was missing a
+//! of "run AnuGovernor, get report, debug, re-run" was missing a
 //! queryable confirmation registry that also records WHO ran it and at
 //! what privilege level, specifically so an authority-related block
 //! (operator's vault passport doesn't clear the required privilege
@@ -23,7 +23,7 @@
 //!     (`kupru_vault::AuthedIdentity`), portable, requires a real vault
 //!     + passphrase, only present when `vault_check_enabled=true`.
 //!   - `os_*` — the real Fedora host OS user/group that launched the
-//!     `shakkanakku` process (`id -un`/`id -Gn`, cross-referenced
+//!     `anu-governor` process (`id -un`/`id -Gn`, cross-referenced
 //!     against the 5 `bahyway-*` groups PB-268 creates), always
 //!     available (no vault needed), host-local. A mismatch between the
 //!     two (e.g. OS group `bahyway-developer` running with a vault
@@ -34,7 +34,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShakkanakkuRunRecordSpec {
+pub struct AnuGovernorRunRecordSpec {
     pub run_id: String,
     pub started_at: u64,
     pub finished_at: u64,
@@ -44,7 +44,7 @@ pub struct ShakkanakkuRunRecordSpec {
     pub failed_count: u32,
     pub skipped_count: u32,
     /// "Completed" | "Aborted" | "BlockedByAuthority" — real, closed set;
-    /// see `registry_emitter::emit_shakkanakku_run`'s own validation.
+    /// see `registry_emitter::emit_anu_governor_run`'s own validation.
     pub outcome: String,
     /// Set only when `outcome` isn't a clean "Completed" — e.g. the real
     /// MAJOR-failure message, or "operator privilege_level=3 below

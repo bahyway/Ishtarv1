@@ -45,7 +45,7 @@ pub use pattern_emitter::PatternEmitter;
 pub use pb::{scan_pbs, PbProfile};
 pub use pb_emitter::PbEmitter;
 pub use registry_emitter::RegistryEmitter;
-pub use run_record::ShakkanakkuRunRecordSpec;
+pub use run_record::AnuGovernorRunRecordSpec;
 pub use readnode::{
     list_versions, materialize_now, materialize_version, CachedReadNode, CachedReadNodeError,
     Generation, ReadNode, ReadNodeError, SOVEREIGN_NAME,

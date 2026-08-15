@@ -13,13 +13,13 @@
 //! It is NOT wired to any live network boundary. Checked before building
 //! this: none of the 7 read-servers (`enkidb-read-server` through
 //! `enkiddb-read-server`) have TLS or any per-connection credential
-//! today — only `shakkanakku-web` does (PB-194/195). Wiring this
+//! today — only `anu-governor-web` does (PB-194/195). Wiring this
 //! authorizer to `enkimdb-read-server`'s live TCP QUERY handler would
 //! need one of: (a) TLS on that server plus a real per-connection
 //! credential exchange (its own real, separate scope — mirroring what
-//! `shakkanakku-web` needed its own dedicated build pass for), or
+//! `anu-governor-web` needed its own dedicated build pass for), or
 //! (b) a shared-secret session-token mechanism between processes, which
-//! `shakkanakku-web`'s own design deliberately does NOT support (its
+//! `anu-governor-web`'s own design deliberately does NOT support (its
 //! HMAC signing key is generated fresh in memory per process start,
 //! precisely so a stolen cookie can't be forged and a restart
 //! invalidates every session — sharing that key across processes would
@@ -35,10 +35,10 @@ use heptascript::query::HeptaQuery;
 /// Deliberately a short, explicit list (not a wildcard "anything with a
 /// dot") — only namespaces an Architect has actually asked to be gated
 /// belong here; adding one is a deliberate act, not implied by pattern.
-/// `shakkanakku_run.*` (2026-07-29): the run-confirmation registry
-/// carries operator identity/privilege_level for every Shakkanakku run —
+/// `anu_governor_run.*` (2026-07-29): the run-confirmation registry
+/// carries operator identity/privilege_level for every AnuGovernor run —
 /// same read-sensitivity rationale as `passport.*`, gated identically.
-pub const RESTRICTED_NAMESPACES: &[&str] = &["passport.", "shakkanakku_run."];
+pub const RESTRICTED_NAMESPACES: &[&str] = &["passport.", "anu_governor_run."];
 
 /// 5 = Administrator tier in the Architect's own 5-group model
 /// (Architect=7/Gilgamesh, dataSteward/Administrator/Developer=Sargon 3
@@ -140,11 +140,11 @@ mod tests {
     }
 
     #[test]
-    fn shakkanakku_run_attr_is_denied_without_privilege_and_allowed_at_5() {
-        let q = parse_query("WHO T.E\nWHAT E[shakkanakku_run.outcome]\nWHERE E[artifact.kind] = \"Crate\"").unwrap();
+    fn anu_governor_run_attr_is_denied_without_privilege_and_allowed_at_5() {
+        let q = parse_query("WHO T.E\nWHAT E[anu_governor_run.outcome]\nWHERE E[artifact.kind] = \"Crate\"").unwrap();
         assert_eq!(
             authorize(&q, None),
-            AuthzDecision::Denied { namespace: "shakkanakku_run.", required_privilege: 5 }
+            AuthzDecision::Denied { namespace: "anu_governor_run.", required_privilege: 5 }
         );
         assert_eq!(authorize(&q, Some(5)), AuthzDecision::Allowed);
         assert!(matches!(authorize(&q, Some(4)), AuthzDecision::Denied { .. }));

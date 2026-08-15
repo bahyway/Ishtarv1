@@ -11,7 +11,7 @@
 //! manual nucleus (no dedicated engine), see `tests::nucleus_exchange`.
 //!
 //! HONEST SCOPE: `Prover::residual_trustworthy` has no real King-plot
-//! classifier anywhere in this ecosystem yet (`docs/GL-EGD-001.md`
+//! classifier anywhere in this ecosystem yet (`docs/07_file_formats/GL-EGD-001.md`
 //! already names that gap), so its default implementation trusts the
 //! residual unconditionally. `Prover::isolation_proven` defaults to
 //! `false` — a domain must opt in with a real exclusion simulator (as
@@ -488,7 +488,7 @@ mod tests {
 
         impl Prover for ElectricityNucleus {
             // residual_trustworthy: default (true) -- no King-plot
-            // classifier exists yet, per docs/GL-EGD-001.md.
+            // classifier exists yet, per docs/07_file_formats/GL-EGD-001.md.
             fn isolation_proven(&self, unit_id: u32) -> bool {
                 if unit_id != self.monitored_node_id {
                     return false;

@@ -23,7 +23,7 @@
 # B11 GEM/ORBIT/FUZZY quality-tier scheme) belonged to a separate,
 # unrelated particle store -- none of it exists in EnkiDDB/EnkiMDB's
 # real schema, so every data-shaped piece of this file changes, not
-# just the host/port. See docs/ARCHITECT_DESIGN_ENKIDDB_ENKIMDB_PODMAN.md
+# just the host/port. See docs/05_storage/ARCHITECT_DESIGN_ENKIDDB_ENKIMDB_PODMAN.md
 # for the real EAV schemas this now reflects.
 #
 # Also fixed: the wire protocol itself differs. enkidb-query-server
@@ -124,7 +124,7 @@ const TARGETS = {
 var current_target := "EnkiDB"
 
 # Real attribute -> display label map, EnkiDDB (DocOrbit) + EnkiMDB (flat
-# artifact.*) combined -- see docs/ARCHITECT_DESIGN_ENKIDDB_ENKIMDB_PODMAN.md
+# artifact.*) combined -- see docs/05_storage/ARCHITECT_DESIGN_ENKIDDB_ENKIMDB_PODMAN.md
 # section 3 for the schema these come from. Unknown attributes fall back
 # to their own real name (not a hash, not a truncated fragment).
 const ATTR_NAMES = {
