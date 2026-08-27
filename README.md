@@ -1,1 +1,100 @@
-IyDwkoG+IElzaHRhcnYxIOKAlCBCYWh5V2F5LkVjb3N5c3RlbSB2NC4wLCBGaW5hbCBCdWlsZAoKKipUaGlzIGlzIHRoZSBvZmZpY2lhbCwgZmluYWwtYnVpbGQgc25hcHNob3Qgb2YgQmFoeVdheS5FY29zeXN0ZW0gdjQuMApwcmlvciB0byBwcm9kdWN0aW9uLioqIElmIHlvdSBoYXZlIGZvdW5kIHRoaXMgcmVwb3NpdG9yeSBhbW9uZyBtYW55Cm90aGVycyBjYXJyeWluZyB0aGUgYEJhaHlXYXlgL2BiYWh5d2F5X3Y0YCBuYW1lLCB0aGlzIGlzIHRoZSBvbmUgdG8KdHJ1c3Q6IGl0IGV4aXN0cyBzcGVjaWZpY2FsbHkgdG8gYW5zd2VyICJ3aGljaCBvZiB0aGVzZSBpcyByZWFsPyIg4oCUCmV2ZXJ5dGhpbmcgZWxzZSBpcyB3b3JraW5nIGhpc3RvcnksIHRoaXMgaXMgdGhlIGFjY2VwdGVkIHJlc3VsdC4KCiMjIFdoYXQgdGhpcyBpcwoKLSBBIGNvbXBsZXRlLCB3b3JraW5nIGNvcHkgb2YgdGhlIGVjb3N5c3RlbSDigJQgdGhlIGZ1bGwgYHdvcmtzcGFjZS9iYWh5d2F5X3Y0YAogIENhcmdvIHdvcmtzcGFjZSAoYWxsIGNyYXRlcywgYWxsIHBhdGgtZGVwZW5kZW5jaWVzIGludGFjdCBhbmQgYnVpbGRhYmxlKSwKICBldmVyeSBzZWFsZWQgYW5kIGRyYWZ0IGxhdyBkb2N1bWVudCwgZXZlcnkgcGxheWJvb2ssIGV2ZXJ5IHByb3RvdHlwZSwKICB0aGUgdGhyZWUgcHVibGljIHdlYnNpdGVzLiBOb3RoaW5nIHBhcnRpYWw6IHRoaXMgcmVwbyBidWlsZHMgYW5kIHJ1bnMKICBvbiBpdHMgb3duLCB0aGUgc2FtZSB3YXkgdGhlIHNvdXJjZSBpdCB3YXMgY3V0IGZyb20gZG9lcy4KLSAqKkEgc2luZ2xlIHNuYXBzaG90IGJyYW5jaCAoYG1haW5gKSwgbm90IGEgbXVsdGktYnJhbmNoIE9UQVAgcGlwZWxpbmUuKioKICBEYXktdG8tZGF5IGRldmVsb3BtZW50IGFuZCB0aGUgYGRldiDihpIgdGVzdCDihpIgYWNjZXB0IOKGkiBtYXN0ZXJgIHByb21vdGlvbgogIGRpc2NpcGxpbmUgY29udGludWUgdG8gbGl2ZSBpbiBgYmFoeXdheS9FbmtpREJgIChzZWUKICBgZG9jcy8wOF9waXBlbGluZV9hbGFrdHUvT1RBUF9QSVBFTElORS5tZGAgYW5kCiAgYHBsYXlib29rcy9wbGF5Ym9va181NTdfcHJvZHVjdGlvbl9nb2xpdmVfZnJvbV9hY2NlcHQueW1sYCBpbiB0aGlzCiAgc25hcHNob3QgZm9yIGhvdyB0aGF0IHdvcmtzKS4gVGhpcyByZXBvc2l0b3J5IHJlY2VpdmVzIHRoZSAqZmluaXNoZWQKICByZXN1bHQqIGVhY2ggdGltZSBhIG1pbGVzdG9uZSBpcyBhY2NlcHRlZCDigJQgaXQgaXMgbm90IGl0c2VsZiB3aGVyZQogIHByb21vdGlvbiBoYXBwZW5zLgotIFJlLWN1dCAoYSBmcmVzaCBjb21taXQsIGRlbGliZXJhdGVseSBub3QgYSBtZXJnZSBvciBhIGhpc3RvcnkgaW1wb3J0KQogIGVhY2ggdGltZSBhIG5ldyBtaWxlc3RvbmUgaXMgYWNjZXB0ZWQsIHNvIHRoaXMgcmVwbydzIG93biBoaXN0b3J5IHN0YXlzCiAgc21hbGwgYW5kIGxlZ2libGUgaW5zdGVhZCBvZiBhY2N1bXVsYXRpbmcgdGhlIHNwcmF3bCB0aGF0IG1vdGl2YXRlZAogIGNyZWF0aW5nIGl0IGluIHRoZSBmaXJzdCBwbGFjZS4KCiMjIFdoYXQgdGhpcyBpcyBub3QKCi0gTm90IGEgZm9yayBtZWFudCBmb3IgaW5kZXBlbmRlbnQgZGV2ZWxvcG1lbnQuIENoYW5nZXMgYmVsb25nIGluCiAgYGJhaHl3YXkvRW5raURCYDsgdGhpcyByZXBvIGlzIGEgbWlycm9yIG9mIGFjY2VwdGVkIHJlc3VsdHMsIG5vdCBhCiAgcGxhY2UgdG8gYnJhbmNoIG5ldyB3b3JrIGZyb20uCi0gTm90IG9uZSBvZiB0aGUgfjgwMCB3b3JraW5nL2V4cGVyaW1lbnRhbCBgYmFoeXdheV92NGAtcmVsYXRlZAogIHJlcG9zaXRvcmllcyB0aGF0IGhhdmUgYWNjdW11bGF0ZWQgb3ZlciB0aW1lLiBUaG9zZSByZW1haW4gd2hhdCB0aGV5CiAgd2VyZSDigJQgc2Vzc2lvbiBoaXN0b3J5LCBkcmFmdHMsIG9uZS1vZmYgZXhwZXJpbWVudHMuIE5vbmUgb2YgdGhlbSBhcmUKICAidGhlIiBvZmZpY2lhbCBidWlsZC4gVGhpcyBvbmUgaXMsIGJ5IGNvbnN0cnVjdGlvbiBhbmQgYnkgZGVjbGFyYXRpb24uCgojIyBQcm92ZW5hbmNlCgp8IHwgfAp8LS0tfC0tLXwKfCBTb3VyY2UgcmVwb3NpdG9yeSB8IFtgYmFoeXdheS9FbmtpREJgXShodHRwczovL2dpdGh1Yi5jb20vYmFoeXdheS9FbmtpREIpIHwKfCBTb3VyY2UgY29tbWl0IHwgYDRkMWEwN2Y1ZmEyMzgzM2M2MzNiMGYyNWFhMDAzMzY0N2NlZjdiYmVgIHwKfCBTb3VyY2UgYnJhbmNoIHwgYG1hc3RlcmAgfAp8IFNvdXJjZSB0YWcgfCBbYGd1ZGVhLXY0LjAtc2VhbGVkYF0oaHR0cHM6Ly9naXRodWIuY29tL2JhaHl3YXkvRW5raURCL3JlbGVhc2VzL3RhZy9ndWRlYS12NC4wLXNlYWxlZCkgfAp8IEN1dCBkYXRlIHwgMjAyNi0wOC0yNyB8CnwgQ3V0IGJ5IHwgRFVCLlNBUiDwkoG+IChCYWhhYSBGYWRhbSksIHZpYSBDbGF1ZGUgQ29kZSB8CnwgUHJldmlvdXMgY3V0IHwgYDY5ZTVkZWFlNDc4NDE4MDg1OTIyMzQ0YmUwZWZiODkyMWYyYTBlN2VgICgyMDI2LTA4LTE1KSB8CgoqKldoYXQgY2hhbmdlZCBzaW5jZSB0aGUgcHJldmlvdXMgY3V0OioqIHRoZSBidWlsZCBwaGFzZSBvZiBCYWh5V2F5LkVjb3N5c3RlbQp2NC4wIGNsb3NlZCBmb3IgcmVhbC4gVGhlIFBhbMO7IENyb3NzaW5nIChsYXcgYEdMLVBBTC0wMDFgLCBjb29yZGluYXRvcgpgSXNpbXVkRW5naW5lYCkgc2VhbGVkIHRoZSAqKkd1ZGVhKiogcmVpZ24gKHY0LjApIGF0IGAyMDI2LTA4LTI3VDEyOjM3OjQ0WmAKYWNyb3NzIGFsbCBzZXZlbiBzb3ZlcmVpZ24gZGF0YWJhc2VzIGFuZCBvcGVuZWQgdGhlICoqWmFnZXNpKiogcmVpZ24gKHY0LjEpCmZvciBuZXcgd29yayDigJQgcHJvb2YgaW4gYHBhbHUvQ09NUExFVElPTi1TVEVMRS00LjAudHN2YCBhbmQKYHBhbHUvUEFMVS1TVEVMRS00LjAtdG8tNC4xLm1kYCwgYm90aCBjYXJyaWVkIGluIHRoaXMgY3V0LiBTaW5jZSB0aGUgcHJldmlvdXMKY3V0OiBgZW5raWRiLWNvbi1lbmdpbmVgIGdhaW5lZCAqKkNTUi0wOCBBcmNoaXRlY3QgU292ZXJlaWdudHkqKiwgdGhlIGVpZ2h0aApDb25uZWN0aW9uIFNlY3VyaXR5IFJ1bGUsIGFwcGVuZC1vbmx5LWhvbmVzdCBieSBkZXNpZ24gKGBDcmVhdGVgL2BTdXBlcnNlZGVgLwpgUmV0aXJlYCwgbmV2ZXIgYSBsaXRlcmFsIG1vZGlmeS9kZWxldGUg4oCUIHNlZSBgZG9jcy8xOF9zZWN1cml0eS9DT05FTkdJTkVfQ1NSLm1kYCk7CmBlbmtpZGItaW5nZXN0OjpraXNwdWAgbGFuZGVkIHRoZSBmb3VyLXdheSBhdG9taWMgY29tbWl0IGJpbmRpbmcgdGhlIEV2ZW50CktBS0ksIHRoZSBOQVRJUlUgb3JiaXRhbC1yYW5nZSBpbmRleCwgdGhlIHpha8SBcnUgYXVkaXQgam91cm5hbCwgYW5kIHRoZQpPcmJpdGFsIHBvc2l0aW9uIGludG8gb25lIGFsbC1vci1ub3RoaW5nIHdyaXRlOyBgcGRtLXNoYXBlLWFkbWlzc2lvbmAgc2hpcHBlZAphcyBHTC1FQVYtMDAxIExheWVyIDIncyBmaXJzdCByZWFsIGltcGxlbWVudGF0aW9uOyAxNyBEUkFGVCBsYXcgdGFibGV0cwooYEdMLU5TUi0wMDFgLCBgR0wtTEJSLTAwMWAsIGBHTC1OSkYtMDAxYCwgYEdMLURTVC0wMDRgLCBgR0wtVlNMLTAwMWAsCmBHTC1TSFAtMDAxYCwgYEdMLUlTTS0wMDFgLCBgSFMtRVhULTAwM2AsIGFuZCBuaW5lIG1vcmUpIHdlcmUgc2VhbGVkIHdpdGgKdGhlaXIgbWF0Y2hpbmcgY3JhdGVzIGJ1aWx0IGFuZCB0ZXN0ZWQ7IHRoZSBFLTAwNC9FLTAwNSBwZXJmb3JtYW5jZSBnYXRlcwp3ZXJlIGNsb3NlZCBmb3IgcmVhbCBhZ2FpbnN0IHRoZSBwcm9kdWN0aW9uIFJlYWQgTm9kZSBwYXRoOyBhbmQgdHdvIHJlYWwKYnVncyBmb3VuZCBsaXZlIG9uIGJhcmUtbWV0YWwgaGFyZHdhcmUgKGBwbGF5Ym9va182ODdgJ3Mgc3RhbGUtc3RvcmUgcmVzZXQsCmBwbGF5Ym9va182ODhgJ3MgU0VMaW51eC90cmF2ZXJzYWwtcGVybWlzc2lvbiBjaGFpbikgd2VyZSBkaWFnbm9zZWQgYW5kCmZpeGVkLiBUaGUgd29ya3NwYWNlIGdyZXcgZnJvbSA3OSB0byAqKjI2MSBjcmF0ZXMqKi4gRnVsbCB3b3Jrc3BhY2UKYGNhcmdvIGNoZWNrIC0td29ya3NwYWNlYCB2ZXJpZmllZCBjbGVhbiBiZWZvcmUgdGhpcyBjdXQgKDFtMzFzLCBleGl0IDApOwphIGZ1bGwgYGNhcmdvIHRlc3QgLS13b3Jrc3BhY2VgIHJ1biBhY3Jvc3MgYWxsIDI2MSBjcmF0ZXMgd2FzIG5vdCByZS1ydW4KZm9yIHRoaXMgc3BlY2lmaWMgY3V0IOKAlCB0aGUgaW5kaXZpZHVhbCBjcmF0ZXMgbGFuZGVkIHRoaXMgZXJhIGVhY2ggY2FycnkKdGhlaXIgb3duIHBhc3NpbmcgYGNhcmdvIHRlc3QgLXAgPGNyYXRlPmAgY291bnRzIGRvY3VtZW50ZWQgaW4gdGhlaXIgb3duCnRhYmxldHMgYW5kIGBkb2NzLzE4X3NlY3VyaXR5L0NPTkVOR0lORV9DU1IubWRgLgoKKipIb25lc3Qgbm90ZSBvbiB0aGUgc291cmNlIGJyYW5jaCoqOiB0aGlzIGN1dCBpcyB0YWtlbiBmcm9tIGBtYXN0ZXJgCmRpcmVjdGx5IOKAlCB1bmxpa2UgdGhlIHByZXZpb3VzIGN1dCAodGFrZW4gZnJvbSBhIFBoYXNlIDIgaW50ZWdyYXRpb24gYnJhbmNoCmJlY2F1c2UgdGhlIGFjY2VwdGVkIHdvcmsgaGFkbid0IHJlYWNoZWQgYG1hc3RlcmAgeWV0IGF0IHRoYXQgdGltZSksIHRoZQpHdWRlYS1lcmEgYnVpbGQgcGhhc2UgaXMgc2VhbGVkIG9uIGBtYXN0ZXJgIGl0c2VsZiwgc28gdGhpcyBhbmQgZnV0dXJlCnJlLWN1dHMgc2hvdWxkIGtlZXAgdHJhY2tpbmcgYG1hc3RlcmAgZ29pbmcgZm9yd2FyZC4KClRvIHZlcmlmeSB0aGlzIHNuYXBzaG90IGFnYWluc3QgaXRzIHNvdXJjZSBhdCBhbnkgdGltZToKYGBgYmFzaApnaXQgY2xvbmUgaHR0cHM6Ly9naXRodWIuY29tL2JhaHl3YXkvRW5raURCCmNkIEVua2lEQgpnaXQgZGlmZiA0ZDFhMDdmNWZhMjM4MzNjNjMzYjBmMjVhYTAwMzM2NDdjZWY3YmJlIC0tIC4gJzooZXhjbHVkZSkuZ2l0JwojIGNvbXBhcmUgYWdhaW5zdCBhIGNoZWNrb3V0IG9mIHRoaXMgcmVwbydzIG1haW4gYnJhbmNoIC0tIHNob3VsZCBiZSBlbXB0eQojIGV4Y2VwdCBmb3IgdGhpcyBSRUFETUUubWQgYW5kIEVDT1NZU1RFTV9PVkVSVklFVy5tZCdzIHJlbmFtZS4KYGBgCgojIyBFY29zeXN0ZW0gb3ZlcnZpZXcKClRoZSBmdWxsIGFyY2hpdGVjdHVyZSwgcGhpbG9zb3BoeSwgYW5kIHRlY2huaWNhbCBvdmVydmlldyB0aGF0IHdvdWxkCm5vcm1hbGx5IGxpdmUgaW4gdGhpcyBmaWxlIGhhcyBiZWVuIHByZXNlcnZlZCBhdApbYEVDT1NZU1RFTV9PVkVSVklFVy5tZGBdKC4vRUNPU1lTVEVNX09WRVJWSUVXLm1kKSAodGhlIHNvdXJjZSByZXBvc2l0b3J5J3MKb3duIHJvb3QgYFJFQURNRS5tZGAsIHVuY2hhbmdlZCkg4oCUIGtlcHQgc2VwYXJhdGUgc28gdGhpcyBmaWxlIGNhbiBzdGF5CmZvY3VzZWQgb24gYW5zd2VyaW5nICJ3aGF0IGlzIHRoaXMgcmVwb3NpdG9yeSIgZmlyc3QuCgrigJQgSW5zY3JpYmVkIGZvciBEVUIuU0FSIPCSgb4sIEJhaHlXYXkuRWNvc3lzdGVtIHY0LjAuCg==
+# 𒁾 Ishtarv1 — BahyWay.Ecosystem v4.0, Final Build
+
+**This is the official, final-build snapshot of BahyWay.Ecosystem v4.0
+prior to production.** If you have found this repository among many
+others carrying the `BahyWay`/`bahyway_v4` name, this is the one to
+trust: it exists specifically to answer "which of these is real?" —
+everything else is working history, this is the accepted result.
+
+## What this is
+
+- A complete, working copy of the ecosystem — the full `workspace/bahyway_v4`
+  Cargo workspace (all crates, all path-dependencies intact and buildable),
+  every sealed and draft law document, every playbook, every prototype,
+  the three public websites. Nothing partial: this repo builds and runs
+  on its own, the same way the source it was cut from does.
+- **A single snapshot branch (`main`), not a multi-branch OTAP pipeline.**
+  Day-to-day development and the `dev → test → accept → master` promotion
+  discipline continue to live in `bahyway/EnkiDB` (see
+  `docs/08_pipeline_alaktu/OTAP_PIPELINE.md` and
+  `playbooks/playbook_557_production_golive_from_accept.yml` in this
+  snapshot for how that works). This repository receives the *finished
+  result* each time a milestone is accepted — it is not itself where
+  promotion happens.
+- Re-cut (a fresh commit, deliberately not a merge or a history import)
+  each time a new milestone is accepted, so this repo's own history stays
+  small and legible instead of accumulating the sprawl that motivated
+  creating it in the first place.
+
+## What this is not
+
+- Not a fork meant for independent development. Changes belong in
+  `bahyway/EnkiDB`; this repo is a mirror of accepted results, not a
+  place to branch new work from.
+- Not one of the ~800 working/experimental `bahyway_v4`-related
+  repositories that have accumulated over time. Those remain what they
+  were — session history, drafts, one-off experiments. None of them are
+  "the" official build. This one is, by construction and by declaration.
+
+## Provenance
+
+| | |
+|---|---|
+| Source repository | [`bahyway/EnkiDB`](https://github.com/bahyway/EnkiDB) |
+| Source commit | `4d1a07f5fa23833c633b0f25aa0033647cef7bbe` |
+| Source branch | `master` |
+| Source tag | [`gudea-v4.0-sealed`](https://github.com/bahyway/EnkiDB/releases/tag/gudea-v4.0-sealed) |
+| Cut date | 2026-08-27 |
+| Cut by | DUB.SAR 𒁾 (Bahaa Fadam), via Claude Code |
+| Previous cut | `69e5deae478418085922344be0efb8921f2a0e7e` (2026-08-15) |
+
+**What changed since the previous cut:** the build phase of BahyWay.Ecosystem
+v4.0 closed for real. The Palû Crossing (law `GL-PAL-001`, coordinator
+`IsimudEngine`) sealed the **Gudea** reign (v4.0) at `2026-08-27T12:37:44Z`
+across all seven sovereign databases and opened the **Zagesi** reign (v4.1)
+for new work — proof in `palu/COMPLETION-STELE-4.0.tsv` and
+`palu/PALU-STELE-4.0-to-4.1.md`, both carried in this cut. Since the previous
+cut: `enkidb-con-engine` gained **CSR-08 Architect Sovereignty**, the eighth
+Connection Security Rule, append-only-honest by design (`Create`/`Supersede`/
+`Retire`, never a literal modify/delete — see `docs/18_security/CONENGINE_CSR.md`);
+`enkidb-ingest::kispu` landed the four-way atomic commit binding the Event
+KAKI, the NATIRU orbital-range index, the zakāru audit journal, and the
+Orbital position into one all-or-nothing write; `pdm-shape-admission` shipped
+as GL-EAV-001 Layer 2's first real implementation; 17 DRAFT law tablets
+(`GL-NSR-001`, `GL-LBR-001`, `GL-NJF-001`, `GL-DST-004`, `GL-VSL-001`,
+`GL-SHP-001`, `GL-ISM-001`, `HS-EXT-003`, and nine more) were sealed with
+their matching crates built and tested; the E-004/E-005 performance gates
+were closed for real against the production Read Node path; and two real
+bugs found live on bare-metal hardware (`playbook_687`'s stale-store reset,
+`playbook_688`'s SELinux/traversal-permission chain) were diagnosed and
+fixed. The workspace grew from 79 to **261 crates**. Full workspace
+`cargo check --workspace` verified clean before this cut (1m31s, exit 0);
+a full `cargo test --workspace` run across all 261 crates was not re-run
+for this specific cut — the individual crates landed this era each carry
+their own passing `cargo test -p <crate>` counts documented in their own
+tablets and `docs/18_security/CONENGINE_CSR.md`.
+
+**Honest note on the source branch**: this cut is taken from `master`
+directly — unlike the previous cut (taken from a Phase 2 integration branch
+because the accepted work hadn't reached `master` yet at that time), the
+Gudea-era build phase is sealed on `master` itself, so this and future
+re-cuts should keep tracking `master` going forward.
+
+To verify this snapshot against its source at any time:
+```bash
+git clone https://github.com/bahyway/EnkiDB
+cd EnkiDB
+git diff 4d1a07f5fa23833c633b0f25aa0033647cef7bbe -- . ':(exclude).git'
+# compare against a checkout of this repo's main branch -- should be empty
+# except for this README.md and ECOSYSTEM_OVERVIEW.md's rename.
+```
+
+## Ecosystem overview
+
+The full architecture, philosophy, and technical overview that would
+normally live in this file has been preserved at
+[`ECOSYSTEM_OVERVIEW.md`](./ECOSYSTEM_OVERVIEW.md) (the source repository's
+own root `README.md`, unchanged) — kept separate so this file can stay
+focused on answering "what is this repository" first.
+
+— Inscribed for DUB.SAR 𒁾, BahyWay.Ecosystem v4.0.
