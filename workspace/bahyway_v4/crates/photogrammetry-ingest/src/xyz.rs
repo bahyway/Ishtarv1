@@ -55,7 +55,10 @@ mod tests {
     #[test]
     fn parses_whitespace_separated_xyz() {
         let cloud = parse_xyz("0 0 0\n1 2 3\n4 5 6\n").unwrap();
-        assert_eq!(cloud.points, vec![[0.0, 0.0, 0.0], [1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+        assert_eq!(
+            cloud.points,
+            vec![[0.0, 0.0, 0.0], [1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+        );
         assert!(cloud.colors.is_none());
     }
 

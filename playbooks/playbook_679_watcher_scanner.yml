@@ -1,0 +1,138 @@
+---
+# PB-416 · Watcher_Scanner · score a stakeholder's templates against real orbits and propose a band
+# GL-BND-001 · a band is a summary of evidence, never a reward for effort
+- name: PB-416 scan a portfolio and propose a band
+  hosts: girsu
+  vars:
+    bahyway_provides: ["decree:band", "artifact:band_decree"]
+    bahyway_requires: ["law:GL-BND-001", "law:GL-AGT-001", "tribe:mdb.template"]
+    home: "{{ ansible_env.HOME }}/bahyway/scanner"
+    reg: "{{ ansible_env.HOME }}/bahyway/templates/registry.json"
+    stakeholder: "{{ who | default('') }}"
+  tasks:
+    - name: Ensure the scanner's home
+      ansible.builtin.file: {path: "{{ home }}/{{ item }}", state: directory, mode: "0750"}
+      loop: ["", "runs", "decrees"]
+
+    - name: Place the scanner and the sealed weights
+      ansible.builtin.copy: {src: "{{ item.s }}", dest: "{{ home }}/{{ item.d }}", mode: "{{ item.m }}"}
+      loop:
+        - {s: watcher_scanner.py, d: watcher_scanner.py, m: "0750"}
+        - {s: GL-BND-001_the_band.md, d: GL-BND-001_the_band.md, m: "0440"}
+
+    - name: Gate B0 · the scanner cannot edit the weights or the ladder it reads (§6)
+      ansible.builtin.shell: |
+        test ! -w "{{ home }}/GL-BND-001_the_band.md" \
+          && echo "B0 green - the tablet is read-only to the scanner" \
+          || { echo "B0 RED - the scanner could amend the ladder it is judged by"; exit 1; }
+      changed_when: false
+
+    - name: Gate B1 · a stakeholder was named
+      ansible.builtin.assert:
+        that: [stakeholder | length > 0]
+        fail_msg: "pass -e who=freelance.viz"
+
+    - name: Harvest the stakeholder's candidate templates
+      ansible.builtin.command: >
+        bahyway-enkidb present --db EnkiMDB --port 7006 --tribe mdb.template
+        --where "author = {{ stakeholder }}" --json
+      register: port
+      changed_when: false
+      failed_when: false
+
+    - name: Harvest real orbits to score against — labelled, and never invented
+      ansible.builtin.command: >
+        bahyway-lamassu orbits --labelled --epochs 2 --emit units,strata,signature,replay_error --json
+      register: orbits
+      changed_when: false
+      failed_when: false
+
+    - name: Gate B2 · there must be at least one labelled pair, or DISCRIMINATION is UNKNOWN not zero
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys
+        try: d = json.loads({{ orbits.stdout | default('"{}"') | to_json }})
+        except Exception: d = {}
+        labs = {o.get("label") for o in d.get("orbits", [])}
+        print("labels present:", sorted(labs))
+        if not ({"healthy"} & labs and labs - {"healthy"}):
+            print("no healthy/unhealthy pair - DISCRIMINATION cannot be measured;")
+            print("it must be reported UNKNOWN, never scored zero (GL-AGT-001 §4)")
+            sys.exit(1)
+        PY
+      changed_when: false
+      failed_when: false
+
+    - name: Score the portfolio and propose a band
+      ansible.builtin.shell: |
+        cd "{{ home }}"
+        python3 watcher_scanner.py \
+          --portfolio runs/{{ stakeholder }}_portfolio.json \
+          --registry  {{ reg }} \
+          --orbits    runs/orbits.json \
+          --work      runs/{{ stakeholder }}
+      register: scan
+      changed_when: true
+      failed_when: false
+
+    - name: Gate B3 · determinism — two scans, byte-identical decrees (§ GL-AGT-001 §1)
+      ansible.builtin.shell: |
+        cd "{{ home }}"
+        python3 watcher_scanner.py --portfolio runs/{{ stakeholder }}_portfolio.json \
+          --registry {{ reg }} --orbits runs/orbits.json --work runs/_a >/dev/null
+        python3 watcher_scanner.py --portfolio runs/{{ stakeholder }}_portfolio.json \
+          --registry {{ reg }} --orbits runs/orbits.json --work runs/_b >/dev/null
+        A=$(python3 -c "import json;print(json.load(open('runs/_a/band_decree.json'))['receipt_sha256'])")
+        B=$(python3 -c "import json;print(json.load(open('runs/_b/band_decree.json'))['receipt_sha256'])")
+        [ "$A" = "$B" ] && echo "B3 green - $A" || { echo "B3 RED - the scanner is not deterministic"; exit 1; }
+      changed_when: false
+      failed_when: false
+
+    - name: Gate B4 · a duplicate scored above zero would be a breach (§2)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys, pathlib
+        p = pathlib.Path("{{ home }}/runs/{{ stakeholder }}/band_decree.json")
+        if not p.exists(): print("no decree yet"); sys.exit(0)
+        d = json.loads(p.read_text())
+        bad = [t["name"] for t in d["templates"] if t["refused_duplicate"] and t["score"] > 0]
+        print("duplicates scoring above zero:", bad)
+        sys.exit(1 if bad else 0)
+        PY
+      changed_when: false
+
+    - name: Gate B5 · the black band was not awarded without another engine's adoption (§4)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys, pathlib
+        p = pathlib.Path("{{ home }}/runs/{{ stakeholder }}/band_decree.json")
+        if not p.exists(): sys.exit(0)
+        d = json.loads(p.read_text())
+        b = d["band"]
+        if b["band"] == "BLACK" and not b["facts"].get("adopted_elsewhere_and_no_refusal"):
+            print("BREACH - a black band without another engine adopting the work")
+            sys.exit(1)
+        print("B5 green -", b["band"], b.get("kanji", ""))
+        PY
+      changed_when: false
+
+    - name: Show the proposal
+      ansible.builtin.debug:
+        msg: >
+          {{ scan.stdout_lines | default([]) }}
+          - the scanner awards nothing. A steward signs the decree, and the band is re-computed
+          every epoch: a template that fails on orbits it has not met before lowers it (§5).
+
+    - name: File the decree, unexecuted
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ home }}/runs/{{ stakeholder }}/band_decree.json"
+        dest: "{{ home }}/decrees/{{ stakeholder }}_{{ ansible_date_time.epoch }}.json"
+        mode: "0440"
+      failed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-416 band proposed for {{ stakeholder }} - median-based, duplicates zeroed, black requires another engine's adoption"

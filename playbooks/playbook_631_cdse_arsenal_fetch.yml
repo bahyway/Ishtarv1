@@ -1,0 +1,162 @@
+---
+# PB-371 · CDSE Arsenal · fetch Copernicus products into the landing zone with receipts
+# Law: GL-FLD-001 §5 (archive is the store; the field over it is a view) · GL-UNT-001 §3 (boundary travels with shared data)
+#
+# Confirmed with the Architect (2026-08-26): this is the actual reason the
+# NAS is wanted at all -- keep downloaded Copernicus Sentinel products
+# locally and analyze the hyperspectral imagery, not any public-cloud need
+# (this ecosystem has none). Kept in scope, unconditionally, unlike
+# PB-632/633/634's nas_dedicated fallback: it runs against whatever landing
+# zone exists (real NAS or the current host), then PB-632's sweep task ages
+# raw/ into its 250GB Archive Storage Sector.
+#
+# CORRECTED 2026-08-26: the first version of this section invented a bare
+# openssl-ed25519-keyfile "Sargon/Gilgamesh Passport" -- wrong. That system
+# already exists, real and load-bearing, in workspace/bahyway_v4/crates/
+# kupru (SargonPassport, ARCHITECT_KEY_CEREMONY.md's Shamir-split Gilgamesh
+# root key, kupru-vault-cli) and is already wired into this very playbooks/
+# directory via tasks/require_gilgamesh_for_production.yml (see playbook_259/
+# playbook_263/playbook_280 for existing callers). This playbook now imports
+# that SAME shared gate instead of a parallel invented one.
+#
+# Two-tier access, per the Architect (2026-08-26), mapped onto that existing
+# target_env convention (no separate demo_mode flag -- one axis, not two):
+#   -e target_env=Development|Test|Acceptance  -- no real CDSE account or
+#     passport needed. Lands a handful of clearly-labeled synthetic
+#     DEMO-*.zip crates with real, valid Kaniku receipts (real sha256 over
+#     the dummy bytes, "demo": true tagged) so the landing/receipt/gate
+#     pipeline and PB-632's sweep can be exercised end-to-end with nothing
+#     real at risk.
+#   -e target_env=Production -- a REAL Copernicus download: requires BOTH
+#     real CDSE_USER/CDSE_PASS (Gate L0, a free account at
+#     https://dataspace.copernicus.eu/) AND require_gilgamesh_for_
+#     production.yml's own gate -- a verified privilege_level=7 (Gilgamesh)
+#     SargonPassport in the real kupru vault, KUPRU_VAULT_PASSPHRASE
+#     exported (never a -e var). This is the same "fundamental door" every
+#     other real-infrastructure playbook in this repo already uses -- see
+#     that task file's header for the full rule.
+- name: PB-371 land Copernicus archives
+  hosts: girsu
+  vars:
+    lz: "{{ ansible_env.HOME }}/bahyway/landing_zone"
+    collection: SENTINEL-2
+    wkt: "POLYGON((4.72 52.28,5.02 52.28,5.02 52.43,4.72 52.43,4.72 52.28))"   # replace per target
+    start: "2026-06-01"
+    end: "2026-08-24"
+    cloud: 30
+    limit: 12
+    demo_crate_count: 3
+    # Real download only at Production tier -- everything below it is demo.
+    demo_mode: "{{ target_env != 'Production' }}"
+  tasks:
+    - name: "GATE | target_env-based Production check (real download = real infrastructure)"
+      ansible.builtin.import_tasks: tasks/require_gilgamesh_for_production.yml
+
+    - name: Ensure landing zone layout
+      ansible.builtin.file: {path: "{{ lz }}/{{ item }}", state: directory, mode: "0750"}
+      loop: [raw, receipts, derived, quarantine]
+
+    - name: Place the arsenal tool
+      ansible.builtin.copy: {src: arsenal.py, dest: "{{ lz }}/arsenal.py", mode: "0750"}
+
+    - name: Gate L0 · credentials present (never stored in the playbook)
+      ansible.builtin.assert:
+        that:
+          - lookup('env','CDSE_USER') | length > 0
+          - lookup('env','CDSE_PASS') | length > 0
+        fail_msg: "export CDSE_USER and CDSE_PASS before running PB-371 at target_env=Production"
+      when: not (demo_mode | bool)
+
+    - name: Gate L1 · dry run first — refuse to land more than the free disk allows
+      ansible.builtin.shell: >
+        python3 {{ lz }}/arsenal.py --collection {{ collection }} --wkt "{{ wkt }}"
+        --start {{ start }} --end {{ end }} --cloud {{ cloud }} --limit {{ limit }} --dry-run
+      register: dry
+      changed_when: false
+      when: not (demo_mode | bool)
+
+    - name: Show the estimate
+      ansible.builtin.debug: {msg: "{{ dry.stdout_lines }}"}
+      when: not (demo_mode | bool)
+
+    - name: Assert free space is at least twice the estimate
+      ansible.builtin.shell: |
+        need=$(echo "{{ dry.stdout }}" | grep 'estimated landing size' | grep -oE '[0-9.]+')
+        free=$(df -BG --output=avail "{{ lz }}" | tail -1 | tr -dc '0-9')
+        python3 -c "import sys;sys.exit(0 if $free > 2*$need else 1)"
+      changed_when: false
+      when: not (demo_mode | bool)
+
+    - name: Land the archives
+      ansible.builtin.shell: >
+        python3 {{ lz }}/arsenal.py --collection {{ collection }} --wkt "{{ wkt }}"
+        --start {{ start }} --end {{ end }} --cloud {{ cloud }} --limit {{ limit }}
+        --out {{ lz }}/raw --recompress
+      register: landed
+      changed_when: "'landed' in landed.stdout"
+      when: not (demo_mode | bool)
+
+    - name: "DEMO :: synthetic Copernicus-shaped crates (no real download, no credentials)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        python3 << 'PYEOF'
+        import hashlib, json, os, datetime
+        lz = "{{ lz }}"
+        n = {{ demo_crate_count }}
+        stamp = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        os.makedirs(os.path.join(lz, "raw", "receipts"), exist_ok=True)
+        for i in range(1, n + 1):
+            name = f"DEMO-{{ collection }}-{i:03d}.zip"
+            path = os.path.join(lz, "raw", name)
+            # Deterministic, clearly-fake payload -- never mistakable for a real product.
+            payload = f"BAHYWAY DEMO CRATE -- NOT REAL COPERNICUS DATA -- {name} -- {stamp}".encode()
+            with open(path, "wb") as f:
+                f.write(payload)
+            sha = hashlib.sha256(payload).hexdigest()
+            receipt = {
+                "archive": name, "sha256": sha, "demo": True,
+                "collection": "{{ collection }}", "kaki": f"DEMO-KAKI-{i:03d}",
+                "landed_utc": stamp,
+                "note": "synthetic demo crate -- no real Copernicus download occurred",
+            }
+            with open(os.path.join(lz, "raw", "receipts", name + ".kaniku.json"), "w") as f:
+                json.dump(receipt, f, indent=2)
+        print(f"DEMO landed {n} synthetic crates -- nothing real downloaded")
+        PYEOF
+      args: {executable: /bin/bash}
+      register: demo_landed
+      changed_when: true
+      when: demo_mode | bool
+
+    - name: Show the demo result
+      ansible.builtin.debug: {msg: "{{ demo_landed.stdout_lines }}"}
+      when: demo_mode | bool
+
+    - name: Gate L2 · every archive has a Kaniku receipt with a KAKI and a sha256
+      ansible.builtin.shell: |
+        set -e
+        n=$(ls {{ lz }}/raw/*.zip 2>/dev/null | wc -l)
+        r=$(ls {{ lz }}/raw/receipts/*.kaniku.json 2>/dev/null | wc -l)
+        [ "$n" = "$r" ] || { echo "archives=$n receipts=$r"; exit 1; }
+        echo "L2 green - $n archives, $n receipts"
+      changed_when: false
+
+    - name: Gate L3 · verify every sha256 against the bytes on disk
+      ansible.builtin.shell: |
+        set -e
+        for j in {{ lz }}/raw/receipts/*.kaniku.json; do
+          f="{{ lz }}/raw/$(python3 -c "import json,sys;print(json.load(open('$j'))['archive'])")"
+          w=$(python3 -c "import json;print(json.load(open('$j'))['sha256'])")
+          h=$(sha256sum "$f" | cut -d' ' -f1)
+          [ "$w" = "$h" ] || { echo "BROKEN $f"; exit 1; }
+        done
+        echo "L3 green - all archives verify"
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: >-
+          {{ ansible_date_time.iso8601 }} PB-371 CDSE arsenal landed {{ collection }} {{ start }}..{{ end }} -
+          receipts verified {{ '(DEMO -- synthetic crates, target_env=' + target_env + ')' if (demo_mode | bool) else '(REAL -- Gilgamesh Passport-authorized, target_env=Production)' }}

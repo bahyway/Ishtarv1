@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 //! Stage 0 archive format detection via magic-byte signature matching.
 
-use crate::format::ArchiveFormat;
 use crate::error::ArchiveError;
+use crate::format::ArchiveFormat;
 
 /// Detect the archive format from the first bytes of a byte slice.
 ///
@@ -12,7 +12,7 @@ use crate::error::ArchiveError;
 /// (EN-NARAMSIN-001 §2.3 scope discipline).
 pub fn detect_format(header: &[u8]) -> Result<ArchiveFormat, ArchiveError> {
     let formats = [
-        ArchiveFormat::TarXz,   // longest magic first to avoid prefix collision
+        ArchiveFormat::TarXz, // longest magic first to avoid prefix collision
         ArchiveFormat::SevenZip,
         ArchiveFormat::TarGz,
         ArchiveFormat::TarBz2,

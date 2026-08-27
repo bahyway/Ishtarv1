@@ -10,27 +10,27 @@ pub mod codec;
 pub mod types;
 pub mod value;
 
+pub use codec::{decode as decode_value, encode as encode_value, CodecError};
 pub use types::{
-    AkkCoordinate, AkkDate, AkkHijriDate, AkkNationalId, AkkNamePartLabel,
-    AkkNameVector, AkkPhone, CipherAlgorithm, PipelineStatus, PolicyVerdict,
+    AkkCoordinate, AkkDate, AkkHijriDate, AkkNamePartLabel, AkkNameVector, AkkNationalId, AkkPhone,
+    CipherAlgorithm, PipelineStatus, PolicyVerdict,
 };
-pub use codec::{encode as encode_value, decode as decode_value, CodecError};
 pub use value::AkkValue;
 
 /// Sovereign EAV triple: entity + attribute + value.
 #[derive(Debug, Clone)]
 pub struct AkkTriple {
-    pub entity:    String,
+    pub entity: String,
     pub attribute: String,
-    pub value:     AkkValue,
+    pub value: AkkValue,
 }
 
 impl AkkTriple {
-    pub fn new(
-        entity:    impl Into<String>,
-        attribute: impl Into<String>,
-        value:     AkkValue,
-    ) -> Self {
-        Self { entity: entity.into(), attribute: attribute.into(), value }
+    pub fn new(entity: impl Into<String>, attribute: impl Into<String>, value: AkkValue) -> Self {
+        Self {
+            entity: entity.into(),
+            attribute: attribute.into(),
+            value,
+        }
     }
 }

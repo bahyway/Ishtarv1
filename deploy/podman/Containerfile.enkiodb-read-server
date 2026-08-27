@@ -1,0 +1,49 @@
+# =============================================================================
+# enkiodb-read-server — EnkiODB (Operational Database) Read Node container
+# image. There is deliberately no enkiodb-write-server image: EnkiODB is
+# fed in-process by enkisdb-write-server's ValidationSweep
+# (`OdbStore::drain_from_sdb`) -- see
+# deploy/podman/Containerfile.enkisdb-write-server's header. This
+# container only ever reads the materialized odb/ Data File tree that
+# process produces.
+#
+# Build (from the repo root):
+#   podman build -t enkiodb-read-server:latest \
+#     -f deploy/podman/Containerfile.enkiodb-read-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkiodb-read \
+#     -p 7004:7004 \
+#     -v enkiodb-read-data:/data:Z \
+#     -e RELOAD_SECS=30 \
+#     --restart=always \
+#     enkiodb-read-server:latest
+#
+# Lifecycle (no systemd anywhere -- plain Podman commands):
+#   podman stop enkiodb-read
+#   podman start enkiodb-read
+#   podman logs -f enkiodb-read
+#
+# Data path: this container never writes -- it only opens
+# /data/current/{entities,eav} read-only and reloads on a timer. Getting
+# enkisdb-write's materialized odb/ tree into that path is a separate
+# step; see scripts/enkiodb-sync-data.sh.
+#
+# `:Z` on the volume mount is required on Fedora/SELinux-enforcing hosts.
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkiodb-read-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkiodb
+COPY --from=builder /build/target/release/enkiodb-read-server /usr/local/bin/enkiodb-read-server
+USER enkiodb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7004
+ENV DATA_DIR=/data
+EXPOSE 7004
+ENTRYPOINT ["/usr/local/bin/enkiodb-read-server"]

@@ -9,11 +9,11 @@ pub use nusku_engine::BodyType;
 /// Raw thermal frame — 16-zone float array (°C)
 #[derive(Debug, Clone)]
 pub struct IrisFrame {
-    pub frame_id:     u64,
-    pub temperatures: [f32; 16],  // one per body zone (Head=0 … RShin=15)
-    pub body_type:    BodyType,
-    pub width_px:     u32,
-    pub height_px:    u32,
+    pub frame_id: u64,
+    pub temperatures: [f32; 16], // one per body zone (Head=0 … RShin=15)
+    pub body_type: BodyType,
+    pub width_px: u32,
+    pub height_px: u32,
 }
 
 /// IR camera backend abstraction
@@ -24,12 +24,17 @@ pub trait IrisCamera: Send + Sync {
 
 /// Simulated camera for development / testing
 pub struct SimulatedCamera {
-    pub scenario:    SimScenario,
-    frame_counter:   std::sync::atomic::AtomicU64,
+    pub scenario: SimScenario,
+    frame_counter: std::sync::atomic::AtomicU64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SimScenario { Normal, Threat, Fever, Stress }
+pub enum SimScenario {
+    Normal,
+    Threat,
+    Fever,
+    Stress,
+}
 
 impl SimulatedCamera {
     pub fn new(scenario: SimScenario) -> Self {
@@ -50,10 +55,8 @@ impl IrisCamera for SimulatedCamera {
         //   LForearm, RForearm, LHip, RHip,
         //   LThigh, RThigh, LShin, RShin
         let baseline: [f32; 16] = [
-            36.8, 36.4, 36.6, 36.4,
-            35.8, 35.8, 34.5, 34.5,
-            33.8, 33.8, 35.6, 35.6,
-            35.0, 35.0, 33.5, 33.5,
+            36.8, 36.4, 36.6, 36.4, 35.8, 35.8, 34.5, 34.5, 33.8, 33.8, 35.6, 35.6, 35.0, 35.0,
+            33.5, 33.5,
         ];
         let mut temps = baseline;
         let t = id as f32 / 60.0;
@@ -64,20 +67,27 @@ impl IrisCamera for SimulatedCamera {
             SimScenario::Threat => {
                 // Torso cold shadow + arm hot spots (concealed object signature)
                 temps[2] -= 2.0 + (t * 0.7).sin() * 0.3; // Chest
-                temps[3] -= 2.3;                           // Abdomen
-                temps[4] -= 1.5; temps[5] -= 1.5;         // Shoulders
-                temps[6] += 1.6; temps[7] += 1.0;         // Arms
-                temps[0] += 1.0; temps[1] += 0.8;         // Head/neck stress
+                temps[3] -= 2.3; // Abdomen
+                temps[4] -= 1.5;
+                temps[5] -= 1.5; // Shoulders
+                temps[6] += 1.6;
+                temps[7] += 1.0; // Arms
+                temps[0] += 1.0;
+                temps[1] += 0.8; // Head/neck stress
             }
 
             SimScenario::Fever => {
-                for i in 0..16 { temps[i] += 1.8 + (t * 0.5).sin() * 0.2; }
+                for temp in temps.iter_mut().take(16) {
+                    *temp += 1.8 + (t * 0.5).sin() * 0.2;
+                }
                 temps[0] += 0.5; // Head highest
             }
 
             SimScenario::Stress => {
-                temps[0] += 1.4; temps[1] += 1.1; // Hot head
-                temps[8] -= 0.6; temps[9] -= 0.6; // Cold hands (LForearm / RForearm)
+                temps[0] += 1.4;
+                temps[1] += 1.1; // Hot head
+                temps[8] -= 0.6;
+                temps[9] -= 0.6; // Cold hands (LForearm / RForearm)
             }
         }
 
@@ -87,15 +97,17 @@ impl IrisCamera for SimulatedCamera {
         }
 
         Ok(IrisFrame {
-            frame_id:     id,
+            frame_id: id,
             temperatures: temps,
-            body_type:    BodyType::Man,
-            width_px:     80,
-            height_px:    60,
+            body_type: BodyType::Man,
+            width_px: 80,
+            height_px: 60,
         })
     }
 
-    fn camera_id(&self) -> &str { "sim-001" }
+    fn camera_id(&self) -> &str {
+        "sim-001"
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────

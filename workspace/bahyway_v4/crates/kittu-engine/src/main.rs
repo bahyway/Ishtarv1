@@ -1,6 +1,6 @@
 //! Kittu Engine v1 daemon entry point.
 //! Usage: kittu-engine [enkidb_addr] [alert_email] [show_dir]
-//! Defaults: 192.168.122.107:7001, security@bahyway.local, ./runtime/show_alerts
+//! Defaults: 192.168.122.112:7001, security@bahyway.local, ./runtime/show_alerts
 #![forbid(unsafe_code)]
 use std::env;
 
@@ -8,7 +8,7 @@ fn main() {
     eprintln!("[kittu-engine v1] starting");
     let enkidb = env::args()
         .nth(1)
-        .unwrap_or_else(|| "192.168.122.107:7001".to_string());
+        .unwrap_or_else(|| "192.168.122.112:7001".to_string());
     let email = env::args()
         .nth(2)
         .unwrap_or_else(|| "security@bahyway.local".to_string());

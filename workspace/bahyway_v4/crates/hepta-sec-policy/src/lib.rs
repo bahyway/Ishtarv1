@@ -13,16 +13,14 @@
 
 use std::collections::HashMap;
 
-use hepta_sec_firewall::{
-    BlockReason, KakiPacket, PacketProtocol, TrustEntry, TrustState,
-};
+use hepta_sec_firewall::{BlockReason, KakiPacket, PacketProtocol, TrustEntry, TrustState};
 
 // ── RateTracker ───────────────────────────────────────────────────────────────
 
 /// One-second sliding window for a single KAKI.
 struct RateWindow {
-    epoch:  u32,
-    count:  u32,
+    epoch: u32,
+    count: u32,
 }
 
 /// Per-KAKI packet-rate tracker used by `PolicyCondition::RateExceeds`.
@@ -35,13 +33,18 @@ pub struct RateTracker {
 
 impl RateTracker {
     pub fn new() -> Self {
-        RateTracker { windows: HashMap::new() }
+        RateTracker {
+            windows: HashMap::new(),
+        }
     }
 
     /// Record one packet for `kaki_hash` at `now_epoch` and return whether
     /// the per-second count now exceeds `threshold`.
     pub fn record_and_check(&mut self, kaki_hash: u32, threshold: u32, now_epoch: u32) -> bool {
-        let w = self.windows.entry(kaki_hash).or_insert(RateWindow { epoch: now_epoch, count: 0 });
+        let w = self.windows.entry(kaki_hash).or_insert(RateWindow {
+            epoch: now_epoch,
+            count: 0,
+        });
         if w.epoch != now_epoch {
             w.epoch = now_epoch;
             w.count = 0;
@@ -57,7 +60,9 @@ impl RateTracker {
 }
 
 impl Default for RateTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── PolicyPriority ────────────────────────────────────────────────────────────
@@ -184,9 +189,9 @@ impl PolicyEngine {
     /// count for `packet.src_kaki_hash` exceeds the configured threshold.
     pub fn evaluate_with_rate(
         &self,
-        packet:    &KakiPacket,
-        trust:     Option<&TrustEntry>,
-        tracker:   &mut RateTracker,
+        packet: &KakiPacket,
+        trust: Option<&TrustEntry>,
+        tracker: &mut RateTracker,
         now_epoch: u32,
     ) -> Option<PolicyAction> {
         for rule in &self.rules {
@@ -239,7 +244,9 @@ impl PolicyEngine {
             name: "quarantine_unknown_source",
             priority: PolicyPriority::High,
             conditions: vec![PolicyCondition::SourceTrustState(TrustState::Unknown)],
-            action: PolicyAction::QuarantineAndAlert("unknown_source: first-seen KAKI held for verification"),
+            action: PolicyAction::QuarantineAndAlert(
+                "unknown_source: first-seen KAKI held for verification",
+            ),
         });
 
         // Rule 5 — Normal: quarantine suspicious (Fuzzy B11) sources
@@ -247,7 +254,9 @@ impl PolicyEngine {
             name: "quarantine_suspicious_source",
             priority: PolicyPriority::Normal,
             conditions: vec![PolicyCondition::SourceTrustState(TrustState::Suspicious)],
-            action: PolicyAction::QuarantineAndAlert("suspicious_source: Fuzzy B11 held for steward review"),
+            action: PolicyAction::QuarantineAndAlert(
+                "suspicious_source: Fuzzy B11 held for steward review",
+            ),
         });
 
         // Rule 6a — Normal: permit Active sources
@@ -270,8 +279,10 @@ impl PolicyEngine {
         engine.add_rule(PolicyRule {
             name: "default_deny_all",
             priority: PolicyPriority::Low,
-            conditions: vec![],   // empty = always matches
-            action: PolicyAction::Deny(BlockReason::PolicyViolation("default_deny: no rule permitted this packet")),
+            conditions: vec![], // empty = always matches
+            action: PolicyAction::Deny(BlockReason::PolicyViolation(
+                "default_deny: no rule permitted this packet",
+            )),
         });
 
         engine
@@ -300,25 +311,19 @@ impl PolicyEngine {
         trust: Option<&TrustEntry>,
     ) -> bool {
         match condition {
-            PolicyCondition::SourceKakiAbsent => {
-                packet.src_kaki_hash.is_none()
-            }
+            PolicyCondition::SourceKakiAbsent => packet.src_kaki_hash.is_none(),
             PolicyCondition::SourceTrustState(expected) => {
-                trust.map_or(false, |e| &e.state == expected)
+                trust.is_some_and(|e| &e.state == expected)
             }
             PolicyCondition::DestTrustState(expected) => {
                 // For now: only matchable if we have a trust entry and the
                 // packet dst matches its hash.  Phase 2 will add a lookup.
-                trust.map_or(false, |e| {
+                trust.is_some_and(|e| {
                     packet.dst_kaki_hash == Some(e.kaki_hash) && &e.state == expected
                 })
             }
-            PolicyCondition::ProtocolIs(proto) => {
-                &packet.protocol == proto
-            }
-            PolicyCondition::PacketSizeExceeds(threshold) => {
-                packet.size_bytes > *threshold
-            }
+            PolicyCondition::ProtocolIs(proto) => &packet.protocol == proto,
+            PolicyCondition::PacketSizeExceeds(threshold) => packet.size_bytes > *threshold,
             PolicyCondition::RateExceeds { .. } => {
                 // Stateless evaluate() cannot track rates — always false.
                 // Use evaluate_with_rate() to get live rate enforcement.
@@ -329,10 +334,10 @@ impl PolicyEngine {
 
     fn rule_matches_with_rate(
         &self,
-        rule:      &PolicyRule,
-        packet:    &KakiPacket,
-        trust:     Option<&TrustEntry>,
-        tracker:   &mut RateTracker,
+        rule: &PolicyRule,
+        packet: &KakiPacket,
+        trust: Option<&TrustEntry>,
+        tracker: &mut RateTracker,
         now_epoch: u32,
     ) -> bool {
         for cond in &rule.conditions {
@@ -346,9 +351,9 @@ impl PolicyEngine {
     fn condition_matches_with_rate(
         &self,
         condition: &PolicyCondition,
-        packet:    &KakiPacket,
-        trust:     Option<&TrustEntry>,
-        tracker:   &mut RateTracker,
+        packet: &KakiPacket,
+        trust: Option<&TrustEntry>,
+        tracker: &mut RateTracker,
         now_epoch: u32,
     ) -> bool {
         match condition {
@@ -375,7 +380,7 @@ impl Default for PolicyEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hepta_sec_firewall::{KakiPacket, PacketProtocol, TrustEntry, TrustState, BlockReason};
+    use hepta_sec_firewall::{BlockReason, KakiPacket, PacketProtocol, TrustEntry, TrustState};
 
     fn make_packet(src: Option<u32>, size: u32) -> KakiPacket {
         KakiPacket {
@@ -402,17 +407,9 @@ mod tests {
     fn condition_source_kaki_absent() {
         let engine = PolicyEngine::new();
         let packet = make_packet(None, 128);
-        assert!(engine.condition_matches(
-            &PolicyCondition::SourceKakiAbsent,
-            &packet,
-            None,
-        ));
+        assert!(engine.condition_matches(&PolicyCondition::SourceKakiAbsent, &packet, None,));
         let packet2 = make_packet(Some(0x1234), 128);
-        assert!(!engine.condition_matches(
-            &PolicyCondition::SourceKakiAbsent,
-            &packet2,
-            None,
-        ));
+        assert!(!engine.condition_matches(&PolicyCondition::SourceKakiAbsent, &packet2, None,));
     }
 
     #[test]
@@ -559,7 +556,10 @@ mod tests {
             tracker.record_and_check(0xBBBB_0001, 3, 2_000);
         }
         let exceeded = tracker.record_and_check(0xBBBB_0001, 3, 2_000);
-        assert!(exceeded, "4th packet in same second should exceed threshold of 3");
+        assert!(
+            exceeded,
+            "4th packet in same second should exceed threshold of 3"
+        );
     }
 
     #[test]
@@ -579,7 +579,9 @@ mod tests {
         engine.add_rule(PolicyRule {
             name: "rate_limit_rule",
             priority: PolicyPriority::Critical,
-            conditions: vec![PolicyCondition::RateExceeds { packets_per_second: 2 }],
+            conditions: vec![PolicyCondition::RateExceeds {
+                packets_per_second: 2,
+            }],
             action: PolicyAction::Deny(BlockReason::PolicyViolation("rate_exceeded")),
         });
         engine.add_rule(PolicyRule {
@@ -593,10 +595,21 @@ mod tests {
         let mut tracker = RateTracker::new();
 
         // First 2 packets: below/at threshold → permit
-        assert_eq!(engine.evaluate_with_rate(&packet, None, &mut tracker, 5_000), Some(PolicyAction::Permit));
-        assert_eq!(engine.evaluate_with_rate(&packet, None, &mut tracker, 5_000), Some(PolicyAction::Permit));
+        assert_eq!(
+            engine.evaluate_with_rate(&packet, None, &mut tracker, 5_000),
+            Some(PolicyAction::Permit)
+        );
+        assert_eq!(
+            engine.evaluate_with_rate(&packet, None, &mut tracker, 5_000),
+            Some(PolicyAction::Permit)
+        );
         // 3rd packet: threshold exceeded → deny
         let action = engine.evaluate_with_rate(&packet, None, &mut tracker, 5_000);
-        assert_eq!(action, Some(PolicyAction::Deny(BlockReason::PolicyViolation("rate_exceeded"))));
+        assert_eq!(
+            action,
+            Some(PolicyAction::Deny(BlockReason::PolicyViolation(
+                "rate_exceeded"
+            )))
+        );
     }
 }

@@ -1,0 +1,55 @@
+---
+# PB-366 · ENLIL wave-field kernel · GL-FLD-001 §1 §2 §5 §7
+# One scatter-add pass builds the membrane; conservation and Masku descent are gates, not options.
+- name: PB-366 deploy the ENLIL field kernel
+  hosts: girsu
+  vars:
+    forge: "{{ ansible_env.HOME }}/bahyway/forge"
+    grid: {shells: 7, angles: 64, radii: 28}
+  tasks:
+    - name: Write the field configuration
+      ansible.builtin.copy:
+        dest: "{{ forge }}/enlil_field.toml"
+        mode: "0640"
+        content: |
+          # GL-FLD-001 sealed 2026-08-24
+          [grid]
+          shells = {{ grid.shells }}    # MLU -3..+3
+          angles = {{ grid.angles }}
+          radii  = {{ grid.radii }}     # RU bins
+          [law]
+          amplitude_is_density = true   # §1 - the height IS the count
+          field_is_a_view = true        # §5 - never the store
+          cross_term_band_shown = true  # §2 - remainder never folded into components
+          residual_vs_median = true     # §7
+          [gates]
+          conservation = "sum(field) == n_scattered"
+          descent = "every bin returns its KAKIs"
+          sub_second = "1e9 particles < 1s on target hardware"
+
+    - name: Build the kernel (release, autovectorised)
+      ansible.builtin.command:
+        cmd: cargo build --release -p enlil-field
+        chdir: "{{ forge }}/bahyway_v4"
+      register: build
+      changed_when: "'Compiling' in build.stderr"
+
+    - name: Gate C1 · conservation - sum of field equals particles scattered
+      ansible.builtin.command: "{{ forge }}/bahyway_v4/target/release/enlil-field --gate conservation"
+      changed_when: false
+
+    - name: Gate C2 · Masku descent - every bin returns sovereign KAKIs
+      ansible.builtin.command: "{{ forge }}/bahyway_v4/target/release/enlil-field --gate descent"
+      changed_when: false
+
+    - name: Gate C3 · sub-second law on this hardware (1e9 particles)
+      ansible.builtin.command: "{{ forge }}/bahyway_v4/target/release/enlil-field --bench 1000000000 --assert-under-ms 1000"
+      register: bench
+      changed_when: false
+      failed_when: bench.rc != 0
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-366 ENLIL field kernel green - conservation, descent, sub-second"

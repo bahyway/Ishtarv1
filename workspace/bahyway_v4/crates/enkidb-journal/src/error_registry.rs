@@ -19,18 +19,18 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ErrorSeverity {
-    Info     = 0,
-    Warning  = 1,
-    Error    = 2,
+    Info = 0,
+    Warning = 1,
+    Error = 2,
     Critical = 3,
 }
 
 impl ErrorSeverity {
     pub fn as_str(self) -> &'static str {
         match self {
-            ErrorSeverity::Info     => "INFO",
-            ErrorSeverity::Warning  => "WARNING",
-            ErrorSeverity::Error    => "ERROR",
+            ErrorSeverity::Info => "INFO",
+            ErrorSeverity::Warning => "WARNING",
+            ErrorSeverity::Error => "ERROR",
             ErrorSeverity::Critical => "CRITICAL",
         }
     }
@@ -73,7 +73,12 @@ impl ErrorTypeSpec {
         severity: ErrorSeverity,
         defined_by: &'static str,
     ) -> Self {
-        ErrorTypeSpec { code, summary, severity, defined_by }
+        ErrorTypeSpec {
+            code,
+            summary,
+            severity,
+            defined_by,
+        }
     }
 }
 
@@ -97,7 +102,12 @@ mod tests {
 
     #[test]
     fn severity_round_trips() {
-        for s in [ErrorSeverity::Info, ErrorSeverity::Warning, ErrorSeverity::Error, ErrorSeverity::Critical] {
+        for s in [
+            ErrorSeverity::Info,
+            ErrorSeverity::Warning,
+            ErrorSeverity::Error,
+            ErrorSeverity::Critical,
+        ] {
             assert_eq!(ErrorSeverity::from_byte(s.to_byte()), Some(s));
         }
     }

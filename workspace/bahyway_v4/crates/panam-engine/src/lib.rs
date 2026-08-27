@@ -8,11 +8,11 @@ pub use nusku_engine::KakiPK;
 
 #[derive(Debug, Clone)]
 pub struct FaceDetection {
-    pub face_kaki:     KakiPK,
-    pub confidence:    f32,
-    pub bounding_box:  [f32; 4],       // [x, y, w, h] normalized
-    pub landmarks:     Vec<[f32; 2]>,  // 5-point (eyes, nose, mouth)
-    pub thermal_temp:  f32,            // forehead temperature from IR channel
+    pub face_kaki: KakiPK,
+    pub confidence: f32,
+    pub bounding_box: [f32; 4],   // [x, y, w, h] normalized
+    pub landmarks: Vec<[f32; 2]>, // 5-point (eyes, nose, mouth)
+    pub thermal_temp: f32,        // forehead temperature from IR channel
     pub face_kaki_hex: String,
 }
 
@@ -26,12 +26,12 @@ pub struct FaceDetection {
 pub fn derive_face_kaki(embedding: &[f32; 128], frame_id: u64) -> KakiPK {
     // Golden-ratio fractional-part constants (32-bit Fibonacci mixing)
     const PHI32: u32 = 0x9e37_79b9; // Knuth multiplicative constant
-    const C0: u32    = 0x6c62_272e; // Murmur3 mix constant
-    const C1: u32    = 0x2745_937f;
+    const C0: u32 = 0x6c62_272e; // Murmur3 mix constant
+    const C1: u32 = 0x2745_937f;
 
     // Seed from frame_id
     let mut state: [u32; 4] = [
-        (frame_id        & 0xffff_ffff) as u32 ^ PHI32,
+        (frame_id & 0xffff_ffff) as u32 ^ PHI32,
         ((frame_id >> 32) & 0xffff_ffff) as u32 ^ C0,
         PHI32.wrapping_mul(C1),
         C0.wrapping_mul(PHI32),
@@ -41,10 +41,8 @@ pub fn derive_face_kaki(embedding: &[f32; 128], frame_id: u64) -> KakiPK {
     for (i, &v) in embedding.iter().enumerate() {
         let bits = v.to_bits();
         let lane = i & 3;
-        state[lane] = state[lane]
-            .wrapping_add(bits)
-            .wrapping_mul(PHI32)
-            ^ state[lane].rotate_left(13);
+        state[lane] =
+            state[lane].wrapping_add(bits).wrapping_mul(PHI32) ^ state[lane].rotate_left(13);
         // Cross-lane mix every 4 elements
         if lane == 3 {
             state[0] ^= state[1].rotate_left(7);
@@ -77,24 +75,28 @@ pub use nusku_engine::kaki_to_hex;
 /// Simulate a face detection result for development / testing.
 /// Returns None on every third frame to model real-world no-detections.
 pub fn simulate_face_detection(frame_id: u64, forehead_temp: f32) -> Option<FaceDetection> {
-    if frame_id % 3 == 2 { return None; }
+    if frame_id % 3 == 2 {
+        return None;
+    }
 
     let mut emb = [0.0f32; 128];
     for (i, v) in emb.iter_mut().enumerate() {
         *v = ((frame_id as f32 * 0.01 + i as f32 * 0.1).sin()).abs();
     }
 
-    let face_kaki     = derive_face_kaki(&emb, frame_id);
+    let face_kaki = derive_face_kaki(&emb, frame_id);
     let face_kaki_hex = kaki_to_hex(&face_kaki);
 
     Some(FaceDetection {
         face_kaki,
-        confidence:   0.87,
+        confidence: 0.87,
         bounding_box: [0.35, 0.05, 0.30, 0.28],
-        landmarks:    vec![
-            [0.42, 0.12], [0.58, 0.12],  // eyes
-            [0.50, 0.18],                 // nose
-            [0.43, 0.24], [0.57, 0.24],  // mouth corners
+        landmarks: vec![
+            [0.42, 0.12],
+            [0.58, 0.12], // eyes
+            [0.50, 0.18], // nose
+            [0.43, 0.24],
+            [0.57, 0.24], // mouth corners
         ],
         thermal_temp: forehead_temp,
         face_kaki_hex,
@@ -132,7 +134,7 @@ mod tests {
         let kaki = [0xabu8; 16];
         let hex = kaki_to_hex(&kaki);
         assert_eq!(hex.len(), 32);
-        assert_eq!(&hex[..4], "ABAB");  // nusku-engine uses uppercase
+        assert_eq!(&hex[..4], "ABAB"); // nusku-engine uses uppercase
     }
 
     #[test]

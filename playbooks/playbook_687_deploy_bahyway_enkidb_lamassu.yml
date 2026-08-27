@@ -1,0 +1,111 @@
+# ── PB-687 — Deploy bahyway-enkidb, bahyway-lamassu and bahyway-enlil ────
+# 26 playbooks (see docs/13_changelog/WED0826_MANIFEST_TRIAGE_2026-08-26.md
+# and docs/13_changelog/WED0826_BAHYWAY_ENKIDB_LAMASSU_CLI_2026-08-26.md)
+# invoke these binaries as already-installed CLIs. They are real
+# workspace members now (crates/enkidb-particle-store,
+# bin/bahyway-enkidb, bin/bahyway-lamassu, bin/bahyway-enlil) but nothing
+# installed them system-wide until this playbook, mirroring PB-263's own
+# build-in-place/install-to-/usr/local/bin pattern for AnuGovernor.
+#
+# bahyway-enlil (added 2026-08-26) closes the third gap the
+# WED0826_BAHYWAY_ENKIDB_LAMASSU_CLI doc flagged but explicitly left out
+# of scope: `blob-locality`/`locality`/`layer-metrics`/`field`/`prove`,
+# the 7 real call sites across playbook_655/663/670/671.
+#
+# Also installs the two OS packages found missing live while verifying
+# this ecosystem's playbooks in a fresh checkout (lvm2 for
+# playbook_671's `vgs`/`lvs`/`pvs` calls; openssh-client for every
+# playbook that `delegate_to`s a real inventory host even when it
+# resolves back to localhost) -- both real, standard Fedora packages,
+# not specific to these new binaries, but never previously declared
+# anywhere in this repo's own package requirements.
+- name: "PB-687 -- Build and install bahyway-enkidb / bahyway-lamassu / bahyway-enlil"
+  hosts: localhost
+  connection: local
+  vars:
+    forge_root: "{{ playbook_dir }}/.."
+    workspace_root: "{{ forge_root }}/workspace/bahyway_v4"
+
+  tasks:
+    - name: ensure rust toolchain + real OS prerequisites present (Fedora)
+      ansible.builtin.dnf:
+        name: [rust, cargo, lvm2, openssh-clients]
+        state: present
+      become: true
+
+    - name: build all three binaries in place (shares the workspace's warm target/)
+      ansible.builtin.command:
+        cmd: cargo build --release -p bahyway-enkidb -p bahyway-lamassu -p bahyway-enlil
+        chdir: "{{ workspace_root }}"
+      register: build
+      changed_when: "'Compiling' in build.stderr or 'Finished' in build.stderr"
+
+    - name: confirm all three binaries actually got built
+      ansible.builtin.stat:
+        path: "{{ workspace_root }}/target/release/{{ item }}"
+      loop: [bahyway-enkidb, bahyway-lamassu, bahyway-enlil]
+      register: built_bins
+      failed_when: not built_bins.stat.exists
+
+    - name: install all three binaries to /usr/local/bin
+      ansible.builtin.copy:
+        src: "{{ workspace_root }}/target/release/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop: [bahyway-enkidb, bahyway-lamassu, bahyway-enlil]
+      become: true
+
+    - name: smoke-test -- clear any stale PB687Smoke store from a prior run
+      ansible.builtin.file:
+        # store_root() is $HOME/bahyway/enkidb (enkidb-particle-store's
+        # own store_root()); db_dir(db, port) keys the store directory
+        # as "<db>-<port>" under it. orbit() LOADS the existing store
+        # and APPENDS -- it never resets -- so a store already carrying
+        # particles from an earlier run of this same playbook (this
+        # playbook's own header says it and its binaries have already
+        # been invoked repeatedly as part of the WED0826 corpus) will
+        # never again show count==1 after the first successful run.
+        # That is the real cause of the "present --count" failure seen
+        # on the real bare-metal run, not a bug in orbit/present
+        # themselves. Start clean every time so the assertion is
+        # actually testing this run, not accumulated history.
+        path: "{{ ansible_env.HOME }}/bahyway/enkidb/PB687Smoke-9999"
+        state: absent
+
+    - name: smoke-test -- orbit one real particle and read it back
+      ansible.builtin.shell: |
+        set -e
+        orbit_out=$(/usr/local/bin/bahyway-enkidb orbit --db PB687Smoke --port 9999 --kaki-type SMOKE)
+        echo "$orbit_out"
+        n=$(/usr/local/bin/bahyway-enkidb present --db PB687Smoke --port 9999 --count)
+        echo "present --count reported: [$n]"
+        if [ "$n" = "1" ]; then
+          echo "PB-687 smoke test green: 1 real KAKI minted and read back"
+        else
+          echo "PB-687 smoke test RED: expected count 1, got [$n] -- orbit output was: $orbit_out" >&2
+          exit 1
+        fi
+      args: {executable: /bin/bash}
+      register: smoke
+      changed_when: false
+
+    - name: smoke-test -- bahyway-enlil reads the same real store back honestly
+      ansible.builtin.shell: |
+        set -e
+        /usr/local/bin/bahyway-enlil locality --db PB687Smoke --port 9999 --scan orbit --json
+        /usr/local/bin/bahyway-enlil prove --rule no_silent_decimation
+        echo "PB-687 bahyway-enlil smoke test green"
+      args: {executable: /bin/bash}
+      register: enlil_smoke
+      changed_when: false
+
+    - name: report
+      ansible.builtin.debug:
+        msg: "{{ smoke.stdout }} {{ enlil_smoke.stdout }}"
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-687 bahyway-enkidb + bahyway-lamassu + bahyway-enlil built and installed to /usr/local/bin"

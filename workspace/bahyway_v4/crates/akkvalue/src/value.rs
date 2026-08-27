@@ -6,15 +6,16 @@
 use core::fmt;
 
 use crate::types::{
-    AkkCoordinate, AkkDate, AkkHijriDate, AkkNationalId, AkkNameVector, AkkPhone,
-    CipherAlgorithm, PipelineStatus, PolicyVerdict,
+    AkkCoordinate, AkkDate, AkkHijriDate, AkkNameVector, AkkNationalId, AkkPhone, CipherAlgorithm,
+    PipelineStatus, PolicyVerdict,
 };
 
 // ── AkkValue ─────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum AkkValue {
     // Scalar
+    #[default]
     Null,
     Bool(bool),
     Int(i64),
@@ -23,35 +24,35 @@ pub enum AkkValue {
     Bytes(Vec<u8>),
 
     // Identity
-    Uuid([u8; 16]),           // RFC 4122 UUID stored as raw bytes
+    Uuid([u8; 16]), // RFC 4122 UUID stored as raw bytes
     NationalId(AkkNationalId),
     Phone(AkkPhone),
 
     // Temporal
-    Timestamp(i64),           // UNIX seconds (UTC)
+    Timestamp(i64), // UNIX seconds (UTC)
     Date(AkkDate),
     HijriDate(AkkHijriDate),
-    Duration(u64),            // seconds
+    Duration(u64), // seconds
 
     // Geographic
     Coordinate(AkkCoordinate),
-    CountryCode(String),      // ISO 3166-1 alpha-2
+    CountryCode(String), // ISO 3166-1 alpha-2
 
     // Domain (KAKI)
     DomainByte(u8),
-    QualityScore(u8),         // 0–240 (QUALITY_DIVISOR=240.0; ADR-001)
+    QualityScore(u8), // 0–240 (QUALITY_DIVISOR=240.0; ADR-001)
     KakiPk([u8; 16]),
 
     // Linguistic
-    AkkadianRoot(String),     // 3-radical root string
+    AkkadianRoot(String), // 3-radical root string
     NameVector(AkkNameVector),
-    LangCode(String),         // BCP-47
+    LangCode(String), // BCP-47
 
     // ML / Analytics
     Embedding(Vec<f32>),
-    Probability(f64),         // 0.0..=1.0
+    Probability(f64), // 0.0..=1.0
     Label(String),
-    Confidence(f64),          // 0.0..=1.0
+    Confidence(f64), // 0.0..=1.0
 
     // Pipeline
     PipelineStatus(PipelineStatus),
@@ -69,90 +70,142 @@ pub enum AkkValue {
 impl AkkValue {
     pub fn type_name(&self) -> &'static str {
         match self {
-            Self::Null              => "Null",
-            Self::Bool(_)           => "Bool",
-            Self::Int(_)            => "Int",
-            Self::Float(_)          => "Float",
-            Self::Text(_)           => "Text",
-            Self::Bytes(_)          => "Bytes",
-            Self::Uuid(_)           => "Uuid",
-            Self::NationalId(_)     => "NationalId",
-            Self::Phone(_)          => "Phone",
-            Self::Timestamp(_)      => "Timestamp",
-            Self::Date(_)           => "Date",
-            Self::HijriDate(_)      => "HijriDate",
-            Self::Duration(_)       => "Duration",
-            Self::Coordinate(_)     => "Coordinate",
-            Self::CountryCode(_)    => "CountryCode",
-            Self::DomainByte(_)     => "DomainByte",
-            Self::QualityScore(_)   => "QualityScore",
-            Self::KakiPk(_)         => "KakiPk",
-            Self::AkkadianRoot(_)   => "AkkadianRoot",
-            Self::NameVector(_)     => "NameVector",
-            Self::LangCode(_)       => "LangCode",
-            Self::Embedding(_)      => "Embedding",
-            Self::Probability(_)    => "Probability",
-            Self::Label(_)          => "Label",
-            Self::Confidence(_)     => "Confidence",
+            Self::Null => "Null",
+            Self::Bool(_) => "Bool",
+            Self::Int(_) => "Int",
+            Self::Float(_) => "Float",
+            Self::Text(_) => "Text",
+            Self::Bytes(_) => "Bytes",
+            Self::Uuid(_) => "Uuid",
+            Self::NationalId(_) => "NationalId",
+            Self::Phone(_) => "Phone",
+            Self::Timestamp(_) => "Timestamp",
+            Self::Date(_) => "Date",
+            Self::HijriDate(_) => "HijriDate",
+            Self::Duration(_) => "Duration",
+            Self::Coordinate(_) => "Coordinate",
+            Self::CountryCode(_) => "CountryCode",
+            Self::DomainByte(_) => "DomainByte",
+            Self::QualityScore(_) => "QualityScore",
+            Self::KakiPk(_) => "KakiPk",
+            Self::AkkadianRoot(_) => "AkkadianRoot",
+            Self::NameVector(_) => "NameVector",
+            Self::LangCode(_) => "LangCode",
+            Self::Embedding(_) => "Embedding",
+            Self::Probability(_) => "Probability",
+            Self::Label(_) => "Label",
+            Self::Confidence(_) => "Confidence",
             Self::PipelineStatus(_) => "PipelineStatus",
-            Self::StepIndex(_)      => "StepIndex",
-            Self::PolicyVerdict(_)  => "PolicyVerdict",
-            Self::CipherAlgorithm(_)=> "CipherAlgorithm",
-            Self::SealSignature(_)  => "SealSignature",
-            Self::List(_)           => "List",
+            Self::StepIndex(_) => "StepIndex",
+            Self::PolicyVerdict(_) => "PolicyVerdict",
+            Self::CipherAlgorithm(_) => "CipherAlgorithm",
+            Self::SealSignature(_) => "SealSignature",
+            Self::List(_) => "List",
         }
     }
 
-    pub fn is_null(&self)  -> bool     { matches!(self, Self::Null) }
-    pub fn as_bool(&self)  -> Option<bool>  { if let Self::Bool(v)  = self { Some(*v) } else { None } }
-    pub fn as_int(&self)   -> Option<i64>   { if let Self::Int(v)   = self { Some(*v) } else { None } }
-    pub fn as_float(&self) -> Option<f64>   { if let Self::Float(v) = self { Some(*v) } else { None } }
-    pub fn as_text(&self)  -> Option<&str>  { if let Self::Text(v)  = self { Some(v)  } else { None } }
-    pub fn as_bytes(&self) -> Option<&[u8]> { if let Self::Bytes(v) = self { Some(v)  } else { None } }
-    pub fn as_uuid(&self)  -> Option<&[u8; 16]> { if let Self::Uuid(v) = self { Some(v) } else { None } }
-    pub fn as_kaki_pk(&self) -> Option<&[u8; 16]> { if let Self::KakiPk(v) = self { Some(v) } else { None } }
-    pub fn as_timestamp(&self) -> Option<i64> { if let Self::Timestamp(v) = self { Some(*v) } else { None } }
+    pub fn is_null(&self) -> bool {
+        matches!(self, Self::Null)
+    }
+    pub fn as_bool(&self) -> Option<bool> {
+        if let Self::Bool(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+    pub fn as_int(&self) -> Option<i64> {
+        if let Self::Int(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+    pub fn as_float(&self) -> Option<f64> {
+        if let Self::Float(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+    pub fn as_text(&self) -> Option<&str> {
+        if let Self::Text(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        if let Self::Bytes(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+    pub fn as_uuid(&self) -> Option<&[u8; 16]> {
+        if let Self::Uuid(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+    pub fn as_kaki_pk(&self) -> Option<&[u8; 16]> {
+        if let Self::KakiPk(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+    pub fn as_timestamp(&self) -> Option<i64> {
+        if let Self::Timestamp(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
     pub fn as_coordinate(&self) -> Option<&AkkCoordinate> {
-        if let Self::Coordinate(v) = self { Some(v) } else { None }
+        if let Self::Coordinate(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
 }
-
-impl Default for AkkValue { fn default() -> Self { Self::Null } }
 
 impl fmt::Display for AkkValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Null                 => write!(f, "∅"),
-            Self::Bool(b)              => write!(f, "{b}"),
-            Self::Int(i)               => write!(f, "{i}"),
-            Self::Float(v)             => write!(f, "{v}"),
-            Self::Text(s)              => write!(f, "{s}"),
-            Self::Bytes(b)             => write!(f, "[{} bytes]", b.len()),
-            Self::Uuid(u)              => write!(f, "{}", fmt_uuid(u)),
-            Self::NationalId(n)        => write!(f, "{}/{}", n.country_code, n.number),
-            Self::Phone(p)             => write!(f, "+{} {}", p.country_code, p.number),
-            Self::Timestamp(ts)        => write!(f, "ts:{ts}"),
-            Self::Date(d)              => write!(f, "{d}"),
-            Self::HijriDate(h)         => write!(f, "{h}"),
-            Self::Duration(s)          => write!(f, "{s}s"),
-            Self::Coordinate(c)        => write!(f, "({},{})", c.lat, c.lon),
-            Self::CountryCode(cc)      => write!(f, "cc:{cc}"),
-            Self::DomainByte(b)        => write!(f, "dom:{b:#04x}"),
-            Self::QualityScore(q)      => write!(f, "q:{q}"),
-            Self::KakiPk(pk)           => write!(f, "kaki:{}", hex_16(pk)),
-            Self::AkkadianRoot(r)      => write!(f, "root:{r}"),
-            Self::NameVector(nv)       => write!(f, "name[{}]", nv.parts.len()),
-            Self::LangCode(l)          => write!(f, "lang:{l}"),
-            Self::Embedding(e)         => write!(f, "emb[{}]", e.len()),
-            Self::Probability(p)       => write!(f, "p:{p:.4}"),
-            Self::Label(l)             => write!(f, "lbl:{l}"),
-            Self::Confidence(c)        => write!(f, "conf:{c:.4}"),
-            Self::PipelineStatus(s)    => write!(f, "{s}"),
-            Self::StepIndex(i)         => write!(f, "step:{i}"),
-            Self::PolicyVerdict(v)     => write!(f, "{v}"),
-            Self::CipherAlgorithm(a)   => write!(f, "{a}"),
-            Self::SealSignature(s)     => write!(f, "seal[{}]", s.len()),
-            Self::List(l)              => write!(f, "list[{}]", l.len()),
+            Self::Null => write!(f, "∅"),
+            Self::Bool(b) => write!(f, "{b}"),
+            Self::Int(i) => write!(f, "{i}"),
+            Self::Float(v) => write!(f, "{v}"),
+            Self::Text(s) => write!(f, "{s}"),
+            Self::Bytes(b) => write!(f, "[{} bytes]", b.len()),
+            Self::Uuid(u) => write!(f, "{}", fmt_uuid(u)),
+            Self::NationalId(n) => write!(f, "{}/{}", n.country_code, n.number),
+            Self::Phone(p) => write!(f, "+{} {}", p.country_code, p.number),
+            Self::Timestamp(ts) => write!(f, "ts:{ts}"),
+            Self::Date(d) => write!(f, "{d}"),
+            Self::HijriDate(h) => write!(f, "{h}"),
+            Self::Duration(s) => write!(f, "{s}s"),
+            Self::Coordinate(c) => write!(f, "({},{})", c.lat, c.lon),
+            Self::CountryCode(cc) => write!(f, "cc:{cc}"),
+            Self::DomainByte(b) => write!(f, "dom:{b:#04x}"),
+            Self::QualityScore(q) => write!(f, "q:{q}"),
+            Self::KakiPk(pk) => write!(f, "kaki:{}", hex_16(pk)),
+            Self::AkkadianRoot(r) => write!(f, "root:{r}"),
+            Self::NameVector(nv) => write!(f, "name[{}]", nv.parts.len()),
+            Self::LangCode(l) => write!(f, "lang:{l}"),
+            Self::Embedding(e) => write!(f, "emb[{}]", e.len()),
+            Self::Probability(p) => write!(f, "p:{p:.4}"),
+            Self::Label(l) => write!(f, "lbl:{l}"),
+            Self::Confidence(c) => write!(f, "conf:{c:.4}"),
+            Self::PipelineStatus(s) => write!(f, "{s}"),
+            Self::StepIndex(i) => write!(f, "step:{i}"),
+            Self::PolicyVerdict(v) => write!(f, "{v}"),
+            Self::CipherAlgorithm(a) => write!(f, "{a}"),
+            Self::SealSignature(s) => write!(f, "seal[{}]", s.len()),
+            Self::List(l) => write!(f, "list[{}]", l.len()),
         }
     }
 }
@@ -190,7 +243,10 @@ mod tests {
         assert_eq!(AkkValue::Int(42).as_int(), Some(42));
         assert_eq!(AkkValue::Float(3.14).as_float(), Some(3.14));
         assert_eq!(AkkValue::Text("hi".into()).as_text(), Some("hi"));
-        assert_eq!(AkkValue::Bytes(vec![1, 2]).as_bytes(), Some([1u8, 2].as_slice()));
+        assert_eq!(
+            AkkValue::Bytes(vec![1, 2]).as_bytes(),
+            Some([1u8, 2].as_slice())
+        );
     }
 
     #[test]
@@ -203,8 +259,10 @@ mod tests {
 
     #[test]
     fn uuid_display_has_dashes() {
-        let id = [0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe,
-                  0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];
+        let id = [
+            0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55,
+            0x66, 0x77,
+        ];
         let s = AkkValue::Uuid(id).to_string();
         assert_eq!(s, "deadbeef-cafe-babe-0011-223344556677");
     }

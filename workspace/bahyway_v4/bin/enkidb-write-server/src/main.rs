@@ -6,21 +6,23 @@
 //! prefixed frame, one thread per connection, materialize-on-flush).
 //!
 //! ## Protocol
+//! ```text
 //! One request frame in, one response frame out, per connection:
-//!   - `SEED:<n>`   -> replace the current Journal with `n` freshly
+//!   - SEED:<n>     -> replace the current Journal with n freshly
 //!                     generated synthetic particles (round-robin across
 //!                     5 real station names, one globally-unique "needle"
 //!                     particle at the midpoint — the exact generator
-//!                     `enkidb-readnode`'s `scale_benchmark` example uses),
-//!                     then materialize to `DATA_DIR/current`. Responds
-//!                     `OK:SEEDED:<n>:<generate_ms>:<materialize_ms>`.
+//!                     enkidb-readnode's scale_benchmark example uses),
+//!                     then materialize to DATA_DIR/current. Responds
+//!                     OK:SEEDED:<n>:<generate_ms>:<materialize_ms>.
 //!                     This is a scale/demo tool, not a general-purpose
 //!                     ingest API: real particle ingestion belongs to the
 //!                     ETL station chain (BeeMDM), which is out of this
 //!                     server's scope.
-//!   - `FLUSH`      -> re-materialize the current Journal state now.
-//!                     Responds `OK:FLUSHED:<entity_count>`.
-//!   - anything else -> `ERR:<message>`
+//!   - FLUSH        -> re-materialize the current Journal state now.
+//!                     Responds OK:FLUSHED:<entity_count>.
+//!   - anything else -> ERR:<message>
+//! ```
 //!
 //! ## Durability
 //! Same v1 boundary as `enkiddb-write-server`: the Journal is in-memory
@@ -80,7 +82,10 @@ fn main() {
     eprintln!("𒁾 enkidb-write-server — EnkiDB (core particle store) Write Node");
 
     let minter = KakiMinter::new(TribeId::from_u16(tribe_id()));
-    let state = Mutex::new(SharedState { journal: Journal::new(64), minter });
+    let state = Mutex::new(SharedState {
+        journal: Journal::new(64),
+        minter,
+    });
     let data_dir = data_dir();
 
     let addr = bind_addr();
@@ -95,7 +100,10 @@ fn main() {
         for stream in listener.incoming() {
             match stream {
                 Ok(s) => {
-                    let peer = s.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "?".into());
+                    let peer = s
+                        .peer_addr()
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|_| "?".into());
                     let state_ref = &state;
                     let data_dir_ref = &data_dir;
                     scope.spawn(move || {
@@ -146,13 +154,19 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path) ->
                     "[seed] n={n} entities={} generate_ms={generate_ms} materialize_ms={materialize_ms}",
                     stats.entities
                 );
-                send(&mut stream, &format!("OK:SEEDED:{n}:{generate_ms}:{materialize_ms}"))
+                send(
+                    &mut stream,
+                    &format!("OK:SEEDED:{n}:{generate_ms}:{materialize_ms}"),
+                )
             }
             Err(e) => send(&mut stream, &format!("ERR:materialize: {e}")),
         };
     }
 
-    send(&mut stream, "ERR:unrecognized request -- use SEED:<n> or FLUSH")
+    send(
+        &mut stream,
+        "ERR:unrecognized request -- use SEED:<n> or FLUSH",
+    )
 }
 
 /// The exact generator `enkidb-readnode`'s `scale_benchmark` example
@@ -161,9 +175,11 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path) ->
 /// single-row point-lookup query has a real target to find.
 fn seed_journal(journal: &mut Journal, minter: &KakiMinter, n: usize) {
     for i in 0..n {
-        let e = IdentityKaki::try_from_kaki(minter.mint_identity(i as u32, KakiRole::Zikru)).unwrap();
+        let e =
+            IdentityKaki::try_from_kaki(minter.mint_identity(i as u32, KakiRole::Zikru)).unwrap();
         let ek =
-            EventKaki::try_from_kaki(minter.mint_event((i as u32) ^ 0xFFFF_FFFF, KakiRole::Zikru)).unwrap();
+            EventKaki::try_from_kaki(minter.mint_event((i as u32) ^ 0xFFFF_FFFF, KakiRole::Zikru))
+                .unwrap();
         let station = STATIONS[i % STATIONS.len()];
         let mut eav = vec![EavTriple::new(
             bahyway_crc::crc16("station".as_bytes()) as u32,
@@ -181,7 +197,10 @@ fn seed_journal(journal: &mut Journal, minter: &KakiMinter, n: usize) {
     }
 }
 
-fn materialize_fresh(journal: &Journal, data_dir: &Path) -> io::Result<enkidb_readnode::MaterializeStats> {
+fn materialize_fresh(
+    journal: &Journal,
+    data_dir: &Path,
+) -> io::Result<enkidb_readnode::MaterializeStats> {
     let current = data_dir.join("current");
     let _ = fs::remove_dir_all(&current);
     fs::create_dir_all(&current)?;
@@ -202,7 +221,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

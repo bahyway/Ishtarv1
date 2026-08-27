@@ -26,7 +26,7 @@
 
 #![forbid(unsafe_code)]
 
-use utnapishtim::{ClientTopology, generator::UtnapishtimGenerator};
+use utnapishtim::{generator::UtnapishtimGenerator, ClientTopology};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SealStage {
@@ -46,10 +46,10 @@ pub enum SealResult {
 
 #[derive(Debug, Clone)]
 pub struct EdubbaSession {
-    pub topology:        ClientTopology,
-    pub output_dir:      String,
-    pub mashsharu_cert:  Option<String>,
-    pub namzitum_cert:   Option<String>,
+    pub topology: ClientTopology,
+    pub output_dir: String,
+    pub mashsharu_cert: Option<String>,
+    pub namzitum_cert: Option<String>,
 }
 
 impl EdubbaSession {
@@ -57,16 +57,18 @@ impl EdubbaSession {
         Self {
             topology,
             output_dir: output_dir.into(),
-            mashsharu_cert:  None,
-            namzitum_cert:   None,
+            mashsharu_cert: None,
+            namzitum_cert: None,
         }
     }
 
     /// Execute the five-stage sovereign seal sequence.
     /// All stages must pass or the session is not sealed.
     pub fn seal(&mut self) -> SealResult {
-        println!("[É-DUBBA] Beginning seal sequence for client {} (0x{:04X})",
-            self.topology.client_name, self.topology.client_id);
+        println!(
+            "[É-DUBBA] Beginning seal sequence for client {} (0x{:04X})",
+            self.topology.client_name, self.topology.client_id
+        );
 
         // Stage 1 — MASHSHARU
         println!("[É-DUBBA] Stage 1: MASHSHARU — mathematical verification");
@@ -75,10 +77,12 @@ impl EdubbaSession {
                 self.mashsharu_cert = Some(cert);
                 println!("[É-DUBBA] MASHSHARU ✓");
             }
-            Err(e) => return SealResult::Failed {
-                stage: SealStage::Mashsharu,
-                reason: e,
-            },
+            Err(e) => {
+                return SealResult::Failed {
+                    stage: SealStage::Mashsharu,
+                    reason: e,
+                }
+            }
         }
 
         // Stage 2 — NĀMZITUM
@@ -88,10 +92,12 @@ impl EdubbaSession {
                 self.namzitum_cert = Some(cert);
                 println!("[É-DUBBA] NĀMZITUM ✓");
             }
-            Err(e) => return SealResult::Failed {
-                stage: SealStage::Namzitum,
-                reason: e,
-            },
+            Err(e) => {
+                return SealResult::Failed {
+                    stage: SealStage::Namzitum,
+                    reason: e,
+                }
+            }
         }
 
         // Stage 3 — PĀŠIRU
@@ -103,20 +109,24 @@ impl EdubbaSession {
         println!("[É-DUBBA] Stage 4: KISPU — PARZU-KAKI mint + zakāru");
         match self.run_kispu() {
             Ok(_) => println!("[É-DUBBA] KISPU ✓"),
-            Err(e) => return SealResult::Failed {
-                stage: SealStage::Kispu,
-                reason: e,
-            },
+            Err(e) => {
+                return SealResult::Failed {
+                    stage: SealStage::Kispu,
+                    reason: e,
+                }
+            }
         }
 
         // Stage 5 — UTNAPISHTIM
         println!("[É-DUBBA] Stage 5: UTNAPISHTIM — generating deliverables");
         match self.run_utnapishtim() {
             Ok(_) => println!("[É-DUBBA] UTNAPISHTIM ✓"),
-            Err(e) => return SealResult::Failed {
-                stage: SealStage::Utnapishtim,
-                reason: e,
-            },
+            Err(e) => {
+                return SealResult::Failed {
+                    stage: SealStage::Utnapishtim,
+                    reason: e,
+                }
+            }
         }
 
         println!("[É-DUBBA] 𒂍𒁾𒁀 Session sealed. The flood cannot reach it.");
@@ -129,10 +139,14 @@ impl EdubbaSession {
         if self.topology.tribes.is_empty() {
             return Err("MASHSHARU: topology has no tribes".into());
         }
-        Ok(format!("MASHSHARU-CERT-{:04X}-{}", self.topology.client_id,
+        Ok(format!(
+            "MASHSHARU-CERT-{:04X}-{}",
+            self.topology.client_id,
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs()).unwrap_or(0)))
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        ))
     }
 
     fn run_namzitum(&self) -> Result<String, String> {
@@ -150,7 +164,10 @@ impl EdubbaSession {
     fn run_kispu(&self) -> Result<(), String> {
         // STUB: does not actually mint a PARZU-KAKI or write a zakāru
         // journal entry yet. Production: calls kispu crate.
-        println!("[KISPU] PARZU-KAKI minted for client {:04X}", self.topology.client_id);
+        println!(
+            "[KISPU] PARZU-KAKI minted for client {:04X}",
+            self.topology.client_id
+        );
         Ok(())
     }
 
@@ -169,11 +186,11 @@ impl EdubbaSession {
 /// CORRECTED: all four levels present (KUR was missing)
 pub fn tiamat_colour(level: u8) -> &'static str {
     match level {
-        1 => "#E8B400",  // DILBAT 𒀭𒁾𒁍 amber
-        2 => "#D46000",  // KAKKAB 𒀭𒆳𒀝 orange
-        3 => "#CC2244",  // ERRA   𒀭𒂗𒆳 crimson
-        4 => "#1A0A2E",  // KUR    𒆳     sovereign indigo ← CORRECTED
-        _ => "#00D4C8",  // HEALTHY teal
+        1 => "#E8B400", // DILBAT 𒀭𒁾𒁍 amber
+        2 => "#D46000", // KAKKAB 𒀭𒆳𒀝 orange
+        3 => "#CC2244", // ERRA   𒀭𒂗𒆳 crimson
+        4 => "#1A0A2E", // KUR    𒆳     sovereign indigo ← CORRECTED
+        _ => "#00D4C8", // HEALTHY teal
     }
 }
 
@@ -182,7 +199,7 @@ pub fn tiamat_name(level: u8) -> &'static str {
         1 => "DILBAT 𒀭𒁾𒁍",
         2 => "KAKKAB 𒀭𒆳𒀝",
         3 => "ERRA 𒀭𒂗𒆳",
-        4 => "KUR 𒆳",       // ← CORRECTED: was absent
+        4 => "KUR 𒆳", // ← CORRECTED: was absent
         _ => "NOMINAL",
     }
 }
@@ -202,11 +219,19 @@ mod tests {
     #[test]
     fn test_seal_fails_empty_topology() {
         let topo = ClientTopology {
-            client_id: 1, client_name: "Test".into(),
-            tribes: vec![], sealed_at: 0,
+            client_id: 1,
+            client_name: "Test".into(),
+            tribes: vec![],
+            sealed_at: 0,
         };
         let mut session = EdubbaSession::new(topo, "/tmp/test_seal");
         let result = session.seal();
-        assert!(matches!(result, SealResult::Failed { stage: SealStage::Mashsharu, .. }));
+        assert!(matches!(
+            result,
+            SealResult::Failed {
+                stage: SealStage::Mashsharu,
+                ..
+            }
+        ));
     }
 }

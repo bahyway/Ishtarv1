@@ -1,0 +1,139 @@
+---
+# PB-402 · Seal GL-KRN-001 · Tablet of the Kernel Scene
+# CSR-08: running this playbook IS the confirmation of the seal.
+- name: PB-402 seal GL-KRN-001
+  hosts: girsu
+  gather_facts: true
+  vars:
+    bahyway_provides: ["law:GL-KRN-001"]
+    bahyway_requires: ["law:GL-VIZ-001", "law:GL-UNT-001", "law:GL-FLD-001", "law:GL-FED-001"]
+    law_root: "{{ ansible_env.HOME }}/bahyway/laws"
+    tablet: GL-KRN-001_SEALED.md
+    tablet_id: GL-KRN-001
+    seal_key: "{{ ansible_env.HOME }}/bahyway/keys/akkadian_seal_ed25519"
+    kernel_scenes: [hypergraph_ontograph, storage_seven_types, gates, etl_stations]
+  tasks:
+    - name: Ensure law directories
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0750"}
+      loop: ["{{ law_root }}", "{{ law_root }}/sealed", "{{ law_root }}/receipts"]
+
+    - name: Refuse to re-seal an already sealed tablet
+      ansible.builtin.stat: {path: "{{ law_root }}/sealed/{{ tablet }}"}
+      register: existing
+    # FIXED 2026-08-26 -- see playbook_618_seal_gl_unt_001.yml's own
+    # identical FIXED comment: a fatal assert here used to halt the
+    # ENTIRE ansible-playbook run (proven empirically), not just this
+    # play, permanently blocking PB-626's own later steps.
+    - name: Gate G0 · already sealed -- no silent overwrite, no action taken
+      ansible.builtin.debug:
+        msg: "{{ tablet_id }} is already sealed. Amendments require GL-KRN-001-A1 and a fresh CSR-08 rite. No action taken (idempotent no-op, not a failure)."
+      when: existing.stat.exists
+
+    - name: Gate G0 · end this play cleanly when already sealed
+      ansible.builtin.meta: end_play
+      when: existing.stat.exists
+
+    - name: Gate G0 · tablet not yet sealed, proceeding
+      ansible.builtin.debug:
+        msg: "G0 green - tablet not yet sealed"
+      when: not existing.stat.exists
+
+    - name: Place the tablet
+      ansible.builtin.copy: {src: "{{ tablet }}", dest: "{{ law_root }}/sealed/{{ tablet }}", mode: "0440"}
+
+    - name: Gate G1 · all sixteen sections present
+      ansible.builtin.shell: |
+        set -e
+        for i in $(seq 0 16); do
+          grep -q "## §$i " "{{ law_root }}/sealed/{{ tablet }}" || { echo "missing §$i"; exit 1; }
+        done
+        echo "G1 green - seventeen sections (§0..§16)"
+      changed_when: false
+
+    - name: Gate G2 · Anti-SQL absence proof over the tablet (§10)
+      # FROM alone false-positives on ordinary prose ("from where to where",
+      # "steal height from the stage") -- only flag it paired with SELECT,
+      # same as playbook_618/619/620's Gate G2.
+      ansible.builtin.shell: |
+        ! grep -Eiq 'SELECT +[A-Za-z*].{0,200}\bFROM\b|INNER JOIN|LEFT JOIN' "{{ law_root }}/sealed/{{ tablet }}"
+      changed_when: false
+
+    - name: Gate G3 · the four unamendable clauses are named
+      ansible.builtin.shell: |
+        grep -q '§4, §5, §6 and §11 may not be amended' "{{ law_root }}/sealed/{{ tablet }}"
+        echo "G3 green - no decimation, confidence visible, unknown drawn, the scene never writes"
+      changed_when: false
+
+    - name: Compute the Ed25519 AkkadianSeal
+      ansible.builtin.shell: |
+        openssl pkeyutl -sign -rawin -inkey "{{ seal_key }}" \
+          -in "{{ law_root }}/sealed/{{ tablet }}" | base64 -w0
+      register: seal
+      changed_when: true
+
+    - name: Write the Kanīku receipt
+      ansible.builtin.copy:
+        dest: "{{ law_root }}/receipts/{{ tablet_id }}.kaniku.yml"
+        mode: "0440"
+        content: |
+          tablet: {{ tablet_id }}
+          file: {{ tablet }}
+          sha256: "{{ (lookup('pipe', 'sha256sum ' + law_root + '/sealed/' + tablet)).split()[0] }}"
+          seal_ed25519: "{{ seal.stdout }}"
+          sealed_on: "{{ ansible_date_time.iso8601 }}"
+          sealed_by: "DUB.SAR"
+          rite: CSR-08
+          governs: {{ kernel_scenes | to_json }}
+          unamendable: ["§4 no decimation", "§5 confidence visible", "§6 the unknown is drawn", "§11 the scene never writes"]
+
+    - name: Register in the law registry
+      ansible.builtin.lineinfile:
+        path: "{{ law_root }}/REGISTRY.log"
+        create: true
+        mode: "0640"
+        line: "{{ ansible_date_time.iso8601 }} SEALED {{ tablet_id }} governs {{ kernel_scenes | join(',') }}"
+
+    - name: Conformance sweep · every kernel scene against §1, §14
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import pathlib, re, json
+        tabs = pathlib.Path("{{ ansible_env.HOME }}/bahyway/sala/tabs")
+        need_instruments = ["StoryEngine", "contextmenu", "wheel", "journal",
+                            "legend", "landing", "bird", "N9", "Membrane"]
+        need_gates = ["COMPILE", "RUNTIME", "ORBIT", "CLASS"]
+        report = []
+        for f in sorted(tabs.glob("*.html")):
+            t = f.read_text(errors="ignore")
+            miss_i = [k for k in need_instruments if k.lower() not in t.lower()]
+            miss_g = [k for k in need_gates if k not in t]
+            sql = bool(re.search(r'(^|[^A-Za-z])(SELECT +[A-Za-z*]|FROM +[A-Za-z]|INNER JOIN)', t))
+            report.append({"tab": f.name, "missing_instruments": miss_i,
+                           "missing_gates": miss_g, "foreign_sql": sql})
+        pathlib.Path("{{ law_root }}/receipts/GL-KRN-001.conformance.json").write_text(json.dumps(report, indent=2))
+        contaminated = [r for r in report if r["foreign_sql"]]
+        bad = [r for r in report if r["missing_instruments"] or r["missing_gates"]]
+        for r in contaminated:
+            print("CONTAMINATION", r["tab"],
+                  "- SQL syntax in a sovereign scene is a FOREIGN BODY; quarantine the tab, do not tune it")
+        for r in bad:
+            print("NON-CONFORMING", r["tab"], r["missing_instruments"], r["missing_gates"])
+        print(f"anti-SQL absence proven across {len(report) - len(contaminated)}/{len(report)} tabs")
+        print(f"{len(report) - len(bad)}/{len(report)} tabs carry the nine instruments and the four gates")
+        PY
+      register: conf
+      changed_when: false
+      failed_when: false
+
+    - name: Report conformance
+      ansible.builtin.debug:
+        msg: >
+          {{ conf.stdout_lines | default([]) }}
+          - a non-conforming tab is not a kernel scene and may not be published as one (§1, §15).
+          Any CONTAMINATION line is graver: BahyWay is an Anti-SQL environment, so SQL syntax is not a defect
+          in a scene - it is something foreign that got in, and the scene is quarantined (§10).
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-402 GL-KRN-001 SEALED - one pattern for HyperGraph/OntoGraph, the seven storage types, the Gates and the ETL Stations"

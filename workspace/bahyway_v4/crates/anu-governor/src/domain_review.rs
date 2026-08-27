@@ -16,8 +16,8 @@
 
 use crate::gate_review::approved_gates;
 use crate::pb_catalog::RegistryLine;
-use enkiddb::{DocumentParser, WriteNode};
 use enkidb_kaki::IdentityKaki;
+use enkiddb::{DocumentParser, WriteNode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::Write;
@@ -29,18 +29,98 @@ use std::path::{Path, PathBuf};
 /// not a ruling, since nothing here is ever written without an explicit
 /// Architect approval.
 pub const DOMAIN_NAMES: [(&str, [&str; 7]); 7] = [
-    ("APSU", ["Data Files", "Journals", "Backups", "Snapshots", "Replication", "Retention", "Encryption"]),
-    ("ADAD", ["Extraction", "Transformation", "Loading", "Validation", "Scheduling", "Error Handling", "Source Connectors"]),
-    ("SHEDU", ["Authentication", "Authorization", "Encryption", "Auditing", "Threat Detection", "Vault Management", "Network Hardening"]),
-    ("MUMMU", ["Schema Design", "Type Systems", "Query Engines", "Indexing", "Optimization", "Formal Verification", "Data Modeling"]),
-    ("ENKIDU", ["Match Dedupe", "Steward Review", "Model Training", "Inference", "Prompt Engineering", "Agent Orchestration", "Feedback Loops"]),
-    ("DUBSAR", ["Parsing", "Tokenization", "Grammar", "Localization", "Documentation", "Naming Conventions", "Translation"]),
-    ("ENLIL", ["SLA Signoff", "Policy", "Compliance", "Auditing", "Change Management", "Access Control", "Reporting"]),
+    (
+        "APSU",
+        [
+            "Data Files",
+            "Journals",
+            "Backups",
+            "Snapshots",
+            "Replication",
+            "Retention",
+            "Encryption",
+        ],
+    ),
+    (
+        "ADAD",
+        [
+            "Extraction",
+            "Transformation",
+            "Loading",
+            "Validation",
+            "Scheduling",
+            "Error Handling",
+            "Source Connectors",
+        ],
+    ),
+    (
+        "SHEDU",
+        [
+            "Authentication",
+            "Authorization",
+            "Encryption",
+            "Auditing",
+            "Threat Detection",
+            "Vault Management",
+            "Network Hardening",
+        ],
+    ),
+    (
+        "MUMMU",
+        [
+            "Schema Design",
+            "Type Systems",
+            "Query Engines",
+            "Indexing",
+            "Optimization",
+            "Formal Verification",
+            "Data Modeling",
+        ],
+    ),
+    (
+        "ENKIDU",
+        [
+            "Match Dedupe",
+            "Steward Review",
+            "Model Training",
+            "Inference",
+            "Prompt Engineering",
+            "Agent Orchestration",
+            "Feedback Loops",
+        ],
+    ),
+    (
+        "DUBSAR",
+        [
+            "Parsing",
+            "Tokenization",
+            "Grammar",
+            "Localization",
+            "Documentation",
+            "Naming Conventions",
+            "Translation",
+        ],
+    ),
+    (
+        "ENLIL",
+        [
+            "SLA Signoff",
+            "Policy",
+            "Compliance",
+            "Auditing",
+            "Change Management",
+            "Access Control",
+            "Reporting",
+        ],
+    ),
 ];
 
 pub fn domains_for_gate(gate_akkadian_name: &str) -> Option<&'static [&'static str; 7]> {
     let upper = gate_akkadian_name.to_ascii_uppercase();
-    DOMAIN_NAMES.iter().find(|(g, _)| *g == upper).map(|(_, domains)| domains)
+    DOMAIN_NAMES
+        .iter()
+        .find(|(g, _)| *g == upper)
+        .map(|(_, domains)| domains)
 }
 
 /// One playbook (already approved into `gate_akkadian_name`) the domain
@@ -81,7 +161,10 @@ pub fn approved_domains(domain_registry_path: &Path) -> std::collections::HashMa
 /// them, for the same reason `gate_review::gate_events_for` keeps every
 /// approval: a real reclassification is its own chronicle event, not a
 /// silent overwrite.
-pub fn domain_events_for(domain_registry_path: &Path, kaki_hex: &str) -> Vec<(String, String, String)> {
+pub fn domain_events_for(
+    domain_registry_path: &Path,
+    kaki_hex: &str,
+) -> Vec<(String, String, String)> {
     std::fs::read_to_string(domain_registry_path)
         .unwrap_or_default()
         .lines()
@@ -125,7 +208,9 @@ pub fn scan_domain_suggestions(
     domain_registry_path: &Path,
     gate_akkadian_name: &str,
 ) -> Vec<DomainSuggestion> {
-    let Some(domains) = domains_for_gate(gate_akkadian_name) else { return Vec::new() };
+    let Some(domains) = domains_for_gate(gate_akkadian_name) else {
+        return Vec::new();
+    };
     let gate_upper = gate_akkadian_name.to_ascii_uppercase();
 
     let gates = approved_gates(gate_registry_path);
@@ -140,20 +225,33 @@ pub fn scan_domain_suggestions(
         .unwrap_or_default()
         .lines()
         .filter_map(|l| serde_json::from_str::<RegistryLine>(l).ok())
-        .filter(|r| gates.get(&r.kaki_hex).map(|g| g.to_ascii_uppercase()) == Some(gate_upper.clone()))
+        .filter(|r| {
+            gates.get(&r.kaki_hex).map(|g| g.to_ascii_uppercase()) == Some(gate_upper.clone())
+        })
         .filter(|r| !already_domained.contains(&r.kaki_hex))
         .filter_map(|r| {
             let path = PathBuf::from(&r.first_seen_path);
             let text = std::fs::read_to_string(&path).ok()?;
             let lower = text.to_lowercase();
-            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
             let title = DocumentParser::parse_playbook_header(&text)
                 .map(|s| s.title)
                 .filter(|t| !t.trim().is_empty())
                 .unwrap_or(stem);
-            let suggested_domains =
-                domains.iter().filter(|d| contains_phrase(&lower, &d.to_lowercase())).map(|d| d.to_string()).collect();
-            Some(DomainSuggestion { pb_kaki_hex: r.kaki_hex, title, source_path: r.first_seen_path, suggested_domains })
+            let suggested_domains = domains
+                .iter()
+                .filter(|d| contains_phrase(&lower, &d.to_lowercase()))
+                .map(|d| d.to_string())
+                .collect();
+            Some(DomainSuggestion {
+                pb_kaki_hex: r.kaki_hex,
+                title,
+                source_path: r.first_seen_path,
+                suggested_domains,
+            })
         })
         .collect()
 }
@@ -173,7 +271,11 @@ pub fn apply_domain_approvals(
     if let Some(p) = domain_registry_path.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    let mut registry_file = std::fs::OpenOptions::new().create(true).append(true).open(domain_registry_path).ok();
+    let mut registry_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(domain_registry_path)
+        .ok();
 
     for (kaki, gate_name, domain_name) in approvals {
         write_node.tag_domain(*kaki, domain_name, epoch);
@@ -228,22 +330,43 @@ mod tests {
 
         let pb_registry = dir.join("pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        catalog_playbooks(&[CatalogLocation { name: "loc".into(), root: loc }], &pb_registry, &enkiddb_root);
+        catalog_playbooks(
+            &[CatalogLocation {
+                name: "loc".into(),
+                root: loc,
+            }],
+            &pb_registry,
+            &enkiddb_root,
+        );
 
         let gate_registry = dir.join("pb_gate_registry.jsonl");
         let domain_registry = dir.join("pb_domain_registry.jsonl");
 
-        let suggestions_before_gate = scan_domain_suggestions(&pb_registry, &gate_registry, &domain_registry, "ADAD");
-        assert!(suggestions_before_gate.is_empty(), "a playbook with no approved gate yet must not be domain-suggested");
+        let suggestions_before_gate =
+            scan_domain_suggestions(&pb_registry, &gate_registry, &domain_registry, "ADAD");
+        assert!(
+            suggestions_before_gate.is_empty(),
+            "a playbook with no approved gate yet must not be domain-suggested"
+        );
 
-        let gate_suggestions = crate::gate_review::scan_gate_suggestions(&pb_registry, &gate_registry);
+        let gate_suggestions =
+            crate::gate_review::scan_gate_suggestions(&pb_registry, &gate_registry);
         assert_eq!(gate_suggestions.len(), 1);
         let kaki = parse_kaki_hex(&gate_suggestions[0].pb_kaki_hex).unwrap();
-        let mut wn = WriteNode::new(KakiMinter::new(TribeId::from_u16(enkiddb::PLAYBOOK_CATALOG_TRIBE_ID)), 64);
+        let mut wn = WriteNode::new(
+            KakiMinter::new(TribeId::from_u16(enkiddb::PLAYBOOK_CATALOG_TRIBE_ID)),
+            64,
+        );
         apply_gate_approvals(&mut wn, &[(kaki, "ADAD".to_string())], &gate_registry, 1);
 
-        let suggestions = scan_domain_suggestions(&pb_registry, &gate_registry, &domain_registry, "ADAD");
+        let suggestions =
+            scan_domain_suggestions(&pb_registry, &gate_registry, &domain_registry, "ADAD");
         assert_eq!(suggestions.len(), 1, "{suggestions:?}");
-        assert!(suggestions[0].suggested_domains.contains(&"Extraction".to_string()), "{suggestions:?}");
+        assert!(
+            suggestions[0]
+                .suggested_domains
+                .contains(&"Extraction".to_string()),
+            "{suggestions:?}"
+        );
     }
 }

@@ -11,30 +11,44 @@ use crate::compiler::parser::AkkFile;
 
 #[derive(Debug, Clone)]
 pub struct SemanticDiag {
-    pub level:   DiagLevel,
+    pub level: DiagLevel,
     pub message: String,
-    pub span:    Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiagLevel { Error, Warning, Info }
+pub enum DiagLevel {
+    Error,
+    Warning,
+    Info,
+}
 
 pub struct SemanticAnalyser {
     pub diagnostics: Vec<SemanticDiag>,
 }
 
 impl SemanticAnalyser {
-    pub fn new() -> Self { Self { diagnostics: Vec::new() } }
+    pub fn new() -> Self {
+        Self {
+            diagnostics: Vec::new(),
+        }
+    }
 
     /// Phase 1B stub — passes AST unchanged with no diagnostics.
-    pub fn analyse(&mut self, ast: AkkFile) -> AkkFile { ast }
+    pub fn analyse(&mut self, ast: AkkFile) -> AkkFile {
+        ast
+    }
 
     pub fn has_errors(&self) -> bool {
         self.diagnostics.iter().any(|d| d.level == DiagLevel::Error)
     }
 }
 
-impl Default for SemanticAnalyser { fn default() -> Self { Self::new() } }
+impl Default for SemanticAnalyser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {

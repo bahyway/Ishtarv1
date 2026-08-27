@@ -26,9 +26,7 @@ pub fn scan_crates(workspace_root: &Path) -> std::io::Result<Vec<ArtifactProfile
         }
         let text = fs::read_to_string(&manifest)?;
         let (name, version) = parse_package_name_version(&text);
-        let name = name.unwrap_or_else(|| {
-            path.file_name().unwrap().to_string_lossy().to_string()
-        });
+        let name = name.unwrap_or_else(|| path.file_name().unwrap().to_string_lossy().to_string());
         out.push(ArtifactProfile {
             name,
             kind: ArtifactKind::Crate,
@@ -128,7 +126,8 @@ mod tests {
 
     #[test]
     fn parses_workspace_inherited_version() {
-        let toml = "[package]\nname = \"enkimdb\"\nversion.workspace = true\nedition.workspace = true\n";
+        let toml =
+            "[package]\nname = \"enkimdb\"\nversion.workspace = true\nedition.workspace = true\n";
         let (name, version) = parse_package_name_version(toml);
         assert_eq!(name.as_deref(), Some("enkimdb"));
         assert_eq!(version.as_deref(), Some("workspace"));

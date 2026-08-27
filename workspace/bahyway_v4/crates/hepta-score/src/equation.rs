@@ -22,7 +22,8 @@
 /// `H(P)` in `(0.0, 1.0]`. Returns `1.0` exactly when `P == T`.
 #[inline]
 pub fn hepta_health_score(p: &[f32; 7], t: &[f32; 7], w: &[f32; 7]) -> f32 {
-    let weighted_sq_dist: f32 = p.iter()
+    let weighted_sq_dist: f32 = p
+        .iter()
         .zip(t.iter())
         .zip(w.iter())
         .map(|((pi, ti), wi)| wi * (pi - ti).powi(2))
@@ -82,13 +83,7 @@ pub fn sensitivity(p: &[f32; 7], t: &[f32; 7], w: &[f32; 7]) -> [f32; 7] {
 /// Simulate the new H(P) after fixing dimension `dim` to `new_val`.
 ///
 /// Used in ShoWay "what-if" remediation simulator.
-pub fn simulate_fix(
-    p:       &[f32; 7],
-    t:       &[f32; 7],
-    w:       &[f32; 7],
-    dim:     usize,
-    new_val: f32,
-) -> f32 {
+pub fn simulate_fix(p: &[f32; 7], t: &[f32; 7], w: &[f32; 7], dim: usize, new_val: f32) -> f32 {
     let mut p_fixed = *p;
     p_fixed[dim] = new_val.clamp(0.0, 1.0);
     hepta_health_score(&p_fixed, t, w)
@@ -128,13 +123,19 @@ mod tests {
     #[test]
     fn score_is_monotone() {
         let levels = [0.0f32, 0.2, 0.4, 0.6, 0.8, 0.95, 1.0];
-        let scores: Vec<f32> = levels.iter()
+        let scores: Vec<f32> = levels
+            .iter()
             .map(|&q| hepta_health_score(&[q; 7], &T, &W_EQUAL))
             .collect();
         for i in 0..scores.len() - 1 {
-            assert!(scores[i] < scores[i + 1],
+            assert!(
+                scores[i] < scores[i + 1],
                 "not monotone: h({})={:.4} >= h({})={:.4}",
-                levels[i], scores[i], levels[i+1], scores[i+1]);
+                levels[i],
+                scores[i],
+                levels[i + 1],
+                scores[i + 1]
+            );
         }
     }
 
@@ -162,7 +163,7 @@ mod tests {
     #[test]
     fn b11_roundtrip_within_one() {
         let original = 180u8;
-        let h   = b11_to_health(original);
+        let h = b11_to_health(original);
         let b11 = health_to_b11(h);
         assert!((original as i32 - b11 as i32).abs() <= 1);
     }
@@ -189,7 +190,7 @@ mod tests {
     fn simulate_fix_improves_score() {
         let p = [0.7f32; 7];
         let original = hepta_health_score(&p, &T, &W_EQUAL);
-        let fixed    = simulate_fix(&p, &T, &W_EQUAL, 0, 1.0);
+        let fixed = simulate_fix(&p, &T, &W_EQUAL, 0, 1.0);
         assert!(fixed > original, "{original} → {fixed}");
     }
 

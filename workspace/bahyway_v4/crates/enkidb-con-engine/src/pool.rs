@@ -1,18 +1,18 @@
 #![forbid(unsafe_code)]
 //! Sync connection pool backed by std::sync::Mutex.
 
+use crate::error::ConError;
 use std::net::TcpStream;
 use std::sync::Mutex;
-use crate::error::ConError;
 
 pub struct PooledConnection {
-    pub stream:     TcpStream,
+    pub stream: TcpStream,
     pub session_id: String,
 }
 
 pub struct ConnectionPool {
     connections: Mutex<Vec<PooledConnection>>,
-    max_size:    usize,
+    max_size: usize,
 }
 
 impl ConnectionPool {
@@ -25,7 +25,9 @@ impl ConnectionPool {
 
     /// Acquire a pooled connection. Returns `PoolExhausted` if none available.
     pub fn acquire(&self) -> Result<PooledConnection, ConError> {
-        let mut guard = self.connections.lock()
+        let mut guard = self
+            .connections
+            .lock()
             .map_err(|_| ConError::Io("mutex poisoned".to_string()))?;
         guard.pop().ok_or(ConError::PoolExhausted)
     }

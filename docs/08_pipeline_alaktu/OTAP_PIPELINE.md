@@ -1,5 +1,10 @@
 # EnkiDDB OTAP Pipeline
 
+**See also:** `docs/16_runbooks/BAREMETAL_URUK_GOLIVE_RUNBOOK.md` for the
+concrete, ordered command sequence from a fresh `uruk` checkout through
+Production go-live — this document explains the pipeline's mechanics, that
+one gives the exact steps to run.
+
 **Sealed:** 2026-07-12
 **Scope:** the EnkiDDB (Tigris) rebuild — EAV documentation structure, HeptaScript
 query language, the ENLIL 7-index stack (target: >1 billion particles, <1s

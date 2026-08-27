@@ -5,36 +5,36 @@
 //! Musarû late-discovery.  Administrators use `QdbReport` for forensic
 //! review.
 
-use enkidb_kaki::{EventKaki, IdentityKaki, KakiMinter, KakiRole, Kaki};
-use enkidb_journal::{Journal, JournalEntry, EventCause};
+use enkidb_journal::{EventCause, Journal, JournalEntry};
+use enkidb_kaki::{EventKaki, IdentityKaki, Kaki, KakiMinter, KakiRole};
 use enkisdb::sdb_store::StagedParticle;
 
 /// One permanently quarantined particle.
 #[derive(Debug, Clone)]
 pub struct QuarantineRecord {
     /// Raw 16-byte KAKI identity bytes.
-    pub kaki_bytes:      [u8; 16],
+    pub kaki_bytes: [u8; 16],
     /// Tribe this particle claimed to belong to.
-    pub tribe_id:        u16,
+    pub tribe_id: u16,
     /// Epoch at time of original arrival in the SDB.
-    pub epoch:           u32,
+    pub epoch: u32,
     /// Color_ID(RGB) at time of quarantine.
-    pub color_rgb:       [u8; 3],
+    pub color_rgb: [u8; 3],
     /// Exact EventCause that triggered quarantine.
     pub quarantine_cause: EventCause,
     /// Tick when the particle arrived in the SDB.
-    pub arrived_tick:    u64,
+    pub arrived_tick: u64,
     /// Tick when the quarantine decision was made.
     pub quarantine_tick: u64,
     /// True if Musarû flagged a byte-level malware signature.
-    pub malware_flag:    bool,
+    pub malware_flag: bool,
 }
 
 /// Aggregate counts for the quarantine archive.
 #[derive(Debug, Default, Clone)]
 pub struct QdbReport {
-    pub total_quarantined:  usize,
-    pub malware_count:      usize,
+    pub total_quarantined: usize,
+    pub malware_count: usize,
     pub tribe_mismatch_count: usize,
     pub validation_fail_count: usize,
     pub late_quarantine_count: usize,
@@ -43,7 +43,9 @@ pub struct QdbReport {
 impl QdbReport {
     /// Security risk percentage: malware particles / total.
     pub fn malware_ratio(&self) -> f32 {
-        if self.total_quarantined == 0 { return 0.0; }
+        if self.total_quarantined == 0 {
+            return 0.0;
+        }
         self.malware_count as f32 / self.total_quarantined as f32
     }
 }
@@ -55,7 +57,9 @@ pub struct QdbStore {
 
 impl QdbStore {
     pub fn new() -> Self {
-        QdbStore { records: Vec::new() }
+        QdbStore {
+            records: Vec::new(),
+        }
     }
 
     /// Accept a quarantined `StagedParticle` from the SDB, record it here,
@@ -64,21 +68,21 @@ impl QdbStore {
     /// Returns the store index of the new record.
     pub fn accept(
         &mut self,
-        particle:       &StagedParticle,
-        cause:          EventCause,
-        journal:        &mut Journal,
-        minter:         &KakiMinter,
-        current_tick:   u64,
+        particle: &StagedParticle,
+        cause: EventCause,
+        journal: &mut Journal,
+        minter: &KakiMinter,
+        current_tick: u64,
     ) -> usize {
         let record = QuarantineRecord {
-            kaki_bytes:       particle.kaki_bytes,
-            tribe_id:         particle.tribe_id,
-            epoch:            particle.epoch,
-            color_rgb:        particle.color_rgb,
+            kaki_bytes: particle.kaki_bytes,
+            tribe_id: particle.tribe_id,
+            epoch: particle.epoch,
+            color_rgb: particle.color_rgb,
             quarantine_cause: cause,
-            arrived_tick:     particle.arrived_tick,
-            quarantine_tick:  current_tick,
-            malware_flag:     particle.malware_flag,
+            arrived_tick: particle.arrived_tick,
+            quarantine_tick: current_tick,
+            malware_flag: particle.malware_flag,
         };
 
         // Journal the quarantine move so HeptaScript can query it.
@@ -105,10 +109,10 @@ impl QdbStore {
     /// Returns how many were newly transferred.
     pub fn drain_from_sdb(
         &mut self,
-        sdb:          &enkisdb::SdbStore,
-        cause:        EventCause,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        sdb: &enkisdb::SdbStore,
+        cause: EventCause,
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> usize {
         use enkisdb::SdbStatus;
@@ -121,7 +125,9 @@ impl QdbStore {
 
         let mut count = 0;
         for p in &quarantined {
-            if self.contains_kaki(&p.kaki_bytes) { continue; }
+            if self.contains_kaki(&p.kaki_bytes) {
+                continue;
+            }
             self.accept(p, cause, journal, minter, current_tick);
             count += 1;
         }
@@ -135,7 +141,10 @@ impl QdbStore {
 
     /// Filter records by EventCause.
     pub fn by_cause(&self, cause: EventCause) -> Vec<&QuarantineRecord> {
-        self.records.iter().filter(|r| r.quarantine_cause == cause).collect()
+        self.records
+            .iter()
+            .filter(|r| r.quarantine_cause == cause)
+            .collect()
     }
 
     /// Filter records flagged by Musarû malware scan.
@@ -145,31 +154,46 @@ impl QdbStore {
 
     /// Build a summary report.
     pub fn report(&self) -> QdbReport {
-        let mut r = QdbReport { total_quarantined: self.records.len(), ..Default::default() };
+        let mut r = QdbReport {
+            total_quarantined: self.records.len(),
+            ..Default::default()
+        };
         for rec in &self.records {
-            if rec.malware_flag { r.malware_count += 1; }
+            if rec.malware_flag {
+                r.malware_count += 1;
+            }
             match rec.quarantine_cause {
-                EventCause::MusaruMalwareDetected
-                    | EventCause::MusaruLateQuarantine  => r.late_quarantine_count  += 1,
-                EventCause::SdbValidationFail           => r.validation_fail_count  += 1,
-                EventCause::QuarantineMove              => {} // generic move, counted via total
-                _                                       => r.validation_fail_count  += 1,
+                EventCause::MusaruMalwareDetected | EventCause::MusaruLateQuarantine => {
+                    r.late_quarantine_count += 1
+                }
+                EventCause::SdbValidationFail => r.validation_fail_count += 1,
+                EventCause::QuarantineMove => {} // generic move, counted via total
+                _ => r.validation_fail_count += 1,
             }
         }
         r
     }
 
-    pub fn all(&self)  -> &[QuarantineRecord] { &self.records }
-    pub fn len(&self)  -> usize               { self.records.len() }
-    pub fn is_empty(&self) -> bool            { self.records.is_empty() }
+    pub fn all(&self) -> &[QuarantineRecord] {
+        &self.records
+    }
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
 }
 
 impl Default for QdbStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn reconstruct_identity(bytes: &[u8; 16]) -> Option<IdentityKaki> {
-    Kaki::from_bytes(*bytes).ok()
+    Kaki::from_bytes(*bytes)
+        .ok()
         .and_then(|k| IdentityKaki::try_from_kaki(k).ok())
 }
 
@@ -177,8 +201,8 @@ fn reconstruct_identity(bytes: &[u8; 16]) -> Option<IdentityKaki> {
 mod tests {
     use super::*;
     use bahyway_core::TribeId;
-    use enkidb_kaki::{KakiMinter, KakiRole};
     use enkidb_journal::Journal;
+    use enkidb_kaki::{KakiMinter, KakiRole};
     use enkisdb::sdb_store::{SdbStatus, StagedParticle};
 
     fn make_minter() -> (KakiMinter, TribeId) {
@@ -187,14 +211,15 @@ mod tests {
     }
 
     fn make_staged(minter: &KakiMinter, malware: bool) -> StagedParticle {
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     1,
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [255, 0, 0],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: 1,
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [255, 0, 0],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: malware,
         }
@@ -203,11 +228,17 @@ mod tests {
     #[test]
     fn accept_writes_journal_entry() {
         let (minter, _) = make_minter();
-        let mut qdb     = QdbStore::new();
-        let mut jnl     = Journal::new(64);
-        let particle    = make_staged(&minter, false);
+        let mut qdb = QdbStore::new();
+        let mut jnl = Journal::new(64);
+        let particle = make_staged(&minter, false);
 
-        qdb.accept(&particle, EventCause::SdbValidationFail, &mut jnl, &minter, 900);
+        qdb.accept(
+            &particle,
+            EventCause::SdbValidationFail,
+            &mut jnl,
+            &minter,
+            900,
+        );
 
         assert_eq!(qdb.len(), 1);
         assert_eq!(jnl.entry_count(), 1);
@@ -217,40 +248,76 @@ mod tests {
     #[test]
     fn malware_particle_reported() {
         let (minter, _) = make_minter();
-        let mut qdb     = QdbStore::new();
-        let mut jnl     = Journal::new(64);
+        let mut qdb = QdbStore::new();
+        let mut jnl = Journal::new(64);
 
-        qdb.accept(&make_staged(&minter, true),  EventCause::MusaruMalwareDetected, &mut jnl, &minter, 10);
-        qdb.accept(&make_staged(&minter, false), EventCause::SdbValidationFail,     &mut jnl, &minter, 10);
+        qdb.accept(
+            &make_staged(&minter, true),
+            EventCause::MusaruMalwareDetected,
+            &mut jnl,
+            &minter,
+            10,
+        );
+        qdb.accept(
+            &make_staged(&minter, false),
+            EventCause::SdbValidationFail,
+            &mut jnl,
+            &minter,
+            10,
+        );
 
         let r = qdb.report();
         assert_eq!(r.total_quarantined, 2);
-        assert_eq!(r.malware_count,     1);
+        assert_eq!(r.malware_count, 1);
         assert!((r.malware_ratio() - 0.5).abs() < f32::EPSILON);
     }
 
     #[test]
     fn by_cause_filter() {
         let (minter, _) = make_minter();
-        let mut qdb     = QdbStore::new();
-        let mut jnl     = Journal::new(64);
+        let mut qdb = QdbStore::new();
+        let mut jnl = Journal::new(64);
 
-        qdb.accept(&make_staged(&minter, true),  EventCause::MusaruMalwareDetected, &mut jnl, &minter, 0);
-        qdb.accept(&make_staged(&minter, false), EventCause::SdbValidationFail,     &mut jnl, &minter, 0);
+        qdb.accept(
+            &make_staged(&minter, true),
+            EventCause::MusaruMalwareDetected,
+            &mut jnl,
+            &minter,
+            0,
+        );
+        qdb.accept(
+            &make_staged(&minter, false),
+            EventCause::SdbValidationFail,
+            &mut jnl,
+            &minter,
+            0,
+        );
 
         assert_eq!(qdb.by_cause(EventCause::MusaruMalwareDetected).len(), 1);
-        assert_eq!(qdb.by_cause(EventCause::SdbValidationFail).len(),     1);
-        assert_eq!(qdb.malware_records().len(),                            1);
+        assert_eq!(qdb.by_cause(EventCause::SdbValidationFail).len(), 1);
+        assert_eq!(qdb.malware_records().len(), 1);
     }
 
     #[test]
     fn append_only_no_removal() {
         let (minter, _) = make_minter();
-        let mut qdb     = QdbStore::new();
-        let mut jnl     = Journal::new(64);
+        let mut qdb = QdbStore::new();
+        let mut jnl = Journal::new(64);
 
-        qdb.accept(&make_staged(&minter, false), EventCause::QuarantineMove, &mut jnl, &minter, 0);
-        qdb.accept(&make_staged(&minter, false), EventCause::QuarantineMove, &mut jnl, &minter, 1);
+        qdb.accept(
+            &make_staged(&minter, false),
+            EventCause::QuarantineMove,
+            &mut jnl,
+            &minter,
+            0,
+        );
+        qdb.accept(
+            &make_staged(&minter, false),
+            EventCause::QuarantineMove,
+            &mut jnl,
+            &minter,
+            1,
+        );
 
         assert_eq!(qdb.len(), 2);
         // No method to remove — only append.  Verified by API surface.
@@ -259,9 +326,9 @@ mod tests {
     #[test]
     fn drain_from_sdb_transfers_quarantined_particles() {
         let (minter, _) = make_minter();
-        let mut sdb     = enkisdb::SdbStore::new();
-        let mut qdb     = QdbStore::new();
-        let mut jnl     = Journal::new(64);
+        let mut sdb = enkisdb::SdbStore::new();
+        let mut qdb = QdbStore::new();
+        let mut jnl = Journal::new(64);
 
         // Stage 3 particles, quarantine 2 of them
         let i0 = sdb.stage(make_staged(&minter, false));
@@ -273,7 +340,7 @@ mod tests {
 
         let moved = qdb.drain_from_sdb(&sdb, EventCause::QuarantineMove, &mut jnl, &minter, 900);
 
-        assert_eq!(moved,   2);
+        assert_eq!(moved, 2);
         assert_eq!(qdb.len(), 2);
         assert_eq!(jnl.entry_count(), 2);
         let _ = i0;
@@ -282,18 +349,21 @@ mod tests {
     #[test]
     fn drain_from_sdb_is_idempotent_across_repeated_calls() {
         let (minter, _) = make_minter();
-        let mut sdb     = enkisdb::SdbStore::new();
-        let mut qdb     = QdbStore::new();
-        let mut jnl     = Journal::new(64);
+        let mut sdb = enkisdb::SdbStore::new();
+        let mut qdb = QdbStore::new();
+        let mut jnl = Journal::new(64);
 
         let i0 = sdb.stage(make_staged(&minter, true));
         sdb.quarantine(i0);
 
-        let first  = qdb.drain_from_sdb(&sdb, EventCause::QuarantineMove, &mut jnl, &minter, 900);
+        let first = qdb.drain_from_sdb(&sdb, EventCause::QuarantineMove, &mut jnl, &minter, 900);
         let second = qdb.drain_from_sdb(&sdb, EventCause::QuarantineMove, &mut jnl, &minter, 1800);
 
-        assert_eq!(first,  1);
-        assert_eq!(second, 0, "already-recorded kaki must not be re-accepted on a later sweep");
+        assert_eq!(first, 1);
+        assert_eq!(
+            second, 0,
+            "already-recorded kaki must not be re-accepted on a later sweep"
+        );
         assert_eq!(qdb.len(), 1);
         assert_eq!(jnl.entry_count(), 1);
     }

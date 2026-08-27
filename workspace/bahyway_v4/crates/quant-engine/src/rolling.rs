@@ -17,90 +17,142 @@ impl RollingWindow {
 
     /// Simple Moving Average at each position (returns `None` for early positions).
     pub fn sma(&self) -> Vec<Option<f64>> {
-        self.values.iter().enumerate().map(|(i, _)| {
-            if i + 1 < self.period { return None; }
-            let sum: f64 = self.values[i + 1 - self.period..=i].iter().sum();
-            Some(sum / self.period as f64)
-        }).collect()
+        self.values
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                if i + 1 < self.period {
+                    return None;
+                }
+                let sum: f64 = self.values[i + 1 - self.period..=i].iter().sum();
+                Some(sum / self.period as f64)
+            })
+            .collect()
     }
 
     /// Rolling standard deviation (population) at each position.
     pub fn rolling_std(&self) -> Vec<Option<f64>> {
-        self.values.iter().enumerate().map(|(i, _)| {
-            if i + 1 < self.period { return None; }
-            let window = &self.values[i + 1 - self.period..=i];
-            let mean = window.iter().sum::<f64>() / self.period as f64;
-            let var  = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / self.period as f64;
-            Some(var.sqrt())
-        }).collect()
+        self.values
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                if i + 1 < self.period {
+                    return None;
+                }
+                let window = &self.values[i + 1 - self.period..=i];
+                let mean = window.iter().sum::<f64>() / self.period as f64;
+                let var =
+                    window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / self.period as f64;
+                Some(var.sqrt())
+            })
+            .collect()
     }
 
     /// Rolling maximum at each position.
     pub fn rolling_max(&self) -> Vec<Option<f64>> {
-        self.values.iter().enumerate().map(|(i, _)| {
-            if i + 1 < self.period { return None; }
-            let m = self.values[i + 1 - self.period..=i]
-                .iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            Some(m)
-        }).collect()
+        self.values
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                if i + 1 < self.period {
+                    return None;
+                }
+                let m = self.values[i + 1 - self.period..=i]
+                    .iter()
+                    .cloned()
+                    .fold(f64::NEG_INFINITY, f64::max);
+                Some(m)
+            })
+            .collect()
     }
 
     /// Rolling minimum at each position.
     pub fn rolling_min(&self) -> Vec<Option<f64>> {
-        self.values.iter().enumerate().map(|(i, _)| {
-            if i + 1 < self.period { return None; }
-            let m = self.values[i + 1 - self.period..=i]
-                .iter().cloned().fold(f64::INFINITY, f64::min);
-            Some(m)
-        }).collect()
+        self.values
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                if i + 1 < self.period {
+                    return None;
+                }
+                let m = self.values[i + 1 - self.period..=i]
+                    .iter()
+                    .cloned()
+                    .fold(f64::INFINITY, f64::min);
+                Some(m)
+            })
+            .collect()
     }
 
     /// Compute Bollinger Bands (SMA ± n_std × rolling_std).
     pub fn bollinger_bands(&self, n_std: f64) -> BollingerBands {
         let sma = self.sma();
         let std = self.rolling_std();
-        let upper: Vec<Option<f64>> = sma.iter().zip(std.iter()).map(|(s, d)| {
-            match (s, d) { (Some(m), Some(sd)) => Some(m + n_std * sd), _ => None }
-        }).collect();
-        let lower: Vec<Option<f64>> = sma.iter().zip(std.iter()).map(|(s, d)| {
-            match (s, d) { (Some(m), Some(sd)) => Some(m - n_std * sd), _ => None }
-        }).collect();
-        BollingerBands { middle: sma, upper, lower, period: self.period, n_std }
+        let upper: Vec<Option<f64>> = sma
+            .iter()
+            .zip(std.iter())
+            .map(|(s, d)| match (s, d) {
+                (Some(m), Some(sd)) => Some(m + n_std * sd),
+                _ => None,
+            })
+            .collect();
+        let lower: Vec<Option<f64>> = sma
+            .iter()
+            .zip(std.iter())
+            .map(|(s, d)| match (s, d) {
+                (Some(m), Some(sd)) => Some(m - n_std * sd),
+                _ => None,
+            })
+            .collect();
+        BollingerBands {
+            middle: sma,
+            upper,
+            lower,
+            period: self.period,
+            n_std,
+        }
     }
 
-    pub fn len(&self) -> usize { self.values.len() }
-    pub fn period(&self) -> usize { self.period }
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+    pub fn period(&self) -> usize {
+        self.period
+    }
 }
 
 /// Bollinger Bands result (upper, middle/SMA, lower bands).
 #[derive(Debug, Clone)]
 pub struct BollingerBands {
     pub middle: Vec<Option<f64>>,
-    pub upper:  Vec<Option<f64>>,
-    pub lower:  Vec<Option<f64>>,
+    pub upper: Vec<Option<f64>>,
+    pub lower: Vec<Option<f64>>,
     pub period: usize,
-    pub n_std:  f64,
+    pub n_std: f64,
 }
 
 impl BollingerBands {
     /// Bandwidth = (upper - lower) / middle.  Measures relative band width.
     pub fn bandwidth(&self) -> Vec<Option<f64>> {
-        (0..self.middle.len()).map(|i| {
-            match (self.upper[i], self.middle[i], self.lower[i]) {
+        (0..self.middle.len())
+            .map(|i| match (self.upper[i], self.middle[i], self.lower[i]) {
                 (Some(u), Some(m), Some(l)) if m.abs() > 1e-12 => Some((u - l) / m),
                 _ => None,
-            }
-        }).collect()
+            })
+            .collect()
     }
 
     /// %B indicator: where price is relative to bands (0=lower, 1=upper).
     pub fn percent_b(&self, price: f64) -> Vec<Option<f64>> {
-        (0..self.upper.len()).map(|i| {
-            match (self.upper[i], self.lower[i]) {
+        (0..self.upper.len())
+            .map(|i| match (self.upper[i], self.lower[i]) {
                 (Some(u), Some(l)) if (u - l).abs() > 1e-12 => Some((price - l) / (u - l)),
                 _ => None,
-            }
-        }).collect()
+            })
+            .collect()
     }
 }
 
@@ -109,7 +161,7 @@ impl BollingerBands {
 /// α = 2 / (span + 1), standard "span" EMA formula.
 pub struct ExponentialMovingAverage {
     pub values: Vec<f64>,
-    pub span:   usize,
+    pub span: usize,
 }
 
 impl ExponentialMovingAverage {
@@ -120,7 +172,9 @@ impl ExponentialMovingAverage {
 
     /// Compute the EMA series.  First value = first observation (seeded).
     pub fn compute(&self) -> Vec<f64> {
-        if self.values.is_empty() { return Vec::new(); }
+        if self.values.is_empty() {
+            return Vec::new();
+        }
         let alpha = 2.0 / (self.span as f64 + 1.0);
         let mut ema = Vec::with_capacity(self.values.len());
         let mut prev = self.values[0];
@@ -135,10 +189,13 @@ impl ExponentialMovingAverage {
     /// MACD = EMA(fast_span) − EMA(slow_span).
     /// Returns (macd_line, signal_line) where signal = EMA(macd, signal_span).
     pub fn macd(values: &[f64], fast: usize, slow: usize, signal: usize) -> (Vec<f64>, Vec<f64>) {
-        let fast_ema  = ExponentialMovingAverage::new(values.to_vec(), fast).compute();
-        let slow_ema  = ExponentialMovingAverage::new(values.to_vec(), slow).compute();
-        let macd_line: Vec<f64> = fast_ema.iter().zip(slow_ema.iter())
-            .map(|(f, s)| f - s).collect();
+        let fast_ema = ExponentialMovingAverage::new(values.to_vec(), fast).compute();
+        let slow_ema = ExponentialMovingAverage::new(values.to_vec(), slow).compute();
+        let macd_line: Vec<f64> = fast_ema
+            .iter()
+            .zip(slow_ema.iter())
+            .map(|(f, s)| f - s)
+            .collect();
         let signal_line = ExponentialMovingAverage::new(macd_line.clone(), signal).compute();
         (macd_line, signal_line)
     }
@@ -174,10 +231,10 @@ mod tests {
     fn rolling_max_and_min_correct() {
         let rw = RollingWindow::new(prices(), 3);
         let maxes = rw.rolling_max();
-        let mins  = rw.rolling_min();
+        let mins = rw.rolling_min();
         // window [10,11,12]: max=12, min=10
         assert_eq!(maxes[2].unwrap(), 12.0);
-        assert_eq!(mins[2].unwrap(),  10.0);
+        assert_eq!(mins[2].unwrap(), 10.0);
     }
 
     #[test]
@@ -195,7 +252,7 @@ mod tests {
     fn bollinger_middle_equals_sma() {
         let rw = RollingWindow::new(prices(), 3);
         let bands = rw.bollinger_bands(2.0);
-        let sma   = rw.sma();
+        let sma = rw.sma();
         for (b, s) in bands.middle.iter().zip(sma.iter()) {
             assert_eq!(b, s);
         }
@@ -233,6 +290,8 @@ mod tests {
     fn flat_series_ema_equals_constant() {
         let flat: Vec<f64> = vec![5.0; 10];
         let ema = ExponentialMovingAverage::new(flat, 3).compute();
-        for v in &ema { assert!((v - 5.0).abs() < 1e-9); }
+        for v in &ema {
+            assert!((v - 5.0).abs() < 1e-9);
+        }
     }
 }

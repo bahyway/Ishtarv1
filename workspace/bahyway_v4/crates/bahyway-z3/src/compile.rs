@@ -95,7 +95,11 @@ const MAX_REASONABLE_GROUPS: usize = 100_000;
 /// query's WHERE/WHY is itself satisfiable.
 fn check_gravity_cap(query: &HeptaQuery) -> Vec<String> {
     match &query.gravity {
-        Some(GravityClause { mode: GravityMode::ExactMatchCapped(n), attr, .. }) if *n > MAX_REASONABLE_GROUPS => {
+        Some(GravityClause {
+            mode: GravityMode::ExactMatchCapped(n),
+            attr,
+            ..
+        }) if *n > MAX_REASONABLE_GROUPS => {
             vec![format!(
                 "GRAVITY E[{attr}] MAX_GROUPS {n} exceeds the practical cap of {MAX_REASONABLE_GROUPS} groups \
                  -- MAX_GROUPS is present (satisfying the parser's mandatory-cap rule) but too large to bound \
@@ -137,9 +141,13 @@ pub fn check_query(query: &HeptaQuery) -> ValidationReport {
     // anyway so any future WHY clause built directly against this
     // compiler (bypassing the parser's u8 typing) is still caught.
     let quality_byte = vars.real(&EntityAttr::why("quality.byte"));
-    let quality_lo = quality_byte.ge(&Real::from_rational(0, 1));
-    let quality_hi = quality_byte.le(&Real::from_rational(255, 1));
-    track(&solver, &Bool::and(&[&quality_lo, &quality_hi]), "quality_byte_domain[0,255]".to_string());
+    let quality_lo = quality_byte.ge(Real::from_rational(0, 1));
+    let quality_hi = quality_byte.le(Real::from_rational(255, 1));
+    track(
+        &solver,
+        &Bool::and(&[&quality_lo, &quality_hi]),
+        "quality_byte_domain[0,255]".to_string(),
+    );
 
     // WHERE — assert individually when every condition after the first
     // is AND-joined (safe to decompose for a fine-grained unsat core);
@@ -149,7 +157,11 @@ pub fn check_query(query: &HeptaQuery) -> ValidationReport {
         if is_pure_and_chain(query.r#where.iter().map(|c| &c.combinator)) {
             for (i, cond) in query.r#where.iter().enumerate() {
                 let f = compile_where_leaf(&mut vars, cond);
-                track(&solver, &f, format!("WHERE[{i}] {}[{}]", cond.var, cond.attr));
+                track(
+                    &solver,
+                    &f,
+                    format!("WHERE[{i}] {}[{}]", cond.var, cond.attr),
+                );
             }
         } else {
             let f = fold_where(&mut vars, &query.r#where);
@@ -363,11 +375,17 @@ struct EntityAttr {
 
 impl EntityAttr {
     fn var(var: &str, attr: &str) -> Self {
-        Self { var: var.to_string(), attr: attr.to_string() }
+        Self {
+            var: var.to_string(),
+            attr: attr.to_string(),
+        }
     }
 
     fn why(attr: &str) -> Self {
-        Self { var: "$WHY".to_string(), attr: attr.to_string() }
+        Self {
+            var: "$WHY".to_string(),
+            attr: attr.to_string(),
+        }
     }
 }
 
@@ -396,7 +414,10 @@ impl VarPool {
     }
 
     fn real(&mut self, key: &EntityAttr) -> Real {
-        self.reals.entry(key.clone()).or_insert_with(|| Real::new_const(format!("{}.{}", key.var, key.attr))).clone()
+        self.reals
+            .entry(key.clone())
+            .or_insert_with(|| Real::new_const(format!("{}.{}", key.var, key.attr)))
+            .clone()
     }
 
     fn exists(&mut self, key: &EntityAttr) -> &Bool {
@@ -438,26 +459,28 @@ mod tests {
         let q = parse_query("WHO T.E\nWHERE E[age] > 10 AND E[age] < 5").unwrap();
         let report = check_query(&q);
         assert_eq!(report.outcome, SatOutcome::Unsatisfiable);
-        assert!(report.contradiction_sources.iter().any(|s| s.contains("WHERE[0]")));
-        assert!(report.contradiction_sources.iter().any(|s| s.contains("WHERE[1]")));
+        assert!(report
+            .contradiction_sources
+            .iter()
+            .any(|s| s.contains("WHERE[0]")));
+        assert!(report
+            .contradiction_sources
+            .iter()
+            .any(|s| s.contains("WHERE[1]")));
     }
 
     #[test]
     fn contradictory_text_equality_reports_unsat() {
-        let q = parse_query(
-            "WHO T.E\nWHERE E[status] = \"active\" AND E[status] = \"closed\"",
-        )
-        .unwrap();
+        let q = parse_query("WHO T.E\nWHERE E[status] = \"active\" AND E[status] = \"closed\"")
+            .unwrap();
         let report = check_query(&q);
         assert_eq!(report.outcome, SatOutcome::Unsatisfiable);
     }
 
     #[test]
     fn same_text_equality_twice_is_satisfiable() {
-        let q = parse_query(
-            "WHO T.E\nWHERE E[status] = \"active\" AND E[status] = \"active\"",
-        )
-        .unwrap();
+        let q = parse_query("WHO T.E\nWHERE E[status] = \"active\" AND E[status] = \"active\"")
+            .unwrap();
         let report = check_query(&q);
         assert_eq!(report.outcome, SatOutcome::Satisfiable);
     }
@@ -500,15 +523,16 @@ mod tests {
         .unwrap();
         let report = check_query(&q);
         assert_eq!(report.outcome, SatOutcome::Unsatisfiable);
-        assert!(report.contradiction_sources.iter().any(|s| s.starts_with("WHY[")));
+        assert!(report
+            .contradiction_sources
+            .iter()
+            .any(|s| s.starts_with("WHY[")));
     }
 
     #[test]
     fn why_lane_contradiction_is_unsatisfiable() {
-        let q = parse_query(
-            "WHO T.E\nWHERE E[x] EXISTS\nWHY LANE = Gold AND LANE = Black",
-        )
-        .unwrap();
+        let q =
+            parse_query("WHO T.E\nWHERE E[x] EXISTS\nWHY LANE = Gold AND LANE = Black").unwrap();
         let report = check_query(&q);
         assert_eq!(report.outcome, SatOutcome::Unsatisfiable);
     }
@@ -536,9 +560,14 @@ mod tests {
         // The parser's own mandatory-cap rule is satisfied (MAX_GROUPS is
         // present), but a cap this large no longer bounds anything
         // meaningfully -- Gate G4 must still flag it.
-        let q = parse_query("WHO T.E\nGRAVITY E[national_id] MAX_GROUPS 5000000\nMEASURE DENSE").unwrap();
+        let q = parse_query("WHO T.E\nGRAVITY E[national_id] MAX_GROUPS 5000000\nMEASURE DENSE")
+            .unwrap();
         let report = check_query(&q);
-        assert_eq!(report.outcome, SatOutcome::Satisfiable, "SAT/UNSAT is independent of the GRAVITY cap");
+        assert_eq!(
+            report.outcome,
+            SatOutcome::Satisfiable,
+            "SAT/UNSAT is independent of the GRAVITY cap"
+        );
         assert_eq!(report.gravity_warnings.len(), 1);
         assert!(report.gravity_warnings[0].contains("MAX_GROUPS 5000000"));
         assert!(report.gravity_warnings[0].contains("national_id"));

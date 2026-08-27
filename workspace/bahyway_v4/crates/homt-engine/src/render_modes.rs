@@ -78,8 +78,8 @@ impl RenderingMode {
     pub fn label(&self) -> &'static str {
         match self {
             RenderingMode::PointSprite => "PointSprite",
-            RenderingMode::Instanced   => "Instanced",
-            RenderingMode::Volumetric  => "Volumetric",
+            RenderingMode::Instanced => "Instanced",
+            RenderingMode::Volumetric => "Volumetric",
         }
     }
 }
@@ -134,12 +134,18 @@ mod tests {
 
     #[test]
     fn test_below_threshold_is_point_sprite() {
-        assert_eq!(rendering_mode(POINT_SPRITE_THRESHOLD - 1), RenderingMode::PointSprite);
+        assert_eq!(
+            rendering_mode(POINT_SPRITE_THRESHOLD - 1),
+            RenderingMode::PointSprite
+        );
     }
 
     #[test]
     fn test_at_sprite_threshold_is_instanced() {
-        assert_eq!(rendering_mode(POINT_SPRITE_THRESHOLD), RenderingMode::Instanced);
+        assert_eq!(
+            rendering_mode(POINT_SPRITE_THRESHOLD),
+            RenderingMode::Instanced
+        );
     }
 
     #[test]
@@ -150,7 +156,10 @@ mod tests {
 
     #[test]
     fn test_at_instanced_threshold_is_volumetric() {
-        assert_eq!(rendering_mode(INSTANCED_THRESHOLD), RenderingMode::Volumetric);
+        assert_eq!(
+            rendering_mode(INSTANCED_THRESHOLD),
+            RenderingMode::Volumetric
+        );
     }
 
     #[test]
@@ -186,7 +195,10 @@ mod tests {
 
     #[test]
     fn test_tribe_mode_billion_particles() {
-        assert_eq!(tribe_rendering_mode(1_000_000_000, 5), RenderingMode::Volumetric);
+        assert_eq!(
+            tribe_rendering_mode(1_000_000_000, 5),
+            RenderingMode::Volumetric
+        );
     }
 
     #[test]

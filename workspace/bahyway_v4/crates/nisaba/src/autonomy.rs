@@ -123,7 +123,11 @@ mod tests {
     use kupru::akkadian_seal::SealKeyPair;
 
     fn claim(env: NisabaEnvironment) -> GrantClaim {
-        GrantClaim { environment: env, class: AutonomyClass::WatchBandOnly, issued_at: 1_700_000_000 }
+        GrantClaim {
+            environment: env,
+            class: AutonomyClass::WatchBandOnly,
+            issued_at: 1_700_000_000,
+        }
     }
 
     #[test]

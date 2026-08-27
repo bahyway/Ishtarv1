@@ -55,8 +55,14 @@ impl KupruBridge {
             Ok(kp) => {
                 let mut d = VDict::new();
                 d.set("ok", true);
-                d.set("signing_key", &PackedByteArray::from(kp.signing_key_bytes().as_slice()));
-                d.set("verifying_key", &PackedByteArray::from(kp.verifying_key_bytes().as_slice()));
+                d.set(
+                    "signing_key",
+                    &PackedByteArray::from(kp.signing_key_bytes().as_slice()),
+                );
+                d.set(
+                    "verifying_key",
+                    &PackedByteArray::from(kp.verifying_key_bytes().as_slice()),
+                );
                 d
             }
             Err(e) => Self::error_dict(&e.to_string()),
@@ -105,13 +111,21 @@ impl KupruBridge {
     /// (2026-07-27) via PB-261's own round-trip check, which is exactly
     /// what caught this gap before it shipped in an actual login flow.
     #[func]
-    fn derive_key_with_salt(&self, root_phrase: GString, passphrase: GString, salt: PackedByteArray) -> VDict {
+    fn derive_key_with_salt(
+        &self,
+        root_phrase: GString,
+        passphrase: GString,
+        salt: PackedByteArray,
+    ) -> VDict {
         let root = match AkkadianRoot::from_phrase(&root_phrase.to_string()) {
             Ok(r) => r,
             Err(e) => return Self::error_dict(&e.to_string()),
         };
         if salt.len() != 32 {
-            return Self::error_dict(&format!("salt must be exactly 32 bytes, got {}", salt.len()));
+            return Self::error_dict(&format!(
+                "salt must be exactly 32 bytes, got {}",
+                salt.len()
+            ));
         }
         let mut salt_arr = [0u8; 32];
         salt_arr.copy_from_slice(salt.as_slice());
@@ -187,7 +201,13 @@ impl KupruBridge {
         realm: GString,
         subject_label: GString,
     ) -> VDict {
-        self.issue_passport_inner(signing_key_bytes, identity_phrase, realm, subject_label, false)
+        self.issue_passport_inner(
+            signing_key_bytes,
+            identity_phrase,
+            realm,
+            subject_label,
+            false,
+        )
     }
 
     /// Issue a new architect-privilege (level 7, full wildcard scope)
@@ -201,7 +221,13 @@ impl KupruBridge {
         realm: GString,
         subject_label: GString,
     ) -> VDict {
-        self.issue_passport_inner(signing_key_bytes, identity_phrase, realm, subject_label, true)
+        self.issue_passport_inner(
+            signing_key_bytes,
+            identity_phrase,
+            realm,
+            subject_label,
+            true,
+        )
     }
 
     /// Verify a passport's seal (signature + timing). `passport_json`
@@ -307,8 +333,14 @@ impl KupruBridge {
             Ok(kp) => {
                 let mut d = VDict::new();
                 d.set("ok", true);
-                d.set("signing_key", &PackedByteArray::from(kp.signing_key_bytes().as_slice()));
-                d.set("verifying_key", &PackedByteArray::from(kp.verifying_key_bytes().as_slice()));
+                d.set(
+                    "signing_key",
+                    &PackedByteArray::from(kp.signing_key_bytes().as_slice()),
+                );
+                d.set(
+                    "verifying_key",
+                    &PackedByteArray::from(kp.verifying_key_bytes().as_slice()),
+                );
                 d
             }
             Err(e) => Self::error_dict(&e.to_string()),

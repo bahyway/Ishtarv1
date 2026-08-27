@@ -1,0 +1,199 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# PB-MON-001 — DEPLOY THE AGÛ HOST EXPORTER (Fedora Workstation 44, bare metal)
+# ═══════════════════════════════════════════════════════════════════════════
+# PURPOSE   The Agû Wave dashboard v7 has a LIVE HOST mode: it polls
+#           http://127.0.0.1:7044/agu_metrics.json once per second. This
+#           playbook deposits a pure-stdlib Python exporter (no pip, no deps —
+#           sovereignty holds) that reads /proc/stat, /proc/meminfo,
+#           /proc/diskstats and /sys/class/net, normalizes to 0..1, and serves
+#           CORS-open JSON bound to localhost ONLY. The dashboard then shows
+#           the REAL machine: CPU, RAM, NVMe R/W, NET.
+# SCOPE     Runs FROM the Fedora bare-metal HOST against localhost
+#           (infrastructure Way of Work: Ansible runs from the host).
+# SAFETY    Bind 127.0.0.1 only · read-only observation · systemd hardening.
+# RITE      WITNESS → JUDGE → MOVE → STAGE, Kanīku sha256 sealed.
+# ═══════════════════════════════════════════════════════════════════════════
+---
+- name: "PB-MON-001 · the Agû host exporter — the membrane drinks the real machine"
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    agu_dir: /opt/bahyway/agu
+    agu_port: 7044
+    # normalization ceilings — tune to the machine's honest maxima
+    agu_disk_max_bps: 2000000000      # 2 GB/s NVMe ceiling
+    agu_net_max_bps: 125000000        # 1 Gbit/s ceiling
+  tasks:
+
+    # ── WITNESS ────────────────────────────────────────────────────────────
+    - name: "WITNESS · the host must be Fedora with python3 and systemd"
+      ansible.builtin.command: python3 --version
+      register: pyv
+      changed_when: false
+
+    - name: "WITNESS · port {{ agu_port }} must be free or already ours"
+      ansible.builtin.shell: |
+        set -o pipefail
+        if ss -ltn "sport = :{{ agu_port }}" | grep -q LISTEN; then
+          systemctl is-active agu-exporter.service || { echo "PORT TAKEN BY A STRANGER"; exit 1; }
+        fi
+        echo FREE-OR-OURS
+      args: { executable: /bin/bash }
+      register: portw
+      changed_when: false
+
+    # ── JUDGE ──────────────────────────────────────────────────────────────
+    - name: "JUDGE · refuse if the port belongs to another"
+      ansible.builtin.assert:
+        that: "'PORT TAKEN BY A STRANGER' not in portw.stdout"
+        fail_msg: "The gate refuses: port {{ agu_port }} is held by an unknown service."
+
+    # ── MOVE ───────────────────────────────────────────────────────────────
+    - name: "MOVE · the exporter's house"
+      ansible.builtin.file:
+        path: "{{ agu_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "MOVE · deposit agu_exporter.py (pure stdlib — the witness of /proc)"
+      ansible.builtin.copy:
+        dest: "{{ agu_dir }}/agu_exporter.py"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          # agu_exporter — BahyWay PB-MON-001. Pure stdlib. Localhost only.
+          # Serves /agu_metrics.json : {cpu, ram, nvme_r, nvme_w, net, ts} in 0..1.
+          import json, time, threading
+          from http.server import HTTPServer, BaseHTTPRequestHandler
+
+          DISK_MAX = {{ agu_disk_max_bps }}
+          NET_MAX  = {{ agu_net_max_bps }}
+          SAMPLE = {"cpu":0.0,"ram":0.0,"nvme_r":0.0,"nvme_w":0.0,"net":0.0,"ts":0}
+
+          def cpu_times():
+              with open("/proc/stat") as f:
+                  p=f.readline().split()[1:]
+              vals=list(map(int,p)); idle=vals[3]+vals[4]
+              return sum(vals), idle
+
+          def ram_frac():
+              info={}
+              with open("/proc/meminfo") as f:
+                  for line in f:
+                      k,v=line.split(":",1); info[k]=int(v.strip().split()[0])
+              return 1.0-(info.get("MemAvailable",0)/max(1,info.get("MemTotal",1)))
+
+          def disk_bytes():
+              rd=wr=0
+              with open("/proc/diskstats") as f:
+                  for line in f:
+                      p=line.split()
+                      name=p[2]
+                      if name.startswith(("nvme","sd","vd")) and not any(c.isdigit() for c in name[-1:]) is False and ("p" in name or name[-1].isdigit()):
+                          continue  # skip partitions; whole devices only
+                      if name.startswith(("nvme","sd","vd")):
+                          rd+=int(p[5])*512; wr+=int(p[9])*512
+              return rd, wr
+
+          def net_bytes():
+              tot=0
+              with open("/proc/net/dev") as f:
+                  for line in f.readlines()[2:]:
+                      iface,rest=line.split(":",1)
+                      if iface.strip()=="lo": continue
+                      p=rest.split(); tot+=int(p[0])+int(p[8])
+              return tot
+
+          def sampler():
+              t0,i0=cpu_times(); d_r0,d_w0=disk_bytes(); n0=net_bytes(); last=time.time()
+              while True:
+                  time.sleep(1.0)
+                  now=time.time(); dt=max(0.25,now-last); last=now
+                  t1,i1=cpu_times(); d_r1,d_w1=disk_bytes(); n1=net_bytes()
+                  dtot=max(1,t1-t0); didle=i1-i0
+                  SAMPLE["cpu"]=round(max(0.0,min(1.0,1.0-didle/dtot)),4)
+                  SAMPLE["ram"]=round(max(0.0,min(1.0,ram_frac())),4)
+                  SAMPLE["nvme_r"]=round(max(0.0,min(1.0,(d_r1-d_r0)/dt/DISK_MAX)),4)
+                  SAMPLE["nvme_w"]=round(max(0.0,min(1.0,(d_w1-d_w0)/dt/DISK_MAX)),4)
+                  SAMPLE["net"]=round(max(0.0,min(1.0,(n1-n0)/dt/NET_MAX)),4)
+                  SAMPLE["ts"]=int(now)
+                  t0,i0=t1,i1; d_r0,d_w0=d_r1,d_w1; n0=n1
+
+          class H(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path!="/agu_metrics.json":
+                      self.send_response(404); self.end_headers(); return
+                  body=json.dumps(SAMPLE).encode()
+                  self.send_response(200)
+                  self.send_header("Content-Type","application/json")
+                  self.send_header("Access-Control-Allow-Origin","*")
+                  self.send_header("Cache-Control","no-store")
+                  self.send_header("Content-Length",str(len(body)))
+                  self.end_headers(); self.wfile.write(body)
+              def log_message(self,*a): pass
+
+          threading.Thread(target=sampler,daemon=True).start()
+          HTTPServer(("127.0.0.1",{{ agu_port }}),H).serve_forever()
+
+    - name: "MOVE · systemd unit (hardened, localhost, read-only observer)"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/agu-exporter.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=BahyWay Agû host exporter (PB-MON-001) — localhost telemetry for the Agû Wave dashboard
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/bin/python3 {{ agu_dir }}/agu_exporter.py
+          Restart=always
+          RestartSec=2
+          DynamicUser=yes
+          ProtectSystem=strict
+          ProtectHome=yes
+          PrivateTmp=yes
+          NoNewPrivileges=yes
+          IPAddressAllow=127.0.0.1/8
+          IPAddressDeny=any
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: "MOVE · enable and start"
+      ansible.builtin.systemd:
+        name: agu-exporter.service
+        state: restarted
+        enabled: true
+        daemon_reload: true
+
+    # ── STAGE ──────────────────────────────────────────────────────────────
+    - name: "STAGE · the exporter must answer with lawful JSON"
+      ansible.builtin.shell: |
+        set -o pipefail
+        sleep 2
+        curl -sf http://127.0.0.1:{{ agu_port }}/agu_metrics.json | python3 -c '
+        import json,sys
+        j=json.load(sys.stdin)
+        for k in ("cpu","ram","nvme_r","nvme_w","net"):
+            v=j[k]
+            assert 0.0<=v<=1.0, (k,v)
+        print("LAWFUL:", j)'
+      args: { executable: /bin/bash }
+      register: probe
+      changed_when: false
+
+    - name: "STAGE · Kanīku — seal the exporter"
+      ansible.builtin.shell: |
+        sha256sum {{ agu_dir }}/agu_exporter.py | tee {{ agu_dir }}/KANIKU-agu_exporter.sha256
+      args: { executable: /bin/bash }
+      register: seal
+      changed_when: true
+
+    - name: "STAGE · verdict"
+      ansible.builtin.debug:
+        msg:
+          - "PB-MON-001 COMPLETE — the Agû drinks the real machine."
+          - "{{ probe.stdout_lines | last }}"
+          - "Open sala_agu_wave_dashboard_v7.html — the status bar turns ⬤ LIVE HOST within two seconds."
+          - "Kanīku: {{ seal.stdout }}"

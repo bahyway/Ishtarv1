@@ -1,0 +1,92 @@
+---
+# PB-394 · Snapshot Stack · render each membrane on its own plane along the flow axis
+# GL-VIZ-010 §1 §4 §5 · GL-FLD-001 §1 §5 · GL-UNT-001 §1 §2
+- name: PB-394 build the DubSar Data Flow Graph from live counts
+  hosts: girsu
+  vars:
+    bahyway_provides: ["artifact:stack.json", "tab:sala_dfg_snapshot_stack"]
+    bahyway_requires: ["law:GL-FLD-001", "law:GL-UNT-001", "engine:ENLIL"]
+    ports: {EnkiSDB: 7001, EnkiODB: 7002, EnkiQDB: 7003, EnkiDB: 7004, EnkiDW: 7005, EnkiMDB: 7006, EnkiDDB: 7007}
+    tribe: pipe.reach
+    citizen_threshold: 250000
+    out: "{{ ansible_env.HOME }}/bahyway/stack"
+  tasks:
+    - name: Ensure output
+      ansible.builtin.file: {path: "{{ out }}", state: directory, mode: "0750"}
+
+    - name: Snapshot the tribe's population and units in EVERY type (§3 - the units travel)
+      ansible.builtin.command: >
+        bahyway-enkidb present --db {{ item.key }} --port {{ item.value }}
+        --tribe {{ tribe }} --units --count --json
+      loop: "{{ ports | dict2items }}"
+      register: snaps
+      changed_when: false
+
+    - name: Build the field per plane in one ENLIL pass (never per-particle)
+      ansible.builtin.command: >
+        bahyway-enlil field --tribe {{ tribe }} --port {{ item.value }}
+        --grid 7x64x28 --out {{ out }}/field_{{ item.value }}.bin
+      loop: "{{ ports | dict2items }}"
+      register: fields
+      changed_when: true
+
+    - name: Gate V1 · no plane is drawn per-particle above the threshold (§4)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys
+        snaps = {{ snaps.results | map(attribute='stdout') | list | to_json }}
+        bad = []
+        for s in snaps:
+            try: d = json.loads(s or "{}")
+            except Exception: continue
+            if d.get("render") == "citizens" and d.get("count", 0) > {{ citizen_threshold }}:
+                bad.append(d.get("port"))
+        print("planes forcing per-particle draw above threshold:", bad)
+        sys.exit(1 if bad else 0)
+        PY
+      changed_when: false
+
+    - name: Gate V2 · every plane carries PU, RU and MLU or it may not be drawn (§3)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys
+        snaps = {{ snaps.results | map(attribute='stdout') | list | to_json }}
+        miss = []
+        for s in snaps:
+            try: d = json.loads(s or "{}")
+            except Exception: continue
+            for u in ("pu", "ru", "mlu"):
+                if u not in d: miss.append((d.get("port"), u))
+        print("planes missing a unit:", miss)
+        sys.exit(1 if miss else 0)
+        PY
+      changed_when: false
+
+    - name: Gate V3 · no decimation - the sample is bounded and declared, never silent
+      ansible.builtin.command: bahyway-enlil prove --rule no_silent_decimation
+      changed_when: false
+
+    - name: Trace the sampled KAKIs across the planes (§6 - a trajectory carries its clause)
+      ansible.builtin.command: >
+        bahyway-enkidb trace --tribe {{ tribe }} --sample 256 --with-decrees
+        --out {{ out }}/tracks.json
+      changed_when: true
+
+    - name: Gate V4 · every entry into 7003 names the clause that sent it
+      ansible.builtin.shell: |
+        python3 -c "
+        import json,sys
+        d=json.load(open('{{ out }}/tracks.json'))
+        bad=[t['kaki'] for t in d.get('tracks',[]) if any(s.get('port')=='7003' for s in t.get('path',[])) and not t.get('clause')]
+        print('quarantine entries without a clause:',len(bad))
+        raise SystemExit(1 if bad else 0)"
+      changed_when: false
+
+    - name: Publish the tab beside its data
+      ansible.builtin.copy: {src: sala_dfg_snapshot_stack_v1.html, dest: "{{ ansible_env.HOME }}/bahyway/sala/tabs/sala_dfg_snapshot_stack_v1.html", mode: "0644"}
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-394 snapshot stack built for {{ tribe }} - one plane per membrane, field above threshold"

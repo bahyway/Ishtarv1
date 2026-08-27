@@ -7,6 +7,7 @@
 //!   - consequence comes from this asset's own N-1 contingency result
 //!     (`exclusion::Verdict`) -- how many customers would be stranded
 //!     if it failed right now.
+//!
 //! No new physics; this module only combines two numbers this crate
 //! already produces.
 
@@ -73,9 +74,9 @@ mod tests {
     #[test]
     fn rank_orders_highest_priority_first() {
         let items = vec![
-            (Tier::Sound, 0),           // priority 0
-            (Tier::Birqu, 10),          // priority 11 -- highest
-            (Tier::Horizon(45.0), 2),   // priority 1.5
+            (Tier::Sound, 0),         // priority 0
+            (Tier::Birqu, 10),        // priority 11 -- highest
+            (Tier::Horizon(45.0), 2), // priority 1.5
         ];
         let order = rank(&items);
         assert_eq!(order, vec![1, 2, 0]);

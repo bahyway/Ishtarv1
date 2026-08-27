@@ -33,11 +33,11 @@ pub enum LaneColor {
 impl LaneColor {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Gem      => "Gem",
-            Self::Active   => "Active",
-            Self::Fuzzy    => "Fuzzy",
-            Self::Sec      => "Sec",
-            Self::Dead     => "Dead",
+            Self::Gem => "Gem",
+            Self::Active => "Active",
+            Self::Fuzzy => "Fuzzy",
+            Self::Sec => "Sec",
+            Self::Dead => "Dead",
             Self::Critical => "Critical",
         }
     }
@@ -45,11 +45,11 @@ impl LaneColor {
     /// CSS hex color for DOM / Canvas 2D rendering (dubsar-canvas)
     pub fn css_color(&self) -> &'static str {
         match self {
-            Self::Gem      => "#C9A84C", // Gold
-            Self::Active   => "#2DD4BF", // Teal
-            Self::Fuzzy    => "#F59E0B", // Amber
-            Self::Sec      => "#3B82F6", // Blue
-            Self::Dead     => "#6B7280", // Gray
+            Self::Gem => "#C9A84C",      // Gold
+            Self::Active => "#2DD4BF",   // Teal
+            Self::Fuzzy => "#F59E0B",    // Amber
+            Self::Sec => "#3B82F6",      // Blue
+            Self::Dead => "#6B7280",     // Gray
             Self::Critical => "#EF4444", // Red
         }
     }
@@ -62,11 +62,11 @@ impl LaneColor {
     /// Approximate KAKI B11 quality score for this lane (ADR-001).
     pub fn quality_b11(&self) -> u8 {
         match self {
-            Self::Gem      => 220,
-            Self::Active   => 140,
-            Self::Fuzzy    => 80,
-            Self::Sec      => 120,
-            Self::Dead     => 30,
+            Self::Gem => 220,
+            Self::Active => 140,
+            Self::Fuzzy => 80,
+            Self::Sec => 120,
+            Self::Dead => 30,
             Self::Critical => 50,
         }
     }

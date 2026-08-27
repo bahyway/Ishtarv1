@@ -13,7 +13,7 @@ mod kaki_integrity {
         let kaki = m.mint_identity(0xDEAD_BABE, KakiRole::Zikru);
         let bytes = kaki.bytes();
         let computed = crc16(&bytes[0..14]);
-        let stored   = u16::from_be_bytes([bytes[14], bytes[15]]);
+        let stored = u16::from_be_bytes([bytes[14], bytes[15]]);
         assert_eq!(computed, stored, "KAKI CRC-16 must be self-consistent");
     }
 
@@ -23,7 +23,11 @@ mod kaki_integrity {
         let a = m.identity(KakiRole::Zikru);
         let b = m.identity(KakiRole::Zikru);
         // Counter in minter ensures uuid_hash differs
-        assert_ne!(a.bytes()[0..4], b.bytes()[0..4], "uuid_hash bytes must differ between mints");
+        assert_ne!(
+            a.bytes()[0..4],
+            b.bytes()[0..4],
+            "uuid_hash bytes must differ between mints"
+        );
     }
 
     #[test]
@@ -33,7 +37,10 @@ mod kaki_integrity {
         let bytes = kaki.bytes();
         // D2 = tribe_id at bytes [4..6]
         let tribe_in_kaki = u16::from_be_bytes([bytes[4], bytes[5]]);
-        assert_eq!(tribe_in_kaki, 0x00FF, "tribe_id must be baked into KAKI at birth");
+        assert_eq!(
+            tribe_in_kaki, 0x00FF,
+            "tribe_id must be baked into KAKI at birth"
+        );
     }
 
     #[test]
@@ -43,7 +50,11 @@ mod kaki_integrity {
         let k1 = m.mint_identity(0xAAAA_AAAA, KakiRole::Zikru);
         let k2 = m.mint_identity(0xAAAA_AAAA, KakiRole::Zikru);
         // uuid_hash bytes must be identical
-        assert_eq!(k1.uuid_hash(), k2.uuid_hash(), "same input must produce same uuid_hash");
+        assert_eq!(
+            k1.uuid_hash(),
+            k2.uuid_hash(),
+            "same input must produce same uuid_hash"
+        );
         // uuid_hash is FNV-1a derived — not the raw input (see mint.rs:120)
         // Both checksums must be valid
         assert!(k1.verify_checksum());
@@ -53,34 +64,41 @@ mod kaki_integrity {
 
 #[cfg(test)]
 mod boundary_conditions {
+    use adad_gate::{AdadGate, ArrivalRecord};
     use bahyway_core::{ParticleState, TribeId};
     use enkidb_engine::EnkiDb;
-    use adad_gate::{AdadGate, ArrivalRecord};
     use enkidb_kaki::KakiRole;
+    use musaru_security::check_sovereignty;
     use permanent_storage::PermanentStore;
     use story_engine::projection::{encode_state, ATTR_STATE};
-    use musaru_security::check_sovereignty;
-    use vgca_validation::validate;
     use template_library::civil_registry_template;
+    use vgca_validation::validate;
 
-    fn commit_particle(gate: &AdadGate, store: &mut PermanentStore, epoch: u32, state: ParticleState) {
+    fn commit_particle(
+        gate: &AdadGate,
+        store: &mut PermanentStore,
+        epoch: u32,
+        state: ParticleState,
+    ) {
         let record = ArrivalRecord {
             attrs: vec![(ATTR_STATE, encode_state(state).to_vec())],
             epoch,
             role: KakiRole::Zikru,
         };
-        let gr   = gate.ingest(record).unwrap();
-        let sec  = check_sovereignty(gate.tribe_id(), &gr.particle);
+        let gr = gate.ingest(record).unwrap();
+        let sec = check_sovereignty(gate.tribe_id(), &gr.particle);
         assert!(sec.is_approved());
         let tmpl = civil_registry_template();
-        let vr   = validate(&tmpl, &gr.eav);
+        let vr = validate(&tmpl, &gr.eav);
         assert!(vr.is_valid());
-        store.commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav).unwrap();
+        store
+            .commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav)
+            .unwrap();
     }
 
     #[test]
     fn epoch_zero_is_accepted() {
-        let tid  = TribeId::from_u16(0x0010);
+        let tid = TribeId::from_u16(0x0010);
         let gate = AdadGate::new(tid);
         let mut db = EnkiDb::new(tid);
         let mut store = PermanentStore::new(&mut db);
@@ -90,7 +108,7 @@ mod boundary_conditions {
 
     #[test]
     fn epoch_max_u32_is_accepted() {
-        let tid  = TribeId::from_u16(0x0011);
+        let tid = TribeId::from_u16(0x0011);
         let gate = AdadGate::new(tid);
         let mut db = EnkiDb::new(tid);
         let mut store = PermanentStore::new(&mut db);
@@ -100,7 +118,7 @@ mod boundary_conditions {
 
     #[test]
     fn dead_particle_is_committed_and_projected() {
-        let tid  = TribeId::from_u16(0x0012);
+        let tid = TribeId::from_u16(0x0012);
         let gate = AdadGate::new(tid);
         let mut db = EnkiDb::new(tid);
         let p_id;
@@ -110,23 +128,28 @@ mod boundary_conditions {
                 epoch: 99,
                 role: KakiRole::Zikru,
             };
-            let gr   = gate.ingest(record).unwrap();
-            let sec  = check_sovereignty(tid, &gr.particle);
+            let gr = gate.ingest(record).unwrap();
+            let sec = check_sovereignty(tid, &gr.particle);
             assert!(sec.is_approved());
             let tmpl = civil_registry_template();
-            let vr   = validate(&tmpl, &gr.eav);
+            let vr = validate(&tmpl, &gr.eav);
             assert!(vr.is_valid());
             p_id = gr.particle.clone();
             let mut store = PermanentStore::new(&mut db);
-            store.commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav).unwrap();
+            store
+                .commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav)
+                .unwrap();
         }
         let proj = db.project(&p_id);
-        assert!(!proj.attributes.is_empty(), "Dead particle must still project to non-empty EAV");
+        assert!(
+            !proj.attributes.is_empty(),
+            "Dead particle must still project to non-empty EAV"
+        );
     }
 
     #[test]
     fn high_volume_100_particles() {
-        let tid  = TribeId::from_u16(0x0013);
+        let tid = TribeId::from_u16(0x0013);
         let gate = AdadGate::new(tid);
         let mut db = EnkiDb::new(tid);
         {
@@ -146,15 +169,15 @@ mod boundary_conditions {
 
 #[cfg(test)]
 mod malformed_input {
-    use heptascript::parse_query;
-    use aaol::tokenize as aaol_lex;
     use aaol::ast::Parser as AaolParser;
+    use aaol::tokenize as aaol_lex;
+    use heptascript::parse_query;
 
     #[test]
     fn heptascript_empty_source_returns_error_or_empty_plan() {
         match parse_query("") {
-            Ok(plan)  => assert_eq!(plan.r#where.len(), 0),
-            Err(_)    => { /* acceptable */ }
+            Ok(plan) => assert_eq!(plan.r#where.len(), 0),
+            Err(_) => { /* acceptable */ }
         }
     }
 
@@ -190,12 +213,19 @@ mod malformed_input {
 
     #[test]
     fn vgca_empty_eav_fails_all_required() {
-        use vgca_validation::validate;
         use template_library::operational_template;
+        use vgca_validation::validate;
         let tmpl = operational_template();
-        let vr   = validate(&tmpl, &[]);
-        assert!(!vr.is_valid(), "empty EAV must fail operational template validation");
-        assert_eq!(vr.missing_required.len(), 3, "state+quality+freshness all required");
+        let vr = validate(&tmpl, &[]);
+        assert!(
+            !vr.is_valid(),
+            "empty EAV must fail operational template validation"
+        );
+        assert_eq!(
+            vr.missing_required.len(),
+            3,
+            "state+quality+freshness all required"
+        );
     }
 }
 
@@ -235,7 +265,7 @@ mod color_scoring {
     #[test]
     fn rgb_roundtrip() {
         let rgb = ColorRgb::new(0xAB, 0xCD, 0xEF);
-        let b   = rgb.to_bytes();
+        let b = rgb.to_bytes();
         let rgb2 = ColorRgb::from_bytes(b);
         assert_eq!(rgb, rgb2);
     }
@@ -243,20 +273,32 @@ mod color_scoring {
 
 #[cfg(test)]
 mod eridu_resilience {
-    use eridu_runtime::{Task, TaskResult, EriduRuntime};
+    use eridu_runtime::{EriduRuntime, Task, TaskResult};
 
     struct FailTask;
     impl Task for FailTask {
-        fn name(&self) -> &str { "fail" }
-        fn run(&mut self) -> TaskResult { TaskResult::Failed("intentional failure".to_string()) }
+        fn name(&self) -> &str {
+            "fail"
+        }
+        fn run(&mut self) -> TaskResult {
+            TaskResult::Failed("intentional failure".to_string())
+        }
     }
 
-    struct RetryOnceTask { attempts: u32 }
+    struct RetryOnceTask {
+        attempts: u32,
+    }
     impl Task for RetryOnceTask {
-        fn name(&self) -> &str { "retry_once" }
+        fn name(&self) -> &str {
+            "retry_once"
+        }
         fn run(&mut self) -> TaskResult {
             self.attempts += 1;
-            if self.attempts < 2 { TaskResult::Retry } else { TaskResult::Ok }
+            if self.attempts < 2 {
+                TaskResult::Retry
+            } else {
+                TaskResult::Ok
+            }
         }
     }
 

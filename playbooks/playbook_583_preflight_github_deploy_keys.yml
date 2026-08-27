@@ -1,0 +1,131 @@
+---
+# ============================================================================
+# PB-583 — PREFLIGHT GATE :: GitHub deploy keys for EnkiDB (STAKEHOLDER RITE)
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series (EnkiDB repo)
+# Purpose    : PB-212 generates each node's deploy key but can only DISPLAY it
+#              mid-run (task 0.293); if the key is not yet registered on
+#              GitHub, task 0.31 (git pull) fails AFTER images and state have
+#              already begun changing. This playbook moves that discovery to
+#              the FRONT: it generates the keys idempotently, TESTS real
+#              authentication against github.com/bahyway/EnkiDB, and REFUSES
+#              with explicit instructions until every node passes.
+# Discipline : CSR-08. Run THIS before PB-208 / PB-212 / PB-213, always.
+# Doctrine   : Append-only corpus — PB-212 is not edited; it is gated.
+#
+# Landed from a standalone Architect-supplied upload (2026-08-23),
+# RENUMBERED per this repo's standing rule: the source deposit's own
+# PB-216 collided with this repo's already-landed
+# playbook_216_populate_enkimdb_catalog.yml (an unrelated EnkiMDB
+# catalog-scan playbook) -> PB-583 here. The source file's own header
+# anticipated exactly this ("Renumber: If the ledger has advanced past
+# 216, renumber before running"). See
+# shala-prototypes/batch16_saadoun_family_puluhtu_deploygate/README.md
+# for the full renumbering table. Unlike the harvest playbooks in
+# batch15, this one gates this repo's own already-landed deploy
+# playbooks (PB-208/212/213) rather than external third-party data --
+# still not executed by this session (no such nodes exist here), but
+# landed as a first-class operational playbook, not reference-only.
+#
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  ⚠  STAKEHOLDER WARNING — READ BEFORE RUNNING ANY DEPLOY PLAYBOOK  ⚠     ║
+# ║                                                                          ║
+# ║  Each node (uruk-node-write, uruk-node-read, and any future node)        ║
+# ║  authenticates to GitHub with its OWN dedicated ed25519 deploy key.      ║
+# ║  That public key MUST be registered — READ-ONLY — at:                    ║
+# ║                                                                          ║
+# ║      github.com/bahyway/EnkiDB/settings/keys                             ║
+# ║      (Deploy keys → Add deploy key → title = the node's hostname)        ║
+# ║                                                                          ║
+# ║  BEFORE running PB-208 (ingestion), PB-212 (CQRS deploy) or PB-213       ║
+# ║  (flush/sync/verify). If the key does not exist yet, THIS playbook       ║
+# ║  will create it on the node and print it for you — register it, then     ║
+# ║  re-run PB-583 until every node shows GATE: OPEN. Only then proceed.     ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+# ============================================================================
+
+- name: "PB-583 | Preflight gate — deploy keys must authenticate before any deploy PB"
+  hosts: uruk-node-write:uruk-node-read
+  gather_facts: true
+  become: false
+
+  vars:
+    repo_ssh: "git@github.com:bahyway/EnkiDB.git"
+    key_path: "{{ ansible_facts.env.HOME }}/.ssh/github_deploy_ed25519"
+
+  tasks:
+
+    - name: "0.0 | ⚠ STAKEHOLDER WARNING (the gate exists because 0.31 fails late without it)"
+      ansible.builtin.debug:
+        msg:
+          - "⚠  This node must hold a GitHub deploy key REGISTERED at github.com/bahyway/EnkiDB/settings/keys (READ-ONLY, title '{{ inventory_hostname }}')."
+          - "⚠  Do NOT run PB-208 / PB-212 / PB-213 until this playbook ends with GATE: OPEN on every node."
+
+    - name: "1.1 | Ensure ~/.ssh exists with correct permissions"
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.ssh"
+        state: directory
+        mode: "0700"
+
+    - name: "1.2 | Generate this node's dedicated deploy key (idempotent — no-op if present)"
+      ansible.builtin.command:
+        cmd: >-
+          ssh-keygen -t ed25519 -f {{ key_path }}
+          -N "" -C "{{ inventory_hostname }}-enkidb-deploy"
+        creates: "{{ key_path }}"
+
+    - name: "1.3 | Route github.com through the dedicated key (same marker as PB-212.11 — idempotent overlap)"
+      ansible.builtin.blockinfile:
+        path: "{{ ansible_facts.env.HOME }}/.ssh/config"
+        create: true
+        mode: "0600"
+        marker: "# {mark} PB-212.11 -- dedicated github.com deploy key"
+        block: |
+          Host github.com
+            IdentityFile {{ key_path }}
+            IdentitiesOnly yes
+
+    - name: "1.4 | Read this node's public deploy key"
+      ansible.builtin.command: cat "{{ key_path }}.pub"
+      changed_when: false
+      register: pubkey
+
+    - name: "2.1 | JUDGE — attempt real read access to the EnkiDB repo (the moment of truth, BEFORE any deploy)"
+      ansible.builtin.command:
+        cmd: git ls-remote {{ repo_ssh }} HEAD
+      environment:
+        GIT_TERMINAL_PROMPT: "0"
+        GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+      changed_when: false
+      failed_when: false
+      register: gate
+
+    - name: "2.2 | GATE: OPEN — this node authenticates; deploy playbooks may include it"
+      ansible.builtin.debug:
+        msg: "✅ GATE: OPEN on {{ inventory_hostname }} — deploy key accepted by GitHub; PB-208/212/213 are lawful here."
+      when: gate.rc == 0
+
+    - name: "2.3 | GATE: SEALED — refuse with the exact human act required"
+      ansible.builtin.fail:
+        msg:
+          - "⛔ GATE: SEALED on {{ inventory_hostname }} — GitHub refused this node's deploy key."
+          - "HUMAN ACT REQUIRED (one time, ~1 minute):"
+          - "  1. Open  github.com/bahyway/EnkiDB/settings/keys"
+          - "  2. Deploy keys → Add deploy key"
+          - "  3. Title: {{ inventory_hostname }}   |   ✅ READ-ONLY (do NOT allow write)"
+          - "  4. Paste exactly this key:"
+          - "     {{ pubkey.stdout }}"
+          - "  5. Re-run PB-583. When every node reports GATE: OPEN, proceed to PB-208 → PB-212 → PB-213 in that order."
+          - "Nothing was deployed. Nothing was mutated. The gate simply held — as it must."
+      when: gate.rc != 0
+
+- name: "PB-583 | Summary"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: "Definition of done"
+      ansible.builtin.debug:
+        msg:
+          - "PB-583 passed on every targeted node: all deploy keys authenticate to github.com/bahyway/EnkiDB."
+          - "Lawful order now: PB-208 (ingest on write node) → PB-212 (CQRS split deploy) → PB-213 (flush/sync/verify)."
+          - "New nodes added later must pass PB-583 before joining any deploy inventory."

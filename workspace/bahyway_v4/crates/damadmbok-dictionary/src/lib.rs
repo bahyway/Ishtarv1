@@ -4,29 +4,14 @@
 //! covering all 11 knowledge areas, BahyWay component alignments, and
 //! FuzzyDimension ↔ DAMA term mappings.
 
-pub mod term;
 pub mod alignment;
 pub mod fuzzy_mapping;
+pub mod term;
 
-pub use term::{
-    DmBokTerm,
-    KnowledgeArea,
-    DICTIONARY,
-    lookup,
-    by_area,
-    search,
-};
+pub use term::{by_area, lookup, search, DmBokTerm, KnowledgeArea, DICTIONARY};
 
-pub use alignment::{
-    BahywayAlignment,
-    ALIGNMENTS,
-    alignments_for,
-    alignments_by_crate,
-};
+pub use alignment::{alignments_by_crate, alignments_for, BahywayAlignment, ALIGNMENTS};
 
 pub use fuzzy_mapping::{
-    DimensionMapping,
-    DIMENSION_MAPPINGS,
-    dimension_to_dama,
-    dimensions_for_dama,
+    dimension_to_dama, dimensions_for_dama, DimensionMapping, DIMENSION_MAPPINGS,
 };

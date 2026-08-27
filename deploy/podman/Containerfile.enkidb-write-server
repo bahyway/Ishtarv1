@@ -1,0 +1,45 @@
+# =============================================================================
+# enkidb-write-server — EnkiDB (core 7001 EAV particle store) Write Node
+# container image. This is the type that never had a deployed CQRS pair
+# before (see the crate's own module doc) -- SEED/FLUSH only, no /source
+# mount, no git needed.
+#
+# Build (from the repo root):
+#   podman build -t enkidb-write-server:latest \
+#     -f deploy/podman/Containerfile.enkidb-write-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkidb-write \
+#     -p 7011:7011 \
+#     -v enkidb-write-data:/data:Z \
+#     -e TRIBE_ID=0x7001 \
+#     --restart=always \
+#     enkidb-write-server:latest
+#
+# Lifecycle (no systemd anywhere -- plain Podman commands):
+#   podman stop enkidb-write
+#   podman start enkidb-write
+#   podman logs -f enkidb-write
+#
+# Backup: the volume (enkidb-write-data), not the container, is what
+# holds state -- back up its mounted directory directly rather than
+# `podman commit`.
+#
+# `:Z` on the volume mount is required on Fedora/SELinux-enforcing hosts.
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkidb-write-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkidb
+COPY --from=builder /build/target/release/enkidb-write-server /usr/local/bin/enkidb-write-server
+USER enkidb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7011
+ENV DATA_DIR=/data
+EXPOSE 7011
+ENTRYPOINT ["/usr/local/bin/enkidb-write-server"]

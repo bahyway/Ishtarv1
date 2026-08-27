@@ -1,0 +1,70 @@
+---
+# 2026-08-24, found live: PB-310 and PB-311 both ssh/rsync as
+# {{ ship_user }} (lahamu) to {{ ship_target_host }} (uruk-node-vault),
+# but as whichever LOCAL user actually runs the ssh call -- root, via
+# each playbook's own become: true (neither sets become_user, so it's
+# root's own key that needs trusting on the target, not lahamu's own).
+# "Permission denied (publickey,gssapi-keyex,gssapi-with-mic)" on both
+# playbooks: lahamu was only ever created as a nologin, no-home account
+# on the SOURCE hosts (uruk-node-write, uruk) -- nothing ever created it
+# on the RECEIVING end, and no key was ever generated or trusted.
+#
+# Shared by both playbooks (import_tasks) rather than duplicated.
+# Idempotent throughout:
+#   1. ensure lahamu exists on the target WITH a real home dir AND a
+#      real shell (it's nologin/no-home on the source, which is fine
+#      there since nothing logs in as it locally -- but the target
+#      needs both ~/.ssh/authorized_keys to receive connections AND a
+#      shell that can actually execute a remote command. 2026-08-24,
+#      found live on this task's own first real run: rsync "protocol
+#      version mismatch" + PB-311's literal stdout "This account is
+#      currently not available." -- this task originally gave lahamu
+#      /usr/sbin/nologin on the TARGET too, copied unthinkingly from
+#      the source-side pattern. nologin refuses to exec ANY remote
+#      command, not just interactive logins -- rsync's remote side got
+#      nologin's banner text instead of rsync's binary protocol.
+#      Fixed to /bin/bash on the target specifically.)
+#   2. ensure THIS host's root has an ed25519 keypair
+#   3. trust that public key as lahamu on the target, via delegate_to
+#      (reuses Ansible's own already-working SSH connection to the
+#      target rather than a manual key-copy dance)
+- name: "Ensure {{ ship_user }} exists on {{ ship_target_host }} with a real home dir and shell (needed to RECEIVE and RUN commands over SSH)"
+  ansible.builtin.user:
+    name: "{{ ship_user }}"
+    system: true
+    shell: /bin/bash
+    create_home: true
+  delegate_to: "{{ ship_target_host }}"
+
+- name: "Ensure this host's root has an SSH keypair"
+  ansible.builtin.command: ssh-keygen -t ed25519 -N "" -f /root/.ssh/id_ed25519
+  args: { creates: /root/.ssh/id_ed25519 }
+  # check_mode: false -- same established class of bug as PB-420/PB-319's
+  # bahyvg tasks: a command task with creates: only gets PARTIAL
+  # check-mode support (predicts from the creates path, never actually
+  # runs), so under --check the key would never really exist and the
+  # slurp task right after it would fail against a file that check mode
+  # never actually wrote.
+  check_mode: false
+
+- name: "Read this host's root public key"
+  ansible.builtin.slurp:
+    src: /root/.ssh/id_ed25519.pub
+  register: root_pubkey
+
+- name: "Ensure {{ ship_user }}'s .ssh directory exists on {{ ship_target_host }}"
+  ansible.builtin.file:
+    path: "/home/{{ ship_user }}/.ssh"
+    state: directory
+    owner: "{{ ship_user }}"
+    mode: "0700"
+  delegate_to: "{{ ship_target_host }}"
+
+- name: "Trust this host's root key as {{ ship_user }} on {{ ship_target_host }}"
+  ansible.builtin.lineinfile:
+    path: "/home/{{ ship_user }}/.ssh/authorized_keys"
+    line: "{{ root_pubkey.content | b64decode | trim }}"
+    create: true
+    owner: "{{ ship_user }}"
+    mode: "0600"
+  delegate_to: "{{ ship_target_host }}"

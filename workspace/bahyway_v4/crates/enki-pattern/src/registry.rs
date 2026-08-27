@@ -4,11 +4,11 @@
 //! The registry maintains all patterns indexed by their Pattern-KAKI.
 //! It auto-emits NARUDU-PATTERN events on every mutation.
 
-use std::collections::HashMap;
-use enkidb_kaki::Kaki;
 use crate::narudu::NaruduEvent;
-use crate::tier::{PatternRecord, StorageTier};
 use crate::nash::NashState;
+use crate::tier::{PatternRecord, StorageTier};
+use enkidb_kaki::Kaki;
+use std::collections::HashMap;
 
 /// In-memory pattern registry with NARUDU event emission.
 pub struct PatternRegistry {
@@ -54,9 +54,7 @@ impl PatternRegistry {
             rec.nash_equilibrium_score = nash.equilibrium_score;
             rec.orbital_now = self.current_orbital;
             if delta >= 0.10 {
-                let event = NaruduEvent::nash_shift(
-                    pattern_kaki, nash, self.current_orbital,
-                );
+                let event = NaruduEvent::nash_shift(pattern_kaki, nash, self.current_orbital);
                 self.event_log.push(event);
                 return true; // event emitted
             }
@@ -84,7 +82,9 @@ impl PatternRegistry {
 
     /// All patterns in a given storage tier at the current orbital.
     pub fn by_tier(&self, tier: StorageTier) -> impl Iterator<Item = &PatternRecord> {
-        self.records.values().filter(move |r| r.storage_tier() == tier)
+        self.records
+            .values()
+            .filter(move |r| r.storage_tier() == tier)
     }
 
     /// All patterns currently in Canonical lifecycle.
@@ -98,8 +98,12 @@ impl PatternRegistry {
     }
 
     /// Total pattern count.
-    pub fn len(&self) -> usize { self.records.len() }
-    pub fn is_empty(&self) -> bool { self.records.is_empty() }
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -111,7 +115,9 @@ mod tests {
     fn make_record(n: u16, orbital: u64) -> PatternRecord {
         let k = derive_pattern_kaki(
             PatternType::CrowdFlow,
-            FixedCoord7D { d: [n as i32, 0, 0, 0, 0, 0, 0] },
+            FixedCoord7D {
+                d: [n as i32, 0, 0, 0, 0, 0, 0],
+            },
             [0u8; 32],
             8_500,
             orbital,
@@ -146,7 +152,12 @@ mod tests {
         let kaki = rec.pattern_kaki;
         reg.publish(rec);
 
-        let nash = NashState { equilibrium_score: 0.50, anarchy_score: 1.1, deviation_count: 10, computed_at_orbital: 6 };
+        let nash = NashState {
+            equilibrium_score: 0.50,
+            anarchy_score: 1.1,
+            deviation_count: 10,
+            computed_at_orbital: 6,
+        };
         let emitted = reg.update_nash(kaki, nash);
         assert!(emitted, "delta 0.50 should trigger NashShift event");
 

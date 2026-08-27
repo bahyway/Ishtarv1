@@ -3,14 +3,14 @@
 //! Tribe IDs occupy the EnkiduLLM namespace 0x1001–0x10FF, distinct from
 //! particle/data tribes (0x0001–0x00FF) to prevent namespace collision.
 
+use crate::orbit::BookOrbit;
 use bahyway_core::TribeId;
 use enkidb_kaki::{Kaki, KakiMinter, KakiRole};
-use crate::orbit::BookOrbit;
 
 /// FNV-1a 32-bit hash — sovereign implementation, no external deps.
 pub fn book_uuid_hash(isbn_or_path: &[u8]) -> u32 {
     const OFFSET: u32 = 2_166_136_261;
-    const PRIME:  u32 = 16_777_619;
+    const PRIME: u32 = 16_777_619;
     let mut h = OFFSET;
     for &b in isbn_or_path {
         h ^= b as u32;
@@ -23,15 +23,15 @@ pub fn book_uuid_hash(isbn_or_path: &[u8]) -> u32 {
 pub struct BookDomainTribe;
 
 impl BookDomainTribe {
-    pub const COMPUTER_SCIENCE:  TribeId = TribeId::from_u16(0x1001);
-    pub const MATHEMATICS:       TribeId = TribeId::from_u16(0x1002);
+    pub const COMPUTER_SCIENCE: TribeId = TribeId::from_u16(0x1001);
+    pub const MATHEMATICS: TribeId = TribeId::from_u16(0x1002);
     pub const PHYSICAL_SCIENCES: TribeId = TribeId::from_u16(0x1003);
-    pub const LIFE_SCIENCES:     TribeId = TribeId::from_u16(0x1004);
-    pub const SOCIAL_SCIENCES:   TribeId = TribeId::from_u16(0x1005);
-    pub const HUMANITIES:        TribeId = TribeId::from_u16(0x1006);
-    pub const CROSS_DOMAIN:      TribeId = TribeId::from_u16(0x1007);
+    pub const LIFE_SCIENCES: TribeId = TribeId::from_u16(0x1004);
+    pub const SOCIAL_SCIENCES: TribeId = TribeId::from_u16(0x1005);
+    pub const HUMANITIES: TribeId = TribeId::from_u16(0x1006);
+    pub const CROSS_DOMAIN: TribeId = TribeId::from_u16(0x1007);
     /// Reserved for linguistic token KAKIs only.
-    pub const LINGUISTIC:        TribeId = TribeId::from_u16(0x10FF);
+    pub const LINGUISTIC: TribeId = TribeId::from_u16(0x10FF);
 
     /// Derive tribe from a domain string (case-insensitive prefix match).
     pub fn from_domain(domain: &str) -> TribeId {
@@ -61,7 +61,7 @@ impl BookDomainTribe {
 #[derive(Debug, Clone)]
 pub struct BookKaki {
     pub nucleus: Kaki,
-    pub orbit:   BookOrbit,
+    pub orbit: BookOrbit,
 }
 
 impl BookKaki {
@@ -78,9 +78,15 @@ impl BookKaki {
         KakiMinter::new(self.nucleus.tribe_id()).event(KakiRole::Zikru)
     }
 
-    pub fn uuid_hash(&self) -> u32 { self.nucleus.uuid_hash() }
-    pub fn tribe_id(&self) -> TribeId { self.nucleus.tribe_id() }
-    pub fn role(&self) -> KakiRole { self.nucleus.kaki_role() }
+    pub fn uuid_hash(&self) -> u32 {
+        self.nucleus.uuid_hash()
+    }
+    pub fn tribe_id(&self) -> TribeId {
+        self.nucleus.tribe_id()
+    }
+    pub fn role(&self) -> KakiRole {
+        self.nucleus.kaki_role()
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -88,13 +94,16 @@ impl BookKaki {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::orbit::{CoreShell, BookOrbit};
+    use crate::orbit::{BookOrbit, CoreShell};
 
     fn dummy_orbit() -> BookOrbit {
         BookOrbit::from_core(CoreShell {
-            title: "Test Book".into(), author: "Test Author".into(),
-            publisher: None, isbn: Some("978-0000000000".into()),
-            source_path: "/books/test.pdf".into(), source_seal: 0xDEADBEEF,
+            title: "Test Book".into(),
+            author: "Test Author".into(),
+            publisher: None,
+            isbn: Some("978-0000000000".into()),
+            source_path: "/books/test.pdf".into(),
+            source_seal: 0xDEADBEEF,
         })
     }
 
@@ -114,8 +123,12 @@ mod tests {
 
     #[test]
     fn book_kaki_nucleus_valid() {
-        let bk = BookKaki::new(b"978-0596516963", BookDomainTribe::COMPUTER_SCIENCE,
-                               KakiRole::Kishib, dummy_orbit());
+        let bk = BookKaki::new(
+            b"978-0596516963",
+            BookDomainTribe::COMPUTER_SCIENCE,
+            KakiRole::Kishib,
+            dummy_orbit(),
+        );
         assert!(bk.nucleus.verify_checksum());
         assert_eq!(bk.nucleus.tribe_id(), BookDomainTribe::COMPUTER_SCIENCE);
         assert_eq!(bk.nucleus.kaki_role(), KakiRole::Kishib);
@@ -125,8 +138,12 @@ mod tests {
     #[test]
     fn ingestion_event_is_event_kaki() {
         use enkidb_kaki::KakiType;
-        let bk = BookKaki::new(b"isbn-test", BookDomainTribe::MATHEMATICS,
-                               KakiRole::Zikru, dummy_orbit());
+        let bk = BookKaki::new(
+            b"isbn-test",
+            BookDomainTribe::MATHEMATICS,
+            KakiRole::Zikru,
+            dummy_orbit(),
+        );
         let ev = bk.ingestion_event();
         assert_eq!(ev.kaki_type(), KakiType::Event);
         assert_eq!(ev.tribe_id(), BookDomainTribe::MATHEMATICS);
@@ -135,16 +152,22 @@ mod tests {
 
     #[test]
     fn domain_tribe_computer_science() {
-        assert_eq!(BookDomainTribe::from_domain("distributed_systems"),
-                   BookDomainTribe::COMPUTER_SCIENCE);
-        assert_eq!(BookDomainTribe::from_domain("software engineering"),
-                   BookDomainTribe::COMPUTER_SCIENCE);
+        assert_eq!(
+            BookDomainTribe::from_domain("distributed_systems"),
+            BookDomainTribe::COMPUTER_SCIENCE
+        );
+        assert_eq!(
+            BookDomainTribe::from_domain("software engineering"),
+            BookDomainTribe::COMPUTER_SCIENCE
+        );
     }
 
     #[test]
     fn domain_tribe_cross_domain_fallback() {
-        assert_eq!(BookDomainTribe::from_domain("unknown_field"),
-                   BookDomainTribe::CROSS_DOMAIN);
+        assert_eq!(
+            BookDomainTribe::from_domain("unknown_field"),
+            BookDomainTribe::CROSS_DOMAIN
+        );
     }
 
     #[test]

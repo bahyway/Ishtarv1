@@ -20,9 +20,9 @@
 //! Seed: `0xDEAD_BEEF_CAFE_BABE` XOR `orbital_seed`.
 
 pub mod rng;
-pub mod social_force;
 pub mod simulation;
+pub mod social_force;
 
 pub use rng::XorShift64;
-pub use social_force::{SocialForceParams, Agent2D};
 pub use simulation::{GenesisSimulation, SimulationResult};
+pub use social_force::{Agent2D, SocialForceParams};

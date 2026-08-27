@@ -41,7 +41,7 @@ object. Theater is where the Architect inhabits that fact.
   a slice, a solution candidate — is inscribed as an
   immutable KAKI tablet. Reproducible by law, not habit.
 - **Sovereign & offline:** pure-Rust engines, no cloud,
-  no license server, no telemetry. EriduOS-native.
+  no license server, no telemetry. UrOS-native.
 - **One language:** HeptaScript (Anti-SQL) drives every
   lens; no MATLAB-script/plot-API split.
 

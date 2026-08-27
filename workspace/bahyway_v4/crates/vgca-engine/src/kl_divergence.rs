@@ -19,7 +19,11 @@ pub const KL_EPSILON: f64 = 1e-10;
 /// # Panics
 /// Panics if `p.len() != q.len()`.
 pub fn kl_divergence(p: &[f64], q: &[f64]) -> f64 {
-    assert_eq!(p.len(), q.len(), "KL divergence requires equal-length distributions");
+    assert_eq!(
+        p.len(),
+        q.len(),
+        "KL divergence requires equal-length distributions"
+    );
     p.iter()
         .zip(q.iter())
         .map(|(&pi, &qi)| {
@@ -68,7 +72,10 @@ mod tests {
         let q = normalize(&[0.5, 0.5]);
         let pq = kl_divergence(&p, &q);
         let qp = kl_divergence(&q, &p);
-        assert!((pq - qp).abs() > 1e-6, "D_KL(P||Q) should differ from D_KL(Q||P)");
+        assert!(
+            (pq - qp).abs() > 1e-6,
+            "D_KL(P||Q) should differ from D_KL(Q||P)"
+        );
     }
 
     #[test]
@@ -78,7 +85,10 @@ mod tests {
         let p = vec![0.5, 0.5, 0.0];
         let q = vec![0.5, 0.0, 0.5];
         let d = kl_divergence(&p, &q);
-        assert!(d.is_finite(), "expected finite divergence with epsilon smoothing, got {d}");
+        assert!(
+            d.is_finite(),
+            "expected finite divergence with epsilon smoothing, got {d}"
+        );
         assert!(d > 0.0);
     }
 

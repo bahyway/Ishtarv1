@@ -67,10 +67,13 @@ impl Kaki {
         KakiRole::from_byte(raw[7])?;
 
         // CRC check over κ[0..14]
-        let stored   = u16::from_be_bytes([raw[14], raw[15]]);
+        let stored = u16::from_be_bytes([raw[14], raw[15]]);
         let computed = crc16(&raw[0..14]);
         if stored != computed {
-            return Err(BahywayError::ChecksumMismatch { expected: computed, actual: stored });
+            return Err(BahywayError::ChecksumMismatch {
+                expected: computed,
+                actual: stored,
+            });
         }
         Ok(Kaki { bytes: raw })
     }
@@ -78,7 +81,10 @@ impl Kaki {
     // ── Accessors (read-only) ────────────────────────────────────────────
 
     /// The raw 16 bytes.  No mutable accessor exists.
-    #[inline] pub fn bytes(&self) -> &[u8; 16] { &self.bytes }
+    #[inline]
+    pub fn bytes(&self) -> &[u8; 16] {
+        &self.bytes
+    }
 
     /// κ[0..4] — the numeric ID minted into the KAKI at creation.
     /// Used for byte-layout inspection only; do NOT use as a firewall key.
@@ -95,7 +101,7 @@ impl Kaki {
     #[inline]
     pub fn uuid_hash(&self) -> u32 {
         const OFFSET: u32 = 2_166_136_261;
-        const PRIME:  u32 = 16_777_619;
+        const PRIME: u32 = 16_777_619;
         let mut h = OFFSET;
         for b in &self.bytes {
             h ^= *b as u32;
@@ -245,7 +251,7 @@ mod tests {
     fn from_bytes_rejects_invalid_type() {
         let mut raw = *make_identity_kaki().bytes();
         raw[6] = 0x00; // invalid kaki_type
-        // Recompute checksum so it passes that check
+                       // Recompute checksum so it passes that check
         let cs = bahyway_crc::crc16(&raw[0..14]);
         raw[14..16].copy_from_slice(&cs.to_be_bytes());
         assert!(Kaki::from_bytes(raw).is_err());
@@ -272,8 +278,20 @@ mod tests {
     fn uuid_hash_covers_all_bytes() {
         // Two KAKIs with the same numeric ID but different tribe_id must
         // produce different uuid_hash values (cross-tribe impersonation prevention).
-        let k1 = Kaki::mint(0xDEAD_BEEF, TribeId::from_u16(0x0001), KakiType::Identity, KakiRole::Zikru, 0x0100);
-        let k2 = Kaki::mint(0xDEAD_BEEF, TribeId::from_u16(0x0002), KakiType::Identity, KakiRole::Zikru, 0x0100);
+        let k1 = Kaki::mint(
+            0xDEAD_BEEF,
+            TribeId::from_u16(0x0001),
+            KakiType::Identity,
+            KakiRole::Zikru,
+            0x0100,
+        );
+        let k2 = Kaki::mint(
+            0xDEAD_BEEF,
+            TribeId::from_u16(0x0002),
+            KakiType::Identity,
+            KakiRole::Zikru,
+            0x0100,
+        );
         assert_ne!(k1.uuid_hash(), k2.uuid_hash());
         // minted_id() is the same for both (same numeric ID was minted)
         assert_eq!(k1.minted_id(), k2.minted_id());

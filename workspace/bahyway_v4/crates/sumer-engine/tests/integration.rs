@@ -2,8 +2,8 @@
 //! (DubSar Theater, ZeroEngine, etc.) will actually use it.
 
 use sumer_engine::{
-    meszl, wahshiyya, HeptaDimension, NajafSumerianContext, PlimptonAnchors,
-    SovereignSign, TraditionProfile, Vec7DKey,
+    meszl, wahshiyya, HeptaDimension, NajafSumerianContext, PlimptonAnchors, SovereignSign,
+    TraditionProfile, Vec7DKey,
 };
 
 #[test]
@@ -31,7 +31,10 @@ fn mixed_tradition_key_across_both_civilizations() {
     // Wahshiyya Moon anchor (URU).
     let dub = meszl::by_name("DUB").unwrap();
     let sar = meszl::by_name("SAR").unwrap();
-    let moon = wahshiyya::planetary_anchor_signs().into_iter().last().unwrap();
+    let moon = wahshiyya::planetary_anchor_signs()
+        .into_iter()
+        .last()
+        .unwrap();
     assert_eq!(moon.dimension(), Some(HeptaDimension::URU));
     let key = Vec7DKey::generate_with_rounds(dub, sar, &moon, 256);
     assert_eq!(key.profile, TraditionProfile::Mixed);

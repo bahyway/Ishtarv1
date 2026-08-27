@@ -159,7 +159,10 @@ impl Registry {
     }
 
     pub fn by_domain(&self, tag: &str) -> Vec<&NamingEntry> {
-        self.0.iter().filter(|e| e.domain_tags.contains(&tag)).collect()
+        self.0
+            .iter()
+            .filter(|e| e.domain_tags.contains(&tag))
+            .collect()
     }
 
     pub fn find(&self, name: &str) -> Option<&NamingEntry> {
@@ -192,7 +195,11 @@ impl Registry {
 /// there is nothing real to show: `Reserved`/conceptual entries have
 /// no `crate_path` at all, and a path that fails to read (moved,
 /// permissions, ...) is reported rather than silently swallowed.
-pub fn read_snippet(workspace_root: &std::path::Path, entry: &NamingEntry, max_lines: usize) -> Result<String, String> {
+pub fn read_snippet(
+    workspace_root: &std::path::Path,
+    entry: &NamingEntry,
+    max_lines: usize,
+) -> Result<String, String> {
     let Some(path) = entry.crate_path else {
         let why = match entry.status {
             NamingStatus::Reserved => "reserved for future use -- no code exists yet.",
@@ -201,8 +208,13 @@ pub fn read_snippet(workspace_root: &std::path::Path, entry: &NamingEntry, max_l
         return Err(format!("{} has no source file: {why}", entry.name));
     };
     let full = workspace_root.join(path);
-    let content = std::fs::read_to_string(&full).map_err(|e| format!("could not read {full:?}: {e}"))?;
-    Ok(content.lines().take(max_lines).collect::<Vec<_>>().join("\n"))
+    let content =
+        std::fs::read_to_string(&full).map_err(|e| format!("could not read {full:?}: {e}"))?;
+    Ok(content
+        .lines()
+        .take(max_lines)
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
 
 pub fn seed() -> Registry {
@@ -373,9 +385,9 @@ pub fn seed() -> Registry {
             system_role: Suite,
             domain_tags: &["runtime", "os"],
             status: SealedByLaw,
-            source_doc: Some("docs/10_operations/ERIDUOS.md"),
+            source_doc: Some("docs/10_operations/UROS.md"),
             crate_path: Some("crates/eridu-runtime/src/lib.rs"),
-            blurb: "Tradition's oldest Sumerian city, seat of Enki. Names EriduOS, the sovereign runtime/scheduler/supervisor layer this ecosystem runs on.",
+            blurb: "Tradition's oldest Sumerian city, seat of Enki. Names UrOS, the sovereign runtime/scheduler/supervisor layer this ecosystem runs on.",
             image_path: None,
             image_credit: None,
         },
@@ -704,7 +716,11 @@ mod tests {
         let reg = seed();
         for e in &reg.0 {
             if e.status == NamingStatus::SealedByLaw {
-                assert!(e.source_doc.is_some(), "{} is SealedByLaw but has no source_doc", e.name);
+                assert!(
+                    e.source_doc.is_some(),
+                    "{} is SealedByLaw but has no source_doc",
+                    e.name
+                );
             }
         }
     }
@@ -714,7 +730,11 @@ mod tests {
         let reg = seed();
         for e in &reg.0 {
             if e.status == NamingStatus::Reserved {
-                assert!(e.crate_path.is_none(), "{} is Reserved but already claims a crate_path -- update its status", e.name);
+                assert!(
+                    e.crate_path.is_none(),
+                    "{} is Reserved but already claims a crate_path -- update its status",
+                    e.name
+                );
             }
         }
     }
@@ -729,7 +749,13 @@ mod tests {
         for e in &reg.0 {
             if let Some(p) = e.crate_path {
                 let full = workspace_root.join(p);
-                assert!(full.exists(), "{}: crate_path {:?} does not exist at {:?}", e.name, p, full);
+                assert!(
+                    full.exists(),
+                    "{}: crate_path {:?} does not exist at {:?}",
+                    e.name,
+                    p,
+                    full
+                );
             }
         }
     }
@@ -743,7 +769,11 @@ mod tests {
         let reg = seed();
         for e in &reg.0 {
             if e.image_path.is_some() {
-                assert!(e.image_credit.is_some(), "{}: image_path is set but image_credit is None", e.name);
+                assert!(
+                    e.image_credit.is_some(),
+                    "{}: image_path is set but image_credit is None",
+                    e.name
+                );
             }
         }
     }
@@ -757,7 +787,13 @@ mod tests {
         for e in &reg.0 {
             if let Some(p) = e.image_path {
                 let full = workspace_root.join(p);
-                assert!(full.exists(), "{}: image_path {:?} does not exist at {:?}", e.name, p, full);
+                assert!(
+                    full.exists(),
+                    "{}: image_path {:?} does not exist at {:?}",
+                    e.name,
+                    p,
+                    full
+                );
             }
         }
     }
@@ -767,12 +803,17 @@ mod tests {
         let reg = seed();
         let deities = reg.by_mytho_category(MythoCategory::Deity);
         assert!(!deities.is_empty());
-        assert!(deities.iter().all(|e| e.mytho_category == MythoCategory::Deity));
+        assert!(deities
+            .iter()
+            .all(|e| e.mytho_category == MythoCategory::Deity));
 
         let electricity = reg.by_domain("electricity");
         assert!(electricity.len() >= 2, "expected Gibil and Birqu at least");
 
-        assert!(reg.find("gibil").is_some(), "find() must be case-insensitive");
+        assert!(
+            reg.find("gibil").is_some(),
+            "find() must be case-insensitive"
+        );
         assert!(reg.find("GIBIL").is_some());
         assert!(reg.find("nonexistent-name").is_none());
     }
@@ -787,7 +828,12 @@ mod tests {
 
     #[test]
     fn as_str_round_trips_every_variant_to_a_distinct_label() {
-        let cats = [MythoCategory::Deity, MythoCategory::City, MythoCategory::KingOrEra, MythoCategory::GenericTerm];
+        let cats = [
+            MythoCategory::Deity,
+            MythoCategory::City,
+            MythoCategory::KingOrEra,
+            MythoCategory::GenericTerm,
+        ];
         let mut labels: Vec<&str> = cats.iter().map(|c| c.as_str()).collect();
         labels.sort();
         labels.dedup();
@@ -816,10 +862,20 @@ mod tests {
         let reg = seed();
         assert!(!reg.search("gibil").is_empty());
         assert!(!reg.search("GIBIL").is_empty());
-        assert!(!reg.search("smith-fire").is_empty(), "must match against blurb text");
-        assert!(!reg.search("electricity").is_empty(), "must match against domain_tags");
+        assert!(
+            !reg.search("smith-fire").is_empty(),
+            "must match against blurb text"
+        );
+        assert!(
+            !reg.search("electricity").is_empty(),
+            "must match against domain_tags"
+        );
         assert!(reg.search("no-such-thing-in-the-registry").is_empty());
-        assert_eq!(reg.search("").len(), reg.0.len(), "empty query returns everything");
+        assert_eq!(
+            reg.search("").len(),
+            reg.0.len(),
+            "empty query returns everything"
+        );
     }
 
     #[test]
@@ -827,8 +883,12 @@ mod tests {
         let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
         let reg = seed();
         let gibil = reg.find("Gibil").expect("Gibil must be seeded");
-        let snippet = read_snippet(&workspace_root, gibil, 60).expect("Gibil has a real crate_path and must read");
-        assert!(snippet.contains("Gibil"), "snippet should mention Gibil somewhere in its own header comment");
+        let snippet = read_snippet(&workspace_root, gibil, 60)
+            .expect("Gibil has a real crate_path and must read");
+        assert!(
+            snippet.contains("Gibil"),
+            "snippet should mention Gibil somewhere in its own header comment"
+        );
     }
 
     #[test]
@@ -837,6 +897,9 @@ mod tests {
         let reg = seed();
         let ishum = reg.find("Ishum").expect("Ishum must be seeded");
         let err = read_snippet(&workspace_root, ishum, 60).unwrap_err();
-        assert!(err.contains("reserved"), "error must explain why there's no snippet, got: {err}");
+        assert!(
+            err.contains("reserved"),
+            "error must explain why there's no snippet, got: {err}"
+        );
     }
 }

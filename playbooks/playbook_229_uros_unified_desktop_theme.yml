@@ -1,0 +1,489 @@
+---
+# =============================================================================
+# PB-229 -- UrOS unified desktop theme (GTK + env vars + Codium settings
+# + Godot editor chrome) for Fedora Workstation 44.
+# BahyWay.Ecosystem v4.0 -- 2026-07-24
+#
+# WHY THIS EXISTS: the Architect uploaded a generic
+# "fedora_cobalt2_unified_theme.yml" playbook for evaluation. See
+# docs/10_operations/UROS_THEME_PLAYBOOKS_EVALUATION.md for the full
+# evaluation. This playbook is that draft, corrected:
+#
+#   - `theme_source` (shared convention with PB-228): "dubsar_dark"
+#     default = the real palette already governing DubSar Theater /
+#     Sargon Passport Manager / Gilgamesh Master Key
+#     (workspace/bahyway_v4/godot/*/scripts/dubsar_theme.gd, identical
+#     file across all three). "cobalt2" opt-in reproduces the uploaded
+#     draft's original palette.
+#   - Dropped the unconditional Slint toolchain install (rustup +
+#     cargo install slint-viewer/slint-lsp + several -devel system
+#     packages + a Cobalt2.slint theme + an app template). A full repo
+#     search found zero crates depending on Slint anywhere in this
+#     workspace -- BahyWay's GUI surfaces are Godot and this VSCodium
+#     notebook extension, neither of which is Slint-based. Kept
+#     available behind `install_slint: false` (default off) for anyone
+#     who wants it regardless.
+#   - The GTK3 stylesheet's `*` universal selector is a known way to
+#     break unrelated GTK3 widgets across the whole desktop, not just
+#     the apps the Architect cares about. The CSS file is still
+#     generated (useful to inspect or apply by hand), but actually
+#     switching the desktop's `gsettings gtk-theme` is now gated behind
+#     `apply_gtk_theme_globally: false` (default off).
+#   - Codium's `settings.json` pointed `workbench.colorTheme` at
+#     "Cobalt2" (the community wesbos.theme-cobalt2 extension) without
+#     installing it -- if absent, Codium silently falls back to its
+#     default theme while every colorCustomizations override still
+#     applies over the wrong base. Now points at whatever PB-228
+#     actually built and installed (same `extension_display_name`
+#     convention, shared default).
+#   - Codium's `settings.json` was backed up then overwritten wholesale,
+#     which would silently delete the real "dubsar-ide" extension's own
+#     settings (dubsar.kernelPath / dubsar.backend / dubsar.particleCount
+#     / dubsar.maxVisible -- see dubsar-ide/dubsar-extension/package.json)
+#     if the Architect had already configured them. Now reads the
+#     existing file (if any) and merges the theme keys in via Ansible's
+#     `combine()` filter instead of replacing it.
+#
+# HONEST LIMITS (can't be checked from this sandbox -- no Fedora/GNOME
+# host reachable here):
+#   - Whether `dnf install nodejs20` resolves on the Architect's actual
+#     Fedora mirror (this playbook doesn't touch Node -- see PB-228 for
+#     that guard).
+#   - Whether the GTK3 `*` selector actually visibly breaks anything on
+#     the Architect's real GNOME session -- it's a documented general
+#     risk, not reproduced here, hence opt-in rather than removed.
+#
+# USAGE (run from eriduous-vdi or any Fedora Workstation 44 desktop; run
+# PB-228 first if you want workbench.colorTheme to resolve to a real,
+# installed extension):
+#   ansible-playbook playbooks/playbook_228_build_bahyway_codium_theme_extension.yml
+#   ansible-playbook playbooks/playbook_229_uros_unified_desktop_theme.yml
+#   ansible-playbook playbooks/playbook_229_uros_unified_desktop_theme.yml -e theme_source=cobalt2
+#   ansible-playbook playbooks/playbook_229_uros_unified_desktop_theme.yml -e apply_gtk_theme_globally=true
+#   ansible-playbook playbooks/playbook_229_uros_unified_desktop_theme.yml -e install_slint=true
+# =============================================================================
+
+- name: PB-229 -- UrOS unified desktop theme
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    # -------------------------------------------------------------------------
+    # PALETTE SELECTION -- same convention and same values as PB-228.
+    # -------------------------------------------------------------------------
+    theme_source: "dubsar_dark"
+
+    palettes:
+      dubsar_dark:
+        bg: "#0a0e1a"
+        bg_dark: "#0d1220"
+        bg_darker: "#0a0e1a"
+        bg_light: "#171d2e"
+        fg: "#e8eaf0"
+        fg_dim: "#8b93a7"
+        fg_dark: "#5b6478"
+        accent_blue: "#22d3ee"
+        accent_yellow: "#fbbf24"
+        accent_green: "#4ade80"
+        accent_red: "#f87171"
+        accent_orange: "#fbbf24"
+        accent_purple: "#8b7ff5"
+        accent_cyan: "#22d3ee"
+        border: "#212940"
+        selection: "#22d3ee40"
+      cobalt2:
+        bg: "#193549"
+        bg_dark: "#122738"
+        bg_darker: "#0d1f2d"
+        bg_light: "#1e4b6e"
+        fg: "#ffffff"
+        fg_dim: "#aaaaaa"
+        fg_dark: "#5f7e97"
+        accent_blue: "#1478db"
+        accent_yellow: "#ffc600"
+        accent_green: "#3ad900"
+        accent_red: "#ff628c"
+        accent_orange: "#ff9d00"
+        accent_purple: "#967efb"
+        accent_cyan: "#80fcff"
+        border: "#0d3a58"
+        selection: "#0050a4"
+
+    p: "{{ palettes[theme_source] }}"
+
+    # -------------------------------------------------------------------------
+    # OPT-IN GATES (all safe by default)
+    # -------------------------------------------------------------------------
+    install_slint: false
+    apply_gtk_theme_globally: false
+
+    # Must match PB-228's `extension_display_name` default (or whatever
+    # the Architect ran PB-228 with) for workbench.colorTheme to resolve
+    # to a real, installed extension.
+    extension_display_name: "BahyWay Cobalt2"
+
+    # -------------------------------------------------------------------------
+    # PATHS
+    # -------------------------------------------------------------------------
+    home_dir: "{{ ansible_env.HOME }}"
+    config_dir: "{{ home_dir }}/.config"
+    themes_dir: "{{ home_dir }}/.themes"
+    codium_config_dir: "{{ config_dir }}/VSCodium/User"
+    godot_config_dir: "{{ config_dir }}/godot"
+    slint_themes_dir: "{{ home_dir }}/.slint/themes"
+
+  tasks:
+    # =========================================================================
+    # TASK 1: Directories
+    # =========================================================================
+    - name: "[DIRS] Create theme directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ themes_dir }}/UrOS-gtk/gtk-3.0"
+        - "{{ themes_dir }}/UrOS-gtk/gtk-4.0"
+        - "{{ codium_config_dir }}"
+        - "{{ godot_config_dir }}"
+
+    # =========================================================================
+    # TASK 2: GTK3 CSS -- generated always, applied only if opted in (see
+    # the `*` universal-selector risk noted in the file header above).
+    # =========================================================================
+    - name: "[GTK] Deploy UrOS GTK3 CSS"
+      ansible.builtin.copy:
+        dest: "{{ themes_dir }}/UrOS-gtk/gtk-3.0/gtk.css"
+        content: |
+          /* UrOS GTK3 theme -- palette source: {{ theme_source }}.
+             NOTE: the `*` selector below re-styles every GTK3 widget on
+             the desktop, not just BahyWay apps -- this is why applying
+             it (gsettings set gtk-theme) is opt-in. See
+             docs/10_operations/UROS_THEME_PLAYBOOKS_EVALUATION.md §5. */
+          @define-color bg_color {{ p.bg }};
+          @define-color fg_color {{ p.fg }};
+          @define-color base_color {{ p.bg_dark }};
+          @define-color text_color {{ p.fg }};
+          @define-color selected_bg_color {{ p.selection }};
+          @define-color selected_fg_color {{ p.fg }};
+          @define-color tooltip_bg_color {{ p.bg_darker }};
+          @define-color tooltip_fg_color {{ p.fg }};
+          @define-color borders {{ p.border }};
+          @define-color accent_color {{ p.accent_blue }};
+          @define-color warning_color {{ p.accent_yellow }};
+          @define-color error_color {{ p.accent_red }};
+          @define-color success_color {{ p.accent_green }};
+
+          * {
+              background-color: @bg_color;
+              color: @fg_color;
+              border-color: @borders;
+              outline-color: @accent_color;
+          }
+
+          .view, textview text { background-color: @base_color; color: @text_color; }
+          .view:selected, textview text:selected { background-color: @selected_bg_color; color: @selected_fg_color; }
+
+          button { background-color: @base_color; color: @fg_color; border: 1px solid @borders; border-radius: 6px; padding: 6px 12px; }
+          button:hover { background-color: @borders; }
+          button:active { background-color: @accent_color; }
+
+          entry { background-color: @base_color; color: @text_color; border: 1px solid @borders; border-radius: 6px; padding: 6px; }
+          entry:focus { border-color: @accent_color; }
+
+          notebook tab:checked { background-color: @bg_color; border-bottom: 2px solid @accent_color; }
+          treeview:selected { background-color: @selected_bg_color; }
+          menuitem:hover { background-color: @selected_bg_color; }
+          scrollbar slider { background-color: @borders; border-radius: 4px; }
+          scrollbar slider:hover { background-color: @accent_color; }
+          progressbar progress { background-color: @accent_color; border-radius: 4px; }
+          switch:checked { background-color: @accent_color; }
+          tooltip { background-color: @tooltip_bg_color; color: @tooltip_fg_color; border: 1px solid @borders; border-radius: 6px; }
+        mode: '0644'
+
+    - name: "[GTK] Deploy UrOS GTK4 CSS"
+      ansible.builtin.copy:
+        dest: "{{ themes_dir }}/UrOS-gtk/gtk-4.0/gtk.css"
+        content: |
+          @define-color window_bg_color {{ p.bg }};
+          @define-color window_fg_color {{ p.fg }};
+          @define-color view_bg_color {{ p.bg_dark }};
+          @define-color view_fg_color {{ p.fg }};
+          @define-color headerbar_bg_color {{ p.bg_darker }};
+          @define-color headerbar_fg_color {{ p.fg }};
+          @define-color sidebar_bg_color {{ p.bg_dark }};
+          @define-color accent_bg_color {{ p.accent_blue }};
+          @define-color accent_fg_color {{ p.fg }};
+          @define-color destructive_bg_color {{ p.accent_red }};
+          @define-color success_bg_color {{ p.accent_green }};
+          @define-color warning_bg_color {{ p.accent_yellow }};
+          @define-color error_bg_color {{ p.accent_red }};
+          @define-color borders {{ p.border }};
+
+          * { outline-color: @accent_bg_color; }
+        mode: '0644'
+
+    - name: "[GTK] Apply UrOS GTK theme desktop-wide (opt-in)"
+      ansible.builtin.command:
+        cmd: "gsettings set org.gnome.desktop.interface gtk-theme 'UrOS-gtk'"
+      changed_when: true
+      when: apply_gtk_theme_globally | bool
+
+    - name: "[GTK] Set color scheme to dark (opt-in, same gate as above)"
+      ansible.builtin.command:
+        cmd: "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
+      changed_when: true
+      when: apply_gtk_theme_globally | bool
+
+    # =========================================================================
+    # TASK 3: Environment Variables
+    # =========================================================================
+    - name: "[ENV] Backup existing .bashrc"
+      ansible.builtin.copy:
+        src: "{{ home_dir }}/.bashrc"
+        dest: "{{ home_dir }}/.bashrc.backup.{{ ansible_date_time.iso8601 }}"
+        remote_src: true
+      ignore_errors: true
+
+    - name: "[ENV] Append UrOS environment variables to .bashrc"
+      ansible.builtin.blockinfile:
+        path: "{{ home_dir }}/.bashrc"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - UrOS Theme (PB-229)"
+        block: |
+          export UROS_THEME_SOURCE="{{ theme_source }}"
+          export UROS_BG="{{ p.bg }}"
+          export UROS_BG_DARK="{{ p.bg_dark }}"
+          export UROS_BG_DARKER="{{ p.bg_darker }}"
+          export UROS_FG="{{ p.fg }}"
+          export UROS_FG_DIM="{{ p.fg_dim }}"
+          export UROS_ACCENT_BLUE="{{ p.accent_blue }}"
+          export UROS_ACCENT_YELLOW="{{ p.accent_yellow }}"
+          export UROS_ACCENT_GREEN="{{ p.accent_green }}"
+          export UROS_ACCENT_RED="{{ p.accent_red }}"
+          export UROS_ACCENT_PURPLE="{{ p.accent_purple }}"
+          export UROS_ACCENT_CYAN="{{ p.accent_cyan }}"
+          export UROS_BORDER="{{ p.border }}"
+          export UROS_SELECTION="{{ p.selection }}"
+          {% if apply_gtk_theme_globally | bool %}
+          export GTK_THEME="UrOS-gtk"
+          {% endif %}
+
+    # =========================================================================
+    # TASK 4: Codium settings.json -- merged, not clobbered (see header)
+    # =========================================================================
+    - name: "[CODIUM] Backup existing settings.json"
+      ansible.builtin.copy:
+        src: "{{ codium_config_dir }}/settings.json"
+        dest: "{{ codium_config_dir }}/settings.json.backup.{{ ansible_date_time.iso8601 }}"
+        remote_src: true
+      ignore_errors: true
+
+    - name: "[CODIUM] Read existing settings.json (if any)"
+      ansible.builtin.slurp:
+        src: "{{ codium_config_dir }}/settings.json"
+      register: codium_settings_raw
+      ignore_errors: true
+
+    - name: "[CODIUM] Merge UrOS theme settings into settings.json"
+      vars:
+        existing_settings: "{{ (codium_settings_raw.content | b64decode | from_json) if (codium_settings_raw is succeeded and codium_settings_raw.content is defined) else {} }}"
+        theme_settings:
+          workbench.colorTheme: "{{ extension_display_name }}"
+          workbench.colorCustomizations:
+            editor.background: "{{ p.bg }}"
+            sideBar.background: "{{ p.bg_dark }}"
+            activityBar.background: "{{ p.bg_darker }}"
+            panel.background: "{{ p.bg_dark }}"
+            titleBar.activeBackground: "{{ p.bg_darker }}"
+            statusBar.background: "{{ p.accent_blue }}"
+            statusBar.foreground: "{{ p.fg }}"
+            tab.activeBackground: "{{ p.bg }}"
+            tab.inactiveBackground: "{{ p.bg_dark }}"
+            editorGroupHeader.tabsBackground: "{{ p.bg_darker }}"
+            terminal.background: "{{ p.bg }}"
+            terminal.foreground: "{{ p.fg }}"
+            terminalCursor.background: "{{ p.accent_yellow }}"
+            terminalCursor.foreground: "{{ p.accent_yellow }}"
+            editor.selectionBackground: "{{ p.selection }}"
+            editor.lineHighlightBackground: "{{ p.bg_dark }}"
+            editorLineNumber.foreground: "{{ p.fg_dark }}"
+            editorLineNumber.activeForeground: "{{ p.accent_yellow }}"
+            scrollbarSlider.background: "{{ p.border }}"
+            scrollbarSlider.hoverBackground: "{{ p.accent_blue }}"
+          editor.fontSize: 14
+          editor.fontFamily: "'Fira Code', 'Monospace', monospace"
+          editor.fontLigatures: true
+          terminal.integrated.fontSize: 13
+          editor.minimap.enabled: true
+          editor.minimap.renderCharacters: false
+          breadcrumbs.enabled: true
+      ansible.builtin.copy:
+        dest: "{{ codium_config_dir }}/settings.json"
+        content: "{{ existing_settings | combine(theme_settings, recursive=true) | to_nice_json }}"
+        mode: '0644'
+
+    # =========================================================================
+    # TASK 5: Godot Editor theme script (editor chrome only -- does NOT
+    # touch the running apps' own UI, which comes from dubsar_theme.gd
+    # instead; see docs/10_operations/UROS_THEME_PLAYBOOKS_EVALUATION.md §1)
+    # =========================================================================
+    - name: "[GODOT] Deploy UrOS Godot editor theme script"
+      ansible.builtin.copy:
+        dest: "{{ godot_config_dir }}/apply_uros_theme.gd"
+        content: |
+          @tool
+          extends EditorPlugin
+          # Palette source: {{ theme_source }}. Re-run PB-229 with
+          # -e theme_source=cobalt2 (or dubsar_dark) to regenerate with
+          # the other palette. This affects the Godot EDITOR's own
+          # chrome only -- it does not theme DubSar Theater / Sargon
+          # Passport Manager / Gilgamesh Master Key's running UI, which
+          # is drawn from dubsar_theme.gd instead.
+
+          const BG := Color("{{ p.bg }}")
+          const BG_DARK := Color("{{ p.bg_dark }}")
+          const FG := Color("{{ p.fg }}")
+          const FG_DIM := Color("{{ p.fg_dim }}")
+          const ACCENT_BLUE := Color("{{ p.accent_blue }}")
+          const ACCENT_YELLOW := Color("{{ p.accent_yellow }}")
+          const ACCENT_GREEN := Color("{{ p.accent_green }}")
+          const ACCENT_RED := Color("{{ p.accent_red }}")
+          const ACCENT_ORANGE := Color("{{ p.accent_orange }}")
+          const ACCENT_PURPLE := Color("{{ p.accent_purple }}")
+          const ACCENT_CYAN := Color("{{ p.accent_cyan }}")
+          const SELECTION := Color("{{ p.selection }}")
+
+          func _enter_tree():
+              var settings := EditorInterface.get_editor_settings()
+              settings.set_setting("interface/theme/base_color", BG)
+              settings.set_setting("interface/theme/accent_color", ACCENT_BLUE)
+              settings.set_setting("interface/theme/contrast", 0.3)
+              settings.set_setting("text_editor/theme/highlighting/background_color", BG)
+              settings.set_setting("text_editor/theme/highlighting/completion_background_color", BG_DARK)
+              settings.set_setting("text_editor/theme/highlighting/line_number_color", FG_DIM)
+              settings.set_setting("text_editor/theme/highlighting/caret_color", ACCENT_YELLOW)
+              settings.set_setting("text_editor/theme/highlighting/text_color", FG)
+              settings.set_setting("text_editor/theme/highlighting/selection_color", SELECTION)
+              settings.set_setting("text_editor/theme/highlighting/comment_color", FG_DIM)
+              settings.set_setting("text_editor/theme/highlighting/string_color", ACCENT_GREEN)
+              settings.set_setting("text_editor/theme/highlighting/number_color", ACCENT_ORANGE)
+              settings.set_setting("text_editor/theme/highlighting/function_color", ACCENT_CYAN)
+              settings.set_setting("text_editor/theme/highlighting/member_variable_color", ACCENT_BLUE)
+              settings.set_setting("text_editor/theme/highlighting/keyword_color", ACCENT_PURPLE)
+              settings.set_setting("text_editor/theme/highlighting/control_flow_keyword_color", ACCENT_PURPLE)
+              settings.set_setting("text_editor/theme/highlighting/base_type_color", ACCENT_YELLOW)
+              settings.set_setting("text_editor/theme/highlighting/engine_type_color", ACCENT_YELLOW)
+              settings.set_setting("text_editor/theme/highlighting/constant_color", ACCENT_ORANGE)
+              print("UrOS theme applied to Godot Editor (palette: {{ theme_source }})")
+
+          func _exit_tree():
+              pass
+        mode: '0644'
+
+    # =========================================================================
+    # TASK 6: Slint toolchain (opt-in -- unused by anything in this repo)
+    # =========================================================================
+    - name: "[SLINT] Install build dependencies (opt-in only)"
+      ansible.builtin.dnf:
+        name:
+          - gcc
+          - gcc-c++
+          - cmake
+          - pkgconfig
+          - fontconfig-devel
+          - freetype-devel
+          - libxcb-devel
+          - libxkbcommon-devel
+          - mesa-libGL-devel
+          - libwayland-client-devel
+          - gtk3-devel
+        state: present
+      become: true
+      when: install_slint | bool
+
+    - name: "[SLINT] Check if rustup is installed"
+      ansible.builtin.stat:
+        path: "{{ home_dir }}/.cargo/bin/rustup"
+      register: rustup_bin
+      when: install_slint | bool
+
+    - name: "[SLINT] Install rustup via official installer"
+      ansible.builtin.shell: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      args:
+        creates: "{{ home_dir }}/.cargo/bin/rustup"
+      when: (install_slint | bool) and not rustup_bin.stat.exists
+
+    - name: "[SLINT] Install slint-viewer and slint-lsp"
+      ansible.builtin.shell: |
+        source {{ home_dir }}/.cargo/env
+        cargo install slint-viewer slint-lsp
+      args:
+        executable: /bin/bash
+        creates: "{{ home_dir }}/.cargo/bin/slint-viewer"
+      when: install_slint | bool
+
+    - name: "[SLINT] Create themes directory"
+      ansible.builtin.file:
+        path: "{{ slint_themes_dir }}"
+        state: directory
+        mode: '0755'
+      when: install_slint | bool
+
+    - name: "[SLINT] Deploy UrOS.slint theme file"
+      ansible.builtin.copy:
+        dest: "{{ slint_themes_dir }}/UrOS.slint"
+        content: |
+          // UrOS.slint -- palette source: {{ theme_source }}.
+          // import { UrOSTheme } from "UrOS.slint";
+          export global UrOSTheme {
+              in property <color> bg: {{ p.bg }};
+              in property <color> bg-dark: {{ p.bg_dark }};
+              in property <color> fg: {{ p.fg }};
+              in property <color> fg-dim: {{ p.fg_dim }};
+              in property <color> accent-blue: {{ p.accent_blue }};
+              in property <color> accent-yellow: {{ p.accent_yellow }};
+              in property <color> accent-green: {{ p.accent_green }};
+              in property <color> accent-red: {{ p.accent_red }};
+              in property <color> accent-purple: {{ p.accent_purple }};
+              in property <color> accent-cyan: {{ p.accent_cyan }};
+              in property <color> border: {{ p.border }};
+              in property <string> font-family: "Cantarell";
+          }
+        mode: '0644'
+      when: install_slint | bool
+
+    # =========================================================================
+    # TASK 7: Summary
+    # =========================================================================
+    - name: "[SUMMARY] Display completion message"
+      ansible.builtin.debug:
+        msg:
+          - ""
+          - "============================================================"
+          - "  UROS UNIFIED DESKTOP THEME -- SETUP COMPLETE"
+          - "  Palette source: {{ theme_source }}"
+          - "============================================================"
+          - "  Deployed:"
+          - "    - GTK3/GTK4 CSS: {{ themes_dir }}/UrOS-gtk/ ({{ 'APPLIED desktop-wide' if apply_gtk_theme_globally else 'generated only, NOT applied -- rerun with -e apply_gtk_theme_globally=true' }})"
+          - "    - Codium settings.json: merged (existing dubsar.* keys preserved)"
+          - "    - Godot editor theme script: {{ godot_config_dir }}/apply_uros_theme.gd"
+          - "    - Environment variables: ~/.bashrc (UROS_* block)"
+          - "    - Slint toolchain: {{ 'installed' if install_slint else 'SKIPPED (unused in this repo) -- rerun with -e install_slint=true if wanted' }}"
+          - ""
+          - "  IMPORTANT: this does NOT theme DubSar Theater / Sargon"
+          - "  Passport Manager / Gilgamesh Master Key's own running UI --"
+          - "  those already draw from the real dubsar_theme.gd, shared"
+          - "  identically across all three. This playbook covers the"
+          - "  desktop chrome AROUND them (GTK, Codium, Godot editor)."
+          - ""
+          - "  NEXT: log out and back in for GTK/env changes; restart"
+          - "  Codium for its theme to refresh."
+          - ""
+          - "  REVERT:"
+          - "    gsettings reset org.gnome.desktop.interface gtk-theme"
+          - "    gsettings reset org.gnome.desktop.interface color-scheme"
+          - "    cp {{ codium_config_dir }}/settings.json.backup.* {{ codium_config_dir }}/settings.json"
+          - "    cp {{ home_dir }}/.bashrc.backup.* {{ home_dir }}/.bashrc"
+          - "============================================================"

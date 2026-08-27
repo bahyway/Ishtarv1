@@ -30,21 +30,21 @@ pub enum RuntimeState {
 
 /// EriduRuntime — holds a queue of tasks and runs them cooperatively.
 pub struct EriduRuntime {
-    queue:   VecDeque<Box<dyn Task>>,
-    state:   RuntimeState,
+    queue: VecDeque<Box<dyn Task>>,
+    state: RuntimeState,
     /// How many tasks completed successfully this session.
     pub completed: usize,
     /// How many tasks failed this session.
-    pub failed:    usize,
+    pub failed: usize,
 }
 
 impl EriduRuntime {
     pub fn new() -> Self {
         EriduRuntime {
-            queue:     VecDeque::new(),
-            state:     RuntimeState::Idle,
+            queue: VecDeque::new(),
+            state: RuntimeState::Idle,
             completed: 0,
-            failed:    0,
+            failed: 0,
         }
     }
 
@@ -77,8 +77,12 @@ impl EriduRuntime {
         ok_count
     }
 
-    pub fn state(&self) -> RuntimeState { self.state }
-    pub fn queue_len(&self) -> usize     { self.queue.len() }
+    pub fn state(&self) -> RuntimeState {
+        self.state
+    }
+    pub fn queue_len(&self) -> usize {
+        self.queue.len()
+    }
 
     pub fn shutdown(&mut self) {
         self.queue.clear();
@@ -87,7 +91,9 @@ impl EriduRuntime {
 }
 
 impl Default for EriduRuntime {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -96,9 +102,15 @@ mod tests {
 
     struct EchoTask(String, bool);
     impl Task for EchoTask {
-        fn name(&self) -> &str { &self.0 }
+        fn name(&self) -> &str {
+            &self.0
+        }
         fn run(&mut self) -> TaskResult {
-            if self.1 { TaskResult::Ok } else { TaskResult::Failed("fail".into()) }
+            if self.1 {
+                TaskResult::Ok
+            } else {
+                TaskResult::Failed("fail".into())
+            }
         }
     }
 

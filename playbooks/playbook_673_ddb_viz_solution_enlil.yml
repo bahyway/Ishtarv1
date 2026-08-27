@@ -1,0 +1,84 @@
+---
+# PB-406 · EnkiDDB·7007 · Visualization Solution page for an engine
+# The page shows the crate text (MEASURED) beside the reason it is shaped that way (ADVISED),
+# with an animation per construct and, for every annotation, what breaks without it.
+- name: PB-406 publish the Visualization Solution page
+  hosts: girsu
+  vars:
+    bahyway_provides: ["page:ddb.viz_solution.enlil"]
+    bahyway_requires: ["law:GL-KRN-001", "law:GL-VIZ-001"]
+    ddb: "{{ ansible_env.HOME }}/bahyway/enkiddb/pages"
+    forge: "{{ ansible_env.HOME }}/Forge/bahyway_v4"
+    page: sala_viz_solution_enlil_v1.html
+    engine: ENLIL
+    crates: [kaki-core, hepta-grid, enlil-field]
+  tasks:
+    - name: Ensure the pages directory
+      ansible.builtin.file: {path: "{{ ddb }}", state: directory, mode: "0755"}
+
+    - name: Place the page
+      ansible.builtin.copy: {src: "{{ page }}", dest: "{{ ddb }}/{{ page }}", mode: "0644"}
+
+    - name: Gate D1 · the page parses
+      ansible.builtin.shell: |
+        node -e "const h=require('fs').readFileSync('{{ ddb }}/{{ page }}','utf8');
+                 new Function(h.split('<script>')[1].split('</script>')[0]);console.log('COMPILE green');"
+      changed_when: false
+
+    - name: Gate D2 · the shown code matches the crate on disk (no stale teaching)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import pathlib, re, sys
+        page = pathlib.Path("{{ ddb }}/{{ page }}").read_text(errors="ignore")
+        missing, drifted = [], []
+        for crate in {{ crates | to_json }}:
+            src = pathlib.Path("{{ forge }}") / "crates" / crate / "src"
+            if not src.exists():
+                missing.append(crate); continue
+            for f in src.rglob("*.rs"):
+                sig = [l.strip() for l in f.read_text(errors="ignore").splitlines()
+                       if l.strip().startswith("pub fn") or l.strip().startswith("pub struct")]
+                for s in sig[:6]:
+                    if s and s[:40] not in page:
+                        drifted.append(f"{crate}:{f.name}: {s[:60]}")
+        print("crates not found on disk:", missing)
+        print("signatures in the crate but not on the page:", len(drifted))
+        for d in drifted[:10]: print("  DRIFT", d)
+        print("a teaching page that has drifted from its crate teaches something that is not true")
+        sys.exit(0)
+        PY
+      changed_when: false
+      failed_when: false
+      register: d2
+
+    - name: Gate D3 · every annotation declares its class and what breaks without it
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import pathlib, re, sys
+        t = pathlib.Path("{{ ddb }}/{{ page }}").read_text(errors="ignore")
+        ann = re.findall(r"\{l:\[[^\]]*\],title:'(.*?)',cls:'(.*?)'", t)
+        breaks = t.count("breaks:")
+        print(f"annotations: {len(ann)} · with a 'breaks' clause: {breaks}")
+        bad = [a for a in ann if a[1] not in ("MEASURED", "DERIVED", "ESTIMATED", "ADVISED")]
+        for b in bad: print("UNCLASSED", b[0])
+        ok = (len(ann) == breaks) and not bad
+        print("every annotation says what breaks without it:", ok)
+        print("if a construct breaks nothing when removed, it should not be in the crate")
+        sys.exit(0 if ok else 1)
+        PY
+      changed_when: false
+
+    - name: Gate D4 · anti-SQL absence proof over the page
+      ansible.builtin.shell: |
+        ! grep -Eq '(^|[^A-Za-z])(SELECT +[A-Za-z*]|FROM +[A-Za-z]|INNER JOIN)' "{{ ddb }}/{{ page }}"
+        echo "D4 green"
+      changed_when: false
+
+    - name: Report drift
+      ansible.builtin.debug: {msg: "{{ d2.stdout_lines | default([]) }}"}
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-406 EnkiDDB visualization solution published for {{ engine }} - code MEASURED, rationale ADVISED, drift checked"

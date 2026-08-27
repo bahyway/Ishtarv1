@@ -1,28 +1,36 @@
 //! gem_oracle.rs — GEM rate tracking vs ADR-004 target (35.4%).
 #![forbid(unsafe_code)]
 
-use ea_agent_core::{ParticleSnapshot, constants::GEM_RATE_TARGET};
+use ea_agent_core::{constants::GEM_RATE_TARGET, ParticleSnapshot};
 
 /// GEM rate report for a tribe.
 #[derive(Debug)]
 pub struct GemReport {
-    pub tribe_id:      u16,
-    pub epoch:         u64,
-    pub total:         usize,
-    pub gem_count:     usize,
-    pub gem_rate:      f64,
-    pub target:        f64,
-    pub delta:         f64,   // gem_rate - target (positive = above target)
-    pub assessment:    String,
+    pub tribe_id: u16,
+    pub epoch: u64,
+    pub total: usize,
+    pub gem_count: usize,
+    pub gem_rate: f64,
+    pub target: f64,
+    pub delta: f64, // gem_rate - target (positive = above target)
+    pub assessment: String,
 }
 
 impl GemReport {
-    pub fn meets_target(&self) -> bool { self.gem_rate >= self.target }
+    pub fn meets_target(&self) -> bool {
+        self.gem_rate >= self.target
+    }
     pub fn summary(&self) -> String {
         let icon = if self.meets_target() { "✅" } else { "⚠" };
-        format!("{icon} Tribe 0x{:04X} | GEM: {}/{} ({:.1}%) | Target: {:.1}% | Δ={:+.1}%",
-            self.tribe_id, self.gem_count, self.total,
-            self.gem_rate * 100.0, self.target * 100.0, self.delta * 100.0)
+        format!(
+            "{icon} Tribe 0x{:04X} | GEM: {}/{} ({:.1}%) | Target: {:.1}% | Δ={:+.1}%",
+            self.tribe_id,
+            self.gem_count,
+            self.total,
+            self.gem_rate * 100.0,
+            self.target * 100.0,
+            self.delta * 100.0
+        )
     }
 }
 
@@ -32,45 +40,81 @@ pub struct GemOracle {
 }
 
 impl GemOracle {
-    pub fn new() -> Self { Self { history: Vec::new() } }
+    pub fn new() -> Self {
+        Self {
+            history: Vec::new(),
+        }
+    }
 
-    pub fn evaluate(&mut self, tribe_id: u16, epoch: u64, particles: &[ParticleSnapshot]) -> &GemReport {
-        let total     = particles.len();
+    pub fn evaluate(
+        &mut self,
+        tribe_id: u16,
+        epoch: u64,
+        particles: &[ParticleSnapshot],
+    ) -> &GemReport {
+        let total = particles.len();
         let gem_count = particles.iter().filter(|p| p.is_gem()).count();
-        let gem_rate  = if total > 0 { gem_count as f64 / total as f64 } else { 0.0 };
-        let delta     = gem_rate - GEM_RATE_TARGET;
+        let gem_rate = if total > 0 {
+            gem_count as f64 / total as f64
+        } else {
+            0.0
+        };
+        let delta = gem_rate - GEM_RATE_TARGET;
 
         let assessment = if total == 0 {
             "Empty tribe.".into()
         } else if gem_rate >= GEM_RATE_TARGET {
-            format!("ADR-004 met. {:.1}% GEM particles (target {:.1}%).",
-                gem_rate * 100.0, GEM_RATE_TARGET * 100.0)
+            format!(
+                "ADR-004 met. {:.1}% GEM particles (target {:.1}%).",
+                gem_rate * 100.0,
+                GEM_RATE_TARGET * 100.0
+            )
         } else {
             let deficit = (GEM_RATE_TARGET - gem_rate) * total as f64;
-            format!("ADR-004 deficit: need {:.0} more GEM particles. Apply DQM remediation.",
-                deficit.ceil())
+            format!(
+                "ADR-004 deficit: need {:.0} more GEM particles. Apply DQM remediation.",
+                deficit.ceil()
+            )
         };
 
-        self.history.push(GemReport { tribe_id, epoch, total, gem_count, gem_rate,
-            target: GEM_RATE_TARGET, delta, assessment });
+        self.history.push(GemReport {
+            tribe_id,
+            epoch,
+            total,
+            gem_count,
+            gem_rate,
+            target: GEM_RATE_TARGET,
+            delta,
+            assessment,
+        });
         self.history.last().unwrap()
     }
 
     /// Trend: is GEM rate improving?
     pub fn is_improving(&self) -> bool {
-        if self.history.len() < 2 { return false; }
+        if self.history.len() < 2 {
+            return false;
+        }
         let last = self.history.last().unwrap().gem_rate;
-        let prev = self.history[self.history.len()-2].gem_rate;
+        let prev = self.history[self.history.len() - 2].gem_rate;
         last > prev
     }
 
     /// Epochs above target consecutively.
     pub fn compliance_streak(&self) -> usize {
-        self.history.iter().rev().take_while(|r| r.meets_target()).count()
+        self.history
+            .iter()
+            .rev()
+            .take_while(|r| r.meets_target())
+            .count()
     }
 }
 
-impl Default for GemOracle { fn default() -> Self { Self::new() } }
+impl Default for GemOracle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -114,7 +158,9 @@ mod tests {
     fn compliance_streak_counted() {
         let mut oracle = GemOracle::new();
         let gems: Vec<_> = (0..5).map(|i| gem_particle(&format!("G{i}"))).collect();
-        for ep in 1..=3 { oracle.evaluate(0x0001, ep, &gems); }
+        for ep in 1..=3 {
+            oracle.evaluate(0x0001, ep, &gems);
+        }
         assert_eq!(oracle.compliance_streak(), 3);
     }
 

@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Šala Shell · rail + canvas · PB-401</title>
+<style>
+:root{--bg:#0b1218;--rail:#111b23;--panel:#16222c;--line:#22323e;--ink:#fff;--dim:#7fa3bd;--gold:#ffc600;--lapis:#0088ff;--green:#3ad900;--violet:#fb94ff;--alarm:#ff628c;--hi:#ffee80;--basalt:#5b6b78;
+--mono:"IBM Plex Mono","JetBrains Mono",ui-monospace,Menlo,monospace;--serif:"Iowan Old Style",Palatino,Georgia,serif}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1.45 var(--serif);overflow:hidden}
+#app{display:grid;grid-template-rows:38px 1fr 26px;height:100vh}
+/* top strip */
+#top{display:flex;align-items:center;gap:12px;padding:0 10px;background:var(--rail);border-bottom:1px solid var(--line);font:11px var(--mono);color:var(--dim)}
+#top b{color:var(--gold)}#top .cune{color:var(--gold)}
+#burger{background:none;border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:2px 8px;cursor:pointer;font:13px var(--mono)}
+#top .honest{color:var(--hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+/* body */
+#body{display:grid;grid-template-columns:250px 1fr;min-height:0}
+#body.railoff{grid-template-columns:0 1fr}
+#rail{background:var(--rail);border-right:1px solid var(--line);overflow:auto;min-width:0}
+#rail.hidden{display:none}
+.sec{border-bottom:1px solid var(--line)}
+.sec>h3{margin:0;font:600 10px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);padding:7px 9px;cursor:pointer;display:flex;justify-content:space-between}
+.sec>h3 i{color:var(--dim);font-style:normal}
+.sec .in{padding:6px 9px 10px;display:grid;gap:6px;font:11px var(--mono)}
+.sec.closed .in{display:none}
+.row{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+button,select,textarea,input[type=text]{background:#0d171e;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 7px;font:11px var(--mono);cursor:pointer}
+button:hover{border-color:var(--gold);color:var(--hi)}
+button[aria-pressed=true]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+label{display:flex;align-items:center;gap:5px;color:var(--dim)}
+input[type=range]{width:100%;accent-color:var(--gold)}
+.val{color:var(--hi)}
+.leg{display:grid;gap:3px;font:10px var(--mono);color:var(--dim)}
+.sw{width:11px;height:11px;display:inline-block;border:1px solid #000;vertical-align:-1px;margin-right:5px}
+#jr{font:10px/1.45 var(--mono);color:var(--dim);max-height:150px;overflow:auto;white-space:pre-wrap}
+#jr .t{color:var(--hi)}
+.gate{display:flex;justify-content:space-between;gap:6px;font:10px var(--mono)}
+.gate .ok{color:var(--green)}.gate .bad{color:var(--alarm)}
+/* canvas */
+#stagewrap{position:relative;min-width:0}
+canvas#c{display:block;width:100%;height:100%;background:linear-gradient(180deg,#0d1a22 0%,#070d12 100%);cursor:crosshair;touch-action:none}
+.rites{position:absolute;display:none;z-index:9;background:var(--panel);border:1px solid var(--gold);border-radius:6px;padding:6px;min-width:250px;box-shadow:0 8px 24px #000c}
+.rites h3{font:600 10px var(--mono);letter-spacing:.1em;color:var(--gold);margin:2px 4px 6px;text-transform:uppercase}
+.rites button{display:block;width:100%;text-align:left;margin:2px 0}
+.rites .kaki{font:10px var(--mono);color:var(--violet);margin:0 4px 6px}
+/* status */
+#status{display:flex;align-items:center;gap:14px;padding:0 10px;background:var(--rail);border-top:1px solid var(--line);font:11px var(--mono);color:var(--dim);overflow:hidden}
+#status b{color:var(--hi)}#status .ok{color:var(--green)}#status .bad{color:var(--alarm)}#status .wait{color:var(--violet)}
+#tick{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <button id="burger" title="collapse the rail">☰</button>
+    <span>BAHYWAY.ECOSYSTEM V4.0 · ŠALA SHELL · <b>PB-401</b> · GL-LYF-001 · GL-SEG-001 · GL-VIZ-010</span>
+    <span class="honest" id="honest">rehearsal · seeded 3600 · every state ESTIMATED until PB-396 and PB-400 have run</span>
+    <span class="cune">𒁾</span>
+  </div>
+
+  <div id="body">
+    <div id="rail">
+      <div class="sec" data-s="view"><h3>View <i>▾</i></h3><div class="in">
+        <div class="row"><span style="color:var(--dim)">split</span>
+          <button data-split="1" aria-pressed="true">▯ one</button>
+          <button data-split="2">▮▮ two</button>
+          <button data-split="3">▮▮▮ three</button></div>
+        <div class="row" id="paneAssign"></div>
+        <label>link selection <input type="checkbox" id="linkSel" checked></label>
+      </div></div>
+
+      <div class="sec" data-s="cam"><h3>Camera <i>▾</i></h3><div class="in">
+        <div class="row">
+          <button data-cam="home" aria-pressed="true">⌖ home</button>
+          <button data-cam="top">▣ top</button>
+          <button data-cam="orbit">⟳ orbit</button>
+          <button data-cam="crane">⇥ crane</button></div>
+        <div class="row">
+          <button id="landing">🛬 land from space</button>
+          <button id="bird">🕊 fly sectors</button>
+          <button id="freeze">❄ freeze</button></div>
+        <label>focus pane <select id="focusPane"></select></label>
+      </div></div>
+
+      <div class="sec" data-s="sel"><h3>Select <i>▾</i></h3><div class="in">
+        <div class="row"><span style="color:var(--dim)">scope</span>
+          <button data-scope="layer" aria-pressed="true">layer</button>
+          <button data-scope="sector">sector</button>
+          <button data-scope="particle">particle</button></div>
+        <div id="selInfo" style="color:var(--dim)">nothing held</div>
+      </div></div>
+
+      <div class="sec" data-s="filt"><h3>Filters <i>▾</i></h3><div class="in">
+        <label>epoch <input id="epoch" type="range" min="0" max="9" step="1" value="5"><span class="val" id="eV">5</span></label>
+        <label>state <select id="fstate"><option value="all">all layers</option><option value="ill">not living</option>
+          <option value="DECAY">decay</option><option value="FUZZY">fuzzy</option><option value="DEAD">dead</option></select></label>
+        <label>sectors <select id="fsect"><option value="all">all sectors</option><option value="decay">decayed only</option></select></label>
+        <label><input type="checkbox" id="proj" checked> projected deaths (outlined)</label>
+      </div></div>
+
+      <div class="sec" data-s="hs"><h3>HeptaScript <i>▾</i></h3><div class="in">
+        <textarea id="hsq" spellcheck="false" style="width:100%;height:48px;resize:vertical">PRESENT layer WHERE state = DECAY</textarea>
+        <div class="row"><button id="hsRun" style="background:var(--gold);color:var(--bg);border-color:var(--gold)">▶ run</button>
+          <button data-ex="PRESENT layer WHERE state = FUZZY">fuzzy</button>
+          <button data-ex="PRESENT layer WHERE g > 0.8">g&gt;0.8</button></div>
+        <div id="hsOut" style="max-height:130px;overflow:auto;font:10px var(--mono)"></div>
+      </div></div>
+
+      <div class="sec closed" data-s="leg"><h3>Legend <i>▸</i></h3><div class="in leg">
+        <div><i class="sw" style="background:#3ad900"></i>LIVING · solid = MEASURED</div>
+        <div><i class="sw" style="background:#ffc600"></i>STRAINED</div>
+        <div><i class="sw" style="background:#ff628c"></i>DECAY · has a rate</div>
+        <div><i class="sw" style="background:#7fa3bd"></i>FUZZY · hatched · has a deadline</div>
+        <div><i class="sw" style="background:#5b6b78"></i>DEAD · outlined · g ≥ 1</div>
+        <div style="margin-top:4px;color:var(--dim)">amplitude = density · a trough is a void, never an optimum</div>
+      </div></div>
+
+      <div class="sec closed" data-s="gates"><h3>Gates <i>▸</i></h3><div class="in">
+        <div class="gate"><span>COMPILE</span><i class="ok" id="gC">—</i></div>
+        <div class="gate"><span>RUNTIME</span><i id="gR">—</i></div>
+        <div class="gate"><span>DEAD ≥ 2 witnesses</span><i id="gD">—</i></div>
+        <div class="gate"><span>FUZZY has deadline</span><i id="gF">—</i></div>
+      </div></div>
+
+      <div class="sec closed" data-s="jr"><h3>Journal <i>▸</i></h3><div class="in"><div id="jr"></div></div></div>
+    </div>
+
+    <div id="stagewrap">
+      <canvas id="c"></canvas>
+      <div class="rites" id="rites" role="menu"></div>
+    </div>
+  </div>
+
+  <div id="status">
+    <span id="verdict">—</span>
+    <span id="tick"></span>
+  </div>
+</div>
+
+<script>
+(function(){"use strict";
+const $=id=>document.getElementById(id);
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function h32(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const C={line:'#22323e',ink:'#fff',dim:'#7fa3bd',gold:'#ffc600',lapis:'#0088ff',green:'#3ad900',violet:'#fb94ff',alarm:'#ff628c',hi:'#ffee80',basalt:'#5b6b78'};
+const J=$('jr');let lastLine='';
+function journal(s){const t=new Date().toISOString().slice(11,19);J.innerHTML+='<span class="t">'+t+'</span> '+s+'\n';J.scrollTop=J.scrollHeight;lastLine=s;$('tick').textContent='· '+s;}
+
+/* ================= model ================= */
+const DBS=[['7001','EnkiSDB'],['7002','EnkiODB'],['7003','EnkiQDB'],['7004','EnkiDB'],['7005','EnkiDW'],['7006','EnkiMDB'],['7007','EnkiDDB']];
+const STATE={LIVING:{c:C.green,f:'solid'},STRAINED:{c:C.gold,f:'solid'},DECAY:{c:C.alarm,f:'solid'},FUZZY:{c:C.dim,f:'hatch'},DEAD:{c:C.basalt,f:'out'}};
+const SECT_COL={used:C.green,fragmented:C.gold,'at-risk':C.alarm,unknown:C.dim};
+const FUZZY_DEADLINE=3;
+let EPOCH=5,FSTATE='all',FSECT='all',PROJ=true,SCOPE='layer',LINK=true;
+let LAYERS=[],selLayer=null,selSector=null,selCit=null,zcit=[],SECTORS=[];
+
+function build(){LAYERS=[];
+  DBS.forEach(([port,name],di)=>{for(let m=-3;m<=3;m++){
+    const key=port+'|MLU'+(m>0?'+':'')+m,r=mulberry32(h32(key));
+    const rate=(Math.abs(m)>=2?.055:.012)+r()*.03, g0=.18+r()*.35, g=Math.min(1.35,g0+rate*EPOCH);
+    const coh=r(), unread=r()<.10;
+    const sigs=(g>.55?1:0)+(rate>.05?1:0)+(coh<.28?1:0);
+    const fz=(coh<.22||unread)?Math.max(0,EPOCH-Math.floor(r()*5)):null;
+    let state,wit=sigs>=2?2:sigs,neglect=false;
+    if(fz!==null){const age=EPOCH-fz;state=age>FUZZY_DEADLINE?'DEAD':'FUZZY';if(state==='DEAD'){neglect=true;wit=2;}}
+    if(!state){if(g>=1){state='DEAD';wit=2;}else if(sigs>=2&&rate>.02)state='DECAY';else if(sigs===1)state='STRAINED';else state='LIVING';}
+    LAYERS.push({key,port,db:name,di,m,g,rate,coh,unread,state,wit,neglect,
+      dl:fz!==null&&state==='FUZZY'?FUZZY_DEADLINE-(EPOCH-fz):null,
+      ttd:(state==='DECAY'||state==='STRAINED')&&rate>0?Math.max(0,(1-g)/rate):null,
+      orphans:state==='DEAD'?Math.round(2e4+r()*9e5):0});}});
+  if(selLayer)selLayer=LAYERS.find(L=>L.key===selLayer.key)||null;
+  if(selLayer)descend(selLayer,true);
+  setVerdict();}
+function descend(L,quiet){selLayer=L;selCit=null;selSector=null;zcit=[];SECTORS=[];
+  const r=mulberry32(h32(L.key+'|cit'));
+  for(let i=0;i<200;i++){const th=r()*Math.PI*2,base=.22+.62*Math.sqrt(r());
+    const ru=Math.min(1.25,base*(.65+.75*L.g));
+    const drift=(L.state==='DECAY'||L.state==='STRAINED')?(r()<.45?.02+r()*.05:0):0;
+    zcit.push({i,th,ru,drift,onset:drift?Math.max(0,EPOCH-Math.floor(1+r()*4)):null,
+      mixes:[-3,-2,-1,0,1,2,3].filter(m=>m!==L.m&&r()<.10),
+      kaki:kakiOf(h32(L.key)+i),sect:null});}
+  const NA=48,NR=3,rs=mulberry32(h32(L.key+'|sect'));
+  for(let a=0;a<NA;a++)for(let ri=0;ri<NR;ri++){const roll=rs();
+    const st=roll<.58?'used':roll<.80?'fragmented':roll<.93?'at-risk':'unknown';
+    SECTORS.push({a,ri,NA,NR,st,h:st==='at-risk'?.10+rs()*.12:st==='fragmented'?.05+rs()*.10:.03+rs()*.05,
+      pv:'/dev/nvme0n1p'+(1+Math.floor(rs()*3)),lv:'lv_'+L.port,
+      ext:[Math.round(1e5+rs()*9e5),0],cit:0});}
+  SECTORS.forEach(s=>s.ext[1]=s.ext[0]+Math.round(64+s.h*4000));
+  zcit.forEach(c=>{const a=Math.floor(((c.th/(Math.PI*2))%1+1)%1*NA),ri=Math.min(NR-1,Math.floor(c.ru*NR));
+    const s=SECTORS.find(x=>x.a===a&&x.ri===ri);if(s){s.cit++;c.sect=s;}});
+  if(!quiet)journal('descended · '+L.db+' MLU'+(L.m>0?'+':'')+L.m+' · '+zcit.length+' citizens · '+SECTORS.length+' sectors');
+  setVerdict();}
+function kakiOf(seed){let s='';const r=mulberry32(seed);for(let b=0;b<16;b++){s+=('0'+Math.floor(r()*256).toString(16)).slice(-2);if(b%4===3&&b<15)s+='·';}return s;}
+function sectorCitizens(s){return zcit.filter(c=>c.sect===s);}
+function shownLayer(L){return FSTATE==='all'||(FSTATE==='ill'?L.state!=='LIVING':L.state===FSTATE);}
+function decayed(s){return s.st!=='used';}
+
+/* ================= panes ================= */
+const cv=$('c'),ctx=cv.getContext('2d');
+const VIEWS=['layers','membrane','sectors','particle'];
+const VIEWNAME={layers:'LAYERS · 7×7 grid',membrane:'MEMBRANE · inside the shell',sectors:'SECTORS · storage terrain',particle:'PARTICLE · neighbourhood'};
+function mkCam(v){const base={layers:{yaw:.55,pitch:1.06,dist:5.0},membrane:{yaw:.5,pitch:1.0,dist:2.0},
+  sectors:{yaw:.4,pitch:.9,dist:1.9},particle:{yaw:.6,pitch:1.0,dist:3.0}}[v];
+  return {yaw:base.yaw,pitch:base.pitch,dist:base.dist,tx:0,ty:0,tz:0,auto:false,mode:'home'};}
+let PANES=[{v:'layers',cam:mkCam('layers'),camT:mkCam('layers')}];
+let FOCUS=0,SPLIT=1,FROZEN=false,time=0,landT=-1,landStep=0,birdT=-1,birdSector=null,CAPTION='';
+function setSplit(n){SPLIT=n;const want=[['layers'],['layers','membrane'],['layers','membrane','sectors']][n-1];
+  PANES=want.map((v,i)=>PANES[i]&&PANES[i].v===v?PANES[i]:{v,cam:mkCam(v),camT:mkCam(v)});
+  FOCUS=Math.min(FOCUS,PANES.length-1);
+  document.querySelectorAll('#rail button[data-split]').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.split===n));
+  buildPaneAssign();journal('split · '+n+' pane(s) · '+PANES.map(p=>p.v).join(' | '));}
+function buildPaneAssign(){const w=$('paneAssign');w.innerHTML='';
+  PANES.forEach((p,i)=>{const sel=document.createElement('select');sel.title='pane '+(i+1);
+    VIEWS.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=(i+1)+'· '+v;if(p.v===v)o.selected=true;sel.appendChild(o);});
+    sel.onchange=()=>{p.v=sel.value;p.cam=mkCam(p.v);p.camT=mkCam(p.v);journal('pane '+(i+1)+' → '+p.v);};
+    w.appendChild(sel);});
+  const fp=$('focusPane');fp.innerHTML='';PANES.forEach((p,i)=>{const o=document.createElement('option');o.value=i;o.textContent='pane '+(i+1);fp.appendChild(o);});
+  fp.value=FOCUS;}
+function paneRect(i){const w=cv.width/PANES.length;return {x:i*w,y:0,w,h:cv.height};}
+function paneAt(px,py){for(let i=0;i<PANES.length;i++){const r=paneRect(i);if(px>=r.x&&px<r.x+r.w)return i;}return 0;}
+function resize(){const r=$('stagewrap').getBoundingClientRect();
+  cv.width=Math.max(320,Math.floor(r.width*devicePixelRatio));cv.height=Math.max(240,Math.floor(r.height*devicePixelRatio));}
+addEventListener('resize',resize);
+
+/* ================= projection ================= */
+function proj(p,cam,rect){const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  let x=p[0]-cam.tx,y=p[1]-cam.ty,z=p[2]-cam.tz;let x1=x*cy-y*sy,y1=x*sy+y*cy;let y2=y1*cp-z*sp,z2=y1*sp+z*cp;
+  const d=cam.dist-y2;if(d<.05)return null;const f=rect.h/(2*Math.tan(1.03/2))/d;
+  return [rect.x+rect.w/2+x1*f,rect.y+rect.h/2-z2*f,d];}
+function halo(t,x,y,s,col){ctx.font='600 '+s*devicePixelRatio+'px '+getComputedStyle(document.documentElement).getPropertyValue('--mono');
+  ctx.lineWidth=4;ctx.strokeStyle='#050a0e';ctx.lineJoin='round';ctx.strokeText(t,x,y);ctx.fillStyle=col;ctx.fillText(t,x,y);}
+const SX=3.2,SY=2.1;
+function lpos(L){return [-SX/2+(L.di/6)*SX,-SY/2+((L.m+3)/6)*SY,0];}
+function zpos(c){const t=(reduced||FROZEN)?0:time;
+  const inS=selSector&&c.sect===selSector;
+  const bob=c===selCit?.035+.028*Math.sin(t*7):inS?.022+.02*Math.sin(t*5.5+c.i*.7):.008*Math.sin(t*1.7+c.i);
+  return [Math.cos(c.th+t*.05)*c.ru,Math.sin(c.th+t*.05)*c.ru,bob];}
+function sectPos(s,ka,kr){const th=((s.a+ka)/s.NA)*Math.PI*2, rr=.25+((s.ri+kr)/s.NR)*.95;
+  return [Math.cos(th)*rr,Math.sin(th)*rr,-.30-s.h];}
+
+/* ================= draw ================= */
+let picks=[];
+function draw(){resizeIfNeeded();ctx.clearRect(0,0,cv.width,cv.height);picks=[];
+  PANES.forEach((p,i)=>{const r=paneRect(i);
+    ctx.save();ctx.beginPath();ctx.rect(r.x,r.y,r.w,r.h);ctx.clip();
+    if(p.v==='layers')drawLayers(p,r,i);
+    else if(p.v==='membrane')drawMembrane(p,r,i);
+    else if(p.v==='sectors')drawSectors(p,r,i);
+    else drawParticle(p,r,i);
+    // pane chrome
+    ctx.strokeStyle=i===FOCUS?C.gold:C.line;ctx.lineWidth=i===FOCUS?2:1;
+    ctx.strokeRect(r.x+1,r.y+1,r.w-2,r.h-2);ctx.lineWidth=1;
+    halo((i+1)+' · '+VIEWNAME[p.v],r.x+12,r.y+20*devicePixelRatio,11,i===FOCUS?C.gold:C.dim);
+    ctx.restore();});
+  if(CAPTION){ctx.fillStyle='#050a0ecc';ctx.fillRect(0,cv.height-46*devicePixelRatio,cv.width,26*devicePixelRatio);
+    halo(CAPTION,16,cv.height-28*devicePixelRatio,12,C.hi);}}
+let lastW=0,lastH=0;
+function resizeIfNeeded(){const r=$('stagewrap').getBoundingClientRect();
+  const w=Math.max(320,Math.floor(r.width*devicePixelRatio)),h=Math.max(240,Math.floor(r.height*devicePixelRatio));
+  if(w!==lastW||h!==lastH){cv.width=w;cv.height=h;lastW=w;lastH=h;}}
+function drawLayers(p,r,pi){
+  for(let d=0;d<7;d++){const a=proj([-SX/2+(d/6)*SX,-SY/2-.18,0],p.cam,r),b=proj([-SX/2+(d/6)*SX,SY/2+.18,0],p.cam,r);
+    if(a&&b){ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.strokeStyle=C.line;ctx.globalAlpha=.5;ctx.stroke();ctx.globalAlpha=1;
+      halo(DBS[d][1],a[0]-20,a[1]+16*devicePixelRatio,10,d<3?C.hi:C.gold);}}
+  const order=LAYERS.filter(shownLayer).map(L=>({L,q:proj(lpos(L),p.cam,r)})).filter(o=>o.q).sort((a,b)=>b.q[2]-a.q[2]);
+  for(const o of order){const L=o.L,q=o.q,S=STATE[L.state];
+    const R=Math.max(6,(16+22*Math.min(1.2,L.g))*devicePixelRatio/(q[2]*.42));
+    const puls=(L.state==='DECAY'&&!reduced&&!FROZEN)?1+.05*Math.sin(time*4+L.di):1;
+    ctx.beginPath();ctx.arc(q[0],q[1],R*puls,0,7);
+    if(S.f==='solid'){ctx.fillStyle=S.c;ctx.globalAlpha=.3;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=S.c;ctx.lineWidth=1.6;ctx.stroke();ctx.lineWidth=1;}
+    else if(S.f==='hatch'){ctx.save();ctx.clip();ctx.strokeStyle=S.c;ctx.globalAlpha=.8;
+      for(let k=-R*2;k<R*2;k+=5){ctx.beginPath();ctx.moveTo(q[0]+k,q[1]-R);ctx.lineTo(q[0]+k+2*R,q[1]+R);ctx.stroke();}ctx.restore();ctx.globalAlpha=1;
+      ctx.setLineDash([3,3]);ctx.strokeStyle=S.c;ctx.beginPath();ctx.arc(q[0],q[1],R,0,7);ctx.stroke();ctx.setLineDash([]);}
+    else{ctx.strokeStyle=S.c;ctx.setLineDash([2,3]);ctx.stroke();ctx.setLineDash([]);}
+    ctx.beginPath();ctx.arc(q[0],q[1],R/Math.max(.25,Math.min(1.2,L.g)),0,7);
+    ctx.strokeStyle=C.dim;ctx.globalAlpha=.25;ctx.setLineDash([1,4]);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+    if(PROJ&&L.ttd!==null&&L.ttd<6){ctx.beginPath();ctx.arc(q[0],q[1],R/Math.max(.3,L.g),0,7);
+      ctx.strokeStyle=C.alarm;ctx.globalAlpha=.5;ctx.setLineDash([4,5]);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;}
+    if(L===selLayer){const pr=R+8+7*(.5+.5*Math.sin(time*7));ctx.beginPath();ctx.arc(q[0],q[1],pr,0,7);
+      ctx.strokeStyle=C.hi;ctx.globalAlpha=1-(pr-R-8)/15;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}
+    picks.push({pane:pi,kind:'layer',ref:L,x:q[0],y:q[1],r:R});
+    if(p.cam.dist<3.4||L===selLayer)halo(L.state+' g'+L.g.toFixed(2),q[0]+R+4,q[1]+3,9,S.c);}}
+function drawMembrane(p,r,pi){
+  if(!selLayer){halo('no layer held — click one in the LAYERS pane',r.x+r.w/2-160,r.y+r.h/2,12,C.dim);return;}
+  const L=selLayer,S=STATE[L.state];
+  for(let k=1;k<=5;k++){const rr=k/5*1.05;ctx.beginPath();let f=true;
+    for(let a=0;a<=56;a++){const th=a/56*Math.PI*2;const q=proj([Math.cos(th)*rr,Math.sin(th)*rr,0],p.cam,r);if(!q){f=true;continue}f?(ctx.moveTo(q[0],q[1]),f=false):ctx.lineTo(q[0],q[1]);}
+    ctx.closePath();ctx.strokeStyle=S.c;ctx.globalAlpha=k===5?.8:.18;ctx.stroke();ctx.globalAlpha=1;}
+  ctx.beginPath();let f2=true;
+  for(let a=0;a<=64;a++){const th=a/64*Math.PI*2;const q=proj([Math.cos(th)*1.25,Math.sin(th)*1.25,0],p.cam,r);if(!q){f2=true;continue}f2?(ctx.moveTo(q[0],q[1]),f2=false):ctx.lineTo(q[0],q[1]);}
+  ctx.closePath();ctx.strokeStyle=C.basalt;ctx.setLineDash([4,5]);ctx.stroke();ctx.setLineDash([]);
+  const gq=proj([1.25,0,0],p.cam,r);if(gq)halo('g = 1 · the girth',gq[0]+6,gq[1],10,C.basalt);
+  const list=zcit.map(c=>({c,q:proj(zpos(c),p.cam,r)})).filter(o=>o.q).sort((a,b)=>b.q[2]-a.q[2]);
+  for(const o of list){const c=o.c,q=o.q,inS=selSector&&c.sect===selSector;
+    const s=Math.max(1.8,(c===selCit?5.5:inS?4.4:3)*devicePixelRatio/(q[2]*.42));
+    if(selSector&&!inS)ctx.globalAlpha=.18;
+    ctx.beginPath();ctx.arc(q[0],q[1],s,0,7);
+    ctx.fillStyle=c.sect&&c.sect.st==='unknown'?C.dim:c.drift?C.alarm:S.c;ctx.fill();
+    if(inS&&c!==selCit){const rr=s+3+2.5*Math.sin(time*6+c.i);ctx.beginPath();ctx.arc(q[0],q[1],rr,0,7);ctx.strokeStyle=C.hi;ctx.globalAlpha=.75;ctx.stroke();}
+    ctx.globalAlpha=1;
+    if(c===selCit){const pr=8+8*(.5+.5*Math.sin(time*7));ctx.beginPath();ctx.arc(q[0],q[1],pr,0,7);
+      ctx.strokeStyle=C.hi;ctx.globalAlpha=1-(pr-8)/16;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      halo(c.kaki.slice(0,9)+(c.drift?' · drifting':''),q[0]+10,q[1]-10,10,C.hi);}
+    picks.push({pane:pi,kind:'cit',ref:c,x:q[0],y:q[1],r:s+3});}
+  halo(L.db+'·'+L.port+' MLU '+(L.m>0?'+':'')+L.m+' · '+L.state+' · g '+L.g.toFixed(2),r.x+12,r.y+38*devicePixelRatio,10,S.c);}
+function drawSectors(p,r,pi){
+  if(!selLayer){halo('no layer held',r.x+r.w/2-70,r.y+r.h/2,12,C.dim);return;}
+  const order=SECTORS.map(s=>({s,q:proj(sectPos(s,.5,.5),p.cam,r)})).filter(o=>o.q).sort((a,b)=>b.q[2]-a.q[2]);
+  for(const o of order){const s=o.s;
+    if(FSECT==='decay'&&!decayed(s))continue;
+    const c0=proj(sectPos(s,0,0),p.cam,r),c1=proj(sectPos(s,1,0),p.cam,r),c2=proj(sectPos(s,1,1),p.cam,r),c3=proj(sectPos(s,0,1),p.cam,r);
+    if(!c0||!c1||!c2||!c3)continue;
+    ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(c1[0],c1[1]);ctx.lineTo(c2[0],c2[1]);ctx.lineTo(c3[0],c3[1]);ctx.closePath();
+    const col=SECT_COL[s.st];
+    if(s.st==='unknown'){ctx.strokeStyle=col;ctx.globalAlpha=.55;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(c0[0],c0[1]);ctx.lineTo(c2[0],c2[1]);ctx.moveTo(c1[0],c1[1]);ctx.lineTo(c3[0],c3[1]);ctx.stroke();ctx.globalAlpha=1;}
+    else if(s.st==='fragmented'){ctx.save();ctx.clip();ctx.strokeStyle=col;ctx.globalAlpha=.7;
+      for(let k=-60;k<120;k+=4){ctx.beginPath();ctx.moveTo(c0[0]+k,c0[1]+60);ctx.lineTo(c0[0]+k+60,c0[1]);ctx.stroke();}ctx.restore();ctx.globalAlpha=1;}
+    else{ctx.fillStyle=col;ctx.globalAlpha=s.st==='at-risk'?.32:.16;ctx.fill();ctx.globalAlpha=.45;ctx.strokeStyle=col;ctx.stroke();ctx.globalAlpha=1;}
+    if(s===selSector){const pu=.6+.4*Math.sin(time*5);ctx.strokeStyle=C.hi;ctx.lineWidth=2.6;ctx.globalAlpha=pu;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}
+    if(s===birdSector){ctx.strokeStyle=C.hi;ctx.lineWidth=2;ctx.globalAlpha=.9;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}
+    picks.push({pane:pi,kind:'sect',ref:s,x:o.q[0],y:o.q[1],r:18*devicePixelRatio});}
+  halo('storage terrain · '+SECTORS.filter(decayed).length+' decayed of '+SECTORS.length,r.x+12,r.y+38*devicePixelRatio,10,C.dim);}
+function drawParticle(p,r,pi){
+  if(!selCit){halo('no particle held — click one in the MEMBRANE pane',r.x+r.w/2-190,r.y+r.h/2,12,C.dim);return;}
+  const c=selCit,SH=.20;
+  for(let m=3;m>=-3;m--){const z=(m-selLayer.m)*SH,own=m===selLayer.m;
+    ctx.beginPath();let f=true;
+    for(let a=0;a<=48;a++){const th=a/48*Math.PI*2;const q=proj([Math.cos(th)*1.1,Math.sin(th)*1.1,z],p.cam,r);if(!q){f=true;continue}f?(ctx.moveTo(q[0],q[1]),f=false):ctx.lineTo(q[0],q[1]);}
+    ctx.closePath();ctx.strokeStyle=own?C.hi:C.line;ctx.globalAlpha=own?.85:.35;ctx.stroke();ctx.globalAlpha=1;
+    const lq=proj([1.12,0,z],p.cam,r);if(lq)halo('MLU '+(m>0?'+':'')+m,lq[0]+5,lq[1]+3,9,own?C.hi:C.dim);}
+  const rr=mulberry32(h32(c.kaki));
+  for(let i=0;i<70;i++){const dth=(rr()*2-1)*Math.PI,m=Math.max(-3,Math.min(3,selLayer.m+Math.round((rr()+rr()+rr()-1.5)*2.2)));
+    const q=proj([Math.cos(dth)*(.4+rr()*.7),Math.sin(dth)*(.4+rr()*.7),(m-selLayer.m)*SH],p.cam,r);if(!q)continue;
+    const near=Math.abs(m-selLayer.m)===1&&Math.abs(dth)<.45;
+    ctx.beginPath();ctx.arc(q[0],q[1],near?4:2.4,0,7);ctx.fillStyle=near?C.violet:C.dim;ctx.globalAlpha=near?.95:.45;ctx.fill();ctx.globalAlpha=1;}
+  const sq=proj([0,0,0],p.cam,r);
+  if(sq){ctx.beginPath();ctx.arc(sq[0],sq[1],7,0,7);ctx.fillStyle=C.hi;ctx.fill();
+    halo(c.kaki.slice(0,12)+' · '+c.ru.toFixed(2)+' of girth',sq[0]+11,sq[1]-9,10,C.hi);}}
+
+/* ================= interaction ================= */
+function toCv(e){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height];}
+function pickAt(x,y,pane){let best=null,bd=1e9;
+  for(const p of picks){if(p.pane!==pane)continue;
+    if(SCOPE==='layer'&&p.kind!=='layer')continue;
+    if(SCOPE==='sector'&&p.kind!=='sect')continue;
+    if(SCOPE==='particle'&&p.kind!=='cit')continue;
+    const d=Math.hypot(p.x-x,p.y-y);if(d<Math.max(14*devicePixelRatio,p.r)&&d<bd){bd=d;best=p;}}
+  if(best)return best;
+  for(const p of picks){if(p.pane!==pane)continue;const d=Math.hypot(p.x-x,p.y-y);
+    if(d<Math.max(14*devicePixelRatio,p.r)&&d<bd){bd=d;best=p;}}
+  return best;}
+function hold(p){
+  if(p.kind==='layer'){descend(p.ref);journal('held layer · '+p.ref.db+' MLU'+(p.ref.m>0?'+':'')+p.ref.m+' · '+p.ref.state);}
+  else if(p.kind==='sect'){selSector=p.ref;selCit=null;
+    journal('held sector · '+p.ref.pv+' extents '+p.ref.ext[0].toLocaleString()+'–'+p.ref.ext[1].toLocaleString()+' · '+p.ref.st.toUpperCase()+' · '+sectorCitizens(p.ref).length+' citizens bouncing');}
+  else if(p.kind==='cit'){selCit=p.ref;if(LINK&&p.ref.sect)selSector=p.ref.sect;
+    journal('held citizen · '+p.ref.kaki.slice(0,9)+(p.ref.drift?' · drifting +'+p.ref.drift.toFixed(3)+' g/epoch':' · holding its ring'));}
+  renderSel();setVerdict();}
+function renderSel(){const el=$('selInfo');
+  if(selCit)el.innerHTML='<b style="color:'+C.hi+'">'+selCit.kaki.slice(0,12)+'</b><br>'+selCit.ru.toFixed(2)+' of girth · '+(selCit.drift?'<span style="color:'+C.alarm+'">drifting</span>':'holding')+'<br>sector '+(selCit.sect?selCit.sect.st:'—');
+  else if(selSector)el.innerHTML='<b style="color:'+SECT_COL[selSector.st]+'">'+selSector.st.toUpperCase()+'</b><br>'+selSector.pv+'<br>'+sectorCitizens(selSector).length+' citizens above it';
+  else if(selLayer)el.innerHTML='<b style="color:'+STATE[selLayer.state].c+'">'+selLayer.db+' MLU'+(selLayer.m>0?'+':'')+selLayer.m+'</b><br>'+selLayer.state+' · g '+selLayer.g.toFixed(2)+(selLayer.dl!==null?'<br>deadline '+selLayer.dl+' epoch(s)':'')+(selLayer.ttd!==null?'<br>dies ~'+selLayer.ttd.toFixed(1)+'e (ESTIMATED)':'');
+  else el.textContent='nothing held';}
+let drag=null,moved=false;
+cv.addEventListener('pointerdown',e=>{if(e.button!==0)return;const [x,y]=toCv(e);const pi=paneAt(x,y);
+  FOCUS=pi;$('focusPane').value=pi;drag={x:e.clientX,y:e.clientY,pi,yaw:PANES[pi].cam.yaw,pitch:PANES[pi].cam.pitch};moved=false;cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(!moved&&Math.hypot(dx,dy)<7)return;moved=true;if(landT>=0){landT=-1;CAPTION='';}if(birdT>=0){birdT=-1;CAPTION='';}
+  const p=PANES[drag.pi];p.cam.auto=false;p.camT.yaw=drag.yaw+dx*.008;p.camT.pitch=Math.max(.15,Math.min(1.55,drag.pitch+dy*.006));});
+cv.addEventListener('pointerup',e=>{if(drag&&!moved){const [x,y]=toCv(e);const pi=paneAt(x,y);const p=pickAt(x,y,pi);
+  if(p)hold(p);else{if(SCOPE==='particle')selCit=null;else if(SCOPE==='sector')selSector=null;renderSel();}}
+  drag=null;});
+cv.addEventListener('wheel',e=>{e.preventDefault();const [x,y]=toCv(e);const p=PANES[paneAt(x,y)];
+  p.cam.auto=false;p.camT.dist=Math.max(.6,Math.min(10,p.camT.dist*(e.deltaY>0?1.1:.9)));},{passive:false});
+cv.addEventListener('dblclick',e=>{const [x,y]=toCv(e);const pi=paneAt(x,y);const p=pickAt(x,y,pi);
+  if(p&&p.kind==='layer'){descend(p.ref);if(PANES.length>1){PANES[1].v='membrane';buildPaneAssign();}journal('double-click · descended into '+p.ref.db);}});
+const rites=$('rites');
+cv.addEventListener('contextmenu',e=>{e.preventDefault();const [x,y]=toCv(e);const pi=paneAt(x,y);const p=pickAt(x,y,pi);
+  const wrap=$('stagewrap').getBoundingClientRect();
+  rites.style.left=(e.clientX-wrap.left+8)+'px';rites.style.top=(e.clientY-wrap.top+8)+'px';
+  let h='<h3>Rites · pane '+(pi+1)+'</h3>';
+  if(p&&p.kind==='layer')h+='<div class="kaki">'+p.ref.db+' MLU'+p.ref.m+' · '+p.ref.state+'</div>'
+    +'<button data-r="hold">hold it</button><button data-r="mem">→ send MEMBRANE to next pane</button>'
+    +'<button data-r="sect">→ send SECTORS to next pane</button><button data-r="landing">🛬 land on it from space</button>';
+  else if(p&&p.kind==='sect')h+='<div class="kaki">'+p.ref.st.toUpperCase()+' · '+p.ref.pv+'</div>'
+    +'<button data-r="hold">hold it · bounce its citizens</button><button data-r="only">show decayed only</button>'
+    +'<button data-r="bird">🕊 fly from here</button><button data-r="scrub">✱ propose a scrub</button>';
+  else if(p&&p.kind==='cit')h+='<div class="kaki">'+p.ref.kaki.slice(0,19)+'</div>'
+    +'<button data-r="hold">hold it</button><button data-r="part">→ send PARTICLE to next pane</button>'
+    +'<button data-r="onset">⏱ when did it start drifting?</button>';
+  else h+='<div class="kaki">open space · pane '+(pi+1)+'</div><button data-r="home">⌖ home this pane</button>'
+    +'<button data-r="split2">▮▮ split in two</button><button data-r="split3">▮▮▮ split in three</button><button data-r="fz">'+(FROZEN?'▶ resume':'❄ freeze')+'</button>';
+  rites.innerHTML=h;rites.style.display='block';
+  rites.querySelectorAll('button').forEach(b=>b.onclick=()=>{rite(b.dataset.r,p,pi);rites.style.display='none';});});
+document.addEventListener('pointerdown',e=>{if(!rites.contains(e.target))rites.style.display='none';});
+function nextPane(v){if(PANES.length<2)setSplit(2);const i=Math.min(PANES.length-1,FOCUS+1);
+  PANES[i].v=v;PANES[i].cam=mkCam(v);PANES[i].camT=mkCam(v);buildPaneAssign();journal('pane '+(i+1)+' → '+v);}
+function rite(r,p,pi){switch(r){
+  case 'hold':if(p)hold(p);break;
+  case 'mem':if(p)hold(p);nextPane('membrane');break;
+  case 'sect':if(p)hold(p);nextPane('sectors');break;
+  case 'part':if(p)hold(p);nextPane('particle');break;
+  case 'only':FSECT='decay';$('fsect').value='decay';break;
+  case 'bird':if(p)hold(p);startBird();break;
+  case 'landing':if(p)hold(p);startLanding(p.ref);break;
+  case 'scrub':journal('PROPOSED · scrub '+p.ref.pv+' extents '+p.ref.ext[0].toLocaleString()+'–'+p.ref.ext[1].toLocaleString()+' · '+sectorCitizens(p.ref).length+' citizens above it · the shell proposes; a numbered playbook executes and writes the receipt');break;
+  case 'onset':journal(p.ref.onset!==null?'drift began at epoch '+p.ref.onset+' · '+(EPOCH-p.ref.onset)+' epoch(s) ago · +'+p.ref.drift.toFixed(3)+' g/epoch':'this citizen never left its ring — the layer is decaying without it, which is itself worth witnessing');break;
+  case 'home':PANES[pi].camT=mkCam(PANES[pi].v);break;
+  case 'split2':setSplit(2);break;case 'split3':setSplit(3);break;
+  case 'fz':setFreeze(!FROZEN);break;}
+  renderSel();setVerdict();}
+
+/* ================= cinematics ================= */
+const LANDING=[{t:2.0,c:'from space · the whole estate, seven types by seven shells'},
+ {t:1.8,c:'the type · one column comes forward'},{t:1.8,c:'the layer · its girth ring visible'},
+ {t:1.4,c:'piercing the membrane'},{t:1.6,c:'inside · the citizens bounce at their own radii'},
+ {t:1.6,c:'among them · the drifting ride nearest the girth'},{t:1.0,c:'held · one citizen, and its account'}];
+function startLanding(L){L=L||selLayer||LAYERS.find(x=>x.state==='DECAY')||LAYERS[0];if(!L)return;
+  descend(L,true);landStep=0;landT=0;birdT=-1;setFreeze(false);
+  const p=PANES[FOCUS];p.v='layers';p.camT=Object.assign(mkCam('layers'),{pitch:1.54,dist:9});CAPTION=LANDING[0].c;
+  journal('🛬 landing · '+L.db+' MLU'+(L.m>0?'+':'')+L.m);buildPaneAssign();}
+function landingTick(dt){if(landT<0)return;landT+=dt;if(landT<LANDING[landStep].t)return;
+  landT=0;landStep++;if(landStep>=LANDING.length){landT=-1;CAPTION='';return;}
+  CAPTION=LANDING[landStep].c;journal('landing · '+CAPTION);const p=PANES[FOCUS],L=selLayer;
+  if(landStep===1)Object.assign(p.camT,{yaw:.2,pitch:1.35,dist:6.2,tx:lpos(L)[0],ty:0});
+  if(landStep===2)Object.assign(p.camT,{yaw:.45,pitch:1.15,dist:3.2,tx:lpos(L)[0],ty:lpos(L)[1]});
+  if(landStep===3){p.v='membrane';p.cam=mkCam('membrane');p.camT=Object.assign(mkCam('membrane'),{dist:2.6});buildPaneAssign();}
+  if(landStep===4)Object.assign(p.camT,{dist:1.5,pitch:.95});
+  if(landStep===5){const d=zcit.find(c=>c.drift)||zcit[0];const q=zpos(d);Object.assign(p.camT,{tx:q[0]*.6,ty:q[1]*.6,dist:.9,pitch:.8});}
+  if(landStep===6){const d=zcit.find(c=>c.drift)||zcit[0];selCit=d;if(d.sect)selSector=d.sect;renderSel();
+    const q=zpos(d);Object.assign(p.camT,{tx:q[0],ty:q[1],dist:.6,pitch:.72});setFreeze(true);}}
+function startBird(){if(!selLayer){journal('the bird flies inside a membrane — hold a layer first');return;}
+  const p=PANES[FOCUS];p.v='sectors';p.cam=mkCam('sectors');p.camT=mkCam('sectors');buildPaneAssign();
+  birdT=0;landT=-1;setFreeze(false);journal('🕊 bird · skimming the sectors of '+selLayer.db+' MLU'+selLayer.m);}
+function birdTick(dt){if(birdT<0)return;birdT+=dt*.2;const p=PANES[FOCUS];
+  const rr=.55+.45*Math.sin(birdT*.6),th=birdT*1.35;
+  Object.assign(p.camT,{tx:Math.cos(th)*rr,ty:Math.sin(th)*rr,tz:-.18,dist:.75,
+    yaw:-th+Math.PI/2+.25*Math.sin(birdT*.9),pitch:.42+.06*Math.sin(birdT*.7)});
+  const a=Math.floor((((th/(Math.PI*2))%1)+1)%1*48),ri=Math.min(2,Math.floor(((rr-.25)/.95)*3));
+  const s=SECTORS.find(x=>x.a===a&&x.ri===ri);
+  if(s&&s!==birdSector){birdSector=s;
+    CAPTION='sector '+s.pv+' → '+s.lv+' · extents '+s.ext[0].toLocaleString()+'–'+s.ext[1].toLocaleString()+' · '+s.st.toUpperCase()+' · '+s.cit+' citizen(s) above it';
+    if(s.st==='unknown')journal('🕊 over an UNKNOWN sector · nobody could read it, and it is counted, not dropped');}}
+
+/* ================= rail wiring ================= */
+document.querySelectorAll('.sec>h3').forEach(h=>h.onclick=()=>{const s=h.parentElement;s.classList.toggle('closed');
+  h.querySelector('i').textContent=s.classList.contains('closed')?'▸':'▾';});
+$('burger').onclick=()=>{const b=$('body');b.classList.toggle('railoff');$('rail').classList.toggle('hidden');
+  journal('rail '+(b.classList.contains('railoff')?'collapsed — the canvas takes the room':'restored'));};
+document.querySelectorAll('#rail button[data-split]').forEach(b=>b.onclick=()=>setSplit(+b.dataset.split));
+document.querySelectorAll('#rail button[data-scope]').forEach(b=>b.onclick=()=>{SCOPE=b.dataset.scope;
+  document.querySelectorAll('#rail button[data-scope]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.scope===SCOPE));
+  journal('scope · '+SCOPE);});
+document.querySelectorAll('#rail button[data-cam]').forEach(b=>b.onclick=()=>{const p=PANES[FOCUS],m=b.dataset.cam;
+  document.querySelectorAll('#rail button[data-cam]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.cam===m));
+  p.cam.mode=m;p.cam.auto=false;
+  if(m==='home')p.camT=mkCam(p.v);
+  if(m==='top')Object.assign(p.camT,{yaw:0,pitch:1.57});
+  if(m==='orbit'){p.cam.auto=true;setFreeze(false);}
+  if(m==='crane')Object.assign(p.camT,{pitch:1.2,dist:2.4});
+  journal('pane '+(FOCUS+1)+' camera · '+m);});
+$('focusPane').onchange=e=>{FOCUS=+e.target.value;};
+$('landing').onclick=()=>startLanding(selLayer);
+$('bird').onclick=()=>{if(birdT>=0){birdT=-1;CAPTION='';journal('🕊 controls returned');}else startBird();};
+$('freeze').onclick=()=>setFreeze(!FROZEN);
+function setFreeze(v){FROZEN=v;$('freeze').setAttribute('aria-pressed',v?'true':'false');$('freeze').textContent=v?'❄ frozen':'❄ freeze';}
+$('epoch').oninput=e=>{EPOCH=+e.target.value;$('eV').textContent=EPOCH;build();renderSel();};
+$('fstate').onchange=e=>{FSTATE=e.target.value;setVerdict();};
+$('fsect').onchange=e=>{FSECT=e.target.value;};
+$('proj').onchange=e=>{PROJ=e.target.checked;};
+$('linkSel').onchange=e=>{LINK=e.target.checked;journal('selection linking '+(LINK?'on — a citizen also holds its sector':'off'));};
+$('hsRun').onclick=hsRun;document.querySelectorAll('#rail button[data-ex]').forEach(b=>b.onclick=()=>{$('hsq').value=b.dataset.ex;hsRun();});
+function hsRun(){const src=$('hsq').value.trim(),out=$('hsOut');
+  if(/\b(SELECT|FROM|JOIN)\b/i.test(src)){out.innerHTML='<span style="color:'+C.alarm+'">REFUSED — a layer is not a row.</span>';return;}
+  const m=/^PRESENT\s+layer(?:\s+WHERE\s+(.*))?$/i.exec(src);
+  if(!m){out.innerHTML='<span style="color:'+C.violet+'">try PRESENT layer WHERE state = DECAY</span>';return;}
+  let rows=LAYERS.slice();
+  if(m[1])m[1].split(/\bAND\b/i).forEach(cl=>{const f=/([a-z]+)\s*(=|>|<)\s*(\S+)/i.exec(cl.trim());if(!f)return;
+    const [,k,op,v]=f;rows=rows.filter(L=>{const val=({state:L.state,g:L.g,rate:L.rate,mlu:L.m,db:L.db})[k.toLowerCase()];
+      if(val===undefined)return false;if(op==='=')return String(val).toUpperCase()===v.toUpperCase();
+      if(op==='>')return parseFloat(val)>parseFloat(v);return parseFloat(val)<parseFloat(v);});});
+  out.innerHTML=rows.length?rows.slice(0,30).map(L=>'<div class="hr" data-k="'+LAYERS.indexOf(L)+'" style="cursor:pointer;color:'+STATE[L.state].c+'">'+L.db+' MLU'+(L.m>0?'+':'')+L.m+' · '+L.state+' · g'+L.g.toFixed(2)+'</div>').join('')
+    :'<span style="color:'+C.dim+'">0 — an empty result is not evidence of health, only of no match.</span>';
+  out.querySelectorAll('.hr').forEach(n=>n.onclick=()=>{descend(LAYERS[+n.dataset.k]);renderSel();});
+  journal('HeptaScript · '+rows.length+' layer(s)');}
+
+/* ================= verdict + gates + loop ================= */
+function setVerdict(){const c={LIVING:0,STRAINED:0,DECAY:0,FUZZY:0,DEAD:0};LAYERS.forEach(L=>c[L.state]++);
+  const neg=LAYERS.filter(L=>L.neglect).length;
+  $('verdict').innerHTML='<b>'+c.LIVING+'</b> living · <b>'+c.STRAINED+'</b> strained · <span class="bad">'+c.DECAY+'</span> decay · <span class="wait">'+c.FUZZY+'</span> fuzzy · <b>'+c.DEAD+'</b> dead'
+    +(neg?' · <span class="bad">'+neg+' by neglect</span>':'')
+    +(selLayer?' · held <b>'+selLayer.db+' MLU'+(selLayer.m>0?'+':'')+selLayer.m+'</b>':'');
+  const badDead=LAYERS.filter(L=>L.state==='DEAD'&&L.wit<2).length;
+  $('gD').textContent=badDead?'red · '+badDead:'green';$('gD').className=badDead?'bad':'ok';
+  const noDl=LAYERS.filter(L=>L.state==='FUZZY'&&L.dl===null).length;
+  $('gF').textContent=noDl?'red · '+noDl:'green';$('gF').className=noDl?'bad':'ok';}
+const runtime={click:false,ctx:false,wheel:false};
+cv.addEventListener('click',e=>{if(!e.isTrusted)runtime.click=true;});
+setTimeout(()=>{const r=cv.getBoundingClientRect(),cx=r.left+r.width*.4,cy=r.top+r.height*.5;
+  cv.dispatchEvent(new MouseEvent('click',{clientX:cx,clientY:cy,bubbles:true}));
+  cv.dispatchEvent(new MouseEvent('contextmenu',{clientX:cx,clientY:cy,bubbles:true,cancelable:true}));runtime.ctx=true;rites.style.display='none';
+  cv.dispatchEvent(new WheelEvent('wheel',{deltaY:-1,clientX:cx,clientY:cy,bubbles:true,cancelable:true}));runtime.wheel=true;
+  const ok=runtime.click&&runtime.ctx&&runtime.wheel;$('gR').textContent=ok?'green':'red';$('gR').className=ok?'ok':'bad';
+  journal('RUNTIME gate · '+(ok?'green':'red'));},600);
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;if(!reduced&&!FROZEN)time+=dt;
+  landingTick(dt);birdTick(dt);
+  PANES.forEach(p=>{if(p.cam.auto)p.camT.yaw+=dt*.2;
+    const k=reduced?1:.09;for(const key of ['yaw','pitch','dist','tx','ty','tz'])p.cam[key]=lerp(p.cam[key],p.camT[key],k);});
+  draw();requestAnimationFrame(frame);}
+function lerp(a,b,k){return a+(b-a)*k}
+resize();setSplit(1);build();descend(LAYERS.find(L=>L.state==='DECAY')||LAYERS[0]);renderSel();
+$('gC').textContent='green · 49 layers';
+requestAnimationFrame(frame);
+journal('shell ready · rail left, canvas right · split into two or three panes and each keeps its own camera');
+journal('hint · scope decides what a click holds · right-click anything → "send MEMBRANE/SECTORS/PARTICLE to next pane" · ☰ collapses the rail and the canvas takes the whole room');
+})();
+</script>
+</body>
+</html>

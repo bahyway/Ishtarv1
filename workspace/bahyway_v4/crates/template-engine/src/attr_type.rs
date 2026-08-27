@@ -49,11 +49,11 @@ impl AttrType {
     pub fn as_str(self) -> &'static str {
         match self {
             AttrType::FixedPointScaledInteger { .. } => "FIXED_POINT_SCALED_INTEGER",
-            AttrType::Float32                        => "FLOAT32",
-            AttrType::Float64                        => "FLOAT64",
-            AttrType::Integer                        => "INTEGER",
-            AttrType::Text                           => "TEXT",
-            AttrType::Blob                           => "BLOB",
+            AttrType::Float32 => "FLOAT32",
+            AttrType::Float64 => "FLOAT64",
+            AttrType::Integer => "INTEGER",
+            AttrType::Text => "TEXT",
+            AttrType::Blob => "BLOB",
         }
     }
 
@@ -63,10 +63,10 @@ impl AttrType {
     pub fn expected_byte_len(self) -> Option<usize> {
         match self {
             AttrType::FixedPointScaledInteger { .. } => Some(8),
-            AttrType::Float32                        => Some(4),
-            AttrType::Float64                        => Some(8),
-            AttrType::Integer                        => Some(8),
-            AttrType::Text | AttrType::Blob           => None,
+            AttrType::Float32 => Some(4),
+            AttrType::Float64 => Some(8),
+            AttrType::Integer => Some(8),
+            AttrType::Text | AttrType::Blob => None,
         }
     }
 }
@@ -87,8 +87,18 @@ pub struct AttrTypeSpec {
 }
 
 impl AttrTypeSpec {
-    pub const fn new(attr_hash: u32, name: &'static str, attr_type: AttrType, version: u16) -> Self {
-        AttrTypeSpec { attr_hash, name, attr_type, version }
+    pub const fn new(
+        attr_hash: u32,
+        name: &'static str,
+        attr_type: AttrType,
+        version: u16,
+    ) -> Self {
+        AttrTypeSpec {
+            attr_hash,
+            name,
+            attr_type,
+            version,
+        }
     }
 }
 
@@ -102,7 +112,11 @@ pub enum TypeViolation {
     UnregisteredAttribute { attr_hash: u32 },
     /// The value's byte length doesn't match what the registered
     /// AttrType requires.
-    WrongByteLength { attr_hash: u32, expected: usize, actual: usize },
+    WrongByteLength {
+        attr_hash: u32,
+        expected: usize,
+        actual: usize,
+    },
 }
 
 /// Central registry — one canonical AttrType per attr_hash.
@@ -112,7 +126,9 @@ pub struct AttrTypeRegistry {
 
 impl AttrTypeRegistry {
     pub fn new() -> Self {
-        AttrTypeRegistry { specs: std::collections::HashMap::new() }
+        AttrTypeRegistry {
+            specs: std::collections::HashMap::new(),
+        }
     }
 
     /// Register a canonical type. Returns false if this attr_hash is
@@ -145,7 +161,8 @@ impl AttrTypeRegistry {
     /// guards (presence), as a second, independent check (precision/
     /// representation).
     pub fn validate_value(&self, attr_hash: u32, value: &[u8]) -> Result<(), TypeViolation> {
-        let spec = self.get(attr_hash)
+        let spec = self
+            .get(attr_hash)
             .ok_or(TypeViolation::UnregisteredAttribute { attr_hash })?;
         if let Some(expected) = spec.attr_type.expected_byte_len() {
             if value.len() != expected {
@@ -171,13 +188,23 @@ mod tests {
     use super::*;
 
     const PRICE_USD: u32 = 0x1001;
-    const LATITUDE:  u32 = 0x1002;
-    const NOTES:     u32 = 0x1003;
+    const LATITUDE: u32 = 0x1002;
+    const NOTES: u32 = 0x1003;
 
     fn registry() -> AttrTypeRegistry {
         let mut r = AttrTypeRegistry::new();
-        assert!(r.register(AttrTypeSpec::new(PRICE_USD, "price_usd", AttrType::FixedPointScaledInteger { scale: 2 }, 1)));
-        assert!(r.register(AttrTypeSpec::new(LATITUDE, "latitude", AttrType::Float64, 1)));
+        assert!(r.register(AttrTypeSpec::new(
+            PRICE_USD,
+            "price_usd",
+            AttrType::FixedPointScaledInteger { scale: 2 },
+            1
+        )));
+        assert!(r.register(AttrTypeSpec::new(
+            LATITUDE,
+            "latitude",
+            AttrType::Float64,
+            1
+        )));
         assert!(r.register(AttrTypeSpec::new(NOTES, "notes", AttrType::Text, 1)));
         r
     }
@@ -188,13 +215,21 @@ mod tests {
         assert_eq!(r.len(), 3);
         let spec = r.get(PRICE_USD).unwrap();
         assert_eq!(spec.name, "price_usd");
-        assert_eq!(spec.attr_type, AttrType::FixedPointScaledInteger { scale: 2 });
+        assert_eq!(
+            spec.attr_type,
+            AttrType::FixedPointScaledInteger { scale: 2 }
+        );
     }
 
     #[test]
     fn duplicate_attr_hash_rejected() {
         let mut r = registry();
-        assert!(!r.register(AttrTypeSpec::new(PRICE_USD, "price_usd_v2", AttrType::Float64, 2)));
+        assert!(!r.register(AttrTypeSpec::new(
+            PRICE_USD,
+            "price_usd_v2",
+            AttrType::Float64,
+            2
+        )));
         assert_eq!(r.len(), 3, "duplicate must not overwrite");
         assert_eq!(r.get(PRICE_USD).unwrap().name, "price_usd");
     }
@@ -203,7 +238,12 @@ mod tests {
     fn unregistered_attribute_returns_violation() {
         let r = registry();
         let result = r.validate_value(0xDEAD_BEEF, &[0u8; 8]);
-        assert_eq!(result, Err(TypeViolation::UnregisteredAttribute { attr_hash: 0xDEAD_BEEF }));
+        assert_eq!(
+            result,
+            Err(TypeViolation::UnregisteredAttribute {
+                attr_hash: 0xDEAD_BEEF
+            })
+        );
     }
 
     #[test]
@@ -221,7 +261,14 @@ mod tests {
         // exists to catch.
         let wrong: f32 = 19.99;
         let result = r.validate_value(PRICE_USD, &wrong.to_be_bytes());
-        assert_eq!(result, Err(TypeViolation::WrongByteLength { attr_hash: PRICE_USD, expected: 8, actual: 4 }));
+        assert_eq!(
+            result,
+            Err(TypeViolation::WrongByteLength {
+                attr_hash: PRICE_USD,
+                expected: 8,
+                actual: 4
+            })
+        );
     }
 
     #[test]
@@ -235,13 +282,18 @@ mod tests {
     #[test]
     fn text_has_no_length_constraint() {
         let r = registry();
-        assert!(r.validate_value(NOTES, b"any length at all, arbitrarily long text").is_ok());
+        assert!(r
+            .validate_value(NOTES, b"any length at all, arbitrarily long text")
+            .is_ok());
         assert!(r.validate_value(NOTES, b"").is_ok());
     }
 
     #[test]
     fn attr_type_as_str() {
-        assert_eq!(AttrType::FixedPointScaledInteger { scale: 2 }.as_str(), "FIXED_POINT_SCALED_INTEGER");
+        assert_eq!(
+            AttrType::FixedPointScaledInteger { scale: 2 }.as_str(),
+            "FIXED_POINT_SCALED_INTEGER"
+        );
         assert_eq!(AttrType::Float64.as_str(), "FLOAT64");
     }
 
@@ -254,6 +306,9 @@ mod tests {
         // the naive "just insert again" path.
         let mut r = registry();
         let widened = AttrTypeSpec::new(LATITUDE, "latitude", AttrType::Float64, 2);
-        assert!(!r.register(widened), "must not silently reinterpret an existing attr_hash");
+        assert!(
+            !r.register(widened),
+            "must not silently reinterpret an existing attr_hash"
+        );
     }
 }

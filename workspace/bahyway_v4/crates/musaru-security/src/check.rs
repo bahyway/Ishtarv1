@@ -32,7 +32,7 @@ pub fn check_sovereignty(db_tribe: TribeId, particle: &IdentityKaki) -> Security
         return SecurityResult::InvalidChecksum;
     }
     let expected = db_tribe.as_u16();
-    let actual   = particle.tribe_id().as_u16();
+    let actual = particle.tribe_id().as_u16();
     if expected != actual {
         return SecurityResult::TribeMismatch { expected, actual };
     }
@@ -42,14 +42,14 @@ pub fn check_sovereignty(db_tribe: TribeId, particle: &IdentityKaki) -> Security
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_kaki::{KakiRole, mint::KakiMinter};
     use bahyway_core::TribeId;
+    use enkidb_kaki::{mint::KakiMinter, KakiRole};
 
     #[test]
     fn approved_for_matching_tribe() {
         let tid = TribeId::from_u16(0x0001);
-        let m   = KakiMinter::new(tid);
-        let p   = enkidb_kaki::IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
+        let m = KakiMinter::new(tid);
+        let p = enkidb_kaki::IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
         assert_eq!(check_sovereignty(tid, &p), SecurityResult::Approved);
     }
 
@@ -57,9 +57,9 @@ mod tests {
     fn rejected_for_wrong_tribe() {
         let tid1 = TribeId::from_u16(0x0001);
         let tid2 = TribeId::from_u16(0x0002);
-        let m    = KakiMinter::new(tid1);
-        let p    = enkidb_kaki::IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-        let res  = check_sovereignty(tid2, &p);
+        let m = KakiMinter::new(tid1);
+        let p = enkidb_kaki::IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
+        let res = check_sovereignty(tid2, &p);
         assert!(matches!(res, SecurityResult::TribeMismatch { .. }));
     }
 }

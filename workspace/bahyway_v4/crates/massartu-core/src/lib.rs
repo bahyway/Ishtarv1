@@ -58,7 +58,8 @@ pub trait Prover {
 /// the trend-fit's predicted days-to-crossing, or `window_days` if the
 /// trend never crosses).
 pub trait Horizon {
-    fn p_fail_within(&self, history: &KappaHistory, threshold: f64, window_days: f64) -> (f64, f64);
+    fn p_fail_within(&self, history: &KappaHistory, threshold: f64, window_days: f64)
+        -> (f64, f64);
 }
 
 /// A real `Horizon`: wraps `trend_core::time_to_threshold` (the same
@@ -67,9 +68,16 @@ pub trait Horizon {
 pub struct TrendHorizon;
 
 impl Horizon for TrendHorizon {
-    fn p_fail_within(&self, history: &KappaHistory, threshold: f64, window_days: f64) -> (f64, f64) {
+    fn p_fail_within(
+        &self,
+        history: &KappaHistory,
+        threshold: f64,
+        window_days: f64,
+    ) -> (f64, f64) {
         match time_to_threshold(history, threshold) {
-            Ok(Some(days)) if days <= window_days => (1.0 - (days / window_days).clamp(0.0, 1.0), days),
+            Ok(Some(days)) if days <= window_days => {
+                (1.0 - (days / window_days).clamp(0.0, 1.0), days)
+            }
             Ok(Some(days)) => (0.0, days),
             Ok(None) => (0.0, window_days),
             // Fewer than two samples: honestly the lowest-confidence
@@ -109,13 +117,26 @@ pub enum Tier {
 /// PRESCRIBE: what to actually do about a non-Sound tier.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Prescription {
-    Inspect { unit_id: u32, before_days: f64 },
-    Repair { unit_id: u32, before_days: f64 },
+    Inspect {
+        unit_id: u32,
+        before_days: f64,
+    },
+    Repair {
+        unit_id: u32,
+        before_days: f64,
+    },
     /// Only reachable when `Prover::isolation_proven` returned `true`.
-    ExcludeProven { unit_id: u32, isolation_steps: Vec<String> },
+    ExcludeProven {
+        unit_id: u32,
+        isolation_steps: Vec<String>,
+    },
     /// The honest fallback whenever isolation has not been proven
     /// safe: never prescribe an exclusion Massartu can't back up.
-    MitigateOnly { unit_id: u32, reasons: Vec<String>, interim: Vec<String> },
+    MitigateOnly {
+        unit_id: u32,
+        reasons: Vec<String>,
+        interim: Vec<String>,
+    },
 }
 
 /// RiskFis: fuse (p_fail, band, exposure) into a tier.
@@ -161,8 +182,14 @@ pub struct SimplePrescriber {
 impl Prescriber for SimplePrescriber {
     fn prescribe(&self, unit_id: u32, tier: Tier, isolation_proven: bool) -> Prescription {
         match tier {
-            Tier::Watch => Prescription::Inspect { unit_id, before_days: self.lead_days },
-            Tier::Strike if isolation_proven => Prescription::Repair { unit_id, before_days: self.lead_days * 0.5 },
+            Tier::Watch => Prescription::Inspect {
+                unit_id,
+                before_days: self.lead_days,
+            },
+            Tier::Strike if isolation_proven => Prescription::Repair {
+                unit_id,
+                before_days: self.lead_days * 0.5,
+            },
             Tier::Strike => Prescription::MitigateOnly {
                 unit_id,
                 reasons: vec!["isolation not proven safe".to_string()],
@@ -177,7 +204,10 @@ impl Prescriber for SimplePrescriber {
                 reasons: vec!["isolation not proven safe; cannot exclude".to_string()],
                 interim: vec!["emergency derate".to_string()],
             },
-            Tier::Sound | Tier::Unproven => Prescription::Inspect { unit_id, before_days: self.lead_days * 4.0 },
+            Tier::Sound | Tier::Unproven => Prescription::Inspect {
+                unit_id,
+                before_days: self.lead_days * 4.0,
+            },
         }
     }
 }
@@ -201,7 +231,10 @@ pub struct InMemoryEscalator {
 
 impl InMemoryEscalator {
     pub fn new(silence_window_millis: u64) -> Self {
-        Self { silence_window_millis, ..Default::default() }
+        Self {
+            silence_window_millis,
+            ..Default::default()
+        }
     }
 }
 
@@ -231,7 +264,8 @@ pub struct InMemoryChronicler {
 
 impl Chronicler for InMemoryChronicler {
     fn record(&mut self, unit_id: u32, tier: Tier, prescription: &Prescription, ts_millis: u64) {
-        self.entries.push((unit_id, tier, prescription.clone(), ts_millis));
+        self.entries
+            .push((unit_id, tier, prescription.clone(), ts_millis));
     }
 }
 
@@ -313,7 +347,9 @@ mod tests {
         // -- so the most recent (most degraded) sample must land at
         // t=0, not the oldest one.
         let n = 30;
-        (0..n).map(|d| (d as f64 - (n - 1) as f64, 0.01 + d as f64 * 0.02)).collect()
+        (0..n)
+            .map(|d| (d as f64 - (n - 1) as f64, 0.01 + d as f64 * 0.02))
+            .collect()
     }
 
     /// Same underlying kappa trend, different exposure -> different
@@ -324,7 +360,11 @@ mod tests {
     fn hospital_generator_reaches_herald_desert_line_does_not() {
         let residual_law = HardcodedHistory(degrading_history());
         let horizon = TrendHorizon;
-        let fis = SimpleRiskFis { watch_p_fail: 0.2, strike_p_fail: 0.5, herald_severity: 4.0 };
+        let fis = SimpleRiskFis {
+            watch_p_fail: 0.2,
+            strike_p_fail: 0.5,
+            herald_severity: 4.0,
+        };
         let prescriber = SimplePrescriber { lead_days: 3.0 };
 
         let hospital_exposure = FixedExposure(50.0); // 50 patients on backup power
@@ -386,12 +426,29 @@ mod tests {
         let n = NeverTrust;
         let horizon = TrendHorizon;
         let exposure = FixedExposure(100.0);
-        let fis = SimpleRiskFis { watch_p_fail: 0.2, strike_p_fail: 0.5, herald_severity: 4.0 };
+        let fis = SimpleRiskFis {
+            watch_p_fail: 0.2,
+            strike_p_fail: 0.5,
+            herald_severity: 4.0,
+        };
         let prescriber = SimplePrescriber { lead_days: 3.0 };
         let mut esc = InMemoryEscalator::new(0);
         let mut chron = InMemoryChronicler::default();
 
-        let tier = watch_cycle(1, &n, &n, &horizon, &exposure, &fis, &prescriber, &mut esc, &mut chron, 0.5, 10.0, 0);
+        let tier = watch_cycle(
+            1,
+            &n,
+            &n,
+            &horizon,
+            &exposure,
+            &fis,
+            &prescriber,
+            &mut esc,
+            &mut chron,
+            0.5,
+            10.0,
+            0,
+        );
         assert_eq!(tier, Tier::Unproven);
         assert_eq!(chron.entries.len(), 1);
         assert!(matches!(chron.entries[0].2, Prescription::Inspect { .. }));
@@ -402,17 +459,68 @@ mod tests {
         let residual_law = HardcodedHistory(degrading_history());
         let horizon = TrendHorizon;
         let exposure = FixedExposure(50.0);
-        let fis = SimpleRiskFis { watch_p_fail: 0.2, strike_p_fail: 0.5, herald_severity: 4.0 };
+        let fis = SimpleRiskFis {
+            watch_p_fail: 0.2,
+            strike_p_fail: 0.5,
+            herald_severity: 4.0,
+        };
         let prescriber = SimplePrescriber { lead_days: 3.0 };
         let mut esc = InMemoryEscalator::new(1_000);
         let mut chron = InMemoryChronicler::default();
 
-        watch_cycle(1, &residual_law, &residual_law, &horizon, &exposure, &fis, &prescriber, &mut esc, &mut chron, 0.5, 10.0, 0);
-        watch_cycle(1, &residual_law, &residual_law, &horizon, &exposure, &fis, &prescriber, &mut esc, &mut chron, 0.5, 10.0, 500);
-        assert_eq!(esc.log.len(), 1, "second cycle is inside the silence window and must not re-alert");
+        watch_cycle(
+            1,
+            &residual_law,
+            &residual_law,
+            &horizon,
+            &exposure,
+            &fis,
+            &prescriber,
+            &mut esc,
+            &mut chron,
+            0.5,
+            10.0,
+            0,
+        );
+        watch_cycle(
+            1,
+            &residual_law,
+            &residual_law,
+            &horizon,
+            &exposure,
+            &fis,
+            &prescriber,
+            &mut esc,
+            &mut chron,
+            0.5,
+            10.0,
+            500,
+        );
+        assert_eq!(
+            esc.log.len(),
+            1,
+            "second cycle is inside the silence window and must not re-alert"
+        );
 
-        watch_cycle(1, &residual_law, &residual_law, &horizon, &exposure, &fis, &prescriber, &mut esc, &mut chron, 0.5, 10.0, 1_500);
-        assert_eq!(esc.log.len(), 2, "third cycle is past the silence window and must alert again");
+        watch_cycle(
+            1,
+            &residual_law,
+            &residual_law,
+            &horizon,
+            &exposure,
+            &fis,
+            &prescriber,
+            &mut esc,
+            &mut chron,
+            0.5,
+            10.0,
+            1_500,
+        );
+        assert_eq!(
+            esc.log.len(),
+            2,
+            "third cycle is past the silence window and must alert again"
+        );
     }
 
     /// PH-002 Corollary 1 (nucleus-exchange invariance): the literal
@@ -453,15 +561,38 @@ mod tests {
                 let i_line = y_full.mul(v[0].sub(v[1]));
                 let base_net = Network {
                     nodes: vec![
-                        Node { id: 0, injection: Phasor::zero().sub(i_line) },
-                        Node { id: 1, injection: i_line },
+                        Node {
+                            id: 0,
+                            injection: Phasor::zero().sub(i_line),
+                        },
+                        Node {
+                            id: 1,
+                            injection: i_line,
+                        },
                     ],
                     edges: vec![
-                        Edge { from: 0, to: 1, coeff: y_half, in_service: true },
-                        Edge { from: 0, to: 1, coeff: y_half, in_service: true },
+                        Edge {
+                            from: 0,
+                            to: 1,
+                            coeff: y_half,
+                            in_service: true,
+                        },
+                        Edge {
+                            from: 0,
+                            to: 1,
+                            coeff: y_half,
+                            in_service: true,
+                        },
                     ],
                 };
-                Self { base_net, phi: v, monitored_node_id: 1, spare_edge_idx: 0, n_days: 10, max_theft_frac: 0.6 }
+                Self {
+                    base_net,
+                    phi: v,
+                    monitored_node_id: 1,
+                    spare_edge_idx: 0,
+                    n_days: 10,
+                    max_theft_frac: 0.6,
+                }
             }
         }
 
@@ -470,14 +601,21 @@ mod tests {
                 if unit_id != self.monitored_node_id {
                     return vec![];
                 }
-                let node_idx = self.base_net.nodes.iter().position(|n| n.id == unit_id).unwrap();
+                let node_idx = self
+                    .base_net
+                    .nodes
+                    .iter()
+                    .position(|n| n.id == unit_id)
+                    .unwrap();
                 // trend-core convention: t=0 is "now" -- the most
                 // recent (most degraded) day must land at t=0.
                 (0..self.n_days)
                     .map(|day| {
                         let frac = self.max_theft_frac * (day as f64 / (self.n_days - 1) as f64);
                         let mut net = self.base_net.clone();
-                        let stolen = net.nodes[node_idx].injection.mul(Phasor::new(1.0 - frac, 0.0));
+                        let stolen = net.nodes[node_idx]
+                            .injection
+                            .mul(Phasor::new(1.0 - frac, 0.0));
                         net.nodes[node_idx].injection = stolen;
                         let r = fdd_core::residuals(&net, &self.phi, &Gibil).unwrap();
                         (day as f64 - (self.n_days - 1) as f64, r[node_idx])
@@ -494,7 +632,12 @@ mod tests {
                     return false;
                 }
                 matches!(
-                    exclusion::simulate_exclusion(&self.base_net, &self.phi, self.spare_edge_idx, 1e-6),
+                    exclusion::simulate_exclusion(
+                        &self.base_net,
+                        &self.phi,
+                        self.spare_edge_idx,
+                        1e-6
+                    ),
                     Ok(exclusion::Verdict::Proven)
                 )
             }
@@ -516,7 +659,11 @@ mod tests {
         #[test]
         fn same_watch_cycle_drives_a_real_physics_nucleus_and_a_manual_one() {
             let horizon = TrendHorizon;
-            let fis = SimpleRiskFis { watch_p_fail: 0.15, strike_p_fail: 0.4, herald_severity: 3.0 };
+            let fis = SimpleRiskFis {
+                watch_p_fail: 0.15,
+                strike_p_fail: 0.4,
+                herald_severity: 3.0,
+            };
             let prescriber = SimplePrescriber { lead_days: 5.0 };
 
             // Nucleus A: electricity, real physics underneath.
@@ -527,7 +674,10 @@ mod tests {
                 history_a.first().unwrap().1 < history_a.last().unwrap().1,
                 "physics-driven current theft must produce a genuinely growing residual, not fabricated numbers"
             );
-            assert!(elec.isolation_proven(elec.monitored_node_id), "the redundant spare edge must make exclusion provably safe");
+            assert!(
+                elec.isolation_proven(elec.monitored_node_id),
+                "the redundant spare edge must make exclusion provably safe"
+            );
 
             let elec_exposure = FixedExposure(20.0);
             let mut esc_a = InMemoryEscalator::new(0);
@@ -546,16 +696,30 @@ mod tests {
                 20.0,
                 0,
             );
-            assert_ne!(tier_a, Tier::Sound, "the growing physical residual must be caught");
+            assert_ne!(
+                tier_a,
+                Tier::Sound,
+                "the growing physical residual must be caught"
+            );
             assert_ne!(tier_a, Tier::Unproven);
             if tier_a == Tier::Herald {
-                assert!(matches!(chron_a.entries[0].2, Prescription::ExcludeProven { .. }), "a proven-safe isolation must be prescribed, not merely mitigated");
+                assert!(
+                    matches!(chron_a.entries[0].2, Prescription::ExcludeProven { .. }),
+                    "a proven-safe isolation must be prescribed, not merely mitigated"
+                );
             }
 
             // Nucleus B: generic/manual, no dedicated engine, no
             // exclusion simulator.
-            let manual = ManualNucleus((0..10).map(|d| (d as f64 - 9.0, 0.02 + d as f64 * 0.08)).collect());
-            assert!(!manual.isolation_proven(1), "no exclusion simulator exists for this domain -- must stay unproven");
+            let manual = ManualNucleus(
+                (0..10)
+                    .map(|d| (d as f64 - 9.0, 0.02 + d as f64 * 0.08))
+                    .collect(),
+            );
+            assert!(
+                !manual.isolation_proven(1),
+                "no exclusion simulator exists for this domain -- must stay unproven"
+            );
 
             let manual_exposure = FixedExposure(20.0);
             let mut esc_b = InMemoryEscalator::new(0);
@@ -578,7 +742,10 @@ mod tests {
             assert_ne!(tier_b, Tier::Unproven);
             if tier_b == Tier::Herald || tier_b == Tier::Strike {
                 assert!(
-                    matches!(chron_b.entries[0].2, Prescription::MitigateOnly { .. } | Prescription::Inspect { .. }),
+                    matches!(
+                        chron_b.entries[0].2,
+                        Prescription::MitigateOnly { .. } | Prescription::Inspect { .. }
+                    ),
                     "an unproven isolation must never be prescribed as ExcludeProven/Repair"
                 );
             }

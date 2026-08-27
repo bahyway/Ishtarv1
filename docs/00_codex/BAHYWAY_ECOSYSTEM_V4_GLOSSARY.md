@@ -625,3 +625,33 @@ gzip unwrapper (📄 not re-traced this pass).
 **✅ VERIFIED**, magic bytes confirmed (§A, ArchiveFormat). Methods 0
 (STORE) and 8 (DEFLATE, RFC 1951). CRC-32 verified on every extracted
 entry.
+<!-- BEGIN PB-686 WED0826 TERMS -->
+
+---
+
+## Addenda — Wed0826 Landing (2026-08-26)
+
+### ANTI-SQL
+**🔒 LAW** — `playbooks/files/GL-ALG-001_algebra_register.md` §9. Names an absence, not a
+comparison: HeptaScript has no Cartesian product, so no table-shaped operation of the
+classical calculus can be built in it. The only term in the ecosystem permitted to refer to
+that other system, and only to name what BahyWay does not have.
+
+### Girth ratio (g = RU ÷ OU)
+**🔒 LAW** — `playbooks/files/GL-ALG-001_algebra_register.md` §8, `GL-LYF-001` §2.
+Dimensionless by construction; a layer is DEAD when g ≥ 1. Comparable across tribes of any
+size for exactly that reason.
+
+### Tolerance relation
+**🔒 LAW** — `playbooks/files/GL-ALG-001_algebra_register.md` §7. Reflexive and symmetric but
+**not transitive**; near-similarity is a tolerance, not an equivalence, which is the formal
+reason the watcher (`GL-AGT-001`) may never auto-resolve a near match — chaining
+near-neighbours would merge shapes that are not the same shape.
+
+### Claim gate
+**🔒 LAW** — `playbooks/files/GL-ALG-001_algebra_register.md` §12-17. Five questions an
+entry must answer before it reaches `CLAIMED`: is it a construction of ours; has prior art
+been searched; is it a known result renamed; is the obligation discharged and green at G4;
+is it published, with a date. An entry without all five is `CONJECTURE` or `UNSEARCHED`,
+never `CLAIMED`.
+<!-- END PB-686 WED0826 TERMS -->

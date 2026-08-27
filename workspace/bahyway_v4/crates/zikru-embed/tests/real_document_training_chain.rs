@@ -17,25 +17,34 @@
 //! (see playbook_250's header comment) and out of scope here.
 
 use enkidullm_ingest::{ingest_file, tokenize, DocFormat};
-use zikru_embed::{ZikruEmbedModel, TrainingSample, train_epoch};
+use zikru_embed::{train_epoch, TrainingSample, ZikruEmbedModel};
 
 const TRIBE_A: u16 = 0x1001;
 const TRIBE_B: u16 = 0x1007;
 
 #[test]
 fn real_pdf_ingest_produces_nonempty_text() {
-    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/sample.pdf"))
-        .expect("fixture PDF must be present");
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/sample.pdf"
+    ))
+    .expect("fixture PDF must be present");
     let result = ingest_file("sample.pdf", &data);
 
     assert_eq!(result.format, DocFormat::Pdf);
-    assert!(!result.full_text.is_empty(), "native PDF parser extracted zero bytes of text");
+    assert!(
+        !result.full_text.is_empty(),
+        "native PDF parser extracted zero bytes of text"
+    );
 }
 
 #[test]
 fn real_pdf_to_trained_embedding_full_chain() {
-    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/sample.pdf"))
-        .expect("fixture PDF must be present");
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/sample.pdf"
+    ))
+    .expect("fixture PDF must be present");
     let ingested = ingest_file("sample.pdf", &data);
     assert!(!ingested.full_text.is_empty());
 
@@ -51,11 +60,11 @@ fn real_pdf_to_trained_embedding_full_chain() {
     let third = hashes.len() / 3;
 
     let sample = TrainingSample {
-        anchor_hashes:   hashes[0..third.max(1)].to_vec(),
+        anchor_hashes: hashes[0..third.max(1)].to_vec(),
         positive_hashes: hashes[third.max(1)..(2 * third).max(2)].to_vec(),
         negative_hashes: hashes[(2 * third).max(2)..].to_vec(),
-        anchor_tribe:    TRIBE_A,
-        negative_tribe:  TRIBE_B,
+        anchor_tribe: TRIBE_A,
+        negative_tribe: TRIBE_B,
     };
     assert!(!sample.anchor_hashes.is_empty());
     assert!(!sample.positive_hashes.is_empty());
@@ -68,6 +77,9 @@ fn real_pdf_to_trained_embedding_full_chain() {
 
     assert_eq!(model.orbit.training_epochs, 1);
     assert_eq!(metrics.total_samples, 1);
-    assert!(metrics.mean_loss.is_finite(), "loss went non-finite training on a real document");
+    assert!(
+        metrics.mean_loss.is_finite(),
+        "loss went non-finite training on a real document"
+    );
     assert!(metrics.mean_loss >= 0.0);
 }

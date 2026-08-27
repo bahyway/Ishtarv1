@@ -1,0 +1,227 @@
+# =============================================================================
+# PB-558 — Land EriduScaffold: the OTA ground scaffolder, status ledger,
+# and honest-dogfooding build-DAG scheduler. BahyWay.Ecosystem v4.0 —
+# 2026-08-20
+#
+# PROVENANCE: designed in a parallel Claude Code session (thread
+# "Interactive orbit selection in particle visualization," 2026-08-20)
+# while this session was debugging the bare-metal CQRS VM bring-up. Per
+# the Architect's explicit standing instruction, that session's own
+# names and numbers carry no authority here — this playbook, its number,
+# and its host directory are assigned from this repo's own real,
+# verified-free sequence after evaluating the actual content. Source
+# material, unmodified, plus a full evaluation README, is landed at
+# shala-prototypes/batch9_eridu_scaffold/.
+#
+# NAMING: landing this required freeing the name "Eridu" first — this
+# repo already had "EriduOS" claimed for the sovereign runtime/scheduler/
+# supervisor layer. That branding was renamed to UrOS in this same
+# session (commit 9024000) specifically to make this landing lawful
+# under NL-001 (gods name engines; cities/places name structures) —
+# EriduScaffold is a structure/scaffolder, the correct tier for a
+# city-name, and "Eridu" was freed rather than reused while contested.
+#
+# WHAT ERIDUSCAFFOLD IS (see the batch9 README for the full account):
+#   - bahyway.sh   : lean project/+journal/+inbox/ DailyWorks structure
+#                    and a single STATUS.md completion ledger (numbers
+#                    entered by hand, never estimated — GL-DB-001
+#                    applied to the Architect's own progress tracking).
+#   - eridu.sh     : the OTA-internal ground scaffolder + append-only
+#                    evolution log (Sedimentation, GL-STY-001). Flat-
+#                    file only at this stage (Stage 0 of 5 on its own
+#                    graduation roadmap toward EnkiDB GOLDEN); the
+#                    EnkiDB-emit hook is a deliberate no-op stub — a
+#                    scaffolder must never hard-depend on what it
+#                    scaffolds for.
+#   - eridu_build_dag.rs : a pure-Rust (std only, zero crates)
+#                    topological scheduler enforcing that an
+#                    Application doc generated FROM the OntoGraph can
+#                    never run before the Foundational/Ontology tasks
+#                    that BUILD the OntoGraph exist — dogfooding made
+#                    honest by construction, not by promise. Verified
+#                    in this session: compiles clean with
+#                    `rustc -O`, runs, and produces the claimed 6-wave
+#                    schedule + honest-ordering proof + valid hash
+#                    chain (see batch9 README for the exact output).
+#
+# SCOPE — DELIBERATELY NARROW: this playbook installs the two scaffold
+# scripts to each target host's own home directory, RUNS each one's own
+# safe-to-re-run default pass (see AUTOMATIC FIRST RUN below), and
+# (optionally) compiles the DAG scheduler binary for local use. It does
+# NOT provision any database or container (Eridu scaffolds and records;
+# it never provisions — the same boundary its own design docs insist
+# on), and does NOT wire the EnkiSDB-emit hook (Stage 1 of its roadmap,
+# explicitly future work).
+#
+# AUTOMATIC FIRST RUN (added 2026-08-21, Architect's explicit standing
+# instruction: "the Ecosystem automation accepts no human intervention
+# -- all Infra PBs must do the whole configuration in the PBs" -- no
+# logging into a node to run a script by hand). Both scripts were
+# checked line by line for anything that would make an automated run
+# unsafe: neither prompts for input, `init_structure()` in both is pure
+# `mkdir -p` + `[ -f X ] || write X` (create-if-missing, never
+# overwrite), and eridu.sh's `scan` step only ever appends a new
+# timestamped snapshot + one evolution-log line -- so re-running this
+# playbook is exactly as safe as re-running the scripts by hand would
+# have been. What gets run automatically, and what deliberately does
+# NOT:
+#   - `eridu.sh` (no args = init + scan + evolution, its own documented
+#     "daily ground pass") -- run in full. This is exactly the tool's
+#     designed behavior: lay the ground once, then keep recording how it
+#     evolves on every re-run, which is the whole point of Sedimentation
+#     (GL-STY-001).
+#   - `bahyway.sh init` ONLY -- deliberately NOT `today`/`morning`.
+#     Those also write a journal/daily/<date>.md note from a template
+#     with empty "Done today" / "Decisions" / "Blocked" sections for the
+#     Architect to fill in by hand. Auto-generating that file from a PB
+#     would create a note that LOOKS like the Architect's own daily
+#     reflection but was never actually written by them -- exactly the
+#     false-authority shape GL-DB-001 exists to forbid, just aimed at a
+#     journal entry instead of a data record. `init` alone creates the
+#     real, structural, no-Architect-content-required part (the
+#     directory tree + a template STATUS.md, both create-if-missing) --
+#     the unified filesystem structure this whole playbook exists to
+#     land, with nothing fabricated on the Architect's behalf.
+#
+# WHY THREE HOSTS (added 2026-08-21, Architect's explicit request): the
+# whole point of EriduScaffold is a unified filesystem structure that
+# cannot differ between environments -- landing it on `uruk` (bare-metal)
+# alone left the two CQRS VM nodes (uruk-node-write, uruk-node-read)
+# without it, defeating that purpose. `enkidb_write`/`enkidb_read` are
+# this repo's real inventory groups for those two VMs (see
+# ansible/inventory.ini) -- `enkidb_vault` (uruk-node-vault) is
+# deliberately NOT included here: the Architect's request was scoped to
+# "the 2 CQRS VM Nodes", and the vault's own filesystem needs (secrets,
+# passport storage) are a different concern from the OTA ground
+# structure this scaffolder lays.
+#
+# Running this playbook = CSR-08 confirmation. Review -> --check -> live.
+# =============================================================================
+
+- name: "PB-558 | Land EriduScaffold on uruk + both CQRS VM nodes"
+  hosts: uruk:enkidb_write:enkidb_read
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    source_dir: "{{ repo_root }}/shala-prototypes/batch9_eridu_scaffold"
+    # ansible_env.HOME (a real per-host remote fact), not
+    # lookup('env', 'HOME') -- that lookup plugin always evaluates on
+    # the CONTROL node regardless of which host a task targets, so on
+    # enkidb_write/enkidb_read it would have resolved to the control
+    # node's own $HOME (a path with no meaning, and likely no writable
+    # parent, on those remote VMs) instead of each VM's real $HOME. Same
+    # class of control-vs-remote path bug already found and fixed this
+    # session in PB-212/PB-208 (ansible_env.HOME there too).
+    bahyway_root: "{{ ansible_env.HOME }}/BahyWay"
+    compile_build_dag: false   # -e compile_build_dag=true to also rustc it
+
+  tasks:
+
+    - name: "0.1 | Confirm the source scaffold scripts exist in this repo (control node's own checkout, same for every target host)"
+      ansible.builtin.stat:
+        path: "{{ source_dir }}/{{ item }}"
+      register: src_check
+      delegate_to: localhost
+      run_once: true
+      loop:
+        - bahyway.sh
+        - eridu.sh
+        - eridu_build_dag.rs
+
+    - name: "FAIL | a required EriduScaffold source file is missing"
+      ansible.builtin.fail:
+        msg: "{{ item.item }} not found under {{ source_dir }} -- nothing to land."
+      loop: "{{ src_check.results }}"
+      loop_control: { label: "{{ item.item }}" }
+      when: not item.stat.exists
+
+    - name: "1.1 | Ensure the Architect's BahyWay root exists"
+      ansible.builtin.file:
+        path: "{{ bahyway_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: "1.2 | Install bahyway.sh (DailyWorks structure + STATUS.md ledger)"
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/bahyway.sh"
+        dest: "{{ bahyway_root }}/bahyway.sh"
+        mode: "0755"
+
+    - name: "1.3 | Install eridu.sh (OTA ground scaffolder + evolution log)"
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/eridu.sh"
+        dest: "{{ bahyway_root }}/eridu.sh"
+        mode: "0755"
+
+    - name: "1.4 | Verify both scripts landed executable"
+      ansible.builtin.stat:
+        path: "{{ bahyway_root }}/{{ item }}"
+      register: landed_check
+      loop: [bahyway.sh, eridu.sh]
+
+    - name: "FAIL | a scaffold script did not land as expected"
+      ansible.builtin.fail:
+        msg: "{{ item.item }} missing or not executable at {{ bahyway_root }}."
+      loop: "{{ landed_check.results }}"
+      loop_control: { label: "{{ item.item }}" }
+      when: not (item.stat.exists and item.stat.executable)
+
+    - name: "1.5 | Run bahyway.sh init (structure + template STATUS.md only -- see AUTOMATIC FIRST RUN above for why not today/morning)"
+      ansible.builtin.command:
+        cmd: "./bahyway.sh init"
+        chdir: "{{ bahyway_root }}"
+      register: bahyway_init
+      # No real changed/unchanged signal available: init_structure() always
+      # prints the same "structure ready" line whether it just created the
+      # tree or every path already existed (mkdir -p / [ -f ] || are silent
+      # either way). Left as ansible.builtin.command's honest default
+      # (always reports changed) rather than a changed_when that would
+      # look precise but isn't.
+
+    - name: "1.6 | Run eridu.sh (init + scan + evolution -- its own documented daily ground pass, safe to re-run every time this playbook runs)"
+      ansible.builtin.command:
+        cmd: "./eridu.sh"
+        chdir: "{{ bahyway_root }}"
+      register: eridu_run
+
+    - name: "1.7 | Show this host's evolution-log line from the run just now"
+      ansible.builtin.debug:
+        msg: "[{{ inventory_hostname }}] {{ eridu_run.stdout_lines }}"
+
+    - name: "2.1 | Check for a Rust toolchain (only needed if compile_build_dag)"
+      ansible.builtin.command: rustc --version
+      register: rustc_check
+      changed_when: false
+      failed_when: false
+      when: compile_build_dag
+
+    - name: "2.2 | Copy the build-DAG scheduler source"
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/eridu_build_dag.rs"
+        dest: "{{ bahyway_root }}/eridu_build_dag.rs"
+        mode: "0644"
+      when: compile_build_dag and rustc_check.rc == 0
+
+    - name: "2.3 | Compile the build-DAG scheduler (rustc -O, std only, no crates)"
+      ansible.builtin.command:
+        cmd: "rustc -O eridu_build_dag.rs -o eridu_dag"
+        chdir: "{{ bahyway_root }}"
+      when: compile_build_dag and rustc_check.rc == 0
+      register: dag_compile
+      changed_when: dag_compile.rc == 0
+
+    - name: "WARN | Rust toolchain not found -- skipping build-DAG compile"
+      ansible.builtin.debug:
+        msg: "compile_build_dag=true but `rustc` is unavailable on {{ inventory_hostname }}. eridu_build_dag.rs was not copied or compiled here. Install rustc/cargo on this host and re-run with -e compile_build_dag=true."
+      when: compile_build_dag and rustc_check.rc != 0
+
+    - name: "3.1 | Report what was landed and run"
+      ansible.builtin.debug:
+        msg: >-
+          [{{ inventory_hostname }}] EriduScaffold landed at {{ bahyway_root }}
+          and run: bahyway.sh init (DailyWorks structure + template
+          STATUS.md) and eridu.sh (OTA ground init + scan + evolution)
+          both completed. build-DAG scheduler
+          {{ 'compiled to ' + bahyway_root + '/eridu_dag' if (compile_build_dag and rustc_check is defined and rustc_check.rc == 0) else 'not compiled this run (pass -e compile_build_dag=true)' }}.
+          Full source, 14 Šala rehearsal prototypes, and the evaluation
+          README remain at {{ source_dir }} for reference.

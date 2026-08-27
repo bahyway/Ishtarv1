@@ -19,7 +19,12 @@ impl HotIndex {
             valid[t as usize] = 1;
             node[t as usize] = n;
         }
-        Self { valid, node, epoch, seal }
+        Self {
+            valid,
+            node,
+            epoch,
+            seal,
+        }
     }
 
     /// O(1): one indexed load. This outruns any SIMD *search*.

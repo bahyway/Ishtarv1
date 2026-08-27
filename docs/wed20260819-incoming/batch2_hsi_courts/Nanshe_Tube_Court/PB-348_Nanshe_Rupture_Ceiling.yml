@@ -1,0 +1,232 @@
+---
+# ============================================================
+#  PB-348 — Nanshe Rupture Ceiling (GL-HSI-001-A2)
+#  BahyWay.Ecosystem v4.0
+#
+#  Run from the Fedora bare-metal HOST:
+#    ansible-playbook -i inventory PB-348_Nanshe_Rupture_Ceiling.yml
+#  Running this playbook is the CSR-08 confirmation point —
+#  including PU/OU units, the ceiling law, and the Brittle Decree.
+#
+#  GATE: requires nanshe crate with dilation module (PB-347).
+# ============================================================
+- name: PB-348 nanshe rupture ceiling
+  hosts: bahyway_host
+  gather_facts: false
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    crate_dir: "{{ v4_root }}/engines/nanshe"
+    tablets_dir: "{{ v4_root }}/tablets"
+    shala_dir: "{{ v4_root }}/shala"
+
+  tasks:
+    - name: GATE · dilation module must exist (PB-347)
+      ansible.builtin.stat:
+        path: "{{ crate_dir }}/src/dilation.rs"
+      register: dil
+
+    - name: GATE · refuse if PB-347 not run
+      ansible.builtin.fail:
+        msg: "COMPLETION LAW REFUSAL: dilation.rs absent — run PB-347 first."
+      when: not dil.stat.exists
+
+    - name: Deposit amendment tablet
+      ansible.builtin.copy:
+        src: "GL-HSI-001-A2_Rupture_Ceiling.md"
+        dest: "{{ tablets_dir }}/GL-HSI-001-A2_Rupture_Ceiling.md"
+        mode: "0644"
+
+    - name: Deposit Šala tab (standing habit — one PB, one tab)
+      ansible.builtin.copy:
+        src: "shala_nanshe_tube_court.html"
+        dest: "{{ shala_dir }}/shala_nanshe_tube_court.html"
+        mode: "0644"
+
+    - name: Register modules in lib.rs
+      ansible.builtin.lineinfile:
+        path: "{{ crate_dir }}/src/lib.rs"
+        line: "{{ item }}"
+      loop:
+        - "pub mod units;"
+        - "pub mod rupture;"
+
+    - name: src/units.rs — PU and OU
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/units.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A2 §1 — the Units. PU = whitened orbit-radius sigma;
+          //! OU = healthy girth G0. Conversion is exact (L-HSI-11): OU is a
+          //! pure rescale by the sealed G0, no rounding, no state.
+
+          #[derive(Clone, Copy, Debug, PartialEq)]
+          pub struct Pu(pub f64);   // lengths in Particle Units
+          #[derive(Clone, Copy, Debug, PartialEq)]
+          pub struct Ou(pub f64);   // lengths in Orbital Units
+
+          /// Sealed per-tribe calibration: G0 in PU, R_tube in PU, and the
+          /// NUZI epoch that sealed them. Judgments cite the epoch (LAW-HOT-3).
+          #[derive(Clone, Copy, Debug)]
+          pub struct Calibration {
+              pub g0_pu: f64,
+              pub r_tube_pu: f64,
+              pub sealed_epoch: u16,
+          }
+
+          impl Calibration {
+              pub fn to_ou(&self, g: Pu) -> Ou { Ou(g.0 / self.g0_pu) }
+              pub fn to_pu(&self, g: Ou) -> Pu { Pu(g.0 * self.g0_pu) }
+          }
+
+    - name: src/rupture.rs — ceiling, strain, regimes, T_rupt
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/rupture.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A2 §2–4 — the Ceiling Law and the Strain Unification.
+          //! G_max = G0 + eta * R_tube. S = (G - G0)/(G_max - G0).
+          //! Regimes are Abubu's, verbatim. T_rupt = time to S = 1 under the
+          //! Igigi condition. eta = 0 is the Brittle Decree.
+          use crate::units::{Calibration, Pu};
+          use crate::horizon;
+
+          pub const EPS_Y: f64 = 0.6;   // plastic threshold, Abubu kinship
+
+          pub fn g_max(cal: &Calibration, eta: f64) -> Pu {
+              Pu(cal.g0_pu + eta * cal.r_tube_pu)
+          }
+
+          /// Strain S. Brittle (eta=0 => g_max==g0): any positive dilation
+          /// maps to +infinity strain — the membrane that cannot stretch.
+          pub fn strain(cal: &Calibration, eta: f64, g: Pu) -> f64 {
+              let gm = g_max(cal, eta).0;
+              let span = gm - cal.g0_pu;
+              if span <= 0.0 {
+                  return if g.0 > cal.g0_pu { f64::INFINITY } else { 0.0 };
+              }
+              ((g.0 - cal.g0_pu) / span).max(0.0)
+          }
+
+          #[derive(Debug, PartialEq)]
+          pub enum Regime { Elastic, Plastic, Rupture }
+
+          /// L-HSI-13: RUPTURE strictly requires S >= 1. Nothing else declares it.
+          pub fn regime(s: f64) -> Regime {
+              if s >= 1.0 { Regime::Rupture }
+              else if s >= EPS_Y { Regime::Plastic }
+              else { Regime::Elastic }
+          }
+
+          #[derive(Debug, PartialEq)]
+          pub enum RuptureVerdict {
+              Weather,
+              Watch { t_rupt: f64 },          // finite horizon, beyond tau
+              Omen { t_rupt: f64 },           // finite horizon, inside tau
+              Ruptured,                       // S >= 1: Abubu clause fires,
+                                              // witnesses -> FUZZY -> EnkiQDB
+          }
+
+          /// The court. `dilation_proven` = A1 §3 two-witness discipline
+          /// (sustained x2 + second witness), computed upstream.
+          pub fn judge(cal: &Calibration, eta: f64, g_series_pu: &[f64],
+                       tau: f64, dilation_proven: bool) -> RuptureVerdict {
+              let g_now = *g_series_pu.last().unwrap_or(&cal.g0_pu);
+              let s_now = strain(cal, eta, Pu(g_now));
+              if s_now >= 1.0 { return RuptureVerdict::Ruptured; }
+              if !dilation_proven { return RuptureVerdict::Weather; }
+              // Brittle Decree (L-HSI-15): proven dilation on eta=0 => T_rupt=0
+              if eta == 0.0 { return RuptureVerdict::Omen { t_rupt: 0.0 }; }
+              let gm = g_max(cal, eta).0;
+              let h = horizon::fit(g_series_pu, gm);
+              match (h.t_leak_epochs, h.accel > 0.0 && h.slope > 0.0) {
+                  (Some(t), true) if t <= tau => RuptureVerdict::Omen { t_rupt: t },
+                  (Some(t), true) => RuptureVerdict::Watch { t_rupt: t },
+                  _ => RuptureVerdict::Weather,   // L-HSI-14: no Igigi, no horizon
+              }
+          }
+
+    - name: tests/rupture_law_tests.rs — L-HSI-11..15
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/rupture_law_tests.rs"
+        mode: "0644"
+        content: |
+          use nanshe::units::{Calibration, Pu, Ou};
+          use nanshe::rupture::{g_max, strain, regime, judge,
+                                Regime, RuptureVerdict};
+
+          fn cal() -> Calibration {
+              Calibration { g0_pu: 6.0, r_tube_pu: 40.0, sealed_epoch: 42 }
+          }
+
+          #[test]
+          fn l_hsi_11_unit_round_trip_exact() {
+              let c = cal();
+              let g = Pu(13.37);
+              let back = c.to_pu(c.to_ou(g));
+              assert_eq!(g.0.to_bits(), back.0.to_bits()); // bit-exact
+              assert_eq!(c.to_ou(Pu(6.0)), Ou(1.0));       // G0 == 1 OU
+          }
+
+          #[test]
+          fn l_hsi_12_ceiling_monotone_and_brittle() {
+              let c = cal();
+              assert!(g_max(&c, 0.5).0 > g_max(&c, 0.2).0);
+              let wider = Calibration { r_tube_pu: 80.0, ..c };
+              assert!(g_max(&wider, 0.2).0 > g_max(&c, 0.2).0);
+              assert_eq!(g_max(&c, 0.0).0, c.g0_pu);        // Brittle: ceiling = floor
+          }
+
+          #[test]
+          fn l_hsi_13_no_early_rupture() {
+              let c = cal();
+              // S just below 1 with wild noise and proven dilation: never Ruptured
+              let gm = g_max(&c, 0.3).0;
+              let g_series: Vec<f64> = (0..10)
+                  .map(|t| c.g0_pu + (gm - c.g0_pu) * 0.98 * (t as f64 / 9.0)).collect();
+              let v = judge(&c, 0.3, &g_series, 5.0, true);
+              assert_ne!(v, RuptureVerdict::Ruptured);
+              assert_eq!(regime(0.999), Regime::Plastic);
+              assert_eq!(regime(1.0), Regime::Rupture);      // and only at 1
+          }
+
+          #[test]
+          fn l_hsi_14_horizon_needs_igigi() {
+              let c = cal();
+              // linear growth: slope>0 but accel==0 -> no finite horizon named
+              let lin: Vec<f64> = (0..8).map(|t| c.g0_pu + 0.5 * t as f64).collect();
+              match judge(&c, 0.5, &lin, 6.0, true) {
+                  RuptureVerdict::Weather => {}
+                  v => panic!("linear ramp must not name a horizon, got {:?}", v),
+              }
+              // quadratic growth: horizon finite
+              let quad: Vec<f64> = (0..8).map(|t| c.g0_pu + 0.15 * (t as f64).powi(2)).collect();
+              match judge(&c, 0.5, &quad, 100.0, true) {
+                  RuptureVerdict::Watch { t_rupt } | RuptureVerdict::Omen { t_rupt } =>
+                      assert!(t_rupt.is_finite()),
+                  v => panic!("expected horizon, got {:?}", v),
+              }
+          }
+
+          #[test]
+          fn l_hsi_15_brittle_decree() {
+              let c = cal();
+              let g_series = vec![c.g0_pu, c.g0_pu, c.g0_pu]; // S=0, not ruptured
+              match judge(&c, 0.0, &g_series, 6.0, true) {
+                  RuptureVerdict::Omen { t_rupt } => assert_eq!(t_rupt, 0.0),
+                  v => panic!("Brittle Decree must fire T_rupt=0, got {:?}", v),
+              }
+              // and without proven dilation, brittle stays Weather
+              assert_eq!(judge(&c, 0.0, &g_series, 6.0, false),
+                         RuptureVerdict::Weather);
+          }
+
+    - name: Build and run law tests (release)
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ crate_dir }}"
+      register: law_tests
+      changed_when: false
+
+    - name: Announce
+      ansible.builtin.debug:
+        msg: "Rupture Ceiling sealed. Law tests: {{ 'GREEN' if law_tests.rc == 0 else 'RED' }}. GL-HSI-001-A2 awaits CSR-08."

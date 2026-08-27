@@ -11,10 +11,8 @@
 //! formula locally.
 
 use crate::sector::BaghdadSector;
-use bahyway_algebra::enbilulu::{
-    self, EnbiFactors, TiamatBand, FailureMechanism, RootCause,
-};
 use alert_engine::AlertSeverity;
+use bahyway_algebra::enbilulu::{self, EnbiFactors, FailureMechanism, RootCause, TiamatBand};
 
 /// A single junction's Enbilulu assessment, scoped to its Baghdad sector
 /// and KAKI tribe for deployment routing.
@@ -77,8 +75,11 @@ mod tests {
     #[test]
     fn erra_junction_in_sadr_city_carries_that_tribe_id() {
         let factors = EnbiFactors {
-            factor_1: 90.0, factor_2: 90.0, factor_3: 90.0,
-            baru_residual: 90.0, factor_5: 90.0,
+            factor_1: 90.0,
+            factor_2: 90.0,
+            factor_3: 90.0,
+            baru_residual: 90.0,
+            factor_5: 90.0,
         };
         let a = assess_junction("J-SadrCity-12", BaghdadSector::SadrCity, &factors, 2.0);
         assert_eq!(a.tribe_id, BaghdadSector::SadrCity.tribe_id());
@@ -90,8 +91,11 @@ mod tests {
     #[test]
     fn stable_junction_has_no_milu_alert() {
         let factors = EnbiFactors {
-            factor_1: 5.0, factor_2: 5.0, factor_3: 5.0,
-            baru_residual: 5.0, factor_5: 5.0,
+            factor_1: 5.0,
+            factor_2: 5.0,
+            factor_3: 5.0,
+            baru_residual: 5.0,
+            factor_5: 5.0,
         };
         let a = assess_junction("J-GreenZone-1", BaghdadSector::GreenZone, &factors, 1.0);
         assert_eq!(a.band, TiamatBand::Stable);
@@ -101,8 +105,11 @@ mod tests {
     #[test]
     fn narrate_includes_junction_id_and_sector_tribe_is_reachable() {
         let factors = EnbiFactors {
-            factor_1: 50.0, factor_2: 50.0, factor_3: 50.0,
-            baru_residual: 70.0, factor_5: 50.0,
+            factor_1: 50.0,
+            factor_2: 50.0,
+            factor_3: 50.0,
+            baru_residual: 70.0,
+            factor_5: 50.0,
         };
         let a = assess_junction("J-Karrada-7", BaghdadSector::Karrada, &factors, 4.0);
         let sentence = a.narrate(Some(("Karrada-capacity-X", 20.0)));

@@ -16,14 +16,16 @@ pub enum AshnanError {
 impl core::fmt::Display for AshnanError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::InvalidFactor { factor, value } =>
-                write!(f, "ASHNAN: invalid factor '{factor}' = {value}"),
-            Self::MissingProvenance(field) =>
-                write!(f, "ASHNAN: missing provenance EAV field '{field}'"),
-            Self::InsufficientTrapData =>
-                write!(f, "ASHNAN: insufficient pest trap data for IRI"),
-            Self::InsufficientHerdData =>
-                write!(f, "ASHNAN: insufficient herd sensor data for LMI"),
+            Self::InvalidFactor { factor, value } => {
+                write!(f, "ASHNAN: invalid factor '{factor}' = {value}")
+            }
+            Self::MissingProvenance(field) => {
+                write!(f, "ASHNAN: missing provenance EAV field '{field}'")
+            }
+            Self::InsufficientTrapData => write!(f, "ASHNAN: insufficient pest trap data for IRI"),
+            Self::InsufficientHerdData => {
+                write!(f, "ASHNAN: insufficient herd sensor data for LMI")
+            }
         }
     }
 }

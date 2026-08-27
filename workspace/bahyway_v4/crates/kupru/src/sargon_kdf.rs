@@ -11,9 +11,7 @@
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::{
-    akkadian_root::AkkadianRoot, error::KupruError, KupruResult,
-};
+use crate::{akkadian_root::AkkadianRoot, error::KupruError, KupruResult};
 
 // ── Sovereign constants ───────────────────────────────────────────────────────
 
@@ -21,9 +19,9 @@ use crate::{
 /// No credential may exceed this TTL — intentionally public and visible.
 pub const SATTATU_MAX: u64 = 54 * 3600; // 194,400 seconds
 
-const KDF_MEMORY_KIB: u32   = 65_536; // 64 MiB
-const KDF_PARALLELISM: u32  = 4;
-const KDF_ITERATIONS: u32   = 54;     // mirrors SATTATU_MAX symbolically
+const KDF_MEMORY_KIB: u32 = 65_536; // 64 MiB
+const KDF_PARALLELISM: u32 = 4;
+const KDF_ITERATIONS: u32 = 54; // mirrors SATTATU_MAX symbolically
 const KDF_OUTPUT_LEN: usize = 32;
 
 // ── SargonKdf ─────────────────────────────────────────────────────────────────
@@ -32,10 +30,10 @@ const KDF_OUTPUT_LEN: usize = 32;
 /// Argon2id memory-hard derivation.
 #[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct SargonKdf {
-    root:        AkkadianRoot,
-    salt:        [u8; 32],
-    iterations:  u32,
-    memory_kib:  u32,
+    root: AkkadianRoot,
+    salt: [u8; 32],
+    iterations: u32,
+    memory_kib: u32,
     parallelism: u32,
 }
 
@@ -61,8 +59,8 @@ impl SargonKdf {
         Ok(Self {
             root,
             salt,
-            iterations:  KDF_ITERATIONS,
-            memory_kib:  KDF_MEMORY_KIB,
+            iterations: KDF_ITERATIONS,
+            memory_kib: KDF_MEMORY_KIB,
             parallelism: KDF_PARALLELISM,
         })
     }
@@ -72,8 +70,8 @@ impl SargonKdf {
         Self {
             root,
             salt,
-            iterations:  KDF_ITERATIONS,
-            memory_kib:  KDF_MEMORY_KIB,
+            iterations: KDF_ITERATIONS,
+            memory_kib: KDF_MEMORY_KIB,
             parallelism: KDF_PARALLELISM,
         }
     }
@@ -118,7 +116,9 @@ impl SargonKdf {
 
     /// Expose the salt for storage alongside the sealed artifact.
     /// The salt is not secret — it lives in the MUDÛ metadata layer.
-    pub fn salt(&self) -> &[u8; 32] { &self.salt }
+    pub fn salt(&self) -> &[u8; 32] {
+        &self.salt
+    }
 
     /// Current Unix time in seconds.
     pub fn sovereign_now() -> u64 {
@@ -129,10 +129,14 @@ impl SargonKdf {
     }
 
     /// Compute expiry: `now + SATTATU_MAX`.
-    pub fn sovereign_expiry() -> u64 { Self::sovereign_now() + SATTATU_MAX }
+    pub fn sovereign_expiry() -> u64 {
+        Self::sovereign_now() + SATTATU_MAX
+    }
 
     /// True if `expires_at` is in the past.
-    pub fn is_expired(expires_at: u64) -> bool { Self::sovereign_now() > expires_at }
+    pub fn is_expired(expires_at: u64) -> bool {
+        Self::sovereign_now() > expires_at
+    }
 }
 
 // ── Timing guard ──────────────────────────────────────────────────────────────
@@ -230,6 +234,9 @@ mod tests {
         let wrong_key = reopened.derive_key(b"wrong-passphrase").unwrap();
         let right_key = reopened.derive_key(b"correct-passphrase").unwrap();
 
-        assert_ne!(wrong_key, right_key, "a wrong passphrase must not derive the right key");
+        assert_ne!(
+            wrong_key, right_key,
+            "a wrong passphrase must not derive the right key"
+        );
     }
 }

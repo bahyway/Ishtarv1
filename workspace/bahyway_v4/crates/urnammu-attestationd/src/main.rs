@@ -7,10 +7,10 @@
 //!   runtime    — interval loop (called by systemd timer)
 #![forbid(unsafe_code)]
 
-mod tpm;
 mod baseline;
-mod kaki;
 mod gate;
+mod kaki;
+mod tpm;
 
 use std::env;
 use std::thread;

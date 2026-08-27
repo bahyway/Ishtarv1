@@ -24,13 +24,13 @@
 pub mod detect;
 pub mod error;
 pub mod format;
-pub mod zip;
-pub mod tar;
 pub mod gzip;
+pub mod tar;
+pub mod zip;
 
+pub use detect::detect_format;
 pub use error::ArchiveError;
 pub use format::ArchiveFormat;
-pub use detect::detect_format;
 pub use zip::ExtractedFile;
 
 /// Maximum recursion depth for nested archives (zip-bomb guard).
@@ -39,15 +39,21 @@ const MAX_RECURSION: u8 = 4;
 // ── Stubs for not-yet-sovereign formats ───────────────────────────────────────
 
 pub fn unwrap_bzip2(_data: &[u8]) -> Result<Vec<u8>, ArchiveError> {
-    Err(ArchiveError::UnsupportedFormat("bzip2 sovereign module pending"))
+    Err(ArchiveError::UnsupportedFormat(
+        "bzip2 sovereign module pending",
+    ))
 }
 
 pub fn unwrap_xz(_data: &[u8]) -> Result<Vec<u8>, ArchiveError> {
-    Err(ArchiveError::UnsupportedFormat("xz sovereign module pending"))
+    Err(ArchiveError::UnsupportedFormat(
+        "xz sovereign module pending",
+    ))
 }
 
 pub fn unwrap_7z(_data: &[u8]) -> Result<Vec<u8>, ArchiveError> {
-    Err(ArchiveError::UnsupportedFormat("7z sovereign module pending"))
+    Err(ArchiveError::UnsupportedFormat(
+        "7z sovereign module pending",
+    ))
 }
 
 // ── Main decompress entry point ───────────────────────────────────────────────
@@ -71,10 +77,8 @@ pub fn decompress(data: &[u8], recursion_depth: u8) -> Result<Vec<ExtractedFile>
             let mut result = Vec::new();
             for file in files {
                 if file.name.ends_with(".zip") {
-                    match decompress(&file.data, recursion_depth + 1) {
-                        Ok(nested) => result.extend(nested),
-                        Err(e) => return Err(e),
-                    }
+                    let nested = decompress(&file.data, recursion_depth + 1)?;
+                    result.extend(nested)
                 } else {
                     result.push(file);
                 }
@@ -97,9 +101,10 @@ pub fn decompress(data: &[u8], recursion_depth: u8) -> Result<Vec<ExtractedFile>
             let _raw = unwrap_7z(data)?;
             unreachable!()
         }
-        ArchiveFormat::None => {
-            Ok(vec![ExtractedFile { name: "raw_data".to_string(), data: data.to_vec() }])
-        }
+        ArchiveFormat::None => Ok(vec![ExtractedFile {
+            name: "raw_data".to_string(),
+            data: data.to_vec(),
+        }]),
     }
 }
 
@@ -168,13 +173,13 @@ mod tests {
         hdr[..name.len()].copy_from_slice(name);
         // size in octal ASCII (24 bytes → "00000000030\0")
         let size_str = format!("{:011o}\0", file_content.len());
-        hdr[124..124+size_str.len()].copy_from_slice(size_str.as_bytes());
+        hdr[124..124 + size_str.len()].copy_from_slice(size_str.as_bytes());
         // typeflag = '0'
         hdr[156] = b'0';
         // checksum — compute simple sum
         let cksum: u32 = hdr.iter().map(|&b| b as u32).sum::<u32>() + 8 * b' ' as u32;
         let cksum_str = format!("{:06o}\0 ", cksum);
-        hdr[148..148+cksum_str.len()].copy_from_slice(cksum_str.as_bytes());
+        hdr[148..148 + cksum_str.len()].copy_from_slice(cksum_str.as_bytes());
         tar_data.extend_from_slice(&hdr);
         // data block (padded to 512)
         let mut data_block = [0u8; 512];

@@ -12,7 +12,11 @@ pub fn gate_boot_handoff(attestation_passed: bool) -> Result<(), String> {
 }
 
 fn gate_boot_handoff_to(attestation_passed: bool, path: &str) -> Result<(), String> {
-    let result = if attestation_passed { "PASS\n" } else { "FAIL\n" };
+    let result = if attestation_passed {
+        "PASS\n"
+    } else {
+        "FAIL\n"
+    };
     fs::write(path, result).map_err(|e| format!("Gate sentinel write failed ({path}): {e}"))?;
     if !attestation_passed {
         eprintln!("[urnammu] BOOT GATE: attestation FAILED — sentinel written FAIL, display manager will not start");

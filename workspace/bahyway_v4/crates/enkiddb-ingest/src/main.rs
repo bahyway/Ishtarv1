@@ -18,8 +18,14 @@ use enkiddb::{materialize_version, RagIndex, WriteNode, DOCS_TRIBE_ID};
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 4 {
-        eprintln!("Usage: {} <docs_root> <output_root> <version> [search_query]", args[0]);
-        eprintln!(r#"Example: {} ~/BahyWayV4/docs ~/tigris_data 4.0 "KAKI identity""#, args[0]);
+        eprintln!(
+            "Usage: {} <docs_root> <output_root> <version> [search_query]",
+            args[0]
+        );
+        eprintln!(
+            r#"Example: {} ~/BahyWayV4/docs ~/tigris_data 4.0 "KAKI identity""#,
+            args[0]
+        );
         std::process::exit(1);
     }
     let docs_root = PathBuf::from(&args[1]);
@@ -53,11 +59,17 @@ fn main() {
         total_entries
     );
     if doc_kakis.is_empty() {
-        println!("No .md files found under {} -- nothing to materialize.", docs_root.display());
+        println!(
+            "No .md files found under {} -- nothing to materialize.",
+            docs_root.display()
+        );
         return;
     }
 
-    println!("Materializing Tigris v{version} to {}...", output_root.display());
+    println!(
+        "Materializing Tigris v{version} to {}...",
+        output_root.display()
+    );
     let (generation, stats) = match materialize_version(&write_node, &output_root, version) {
         Ok(result) => result,
         Err(e) => {
@@ -74,7 +86,10 @@ fn main() {
     println!("Queryable now via enkiddb::ReadNode::open() / HeptaScript, no re-ingestion needed.");
 
     let rag = RagIndex::build(write_node.journal());
-    println!("RAG index: {} searchable chunk(s) (from body.summary particles).", rag.len());
+    println!(
+        "RAG index: {} searchable chunk(s) (from body.summary particles).",
+        rag.len()
+    );
     println!(
         "NOTE: the RAG index above is built from this run's in-memory Journal; \
          it does not persist to disk. Re-run this binary against the same \
@@ -89,7 +104,8 @@ fn main() {
             println!("  (no matches)");
         }
         for hit in hits {
-            let value = RagIndex::fetch_value(write_node.journal(), &hit.section).unwrap_or_default();
+            let value =
+                RagIndex::fetch_value(write_node.journal(), &hit.section).unwrap_or_default();
             let preview: String = value.chars().take(120).collect();
             println!("  score={:.3}  {}...", hit.score, preview.trim());
         }

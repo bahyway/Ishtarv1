@@ -41,20 +41,44 @@ pub fn build_alert(
         segment_ref: segment_ref.to_string(),
         stage,
         attrs: vec![
-            EavAttr { attribute: "ale.material", value: format!("{material:?}") },
-            EavAttr { attribute: "ale.v_mps", value: format!("{v_mps:.3}") },
-            EavAttr { attribute: "ale.sigma_v_rel", value: format!("{sigma_v_rel:.6}") },
-            EavAttr { attribute: "ale.position_m", value: format!("{position_m:.3}") },
-            EavAttr { attribute: "ale.sigma_d_m", value: format!("{sigma_d_m:.3}") },
-            EavAttr { attribute: "ale.site", value: format!("{site:?}") },
-            EavAttr { attribute: "ale.posterior", value: format!("{posterior:.4}") },
+            EavAttr {
+                attribute: "ale.material",
+                value: format!("{material:?}"),
+            },
+            EavAttr {
+                attribute: "ale.v_mps",
+                value: format!("{v_mps:.3}"),
+            },
+            EavAttr {
+                attribute: "ale.sigma_v_rel",
+                value: format!("{sigma_v_rel:.6}"),
+            },
+            EavAttr {
+                attribute: "ale.position_m",
+                value: format!("{position_m:.3}"),
+            },
+            EavAttr {
+                attribute: "ale.sigma_d_m",
+                value: format!("{sigma_d_m:.3}"),
+            },
+            EavAttr {
+                attribute: "ale.site",
+                value: format!("{site:?}"),
+            },
+            EavAttr {
+                attribute: "ale.posterior",
+                value: format!("{posterior:.4}"),
+            },
         ],
     }
 }
 
 /// Wire form for the real enkidb-ingest bridge (line-oriented, stdlib only).
 pub fn to_bridge_wire(ev: &LeakAlertEvent) -> String {
-    let mut s = format!("ALE_ALERT tribe={} segment={} stage={:?}\n", ev.tribe_id, ev.segment_ref, ev.stage);
+    let mut s = format!(
+        "ALE_ALERT tribe={} segment={} stage={:?}\n",
+        ev.tribe_id, ev.segment_ref, ev.stage
+    );
     for a in &ev.attrs {
         s.push_str(&format!("EAV {}={}\n", a.attribute, a.value));
     }

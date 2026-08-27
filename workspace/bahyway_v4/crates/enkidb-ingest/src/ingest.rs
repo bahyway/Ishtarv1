@@ -1,13 +1,15 @@
 //! CsvIngester — orchestrates the CSV → Particle → EnkiDb pipeline.
 
 use bahyway_core::TribeId;
+use enkidb_con_engine::NaruJournal;
 use enkidb_engine::EnkiDb;
-use enkidb_kaki::{IdentityKaki, KakiRole, mint::KakiMinter};
+use enkidb_kaki::{mint::KakiMinter, IdentityKaki, KakiRole};
 
 use crate::bridge::particle_to_eav_triple;
 use crate::csv::{parse_csv, CsvError};
-use enkidb_particles::Particle;
+use crate::kispu::{self, KispuError};
 use akkvalue::AkkValue;
+use enkidb_particles::Particle;
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
@@ -15,19 +17,36 @@ use akkvalue::AkkValue;
 pub enum IngestError {
     Csv(CsvError),
     Db(bahyway_core::BahywayError),
+    /// The KISPU all-or-nothing commit refused a row -- neither its audit
+    /// record nor its ledger entry landed (see `kispu::commit`).
+    Kispu(KispuError),
 }
 
 impl core::fmt::Display for IngestError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Csv(e) => write!(f, "ingest CSV: {e}"),
-            Self::Db(e)  => write!(f, "ingest DB: {e:?}"),
+            Self::Db(e) => write!(f, "ingest DB: {e:?}"),
+            Self::Kispu(e) => write!(f, "ingest commit: {e}"),
         }
     }
 }
 
-impl From<CsvError>                  for IngestError { fn from(e: CsvError)                  -> Self { Self::Csv(e) } }
-impl From<bahyway_core::BahywayError> for IngestError { fn from(e: bahyway_core::BahywayError) -> Self { Self::Db(e)  } }
+impl From<CsvError> for IngestError {
+    fn from(e: CsvError) -> Self {
+        Self::Csv(e)
+    }
+}
+impl From<bahyway_core::BahywayError> for IngestError {
+    fn from(e: bahyway_core::BahywayError) -> Self {
+        Self::Db(e)
+    }
+}
+impl From<KispuError> for IngestError {
+    fn from(e: KispuError) -> Self {
+        Self::Kispu(e)
+    }
+}
 
 // ── Report ────────────────────────────────────────────────────────────────────
 
@@ -35,13 +54,17 @@ impl From<bahyway_core::BahywayError> for IngestError { fn from(e: bahyway_core:
 #[derive(Debug, Clone)]
 pub struct IngestReport {
     /// Number of CSV data rows processed.
-    pub rows_processed:   usize,
+    pub rows_processed: usize,
     /// Number of EAV particles written to the DB.
     pub particles_written: usize,
     /// Number of null values skipped (null fields are not stored).
-    pub nulls_skipped:     usize,
+    pub nulls_skipped: usize,
     /// Identity KAKIs minted, one per CSV row.
-    pub entity_kakis:      Vec<IdentityKaki>,
+    pub entity_kakis: Vec<IdentityKaki>,
+    /// NĀRU audit records committed alongside the ledger entries above —
+    /// always equal to `entity_kakis.len()` on a fully successful run,
+    /// since KISPU commits both legs together or neither (`kispu::commit`).
+    pub audit_entries_committed: usize,
 }
 
 // ── CsvIngester ───────────────────────────────────────────────────────────────
@@ -58,13 +81,24 @@ pub struct IngestReport {
 pub struct CsvIngester {
     tribe_id: TribeId,
     csv_text: String,
-    born_at:  u64,
+    born_at: u64,
+    audit_capacity: usize,
 }
+
+/// Default NĀRU audit journal capacity for one ingest run. Generous
+/// enough that ordinary CSV files never hit it; override with
+/// `with_audit_capacity` for a run expected to exceed it.
+const DEFAULT_AUDIT_CAPACITY: usize = 1_000_000;
 
 impl CsvIngester {
     /// Construct from raw CSV text.
     pub fn from_str(csv_text: impl Into<String>, tribe_id: TribeId) -> Self {
-        Self { tribe_id, csv_text: csv_text.into(), born_at: 0 }
+        Self {
+            tribe_id,
+            csv_text: csv_text.into(),
+            born_at: 0,
+            audit_capacity: DEFAULT_AUDIT_CAPACITY,
+        }
     }
 
     /// Set the birth timestamp for all minted particles.
@@ -73,19 +107,31 @@ impl CsvIngester {
         self
     }
 
+    /// Override the NĀRU audit journal's fixed capacity for this run.
+    pub fn with_audit_capacity(mut self, audit_capacity: usize) -> Self {
+        self.audit_capacity = audit_capacity;
+        self
+    }
+
     /// Parse + ingest into the given `EnkiDb`.
     ///
     /// On success, returns an `IngestReport` with the minted entity KAKIs.
-    /// On error, the DB may be partially populated (no rollback — WAL is append-only).
+    /// Each row's ledger entry and NĀRU audit record commit together via
+    /// `kispu::commit` — a row that fails to commit lands in neither, so
+    /// the DB and the audit journal are never left disagreeing about how
+    /// many rows actually made it in (earlier rows in the same run stay
+    /// committed; the run overall reports the error).
     pub fn ingest_into(self, db: &mut EnkiDb) -> Result<IngestReport, IngestError> {
         let rows = parse_csv(&self.csv_text)?;
         let minter = KakiMinter::new(self.tribe_id);
+        let mut audit = NaruJournal::new(self.audit_capacity);
 
         let mut report = IngestReport {
-            rows_processed:    0,
+            rows_processed: 0,
             particles_written: 0,
-            nulls_skipped:     0,
-            entity_kakis:      Vec::with_capacity(rows.len()),
+            nulls_skipped: 0,
+            entity_kakis: Vec::with_capacity(rows.len()),
+            audit_entries_committed: 0,
         };
 
         for row in rows {
@@ -119,18 +165,18 @@ impl CsvIngester {
             }
 
             // Mint an EventKaki for this ingestion event
-            let event_kaki = enkidb_kaki::EventKaki::try_from_kaki(
-                minter.event(KakiRole::Zikru)
-            ).expect("KakiMinter always produces valid Event KAKIs");
+            let event_kaki = enkidb_kaki::EventKaki::try_from_kaki(minter.event(KakiRole::Zikru))
+                .expect("KakiMinter always produces valid Event KAKIs");
 
             let epoch = (self.born_at & 0xFFFF_FFFF) as u32;
 
-            // Write to journal + indexes
-            db.append_event(event_kaki, identity_kaki, epoch, eav_triples)?;
+            // KISPU: audit record + journal/index write, all-or-nothing.
+            kispu::commit(&mut audit, db, event_kaki, identity_kaki, epoch, eav_triples)?;
 
             report.entity_kakis.push(identity_kaki);
         }
 
+        report.audit_entries_committed = audit.len();
         Ok(report)
     }
 }
@@ -158,12 +204,12 @@ mod tests {
             .ingest_into(&mut db)
             .unwrap();
 
-        assert_eq!(report.rows_processed,    2);
+        assert_eq!(report.rows_processed, 2);
         assert_eq!(report.entity_kakis.len(), 2);
         // Alice: name(text) + age(int) + city(text) = 3 particles
         // Bob:   name(text) + age(int) + city(text) = 3 particles
         assert_eq!(report.particles_written, 6);
-        assert_eq!(report.nulls_skipped,     0);
+        assert_eq!(report.nulls_skipped, 0);
     }
 
     #[test]
@@ -174,9 +220,9 @@ mod tests {
         let report = CsvIngester::from_str(csv, tribe)
             .ingest_into(&mut db)
             .unwrap();
-        assert_eq!(report.rows_processed,    1);
+        assert_eq!(report.rows_processed, 1);
         assert_eq!(report.particles_written, 2); // a and c
-        assert_eq!(report.nulls_skipped,     1); // b
+        assert_eq!(report.nulls_skipped, 1); // b
     }
 
     #[test]
@@ -240,7 +286,9 @@ mod tests {
         let mut db = make_db(tribe);
         // Column mismatch
         let csv = "a,b\n1,2,3";
-        assert!(CsvIngester::from_str(csv, tribe).ingest_into(&mut db).is_err());
+        assert!(CsvIngester::from_str(csv, tribe)
+            .ingest_into(&mut db)
+            .is_err());
     }
 
     #[test]

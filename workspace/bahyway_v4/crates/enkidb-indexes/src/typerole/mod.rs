@@ -1,9 +1,9 @@
 //! Index 3 — Type+Role Index: 3×3 KAKI taxonomy (§9.3)
 //! Answers "all Event-Kakis in tribe X", "all PARZU-KAKIs in templates", etc.
 
-use std::collections::{HashMap, HashSet};
 use bahyway_core::TribeId;
 use enkidb_kaki::{KakiRole, KakiType};
+use std::collections::{HashMap, HashSet};
 
 /// 3×3 taxonomy cell: (KakiType, KakiRole) → set of uuid_hashes (sorted only
 /// on read -- see SovereigntyIndex::insert's doc comment for why this isn't
@@ -16,11 +16,22 @@ pub struct TypeRoleIndex {
 
 impl TypeRoleIndex {
     pub fn new() -> Self {
-        TypeRoleIndex { cells: HashMap::new() }
+        TypeRoleIndex {
+            cells: HashMap::new(),
+        }
     }
 
-    pub fn insert(&mut self, tribe_id: TribeId, kaki_type: KakiType, role: KakiRole, uuid_hash: u32) {
-        self.cells.entry((tribe_id, kaki_type, role)).or_default().insert(uuid_hash);
+    pub fn insert(
+        &mut self,
+        tribe_id: TribeId,
+        kaki_type: KakiType,
+        role: KakiRole,
+        uuid_hash: u32,
+    ) {
+        self.cells
+            .entry((tribe_id, kaki_type, role))
+            .or_default()
+            .insert(uuid_hash);
     }
 
     /// All uuid_hashes with a given type+role within a tribe, sorted.
@@ -35,7 +46,11 @@ impl TypeRoleIndex {
     }
 }
 
-impl Default for TypeRoleIndex { fn default() -> Self { Self::new() } }
+impl Default for TypeRoleIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -45,13 +60,13 @@ mod tests {
     fn taxonomy_separation() {
         let mut idx = TypeRoleIndex::new();
         let t = TribeId::from_u16(0x0001);
-        idx.insert(t, KakiType::Identity,   KakiRole::Zikru,  0x0001);
-        idx.insert(t, KakiType::Identity,   KakiRole::Parzu,  0x0002);
-        idx.insert(t, KakiType::Event,      KakiRole::Zikru,  0x0003);
+        idx.insert(t, KakiType::Identity, KakiRole::Zikru, 0x0001);
+        idx.insert(t, KakiType::Identity, KakiRole::Parzu, 0x0002);
+        idx.insert(t, KakiType::Event, KakiRole::Zikru, 0x0003);
 
-        assert_eq!(idx.query(t, KakiType::Identity, KakiRole::Zikru).len(),  1);
-        assert_eq!(idx.query(t, KakiType::Identity, KakiRole::Parzu).len(),  1);
-        assert_eq!(idx.query(t, KakiType::Event,    KakiRole::Zikru).len(),  1);
-        assert_eq!(idx.query(t, KakiType::Event,    KakiRole::Parzu).len(),  0);
+        assert_eq!(idx.query(t, KakiType::Identity, KakiRole::Zikru).len(), 1);
+        assert_eq!(idx.query(t, KakiType::Identity, KakiRole::Parzu).len(), 1);
+        assert_eq!(idx.query(t, KakiType::Event, KakiRole::Zikru).len(), 1);
+        assert_eq!(idx.query(t, KakiType::Event, KakiRole::Parzu).len(), 0);
     }
 }

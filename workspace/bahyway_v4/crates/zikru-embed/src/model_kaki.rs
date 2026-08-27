@@ -6,10 +6,10 @@
 //! to a dense embedding vector using a HashMap<u32, usize> vocabulary table
 //! rather than direct hash-modulo indexing (avoids collision artifacts).
 
-use std::collections::HashMap;
+use crate::matrix::QuantizedMatrix;
 use bahyway_core::TribeId;
 use enkidb_kaki::{Kaki, KakiMinter, KakiRole};
-use crate::matrix::QuantizedMatrix;
+use std::collections::HashMap;
 
 /// Model KAKI nucleus — the model itself is a sovereign particle.
 /// tribe_id = LINGUISTIC (0x10FF), kaki_role = Parzu (axiom/architecture).
@@ -19,38 +19,38 @@ pub const MODEL_TRIBE_ID: TribeId = TribeId::from_u16(0x10FF);
 #[derive(Debug, Clone)]
 pub struct ZikruEmbedModel {
     pub nucleus: Kaki,
-    pub orbit:   ModelOrbit,
+    pub orbit: ModelOrbit,
 }
 
 /// Model orbit: hyperparameters + weights + quality metrics.
 #[derive(Debug, Clone)]
 pub struct ModelOrbit {
     // ── Core: model metadata (set at initialization)
-    pub model_version:          String,
-    pub architecture_hash:      u32,
-    pub training_corpus_tribe:  u16,
+    pub model_version: String,
+    pub architecture_hash: u32,
+    pub training_corpus_tribe: u16,
 
     // ── Classification: hyperparameters
-    pub embedding_dim:          u16,
-    pub max_sequence_len:       u16,
-    pub quantization_bits:      u8,   // Always 8 in v4.0.2
+    pub embedding_dim: u16,
+    pub max_sequence_len: u16,
+    pub quantization_bits: u8, // Always 8 in v4.0.2
 
     // ── Content: learned weights (quantized int8)
     /// Embedding matrix: [vocab_size, embedding_dim].
-    pub embedding_weights:      QuantizedMatrix,
+    pub embedding_weights: QuantizedMatrix,
     /// Vocab table: token uuid_hash → row index in embedding_weights.
-    pub vocab_table:            HashMap<u32, usize>,
+    pub vocab_table: HashMap<u32, usize>,
     /// Field strength bias per TokenClass (8 classes mapped to [0,7]).
-    pub field_strength_biases:  [f32; 8],
+    pub field_strength_biases: [f32; 8],
     /// Sector classifier weights: [7, embedding_dim] — each row produces one sector logit.
-    pub sector_weights:         QuantizedMatrix,
+    pub sector_weights: QuantizedMatrix,
     /// Per-tribe sector fusion weights: [7] f32.
-    pub fusion_weights:         [f32; 7],
+    pub fusion_weights: [f32; 7],
 
     // ── Reputation: training quality metrics
-    pub contrastive_loss:       f32,
-    pub tribe_alignment_score:  f32,
-    pub training_epochs:        u32,
+    pub contrastive_loss: f32,
+    pub tribe_alignment_score: f32,
+    pub training_epochs: u32,
 }
 
 impl ZikruEmbedModel {
@@ -73,20 +73,20 @@ impl ZikruEmbedModel {
         let sector_q = QuantizedMatrix::from_f32(7, dim, &sector_w);
 
         let orbit = ModelOrbit {
-            model_version:         "ZikruEmbed-1.0".into(),
-            architecture_hash:     fnv1a(b"ZikruEmbed-v1.0-7sector"),
+            model_version: "ZikruEmbed-1.0".into(),
+            architecture_hash: fnv1a(b"ZikruEmbed-v1.0-7sector"),
             training_corpus_tribe: corpus_tribe,
             embedding_dim,
-            max_sequence_len:      512,
-            quantization_bits:     8,
-            embedding_weights:     embed_q,
-            vocab_table:           HashMap::new(),
+            max_sequence_len: 512,
+            quantization_bits: 8,
+            embedding_weights: embed_q,
+            vocab_table: HashMap::new(),
             field_strength_biases: [1.0, 1.2, 0.8, 1.0, 0.6, 0.7, 1.5, 1.0],
-            sector_weights:        sector_q,
-            fusion_weights:        [0.10, 0.15, 0.15, 0.10, 0.10, 0.10, 0.30],
-            contrastive_loss:      f32::INFINITY,
+            sector_weights: sector_q,
+            fusion_weights: [0.10, 0.15, 0.15, 0.10, 0.10, 0.10, 0.30],
+            contrastive_loss: f32::INFINITY,
             tribe_alignment_score: 0.0,
-            training_epochs:       0,
+            training_epochs: 0,
         };
 
         Self { nucleus, orbit }
@@ -97,7 +97,11 @@ impl ZikruEmbedModel {
     pub fn vocab_index(&mut self, uuid_hash: u32) -> usize {
         let next = self.orbit.vocab_table.len();
         let rows = self.orbit.embedding_weights.rows;
-        *self.orbit.vocab_table.entry(uuid_hash).or_insert_with(|| next % rows)
+        *self
+            .orbit
+            .vocab_table
+            .entry(uuid_hash)
+            .or_insert_with(|| next % rows)
     }
 
     /// Get the embedding vector for a token uuid_hash.
@@ -109,7 +113,8 @@ impl ZikruEmbedModel {
     /// Classify a token embedding into a Hepta sector (θ₀–θ₆).
     pub fn classify_sector(&self, embedding: &[f32]) -> u8 {
         let logits = self.orbit.sector_weights.matvec(embedding);
-        logits.iter()
+        logits
+            .iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| (i % 7) as u8)
@@ -121,17 +126,24 @@ impl ZikruEmbedModel {
         self.orbit.field_strength_biases[class_idx.min(7)]
     }
 
-    pub fn embedding_dim(&self) -> usize { self.orbit.embedding_dim as usize }
-    pub fn vocab_size(&self)    -> usize { self.orbit.embedding_weights.rows }
+    pub fn embedding_dim(&self) -> usize {
+        self.orbit.embedding_dim as usize
+    }
+    pub fn vocab_size(&self) -> usize {
+        self.orbit.embedding_weights.rows
+    }
 }
 
 // ── Sovereign utilities ───────────────────────────────────────────────────────
 
 fn fnv1a(bytes: &[u8]) -> u32 {
     const OFFSET: u32 = 2_166_136_261;
-    const PRIME:  u32 = 16_777_619;
+    const PRIME: u32 = 16_777_619;
     let mut h = OFFSET;
-    for &b in bytes { h ^= b as u32; h = h.wrapping_mul(PRIME); }
+    for &b in bytes {
+        h ^= b as u32;
+        h = h.wrapping_mul(PRIME);
+    }
     h
 }
 

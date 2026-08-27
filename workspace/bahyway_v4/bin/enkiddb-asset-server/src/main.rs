@@ -31,8 +31,9 @@ const READ_TIMEOUT: u64 = 30;
 const WRITE_TIMEOUT: u64 = 30;
 const MAX_HEADER_BYTES: usize = 8 * 1024;
 
-const ALLOWED_EXTENSIONS: &[&str] =
-    &["md", "sh", "py", "rs", "yml", "yaml", "png", "svg", "jpg", "jpeg", "json", "txt"];
+const ALLOWED_EXTENSIONS: &[&str] = &[
+    "md", "sh", "py", "rs", "yml", "yaml", "png", "svg", "jpg", "jpeg", "json", "txt",
+];
 
 fn bind_addr() -> String {
     env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:7301".to_string())
@@ -50,7 +51,10 @@ fn main() {
         std::process::exit(1);
     }
     let canonical_root = fs::canonicalize(&root).unwrap_or_else(|e| {
-        eprintln!("FATAL: cannot canonicalize ASSET_ROOT {}: {e}", root.display());
+        eprintln!(
+            "FATAL: cannot canonicalize ASSET_ROOT {}: {e}",
+            root.display()
+        );
         std::process::exit(1);
     });
 
@@ -87,7 +91,13 @@ fn handle(mut stream: TcpStream, root: &Path) -> io::Result<()> {
     let mut request_line = String::new();
     reader.read_line(&mut request_line)?;
     let Some((method, req_path)) = parse_request_line(request_line.trim_end()) else {
-        return respond(&mut stream, 400, "Bad Request", "text/plain", b"malformed request line");
+        return respond(
+            &mut stream,
+            400,
+            "Bad Request",
+            "text/plain",
+            b"malformed request line",
+        );
     };
     let method = method.to_string();
     let req_path = req_path.to_string();
@@ -105,12 +115,24 @@ fn handle(mut stream: TcpStream, root: &Path) -> io::Result<()> {
     }
 
     if method != "GET" {
-        return respond(&mut stream, 405, "Method Not Allowed", "text/plain", b"only GET is served");
+        return respond(
+            &mut stream,
+            405,
+            "Method Not Allowed",
+            "text/plain",
+            b"only GET is served",
+        );
     }
 
     if req_path == "/" {
         let listing = list_root(root).unwrap_or_default();
-        return respond(&mut stream, 200, "OK", "text/plain; charset=utf-8", listing.as_bytes());
+        return respond(
+            &mut stream,
+            200,
+            "OK",
+            "text/plain; charset=utf-8",
+            listing.as_bytes(),
+        );
     }
 
     match resolve_safe_path(root, &req_path) {
@@ -119,10 +141,20 @@ fn handle(mut stream: TcpStream, root: &Path) -> io::Result<()> {
             Err(_) => respond(&mut stream, 404, "Not Found", "text/plain", b"not found"),
         },
         Ok(_) => respond(&mut stream, 404, "Not Found", "text/plain", b"not found"),
-        Err(ServeError::Traversal) => respond(&mut stream, 403, "Forbidden", "text/plain", b"path escapes asset root"),
-        Err(ServeError::DisallowedExtension) => {
-            respond(&mut stream, 403, "Forbidden", "text/plain", b"extension not served")
-        }
+        Err(ServeError::Traversal) => respond(
+            &mut stream,
+            403,
+            "Forbidden",
+            "text/plain",
+            b"path escapes asset root",
+        ),
+        Err(ServeError::DisallowedExtension) => respond(
+            &mut stream,
+            403,
+            "Forbidden",
+            "text/plain",
+            b"extension not served",
+        ),
     }
 }
 
@@ -161,10 +193,12 @@ fn resolve_safe_path(root: &Path, req_path: &str) -> Result<PathBuf, ServeError>
         return Err(ServeError::DisallowedExtension);
     }
 
-    if Path::new(relative)
-        .components()
-        .any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
-    {
+    if Path::new(relative).components().any(|c| {
+        matches!(
+            c,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
         return Err(ServeError::Traversal);
     }
 
@@ -178,7 +212,12 @@ fn resolve_safe_path(root: &Path, req_path: &str) -> Result<PathBuf, ServeError>
 }
 
 fn content_type_for(path: &Path) -> &'static str {
-    match path.extension().and_then(|e| e.to_str()).map(str::to_lowercase).as_deref() {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_lowercase)
+        .as_deref()
+    {
         Some("md") => "text/markdown; charset=utf-8",
         Some("svg") => "image/svg+xml",
         Some("png") => "image/png",
@@ -220,7 +259,13 @@ fn list_root(root: &Path) -> io::Result<String> {
     Ok(out)
 }
 
-fn respond(stream: &mut TcpStream, code: u16, reason: &str, content_type: &str, body: &[u8]) -> io::Result<()> {
+fn respond(
+    stream: &mut TcpStream,
+    code: u16,
+    reason: &str,
+    content_type: &str,
+    body: &[u8],
+) -> io::Result<()> {
     let header = format!(
         "HTTP/1.1 {code} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
@@ -236,7 +281,10 @@ mod tests {
 
     #[test]
     fn parse_request_line_extracts_method_and_path() {
-        assert_eq!(parse_request_line("GET /docs/foo.md HTTP/1.1"), Some(("GET", "/docs/foo.md")));
+        assert_eq!(
+            parse_request_line("GET /docs/foo.md HTTP/1.1"),
+            Some(("GET", "/docs/foo.md"))
+        );
         assert_eq!(parse_request_line("POST / HTTP/1.1"), Some(("POST", "/")));
         assert_eq!(parse_request_line(""), None);
         assert_eq!(parse_request_line("GET"), None);
@@ -244,10 +292,16 @@ mod tests {
 
     #[test]
     fn content_type_for_maps_known_extensions() {
-        assert_eq!(content_type_for(Path::new("a.md")), "text/markdown; charset=utf-8");
+        assert_eq!(
+            content_type_for(Path::new("a.md")),
+            "text/markdown; charset=utf-8"
+        );
         assert_eq!(content_type_for(Path::new("a.svg")), "image/svg+xml");
         assert_eq!(content_type_for(Path::new("a.png")), "image/png");
-        assert_eq!(content_type_for(Path::new("a.bin")), "text/plain; charset=utf-8");
+        assert_eq!(
+            content_type_for(Path::new("a.bin")),
+            "text/plain; charset=utf-8"
+        );
     }
 
     fn scratch_dir(name: &str) -> PathBuf {

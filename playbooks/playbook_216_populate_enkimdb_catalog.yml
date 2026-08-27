@@ -35,12 +35,15 @@
   connection: local
   become: false
   vars:
-    enkiddb_read_ip: "192.168.122.107"
+    # Resolved from the real inventory group, not hardcoded -- see
+    # PB-221's own identical fix (2026-08-26): a stale IP from before
+    # the uruk-node-* rename sat here silently until it broke live.
+    enkiddb_read_ip: "{{ hostvars[groups['enkidb_read'][0]]['ansible_host'] }}"
 
   tasks:
     - name: "0.1 | Confirm enkimdb-write is up on enkidb-node-write"
       ansible.builtin.command: podman ps --filter "name=enkimdb-write"
-      delegate_to: enkidb-node-write
+      delegate_to: "{{ groups['enkidb_write'][0] }}"
       register: write_up
       changed_when: false
 
@@ -59,7 +62,7 @@
         n = struct.unpack('<I', lb)[0]
         print(s.recv(n).decode())
         "
-      delegate_to: enkidb-node-write
+      delegate_to: "{{ groups['enkidb_write'][0] }}"
       register: scan_crates_result
       changed_when: true
 
@@ -78,7 +81,7 @@
         n = struct.unpack('<I', lb)[0]
         print(s.recv(n).decode())
         "
-      delegate_to: enkidb-node-write
+      delegate_to: "{{ groups['enkidb_write'][0] }}"
       register: scan_playbooks_result
       changed_when: true
 
@@ -92,8 +95,8 @@
         enkiddb_db_label: "enkimdb"
         enkiddb_write_volume: "enkimdb-write-data"
         enkiddb_read_volume: "enkimdb-read-data"
-        enkiddb_write_host: "enkidb-node-write"
-        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_host: "{{ groups['enkidb_write'][0] }}"
+        enkiddb_read_host: "{{ groups['enkidb_read'][0] }}"
         enkiddb_write_port: 7201
         enkiddb_read_port: 7202
         enkiddb_query_what: "artifact.name, artifact.kind, artifact.path"

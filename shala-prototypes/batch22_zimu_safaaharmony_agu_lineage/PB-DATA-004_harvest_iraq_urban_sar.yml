@@ -1,0 +1,138 @@
+---
+# ============================================================================
+# PB-DATA-004 — The SweepSAR Harvest for Iraqi Cities
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series
+# Purpose    : Gather the radar witness for URBAN IRAQ — feeding the Kinu
+#              chain (GL-HSI-001-A5, sovereign PS/DS "SqueeSAR-class") and,
+#              fused with EMIT/EnMAP spectra (PB-DATA-003), the neighborhood
+#              infrastructure courts (Palgu, Shetu, Underground).
+# Sources    : 1) NISAR L-band (SweepSAR, global, free & open; public release
+#                 began 2026-07-20 for acquisitions >= 2026-06-17; first-year
+#                 archive arriving through end of 2026; 12-day repeat)
+#              2) Sentinel-1 SLC (C-band, free, ~decade-deep archive over
+#                 Iraqi cities — the time-series backbone TODAY)
+#              Both via ASF DAAC / asf_search with a free Earthdata Login.
+# Doctrine   : SqueeSAR is a vendor's algorithm, not a satellite: no one
+#              sells Iraq its own ground motion. Stacks in, Kinu out.
+# Discipline : CSR-08. Receipts before use; refusals over silence.
+# ============================================================================
+
+- name: "PB-DATA-004 :: NISAR + Sentinel-1 stacks over the four cities"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    shelf: "/opt/bahyway/v4/data/sar_iraq_urban"
+    ledger_path: "/opt/bahyway/v4/data/LEDGER-DATA.tsv"
+    max_results_per_query: 40         # widen after first inspection
+    cities:
+      - { name: "baghdad",  bbox: "44.20,33.15,44.60,33.50" }
+      - { name: "najaf",    bbox: "44.25,31.93,44.45,32.08" }   # city + Wadi al-Salam
+      - { name: "basra",    bbox: "47.65,30.42,47.90,30.62" }
+      - { name: "mosul",    bbox: "43.05,36.28,43.25,36.42" }
+
+  tasks:
+
+    - name: "WITNESS :: shelf exists"
+      ansible.builtin.file:
+        path: "{{ shelf }}/{{ item.name }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ cities }}"
+      loop_control: {label: "{{ item.name }}"}
+
+    - name: "WITNESS :: asf_search present"
+      ansible.builtin.command: python3 -c "import asf_search"
+      register: asf_ok
+      changed_when: false
+      failed_when: false
+
+    - name: "JUDGE :: refuse without the librarian"
+      ansible.builtin.assert:
+        that: asf_ok.rc == 0
+        fail_msg: "REFUSED — pip install asf_search (and set up ~/.netrc with Earthdata Login). No credentials, no harvest."
+
+    - name: "MOVE :: query both witnesses per city (manifests first, downloads by choice)"
+      ansible.builtin.shell: |
+        python3 - << 'PY'
+        import asf_search as asf, json, datetime
+        city="{{ item.name }}"; bbox=[float(x) for x in "{{ item.bbox }}".split(",")]
+        wkt=f"POLYGON(({bbox[0]} {bbox[1]},{bbox[2]} {bbox[1]},{bbox[2]} {bbox[3]},{bbox[0]} {bbox[3]},{bbox[0]} {bbox[1]}))"
+        out={"city":city,"generated_utc":datetime.datetime.utcnow().isoformat()+"Z","queries":{}}
+        # --- Witness A: NISAR L-band (SweepSAR era; grows weekly) ---
+        try:
+            r=asf.search(platform="NISAR", intersectsWith=wkt,
+                         maxResults={{ max_results_per_query }})
+            out["queries"]["nisar"]={"count":len(r),
+                "granules":[{"name":g.properties.get("sceneName"),
+                             "start":g.properties.get("startTime"),
+                             "type":g.properties.get("processingLevel")} for g in r]}
+        except Exception as e:
+            out["queries"]["nisar"]={"error":str(e)}
+        # --- Witness B: Sentinel-1 SLC (the decade-deep backbone for Kinu) ---
+        try:
+            r2=asf.search(platform=asf.PLATFORM.SENTINEL1, processingLevel="SLC",
+                          beamMode="IW", intersectsWith=wkt,
+                          start="2015-01-01", maxResults={{ max_results_per_query }})
+            out["queries"]["sentinel1_slc"]={"count":len(r2),
+                "granules":[{"name":g.properties.get("sceneName"),
+                             "start":g.properties.get("startTime"),
+                             "path":g.properties.get("pathNumber"),
+                             "frame":g.properties.get("frameNumber")} for g in r2]}
+        except Exception as e:
+            out["queries"]["sentinel1_slc"]={"error":str(e)}
+        p="{{ shelf }}/"+city+"/manifest_"+city+".json"
+        json.dump(out,open(p,"w"),indent=1)
+        na=out["queries"].get("nisar",{}).get("count","ERR")
+        s1=out["queries"].get("sentinel1_slc",{}).get("count","ERR")
+        print(f"{city}: NISAR={na} granules, Sentinel-1 SLC={s1} granules -> {p}")
+        PY
+      loop: "{{ cities }}"
+      loop_control: {label: "{{ item.name }}"}
+      register: harvest
+      changed_when: true
+
+    - name: "JUDGE :: at least one witness answered per city"
+      ansible.builtin.shell: |
+        python3 - << 'PY'
+        import json,glob,sys
+        bad=[]
+        for p in glob.glob("{{ shelf }}/*/manifest_*.json"):
+            m=json.load(open(p))
+            a=m["queries"].get("nisar",{}).get("count",0) or 0
+            b=m["queries"].get("sentinel1_slc",{}).get("count",0) or 0
+            if (a+b)==0: bad.append(m["city"])
+        if bad:
+            print("REFUSED — empty sky over:",bad); sys.exit(1)
+        print("witnesses stand over all cities")
+        PY
+      changed_when: false
+
+    - name: "MOVE :: receipt every manifest"
+      ansible.builtin.shell: |
+        cd "{{ shelf }}" && find . -name 'manifest_*.json' -exec sha256sum {} \; > MANIFESTS.kaniku
+      changed_when: true
+
+    - name: "STAGE :: ensure data ledger exists"
+      ansible.builtin.copy:
+        dest: "{{ ledger_path }}"
+        content: "archive\tharvested_utc\tsha256\tsource\tstatus\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: append the seal"
+      ansible.builtin.shell: |
+        H=$(sha256sum "{{ shelf }}/MANIFESTS.kaniku" | cut -d' ' -f1)
+        echo -e "sar_iraq_urban/MANIFESTS.kaniku\t$(date -u +%FT%TZ)\t$H\tNISAR+S1-ASF\tMANIFESTED" >> "{{ ledger_path }}"
+      changed_when: true
+
+    - name: "STAGE :: proclaim, and name the road onward"
+      ansible.builtin.debug:
+        msg:
+          - "{{ harvest.results | map(attribute='stdout') | list }}"
+          - "NOTE  :: NISAR counts will GROW weekly — the first-year archive lands through end of 2026; re-run monthly."
+          - "NEXT  :: pick one city + one Sentinel-1 path/frame; download the SLC stack; run the Kinu PS/DS chain (GL-HSI-001-A5)."
+          - "FUSE  :: join EMIT spectra from PB-DATA-003 at the Shetu addresses; the Two Witnesses of Place convene over a real neighborhood."
+          - "TRUTH :: SqueeSAR is an algorithm someone rents; Kinu is the same class of truth, owned. Stacks in — sovereignty out."

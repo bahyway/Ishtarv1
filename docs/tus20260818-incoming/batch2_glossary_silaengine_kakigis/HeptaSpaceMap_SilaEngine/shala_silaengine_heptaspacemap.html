@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ŠALA · SilaEngine — HeptaSpaceMap (prototype)</title>
+<!-- ======================================================================
+  ŠALA PROTOTYPE ONLY (GL-VIZ-001) — production is egui/WGPU on the host.
+  Nasaru grammar implemented inline (swap to canonical nasaru_style.js):
+    (1) SCROLL-ZOOM 0.55–4.0
+    (2) 3D MOVING MEMBRANE: drag rotate/tilt + optional ṬĀLUKU auto-orbit
+    (3) LEFT-CLICK BOUNCE-IN-PLACE -> StoryEngine journal (3px threshold)
+    (4) RIGHT-CLICK CONTEXT MENU branching by birth-status
+    (+) LAND-FROM-SKY cinematic descent onto searched destination
+  Colour law: red confined to the Refusal/Quarantine tray only.
+====================================================================== -->
+<style>
+  :root{
+    --gold:#d4af37; --blue:#4aa3ff; --green:#38c98b; --red:#e0393b;
+    --ink:#0a0f1e; --panel:#101830ee; --line:#2a3a5c;
+  }
+  html,body{margin:0;height:100%;background:var(--ink);overflow:hidden;
+    font-family:Georgia,'Times New Roman',serif;color:#dfe6f5;}
+  #sky{position:fixed;inset:0;display:block;cursor:grab;}
+  #sky.dragging{cursor:grabbing;}
+  .hud{position:fixed;top:14px;left:16px;pointer-events:none;}
+  .hud h1{font-size:17px;margin:0;color:var(--gold);letter-spacing:1px;}
+  .hud .law{font-size:11.5px;color:#9fb0d6;margin-top:3px;}
+  .ctl{position:fixed;top:14px;right:16px;display:flex;gap:8px;}
+  .ctl button{background:#141f3d;border:1px solid var(--line);color:#cfe0ff;
+    font:12px Georgia;padding:6px 10px;border-radius:6px;cursor:pointer;}
+  .ctl button.on{border-color:var(--gold);color:var(--gold);}
+  /* -------- Unified search -------- */
+  #searchbox{position:fixed;top:60px;left:50%;transform:translateX(-50%);
+    width:380px;z-index:30;}
+  #q{width:100%;box-sizing:border-box;background:#0e1730f2;color:#eef;
+    border:1px solid var(--line);border-radius:8px;padding:9px 12px;
+    font:14px Georgia;outline:none;}
+  #q:focus{border-color:var(--gold);}
+  #results{background:#0e1730f8;border:1px solid var(--line);border-top:none;
+    border-radius:0 0 8px 8px;max-height:210px;overflow:auto;display:none;}
+  #results div{padding:7px 12px;font-size:13px;cursor:pointer;
+    display:flex;justify-content:space-between;}
+  #results div:hover{background:#1a2748;}
+  #results .hid{color:#7f93bd;font-size:11px;}
+  /* -------- StoryEngine journal -------- */
+  #journal{position:fixed;top:0;right:-360px;width:330px;height:100%;
+    background:var(--panel);border-left:1px solid var(--line);
+    transition:right .35s ease;padding:18px;box-sizing:border-box;
+    overflow:auto;z-index:40;}
+  #journal.open{right:0;}
+  #journal h2{color:var(--gold);font-size:15px;margin:0 0 4px;}
+  #journal .sub{font-size:11px;color:#8fa2c8;margin-bottom:12px;}
+  #journal .entry{border-left:2px solid var(--blue);padding:6px 10px;
+    margin:8px 0;font-size:12.5px;background:#0d1530;}
+  #journal .entry b{color:var(--green);}
+  #journal .kaki{font-family:monospace;font-size:11px;color:var(--gold);}
+  #journal .close{position:absolute;top:10px;right:12px;cursor:pointer;
+    color:#8fa2c8;font-size:18px;}
+  /* -------- Refusal / quarantine tray (only place red may live) ---- */
+  #tray{position:fixed;left:16px;bottom:16px;background:#180d12f0;
+    border:1px solid #5a2430;border-radius:8px;padding:10px 12px;
+    width:230px;z-index:30;}
+  #tray h3{margin:0 0 6px;font-size:11px;color:#c98;letter-spacing:1px;}
+  #tray .nonp{display:flex;align-items:center;gap:8px;font-size:12px;
+    padding:4px 2px;cursor:context-menu;color:#d8c4c8;}
+  #tray .dot{width:9px;height:9px;border-radius:50%;background:var(--red);
+    box-shadow:0 0 6px var(--red);}
+  /* -------- context menu -------- */
+  #cmenu{position:fixed;display:none;background:#101a36;border:1px solid
+    var(--line);border-radius:7px;z-index:60;min-width:200px;overflow:hidden;}
+  #cmenu div{padding:8px 14px;font-size:13px;cursor:pointer;}
+  #cmenu div:hover{background:#1c2a52;}
+  #cmenu .rf{color:#e8b8bd;}
+  /* -------- refusal record -------- */
+  #refrec{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+    display:none;background:#1a0e13f5;border:1px solid #5a2430;
+    border-radius:10px;padding:20px 24px;width:330px;z-index:70;}
+  #refrec h2{color:var(--red);font-size:14px;margin:0 0 8px;}
+  #refrec p{font-size:12.5px;line-height:1.5;color:#dcc;}
+  #refrec .close{float:right;cursor:pointer;color:#a88;}
+  .foot{position:fixed;bottom:14px;right:16px;font-size:10.5px;
+    color:#66779c;pointer-events:none;text-align:right;}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+
+<div class="hud">
+  <h1>ŠALA · SilaEngine — HeptaSpaceMap</h1>
+  <div class="law">Truth: Orbit membership · Glyph: Seven Gates · Final leg: sūqu qaṭnu (narrow path)</div>
+</div>
+
+<div class="ctl">
+  <button id="btnOrbit">ṬĀLUKU orbit</button>
+  <button id="btnSky">↺ Land-from-sky</button>
+</div>
+
+<div id="searchbox">
+  <input id="q" placeholder="Unified Hepta Search — Orbit Particles ▸ type a destination…" autocomplete="off">
+  <div id="results"></div>
+</div>
+
+<div id="journal">
+  <span class="close" onclick="closeJournal()">✕</span>
+  <h2 id="jTitle"></h2><div class="sub" id="jSub"></div><div id="jBody"></div>
+</div>
+
+<div id="tray">
+  <h3>REFUSAL RECORDS · QUARANTINE TRAY</h3>
+  <div id="trayBody"></div>
+</div>
+
+<div id="cmenu"></div>
+
+<div id="refrec">
+  <span class="close" onclick="refrec.style.display='none'">✕</span>
+  <h2>Refusal Record</h2><p id="rrBody"></p>
+</div>
+
+<div class="foot">Šala prototype only (GL-VIZ-001) · production: egui/WGPU · red confined to tray<br>
+scroll = zoom · drag = rotate/tilt · left-click particle = bounce + journal · right-click = context</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('sky'), cx2 = cv.getContext('2d');
+let W=0,H=0; function fit(){W=cv.width=innerWidth;H=cv.height=innerHeight;}
+addEventListener('resize',fit); fit();
+
+/* ================= WORLD: hepta glyphs, gates, particles ============= */
+const TAU=Math.PI*2, D=120, R=D*0.545;
+const cells=[]; // {id,x,y,ring}
+cells.push({id:'SILA-0000',x:0,y:0,ring:0});
+for(let k=0;k<7;k++){const a=k*TAU/7-Math.PI/2;
+  cells.push({id:'SILA-'+String(k+1).padStart(4,'0'),x:Math.cos(a)*D*1.72,y:Math.sin(a)*D*1.72,ring:1});}
+for(let k=0;k<14;k++){const a=k*TAU/14-Math.PI/2+TAU/28;
+  cells.push({id:'SILA-'+String(k+8).padStart(4,'0'),x:Math.cos(a)*D*3.35,y:Math.sin(a)*D*3.35,ring:2});}
+const gates=[]; // neighbour shortcut graph
+for(let i=0;i<cells.length;i++)for(let j=i+1;j<cells.length;j++){
+  const dx=cells[i].x-cells[j].x,dy=cells[i].y-cells[j].y;
+  if(Math.hypot(dx,dy)<D*2.35)gates.push([i,j]);}
+
+const particles=[ // born Particles (StoryEngine journals exist)
+ {name:'Imam Ali Shrine Court', cell:0, col:'#d4af37', kaki:'A17F 0C22 0102 0000 68B1 D4E3'},
+ {name:'Souq al-Kabir Entrance', cell:2, col:'#38c98b', kaki:'B902 0C22 0102 0000 68B2 91AF'},
+ {name:'Wadi-us-Salaam Gate 3', cell:5, col:'#4aa3ff', kaki:'C355 0C22 0102 0000 68B2 33D0'},
+ {name:'Al-Ṭūsī Manuscript House', cell:9, col:'#38c98b', kaki:'D0AA 0C22 0102 0000 68B3 7C15'},
+ {name:'Old City Clinic', cell:13, col:'#4aa3ff', kaki:'E4C1 0C22 0102 0000 68B3 90BE'},
+ {name:'Maqām Zayn al-ʿĀbidīn', cell:17, col:'#38c98b', kaki:'F218 0C22 0102 0000 68B4 12A7'},
+ {name:'Kufa Road Junction', cell:20, col:'#4aa3ff', kaki:'0A3D 0C22 0102 0000 68B4 55E9'},
+];
+particles.forEach(p=>{p.z=0;p.bounceT=-1;});
+const refused=[ // Non-Particles: never born, no KAKI (tray only)
+ {name:'Unverified vendor overlay', gate:'Nergal · Gate G2',
+  why:'External overlay arrived outside SUSA; witness count 0. Never born — no KAKI was ever minted.'},
+ {name:'Foreign tile-server pin', gate:'Mummu · Gate G4',
+  why:'Coordinate reference unverifiable; composite shape proof failed at design gate. Never born — no KAKI.'},
+];
+
+/* narrow path (suqu qatnu): winding alley into the shrine cell */
+function narrowPath(dst){const c=cells[dst.cell],pts=[];const steps=9;
+  const sx=c.x+D*2.6,sy=c.y+D*1.4;
+  for(let i=0;i<=steps;i++){const t=i/steps;
+    pts.push({x:sx+(c.x-sx)*t+Math.sin(t*9)*14*(1-t),
+              y:sy+(c.y-sy)*t+Math.cos(t*7)*12*(1-t)});}
+  return pts;}
+
+/* ================= CAMERA + NASARU MEMBRANE ========================= */
+const cam={yaw:0.6,tilt:0.55,zoom:1.0,tx:0,ty:0};
+const Zmin=0.55,Zmax=4.0,S=1.0;
+let orbitOn=false;
+function proj(x,y,z){
+  const dx=x-cam.tx,dy=y-cam.ty;
+  const rx=Math.cos(cam.yaw)*dx-Math.sin(cam.yaw)*dy;
+  const ry=Math.sin(cam.yaw)*dx+Math.cos(cam.yaw)*dy;
+  const gY=1-cam.tilt*0.72, hZ=cam.tilt;
+  return [W/2+rx*cam.zoom*S, H*0.56+ry*gY*cam.zoom*S-(z||0)*hZ*cam.zoom*S];}
+
+/* ================= CINEMATIC: LAND-FROM-SKY ========================= */
+let cine=null, dest=null, pathPts=null;
+function sweepTo(p){dest=p;pathPts=narrowPath(p);
+  const c=cells[p.cell];
+  cine={t:0,dur:3200,
+    z0:cam.zoom,x0:cam.tx,y0:cam.ty,t0:cam.tilt,
+    xz:c.x,yz:c.y};}
+function ease(t){return t*t*(3-2*t);}
+function stepCine(dt){if(!cine)return;cine.t+=dt;const u=Math.min(1,cine.t/cine.dur);
+  if(u<0.35){const v=ease(u/0.35);           // rise to the sky
+    cam.zoom=cine.z0+(0.72-cine.z0)*v; cam.tilt=cine.t0+(0.30-cine.t0)*v;}
+  else if(u<0.72){const v=ease((u-0.35)/0.37); // glide over the membrane
+    cam.tx=cine.x0+(cine.xz-cine.x0)*v; cam.ty=cine.y0+(cine.yz-cine.y0)*v;}
+  else{const v=ease((u-0.72)/0.28);           // descend onto the heptagon
+    cam.zoom=0.72+(2.65-0.72)*v; cam.tilt=0.30+(0.62-0.30)*v;
+    cam.tx=cine.xz;cam.ty=cine.yz;}
+  if(u>=1){cine=null;const pt=particles.find(q=>q===dest);if(pt)bounce(pt);}}
+
+/* ================= RENDER =========================================== */
+let last=performance.now();
+function frame(now){const dt=now-last;last=now;
+  if(orbitOn&&!cine)cam.yaw+=0.00035*dt;
+  stepCine(dt);
+  cx2.clearRect(0,0,W,H);
+  // sky
+  const g=cx2.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#060a18');g.addColorStop(1,'#0d1530');
+  cx2.fillStyle=g;cx2.fillRect(0,0,W,H);
+  // membrane grid
+  cx2.strokeStyle='rgba(74,163,255,0.07)';cx2.lineWidth=1;
+  for(let i=-6;i<=6;i++){
+    let a=proj(i*90,-560,0),b=proj(i*90,560,0);
+    cx2.beginPath();cx2.moveTo(a[0],a[1]);cx2.lineTo(b[0],b[1]);cx2.stroke();
+    a=proj(-560,i*90,0);b=proj(560,i*90,0);
+    cx2.beginPath();cx2.moveTo(a[0],a[1]);cx2.lineTo(b[0],b[1]);cx2.stroke();}
+  // gates (shortcut graph)
+  cx2.strokeStyle='rgba(74,163,255,0.16)';
+  for(const[i,j]of gates){const a=proj(cells[i].x,cells[i].y,0),b=proj(cells[j].x,cells[j].y,0);
+    cx2.beginPath();cx2.moveTo(a[0],a[1]);cx2.lineTo(b[0],b[1]);cx2.stroke();}
+  // hepta glyphs (seven gates each)
+  for(const c of cells){
+    cx2.beginPath();
+    for(let k=0;k<=7;k++){const a=k*TAU/7-Math.PI/2;
+      const p=proj(c.x+Math.cos(a)*R,c.y+Math.sin(a)*R,0);
+      k?cx2.lineTo(p[0],p[1]):cx2.moveTo(p[0],p[1]);}
+    const hot=dest&&cells[dest.cell]===c;
+    cx2.fillStyle=hot?'rgba(212,175,55,0.13)':'rgba(212,175,55,0.045)';
+    cx2.strokeStyle=hot?'rgba(212,175,55,0.85)':'rgba(212,175,55,0.30)';
+    cx2.lineWidth=hot?1.8:1;cx2.fill();cx2.stroke();}
+  // suqu qatnu — the narrow final leg
+  if(pathPts){cx2.setLineDash([7,6]);
+    cx2.lineDashOffset=-now*0.02;
+    cx2.strokeStyle='rgba(240,220,150,0.9)';cx2.lineWidth=2;
+    cx2.beginPath();pathPts.forEach((p,i)=>{const s=proj(p.x,p.y,0);
+      i?cx2.lineTo(s[0],s[1]):cx2.moveTo(s[0],s[1]);});
+    cx2.stroke();cx2.setLineDash([]);}
+  // particles (with stems + damped bounce)
+  for(const p of particles){
+    if(p.bounceT>=0){p.bounceT+=dt/1000;const t=p.bounceT;
+      p.z=26+20*Math.exp(-2.6*t)*Math.abs(Math.sin(t*9));
+      if(t>2.6){p.z=26;}}
+    const c=cells[p.cell];
+    if(p.z>0.5){const a=proj(c.x,c.y,0),b=proj(c.x,c.y,p.z);
+      cx2.strokeStyle='rgba(223,230,245,0.5)';cx2.lineWidth=1;
+      cx2.beginPath();cx2.moveTo(a[0],a[1]);cx2.lineTo(b[0],b[1]);cx2.stroke();}
+    const s=proj(c.x,c.y,p.z);p._sx=s[0];p._sy=s[1];
+    const r=5.5*Math.sqrt(cam.zoom);
+    cx2.shadowColor=p.col;cx2.shadowBlur=14;
+    cx2.fillStyle=p.col;cx2.beginPath();
+    cx2.arc(s[0],s[1],r,0,TAU);cx2.fill();cx2.shadowBlur=0;
+    if(cam.zoom>1.15||dest===p){cx2.fillStyle='#e8eefc';
+      cx2.font='11.5px Georgia';cx2.fillText(p.name,s[0]+r+5,s[1]+3);}}
+  requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+
+/* ================= NASARU INTERACTIONS ============================== */
+let down=null,moved=false;
+cv.addEventListener('wheel',e=>{e.preventDefault();
+  cam.zoom=Math.min(Zmax,Math.max(Zmin,cam.zoom*Math.exp(-e.deltaY*0.0012)));},{passive:false});
+cv.addEventListener('mousedown',e=>{if(e.button!==0)return;
+  down={x:e.clientX,y:e.clientY};moved=false;cv.classList.add('dragging');});
+addEventListener('mousemove',e=>{if(!down)return;
+  const dx=e.clientX-down.x,dy=e.clientY-down.y;
+  if(Math.hypot(dx,dy)>3)moved=true;              // 3px drag-vs-click law
+  if(moved){cam.yaw+=dx*0.0045;
+    cam.tilt=Math.min(0.85,Math.max(0.22,cam.tilt+dy*0.0028));
+    down={x:e.clientX,y:e.clientY};}});
+addEventListener('mouseup',e=>{cv.classList.remove('dragging');
+  if(down&&!moved&&e.button===0){const p=hit(e.clientX,e.clientY);
+    if(p){bounce(p);openJournal(p);}}
+  down=null;});
+function hit(mx,my){for(const p of particles)
+  if(Math.hypot(mx-p._sx,my-p._sy)<14)return p;return null;}
+function bounce(p){p.bounceT=0;}
+
+/* right-click: context menu branches by birth-status */
+const cmenu=document.getElementById('cmenu');
+cv.addEventListener('contextmenu',e=>{e.preventDefault();
+  const p=hit(e.clientX,e.clientY);if(!p){cmenu.style.display='none';return;}
+  cmenu.innerHTML='<div onclick="menuJournal()">Open StoryEngine journal</div>'
+    +'<div onclick="menuCohort()">Add to cohort</div>';
+  cmenu._p=p;show(cmenu,e);});
+document.getElementById('tray').addEventListener('contextmenu',e=>{
+  e.preventDefault();const el=e.target.closest('.nonp');if(!el)return;
+  cmenu.innerHTML='<div class="rf" onclick="menuRefusal()">Show Refusal Record</div>';
+  cmenu._r=refused[+el.dataset.i];show(cmenu,e);});
+function show(m,e){m.style.display='block';
+  m.style.left=Math.min(e.clientX,innerWidth-210)+'px';
+  m.style.top=Math.min(e.clientY,innerHeight-90)+'px';}
+addEventListener('click',()=>cmenu.style.display='none');
+function menuJournal(){openJournal(cmenu._p);}
+function menuCohort(){cmenu._p._cohort=true;openJournal(cmenu._p,true);}
+const refrec=document.getElementById('refrec');
+function menuRefusal(){const r=cmenu._r;
+  document.getElementById('rrBody').innerHTML=
+   '<b>'+r.name+'</b><br>Refused at: '+r.gate+'<br><br>'+r.why+
+   '<br><br><i>A refused Non-Particle has no story — it was never born.</i>';
+  refrec.style.display='block';}
+
+/* ================= STORYENGINE JOURNAL (GL-STY-001 mock) ============ */
+const jr=document.getElementById('journal');
+function openJournal(p,cohort){
+  document.getElementById('jTitle').textContent=p.name;
+  document.getElementById('jSub').textContent=
+    cells[p.cell].id+' · Hepta cell (7 gates) · Orbit-member';
+  document.getElementById('jBody').innerHTML=
+   '<div class="entry"><b>Born</b> — KISPU commit sealed. '
+   +'<span class="kaki">KAKI '+p.kaki+'</span></div>'
+   +'<div class="entry"><b>Gate chain</b> — SUSA → EnkiSDB → G1…G7 passed → EnkiODB. No bypass.</div>'
+   +'<div class="entry"><b>Orbit</b> — nearest-seed truth confirmed; glyph gates 7/7; '
+   +'final approach: sūqu qaṭnu.</div>'
+   +'<div class="entry"><b>Decree</b> — Madanu: ACTIVE. Aging witnesses quiet (Šību 0.11 šb).</div>'
+   +(cohort?'<div class="entry"><b>Cohort</b> — added to current navigation cohort.</div>':'');
+  jr.classList.add('open');}
+function closeJournal(){jr.classList.remove('open');}
+
+/* ================= UNIFIED SEARCH + CONTROLS ======================== */
+const q=document.getElementById('q'),res=document.getElementById('results');
+q.addEventListener('input',()=>{const v=q.value.trim().toLowerCase();
+  if(!v){res.style.display='none';return;}
+  const m=particles.filter(p=>p.name.toLowerCase().includes(v));
+  res.innerHTML=m.map((p,i)=>'<div data-n="'+particles.indexOf(p)+'">'
+    +p.name+'<span class="hid">'+cells[p.cell].id+'</span></div>').join('')
+    ||'<div style="color:#7f93bd">no orbit particle answers</div>';
+  res.style.display='block';});
+res.addEventListener('click',e=>{const el=e.target.closest('div[data-n]');
+  if(!el)return;const p=particles[+el.dataset.n];
+  res.style.display='none';q.value=p.name;sweepTo(p);});
+document.getElementById('btnOrbit').onclick=function(){
+  orbitOn=!orbitOn;this.classList.toggle('on',orbitOn);};
+document.getElementById('btnSky').onclick=()=>{if(dest)sweepTo(dest);};
+
+/* tray */
+document.getElementById('trayBody').innerHTML=refused.map((r,i)=>
+ '<div class="nonp" data-i="'+i+'"><span class="dot"></span>'+r.name+'</div>').join('');
+</script>
+</body>
+</html>

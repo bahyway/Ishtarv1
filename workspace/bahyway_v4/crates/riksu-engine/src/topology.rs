@@ -4,7 +4,7 @@
 //! As nodes fail, the topology degrades gracefully: arcs dim, then sever.
 //! At Quantum Freeze, the topology crystallizes into a FrozenTopology.
 
-use crate::arc::{RiksuArc, ArcState};
+use crate::arc::{ArcState, RiksuArc};
 
 /// The live cross-tribe arc topology for the cluster.
 #[derive(Debug, Default)]
@@ -13,7 +13,9 @@ pub struct RiksuTopology {
 }
 
 impl RiksuTopology {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Build topology from a slice of CrossTribeKaki 16-byte primary keys.
     ///
@@ -33,7 +35,8 @@ impl RiksuTopology {
             }
         }
         let max_events = counts.values().copied().max().unwrap_or(1);
-        let arcs = counts.into_iter()
+        let arcs = counts
+            .into_iter()
             .map(|((a, b), count)| RiksuArc::new(a, b, count, max_events))
             .collect();
         Self { arcs }
@@ -59,29 +62,37 @@ impl RiksuTopology {
     }
 
     /// Total arc count.
-    pub fn total_arc_count(&self) -> usize { self.arcs.len() }
+    pub fn total_arc_count(&self) -> usize {
+        self.arcs.len()
+    }
 
     /// Topology harmony score — fraction of arcs still active (0..1).
     pub fn harmony_score(&self) -> f32 {
-        if self.arcs.is_empty() { return 0.0; }
+        if self.arcs.is_empty() {
+            return 0.0;
+        }
         self.active_arc_count() as f32 / self.arcs.len() as f32
     }
 
     /// Average strength of all visible arcs.
     pub fn average_strength(&self) -> f32 {
-        let visible: Vec<f32> = self.arcs.iter()
+        let visible: Vec<f32> = self
+            .arcs
+            .iter()
             .filter(|a| a.state.is_visible())
             .map(|a| a.strength)
             .collect();
-        if visible.is_empty() { return 0.0; }
+        if visible.is_empty() {
+            return 0.0;
+        }
         visible.iter().sum::<f32>() / visible.len() as f32
     }
 
     /// Find the arc connecting two specific tribes (if it exists).
     pub fn find_arc(&self, tribe_a: u16, tribe_b: u16) -> Option<&RiksuArc> {
         self.arcs.iter().find(|a| {
-            (a.tribe_a == tribe_a && a.tribe_b == tribe_b) ||
-            (a.tribe_a == tribe_b && a.tribe_b == tribe_a)
+            (a.tribe_a == tribe_a && a.tribe_b == tribe_b)
+                || (a.tribe_a == tribe_b && a.tribe_b == tribe_a)
         })
     }
 
@@ -159,7 +170,7 @@ mod tests {
         let kakis = vec![make_kaki(1, 2), make_kaki(2, 3)];
         let mut topo = RiksuTopology::from_cross_tribe_kakis(&kakis);
         topo.apply_node_dead(2); // severs both arcs
-        // add a separate arc that's still active conceptually
+                                 // add a separate arc that's still active conceptually
         let kakis2 = vec![make_kaki(1, 3)];
         let mut topo2 = RiksuTopology::from_cross_tribe_kakis(&kakis2);
         topo2.freeze();

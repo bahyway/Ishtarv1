@@ -1,7 +1,7 @@
 //! snapshot-job — Snapshot_Job operational mechanism (§3.6, §5.5)
 //!
 //! The Snapshot_Job is a Vector-ID-identified mechanism (NOT a particle).
-//! It runs from EriduOS or EnkiDB on a configured schedule.
+//! It runs from UrOS or EnkiDB on a configured schedule.
 //! For each particle it manages, it:
 //!   1. Computes current projected state via the StoryEngine
 //!   2. Appends a new Event-Kaki to the particle's Journal updating

@@ -20,14 +20,14 @@ impl DefectClass {
     /// Normalised severity score 0–100 for scheduling and priority.
     pub fn severity(self) -> u8 {
         match self {
-            DefectClass::ActiveLeak    => 100,
-            DefectClass::Crack         =>  85,
-            DefectClass::JointFailure  =>  80,
-            DefectClass::Subsidence    =>  75,
-            DefectClass::Corrosion     =>  65,
-            DefectClass::RootIntrusion =>  50,
-            DefectClass::Tuberculation =>  35,
-            DefectClass::Healthy       =>   0,
+            DefectClass::ActiveLeak => 100,
+            DefectClass::Crack => 85,
+            DefectClass::JointFailure => 80,
+            DefectClass::Subsidence => 75,
+            DefectClass::Corrosion => 65,
+            DefectClass::RootIntrusion => 50,
+            DefectClass::Tuberculation => 35,
+            DefectClass::Healthy => 0,
         }
     }
 
@@ -36,12 +36,12 @@ impl DefectClass {
         let s = (score.clamp(0.0, 1.0) * 100.0) as u8;
         match s {
             90..=100 => DefectClass::ActiveLeak,
-            75..=89  => DefectClass::Crack,
-            60..=74  => DefectClass::JointFailure,
-            45..=59  => DefectClass::Corrosion,
-            30..=44  => DefectClass::Tuberculation,
-            10..=29  => DefectClass::RootIntrusion,
-            _        => DefectClass::Healthy,
+            75..=89 => DefectClass::Crack,
+            60..=74 => DefectClass::JointFailure,
+            45..=59 => DefectClass::Corrosion,
+            30..=44 => DefectClass::Tuberculation,
+            10..=29 => DefectClass::RootIntrusion,
+            _ => DefectClass::Healthy,
         }
     }
 
@@ -51,14 +51,14 @@ impl DefectClass {
 
     pub fn name(self) -> &'static str {
         match self {
-            DefectClass::ActiveLeak    => "Active Leak",
-            DefectClass::Corrosion     => "Corrosion",
-            DefectClass::Crack         => "Crack",
-            DefectClass::JointFailure  => "Joint Failure",
+            DefectClass::ActiveLeak => "Active Leak",
+            DefectClass::Corrosion => "Corrosion",
+            DefectClass::Crack => "Crack",
+            DefectClass::JointFailure => "Joint Failure",
             DefectClass::Tuberculation => "Tuberculation",
             DefectClass::RootIntrusion => "Root Intrusion",
-            DefectClass::Subsidence    => "Subsidence",
-            DefectClass::Healthy       => "Healthy",
+            DefectClass::Subsidence => "Subsidence",
+            DefectClass::Healthy => "Healthy",
         }
     }
 }
@@ -76,10 +76,10 @@ pub enum DetectionMethod {
 impl DetectionMethod {
     pub fn name(self) -> &'static str {
         match self {
-            DetectionMethod::SpectralScan     => "Spectral Scan",
+            DetectionMethod::SpectralScan => "Spectral Scan",
             DetectionMethod::VisualInspection => "Visual Inspection",
-            DetectionMethod::PressureTest     => "Pressure Test",
-            DetectionMethod::AcousticSensor   => "Acoustic Sensor",
+            DetectionMethod::PressureTest => "Pressure Test",
+            DetectionMethod::AcousticSensor => "Acoustic Sensor",
         }
     }
 }
@@ -88,16 +88,16 @@ impl DetectionMethod {
 
 #[derive(Debug, Clone)]
 pub struct DefectEvent {
-    pub kaki:                     KakiPK,
-    pub segment_id:               String,
-    pub defect_class:             DefectClass,
-    pub detection_method:         DetectionMethod,
-    pub composite_score:          f32,
-    pub confidence:               f32,
-    pub timestamp_ms:             u64,
-    pub description:              String,
+    pub kaki: KakiPK,
+    pub segment_id: String,
+    pub defect_class: DefectClass,
+    pub detection_method: DetectionMethod,
+    pub composite_score: f32,
+    pub confidence: f32,
+    pub timestamp_ms: u64,
+    pub description: String,
     pub estimated_water_loss_lpd: Option<f32>,
-    pub recommended_action:       String,
+    pub recommended_action: String,
 }
 
 // ── Classifier ───────────────────────────────────────────────────
@@ -106,15 +106,15 @@ pub struct DefectClassifier;
 
 impl DefectClassifier {
     pub fn classify(
-        segment_id:      impl Into<String>,
+        segment_id: impl Into<String>,
         composite_score: f32,
-        confidence:      f32,
-        timestamp_ms:    u64,
+        confidence: f32,
+        timestamp_ms: u64,
         detection_method: DetectionMethod,
     ) -> WpdResult<DefectEvent> {
-        let sid          = segment_id.into();
+        let sid = segment_id.into();
         let defect_class = DefectClass::from_score(composite_score);
-        let kaki         = derive_wpd_kaki(&sid, composite_score, confidence, timestamp_ms);
+        let kaki = derive_wpd_kaki(&sid, composite_score, confidence, timestamp_ms);
         let estimated_water_loss_lpd = if matches!(defect_class, DefectClass::ActiveLeak) {
             // rough linear estimate: 5000 L/day at score=1.0
             Some(composite_score * 5_000.0)
@@ -124,7 +124,10 @@ impl DefectClassifier {
         let recommended_action = Self::recommended_action(defect_class).to_string();
         let description = format!(
             "{} detected via {} (score={:.2}, conf={:.2})",
-            defect_class.name(), detection_method.name(), composite_score, confidence
+            defect_class.name(),
+            detection_method.name(),
+            composite_score,
+            confidence
         );
         Ok(DefectEvent {
             kaki,
@@ -142,14 +145,14 @@ impl DefectClassifier {
 
     pub fn recommended_action(class: DefectClass) -> &'static str {
         match class {
-            DefectClass::ActiveLeak    => "Emergency shutdown and immediate repair",
-            DefectClass::Crack         => "Emergency inspection and repair within 24h",
-            DefectClass::JointFailure  => "Urgent repair scheduled within 72h",
-            DefectClass::Subsidence    => "Urgent soil stabilisation and pipe realignment",
-            DefectClass::Corrosion     => "Planned repair within 30 days",
+            DefectClass::ActiveLeak => "Emergency shutdown and immediate repair",
+            DefectClass::Crack => "Emergency inspection and repair within 24h",
+            DefectClass::JointFailure => "Urgent repair scheduled within 72h",
+            DefectClass::Subsidence => "Urgent soil stabilisation and pipe realignment",
+            DefectClass::Corrosion => "Planned repair within 30 days",
             DefectClass::Tuberculation => "Planned cleaning and lining within 90 days",
             DefectClass::RootIntrusion => "Routine root clearing within 6 months",
-            DefectClass::Healthy       => "No action required",
+            DefectClass::Healthy => "No action required",
         }
     }
 }
@@ -179,13 +182,16 @@ mod tests {
     #[test]
     fn severity_ordering() {
         assert!(DefectClass::ActiveLeak.severity() > DefectClass::Corrosion.severity());
-        assert!(DefectClass::Corrosion.severity()  > DefectClass::Healthy.severity());
+        assert!(DefectClass::Corrosion.severity() > DefectClass::Healthy.severity());
     }
 
     #[test]
     fn classifier_produces_kaki() {
         let ev = DefectClassifier::classify(
-            "BGH-SC-001", 0.80, 0.90, 1_717_000_000_000,
+            "BGH-SC-001",
+            0.80,
+            0.90,
+            1_717_000_000_000,
             DetectionMethod::SpectralScan,
         )
         .unwrap();
@@ -196,7 +202,10 @@ mod tests {
     #[test]
     fn active_leak_estimates_water_loss() {
         let ev = DefectClassifier::classify(
-            "BGH-KZ-001", 0.95, 0.85, 1_717_000_000_000,
+            "BGH-KZ-001",
+            0.95,
+            0.85,
+            1_717_000_000_000,
             DetectionMethod::SpectralScan,
         )
         .unwrap();
@@ -207,7 +216,10 @@ mod tests {
     #[test]
     fn healthy_segment_no_water_loss() {
         let ev = DefectClassifier::classify(
-            "BGH-GZ-001", 0.05, 0.95, 1_717_000_000_000,
+            "BGH-GZ-001",
+            0.05,
+            0.95,
+            1_717_000_000_000,
             DetectionMethod::SpectralScan,
         )
         .unwrap();

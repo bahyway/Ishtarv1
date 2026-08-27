@@ -15,11 +15,11 @@
 //!   Kittu   = delivery only
 #![forbid(unsafe_code)]
 
-pub mod show;
-pub mod email;
 pub mod confirm;
-pub mod poll;
+pub mod email;
 pub mod error;
+pub mod poll;
+pub mod show;
 
 use serde::{Deserialize, Serialize};
 

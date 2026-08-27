@@ -36,16 +36,16 @@ pub enum RotationType {
 impl RotationType {
     pub fn label(&self) -> &'static str {
         match self {
-            RotationType::LoopToHashConversion  => "Loop-to-Hash Conversion",
-            RotationType::SargableTunnel        => "Sargable Tunneling",
-            RotationType::RebuildIndex          => "Rebuild Index",
-            RotationType::ReorganizeIndex       => "Reorganize Index",
-            RotationType::UpdateStatistics      => "Update Statistics",
-            RotationType::ForceHashJoin         => "Force Hash Join",
-            RotationType::AddCoveringColumns    => "Add Covering Columns",
-            RotationType::CreateCoveringIndex   => "Create Covering Index",
-            RotationType::EliminateSpool        => "Eliminate Spool",
-            RotationType::StageOuterJoins       => "Stage Outer Joins",
+            RotationType::LoopToHashConversion => "Loop-to-Hash Conversion",
+            RotationType::SargableTunnel => "Sargable Tunneling",
+            RotationType::RebuildIndex => "Rebuild Index",
+            RotationType::ReorganizeIndex => "Reorganize Index",
+            RotationType::UpdateStatistics => "Update Statistics",
+            RotationType::ForceHashJoin => "Force Hash Join",
+            RotationType::AddCoveringColumns => "Add Covering Columns",
+            RotationType::CreateCoveringIndex => "Create Covering Index",
+            RotationType::EliminateSpool => "Eliminate Spool",
+            RotationType::StageOuterJoins => "Stage Outer Joins",
         }
     }
 }
@@ -53,19 +53,25 @@ impl RotationType {
 /// One actionable recommendation from The Oracle.
 #[derive(Debug, Clone)]
 pub struct Recommendation {
-    pub rotation:           RotationType,
-    pub title:              String,
-    pub detail:             String,
+    pub rotation: RotationType,
+    pub title: String,
+    pub detail: String,
     /// Estimated alignment gain in percentage points if this fix is applied.
     pub alignment_gain_pct: f32,
     /// Priority: 1 = apply first (highest gain / lowest risk).
-    pub priority:           u8,
+    pub priority: u8,
 }
 
 impl Recommendation {
     fn new(rotation: RotationType, detail: impl Into<String>, gain: f32, priority: u8) -> Self {
         let title = rotation.label().to_string();
-        Recommendation { rotation, title, detail: detail.into(), alignment_gain_pct: gain, priority }
+        Recommendation {
+            rotation,
+            title,
+            detail: detail.into(),
+            alignment_gain_pct: gain,
+            priority,
+        }
     }
 }
 
@@ -74,9 +80,9 @@ pub struct TheOracle;
 
 impl TheOracle {
     pub fn advise(
-        _plan:       &QueryPlan,
+        _plan: &QueryPlan,
         bottlenecks: &[Bottleneck],
-        journey:     &SevenLevelJourney,
+        journey: &SevenLevelJourney,
     ) -> Vec<Recommendation> {
         let _ = journey; // used implicitly via bottleneck kinds
         let mut out: Vec<Recommendation> = Vec::new();
@@ -90,7 +96,8 @@ impl TheOracle {
                         format!(
                             "Nested loop join with inner set of {} rows causes O(n²) execution. \
                              Force hash join via OPTION(HASH JOIN) or rewrite the join order. \
-                             Alignment gain: +{:.0}%", inner_rows,
+                             Alignment gain: +{:.0}%",
+                            inner_rows,
                             Self::gain_for_severity(bn.severity, 25.0)
                         ),
                         Self::gain_for_severity(bn.severity, 25.0),
@@ -126,7 +133,11 @@ impl TheOracle {
                     ));
                     priority += 1;
                 }
-                BottleneckKind::StaleStatistics { estimated, actual, ratio } => {
+                BottleneckKind::StaleStatistics {
+                    estimated,
+                    actual,
+                    ratio,
+                } => {
                     out.push(Recommendation::new(
                         RotationType::UpdateStatistics,
                         format!(
@@ -159,7 +170,8 @@ impl TheOracle {
                         RotationType::EliminateSpool,
                         "EagerSpool materialises the inner set on every outer row. \
                          Materialise the inner query as a CTE or add OPTION(RECOMPILE) \
-                         to force parameter-specific plan. Alignment gain: +8%".to_string(),
+                         to force parameter-specific plan. Alignment gain: +8%"
+                            .to_string(),
                         8.0,
                         priority,
                     ));
@@ -183,7 +195,8 @@ impl TheOracle {
                     out.push(Recommendation::new(
                         RotationType::ForceHashJoin,
                         "Missing join condition creates row explosion. Add explicit ON predicate \
-                         and verify the join intent. Alignment gain: +35%".to_string(),
+                         and verify the join intent. Alignment gain: +35%"
+                            .to_string(),
                         35.0,
                         priority,
                     ));
@@ -193,13 +206,17 @@ impl TheOracle {
         }
 
         // Sort: highest gain first, then lowest priority number
-        out.sort_by(|a, b| b.alignment_gain_pct
-            .partial_cmp(&a.alignment_gain_pct)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.priority.cmp(&b.priority)));
+        out.sort_by(|a, b| {
+            b.alignment_gain_pct
+                .partial_cmp(&a.alignment_gain_pct)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.priority.cmp(&b.priority))
+        });
 
         // Re-number priority after sort
-        for (i, rec) in out.iter_mut().enumerate() { rec.priority = (i + 1) as u8; }
+        for (i, rec) in out.iter_mut().enumerate() {
+            rec.priority = (i + 1) as u8;
+        }
 
         out
     }
@@ -217,9 +234,9 @@ impl TheOracle {
     fn gain_for_severity(severity: Severity, base: f32) -> f32 {
         match severity {
             Severity::Critical => base * 1.4,
-            Severity::High     => base * 1.2,
-            Severity::Medium   => base,
-            Severity::Low      => base * 0.5,
+            Severity::High => base * 1.2,
+            Severity::Medium => base,
+            Severity::Low => base * 0.5,
         }
     }
 }
@@ -231,49 +248,66 @@ mod tests {
     use crate::journey::SevenLevelJourney;
     use crate::plan::{sales_order_plan, simple_nested_loop_plan};
 
-    fn full_analysis(plan: &QueryPlan) -> (Vec<Bottleneck>, SevenLevelJourney, Vec<Recommendation>) {
-        let bns  = BottleneckDetector::detect(plan);
-        let j    = SevenLevelJourney::analyze(plan, &bns);
+    fn full_analysis(
+        plan: &QueryPlan,
+    ) -> (Vec<Bottleneck>, SevenLevelJourney, Vec<Recommendation>) {
+        let bns = BottleneckDetector::detect(plan);
+        let j = SevenLevelJourney::analyze(plan, &bns);
         let recs = TheOracle::advise(plan, &bns, &j);
         (bns, j, recs)
     }
 
-    #[test] fn sales_order_has_recommendations() {
+    #[test]
+    fn sales_order_has_recommendations() {
         let plan = sales_order_plan();
         let (_, _, recs) = full_analysis(&plan);
-        assert!(!recs.is_empty(), "Oracle should produce at least one recommendation");
+        assert!(
+            !recs.is_empty(),
+            "Oracle should produce at least one recommendation"
+        );
     }
-    #[test] fn recommendations_sorted_by_gain_desc() {
+    #[test]
+    fn recommendations_sorted_by_gain_desc() {
         let plan = simple_nested_loop_plan();
         let (_, _, recs) = full_analysis(&plan);
         for w in recs.windows(2) {
-            assert!(w[0].alignment_gain_pct >= w[1].alignment_gain_pct,
-                "Recs must be sorted by gain desc");
+            assert!(
+                w[0].alignment_gain_pct >= w[1].alignment_gain_pct,
+                "Recs must be sorted by gain desc"
+            );
         }
     }
-    #[test] fn priority_renumbered_from_one() {
+    #[test]
+    fn priority_renumbered_from_one() {
         let plan = sales_order_plan();
         let (_, _, recs) = full_analysis(&plan);
-        if !recs.is_empty() { assert_eq!(recs[0].priority, 1); }
-        for (i, r) in recs.iter().enumerate() { assert_eq!(r.priority as usize, i + 1); }
+        if !recs.is_empty() {
+            assert_eq!(recs[0].priority, 1);
+        }
+        for (i, r) in recs.iter().enumerate() {
+            assert_eq!(r.priority as usize, i + 1);
+        }
     }
-    #[test] fn projected_alignment_gte_current() {
+    #[test]
+    fn projected_alignment_gte_current() {
         let plan = sales_order_plan();
         let (bns, j, recs) = full_analysis(&plan);
         let _ = &bns;
         let current = j.alignment_score();
-        let proj    = TheOracle::projected_alignment(current, &recs);
+        let proj = TheOracle::projected_alignment(current, &recs);
         assert!(proj >= current);
         assert!(proj <= 100.0);
     }
-    #[test] fn top_recommendation_matches_first() {
+    #[test]
+    fn top_recommendation_matches_first() {
         let plan = simple_nested_loop_plan();
         let (_, _, recs) = full_analysis(&plan);
         if let Some(top) = TheOracle::top_recommendation(&recs) {
             assert_eq!(top.priority, 1);
         }
     }
-    #[test] fn rotation_labels_non_empty() {
+    #[test]
+    fn rotation_labels_non_empty() {
         let rots = [
             RotationType::LoopToHashConversion,
             RotationType::SargableTunnel,
@@ -286,22 +320,34 @@ mod tests {
             RotationType::EliminateSpool,
             RotationType::StageOuterJoins,
         ];
-        for r in &rots { assert!(!r.label().is_empty()); }
+        for r in &rots {
+            assert!(!r.label().is_empty());
+        }
     }
-    #[test] fn detail_non_empty_for_each_rec() {
+    #[test]
+    fn detail_non_empty_for_each_rec() {
         let plan = simple_nested_loop_plan();
         let (_, _, recs) = full_analysis(&plan);
-        for r in &recs { assert!(!r.detail.is_empty(), "empty detail for {:?}", r.rotation); }
+        for r in &recs {
+            assert!(!r.detail.is_empty(), "empty detail for {:?}", r.rotation);
+        }
     }
-    #[test] fn stage_outer_joins_recommended_for_deadlock() {
+    #[test]
+    fn stage_outer_joins_recommended_for_deadlock() {
         let plan = sales_order_plan();
         let (_, _, recs) = full_analysis(&plan);
-        assert!(recs.iter().any(|r| r.rotation == RotationType::StageOuterJoins),
-            "Two chained LeftOuter joins should trigger StageOuterJoins");
+        assert!(
+            recs.iter()
+                .any(|r| r.rotation == RotationType::StageOuterJoins),
+            "Two chained LeftOuter joins should trigger StageOuterJoins"
+        );
     }
-    #[test] fn loop_to_hash_recommended_for_nested_loop() {
+    #[test]
+    fn loop_to_hash_recommended_for_nested_loop() {
         let plan = simple_nested_loop_plan();
         let (_, _, recs) = full_analysis(&plan);
-        assert!(recs.iter().any(|r| r.rotation == RotationType::LoopToHashConversion));
+        assert!(recs
+            .iter()
+            .any(|r| r.rotation == RotationType::LoopToHashConversion));
     }
 }

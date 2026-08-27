@@ -14,13 +14,26 @@ use crate::constants::LAW_PRIORITY_ORDER;
 /// One of the 7 Tribal Laws (1-based index).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TribeLaw {
-    L1, L2, L3, L4, L5, L6, L7,
+    L1,
+    L2,
+    L3,
+    L4,
+    L5,
+    L6,
+    L7,
 }
 
 impl TribeLaw {
     /// All laws in declaration order (L1..L7).
-    pub const ALL: [Self; 7] = [Self::L1, Self::L2, Self::L3, Self::L4,
-                                 Self::L5, Self::L6, Self::L7];
+    pub const ALL: [Self; 7] = [
+        Self::L1,
+        Self::L2,
+        Self::L3,
+        Self::L4,
+        Self::L5,
+        Self::L6,
+        Self::L7,
+    ];
 
     /// 0-based priority index — lower = fires last (higher priority overrides lower).
     ///
@@ -70,18 +83,28 @@ mod tests {
     #[test]
     fn l6_has_highest_priority() {
         for &law in &TribeLaw::ALL {
-            if law == TribeLaw::L6 { continue; }
-            assert!(TribeLaw::L6.overrides(law),
-                "L6 must override {}", law.label());
+            if law == TribeLaw::L6 {
+                continue;
+            }
+            assert!(
+                TribeLaw::L6.overrides(law),
+                "L6 must override {}",
+                law.label()
+            );
         }
     }
 
     #[test]
     fn l3_has_lowest_priority() {
         for &law in &TribeLaw::ALL {
-            if law == TribeLaw::L3 { continue; }
-            assert!(law.overrides(TribeLaw::L3),
-                "{} must override L3", law.label());
+            if law == TribeLaw::L3 {
+                continue;
+            }
+            assert!(
+                law.overrides(TribeLaw::L3),
+                "{} must override L3",
+                law.label()
+            );
         }
     }
 
@@ -96,11 +119,22 @@ mod tests {
     #[test]
     fn priority_order_sovereign() {
         // Verify the complete sovereign ordering
-        let ordered = [TribeLaw::L3, TribeLaw::L7, TribeLaw::L1,
-                       TribeLaw::L2, TribeLaw::L5, TribeLaw::L4, TribeLaw::L6];
+        let ordered = [
+            TribeLaw::L3,
+            TribeLaw::L7,
+            TribeLaw::L1,
+            TribeLaw::L2,
+            TribeLaw::L5,
+            TribeLaw::L4,
+            TribeLaw::L6,
+        ];
         for i in 0..ordered.len() - 1 {
-            assert!(ordered[i + 1].overrides(ordered[i]),
-                "{} must override {}", ordered[i+1].label(), ordered[i].label());
+            assert!(
+                ordered[i + 1].overrides(ordered[i]),
+                "{} must override {}",
+                ordered[i + 1].label(),
+                ordered[i].label()
+            );
         }
     }
 

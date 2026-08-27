@@ -13,14 +13,14 @@
 use crate::attribute::{AttrDataType, DamaAttribute};
 
 // Re-export the well-known attr hashes (same values as story-engine::projection).
-pub const ATTR_HASH_STATE:              u32 = 0x1A4B; // sovereign constant, NOT crc16("state")
-pub const ATTR_HASH_QUALITY:            u32 = 0x2C5E; // sovereign constant, NOT crc16("quality")
-pub const ATTR_HASH_COLOR_RGB:          u32 = 0x3D7F; // sovereign constant, NOT crc16("color_rgb")
-pub const ATTR_HASH_FRESHNESS:          u32 = 0x4E89; // sovereign constant, NOT crc16("freshness")
-pub const ATTR_HASH_SNAPSHOT_DATE:      u32 = 0x9A1D; // sovereign constant, NOT crc16("Snapshot_Date")
-pub const ATTR_HASH_SNAPSHOT_STATE:     u32 = 0x7E32; // sovereign constant, NOT crc16("Snapshot_State")
+pub const ATTR_HASH_STATE: u32 = 0x1A4B; // sovereign constant, NOT crc16("state")
+pub const ATTR_HASH_QUALITY: u32 = 0x2C5E; // sovereign constant, NOT crc16("quality")
+pub const ATTR_HASH_COLOR_RGB: u32 = 0x3D7F; // sovereign constant, NOT crc16("color_rgb")
+pub const ATTR_HASH_FRESHNESS: u32 = 0x4E89; // sovereign constant, NOT crc16("freshness")
+pub const ATTR_HASH_SNAPSHOT_DATE: u32 = 0x9A1D; // sovereign constant, NOT crc16("Snapshot_Date")
+pub const ATTR_HASH_SNAPSHOT_STATE: u32 = 0x7E32; // sovereign constant, NOT crc16("Snapshot_State")
 pub const ATTR_HASH_SNAPSHOT_FREQUENCY: u32 = 0x4B0F; // sovereign constant, NOT crc16("Snapshot_Frequency")
-pub const ATTR_HASH_MOMENTUM:           u32 = 0xD3A1; // sovereign constant, NOT crc16("momentum") — PA-13
+pub const ATTR_HASH_MOMENTUM: u32 = 0xD3A1; // sovereign constant, NOT crc16("momentum") — PA-13
 
 /// The complete set of built-in ILKUM attributes.
 pub const BUILTIN_ATTRS: &[DamaAttribute] = &[

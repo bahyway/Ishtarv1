@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //! Vote types and consensus calculation for the AICouncil.
 
-use crate::agent::{AgentId, AgentEvaluation};
+use crate::agent::{AgentEvaluation, AgentId};
 
 /// A binary approve/reject vote from one agent in Phase 2.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -14,14 +14,19 @@ impl Vote {
     /// An agent approves if its Phase 1 score is ≥ 0.75 after seeing peer scores.
     /// The deliberation boost allows a score of 0.70–0.74 to flip to Approve if
     /// both peers scored ≥ 0.85 (social force alignment).
-    pub fn deliberate(
-        own_eval: &AgentEvaluation,
-        peer_scores: [f64; 2],
-    ) -> Self {
+    pub fn deliberate(own_eval: &AgentEvaluation, peer_scores: [f64; 2]) -> Self {
         let base = own_eval.score;
         let peers_strong = peer_scores.iter().all(|&p| p >= 0.85);
-        let effective = if peers_strong && base >= 0.70 { base + 0.05 } else { base };
-        if effective >= 0.75 { Vote::Approve } else { Vote::Reject }
+        let effective = if peers_strong && base >= 0.70 {
+            base + 0.05
+        } else {
+            base
+        };
+        if effective >= 0.75 {
+            Vote::Approve
+        } else {
+            Vote::Reject
+        }
     }
 }
 
@@ -50,16 +55,23 @@ impl ConsensusResult {
         if votes.len() < 3 {
             return ConsensusResult::Incomplete;
         }
-        let approvals = votes.iter().filter(|v| v.phase2_vote == Vote::Approve).count() as u8;
+        let approvals = votes
+            .iter()
+            .filter(|v| v.phase2_vote == Vote::Approve)
+            .count() as u8;
         // 3 agents × 75% threshold → ceiling(3 × 0.75) = 3 required
         if approvals >= 3 {
             ConsensusResult::Approved
         } else {
-            ConsensusResult::Rejected { approve_count: approvals }
+            ConsensusResult::Rejected {
+                approve_count: approvals,
+            }
         }
     }
 
-    pub fn is_approved(&self) -> bool { *self == ConsensusResult::Approved }
+    pub fn is_approved(&self) -> bool {
+        *self == ConsensusResult::Approved
+    }
 }
 
 #[cfg(test)]
@@ -68,7 +80,13 @@ mod tests {
     use enkidb_kaki::{derive_pattern_kaki, FixedCoord7D, PatternType};
 
     fn dummy_eval(agent: AgentId, score: f64) -> AgentEvaluation {
-        let k = derive_pattern_kaki(PatternType::CrowdFlow, FixedCoord7D::zero(), [0u8; 32], 8_000, 1);
+        let k = derive_pattern_kaki(
+            PatternType::CrowdFlow,
+            FixedCoord7D::zero(),
+            [0u8; 32],
+            8_000,
+            1,
+        );
         AgentEvaluation::new(agent, k, score, "test", 1)
     }
 
@@ -86,31 +104,40 @@ mod tests {
     fn unanimous_approve() {
         let records = vec![
             vote_record(AgentId::TamuzAI, 0.90, [0.88, 0.92]),
-            vote_record(AgentId::Ninsun,  0.88, [0.90, 0.92]),
-            vote_record(AgentId::Pazuzu,  0.92, [0.90, 0.88]),
+            vote_record(AgentId::Ninsun, 0.88, [0.90, 0.92]),
+            vote_record(AgentId::Pazuzu, 0.92, [0.90, 0.88]),
         ];
-        assert_eq!(ConsensusResult::from_votes(&records), ConsensusResult::Approved);
+        assert_eq!(
+            ConsensusResult::from_votes(&records),
+            ConsensusResult::Approved
+        );
     }
 
     #[test]
     fn one_reject_fails_consensus() {
         let records = vec![
             vote_record(AgentId::TamuzAI, 0.90, [0.88, 0.50]),
-            vote_record(AgentId::Ninsun,  0.88, [0.90, 0.50]),
-            vote_record(AgentId::Pazuzu,  0.50, [0.90, 0.88]),
+            vote_record(AgentId::Ninsun, 0.88, [0.90, 0.50]),
+            vote_record(AgentId::Pazuzu, 0.50, [0.90, 0.88]),
         ];
         let result = ConsensusResult::from_votes(&records);
         assert!(!result.is_approved());
-        assert!(matches!(result, ConsensusResult::Rejected { approve_count: 2 }));
+        assert!(matches!(
+            result,
+            ConsensusResult::Rejected { approve_count: 2 }
+        ));
     }
 
     #[test]
     fn incomplete_on_two_votes() {
         let records = vec![
             vote_record(AgentId::TamuzAI, 0.90, [0.88, 0.92]),
-            vote_record(AgentId::Ninsun,  0.88, [0.90, 0.92]),
+            vote_record(AgentId::Ninsun, 0.88, [0.90, 0.92]),
         ];
-        assert_eq!(ConsensusResult::from_votes(&records), ConsensusResult::Incomplete);
+        assert_eq!(
+            ConsensusResult::from_votes(&records),
+            ConsensusResult::Incomplete
+        );
     }
 
     #[test]

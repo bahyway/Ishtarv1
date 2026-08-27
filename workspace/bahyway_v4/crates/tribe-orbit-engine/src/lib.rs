@@ -25,16 +25,15 @@ pub mod law;
 pub mod orbit;
 
 pub use constants::{
-    PARTICLES_PER_TRIBE, SHC, TAU_R7, CLUSTER_THRESH,
-    RESONANCE_RADIUS, DENSITY_ISOLATED_MAX, DENSITY_CLUSTER_MAX,
-    ORBIT_RADIUS_MAX, ORBIT_RADIUS_GEM, LAW_PRIORITY_ORDER,
+    CLUSTER_THRESH, DENSITY_CLUSTER_MAX, DENSITY_ISOLATED_MAX, LAW_PRIORITY_ORDER,
+    ORBIT_RADIUS_GEM, ORBIT_RADIUS_MAX, PARTICLES_PER_TRIBE, RESONANCE_RADIUS, SHC, TAU_R7,
 };
 pub use density::{
-    DensityBand, sph_kernel, sph_densities,
-    neighbourhood_counts, classify_density, find_rule7_clusters,
+    classify_density, find_rule7_clusters, neighbourhood_counts, sph_densities, sph_kernel,
+    DensityBand,
 };
-pub use law::{TribeLaw, resolve_conflict};
-pub use orbit::{OrbitalRing, OrbitalAssignment, ring_from_b11};
+pub use law::{resolve_conflict, TribeLaw};
+pub use orbit::{ring_from_b11, OrbitalAssignment, OrbitalRing};
 
 /// High-level entry point: compute all orbital assignments for a batch of particles.
 ///
@@ -42,12 +41,14 @@ pub use orbit::{OrbitalRing, OrbitalAssignment, ring_from_b11};
 /// `b11_batch`  — corresponding B11 quality bytes (same length)
 ///
 /// Returns `Vec<OrbitalAssignment>` in the same order.
-pub fn assign_orbits(
-    kaki_batch: &[[u8; 16]],
-    b11_batch:  &[u8],
-) -> Vec<OrbitalAssignment> {
-    assert_eq!(kaki_batch.len(), b11_batch.len(), "kaki and b11 slices must be same length");
-    kaki_batch.iter()
+pub fn assign_orbits(kaki_batch: &[[u8; 16]], b11_batch: &[u8]) -> Vec<OrbitalAssignment> {
+    assert_eq!(
+        kaki_batch.len(),
+        b11_batch.len(),
+        "kaki and b11 slices must be same length"
+    );
+    kaki_batch
+        .iter()
         .zip(b11_batch.iter())
         .map(|(kaki, &b11)| OrbitalAssignment::from_kaki(kaki, b11))
         .collect()
@@ -56,10 +57,8 @@ pub fn assign_orbits(
 /// Compute density bands for all particles given their 3D positions.
 ///
 /// Returns `(DensityBand per particle, Rule7 cluster groups)`.
-pub fn analyse_density(
-    positions: &[[f32; 3]],
-) -> (Vec<DensityBand>, Vec<Vec<usize>>) {
-    let bands    = classify_density(positions);
+pub fn analyse_density(positions: &[[f32; 3]]) -> (Vec<DensityBand>, Vec<Vec<usize>>) {
+    let bands = classify_density(positions);
     let clusters = find_rule7_clusters(positions);
     (bands, clusters)
 }
@@ -71,7 +70,7 @@ mod tests {
     #[test]
     fn assign_orbits_batch_same_length() {
         let kakis = vec![[0u8; 16]; 5];
-        let b11s  = vec![240u8, 180, 120, 70, 30];
+        let b11s = vec![240u8, 180, 120, 70, 30];
         let assignments = assign_orbits(&kakis, &b11s);
         assert_eq!(assignments.len(), 5);
         assert_eq!(assignments[0].ring, OrbitalRing::Inner);

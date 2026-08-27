@@ -20,22 +20,16 @@
 
 #![forbid(unsafe_code)]
 
-pub mod fsv;
 pub mod bfv;
+pub mod fsv;
 pub mod geometric_fit;
 pub mod kl_divergence;
 pub mod riemannian;
 
-pub use fsv::{
-    FeatureScoreVector, compute_fsv, shannon_entropy, is_arabic_char,
-};
-pub use bfv::{
-    BinaryFeatureVector, compute_bfv, fragmentation_score, is_fragmented,
-    DELTA_FRAG,
-};
+pub use bfv::{compute_bfv, fragmentation_score, is_fragmented, BinaryFeatureVector, DELTA_FRAG};
+pub use fsv::{compute_fsv, is_arabic_char, shannon_entropy, FeatureScoreVector};
 pub use geometric_fit::{
-    GeometricFit, DomainCentroid, VgcaResult,
-    CLEAN_THRESHOLD, SUSPECT_THRESHOLD, ALIEN_THRESHOLD,
+    DomainCentroid, GeometricFit, VgcaResult, ALIEN_THRESHOLD, CLEAN_THRESHOLD, SUSPECT_THRESHOLD,
 };
 
 /// Run the full VGCA-Σ pipeline on one text field.

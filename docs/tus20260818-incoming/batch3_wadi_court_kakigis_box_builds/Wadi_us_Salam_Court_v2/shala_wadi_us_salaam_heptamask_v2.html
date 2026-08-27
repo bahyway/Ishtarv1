@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ŠALA · SilaEngine — Wadi-us-Salaam Court v2 · yard-fitted {7,3} mask</title>
+<!-- ======================================================================
+  ŠALA PROTOTYPE ONLY (GL-VIZ-001) — production is egui/WGPU on the host.
+  PB-333. The mask PICKS THE YARD: anchor + covering radius computed from
+  the cemetery boundary polygon; drawing CLIPPED to the boundary — no gold
+  outside the graveyard. Generation deepened (~420 cells) so the chart's
+  rim refinement covers the narrow boundary alleys.
+  Boundary here is WORKSHOP-APPROXIMATE; the sealed boundary arrives from
+  the QGIS export via SUSA in production.
+  Basemap (c) OpenStreetMap contributors. Truth space = UTM 38N (PB-328).
+  PALAHU CLAUSE (PB-331): search arrives under the veil, exact, no flight.
+====================================================================== -->
+<style>
+  :root{--gold:#d4af37;--blue:#4aa3ff;--green:#38c98b;--red:#e0393b;
+    --ink:#0a0f1e;--panel:#101830ee;--line:#2a3a5c;}
+  html,body{margin:0;height:100%;background:var(--ink);overflow:hidden;
+    font-family:Georgia,'Times New Roman',serif;color:#dfe6f5;}
+  #sky{position:fixed;inset:0;display:block;cursor:grab;}
+  #sky.dragging{cursor:grabbing;}
+  .hud{position:fixed;top:14px;left:16px;pointer-events:none;z-index:20;}
+  .hud h1{font-size:16px;margin:0;color:var(--gold);letter-spacing:1px;}
+  .hud .law{font-size:11px;color:#9fb0d6;margin-top:3px;max-width:600px;}
+  .ctl{position:fixed;top:14px;right:16px;display:flex;gap:8px;z-index:20;}
+  .ctl button{background:#141f3d;border:1px solid var(--line);color:#cfe0ff;
+    font:12px Georgia;padding:6px 10px;border-radius:6px;cursor:pointer;}
+  .ctl button.on{border-color:var(--gold);color:var(--gold);}
+  #coords{position:fixed;top:52px;right:16px;font:11px monospace;
+    color:#8fa2c8;z-index:20;}
+  #searchbox{position:fixed;top:64px;left:50%;transform:translateX(-50%);
+    width:400px;z-index:30;}
+  #q{width:100%;box-sizing:border-box;background:#0e1730f2;color:#eef;
+    border:1px solid var(--line);border-radius:8px;padding:9px 12px;
+    font:14px Georgia;outline:none;}
+  #q:focus{border-color:var(--gold);}
+  .hint{font-size:10.5px;color:#7f93bd;margin-top:4px;text-align:center;
+    text-shadow:0 1px 3px #060a18;}
+  #results{background:#0e1730f8;border:1px solid var(--line);border-top:none;
+    border-radius:0 0 8px 8px;max-height:220px;overflow:auto;display:none;}
+  #results div{padding:7px 12px;font-size:13px;cursor:pointer;
+    display:flex;justify-content:space-between;}
+  #results div:hover{background:#1a2748;}
+  #results .hid{color:#7f93bd;font-size:11px;}
+  #journal{position:fixed;top:0;right:-370px;width:335px;height:100%;
+    background:var(--panel);border-left:1px solid var(--line);
+    transition:right .35s ease;padding:18px;box-sizing:border-box;
+    overflow:auto;z-index:40;}
+  #journal.open{right:0;}
+  #journal h2{color:var(--gold);font-size:15px;margin:0 0 4px;}
+  #journal .sub{font-size:11px;color:#8fa2c8;margin-bottom:12px;}
+  #journal .entry{border-left:2px solid var(--blue);padding:6px 10px;
+    margin:8px 0;font-size:12.5px;background:#0d1530;}
+  #journal .entry b{color:var(--green);}
+  #journal .kaki{font-family:monospace;font-size:11px;color:var(--gold);}
+  #journal .close{position:absolute;top:10px;right:12px;cursor:pointer;
+    color:#8fa2c8;font-size:18px;}
+  #tray{position:fixed;left:16px;bottom:34px;background:#180d12f0;
+    border:1px solid #5a2430;border-radius:8px;padding:10px 12px;
+    width:230px;z-index:30;}
+  #tray h3{margin:0 0 6px;font-size:11px;color:#c98;letter-spacing:1px;}
+  #tray .nonp{display:flex;align-items:center;gap:8px;font-size:12px;
+    padding:4px 2px;cursor:context-menu;color:#d8c4c8;}
+  #tray .dot{width:9px;height:9px;border-radius:50%;background:var(--red);
+    box-shadow:0 0 6px var(--red);}
+  #cmenu{position:fixed;display:none;background:#101a36;border:1px solid
+    var(--line);border-radius:7px;z-index:60;min-width:200px;overflow:hidden;}
+  #cmenu div{padding:8px 14px;font-size:13px;cursor:pointer;}
+  #cmenu div:hover{background:#1c2a52;}
+  #cmenu .rf{color:#e8b8bd;}
+  #refrec{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+    display:none;background:#1a0e13f5;border:1px solid #5a2430;
+    border-radius:10px;padding:20px 24px;width:330px;z-index:70;}
+  #refrec h2{color:var(--red);font-size:14px;margin:0 0 8px;}
+  #refrec p{font-size:12.5px;line-height:1.5;color:#dcc;}
+  #refrec .close{float:right;cursor:pointer;color:#a88;}
+  #attrib{position:fixed;bottom:8px;right:12px;font:10.5px Georgia;
+    color:#8fa2c8;z-index:20;}
+  .foot{position:fixed;bottom:8px;left:16px;font-size:10px;
+    color:#66779c;pointer-events:none;z-index:20;}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+
+<div class="hud">
+  <h1>ŠALA · SilaEngine — Wadi-us-Salaam Court v2 · yard-fitted {7,3} mask</h1>
+  <div class="law">Mask anchored, sized and CLIPPED to the yard boundary (workshop-approximate — sealed boundary via QGIS/SUSA) · index space only, truth = UTM 38N · Palāḫu: arrivals under the veil, exact per cm · ṬĀLUKU off</div>
+</div>
+
+<div class="ctl">
+  <button id="btnMask" class="on">Hepta mask</button>
+  <button id="btnBound" class="on">Yard boundary</button>
+  <button id="btnOrbit">ṬĀLUKU orbit</button>
+</div>
+<div id="coords">…</div>
+
+<div id="searchbox">
+  <input id="q" placeholder="Say where — the veil brings you down… (plot, gate, landmark)" autocomplete="off">
+  <div id="results"></div>
+  <div class="hint">Palāḫu descent: dim → arrive exactly → reveal · ~400 ms · no traversal</div>
+</div>
+
+<div id="journal">
+  <span class="close" onclick="closeJournal()">✕</span>
+  <h2 id="jTitle"></h2><div class="sub" id="jSub"></div><div id="jBody"></div>
+</div>
+
+<div id="tray">
+  <h3>REFUSAL RECORDS · QUARANTINE TRAY</h3>
+  <div id="trayBody"></div>
+</div>
+
+<div id="cmenu"></div>
+
+<div id="refrec">
+  <span class="close" onclick="refrec.style.display='none'">✕</span>
+  <h2>Refusal Record</h2><p id="rrBody"></p>
+</div>
+
+<div id="attrib">Basemap © OpenStreetMap contributors</div>
+<div class="foot">Šala prototype only (GL-VIZ-001 · GL-GEO-002 · Palāḫu PB-331 · PB-333) · production: egui/WGPU · scroll = zoom · drag = pan · Shift-drag = yaw/tilt · left-click = journal · right-click = context</div>
+
+<script>
+"use strict";
+/* ================= complex helpers + {7,3} generator ================ */
+function C(re,im){return{re:re,im:im};}
+function cadd(a,b){return C(a.re+b.re,a.im+b.im);}
+function csub(a,b){return C(a.re-b.re,a.im-b.im);}
+function cabs2(a){return a.re*a.re+a.im*a.im;}
+function cscale(a,s){return C(a.re*s,a.im*s);}
+const P7=7,Q3=3;
+const coshR=Math.cos(Math.PI/Q3)/Math.sin(Math.PI/P7);
+const Rh=Math.log(coshR+Math.sqrt(coshR*coshR-1));
+const rv=Math.tanh(Rh/2);
+const centerVerts=[];
+for(let k=0;k<P7;k++){const a=2*Math.PI*k/P7-Math.PI/2;
+  centerVerts.push(C(rv*Math.cos(a),rv*Math.sin(a)));}
+function geoCircle(A,B){
+  const den=2*(A.re*B.im-B.re*A.im);
+  if(Math.abs(den)<1e-8)return null;
+  const A1=cabs2(A)+1,A2=cabs2(B)+1;
+  const cx=(A1*B.im-A2*A.im)/den,cy=(A2*A.re-A1*B.re)/den;
+  return{c:C(cx,cy),r2:cx*cx+cy*cy-1};}
+function reflect(z,A,B){
+  const g=geoCircle(A,B);
+  if(!g){const ph=Math.atan2(B.im-A.im,B.re-A.re);
+    return C(Math.cos(2*ph)*z.re+Math.sin(2*ph)*z.im,
+             Math.sin(2*ph)*z.re-Math.cos(2*ph)*z.im);}
+  const d=csub(z,g.c);return cadd(g.c,cscale(d,g.r2/cabs2(d)));}
+function sampleGeo(z1,z2,n){
+  const g=geoCircle(z1,z2),pts=[];
+  if(!g){for(let i=0;i<=n;i++)
+    pts.push(C(z1.re+(z2.re-z1.re)*i/n,z1.im+(z2.im-z1.im)*i/n));return pts;}
+  const t1=Math.atan2(z1.im-g.c.im,z1.re-g.c.re);
+  let dt=Math.atan2(z2.im-g.c.im,z2.re-g.c.re)-t1;
+  while(dt>Math.PI)dt-=2*Math.PI;while(dt<-Math.PI)dt+=2*Math.PI;
+  const r=Math.sqrt(Math.max(0,g.r2));
+  for(let i=0;i<=n;i++){const th=t1+dt*i/n;
+    pts.push(C(g.c.re+r*Math.cos(th),g.c.im+r*Math.sin(th)));}
+  return pts;}
+const cells=[];
+(function build(){ // deepened: ~420 cells, finer rim -> alley-scale coverage
+  const seen=new Set();
+  function key(c){return Math.round(c.re*12000)+'_'+Math.round(c.im*12000);}
+  function cen(vs){let x=0,y=0;for(const v of vs){x+=v.re;y+=v.im;}
+    return C(x/vs.length,y/vs.length);}
+  cells.push({verts:centerVerts,c:cen(centerVerts)});seen.add(key(cells[0].c));
+  let q=[0];
+  while(q.length&&cells.length<420){const nq=[];
+    for(const idx of q){const cell=cells[idx];
+      for(let e=0;e<P7;e++){
+        const A=cell.verts[e],B=cell.verts[(e+1)%P7];
+        const nv=cell.verts.map(v=>reflect(v,A,B));
+        const nc=cen(nv);
+        if(Math.hypot(nc.re,nc.im)>0.985)continue;
+        let sz=0;for(const v of nv)sz=Math.max(sz,Math.hypot(v.re-nc.re,v.im-nc.im));
+        if(sz<0.0055)continue;
+        const k=key(nc);if(seen.has(k))continue;seen.add(k);
+        cells.push({verts:nv,c:nc});nq.push(cells.length-1);
+        if(cells.length>=420)break;}
+      if(cells.length>=420)break;}
+    q=nq;}
+})();
+
+/* ================= Web-Mercator ===================================== */
+const RE=6378137;
+function rad(d){return d*Math.PI/180;}
+function m2x(lon){return RE*rad(lon);}
+function m2y(lat){return RE*Math.log(Math.tan(Math.PI/4+rad(lat)/2));}
+function y2lat(y){return (2*Math.atan(Math.exp(y/RE))-Math.PI/2)*180/Math.PI;}
+function x2lon(x){return (x/RE)*180/Math.PI;}
+
+/* ================= THE YARD (workshop-approximate boundary) ========= */
+/* Sealed boundary comes from the QGIS export via SUSA in production.  */
+const YARD_LL=[
+  [31.9985,44.3105],[31.9992,44.3040],[32.0015,44.2975],[32.0055,44.2915],
+  [32.0110,44.2870],[32.0175,44.2850],[32.0245,44.2865],[32.0300,44.2915],
+  [32.0330,44.2985],[32.0325,44.3055],[32.0285,44.3105],[32.0220,44.3130],
+  [32.0145,44.3138],[32.0065,44.3128],[32.0015,44.3122]
+];
+const YARD=YARD_LL.map(p=>[m2x(p[1]),m2y(p[0])]);
+/* anchor = polygon centroid; radius = covering radius (computed, never guessed) */
+let AX=0,AY=0;
+for(const p of YARD){AX+=p[0];AY+=p[1];}
+AX/=YARD.length;AY/=YARD.length;
+let MASK_R=0;
+for(const p of YARD)MASK_R=Math.max(MASK_R,Math.hypot(p[0]-AX,p[1]-AY));
+MASK_R*=1.03;
+function chart(z){return[AX+z.re*MASK_R,AY+z.im*MASK_R];}
+
+/* ================= camera =========================================== */
+const cam={cx:AX,cy:AY,zoom:14.5,yaw:0.0,tilt:0.42};
+const Zmin=13.2,Zmax=19.6;
+let orbitOn=false,maskOn=true,boundOn=true;
+const cv=document.getElementById('sky'),cx2=cv.getContext('2d');
+let W=0,H=0;function fit(){W=cv.width=innerWidth;H=cv.height=innerHeight;}
+addEventListener('resize',fit);fit();
+function scale(){return 256*Math.pow(2,cam.zoom)/(2*Math.PI*RE);}
+function proj(mx,my,zm){
+  const s=scale();
+  const X=(mx-cam.cx)*s,Y=-(my-cam.cy)*s;
+  const rx=Math.cos(cam.yaw)*X-Math.sin(cam.yaw)*Y;
+  const ry=Math.sin(cam.yaw)*X+Math.cos(cam.yaw)*Y;
+  const gY=1-cam.tilt*0.72;
+  return[W/2+rx,H*0.54+ry*gY-(zm||0)*s*cam.tilt*1.2];}
+
+/* ================= sovereign tile engine ============================ */
+const tiles={};
+function tileImg(z,x,y){
+  const n=1<<z;if(y<0||y>=n)return null;x=((x%n)+n)%n;
+  const k=z+'/'+x+'/'+y;
+  if(tiles[k])return tiles[k];
+  const im=new Image();im.crossOrigin='anonymous';
+  im.src='https://tile.openstreetmap.org/'+z+'/'+x+'/'+y+'.png';
+  tiles[k]=im;return im;}
+function drawTiles(){
+  const zt=Math.max(3,Math.min(19,Math.round(cam.zoom)));
+  const n=1<<zt,tsz=2*Math.PI*RE/n;
+  const ctx=Math.floor((cam.cx+Math.PI*RE)/tsz);
+  const cty=Math.floor((Math.PI*RE-cam.cy)/tsz);
+  const tScreen=tsz*scale();
+  const k=Math.min(9,Math.ceil(Math.max(W,H/(1-cam.tilt*0.72))/(2*tScreen))+1);
+  for(let dy=-k;dy<=k;dy++)for(let dx=-k;dx<=k;dx++){
+    const tx=ctx+dx,ty=cty+dy;
+    const im=tileImg(zt,tx,ty);
+    if(!im||!im.complete||!im.naturalWidth)continue;
+    const wx=-Math.PI*RE+((tx%n+n)%n)*tsz,wy=Math.PI*RE-ty*tsz;
+    const P0=proj(wx,wy,0),P1=proj(wx+tsz,wy,0),P2=proj(wx,wy-tsz,0);
+    cx2.setTransform((P1[0]-P0[0])/256,(P1[1]-P0[1])/256,
+                     (P2[0]-P0[0])/256,(P2[1]-P0[1])/256,P0[0],P0[1]);
+    cx2.drawImage(im,0,0);}
+  cx2.setTransform(1,0,0,1,0,0);}
+
+/* ================= particles / refused ============================== */
+const particles=[
+ {name:'Target plot NJF-80211',lat:32.0158,lon:44.3021,col:'#38c98b',
+  addr:'3·5·1·0·2·6·4·1·3',kaki:'C355 0C22 0102 0000 68B2 33D0',kind:'grave'},
+ {name:'Plot NJF-80272',lat:32.0102,lon:44.2988,col:'#38c98b',
+  addr:'3·5·1·0·2·6·4·2·0',kaki:'D0AA 0C22 0102 0000 68B3 7C15',kind:'grave'},
+ {name:'Section 41 marker',lat:32.0210,lon:44.3050,col:'#4aa3ff',
+  addr:'3·5·2·—',kaki:'E4C1 0C22 0102 0000 68B3 90BE',kind:'section'},
+ {name:'Wadi al-Salam Gate 3',lat:32.0006,lon:44.3080,col:'#4aa3ff',
+  addr:'3·0·—',kaki:'B902 0C22 0102 0000 68B2 91AF',kind:'gate'},
+ {name:'Imam Ali Shrine',lat:31.9961,lon:44.3142,col:'#d4af37',
+  addr:'anchor·landmark',kaki:'A17F 0C22 0102 0000 68B1 D4E3',kind:'landmark'},
+ {name:'Al-Ṭūsī Manuscript House',lat:31.9979,lon:44.3125,col:'#38c98b',
+  addr:'landmark',kaki:'F218 0C22 0102 0000 68B4 12A7',kind:'landmark'},
+];
+particles.forEach(p=>{p.mx=m2x(p.lon);p.my=m2y(p.lat);p.z=0;p.bounceT=-1;});
+const refused=[
+ {name:'Unverified vendor overlay',gate:'Nergal · Gate G2',
+  why:'External overlay arrived outside SUSA; witness count 0. Never born — no KAKI was ever minted.'},
+ {name:'Foreign tile-server pin',gate:'Mummu · Gate G4',
+  why:'Coordinate reference unverifiable; composite shape proof failed at design gate. Never born — no KAKI.'}];
+
+/* ================= PALAHU veil descent (PB-331) ===================== */
+const _veil=document.createElement('div');
+_veil.style.cssText='position:fixed;inset:0;background:#060a18;opacity:0;'
+ +'transition:opacity .16s ease;pointer-events:none;z-index:25;';
+document.body.appendChild(_veil);
+let _pal=null,dest=null;
+function sweepTo(p){dest=p;_pal={phase:'veil',t:0,p:p};_veil.style.opacity='1';}
+function stepPal(dt){
+  if(!_pal)return;
+  _pal.t+=dt;
+  if(_pal.phase==='veil'&&_pal.t>=160){
+    cam.cx=_pal.p.mx;cam.cy=_pal.p.my;
+    cam.zoom=(_pal.p.kind==='grave')?18.6:17.2;
+    cam.tilt=0.55;orbitOn=false;
+    document.getElementById('btnOrbit').classList.remove('on');
+    _pal.phase='reveal';_pal.t=0;_veil.style.opacity='0';
+  }else if(_pal.phase==='reveal'&&_pal.t>=240){
+    const err=Math.hypot(cam.cx-_pal.p.mx,cam.cy-_pal.p.my)
+              *Math.cos(rad(_pal.p.lat))*100;
+    _pal=null;bounce(dest);openJournal(dest,false,err);}}
+
+/* ================= render =========================================== */
+function yardPath(){
+  cx2.beginPath();
+  for(let i=0;i<YARD.length;i++){const s=proj(YARD[i][0],YARD[i][1],0);
+    i?cx2.lineTo(s[0],s[1]):cx2.moveTo(s[0],s[1]);}
+  cx2.closePath();}
+let last=performance.now(),coordT=0;
+function frame(now){const dt=now-last;last=now;
+  if(orbitOn&&!_pal)cam.yaw+=0.00030*dt;
+  stepPal(dt);
+  cx2.setTransform(1,0,0,1,0,0);
+  cx2.fillStyle='#060a18';cx2.fillRect(0,0,W,H);
+  drawTiles();
+  cx2.fillStyle='rgba(6,10,24,0.52)';cx2.fillRect(0,0,W,H);
+
+  if(maskOn){ /* the {7,3} chart, CLIPPED TO THE YARD */
+    cx2.save();
+    yardPath();cx2.clip();
+    for(const cell of cells){
+      let sz=0;for(const v of cell.verts)
+        sz=Math.max(sz,Math.hypot(v.re-cell.c.re,v.im-cell.c.im));
+      const px=sz*MASK_R*scale();
+      if(px<1.6)continue;
+      cx2.strokeStyle='rgba(212,175,55,'+Math.min(0.5,sz*2.6+0.14)+')';
+      cx2.lineWidth=0.9;
+      for(let k=0;k<P7;k++){
+        const pts=sampleGeo(cell.verts[k],cell.verts[(k+1)%P7],4);
+        cx2.beginPath();
+        for(let i=0;i<pts.length;i++){const m=chart(pts[i]);
+          const s=proj(m[0],m[1],0);
+          i?cx2.lineTo(s[0],s[1]):cx2.moveTo(s[0],s[1]);}
+        cx2.stroke();}}
+    cx2.restore();}
+
+  if(boundOn){ /* the yard itself, honoured with its own line */
+    yardPath();
+    cx2.strokeStyle='rgba(212,175,55,0.55)';cx2.lineWidth=1.6;cx2.stroke();}
+
+  for(const p of particles){
+    if(p.bounceT>=0){p.bounceT+=dt/1000;const t=p.bounceT;
+      p.z=16+13*Math.exp(-2.6*t)*Math.abs(Math.sin(t*9));if(t>2.6)p.z=16;}
+    if(p.z>0.4){const a=proj(p.mx,p.my,0),b=proj(p.mx,p.my,p.z);
+      cx2.strokeStyle='rgba(223,230,245,0.5)';cx2.lineWidth=1;
+      cx2.beginPath();cx2.moveTo(a[0],a[1]);cx2.lineTo(b[0],b[1]);cx2.stroke();}
+    const s=proj(p.mx,p.my,p.z);p._sx=s[0];p._sy=s[1];
+    const r=Math.max(4.5,Math.min(9,cam.zoom-11));
+    cx2.shadowColor=p.col;cx2.shadowBlur=12;
+    cx2.fillStyle=p.col;cx2.beginPath();cx2.arc(s[0],s[1],r,0,2*Math.PI);cx2.fill();
+    cx2.shadowBlur=0;
+    if(cam.zoom>15.4||dest===p){cx2.fillStyle='#e8eefc';
+      cx2.font='11.5px Georgia';cx2.fillText(p.name,s[0]+r+5,s[1]+3);}}
+
+  coordT+=dt;
+  if(coordT>200){coordT=0;
+    document.getElementById('coords').textContent=
+      y2lat(cam.cy).toFixed(4)+' N, '+x2lon(cam.cx).toFixed(4)+' E · z'
+      +cam.zoom.toFixed(1);}
+  requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+
+/* ================= Nasaru interactions ============================== */
+let down=null,moved=false,shifted=false;
+cv.addEventListener('wheel',e=>{e.preventDefault();
+  cam.zoom=Math.min(Zmax,Math.max(Zmin,cam.zoom-e.deltaY*0.0016));},{passive:false});
+cv.addEventListener('mousedown',e=>{if(e.button!==0)return;
+  down={x:e.clientX,y:e.clientY};moved=false;shifted=e.shiftKey;
+  cv.classList.add('dragging');});
+addEventListener('mousemove',e=>{if(!down)return;
+  const dx=e.clientX-down.x,dy=e.clientY-down.y;
+  if(Math.hypot(dx,dy)>3)moved=true;
+  if(moved){
+    if(shifted||e.shiftKey){cam.yaw+=dx*0.0045;
+      cam.tilt=Math.min(0.80,Math.max(0.15,cam.tilt+dy*0.0028));}
+    else{const s=scale(),gY=1-cam.tilt*0.72;
+      const uy=dy/gY;
+      const ux2=Math.cos(-cam.yaw)*dx-Math.sin(-cam.yaw)*uy;
+      const uy2=Math.sin(-cam.yaw)*dx+Math.cos(-cam.yaw)*uy;
+      cam.cx-=ux2/s;cam.cy+=uy2/s;}
+    down={x:e.clientX,y:e.clientY};}});
+addEventListener('mouseup',e=>{cv.classList.remove('dragging');
+  if(down&&!moved&&e.button===0){const p=hit(e.clientX,e.clientY);
+    if(p){bounce(p);openJournal(p);}}
+  down=null;});
+function hit(mx,my){for(const p of particles)
+  if(Math.hypot(mx-p._sx,my-p._sy)<14)return p;return null;}
+function bounce(p){p.bounceT=0;}
+
+const cmenu=document.getElementById('cmenu');
+cv.addEventListener('contextmenu',e=>{e.preventDefault();
+  const p=hit(e.clientX,e.clientY);if(!p){cmenu.style.display='none';return;}
+  cmenu.innerHTML='<div onclick="menuJournal()">Open StoryEngine journal</div>'
+    +'<div onclick="menuCohort()">Add to cohort</div>';
+  cmenu._p=p;show(cmenu,e);});
+document.getElementById('tray').addEventListener('contextmenu',e=>{
+  e.preventDefault();const el=e.target.closest('.nonp');if(!el)return;
+  cmenu.innerHTML='<div class="rf" onclick="menuRefusal()">Show Refusal Record</div>';
+  cmenu._r=refused[+el.dataset.i];show(cmenu,e);});
+function show(m,e){m.style.display='block';
+  m.style.left=Math.min(e.clientX,innerWidth-210)+'px';
+  m.style.top=Math.min(e.clientY,innerHeight-90)+'px';}
+addEventListener('click',()=>cmenu.style.display='none');
+function menuJournal(){openJournal(cmenu._p);}
+function menuCohort(){cmenu._p._cohort=true;openJournal(cmenu._p,true);}
+const refrec=document.getElementById('refrec');
+function menuRefusal(){const r=cmenu._r;
+  document.getElementById('rrBody').innerHTML=
+   '<b>'+r.name+'</b><br>Refused at: '+r.gate+'<br><br>'+r.why+
+   '<br><br><i>A refused Non-Particle has no story — it was never born.</i>';
+  refrec.style.display='block';}
+
+/* ================= StoryEngine journal ============================== */
+const jr=document.getElementById('journal');
+function openJournal(p,cohort,arrErrCm){
+  document.getElementById('jTitle').textContent=p.name;
+  document.getElementById('jSub').textContent=
+    'Hepta-address '+p.addr+' · truth: UTM 38N · one grave = one cell';
+  let arr='';
+  if(typeof arrErrCm==='number')
+    arr='<div class="entry"><b>Palāḫu arrival</b> — under the veil, '
+       +'no traversal; arrival error '+arrErrCm.toFixed(1)+' cm.</div>';
+  document.getElementById('jBody').innerHTML=
+   '<div class="entry"><b>Born</b> — KISPU commit sealed. '
+   +'<span class="kaki">KAKI '+p.kaki+'</span></div>'
+   +'<div class="entry"><b>Gate chain</b> — SUSA → EnkiSDB → G1…G7 passed → EnkiODB. No bypass.</div>'
+   +arr
+   +'<div class="entry"><b>Index</b> — yard-fitted {7,3} chart cell held; exact lookup '
+   +'via hepta-address (7⁹ = 40,353,607 leaves > 6M graves).</div>'
+   +'<div class="entry"><b>Decree</b> — Madanu: ACTIVE. Aging witnesses quiet (Šību 0.11 šb).</div>'
+   +(cohort?'<div class="entry"><b>Cohort</b> — added to current navigation cohort.</div>':'');
+  jr.classList.add('open');}
+function closeJournal(){jr.classList.remove('open');}
+
+/* ================= search + controls ================================ */
+const q=document.getElementById('q'),res=document.getElementById('results');
+q.addEventListener('input',()=>{const v=q.value.trim().toLowerCase();
+  if(!v){res.style.display='none';return;}
+  const m=particles.filter(p=>p.name.toLowerCase().includes(v));
+  res.innerHTML=m.map(p=>'<div data-n="'+particles.indexOf(p)+'">'
+    +p.name+'<span class="hid">'+p.addr+'</span></div>').join('')
+    ||'<div style="color:#7f93bd">no orbit particle answers</div>';
+  res.style.display='block';});
+res.addEventListener('click',e=>{const el=e.target.closest('div[data-n]');
+  if(!el)return;const p=particles[+el.dataset.n];
+  res.style.display='none';q.value=p.name;sweepTo(p);});
+document.getElementById('btnOrbit').onclick=function(){
+  orbitOn=!orbitOn;this.classList.toggle('on',orbitOn);};
+document.getElementById('btnMask').onclick=function(){
+  maskOn=!maskOn;this.classList.toggle('on',maskOn);};
+document.getElementById('btnBound').onclick=function(){
+  boundOn=!boundOn;this.classList.toggle('on',boundOn);};
+
+document.getElementById('trayBody').innerHTML=refused.map((r,i)=>
+ '<div class="nonp" data-i="'+i+'"><span class="dot"></span>'+r.name+'</div>').join('');
+</script>
+</body>
+</html>

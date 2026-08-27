@@ -1,4 +1,4 @@
-//! PipelineDeclaration — declare WHAT, EriduOS executes HOW.
+//! PipelineDeclaration — declare WHAT, UrOS executes HOW.
 //!
 //! A pipeline is a named, versioned description of:
 //!   - one source to extract from
@@ -31,7 +31,10 @@ pub enum Stage {
     /// Cross-tribe de-duplication via IDU prober (idu-prober).
     Deduplicate,
     /// Aggregation reduction (sum / count / last-wins per key).
-    Aggregate { key_attr_hash: u32, strategy: AggregationStrategy },
+    Aggregate {
+        key_attr_hash: u32,
+        strategy: AggregationStrategy,
+    },
     /// Custom transformation with a named transform function ID.
     Transform { transform_id: &'static str },
 }
@@ -49,12 +52,12 @@ pub enum AggregationStrategy {
 impl Stage {
     pub fn stage_name(&self) -> &'static str {
         match self {
-            Stage::Cleanse             => "cleanse",
-            Stage::Validate { .. }    => "validate",
-            Stage::Enrich { .. }      => "enrich",
-            Stage::Deduplicate        => "deduplicate",
-            Stage::Aggregate { .. }   => "aggregate",
-            Stage::Transform { .. }   => "transform",
+            Stage::Cleanse => "cleanse",
+            Stage::Validate { .. } => "validate",
+            Stage::Enrich { .. } => "enrich",
+            Stage::Deduplicate => "deduplicate",
+            Stage::Aggregate { .. } => "aggregate",
+            Stage::Transform { .. } => "transform",
         }
     }
 }
@@ -71,14 +74,17 @@ pub enum ExceptionPolicy {
     /// Halt the entire pipeline run and raise an alert.
     HaltPipeline,
     /// Attempt retry up to `max_retries` times before falling back to `fallback`.
-    Retry { max_retries: u8, fallback: Box<ExceptionPolicy> },
+    Retry {
+        max_retries: u8,
+        fallback: Box<ExceptionPolicy>,
+    },
 }
 
 /// Scope: which exception kinds this policy covers.
 #[derive(Debug, Clone)]
 pub struct ExceptionRule {
     pub applies_to: Vec<ExceptionKind>,
-    pub policy:     ExceptionPolicy,
+    pub policy: ExceptionPolicy,
 }
 
 // ── Pipeline Declaration ──────────────────────────────────────────────────────
@@ -88,16 +94,16 @@ pub struct ExceptionRule {
 /// Construct via `PipelineDeclaration::builder()`.
 #[derive(Debug, Clone)]
 pub struct PipelineDeclaration {
-    pub id:              PipelineId,
+    pub id: PipelineId,
     /// Semantic version — bump when stages or routing change.
-    pub version:         u16,
-    pub source:          SourceId,
-    pub stages:          Vec<Stage>,
-    pub targets:         Vec<TargetId>,
+    pub version: u16,
+    pub source: SourceId,
+    pub stages: Vec<Stage>,
+    pub targets: Vec<TargetId>,
     pub exception_rules: Vec<ExceptionRule>,
     /// Optional: human description (shown in Dubsar pipeline map).
-    pub description:     &'static str,
-    pub enabled:         bool,
+    pub description: &'static str,
+    pub enabled: bool,
 }
 
 impl PipelineDeclaration {
@@ -109,13 +115,13 @@ impl PipelineDeclaration {
 // ── Pipeline Builder ──────────────────────────────────────────────────────────
 
 pub struct PipelineBuilder {
-    id:              PipelineId,
-    version:         u16,
-    source:          SourceId,
-    stages:          Vec<Stage>,
-    targets:         Vec<TargetId>,
+    id: PipelineId,
+    version: u16,
+    source: SourceId,
+    stages: Vec<Stage>,
+    targets: Vec<TargetId>,
     exception_rules: Vec<ExceptionRule>,
-    description:     &'static str,
+    description: &'static str,
 }
 
 impl PipelineBuilder {
@@ -131,11 +137,23 @@ impl PipelineBuilder {
         }
     }
 
-    pub fn version(mut self, v: u16) -> Self { self.version = v; self }
-    pub fn description(mut self, d: &'static str) -> Self { self.description = d; self }
+    pub fn version(mut self, v: u16) -> Self {
+        self.version = v;
+        self
+    }
+    pub fn description(mut self, d: &'static str) -> Self {
+        self.description = d;
+        self
+    }
 
-    pub fn stage(mut self, s: Stage) -> Self { self.stages.push(s); self }
-    pub fn target(mut self, t: &'static str) -> Self { self.targets.push(TargetId(t)); self }
+    pub fn stage(mut self, s: Stage) -> Self {
+        self.stages.push(s);
+        self
+    }
+    pub fn target(mut self, t: &'static str) -> Self {
+        self.targets.push(TargetId(t));
+        self
+    }
 
     pub fn on_exception(mut self, rule: ExceptionRule) -> Self {
         self.exception_rules.push(rule);
@@ -167,12 +185,16 @@ mod tests {
             .stage(Stage::Cleanse)
             .stage(Stage::Validate { min_b11: 140 })
             .stage(Stage::Deduplicate)
-            .stage(Stage::Enrich { ruleset: "erp.enrichment.v1" })
+            .stage(Stage::Enrich {
+                ruleset: "erp.enrichment.v1",
+            })
             .target("dw.central")
             .target("notify.alerts")
             .on_exception(ExceptionRule {
                 applies_to: vec![ExceptionKind::QualityRejection],
-                policy: ExceptionPolicy::DeadLetter { queue_id: "dlq.quality" },
+                policy: ExceptionPolicy::DeadLetter {
+                    queue_id: "dlq.quality",
+                },
             })
             .build()
     }
@@ -198,7 +220,11 @@ mod tests {
     #[test]
     fn validate_stage_carries_min_b11() {
         let p = erp_to_dw_pipeline();
-        let validate = p.stages.iter().find(|s| s.stage_name() == "validate").unwrap();
+        let validate = p
+            .stages
+            .iter()
+            .find(|s| s.stage_name() == "validate")
+            .unwrap();
         assert_eq!(*validate, Stage::Validate { min_b11: 140 });
     }
 
@@ -216,7 +242,9 @@ mod tests {
 
     #[test]
     fn builder_bumps_version() {
-        let p = PipelineDeclaration::builder("test", "src").version(3).build();
+        let p = PipelineDeclaration::builder("test", "src")
+            .version(3)
+            .build();
         assert_eq!(p.version, 3);
     }
 }

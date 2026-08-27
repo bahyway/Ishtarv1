@@ -1,0 +1,108 @@
+# =============================================================================
+# PB-609 -- Automated run-manifest: walk the remaining playbook backlog
+# toward finishing BahyWay.Ecosystem v4.0, fully unattended. 2026-08-23,
+# rewritten twice per the Architect's explicit instruction: ZERO prompts,
+# no ENTER required anywhere, not even one at the start. Invoking this
+# playbook is itself the one CSR-08 confirmation -- from that point on it
+# runs --check then LIVE automatically for every item, start to finish,
+# with no pause of any kind. Suitable for cron/CI or any context with no
+# human present at the terminal.
+#
+# STOP-ON-ERROR: controlled by `stop_on_error` (default false):
+#   -e stop_on_error=false (default) -- a failure is journaled and the walk
+#     moves to the next item. This is the mode that actually answers "what
+#     do I have vs. what's still missing" -- most of this backlog has
+#     pre-existing bugs unrelated to this playbook (undefined vars, wrong
+#     assumed paths, missing crates), so a hard stop on the first failure
+#     halts at item 1 and never reaches the other 109.
+#   -e stop_on_error=true -- halts the whole walk the instant any item's
+#     --check or LIVE run fails, so you can fix and re-run immediately.
+#
+# THE ORDERING -- dependency-based, per the Architect's instruction:
+# playbooks/data/run_manifest_609_backlog.yml is sorted in STRICT ASCENDING
+# PB-number order (109 entries, PB-160 through PB-579). This is not
+# cosmetic: it was rebuilt from real evidence, not the manual's original
+# presentation order (which is why the walk used to jump PB-570 -> PB-430
+# -> PB-502). Every playbook in this backlog was checked for preflight/
+# chain-gate references to another backlog item; only two real
+# dependencies exist -- PB-437 requires PB-427..436 to have journaled
+# first, PB-530 requires PB-515..529 -- and both cite ranges BELOW their
+# own number, by construction (a gate is always written after what it
+# gates). A plain ascending sort therefore satisfies both automatically.
+# The other ~106 items have no dependency on each other at all -- so a
+# full renumbering (renaming ~110 files and every cross-reference to
+# them, for items that don't actually depend on one another) would be
+# almost entirely cosmetic risk for near-zero functional benefit. This
+# ordering achieves the same outcome -- dependencies respected, no
+# jumping -- without renaming a single file.
+#
+# THE BACKLOG (playbooks/data/run_manifest_609_backlog.yml, 109 entries,
+# PB-318 excluded -- physical NAS hardware doesn't exist yet, and PB-160
+# RECOVERY excluded -- superseded by _corrected, which already ran clean):
+#   - PB-160, PB-301, PB-321..PB-579 covering law-seals, crate scaffolds,
+#     and CQRS/service wiring, in one merged ascending sequence.
+#
+# WHAT'S DELIBERATELY NOT IN THIS BACKLOG:
+#   - The Gula chain (playbook_602-608) -- already run and green this
+#     session (cargo build/test), journaled at naru/playbook_acts.jsonl.
+#   - playbook_318 (vault_body/NAS), the najaf_base_station/najaf_field_sbc
+#     hardware playbooks (422-425) -- still genuinely blocked on hardware
+#     that doesn't exist. See ANU_GOVERNOR_PB_MANUAL.md's "Not yet
+#     runnable" table.
+#   - The six undrafted suites (PB-360-374, 380-409, ~40 numbers) -- no
+#     .yml files exist for these yet.
+#   - playbook_317 (game day) IS in this backlog, but its own T1 step
+#     invokes playbook_313's interactive CSR-08 seal prompt from a non-TTY
+#     subprocess -- expect that one to fail or hang differently from a
+#     normal task failure; watch its rc specifically.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_609_run_manifest.yml
+#   ansible-playbook playbooks/playbook_609_run_manifest.yml -e stop_on_error=true
+#
+# Every step is journaled to naru/run_manifest_log.jsonl (append-only) --
+# re-running skips anything that already succeeded, so a walk can always
+# be safely re-run after fixing whatever broke.
+# =============================================================================
+- name: "PB-609 · Automated run-manifest — the BahyWay.Ecosystem v4.0 backlog"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    manifest_log: "{{ repo_root }}/naru/run_manifest_log.jsonl"
+    stop_on_error: false
+
+  tasks:
+    - name: Load the backlog
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/data/run_manifest_609_backlog.yml"
+
+    - name: Ensure NARU dir exists
+      ansible.builtin.file:
+        path: "{{ repo_root }}/naru"
+        state: directory
+        mode: "0755"
+
+    - name: "Announce the walk (no pause — fully unattended, zero prompts)"
+      ansible.builtin.debug:
+        msg: >-
+          PB-609 walking {{ manifest | length }} backlog playbooks
+          UNATTENDED: --check then LIVE, automatically, no prompts at all.
+          stop_on_error={{ stop_on_error }} ({{ 'halts on the first failure' if stop_on_error else 'failures are journaled, walk continues' }}).
+
+    - name: "Walk the backlog, unattended"
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/run_manifest_one.yml"
+      loop: "{{ manifest }}"
+      loop_control:
+        loop_var: item
+        label: "{{ item.pb }} — {{ item.what }}"
+
+    - name: "Walk complete"
+      ansible.builtin.debug:
+        msg: >-
+          PB-609 walk finished. See {{ manifest_log }} for the full
+          per-item journal (dry/live rc, skips). Still outside this
+          backlog: PB-318 (NAS hardware), the Najaf GPS hardware suite
+          (422-425), and the six undrafted suites (PB-360-374, 380-409)
+          — see ANU_GOVERNOR_PB_MANUAL.md.

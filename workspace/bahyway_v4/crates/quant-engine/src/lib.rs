@@ -42,27 +42,24 @@
 
 #![forbid(unsafe_code)]
 
-pub mod returns;
-pub mod rolling;
 pub mod covariance;
-pub mod risk;
 pub mod factor;
 pub mod particle;
+pub mod returns;
+pub mod risk;
+pub mod rolling;
 
-pub use returns::{ReturnSeries, ReturnKind};
-pub use rolling::{RollingWindow, BollingerBands, ExponentialMovingAverage};
-pub use covariance::{CovMatrix, CorrelationMatrix};
-pub use risk::{RiskReport, DrawdownSeries};
-pub use factor::{QuantFactor, FactorModel, FactorScores};
+pub use covariance::{CorrelationMatrix, CovMatrix};
+pub use factor::{FactorModel, FactorScores, QuantFactor};
 pub use particle::{AssetParticle, AssetQualityLane};
+pub use returns::{ReturnKind, ReturnSeries};
+pub use risk::{DrawdownSeries, RiskReport};
+pub use rolling::{BollingerBands, ExponentialMovingAverage, RollingWindow};
 
 pub mod prelude {
     pub use crate::{
-        ReturnSeries, ReturnKind,
-        RollingWindow, BollingerBands, ExponentialMovingAverage,
-        CovMatrix, CorrelationMatrix,
-        RiskReport, DrawdownSeries,
-        QuantFactor, FactorModel, FactorScores,
-        AssetParticle, AssetQualityLane,
+        AssetParticle, AssetQualityLane, BollingerBands, CorrelationMatrix, CovMatrix,
+        DrawdownSeries, ExponentialMovingAverage, FactorModel, FactorScores, QuantFactor,
+        ReturnKind, ReturnSeries, RiskReport, RollingWindow,
     };
 }

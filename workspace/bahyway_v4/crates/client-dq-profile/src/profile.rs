@@ -23,23 +23,23 @@ pub enum DimTag {
 impl DimTag {
     pub fn label(self) -> &'static str {
         match self {
-            DimTag::Name      => "Name",
-            DimTag::Identity  => "Identity",
-            DimTag::Date      => "Date",
+            DimTag::Name => "Name",
+            DimTag::Identity => "Identity",
+            DimTag::Date => "Date",
             DimTag::Geography => "Geography",
-            DimTag::Content   => "Content",
-            DimTag::General   => "General",
+            DimTag::Content => "Content",
+            DimTag::General => "General",
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_dim_tag(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
-            "name"      => DimTag::Name,
-            "identity"  => DimTag::Identity,
-            "date"      => DimTag::Date,
+            "name" => DimTag::Name,
+            "identity" => DimTag::Identity,
+            "date" => DimTag::Date,
             "geography" => DimTag::Geography,
-            "content"   => DimTag::Content,
-            _           => DimTag::General,
+            "content" => DimTag::Content,
+            _ => DimTag::General,
         }
     }
 
@@ -55,14 +55,23 @@ impl DimTag {
         if n.contains("date") || n.contains("birth") || n.contains("death") || n.contains("year") {
             return DimTag::Date;
         }
-        if n.contains("location") || n.contains("cemetery") || n.contains("region")
-            || n.contains("zone") || n.contains("city") || n.contains("address")
-            || n.contains("section") || n.contains("row") || n.contains("plot")
+        if n.contains("location")
+            || n.contains("cemetery")
+            || n.contains("region")
+            || n.contains("zone")
+            || n.contains("city")
+            || n.contains("address")
+            || n.contains("section")
+            || n.contains("row")
+            || n.contains("plot")
         {
             return DimTag::Geography;
         }
-        if n.contains("note") || n.contains("remark") || n.contains("comment")
-            || n.contains("description") || n.contains("text")
+        if n.contains("note")
+            || n.contains("remark")
+            || n.contains("comment")
+            || n.contains("description")
+            || n.contains("text")
         {
             return DimTag::General;
         }
@@ -73,41 +82,41 @@ impl DimTag {
 /// Client-level format layer codes (maps to fuzzy_engine::FormatLayer).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FormatLayerCode {
-    CivilRegistry       = 0,
-    MedicalRecord       = 1,
-    PipelineData        = 2,
+    CivilRegistry = 0,
+    MedicalRecord = 1,
+    PipelineData = 2,
     CuneiformDictionary = 3,
-    GenericEav          = 4,
+    GenericEav = 4,
 }
 
 impl FormatLayerCode {
     pub fn to_format_layer(self) -> FormatLayer {
         match self {
-            FormatLayerCode::CivilRegistry       => FormatLayer::CivilRegistry,
-            FormatLayerCode::MedicalRecord       => FormatLayer::MedicalRecord,
-            FormatLayerCode::PipelineData        => FormatLayer::PipelineData,
+            FormatLayerCode::CivilRegistry => FormatLayer::CivilRegistry,
+            FormatLayerCode::MedicalRecord => FormatLayer::MedicalRecord,
+            FormatLayerCode::PipelineData => FormatLayer::PipelineData,
             FormatLayerCode::CuneiformDictionary => FormatLayer::CuneiformDictionary,
-            FormatLayerCode::GenericEav          => FormatLayer::GenericEav,
+            FormatLayerCode::GenericEav => FormatLayer::GenericEav,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            FormatLayerCode::CivilRegistry       => "CivilRegistry",
-            FormatLayerCode::MedicalRecord       => "MedicalRecord",
-            FormatLayerCode::PipelineData        => "PipelineData",
+            FormatLayerCode::CivilRegistry => "CivilRegistry",
+            FormatLayerCode::MedicalRecord => "MedicalRecord",
+            FormatLayerCode::PipelineData => "PipelineData",
             FormatLayerCode::CuneiformDictionary => "CuneiformDictionary",
-            FormatLayerCode::GenericEav          => "GenericEav",
+            FormatLayerCode::GenericEav => "GenericEav",
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_format_layer_code(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
-            "civilregistry" | "civil_registry" | "civil"   => FormatLayerCode::CivilRegistry,
+            "civilregistry" | "civil_registry" | "civil" => FormatLayerCode::CivilRegistry,
             "medicalrecord" | "medical_record" | "medical" => FormatLayerCode::MedicalRecord,
-            "pipelinedata"  | "pipeline_data"  | "pipeline"=> FormatLayerCode::PipelineData,
-            "cuneiformdictionary" | "cuneiform"            => FormatLayerCode::CuneiformDictionary,
-            _                                              => FormatLayerCode::GenericEav,
+            "pipelinedata" | "pipeline_data" | "pipeline" => FormatLayerCode::PipelineData,
+            "cuneiformdictionary" | "cuneiform" => FormatLayerCode::CuneiformDictionary,
+            _ => FormatLayerCode::GenericEav,
         }
     }
 
@@ -126,36 +135,36 @@ impl FormatLayerCode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceTrustLevel {
     Authoritative = 0,
-    Official      = 1,
-    Community     = 2,
-    Unknown       = 3,
+    Official = 1,
+    Community = 2,
+    Unknown = 3,
 }
 
 impl SourceTrustLevel {
     pub fn to_source_trust(self) -> SourceTrust {
         match self {
             SourceTrustLevel::Authoritative => SourceTrust::Authoritative,
-            SourceTrustLevel::Official      => SourceTrust::Official,
-            SourceTrustLevel::Community     => SourceTrust::Community,
-            SourceTrustLevel::Unknown       => SourceTrust::Unknown,
+            SourceTrustLevel::Official => SourceTrust::Official,
+            SourceTrustLevel::Community => SourceTrust::Community,
+            SourceTrustLevel::Unknown => SourceTrust::Unknown,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
             SourceTrustLevel::Authoritative => "Authoritative",
-            SourceTrustLevel::Official      => "Official",
-            SourceTrustLevel::Community     => "Community",
-            SourceTrustLevel::Unknown       => "Unknown",
+            SourceTrustLevel::Official => "Official",
+            SourceTrustLevel::Community => "Community",
+            SourceTrustLevel::Unknown => "Unknown",
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_source_trust_level(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
             "authoritative" => SourceTrustLevel::Authoritative,
-            "official"      => SourceTrustLevel::Official,
-            "community"     => SourceTrustLevel::Community,
-            _               => SourceTrustLevel::Unknown,
+            "official" => SourceTrustLevel::Official,
+            "community" => SourceTrustLevel::Community,
+            _ => SourceTrustLevel::Unknown,
         }
     }
 }
@@ -164,31 +173,31 @@ impl SourceTrustLevel {
 #[derive(Debug, Clone)]
 pub struct AttrProfile {
     /// Column name from the CSV header.
-    pub attr_name:      String,
+    pub attr_name: String,
     /// FNV-1a hash of attr_name — matches EavTriple.attr_hash.
-    pub attr_hash:      u32,
+    pub attr_hash: u32,
     /// If true: empty value is acceptable (optional column). If false: empty = DQ failure.
-    pub nullable:       bool,
+    pub nullable: bool,
     /// Minimum fraction of records across the batch that must have this attr (0.0–1.0).
     /// Only used for batch-level SLA reporting; per-record scoring uses `nullable`.
     pub fill_threshold: f32,
     /// Which fuzzy dimension this attribute contributes to.
-    pub dim_tag:        DimTag,
+    pub dim_tag: DimTag,
     /// Relative weight of this attribute in the overall quality score (0.0–1.0).
-    pub weight:         f32,
+    pub weight: f32,
 }
 
 impl AttrProfile {
     pub fn new(attr_name: &str, nullable: bool) -> Self {
         let attr_hash = fnv1a_32(attr_name.as_bytes());
-        let dim_tag   = DimTag::detect(attr_name);
+        let dim_tag = DimTag::detect(attr_name);
         AttrProfile {
-            attr_name:      attr_name.to_string(),
+            attr_name: attr_name.to_string(),
             attr_hash,
             nullable,
             fill_threshold: if nullable { 0.0 } else { 1.0 },
             dim_tag,
-            weight:         1.0,
+            weight: 1.0,
         }
     }
 }
@@ -197,17 +206,17 @@ impl AttrProfile {
 #[derive(Debug, Clone)]
 pub struct ClientDqProfile {
     /// Base batch name (ZIP filename without extension).
-    pub batch_name:      String,
+    pub batch_name: String,
     /// Per-attribute rules.
-    pub attrs:           Vec<AttrProfile>,
+    pub attrs: Vec<AttrProfile>,
     /// B11 threshold for Golden (Gem tier). Default: 200.
-    pub gem_threshold:   u8,
+    pub gem_threshold: u8,
     /// B11 threshold for Tribe tier. Default: 140.
     pub tribe_threshold: u8,
     /// Format layer for score multiplier.
-    pub format_layer:    FormatLayerCode,
+    pub format_layer: FormatLayerCode,
     /// Source trust level.
-    pub source_trust:    SourceTrustLevel,
+    pub source_trust: SourceTrustLevel,
 }
 
 impl ClientDqProfile {
@@ -215,9 +224,9 @@ impl ClientDqProfile {
     /// Mandatory attrs → nullable=false. Optional attrs → nullable=true.
     /// DimTag auto-detected from column names.
     pub fn default_from_schema(
-        batch_name:      &str,
+        batch_name: &str,
         mandatory_attrs: &[String],
-        optional_attrs:  &[String],
+        optional_attrs: &[String],
     ) -> Self {
         let mut attrs = Vec::with_capacity(mandatory_attrs.len() + optional_attrs.len());
         for col in mandatory_attrs {
@@ -227,12 +236,12 @@ impl ClientDqProfile {
             attrs.push(AttrProfile::new(col, true));
         }
         ClientDqProfile {
-            batch_name:      batch_name.to_string(),
+            batch_name: batch_name.to_string(),
             attrs,
-            gem_threshold:   200,
+            gem_threshold: 200,
             tribe_threshold: 140,
-            format_layer:    FormatLayerCode::CivilRegistry,
-            source_trust:    SourceTrustLevel::Official,
+            format_layer: FormatLayerCode::CivilRegistry,
+            source_trust: SourceTrustLevel::Official,
         }
     }
 
@@ -277,33 +286,33 @@ mod tests {
 
     #[test]
     fn dim_detect_name_column() {
-        assert_eq!(DimTag::detect("first_name"),    DimTag::Name);
-        assert_eq!(DimTag::detect("father_name"),   DimTag::Name);
-        assert_eq!(DimTag::detect("full_name"),     DimTag::Name);
+        assert_eq!(DimTag::detect("first_name"), DimTag::Name);
+        assert_eq!(DimTag::detect("father_name"), DimTag::Name);
+        assert_eq!(DimTag::detect("full_name"), DimTag::Name);
     }
 
     #[test]
     fn dim_detect_identity_column() {
-        assert_eq!(DimTag::detect("national_id"),   DimTag::Identity);
-        assert_eq!(DimTag::detect("uid"),           DimTag::Identity);
+        assert_eq!(DimTag::detect("national_id"), DimTag::Identity);
+        assert_eq!(DimTag::detect("uid"), DimTag::Identity);
     }
 
     #[test]
     fn dim_detect_date_column() {
         assert_eq!(DimTag::detect("date_of_death"), DimTag::Date);
-        assert_eq!(DimTag::detect("birth_year"),    DimTag::Date);
+        assert_eq!(DimTag::detect("birth_year"), DimTag::Date);
     }
 
     #[test]
     fn dim_detect_geography() {
         assert_eq!(DimTag::detect("cemetery_section"), DimTag::Geography);
-        assert_eq!(DimTag::detect("city"),             DimTag::Geography);
+        assert_eq!(DimTag::detect("city"), DimTag::Geography);
     }
 
     #[test]
     fn default_profile_classifies_correctly() {
         let mandatory = vec!["name".to_string(), "national_id".to_string()];
-        let optional  = vec!["date_of_death".to_string(), "notes".to_string()];
+        let optional = vec!["date_of_death".to_string(), "notes".to_string()];
         let p = ClientDqProfile::default_from_schema("batch_001", &mandatory, &optional);
 
         assert_eq!(p.attrs.len(), 4);

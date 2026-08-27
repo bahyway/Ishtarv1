@@ -12,9 +12,9 @@ pub enum PollutionDomain {
 impl std::fmt::Display for PollutionDomain {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Air   => write!(f, "AIR"),
+            Self::Air => write!(f, "AIR"),
             Self::Water => write!(f, "WATER"),
-            Self::Oil   => write!(f, "OIL"),
+            Self::Oil => write!(f, "OIL"),
         }
     }
 }
@@ -28,10 +28,10 @@ pub enum PollutionError {
 impl std::fmt::Display for PollutionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidDomain(s) =>
-                write!(f, "invalid pollution domain: {}", s),
-            Self::InvalidCoordinates { lat, lon } =>
-                write!(f, "invalid coordinates: ({}, {})", lat, lon),
+            Self::InvalidDomain(s) => write!(f, "invalid pollution domain: {}", s),
+            Self::InvalidCoordinates { lat, lon } => {
+                write!(f, "invalid coordinates: ({}, {})", lat, lon)
+            }
         }
     }
 }

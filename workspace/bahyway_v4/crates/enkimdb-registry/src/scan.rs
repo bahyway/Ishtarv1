@@ -44,7 +44,8 @@ fn extract_quoted_value(line: &str, key: &str) -> Option<String> {
 fn is_workspace_version_ref(line: &str, key: &str) -> bool {
     let line = line.trim();
     // e.g. "version.workspace = true" or "version = { workspace = true }"
-    line.starts_with(&format!("{key}.workspace")) || (line.starts_with(key) && line.contains("workspace = true"))
+    line.starts_with(&format!("{key}.workspace"))
+        || (line.starts_with(key) && line.contains("workspace = true"))
 }
 
 #[derive(Default)]
@@ -54,7 +55,10 @@ struct PackageFields {
     description: Option<String>,
 }
 
-fn parse_package_section(cargo_toml: &str, workspace_version: Option<&str>) -> Option<PackageFields> {
+fn parse_package_section(
+    cargo_toml: &str,
+    workspace_version: Option<&str>,
+) -> Option<PackageFields> {
     let mut fields = PackageFields::default();
     let mut in_package = false;
     for line in cargo_toml.lines() {
@@ -107,15 +111,22 @@ pub fn scan_workspace(workspace_root: &Path) -> Vec<ReleaseProfile> {
     let mut out = Vec::new();
     for subdir in ["crates", "bin"] {
         let dir = workspace_root.join(subdir);
-        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.is_dir() {
                 continue;
             }
             let cargo_toml_path = path.join("Cargo.toml");
-            let Ok(contents) = fs::read_to_string(&cargo_toml_path) else { continue };
-            let Some(fields) = parse_package_section(&contents, workspace_version.as_deref()) else { continue };
+            let Ok(contents) = fs::read_to_string(&cargo_toml_path) else {
+                continue;
+            };
+            let Some(fields) = parse_package_section(&contents, workspace_version.as_deref())
+            else {
+                continue;
+            };
             let Some(name) = fields.name else { continue };
             out.push(ReleaseProfile {
                 crate_name: name,
@@ -179,7 +190,10 @@ description       = "analysis"
         // whole point of this crate.
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let profiles = scan_workspace(&root);
-        assert!(!profiles.is_empty(), "expected to find real crates under crates/");
+        assert!(
+            !profiles.is_empty(),
+            "expected to find real crates under crates/"
+        );
         let names: Vec<&str> = profiles.iter().map(|p| p.crate_name.as_str()).collect();
         assert!(names.contains(&"dagan-engine"));
         assert!(names.contains(&"girra-engine"));
@@ -187,10 +201,14 @@ description       = "analysis"
         assert!(names.contains(&"acoustic-leak-engine"));
         assert!(names.contains(&"tupsimati"));
         assert!(names.contains(&"enkimdb-registry")); // finds itself
-        // Every found profile has a real, non-"unknown" version (all real
-        // crates here declare one, literal or workspace-inherited).
+                                                      // Every found profile has a real, non-"unknown" version (all real
+                                                      // crates here declare one, literal or workspace-inherited).
         for p in &profiles {
-            assert_ne!(p.version, "unknown", "{} has no resolvable version", p.crate_name);
+            assert_ne!(
+                p.version, "unknown",
+                "{} has no resolvable version",
+                p.crate_name
+            );
         }
     }
 

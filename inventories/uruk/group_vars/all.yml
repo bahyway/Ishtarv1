@@ -1,0 +1,44 @@
+# ── URUK stream variables — REVIEW EVERY VALUE BEFORE FIRST RUN ──
+# Landed 2026-08-23 from docs/phase2-incoming/batch3_streaming_pu_ctg_pb310_320/
+# (never copied into place at PB-310-320's landing, which is why PB-315/316
+# reported missing vars until now — see ANU_GOVERNOR_PB_MANUAL.md). One value
+# corrected against the real, live inventory (ansible/inventory.ini): the rest
+# are unverified placeholders as originally delivered, most still needing the
+# Architect's own confirmation against real hardware (nas_disks, host_pv).
+bahyway_stream: uruk
+bahyway_root: /var/lib/bahyway
+kaki_runs: /var/lib/bahyway/kaki/pb_runs.jsonl
+enkidb_ports: { sdb: 7001, odb: 7002, qdb: 7003, db: 7004, dw: 7005, mdb: 7006, ddb: 7007 }
+ledger_dir: /var/lib/enkidb/ledger          # on write node, XFS on raw LV
+ledger_lv: /dev/bahyvg/enkidb_ledger
+projections_dir: /var/lib/enkidb/projections # on read node, expendable
+ship_user: lahamu
+ship_target_host: uruk-node-vault            # was vault-lib; now the real, live vault VM (later: kish box)
+ship_target_dir: /vault/hot/ledger_segments
+watermark_file: /var/lib/enkidb/ledger/WATERMARK
+vault_pool: nuzivault
+vault_datasets: [enkisdb, enkiodb, enkiqdb, enkidb, enkidw, enkimdb, enkiddb, forge, assets]
+vault_mount: /nuzivault
+nas_disks: [/dev/sda, /dev/sdb, /dev/sdc, /dev/sdd, /dev/sde, /dev/sdf, /dev/sdg]  # VERIFY!
+signing_key: /root/.bahyway/keys/zagesi_ed25519   # keep an off-box copy of this key
+forge_subvol: /home/bfadam/Forge
+vm_images_dir: /var/lib/libvirt/images
+host_vg: bahyvg
+# 2026-08-24, Architect's decision: uruk's NVMe has no free partition for
+# a dedicated PV -- lsblk showed only p1 (1M), p2 (2G /boot), p3 (951.9G,
+# the live mounted Btrfs root+home, already spanning virtually the whole
+# disk). Shrinking that live, mounted partition to carve out a real p5
+# was judged too risky for the only OS disk (needs a rescue boot + full
+# backup to do safely, not a routine PB run). Instead bahyvg is backed
+# by a preallocated file inside the existing Btrfs free space (861.3G
+# available), attached to this fixed loop device by the
+# bahyvg-loop.service systemd unit PB-319 installs below -- real
+# storage, not RAM, just file-backed instead of a raw partition. Before
+# running PB-319, confirm /dev/loop20 is actually free with `losetup -a`
+# (Fedora's snapd/etc already occupy loop0-loop2) -- override host_pv via
+# `-e host_pv=/dev/loopNN` if 20 collides on this machine.
+host_pv: /dev/loop20
+bahyvg_backing_file: /var/lib/bahyway/bahyvg.img
+bahyvg_size: 250G
+retention_days: { ledger: 90, dw: 30, staging: 7, quarantine_open: 999999 }
+smoke_cmd: "/usr/local/bin/bahyway-smoke --stream {{ bahyway_stream }}"

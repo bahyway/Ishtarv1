@@ -24,7 +24,9 @@ pub struct NaviCoord {
 }
 
 impl NaviCoord {
-    pub fn new(lat: f32, lon: f32, alt: f32) -> Self { NaviCoord { lat, lon, alt } }
+    pub fn new(lat: f32, lon: f32, alt: f32) -> Self {
+        NaviCoord { lat, lon, alt }
+    }
 
     /// Approximate flat-earth distance in metres (fast, ±1% for short distances).
     pub fn flat_distance(&self, other: &NaviCoord) -> f32 {
@@ -38,37 +40,37 @@ impl NaviCoord {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SurfaceQuality {
-    Excellent,  // paved, smooth — 0.80× cost
-    Good,       // paved, minor wear — 1.00×
-    Fair,       // unpaved / maintained — 1.20×
-    Poor,       // rough / damaged — 1.50×
+    Excellent, // paved, smooth — 0.80× cost
+    Good,      // paved, minor wear — 1.00×
+    Fair,      // unpaved / maintained — 1.20×
+    Poor,      // rough / damaged — 1.50×
 }
 
 impl SurfaceQuality {
     pub fn cost_multiplier(self) -> f32 {
         match self {
             SurfaceQuality::Excellent => 0.80,
-            SurfaceQuality::Good      => 1.00,
-            SurfaceQuality::Fair      => 1.20,
-            SurfaceQuality::Poor      => 1.50,
+            SurfaceQuality::Good => 1.00,
+            SurfaceQuality::Fair => 1.20,
+            SurfaceQuality::Poor => 1.50,
         }
     }
 
     pub fn from_u8(v: u8) -> Self {
         match v {
-            0..=63   => SurfaceQuality::Excellent,
+            0..=63 => SurfaceQuality::Excellent,
             64..=127 => SurfaceQuality::Good,
             128..=191 => SurfaceQuality::Fair,
-            _         => SurfaceQuality::Poor,
+            _ => SurfaceQuality::Poor,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
             SurfaceQuality::Excellent => "Excellent",
-            SurfaceQuality::Good      => "Good",
-            SurfaceQuality::Fair      => "Fair",
-            SurfaceQuality::Poor      => "Poor",
+            SurfaceQuality::Good => "Good",
+            SurfaceQuality::Fair => "Fair",
+            SurfaceQuality::Poor => "Poor",
         }
     }
 }
@@ -116,13 +118,13 @@ impl NaviSignal {
 /// A 7-dimensional sovereign navigation particle.
 #[derive(Debug, Clone)]
 pub struct NaviParticle {
-    pub coord:      NaviCoord,          // D1 D2 D3
-    pub speed_kmh:  u8,                 // D4: 0=stopped 255=max speed
-    pub congestion: u8,                 // D5: 0=clear 255=gridlock
-    pub surface:    SurfaceQuality,     // D6
-    pub tribe:      TribeId,            // D7
-    pub state:      NaviParticleState,
-    pub signal:     NaviSignal,
+    pub coord: NaviCoord,        // D1 D2 D3
+    pub speed_kmh: u8,           // D4: 0=stopped 255=max speed
+    pub congestion: u8,          // D5: 0=clear 255=gridlock
+    pub surface: SurfaceQuality, // D6
+    pub tribe: TribeId,          // D7
+    pub state: NaviParticleState,
+    pub signal: NaviSignal,
 }
 
 impl NaviParticle {
@@ -131,11 +133,11 @@ impl NaviParticle {
         NaviParticle {
             coord,
             tribe,
-            speed_kmh:  60,
+            speed_kmh: 60,
             congestion: 0,
-            surface:    SurfaceQuality::Good,
-            state:      NaviParticleState::Active,
-            signal:     NaviSignal::Strong,
+            surface: SurfaceQuality::Good,
+            state: NaviParticleState::Active,
+            signal: NaviSignal::Strong,
         }
     }
 
@@ -151,18 +153,30 @@ impl NaviParticle {
         congestion_factor * self.surface.cost_multiplier()
     }
 
-    pub fn kill(&mut self)       { self.state = NaviParticleState::Dead; }
-    pub fn restrict(&mut self)   { self.state = NaviParticleState::Restricted; }
-    pub fn jam(&mut self)        { self.signal = NaviSignal::Jammed; }
-    pub fn degrade_signal(&mut self) { self.signal = NaviSignal::Degraded; }
+    pub fn kill(&mut self) {
+        self.state = NaviParticleState::Dead;
+    }
+    pub fn restrict(&mut self) {
+        self.state = NaviParticleState::Restricted;
+    }
+    pub fn jam(&mut self) {
+        self.signal = NaviSignal::Jammed;
+    }
+    pub fn degrade_signal(&mut self) {
+        self.signal = NaviSignal::Degraded;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn najaf_tribe() -> TribeId { TribeId::from_u16(0x0001) }
-    fn coord()       -> NaviCoord { NaviCoord::new(31.99, 44.32, 0.0) }
+    fn najaf_tribe() -> TribeId {
+        TribeId::from_u16(0x0001)
+    }
+    fn coord() -> NaviCoord {
+        NaviCoord::new(31.99, 44.32, 0.0)
+    }
 
     #[test]
     fn new_particle_is_active_and_strong() {
@@ -218,24 +232,26 @@ mod tests {
     fn intrinsic_cost_full_congestion_poor() {
         let mut p = NaviParticle::new(coord(), najaf_tribe());
         p.congestion = 255;
-        p.surface    = SurfaceQuality::Poor;
+        p.surface = SurfaceQuality::Poor;
         // congestion_factor ≈ 5.0; surface = 1.50 → ≈ 7.50
         assert!(p.intrinsic_cost() > 7.0);
     }
 
     #[test]
     fn surface_quality_from_u8_ranges() {
-        assert_eq!(SurfaceQuality::from_u8(0),   SurfaceQuality::Excellent);
-        assert_eq!(SurfaceQuality::from_u8(64),  SurfaceQuality::Good);
+        assert_eq!(SurfaceQuality::from_u8(0), SurfaceQuality::Excellent);
+        assert_eq!(SurfaceQuality::from_u8(64), SurfaceQuality::Good);
         assert_eq!(SurfaceQuality::from_u8(128), SurfaceQuality::Fair);
         assert_eq!(SurfaceQuality::from_u8(192), SurfaceQuality::Poor);
     }
 
     #[test]
     fn surface_cost_order() {
-        assert!(SurfaceQuality::Excellent.cost_multiplier() < SurfaceQuality::Good.cost_multiplier());
-        assert!(SurfaceQuality::Good.cost_multiplier()      < SurfaceQuality::Fair.cost_multiplier());
-        assert!(SurfaceQuality::Fair.cost_multiplier()      < SurfaceQuality::Poor.cost_multiplier());
+        assert!(
+            SurfaceQuality::Excellent.cost_multiplier() < SurfaceQuality::Good.cost_multiplier()
+        );
+        assert!(SurfaceQuality::Good.cost_multiplier() < SurfaceQuality::Fair.cost_multiplier());
+        assert!(SurfaceQuality::Fair.cost_multiplier() < SurfaceQuality::Poor.cost_multiplier());
     }
 
     #[test]
@@ -270,7 +286,12 @@ mod tests {
 
     #[test]
     fn surface_quality_labels_non_empty() {
-        for s in [SurfaceQuality::Excellent, SurfaceQuality::Good, SurfaceQuality::Fair, SurfaceQuality::Poor] {
+        for s in [
+            SurfaceQuality::Excellent,
+            SurfaceQuality::Good,
+            SurfaceQuality::Fair,
+            SurfaceQuality::Poor,
+        ] {
             assert!(!s.label().is_empty());
         }
     }

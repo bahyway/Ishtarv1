@@ -16,6 +16,7 @@
 //!     performs a one-time O(n) pass over the WriteNode's Journal into
 //!     two Data Files; [`readnode::ReadNode`] opens them in O(1) and
 //!     answers HeptaScript queries without ever touching the Journal.
+//!
 //! The two nodes are genuinely decoupled — the Read Node sees nothing
 //! until `materialize_now` runs, proven by test.
 //!
@@ -127,6 +128,9 @@ pub use links::discover_referenced_paths;
 pub use orbit::DocOrbit;
 pub use parser::DocumentParser;
 pub use rag::{RagHit, RagIndex};
-pub use readnode::{list_versions, materialize_now, materialize_version, Generation, ReadNode, ReadNodeError, SOVEREIGN_NAME};
+pub use readnode::{
+    list_versions, materialize_now, materialize_version, Generation, ReadNode, ReadNodeError,
+    SOVEREIGN_NAME,
+};
 pub use security::{scan_document, SecurityScanResult};
 pub use writenode::WriteNode;

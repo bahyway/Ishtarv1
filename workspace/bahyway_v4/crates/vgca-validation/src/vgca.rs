@@ -40,7 +40,10 @@ pub struct FieldSignatureVector(pub [f32; 7]);
 impl FieldSignatureVector {
     /// Euclidean distance between two FSVs.
     pub fn distance_to(&self, other: &Self) -> f32 {
-        let sum: f32 = self.0.iter().zip(other.0.iter())
+        let sum: f32 = self
+            .0
+            .iter()
+            .zip(other.0.iter())
             .map(|(a, b)| (a - b) * (a - b))
             .sum();
         sum.sqrt()
@@ -54,12 +57,16 @@ impl FieldSignatureVector {
     /// Returns `None` if `value` is empty.
     pub fn compute(value: &str, max_len_chars: usize, max_words: usize) -> Option<Self> {
         let len = value.chars().count();
-        if len == 0 { return None; }
+        if len == 0 {
+            return None;
+        }
 
         let len_f = len as f32;
 
         // d0: char_count_normalised
-        let d0 = if max_len_chars == 0 { 0.0 } else {
+        let d0 = if max_len_chars == 0 {
+            0.0
+        } else {
             (len as f32 / max_len_chars as f32).min(1.0)
         };
 
@@ -68,7 +75,10 @@ impl FieldSignatureVector {
         let d1 = digits as f32 / len_f;
 
         // d2: arabic_density (U+0600–U+06FF)
-        let arabic = value.chars().filter(|c| ('\u{0600}'..='\u{06FF}').contains(c)).count();
+        let arabic = value
+            .chars()
+            .filter(|c| ('\u{0600}'..='\u{06FF}').contains(c))
+            .count();
         let d2 = arabic as f32 / len_f;
 
         // d3: latin_density (A–Za–z)
@@ -81,7 +91,9 @@ impl FieldSignatureVector {
 
         // d5: word_count_normalised
         let words = value.split_whitespace().count();
-        let d5 = if max_words == 0 { 0.0 } else {
+        let d5 = if max_words == 0 {
+            0.0
+        } else {
             (words as f32 / max_words as f32).min(1.0)
         };
 
@@ -100,11 +112,16 @@ fn normalised_shannon_entropy(s: &str) -> f32 {
         freq[b as usize] += 1;
         total += 1;
     }
-    if total == 0 { return 0.0; }
+    if total == 0 {
+        return 0.0;
+    }
     let unique = freq.iter().filter(|&&c| c > 0).count();
     let norm = (unique as f32 + 1.0).log2();
-    if norm == 0.0 { return 0.0; }
-    let h: f32 = freq.iter()
+    if norm == 0.0 {
+        return 0.0;
+    }
+    let h: f32 = freq
+        .iter()
         .filter(|&&c| c > 0)
         .map(|&c| {
             let p = c as f32 / total as f32;
@@ -132,10 +149,10 @@ pub enum GeometricFit {
 impl GeometricFit {
     pub fn as_str(self) -> &'static str {
         match self {
-            GeometricFit::Clean   => "CLEAN",
+            GeometricFit::Clean => "CLEAN",
             GeometricFit::Suspect => "SUSPECT",
             GeometricFit::Outlier => "OUTLIER",
-            GeometricFit::Alien   => "ALIEN",
+            GeometricFit::Alien => "ALIEN",
         }
     }
 
@@ -161,16 +178,23 @@ impl core::fmt::Display for GeometricFit {
 /// - score = 0.5 → 1.5σ from centroid
 /// - score = 0.0 → ≥ 3σ from centroid (geometric outlier)
 pub fn vgca_score(distance: f32, sigma: f32) -> f32 {
-    if sigma == 0.0 { return 1.0; } // degenerate: all values identical → perfect fit
+    if sigma == 0.0 {
+        return 1.0;
+    } // degenerate: all values identical → perfect fit
     1.0 - (distance / (SIGMA_MULTIPLIER * sigma)).clamp(0.0, 1.0)
 }
 
 /// Classify a vgca score into a `GeometricFit` verdict.
 pub fn geometric_fit(score: f32) -> GeometricFit {
-    if score >= CLEAN_THRESHOLD        { GeometricFit::Clean }
-    else if score >= SUSPECT_THRESHOLD { GeometricFit::Suspect }
-    else if score > 0.005              { GeometricFit::Outlier }
-    else                               { GeometricFit::Alien }
+    if score >= CLEAN_THRESHOLD {
+        GeometricFit::Clean
+    } else if score >= SUSPECT_THRESHOLD {
+        GeometricFit::Suspect
+    } else if score > 0.005 {
+        GeometricFit::Outlier
+    } else {
+        GeometricFit::Alien
+    }
 }
 
 /// Full VGCA-Σ result for a single text value (§5.1).
@@ -198,7 +222,9 @@ impl VgcaTextResult {
 
         // identify the dimension with the largest deviation from centroid
         let outlier_driver = if fit != GeometricFit::Clean {
-            fsv.0.iter().zip(centroid.0.iter())
+            fsv.0
+                .iter()
+                .zip(centroid.0.iter())
                 .enumerate()
                 .max_by(|(_, (a1, b1)), (_, (a2, b2))| {
                     let d1 = (*a1 - *b1).abs();
@@ -210,7 +236,14 @@ impl VgcaTextResult {
             None
         };
 
-        VgcaTextResult { fsv, distance, sigma_multiple, score, fit, outlier_driver }
+        VgcaTextResult {
+            fsv,
+            distance,
+            sigma_multiple,
+            score,
+            fit,
+            outlier_driver,
+        }
     }
 }
 
@@ -231,7 +264,10 @@ pub struct BlockFeatureVector(pub [f32; 6]);
 impl BlockFeatureVector {
     /// Euclidean distance between two BFVs.
     pub fn distance_to(&self, other: &Self) -> f32 {
-        let sum: f32 = self.0.iter().zip(other.0.iter())
+        let sum: f32 = self
+            .0
+            .iter()
+            .zip(other.0.iter())
             .map(|(a, b)| (a - b) * (a - b))
             .sum();
         sum.sqrt()
@@ -248,8 +284,14 @@ impl BlockFeatureVector {
         let e0 = block_entropy(block) / 8.0;
 
         // e1: byte_class_balance
-        let printable = block.iter().filter(|&&b| b >= 0x20 && b <= 0x7E).count();
-        let binary    = block.iter().filter(|&&b| b < 0x20 || b > 0x7E).count();
+        let printable = block
+            .iter()
+            .filter(|&&b| (0x20..=0x7E).contains(&b))
+            .count();
+        let binary = block
+            .iter()
+            .filter(|&&b| !(0x20..=0x7E).contains(&b))
+            .count();
         let e1 = 1.0 - ((printable as f32 / n) - (binary as f32 / n)).abs();
 
         // e2: null_byte_density
@@ -278,7 +320,9 @@ impl BlockFeatureVector {
 
 fn block_entropy(block: &[u8]) -> f32 {
     let mut freq = [0usize; 256];
-    for &b in block { freq[b as usize] += 1; }
+    for &b in block {
+        freq[b as usize] += 1;
+    }
     let n = block.len() as f32;
     freq.iter()
         .filter(|&&c| c > 0)
@@ -290,17 +334,25 @@ fn block_entropy(block: &[u8]) -> f32 {
 }
 
 fn magic_score(block: &[u8]) -> f32 {
-    if block.len() < 4 { return 0.0; }
+    if block.len() < 4 {
+        return 0.0;
+    }
     // ZIP/XLSX: PK\x03\x04
     if block[0] == 0x50 && block[1] == 0x4B && block[2] == 0x03 && block[3] == 0x04 {
         return 1.0;
     }
     // Parquet: PAR1
-    if block.len() >= 4 && &block[0..4] == b"PAR1" { return 1.0; }
+    if block.len() >= 4 && &block[0..4] == b"PAR1" {
+        return 1.0;
+    }
     // PDF: %PDF
-    if block.len() >= 4 && &block[0..4] == b"%PDF" { return 0.9; }
+    if block.len() >= 4 && &block[0..4] == b"%PDF" {
+        return 0.9;
+    }
     // PNG: \x89PNG
-    if block.len() >= 4 && block[0] == 0x89 && &block[1..4] == b"PNG" { return 0.9; }
+    if block.len() >= 4 && block[0] == 0x89 && &block[1..4] == b"PNG" {
+        return 0.9;
+    }
     0.0
 }
 
@@ -321,8 +373,10 @@ pub struct VgcaBlockResult {
 pub fn vgca_delta(bfvs: &[BlockFeatureVector]) -> VgcaBlockResult {
     if bfvs.is_empty() {
         return VgcaBlockResult {
-            fragment_count: 0, fragmentation_ratio: 0.0,
-            zip_bomb_suspected: false, first_anomaly_block: None,
+            fragment_count: 0,
+            fragmentation_ratio: 0.0,
+            zip_bomb_suspected: false,
+            first_anomaly_block: None,
         };
     }
     let total = bfvs.len();
@@ -333,7 +387,9 @@ pub fn vgca_delta(bfvs: &[BlockFeatureVector]) -> VgcaBlockResult {
         let e5 = bfv.0[5];
         if e5 > DELTA_FRAG {
             fragment_count += 1;
-            if first_anomaly.is_none() { first_anomaly = Some(i); }
+            if first_anomaly.is_none() {
+                first_anomaly = Some(i);
+            }
         }
     }
 
@@ -341,11 +397,18 @@ pub fn vgca_delta(bfvs: &[BlockFeatureVector]) -> VgcaBlockResult {
     let mean_entropy: f32 = bfvs.iter().map(|b| b.0[0]).sum::<f32>() / total as f32;
     let zip_bomb_suspected = mean_entropy > (7.9 / 8.0);
 
-    let fragmentation_ratio = if total <= 1 { 0.0 } else {
+    let fragmentation_ratio = if total <= 1 {
+        0.0
+    } else {
         fragment_count as f32 / (total - 1) as f32
     };
 
-    VgcaBlockResult { fragment_count, fragmentation_ratio, zip_bomb_suspected, first_anomaly_block: first_anomaly }
+    VgcaBlockResult {
+        fragment_count,
+        fragmentation_ratio,
+        zip_bomb_suspected,
+        first_anomaly_block: first_anomaly,
+    }
 }
 
 // ── VGCA-Λ: Column Geometry Descriptor (§4.2) ────────────────────────────────
@@ -353,21 +416,21 @@ pub fn vgca_delta(bfvs: &[BlockFeatureVector]) -> VgcaBlockResult {
 /// Compressed geometric summary of an entire column's value population (VGCA-Λ).
 #[derive(Clone, Debug)]
 pub struct ColumnGeometryDescriptor {
-    pub column_id:     String,
+    pub column_id: String,
     /// Mean FSV across all column values.
-    pub centroid:      [f32; 7],
+    pub centroid: [f32; 7],
     /// Population standard deviation in FSV space.
-    pub spread:        f32,
+    pub spread: f32,
     /// Distribution skewness (0 = symmetric; +ve = right tail; −ve = left tail).
-    pub skewness:      f32,
+    pub skewness: f32,
     /// Distribution kurtosis (3 = normal; > 3 = heavy tails / outlier-prone).
-    pub kurtosis:      f32,
+    pub kurtosis: f32,
     /// Cluster count (1 = homogeneous; > 3 = mixed content, structural warning).
     pub cluster_count: u8,
     /// Count of values with vgca_score < SUSPECT_THRESHOLD.
     pub outlier_count: u64,
     /// Total value count.
-    pub total_count:   u64,
+    pub total_count: u64,
     /// Autonomously inferred column type from CGD pattern.
     pub inferred_type: InferredColumnType,
 }
@@ -377,9 +440,14 @@ impl ColumnGeometryDescriptor {
     pub fn from_fsvs(column_id: String, fsvs: &[FieldSignatureVector]) -> Self {
         if fsvs.is_empty() {
             return ColumnGeometryDescriptor {
-                column_id, centroid: [0.0; 7], spread: 0.0,
-                skewness: 0.0, kurtosis: 0.0, cluster_count: 1,
-                outlier_count: 0, total_count: 0,
+                column_id,
+                centroid: [0.0; 7],
+                spread: 0.0,
+                skewness: 0.0,
+                kurtosis: 0.0,
+                cluster_count: 1,
+                outlier_count: 0,
+                total_count: 0,
                 inferred_type: InferredColumnType::Unknown,
             };
         }
@@ -396,14 +464,16 @@ impl ColumnGeometryDescriptor {
 
         // spread (population σ)
         let spread = {
-            let sum_sq: f32 = fsvs.iter()
+            let sum_sq: f32 = fsvs
+                .iter()
                 .map(|fsv| fsv.distance_to(&centroid_fsv).powi(2))
                 .sum();
             (sum_sq / n).sqrt()
         };
 
         // outlier count (score < SUSPECT_THRESHOLD)
-        let outlier_count = fsvs.iter()
+        let outlier_count = fsvs
+            .iter()
             .filter(|fsv| {
                 let d = fsv.distance_to(&centroid_fsv);
                 vgca_score(d, spread) < SUSPECT_THRESHOLD
@@ -412,7 +482,8 @@ impl ColumnGeometryDescriptor {
 
         // skewness and kurtosis (1D approximation on overall distance)
         let (skewness, kurtosis) = {
-            let distances: Vec<f32> = fsvs.iter()
+            let distances: Vec<f32> = fsvs
+                .iter()
                 .map(|fsv| fsv.distance_to(&centroid_fsv))
                 .collect();
             let mean = distances.iter().sum::<f32>() / n;
@@ -421,23 +492,48 @@ impl ColumnGeometryDescriptor {
             if std_dev == 0.0 {
                 (0.0, 3.0)
             } else {
-                let skew = distances.iter().map(|d| ((d - mean) / std_dev).powi(3)).sum::<f32>() / n;
-                let kurt = distances.iter().map(|d| ((d - mean) / std_dev).powi(4)).sum::<f32>() / n;
+                let skew = distances
+                    .iter()
+                    .map(|d| ((d - mean) / std_dev).powi(3))
+                    .sum::<f32>()
+                    / n;
+                let kurt = distances
+                    .iter()
+                    .map(|d| ((d - mean) / std_dev).powi(4))
+                    .sum::<f32>()
+                    / n;
                 (skew, kurt)
             }
         };
 
         // cluster_count: simplified heuristic — 1 if spread < 0.15, else proportional
-        let cluster_count = if spread < 0.15 { 1 }
-            else if spread < 0.30 { 2 }
-            else if spread < 0.40 { 3 }
-            else { 4u8.min(((spread / 0.10) as u8).max(4)) };
+        let cluster_count = if spread < 0.15 {
+            1
+        } else if spread < 0.30 {
+            2
+        } else if spread < 0.40 {
+            3
+        } else {
+            // 2026-08-24, found live (clippy::min_max, hard-deny): this was
+            // `4u8.min(x.max(4))`, which always evaluates to the constant 4
+            // regardless of x -- min(4, anything >= 4) is always 4, so the
+            // intended scaling by spread never actually took effect. Kept
+            // the existing (already-constant) runtime behavior rather than
+            // invent a new upper bound the Architect hasn't specified.
+            4u8
+        };
 
         let inferred_type = infer_column_type(&centroid, spread, cluster_count);
 
         ColumnGeometryDescriptor {
-            column_id, centroid, spread, skewness, kurtosis,
-            cluster_count, outlier_count, total_count: fsvs.len() as u64,
+            column_id,
+            centroid,
+            spread,
+            skewness,
+            kurtosis,
+            cluster_count,
+            outlier_count,
+            total_count: fsvs.len() as u64,
             inferred_type,
         }
     }
@@ -462,22 +558,26 @@ pub enum InferredColumnType {
 impl InferredColumnType {
     pub fn as_str(self) -> &'static str {
         match self {
-            InferredColumnType::ArabicNameField  => "ARABIC_NAME_FIELD",
-            InferredColumnType::PhoneNumber      => "PHONE_NUMBER",
-            InferredColumnType::IraqiNationalId  => "IRAQI_NATIONAL_ID",
-            InferredColumnType::DateOrTimestamp  => "DATE_OR_TIMESTAMP",
-            InferredColumnType::HijriDate        => "HIJRI_DATE",
-            InferredColumnType::NumericAmount    => "NUMERIC_AMOUNT",
-            InferredColumnType::FreeText         => "FREE_TEXT",
-            InferredColumnType::GeographicCode   => "GEOGRAPHIC_CODE",
-            InferredColumnType::MixedContent     => "MIXED_CONTENT",
-            InferredColumnType::Unknown          => "UNKNOWN",
+            InferredColumnType::ArabicNameField => "ARABIC_NAME_FIELD",
+            InferredColumnType::PhoneNumber => "PHONE_NUMBER",
+            InferredColumnType::IraqiNationalId => "IRAQI_NATIONAL_ID",
+            InferredColumnType::DateOrTimestamp => "DATE_OR_TIMESTAMP",
+            InferredColumnType::HijriDate => "HIJRI_DATE",
+            InferredColumnType::NumericAmount => "NUMERIC_AMOUNT",
+            InferredColumnType::FreeText => "FREE_TEXT",
+            InferredColumnType::GeographicCode => "GEOGRAPHIC_CODE",
+            InferredColumnType::MixedContent => "MIXED_CONTENT",
+            InferredColumnType::Unknown => "UNKNOWN",
         }
     }
 }
 
 /// Autonomous column type inference from CGD pattern (§4.3).
-pub fn infer_column_type(centroid: &[f32; 7], spread: f32, cluster_count: u8) -> InferredColumnType {
+pub fn infer_column_type(
+    centroid: &[f32; 7],
+    spread: f32,
+    cluster_count: u8,
+) -> InferredColumnType {
     let d1 = centroid[1]; // digit_density
     let d2 = centroid[2]; // arabic_density
     let d3 = centroid[3]; // latin_density (unused directly but available)
@@ -486,28 +586,44 @@ pub fn infer_column_type(centroid: &[f32; 7], spread: f32, cluster_count: u8) ->
 
     let _ = d3; // reserved for future rules
 
-    if cluster_count > 3 { return InferredColumnType::MixedContent; }
+    if cluster_count > 3 {
+        return InferredColumnType::MixedContent;
+    }
 
     // Phone number: high digit + punctuation separators
-    if d1 > 0.80 && d4 > 0.10 { return InferredColumnType::PhoneNumber; }
+    if d1 > 0.80 && d4 > 0.10 {
+        return InferredColumnType::PhoneNumber;
+    }
 
     // Iraqi National ID: digit-dense, ~12 chars, no separators
-    if d1 > 0.80 && (d0 - 0.12).abs() < 0.05 { return InferredColumnType::IraqiNationalId; }
+    if d1 > 0.80 && (d0 - 0.12).abs() < 0.05 {
+        return InferredColumnType::IraqiNationalId;
+    }
 
     // Numeric amount: near-pure digits, no separators
-    if d1 > 0.95 && d4 < 0.05 { return InferredColumnType::NumericAmount; }
+    if d1 > 0.95 && d4 < 0.05 {
+        return InferredColumnType::NumericAmount;
+    }
 
     // Date/timestamp: punctuation separators + digit density
-    if d4 > 0.30 && d1 > 0.50 { return InferredColumnType::DateOrTimestamp; }
+    if d4 > 0.30 && d1 > 0.50 {
+        return InferredColumnType::DateOrTimestamp;
+    }
 
     // Arabic name: Arabic-dominant, tight cluster
-    if d2 > 0.70 && spread < 0.15 { return InferredColumnType::ArabicNameField; }
+    if d2 > 0.70 && spread < 0.15 {
+        return InferredColumnType::ArabicNameField;
+    }
 
     // Arabic mixed content: Arabic column with wide spread
-    if d2 > 0.70 && spread > 0.40 { return InferredColumnType::MixedContent; }
+    if d2 > 0.70 && spread > 0.40 {
+        return InferredColumnType::MixedContent;
+    }
 
     // Free text: long values, diverse population
-    if d0 > 0.50 { return InferredColumnType::FreeText; }
+    if d0 > 0.50 {
+        return InferredColumnType::FreeText;
+    }
 
     InferredColumnType::Unknown
 }
@@ -526,19 +642,31 @@ mod tests {
     #[test]
     fn fsv_pure_digits_high_d1() {
         let fsv = FieldSignatureVector::compute("0501234567", 20, 5).unwrap();
-        assert!(fsv.0[1] > 0.8, "digit_density should be high, got {}", fsv.0[1]);
+        assert!(
+            fsv.0[1] > 0.8,
+            "digit_density should be high, got {}",
+            fsv.0[1]
+        );
     }
 
     #[test]
     fn fsv_arabic_name_high_d2() {
         let fsv = FieldSignatureVector::compute("محمد علي", 20, 5).unwrap();
-        assert!(fsv.0[2] > 0.5, "arabic_density should be high, got {}", fsv.0[2]);
+        assert!(
+            fsv.0[2] > 0.5,
+            "arabic_density should be high, got {}",
+            fsv.0[2]
+        );
     }
 
     #[test]
     fn fsv_latin_name_high_d3() {
         let fsv = FieldSignatureVector::compute("John Smith", 20, 5).unwrap();
-        assert!(fsv.0[3] > 0.5, "latin_density should be high, got {}", fsv.0[3]);
+        assert!(
+            fsv.0[3] > 0.5,
+            "latin_density should be high, got {}",
+            fsv.0[3]
+        );
     }
 
     #[test]
@@ -582,7 +710,7 @@ mod tests {
 
     #[test]
     fn geometric_fit_classification() {
-        assert_eq!(geometric_fit(1.0),  GeometricFit::Clean);
+        assert_eq!(geometric_fit(1.0), GeometricFit::Clean);
         assert_eq!(geometric_fit(0.80), GeometricFit::Clean);
         assert_eq!(geometric_fit(0.79), GeometricFit::Suspect);
         assert_eq!(geometric_fit(0.50), GeometricFit::Suspect);
@@ -658,25 +786,37 @@ mod tests {
     fn infer_phone_number() {
         // d1=0.90, d4=0.15 → PhoneNumber
         let centroid = [0.1, 0.90, 0.0, 0.0, 0.15, 0.1, 0.5];
-        assert_eq!(infer_column_type(&centroid, 0.10, 1), InferredColumnType::PhoneNumber);
+        assert_eq!(
+            infer_column_type(&centroid, 0.10, 1),
+            InferredColumnType::PhoneNumber
+        );
     }
 
     #[test]
     fn infer_arabic_name() {
         // d2=0.80, spread < 0.15 → ArabicNameField
         let centroid = [0.3, 0.0, 0.80, 0.0, 0.02, 0.3, 0.5];
-        assert_eq!(infer_column_type(&centroid, 0.10, 1), InferredColumnType::ArabicNameField);
+        assert_eq!(
+            infer_column_type(&centroid, 0.10, 1),
+            InferredColumnType::ArabicNameField
+        );
     }
 
     #[test]
     fn infer_mixed_content_from_cluster_count() {
         let centroid = [0.3; 7];
-        assert_eq!(infer_column_type(&centroid, 0.30, 4), InferredColumnType::MixedContent);
+        assert_eq!(
+            infer_column_type(&centroid, 0.30, 4),
+            InferredColumnType::MixedContent
+        );
     }
 
     #[test]
     fn inferred_type_display() {
-        assert_eq!(InferredColumnType::ArabicNameField.as_str(), "ARABIC_NAME_FIELD");
+        assert_eq!(
+            InferredColumnType::ArabicNameField.as_str(),
+            "ARABIC_NAME_FIELD"
+        );
         assert_eq!(InferredColumnType::PhoneNumber.as_str(), "PHONE_NUMBER");
         assert_eq!(InferredColumnType::MixedContent.as_str(), "MIXED_CONTENT");
     }
@@ -733,8 +873,8 @@ impl CorruptionClass {
     /// Severity level (3–5) per ADR-008 CorruptionClass severity scale.
     pub fn severity(&self) -> u8 {
         match self {
-            CorruptionClass::DriveFragmentationSevere { .. }          => 3,
-            CorruptionClass::BlockTrajectoryAnomaly { .. }            => 4,
+            CorruptionClass::DriveFragmentationSevere { .. } => 3,
+            CorruptionClass::BlockTrajectoryAnomaly { .. } => 4,
             CorruptionClass::CompressedPayloadGeometricAnomaly { .. } => 5,
         }
     }
@@ -764,7 +904,11 @@ impl CorruptionClass {
         }
         if result.fragment_count > 0 {
             // severity 4: block trajectory anomaly
-            let max_score = if result.fragmentation_ratio > 0.0 { result.fragmentation_ratio } else { DELTA_FRAG + 0.01 };
+            let max_score = if result.fragmentation_ratio > 0.0 {
+                result.fragmentation_ratio
+            } else {
+                DELTA_FRAG + 0.01
+            };
             return Some(CorruptionClass::BlockTrajectoryAnomaly {
                 first_discontinuity_block: result.first_anomaly_block.unwrap_or(0),
                 fragment_count: result.fragment_count,
@@ -781,28 +925,47 @@ mod corruption_tests {
 
     #[test]
     fn severity_ordering() {
-        assert_eq!(CorruptionClass::DriveFragmentationSevere {
-            fragment_estimate: 5, fragmentation_ratio: 0.80
-        }.severity(), 3);
+        assert_eq!(
+            CorruptionClass::DriveFragmentationSevere {
+                fragment_estimate: 5,
+                fragmentation_ratio: 0.80
+            }
+            .severity(),
+            3
+        );
 
-        assert_eq!(CorruptionClass::BlockTrajectoryAnomaly {
-            first_discontinuity_block: 2, fragment_count: 3, max_fragment_score: 0.40
-        }.severity(), 4);
+        assert_eq!(
+            CorruptionClass::BlockTrajectoryAnomaly {
+                first_discontinuity_block: 2,
+                fragment_count: 3,
+                max_fragment_score: 0.40
+            }
+            .severity(),
+            4
+        );
 
-        assert_eq!(CorruptionClass::CompressedPayloadGeometricAnomaly {
-            mean_compressed_entropy: 0.99, expected_entropy_range: [0.60, 0.95]
-        }.severity(), 5);
+        assert_eq!(
+            CorruptionClass::CompressedPayloadGeometricAnomaly {
+                mean_compressed_entropy: 0.99,
+                expected_entropy_range: [0.60, 0.95]
+            }
+            .severity(),
+            5
+        );
     }
 
     #[test]
     fn blackbox_routing_threshold() {
         let anomaly = CorruptionClass::BlockTrajectoryAnomaly {
-            first_discontinuity_block: 0, fragment_count: 1, max_fragment_score: 0.4,
+            first_discontinuity_block: 0,
+            fragment_count: 1,
+            max_fragment_score: 0.4,
         };
         assert!(anomaly.requires_blackbox_routing());
 
         let frag = CorruptionClass::DriveFragmentationSevere {
-            fragment_estimate: 3, fragmentation_ratio: 0.8,
+            fragment_estimate: 3,
+            fragmentation_ratio: 0.8,
         };
         assert!(!frag.requires_blackbox_routing());
     }
@@ -810,8 +973,10 @@ mod corruption_tests {
     #[test]
     fn classify_zip_bomb() {
         let result = VgcaBlockResult {
-            fragment_count: 0, fragmentation_ratio: 0.0,
-            zip_bomb_suspected: true, first_anomaly_block: None,
+            fragment_count: 0,
+            fragmentation_ratio: 0.0,
+            zip_bomb_suspected: true,
+            first_anomaly_block: None,
         };
         let class = CorruptionClass::from_vgca_block_result(&result).unwrap();
         assert_eq!(class.severity(), 5);
@@ -820,8 +985,10 @@ mod corruption_tests {
     #[test]
     fn classify_severe_fragmentation() {
         let result = VgcaBlockResult {
-            fragment_count: 50, fragmentation_ratio: 0.80,
-            zip_bomb_suspected: false, first_anomaly_block: Some(2),
+            fragment_count: 50,
+            fragmentation_ratio: 0.80,
+            zip_bomb_suspected: false,
+            first_anomaly_block: Some(2),
         };
         let class = CorruptionClass::from_vgca_block_result(&result).unwrap();
         assert_eq!(class.severity(), 3);
@@ -830,8 +997,10 @@ mod corruption_tests {
     #[test]
     fn classify_mild_anomaly() {
         let result = VgcaBlockResult {
-            fragment_count: 3, fragmentation_ratio: 0.15,
-            zip_bomb_suspected: false, first_anomaly_block: Some(5),
+            fragment_count: 3,
+            fragmentation_ratio: 0.15,
+            zip_bomb_suspected: false,
+            first_anomaly_block: Some(5),
         };
         let class = CorruptionClass::from_vgca_block_result(&result).unwrap();
         assert_eq!(class.severity(), 4);
@@ -840,8 +1009,10 @@ mod corruption_tests {
     #[test]
     fn clean_result_returns_none() {
         let result = VgcaBlockResult {
-            fragment_count: 0, fragmentation_ratio: 0.0,
-            zip_bomb_suspected: false, first_anomaly_block: None,
+            fragment_count: 0,
+            fragmentation_ratio: 0.0,
+            zip_bomb_suspected: false,
+            first_anomaly_block: None,
         };
         assert!(CorruptionClass::from_vgca_block_result(&result).is_none());
     }

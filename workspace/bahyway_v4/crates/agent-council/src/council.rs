@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 //! AiCouncil — orchestrates the 2-phase evaluation and deliberation protocol.
 
-use enkidb_kaki::Kaki;
-use crate::agent::{AgentId, AgentEvaluation};
+use crate::agent::{AgentEvaluation, AgentId};
 use crate::vote::{ConsensusResult, Vote, VoteRecord};
+use enkidb_kaki::Kaki;
 
 /// The outcome of a full council session on one pattern-kaki.
 #[derive(Clone, Debug)]
@@ -21,7 +21,9 @@ pub struct CouncilDecision {
 }
 
 impl CouncilDecision {
-    pub fn is_approved(&self) -> bool { self.result.is_approved() }
+    pub fn is_approved(&self) -> bool {
+        self.result.is_approved()
+    }
 }
 
 /// Orchestrates the 2-phase AICouncil protocol.
@@ -54,19 +56,29 @@ impl AiCouncil {
         // ── Phase 2: Deliberation — each agent sees peer scores ──────────
         let scores: [f64; 3] = evals.each_ref().map(|e| e.score);
 
-        let votes: Vec<VoteRecord> = evals.iter().enumerate().map(|(i, ev)| {
-            let peer_scores = [scores[(i + 1) % 3], scores[(i + 2) % 3]];
-            VoteRecord {
-                agent:        ev.agent,
-                phase1_score: ev.score,
-                phase2_vote:  Vote::deliberate(ev, peer_scores),
-                reason:       ev.reason,
-            }
-        }).collect();
+        let votes: Vec<VoteRecord> = evals
+            .iter()
+            .enumerate()
+            .map(|(i, ev)| {
+                let peer_scores = [scores[(i + 1) % 3], scores[(i + 2) % 3]];
+                VoteRecord {
+                    agent: ev.agent,
+                    phase1_score: ev.score,
+                    phase2_vote: Vote::deliberate(ev, peer_scores),
+                    reason: ev.reason,
+                }
+            })
+            .collect();
 
         let result = ConsensusResult::from_votes(&votes);
 
-        CouncilDecision { pattern_kaki, evaluations: evals, votes, result, decided_at_orbital }
+        CouncilDecision {
+            pattern_kaki,
+            evaluations: evals,
+            votes,
+            result,
+            decided_at_orbital,
+        }
     }
 }
 
@@ -78,7 +90,9 @@ mod tests {
     fn sample_kaki() -> Kaki {
         derive_pattern_kaki(
             PatternType::IndoorHallway,
-            FixedCoord7D { d: [500, 500, 100, 1, 2, 3, 4] },
+            FixedCoord7D {
+                d: [500, 500, 100, 1, 2, 3, 4],
+            },
             [0xABu8; 32],
             9_000,
             55,
@@ -90,8 +104,8 @@ mod tests {
         let k = sample_kaki();
         let decision = AiCouncil::evaluate(k, 100, |agent, _| match agent {
             AgentId::TamuzAI => (0.92, "high quality"),
-            AgentId::Ninsun  => (0.89, "consistent"),
-            AgentId::Pazuzu  => (0.91, "no anomaly"),
+            AgentId::Ninsun => (0.89, "consistent"),
+            AgentId::Pazuzu => (0.91, "no anomaly"),
         });
         assert!(decision.is_approved());
         assert_eq!(decision.votes.len(), 3);
@@ -102,8 +116,8 @@ mod tests {
         let k = sample_kaki();
         let decision = AiCouncil::evaluate(k, 200, |agent, _| match agent {
             AgentId::TamuzAI => (0.88, "quality ok"),
-            AgentId::Ninsun  => (0.85, "consistent"),
-            AgentId::Pazuzu  => (0.30, "synthetic flood detected"),
+            AgentId::Ninsun => (0.85, "consistent"),
+            AgentId::Pazuzu => (0.30, "synthetic flood detected"),
         });
         assert!(!decision.is_approved());
         assert!(matches!(

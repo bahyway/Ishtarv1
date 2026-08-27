@@ -64,7 +64,9 @@ impl BufferPool {
     }
 
     /// Buffer size this pool was created with.
-    pub fn buf_size(&self) -> usize { self.buf_size }
+    pub fn buf_size(&self) -> usize {
+        self.buf_size
+    }
 }
 
 #[cfg(test)]

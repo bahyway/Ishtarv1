@@ -13,9 +13,15 @@ pub fn draw(ui: &mut Ui) {
 
     let segments = sovereign_segments();
 
-    let n_defective = segments.iter().filter(|s| s.status == SegmentStatus::Defective).count();
-    let n_suspected = segments.iter().filter(|s| s.status == SegmentStatus::Suspected).count();
-    let n_active    = segments.len() - n_defective - n_suspected;
+    let n_defective = segments
+        .iter()
+        .filter(|s| s.status == SegmentStatus::Defective)
+        .count();
+    let n_suspected = segments
+        .iter()
+        .filter(|s| s.status == SegmentStatus::Suspected)
+        .count();
+    let n_active = segments.len() - n_defective - n_suspected;
 
     // Summary strip
     ui.horizontal(|ui| {
@@ -26,8 +32,7 @@ pub fn draw(ui: &mut Ui) {
         ui.label(RichText::new(format!("✓ Active: {n_active}")).color(theme::GREEN));
         ui.add_space(12.0);
         ui.label(
-            RichText::new(format!("Total: {} segments", segments.len()))
-                .color(theme::TEXT_DIM),
+            RichText::new(format!("Total: {} segments", segments.len())).color(theme::TEXT_DIM),
         );
     });
     ui.separator();
@@ -37,9 +42,9 @@ pub fn draw(ui: &mut Ui) {
         .show(ui, |ui| {
             for seg in &segments {
                 let card_fill = match seg.status {
-                    SegmentStatus::Defective      => Color32::from_rgb(45, 10, 10),
-                    SegmentStatus::Suspected       => Color32::from_rgb(40, 25, 5),
-                    _                              => theme::BG_CARD,
+                    SegmentStatus::Defective => Color32::from_rgb(45, 10, 10),
+                    SegmentStatus::Suspected => Color32::from_rgb(40, 25, 5),
+                    _ => theme::BG_CARD,
                 };
 
                 theme::card_frame(card_fill).show(ui, |ui| {
@@ -48,9 +53,7 @@ pub fn draw(ui: &mut Ui) {
                         let (badge_c, badge) = status_badge(seg.status);
                         ui.label(RichText::new(badge).color(badge_c).small().strong());
                         ui.add_space(8.0);
-                        ui.label(
-                            RichText::new(&seg.id).color(theme::CYAN).monospace(),
-                        );
+                        ui.label(RichText::new(&seg.id).color(theme::CYAN).monospace());
                         ui.add_space(8.0);
                         ui.label(
                             RichText::new(format!(
@@ -136,30 +139,28 @@ pub fn draw(ui: &mut Ui) {
 
 fn status_badge(status: SegmentStatus) -> (Color32, &'static str) {
     match status {
-        SegmentStatus::Defective      => (theme::RED_HOT, "⛔ DEFECTIVE"),
-        SegmentStatus::Suspected       => (theme::ORANGE,  "⚠  SUSPECTED"),
-        SegmentStatus::Active          => (theme::GREEN,   "✓  ACTIVE"),
-        SegmentStatus::Decommissioned  => (theme::TEXT_DIM, "✗  DECOM"),
-        SegmentStatus::Recovered       => (theme::CYAN,    "↑  RECOVERED"),
+        SegmentStatus::Defective => (theme::RED_HOT, "⛔ DEFECTIVE"),
+        SegmentStatus::Suspected => (theme::ORANGE, "⚠  SUSPECTED"),
+        SegmentStatus::Active => (theme::GREEN, "✓  ACTIVE"),
+        SegmentStatus::Decommissioned => (theme::TEXT_DIM, "✗  DECOM"),
+        SegmentStatus::Recovered => (theme::CYAN, "↑  RECOVERED"),
     }
 }
 
 fn material_name(mat: PipeMaterial) -> &'static str {
     match mat {
         PipeMaterial::AsbestosCement => "Asbestos Cement",
-        PipeMaterial::CastIron       => "Cast Iron",
-        PipeMaterial::DuctileIron    => "Ductile Iron",
-        PipeMaterial::Plastic        => "Plastic",
-        PipeMaterial::Unknown        => "Unknown",
+        PipeMaterial::CastIron => "Cast Iron",
+        PipeMaterial::DuctileIron => "Ductile Iron",
+        PipeMaterial::Plastic => "Plastic",
+        PipeMaterial::Unknown => "Unknown",
     }
 }
 
 fn score_bar(ui: &mut Ui, score: f32, width: f32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 8.0), egui::Sense::hover());
     ui.painter().rect_filled(rect, 2.0, theme::BG_DARK);
-    let filled = egui::Rect::from_min_size(
-        rect.min,
-        Vec2::new(width * score.clamp(0.0, 1.0), 8.0),
-    );
-    ui.painter().rect_filled(filled, 2.0, theme::defect_color(score));
+    let filled = egui::Rect::from_min_size(rect.min, Vec2::new(width * score.clamp(0.0, 1.0), 8.0));
+    ui.painter()
+        .rect_filled(filled, 2.0, theme::defect_color(score));
 }

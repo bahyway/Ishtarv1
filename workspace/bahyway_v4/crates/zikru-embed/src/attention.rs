@@ -11,14 +11,14 @@
 #[derive(Debug, Clone)]
 pub struct TokenParticle {
     /// Embedding vector (dim = model.embedding_dim).
-    pub position:      Vec<f32>,
+    pub position: Vec<f32>,
     /// Field strength: how strongly this particle influences neighbors.
     /// Set from field_strength_biases indexed by TokenClass.
     pub field_strength: f32,
     /// Tribe affinity — domain-specific relevance weight [0,1].
     pub tribe_affinity: f32,
     /// Hepta sector θ₀–θ₆ for this token.
-    pub sector:        u8,
+    pub sector: u8,
 }
 
 /// Compute attended embeddings via Tribal Field Attention.
@@ -29,7 +29,9 @@ pub struct TokenParticle {
 /// Then: output[i] = position[i] + Σ(weight(i,j) × position[j]) / total_weight
 pub fn tribal_field_attend(particles: &[TokenParticle]) -> Vec<Vec<f32>> {
     let n = particles.len();
-    if n == 0 { return Vec::new(); }
+    if n == 0 {
+        return Vec::new();
+    }
     let dim = particles[0].position.len();
     let mut outputs = vec![vec![0.0f32; dim]; n];
 
@@ -38,19 +40,25 @@ pub fn tribal_field_attend(particles: &[TokenParticle]) -> Vec<Vec<f32>> {
         let mut total_weight = 0.0f32;
 
         for j in 0..n {
-            if i == j { continue; }
+            if i == j {
+                continue;
+            }
 
             let distance = cosine_distance(&particles[i].position, &particles[j].position);
             // Inverse-square field: particles close in semantic space influence more
             let field = particles[j].field_strength / (distance * distance + 1e-6);
 
             // Same sector = stronger interaction (aligned semantic dimension)
-            let sector_compat = if particles[i].sector == particles[j].sector { 1.5f32 } else { 0.5f32 };
+            let sector_compat = if particles[i].sector == particles[j].sector {
+                1.5f32
+            } else {
+                0.5f32
+            };
 
             let weight = field * sector_compat * particles[j].tribe_affinity;
 
-            for k in 0..dim {
-                accumulator[k] += weight * particles[j].position[k];
+            for (k, acc) in accumulator.iter_mut().enumerate().take(dim) {
+                *acc += weight * particles[j].position[k];
             }
             total_weight += weight;
         }
@@ -69,7 +77,7 @@ pub fn tribal_field_attend(particles: &[TokenParticle]) -> Vec<Vec<f32>> {
 /// [0,2] in general.
 pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
     debug_assert_eq!(a.len(), b.len());
-    let dot:    f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
     1.0 - (dot / (norm_a * norm_b + 1e-8))
@@ -78,7 +86,11 @@ pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
 /// Euclidean distance between two vectors.
 pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     debug_assert_eq!(a.len(), b.len());
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y) * (x - y)).sum::<f32>().sqrt()
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y) * (x - y))
+        .sum::<f32>()
+        .sqrt()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -88,7 +100,12 @@ mod tests {
     use super::*;
 
     fn make_particle(pos: Vec<f32>, sector: u8) -> TokenParticle {
-        TokenParticle { position: pos, field_strength: 1.0, tribe_affinity: 1.0, sector }
+        TokenParticle {
+            position: pos,
+            field_strength: 1.0,
+            tribe_affinity: 1.0,
+            sector,
+        }
     }
 
     #[test]
@@ -121,7 +138,11 @@ mod tests {
     fn cosine_distance_identical_vectors() {
         let v = vec![1.0f32, 2.0, 3.0];
         let d = cosine_distance(&v, &v);
-        assert!(d.abs() < 1e-5, "identical vectors have distance 0, got {}", d);
+        assert!(
+            d.abs() < 1e-5,
+            "identical vectors have distance 0, got {}",
+            d
+        );
     }
 
     #[test]
@@ -129,7 +150,11 @@ mod tests {
         let a = vec![1.0f32, 0.0];
         let b = vec![0.0f32, 1.0];
         let d = cosine_distance(&a, &b);
-        assert!((d - 1.0).abs() < 1e-5, "orthogonal vectors have distance 1, got {}", d);
+        assert!(
+            (d - 1.0).abs() < 1e-5,
+            "orthogonal vectors have distance 1, got {}",
+            d
+        );
     }
 
     #[test]
@@ -143,16 +168,20 @@ mod tests {
     #[test]
     fn field_strength_affects_output() {
         // Higher field strength on particle B → B influences A more
-        let a  = make_particle(vec![1.0, 0.0], 0);
+        let a = make_particle(vec![1.0, 0.0], 0);
         let mut b_high = make_particle(vec![0.0, 1.0], 0);
         b_high.field_strength = 10.0;
-        let b_low  = make_particle(vec![0.0, 1.0], 0); // field=1.0
+        let b_low = make_particle(vec![0.0, 1.0], 0); // field=1.0
 
         let out_high = tribal_field_attend(&[a.clone(), b_high]);
-        let out_low  = tribal_field_attend(&[a.clone(), b_low]);
+        let out_low = tribal_field_attend(&[a.clone(), b_low]);
 
         // High-field B should pull A's output[1] higher
-        assert!(out_high[0][1] > out_low[0][1],
-                "high field: {}, low field: {}", out_high[0][1], out_low[0][1]);
+        assert!(
+            out_high[0][1] > out_low[0][1],
+            "high field: {}, low field: {}",
+            out_high[0][1],
+            out_low[0][1]
+        );
     }
 }

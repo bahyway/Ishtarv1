@@ -120,9 +120,9 @@ impl TrustState {
     pub fn from_b11(b11: u8) -> Self {
         match b11 {
             200..=u8::MAX => TrustState::Golden,
-            100..=199     => TrustState::Active,
-            59..=99       => TrustState::Suspicious,
-            _             => TrustState::Blocked,
+            100..=199 => TrustState::Active,
+            59..=99 => TrustState::Suspicious,
+            _ => TrustState::Blocked,
         }
     }
 }
@@ -222,7 +222,9 @@ impl KakiFirewall {
         let src_hash = match packet.src_kaki_hash {
             Some(h) => h,
             None => {
-                let verdict = FirewallVerdict::Block { reason: BlockReason::NoSourceKaki };
+                let verdict = FirewallVerdict::Block {
+                    reason: BlockReason::NoSourceKaki,
+                };
                 self.blocked += 1;
                 self.append_event(FirewallEvent {
                     epoch: now_epoch,
@@ -235,16 +237,18 @@ impl KakiFirewall {
         };
 
         // ── Step 2: Trust table lookup ────────────────────────────────────
-        if !self.trust_table.contains_key(&src_hash) {
+        if let std::collections::btree_map::Entry::Vacant(e) = self.trust_table.entry(src_hash) {
             // First-seen KAKI — register Unknown and quarantine
-            self.trust_table.insert(src_hash, TrustEntry {
+            e.insert(TrustEntry {
                 kaki_hash: src_hash,
                 state: TrustState::Unknown,
                 last_seen_epoch: now_epoch,
                 packet_count: 1,
                 blocked_count: 0,
             });
-            let verdict = FirewallVerdict::Quarantine { reason: BlockReason::NoSourceKaki };
+            let verdict = FirewallVerdict::Quarantine {
+                reason: BlockReason::NoSourceKaki,
+            };
             self.quarantined += 1;
             self.append_event(FirewallEvent {
                 epoch: now_epoch,
@@ -259,27 +263,33 @@ impl KakiFirewall {
         let verdict = {
             let entry = self.trust_table.get(&src_hash).unwrap();
             match entry.state {
-                TrustState::Revoked => {
-                    Some(FirewallVerdict::Block { reason: BlockReason::RevokedKaki })
-                }
-                TrustState::Blocked => {
-                    Some(FirewallVerdict::Block { reason: BlockReason::DeadB11 })
-                }
-                TrustState::Unknown => {
-                    Some(FirewallVerdict::Quarantine { reason: BlockReason::NoSourceKaki })
-                }
+                TrustState::Revoked => Some(FirewallVerdict::Block {
+                    reason: BlockReason::RevokedKaki,
+                }),
+                TrustState::Blocked => Some(FirewallVerdict::Block {
+                    reason: BlockReason::DeadB11,
+                }),
+                TrustState::Unknown => Some(FirewallVerdict::Quarantine {
+                    reason: BlockReason::NoSourceKaki,
+                }),
                 TrustState::Suspicious => {
                     if entry.blocked_count > 3 {
-                        Some(FirewallVerdict::Block { reason: BlockReason::FuzzyRateLimited })
+                        Some(FirewallVerdict::Block {
+                            reason: BlockReason::FuzzyRateLimited,
+                        })
                     } else {
-                        Some(FirewallVerdict::Quarantine { reason: BlockReason::FuzzyRateLimited })
+                        Some(FirewallVerdict::Quarantine {
+                            reason: BlockReason::FuzzyRateLimited,
+                        })
                     }
                 }
                 TrustState::Active | TrustState::Golden => {
                     // Check SATTATU_MAX expiry
                     let age = now_epoch.saturating_sub(entry.last_seen_epoch);
                     if age > SATTATU_MAX_SECS {
-                        Some(FirewallVerdict::Block { reason: BlockReason::ExpiredKaki })
+                        Some(FirewallVerdict::Block {
+                            reason: BlockReason::ExpiredKaki,
+                        })
                     } else {
                         // Compute tunnel_id as fnv1a(src ++ dst)
                         let dst = packet.dst_kaki_hash.unwrap_or(0);
@@ -297,18 +307,15 @@ impl KakiFirewall {
             let entry = self.trust_table.get_mut(&src_hash).unwrap();
             entry.last_seen_epoch = now_epoch;
             entry.packet_count += 1;
-            match &verdict {
-                FirewallVerdict::Block { .. } => {
-                    entry.blocked_count += 1;
-                }
-                _ => {}
+            if let FirewallVerdict::Block { .. } = &verdict {
+                entry.blocked_count += 1;
             }
         }
 
         // Accumulate global counters and log event
         match &verdict {
-            FirewallVerdict::Allow { .. }     => self.allowed += 1,
-            FirewallVerdict::Block { .. }     => self.blocked += 1,
+            FirewallVerdict::Allow { .. } => self.allowed += 1,
+            FirewallVerdict::Block { .. } => self.blocked += 1,
             FirewallVerdict::Quarantine { .. } => self.quarantined += 1,
         }
 
@@ -415,7 +422,7 @@ impl Default for KakiFirewall {
 /// Compute a 32-bit FNV-1a hash of `(src, dst)` for the tunnel ID.
 fn fnv1a_tunnel(src: u32, dst: u32) -> u32 {
     const OFFSET: u32 = 2_166_136_261;
-    const PRIME: u32  = 16_777_619;
+    const PRIME: u32 = 16_777_619;
     let mut h = OFFSET;
     for b in src.to_le_bytes().iter().chain(dst.to_le_bytes().iter()) {
         h ^= *b as u32;
@@ -445,7 +452,12 @@ mod tests {
     fn no_kaki_is_blocked() {
         let mut fw = KakiFirewall::new();
         let verdict = fw.inspect(&make_packet(None), 1_000);
-        assert_eq!(verdict, FirewallVerdict::Block { reason: BlockReason::NoSourceKaki });
+        assert_eq!(
+            verdict,
+            FirewallVerdict::Block {
+                reason: BlockReason::NoSourceKaki
+            }
+        );
         assert_eq!(fw.stats().blocked, 1);
     }
 
@@ -472,7 +484,12 @@ mod tests {
         fw.register_kaki(0xDEAD_0001, TrustState::Golden, 900);
         fw.revoke_kaki(0xDEAD_0001, 950);
         let verdict = fw.inspect(&make_packet(Some(0xDEAD_0001)), 1_000);
-        assert_eq!(verdict, FirewallVerdict::Block { reason: BlockReason::RevokedKaki });
+        assert_eq!(
+            verdict,
+            FirewallVerdict::Block {
+                reason: BlockReason::RevokedKaki
+            }
+        );
     }
 
     #[test]
@@ -483,7 +500,12 @@ mod tests {
         // now_epoch is SATTATU_MAX_SECS + 1 seconds later
         let now = 100 + SATTATU_MAX_SECS + 1;
         let verdict = fw.inspect(&make_packet(Some(0xE4_9D_0001)), now);
-        assert_eq!(verdict, FirewallVerdict::Block { reason: BlockReason::ExpiredKaki });
+        assert_eq!(
+            verdict,
+            FirewallVerdict::Block {
+                reason: BlockReason::ExpiredKaki
+            }
+        );
     }
 
     #[test]
@@ -492,10 +514,10 @@ mod tests {
         assert_eq!(TrustState::from_b11(200), TrustState::Golden);
         assert_eq!(TrustState::from_b11(199), TrustState::Active);
         assert_eq!(TrustState::from_b11(100), TrustState::Active);
-        assert_eq!(TrustState::from_b11(99),  TrustState::Suspicious);
-        assert_eq!(TrustState::from_b11(59),  TrustState::Suspicious);
-        assert_eq!(TrustState::from_b11(58),  TrustState::Blocked);
-        assert_eq!(TrustState::from_b11(0),   TrustState::Blocked);
+        assert_eq!(TrustState::from_b11(99), TrustState::Suspicious);
+        assert_eq!(TrustState::from_b11(59), TrustState::Suspicious);
+        assert_eq!(TrustState::from_b11(58), TrustState::Blocked);
+        assert_eq!(TrustState::from_b11(0), TrustState::Blocked);
     }
 
     #[test]

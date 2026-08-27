@@ -77,13 +77,23 @@ mod tests {
         let endpoint = traj.last().unwrap();
 
         for i in 0..7 {
-            assert!((endpoint[i] - t[i]).abs() < 1e-6, "component {i}: {} vs {}", endpoint[i], t[i]);
+            assert!(
+                (endpoint[i] - t[i]).abs() < 1e-6,
+                "component {i}: {} vs {}",
+                endpoint[i],
+                t[i]
+            );
         }
 
         // And the direct radial_coordinate formula matches the metric
         // arc-length of that same straight segment.
         let direct = radial_coordinate(&p, &t, &w);
-        let arc_length: f64 = w.iter().zip(v0.iter()).map(|(wi, vi)| wi * vi * vi).sum::<f64>().sqrt();
+        let arc_length: f64 = w
+            .iter()
+            .zip(v0.iter())
+            .map(|(wi, vi)| wi * vi * vi)
+            .sum::<f64>()
+            .sqrt();
         assert!((direct - arc_length).abs() < 1e-9);
     }
 }

@@ -11,7 +11,7 @@
 //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust
 
 use crate::agent::{AgentSnapshot, AgentState};
-use crate::behavior::{BehaviorPolicy, TransitionOutcome, apply_transition};
+use crate::behavior::{apply_transition, BehaviorPolicy, TransitionOutcome};
 
 /// Kinetic quantities for a single particle at one timestep.
 #[derive(Debug, Clone)]
@@ -38,9 +38,9 @@ pub struct KineticState {
 /// Here we use a simplified closed-form: velocity decays with radius (inner
 /// particles orbit faster) and increases with density pressure.
 pub fn j_phys(snapshot: &AgentSnapshot, density_count: usize) -> f32 {
-    let b11_norm  = snapshot.b11 as f32 / 240.0;
-    let speed     = b11_norm * 2.0;          // higher quality → faster inner orbit
-    let pressure  = density_count as f32 * 0.05; // density pushes particles outward
+    let b11_norm = snapshot.b11 as f32 / 240.0;
+    let speed = b11_norm * 2.0; // higher quality → faster inner orbit
+    let pressure = density_count as f32 * 0.05; // density pushes particles outward
     (speed + pressure).min(4.0)
 }
 
@@ -49,10 +49,10 @@ pub fn j_phys(snapshot: &AgentSnapshot, density_count: usize) -> f32 {
 /// +1 → net ascend, 0 → stable, −1 → net descend, −99 → Rule 7 sink.
 pub fn j_mem(snapshot: &AgentSnapshot, policy: &BehaviorPolicy) -> i8 {
     match policy.resolve(snapshot.state) {
-        TransitionOutcome::Ascend    =>  1,
-        TransitionOutcome::Descend   => -1,
+        TransitionOutcome::Ascend => 1,
+        TransitionOutcome::Descend => -1,
         TransitionOutcome::Rule7Sink => -99, // sentinel for Rule 7
-        TransitionOutcome::Stable    =>  0,
+        TransitionOutcome::Stable => 0,
     }
 }
 
@@ -74,9 +74,7 @@ pub fn j_learn(delta_h: f32) -> f32 {
 pub fn policy_for(snapshot: &AgentSnapshot, density_count: usize) -> BehaviorPolicy {
     const TAU_R7: usize = 11;
 
-    if density_count >= TAU_R7
-        && matches!(snapshot.state, AgentState::Fuzzy | AgentState::Dead)
-    {
+    if density_count >= TAU_R7 && matches!(snapshot.state, AgentState::Fuzzy | AgentState::Dead) {
         return BehaviorPolicy::rule7_overflow();
     }
 
@@ -107,23 +105,19 @@ pub fn policy_for(snapshot: &AgentSnapshot, density_count: usize) -> BehaviorPol
 /// Advance one particle by one discrete kinetic timestep.
 ///
 /// `delta_h` — signed change in H(P) score this step (from score-engine).
-pub fn kinetic_step(
-    snapshot: AgentSnapshot,
-    density_count: usize,
-    delta_h: f32,
-) -> KineticState {
-    let policy  = policy_for(&snapshot, density_count);
+pub fn kinetic_step(snapshot: AgentSnapshot, density_count: usize, delta_h: f32) -> KineticState {
+    let policy = policy_for(&snapshot, density_count);
     let outcome = policy.resolve(snapshot.state);
-    let j_m     = j_mem(&snapshot, &policy);
-    let j_p     = j_phys(&snapshot, density_count);
-    let j_l     = j_learn(delta_h);
-    let next    = apply_transition(snapshot.state, outcome);
+    let j_m = j_mem(&snapshot, &policy);
+    let j_p = j_phys(&snapshot, density_count);
+    let j_l = j_learn(delta_h);
+    let next = apply_transition(snapshot.state, outcome);
 
     KineticState {
-        j_phys:        j_p,
-        j_mem:         j_m,
-        j_learn:       j_l,
-        next_state:    next,
+        j_phys: j_p,
+        j_mem: j_m,
+        j_learn: j_l,
+        next_state: next,
         outcome,
         density_count,
         snapshot,
@@ -135,16 +129,18 @@ pub fn kinetic_step(
 /// `density_counts[i]` = neighbourhood count for agent i (from tribe-orbit-engine).
 /// `delta_hs[i]`       = H(P) drift for agent i (from score-engine).
 pub fn kinetic_step_batch(
-    snapshots:      &[AgentSnapshot],
+    snapshots: &[AgentSnapshot],
     density_counts: &[usize],
-    delta_hs:       &[f32],
+    delta_hs: &[f32],
 ) -> Vec<KineticState> {
     assert_eq!(snapshots.len(), density_counts.len());
     assert_eq!(snapshots.len(), delta_hs.len());
 
-    snapshots.iter().enumerate().map(|(i, snap)| {
-        kinetic_step(snap.clone(), density_counts[i], delta_hs[i])
-    }).collect()
+    snapshots
+        .iter()
+        .enumerate()
+        .map(|(i, snap)| kinetic_step(snap.clone(), density_counts[i], delta_hs[i]))
+        .collect()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -158,7 +154,9 @@ mod tests {
         let mut kaki = [0u8; 16];
         kaki[6] = kaki_type;
         let mut snap = AgentSnapshot::new(kaki, b11, [0.0, 0.0, 0.0]);
-        if let Some(s) = state_override { snap.state = s; }
+        if let Some(s) = state_override {
+            snap.state = s;
+        }
         snap
     }
 
@@ -166,14 +164,17 @@ mod tests {
     fn j_phys_gem_high_velocity() {
         let snap = make_snap(240, 1, None);
         let v = j_phys(&snap, 0);
-        assert!(v > 1.5, "GEM particle should have high orbital velocity, got {v}");
+        assert!(
+            v > 1.5,
+            "GEM particle should have high orbital velocity, got {v}"
+        );
     }
 
     #[test]
     fn j_phys_density_increases_velocity() {
         let snap = make_snap(100, 2, None);
         let v_sparse = j_phys(&snap, 0);
-        let v_dense  = j_phys(&snap, 10);
+        let v_dense = j_phys(&snap, 10);
         assert!(v_dense > v_sparse);
     }
 
@@ -211,7 +212,7 @@ mod tests {
     #[test]
     fn kinetic_step_gem_stays_gem() {
         let snap = make_snap(240, 1, None);
-        let ks   = kinetic_step(snap, 0, 0.0);
+        let ks = kinetic_step(snap, 0, 0.0);
         assert_eq!(ks.next_state, AgentState::Gem);
         assert_eq!(ks.outcome, TransitionOutcome::Stable);
     }
@@ -219,7 +220,7 @@ mod tests {
     #[test]
     fn kinetic_step_dead_rule7_sinks() {
         let snap = make_snap(30, 2, Some(AgentState::Dead));
-        let ks   = kinetic_step(snap, 11, 0.0);
+        let ks = kinetic_step(snap, 11, 0.0);
         assert_eq!(ks.outcome, TransitionOutcome::Rule7Sink);
         assert_eq!(ks.next_state, AgentState::Dead);
     }
@@ -228,7 +229,7 @@ mod tests {
     fn kinetic_step_batch_same_length() {
         let snaps: Vec<_> = (0..7).map(|_| make_snap(150, 2, None)).collect();
         let counts = vec![0usize; 7];
-        let dhs    = vec![0.0f32; 7];
+        let dhs = vec![0.0f32; 7];
         let result = kinetic_step_batch(&snaps, &counts, &dhs);
         assert_eq!(result.len(), 7);
     }

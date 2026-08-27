@@ -6,16 +6,16 @@
 //! - Snapshot acceleration: O(events since last snapshot) instead of O(total).
 //! - Zero writes: the StoryEngine never modifies the Journal or any index.
 
-use enkidb_kaki::IdentityKaki;
 use enkidb_journal::Journal;
-use enkidb_snapshot::SnapshotRecord;
+use enkidb_kaki::IdentityKaki;
 use enkidb_snapshot::projection::{choose_algorithm, ProjectionAlgorithm};
+use enkidb_snapshot::SnapshotRecord;
 
 use crate::projected_state::ProjectedState;
 use crate::projection::{decode_state, ATTR_STATE};
 
 pub struct StoryEngine<'a> {
-    journal:   &'a Journal,
+    journal: &'a Journal,
     snapshots: &'a [SnapshotRecord],
 }
 
@@ -37,11 +37,14 @@ impl<'a> StoryEngine<'a> {
         let mut state = match &algo {
             ProjectionAlgorithm::SnapshotAccelerated { snapshot_epoch } => {
                 // Start from snapshot state
-                let snap = self.snapshots.iter()
-                    .filter(|s| s.particle.bytes() == particle.bytes()
-                             && s.snapshot_date <= *snapshot_epoch)
+                let snap = self
+                    .snapshots
+                    .iter()
+                    .filter(|s| {
+                        s.particle.bytes() == particle.bytes() && s.snapshot_date <= *snapshot_epoch
+                    })
                     .max_by_key(|s| s.snapshot_date);
-                let mut ps = ProjectedState::new(particle.clone());
+                let mut ps = ProjectedState::new(*particle);
                 ps.from_snapshot = true;
                 if let Some(s) = snap {
                     // snapshot_state is raw bytes encoding prior attr values;
@@ -50,7 +53,7 @@ impl<'a> StoryEngine<'a> {
                 }
                 ps
             }
-            ProjectionAlgorithm::FullReplay => ProjectedState::new(particle.clone()),
+            ProjectionAlgorithm::FullReplay => ProjectedState::new(*particle),
         };
 
         // Determine the epoch threshold for delta events
@@ -61,7 +64,8 @@ impl<'a> StoryEngine<'a> {
 
         // Apply all qualifying Event-Kakis in chronological order (§3.1)
         let history = self.journal.read_particle_history(particle);
-        let mut relevant: Vec<_> = history.iter()
+        let mut relevant: Vec<_> = history
+            .iter()
             .filter(|e| e.epoch >= since_epoch && e.epoch as u64 <= at_epoch)
             .collect();
         // Sort ascending by epoch — Journal must be replayed in chronological order
@@ -91,22 +95,29 @@ impl<'a> StoryEngine<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_journal::entry::{EavTriple, JournalEntry};
-    use enkidb_kaki::{EventKaki, KakiRole, mint::KakiMinter};
-    use bahyway_core::{ParticleState, TribeId};
     use crate::projection::{encode_state, ATTR_QUALITY};
+    use bahyway_core::{ParticleState, TribeId};
+    use enkidb_journal::entry::{EavTriple, JournalEntry};
+    use enkidb_kaki::{mint::KakiMinter, EventKaki, KakiRole};
 
     fn setup() -> (KakiMinter, Journal, IdentityKaki) {
-        let m      = KakiMinter::new(TribeId::from_u16(0x0001));
+        let m = KakiMinter::new(TribeId::from_u16(0x0001));
         let target = enkidb_kaki::IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-        let jnl    = Journal::new(64);
+        let jnl = Journal::new(64);
         (m, jnl, target)
     }
 
-    fn push_state(jnl: &mut Journal, m: &KakiMinter, target: &IdentityKaki, ps: ParticleState, epoch: u32) {
-        let ek  = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
+    fn push_state(
+        jnl: &mut Journal,
+        m: &KakiMinter,
+        target: &IdentityKaki,
+        ps: ParticleState,
+        epoch: u32,
+    ) {
+        let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
         let eav = vec![EavTriple::new(ATTR_STATE, encode_state(ps).to_vec())];
-        jnl.append(JournalEntry::new(ek, target.clone(), epoch, eav)).unwrap();
+        jnl.append(JournalEntry::new(ek, target.clone(), epoch, eav))
+            .unwrap();
     }
 
     #[test]
@@ -114,7 +125,7 @@ mod tests {
         let (m, mut jnl, target) = setup();
         push_state(&mut jnl, &m, &target, ParticleState::Golden, 1);
         let engine = StoryEngine::new(&jnl, &[]);
-        let ps     = engine.project(&target);
+        let ps = engine.project(&target);
         assert_eq!(ps.state, ParticleState::Golden);
         assert_eq!(ps.events_seen, 1);
     }
@@ -123,8 +134,8 @@ mod tests {
     fn project_state_evolution() {
         let (m, mut jnl, target) = setup();
         push_state(&mut jnl, &m, &target, ParticleState::Golden, 1);
-        push_state(&mut jnl, &m, &target, ParticleState::Fuzzy,  2);
-        push_state(&mut jnl, &m, &target, ParticleState::Dead,   3);
+        push_state(&mut jnl, &m, &target, ParticleState::Fuzzy, 2);
+        push_state(&mut jnl, &m, &target, ParticleState::Dead, 3);
         let engine = StoryEngine::new(&jnl, &[]);
         assert_eq!(engine.project(&target).state, ParticleState::Dead);
     }
@@ -133,7 +144,7 @@ mod tests {
     fn time_travel_query() {
         let (m, mut jnl, target) = setup();
         push_state(&mut jnl, &m, &target, ParticleState::Golden, 1);
-        push_state(&mut jnl, &m, &target, ParticleState::Dead,   5);
+        push_state(&mut jnl, &m, &target, ParticleState::Dead, 5);
         let engine = StoryEngine::new(&jnl, &[]);
         // At epoch 3 the particle was still Golden
         let at_3 = engine.project_at(&target, 3);
@@ -146,14 +157,15 @@ mod tests {
     #[test]
     fn multi_attribute_projection() {
         let (m, mut jnl, target) = setup();
-        let ek  = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
+        let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
         let eav = vec![
-            EavTriple::new(ATTR_STATE,   encode_state(ParticleState::Golden).to_vec()),
+            EavTriple::new(ATTR_STATE, encode_state(ParticleState::Golden).to_vec()),
             EavTriple::new(ATTR_QUALITY, b"0.95".to_vec()),
         ];
-        jnl.append(JournalEntry::new(ek, target.clone(), 1, eav)).unwrap();
+        jnl.append(JournalEntry::new(ek, target.clone(), 1, eav))
+            .unwrap();
         let engine = StoryEngine::new(&jnl, &[]);
-        let ps     = engine.project(&target);
+        let ps = engine.project(&target);
         assert_eq!(ps.get(ATTR_QUALITY), Some(b"0.95".as_slice()));
     }
 
@@ -161,7 +173,7 @@ mod tests {
     fn empty_journal_returns_fuzzy() {
         let (_, jnl, target) = setup();
         let engine = StoryEngine::new(&jnl, &[]);
-        let ps     = engine.project(&target);
+        let ps = engine.project(&target);
         assert_eq!(ps.state, ParticleState::Fuzzy);
         assert_eq!(ps.events_seen, 0);
     }

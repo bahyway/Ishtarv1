@@ -45,15 +45,15 @@ impl CellKind {
     /// ```
     pub fn as_tag(self) -> &'static str {
         match self {
-            CellKind::Akk    => "akk",
-            CellKind::Hepta  => "hepta",
-            CellKind::Vgca   => "vgca",
-            CellKind::Way    => "way",
-            CellKind::Prose  => "prose",
+            CellKind::Akk => "akk",
+            CellKind::Hepta => "hepta",
+            CellKind::Vgca => "vgca",
+            CellKind::Way => "way",
+            CellKind::Prose => "prose",
             CellKind::Canvas => "canvas",
-            CellKind::Shell  => "shell",
-            CellKind::Json   => "json",
-            CellKind::Sql    => "sql",
+            CellKind::Shell => "shell",
+            CellKind::Json => "json",
+            CellKind::Sql => "sql",
             CellKind::Output => "output",
         }
     }
@@ -61,15 +61,15 @@ impl CellKind {
     /// Human-readable description of what this cell kind does at runtime.
     pub fn description(self) -> &'static str {
         match self {
-            CellKind::Akk    => "AkkadianAOL source — compiled by Nabu engine",
-            CellKind::Hepta  => "HeptaScript query — evaluated against EnkiDB",
-            CellKind::Vgca   => "VGCA geometric validation pipeline",
-            CellKind::Way    => "Way security policy — compiled to Lamassu config",
-            CellKind::Prose  => "Markdown prose — rendered as HTML",
+            CellKind::Akk => "AkkadianAOL source — compiled by Nabu engine",
+            CellKind::Hepta => "HeptaScript query — evaluated against EnkiDB",
+            CellKind::Vgca => "VGCA geometric validation pipeline",
+            CellKind::Way => "Way security policy — compiled to Lamassu config",
+            CellKind::Prose => "Markdown prose — rendered as HTML",
             CellKind::Canvas => "HTML Canvas 2D visualization (no animation)",
-            CellKind::Shell  => "Shell command — sovereign sandbox",
-            CellKind::Json   => "Inline JSON data — not executed",
-            CellKind::Sql    => "SQL query — sent to EnkiDB SQL gateway",
+            CellKind::Shell => "Shell command — sovereign sandbox",
+            CellKind::Json => "Inline JSON data — not executed",
+            CellKind::Sql => "SQL query — sent to EnkiDB SQL gateway",
             CellKind::Output => "Runtime output — read-only result block",
         }
     }
@@ -78,8 +78,12 @@ impl CellKind {
     pub fn is_executable(self) -> bool {
         matches!(
             self,
-            CellKind::Akk | CellKind::Hepta | CellKind::Vgca |
-            CellKind::Way | CellKind::Shell  | CellKind::Sql
+            CellKind::Akk
+                | CellKind::Hepta
+                | CellKind::Vgca
+                | CellKind::Way
+                | CellKind::Shell
+                | CellKind::Sql
         )
     }
 
@@ -92,17 +96,17 @@ impl CellKind {
     /// Parse a fence tag string into a `CellKind`, if known.
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
-            "akk"    => Some(CellKind::Akk),
-            "hepta"  => Some(CellKind::Hepta),
-            "vgca"   => Some(CellKind::Vgca),
-            "way"    => Some(CellKind::Way),
-            "prose"  => Some(CellKind::Prose),
+            "akk" => Some(CellKind::Akk),
+            "hepta" => Some(CellKind::Hepta),
+            "vgca" => Some(CellKind::Vgca),
+            "way" => Some(CellKind::Way),
+            "prose" => Some(CellKind::Prose),
             "canvas" => Some(CellKind::Canvas),
-            "shell"  => Some(CellKind::Shell),
-            "json"   => Some(CellKind::Json),
-            "sql"    => Some(CellKind::Sql),
+            "shell" => Some(CellKind::Shell),
+            "json" => Some(CellKind::Json),
+            "sql" => Some(CellKind::Sql),
             "output" => Some(CellKind::Output),
-            _        => None,
+            _ => None,
         }
     }
 
@@ -142,16 +146,21 @@ mod tests {
     fn from_tag_round_trip() {
         for kind in CellKind::all() {
             let parsed = CellKind::from_tag(kind.as_tag());
-            assert_eq!(parsed, Some(*kind), "round-trip failed for {}", kind.as_tag());
+            assert_eq!(
+                parsed,
+                Some(*kind),
+                "round-trip failed for {}",
+                kind.as_tag()
+            );
         }
     }
 
     #[test]
     fn unknown_tag_returns_none() {
-        assert_eq!(CellKind::from_tag("rust"),     None);
-        assert_eq!(CellKind::from_tag(""),          None);
-        assert_eq!(CellKind::from_tag("HEPTA"),     None); // case-sensitive
-        assert_eq!(CellKind::from_tag("markdown"),  None);
+        assert_eq!(CellKind::from_tag("rust"), None);
+        assert_eq!(CellKind::from_tag(""), None);
+        assert_eq!(CellKind::from_tag("HEPTA"), None); // case-sensitive
+        assert_eq!(CellKind::from_tag("markdown"), None);
     }
 
     #[test]
@@ -194,7 +203,11 @@ mod tests {
     fn no_duplicate_tags() {
         let mut seen = std::collections::HashSet::new();
         for kind in CellKind::all() {
-            assert!(seen.insert(kind.as_tag()), "duplicate tag: {}", kind.as_tag());
+            assert!(
+                seen.insert(kind.as_tag()),
+                "duplicate tag: {}",
+                kind.as_tag()
+            );
         }
     }
 }

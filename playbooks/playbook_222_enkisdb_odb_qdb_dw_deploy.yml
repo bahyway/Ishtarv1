@@ -322,19 +322,22 @@
   connection: local
   become: false
   vars:
-    enkidb_read_ip: "192.168.122.107"   # enkidb-node-read, per ansible/inventory.ini
+    # Resolved from the real inventory group, not hardcoded -- see
+    # PB-221's own identical fix (2026-08-26): a stale IP from before
+    # the uruk-node-* rename sat here silently until it broke live.
+    enkidb_read_ip: "{{ hostvars[groups['enkidb_read'][0]]['ansible_host'] }}"
 
   tasks:
     - name: "0.1 | Confirm all six containers are up before touching anything"
       ansible.builtin.command: "podman ps --filter name={{ item.1 }}"
       delegate_to: "{{ item.0 }}"
       loop:
-        - [enkidb-node-write, enkisdb-write]
-        - [enkidb-node-write, enkidw-write]
-        - [enkidb-node-read, enkisdb-read]
-        - [enkidb-node-read, enkiodb-read]
-        - [enkidb-node-read, enkiqdb-read]
-        - [enkidb-node-read, enkidw-read]
+        - ["{{ groups['enkidb_write'][0] }}", enkisdb-write]
+        - ["{{ groups['enkidb_write'][0] }}", enkidw-write]
+        - ["{{ groups['enkidb_read'][0] }}", enkisdb-read]
+        - ["{{ groups['enkidb_read'][0] }}", enkiodb-read]
+        - ["{{ groups['enkidb_read'][0] }}", enkiqdb-read]
+        - ["{{ groups['enkidb_read'][0] }}", enkidw-read]
       register: containers_up
       changed_when: false
 
@@ -351,8 +354,8 @@
         enkiddb_db_label: "enkisdb"
         enkiddb_write_volume: "enkisdb-write-data"
         enkiddb_read_volume: "enkisdb-read-data"
-        enkiddb_write_host: "enkidb-node-write"
-        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_host: "{{ groups['enkidb_write'][0] }}"
+        enkiddb_read_host: "{{ groups['enkidb_read'][0] }}"
         # tasks/enkiddb_cross_host_sync.yml's own QUERY step reads
         # enkiddb_read_ip (double-d, matching every other enkiddb_*
         # var in this vars block) -- this play only ever defined
@@ -373,8 +376,8 @@
         enkiddb_db_label: "enkiodb"
         enkiddb_write_volume: "enkiodb-write-data"
         enkiddb_read_volume: "enkiodb-read-data"
-        enkiddb_write_host: "enkidb-node-write"
-        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_host: "{{ groups['enkidb_write'][0] }}"
+        enkiddb_read_host: "{{ groups['enkidb_read'][0] }}"
         # tasks/enkiddb_cross_host_sync.yml's own QUERY step reads
         # enkiddb_read_ip (double-d, matching every other enkiddb_*
         # var in this vars block) -- this play only ever defined
@@ -395,8 +398,8 @@
         enkiddb_db_label: "enkiqdb"
         enkiddb_write_volume: "enkiqdb-write-data"
         enkiddb_read_volume: "enkiqdb-read-data"
-        enkiddb_write_host: "enkidb-node-write"
-        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_host: "{{ groups['enkidb_write'][0] }}"
+        enkiddb_read_host: "{{ groups['enkidb_read'][0] }}"
         # tasks/enkiddb_cross_host_sync.yml's own QUERY step reads
         # enkiddb_read_ip (double-d, matching every other enkiddb_*
         # var in this vars block) -- this play only ever defined
@@ -417,8 +420,8 @@
         enkiddb_db_label: "enkidw"
         enkiddb_write_volume: "enkidw-write-data"
         enkiddb_read_volume: "enkidw-read-data"
-        enkiddb_write_host: "enkidb-node-write"
-        enkiddb_read_host: "enkidb-node-read"
+        enkiddb_write_host: "{{ groups['enkidb_write'][0] }}"
+        enkiddb_read_host: "{{ groups['enkidb_read'][0] }}"
         # tasks/enkiddb_cross_host_sync.yml's own QUERY step reads
         # enkiddb_read_ip (double-d, matching every other enkiddb_*
         # var in this vars block) -- this play only ever defined

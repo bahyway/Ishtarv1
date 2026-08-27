@@ -2,16 +2,16 @@
 //! One call generates everything for one client É-DUBBA session
 
 #![forbid(unsafe_code)]
-use std::path::PathBuf;
-use crate::ClientTopology;
-use crate::threejs::generate_threejs_viewer;
 use crate::godot::generate_godot_app;
 use crate::manifest::generate_manifest;
 use crate::repository::TemplateRepository;
+use crate::threejs::generate_threejs_viewer;
+use crate::ClientTopology;
+use std::path::PathBuf;
 
 pub struct UtnapishtimGenerator {
     pub output_dir: PathBuf,
-    pub repo:       TemplateRepository,
+    pub repo: TemplateRepository,
 }
 
 impl UtnapishtimGenerator {
@@ -26,12 +26,13 @@ impl UtnapishtimGenerator {
     pub fn generate(&self, topo: &ClientTopology) -> Result<GenerationResult, UtnapishtimError> {
         topo.validate().map_err(UtnapishtimError::TopologyInvalid)?;
 
-        let client_dir = self.output_dir.join(format!("client_{:04X}", topo.client_id));
-        std::fs::create_dir_all(&client_dir)
-            .map_err(UtnapishtimError::IoError)?;
+        let client_dir = self
+            .output_dir
+            .join(format!("client_{:04X}", topo.client_id));
+        std::fs::create_dir_all(&client_dir).map_err(UtnapishtimError::IoError)?;
 
         // 1. Three.js viewer
-        let html    = generate_threejs_viewer(topo);
+        let html = generate_threejs_viewer(topo);
         let html_path = client_dir.join(format!("dubsar_viewer_{}.html", topo.client_id));
         std::fs::write(&html_path, &html).map_err(UtnapishtimError::IoError)?;
         println!("[UTNAPISHTIM] Three.js viewer → {:?}", html_path);
@@ -48,12 +49,14 @@ impl UtnapishtimGenerator {
 
         // 3. manifest.akk
         let manifest = generate_manifest(topo, &client_dir.to_string_lossy());
-        let mpath    = client_dir.join("manifest.akk");
+        let mpath = client_dir.join("manifest.akk");
         std::fs::write(&mpath, &manifest).map_err(UtnapishtimError::IoError)?;
         println!("[UTNAPISHTIM] manifest.akk → {:?}", mpath);
 
         // 4. Save topology to repository
-        self.repo.save_topology(topo).map_err(UtnapishtimError::IoError)?;
+        self.repo
+            .save_topology(topo)
+            .map_err(UtnapishtimError::IoError)?;
 
         println!("[UTNAPISHTIM] 𒌓𒍣𒅁𒀭 The flood cannot reach what has been sealed.");
 
@@ -66,8 +69,8 @@ impl UtnapishtimGenerator {
 }
 
 pub struct GenerationResult {
-    pub html_path:     PathBuf,
-    pub godot_dir:     PathBuf,
+    pub html_path: PathBuf,
+    pub godot_dir: PathBuf,
     pub manifest_path: PathBuf,
 }
 

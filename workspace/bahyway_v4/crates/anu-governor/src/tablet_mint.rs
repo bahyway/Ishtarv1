@@ -52,7 +52,9 @@ struct RegistryLine {
 /// rest").
 fn find_tablets(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(root) else { return out };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return out;
+    };
     let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.file_name());
 
@@ -104,7 +106,11 @@ pub fn mint_new_tablets(
     if let Some(p) = registry_path.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    let mut registry_file = std::fs::OpenOptions::new().create(true).append(true).open(registry_path).ok();
+    let mut registry_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(registry_path)
+        .ok();
 
     for kind in [TabletKind::Akk, TabletKind::Way, TabletKind::Tmpl] {
         let batch: Vec<&TabletProfile> = new_tablets.iter().filter(|p| p.kind == kind).collect();
@@ -118,7 +124,11 @@ pub fn mint_new_tablets(
 
         for (i, profile) in batch.iter().enumerate() {
             let kaki = write_node.ingest_tablet(profile, i as u32 + 1);
-            log.push(format!("𒁾 minted {} tablet {} → {kaki}", kind.as_str(), profile.path));
+            log.push(format!(
+                "𒁾 minted {} tablet {} → {kaki}",
+                kind.as_str(),
+                profile.path
+            ));
             if let Some(f) = &mut registry_file {
                 let line = RegistryLine {
                     path: profile.path.clone(),
@@ -133,14 +143,21 @@ pub fn mint_new_tablets(
             }
         }
 
-        match enkimdb::materialize_version(&write_node, enkimdb_output_root, &format!("{stamp}_{}", kind.as_str())) {
+        match enkimdb::materialize_version(
+            &write_node,
+            enkimdb_output_root,
+            &format!("{stamp}_{}", kind.as_str()),
+        ) {
             Ok((generation, stats)) => log.push(format!(
                 "𒁾 EnkiMDB Euphrates generation {stamp}_{} materialized: {} entities → {}",
                 kind.as_str(),
                 stats.entities,
                 generation.entities_path.display()
             )),
-            Err(e) => log.push(format!("⚠ EnkiMDB materialize failed for {} tablets: {e}", kind.as_str())),
+            Err(e) => log.push(format!(
+                "⚠ EnkiMDB materialize failed for {} tablets: {e}",
+                kind.as_str()
+            )),
         }
     }
 
@@ -166,8 +183,13 @@ mod tests {
         let enkimdb_root = dir.join("enkimdb_data");
 
         let log = mint_new_tablets(&dir, &registry, &enkimdb_root);
-        assert!(log.iter().any(|l| l.contains("akk tablet")), "expected an akk mint log line, got: {log:?}");
-        assert!(std::fs::read_to_string(&registry).unwrap().contains("sample.akk"));
+        assert!(
+            log.iter().any(|l| l.contains("akk tablet")),
+            "expected an akk mint log line, got: {log:?}"
+        );
+        assert!(std::fs::read_to_string(&registry)
+            .unwrap()
+            .contains("sample.akk"));
     }
 
     #[test]
@@ -181,7 +203,10 @@ mod tests {
         assert!(!first.is_empty(), "first run must mint the new tablet");
 
         let second = mint_new_tablets(&dir, &registry, &enkimdb_root);
-        assert!(second.is_empty(), "second run must find nothing new to mint: {second:?}");
+        assert!(
+            second.is_empty(),
+            "second run must find nothing new to mint: {second:?}"
+        );
     }
 
     #[test]

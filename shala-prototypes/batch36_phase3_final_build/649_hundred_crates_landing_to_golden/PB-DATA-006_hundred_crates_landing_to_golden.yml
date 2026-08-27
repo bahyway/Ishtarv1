@@ -1,0 +1,268 @@
+---
+# ============================================================================
+# PB-DATA-006 :: THE HUNDRED CRATES — LandingZone convoy at host scale
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-DATA series
+# Purpose    : Perform the Kārum convoy grammar OUTSIDE the browser:
+#              (1) HARVEST — 100 compressed crates (.json.gz) drawn from
+#                  keyless open seas (USGS seismic day-slices, Open-Meteo
+#                  Najaf day-slices, NASA EONET events, REST-Countries
+#                  reference citizens), sealed IN SEQUENCE, each with its
+#                  own sha-256 Kanīku receipt in the ledger.
+#              (2) LANDING — crates berthed in the LandingZone the BeeMDM
+#                  chain reads as S0.
+#              (3) SAIL — the ETL Processing Stations Chain S0→S8 through
+#                  the gate chain (SUSA → EnkiSDB·7001 → Nergal/Mummu →
+#                  EnkiODB·7002 → … ) until particles reach the GOLDEN
+#                  shelf, EnkiDB·7004.
+#              (4) BRANCH — the three conversions from GOLDEN:
+#                  EnkiDW·7005 (warehouse), EnkiMDB·7006 (patterns/Masku),
+#                  EnkiDDB·7007 (documents, Simtu/Šasû/Eṭemmu law).
+#
+# Doctrine   : Balāṭu — "We don't need your data to be alive; we need it
+#              only to serve you." The Ecosystem heals, tests, and builds
+#              itself from the open world. No crate unreceipted; refusals
+#              over silence; nothing faked.
+# Discipline : WITNESS → JUDGE → MOVE → STAGE · CSR-08: running this
+#              playbook is Bahaa's confirmation act · append-only ledger.
+# Run        : from the bare-metal Fedora HOST (Way of Work rule 1):
+#   ansible-playbook PB-DATA-006_hundred_crates_landing_to_golden.yml \
+#     [-e crate_count=100] [-e landing_zone=/opt/bahyway/v4/landing] \
+#     [-e run_etl=true] [-e run_branches=true]
+# ============================================================================
+
+- name: "PB-DATA-006 :: The Hundred Crates — LandingZone → BeeMDM → GOLDEN"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    crate_count: 100
+    landing_zone: "/opt/bahyway/v4/landing"
+    crates_dir: "{{ landing_zone }}/crates"
+    kaniku_ledger: "{{ landing_zone }}/KANIKU-LEDGER.tsv"
+    manifest_tsv: "{{ landing_zone }}/INTAKE-MANIFEST.tsv"
+    naru_dir: "{{ landing_zone }}/naru"
+    # ------------------------------------------------------------------
+    # BeeMDM chain hooks — YOUR sovereign binaries. The playbook REFUSES
+    # (never fakes) if a hook is absent. Override with -e as needed.
+    # ------------------------------------------------------------------
+    run_etl: true
+    run_branches: true
+    beemdm_intake_cmd: "{{ lookup('env','HOME') }}/Forge/bahyway_v4/target/release/enkidb-ingest"
+    beemdm_intake_args: "--landing {{ crates_dir }} --mode batch --commit kispu"
+    branch_dw_cmd: "{{ lookup('env','HOME') }}/Forge/bahyway_v4/target/release/enkidw-convert"
+    branch_mdb_cmd: "{{ lookup('env','HOME') }}/Forge/bahyway_v4/target/release/enkimdb-convert"
+    branch_ddb_cmd: "{{ lookup('env','HOME') }}/Forge/bahyway_v4/target/release/enkiddb-convert"
+    # ------------------------------------------------------------------
+    # Ports (fixed law, never override): 7001 SDB · 7002 ODB · 7003 QDB ·
+    # 7004 DB(GOLDEN) · 7005 DW · 7006 MDB · 7007 DDB
+    # ------------------------------------------------------------------
+    najaf_lat: 32.028
+    najaf_lon: 44.346
+
+  tasks:
+
+    # ==================================================== WITNESS
+    - name: "WITNESS :: raise the LandingZone"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crates_dir }}"
+        - "{{ naru_dir }}"
+
+    - name: "WITNESS :: python3 with gzip/hashlib present"
+      ansible.builtin.command: python3 -c "import gzip,hashlib,urllib.request,json"
+      changed_when: false
+
+    - name: "WITNESS :: found ledger head (append-only — never truncated)"
+      ansible.builtin.lineinfile:
+        path: "{{ kaniku_ledger }}"
+        create: true
+        mode: "0644"
+        insertbefore: BOF
+        line: "crate\tsea\twindow\traw_bytes\tgz_bytes\tsha256\tsealed_utc"
+
+    # ==================================================== MOVE — the harvest
+    # 100 crates, four open seas, day-sliced so no single harbor is abused:
+    #   crates 001–060  USGS earthquakes, one per day, last 60 days
+    #   crates 061–090  Open-Meteo Najaf archive, one per day, last 30 days
+    #   crates 091–099  NASA EONET open events, 9 category slices
+    #   crate  100      REST-Countries Iraq — the sealed reference citizen
+    - name: "MOVE :: seal the hundred crates IN SEQUENCE (streamed, receipted)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        python3 << 'PYEOF'
+        import gzip, hashlib, json, time, urllib.request, urllib.parse, datetime, os, sys
+
+        CRATES   = "{{ crates_dir }}"
+        LEDGER   = "{{ kaniku_ledger }}"
+        MANIFEST = "{{ manifest_tsv }}"
+        N        = int("{{ crate_count }}")
+        LAT, LON = {{ najaf_lat }}, {{ najaf_lon }}
+        today    = datetime.date.today()
+
+        def fetch(url, timeout=90):
+            req = urllib.request.Request(url, headers={'User-Agent':'BahyWay-Karum/1.0'})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+
+        def seal(idx, sea, window, raw):
+            name  = f"crate_{idx:03d}.json.gz"
+            path  = os.path.join(CRATES, name)
+            gz    = gzip.compress(raw)
+            sha   = hashlib.sha256(gz).hexdigest()
+            with open(path, "wb") as f: f.write(gz)
+            stamp = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            row   = f"{name}\t{sea}\t{window}\t{len(raw)}\t{len(gz)}\t{sha}\t{stamp}\n"
+            with open(LEDGER, "a") as f: f.write(row)
+            with open(MANIFEST, "a") as f: f.write(row)
+            print(f"𒁾 {name} sealed in sequence — {sea} {window} · {len(raw)}→{len(gz)} B · {sha[:12]}…")
+
+        idx = 0
+        # --- Sea 1: USGS day-slices (60) -------------------------------
+        for d in range(60):
+            if idx >= N: break
+            day  = today - datetime.timedelta(days=d+1)
+            nxt  = day + datetime.timedelta(days=1)
+            url  = ("https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson"
+                    f"&starttime={day}&endtime={nxt}")
+            idx += 1
+            try: seal(idx, "usgs-seismic", str(day), fetch(url))
+            except Exception as e:
+                print(f"✕ crate_{idx:03d} REFUSED BY THE SEA — {e} (journaled, never faked)")
+                with open(LEDGER, "a") as f:
+                    f.write(f"crate_{idx:03d}\tusgs-seismic\t{day}\tREFUSED\t0\t-\t-\n")
+            time.sleep(1)
+
+        # --- Sea 2: Open-Meteo Najaf day-slices (30) -------------------
+        for d in range(30):
+            if idx >= N: break
+            day = today - datetime.timedelta(days=d+2)
+            url = ("https://archive-api.open-meteo.com/v1/archive?"
+                   f"latitude={LAT}&longitude={LON}&start_date={day}&end_date={day}"
+                   "&hourly=temperature_2m,shortwave_radiation,relative_humidity_2m")
+            idx += 1
+            try: seal(idx, "openmeteo-najaf", str(day), fetch(url))
+            except Exception as e:
+                print(f"✕ crate_{idx:03d} REFUSED BY THE SEA — {e}")
+                with open(LEDGER, "a") as f:
+                    f.write(f"crate_{idx:03d}\topenmeteo-najaf\t{day}\tREFUSED\t0\t-\t-\n")
+            time.sleep(1)
+
+        # --- Sea 3: NASA EONET category slices (9) ---------------------
+        cats = ["wildfires","severeStorms","floods","volcanoes","seaLakeIce",
+                "dustHaze","drought","landslides","earthquakes"]
+        for c in cats:
+            if idx >= N: break
+            url = f"https://eonet.gsfc.nasa.gov/api/v3/events?category={c}&limit=200"
+            idx += 1
+            try: seal(idx, "nasa-eonet", c, fetch(url))
+            except Exception as e:
+                print(f"✕ crate_{idx:03d} REFUSED BY THE SEA — {e}")
+                with open(LEDGER, "a") as f:
+                    f.write(f"crate_{idx:03d}\tnasa-eonet\t{c}\tREFUSED\t0\t-\t-\n")
+            time.sleep(1)
+
+        # --- Sea 4: the sealed reference citizen (1) -------------------
+        if idx < N:
+            idx += 1
+            try: seal(idx, "restcountries", "iraq",
+                      fetch("https://restcountries.com/v3.1/name/iraq"))
+            except Exception as e:
+                print(f"✕ crate_{idx:03d} REFUSED BY THE SEA — {e}")
+
+        sealed = len([f for f in os.listdir(CRATES) if f.endswith('.json.gz')])
+        print(f"⛴ CONVOY SEALED — {sealed} crates berthed in the LandingZone.")
+        if sealed == 0: sys.exit(1)
+        PYEOF
+      args:
+        executable: /bin/bash
+      register: harvest
+      changed_when: true
+
+    - name: "JUDGE :: refuse an empty LandingZone"
+      ansible.builtin.find:
+        paths: "{{ crates_dir }}"
+        patterns: "crate_*.json.gz"
+      register: berthed
+
+    - name: "JUDGE :: the refuse-empty-shelf gate"
+      ansible.builtin.assert:
+        that: berthed.matched | int > 0
+        fail_msg: "REFUSED — no crates berthed; the seas answered nothing. Nothing faked."
+        success_msg: "GATE PASS — {{ berthed.matched }} crates berthed and receipted."
+
+    # ==================================================== SAIL — BeeMDM S0→S8
+    - name: "WITNESS :: BeeMDM intake binary present"
+      ansible.builtin.stat:
+        path: "{{ beemdm_intake_cmd }}"
+      register: intake_bin
+      when: run_etl | bool
+
+    - name: "JUDGE :: refuse the sail without the sovereign intake"
+      ansible.builtin.assert:
+        that: intake_bin.stat.exists and intake_bin.stat.executable
+        fail_msg: >-
+          REFUSED — {{ beemdm_intake_cmd }} not found/executable. The crates
+          WAIT at the LandingZone, receipted; run again with
+          -e beemdm_intake_cmd=/path/to/enkidb-ingest when the chain is built.
+          No station is simulated.
+      when: run_etl | bool
+
+    - name: "MOVE :: sail the chain — SUSA → EnkiSDB·7001 → gates → GOLDEN EnkiDB·7004"
+      ansible.builtin.command:
+        cmd: "{{ beemdm_intake_cmd }} {{ beemdm_intake_args }}"
+      register: sail
+      changed_when: true
+      when: run_etl | bool and intake_bin.stat.exists
+
+    # ==================================================== BRANCH — the three waters
+    - name: "MOVE :: branch conversions from GOLDEN (7004 → 7005/7006/7007)"
+      ansible.builtin.command:
+        cmd: "{{ item.cmd }}"
+      loop:
+        - { name: "EnkiDW·7005 warehouse",          cmd: "{{ branch_dw_cmd }}" }
+        - { name: "EnkiMDB·7006 patterns (Masku)",  cmd: "{{ branch_mdb_cmd }}" }
+        - { name: "EnkiDDB·7007 documents (Simtu)", cmd: "{{ branch_ddb_cmd }}" }
+      loop_control:
+        label: "{{ item.name }}"
+      register: branches
+      changed_when: true
+      failed_when: false
+      when: run_branches | bool and run_etl | bool
+
+    - name: "JUDGE :: report any branch that refused"
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item.name }}:
+          {{ 'GOLDEN water flowed' if item.rc | default(1) == 0
+             else 'REFUSED (rc=' ~ (item.rc | default('missing')) ~ ') — journaled, never faked' }}
+      loop: "{{ branches.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name | default('branch') }}"
+      when: run_branches | bool and run_etl | bool
+
+    # ==================================================== NĀRU
+    - name: "NĀRU :: record the act"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/playbook_acts.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-DATA-006","act":"hundred-crates",
+          "crates":{{ berthed.matched }},
+          "landing":"{{ crates_dir }}",
+          "etl":"{{ 'sailed' if run_etl | bool else 'held' }}",
+          "doctrine":"Balatu — the Ecosystem feeds itself from open seas",
+          "law":"no crate unreceipted; refusals journaled, never faked"}
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "PB-DATA-006 complete. {{ berthed.matched }} crates in the LandingZone,"
+          - "each gzip-sealed with its sha-256 Kanīku in {{ kaniku_ledger }}."
+          - "GOLDEN shelf: EnkiDB·7004 · branches: EnkiDW·7005, EnkiMDB·7006, EnkiDDB·7007."
+          - "The Šala rehearsal of this convoy: sala_hundred_crates_landing.html"

@@ -5,8 +5,8 @@
 //!
 //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust
 
-use std::collections::HashMap;
 use crate::membership::LinguisticVar;
+use std::collections::HashMap;
 
 /// Centroid (CoG) defuzzification over 100 samples.
 ///
@@ -17,7 +17,7 @@ pub fn centroid_defuzz(clips: &HashMap<String, f32>, output_var: &LinguisticVar)
     let (lo, hi) = output_var.range;
     let step = (hi - lo) / samples as f32;
 
-    let mut numerator   = 0.0f32;
+    let mut numerator = 0.0f32;
     let mut denominator = 0.0f32;
 
     for i in 0..=samples {
@@ -30,12 +30,15 @@ pub fn centroid_defuzz(clips: &HashMap<String, f32>, output_var: &LinguisticVar)
                 mu_max = mu_max.max(mu);
             }
         }
-        numerator   += x * mu_max;
+        numerator += x * mu_max;
         denominator += mu_max;
     }
 
-    if denominator < 1e-8 { (lo + hi) / 2.0 }
-    else { (numerator / denominator).clamp(lo, hi) }
+    if denominator < 1e-8 {
+        (lo + hi) / 2.0
+    } else {
+        (numerator / denominator).clamp(lo, hi)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -45,7 +48,9 @@ mod tests {
     use super::*;
     use crate::membership::var_state_output;
 
-    fn output_var() -> LinguisticVar { var_state_output() }
+    fn output_var() -> LinguisticVar {
+        var_state_output()
+    }
 
     #[test]
     fn empty_clips_returns_midpoint() {
@@ -88,8 +93,10 @@ mod tests {
                 let mut clips = HashMap::new();
                 clips.insert(term.into(), clip);
                 let score = centroid_defuzz(&clips, &var);
-                assert!(score >= var.range.0 && score <= var.range.1,
-                    "{term}@{clip} → score={score} out of range");
+                assert!(
+                    score >= var.range.0 && score <= var.range.1,
+                    "{term}@{clip} → score={score} out of range"
+                );
             }
         }
     }

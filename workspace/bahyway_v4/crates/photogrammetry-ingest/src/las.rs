@@ -24,19 +24,35 @@ const HEADER_MIN_LEN: usize = 179; // enough to read scale/offset (byte 179 is w
 const LASZIP_COMPRESSED_BIT: u8 = 0x80;
 
 fn u16_le(b: &[u8], off: usize) -> Result<u16, ParseError> {
-    let s: [u8; 2] = b.get(off..off + 2).ok_or_else(too_short)?.try_into().unwrap();
+    let s: [u8; 2] = b
+        .get(off..off + 2)
+        .ok_or_else(too_short)?
+        .try_into()
+        .unwrap();
     Ok(u16::from_le_bytes(s))
 }
 fn u32_le(b: &[u8], off: usize) -> Result<u32, ParseError> {
-    let s: [u8; 4] = b.get(off..off + 4).ok_or_else(too_short)?.try_into().unwrap();
+    let s: [u8; 4] = b
+        .get(off..off + 4)
+        .ok_or_else(too_short)?
+        .try_into()
+        .unwrap();
     Ok(u32::from_le_bytes(s))
 }
 fn i32_le(b: &[u8], off: usize) -> Result<i32, ParseError> {
-    let s: [u8; 4] = b.get(off..off + 4).ok_or_else(too_short)?.try_into().unwrap();
+    let s: [u8; 4] = b
+        .get(off..off + 4)
+        .ok_or_else(too_short)?
+        .try_into()
+        .unwrap();
     Ok(i32::from_le_bytes(s))
 }
 fn f64_le(b: &[u8], off: usize) -> Result<f64, ParseError> {
-    let s: [u8; 8] = b.get(off..off + 8).ok_or_else(too_short)?.try_into().unwrap();
+    let s: [u8; 8] = b
+        .get(off..off + 8)
+        .ok_or_else(too_short)?
+        .try_into()
+        .unwrap();
     Ok(f64::from_le_bytes(s))
 }
 fn u16_le_rgb(b: &[u8], off: usize) -> Result<u8, ParseError> {
@@ -45,12 +61,16 @@ fn u16_le_rgb(b: &[u8], off: usize) -> Result<u8, ParseError> {
     Ok((u16_le(b, off)? >> 8) as u8)
 }
 fn too_short() -> ParseError {
-    ParseError("LAS file truncated: header or point record shorter than the spec requires".to_string())
+    ParseError(
+        "LAS file truncated: header or point record shorter than the spec requires".to_string(),
+    )
 }
 
 pub fn parse_las(bytes: &[u8]) -> Result<PointCloud, ParseError> {
     if bytes.len() < HEADER_MIN_LEN || &bytes[0..4] != b"LASF" {
-        return Err(ParseError("not a LAS file (expected 'LASF' signature)".to_string()));
+        return Err(ParseError(
+            "not a LAS file (expected 'LASF' signature)".to_string(),
+        ));
     }
     let version_major = bytes[24];
     let version_minor = bytes[25];
@@ -89,7 +109,11 @@ pub fn parse_las(bytes: &[u8]) -> Result<PointCloud, ParseError> {
     };
 
     let mut points = Vec::with_capacity(num_point_records);
-    let mut colors: Option<Vec<[u8; 3]>> = if has_rgb { Some(Vec::with_capacity(num_point_records)) } else { None };
+    let mut colors: Option<Vec<[u8; 3]>> = if has_rgb {
+        Some(Vec::with_capacity(num_point_records))
+    } else {
+        None
+    };
 
     for i in 0..num_point_records {
         let rec_start = offset_to_point_data + i * point_data_record_length;
@@ -125,7 +149,11 @@ mod tests {
     /// 20-byte record with zeros) -- enough to prove this module's
     /// reader recovers exactly the coordinates that went in, against a
     /// real byte layout, not a stubbed one.
-    fn build_minimal_las_format0(points_raw: &[(i32, i32, i32)], scale: f64, offset: f64) -> Vec<u8> {
+    fn build_minimal_las_format0(
+        points_raw: &[(i32, i32, i32)],
+        scale: f64,
+        offset: f64,
+    ) -> Vec<u8> {
         let mut h = vec![0u8; 227];
         h[0..4].copy_from_slice(b"LASF");
         h[24] = 1; // version major

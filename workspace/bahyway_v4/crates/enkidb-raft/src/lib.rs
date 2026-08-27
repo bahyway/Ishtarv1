@@ -24,9 +24,9 @@ pub mod log;
 pub mod message;
 pub mod state;
 
-pub use log::{LogEntry, RaftEav, LogView};
+pub use log::{LogEntry, LogView, RaftEav};
 pub use message::RaftMessage;
 pub use state::{
-    RaftNode, RaftEffect, Role,
-    ELECTION_TIMEOUT_MIN_MS, ELECTION_TIMEOUT_MAX_MS, HEARTBEAT_INTERVAL_MS,
+    RaftEffect, RaftNode, Role, ELECTION_TIMEOUT_MAX_MS, ELECTION_TIMEOUT_MIN_MS,
+    HEARTBEAT_INTERVAL_MS,
 };

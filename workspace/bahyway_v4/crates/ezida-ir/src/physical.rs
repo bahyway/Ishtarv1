@@ -93,7 +93,13 @@ mod tests {
             index: IndexKind::EntityAttrTime,
             key_range: KeyRange::full(),
         };
-        assert!(matches!(plan, PhysicalPlan::IndexScan { index: IndexKind::EntityAttrTime, .. }));
+        assert!(matches!(
+            plan,
+            PhysicalPlan::IndexScan {
+                index: IndexKind::EntityAttrTime,
+                ..
+            }
+        ));
     }
 
     #[test]

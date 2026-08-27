@@ -17,9 +17,9 @@
 //! Architect is always the one who decides; the safe default when no one
 //! is there to ask is to stop, not to press on.
 
-use serde::Deserialize;
 use anu_governor::docpulse::{spawn_docpulse, DocPulseCfg};
 use anu_governor::model::{Ctl, RunnerEvent};
+use serde::Deserialize;
 use std::io::BufRead;
 
 #[derive(Deserialize)]
@@ -91,10 +91,8 @@ fn build_cfg(cli: CliConfig) -> Result<DocPulseCfg, String> {
 }
 
 fn load_cfg(path: &str) -> Result<DocPulseCfg, String> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("reading {path}: {e}"))?;
-    let cli: CliConfig = toml::from_str(&text)
-        .map_err(|e| format!("parsing {path}: {e}"))?;
+    let text = std::fs::read_to_string(path).map_err(|e| format!("reading {path}: {e}"))?;
+    let cli: CliConfig = toml::from_str(&text).map_err(|e| format!("parsing {path}: {e}"))?;
     build_cfg(cli)
 }
 
@@ -116,7 +114,9 @@ fn read_ctl_decision() -> Ctl {
 }
 
 fn main() {
-    let config_path = std::env::args().nth(1).unwrap_or_else(|| "uruinimgina.toml".into());
+    let config_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "uruinimgina.toml".into());
     let cfg = match load_cfg(&config_path) {
         Ok(c) => c,
         Err(e) => {
@@ -177,9 +177,16 @@ mod tests {
         assert_eq!(cfg.repo_path, "/home/bfadam/Forge/bahyway_v4_docs");
         assert_eq!(cfg.limit_mb, 90);
         assert_eq!(cfg.chronicle_dir, "uruinimgina_chronicle");
-        assert!(cfg.official_repo_path.is_empty(), "official repo must default empty -- skip landing stage");
+        assert!(
+            cfg.official_repo_path.is_empty(),
+            "official repo must default empty -- skip landing stage"
+        );
         assert!(!cfg.auto_push_to_official_repo);
-        assert_eq!(cfg.docs_tribe_id, enkiddb::DOCS_TRIBE_ID, "docs_tribe must default to the sealed corpus, not architect_docs");
+        assert_eq!(
+            cfg.docs_tribe_id,
+            enkiddb::DOCS_TRIBE_ID,
+            "docs_tribe must default to the sealed corpus, not architect_docs"
+        );
     }
 
     #[test]
@@ -216,7 +223,8 @@ mod tests {
         let cfg = build_cfg(cli).unwrap();
         assert_eq!(cfg.docs_tribe_id, enkiddb::ARCHITECT_DOCS_TRIBE_ID);
         assert_ne!(
-            enkiddb::ARCHITECT_DOCS_TRIBE_ID, enkiddb::DOCS_TRIBE_ID,
+            enkiddb::ARCHITECT_DOCS_TRIBE_ID,
+            enkiddb::DOCS_TRIBE_ID,
             "architect_docs must never collide with the sealed docs tribe"
         );
     }
@@ -236,7 +244,10 @@ mod tests {
             Err(e) => e,
             Ok(_) => panic!("expected an error for an unknown docs_tribe value"),
         };
-        assert!(err.contains("nonsense"), "error must name the bad value: {err}");
+        assert!(
+            err.contains("nonsense"),
+            "error must name the bad value: {err}"
+        );
     }
 
     #[test]
@@ -246,6 +257,9 @@ mod tests {
             archive = "/archive"
         "#;
         let result: Result<CliConfig, _> = toml::from_str(toml_text);
-        assert!(result.is_err(), "missing 'repo' must fail to parse, not default silently");
+        assert!(
+            result.is_err(),
+            "missing 'repo' must fail to parse, not default silently"
+        );
     }
 }

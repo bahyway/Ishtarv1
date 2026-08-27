@@ -19,19 +19,29 @@ pub enum FieldType {
 /// A single field declaration inside a SchemaContract.
 #[derive(Debug, Clone)]
 pub struct FieldSpec {
-    pub name:      &'static str,
+    pub name: &'static str,
     pub attr_hash: u32,
     pub field_type: FieldType,
-    pub required:  bool,
+    pub required: bool,
 }
 
 impl FieldSpec {
     pub const fn required(name: &'static str, attr_hash: u32, field_type: FieldType) -> Self {
-        FieldSpec { name, attr_hash, field_type, required: true }
+        FieldSpec {
+            name,
+            attr_hash,
+            field_type,
+            required: true,
+        }
     }
 
     pub const fn optional(name: &'static str, attr_hash: u32, field_type: FieldType) -> Self {
-        FieldSpec { name, attr_hash, field_type, required: false }
+        FieldSpec {
+            name,
+            attr_hash,
+            field_type,
+            required: false,
+        }
     }
 }
 
@@ -42,29 +52,42 @@ impl FieldSpec {
 /// The Fabric enforces alignment before data moves.
 #[derive(Debug, Clone)]
 pub struct SchemaContract {
-    pub name:    &'static str,
+    pub name: &'static str,
     pub version: u16,
-    pub fields:  Vec<FieldSpec>,
+    pub fields: Vec<FieldSpec>,
 }
 
 impl SchemaContract {
     pub fn new(name: &'static str, version: u16, fields: Vec<FieldSpec>) -> Self {
-        SchemaContract { name, version, fields }
+        SchemaContract {
+            name,
+            version,
+            fields,
+        }
     }
 
     /// Returns all required field hashes — used for validation.
     pub fn required_hashes(&self) -> Vec<u32> {
-        self.fields.iter().filter(|f| f.required).map(|f| f.attr_hash).collect()
+        self.fields
+            .iter()
+            .filter(|f| f.required)
+            .map(|f| f.attr_hash)
+            .collect()
     }
 
     /// Check that a set of attr_hashes satisfies the required fields.
     pub fn validate_presence(&self, present: &[u32]) -> Result<(), Vec<&'static str>> {
-        let missing: Vec<&'static str> = self.fields
+        let missing: Vec<&'static str> = self
+            .fields
             .iter()
             .filter(|f| f.required && !present.contains(&f.attr_hash))
             .map(|f| f.name)
             .collect();
-        if missing.is_empty() { Ok(()) } else { Err(missing) }
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(missing)
+        }
     }
 }
 
@@ -73,11 +96,15 @@ mod tests {
     use super::*;
 
     fn sample_contract() -> SchemaContract {
-        SchemaContract::new("erp.invoice", 1, vec![
-            FieldSpec::required("invoice_id",  0x1001, FieldType::Integer),
-            FieldSpec::required("amount",      0x1002, FieldType::Decimal),
-            FieldSpec::optional("description", 0x1003, FieldType::Text),
-        ])
+        SchemaContract::new(
+            "erp.invoice",
+            1,
+            vec![
+                FieldSpec::required("invoice_id", 0x1001, FieldType::Integer),
+                FieldSpec::required("amount", 0x1002, FieldType::Decimal),
+                FieldSpec::optional("description", 0x1003, FieldType::Text),
+            ],
+        )
     }
 
     #[test]

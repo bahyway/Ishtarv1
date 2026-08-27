@@ -7,47 +7,46 @@
 //! payloads are always prefixed by a 4-byte big-endian length (`u32`).
 
 use crate::{
-    AkkValue,
     types::{
-        AkkCoordinate, AkkDate, AkkHijriDate, AkkNamePartLabel,
-        AkkNameVector, AkkNationalId, AkkPhone,
-        CipherAlgorithm, PipelineStatus, PolicyVerdict,
+        AkkCoordinate, AkkDate, AkkHijriDate, AkkNamePartLabel, AkkNameVector, AkkNationalId,
+        AkkPhone, CipherAlgorithm, PipelineStatus, PolicyVerdict,
     },
+    AkkValue,
 };
 
 // ── Type tags ─────────────────────────────────────────────────────────────────
 
-const TAG_NULL:             u8 = 0x00;
-const TAG_BOOL:             u8 = 0x01;
-const TAG_INT:              u8 = 0x02;
-const TAG_FLOAT:            u8 = 0x03;
-const TAG_TEXT:             u8 = 0x04;
-const TAG_BYTES:            u8 = 0x05;
-const TAG_UUID:             u8 = 0x06;
-const TAG_NATIONAL_ID:      u8 = 0x07;
-const TAG_PHONE:            u8 = 0x08;
-const TAG_TIMESTAMP:        u8 = 0x09;
-const TAG_DATE:             u8 = 0x0A;
-const TAG_HIJRI_DATE:       u8 = 0x0B;
-const TAG_DURATION:         u8 = 0x0C;
-const TAG_COORDINATE:       u8 = 0x0D;
-const TAG_COUNTRY_CODE:     u8 = 0x0E;
-const TAG_DOMAIN_BYTE:      u8 = 0x0F;
-const TAG_QUALITY_SCORE:    u8 = 0x10;
-const TAG_KAKI_PK:          u8 = 0x11;
-const TAG_AKKADIAN_ROOT:    u8 = 0x12;
-const TAG_NAME_VECTOR:      u8 = 0x13;
-const TAG_LANG_CODE:        u8 = 0x14;
-const TAG_EMBEDDING:        u8 = 0x15;
-const TAG_PROBABILITY:      u8 = 0x16;
-const TAG_LABEL:            u8 = 0x17;
-const TAG_CONFIDENCE:       u8 = 0x18;
-const TAG_PIPELINE_STATUS:  u8 = 0x19;
-const TAG_STEP_INDEX:       u8 = 0x1A;
-const TAG_POLICY_VERDICT:   u8 = 0x1B;
+const TAG_NULL: u8 = 0x00;
+const TAG_BOOL: u8 = 0x01;
+const TAG_INT: u8 = 0x02;
+const TAG_FLOAT: u8 = 0x03;
+const TAG_TEXT: u8 = 0x04;
+const TAG_BYTES: u8 = 0x05;
+const TAG_UUID: u8 = 0x06;
+const TAG_NATIONAL_ID: u8 = 0x07;
+const TAG_PHONE: u8 = 0x08;
+const TAG_TIMESTAMP: u8 = 0x09;
+const TAG_DATE: u8 = 0x0A;
+const TAG_HIJRI_DATE: u8 = 0x0B;
+const TAG_DURATION: u8 = 0x0C;
+const TAG_COORDINATE: u8 = 0x0D;
+const TAG_COUNTRY_CODE: u8 = 0x0E;
+const TAG_DOMAIN_BYTE: u8 = 0x0F;
+const TAG_QUALITY_SCORE: u8 = 0x10;
+const TAG_KAKI_PK: u8 = 0x11;
+const TAG_AKKADIAN_ROOT: u8 = 0x12;
+const TAG_NAME_VECTOR: u8 = 0x13;
+const TAG_LANG_CODE: u8 = 0x14;
+const TAG_EMBEDDING: u8 = 0x15;
+const TAG_PROBABILITY: u8 = 0x16;
+const TAG_LABEL: u8 = 0x17;
+const TAG_CONFIDENCE: u8 = 0x18;
+const TAG_PIPELINE_STATUS: u8 = 0x19;
+const TAG_STEP_INDEX: u8 = 0x1A;
+const TAG_POLICY_VERDICT: u8 = 0x1B;
 const TAG_CIPHER_ALGORITHM: u8 = 0x1C;
-const TAG_SEAL_SIGNATURE:   u8 = 0x1D;
-const TAG_LIST:             u8 = 0x1E;
+const TAG_SEAL_SIGNATURE: u8 = 0x1D;
+const TAG_LIST: u8 = 0x1E;
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
@@ -63,16 +62,18 @@ pub enum CodecError {
 impl core::fmt::Display for CodecError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Truncated { expected, got } =>
-                write!(f, "codec: need {expected} bytes, only {got} available"),
-            Self::InvalidUtf8 =>
-                write!(f, "codec: invalid UTF-8 in Text/String field"),
-            Self::UnknownTypeTag(t) =>
-                write!(f, "codec: unknown type tag {t:#04x}"),
-            Self::UnknownDiscriminant { tag, discriminant } =>
-                write!(f, "codec: unknown discriminant {discriminant:#04x} for tag {tag:#04x}"),
-            Self::InvalidLength { max, got } =>
-                write!(f, "codec: field length {got} exceeds max {max}"),
+            Self::Truncated { expected, got } => {
+                write!(f, "codec: need {expected} bytes, only {got} available")
+            }
+            Self::InvalidUtf8 => write!(f, "codec: invalid UTF-8 in Text/String field"),
+            Self::UnknownTypeTag(t) => write!(f, "codec: unknown type tag {t:#04x}"),
+            Self::UnknownDiscriminant { tag, discriminant } => write!(
+                f,
+                "codec: unknown discriminant {discriminant:#04x} for tag {tag:#04x}"
+            ),
+            Self::InvalidLength { max, got } => {
+                write!(f, "codec: field length {got} exceeds max {max}")
+            }
         }
     }
 }
@@ -213,10 +214,13 @@ fn encode_into(value: &AkkValue, buf: &mut Vec<u8>) {
         AkkValue::PipelineStatus(s) => {
             buf.push(TAG_PIPELINE_STATUS);
             match s {
-                PipelineStatus::Pending   => buf.push(0x00),
-                PipelineStatus::Running   => buf.push(0x01),
+                PipelineStatus::Pending => buf.push(0x00),
+                PipelineStatus::Running => buf.push(0x01),
                 PipelineStatus::Completed => buf.push(0x02),
-                PipelineStatus::Failed(r) => { buf.push(0x03); push_str(buf, r); }
+                PipelineStatus::Failed(r) => {
+                    buf.push(0x03);
+                    push_str(buf, r);
+                }
                 PipelineStatus::Cancelled => buf.push(0x04),
             }
         }
@@ -227,20 +231,20 @@ fn encode_into(value: &AkkValue, buf: &mut Vec<u8>) {
         AkkValue::PolicyVerdict(v) => {
             buf.push(TAG_POLICY_VERDICT);
             buf.push(match v {
-                PolicyVerdict::Allow    => 0x00,
-                PolicyVerdict::Deny     => 0x01,
+                PolicyVerdict::Allow => 0x00,
+                PolicyVerdict::Deny => 0x01,
                 PolicyVerdict::Escalate => 0x02,
-                PolicyVerdict::Redact   => 0x03,
-                PolicyVerdict::Audit    => 0x04,
+                PolicyVerdict::Redact => 0x03,
+                PolicyVerdict::Audit => 0x04,
             });
         }
         AkkValue::CipherAlgorithm(a) => {
             buf.push(TAG_CIPHER_ALGORITHM);
             buf.push(match a {
                 CipherAlgorithm::ChaCha20Poly1305 => 0x00,
-                CipherAlgorithm::Aes256Gcm        => 0x01,
-                CipherAlgorithm::Ed25519          => 0x02,
-                CipherAlgorithm::Dilithium3       => 0x03,
+                CipherAlgorithm::Aes256Gcm => 0x01,
+                CipherAlgorithm::Ed25519 => 0x02,
+                CipherAlgorithm::Dilithium3 => 0x03,
             });
         }
         AkkValue::SealSignature(s) => {
@@ -271,14 +275,14 @@ fn push_bytes(buf: &mut Vec<u8>, data: &[u8]) {
 
 fn name_part_label_tag(label: &AkkNamePartLabel) -> u8 {
     match label {
-        AkkNamePartLabel::Given       => 0x00,
-        AkkNamePartLabel::Family      => 0x01,
-        AkkNamePartLabel::Father      => 0x02,
+        AkkNamePartLabel::Given => 0x00,
+        AkkNamePartLabel::Family => 0x01,
+        AkkNamePartLabel::Father => 0x02,
         AkkNamePartLabel::Grandfather => 0x03,
-        AkkNamePartLabel::Tribe       => 0x04,
-        AkkNamePartLabel::Honorific   => 0x05,
-        AkkNamePartLabel::Kunyah      => 0x06,
-        AkkNamePartLabel::Laqab       => 0x07,
+        AkkNamePartLabel::Tribe => 0x04,
+        AkkNamePartLabel::Honorific => 0x05,
+        AkkNamePartLabel::Kunyah => 0x06,
+        AkkNamePartLabel::Laqab => 0x07,
     }
 }
 
@@ -333,17 +337,20 @@ pub fn decode(bytes: &[u8], pos: usize) -> Result<(AkkValue, usize), CodecError>
         }
         TAG_DATE => {
             need(bytes, p, 6)?;
-            let year  = i32::from_be_bytes(bytes[p..p+4].try_into().unwrap());
+            let year = i32::from_be_bytes(bytes[p..p + 4].try_into().unwrap());
             let month = bytes[p + 4];
-            let day   = bytes[p + 5];
+            let day = bytes[p + 5];
             Ok((AkkValue::Date(AkkDate::new(year, month, day)), p + 6))
         }
         TAG_HIJRI_DATE => {
             need(bytes, p, 4)?;
-            let year  = u16::from_be_bytes(bytes[p..p+2].try_into().unwrap());
+            let year = u16::from_be_bytes(bytes[p..p + 2].try_into().unwrap());
             let month = bytes[p + 2];
-            let day   = bytes[p + 3];
-            Ok((AkkValue::HijriDate(AkkHijriDate::new(year, month, day)), p + 4))
+            let day = bytes[p + 3];
+            Ok((
+                AkkValue::HijriDate(AkkHijriDate::new(year, month, day)),
+                p + 4,
+            ))
         }
         TAG_DURATION => {
             let d = read_u64(bytes, p)?;
@@ -410,7 +417,7 @@ pub fn decode(bytes: &[u8], pos: usize) -> Result<(AkkValue, usize), CodecError>
             let mut floats = Vec::with_capacity(count);
             let mut np = p + 4;
             for _ in 0..count {
-                let f = f32::from_be_bytes(bytes[np..np+4].try_into().unwrap());
+                let f = f32::from_be_bytes(bytes[np..np + 4].try_into().unwrap());
                 floats.push(f);
                 np += 4;
             }
@@ -431,15 +438,18 @@ pub fn decode(bytes: &[u8], pos: usize) -> Result<(AkkValue, usize), CodecError>
         TAG_PIPELINE_STATUS => {
             let disc = read_u8(bytes, p)?;
             match disc {
-                0x00 => Ok((AkkValue::PipelineStatus(PipelineStatus::Pending),   p + 1)),
-                0x01 => Ok((AkkValue::PipelineStatus(PipelineStatus::Running),   p + 1)),
+                0x00 => Ok((AkkValue::PipelineStatus(PipelineStatus::Pending), p + 1)),
+                0x01 => Ok((AkkValue::PipelineStatus(PipelineStatus::Running), p + 1)),
                 0x02 => Ok((AkkValue::PipelineStatus(PipelineStatus::Completed), p + 1)),
                 0x03 => {
                     let (reason, np) = read_str(bytes, p + 1)?;
                     Ok((AkkValue::PipelineStatus(PipelineStatus::Failed(reason)), np))
                 }
                 0x04 => Ok((AkkValue::PipelineStatus(PipelineStatus::Cancelled), p + 1)),
-                d => Err(CodecError::UnknownDiscriminant { tag, discriminant: d }),
+                d => Err(CodecError::UnknownDiscriminant {
+                    tag,
+                    discriminant: d,
+                }),
             }
         }
         TAG_STEP_INDEX => {
@@ -454,7 +464,12 @@ pub fn decode(bytes: &[u8], pos: usize) -> Result<(AkkValue, usize), CodecError>
                 0x02 => PolicyVerdict::Escalate,
                 0x03 => PolicyVerdict::Redact,
                 0x04 => PolicyVerdict::Audit,
-                d    => return Err(CodecError::UnknownDiscriminant { tag, discriminant: d }),
+                d => {
+                    return Err(CodecError::UnknownDiscriminant {
+                        tag,
+                        discriminant: d,
+                    })
+                }
             };
             Ok((AkkValue::PolicyVerdict(v), p + 1))
         }
@@ -465,7 +480,12 @@ pub fn decode(bytes: &[u8], pos: usize) -> Result<(AkkValue, usize), CodecError>
                 0x01 => CipherAlgorithm::Aes256Gcm,
                 0x02 => CipherAlgorithm::Ed25519,
                 0x03 => CipherAlgorithm::Dilithium3,
-                d    => return Err(CodecError::UnknownDiscriminant { tag, discriminant: d }),
+                d => {
+                    return Err(CodecError::UnknownDiscriminant {
+                        tag,
+                        discriminant: d,
+                    })
+                }
             };
             Ok((AkkValue::CipherAlgorithm(a), p + 1))
         }
@@ -494,7 +514,10 @@ pub fn decode(bytes: &[u8], pos: usize) -> Result<(AkkValue, usize), CodecError>
 fn need(bytes: &[u8], pos: usize, n: usize) -> Result<(), CodecError> {
     let available = bytes.len().saturating_sub(pos);
     if available < n {
-        Err(CodecError::Truncated { expected: n, got: available })
+        Err(CodecError::Truncated {
+            expected: n,
+            got: available,
+        })
     } else {
         Ok(())
     }
@@ -507,33 +530,33 @@ fn read_u8(bytes: &[u8], pos: usize) -> Result<u8, CodecError> {
 
 fn read_u16(bytes: &[u8], pos: usize) -> Result<u16, CodecError> {
     need(bytes, pos, 2)?;
-    Ok(u16::from_be_bytes(bytes[pos..pos+2].try_into().unwrap()))
+    Ok(u16::from_be_bytes(bytes[pos..pos + 2].try_into().unwrap()))
 }
 
 fn read_u32(bytes: &[u8], pos: usize) -> Result<u32, CodecError> {
     need(bytes, pos, 4)?;
-    Ok(u32::from_be_bytes(bytes[pos..pos+4].try_into().unwrap()))
+    Ok(u32::from_be_bytes(bytes[pos..pos + 4].try_into().unwrap()))
 }
 
 fn read_u64(bytes: &[u8], pos: usize) -> Result<u64, CodecError> {
     need(bytes, pos, 8)?;
-    Ok(u64::from_be_bytes(bytes[pos..pos+8].try_into().unwrap()))
+    Ok(u64::from_be_bytes(bytes[pos..pos + 8].try_into().unwrap()))
 }
 
 fn read_i64(bytes: &[u8], pos: usize) -> Result<i64, CodecError> {
     need(bytes, pos, 8)?;
-    Ok(i64::from_be_bytes(bytes[pos..pos+8].try_into().unwrap()))
+    Ok(i64::from_be_bytes(bytes[pos..pos + 8].try_into().unwrap()))
 }
 
 fn read_f64(bytes: &[u8], pos: usize) -> Result<f64, CodecError> {
     need(bytes, pos, 8)?;
-    Ok(f64::from_be_bytes(bytes[pos..pos+8].try_into().unwrap()))
+    Ok(f64::from_be_bytes(bytes[pos..pos + 8].try_into().unwrap()))
 }
 
 fn read_str(bytes: &[u8], pos: usize) -> Result<(String, usize), CodecError> {
     let len = read_u32(bytes, pos)? as usize;
     need(bytes, pos + 4, len)?;
-    let s = core::str::from_utf8(&bytes[pos+4..pos+4+len])
+    let s = core::str::from_utf8(&bytes[pos + 4..pos + 4 + len])
         .map_err(|_| CodecError::InvalidUtf8)?
         .to_string();
     Ok((s, pos + 4 + len))
@@ -542,7 +565,7 @@ fn read_str(bytes: &[u8], pos: usize) -> Result<(String, usize), CodecError> {
 fn read_bytes_vec(bytes: &[u8], pos: usize) -> Result<(Vec<u8>, usize), CodecError> {
     let len = read_u32(bytes, pos)? as usize;
     need(bytes, pos + 4, len)?;
-    Ok((bytes[pos+4..pos+4+len].to_vec(), pos + 4 + len))
+    Ok((bytes[pos + 4..pos + 4 + len].to_vec(), pos + 4 + len))
 }
 
 fn name_part_label_from_byte(tag: u8, b: u8) -> Result<AkkNamePartLabel, CodecError> {
@@ -555,7 +578,12 @@ fn name_part_label_from_byte(tag: u8, b: u8) -> Result<AkkNamePartLabel, CodecEr
         0x05 => AkkNamePartLabel::Honorific,
         0x06 => AkkNamePartLabel::Kunyah,
         0x07 => AkkNamePartLabel::Laqab,
-        d    => return Err(CodecError::UnknownDiscriminant { tag, discriminant: d }),
+        d => {
+            return Err(CodecError::UnknownDiscriminant {
+                tag,
+                discriminant: d,
+            })
+        }
     })
 }
 
@@ -580,7 +608,7 @@ mod tests {
 
     #[test]
     fn bool_round_trip() {
-        assert_eq!(round_trip(AkkValue::Bool(true)),  AkkValue::Bool(true));
+        assert_eq!(round_trip(AkkValue::Bool(true)), AkkValue::Bool(true));
         assert_eq!(round_trip(AkkValue::Bool(false)), AkkValue::Bool(false));
     }
 
@@ -595,7 +623,9 @@ mod tests {
     fn float_round_trip() {
         for v in [0.0f64, f64::NAN, f64::INFINITY, -f64::INFINITY, 3.14159] {
             let enc = encode(&AkkValue::Float(v));
-            let (AkkValue::Float(decoded), _) = decode(&enc, 0).unwrap() else { panic!() };
+            let (AkkValue::Float(decoded), _) = decode(&enc, 0).unwrap() else {
+                panic!()
+            };
             if v.is_nan() {
                 assert!(decoded.is_nan());
             } else {
@@ -621,13 +651,18 @@ mod tests {
 
     #[test]
     fn uuid_round_trip() {
-        let id = [0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let id = [
+            0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+        ];
         assert_eq!(round_trip(AkkValue::Uuid(id)), AkkValue::Uuid(id));
     }
 
     #[test]
     fn timestamp_round_trip() {
-        assert_eq!(round_trip(AkkValue::Timestamp(1_700_000_000)), AkkValue::Timestamp(1_700_000_000));
+        assert_eq!(
+            round_trip(AkkValue::Timestamp(1_700_000_000)),
+            AkkValue::Timestamp(1_700_000_000)
+        );
         assert_eq!(round_trip(AkkValue::Timestamp(-1)), AkkValue::Timestamp(-1));
     }
 
@@ -642,19 +677,31 @@ mod tests {
     fn coordinate_round_trip_with_alt() {
         let mut c = AkkCoordinate::new(32.0031, 44.3282);
         c.alt = Some(37.5);
-        assert_eq!(round_trip(AkkValue::Coordinate(c.clone())), AkkValue::Coordinate(c));
+        assert_eq!(
+            round_trip(AkkValue::Coordinate(c.clone())),
+            AkkValue::Coordinate(c)
+        );
     }
 
     #[test]
     fn coordinate_round_trip_no_alt() {
         let c = AkkCoordinate::new(-33.8688, 151.2093);
-        assert_eq!(round_trip(AkkValue::Coordinate(c.clone())), AkkValue::Coordinate(c));
+        assert_eq!(
+            round_trip(AkkValue::Coordinate(c.clone())),
+            AkkValue::Coordinate(c)
+        );
     }
 
     #[test]
     fn quality_score_round_trip() {
-        assert_eq!(round_trip(AkkValue::QualityScore(240)), AkkValue::QualityScore(240));
-        assert_eq!(round_trip(AkkValue::QualityScore(0)),   AkkValue::QualityScore(0));
+        assert_eq!(
+            round_trip(AkkValue::QualityScore(240)),
+            AkkValue::QualityScore(240)
+        );
+        assert_eq!(
+            round_trip(AkkValue::QualityScore(0)),
+            AkkValue::QualityScore(0)
+        );
     }
 
     #[test]
@@ -680,7 +727,10 @@ mod tests {
     #[test]
     fn pipeline_status_failed_round_trip() {
         let s = PipelineStatus::Failed("disk full".into());
-        assert_eq!(round_trip(AkkValue::PipelineStatus(s.clone())), AkkValue::PipelineStatus(s));
+        assert_eq!(
+            round_trip(AkkValue::PipelineStatus(s.clone())),
+            AkkValue::PipelineStatus(s)
+        );
     }
 
     #[test]
@@ -710,7 +760,10 @@ mod tests {
     #[test]
     fn unknown_tag_returns_error() {
         let bytes = [0xFF];
-        assert!(matches!(decode(&bytes, 0), Err(CodecError::UnknownTypeTag(0xFF))));
+        assert!(matches!(
+            decode(&bytes, 0),
+            Err(CodecError::UnknownTypeTag(0xFF))
+        ));
     }
 
     #[test]

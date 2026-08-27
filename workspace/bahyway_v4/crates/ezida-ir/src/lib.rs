@@ -10,12 +10,12 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cost;
 pub mod expr;
 pub mod logical;
 pub mod physical;
-pub mod cost;
 
+pub use cost::{total_cost, Cost};
 pub use expr::Expr;
 pub use logical::LogicalPlan;
-pub use physical::{PhysicalPlan, IndexKind, KeyRange};
-pub use cost::{Cost, total_cost};
+pub use physical::{IndexKind, KeyRange, PhysicalPlan};

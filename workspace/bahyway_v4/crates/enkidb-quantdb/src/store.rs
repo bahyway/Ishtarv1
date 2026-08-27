@@ -4,9 +4,9 @@
 //! In production this backs to enkidb-persist sovereign pages.
 //! Here the store is a Vec<TickRecord> per asset, sorted by epoch+sequence.
 
-use std::collections::HashMap;
-use crate::tick::TickRecord;
 use crate::ohlc::{OhlcAggregator, OhlcBar};
+use crate::tick::TickRecord;
+use std::collections::HashMap;
 
 /// The sovereign quantitative time-series store.
 ///
@@ -14,31 +14,39 @@ use crate::ohlc::{OhlcAggregator, OhlcBar};
 /// Queries return slices or owned Vecs — no external iterators needed.
 pub struct QuantDbStore {
     /// Per-asset tick storage: asset_hash → Vec<TickRecord> (ordered by epoch, sequence).
-    ticks:     HashMap<u32, Vec<TickRecord>>,
+    ticks: HashMap<u32, Vec<TickRecord>>,
     /// Total tick count across all assets.
-    total:     usize,
+    total: usize,
 }
 
 impl QuantDbStore {
     pub fn new() -> Self {
-        QuantDbStore { ticks: HashMap::new(), total: 0 }
+        QuantDbStore {
+            ticks: HashMap::new(),
+            total: 0,
+        }
     }
 
     /// Append a tick.  Ticks for the same asset should arrive in
     /// non-decreasing (epoch, sequence) order; the store does not sort.
     pub fn push_tick(&mut self, tick: TickRecord) {
-        self.ticks.entry(tick.asset_hash).or_insert_with(Vec::new).push(tick);
+        self.ticks.entry(tick.asset_hash).or_default().push(tick);
         self.total += 1;
     }
 
     /// Append a batch of ticks efficiently.
     pub fn push_batch(&mut self, ticks: &[TickRecord]) {
-        for t in ticks { self.push_tick(*t); }
+        for t in ticks {
+            self.push_tick(*t);
+        }
     }
 
     /// All ticks for a given asset in insertion order.
     pub fn ticks_for_asset(&self, asset_hash: u32) -> &[TickRecord] {
-        self.ticks.get(&asset_hash).map(|v| v.as_slice()).unwrap_or(&[])
+        self.ticks
+            .get(&asset_hash)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Ticks for an asset in the epoch range [from, to] inclusive.
@@ -70,10 +78,14 @@ impl QuantDbStore {
     }
 
     /// Number of distinct assets in the store.
-    pub fn asset_count(&self) -> usize { self.ticks.len() }
+    pub fn asset_count(&self) -> usize {
+        self.ticks.len()
+    }
 
     /// Total tick count across all assets.
-    pub fn total_ticks(&self) -> usize { self.total }
+    pub fn total_ticks(&self) -> usize {
+        self.total
+    }
 
     /// All known asset hashes.
     pub fn asset_hashes(&self) -> Vec<u32> {
@@ -89,7 +101,9 @@ impl QuantDbStore {
 }
 
 impl Default for QuantDbStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -172,7 +186,9 @@ mod tests {
         let mut s1 = QuantDbStore::new();
         let mut s2 = QuantDbStore::new();
         let ticks = vec![t(0xA, 1, 1), t(0xA, 2, 2), t(0xA, 3, 3)];
-        for tick in &ticks { s1.push_tick(*tick); }
+        for tick in &ticks {
+            s1.push_tick(*tick);
+        }
         s2.push_batch(&ticks);
         assert_eq!(s1.total_ticks(), s2.total_ticks());
         assert_eq!(s1.latest_price(0xA), s2.latest_price(0xA));

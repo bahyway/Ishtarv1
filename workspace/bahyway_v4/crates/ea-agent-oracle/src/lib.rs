@@ -12,11 +12,11 @@
 #![forbid(unsafe_code)]
 
 pub mod collapse_predictor;
-pub mod pauli_monitor;
 pub mod gem_oracle;
 pub mod oracle_engine;
+pub mod pauli_monitor;
 
 pub use collapse_predictor::{CollapsePredictor, CollapseRisk, TrendPoint};
-pub use pauli_monitor::{PauliMonitor, MonitorReport};
 pub use gem_oracle::{GemOracle, GemReport};
-pub use oracle_engine::{OracleEngine, OracleReport, OracleAlert, AlertLevel};
+pub use oracle_engine::{AlertLevel, OracleAlert, OracleEngine, OracleReport};
+pub use pauli_monitor::{MonitorReport, PauliMonitor};

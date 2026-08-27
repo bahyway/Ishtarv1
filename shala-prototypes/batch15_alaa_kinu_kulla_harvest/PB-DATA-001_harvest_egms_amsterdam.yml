@@ -1,0 +1,107 @@
+---
+# ============================================================================
+# PB-DATA-001 — Harvest EGMS real InSAR data (Amsterdam tiles) as zip archives
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series
+# Purpose    : Download real EGMS (Copernicus European Ground Motion Service)
+#              ground-motion tiles for the Amsterdam region onto the NEW
+#              bare-metal infra, checksum them, and seal them on the data
+#              shelf, ready for the BeeMDM S0-S8 first-ingest rite.
+# Discipline : CSR-08 (running this playbook IS the confirmation act)
+# Host       : Fedora bare-metal HOST (Ansible control node; no VDIs)
+# Doctrine   : Append-only. Existing archives are never overwritten. Every
+#              archive gets a SHA-256 Kaniku receipt in the data ledger
+#              BEFORE it may approach Station S0.
+#
+# PREREQUISITES (one-time, human act — tokens never live in this file):
+#   1. Register at land.copernicus.eu and open the EGMS Explorer.
+#   2. Select the Amsterdam area tiles (L2b Calibrated is the recommended
+#      first harvest; L3 Ortho optional for vertical/E-W decomposition).
+#   3. Copy the download links (each ends with &id=<TOKEN>). Extract the
+#      token once; place the tile URLs (token stripped) in egms_tiles below
+#      or pass them with --extra-vars.
+#   4. Run:  ansible-playbook PB-DATA-001_harvest_egms_amsterdam.yml \
+#              -e egms_token=YOUR_TEMPORARY_TOKEN
+#
+# NOTE: ascending AND descending tiles are both harvested deliberately —
+#       two orbit geometries are the Two Witnesses of GL-NIM-002.
+# ============================================================================
+
+- name: "PB-DATA-001 :: Harvest EGMS Amsterdam tiles (append-only, receipted)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    data_root: "/opt/bahyway/v4/data/egms"
+    ledger_path: "/opt/bahyway/v4/data/LEDGER-DATA.tsv"
+    egms_token: "REPLACE_OR_PASS_WITH_EXTRA_VARS"
+    # Tile URLs WITHOUT the trailing &id= token; edit to your Explorer list.
+    # The two example stems below illustrate ascending vs descending naming;
+    # replace with the exact links EGMS Explorer gives for your Amsterdam AOI.
+    egms_tiles:
+      - name: "EGMS_L2b_ASC_amsterdam_tile1.zip"
+        url: "https://egms.land.copernicus.eu/insar-api/archive/download/EGMS_L2b_XXX_ASC.zip"
+      - name: "EGMS_L2b_DSC_amsterdam_tile1.zip"
+        url: "https://egms.land.copernicus.eu/insar-api/archive/download/EGMS_L2b_XXX_DSC.zip"
+
+  tasks:
+
+    - name: "WITNESS :: data shelf exists"
+      ansible.builtin.file:
+        path: "{{ data_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: "JUDGE :: refuse to run with the placeholder token"
+      ansible.builtin.assert:
+        that: egms_token != "REPLACE_OR_PASS_WITH_EXTRA_VARS"
+        fail_msg: "REFUSED — no EGMS token provided. Obtain it from EGMS Explorer; tokens are yours alone and never sealed into tablets."
+
+    - name: "WITNESS :: check which archives already sit on the shelf"
+      ansible.builtin.stat:
+        path: "{{ data_root }}/{{ item.name }}"
+      loop: "{{ egms_tiles }}"
+      loop_control: {label: "{{ item.name }}"}
+      register: shelf
+
+    - name: "MOVE :: download only absent archives (append-only; no overwrite)"
+      ansible.builtin.get_url:
+        url: "{{ item.item.url }}?id={{ egms_token }}"
+        dest: "{{ data_root }}/{{ item.item.name }}"
+        mode: "0444"
+        timeout: 600
+      loop: "{{ shelf.results }}"
+      loop_control: {label: "{{ item.item.name }}"}
+      when: not item.stat.exists
+      register: fetched
+
+    - name: "MOVE :: compute SHA-256 Kaniku receipts"
+      ansible.builtin.stat:
+        path: "{{ data_root }}/{{ item.name }}"
+        checksum_algorithm: sha256
+      loop: "{{ egms_tiles }}"
+      loop_control: {label: "{{ item.name }}"}
+      register: receipts
+
+    - name: "STAGE :: ensure the data ledger exists (header on first creation)"
+      ansible.builtin.copy:
+        dest: "{{ ledger_path }}"
+        content: "archive\tharvested_utc\tsha256\tsource\tstatus\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: append receipts (idempotent per archive+checksum line)"
+      ansible.builtin.lineinfile:
+        path: "{{ ledger_path }}"
+        line: "{{ item.stat.path | basename }}\t{{ ansible_date_time.iso8601 }}\t{{ item.stat.checksum }}\tEGMS-Copernicus\tSEALED-AWAITING-S0"
+        insertafter: EOF
+      loop: "{{ receipts.results }}"
+      loop_control: {label: "{{ item.stat.path | basename }}"}
+
+    - name: "STAGE :: proclaim the harvest"
+      ansible.builtin.debug:
+        msg:
+          - "HARVEST SEALED :: {{ egms_tiles | length }} EGMS archives on the shelf at {{ data_root }}"
+          - "Two orbit geometries harvested — the Two Witnesses ride in the data itself."
+          - "Next rite :: BeeMDM Station S0 may now receive them (first-ingest, eight steps)."

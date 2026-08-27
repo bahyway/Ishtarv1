@@ -21,12 +21,12 @@ use crate::record::encode_particle;
 const WRITE_BUF_SIZE: usize = 256 * 1024;
 
 pub struct DataFileWriter {
-    data_file:    BufWriter<File>,
+    data_file: BufWriter<File>,
     staging_file: BufWriter<File>,
-    data_path:    PathBuf,
+    data_path: PathBuf,
     staging_path: PathBuf,
-    idx_path:     PathBuf,
-    next_offset:  u64,
+    idx_path: PathBuf,
+    next_offset: u64,
 }
 
 impl DataFileWriter {
@@ -40,9 +40,16 @@ impl DataFileWriter {
         let staging_path = base.with_extension("idx.staging");
         let idx_path = base.with_extension("idx");
 
-        let data_file = OpenOptions::new().create(true).append(true).read(true).open(&data_path)?;
+        let data_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .open(&data_path)?;
         let next_offset = data_file.metadata()?.len();
-        let staging_file = OpenOptions::new().create(true).append(true).open(&staging_path)?;
+        let staging_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&staging_path)?;
 
         Ok(DataFileWriter {
             data_file: BufWriter::with_capacity(WRITE_BUF_SIZE, data_file),
@@ -72,7 +79,11 @@ impl DataFileWriter {
         self.data_file.write_all(bytes)?;
         self.next_offset += bytes.len() as u64;
 
-        let record = IndexRecord { kaki: key, offset, len };
+        let record = IndexRecord {
+            kaki: key,
+            offset,
+            len,
+        };
         self.staging_file.write_all(&record.to_bytes())?;
 
         Ok(offset)
@@ -100,7 +111,7 @@ impl DataFileWriter {
         let mut records = read_all_records(&self.staging_path)?;
         let existing = read_all_records(&self.idx_path).unwrap_or_default();
         records.extend(existing);
-        records.sort_by(|a, b| a.kaki.cmp(&b.kaki));
+        records.sort_by_key(|r| r.kaki);
 
         let new_path = self.idx_path.with_extension("idx.new");
         {
@@ -120,7 +131,10 @@ impl DataFileWriter {
             .truncate(true)
             .open(&self.staging_path)?;
         drop(staging_file);
-        let staging_file = OpenOptions::new().create(true).append(true).open(&self.staging_path)?;
+        let staging_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.staging_path)?;
         self.staging_file = BufWriter::with_capacity(WRITE_BUF_SIZE, staging_file);
 
         Ok(records.len())
@@ -137,7 +151,9 @@ fn read_all_records(path: &Path) -> io::Result<Vec<IndexRecord>> {
     let mut out = Vec::with_capacity(count);
     for i in 0..count {
         let start = i * INDEX_RECORD_SIZE;
-        out.push(IndexRecord::from_bytes(&bytes[start..start + INDEX_RECORD_SIZE]));
+        out.push(IndexRecord::from_bytes(
+            &bytes[start..start + INDEX_RECORD_SIZE],
+        ));
     }
     Ok(out)
 }
@@ -189,7 +205,10 @@ mod tests {
         let records = read_all_records(&idx_path).unwrap();
         assert_eq!(records.len(), 20);
         for pair in records.windows(2) {
-            assert!(pair[0].kaki <= pair[1].kaki, "index must be sorted ascending by kaki bytes");
+            assert!(
+                pair[0].kaki <= pair[1].kaki,
+                "index must be sorted ascending by kaki bytes"
+            );
         }
     }
 
@@ -201,13 +220,15 @@ mod tests {
 
         for i in 0..10 {
             let e = IdentityKaki::try_from_kaki(m.mint_identity(i, KakiRole::Zikru)).unwrap();
-            w.append(&Particle::base(e, "a", AkkValue::Int(i as i64), 0)).unwrap();
+            w.append(&Particle::base(e, "a", AkkValue::Int(i as i64), 0))
+                .unwrap();
         }
         w.compact_index().unwrap();
 
         for i in 10..20 {
             let e = IdentityKaki::try_from_kaki(m.mint_identity(i, KakiRole::Zikru)).unwrap();
-            w.append(&Particle::base(e, "a", AkkValue::Int(i as i64), 0)).unwrap();
+            w.append(&Particle::base(e, "a", AkkValue::Int(i as i64), 0))
+                .unwrap();
         }
         let n = w.compact_index().unwrap();
         assert_eq!(n, 20);

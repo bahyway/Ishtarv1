@@ -13,35 +13,43 @@
 //! Hot-swapping: register a new source or target at any time.
 //! The orchestrator never needs to know about existing pipelines to add one.
 
-use std::collections::HashMap;
 use crate::connector::{
-    DataBatch, DeliveryReceipt, ExtractionCursor, SourceConnector, SourceId, TargetConnector, TargetId,
+    DataBatch, DeliveryReceipt, ExtractionCursor, SourceConnector, SourceId, TargetConnector,
+    TargetId,
 };
 use crate::exception::FabricException;
 use crate::lineage::{hash_record, LineageChain, LineageHop, QualitySnapshot, StageId};
 use crate::pipeline::{PipelineDeclaration, PipelineId, Stage};
 use data_cleansing_station::VgcaCleansingStation;
+use std::collections::HashMap;
 use template_engine::Template;
+
+/// One record's field set: (attr_hash, value_bytes) pairs.
+type FieldRecord = Vec<(u32, Vec<u8>)>;
+/// A record paired with the lineage chain accumulated for it so far.
+type StagedRecord = (FieldRecord, LineageChain);
 
 // ── Orchestrator Result ───────────────────────────────────────────────────────
 
 /// The result of a single pipeline run.
 #[derive(Debug)]
 pub struct OrchestratorResult {
-    pub pipeline_id:   PipelineId,
-    pub records_in:    usize,
-    pub records_out:   usize,
-    pub exceptions:    Vec<FabricException>,
-    pub receipts:      Vec<DeliveryReceipt>,
+    pub pipeline_id: PipelineId,
+    pub records_in: usize,
+    pub records_out: usize,
+    pub exceptions: Vec<FabricException>,
+    pub receipts: Vec<DeliveryReceipt>,
     /// Lineage chains — one per successfully processed record.
-    pub lineage:       Vec<LineageChain>,
+    pub lineage: Vec<LineageChain>,
     /// Orbit density snapshot for Dashboard visualisation (particle lane counts).
     pub orbit_density: data_cleansing_station::OrbitDensitySnapshot,
 }
 
 impl OrchestratorResult {
     pub fn success_rate(&self) -> f32 {
-        if self.records_in == 0 { return 1.0; }
+        if self.records_in == 0 {
+            return 1.0;
+        }
         self.records_out as f32 / self.records_in as f32
     }
 
@@ -61,8 +69,8 @@ impl OrchestratorResult {
 /// Holds a `VgcaCleansingStation` whose self-calibrating centroid improves
 /// over time as GEM-lane particles pass through `Stage::Cleanse`.
 pub struct FabricOrchestrator {
-    sources:   HashMap<SourceId, Box<dyn SourceConnector>>,
-    targets:   HashMap<TargetId, Box<dyn TargetConnector>>,
+    sources: HashMap<SourceId, Box<dyn SourceConnector>>,
+    targets: HashMap<TargetId, Box<dyn TargetConnector>>,
     pipelines: HashMap<PipelineId, PipelineDeclaration>,
     /// Self-calibrating VGCA domain centroid — updated by every GEM particle.
     cleansing_station: std::cell::RefCell<VgcaCleansingStation>,
@@ -71,9 +79,9 @@ pub struct FabricOrchestrator {
 impl FabricOrchestrator {
     pub fn new() -> Self {
         FabricOrchestrator {
-            sources:           HashMap::new(),
-            targets:           HashMap::new(),
-            pipelines:         HashMap::new(),
+            sources: HashMap::new(),
+            targets: HashMap::new(),
+            pipelines: HashMap::new(),
             cleansing_station: std::cell::RefCell::new(VgcaCleansingStation::new()),
         }
     }
@@ -103,9 +111,15 @@ impl FabricOrchestrator {
         self.pipelines.insert(pipeline.id.clone(), pipeline);
     }
 
-    pub fn source_count(&self)   -> usize { self.sources.len() }
-    pub fn target_count(&self)   -> usize { self.targets.len() }
-    pub fn pipeline_count(&self) -> usize { self.pipelines.len() }
+    pub fn source_count(&self) -> usize {
+        self.sources.len()
+    }
+    pub fn target_count(&self) -> usize {
+        self.targets.len()
+    }
+    pub fn pipeline_count(&self) -> usize {
+        self.pipelines.len()
+    }
 
     /// Execute a registered pipeline. Returns `None` if the pipeline is not found.
     pub fn run_pipeline(
@@ -114,27 +128,31 @@ impl FabricOrchestrator {
         cursor: &ExtractionCursor,
     ) -> Option<OrchestratorResult> {
         let pipeline = self.pipelines.get(pipeline_id)?;
-        if !pipeline.enabled { return None; }
+        if !pipeline.enabled {
+            return None;
+        }
 
         let source = self.sources.get(&pipeline.source)?;
 
         // ── Step 1: Extract ───────────────────────────────────────────────────
         let batch = match source.extract(cursor) {
-            Ok(b)  => b,
-            Err(e) => return Some(OrchestratorResult {
-                pipeline_id:   pipeline_id.clone(),
-                records_in:    0,
-                records_out:   0,
-                exceptions:    vec![e],
-                receipts:      vec![],
-                lineage:       vec![],
-                orbit_density: data_cleansing_station::OrbitDensitySnapshot::default(),
-            }),
+            Ok(b) => b,
+            Err(e) => {
+                return Some(OrchestratorResult {
+                    pipeline_id: pipeline_id.clone(),
+                    records_in: 0,
+                    records_out: 0,
+                    exceptions: vec![e],
+                    receipts: vec![],
+                    lineage: vec![],
+                    orbit_density: data_cleansing_station::OrbitDensitySnapshot::default(),
+                })
+            }
         };
 
         let records_in = batch.len();
-        let epoch      = batch.epoch;
-        let source_id  = batch.source_id.clone();
+        let epoch = batch.epoch;
+        let source_id = batch.source_id.clone();
 
         // ── Step 2: Contract validation at source boundary ────────────────────
         let contract = source.schema();
@@ -144,30 +162,40 @@ impl FabricOrchestrator {
         for record in batch.records {
             let present: Vec<u32> = record.iter().map(|(h, _)| *h).collect();
             match contract.validate_presence(&present) {
-                Ok(_)       => accepted_records.push(record),
+                Ok(_) => accepted_records.push(record),
                 Err(fields) => {
                     let field = fields.first().copied().unwrap_or("unknown");
                     exceptions.push(FabricException::missing_field(
-                        source_id.clone(), "source-boundary", field, record, epoch,
+                        source_id.clone(),
+                        "source-boundary",
+                        field,
+                        record,
+                        epoch,
                     ));
                 }
             }
         }
 
         // ── Step 3: Stage execution with lineage tracking ─────────────────────
-        let mut processed: Vec<(Vec<(u32, Vec<u8>)>, LineageChain)> = accepted_records
+        let mut processed: Vec<StagedRecord> = accepted_records
             .into_iter()
             .map(|r| {
                 let mut chain = LineageChain::new();
                 // Seed lineage with source hop (b11 unknown at extraction → 0)
-                chain.push(LineageHop::new(
-                    StageId("extraction"),
-                    Some(source_id.clone()),
-                    hash_record(&r),
-                    hash_record(&r),
-                    QualitySnapshot { b11_in: 0, b11_out: 0 },
-                    epoch,
-                ).with_annotation(format!("source={}", source.display_name())));
+                chain.push(
+                    LineageHop::new(
+                        StageId("extraction"),
+                        Some(source_id.clone()),
+                        hash_record(&r),
+                        hash_record(&r),
+                        QualitySnapshot {
+                            b11_in: 0,
+                            b11_out: 0,
+                        },
+                        epoch,
+                    )
+                    .with_annotation(format!("source={}", source.display_name())),
+                );
                 (r, chain)
             })
             .collect();
@@ -176,7 +204,7 @@ impl FabricOrchestrator {
 
         for stage in &pipeline.stages {
             let stage_name = stage.stage_name();
-            let mut next: Vec<(Vec<(u32, Vec<u8>)>, LineageChain)> = Vec::new();
+            let mut next: Vec<StagedRecord> = Vec::new();
 
             for (record, mut chain) in processed {
                 let in_hash = hash_record(&record);
@@ -189,14 +217,17 @@ impl FabricOrchestrator {
 
                 if !rejected {
                     let out_hash = hash_record(&out_record);
-                    chain.push(LineageHop::new(
-                        StageId(stage_name),
-                        None,
-                        in_hash,
-                        out_hash,
-                        QualitySnapshot { b11_in, b11_out },
-                        epoch,
-                    ).with_annotation(annotation));
+                    chain.push(
+                        LineageHop::new(
+                            StageId(stage_name),
+                            None,
+                            in_hash,
+                            out_hash,
+                            QualitySnapshot { b11_in, b11_out },
+                            epoch,
+                        )
+                        .with_annotation(annotation),
+                    );
                     next.push((out_record, chain));
                 }
             }
@@ -204,25 +235,23 @@ impl FabricOrchestrator {
         }
 
         let orbit_density = {
-            let mut snap = data_cleansing_station::OrbitDensitySnapshot::from_reports(&cleanse_reports);
+            let mut snap =
+                data_cleansing_station::OrbitDensitySnapshot::from_reports(&cleanse_reports);
             snap.centroid_gem_depth = self.cleansing_station.borrow().gem_count();
             snap
         };
 
         // ── Step 4: Deliver to targets ────────────────────────────────────────
-        let final_records: Vec<Vec<(u32, Vec<u8>)>> = processed.iter().map(|(r, _)| r.clone()).collect();
-        let lineage: Vec<LineageChain>               = processed.into_iter().map(|(_, c)| c).collect();
+        let final_records: Vec<Vec<(u32, Vec<u8>)>> =
+            processed.iter().map(|(r, _)| r.clone()).collect();
+        let lineage: Vec<LineageChain> = processed.into_iter().map(|(_, c)| c).collect();
 
         let mut receipts: Vec<DeliveryReceipt> = Vec::new();
         for target_id in &pipeline.targets {
             if let Some(target) = self.targets.get(target_id) {
-                let deliver_batch = DataBatch::new(
-                    source_id.clone(),
-                    final_records.clone(),
-                    epoch,
-                );
+                let deliver_batch = DataBatch::new(source_id.clone(), final_records.clone(), epoch);
                 match target.deliver(deliver_batch) {
-                    Ok(r)  => receipts.push(r),
+                    Ok(r) => receipts.push(r),
                     Err(e) => exceptions.push(e),
                 }
             }
@@ -250,7 +279,14 @@ impl FabricOrchestrator {
         source_id: &SourceId,
         epoch: u32,
         exceptions: &mut Vec<FabricException>,
-    ) -> (Vec<(u32, Vec<u8>)>, u8, u8, bool, String, Option<data_cleansing_station::CleansingReport>) {
+    ) -> (
+        FieldRecord,
+        u8,
+        u8,
+        bool,
+        String,
+        Option<data_cleansing_station::CleansingReport>,
+    ) {
         match stage {
             Stage::Cleanse => {
                 // Full VGCA-powered cleansing: VGCA-Σ (FSV 7D) for text fields,
@@ -260,11 +296,13 @@ impl FabricOrchestrator {
                 // completeness is enforced at the source boundary, not here.
                 // We use a fixed empty template so VGCA geometry runs on all fields.
                 let template = Template::default_template("t.cleanse", "CleansePass", &[]);
-                let report = self.cleansing_station.borrow_mut().cleanse(
-                    record, &template, epoch, epoch, 10,
-                );
+                let report = self
+                    .cleansing_station
+                    .borrow_mut()
+                    .cleanse(record, &template, epoch, epoch, 10);
                 // Alien fields are stripped; everything else passes through
-                let cleaned: Vec<(u32, Vec<u8>)> = record.iter()
+                let cleaned: Vec<(u32, Vec<u8>)> = record
+                    .iter()
                     .zip(report.field_results.iter())
                     .filter(|(_, vr)| vr.fit != vgca_engine::GeometricFit::Alien)
                     .map(|((h, v), _)| (*h, v.clone()))
@@ -283,15 +321,26 @@ impl FabricOrchestrator {
                 // Simplified quality gate: score by non-empty fields / total fields.
                 // In production this delegates to hepta-score H(P) computation.
                 let non_empty = record.iter().filter(|(_, v)| !v.is_empty()).count();
-                let total     = record.len().max(1);
-                let b11       = ((non_empty as f32 / total as f32) * 240.0) as u8;
+                let total = record.len().max(1);
+                let b11 = ((non_empty as f32 / total as f32) * 240.0) as u8;
                 if b11 < *min_b11 {
                     exceptions.push(FabricException::quality_rejection(
-                        source_id.clone(), b11, *min_b11, record.to_vec(), epoch,
+                        source_id.clone(),
+                        b11,
+                        *min_b11,
+                        record.to_vec(),
+                        epoch,
                     ));
                     (vec![], 0, b11, true, String::new(), None)
                 } else {
-                    (record.to_vec(), 0, b11, false, format!("B11={b11} ≥ threshold={min_b11}"), None)
+                    (
+                        record.to_vec(),
+                        0,
+                        b11,
+                        false,
+                        format!("B11={b11} ≥ threshold={min_b11}"),
+                        None,
+                    )
                 }
             }
 
@@ -301,24 +350,32 @@ impl FabricOrchestrator {
                 (enriched, 0, 0, false, format!("ruleset={ruleset}"), None)
             }
 
-            Stage::Deduplicate => {
-                (record.to_vec(), 0, 0, false, "idu-prober:pass".into(), None)
-            }
+            Stage::Deduplicate => (record.to_vec(), 0, 0, false, "idu-prober:pass".into(), None),
 
-            Stage::Aggregate { key_attr_hash, strategy } => {
+            Stage::Aggregate {
+                key_attr_hash,
+                strategy,
+            } => {
                 let annotation = format!("key={key_attr_hash:#x} strategy={:?}", strategy);
                 (record.to_vec(), 0, 0, false, annotation, None)
             }
 
-            Stage::Transform { transform_id } => {
-                (record.to_vec(), 0, 0, false, format!("transform={transform_id}"), None)
-            }
+            Stage::Transform { transform_id } => (
+                record.to_vec(),
+                0,
+                0,
+                false,
+                format!("transform={transform_id}"),
+                None,
+            ),
         }
     }
 }
 
 impl Default for FabricOrchestrator {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -336,16 +393,28 @@ mod tests {
     }
 
     impl SourceConnector for StubSource {
-        fn source_id(&self) -> SourceId { SourceId("stub.source") }
-        fn display_name(&self) -> &'static str { "Stub Source" }
+        fn source_id(&self) -> SourceId {
+            SourceId("stub.source")
+        }
+        fn display_name(&self) -> &'static str {
+            "Stub Source"
+        }
         fn schema(&self) -> SchemaContract {
-            SchemaContract::new("stub", 1, vec![
-                FieldSpec::required("id",    0x0001, FieldType::Integer),
-                FieldSpec::required("value", 0x0002, FieldType::Text),
-            ])
+            SchemaContract::new(
+                "stub",
+                1,
+                vec![
+                    FieldSpec::required("id", 0x0001, FieldType::Integer),
+                    FieldSpec::required("value", 0x0002, FieldType::Text),
+                ],
+            )
         }
         fn extract(&self, _cursor: &ExtractionCursor) -> Result<DataBatch, FabricException> {
-            Ok(DataBatch::new(SourceId("stub.source"), self.records.clone(), 1))
+            Ok(DataBatch::new(
+                SourceId("stub.source"),
+                self.records.clone(),
+                1,
+            ))
         }
     }
 
@@ -354,8 +423,12 @@ mod tests {
     }
 
     impl TargetConnector for StubTarget {
-        fn target_id(&self) -> TargetId { TargetId(self.id) }
-        fn display_name(&self) -> &'static str { "Stub Target" }
+        fn target_id(&self) -> TargetId {
+            TargetId(self.id)
+        }
+        fn display_name(&self) -> &'static str {
+            "Stub Target"
+        }
         fn schema_expectation(&self) -> SchemaContract {
             SchemaContract::new("stub-target", 1, vec![])
         }
@@ -392,9 +465,10 @@ mod tests {
 
     #[test]
     fn clean_records_are_delivered() {
-        let records = vec![
-            vec![(0x0001u32, b"42".to_vec()), (0x0002u32, b"hello".to_vec())],
-        ];
+        let records = vec![vec![
+            (0x0001u32, b"42".to_vec()),
+            (0x0002u32, b"hello".to_vec()),
+        ]];
         let (o, id) = make_orchestrator(records);
         let result = o.run_pipeline(&id, &ExtractionCursor::default()).unwrap();
         assert_eq!(result.records_in, 1);
@@ -406,21 +480,23 @@ mod tests {
     #[test]
     fn empty_value_rejected_by_quality_gate() {
         // Record with all empty values → quality score = 0 < min_b11 = 100
-        let records = vec![
-            vec![(0x0001u32, b"".to_vec()), (0x0002u32, b"".to_vec())],
-        ];
+        let records = vec![vec![(0x0001u32, b"".to_vec()), (0x0002u32, b"".to_vec())]];
         let (o, id) = make_orchestrator(records);
         let result = o.run_pipeline(&id, &ExtractionCursor::default()).unwrap();
         assert_eq!(result.records_out, 0);
         assert!(!result.exceptions.is_empty());
-        assert_eq!(result.exceptions[0].kind, crate::exception::ExceptionKind::QualityRejection);
+        assert_eq!(
+            result.exceptions[0].kind,
+            crate::exception::ExceptionKind::QualityRejection
+        );
     }
 
     #[test]
     fn lineage_chain_depth_matches_stage_count_plus_extraction() {
-        let records = vec![
-            vec![(0x0001u32, b"1".to_vec()), (0x0002u32, b"val".to_vec())],
-        ];
+        let records = vec![vec![
+            (0x0001u32, b"1".to_vec()),
+            (0x0002u32, b"val".to_vec()),
+        ]];
         let (o, id) = make_orchestrator(records);
         let result = o.run_pipeline(&id, &ExtractionCursor::default()).unwrap();
         // extraction + cleanse + validate = 3 hops

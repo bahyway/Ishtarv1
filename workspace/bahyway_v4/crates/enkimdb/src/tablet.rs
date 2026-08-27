@@ -105,8 +105,12 @@ pub fn profile_tablet(path: &Path) -> std::io::Result<TabletProfile> {
 /// valid UTF-8 or doesn't parse -- a tablet that fails to parse is still
 /// a real file worth minting, just without the structured extras.
 fn profile_akk(bytes: &[u8]) -> Vec<(&'static str, AkkValue)> {
-    let Ok(text) = std::str::from_utf8(bytes) else { return Vec::new() };
-    let Ok(program) = aaol::PmpvdParser::parse_source(text) else { return Vec::new() };
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return Vec::new();
+    };
+    let Ok(program) = aaol::PmpvdParser::parse_source(text) else {
+        return Vec::new();
+    };
 
     let mut particles = 0i64;
     let mut tribes = 0i64;
@@ -145,18 +149,35 @@ mod tests {
 
     #[test]
     fn kind_from_path_recognizes_all_three_extensions() {
-        assert_eq!(TabletKind::from_path(Path::new("x.akk")), Some(TabletKind::Akk));
-        assert_eq!(TabletKind::from_path(Path::new("x.way")), Some(TabletKind::Way));
-        assert_eq!(TabletKind::from_path(Path::new("x.tmpl")), Some(TabletKind::Tmpl));
+        assert_eq!(
+            TabletKind::from_path(Path::new("x.akk")),
+            Some(TabletKind::Akk)
+        );
+        assert_eq!(
+            TabletKind::from_path(Path::new("x.way")),
+            Some(TabletKind::Way)
+        );
+        assert_eq!(
+            TabletKind::from_path(Path::new("x.tmpl")),
+            Some(TabletKind::Tmpl)
+        );
         assert_eq!(TabletKind::from_path(Path::new("x.md")), None);
     }
 
     #[test]
     fn tribe_ids_are_distinct() {
-        let mut ids = vec![TabletKind::Akk.tribe_id(), TabletKind::Way.tribe_id(), TabletKind::Tmpl.tribe_id()];
+        let mut ids = vec![
+            TabletKind::Akk.tribe_id(),
+            TabletKind::Way.tribe_id(),
+            TabletKind::Tmpl.tribe_id(),
+        ];
         ids.sort_unstable();
         ids.dedup();
-        assert_eq!(ids.len(), 3, "each tablet kind must have its own distinct tribe id");
+        assert_eq!(
+            ids.len(),
+            3,
+            "each tablet kind must have its own distinct tribe id"
+        );
     }
 
     #[test]
@@ -176,7 +197,10 @@ mod tests {
         std::fs::write(&way_path, b"some way content").unwrap();
         let profile = profile_tablet(&way_path).unwrap();
         assert_eq!(profile.kind, TabletKind::Way);
-        assert!(profile.extra.is_empty(), "WAY has no parser yet -- extras must stay empty, not fabricated");
+        assert!(
+            profile.extra.is_empty(),
+            "WAY has no parser yet -- extras must stay empty, not fabricated"
+        );
         assert!(!profile.sha256.is_empty());
     }
 

@@ -15,8 +15,8 @@
 //! "playbook_<n>" number forms.
 
 use crate::pb_catalog::{guess_pb_number, list_cataloged_playbooks, CatalogedPlaybook};
-use enkiddb::WriteNode;
 use enkidb_kaki::IdentityKaki;
+use enkiddb::WriteNode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::Write;
@@ -63,7 +63,10 @@ fn contains_word(haystack_lower: &str, needle_lower: &str) -> bool {
 }
 
 fn stem_of(source_path: &str) -> String {
-    PathBuf::from(source_path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+    PathBuf::from(source_path)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default()
 }
 
 /// Every real, distinct way `target`'s identity could plausibly appear
@@ -103,7 +106,10 @@ pub fn approved_pairs(dependency_registry_path: &Path) -> HashSet<(String, Strin
 /// `other_kaki_hex`, `false` means `other_kaki_hex` depends on
 /// `kaki_hex`. StoryEngine's chronicle needs both directions to tell a
 /// real "who does this affect" story, not just "what does this depend on."
-pub fn dependency_events_for(dependency_registry_path: &Path, kaki_hex: &str) -> Vec<(String, String, bool)> {
+pub fn dependency_events_for(
+    dependency_registry_path: &Path,
+    kaki_hex: &str,
+) -> Vec<(String, String, bool)> {
     std::fs::read_to_string(dependency_registry_path)
         .unwrap_or_default()
         .lines()
@@ -175,10 +181,21 @@ pub fn apply_dependency_approvals(
     if let Some(p) = dependency_registry_path.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    let mut registry_file = std::fs::OpenOptions::new().create(true).append(true).open(dependency_registry_path).ok();
+    let mut registry_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dependency_registry_path)
+        .ok();
 
     for (source_kaki, source_title, target_kaki, target_title) in approvals {
-        write_node.mint_link_edge(*source_kaki, source_title, *target_kaki, target_title, "depends-on", epoch);
+        write_node.mint_link_edge(
+            *source_kaki,
+            source_title,
+            *target_kaki,
+            target_title,
+            "depends-on",
+            epoch,
+        );
         epoch += 1;
 
         let line = DependencyRegistryLine {
@@ -199,8 +216,8 @@ pub fn apply_dependency_approvals(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb_catalog::{catalog_playbooks, CatalogLocation};
     use crate::gate_review::parse_kaki_hex;
+    use crate::pb_catalog::{catalog_playbooks, CatalogLocation};
     use bahyway_core::TribeId;
     use enkidb_kaki::KakiMinter;
 
@@ -229,14 +246,27 @@ mod tests {
 
         let pb_registry = dir.join("pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        catalog_playbooks(&[CatalogLocation { name: "loc".into(), root: loc }], &pb_registry, &enkiddb_root);
+        catalog_playbooks(
+            &[CatalogLocation {
+                name: "loc".into(),
+                root: loc,
+            }],
+            &pb_registry,
+            &enkiddb_root,
+        );
 
         let dep_registry = dir.join("pb_dependency_registry.jsonl");
         let suggestions = scan_dependency_suggestions(&pb_registry, &dep_registry);
 
         assert_eq!(suggestions.len(), 1, "{suggestions:?}");
-        assert!(suggestions[0].source_title.contains("961"), "{suggestions:?}");
-        assert!(suggestions[0].target_title.contains("960"), "{suggestions:?}");
+        assert!(
+            suggestions[0].source_title.contains("961"),
+            "{suggestions:?}"
+        );
+        assert!(
+            suggestions[0].target_title.contains("960"),
+            "{suggestions:?}"
+        );
     }
 
     #[test]
@@ -249,7 +279,14 @@ mod tests {
 
         let pb_registry = dir.join("pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        catalog_playbooks(&[CatalogLocation { name: "loc".into(), root: loc }], &pb_registry, &enkiddb_root);
+        catalog_playbooks(
+            &[CatalogLocation {
+                name: "loc".into(),
+                root: loc,
+            }],
+            &pb_registry,
+            &enkiddb_root,
+        );
 
         let dep_registry = dir.join("pb_dependency_registry.jsonl");
         let first = scan_dependency_suggestions(&pb_registry, &dep_registry);
@@ -257,16 +294,27 @@ mod tests {
         let source = parse_kaki_hex(&first[0].source_kaki_hex).unwrap();
         let target = parse_kaki_hex(&first[0].target_kaki_hex).unwrap();
 
-        let mut wn = WriteNode::new(KakiMinter::new(TribeId::from_u16(enkiddb::PLAYBOOK_CATALOG_TRIBE_ID)), 64);
+        let mut wn = WriteNode::new(
+            KakiMinter::new(TribeId::from_u16(enkiddb::PLAYBOOK_CATALOG_TRIBE_ID)),
+            64,
+        );
         let log = apply_dependency_approvals(
             &mut wn,
-            &[(source, first[0].source_title.clone(), target, first[0].target_title.clone())],
+            &[(
+                source,
+                first[0].source_title.clone(),
+                target,
+                first[0].target_title.clone(),
+            )],
             &dep_registry,
             1,
         );
         assert!(log.iter().any(|l| l.contains("depends-on")), "{log:?}");
 
         let second = scan_dependency_suggestions(&pb_registry, &dep_registry);
-        assert!(second.is_empty(), "an approved pair must not be re-suggested: {second:?}");
+        assert!(
+            second.is_empty(),
+            "an approved pair must not be re-suggested: {second:?}"
+        );
     }
 }

@@ -21,7 +21,7 @@ pub struct SnapshotIndexEntry {
     /// Storage offset of the snapshot Event-Kaki / snapshot state block.
     pub cold_storage_offset: u64,
     /// Number of events replayed to produce this snapshot.
-    pub events_count:        u32,
+    pub events_count: u32,
 }
 
 /// Sparse snapshot index for all particles. Tree-free by construction.
@@ -31,7 +31,9 @@ pub struct SnapshotIndex {
 
 impl SnapshotIndex {
     pub fn new() -> Self {
-        SnapshotIndex { particles: HashMap::new() }
+        SnapshotIndex {
+            particles: HashMap::new(),
+        }
     }
 
     /// Insert a snapshot record, keeping this particle's list sorted by epoch.
@@ -48,7 +50,11 @@ impl SnapshotIndex {
     /// Find the most recent snapshot at or before `at_epoch` for the given particle.
     /// O(log k) binary search over that one particle's own sparse list, where k
     /// is that particle's snapshot count -- never a function of total particles.
-    pub fn latest_before(&self, uuid_hash: u32, at_epoch: u64) -> Option<(u64, &SnapshotIndexEntry)> {
+    pub fn latest_before(
+        &self,
+        uuid_hash: u32,
+        at_epoch: u64,
+    ) -> Option<(u64, &SnapshotIndexEntry)> {
         let list = self.particles.get(&uuid_hash)?;
         let idx = list.partition_point(|(e, _)| *e <= at_epoch);
         if idx == 0 {
@@ -60,14 +66,21 @@ impl SnapshotIndex {
     }
 }
 
-impl Default for SnapshotIndex { fn default() -> Self { Self::new() } }
+impl Default for SnapshotIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn entry(offset: u64) -> SnapshotIndexEntry {
-        SnapshotIndexEntry { cold_storage_offset: offset, events_count: 10 }
+        SnapshotIndexEntry {
+            cold_storage_offset: offset,
+            events_count: 10,
+        }
     }
 
     #[test]
@@ -115,7 +128,10 @@ mod tests {
 
         let (epoch, e) = idx.latest_before(0x0001, 100).unwrap();
         assert_eq!(epoch, 100);
-        assert_eq!(e.cold_storage_offset, 2222, "second insert at the same epoch must replace, not duplicate");
+        assert_eq!(
+            e.cold_storage_offset, 2222,
+            "second insert at the same epoch must replace, not duplicate"
+        );
     }
 
     #[test]
@@ -124,7 +140,19 @@ mod tests {
         idx.insert(0x0001, 100, entry(1000));
         idx.insert(0x0002, 100, entry(9999));
 
-        assert_eq!(idx.latest_before(0x0001, 100).unwrap().1.cold_storage_offset, 1000);
-        assert_eq!(idx.latest_before(0x0002, 100).unwrap().1.cold_storage_offset, 9999);
+        assert_eq!(
+            idx.latest_before(0x0001, 100)
+                .unwrap()
+                .1
+                .cold_storage_offset,
+            1000
+        );
+        assert_eq!(
+            idx.latest_before(0x0002, 100)
+                .unwrap()
+                .1
+                .cold_storage_offset,
+            9999
+        );
     }
 }

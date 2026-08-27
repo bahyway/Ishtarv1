@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //! Trajectory buffering — sliding-window 7D movement records per particle.
 
-use enkidb_kaki::{Kaki, FixedCoord7D};
+use enkidb_kaki::{FixedCoord7D, Kaki};
 
 /// A single trajectory segment: one particle's position at one orbital tick.
 #[derive(Copy, Clone, Debug)]
@@ -25,14 +25,20 @@ impl TrajectoryBuffer {
     const WINDOW: usize = 16;
 
     pub fn new() -> Self {
-        Self { segments: [None; 16], head: 0, count: 0 }
+        Self {
+            segments: [None; 16],
+            head: 0,
+            count: 0,
+        }
     }
 
     /// Push a new observation, evicting the oldest if the window is full.
     pub fn push(&mut self, seg: TrajectorySegment) {
         self.segments[self.head] = Some(seg);
         self.head = (self.head + 1) % Self::WINDOW;
-        if self.count < Self::WINDOW { self.count += 1; }
+        if self.count < Self::WINDOW {
+            self.count += 1;
+        }
     }
 
     /// Return all buffered segments in chronological order (oldest first).
@@ -42,17 +48,24 @@ impl TrajectoryBuffer {
         } else {
             self.head // head points to oldest when window full
         };
-        (0..self.count).map(move |i| {
-            self.segments[(start + i) % Self::WINDOW].as_ref().unwrap()
-        })
+        (0..self.count).map(move |i| self.segments[(start + i) % Self::WINDOW].as_ref().unwrap())
     }
 
-    pub fn len(&self) -> usize { self.count }
-    pub fn is_full(&self) -> bool { self.count == Self::WINDOW }
+    pub fn len(&self) -> usize {
+        self.count
+    }
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+    pub fn is_full(&self) -> bool {
+        self.count == Self::WINDOW
+    }
 }
 
 impl Default for TrajectoryBuffer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -61,13 +74,21 @@ mod tests {
     use enkidb_kaki::{derive_pattern_kaki, PatternType};
 
     fn sample_kaki() -> Kaki {
-        derive_pattern_kaki(PatternType::CrowdFlow, FixedCoord7D::zero(), [0u8; 32], 8_000, 1)
+        derive_pattern_kaki(
+            PatternType::CrowdFlow,
+            FixedCoord7D::zero(),
+            [0u8; 32],
+            8_000,
+            1,
+        )
     }
 
     fn seg(orbital: u64) -> TrajectorySegment {
         TrajectorySegment {
             particle_kaki: sample_kaki(),
-            position: FixedCoord7D { d: [orbital as i32, 0, 0, 0, 0, 0, 0] },
+            position: FixedCoord7D {
+                d: [orbital as i32, 0, 0, 0, 0, 0, 0],
+            },
             orbital,
         }
     }
@@ -88,7 +109,9 @@ mod tests {
     #[test]
     fn partial_window() {
         let mut buf = TrajectoryBuffer::new();
-        for i in 0..5u64 { buf.push(seg(i)); }
+        for i in 0..5u64 {
+            buf.push(seg(i));
+        }
         assert_eq!(buf.len(), 5);
         assert!(!buf.is_full());
         let segs: Vec<_> = buf.segments().collect();

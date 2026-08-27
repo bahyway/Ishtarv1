@@ -15,9 +15,9 @@
 //!
 //! The derivation uses FNV-1a mixing (no external crates, no_std compatible).
 
+use crate::{Kaki, KakiRole, KakiType};
 use bahyway_core::BahywayError;
 use bahyway_crc::crc16;
-use crate::{Kaki, KakiRole, KakiType};
 
 /// 7-dimensional fixed-point coordinate.
 /// Each axis is stored as i32 in millimetre units (i32::MAX ≈ 2 147 km).
@@ -27,7 +27,9 @@ pub struct FixedCoord7D {
 }
 
 impl FixedCoord7D {
-    pub fn zero() -> Self { Self { d: [0; 7] } }
+    pub fn zero() -> Self {
+        Self { d: [0; 7] }
+    }
 
     /// Serialize to 28 bytes (7 × i32 big-endian).
     pub fn to_bytes(self) -> [u8; 28] {
@@ -44,21 +46,21 @@ impl FixedCoord7D {
 #[repr(u8)]
 pub enum PatternType {
     /// Crowd flow corridor detected in outdoor space.
-    CrowdFlow          = 0x01,
+    CrowdFlow = 0x01,
     /// Aviation corridor (en-route airspace).
-    AviationCorridor   = 0x02,
+    AviationCorridor = 0x02,
     /// Aviation holding pattern.
-    AviationHolding    = 0x03,
+    AviationHolding = 0x03,
     /// Indoor hallway / passage.
-    IndoorHallway      = 0x04,
+    IndoorHallway = 0x04,
     /// Indoor room / enclosed space.
-    IndoorRoom         = 0x05,
+    IndoorRoom = 0x05,
     /// Indoor transition zone (stairs, lifts, doorways).
-    IndoorTransition   = 0x06,
+    IndoorTransition = 0x06,
     /// Water flow channel (rivers, canals, drainage).
-    WaterFlow          = 0x07,
+    WaterFlow = 0x07,
     /// Custom application-defined pattern.
-    Custom             = 0xFF,
+    Custom = 0xFF,
 }
 
 impl PatternType {
@@ -78,14 +80,14 @@ impl PatternType {
 
     pub fn as_str(self) -> &'static str {
         match self {
-            PatternType::CrowdFlow        => "CrowdFlow",
+            PatternType::CrowdFlow => "CrowdFlow",
             PatternType::AviationCorridor => "AviationCorridor",
-            PatternType::AviationHolding  => "AviationHolding",
-            PatternType::IndoorHallway    => "IndoorHallway",
-            PatternType::IndoorRoom       => "IndoorRoom",
+            PatternType::AviationHolding => "AviationHolding",
+            PatternType::IndoorHallway => "IndoorHallway",
+            PatternType::IndoorRoom => "IndoorRoom",
             PatternType::IndoorTransition => "IndoorTransition",
-            PatternType::WaterFlow        => "WaterFlow",
-            PatternType::Custom           => "Custom",
+            PatternType::WaterFlow => "WaterFlow",
+            PatternType::Custom => "Custom",
         }
     }
 }
@@ -101,11 +103,11 @@ impl core::fmt::Display for PatternType {
 #[repr(u8)]
 pub enum PatternLifecycle {
     /// GA confidence ≥ 0.60 but < 0.85. Observed, not yet stable.
-    Emerging   = 0x01,
+    Emerging = 0x01,
     /// GA confidence ≥ 0.85. Reproducible across multiple orbitals.
-    Stable     = 0x02,
+    Stable = 0x02,
     /// Approved by AICouncil + Šàtamu. Authoritative routing reference.
-    Canonical  = 0x03,
+    Canonical = 0x03,
     /// Superseded by a newer pattern. No longer used for routing.
     Deprecated = 0x04,
 }
@@ -130,7 +132,7 @@ pub fn derive_pattern_kaki(
 ) -> Kaki {
     // ── Mix all inputs into 16 bytes using FNV-1a ────────────────────────
     const FNV_OFFSET: u64 = 14_695_981_039_346_656_037;
-    const FNV_PRIME:  u64 = 1_099_511_628_211;
+    const FNV_PRIME: u64 = 1_099_511_628_211;
 
     let mut h = FNV_OFFSET;
 
@@ -176,9 +178,9 @@ pub fn derive_pattern_kaki(
     let h_lo = h as u32;
 
     bytes[0..4].copy_from_slice(&h_hi.to_be_bytes());
-    bytes[4..6].copy_from_slice(&[0x00, 0x00]);    // cross-tribe: no single tribe_id
-    bytes[6] = KakiType::Pattern as u8;             // 0x04
-    bytes[7] = KakiRole::Parzu as u8;              // 0x03
+    bytes[4..6].copy_from_slice(&[0x00, 0x00]); // cross-tribe: no single tribe_id
+    bytes[6] = KakiType::Pattern as u8; // 0x04
+    bytes[7] = KakiRole::Parzu as u8; // 0x03
     bytes[8..12].copy_from_slice(&h_lo.to_be_bytes());
     bytes[12..14].copy_from_slice(&confidence_millipercent.to_be_bytes());
     let cs = crc16(&bytes[0..14]);
@@ -203,22 +205,34 @@ mod tests {
     use super::*;
 
     fn sample_centroid() -> FixedCoord7D {
-        FixedCoord7D { d: [1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000] }
+        FixedCoord7D {
+            d: [1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000],
+        }
     }
 
     fn sample_merkle() -> [u8; 32] {
         let mut m = [0u8; 32];
-        for (i, b) in m.iter_mut().enumerate() { *b = i as u8; }
+        for (i, b) in m.iter_mut().enumerate() {
+            *b = i as u8;
+        }
         m
     }
 
     #[test]
     fn deterministic_derivation() {
         let k1 = derive_pattern_kaki(
-            PatternType::CrowdFlow, sample_centroid(), sample_merkle(), 8_500, 42,
+            PatternType::CrowdFlow,
+            sample_centroid(),
+            sample_merkle(),
+            8_500,
+            42,
         );
         let k2 = derive_pattern_kaki(
-            PatternType::CrowdFlow, sample_centroid(), sample_merkle(), 8_500, 42,
+            PatternType::CrowdFlow,
+            sample_centroid(),
+            sample_merkle(),
+            8_500,
+            42,
         );
         assert_eq!(k1, k2, "same inputs must produce identical KAKI bytes");
     }
@@ -226,10 +240,18 @@ mod tests {
     #[test]
     fn different_type_different_kaki() {
         let k1 = derive_pattern_kaki(
-            PatternType::CrowdFlow, sample_centroid(), sample_merkle(), 8_500, 42,
+            PatternType::CrowdFlow,
+            sample_centroid(),
+            sample_merkle(),
+            8_500,
+            42,
         );
         let k2 = derive_pattern_kaki(
-            PatternType::IndoorHallway, sample_centroid(), sample_merkle(), 8_500, 42,
+            PatternType::IndoorHallway,
+            sample_centroid(),
+            sample_merkle(),
+            8_500,
+            42,
         );
         assert_ne!(k1, k2);
     }
@@ -237,7 +259,11 @@ mod tests {
     #[test]
     fn kaki_type_is_pattern() {
         let k = derive_pattern_kaki(
-            PatternType::CrowdFlow, sample_centroid(), sample_merkle(), 8_500, 42,
+            PatternType::CrowdFlow,
+            sample_centroid(),
+            sample_merkle(),
+            8_500,
+            42,
         );
         assert_eq!(k.kaki_type(), KakiType::Pattern);
     }
@@ -245,7 +271,11 @@ mod tests {
     #[test]
     fn checksum_valid() {
         let k = derive_pattern_kaki(
-            PatternType::CrowdFlow, sample_centroid(), sample_merkle(), 8_500, 42,
+            PatternType::CrowdFlow,
+            sample_centroid(),
+            sample_merkle(),
+            8_500,
+            42,
         );
         assert!(k.verify_checksum());
     }
@@ -253,7 +283,11 @@ mod tests {
     #[test]
     fn confidence_readable() {
         let k = derive_pattern_kaki(
-            PatternType::CrowdFlow, sample_centroid(), sample_merkle(), 7_250, 99,
+            PatternType::CrowdFlow,
+            sample_centroid(),
+            sample_merkle(),
+            7_250,
+            99,
         );
         assert_eq!(pattern_kaki_confidence(&k), Some(7_250));
     }
@@ -270,10 +304,14 @@ mod tests {
     #[test]
     fn pattern_type_round_trip() {
         for &pt in &[
-            PatternType::CrowdFlow, PatternType::AviationCorridor,
-            PatternType::AviationHolding, PatternType::IndoorHallway,
-            PatternType::IndoorRoom, PatternType::IndoorTransition,
-            PatternType::WaterFlow, PatternType::Custom,
+            PatternType::CrowdFlow,
+            PatternType::AviationCorridor,
+            PatternType::AviationHolding,
+            PatternType::IndoorHallway,
+            PatternType::IndoorRoom,
+            PatternType::IndoorTransition,
+            PatternType::WaterFlow,
+            PatternType::Custom,
         ] {
             assert_eq!(PatternType::from_byte(pt as u8).unwrap(), pt);
         }

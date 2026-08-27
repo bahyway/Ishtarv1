@@ -1,0 +1,84 @@
+# =============================================================================
+# PB-188 — IRKALLA sovereign name + UrOS IDE layout, landed for real
+# BahyWay.Ecosystem v4.0 — 2026-07-17
+#
+# CONTEXT: after PB-187 sealed SumerEngine and the Nergal AV panel, the
+# Architect uploaded five more playbooks (08 duplicate, 14, 10, 24, 25) and
+# pushed back on the claim that "IRKALLA" was design-only: it appears
+# consistently across independent files (the Nergal dashboard, the UrOS
+# NABA agent, the Web Show menu), which is real evidence of something.
+#
+# WHAT WAS VERIFIED: in every one of those five playbooks, IRKALLA is
+# painted UI text or a chatbot string literal -- never a Rust type, tribe
+# registration, or jail mechanism. The data those panels display
+# (bee-mdm-bus's total_quarantined, gates.counts[6]) is generic; the real,
+# tested jail (storage-sector::StorageSector) never uses the string
+# anywhere. So: a real, repeated, deliberate NAME with no coded identity
+# behind it -- distinct from a fabrication, and distinct from something
+# already built. The Architect asked for both gaps closed: give IRKALLA a
+# real identity, and land the fuller UI (UrOS layout, dropdown nav) that
+# these playbooks revealed exists in the Architect's own Forge tree but was
+# never pushed into this repo.
+#
+# PART 1 — IRKALLA sovereign name (small, precise):
+#   - storage-sector gained `pub const SOVEREIGN_NAME: &str = "irkalla"`
+#     and `pub const IRKALLA_TRIBE: u16 = 0x0002` (matching "ThreatDB
+#     Tribe: IRKALLA (0x0002)", used consistently across all five
+#     playbooks). Same display-name-only pattern as NUZI/Anu/Tigris --
+#     `storage-sector`/`StorageSector` keep their existing identifiers.
+#   - dubsar-visualizer's Nergal panel (landed PB-187) now reads this real
+#     const instead of a bare string literal for its jail labels.
+#
+# PART 2 — UrOS IDE layout, landed for real (adapted, not fabricated):
+#   - crates/dubsar-visualizer/src/panels/uros_layout.rs -- the dual-
+#     sidebar layout from playbook 14 (left: mini viz panels, centre: 5
+#     sovereign-language tabs with editor + scripted-preview runner,
+#     right: live panels, NABA floating hologram agent). Adapted to this
+#     repo's real dubsar-visualizer, which does NOT have the
+#     EtlTransparency/EtlSim/BahywayMain panels playbooks 14/24/25 assume
+#     exist (confirmed absent here; likely real in the Architect's own
+#     Forge checkout, which is ahead of this repo). Floating "ETL 3D" and
+#     "BeeMDM" windows render inline from real `bee-mdm-bus` fields rather
+#     than delegating to those missing panels. The language-tab Run button
+#     is explicitly labelled a scripted preview, not live execution --
+#     same honesty standard as the rest of this session's work.
+#   - The nav bar was rewritten per playbooks 24+25's final design
+#     (egui::Window-based dropdowns, replacing the old horizontal tab
+#     strip) -- "Enterprise Apps" and "AI Agents" dropdowns, trimmed to
+#     only the panels genuinely real in this repo (UrOS, Hepta,
+#     Particles, Wpd, Najaf, EtlFlow, Nergal / TamuzAI, EaAgent). The
+#     "Web Show" dropdown (Firefox-launched HTML dashboards) was NOT
+#     landed -- those HTML files
+#     (visualization_examples/_UseThese/*.html) do not exist in this repo,
+#     and building a button pointing at nonexistent absolute paths would
+#     repeat the exact mistake this session keeps catching in others.
+#   - UrOS is now the default panel on launch (matching playbook 14's
+#     "UrOS tab as DEFAULT panel" instruction).
+#   - Playbook 10 (VM disk path fix + virsh start sequence) was reviewed
+#     but not landed -- it is infrastructure for the Architect's own
+#     libvirt VMs (enkidb-node-write/read, dubsar-workstation), entirely
+#     outside this git repo's scope.
+#
+# VERIFICATION: cargo build -p dubsar-visualizer clean, zero crate-specific
+#   warnings. cargo test --workspace: 3448 passed, 0 failed -- identical to
+#   the PB-187 baseline, confirming purely additive UI work with zero
+#   regressions to any existing panel or backend crate.
+# =============================================================================
+---
+- name: "PB-188 | Record — IRKALLA sovereign name + UrOS layout landed for real"
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: "PB-188.1 | Pointer to the actual change"
+      ansible.builtin.debug:
+        msg: >-
+          See commit history on claude/iphone-playbooks-crosstribe-eval-nbc5sw,
+          2026-07-17. Changed: crates/storage-sector/src/lib.rs (IRKALLA
+          sovereign name + tribe const). Changed:
+          crates/dubsar-visualizer/src/panels/nergal.rs (reads the real
+          const). New: crates/dubsar-visualizer/src/panels/uros_layout.rs.
+          Changed: panels/mod.rs, app.rs (UrOS default panel, dropdown
+          nav bar, trimmed to real panels only). Run
+          `cargo test --workspace` for the standing proof: 3448 passed,
+          0 failed, unchanged from PB-187.

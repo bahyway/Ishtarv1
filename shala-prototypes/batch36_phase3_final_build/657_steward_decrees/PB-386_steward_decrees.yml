@@ -1,0 +1,113 @@
+---
+# PB-386 · Execute steward decrees · GL-STW-001
+# The tab proposes; this playbook is the only thing that may write across the Pre-Golden / Golden line.
+- name: PB-386 validate and execute steward decrees
+  hosts: girsu
+  vars:
+    bahyway_provides: ["rite:steward_decree"]
+    bahyway_requires: ["law:GL-STW-001", "law:EN-QDB-001", "facetset:enkiqdb"]
+    decrees: "{{ ansible_env.HOME }}/bahyway/steward/decrees.json"
+    receipts: "{{ ansible_env.HOME }}/bahyway/steward/receipts"
+    matrix:
+      MARK_SUSPICIOUS: {from: ["*"],                         to: "7003", wit: 1, clause: false}
+      DEFINE:          {from: ["7001"],                      to: "7002", wit: 2, clause: false}
+      RELEASE:         {from: ["7003"],                      to: "7001", wit: 2, clause: false}
+      PROMOTE:         {from: ["7002", "7003"],              to: "7004", wit: 2, clause: true}
+      DERIVE:          {from: ["7004"],                      to: "7005", wit: 2, clause: false}
+      DERIVE_MASK:     {from: ["7004"],                      to: "7006", wit: 2, clause: false}
+      CODIFY:          {from: ["7005", "7006"],              to: "7007", wit: 2, clause: false}
+      DEMOTE:          {from: ["7004","7005","7006","7007"], to: "7003", wit: 2, clause: true}
+      MEMBRANE_OPEN:   {from: ["*"],                         to: null,   wit: 2, clause: false}
+    lineages: {ETL: "7001", STREAM: "7002"}
+  tasks:
+    - name: Ensure receipt directory
+      ansible.builtin.file: {path: "{{ receipts }}", state: directory, mode: "0750"}
+
+    - name: Read the decrees
+      ansible.builtin.slurp: {src: "{{ decrees }}"}
+      register: raw
+
+    - name: Gate D1 · every decree is legal, witnessed, and not self-witnessed
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys, base64
+        d = json.loads(base64.b64decode("{{ raw.content }}"))
+        M = {{ matrix | to_json }}
+        bad = []
+        for x in d["decrees"]:
+            if x.get("status") == "WITHDRAWN":
+                continue
+            m = M.get(x["act"])
+            if not m: bad.append((x["id"], "unknown act " + x["act"])); continue
+            if m["from"] != ["*"] and x.get("from") not in m["from"]:
+                bad.append((x["id"], f'{x.get("from")}->{x.get("to")} has no row in the matrix')); continue
+            if m["to"] and x.get("to") != m["to"]:
+                bad.append((x["id"], f'target must be {m["to"]}')); continue
+            w = x.get("wit", [])
+            if len(w) < m["wit"]: bad.append((x["id"], f'{len(w)}/{m["wit"]} witnesses')); continue
+            if len(set(w)) < len(w): bad.append((x["id"], "a steward may not act as both witnesses (§7)")); continue
+            if m["clause"] and not x.get("clause"): bad.append((x["id"], "a sealed clause is required for this crossing"))
+        for b in bad: print("REFUSED", b[0], "-", b[1])
+        print("legal:", len([x for x in d["decrees"] if x.get("status") != "WITHDRAWN"]) - len(bad), "refused:", len(bad))
+        sys.exit(1 if bad else 0)
+        PY
+      register: d1
+      changed_when: false
+
+    - name: Gate D1b · every MARK_SUSPICIOUS names a quarantine tribe and a legal lineage (GL-STW-001 §8)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys, base64
+        d = json.loads(base64.b64decode("{{ raw.content }}"))
+        L = {{ lineages | to_json }}
+        bad = []
+        for x in d["decrees"]:
+            if x.get("act") != "MARK_SUSPICIOUS" or x.get("status") == "WITHDRAWN":
+                continue
+            if not x.get("qtribe"):
+                bad.append((x["id"], "no quarantine tribe named - a bin is not a tribe (§8)")); continue
+            lin = (x.get("lineage") or "").split(" ")[0]
+            if lin not in L:
+                bad.append((x["id"], f"lineage must be ETL or STREAM, got {lin!r}")); continue
+            if not x["qtribe"].startswith("qdb."):
+                bad.append((x["id"], "quarantine tribe must live under qdb."))
+        for b in bad: print("REFUSED", b[0], "-", b[1])
+        sys.exit(1 if bad else 0)
+        PY
+      changed_when: false
+
+    - name: Mint the quarantine tribes with a cloned schema before any particle is routed
+      ansible.builtin.command: >
+        bahyway-enkidb clone-tribe --to EnkiQDB --port 7003 --from-decrees {{ decrees }}
+        --facet-set enkiqdb --provisional-until-witnessed
+      register: mint
+      changed_when: "'MINTED' in mint.stdout"
+
+    - name: Gate D2 · no decree touches a quarantined payload
+      ansible.builtin.command: bahyway-enkidb prove --db EnkiQDB --port 7003 --rule payload_immutable
+      changed_when: false
+
+    - name: Execute each decree as a sovereign act (ORBIT / WITNESS / EMIT — never SQL)
+      ansible.builtin.command: >
+        bahyway-enkidb decree --file {{ decrees }} --law GL-STW-001
+        --receipts {{ receipts }} --require-two-witness --emit-event-kaki
+      register: exec
+      changed_when: "'EXECUTED' in exec.stdout"
+
+    - name: Gate D3 · every executed decree left a Kanīku receipt and an Event KAKI
+      ansible.builtin.shell: |
+        n=$(python3 -c "import json;print(len([x for x in json.load(open('{{ decrees }}'))['decrees'] if x.get('status')!='WITHDRAWN']))")
+        r=$(ls {{ receipts }}/*.kaniku.json 2>/dev/null | wc -l)
+        echo "decrees=$n receipts=$r"
+        [ "$r" -ge "$n" ]
+      changed_when: false
+
+    - name: Gate D4 · the Golden crossing is re-witnessed after the fact
+      ansible.builtin.command: bahyway-enkidb prove --db EnkiDB --port 7004 --rule promoted_have_two_witnesses
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-386 steward decrees executed - {{ exec.stdout | default('') | truncate(120) }}"

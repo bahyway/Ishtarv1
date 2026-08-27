@@ -1,15 +1,15 @@
 pub mod etl_flow;
-pub mod eridu_layout;
 pub mod glossary;
 pub mod hepta;
 pub mod najaf;
 pub mod nergal;
 pub mod particles;
+pub mod uros_layout;
 pub mod wpd;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ActivePanel {
-    EriduOS,
+    UrOS,
     Hepta,
     Particles,
     Wpd,
@@ -29,5 +29,5 @@ pub enum InspectorTab {
     Attributes,
     Story,
 }
-pub mod tamuzai;
 pub mod eaagent;
+pub mod tamuzai;

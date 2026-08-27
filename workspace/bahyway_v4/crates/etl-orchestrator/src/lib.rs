@@ -135,7 +135,10 @@ pub fn run_batch(
     current_tick: u64,
 ) -> BatchOutcome {
     let schema = schema_for(entry_point);
-    let mut outcome = BatchOutcome { entry_point: Some(entry_point), ..Default::default() };
+    let mut outcome = BatchOutcome {
+        entry_point: Some(entry_point),
+        ..Default::default()
+    };
 
     match schema.lands_in {
         LandingTarget::SdbStaging => {
@@ -190,7 +193,13 @@ pub fn new_batch_record(
     color_rgb: [u8; 3],
 ) -> BatchRecord {
     let kaki = minter.identity(enkidb_kaki::KakiRole::Zikru);
-    BatchRecord { kaki_bytes: *kaki.bytes(), tribe_id: tribe.as_u16(), epoch, eav, color_rgb }
+    BatchRecord {
+        kaki_bytes: *kaki.bytes(),
+        tribe_id: tribe.as_u16(),
+        epoch,
+        eav,
+        color_rgb,
+    }
 }
 
 #[cfg(test)]
@@ -215,7 +224,10 @@ mod tests {
         let schema = schema_for(EtlEntryPoint::EnterpriseApiDirect);
         assert_eq!(schema.lands_in, LandingTarget::OdbDirect);
         assert!(schema.stations.len() < schema_for(EtlEntryPoint::ZipDrop).stations.len());
-        assert!(!schema.stations.contains(&"score-engine"), "no B11 routing needed without SDB staging");
+        assert!(
+            !schema.stations.contains(&"score-engine"),
+            "no B11 routing needed without SDB staging"
+        );
     }
 
     #[test]
@@ -229,7 +241,15 @@ mod tests {
             .map(|_| new_batch_record(&minter, tid, 1, Vec::new(), [10, 20, 30]))
             .collect();
 
-        let outcome = run_batch(EtlEntryPoint::ZipDrop, batch, &mut sdb, &mut odb, &mut jnl, &minter, 0);
+        let outcome = run_batch(
+            EtlEntryPoint::ZipDrop,
+            batch,
+            &mut sdb,
+            &mut odb,
+            &mut jnl,
+            &minter,
+            0,
+        );
 
         assert_eq!(outcome.landed, 5);
         assert_eq!(outcome.sdb_indices.len(), 5);
@@ -237,7 +257,11 @@ mod tests {
         for idx in &outcome.sdb_indices {
             assert_eq!(sdb.get(*idx).unwrap().status, SdbStatus::Pending);
         }
-        assert_eq!(odb.len(), 0, "EnterpriseApiDirect's target, ODB, must stay untouched by a ZipDrop batch");
+        assert_eq!(
+            odb.len(),
+            0,
+            "EnterpriseApiDirect's target, ODB, must stay untouched by a ZipDrop batch"
+        );
     }
 
     #[test]
@@ -251,8 +275,15 @@ mod tests {
             .map(|_| new_batch_record(&minter, tid, 1, Vec::new(), [10, 20, 30]))
             .collect();
 
-        let outcome =
-            run_batch(EtlEntryPoint::EnterpriseApiDirect, batch, &mut sdb, &mut odb, &mut jnl, &minter, 0);
+        let outcome = run_batch(
+            EtlEntryPoint::EnterpriseApiDirect,
+            batch,
+            &mut sdb,
+            &mut odb,
+            &mut jnl,
+            &minter,
+            0,
+        );
 
         assert_eq!(outcome.landed, 3);
         assert_eq!(outcome.odb_indices.len(), 3);
@@ -261,7 +292,11 @@ mod tests {
             assert_eq!(odb.all()[*idx].status, enkiodb::OdbStatus::Active);
             assert_eq!(odb.all()[*idx].source, enkiodb::OdbSource::GuiTransaction);
         }
-        assert_eq!(sdb.len(), 0, "ZipDrop's target, SDB, must stay untouched by an EnterpriseApiDirect batch");
+        assert_eq!(
+            sdb.len(),
+            0,
+            "ZipDrop's target, SDB, must stay untouched by an EnterpriseApiDirect batch"
+        );
     }
 
     #[test]
@@ -272,7 +307,15 @@ mod tests {
         let mut jnl = Journal::new(64);
         let _ = tid;
 
-        let outcome = run_batch(EtlEntryPoint::ZipDrop, Vec::new(), &mut sdb, &mut odb, &mut jnl, &minter, 0);
+        let outcome = run_batch(
+            EtlEntryPoint::ZipDrop,
+            Vec::new(),
+            &mut sdb,
+            &mut odb,
+            &mut jnl,
+            &minter,
+            0,
+        );
         assert_eq!(outcome.landed, 0);
         assert_eq!(outcome.skipped, 0);
     }

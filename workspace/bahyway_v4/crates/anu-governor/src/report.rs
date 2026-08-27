@@ -67,9 +67,21 @@ pub fn generate(report_dir: &str, seal_key: &str, run: &RunSummary) -> Result<Pa
     std::fs::create_dir_all(report_dir).context("cannot create report dir")?;
 
     let ok = run.statuses.iter().filter(|s| **s == PbStatus::Ok).count();
-    let warned = run.statuses.iter().filter(|s| **s == PbStatus::Warned).count();
-    let failed = run.statuses.iter().filter(|s| **s == PbStatus::Failed).count();
-    let skipped = run.statuses.iter().filter(|s| **s == PbStatus::Skipped).count();
+    let warned = run
+        .statuses
+        .iter()
+        .filter(|s| **s == PbStatus::Warned)
+        .count();
+    let failed = run
+        .statuses
+        .iter()
+        .filter(|s| **s == PbStatus::Failed)
+        .count();
+    let skipped = run
+        .statuses
+        .iter()
+        .filter(|s| **s == PbStatus::Skipped)
+        .count();
     let dur = run.finished - run.started;
 
     let mut md = String::new();
@@ -116,8 +128,12 @@ pub fn generate(report_dir: &str, seal_key: &str, run: &RunSummary) -> Result<Pa
                 ev.severity, ev.playbook, ev.playbook, ev.task, ev.error_type, ev.message
             ));
             match (&ev.remedy_id, ev.severity) {
-                (Some(id), _) => md.push_str(&format!("- **Remedy:** rule {id} matched — fix playbook generated\n\n")),
-                (None, Severity::Major) => md.push_str("- **Remedy:** none in knowledge base — escalated to Architect\n\n"),
+                (Some(id), _) => md.push_str(&format!(
+                    "- **Remedy:** rule {id} matched — fix playbook generated\n\n"
+                )),
+                (None, Severity::Major) => {
+                    md.push_str("- **Remedy:** none in knowledge base — escalated to Architect\n\n")
+                }
                 (None, Severity::Warning) => md.push_str("- **Remedy:** proceeded by law\n\n"),
             }
         }
@@ -187,8 +203,15 @@ pub fn to_html(markdown: &str, title: &str) -> String {
     for line in markdown.lines() {
         let t = line.trim_end();
         if t.trim_start().starts_with('|') {
-            let cells: Vec<String> = t.trim().trim_matches('|').split('|').map(|c| c.trim().to_string()).collect();
-            let is_sep = cells.iter().all(|c| !c.is_empty() && c.chars().all(|ch| ch == '-'));
+            let cells: Vec<String> = t
+                .trim()
+                .trim_matches('|')
+                .split('|')
+                .map(|c| c.trim().to_string())
+                .collect();
+            let is_sep = cells
+                .iter()
+                .all(|c| !c.is_empty() && c.chars().all(|ch| ch == '-'));
             if !is_sep {
                 table_rows.push(cells);
             }
@@ -222,7 +245,10 @@ pub fn to_html(markdown: &str, title: &str) -> String {
                 in_ul = false;
             }
             if trimmed.len() > 1 && trimmed.starts_with('_') && trimmed.ends_with('_') {
-                body.push_str(&format!("<p><em>{}</em></p>\n", inline_html(&trimmed[1..trimmed.len() - 1])));
+                body.push_str(&format!(
+                    "<p><em>{}</em></p>\n",
+                    inline_html(&trimmed[1..trimmed.len() - 1])
+                ));
             } else {
                 body.push_str(&format!("<p>{}</p>\n", inline_html(trimmed)));
             }
@@ -303,7 +329,9 @@ fn replace_paired(s: &str, delim: &str, open: &str, close: &str) -> String {
 /// Verify a sealed report file (used by tests and by auditors).
 pub fn verify(path: &Path) -> Result<bool> {
     let text = std::fs::read_to_string(path)?;
-    let idx = text.rfind("---\n\n## AkkadianSeal").context("no seal block")?;
+    let idx = text
+        .rfind("---\n\n## AkkadianSeal")
+        .context("no seal block")?;
     let body = &text[..idx];
     let get = |label: &str| -> Option<String> {
         text[idx..]
@@ -354,7 +382,10 @@ mod tests {
         let mut t = std::fs::read_to_string(&p).unwrap();
         t = t.replacen("Succeeded | 1", "Succeeded | 2", 1);
         std::fs::write(&p, t).unwrap();
-        assert!(!verify(&p).unwrap(), "tampered report must fail verification");
+        assert!(
+            !verify(&p).unwrap(),
+            "tampered report must fail verification"
+        );
     }
 
     #[test]

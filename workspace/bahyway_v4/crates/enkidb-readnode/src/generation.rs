@@ -1,11 +1,18 @@
 //! Generation — a named, versioned Read Node materialization.
 //!
-//! `materialize()` (see `crate::materialize`) requires a fresh base path
-//! per call, because `enkidb-datafile`'s writer always appends and never
-//! truncates — calling it twice at the same path silently duplicates
-//! every entity. This module turns that constraint into a real, checkable
-//! naming scheme instead of leaving it as a caller convention to
-//! remember: every materialization gets a `(sovereign_name, version)`
+//! `materialize()` (see `crate::materialize`) resets the Data Files at its
+//! target path before writing, so re-materializing the same path replaces
+//! that path's state rather than duplicating it (fixed 2026-08-21, after a
+//! real incident: a Write Node's on-disk volume survives container
+//! rebuilds, so the production write-servers — which call `materialize()`
+//! directly against a fixed `current/entities`/`current/eav` path on every
+//! `FLUSH`, not through this module — were leaving every earlier pass's
+//! records sitting underneath the current one, and a Read Node's full
+//! index scan choked the moment one of them didn't decode cleanly).
+//!
+//! This module exists independently of that fix, as a real, checkable
+//! naming scheme instead of a caller convention to remember: every
+//! materialization gets a `(sovereign_name, version)`
 //! pair (e.g. `("tigris", "4.0")`, `("euphrates", "4.2")`) and lands at
 //! `<root>/<sovereign_name>/<version>/{entities,eav}` — deterministic,
 //! collision-proof by construction (two calls with the same pair always
@@ -61,10 +68,11 @@ impl Generation {
 /// Materialize `journal`'s current state as generation `(sovereign_name,
 /// version)` under `root`. Deterministic path — calling this again with
 /// the *same* `(sovereign_name, version)` re-materializes into the exact
-/// same location, so a caller who does that on purpose (rebuilding a
-/// generation after fixing a bad write) gets the expected duplication
-/// warning baked into `enkidb-datafile`'s append-only behavior, rather
-/// than a silent surprise at a path they chose ad hoc.
+/// same location, replacing that generation's on-disk state with the
+/// journal's current state (see `crate::materialize::materialize`'s reset
+/// behavior) — the expected outcome for a caller who does that on purpose
+/// (rebuilding a generation after fixing a bad write), not a silent
+/// accumulation of every prior pass at a path they chose ad hoc.
 pub fn materialize_generation(
     journal: &Journal,
     root: impl AsRef<Path>,
@@ -128,7 +136,8 @@ mod tests {
         let root = tmp_root("two_versions");
 
         let jnl_v40 = journal_with_one_entry(0xFF20, "v4.0 doc");
-        let (gen_v40, stats_v40) = materialize_generation(&jnl_v40, &root, "euphrates", "4.1").unwrap();
+        let (gen_v40, stats_v40) =
+            materialize_generation(&jnl_v40, &root, "euphrates", "4.1").unwrap();
         assert_eq!(stats_v40.entities, 1);
 
         // v4.2's journal has two documents, proving it is a genuinely
@@ -137,15 +146,20 @@ mod tests {
         let m = KakiMinter::new(TribeId::from_u16(0xFF22));
         let target2 = IdentityKaki::try_from_kaki(m.identity(KakiRole::Kishib)).unwrap();
         let ek2 = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
-        jnl_v42.append(JournalEntry::new(
-            ek2, target2, 2,
-            vec![EavTriple::new(
-                bahyway_crc::crc16(b"meta.title") as u32,
-                akkvalue::codec::encode(&akkvalue::AkkValue::Text("v4.2 doc b".to_string())),
-            )],
-        )).unwrap();
+        jnl_v42
+            .append(JournalEntry::new(
+                ek2,
+                target2,
+                2,
+                vec![EavTriple::new(
+                    bahyway_crc::crc16(b"meta.title") as u32,
+                    akkvalue::codec::encode(&akkvalue::AkkValue::Text("v4.2 doc b".to_string())),
+                )],
+            ))
+            .unwrap();
 
-        let (gen_v42, stats_v42) = materialize_generation(&jnl_v42, &root, "euphrates", "4.2").unwrap();
+        let (gen_v42, stats_v42) =
+            materialize_generation(&jnl_v42, &root, "euphrates", "4.2").unwrap();
         assert_eq!(stats_v42.entities, 2);
 
         // Both generations are independently openable and disagree in entity count,
@@ -155,10 +169,18 @@ mod tests {
         assert_eq!(rn_v40.entity_count(), 1);
         assert_eq!(rn_v42.entity_count(), 2);
 
-        let res_v40 = rn_v40.query("WHO T.E\nWHERE E[meta.title] = \"v4.0 doc\"").unwrap();
+        let res_v40 = rn_v40
+            .query("WHO T.E\nWHERE E[meta.title] = \"v4.0 doc\"")
+            .unwrap();
         assert_eq!(res_v40.matched.len(), 1);
-        let res_v42 = rn_v42.query("WHO T.E\nWHERE E[meta.title] = \"v4.0 doc\"").unwrap();
-        assert_eq!(res_v42.matched.len(), 0, "v4.2's generation must not see v4.0's documents");
+        let res_v42 = rn_v42
+            .query("WHO T.E\nWHERE E[meta.title] = \"v4.0 doc\"")
+            .unwrap();
+        assert_eq!(
+            res_v42.matched.len(),
+            0,
+            "v4.2's generation must not see v4.0's documents"
+        );
     }
 
     #[test]

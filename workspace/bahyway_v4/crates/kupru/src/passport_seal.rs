@@ -4,9 +4,9 @@
 //! serde version, or field ordering — unlike the JSON-based approach
 //! used in the initial `SargonPassport::issue()`.
 
-use crate::canonical::{CanonicalBytes, domains};
-use crate::passport::{IshtarLayer, KupruLayer, NaruLayer, QuppuLayer};
 use crate::akkadian_seal::{AkkadianSeal, SealKeyPair, SealVerifier, SovereignVerifier};
+use crate::canonical::{domains, CanonicalBytes};
+use crate::passport::{IshtarLayer, KupruLayer, NaruLayer, QuppuLayer};
 use crate::KupruResult;
 
 /// Produce canonical seal bytes for a SargonPassport.
@@ -16,7 +16,7 @@ use crate::KupruResult;
 pub fn passport_canonical_bytes(
     quppu: &QuppuLayer,
     kupru: &KupruLayer,
-    naru:  &NaruLayer,
+    naru: &NaruLayer,
     istar: &IshtarLayer,
 ) -> Vec<u8> {
     let mut cb = CanonicalBytes::new(domains::SARGON_PASSPORT);
@@ -62,10 +62,10 @@ pub fn passport_canonical_bytes(
 
 /// Sign the canonical passport bytes with the issuer key pair.
 pub fn passport_seal(
-    quppu:   &QuppuLayer,
-    kupru:   &KupruLayer,
-    naru:    &NaruLayer,
-    istar:   &IshtarLayer,
+    quppu: &QuppuLayer,
+    kupru: &KupruLayer,
+    naru: &NaruLayer,
+    istar: &IshtarLayer,
     keypair: &SealKeyPair,
 ) -> KupruResult<Vec<u8>> {
     let bytes = passport_canonical_bytes(quppu, kupru, naru, istar);
@@ -74,14 +74,14 @@ pub fn passport_seal(
 
 /// Verify a passport seal against canonical bytes.
 pub fn passport_verify_seal(
-    quppu:          &QuppuLayer,
-    kupru:          &KupruLayer,
-    naru:           &NaruLayer,
-    istar:          &IshtarLayer,
-    seal_bytes:     &[u8],
-    verifying_key:  &[u8],
+    quppu: &QuppuLayer,
+    kupru: &KupruLayer,
+    naru: &NaruLayer,
+    istar: &IshtarLayer,
+    seal_bytes: &[u8],
+    verifying_key: &[u8],
 ) -> KupruResult<bool> {
-    let bytes    = passport_canonical_bytes(quppu, kupru, naru, istar);
+    let bytes = passport_canonical_bytes(quppu, kupru, naru, istar);
     let verifier = SovereignVerifier::from_bytes(verifying_key)?;
     Ok(verifier.verify(&bytes, seal_bytes))
 }

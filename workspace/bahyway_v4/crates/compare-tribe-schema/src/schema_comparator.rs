@@ -24,19 +24,19 @@ pub enum CompareVerdict {
 /// Full comparison report produced by `compare_versions`.
 #[derive(Debug, Clone)]
 pub struct CompareReport {
-    pub verdict:             CompareVerdict,
-    pub v1_version:          u32,
-    pub v2_version:          u32,
-    pub file_name:           String,
-    pub arrival_epoch:       u32,
+    pub verdict: CompareVerdict,
+    pub v1_version: u32,
+    pub v2_version: u32,
+    pub file_name: String,
+    pub arrival_epoch: u32,
     /// Per-field diffs, sorted by field name for determinism.
-    pub field_diffs:         Vec<FieldDiff>,
+    pub field_diffs: Vec<FieldDiff>,
     /// Breaking change count (Removed, TypeChanged, Mandatory false→true).
-    pub breaking_count:      usize,
+    pub breaking_count: usize,
     /// Soft change count (position, length, nullable, Added).
-    pub soft_count:          usize,
+    pub soft_count: usize,
     /// Populated only when verdict == SchemaMatch.
-    pub staging_tribe_name:  Option<String>,
+    pub staging_tribe_name: Option<String>,
 }
 
 impl CompareReport {
@@ -79,9 +79,9 @@ impl CompareReport {
 /// Returns a `CompareReport`.  On `SchemaMismatch` the caller must call
 /// `DeadVerdict::new(...)` to build the alert and mark particles Dead.
 pub fn compare_versions(
-    v1:            &SchemaVersion,
-    v2:            &SchemaVersion,
-    file_name:     &str,
+    v1: &SchemaVersion,
+    v2: &SchemaVersion,
+    file_name: &str,
     arrival_epoch: u32,
 ) -> CompareReport {
     let mut diffs: Vec<FieldDiff> = Vec::new();
@@ -89,17 +89,17 @@ pub fn compare_versions(
     // Pass 1: everything in V1 — detect Removed and in-place changes.
     for f1 in &v1.fields {
         match v2.field_by_name(&f1.name) {
-            None     => diffs.push(FieldDiff {
+            None => diffs.push(FieldDiff {
                 field_name: f1.name.clone(),
-                attr_hash:  f1.attr_hash,
-                changes:    vec![FieldChange::Removed],
+                attr_hash: f1.attr_hash,
+                changes: vec![FieldChange::Removed],
             }),
             Some(f2) => {
                 let changes = diff_field(f1, f2);
                 if !changes.is_empty() {
                     diffs.push(FieldDiff {
                         field_name: f1.name.clone(),
-                        attr_hash:  f1.attr_hash,
+                        attr_hash: f1.attr_hash,
                         changes,
                     });
                 }
@@ -112,8 +112,8 @@ pub fn compare_versions(
         if v1.field_by_name(&f2.name).is_none() {
             diffs.push(FieldDiff {
                 field_name: f2.name.clone(),
-                attr_hash:  f2.attr_hash,
-                changes:    vec![FieldChange::Added],
+                attr_hash: f2.attr_hash,
+                changes: vec![FieldChange::Added],
             });
         }
     }
@@ -122,7 +122,7 @@ pub fn compare_versions(
     diffs.sort_by(|a, b| a.field_name.cmp(&b.field_name));
 
     let breaking_count = diffs.iter().filter(|d| d.has_breaking_change()).count();
-    let soft_count     = diffs.len() - breaking_count;
+    let soft_count = diffs.len() - breaking_count;
 
     let verdict = if diffs.is_empty() {
         CompareVerdict::SchemaMatch
@@ -131,17 +131,17 @@ pub fn compare_versions(
     };
 
     let staging_tribe_name = match verdict {
-        CompareVerdict::SchemaMatch    => Some(format!("{}_{}", file_name, arrival_epoch)),
+        CompareVerdict::SchemaMatch => Some(format!("{}_{}", file_name, arrival_epoch)),
         CompareVerdict::SchemaMismatch => None,
     };
 
     CompareReport {
         verdict,
-        v1_version:   v1.version,
-        v2_version:   v2.version,
-        file_name:    file_name.to_string(),
+        v1_version: v1.version,
+        v2_version: v2.version,
+        file_name: file_name.to_string(),
         arrival_epoch,
-        field_diffs:  diffs,
+        field_diffs: diffs,
         breaking_count,
         soft_count,
         staging_tribe_name,
@@ -150,11 +150,36 @@ pub fn compare_versions(
 
 fn diff_field(f1: &FieldMeta, f2: &FieldMeta) -> Vec<FieldChange> {
     let mut changes = Vec::new();
-    if f1.data_type  != f2.data_type  { changes.push(FieldChange::TypeChanged     { from: f1.data_type,  to: f2.data_type  }); }
-    if f1.max_length != f2.max_length { changes.push(FieldChange::LengthChanged   { from: f1.max_length, to: f2.max_length }); }
-    if f1.position   != f2.position   { changes.push(FieldChange::PositionChanged { from: f1.position,   to: f2.position   }); }
-    if f1.mandatory  != f2.mandatory  { changes.push(FieldChange::MandatoryChanged{ was:  f1.mandatory,  now: f2.mandatory }); }
-    if f1.nullable   != f2.nullable   { changes.push(FieldChange::NullableChanged { was:  f1.nullable,   now: f2.nullable  }); }
+    if f1.data_type != f2.data_type {
+        changes.push(FieldChange::TypeChanged {
+            from: f1.data_type,
+            to: f2.data_type,
+        });
+    }
+    if f1.max_length != f2.max_length {
+        changes.push(FieldChange::LengthChanged {
+            from: f1.max_length,
+            to: f2.max_length,
+        });
+    }
+    if f1.position != f2.position {
+        changes.push(FieldChange::PositionChanged {
+            from: f1.position,
+            to: f2.position,
+        });
+    }
+    if f1.mandatory != f2.mandatory {
+        changes.push(FieldChange::MandatoryChanged {
+            was: f1.mandatory,
+            now: f2.mandatory,
+        });
+    }
+    if f1.nullable != f2.nullable {
+        changes.push(FieldChange::NullableChanged {
+            was: f1.nullable,
+            now: f2.nullable,
+        });
+    }
     changes
 }
 
@@ -164,19 +189,24 @@ mod tests {
     use crate::schema_version::{FieldMeta, FieldType, SchemaVersion};
 
     fn make_v1() -> SchemaVersion {
-        SchemaVersion::new(1, "civil.registry", 1000, vec![
-            FieldMeta::new("national_id", FieldType::Integer, Some(12), 1, true,  false),
-            FieldMeta::new("full_name",   FieldType::Text,    Some(200), 2, true,  false),
-            FieldMeta::new("birth_date",  FieldType::Date,    None,      3, true,  false),
-            FieldMeta::new("governorate", FieldType::Text,    Some(64),  4, false, true),
-        ])
+        SchemaVersion::new(
+            1,
+            "civil.registry",
+            1000,
+            vec![
+                FieldMeta::new("national_id", FieldType::Integer, Some(12), 1, true, false),
+                FieldMeta::new("full_name", FieldType::Text, Some(200), 2, true, false),
+                FieldMeta::new("birth_date", FieldType::Date, None, 3, true, false),
+                FieldMeta::new("governorate", FieldType::Text, Some(64), 4, false, true),
+            ],
+        )
     }
 
     #[test]
     fn identical_schemas_produce_match() {
         let v1 = make_v1();
         let v2 = make_v1();
-        let r  = compare_versions(&v1, &v2, "najaf_2020", 5000);
+        let r = compare_versions(&v1, &v2, "najaf_2020", 5000);
         assert_eq!(r.verdict, CompareVerdict::SchemaMatch);
         assert!(r.field_diffs.is_empty());
         assert_eq!(r.staging_tribe_name.as_deref(), Some("najaf_2020_5000"));
@@ -186,28 +216,42 @@ mod tests {
     fn removed_field_produces_mismatch() {
         let v1 = make_v1();
         // V2 is missing "birth_date"
-        let v2 = SchemaVersion::new(2, "civil.registry", 2000, vec![
-            FieldMeta::new("national_id", FieldType::Integer, Some(12), 1, true,  false),
-            FieldMeta::new("full_name",   FieldType::Text,    Some(200), 2, true,  false),
-            FieldMeta::new("governorate", FieldType::Text,    Some(64),  3, false, true),
-        ]);
+        let v2 = SchemaVersion::new(
+            2,
+            "civil.registry",
+            2000,
+            vec![
+                FieldMeta::new("national_id", FieldType::Integer, Some(12), 1, true, false),
+                FieldMeta::new("full_name", FieldType::Text, Some(200), 2, true, false),
+                FieldMeta::new("governorate", FieldType::Text, Some(64), 3, false, true),
+            ],
+        );
         let r = compare_versions(&v1, &v2, "test", 1);
         assert_eq!(r.verdict, CompareVerdict::SchemaMismatch);
         assert!(r.breaking_count > 0);
         assert!(r.staging_tribe_name.is_none());
-        let birth_diff = r.field_diffs.iter().find(|d| d.field_name == "birth_date").unwrap();
+        let birth_diff = r
+            .field_diffs
+            .iter()
+            .find(|d| d.field_name == "birth_date")
+            .unwrap();
         assert!(birth_diff.changes.contains(&FieldChange::Removed));
     }
 
     #[test]
     fn type_change_is_breaking_mismatch() {
         let v1 = make_v1();
-        let v2 = SchemaVersion::new(2, "civil.registry", 2000, vec![
-            FieldMeta::new("national_id", FieldType::Text,    Some(12), 1, true,  false), // was Integer
-            FieldMeta::new("full_name",   FieldType::Text,    Some(200), 2, true,  false),
-            FieldMeta::new("birth_date",  FieldType::Date,    None,      3, true,  false),
-            FieldMeta::new("governorate", FieldType::Text,    Some(64),  4, false, true),
-        ]);
+        let v2 = SchemaVersion::new(
+            2,
+            "civil.registry",
+            2000,
+            vec![
+                FieldMeta::new("national_id", FieldType::Text, Some(12), 1, true, false), // was Integer
+                FieldMeta::new("full_name", FieldType::Text, Some(200), 2, true, false),
+                FieldMeta::new("birth_date", FieldType::Date, None, 3, true, false),
+                FieldMeta::new("governorate", FieldType::Text, Some(64), 4, false, true),
+            ],
+        );
         let r = compare_versions(&v1, &v2, "file", 1);
         assert_eq!(r.verdict, CompareVerdict::SchemaMismatch);
         assert!(r.has_breaking_changes());
@@ -216,15 +260,23 @@ mod tests {
     #[test]
     fn position_change_is_soft_mismatch() {
         let v1 = make_v1();
-        let v2 = SchemaVersion::new(2, "civil.registry", 2000, vec![
-            FieldMeta::new("national_id", FieldType::Integer, Some(12), 2, true,  false), // pos 1→2
-            FieldMeta::new("full_name",   FieldType::Text,    Some(200), 1, true,  false), // pos 2→1
-            FieldMeta::new("birth_date",  FieldType::Date,    None,      3, true,  false),
-            FieldMeta::new("governorate", FieldType::Text,    Some(64),  4, false, true),
-        ]);
+        let v2 = SchemaVersion::new(
+            2,
+            "civil.registry",
+            2000,
+            vec![
+                FieldMeta::new("national_id", FieldType::Integer, Some(12), 2, true, false), // pos 1→2
+                FieldMeta::new("full_name", FieldType::Text, Some(200), 1, true, false), // pos 2→1
+                FieldMeta::new("birth_date", FieldType::Date, None, 3, true, false),
+                FieldMeta::new("governorate", FieldType::Text, Some(64), 4, false, true),
+            ],
+        );
         let r = compare_versions(&v1, &v2, "file", 1);
         assert_eq!(r.verdict, CompareVerdict::SchemaMismatch);
-        assert!(!r.has_breaking_changes(), "position-only changes must be soft");
+        assert!(
+            !r.has_breaking_changes(),
+            "position-only changes must be soft"
+        );
         assert!(r.soft_count > 0);
     }
 
@@ -232,7 +284,14 @@ mod tests {
     fn added_field_is_soft_mismatch() {
         let mut v2 = make_v1();
         v2.version = 2;
-        v2.fields.push(FieldMeta::new("religion", FieldType::Text, Some(30), 5, false, true));
+        v2.fields.push(FieldMeta::new(
+            "religion",
+            FieldType::Text,
+            Some(30),
+            5,
+            false,
+            true,
+        ));
         let r = compare_versions(&make_v1(), &v2, "file", 1);
         assert_eq!(r.verdict, CompareVerdict::SchemaMismatch);
         assert!(!r.has_breaking_changes());
@@ -241,12 +300,20 @@ mod tests {
 
     #[test]
     fn mandatory_upgrade_false_to_true_is_breaking() {
-        let v1 = SchemaVersion::new(1, "t", 1000, vec![
-            FieldMeta::new("col", FieldType::Text, None, 1, false, true),
-        ]);
-        let v2 = SchemaVersion::new(2, "t", 2000, vec![
-            FieldMeta::new("col", FieldType::Text, None, 1, true, false), // mandatory now
-        ]);
+        let v1 = SchemaVersion::new(
+            1,
+            "t",
+            1000,
+            vec![FieldMeta::new("col", FieldType::Text, None, 1, false, true)],
+        );
+        let v2 = SchemaVersion::new(
+            2,
+            "t",
+            2000,
+            vec![
+                FieldMeta::new("col", FieldType::Text, None, 1, true, false), // mandatory now
+            ],
+        );
         let r = compare_versions(&v1, &v2, "f", 1);
         assert!(r.has_breaking_changes());
     }
@@ -254,14 +321,14 @@ mod tests {
     #[test]
     fn staging_name_format_is_correct() {
         let v1 = make_v1();
-        let r  = compare_versions(&v1, &v1.clone(), "najaf_decades", 9999);
+        let r = compare_versions(&v1, &v1.clone(), "najaf_decades", 9999);
         assert_eq!(r.staging_tribe_name.as_deref(), Some("najaf_decades_9999"));
     }
 
     #[test]
     fn summary_contains_verdict_keyword() {
         let v1 = make_v1();
-        let match_r    = compare_versions(&v1, &v1.clone(), "f", 1);
+        let match_r = compare_versions(&v1, &v1.clone(), "f", 1);
         let mismatch_r = compare_versions(&v1, &SchemaVersion::new(2, "t", 1, vec![]), "f", 1);
         assert!(match_r.summary().contains("MATCH"));
         assert!(mismatch_r.summary().contains("MISMATCH"));
@@ -269,13 +336,23 @@ mod tests {
 
     #[test]
     fn diff_output_is_sorted_by_field_name() {
-        let v1 = SchemaVersion::new(1, "t", 1, vec![
-            FieldMeta::new("zzz", FieldType::Text, None, 1, true, false),
-            FieldMeta::new("aaa", FieldType::Text, None, 2, true, false),
-        ]);
-        let v2 = SchemaVersion::new(2, "t", 2, vec![
-            FieldMeta::new("zzz", FieldType::Integer, None, 1, true, false), // changed
-        ]); // "aaa" removed
+        let v1 = SchemaVersion::new(
+            1,
+            "t",
+            1,
+            vec![
+                FieldMeta::new("zzz", FieldType::Text, None, 1, true, false),
+                FieldMeta::new("aaa", FieldType::Text, None, 2, true, false),
+            ],
+        );
+        let v2 = SchemaVersion::new(
+            2,
+            "t",
+            2,
+            vec![
+                FieldMeta::new("zzz", FieldType::Integer, None, 1, true, false), // changed
+            ],
+        ); // "aaa" removed
         let r = compare_versions(&v1, &v2, "f", 1);
         assert_eq!(r.field_diffs[0].field_name, "aaa");
         assert_eq!(r.field_diffs[1].field_name, "zzz");

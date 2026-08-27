@@ -9,7 +9,7 @@
 //! purge_stale used to always return 0 due to a dead-code bug, fixed
 //! alongside this test).
 
-use hepta_sec_web::{KakiExtractor, WebSentinelGuard, HttpVerdict, KAKI_HASH_HEADER};
+use hepta_sec_web::{HttpVerdict, KakiExtractor, WebSentinelGuard, KAKI_HASH_HEADER};
 
 const SATTATU_MAX_SECS: u32 = 54 * 3600;
 
@@ -76,7 +76,12 @@ fn extractor_matches_guard_pipeline_directly() {
     let mut guard = WebSentinelGuard::new();
     guard.register_trusted(0xAABB_CCDD, 240, 0);
     let verdict = guard.inspect(&hdrs, 0, 1);
-    assert_eq!(verdict, HttpVerdict::Allow { kaki_hash: 0xAABB_CCDD });
+    assert_eq!(
+        verdict,
+        HttpVerdict::Allow {
+            kaki_hash: 0xAABB_CCDD
+        }
+    );
 }
 
 #[test]
@@ -93,7 +98,10 @@ fn purge_stale_reports_real_downgrade_count_through_the_full_stack() {
     let _ = guard.inspect(&hdrs3, 0, SATTATU_MAX_SECS - 1);
 
     let purged = guard.sentinel().purge_stale(SATTATU_MAX_SECS + 1);
-    assert_eq!(purged, 2, "exactly KAKI #1 and #2 should have gone stale, not #3");
+    assert_eq!(
+        purged, 2,
+        "exactly KAKI #1 and #2 should have gone stale, not #3"
+    );
 
     // Re-running purge_stale immediately must not recount already-Unknown entries.
     let purged_again = guard.sentinel().purge_stale(SATTATU_MAX_SECS + 2);

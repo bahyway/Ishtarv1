@@ -15,31 +15,31 @@ pub enum SegmentStatus {
 impl SegmentStatus {
     pub fn name(self) -> &'static str {
         match self {
-            SegmentStatus::Active         => "Active",
-            SegmentStatus::Suspected      => "Suspected",
-            SegmentStatus::Defective      => "Defective",
+            SegmentStatus::Active => "Active",
+            SegmentStatus::Suspected => "Suspected",
+            SegmentStatus::Defective => "Defective",
             SegmentStatus::Decommissioned => "Decommissioned",
-            SegmentStatus::Recovered      => "Recovered",
+            SegmentStatus::Recovered => "Recovered",
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct PipelineSegment {
-    pub id:             String,
-    pub sector:         BaghdadSector,
-    pub pipeline_type:  PipelineType,
-    pub lat_start:      f64,
-    pub lon_start:      f64,
-    pub lat_end:        f64,
-    pub lon_end:        f64,
-    pub diameter_mm:    u32,
-    pub length_m:       f32,
-    pub material:       PipeMaterial,
+    pub id: String,
+    pub sector: BaghdadSector,
+    pub pipeline_type: PipelineType,
+    pub lat_start: f64,
+    pub lon_start: f64,
+    pub lat_end: f64,
+    pub lon_end: f64,
+    pub diameter_mm: u32,
+    pub length_m: f32,
+    pub material: PipeMaterial,
     pub year_installed: u16,
     pub last_inspected: Option<u16>,
-    pub defect_score:   f32,
-    pub status:         SegmentStatus,
+    pub defect_score: f32,
+    pub status: SegmentStatus,
 }
 
 impl PipelineSegment {
@@ -76,7 +76,9 @@ pub struct PipelineRegistry {
 
 impl PipelineRegistry {
     pub fn new() -> Self {
-        Self { segments: Vec::new() }
+        Self {
+            segments: Vec::new(),
+        }
     }
 
     pub fn with_segments(segments: Vec<PipelineSegment>) -> Self {
@@ -92,11 +94,17 @@ impl PipelineRegistry {
     }
 
     pub fn by_sector(&self, sector: BaghdadSector) -> Vec<&PipelineSegment> {
-        self.segments.iter().filter(|s| s.sector == sector).collect()
+        self.segments
+            .iter()
+            .filter(|s| s.sector == sector)
+            .collect()
     }
 
     pub fn urgent(&self) -> Vec<&PipelineSegment> {
-        self.segments.iter().filter(|s| s.needs_urgent_inspection()).collect()
+        self.segments
+            .iter()
+            .filter(|s| s.needs_urgent_inspection())
+            .collect()
     }
 
     pub fn insert(&mut self, seg: PipelineSegment) {
@@ -121,17 +129,20 @@ impl Default for PipelineRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sector::BaghdadSector;
     use crate::domain::{PipeMaterial, PipelineType};
+    use crate::sector::BaghdadSector;
 
     fn make_segment(id: &str, year: u16, score: f32) -> PipelineSegment {
         PipelineSegment {
             id: id.to_string(),
             sector: BaghdadSector::SadrCity,
             pipeline_type: PipelineType::Water,
-            lat_start: 33.36, lon_start: 44.44,
-            lat_end:   33.37, lon_end:   44.45,
-            diameter_mm: 250, length_m: 1000.0,
+            lat_start: 33.36,
+            lon_start: 44.44,
+            lat_end: 33.37,
+            lon_end: 44.45,
+            diameter_mm: 250,
+            length_m: 1000.0,
             material: PipeMaterial::AsbestosCement,
             year_installed: year,
             last_inspected: None,

@@ -1,0 +1,40 @@
+---
+# 𒁾 Base OS image source — one config file shared by two playbooks
+# (Automation Pillar + per-version unification, Architect directives
+# 2026-08-15).
+#
+# playbook_273_fetch_os_image.yml is the ONLY playbook that ever downloads
+# anything: run once per fedora_release, it auto-discovers the current
+# Fedora Cloud Base qcow2 by fetching Fedora's own live directory listing
+# at
+#   https://download.fedoraproject.org/pub/fedora/linux/releases/{{ fedora_release }}/Cloud/x86_64/images/
+# finding the real Fedora-Cloud-Base-Generic-{{ fedora_release }}-*.x86_64.qcow2
+# entry Fedora is actually serving right now, fetching the matching
+# *-CHECKSUM file from the same directory, and downloading + verifying +
+# placing it at Infra/OSImage/v{{ fedora_release }}/ inside the Forge tree
+# -- zero human lookups, zero pasted URLs, nothing guessed.
+#
+# playbook_265 (and every other VM-creation playbook) never downloads
+# anything -- it only READS whichever file playbook_273 already placed in
+# that shared, per-version folder. One real file per Ecosystem version, on
+# disk, every VM in that version boots from it.
+#
+# fedora_release is the one thing kept as an explicit pin rather than
+# "latest" -- silently jumping major Fedora versions mid-deployment is a
+# bigger operational risk than a version number that changes roughly once
+# a year. Bump it deliberately when you want a newer Ecosystem version,
+# then re-run playbook_273 for the new value.
+fedora_release: "44"
+
+# OPTIONAL PIN: leave both blank (recommended) to use playbook_273's live
+# auto-discovery above. Set fedora_cloud_base_image_url only if you want
+# to force an exact build (e.g. reproducing a specific past deployment, or
+# Fedora's directory-listing format changes and auto-discovery starts
+# failing -- see playbook_273's own "auto-discovery found nothing" failure
+# message, which always points back here). When set, this value wins
+# outright and auto-discovery never runs. fedora_cloud_base_image_sha256
+# is then optional too -- get_url only refuses a corrupted/wrong download
+# when a checksum is present, whether that came from a pin here or from
+# auto-discovery's own CHECKSUM-file lookup.
+fedora_cloud_base_image_url: ""
+fedora_cloud_base_image_sha256: ""

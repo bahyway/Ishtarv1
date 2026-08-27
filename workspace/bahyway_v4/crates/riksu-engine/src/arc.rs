@@ -30,10 +30,10 @@ pub enum ArcState {
 impl ArcState {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Active  => "ACTIVE",
+            Self::Active => "ACTIVE",
             Self::Dimming => "DIMMING",
             Self::Severed => "SEVERED",
-            Self::Frozen  => "FROZEN",
+            Self::Frozen => "FROZEN",
         }
     }
 
@@ -43,10 +43,10 @@ impl ArcState {
 
     pub fn opacity(self, strength: f32) -> f32 {
         match self {
-            Self::Active  => strength,
+            Self::Active => strength,
             Self::Dimming => strength * 0.5,
             Self::Severed => 0.0,
-            Self::Frozen  => strength * 0.8,
+            Self::Frozen => strength * 0.8,
         }
     }
 }
@@ -55,15 +55,15 @@ impl ArcState {
 #[derive(Debug, Clone)]
 pub struct RiksuArc {
     /// Unique 16-byte arc identifier (derived from the two tribe IDs).
-    pub arc_id:   [u8; 16],
+    pub arc_id: [u8; 16],
     /// Source tribe identifier.
-    pub tribe_a:  u16,
+    pub tribe_a: u16,
     /// Destination tribe identifier.
-    pub tribe_b:  u16,
+    pub tribe_b: u16,
     /// Bond strength: 0..1 normalised cross-tribe interaction frequency.
     pub strength: f32,
     /// Current visual/functional state.
-    pub state:    ArcState,
+    pub state: ArcState,
     /// Number of CrossTribeKaki events that created this arc.
     pub event_count: u64,
 }
@@ -71,8 +71,11 @@ pub struct RiksuArc {
 impl RiksuArc {
     /// Create a new arc between two tribes.
     pub fn new(tribe_a: u16, tribe_b: u16, event_count: u64, max_events: u64) -> Self {
-        let strength = if max_events == 0 { 0.0 }
-                       else { (event_count as f32 / max_events as f32).clamp(0.0, 1.0) };
+        let strength = if max_events == 0 {
+            0.0
+        } else {
+            (event_count as f32 / max_events as f32).clamp(0.0, 1.0)
+        };
         Self {
             arc_id: arc_id_from_tribes(tribe_a, tribe_b),
             tribe_a,
@@ -90,9 +93,13 @@ impl RiksuArc {
 
     /// The opposite tribe of the given one in this arc.
     pub fn other_tribe(&self, tribe_id: u16) -> Option<u16> {
-        if self.tribe_a == tribe_id { Some(self.tribe_b) }
-        else if self.tribe_b == tribe_id { Some(self.tribe_a) }
-        else { None }
+        if self.tribe_a == tribe_id {
+            Some(self.tribe_b)
+        } else if self.tribe_b == tribe_id {
+            Some(self.tribe_a)
+        } else {
+            None
+        }
     }
 
     /// Apply a dimming event (one of the connected nodes degraded).
@@ -108,7 +115,7 @@ impl RiksuArc {
     /// Sever this arc (connected node went DEAD).
     pub fn sever(&mut self) {
         self.strength = 0.0;
-        self.state    = ArcState::Severed;
+        self.state = ArcState::Severed;
     }
 
     /// Freeze this arc (Quantum Freeze fired).
@@ -124,7 +131,11 @@ impl RiksuArc {
 /// Derive a canonical 16-byte arc identifier from two tribe IDs.
 /// Canonical form: smaller tribe_id is always tribe_a for uniqueness.
 pub fn arc_id_from_tribes(tribe_a: u16, tribe_b: u16) -> [u8; 16] {
-    let (a, b) = if tribe_a <= tribe_b { (tribe_a, tribe_b) } else { (tribe_b, tribe_a) };
+    let (a, b) = if tribe_a <= tribe_b {
+        (tribe_a, tribe_b)
+    } else {
+        (tribe_b, tribe_a)
+    };
 
     const FNV_PRIME: u64 = 0x0000_0100_0000_01B3;
     const FNV_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
@@ -138,7 +149,7 @@ pub fn arc_id_from_tribes(tribe_a: u16, tribe_b: u16) -> [u8; 16] {
     let mut hash = FNV_BASIS;
     for &byte in &data {
         hash ^= byte as u64;
-        hash  = hash.wrapping_mul(FNV_PRIME);
+        hash = hash.wrapping_mul(FNV_PRIME);
     }
     let hash2 = hash.wrapping_mul(FNV_PRIME);
 

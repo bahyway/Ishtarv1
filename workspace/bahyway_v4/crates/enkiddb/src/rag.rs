@@ -37,7 +37,7 @@ use enkidb_readnode::CachedReadNode;
 use heptascript::ParseError;
 
 use crate::orbit::DocOrbit;
-use adapa_recall::{Document, DocId, RecallIndex};
+use adapa_recall::{DocId, Document, RecallIndex};
 
 /// One search hit: the matched section's Identity-Kaki and its cosine
 /// similarity score against the query (see `RecallIndex::query`).
@@ -85,7 +85,11 @@ impl RagIndex {
             }
         }
 
-        RagIndex { recall: RecallIndex::build(docs), section_by_id, text_cache: HashMap::new() }
+        RagIndex {
+            recall: RecallIndex::build(docs),
+            section_by_id,
+            text_cache: HashMap::new(),
+        }
     }
 
     /// Rank sections by topical relevance to `query`'s condensed summary
@@ -95,7 +99,11 @@ impl RagIndex {
         self.recall
             .query(query, top_k)
             .into_iter()
-            .filter_map(|(id, score)| self.section_by_id.get(&id).map(|k| RagHit { section: *k, score }))
+            .filter_map(|(id, score)| {
+                self.section_by_id
+                    .get(&id)
+                    .map(|k| RagHit { section: *k, score })
+            })
             .collect()
     }
 
@@ -139,9 +147,8 @@ impl RagIndex {
     /// `project_what` resolves a named projection by hashing the *request*
     /// and returns it labeled with the name that was asked for.
     pub fn build_from_readnode(read_node: &mut ReadNode) -> Result<Self, ReadNodeError> {
-        let result = read_node.query(
-            "WHO T.E\nWHAT E[body.summary, body.text]\nWHERE E[hist.event] = \"BIRTH\"",
-        )?;
+        let result = read_node
+            .query("WHO T.E\nWHAT E[body.summary, body.text]\nWHERE E[hist.event] = \"BIRTH\"")?;
 
         let mut docs = Vec::new();
         let mut section_by_id = HashMap::new();
@@ -168,7 +175,11 @@ impl RagIndex {
             }
         }
 
-        Ok(RagIndex { recall: RecallIndex::build(docs), section_by_id, text_cache })
+        Ok(RagIndex {
+            recall: RecallIndex::build(docs),
+            section_by_id,
+            text_cache,
+        })
     }
 
     /// Same as [`RagIndex::build_from_readnode`], built from a
@@ -181,7 +192,8 @@ impl RagIndex {
     /// literal here, not user input, so this can't realistically fail,
     /// but still returns `Result` rather than panicking on principle.
     pub fn build_from_cached(crn: &CachedReadNode) -> Result<Self, ParseError> {
-        let result = crn.query("WHO T.E\nWHAT E[body.summary, body.text]\nWHERE E[hist.event] = \"BIRTH\"")?;
+        let result =
+            crn.query("WHO T.E\nWHAT E[body.summary, body.text]\nWHERE E[hist.event] = \"BIRTH\"")?;
 
         let mut docs = Vec::new();
         let mut section_by_id = HashMap::new();
@@ -201,14 +213,18 @@ impl RagIndex {
             if let Some(summary) = summary {
                 let id = kaki_hex(&m.entity);
                 docs.push(Document::new(id.clone(), summary));
-                section_by_id.insert(id.clone(), m.entity.clone());
+                section_by_id.insert(id.clone(), m.entity);
                 if let Some(text) = text {
                     text_cache.insert(id, text);
                 }
             }
         }
 
-        Ok(RagIndex { recall: RecallIndex::build(docs), section_by_id, text_cache })
+        Ok(RagIndex {
+            recall: RecallIndex::build(docs),
+            section_by_id,
+            text_cache,
+        })
     }
 
     /// Fetch a section's full, untouched `body.text` payload -- the
@@ -279,8 +295,14 @@ mod tests {
         assert_eq!(hits.len(), 1);
 
         let value = RagIndex::fetch_value(wn.journal(), &hits[0].section).unwrap();
-        assert_eq!(value.trim(), format!("Section\n{}", long_body.trim()).trim());
-        assert!(value.len() > 200, "the value must be the full text, not the truncated summary");
+        assert_eq!(
+            value.trim(),
+            format!("Section\n{}", long_body.trim()).trim()
+        );
+        assert!(
+            value.len() > 200,
+            "the value must be the full text, not the truncated summary"
+        );
     }
 
     #[test]
@@ -322,9 +344,15 @@ mod tests {
         wn.ingest_document_categorized(&doc, 1, "component");
 
         let base = tmp_base("build_from_readnode");
-        crate::readnode::materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        crate::readnode::materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
 
-        let mut rn = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let mut rn =
+            ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
         let index = RagIndex::build_from_readnode(&mut rn).unwrap();
         assert_eq!(index.len(), 2, "one entry per section, parent doc excluded");
 
@@ -345,9 +373,15 @@ mod tests {
         wn.ingest_document_categorized(&doc, 1, "component");
 
         let base = tmp_base("build_from_cached");
-        crate::readnode::materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        crate::readnode::materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
 
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
         let index = RagIndex::build_from_cached(&crn).unwrap();
         assert_eq!(index.len(), 2, "one entry per section, parent doc excluded");
 
@@ -361,9 +395,15 @@ mod tests {
     fn build_from_cached_on_empty_data_files_is_empty_not_an_error() {
         let wn = write_node();
         let base = tmp_base("empty_cached");
-        crate::readnode::materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        crate::readnode::materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
 
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
         let index = RagIndex::build_from_cached(&crn).unwrap();
         assert!(index.is_empty());
     }
@@ -372,9 +412,15 @@ mod tests {
     fn build_from_readnode_on_empty_data_files_is_empty_not_an_error() {
         let wn = write_node();
         let base = tmp_base("empty_readnode");
-        crate::readnode::materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        crate::readnode::materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
 
-        let mut rn = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let mut rn =
+            ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
         let index = RagIndex::build_from_readnode(&mut rn).unwrap();
         assert!(index.is_empty());
     }

@@ -37,22 +37,23 @@ pub enum CardinalityError {
 
 impl CardinalityError {
     pub fn from_ratio(estimated: u64, actual: u64) -> Self {
-        if actual == 0 || estimated == 0 { return CardinalityError::Accurate; }
-        let ratio = (actual as f64 / estimated as f64)
-            .max(estimated as f64 / actual as f64); // always ≥ 1.0
+        if actual == 0 || estimated == 0 {
+            return CardinalityError::Accurate;
+        }
+        let ratio = (actual as f64 / estimated as f64).max(estimated as f64 / actual as f64); // always ≥ 1.0
         match ratio as u64 {
-            0..=10     => CardinalityError::Accurate,
-            11..=100   => CardinalityError::Moderate,
+            0..=10 => CardinalityError::Accurate,
+            11..=100 => CardinalityError::Moderate,
             101..=1000 => CardinalityError::Severe,
-            _          => CardinalityError::Catastrophic,
+            _ => CardinalityError::Catastrophic,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            CardinalityError::Accurate     => "Accurate",
-            CardinalityError::Moderate     => "Moderate skew",
-            CardinalityError::Severe       => "Severe skew",
+            CardinalityError::Accurate => "Accurate",
+            CardinalityError::Moderate => "Moderate skew",
+            CardinalityError::Severe => "Severe skew",
             CardinalityError::Catastrophic => "Catastrophic skew",
         }
     }
@@ -60,9 +61,9 @@ impl CardinalityError {
     /// Red channel penalty contributed by this cardinality error.
     pub fn red_penalty(self) -> u8 {
         match self {
-            CardinalityError::Accurate     => 0,
-            CardinalityError::Moderate     => 40,
-            CardinalityError::Severe       => 120,
+            CardinalityError::Accurate => 0,
+            CardinalityError::Moderate => 40,
+            CardinalityError::Severe => 120,
             CardinalityError::Catastrophic => 200,
         }
     }
@@ -70,9 +71,9 @@ impl CardinalityError {
     /// Green channel value representing cardinality accuracy.
     pub fn green_value(self) -> u8 {
         match self {
-            CardinalityError::Accurate     => 220,
-            CardinalityError::Moderate     => 160,
-            CardinalityError::Severe       => 80,
+            CardinalityError::Accurate => 220,
+            CardinalityError::Moderate => 160,
+            CardinalityError::Severe => 80,
             CardinalityError::Catastrophic => 20,
         }
     }
@@ -83,11 +84,11 @@ impl CardinalityError {
 /// Health of SQL Server statistics for one table.
 #[derive(Debug, Clone)]
 pub struct StatisticsHealth {
-    pub table_name:        String,
+    pub table_name: String,
     /// Days since the last statistics update.
-    pub stats_age_days:    u32,
+    pub stats_age_days: u32,
     /// Approximate row modifications since the last update (%).
-    pub modification_pct:  f32,
+    pub modification_pct: f32,
     /// Whether an ascending key pattern is detected (stats always trail reality).
     pub has_ascending_key: bool,
 }
@@ -120,13 +121,13 @@ impl StatisticsHealth {
 /// Full Level 2 cardinality analysis result.
 #[derive(Debug, Clone)]
 pub struct CardinalityAnalysis {
-    pub estimated_rows:     u64,
-    pub actual_rows:        u64,
-    pub error_class:        CardinalityError,
+    pub estimated_rows: u64,
+    pub actual_rows: u64,
+    pub error_class: CardinalityError,
     /// The exact deviation ratio (always ≥ 1.0).
-    pub error_ratio:        f64,
-    pub stats_health:       Vec<StatisticsHealth>,
-    pub recommendation:     String,
+    pub error_ratio: f64,
+    pub stats_health: Vec<StatisticsHealth>,
+    pub recommendation: String,
     pub color_contribution: ColorId,
 }
 
@@ -134,9 +135,9 @@ impl CardinalityAnalysis {
     /// The Akkadi AOL rule name for the required fix.
     pub fn akkadi_rule(&self) -> &'static str {
         match self.error_class {
-            CardinalityError::Accurate     => "stats_ok",
-            CardinalityError::Moderate     => "stats_update_auto",
-            CardinalityError::Severe       => "stats_update_fullscan",
+            CardinalityError::Accurate => "stats_ok",
+            CardinalityError::Moderate => "stats_update_auto",
+            CardinalityError::Severe => "stats_update_fullscan",
             CardinalityError::Catastrophic => "stats_rebuild_all",
         }
     }
@@ -150,9 +151,9 @@ impl CardinalityAnalyser {
     ///
     /// `tables` — a slice of `(table_name, age_days, modification_pct)` tuples.
     pub fn analyse(
-        estimated_rows:    u64,
-        actual_rows:       u64,
-        tables:            &[(&str, u32, f32)],
+        estimated_rows: u64,
+        actual_rows: u64,
+        tables: &[(&str, u32, f32)],
         has_ascending_key: bool,
     ) -> CardinalityAnalysis {
         let error_class = CardinalityError::from_ratio(estimated_rows, actual_rows);
@@ -160,34 +161,39 @@ impl CardinalityAnalyser {
         let ratio = if actual_rows > 0 && estimated_rows > 0 {
             (actual_rows as f64 / estimated_rows as f64)
                 .max(estimated_rows as f64 / actual_rows as f64)
-        } else { 1.0 };
+        } else {
+            1.0
+        };
 
-        let stats_health: Vec<StatisticsHealth> = tables.iter().map(|(name, age, mod_pct)| {
-            StatisticsHealth {
-                table_name:        name.to_string(),
-                stats_age_days:    *age,
-                modification_pct:  *mod_pct,
+        let stats_health: Vec<StatisticsHealth> = tables
+            .iter()
+            .map(|(name, age, mod_pct)| StatisticsHealth {
+                table_name: name.to_string(),
+                stats_age_days: *age,
+                modification_pct: *mod_pct,
                 has_ascending_key,
-            }
-        }).collect();
+            })
+            .collect();
 
         let stale_count = stats_health.iter().filter(|s| s.is_stale()).count();
 
         let recommendation = match error_class {
-            CardinalityError::Accurate =>
-                "Statistics are accurate. No action needed.".into(),
+            CardinalityError::Accurate => "Statistics are accurate. No action needed.".into(),
             CardinalityError::Moderate => format!(
-                "Statistics moderately stale ({stale_count} tables). Run UPDATE STATISTICS."),
+                "Statistics moderately stale ({stale_count} tables). Run UPDATE STATISTICS."
+            ),
             CardinalityError::Severe => format!(
                 "Statistics severely outdated ({stale_count} tables). \
-                 Run UPDATE STATISTICS WITH FULLSCAN for accurate histograms."),
+                 Run UPDATE STATISTICS WITH FULLSCAN for accurate histograms."
+            ),
             CardinalityError::Catastrophic => format!(
                 "CRITICAL: {ratio:.0}x cardinality error. Optimizer is choosing the WRONG join \
                  algorithm. Run UPDATE STATISTICS WITH FULLSCAN on all {stale_count} tables \
-                 immediately. Consider rebuilding indexes to auto-update stats."),
+                 immediately. Consider rebuilding indexes to auto-update stats."
+            ),
         };
 
-        let red   = 20u8.saturating_add(error_class.red_penalty());
+        let red = 20u8.saturating_add(error_class.red_penalty());
         let green = error_class.green_value();
 
         CardinalityAnalysis {
@@ -205,8 +211,11 @@ impl CardinalityAnalyser {
         LevelColorContribution::new(
             "L2 GU (Mass)",
             analysis.color_contribution,
-            &format!("Cardinality error: {} ({:.0}x)",
-                analysis.error_class.label(), analysis.error_ratio),
+            &format!(
+                "Cardinality error: {} ({:.0}x)",
+                analysis.error_class.label(),
+                analysis.error_ratio
+            ),
         )
     }
 }
@@ -219,23 +228,38 @@ mod tests {
 
     #[test]
     fn accurate_within_10x() {
-        assert_eq!(CardinalityError::from_ratio(100, 105), CardinalityError::Accurate);
-        assert_eq!(CardinalityError::from_ratio(100, 10),  CardinalityError::Accurate);
+        assert_eq!(
+            CardinalityError::from_ratio(100, 105),
+            CardinalityError::Accurate
+        );
+        assert_eq!(
+            CardinalityError::from_ratio(100, 10),
+            CardinalityError::Accurate
+        );
     }
 
     #[test]
     fn moderate_at_50x() {
-        assert_eq!(CardinalityError::from_ratio(1, 50), CardinalityError::Moderate);
+        assert_eq!(
+            CardinalityError::from_ratio(1, 50),
+            CardinalityError::Moderate
+        );
     }
 
     #[test]
     fn severe_at_200x() {
-        assert_eq!(CardinalityError::from_ratio(1, 200), CardinalityError::Severe);
+        assert_eq!(
+            CardinalityError::from_ratio(1, 200),
+            CardinalityError::Severe
+        );
     }
 
     #[test]
     fn catastrophic_at_1000x() {
-        assert_eq!(CardinalityError::from_ratio(1, 6069), CardinalityError::Catastrophic);
+        assert_eq!(
+            CardinalityError::from_ratio(1, 6069),
+            CardinalityError::Catastrophic
+        );
     }
 
     #[test]
@@ -248,26 +272,40 @@ mod tests {
     #[test]
     fn catastrophic_color_has_high_red() {
         let a = CardinalityAnalyser::analyse(1, 6069, &[("T", 730, 45.0)], false);
-        assert!(a.color_contribution.red > 150, "red={}", a.color_contribution.red);
+        assert!(
+            a.color_contribution.red > 150,
+            "red={}",
+            a.color_contribution.red
+        );
     }
 
     #[test]
     fn catastrophic_color_has_low_green() {
         let a = CardinalityAnalyser::analyse(1, 6069, &[("T", 730, 45.0)], false);
-        assert!(a.color_contribution.green < 50, "green={}", a.color_contribution.green);
+        assert!(
+            a.color_contribution.green < 50,
+            "green={}",
+            a.color_contribution.green
+        );
     }
 
     #[test]
     fn accurate_color_has_low_red() {
         let a = CardinalityAnalyser::analyse(100, 95, &[("T", 5, 2.0)], false);
-        assert!(a.color_contribution.red < 50, "red={}", a.color_contribution.red);
+        assert!(
+            a.color_contribution.red < 50,
+            "red={}",
+            a.color_contribution.red
+        );
     }
 
     #[test]
     fn stale_statistics_detected() {
         let s = StatisticsHealth {
-            table_name: "T".into(), stats_age_days: 730,
-            modification_pct: 45.0, has_ascending_key: false,
+            table_name: "T".into(),
+            stats_age_days: 730,
+            modification_pct: 45.0,
+            has_ascending_key: false,
         };
         assert!(s.is_stale());
     }
@@ -275,8 +313,10 @@ mod tests {
     #[test]
     fn fresh_statistics_not_stale() {
         let s = StatisticsHealth {
-            table_name: "T".into(), stats_age_days: 2,
-            modification_pct: 1.0, has_ascending_key: false,
+            table_name: "T".into(),
+            stats_age_days: 2,
+            modification_pct: 1.0,
+            has_ascending_key: false,
         };
         assert!(!s.is_stale());
     }
@@ -284,8 +324,10 @@ mod tests {
     #[test]
     fn fix_script_contains_table_name() {
         let s = StatisticsHealth {
-            table_name: "SalesOrder".into(), stats_age_days: 100,
-            modification_pct: 30.0, has_ascending_key: false,
+            table_name: "SalesOrder".into(),
+            stats_age_days: 100,
+            modification_pct: 30.0,
+            has_ascending_key: false,
         };
         assert!(s.fix_script().contains("SalesOrder"));
     }

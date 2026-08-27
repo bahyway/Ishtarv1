@@ -7,7 +7,7 @@
 
 use crate::error::{NaviError, NaviResult};
 use crate::graph::NaviGraph;
-use crate::navicode::{NaviCodeExecutor, RouteConstraints, RouteRequest, RoutePlan};
+use crate::navicode::{NaviCodeExecutor, RouteConstraints, RoutePlan, RouteRequest};
 use crate::particle::NaviNodeId;
 use bahyway_core::TribeId;
 
@@ -29,18 +29,18 @@ pub fn haversine_m(lat1: f32, lon1: f32, lat2: f32, lon2: f32) -> f32 {
 #[derive(Debug, Clone)]
 pub struct RouteMetrics {
     pub waypoint_count: usize,
-    pub total_cost:     f32,
+    pub total_cost: f32,
     pub tribe_hop_count: usize,
-    pub algorithm:      &'static str,
+    pub algorithm: &'static str,
 }
 
 impl RouteMetrics {
     pub fn from_plan(plan: &RoutePlan) -> Self {
         RouteMetrics {
-            waypoint_count:  plan.waypoint_count(),
-            total_cost:      plan.total_cost,
+            waypoint_count: plan.waypoint_count(),
+            total_cost: plan.total_cost,
             tribe_hop_count: plan.tribe_hop_count(),
-            algorithm:       "NaviCode-A*",
+            algorithm: "NaviCode-A*",
         }
     }
 }
@@ -52,30 +52,42 @@ pub struct RouteEngine<'a> {
 }
 
 impl<'a> RouteEngine<'a> {
-    pub fn new(graph: &'a NaviGraph) -> Self { RouteEngine { graph } }
+    pub fn new(graph: &'a NaviGraph) -> Self {
+        RouteEngine { graph }
+    }
 
     /// Plan a route from `origin` to `destination`.
     /// Runs the full NC1–NC6 NaviCode pipeline with the supplied constraints.
     pub fn plan(
         &self,
-        origin:      NaviNodeId,
+        origin: NaviNodeId,
         destination: NaviNodeId,
         constraints: RouteConstraints,
     ) -> NaviResult<RoutePlan> {
         if self.graph.node_count() == 0 {
             return Err(NaviError::EmptyGraph);
         }
-        let dest_tribe = self.graph
+        let dest_tribe = self
+            .graph
             .node(destination)
             .map(|n| n.particle.tribe)
             .unwrap_or_else(|| TribeId::from_u16(0x0001));
 
-        let req = RouteRequest { origin, destination, constraints, dest_tribe };
+        let req = RouteRequest {
+            origin,
+            destination,
+            constraints,
+            dest_tribe,
+        };
         NaviCodeExecutor::run_pipeline(req, self.graph)
     }
 
     /// Plan with default constraints.
-    pub fn plan_default(&self, origin: NaviNodeId, destination: NaviNodeId) -> NaviResult<RoutePlan> {
+    pub fn plan_default(
+        &self,
+        origin: NaviNodeId,
+        destination: NaviNodeId,
+    ) -> NaviResult<RoutePlan> {
         self.plan(origin, destination, RouteConstraints::default())
     }
 
@@ -90,8 +102,10 @@ impl<'a> RouteEngine<'a> {
         let d = self.graph.node(dest_id);
         match (n, d) {
             (Some(n), Some(d)) => haversine_m(
-                n.particle.coord.lat, n.particle.coord.lon,
-                d.particle.coord.lat, d.particle.coord.lon,
+                n.particle.coord.lat,
+                n.particle.coord.lon,
+                d.particle.coord.lat,
+                d.particle.coord.lon,
             ),
             _ => 0.0,
         }
@@ -104,7 +118,9 @@ mod tests {
     use crate::graph::NaviGraph;
     use crate::navimap::seven_node_map;
 
-    fn engine() -> NaviGraph { NaviGraph::from_navimap(&seven_node_map()).unwrap() }
+    fn engine() -> NaviGraph {
+        NaviGraph::from_navimap(&seven_node_map()).unwrap()
+    }
 
     #[test]
     fn plan_centre_to_north_succeeds() {
@@ -132,10 +148,10 @@ mod tests {
 
     #[test]
     fn metrics_waypoint_count_matches_plan() {
-        let g    = engine();
-        let e    = RouteEngine::new(&g);
+        let g = engine();
+        let e = RouteEngine::new(&g);
         let plan = e.plan_default(1, 5).unwrap();
-        let m    = RouteEngine::metrics(&plan);
+        let m = RouteEngine::metrics(&plan);
         assert_eq!(m.waypoint_count, plan.waypoint_count());
         assert_eq!(m.algorithm, "NaviCode-A*");
     }

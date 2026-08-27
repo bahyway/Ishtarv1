@@ -8,17 +8,17 @@
 //!   [38..40] entry_checksum  — CRC-16/CCITT over [0..38]
 //!   [40..]   eav_payload     — eav_count EavTriple records (variable length)
 
-use bahyway_crc::crc16;
-use bahyway_core::{BahywayError, Result};
-use enkidb_kaki::{EventKaki, IdentityKaki};
 use crate::event_cause::EventCause;
+use bahyway_core::{BahywayError, Result};
+use bahyway_crc::crc16;
+use enkidb_kaki::{EventKaki, IdentityKaki};
 
 // EAV attribute hashes mirrored from story-engine::projection (§4.2).
 // Duplicated here so enkidb-journal has no dep on story-engine.
 const ATTR_COLOR_ID_SNAPSHOT: u32 = 0x5F3A; // crc16("color_id_snapshot")
-const ATTR_COLOR_DRIFT:        u32 = 0x6C2B; // crc16("color_drift")
-const ATTR_EVENT_CAUSE:        u32 = 0x7D1C; // crc16("event_cause")
-const ATTR_SOURCE_KAKI:        u32 = 0x8E0D; // crc16("source_kaki")
+const ATTR_COLOR_DRIFT: u32 = 0x6C2B; // crc16("color_drift")
+const ATTR_EVENT_CAUSE: u32 = 0x7D1C; // crc16("event_cause")
+const ATTR_SOURCE_KAKI: u32 = 0x8E0D; // crc16("source_kaki")
 
 /// One EAV triple — (attribute_name_hash: u32, value_bytes: up to 256 bytes).
 #[derive(Debug, Clone)]
@@ -26,7 +26,7 @@ pub struct EavTriple {
     /// 32-bit hash of the attribute name (fast lookup; full name in Dictionary).
     pub attr_hash: u32,
     /// Raw attribute value bytes (max 256 bytes, enough for any atomic value).
-    pub value:     Vec<u8>,
+    pub value: Vec<u8>,
 }
 
 impl EavTriple {
@@ -39,23 +39,28 @@ impl EavTriple {
 #[derive(Debug, Clone)]
 pub struct JournalEntry {
     /// The Event-Kaki that was minted for this state transition.
-    pub event_kaki:  EventKaki,
+    pub event_kaki: EventKaki,
     /// The Identity-Kaki of the particle this event targets.
     pub target_kaki: IdentityKaki,
     /// Journal partition epoch (used for time-based partitioning per §9.1).
-    pub epoch:       u32,
+    pub epoch: u32,
     /// The EAV triples carried by this event.
-    pub eav:         Vec<EavTriple>,
+    pub eav: Vec<EavTriple>,
 }
 
 impl JournalEntry {
     pub fn new(
-        event_kaki:  EventKaki,
+        event_kaki: EventKaki,
         target_kaki: IdentityKaki,
-        epoch:       u32,
-        eav:         Vec<EavTriple>,
+        epoch: u32,
+        eav: Vec<EavTriple>,
     ) -> Self {
-        JournalEntry { event_kaki, target_kaki, epoch, eav }
+        JournalEntry {
+            event_kaki,
+            target_kaki,
+            epoch,
+            eav,
+        }
     }
 
     /// Serialize the fixed 40-byte header portion.
@@ -73,7 +78,7 @@ impl JournalEntry {
 
     /// Validate the header checksum.
     pub fn verify_header(&self) -> bool {
-        let h  = self.header_bytes();
+        let h = self.header_bytes();
         let cs = u16::from_be_bytes([h[38], h[39]]);
         crc16(&h[0..38]) == cs
     }
@@ -83,20 +88,26 @@ impl JournalEntry {
     /// Append a `color_id_snapshot` EAV triple ([R, G, B]) to this entry.
     /// Call after construction; does not touch the fixed wire header.
     pub fn with_color_snapshot(mut self, rgb: [u8; 3], drift: f32) -> Self {
-        self.eav.push(EavTriple::new(ATTR_COLOR_ID_SNAPSHOT, rgb.to_vec()));
-        self.eav.push(EavTriple::new(ATTR_COLOR_DRIFT, drift.to_be_bytes().to_vec()));
+        self.eav
+            .push(EavTriple::new(ATTR_COLOR_ID_SNAPSHOT, rgb.to_vec()));
+        self.eav.push(EavTriple::new(
+            ATTR_COLOR_DRIFT,
+            drift.to_be_bytes().to_vec(),
+        ));
         self
     }
 
     /// Append an `event_cause` EAV triple to this entry.
     pub fn with_event_cause(mut self, cause: EventCause) -> Self {
-        self.eav.push(EavTriple::new(ATTR_EVENT_CAUSE, vec![cause.to_byte()]));
+        self.eav
+            .push(EavTriple::new(ATTR_EVENT_CAUSE, vec![cause.to_byte()]));
         self
     }
 
     /// Append a `source_kaki` EAV triple (16 raw bytes of the originating KAKI).
     pub fn with_source_kaki(mut self, kaki_bytes: [u8; 16]) -> Self {
-        self.eav.push(EavTriple::new(ATTR_SOURCE_KAKI, kaki_bytes.to_vec()));
+        self.eav
+            .push(EavTriple::new(ATTR_SOURCE_KAKI, kaki_bytes.to_vec()));
         self
     }
 
@@ -129,26 +140,30 @@ impl JournalEntry {
     }
 
     /// Reconstruct a `JournalEntry` from header bytes + pre-parsed EAV triples.
-    pub fn from_header_bytes(
-        raw: [u8; 40],
-        eav: Vec<EavTriple>,
-    ) -> Result<Self> {
-        let stored_cs   = u16::from_be_bytes([raw[38], raw[39]]);
+    pub fn from_header_bytes(raw: [u8; 40], eav: Vec<EavTriple>) -> Result<Self> {
+        let stored_cs = u16::from_be_bytes([raw[38], raw[39]]);
         let computed_cs = crc16(&raw[0..38]);
         if stored_cs != computed_cs {
             return Err(BahywayError::ChecksumMismatch {
                 expected: computed_cs,
-                actual:   stored_cs,
+                actual: stored_cs,
             });
         }
-        let ek = EventKaki::try_from_kaki(
-            enkidb_kaki::Kaki::from_bytes(raw[0..16].try_into().unwrap())?
-        ).map_err(|_| BahywayError::InvalidKakiType(raw[6]))?;
-        let tk = IdentityKaki::try_from_kaki(
-            enkidb_kaki::Kaki::from_bytes(raw[16..32].try_into().unwrap())?
-        ).map_err(|_| BahywayError::InvalidKakiType(raw[22]))?;
+        let ek = EventKaki::try_from_kaki(enkidb_kaki::Kaki::from_bytes(
+            raw[0..16].try_into().unwrap(),
+        )?)
+        .map_err(|_| BahywayError::InvalidKakiType(raw[6]))?;
+        let tk = IdentityKaki::try_from_kaki(enkidb_kaki::Kaki::from_bytes(
+            raw[16..32].try_into().unwrap(),
+        )?)
+        .map_err(|_| BahywayError::InvalidKakiType(raw[22]))?;
         let epoch = u32::from_be_bytes(raw[32..36].try_into().unwrap());
-        Ok(JournalEntry { event_kaki: ek, target_kaki: tk, epoch, eav })
+        Ok(JournalEntry {
+            event_kaki: ek,
+            target_kaki: tk,
+            epoch,
+            eav,
+        })
     }
 
     // ── Full entry (header + EAV) serialization ──────────────────────────────
@@ -183,25 +198,33 @@ impl JournalEntry {
     /// caller can slice past it if more data follows. `None` on any
     /// malformed/truncated/checksum-mismatched input.
     pub fn from_bytes(bytes: &[u8]) -> Option<(Self, usize)> {
-        if bytes.len() < 40 { return None; }
+        if bytes.len() < 40 {
+            return None;
+        }
         let mut header = [0u8; 40];
         header.copy_from_slice(&bytes[0..40]);
 
-        let stored_cs   = u16::from_be_bytes([header[38], header[39]]);
+        let stored_cs = u16::from_be_bytes([header[38], header[39]]);
         let computed_cs = crc16(&header[0..38]);
-        if stored_cs != computed_cs { return None; }
+        if stored_cs != computed_cs {
+            return None;
+        }
 
         let eav_count = u16::from_be_bytes([header[36], header[37]]) as usize;
         let mut cursor = 40usize;
         let mut eav = Vec::with_capacity(eav_count);
         for _ in 0..eav_count {
-            if cursor + 5 > bytes.len() { return None; }
+            if cursor + 5 > bytes.len() {
+                return None;
+            }
             let attr_hash = u32::from_be_bytes(bytes[cursor..cursor + 4].try_into().ok()?);
-            let vlen      = bytes[cursor + 4] as usize;
-            cursor       += 5;
-            if cursor + vlen > bytes.len() { return None; }
+            let vlen = bytes[cursor + 4] as usize;
+            cursor += 5;
+            if cursor + vlen > bytes.len() {
+                return None;
+            }
             let value = bytes[cursor..cursor + vlen].to_vec();
-            cursor   += vlen;
+            cursor += vlen;
             eav.push(EavTriple::new(attr_hash, value));
         }
 
@@ -213,11 +236,11 @@ impl JournalEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_kaki::{KakiRole, mint::KakiMinter};
     use bahyway_core::TribeId;
+    use enkidb_kaki::{mint::KakiMinter, KakiRole};
 
     fn make_entry() -> JournalEntry {
-        let m  = KakiMinter::new(TribeId::from_u16(0x0001));
+        let m = KakiMinter::new(TribeId::from_u16(0x0001));
         let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
         let ik = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
         let eav = vec![EavTriple::new(0xDEAD_BEEF, b"GOLDEN".to_vec())];
@@ -232,9 +255,9 @@ mod tests {
 
     #[test]
     fn round_trip_header() {
-        let e   = make_entry();
+        let e = make_entry();
         let raw = e.header_bytes();
-        let e2  = JournalEntry::from_header_bytes(raw, e.eav.clone()).unwrap();
+        let e2 = JournalEntry::from_header_bytes(raw, e.eav.clone()).unwrap();
         assert_eq!(e.epoch, e2.epoch);
         assert_eq!(e.event_kaki, e2.event_kaki);
     }
@@ -263,15 +286,18 @@ mod tests {
         let e = make_entry();
         let ek_bytes = *e.event_kaki.bytes();
         let tk_bytes = *e.target_kaki.bytes();
-        let epoch    = e.epoch;
+        let epoch = e.epoch;
 
         let colored = e
             .with_color_snapshot([10, 20, 30], 0.0)
             .with_event_cause(EventCause::KakiBorn);
 
-        assert!(colored.verify_header(), "header checksum broken after EAV addition");
+        assert!(
+            colored.verify_header(),
+            "header checksum broken after EAV addition"
+        );
         let h = colored.header_bytes();
-        assert_eq!(&h[0..16],  ek_bytes.as_ref());
+        assert_eq!(&h[0..16], ek_bytes.as_ref());
         assert_eq!(&h[16..32], tk_bytes.as_ref());
         assert_eq!(u32::from_be_bytes(h[32..36].try_into().unwrap()), epoch);
         // eav_count should now be 1 (original) + 2 (snapshot) + 1 (cause) = 4
@@ -323,10 +349,10 @@ mod tests {
 
     #[test]
     fn to_bytes_from_bytes_round_trips_empty_eav() {
-        let m  = KakiMinter::new(TribeId::from_u16(0x0003));
+        let m = KakiMinter::new(TribeId::from_u16(0x0003));
         let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
         let ik = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-        let e  = JournalEntry::new(ek, ik, 7, vec![]);
+        let e = JournalEntry::new(ek, ik, 7, vec![]);
 
         let bytes = e.to_bytes();
         let (parsed, consumed) = JournalEntry::from_bytes(&bytes).unwrap();

@@ -16,7 +16,9 @@ pub struct CanonicalBytes {
 impl CanonicalBytes {
     /// Create a new stream anchored with a domain separator.
     pub fn new(domain: &[u8]) -> Self {
-        let mut cb = Self { data: Vec::with_capacity(512) };
+        let mut cb = Self {
+            data: Vec::with_capacity(512),
+        };
         cb.push_bytes(domain);
         cb
     }

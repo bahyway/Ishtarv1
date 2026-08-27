@@ -12,14 +12,14 @@
 
 #![forbid(unsafe_code)]
 
-pub mod matrix;
 pub mod attention;
-pub mod pooling;
+pub mod matrix;
 pub mod model_kaki;
+pub mod pooling;
 pub mod trainer;
 
+pub use attention::{cosine_distance, euclidean_distance, tribal_field_attend, TokenParticle};
 pub use matrix::QuantizedMatrix;
-pub use attention::{TokenParticle, tribal_field_attend, cosine_distance, euclidean_distance};
-pub use pooling::{SectorEmbedding, pool_sectors, NUM_SECTORS, DEFAULT_FUSION_WEIGHTS};
-pub use model_kaki::{ZikruEmbedModel, ModelOrbit, MODEL_TRIBE_ID};
-pub use trainer::{TrainingSample, EpochMetrics, compute_contrastive_loss, train_epoch};
+pub use model_kaki::{ModelOrbit, ZikruEmbedModel, MODEL_TRIBE_ID};
+pub use pooling::{pool_sectors, SectorEmbedding, DEFAULT_FUSION_WEIGHTS, NUM_SECTORS};
+pub use trainer::{compute_contrastive_loss, train_epoch, EpochMetrics, TrainingSample};

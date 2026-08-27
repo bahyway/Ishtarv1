@@ -9,7 +9,7 @@ use crate::device::DeviceTier;
 #[repr(u8)]
 pub enum AlertSeverity {
     /// GREEN — nominal, informational.
-    Green  = 0,
+    Green = 0,
     /// DILBAT — watch, worth monitoring.
     Dilbat = 1,
     /// KAKKAB — caution, human attention recommended.
@@ -33,7 +33,7 @@ impl AlertSeverity {
 
     pub fn as_str(self) -> &'static str {
         match self {
-            AlertSeverity::Green  => "GREEN",
+            AlertSeverity::Green => "GREEN",
             AlertSeverity::Dilbat => "DILBAT",
             AlertSeverity::Kakkab => "KAKKAB",
             AlertSeverity::Nergal => "NERGAL",
@@ -43,11 +43,15 @@ impl AlertSeverity {
 
     /// Returns true if this severity warrants interrupting the DataSteward.
     #[inline]
-    pub fn is_actionable(self) -> bool { self >= AlertSeverity::Kakkab }
+    pub fn is_actionable(self) -> bool {
+        self >= AlertSeverity::Kakkab
+    }
 
     /// Returns true if this alert must be routed to ALL connected steward devices.
     #[inline]
-    pub fn is_broadcast(self) -> bool { self == AlertSeverity::Maroon }
+    pub fn is_broadcast(self) -> bool {
+        self == AlertSeverity::Maroon
+    }
 }
 
 impl core::fmt::Display for AlertSeverity {
@@ -83,7 +87,13 @@ impl StewardAlert {
             _ => DeviceTier::Smartwatch,
         };
         let requires_satamu = matches!(severity, AlertSeverity::Nergal | AlertSeverity::Maroon);
-        Self { severity, event, min_tier, sequence, requires_satamu }
+        Self {
+            severity,
+            event,
+            min_tier,
+            sequence,
+            requires_satamu,
+        }
     }
 }
 
@@ -94,9 +104,7 @@ mod tests {
 
     #[test]
     fn satamu_chain_break_is_maroon_broadcast() {
-        let ev = AnomalyEvent::new(
-            AnomalyCode::SatamuChainBreak, None, 100, "chain broken",
-        );
+        let ev = AnomalyEvent::new(AnomalyCode::SatamuChainBreak, None, 100, "chain broken");
         let alert = StewardAlert::from_event(ev, 1);
         assert_eq!(alert.severity, AlertSeverity::Maroon);
         assert!(alert.severity.is_broadcast());
@@ -105,9 +113,7 @@ mod tests {
 
     #[test]
     fn clock_drift_is_dilbat_not_actionable() {
-        let ev = AnomalyEvent::new(
-            AnomalyCode::OrbitalClockDrift, None, 200, "drift = 3 ticks",
-        );
+        let ev = AnomalyEvent::new(AnomalyCode::OrbitalClockDrift, None, 200, "drift = 3 ticks");
         let alert = StewardAlert::from_event(ev, 2);
         assert_eq!(alert.severity, AlertSeverity::Dilbat);
         assert!(!alert.severity.is_actionable());

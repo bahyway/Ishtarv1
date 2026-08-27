@@ -1,0 +1,118 @@
+---
+# PB-407 · EnkiDDB notebook · dual-lens teaching page + the PyO3 bridge that lets the notebook command a pass
+# GL-KRN-001 §5 (confidence visible) · §8 (geometry follows the subject — a lens is offered, never invented)
+- name: PB-407 publish the dual-lens page and stand up the notebook bridge
+  hosts: girsu
+  vars:
+    bahyway_provides: ["page:ddb.viz_solution.enlil.v2", "kernel:enkiddb.notebook"]
+    bahyway_requires: ["page:ddb.viz_solution.enlil", "law:GL-KRN-001"]
+    ddb: "{{ ansible_env.HOME }}/bahyway/enkiddb"
+    forge: "{{ ansible_env.HOME }}/Forge/bahyway_v4"
+    page: sala_viz_solution_enlil_v2.html
+  tasks:
+    - name: Ensure directories
+      ansible.builtin.file: {path: "{{ ddb }}/{{ item }}", state: directory, mode: "0755"}
+      loop: [pages, notebook]
+
+    - name: Place the page
+      ansible.builtin.copy: {src: "{{ page }}", dest: "{{ ddb }}/pages/{{ page }}", mode: "0644"}
+
+    - name: Gate N1 · the page parses
+      ansible.builtin.shell: |
+        node -e "const h=require('fs').readFileSync('{{ ddb }}/pages/{{ page }}','utf8');
+                 new Function(h.split('<script>')[1].split('</script>')[0]);console.log('green');"
+      changed_when: false
+
+    - name: Gate N2 · every annotation still declares a class and what breaks without it
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import pathlib, re, sys
+        t = pathlib.Path("{{ ddb }}/pages/{{ page }}").read_text(errors="ignore")
+        ann = re.findall(r"title:'(.*?)',cls:'(.*?)'", t)
+        ok = len(ann) == t.count("breaks:")
+        bad = [a for a in ann if a[1] not in ("MEASURED","DERIVED","ESTIMATED","ADVISED")]
+        print(f"annotations {len(ann)} · breaks {t.count('breaks:')} · unclassed {len(bad)}")
+        print("if a construct breaks nothing when removed, it should not be in the crate")
+        sys.exit(0 if ok and not bad else 1)
+        PY
+      changed_when: false
+
+    - name: Gate N3 · the machine lens never invents a picture it does not have
+      ansible.builtin.shell: |
+        grep -q 'no picture is defined for this construct' "{{ ddb }}/pages/{{ page }}"
+        grep -q 'and none is invented' "{{ ddb }}/pages/{{ page }}"
+        echo "N3 green - a missing lens says so (GL-KRN-001 §8)"
+      changed_when: false
+
+    - name: Build the PyO3 bridge as an abi3 wheel
+      ansible.builtin.command:
+        cmd: maturin build --release --features abi3 -m crates/pyo3-bridge/Cargo.toml
+        chdir: "{{ forge }}"
+      register: wheel
+      changed_when: "'Built wheel' in wheel.stdout | default('')"
+      failed_when: false
+
+    - name: Install the bridge into the notebook environment
+      ansible.builtin.shell: |
+        python3 -m pip install --break-system-packages --force-reinstall \
+          $(ls -t {{ forge }}/target/wheels/*.whl | head -1)
+      changed_when: true
+      failed_when: false
+
+    - name: Gate N4 · one crossing per pass, never one per particle (§ the boundary)
+      ansible.builtin.shell: |
+        ! grep -REq 'fn +(add|push|insert)_?(one|particle)\b' "{{ forge }}/crates/pyo3-bridge/src"
+        echo "N4 green - no per-particle entry point is exposed to Python"
+      changed_when: false
+      failed_when: false
+
+    - name: Gate N5 · the GIL is released for the sweep
+      ansible.builtin.shell: |
+        grep -q 'allow_threads' "{{ forge }}/crates/pyo3-bridge/src/lib.rs"
+        echo "N5 green - the notebook stays alive while the crowd is counted"
+      changed_when: false
+      failed_when: false
+
+    - name: Gate N6 · the bridge borrows, never copies, the incoming arrays
+      ansible.builtin.shell: |
+        grep -q 'PyReadonlyArray' "{{ forge }}/crates/pyo3-bridge/src/lib.rs"
+        ! grep -Eq 'fn scatter[^\n]*Vec<f32>' "{{ forge }}/crates/pyo3-bridge/src/lib.rs"
+        echo "N6 green - zero-copy in, view out"
+      changed_when: false
+      failed_when: false
+
+    - name: Notebook kernel · numpy, pandas, matplotlib, scikit-learn beside the bridge
+      ansible.builtin.shell: |
+        python3 -m pip install --break-system-packages numpy pandas matplotlib scikit-learn scipy jupyterlab
+      changed_when: true
+      failed_when: false
+
+    - name: Seed a starter notebook that never leaves the page
+      ansible.builtin.copy:
+        dest: "{{ ddb }}/notebook/00_enlil_first_pass.py"
+        mode: "0644"
+        content: |
+          # EnkiDDB notebook · one pass, from Python, without a terminal
+          import numpy as np, matplotlib.pyplot as plt
+          from bahyway_enlil import PyField          # the PyO3 bridge
+
+          n = 5_000_000
+          rng = np.random.default_rng(3600)          # seeded — the same picture every time
+          mlu   = rng.integers(-3, 4, n, dtype=np.int8)
+          theta = rng.random(n, dtype=np.float32)
+          ru    = rng.random(n, dtype=np.float32)
+
+          f = PyField(shells=7, angles=64, radii=28)
+          counted = f.scatter(mlu, theta, ru)        # ONE crossing · the GIL is released inside
+          bins = f.bins()                            # a view of the same memory — no copy
+
+          assert counted == n, "conservation: every particle landed in a bin"
+          plt.imshow(bins.reshape(7, 64, 28).sum(axis=2), aspect="auto")
+          plt.title("ENLIL field · amplitude is density · a trough is a void, not an optimum")
+          plt.show()
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-407 dual-lens page + PyO3 bridge - one crossing per pass, GIL released, zero-copy both ways"

@@ -32,9 +32,9 @@ use enkidb_journal::entry::JournalEntry;
 use enkidb_journal::Journal;
 use enkidb_readnode::materialize::{materialize, MaterializeStats};
 
+use crate::emitter::ReplicationEmitter;
 use crate::error::{ReplicationError, ReplicationResult};
 use crate::event::ReplEventKind;
-use crate::emitter::ReplicationEmitter;
 
 /// Encode `entry` as replication delta bytes and emit it as `kind`
 /// (`ParticleInsert` for a brand-new particle, `ParticleUpdate` for a
@@ -52,9 +52,9 @@ use crate::emitter::ReplicationEmitter;
 /// every real-world event look hundreds of "seconds" stale to the
 /// freshness check on its very first sweep.
 pub fn emit_journal_entry(
-    emitter:   &mut ReplicationEmitter,
-    kind:      ReplEventKind,
-    entry:     &JournalEntry,
+    emitter: &mut ReplicationEmitter,
+    kind: ReplEventKind,
+    entry: &JournalEntry,
     now_epoch: u32,
 ) -> ReplicationResult<()> {
     emitter.emit(kind, entry.to_bytes(), now_epoch)?;
@@ -66,13 +66,19 @@ pub fn emit_journal_entry(
 /// `ParticleInsert`/`ParticleUpdate` decode via `JournalEntry::from_bytes`
 /// and append to `journal`. `ParticleDelete`/`Checkpoint` have no real
 /// handling yet -- rejected, not silently accepted.
-pub fn apply_delta_to_journal(journal: &mut Journal, kind: u8, delta: &[u8]) -> ReplicationResult<()> {
+pub fn apply_delta_to_journal(
+    journal: &mut Journal,
+    kind: u8,
+    delta: &[u8],
+) -> ReplicationResult<()> {
     let event_kind = ReplEventKind::from_u8(kind)?;
     match event_kind {
         ReplEventKind::ParticleInsert | ReplEventKind::ParticleUpdate => {
-            let (entry, _consumed) = JournalEntry::from_bytes(delta)
-                .ok_or(ReplicationError::DeltaDecodeFailed)?;
-            journal.append(entry).map_err(|e| ReplicationError::Io(e.to_string()))
+            let (entry, _consumed) =
+                JournalEntry::from_bytes(delta).ok_or(ReplicationError::DeltaDecodeFailed)?;
+            journal
+                .append(entry)
+                .map_err(|e| ReplicationError::Io(e.to_string()))
         }
         ReplEventKind::ParticleDelete | ReplEventKind::Checkpoint => {
             Err(ReplicationError::DeltaDecodeFailed)
@@ -86,8 +92,8 @@ pub fn apply_delta_to_journal(journal: &mut Journal, kind: u8, delta: &[u8]) -> 
 /// fed purely through replication (no direct Journal access of its own)
 /// still ends up served by the exact same `CachedReadNode` path.
 pub fn materialize_journal(
-    journal:        &Journal,
-    entities_base:  impl AsRef<std::path::Path>,
+    journal: &Journal,
+    entities_base: impl AsRef<std::path::Path>,
     eav_index_base: impl AsRef<std::path::Path>,
 ) -> std::io::Result<MaterializeStats> {
     materialize(journal, entities_base, eav_index_base)
@@ -111,7 +117,10 @@ mod tests {
     fn tmp_path(tag: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
             "enkwal_bridge_{tag}_{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().subsec_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos()
         ))
     }
 
@@ -119,12 +128,15 @@ mod tests {
         use akkvalue::{codec, AkkValue};
         let ek = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
         let ik = IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
-        JournalEntry::new(ek, ik, epoch, vec![
-            EavTriple::new(
+        JournalEntry::new(
+            ek,
+            ik,
+            epoch,
+            vec![EavTriple::new(
                 bahyway_crc::crc16("station".as_bytes()) as u32,
                 codec::encode(&AkkValue::Text(state.to_string())),
-            ),
-        ])
+            )],
+        )
     }
 
     /// Full real pipeline: JournalEntry -> emit -> broker.sweep -> consumer.
@@ -133,15 +145,15 @@ mod tests {
     /// real evidence for "wired into Data Files", not just a claim.
     #[test]
     fn replicated_entry_is_queryable_after_materialize() {
-        let tribe  = TribeId::from_u16(0x7A00);
+        let tribe = TribeId::from_u16(0x7A00);
         let minter = KakiMinter::new(tribe);
-        let entry  = make_entry(&minter, 1, "replicated-station");
+        let entry = make_entry(&minter, 1, "replicated-station");
 
         let write_kp = SealKeyPair::generate().unwrap();
         let write_vk = write_kp.verifying_key_bytes();
         let kaki_hash = 0xB01D_0001u32;
 
-        let log_path   = tmp_path("log");
+        let log_path = tmp_path("log");
         let delta_path = tmp_path("delta");
 
         let mut emitter = ReplicationEmitter::new_log(kaki_hash, write_kp, &log_path);
@@ -149,10 +161,10 @@ mod tests {
 
         let mut broker = ReplicationBroker::new(BrokerConfig {
             write_pod_verifying_key: write_vk,
-            write_pod_kaki_hash:     kaki_hash,
-            input_log_path:          log_path.clone(),
-            output_delta_path:       delta_path.clone(),
-            passport_validator:      None,
+            write_pod_kaki_hash: kaki_hash,
+            input_log_path: log_path.clone(),
+            output_delta_path: delta_path.clone(),
+            passport_validator: None,
         });
         let forwarded = broker.sweep(1_000).unwrap();
         assert_eq!(forwarded, 1);
@@ -185,7 +197,7 @@ mod tests {
         let _ = fs::remove_dir_all(&current);
         fs::create_dir_all(&current).unwrap();
         let entities = current.join("entities");
-        let eav      = current.join("eav");
+        let eav = current.join("eav");
         {
             let j = read_journal.lock().unwrap();
             let stats = materialize_journal(&j, &entities, &eav).unwrap();
@@ -193,8 +205,14 @@ mod tests {
         }
 
         let crn = CachedReadNode::open(&entities, &eav).unwrap();
-        let result = crn.query("WHO T.E\nWHERE E[station] = \"replicated-station\"").unwrap();
-        assert_eq!(result.matched.len(), 1, "the replicated particle must be queryable after materialize");
+        let result = crn
+            .query("WHO T.E\nWHERE E[station] = \"replicated-station\"")
+            .unwrap();
+        assert_eq!(
+            result.matched.len(),
+            1,
+            "the replicated particle must be queryable after materialize"
+        );
         assert_eq!(result.matched[0].entity.bytes(), entry.target_kaki.bytes());
 
         let _ = fs::remove_file(&log_path);
@@ -205,7 +223,11 @@ mod tests {
     #[test]
     fn apply_delta_to_journal_rejects_undecodable_bytes() {
         let mut journal = Journal::new(64);
-        let err = apply_delta_to_journal(&mut journal, ReplEventKind::ParticleInsert.as_u8(), b"not-a-journal-entry");
+        let err = apply_delta_to_journal(
+            &mut journal,
+            ReplEventKind::ParticleInsert.as_u8(),
+            b"not-a-journal-entry",
+        );
         assert!(matches!(err, Err(ReplicationError::DeltaDecodeFailed)));
     }
 
@@ -225,7 +247,7 @@ mod tests {
     #[test]
     fn emit_journal_entry_round_trips_through_to_bytes() {
         let minter = KakiMinter::new(TribeId::from_u16(0x7A01));
-        let entry  = make_entry(&minter, 5, "round-trip-station");
+        let entry = make_entry(&minter, 5, "round-trip-station");
         let kp = SealKeyPair::generate().unwrap();
         let log_path = tmp_path("emit_only");
         let mut emitter = ReplicationEmitter::new_log(0xCAFE_0001, kp, &log_path);
@@ -233,12 +255,21 @@ mod tests {
         emit_journal_entry(&mut emitter, ReplEventKind::ParticleInsert, &entry, 5_000).unwrap();
 
         let raw = fs::read(&log_path).unwrap();
-        let ev  = crate::event::KakiSealedEvent::from_frame(&raw).unwrap();
-        assert_eq!(ev.epoch, 5_000, "replication frame epoch is the freshness epoch, not entry.epoch");
+        let ev = crate::event::KakiSealedEvent::from_frame(&raw).unwrap();
+        assert_eq!(
+            ev.epoch, 5_000,
+            "replication frame epoch is the freshness epoch, not entry.epoch"
+        );
         let (decoded, _) = JournalEntry::from_bytes(&ev.delta).unwrap();
-        assert_eq!(decoded.epoch, 5, "JournalEntry's own logical epoch must survive the round trip");
+        assert_eq!(
+            decoded.epoch, 5,
+            "JournalEntry's own logical epoch must survive the round trip"
+        );
         let (decoded_value, _) = akkvalue::codec::decode(&decoded.eav[0].value, 0).unwrap();
-        assert_eq!(decoded_value, akkvalue::AkkValue::Text("round-trip-station".to_string()));
+        assert_eq!(
+            decoded_value,
+            akkvalue::AkkValue::Text("round-trip-station".to_string())
+        );
 
         let _ = fs::remove_file(&log_path);
         let _ = fnv1a_u32(b"unused"); // keep import honest if unused elsewhere

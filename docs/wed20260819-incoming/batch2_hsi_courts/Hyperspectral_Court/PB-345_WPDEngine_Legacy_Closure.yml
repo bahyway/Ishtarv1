@@ -1,0 +1,148 @@
+---
+# ============================================================
+#  PB-345 — WPDEngine Legacy Closure Audit
+#  BahyWay.Ecosystem v4.0 — closing the BLK ledger lawfully
+#
+#  Run from the Fedora bare-metal HOST (corrected WoW):
+#    ansible-playbook -i inventory PB-345_WPDEngine_Legacy_Closure.yml
+#  Running this playbook is the CSR-08 confirmation point.
+#
+#  DOCTRINE (Rigmu, applied to blockers): no silent close.
+#  This playbook does NOT hardcode BLK-1..BLK-5 contents — it reads
+#  the living blocker registry from the repo (BLK-1 lesson: never
+#  judge against a stale source), runs every sealed gate, and emits
+#  a closure colophon ONLY if all gates are green. Any failure
+#  leaves the ledger open and the colophon unwritten.
+#
+#  Gates audited:
+#    G1  Blocker registry present & parsed (BLOCKERS.md / blk_registry)
+#    G2  Phase A/B workspace: cargo build + cargo test (all crates)
+#    G3  TESTING_PLAYBOOK_PHASE1 Blocks A–F suite
+#    G4  PB-151 runtime-law bench (1B particles < 1s, release+LTO)
+#    G5  SEC-1: CSR-08 enforcement code present in con-engine
+#    G6  WPDEngine/Enbilulu law tests (Phi_Enbi weights, TIAMAT bands,
+#        T_j horizon) still green under current source
+# ============================================================
+- name: PB-345 WPDEngine legacy closure audit
+  hosts: bahyway_host
+  gather_facts: true
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    tablets_dir: "{{ v4_root }}/tablets"
+    closure_tablet: "{{ tablets_dir }}/CLOSURE-WPD-001_Legacy_Ledger.md"
+    registry_candidates:
+      - "{{ v4_root }}/BLOCKERS.md"
+      - "{{ v4_root }}/tablets/BLK_registry.md"
+      - "{{ v4_root }}/docs/BLOCKERS.md"
+    cargo_env:
+      RUSTFLAGS: "-C target-cpu=native"
+
+  tasks:
+    # ---------- G1 · the ledger itself ----------
+    - name: G1 · locate the blocker registry
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ registry_candidates }}"
+      register: blk_stats
+
+    - name: G1 · select registry path
+      ansible.builtin.set_fact:
+        blk_registry: "{{ (blk_stats.results | selectattr('stat.exists') | map(attribute='item') | list | first) | default('') }}"
+
+    - name: G1 · refuse silent close if no registry found
+      ansible.builtin.fail:
+        msg: >-
+          RIGMU REFUSAL: no blocker registry found at any known path.
+          The ledger cannot be closed against a source that cannot be read.
+          Deposit BLOCKERS.md (BLK-1..BLK-5 with current status) and re-run.
+      when: blk_registry == ''
+
+    - name: G1 · read registry (deposited into the colophon verbatim)
+      ansible.builtin.slurp:
+        src: "{{ blk_registry }}"
+      register: blk_content
+
+    # ---------- G2 · workspace truth ----------
+    - name: G2 · cargo build --workspace --release
+      ansible.builtin.command:
+        cmd: cargo build --workspace --release
+        chdir: "{{ v4_root }}"
+      environment: "{{ cargo_env }}"
+      register: g2_build
+      changed_when: false
+
+    - name: G2 · cargo test --workspace --release
+      ansible.builtin.command:
+        cmd: cargo test --workspace --release
+        chdir: "{{ v4_root }}"
+      environment: "{{ cargo_env }}"
+      register: g2_test
+      changed_when: false
+
+    # ---------- G3 · Phase 1 Blocks A–F ----------
+    - name: G3 · TESTING_PLAYBOOK_PHASE1 Blocks A–F
+      ansible.builtin.command:
+        cmd: cargo test --release --test phase1_blocks
+        chdir: "{{ v4_root }}"
+      environment: "{{ cargo_env }}"
+      register: g3
+      changed_when: false
+      failed_when: g3.rc != 0
+
+    # ---------- G4 · the Sovereign Runtime Law ----------
+    - name: G4 · PB-151 runtime bench (1B < 1s)
+      ansible.builtin.command:
+        cmd: cargo run --release --bin runtime_law_bench
+        chdir: "{{ v4_root }}"
+      environment: "{{ cargo_env }}"
+      register: g4
+      changed_when: false
+      failed_when: "'RUNTIME LAW HOLDS' not in g4.stdout"
+
+    # ---------- G5 · SEC-1 ----------
+    - name: G5 · CSR-08 enforcement present in con-engine
+      ansible.builtin.command:
+        cmd: grep -rl "CSR-08" src/
+        chdir: "{{ v4_root }}/engines/con-engine"
+      register: g5
+      changed_when: false
+      failed_when: g5.rc != 0
+
+    # ---------- G6 · Enbilulu still true under current source ----------
+    - name: G6 · WPDEngine/Enbilulu law tests
+      ansible.builtin.command:
+        cmd: cargo test --release -p wpd-engine enbilulu
+        chdir: "{{ v4_root }}"
+      environment: "{{ cargo_env }}"
+      register: g6
+      changed_when: false
+
+    # ---------- Colophon · written only in victory ----------
+    - name: Emit CONCORD closure colophon
+      ansible.builtin.copy:
+        dest: "{{ closure_tablet }}"
+        mode: "0644"
+        content: |
+          # CLOSURE-WPD-001 — The Legacy Ledger, Closed in Concord
+          BahyWay.Ecosystem v4.0 · sealed {{ ansible_date_time.iso8601 }}
+
+          All sealed gates green under CURRENT source (never stale):
+          - G1 registry: {{ blk_registry }}
+          - G2 workspace build+test: PASS
+          - G3 Phase 1 Blocks A–F: PASS
+          - G4 Sovereign Runtime Law (1B < 1s): PASS
+          - G5 SEC-1 CSR-08 enforcement: PRESENT
+          - G6 Enbilulu law tests: PASS
+
+          The registry as judged (verbatim deposit, Labiru origin):
+          ---
+          {{ blk_content.content | b64decode }}
+          ---
+          Colophon: CONCORD. The WPDEngine era closes; the completion
+          law's gate opens. PB-346 (Nanshe scaffold) is now lawful.
+
+          Sealed by running this playbook — DUB.SAR (CSR-08).
+
+    - name: Announce
+      ansible.builtin.debug:
+        msg: "CONCORD — legacy ledger closed. PB-346 unlocked."

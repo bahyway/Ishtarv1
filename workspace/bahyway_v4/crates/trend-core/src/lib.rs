@@ -72,14 +72,22 @@ mod tests {
 
     #[test]
     fn insufficient_history_is_an_error() {
-        assert_eq!(time_to_threshold(&[(0.0, 1.0)], 5.0), Err(TrendError::InsufficientHistory));
-        assert_eq!(time_to_threshold(&[], 5.0), Err(TrendError::InsufficientHistory));
+        assert_eq!(
+            time_to_threshold(&[(0.0, 1.0)], 5.0),
+            Err(TrendError::InsufficientHistory)
+        );
+        assert_eq!(
+            time_to_threshold(&[], 5.0),
+            Err(TrendError::InsufficientHistory)
+        );
     }
 
     #[test]
     fn degrading_series_predicts_correct_crossing() {
         // value rising 0.01/day, now at 0.5, threshold 1.0 -> ~50 days
-        let h: Vec<Sample> = (0..60).map(|i| (-(60 - i) as f64, 0.5 - (60 - i) as f64 * 0.01)).collect();
+        let h: Vec<Sample> = (0..60)
+            .map(|i| (-(60 - i) as f64, 0.5 - (60 - i) as f64 * 0.01))
+            .collect();
         match time_to_threshold(&h, 1.0) {
             Ok(Some(d)) => assert!((d - 50.0).abs() < 2.0, "expected ~50, got {d}"),
             other => panic!("expected Some(~50), got {other:?}"),
@@ -103,7 +111,9 @@ mod tests {
         // mirror of degrading_series_predicts_correct_crossing: value
         // falling 0.01/day, now at 0.5, well under threshold 1.0, and
         // moving further away from it -> never crosses.
-        let h: Vec<Sample> = (0..60).map(|i| (-(60 - i) as f64, 0.5 + (60 - i) as f64 * 0.01)).collect();
+        let h: Vec<Sample> = (0..60)
+            .map(|i| (-(60 - i) as f64, 0.5 + (60 - i) as f64 * 0.01))
+            .collect();
         assert_eq!(time_to_threshold(&h, 1.0), Ok(None));
     }
 }

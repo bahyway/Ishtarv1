@@ -58,10 +58,8 @@ fn tokenize(name: &str) -> HashSet<String> {
             prev_lower = false;
             continue;
         }
-        if c.is_uppercase() && prev_lower {
-            if !current.is_empty() {
-                tokens.push(std::mem::take(&mut current));
-            }
+        if c.is_uppercase() && prev_lower && !current.is_empty() {
+            tokens.push(std::mem::take(&mut current));
         }
         current.push(c.to_ascii_lowercase());
         prev_lower = c.is_lowercase();
@@ -95,7 +93,10 @@ pub fn name_similarity(a: &str, b: &str) -> f64 {
 /// v1 that catches literal token overlap, not full semantic
 /// understanding (see this module's own doc comment for the named
 /// many-to-one limitation).
-pub fn detect_smd_clusters(attrs: &[DepartmentAttr], min_similarity: f64) -> Vec<SmdEquivalenceCluster> {
+pub fn detect_smd_clusters(
+    attrs: &[DepartmentAttr],
+    min_similarity: f64,
+) -> Vec<SmdEquivalenceCluster> {
     let mut clusters: Vec<SmdEquivalenceCluster> = Vec::new();
     let mut used = vec![false; attrs.len()];
 
@@ -119,7 +120,10 @@ pub fn detect_smd_clusters(attrs: &[DepartmentAttr], min_similarity: f64) -> Vec
         }
         if members.len() >= 2 {
             let confidence = similarities.iter().sum::<f64>() / similarities.len() as f64;
-            clusters.push(SmdEquivalenceCluster { members, confidence });
+            clusters.push(SmdEquivalenceCluster {
+                members,
+                confidence,
+            });
         }
     }
     clusters
@@ -207,15 +211,20 @@ pub struct CompositionCandidate {
 /// OTHER department's individual attrs. Only tries 2-field combinations
 /// (see this module's own doc comment for why that's a named limit, not
 /// a silent one).
-pub fn detect_composition_candidates(attrs: &[DepartmentAttr], min_similarity: f64) -> Vec<CompositionCandidate> {
+pub fn detect_composition_candidates(
+    attrs: &[DepartmentAttr],
+    min_similarity: f64,
+) -> Vec<CompositionCandidate> {
     let mut out = Vec::new();
     for i in 0..attrs.len() {
         for j in (i + 1)..attrs.len() {
             if attrs[i].department != attrs[j].department {
                 continue;
             }
-            let union_tokens: HashSet<String> =
-                tokenize(&attrs[i].attr_name).union(&tokenize(&attrs[j].attr_name)).cloned().collect();
+            let union_tokens: HashSet<String> = tokenize(&attrs[i].attr_name)
+                .union(&tokenize(&attrs[j].attr_name))
+                .cloned()
+                .collect();
             for other in attrs {
                 if other.department == attrs[i].department {
                     continue;
@@ -240,7 +249,10 @@ mod tests {
     use super::*;
 
     fn attr(dept: &str, name: &str) -> DepartmentAttr {
-        DepartmentAttr { department: dept.to_string(), attr_name: name.to_string() }
+        DepartmentAttr {
+            department: dept.to_string(),
+            attr_name: name.to_string(),
+        }
     }
 
     #[test]
@@ -276,7 +288,10 @@ mod tests {
         // both have a "name"-ish token -- a real, catchable case for
         // this v1's token-overlap approach.
         let sim = name_similarity("employee_name", "Employee_Full_Name");
-        assert!(sim > 0.3, "expected meaningful overlap between employee_name and Employee_Full_Name, got {sim}");
+        assert!(
+            sim > 0.3,
+            "expected meaningful overlap between employee_name and Employee_Full_Name, got {sim}"
+        );
     }
 
     #[test]
@@ -298,12 +313,18 @@ mod tests {
             attr("hr", "employee_name_2"), // same department -- never a cross-department equivalence
         ];
         let clusters = detect_smd_clusters(&attrs, 0.1);
-        assert!(clusters.is_empty(), "same-department attrs must never form an SMD cluster");
+        assert!(
+            clusters.is_empty(),
+            "same-department attrs must never form an SMD cluster"
+        );
     }
 
     #[test]
     fn detect_smd_clusters_returns_empty_for_no_matches() {
-        let attrs = vec![attr("hr", "employee_name"), attr("logistics", "pipeline_pressure")];
+        let attrs = vec![
+            attr("hr", "employee_name"),
+            attr("logistics", "pipeline_pressure"),
+        ];
         let clusters = detect_smd_clusters(&attrs, 0.5);
         assert!(clusters.is_empty());
     }
@@ -357,18 +378,29 @@ mod tests {
             attr("finance", "Employee_Full_Name"),
         ];
         let candidates = detect_composition_candidates(&attrs, 0.3);
-        assert_eq!(candidates.len(), 1, "expected exactly one composition candidate, got {candidates:?}");
+        assert_eq!(
+            candidates.len(),
+            1,
+            "expected exactly one composition candidate, got {candidates:?}"
+        );
         let c = &candidates[0];
         assert_eq!(c.composed_of.department, "finance");
         assert_eq!(c.components.len(), 2);
-        assert!(c.confidence >= 0.3 && c.confidence <= 0.8, "confidence out of expected range: {}", c.confidence);
+        assert!(
+            c.confidence >= 0.3 && c.confidence <= 0.8,
+            "confidence out of expected range: {}",
+            c.confidence
+        );
     }
 
     #[test]
     fn detect_composition_candidates_never_composes_within_the_same_department() {
         let attrs = vec![attr("hr", "Empl_firstname"), attr("hr", "Empl_surname")];
         let candidates = detect_composition_candidates(&attrs, 0.1);
-        assert!(candidates.is_empty(), "must never treat two same-department fields as composing each other");
+        assert!(
+            candidates.is_empty(),
+            "must never treat two same-department fields as composing each other"
+        );
     }
 
     #[test]

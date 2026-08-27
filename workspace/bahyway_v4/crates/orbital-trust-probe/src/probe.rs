@@ -7,7 +7,7 @@
 //! Step 4 — Unexplained: emit AuditJournal entry + apply trust_penalty.
 
 use crate::cause::DeviationCause;
-use crate::snapshot::{OrbitalSnapshot, near_boundary};
+use crate::snapshot::{near_boundary, OrbitalSnapshot};
 
 /// Minimum Cartesian displacement (in orbit-space units) considered a
 /// meaningful deviation — below this the particle has not meaningfully moved.
@@ -57,9 +57,9 @@ impl ProbeResult {
 
 /// Run the 4-step causal probe against two consecutive orbital snapshots.
 pub fn probe(input: &ProbeInput<'_>) -> ProbeResult {
-    let prev    = input.previous;
-    let curr    = input.current;
-    let delta   = prev.cartesian_distance(curr);
+    let prev = input.previous;
+    let curr = input.current;
+    let delta = prev.cartesian_distance(curr);
     let ring_changed = !prev.same_ring(curr);
 
     // No meaningful movement — nothing to attribute.
@@ -136,7 +136,11 @@ pub fn probe(input: &ProbeInput<'_>) -> ProbeResult {
     // Scale penalty by magnitude of deviation, capped at 1.0.
     // A ring change doubles the penalty weight.
     let base_penalty = (delta / 4.0).clamp(0.0, 0.5);
-    let trust_penalty = if ring_changed { (base_penalty * 2.0).min(1.0) } else { base_penalty };
+    let trust_penalty = if ring_changed {
+        (base_penalty * 2.0).min(1.0)
+    } else {
+        base_penalty
+    };
 
     ProbeResult {
         cartesian_delta: delta,
@@ -155,23 +159,38 @@ pub fn batch_probe<'a>(inputs: &[ProbeInput<'a>]) -> Vec<ProbeResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tribe_orbit_engine::{OrbitalAssignment, OrbitalRing, ring_from_b11};
-    use fuzzy_engine::QualityTier;
     use crate::snapshot::OrbitalSnapshot;
+    use fuzzy_engine::QualityTier;
+    use tribe_orbit_engine::{ring_from_b11, OrbitalAssignment, OrbitalRing};
 
     const FP: u64 = 0xDEAD_BEEF_CAFE_0001;
 
-    fn make_snap(epoch: u64, b11: u8, kaki: [u8; 16], neighbours: usize, fresh: u8) -> OrbitalSnapshot {
+    fn make_snap(
+        epoch: u64,
+        b11: u8,
+        kaki: [u8; 16],
+        neighbours: usize,
+        fresh: u8,
+    ) -> OrbitalSnapshot {
         let assignment = OrbitalAssignment::from_kaki(&kaki, b11);
-        let tier = if b11 >= 200 { QualityTier::Gem }
-                   else if b11 >= 140 { QualityTier::Tribe }
-                   else if b11 >= 100 { QualityTier::Active }
-                   else { QualityTier::NonActive };
+        let tier = if b11 >= 200 {
+            QualityTier::Gem
+        } else if b11 >= 140 {
+            QualityTier::Tribe
+        } else if b11 >= 100 {
+            QualityTier::Active
+        } else {
+            QualityTier::NonActive
+        };
         OrbitalSnapshot::new(epoch, b11, tier, assignment, neighbours, fresh, FP)
     }
 
     fn identical_input<'a>(snap: &'a OrbitalSnapshot) -> ProbeInput<'a> {
-        ProbeInput { previous: snap, current: snap, new_eav_events: 0 }
+        ProbeInput {
+            previous: snap,
+            current: snap,
+            new_eav_events: 0,
+        }
     }
 
     #[test]
@@ -186,7 +205,11 @@ mod tests {
     fn new_eav_events_is_legitimate_evolution() {
         let prev = make_snap(1, 210, [0u8; 16], 3, 200);
         let curr = make_snap(2, 155, [0u8; 16], 3, 200); // moved to Mid ring
-        let input = ProbeInput { previous: &prev, current: &curr, new_eav_events: 3 };
+        let input = ProbeInput {
+            previous: &prev,
+            current: &curr,
+            new_eav_events: 3,
+        };
         let result = probe(&input);
         assert_eq!(result.cause, DeviationCause::LegitimateStateEvolution);
         assert!(!result.is_trust_violation());
@@ -197,8 +220,13 @@ mod tests {
         let prev = make_snap(1, 210, [0u8; 16], 3, 200);
         // Build current with different rules fingerprint
         let assignment = OrbitalAssignment::from_kaki(&[0u8; 16], 155);
-        let curr = OrbitalSnapshot::new(2, 155, QualityTier::Tribe, assignment, 3, 200, 0xFFFF_FFFF);
-        let input = ProbeInput { previous: &prev, current: &curr, new_eav_events: 0 };
+        let curr =
+            OrbitalSnapshot::new(2, 155, QualityTier::Tribe, assignment, 3, 200, 0xFFFF_FFFF);
+        let input = ProbeInput {
+            previous: &prev,
+            current: &curr,
+            new_eav_events: 0,
+        };
         let result = probe(&input);
         assert_eq!(result.cause, DeviationCause::FuzzyRulesChanged);
         assert!(result.cause.is_abort());
@@ -207,9 +235,13 @@ mod tests {
 
     #[test]
     fn neighbour_density_shift_is_not_violation() {
-        let prev = make_snap(1, 210, [0u8; 16], 3,  200);
+        let prev = make_snap(1, 210, [0u8; 16], 3, 200);
         let curr = make_snap(2, 210, [0u8; 16], 12, 200); // density jumped
-        let input = ProbeInput { previous: &prev, current: &curr, new_eav_events: 0 };
+        let input = ProbeInput {
+            previous: &prev,
+            current: &curr,
+            new_eav_events: 0,
+        };
         let result = probe(&input);
         // distance will be 0 (same KAKI + B11), so within tolerance first
         // — that's correct; with same position no deviation to attribute
@@ -222,11 +254,17 @@ mod tests {
         // Both B11=160 are far from any boundary (boundaries at 200 and 100, HYSTERESIS=5).
         // Neighbour count unchanged (delta=0 < threshold=2), so Step 3a is skipped.
         // Freshness drop = 30 ≥ FRESHNESS_DECAY_THRESHOLD=15, so Step 3b fires.
-        let mut kaki_a = [0u8; 16]; kaki_a[12] = 0;
-        let mut kaki_b = [0u8; 16]; kaki_b[12] = 128; // 180° opposite azimuth
+        let mut kaki_a = [0u8; 16];
+        kaki_a[12] = 0;
+        let mut kaki_b = [0u8; 16];
+        kaki_b[12] = 128; // 180° opposite azimuth
         let prev = make_snap(1, 160, kaki_a, 3, 220);
         let curr = make_snap(2, 160, kaki_b, 3, 190); // fresh dropped 30 bytes
-        let input = ProbeInput { previous: &prev, current: &curr, new_eav_events: 0 };
+        let input = ProbeInput {
+            previous: &prev,
+            current: &curr,
+            new_eav_events: 0,
+        };
         let result = probe(&input);
         // Step 3b: freshness_drop = 30 ≥ threshold=15
         assert_eq!(result.cause, DeviationCause::FreshnessDecay);
@@ -238,7 +276,11 @@ mod tests {
         // B11 = 202 — just above Inner/Mid boundary at 200, within HYSTERESIS=5
         let prev = make_snap(1, 202, [0u8; 16], 3, 200);
         let curr = make_snap(2, 197, [0u8; 16], 3, 199); // crossed boundary
-        let input = ProbeInput { previous: &prev, current: &curr, new_eav_events: 0 };
+        let input = ProbeInput {
+            previous: &prev,
+            current: &curr,
+            new_eav_events: 0,
+        };
         let result = probe(&input);
         assert_eq!(result.cause, DeviationCause::ThresholdBoundaryNoise);
         assert_eq!(result.trust_penalty, 0.0);
@@ -248,15 +290,22 @@ mod tests {
     fn unexplained_deviation_with_ring_change_has_penalty() {
         // B11 values far from any boundary — 240 (deep Gem) → 80 (deep Dead)
         // Different KAKI bytes so orbital position differs
-        let kaki_a = [0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0];
+        let kaki_a = [0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let kaki_b = [0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 0, 255, 0];
         let prev = make_snap(1, 240, kaki_a, 3, 200);
-        let curr = make_snap(2, 80,  kaki_b, 3, 199);
-        let input = ProbeInput { previous: &prev, current: &curr, new_eav_events: 0 };
+        let curr = make_snap(2, 80, kaki_b, 3, 199);
+        let input = ProbeInput {
+            previous: &prev,
+            current: &curr,
+            new_eav_events: 0,
+        };
         let result = probe(&input);
         assert_eq!(result.cause, DeviationCause::Unexplained);
         assert!(result.is_trust_violation());
-        assert!(result.trust_penalty > 0.0, "ring change must yield non-zero penalty");
+        assert!(
+            result.trust_penalty > 0.0,
+            "ring change must yield non-zero penalty"
+        );
         assert!(result.ring_changed);
     }
 

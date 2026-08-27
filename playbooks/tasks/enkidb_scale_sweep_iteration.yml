@@ -38,7 +38,12 @@
     resp = send_recv('127.0.0.1', 7011, 'SEED:{{ enkidb_seed_n }}')
     print(f'{resp}  (wall_clock={time.time()-t0:.1f}s)')
     PYEOF
-  delegate_to: enkidb-node-write
+  # Resolved from the real inventory group, not a hardcoded literal --
+  # "enkidb-node-write" (the pre-rename hostname) silently resolved to
+  # somewhere without a live enkidb-write-server on it, so this whole
+  # step got a real ConnectionRefusedError against 127.0.0.1:7011 even
+  # though the actual container was up and healthy on uruk-node-write.
+  delegate_to: "{{ groups['enkidb_write'][0] }}"
   register: seed_result
   changed_when: true
 
@@ -58,8 +63,8 @@
     enkiddb_db_label: "enkidb"
     enkiddb_write_volume: "enkidb-write-data"
     enkiddb_read_volume: "enkidb-read-data"
-    enkiddb_write_host: "enkidb-node-write"
-    enkiddb_read_host: "enkidb-node-read"
+    enkiddb_write_host: "{{ groups['enkidb_write'][0] }}"
+    enkiddb_read_host: "{{ groups['enkidb_read'][0] }}"
     enkiddb_write_port: 7011
     enkiddb_read_port: 7001
     enkiddb_read_ip: "{{ enkidb_read_ip }}"

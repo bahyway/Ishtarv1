@@ -16,7 +16,7 @@ pub fn compose_n_anchors(states: &[ParticleState]) -> CrossTribeLinkState {
     if states.is_empty() {
         return CrossTribeLinkState::Gray;
     }
-    if states.iter().any(|s| *s == ParticleState::Dead) {
+    if states.contains(&ParticleState::Dead) {
         return CrossTribeLinkState::Gray;
     }
     if states.iter().all(|s| *s == ParticleState::Golden) {

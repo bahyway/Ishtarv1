@@ -5,9 +5,9 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AkkadiConfig {
-    pub enkidb_url:          String,
-    pub postgres_dsn:        Option<String>,
-    pub output_format:       String,
+    pub enkidb_url: String,
+    pub postgres_dsn: Option<String>,
+    pub output_format: String,
     pub sovereign_workspace: PathBuf,
     /// Real target for `CellKind::EnkiddbQuery` (`kernel::AkkadiKernel::
     /// run_enkiddb_query`) -- EnkiDDB's own read node, not the same thing
@@ -31,9 +31,9 @@ fn default_enkiddb_read_port() -> u16 {
 impl Default for AkkadiConfig {
     fn default() -> Self {
         Self {
-            enkidb_url:          format!("http://localhost:{}", crate::ENKIDB_PORT),
-            postgres_dsn:        None,
-            output_format:       "table".into(),
+            enkidb_url: format!("http://localhost:{}", crate::ENKIDB_PORT),
+            postgres_dsn: None,
+            output_format: "table".into(),
             sovereign_workspace: dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".akkadi"),

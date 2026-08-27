@@ -16,15 +16,15 @@ use crate::lane::Lane;
 #[repr(u8)]
 pub enum EventKind {
     /// Particle created — first event in every particle's history.
-    Mint           = 0x01,
+    Mint = 0x01,
     /// Generic state journal — catches any non-enumerated mutation.
-    Journal        = 0x02,
+    Journal = 0x02,
     /// Particle moved between tribes (T3: emits the old and new tribe IDs).
-    TribeChange    = 0x03,
+    TribeChange = 0x03,
     /// Lane assignment changed (A3: move into Gray MUST be accompanied by Evidence).
     LaneTransition = 0x04,
     /// Evidence payload attached (satisfies the A3 obligation for Gray lane).
-    Evidence       = 0x05,
+    Evidence = 0x05,
 }
 
 impl EventKind {
@@ -32,16 +32,18 @@ impl EventKind {
     /// Per A3: a LaneTransition *into* Gray is only valid if a concurrent
     /// Evidence event is also appended in the same transaction.
     #[inline]
-    pub fn is_evidence(self) -> bool { self == EventKind::Evidence }
+    pub fn is_evidence(self) -> bool {
+        self == EventKind::Evidence
+    }
 
     /// Display name for HeptaScript introspection and STIR output.
     pub fn as_str(self) -> &'static str {
         match self {
-            EventKind::Mint           => "MINT",
-            EventKind::Journal        => "JOURNAL",
-            EventKind::TribeChange    => "TRIBE_CHANGE",
+            EventKind::Mint => "MINT",
+            EventKind::Journal => "JOURNAL",
+            EventKind::TribeChange => "TRIBE_CHANGE",
             EventKind::LaneTransition => "LANE_TRANSITION",
-            EventKind::Evidence       => "EVIDENCE",
+            EventKind::Evidence => "EVIDENCE",
         }
     }
 }
@@ -72,27 +74,47 @@ pub struct Event {
 impl Event {
     /// Construct a `Mint` event (sequence = 1, default White lane).
     pub fn mint() -> Self {
-        Self { kind: EventKind::Mint, sequence: 1, lane_snapshot: Some(Lane::White) }
+        Self {
+            kind: EventKind::Mint,
+            sequence: 1,
+            lane_snapshot: Some(Lane::White),
+        }
     }
 
     /// Construct a generic `Journal` event at the given sequence number.
     pub fn journal(sequence: u32) -> Self {
-        Self { kind: EventKind::Journal, sequence, lane_snapshot: None }
+        Self {
+            kind: EventKind::Journal,
+            sequence,
+            lane_snapshot: None,
+        }
     }
 
     /// Construct a `LaneTransition` event.
     pub fn lane_transition(sequence: u32, new_lane: Lane) -> Self {
-        Self { kind: EventKind::LaneTransition, sequence, lane_snapshot: Some(new_lane) }
+        Self {
+            kind: EventKind::LaneTransition,
+            sequence,
+            lane_snapshot: Some(new_lane),
+        }
     }
 
     /// Construct an `Evidence` event (satisfies A3 for a Gray transition).
     pub fn evidence(sequence: u32) -> Self {
-        Self { kind: EventKind::Evidence, sequence, lane_snapshot: None }
+        Self {
+            kind: EventKind::Evidence,
+            sequence,
+            lane_snapshot: None,
+        }
     }
 
     /// Construct a `TribeChange` event.
     pub fn tribe_change(sequence: u32) -> Self {
-        Self { kind: EventKind::TribeChange, sequence, lane_snapshot: None }
+        Self {
+            kind: EventKind::TribeChange,
+            sequence,
+            lane_snapshot: None,
+        }
     }
 }
 
@@ -111,17 +133,17 @@ pub fn validate_a3(events: &[Event]) -> Result<(), A3Violation> {
                     has_evidence_at_seq = true;
                 }
             }
-            EventKind::LaneTransition => {
-                if e.lane_snapshot == Some(Lane::Gray) {
-                    // Check whether evidence exists at the same sequence
-                    let evidence_exists = events
-                        .iter()
-                        .any(|x| x.kind == EventKind::Evidence && x.sequence == e.sequence);
-                    if !evidence_exists {
-                        return Err(A3Violation { sequence: e.sequence });
-                    }
-                    pending_gray_seq = None;
+            EventKind::LaneTransition if e.lane_snapshot == Some(Lane::Gray) => {
+                // Check whether evidence exists at the same sequence
+                let evidence_exists = events
+                    .iter()
+                    .any(|x| x.kind == EventKind::Evidence && x.sequence == e.sequence);
+                if !evidence_exists {
+                    return Err(A3Violation {
+                        sequence: e.sequence,
+                    });
                 }
+                pending_gray_seq = None;
             }
             _ => {}
         }
@@ -139,7 +161,11 @@ pub struct A3Violation {
 
 impl core::fmt::Display for A3Violation {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "A3 violation: Gray lane transition at seq {} has no Evidence", self.sequence)
+        write!(
+            f,
+            "A3 violation: Gray lane transition at seq {} has no Evidence",
+            self.sequence
+        )
     }
 }
 
@@ -157,11 +183,11 @@ mod tests {
 
     #[test]
     fn event_kind_display() {
-        assert_eq!(EventKind::Mint.to_string(),           "MINT");
-        assert_eq!(EventKind::Journal.to_string(),        "JOURNAL");
-        assert_eq!(EventKind::TribeChange.to_string(),    "TRIBE_CHANGE");
+        assert_eq!(EventKind::Mint.to_string(), "MINT");
+        assert_eq!(EventKind::Journal.to_string(), "JOURNAL");
+        assert_eq!(EventKind::TribeChange.to_string(), "TRIBE_CHANGE");
         assert_eq!(EventKind::LaneTransition.to_string(), "LANE_TRANSITION");
-        assert_eq!(EventKind::Evidence.to_string(),       "EVIDENCE");
+        assert_eq!(EventKind::Evidence.to_string(), "EVIDENCE");
     }
 
     #[test]
@@ -193,19 +219,13 @@ mod tests {
 
     #[test]
     fn a3_white_transition_no_evidence_needed() {
-        let events = vec![
-            Event::mint(),
-            Event::lane_transition(2, Lane::White),
-        ];
+        let events = vec![Event::mint(), Event::lane_transition(2, Lane::White)];
         assert!(validate_a3(&events).is_ok());
     }
 
     #[test]
     fn a3_black_transition_no_evidence_needed() {
-        let events = vec![
-            Event::mint(),
-            Event::lane_transition(2, Lane::Black),
-        ];
+        let events = vec![Event::mint(), Event::lane_transition(2, Lane::Black)];
         assert!(validate_a3(&events).is_ok());
     }
 

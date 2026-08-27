@@ -24,14 +24,14 @@
 
 #![allow(missing_docs)]
 
+pub mod client;
 pub mod commands;
 pub mod config;
-pub mod client;
 pub mod notebook;
 pub mod output;
 
 pub use config::AkkadiConfig;
-pub use notebook::cell::{CellKind, NotebookCell, CellState};
+pub use notebook::cell::{CellKind, CellState, NotebookCell};
 pub use output::format::OutputFormat;
 
 // ── Sovereign constants (ADR-001, locked) ────────────────────────────────────
@@ -94,15 +94,22 @@ pub const AOL_LSP_PORT: u16 = 9100;
 pub const HEPTA_DIMS: [&str; 7] = ["ME", "GU", "SAG", "IZI", "A", "UD", "URU"];
 
 /// 7 planetary names
-pub const PLANET_NAMES: [&str; 7] = ["Saturn", "Jupiter", "Mars", "Sun", "Venus", "Mercury", "Moon"];
+pub const PLANET_NAMES: [&str; 7] = [
+    "Saturn", "Jupiter", "Mars", "Sun", "Venus", "Mercury", "Moon",
+];
 
 /// 7 planet glyphs (Unicode)
 pub const PLANET_GLYPHS: [&str; 7] = ["♄", "♃", "♂", "☀", "♀", "☿", "☽"];
 
 /// 7 Baghdad district names
 pub const DISTRICTS: [&str; 7] = [
-    "Al-Karkh", "Al-Rusafa", "Al-Mansour",
-    "Sadr City", "Al-Kadhimiya", "Zayouna", "Al-Dora",
+    "Al-Karkh",
+    "Al-Rusafa",
+    "Al-Mansour",
+    "Sadr City",
+    "Al-Kadhimiya",
+    "Zayouna",
+    "Al-Dora",
 ];
 
 // ── Quality helpers ───────────────────────────────────────────────────────────
@@ -127,25 +134,25 @@ impl QualityTier {
             200..=255 => Self::Gem,
             140..=199 => Self::Tribe,
             100..=139 => Self::Active,
-            _          => Self::Dead,
+            _ => Self::Dead,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Gem    => "💎 GEM",
-            Self::Tribe  => "◉ TRIBE",
+            Self::Gem => "💎 GEM",
+            Self::Tribe => "◉ TRIBE",
             Self::Active => "● ACTIVE",
-            Self::Dead   => "○ DEAD",
+            Self::Dead => "○ DEAD",
         }
     }
 
     pub fn color_hex(self) -> &'static str {
         match self {
-            Self::Gem    => "#ffd700",
-            Self::Tribe  => "#00d4c8",
+            Self::Gem => "#ffd700",
+            Self::Tribe => "#00d4c8",
             Self::Active => "#ffffff",
-            Self::Dead   => "#888888",
+            Self::Dead => "#888888",
         }
     }
 }
@@ -166,25 +173,25 @@ impl ParticleKind {
             0x00..=0x7F => Self::Record,
             0xE0..=0xEF => Self::AkkScript,
             0xF0..=0xFF => Self::File,
-            _            => Self::Reserved,
+            _ => Self::Reserved,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Record    => "💎 Record",
+            Self::Record => "💎 Record",
             Self::AkkScript => "◆ AkkScript",
-            Self::File      => "🔷 File",
-            Self::Reserved  => "Reserved",
+            Self::File => "🔷 File",
+            Self::Reserved => "Reserved",
         }
     }
 
     pub fn enkidb_cf(self) -> &'static str {
         match self {
-            Self::Record    => "kaki_records",
+            Self::Record => "kaki_records",
             Self::AkkScript => "kaki_akk",
-            Self::File      => "kaki_files",
-            Self::Reserved  => "unknown",
+            Self::File => "kaki_files",
+            Self::Reserved => "unknown",
         }
     }
 }
@@ -205,13 +212,13 @@ pub fn format_kaki(bytes: &[u8; 16]) -> String {
 
 /// Parse a KAKI display string back to 16 bytes.
 pub fn parse_kaki(s: &str) -> Result<[u8; 16], String> {
-    let clean: String = s.replace('\u{00B7}', "").replace('-', "").replace(' ', "");
+    let clean: String = s.replace(['\u{00B7}', '-', ' '], "");
     if clean.len() != 32 {
         return Err(format!("KAKI must be 32 hex chars, got {}", clean.len()));
     }
     let mut out = [0u8; 16];
     for i in 0..16 {
-        out[i] = u8::from_str_radix(&clean[i*2..i*2+2], 16)
+        out[i] = u8::from_str_radix(&clean[i * 2..i * 2 + 2], 16)
             .map_err(|e| format!("Invalid hex at position {}: {}", i, e))?;
     }
     Ok(out)
@@ -220,18 +227,18 @@ pub fn parse_kaki(s: &str) -> Result<[u8; 16], String> {
 /// Inspect a KAKI — decode all bytes with sovereign meaning.
 #[derive(Debug)]
 pub struct KakiInspection {
-    pub raw:          [u8; 16],
-    pub display:      String,
-    pub b0_b6:        [u8; 7],
-    pub b7:           u8,
-    pub b8_b9:        [u8; 2],
-    pub b10:          u8,
-    pub b11:          u8,
-    pub b12:          u8,
-    pub b13_b15:      [u8; 3],
+    pub raw: [u8; 16],
+    pub display: String,
+    pub b0_b6: [u8; 7],
+    pub b7: u8,
+    pub b8_b9: [u8; 2],
+    pub b10: u8,
+    pub b11: u8,
+    pub b12: u8,
+    pub b13_b15: [u8; 3],
     pub particle_kind: ParticleKind,
-    pub quality_tier:  QualityTier,
-    pub brightness:    f32,
+    pub quality_tier: QualityTier,
+    pub brightness: f32,
 }
 
 impl KakiInspection {
@@ -241,17 +248,17 @@ impl KakiInspection {
         let b8_b9 = [raw[8], raw[9]];
         let b13_b15 = [raw[13], raw[14], raw[15]];
         Self {
-            display:      format_kaki(&raw),
+            display: format_kaki(&raw),
             b0_b6,
-            b7:           raw[7],
+            b7: raw[7],
             b8_b9,
-            b10:          raw[10],
-            b11:          raw[11],
-            b12:          raw[12],
+            b10: raw[10],
+            b11: raw[11],
+            b12: raw[12],
             b13_b15,
             particle_kind: ParticleKind::from_b10(raw[10]),
-            quality_tier:  QualityTier::from_b11(raw[11]),
-            brightness:    quality_display(raw[11]),
+            quality_tier: QualityTier::from_b11(raw[11]),
+            brightness: quality_display(raw[11]),
             raw,
         }
     }

@@ -24,7 +24,7 @@
 /// index key component.
 #[inline]
 fn fnv1a_32(bytes: &[u8]) -> u32 {
-    const PRIME:  u32 = 0x0100_0193;
+    const PRIME: u32 = 0x0100_0193;
     const OFFSET: u32 = 0x811C_9DC5;
     let mut h = OFFSET;
     for &b in bytes {
@@ -48,14 +48,18 @@ type Entry = (u32, u32, u32);
 #[allow(dead_code)]
 struct FingerprintTable {
     table: Vec<u8>,
-    mask:  usize,
+    mask: usize,
 }
 
+#[allow(dead_code)]
 impl FingerprintTable {
     fn new(capacity: usize) -> Self {
         // Next power of two, minimum 256 slots
         let n = capacity.next_power_of_two().max(256);
-        Self { table: vec![0u8; n], mask: n - 1 }
+        Self {
+            table: vec![0u8; n],
+            mask: n - 1,
+        }
     }
 
     #[inline]
@@ -77,7 +81,7 @@ pub struct EavExactIndex {
     /// Sorted (attr_hash, val_fingerprint, surrogate) triples.
     entries: Vec<Entry>,
     /// Fingerprint bloom table for fast negative answers.
-    bloom:   Vec<u8>,
+    bloom: Vec<u8>,
     bloom_mask: usize,
 }
 
@@ -92,18 +96,25 @@ impl EavExactIndex {
         let mask = bloom_size - 1;
         let mut bloom = vec![0u8; bloom_size];
 
-        let mut entries: Vec<Entry> = raw.iter().map(|(attr_h, val_bytes, sur)| {
-            let vfp = fnv1a_32(val_bytes);
-            // Populate bloom
-            let combined = attr_h.wrapping_add(vfp);
-            let fp_byte  = (fnv1a_32(&combined.to_le_bytes()) & 0xFF) as u8 | 1;
-            bloom[combined as usize & mask] |= fp_byte;
-            (*attr_h, vfp, *sur)
-        }).collect();
+        let mut entries: Vec<Entry> = raw
+            .iter()
+            .map(|(attr_h, val_bytes, sur)| {
+                let vfp = fnv1a_32(val_bytes);
+                // Populate bloom
+                let combined = attr_h.wrapping_add(vfp);
+                let fp_byte = (fnv1a_32(&combined.to_le_bytes()) & 0xFF) as u8 | 1;
+                bloom[combined as usize & mask] |= fp_byte;
+                (*attr_h, vfp, *sur)
+            })
+            .collect();
 
         entries.sort_unstable();
 
-        Self { entries, bloom, bloom_mask: mask }
+        Self {
+            entries,
+            bloom,
+            bloom_mask: mask,
+        }
     }
 
     /// Build from already-hashed `(attr_hash, val_fingerprint, surrogate)` triples.
@@ -115,12 +126,16 @@ impl EavExactIndex {
 
         for &(ah, vfp, _) in &triples {
             let combined = ah.wrapping_add(vfp);
-            let fp_byte  = (fnv1a_32(&combined.to_le_bytes()) & 0xFF) as u8 | 1;
+            let fp_byte = (fnv1a_32(&combined.to_le_bytes()) & 0xFF) as u8 | 1;
             bloom[combined as usize & mask] |= fp_byte;
         }
 
         triples.sort_unstable();
-        Self { entries: triples, bloom, bloom_mask: mask }
+        Self {
+            entries: triples,
+            bloom,
+            bloom_mask: mask,
+        }
     }
 
     /// Hash an encoded attribute value to its fingerprint.
@@ -140,8 +155,8 @@ impl EavExactIndex {
     #[inline]
     pub fn may_contain(&self, attr_hash: u32, val_fp: u32) -> bool {
         let combined = attr_hash.wrapping_add(val_fp);
-        let fp_byte  = (fnv1a_32(&combined.to_le_bytes()) & 0xFF) as u8 | 1;
-        let idx      = combined as usize & self.bloom_mask;
+        let fp_byte = (fnv1a_32(&combined.to_le_bytes()) & 0xFF) as u8 | 1;
+        let idx = combined as usize & self.bloom_mask;
         self.bloom[idx] & fp_byte == fp_byte
     }
 
@@ -155,13 +170,13 @@ impl EavExactIndex {
         }
 
         // Binary search for the lower bound of (attr_hash, val_fp, 0)
-        let lo = self.entries.partition_point(|&(a, v, _)| {
-            (a, v) < (attr_hash, val_fp)
-        });
+        let lo = self
+            .entries
+            .partition_point(|&(a, v, _)| (a, v) < (attr_hash, val_fp));
         // Upper bound of (attr_hash, val_fp, u32::MAX)
-        let hi = self.entries.partition_point(|&(a, v, _)| {
-            (a, v) <= (attr_hash, val_fp)
-        });
+        let hi = self
+            .entries
+            .partition_point(|&(a, v, _)| (a, v) <= (attr_hash, val_fp));
 
         &self.entries[lo..hi]
     }
@@ -194,9 +209,7 @@ impl EavExactIndex {
 
     /// Approximate memory usage in bytes.
     pub fn memory_bytes(&self) -> usize {
-        self.entries.len() * 12
-            + self.bloom.len()
-            + std::mem::size_of::<Self>()
+        self.entries.len() * 12 + self.bloom.len() + std::mem::size_of::<Self>()
     }
 }
 
@@ -206,20 +219,24 @@ impl EavExactIndex {
 mod tests {
     use super::*;
 
-    fn encode_str(s: &str) -> Vec<u8> { s.as_bytes().to_vec() }
-    fn encode_i64(n: i64) -> Vec<u8>  { n.to_le_bytes().to_vec() }
+    fn encode_str(s: &str) -> Vec<u8> {
+        s.as_bytes().to_vec()
+    }
+    fn encode_i64(n: i64) -> Vec<u8> {
+        n.to_le_bytes().to_vec()
+    }
 
     #[test]
     fn build_and_exact_lookup() {
         let raw = vec![
-            (100u32, encode_str("Najaf"),   1u32),
+            (100u32, encode_str("Najaf"), 1u32),
             (100u32, encode_str("Baghdad"), 2u32),
-            (100u32, encode_str("Najaf"),   3u32),
-            (200u32, encode_i64(1975),      1u32),
+            (100u32, encode_str("Najaf"), 3u32),
+            (200u32, encode_i64(1975), 1u32),
         ];
         let idx = EavExactIndex::build(&raw);
 
-        let vfp_najaf   = EavExactIndex::val_fingerprint(b"Najaf");
+        let vfp_najaf = EavExactIndex::val_fingerprint(b"Najaf");
         let vfp_baghdad = EavExactIndex::val_fingerprint(b"Baghdad");
 
         let najaf_surs = idx.surrogates_for(100, vfp_najaf);
@@ -228,17 +245,15 @@ mod tests {
         let baghdad_surs = idx.surrogates_for(100, vfp_baghdad);
         assert_eq!(baghdad_surs, vec![2]);
 
-        assert!(idx.contains_surrogate(100, vfp_najaf,   1));
-        assert!(idx.contains_surrogate(100, vfp_najaf,   3));
-        assert!(!idx.contains_surrogate(100, vfp_najaf,  2));
-        assert!(!idx.contains_surrogate(100, vfp_baghdad,1));
+        assert!(idx.contains_surrogate(100, vfp_najaf, 1));
+        assert!(idx.contains_surrogate(100, vfp_najaf, 3));
+        assert!(!idx.contains_surrogate(100, vfp_najaf, 2));
+        assert!(!idx.contains_surrogate(100, vfp_baghdad, 1));
     }
 
     #[test]
     fn bloom_eliminates_absent_entries() {
-        let raw = vec![
-            (100u32, encode_str("Najaf"), 1u32),
-        ];
+        let raw = vec![(100u32, encode_str("Najaf"), 1u32)];
         let idx = EavExactIndex::build(&raw);
         let vfp_missing = EavExactIndex::val_fingerprint(b"ZZZ_NEVER_INSERTED");
 
@@ -246,7 +261,10 @@ mod tests {
         // but candidates() must return empty when bloom says no
         let cands = idx.candidates(100, vfp_missing);
         // Even if bloom false-positives, binary search returns no match
-        let found: Vec<_> = cands.iter().filter(|&&(_, v, _)| v == vfp_missing).collect();
+        let found: Vec<_> = cands
+            .iter()
+            .filter(|&&(_, v, _)| v == vfp_missing)
+            .collect();
         assert!(found.is_empty());
     }
 
@@ -280,7 +298,9 @@ mod tests {
 
     #[test]
     fn memory_estimate_reasonable() {
-        let raw: Vec<_> = (0u32..1_000).map(|i| (i, encode_i64(i as i64), i)).collect();
+        let raw: Vec<_> = (0u32..1_000)
+            .map(|i| (i, encode_i64(i as i64), i))
+            .collect();
         let idx = EavExactIndex::build(&raw);
         // 1000 × 12 + bloom ≈ 12KB + 256B
         assert!(idx.memory_bytes() < 64_000);

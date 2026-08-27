@@ -21,14 +21,18 @@ pub struct AkkadianCipher {
 
 impl std::fmt::Debug for AkkadianCipher {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AkkadianCipher").field("key", &"[REDACTED]").finish()
+        f.debug_struct("AkkadianCipher")
+            .field("key", &"[REDACTED]")
+            .finish()
     }
 }
 
 impl AkkadianCipher {
     pub fn from_key_bytes(key: &[u8]) -> KupruResult<Self> {
         if key.len() != 32 {
-            return Err(KupruError::InvalidInput("LEMNĪ: cipher key must be 32 bytes".into()));
+            return Err(KupruError::InvalidInput(
+                "LEMNĪ: cipher key must be 32 bytes".into(),
+            ));
         }
         let mut k = [0u8; 32];
         k.copy_from_slice(key);
@@ -51,7 +55,13 @@ impl AkkadianCipher {
         let nonce = Nonce::from(nonce_bytes);
 
         let ciphertext = cipher
-            .encrypt(&nonce, Payload { msg: plaintext, aad })
+            .encrypt(
+                &nonce,
+                Payload {
+                    msg: plaintext,
+                    aad,
+                },
+            )
             .map_err(|e| KupruError::Crypto(format!("LEMNĪ: encrypt failed: {e}")))?;
 
         let mut out = Vec::with_capacity(1 + 12 + ciphertext.len());
@@ -78,7 +88,13 @@ impl AkkadianCipher {
 
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.key));
         cipher
-            .decrypt(&nonce, Payload { msg: ciphertext, aad })
+            .decrypt(
+                &nonce,
+                Payload {
+                    msg: ciphertext,
+                    aad,
+                },
+            )
             .map_err(|e| KupruError::Crypto(format!("LEMNĪ: decrypt failed: {e}")))
     }
 }
@@ -86,22 +102,24 @@ impl AkkadianCipher {
 /// Serialisable envelope for transport / storage.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CipherEnvelope {
-    pub version:    u8,
-    pub nonce_hex:  String,
-    pub ct_hex:     String,
-    pub aad_hex:    String,
+    pub version: u8,
+    pub nonce_hex: String,
+    pub ct_hex: String,
+    pub aad_hex: String,
 }
 
 impl CipherEnvelope {
     pub fn from_sealed(sealed: &[u8], aad: &[u8]) -> KupruResult<Self> {
         if sealed.len() < 13 {
-            return Err(KupruError::Crypto("LEMNĪ: sealed too short for envelope".into()));
+            return Err(KupruError::Crypto(
+                "LEMNĪ: sealed too short for envelope".into(),
+            ));
         }
         Ok(Self {
-            version:   sealed[0],
+            version: sealed[0],
             nonce_hex: hex_encode(&sealed[1..13]),
-            ct_hex:    hex_encode(&sealed[13..]),
-            aad_hex:   hex_encode(aad),
+            ct_hex: hex_encode(&sealed[13..]),
+            aad_hex: hex_encode(aad),
         })
     }
 }
@@ -114,8 +132,8 @@ fn hex_encode(b: &[u8]) -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct CipherText {
     pub version: u8,
-    pub nonce:   [u8; 12],
-    pub data:    Vec<u8>,
+    pub nonce: [u8; 12],
+    pub data: Vec<u8>,
 }
 
 impl CipherText {
@@ -125,7 +143,11 @@ impl CipherText {
         }
         let mut nonce = [0u8; 12];
         nonce.copy_from_slice(&sealed[1..13]);
-        Ok(Self { version: sealed[0], nonce, data: sealed[13..].to_vec() })
+        Ok(Self {
+            version: sealed[0],
+            nonce,
+            data: sealed[13..].to_vec(),
+        })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

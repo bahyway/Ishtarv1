@@ -28,16 +28,28 @@ pub enum AOLCat {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
-    pub end:   usize,
-    pub line:  u32,
-    pub col:   u32,
+    pub end: usize,
+    pub line: u32,
+    pub col: u32,
 }
 
 impl Span {
     pub fn new(start: usize, end: usize, line: u32, col: u32) -> Self {
-        Self { start, end, line, col }
+        Self {
+            start,
+            end,
+            line,
+            col,
+        }
     }
-    pub fn dummy() -> Self { Self { start: 0, end: 0, line: 0, col: 0 } }
+    pub fn dummy() -> Self {
+        Self {
+            start: 0,
+            end: 0,
+            line: 0,
+            col: 0,
+        }
+    }
 }
 
 impl fmt::Display for Span {
@@ -53,30 +65,77 @@ pub enum AkkToken {
     // ── Module boundary ───────────────────────────────────────────────────────
     Tablet,
     // ── Entity declarations ───────────────────────────────────────────────────
-    Sign, Word, AolMap,
+    Sign,
+    Word,
+    AolMap,
     // ── Graph query ───────────────────────────────────────────────────────────
-    Seek, Traverse, Where, Limit, Depth,
+    Seek,
+    Traverse,
+    Where,
+    Limit,
+    Depth,
     // ── Pipeline ingestion ────────────────────────────────────────────────────
-    Ingest, Station, Lane, Format,
+    Ingest,
+    Station,
+    Lane,
+    Format,
     // ── Flow control ──────────────────────────────────────────────────────────
-    Shumma, Ul, Adannu, Turru, Sharru,
+    Shumma,
+    Ul,
+    Adannu,
+    Turru,
+    Sharru,
     // ── Policy / Security ─────────────────────────────────────────────────────
-    Policy, Allow, Deny, Firewall, Seal, Verify,
+    Policy,
+    Allow,
+    Deny,
+    Firewall,
+    Seal,
+    Verify,
     // ── Language package ──────────────────────────────────────────────────────
-    LangPkg, Use, Export,
+    LangPkg,
+    Use,
+    Export,
     // ── Annotations ───────────────────────────────────────────────────────────
-    AtCite, AtSeal, AtDomain, AtVersion,
+    AtCite,
+    AtSeal,
+    AtDomain,
+    AtVersion,
     // ── Literals ─────────────────────────────────────────────────────────────
-    IntLit(i64), FloatLit(f64), StrLit(String),
-    BoolLit(bool), GlyphLit(char), MeszlLit(u32),
+    IntLit(i64),
+    FloatLit(f64),
+    StrLit(String),
+    BoolLit(bool),
+    GlyphLit(char),
+    MeszlLit(u32),
     // ── Identifiers ───────────────────────────────────────────────────────────
     Ident(String),
     // ── Punctuation ───────────────────────────────────────────────────────────
-    LBrace, RBrace, LParen, RParen, LBracket, RBracket,
-    Colon, ColonColon, Semi, Comma, Dot,
-    Eq, EqEq, NotEq, Lt, Gt, LtEq, GtEq,
-    Plus, Minus, Star, Slash,
-    PipeForward, Arrow, FatArrow,
+    LBrace,
+    RBrace,
+    LParen,
+    RParen,
+    LBracket,
+    RBracket,
+    Colon,
+    ColonColon,
+    Semi,
+    Comma,
+    Dot,
+    Eq,
+    EqEq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    PipeForward,
+    Arrow,
+    FatArrow,
     // ── Special ───────────────────────────────────────────────────────────────
     Eof,
     Error(String),
@@ -85,69 +144,84 @@ pub enum AkkToken {
 impl AkkToken {
     pub fn aol_cat(&self) -> Option<AOLCat> {
         match self {
-            AkkToken::Shumma | AkkToken::Ul
-            | AkkToken::Adannu | AkkToken::Turru
-            | AkkToken::Sharru                        => Some(AOLCat::Flow),
+            AkkToken::Shumma
+            | AkkToken::Ul
+            | AkkToken::Adannu
+            | AkkToken::Turru
+            | AkkToken::Sharru => Some(AOLCat::Flow),
 
-            AkkToken::Sign | AkkToken::Word
-            | AkkToken::AolMap | AkkToken::Tablet     => Some(AOLCat::Entity),
+            AkkToken::Sign | AkkToken::Word | AkkToken::AolMap | AkkToken::Tablet => {
+                Some(AOLCat::Entity)
+            }
 
-            AkkToken::Seek | AkkToken::Traverse
-            | AkkToken::Where | AkkToken::Limit
-            | AkkToken::Depth                         => Some(AOLCat::Query),
+            AkkToken::Seek
+            | AkkToken::Traverse
+            | AkkToken::Where
+            | AkkToken::Limit
+            | AkkToken::Depth => Some(AOLCat::Query),
 
-            AkkToken::Ingest | AkkToken::Station
-            | AkkToken::Lane | AkkToken::Format       => Some(AOLCat::Ingest),
+            AkkToken::Ingest | AkkToken::Station | AkkToken::Lane | AkkToken::Format => {
+                Some(AOLCat::Ingest)
+            }
 
-            AkkToken::Policy | AkkToken::Allow
-            | AkkToken::Deny | AkkToken::Firewall
-            | AkkToken::Seal | AkkToken::Verify       => Some(AOLCat::Policy),
+            AkkToken::Policy
+            | AkkToken::Allow
+            | AkkToken::Deny
+            | AkkToken::Firewall
+            | AkkToken::Seal
+            | AkkToken::Verify => Some(AOLCat::Policy),
 
-            AkkToken::LangPkg | AkkToken::Use
-            | AkkToken::Export                        => Some(AOLCat::LangPkg),
+            AkkToken::LangPkg | AkkToken::Use | AkkToken::Export => Some(AOLCat::LangPkg),
 
-            _                                         => None,
+            _ => None,
         }
     }
 
     pub fn canonical_spelling(&self) -> Option<&'static str> {
         match self {
-            AkkToken::Tablet    => Some("tablet"),
-            AkkToken::Sign      => Some("sign"),
-            AkkToken::Word      => Some("word"),
-            AkkToken::AolMap    => Some("aol_map"),
-            AkkToken::Seek      => Some("seek"),
-            AkkToken::Traverse  => Some("traverse"),
-            AkkToken::Where     => Some("where"),
-            AkkToken::Limit     => Some("limit"),
-            AkkToken::Depth     => Some("depth"),
-            AkkToken::Ingest    => Some("ingest"),
-            AkkToken::Station   => Some("station"),
-            AkkToken::Lane      => Some("lane"),
-            AkkToken::Format    => Some("format"),
-            AkkToken::Shumma    => Some("shumma"),
-            AkkToken::Ul        => Some("ul"),
-            AkkToken::Adannu    => Some("adannu"),
-            AkkToken::Turru     => Some("turru"),
-            AkkToken::Sharru    => Some("sharru"),
-            AkkToken::Policy    => Some("policy"),
-            AkkToken::Allow     => Some("allow"),
-            AkkToken::Deny      => Some("deny"),
-            AkkToken::Firewall  => Some("firewall"),
-            AkkToken::Seal      => Some("seal"),
-            AkkToken::Verify    => Some("verify"),
-            AkkToken::LangPkg   => Some("lang_pkg"),
-            AkkToken::Use       => Some("use"),
-            AkkToken::Export    => Some("export"),
-            _                   => None,
+            AkkToken::Tablet => Some("tablet"),
+            AkkToken::Sign => Some("sign"),
+            AkkToken::Word => Some("word"),
+            AkkToken::AolMap => Some("aol_map"),
+            AkkToken::Seek => Some("seek"),
+            AkkToken::Traverse => Some("traverse"),
+            AkkToken::Where => Some("where"),
+            AkkToken::Limit => Some("limit"),
+            AkkToken::Depth => Some("depth"),
+            AkkToken::Ingest => Some("ingest"),
+            AkkToken::Station => Some("station"),
+            AkkToken::Lane => Some("lane"),
+            AkkToken::Format => Some("format"),
+            AkkToken::Shumma => Some("shumma"),
+            AkkToken::Ul => Some("ul"),
+            AkkToken::Adannu => Some("adannu"),
+            AkkToken::Turru => Some("turru"),
+            AkkToken::Sharru => Some("sharru"),
+            AkkToken::Policy => Some("policy"),
+            AkkToken::Allow => Some("allow"),
+            AkkToken::Deny => Some("deny"),
+            AkkToken::Firewall => Some("firewall"),
+            AkkToken::Seal => Some("seal"),
+            AkkToken::Verify => Some("verify"),
+            AkkToken::LangPkg => Some("lang_pkg"),
+            AkkToken::Use => Some("use"),
+            AkkToken::Export => Some("export"),
+            _ => None,
         }
     }
 
     pub fn is_block_opener(&self) -> bool {
-        matches!(self,
-            AkkToken::Tablet | AkkToken::Sign  | AkkToken::Word
-            | AkkToken::AolMap | AkkToken::Seek | AkkToken::Ingest
-            | AkkToken::Policy | AkkToken::Firewall | AkkToken::LangPkg
+        matches!(
+            self,
+            AkkToken::Tablet
+                | AkkToken::Sign
+                | AkkToken::Word
+                | AkkToken::AolMap
+                | AkkToken::Seek
+                | AkkToken::Ingest
+                | AkkToken::Policy
+                | AkkToken::Firewall
+                | AkkToken::LangPkg
         )
     }
 }
@@ -155,14 +229,14 @@ impl AkkToken {
 impl fmt::Display for AkkToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AkkToken::Ident(s)    => write!(f, "Ident({})", s),
-            AkkToken::IntLit(n)   => write!(f, "Int({})", n),
+            AkkToken::Ident(s) => write!(f, "Ident({})", s),
+            AkkToken::IntLit(n) => write!(f, "Int({})", n),
             AkkToken::FloatLit(v) => write!(f, "Float({})", v),
-            AkkToken::StrLit(s)   => write!(f, "Str({:?})", s),
-            AkkToken::BoolLit(b)  => write!(f, "Bool({})", b),
+            AkkToken::StrLit(s) => write!(f, "Str({:?})", s),
+            AkkToken::BoolLit(b) => write!(f, "Bool({})", b),
             AkkToken::GlyphLit(c) => write!(f, "Glyph({})", c),
             AkkToken::MeszlLit(n) => write!(f, "MesZL#{}", n),
-            AkkToken::Error(e)    => write!(f, "Error({})", e),
+            AkkToken::Error(e) => write!(f, "Error({})", e),
             other => {
                 if let Some(kw) = other.canonical_spelling() {
                     write!(f, "{}", kw)
@@ -179,22 +253,27 @@ impl fmt::Display for AkkToken {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpannedToken {
     pub token: AkkToken,
-    pub span:  Span,
+    pub span: Span,
 }
 
 impl SpannedToken {
-    pub fn new(token: AkkToken, span: Span) -> Self { Self { token, span } }
+    pub fn new(token: AkkToken, span: Span) -> Self {
+        Self { token, span }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LexError {
     pub message: String,
-    pub span:    Span,
+    pub span: Span,
 }
 
 impl LexError {
     pub fn new(message: impl Into<String>, span: Span) -> Self {
-        Self { message: message.into(), span }
+        Self {
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -208,61 +287,71 @@ impl fmt::Display for LexError {
 
 fn keyword(s: &str) -> Option<AkkToken> {
     match s {
-        "tablet"    => Some(AkkToken::Tablet),
-        "sign"      => Some(AkkToken::Sign),
-        "word"      => Some(AkkToken::Word),
-        "aol_map"   => Some(AkkToken::AolMap),
-        "seek"      => Some(AkkToken::Seek),
-        "traverse"  => Some(AkkToken::Traverse),
-        "where"     => Some(AkkToken::Where),
-        "limit"     => Some(AkkToken::Limit),
-        "depth"     => Some(AkkToken::Depth),
-        "ingest"    => Some(AkkToken::Ingest),
-        "station"   => Some(AkkToken::Station),
-        "lane"      => Some(AkkToken::Lane),
-        "format"    => Some(AkkToken::Format),
-        "shumma"    => Some(AkkToken::Shumma),
-        "ul"        => Some(AkkToken::Ul),
-        "adannu"    => Some(AkkToken::Adannu),
-        "turru"     => Some(AkkToken::Turru),
-        "sharru"    => Some(AkkToken::Sharru),
-        "true"      => Some(AkkToken::BoolLit(true)),
-        "false"     => Some(AkkToken::BoolLit(false)),
-        "policy"    => Some(AkkToken::Policy),
-        "allow"     => Some(AkkToken::Allow),
-        "deny"      => Some(AkkToken::Deny),
-        "firewall"  => Some(AkkToken::Firewall),
-        "seal"      => Some(AkkToken::Seal),
-        "verify"    => Some(AkkToken::Verify),
-        "lang_pkg"  => Some(AkkToken::LangPkg),
-        "use"       => Some(AkkToken::Use),
-        "export"    => Some(AkkToken::Export),
-        _           => None,
+        "tablet" => Some(AkkToken::Tablet),
+        "sign" => Some(AkkToken::Sign),
+        "word" => Some(AkkToken::Word),
+        "aol_map" => Some(AkkToken::AolMap),
+        "seek" => Some(AkkToken::Seek),
+        "traverse" => Some(AkkToken::Traverse),
+        "where" => Some(AkkToken::Where),
+        "limit" => Some(AkkToken::Limit),
+        "depth" => Some(AkkToken::Depth),
+        "ingest" => Some(AkkToken::Ingest),
+        "station" => Some(AkkToken::Station),
+        "lane" => Some(AkkToken::Lane),
+        "format" => Some(AkkToken::Format),
+        "shumma" => Some(AkkToken::Shumma),
+        "ul" => Some(AkkToken::Ul),
+        "adannu" => Some(AkkToken::Adannu),
+        "turru" => Some(AkkToken::Turru),
+        "sharru" => Some(AkkToken::Sharru),
+        "true" => Some(AkkToken::BoolLit(true)),
+        "false" => Some(AkkToken::BoolLit(false)),
+        "policy" => Some(AkkToken::Policy),
+        "allow" => Some(AkkToken::Allow),
+        "deny" => Some(AkkToken::Deny),
+        "firewall" => Some(AkkToken::Firewall),
+        "seal" => Some(AkkToken::Seal),
+        "verify" => Some(AkkToken::Verify),
+        "lang_pkg" => Some(AkkToken::LangPkg),
+        "use" => Some(AkkToken::Use),
+        "export" => Some(AkkToken::Export),
+        _ => None,
     }
 }
 
 // ── Lexer ─────────────────────────────────────────────────────────────────────
 
 pub struct Lexer<'src> {
-    src:        &'src str,
-    pos:        usize,
-    line:       u32,
+    src: &'src str,
+    pos: usize,
+    line: u32,
     line_start: usize,
     pub errors: Vec<LexError>,
 }
 
 impl<'src> Lexer<'src> {
     pub fn new(src: &'src str) -> Self {
-        Self { src, pos: 0, line: 0, line_start: 0, errors: Vec::new() }
+        Self {
+            src,
+            pos: 0,
+            line: 0,
+            line_start: 0,
+            errors: Vec::new(),
+        }
     }
 
-    fn col(&self) -> u32 { (self.pos - self.line_start) as u32 }
+    fn col(&self) -> u32 {
+        (self.pos - self.line_start) as u32
+    }
 
     fn current_span_at(&self, start: usize, sl: u32, sc: u32) -> Span {
         Span::new(start, self.pos, sl, sc)
     }
 
-    fn peek(&self) -> Option<char> { self.src[self.pos..].chars().next() }
+    fn peek(&self) -> Option<char> {
+        self.src[self.pos..].chars().next()
+    }
 
     fn peek2(&self) -> Option<char> {
         let mut chars = self.src[self.pos..].chars();
@@ -273,7 +362,10 @@ impl<'src> Lexer<'src> {
     fn advance(&mut self) -> Option<char> {
         let c = self.src[self.pos..].chars().next()?;
         self.pos += c.len_utf8();
-        if c == '\n' { self.line += 1; self.line_start = self.pos; }
+        if c == '\n' {
+            self.line += 1;
+            self.line_start = self.pos;
+        }
         Some(c)
     }
 
@@ -283,16 +375,23 @@ impl<'src> Lexer<'src> {
                 self.advance();
             }
             if self.src[self.pos..].starts_with("--") {
-                while self.peek().map(|c| c != '\n').unwrap_or(false) { self.advance(); }
+                while self.peek().map(|c| c != '\n').unwrap_or(false) {
+                    self.advance();
+                }
                 continue;
             }
             if self.src[self.pos..].starts_with("{-") {
-                self.advance(); self.advance();
+                self.advance();
+                self.advance();
                 loop {
                     if self.src[self.pos..].starts_with("-}") {
-                        self.advance(); self.advance(); break;
+                        self.advance();
+                        self.advance();
+                        break;
                     }
-                    if self.advance().is_none() { break; }
+                    if self.advance().is_none() {
+                        break;
+                    }
                 }
                 continue;
             }
@@ -306,17 +405,18 @@ impl<'src> Lexer<'src> {
             match self.advance() {
                 None => {
                     let span = self.current_span_at(start, sl, sc);
-                    self.errors.push(LexError::new("unterminated string literal", span));
+                    self.errors
+                        .push(LexError::new("unterminated string literal", span));
                     return SpannedToken::new(AkkToken::Error("unterminated string".into()), span);
                 }
                 Some('"') => break,
                 Some('\\') => match self.advance() {
-                    Some('n')  => s.push('\n'),
-                    Some('t')  => s.push('\t'),
+                    Some('n') => s.push('\n'),
+                    Some('t') => s.push('\t'),
                     Some('\\') => s.push('\\'),
-                    Some('"')  => s.push('"'),
-                    Some(c)    => s.push(c),
-                    None       => break,
+                    Some('"') => s.push('"'),
+                    Some(c) => s.push(c),
+                    None => break,
                 },
                 Some(c) => s.push(c),
             }
@@ -329,27 +429,36 @@ impl<'src> Lexer<'src> {
         s.push(first);
         let mut is_float = false;
         while let Some(c) = self.peek() {
-            if c.is_ascii_digit() { s.push(c); self.advance(); }
-            else if c == '.' && !is_float
+            if c.is_ascii_digit() {
+                s.push(c);
+                self.advance();
+            } else if c == '.'
+                && !is_float
                 && self.peek2().map(|c2| c2.is_ascii_digit()).unwrap_or(false)
             {
-                is_float = true; s.push(c); self.advance();
-            } else { break; }
+                is_float = true;
+                s.push(c);
+                self.advance();
+            } else {
+                break;
+            }
         }
         let span = self.current_span_at(start, sl, sc);
         if is_float {
             match s.parse::<f64>() {
-                Ok(v)  => SpannedToken::new(AkkToken::FloatLit(v), span),
+                Ok(v) => SpannedToken::new(AkkToken::FloatLit(v), span),
                 Err(_) => {
-                    self.errors.push(LexError::new(format!("invalid float: {}", s), span));
+                    self.errors
+                        .push(LexError::new(format!("invalid float: {}", s), span));
                     SpannedToken::new(AkkToken::Error(s), span)
                 }
             }
         } else {
             match s.parse::<i64>() {
-                Ok(v)  => SpannedToken::new(AkkToken::IntLit(v), span),
+                Ok(v) => SpannedToken::new(AkkToken::IntLit(v), span),
                 Err(_) => {
-                    self.errors.push(LexError::new(format!("invalid int: {}", s), span));
+                    self.errors
+                        .push(LexError::new(format!("invalid int: {}", s), span));
                     SpannedToken::new(AkkToken::Error(s), span)
                 }
             }
@@ -359,23 +468,40 @@ impl<'src> Lexer<'src> {
     fn lex_meszl(&mut self, start: usize, sl: u32, sc: u32) -> SpannedToken {
         let mut s = String::new();
         while let Some(c) = self.peek() {
-            if c.is_ascii_digit() { s.push(c); self.advance(); } else { break; }
+            if c.is_ascii_digit() {
+                s.push(c);
+                self.advance();
+            } else {
+                break;
+            }
         }
         let span = self.current_span_at(start, sl, sc);
         match s.parse::<u32>() {
-            Ok(n)  => SpannedToken::new(AkkToken::MeszlLit(n), span),
+            Ok(n) => SpannedToken::new(AkkToken::MeszlLit(n), span),
             Err(_) => {
-                self.errors.push(LexError::new("invalid MesZL number after #", span));
+                self.errors
+                    .push(LexError::new("invalid MesZL number after #", span));
                 SpannedToken::new(AkkToken::Error(format!("#{}", s)), span)
             }
         }
     }
 
-    fn lex_ident_or_keyword(&mut self, first: char, start: usize, sl: u32, sc: u32) -> SpannedToken {
+    fn lex_ident_or_keyword(
+        &mut self,
+        first: char,
+        start: usize,
+        sl: u32,
+        sc: u32,
+    ) -> SpannedToken {
         let mut s = String::new();
         s.push(first);
         while let Some(c) = self.peek() {
-            if c.is_alphanumeric() || c == '_' { s.push(c); self.advance(); } else { break; }
+            if c.is_alphanumeric() || c == '_' {
+                s.push(c);
+                self.advance();
+            } else {
+                break;
+            }
         }
         let span = self.current_span_at(start, sl, sc);
         let tok = keyword(&s).unwrap_or(AkkToken::Ident(s));
@@ -385,16 +511,22 @@ impl<'src> Lexer<'src> {
     fn lex_annotation(&mut self, start: usize, sl: u32, sc: u32) -> SpannedToken {
         let mut s = String::new();
         while let Some(c) = self.peek() {
-            if c.is_alphanumeric() || c == '_' { s.push(c); self.advance(); } else { break; }
+            if c.is_alphanumeric() || c == '_' {
+                s.push(c);
+                self.advance();
+            } else {
+                break;
+            }
         }
         let span = self.current_span_at(start, sl, sc);
         let tok = match s.as_str() {
-            "cite"    => AkkToken::AtCite,
-            "seal"    => AkkToken::AtSeal,
-            "domain"  => AkkToken::AtDomain,
+            "cite" => AkkToken::AtCite,
+            "seal" => AkkToken::AtSeal,
+            "domain" => AkkToken::AtDomain,
             "version" => AkkToken::AtVersion,
             _ => {
-                self.errors.push(LexError::new(format!("unknown annotation @{}", s), span));
+                self.errors
+                    .push(LexError::new(format!("unknown annotation @{}", s), span));
                 AkkToken::Error(format!("@{}", s))
             }
         };
@@ -404,11 +536,11 @@ impl<'src> Lexer<'src> {
     fn next_token(&mut self) -> SpannedToken {
         self.skip_whitespace_and_comments();
         let start = self.pos;
-        let sl    = self.line;
-        let sc    = self.col();
+        let sl = self.line;
+        let sc = self.col();
 
         let c = match self.advance() {
-            None    => return SpannedToken::new(AkkToken::Eof, Span::new(start, start, sl, sc)),
+            None => return SpannedToken::new(AkkToken::Eof, Span::new(start, start, sl, sc)),
             Some(c) => c,
         };
 
@@ -416,32 +548,31 @@ impl<'src> Lexer<'src> {
             c if ('\u{12000}'..='\u{1237F}').contains(&c) => {
                 SpannedToken::new(AkkToken::GlyphLit(c), self.current_span_at(start, sl, sc))
             }
-            '"'  => self.lex_string(start, sl, sc),
-            '#'  => self.lex_meszl(start, sl, sc),
-            '@'  => self.lex_annotation(start, sl, sc),
+            '"' => self.lex_string(start, sl, sc),
+            '#' => self.lex_meszl(start, sl, sc),
+            '@' => self.lex_annotation(start, sl, sc),
             c if c.is_ascii_digit() => self.lex_number(c, start, sl, sc),
             '-' if self.peek().map(|c| c.is_ascii_digit()).unwrap_or(false) => {
                 let digit = self.advance().unwrap();
                 let mut st = self.lex_number(digit, start, sl, sc);
                 match &mut st.token {
-                    AkkToken::IntLit(n)   => *n = -*n,
+                    AkkToken::IntLit(n) => *n = -*n,
                     AkkToken::FloatLit(v) => *v = -*v,
                     _ => {}
                 }
                 st
             }
-            c if c.is_alphabetic() || c == '_' =>
-                self.lex_ident_or_keyword(c, start, sl, sc),
-            '{' => SpannedToken::new(AkkToken::LBrace,   Span::new(start, self.pos, sl, sc)),
-            '}' => SpannedToken::new(AkkToken::RBrace,   Span::new(start, self.pos, sl, sc)),
-            '(' => SpannedToken::new(AkkToken::LParen,   Span::new(start, self.pos, sl, sc)),
-            ')' => SpannedToken::new(AkkToken::RParen,   Span::new(start, self.pos, sl, sc)),
+            c if c.is_alphabetic() || c == '_' => self.lex_ident_or_keyword(c, start, sl, sc),
+            '{' => SpannedToken::new(AkkToken::LBrace, Span::new(start, self.pos, sl, sc)),
+            '}' => SpannedToken::new(AkkToken::RBrace, Span::new(start, self.pos, sl, sc)),
+            '(' => SpannedToken::new(AkkToken::LParen, Span::new(start, self.pos, sl, sc)),
+            ')' => SpannedToken::new(AkkToken::RParen, Span::new(start, self.pos, sl, sc)),
             '[' => SpannedToken::new(AkkToken::LBracket, Span::new(start, self.pos, sl, sc)),
             ']' => SpannedToken::new(AkkToken::RBracket, Span::new(start, self.pos, sl, sc)),
-            ';' => SpannedToken::new(AkkToken::Semi,     Span::new(start, self.pos, sl, sc)),
-            ',' => SpannedToken::new(AkkToken::Comma,    Span::new(start, self.pos, sl, sc)),
-            '+' => SpannedToken::new(AkkToken::Plus,     Span::new(start, self.pos, sl, sc)),
-            '*' => SpannedToken::new(AkkToken::Star,     Span::new(start, self.pos, sl, sc)),
+            ';' => SpannedToken::new(AkkToken::Semi, Span::new(start, self.pos, sl, sc)),
+            ',' => SpannedToken::new(AkkToken::Comma, Span::new(start, self.pos, sl, sc)),
+            '+' => SpannedToken::new(AkkToken::Plus, Span::new(start, self.pos, sl, sc)),
+            '*' => SpannedToken::new(AkkToken::Star, Span::new(start, self.pos, sl, sc)),
             ':' => {
                 if self.peek() == Some(':') {
                     self.advance();
@@ -467,7 +598,8 @@ impl<'src> Lexer<'src> {
                     SpannedToken::new(AkkToken::NotEq, Span::new(start, self.pos, sl, sc))
                 } else {
                     let span = Span::new(start, self.pos, sl, sc);
-                    self.errors.push(LexError::new("unexpected '!' — did you mean '!='?", span));
+                    self.errors
+                        .push(LexError::new("unexpected '!' — did you mean '!='?", span));
                     SpannedToken::new(AkkToken::Error("!".into()), span)
                 }
             }
@@ -496,14 +628,15 @@ impl<'src> Lexer<'src> {
                 }
             }
             '/' => SpannedToken::new(AkkToken::Slash, Span::new(start, self.pos, sl, sc)),
-            '.' => SpannedToken::new(AkkToken::Dot,   Span::new(start, self.pos, sl, sc)),
+            '.' => SpannedToken::new(AkkToken::Dot, Span::new(start, self.pos, sl, sc)),
             '|' => {
                 if self.peek() == Some('>') {
                     self.advance();
                     SpannedToken::new(AkkToken::PipeForward, Span::new(start, self.pos, sl, sc))
                 } else {
                     let span = Span::new(start, self.pos, sl, sc);
-                    self.errors.push(LexError::new("unexpected '|' — did you mean '|>'?", span));
+                    self.errors
+                        .push(LexError::new("unexpected '|' — did you mean '|>'?", span));
                     SpannedToken::new(AkkToken::Error("|".into()), span)
                 }
             }
@@ -522,7 +655,9 @@ impl<'src> Lexer<'src> {
             let st = self.next_token();
             let is_eof = st.token == AkkToken::Eof;
             tokens.push(st);
-            if is_eof { break; }
+            if is_eof {
+                break;
+            }
         }
         tokens
     }

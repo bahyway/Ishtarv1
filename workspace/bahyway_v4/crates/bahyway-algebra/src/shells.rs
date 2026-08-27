@@ -64,8 +64,8 @@ pub fn shell_boundaries(n: usize, epsilon: f64) -> Vec<f64> {
 pub fn shell_index(delta: f64, boundaries: &[f64]) -> usize {
     // binary search: find leftmost boundary that delta < boundary
     match boundaries.binary_search_by(|b| b.partial_cmp(&delta).unwrap()) {
-        Ok(i)  => i + 1,      // exact match → next shell
-        Err(i) => i,          // i = position where delta would be inserted
+        Ok(i) => i + 1, // exact match → next shell
+        Err(i) => i,    // i = position where delta would be inserted
     }
 }
 
@@ -74,7 +74,7 @@ pub fn shell_index(delta: f64, boundaries: &[f64]) -> usize {
 /// `B11 = round(H(P) × 240)` — converts to H(P) then to δ, then bins.
 pub fn b11_to_shell(b11: u8, boundaries: &[f64]) -> usize {
     let health = b11 as f64 / 240.0;
-    let delta  = 1.0 - health;
+    let delta = 1.0 - health;
     shell_index(delta, boundaries)
 }
 

@@ -36,12 +36,21 @@ pub fn drift_axis(snapshot: [u8; 3], root: [u8; 3]) -> DriftAxis {
     let db = (snapshot[2] as i16 - root[2] as i16).unsigned_abs() as u32;
 
     let max = dr.max(dg).max(db);
-    let tied = [dr == max, dg == max, db == max].iter().filter(|&&x| x).count() > 1;
+    let tied = [dr == max, dg == max, db == max]
+        .iter()
+        .filter(|&&x| x)
+        .count()
+        > 1;
 
-    if tied || max == 0 { DriftAxis::Balanced }
-    else if dr == max   { DriftAxis::Severity }
-    else if dg == max   { DriftAxis::Quality  }
-    else                { DriftAxis::Freshness }
+    if tied || max == 0 {
+        DriftAxis::Balanced
+    } else if dr == max {
+        DriftAxis::Severity
+    } else if dg == max {
+        DriftAxis::Quality
+    } else {
+        DriftAxis::Freshness
+    }
 }
 
 #[cfg(test)]

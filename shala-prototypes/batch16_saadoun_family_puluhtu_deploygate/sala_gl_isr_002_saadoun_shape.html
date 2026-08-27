@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · GL-ISR-002 · SaadounShape — Carved by Asymmetry</title>
+<style>
+  :root{
+    --basalt:#14120f; --tablet:#1f1b16; --gold:#c9a227; --lapis:#2e5d8c;
+    --copper:#b0642f; --alarm:#c23b2a; --bone:#e8e0cf;
+    --tablet-edge:#3a332a; --dim:#8f8672; --green:#7fbf5f; --violet:#a58cc0;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--basalt); color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif; overflow:hidden;}
+  #crumbs{padding:10px 16px 0; font-size:12px; color:var(--dim); letter-spacing:.08em;}
+  #crumbs b{color:var(--gold); font-weight:normal;}
+  #lede{padding:2px 16px 8px; font-size:14.5px;}
+  #banner{background:var(--alarm); color:var(--bone); text-align:center;
+    font-size:11px; letter-spacing:.35em; padding:3px 0; font-family:monospace;}
+  #grid{display:grid; grid-template-columns:1fr 320px; gap:10px;
+    padding:10px 16px 16px; height:calc(100% - 92px);}
+  .panel{background:var(--tablet); border:1px solid var(--tablet-edge);
+    border-radius:6px; position:relative; overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block; width:100%; height:100%;}
+  #deck{position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:5;}
+  #deck button{width:34px; height:34px; background:var(--basalt); color:var(--gold);
+    border:1px solid var(--tablet-edge); border-radius:4px; font-size:16px; cursor:pointer;}
+  #deck button.on{border-color:var(--gold);}
+  #acts{position:absolute; bottom:44px; left:10px; display:flex; gap:6px; flex-wrap:wrap; z-index:5;}
+  #acts button{background:var(--basalt); color:var(--copper); font-family:inherit;
+    border:1px solid var(--copper); border-radius:4px; padding:6px 11px;
+    font-size:12px; cursor:pointer;}
+  #acts button:hover{color:var(--gold); border-color:var(--gold);}
+  #acts button.done{color:var(--green); border-color:var(--green);}
+  #lawtags{position:absolute; bottom:10px; left:10px; display:flex; gap:6px;
+    flex-wrap:wrap; z-index:5;}
+  .lawtag{font-family:monospace; font-size:10px; color:var(--basalt);
+    background:var(--gold); padding:2px 7px; border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis); color:var(--bone);}
+  #side{display:flex; flex-direction:column;}
+  #side h2{font-size:12px; letter-spacing:.25em; color:var(--gold);
+    padding:10px 12px 6px; border-bottom:1px solid var(--tablet-edge);}
+  #journal{flex:1; overflow-y:auto; padding:10px 12px; font-size:12.5px; line-height:1.5;}
+  .entry{margin-bottom:10px; border-left:2px solid var(--copper); padding-left:8px;}
+  .entry .t{color:var(--dim); font-family:monospace; font-size:10px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Saadoun Court ▸ <b>GL-ISR-002 · SaadounShape</b></div>
+<div id="lede"><i>"A Tribe whose membrane was carved into existence by its own asymmetric motion."</i> Act I: the symmetric spin testifies to nothing. Act II: the waves arrive and the curves grow asymmetric. Act III: the hull carves itself into being — the unseen stern honestly UNNAMED.</div>
+<div id="banner">ŠALA REHEARSAL ONLY — THE ASYMMETRY IS THE INFORMANT — SOVEREIGN RENDER IS EGUI/WGPU</div>
+
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="deck">
+      <button id="bHome" title="Reset camera">⌖</button>
+      <button id="bPan"  title="Pan mode">✛</button>
+      <button id="bOrb"  title="Orbit mode" class="on">⟳</button>
+    </div>
+    <div id="acts">
+      <button id="a1">ACT I · WITNESS THE SYMMETRIC SPIN</button>
+      <button id="a2">ACT II · LET THE WAVES ARRIVE</button>
+      <button id="a3">ACT III · CARVE THE MEMBRANE</button>
+    </div>
+    <div id="lawtags">
+      <span class="lawtag">GL-ISR-002</span>
+      <span class="lawtag lapis">PB-ISR-002</span>
+      <span class="lawtag lapis">NEBERU SLICER</span>
+      <span class="lawtag lapis">MASKU EN-MDB-001</span>
+      <span class="lawtag">WITHHELD-FLAT</span>
+      <span class="lawtag">UNNAMED SURFACE</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>STORYENGINE JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+const rnd=mulberry32(0x53485044); /* "SHPD" */
+
+const cv=document.getElementById('cv'), g=cv.getContext('2d');
+const stage=document.getElementById('stage');
+function fit(){cv.width=stage.clientWidth; cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit); fit();
+
+const cam0={yaw:-0.55, pitch:0.45, zoom:1.0, px:0, py:0};
+let cam={...cam0}, mode='orbit', drag=null;
+document.getElementById('bHome').onclick=()=>{cam={...cam0};};
+const bPan=document.getElementById('bPan'), bOrb=document.getElementById('bOrb');
+bPan.onclick=()=>{mode='pan'; bPan.classList.add('on'); bOrb.classList.remove('on');};
+bOrb.onclick=()=>{mode='orbit'; bOrb.classList.add('on'); bPan.classList.remove('on');};
+stage.addEventListener('wheel',e=>{e.preventDefault();
+  cam.zoom=Math.min(3,Math.max(.4,cam.zoom*(e.deltaY<0?1.08:0.92)));},{passive:false});
+stage.addEventListener('mousedown',e=>{if(e.button!==0)return; drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mousemove',e=>{if(!drag)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY};
+  if(mode==='orbit'){cam.yaw+=dx*.005; cam.pitch=Math.min(1.25,Math.max(-.15,cam.pitch+dy*.005));}
+  else{cam.px+=dx; cam.py+=dy;}});
+window.addEventListener('mouseup',()=>drag=null);
+
+function proj(p,cx,cy,sc){
+  const cy2=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  let x=p.x*cy2-p.z*sy, z=p.x*sy+p.z*cy2, y=p.y;
+  let yy=y*cp-z*sp, zz=y*sp+z*cp;
+  const d=4.6, s=sc*cam.zoom*(d/(d+zz));
+  return {x:cx+cam.px+x*s, y:cy+cam.py-yy*s, z:zz};
+}
+const jEl=document.getElementById('journal');
+function journal(t){const d=document.createElement('div'); d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;
+  jEl.prepend(d);}
+
+/* ---- the hull: parametric ship membrane, (u,v) heptagon-lattice stand-in ---- */
+const NU=14, NV=16;
+function hullPoint(u,v){ /* u in [0,1] bow->stern, v around */
+  const x=-1+2*u;
+  const r=0.34*Math.sqrt(Math.max(0.02,1-x*x))*(1+0.25*x);
+  const a=v*2*Math.PI;
+  return {x:x, y:r*0.75*Math.sin(a)*0.6+0.05, z:r*Math.cos(a)};
+}
+/* scatterers ON the hull */
+const scat=[];
+for(let k=0;k<26;k++){
+  const u=rnd(), v=rnd();
+  const p=hullPoint(u,v); scat.push({u:u,v:v,p:p,hist:[]});
+}
+/* motion state */
+let waves=false, carving=false, carve=0, act={1:false,2:false,3:false};
+function bodyRot(t){
+  const yaw=t*0.4;
+  const roll = waves? 0.30*Math.sin(t*1.13) : 0;
+  const pitch= waves? 0.22*Math.sin(t*1.71+1.0) : 0;
+  const cy=Math.cos(yaw), sy=Math.sin(yaw);
+  const cr=Math.cos(roll), sr=Math.sin(roll);
+  const cp=Math.cos(pitch), sp=Math.sin(pitch);
+  return function(p){
+    /* Rz(pitch)*Rx(roll)*Ry(yaw) applied to body point */
+    let x=p.x*cy+p.z*sy, z=-p.x*sy+p.z*cy, y=p.y;
+    let y2=y*cr-z*sr, z2=y*sr+z*cr;
+    let x3=x*cp-y2*sp, y3=x*sp+y2*cp;
+    return {x:x3,y:y3,z:z2};
+  };
+}
+const b1=document.getElementById('a1'), b2=document.getElementById('a2'), b3=document.getElementById('a3');
+b1.onclick=()=>{act[1]=true; b1.classList.add('done');
+  journal('ACT I — the Tribe spins about a single uniform axis. Every range curve below is one clean symmetric harmonic: <b>blind along the axis</b>. Nēberu finds a single line in the spectrum. Verdict: <b style="color:var(--gold)">WITHHELD-FLAT</b> — 2D plus hull-constraints only; a third coordinate claimed here would be fiction (§7.1).');};
+b2.onclick=()=>{
+  if(!act[1]){journal('The court hears Act I first — the symmetric spin must testify to nothing before the waves may testify to everything.'); return;}
+  waves=true; act[2]=true; b2.classList.add('done');
+  journal('ACT II — <b>the waves arrive.</b> Roll and pitch join the yaw at distinct frequencies; the rotation vector precesses. Watch the curves: symmetry breaks, harmonics multiply. Nēberu decomposes each asymmetric curve — <b>one coordinate per resolved harmonic</b> (§3). The imperfection of the orbit is the testimony of the form.');};
+b3.onclick=()=>{
+  if(!act[2]){journal('The family order holds (§7.4): the waves must arrive before the carving — a symmetric curve carves nothing.'); return;}
+  carving=true; act[3]=true; b3.classList.add('done');
+  journal('ACT III — <b>THE MEMBRANE IS CARVED.</b> Harmonics give positions, visibility windows carve the hull, amplitude lobes set the normals: three witnesses, one surface (§3–§5). Cells mint as Masku lattice at 7D addresses (§6). The never-witnessed stern remains <span style="color:var(--alarm)">UNNAMED SURFACE</span> — present, bounded, honest (§4). <i>A Tribe whose membrane was carved into existence by its own asymmetric motion.</i> 𒁾 سعدون');};
+
+let t0=performance.now();
+function frame(now){
+  const t=now/1000;
+  g.fillStyle='#14120f'; g.fillRect(0,0,cv.width,cv.height);
+  const cx=cv.width*0.34, cy=cv.height*0.46, sc=cv.height*0.36;
+  /* sea membrane */
+  for(let j=0;j<=6;j++){
+    g.beginPath();
+    for(let i=0;i<=30;i++){
+      const u=(i/30-0.5)*3.0, v=(j/6-0.5)*1.6;
+      const p={x:u,y:-0.55+(waves?0.09:0.04)*Math.sin(t*(waves?1.4:0.7)+u*3+v*2)-0.1*(u*u/6+v*v/4),z:v};
+      const q=proj(p,cx,cy,sc); i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);
+    }
+    g.strokeStyle='rgba(46,93,140,'+(waves?0.28:0.16)+')'; g.lineWidth=1; g.stroke();
+  }
+  const R=bodyRot(t);
+  if(carving && carve<1) carve=Math.min(1,carve+0.0025);
+  /* membrane lattice (carved fraction; stern far-side stays UNNAMED) */
+  if(carve>0){
+    for(let iu=0;iu<NU;iu++)for(let iv=0;iv<NV;iv++){
+      const u0=iu/NU, v0=iv/NV;
+      const unnamed=(u0>0.72 && v0>0.5); /* never-witnessed stern quarter */
+      const reveal=(iu+iv*0.5)/(NU+NV*0.5);
+      if(!unnamed && reveal>carve) continue;
+      const c=[hullPoint(u0,v0),hullPoint(u0+1/NU,v0),hullPoint(u0+1/NU,v0+1/NV),hullPoint(u0,v0+1/NV)];
+      g.beginPath();
+      c.forEach((p,k)=>{const q=proj(R(p),cx,cy,sc); k?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);});
+      g.closePath();
+      if(unnamed){g.strokeStyle='rgba(194,59,42,0.55)'; g.setLineDash([3,3]);
+        g.lineWidth=1; g.stroke(); g.setLineDash([]);}
+      else{g.strokeStyle='rgba(127,191,95,0.4)'; g.lineWidth=1; g.stroke();
+        g.fillStyle='rgba(201,162,39,0.05)'; g.fill();}
+    }
+  }
+  /* scatterers + range history recording */
+  scat.forEach(s=>{
+    const w=R(s.p), q=proj(w,cx,cy,sc);
+    g.beginPath(); g.arc(q.x,q.y,3.2,0,Math.PI*2);
+    g.fillStyle=carving?'#7fbf5f':'#c9a227'; g.fill();
+    s.hist.push(w.z); if(s.hist.length>240)s.hist.shift();
+  });
+  /* curve panel — the asymmetric curves themselves */
+  const mx=cv.width*0.63, my=cv.height*0.12, mw=cv.width*0.33, mh=cv.height*0.56;
+  g.fillStyle='rgba(20,18,15,0.85)'; g.fillRect(mx,my,mw,mh);
+  g.strokeStyle='#3a332a'; g.strokeRect(mx,my,mw,mh);
+  g.fillStyle='#c9a227'; g.font='11px monospace'; g.textAlign='center';
+  g.fillText('RANGE HISTORIES — the curves Nēberu reads', mx+mw/2, my-6);
+  const cols=['#c9a227','#2e5d8c','#b0642f','#a58cc0','#7fbf5f','#e8e0cf'];
+  scat.slice(0,6).forEach((s,si)=>{
+    g.beginPath();
+    s.hist.forEach((z,k)=>{
+      const px=mx+ k/240*mw, py=my+mh/2 - z*mh*0.9 - si*0; 
+      k?g.lineTo(px,py):g.moveTo(px,py);
+    });
+    g.strokeStyle=cols[si]; g.globalAlpha=0.8; g.lineWidth=1.2; g.stroke(); g.globalAlpha=1;
+  });
+  g.font='11px monospace'; g.textAlign='center';
+  g.fillStyle=carving?'#7fbf5f':(waves?'#a58cc0':'#c9a227');
+  g.fillText(carving?'three witnesses agree — Masku cells minting at 7D addresses':
+             waves?'asymmetric superposition — one coordinate per harmonic':
+             'single clean harmonic — WITHHELD-FLAT territory',
+             mx+mw/2, my+mh+14);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('SAADOUN COURT reconvenes for the fourth son. The ship Tribe spins on a calm sea; six of its curves are drawn live at right. Hear the acts in order — ① the symmetric spin, ② the waves, ③ the carving.');
+</script>
+</body>
+</html>

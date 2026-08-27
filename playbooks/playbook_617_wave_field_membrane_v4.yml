@@ -1,0 +1,23 @@
+---
+# PB-360 · Šala tab deploy · BIGRING Relief (RU contours, MLU shells) · GL-UNT-001 draft
+# Run: ansible-playbook PB-360_sala_bigring_relief_ru_mlu.yml   (running it is the CSR-08 confirmation)
+- name: PB-360 deploy Šala Wave-Field Membrane tab
+  hosts: girsu
+  become: false
+  vars:
+    sala_root: "{{ ansible_env.HOME }}/bahyway/sala/tabs"
+    tab: sala_wave_field_membrane_v4.html
+  tasks:
+    - name: Ensure Šala tabs directory
+      ansible.builtin.file: {path: "{{ sala_root }}", state: directory, mode: "0755"}
+    - name: Place tab
+      ansible.builtin.copy: {src: "{{ tab }}", dest: "{{ sala_root }}/{{ tab }}", mode: "0644"}
+    - name: COMPILE gate — script parses
+      ansible.builtin.shell: |
+        node -e "const h=require('fs').readFileSync('{{ sala_root }}/{{ tab }}','utf8');new Function(h.split('<script>')[1].split('</script>')[0]);console.log('COMPILE green')"
+      changed_when: false
+    - name: Journal entry
+      ansible.builtin.lineinfile:
+        path: "{{ sala_root }}/../court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-360 sala_wave_field_membrane_v4 placed · GL-FLD-001 §10 Anti-SQL bench added"

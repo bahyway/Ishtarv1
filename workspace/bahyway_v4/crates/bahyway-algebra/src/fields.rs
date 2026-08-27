@@ -17,19 +17,19 @@
 #[repr(u8)]
 pub enum SemanticField {
     /// S(x,t) — semantic coherence, continuity, orbit persistence.
-    Stability  = 0,
+    Stability = 0,
     /// C(x,t) — instability, contradiction tension, prediction conflict.
-    Chaos      = 1,
+    Chaos = 1,
     /// H(x,t) — ambiguity, semantic uncertainty, information dispersion.
-    Entropy    = 2,
+    Entropy = 2,
     /// K(x,t) — coherence failure, fragmentation propagation, shockwaves.
-    Collapse   = 3,
+    Collapse = 3,
     /// R(x,t) — reintegration, semantic repair, coherence restoration.
-    Healing    = 4,
+    Healing = 4,
     /// U(x,t) — intentional steering, query focus, directional energy.
-    Attention  = 5,
+    Attention = 5,
     /// W(x,t) — adaptive memory, manifold plasticity, semantic evolution.
-    Learning   = 6,
+    Learning = 6,
 }
 
 impl SemanticField {
@@ -37,12 +37,12 @@ impl SemanticField {
     pub fn symbol(self) -> &'static str {
         match self {
             SemanticField::Stability => "S",
-            SemanticField::Chaos     => "C",
-            SemanticField::Entropy   => "H",
-            SemanticField::Collapse  => "K",
-            SemanticField::Healing   => "R",
+            SemanticField::Chaos => "C",
+            SemanticField::Entropy => "H",
+            SemanticField::Collapse => "K",
+            SemanticField::Healing => "R",
             SemanticField::Attention => "U",
-            SemanticField::Learning  => "W",
+            SemanticField::Learning => "W",
         }
     }
 
@@ -50,23 +50,29 @@ impl SemanticField {
     pub fn description(self) -> &'static str {
         match self {
             SemanticField::Stability => "semantic coherence and orbit persistence",
-            SemanticField::Chaos     => "instability, contradiction tension",
-            SemanticField::Entropy   => "ambiguity and information dispersion",
-            SemanticField::Collapse  => "coherence failure and fragmentation",
-            SemanticField::Healing   => "reintegration and semantic repair",
+            SemanticField::Chaos => "instability, contradiction tension",
+            SemanticField::Entropy => "ambiguity and information dispersion",
+            SemanticField::Collapse => "coherence failure and fragmentation",
+            SemanticField::Healing => "reintegration and semantic repair",
             SemanticField::Attention => "intentional steering and query focus",
-            SemanticField::Learning  => "adaptive memory and manifold plasticity",
+            SemanticField::Learning => "adaptive memory and manifold plasticity",
         }
     }
 
     /// Returns `true` for fields that increase system order (reduce free energy).
     pub fn is_stabilising(self) -> bool {
-        matches!(self, SemanticField::Stability | SemanticField::Healing | SemanticField::Learning)
+        matches!(
+            self,
+            SemanticField::Stability | SemanticField::Healing | SemanticField::Learning
+        )
     }
 
     /// Returns `true` for fields that increase disorder (increase free energy).
     pub fn is_destabilising(self) -> bool {
-        matches!(self, SemanticField::Chaos | SemanticField::Entropy | SemanticField::Collapse)
+        matches!(
+            self,
+            SemanticField::Chaos | SemanticField::Entropy | SemanticField::Collapse
+        )
     }
 
     /// All 7 fields in declaration order.
@@ -96,11 +102,11 @@ impl core::fmt::Display for SemanticField {
 #[repr(u8)]
 pub enum SemanticPhase {
     /// Phase 1 — HeptaScript source parsed into semantic AST.
-    Parsing          = 1,
+    Parsing = 1,
     /// Phase 2 — Semantic structures compiled into field tensor representations.
     TensorCompilation = 2,
     /// Phase 3 — Query perturbations deform semantic geometry.
-    QueryInjection   = 3,
+    QueryInjection = 3,
     /// Phase 4 — Coherent attractors self-organize.
     OrbitStabilization = 4,
     /// Phase 5 — Unstable structures fragment (Collapse field rises).
@@ -108,32 +114,32 @@ pub enum SemanticPhase {
     /// Phase 6 — Repair fields restore manifold continuity.
     HealingPropagation = 6,
     /// Phase 7 — Stable orbit manifolds become query results.
-    ResultFormation  = 7,
+    ResultFormation = 7,
 }
 
 impl SemanticPhase {
     pub fn as_str(self) -> &'static str {
         match self {
-            SemanticPhase::Parsing            => "PARSING",
-            SemanticPhase::TensorCompilation  => "TENSOR_COMPILATION",
-            SemanticPhase::QueryInjection     => "QUERY_INJECTION",
+            SemanticPhase::Parsing => "PARSING",
+            SemanticPhase::TensorCompilation => "TENSOR_COMPILATION",
+            SemanticPhase::QueryInjection => "QUERY_INJECTION",
             SemanticPhase::OrbitStabilization => "ORBIT_STABILIZATION",
             SemanticPhase::CollapseResolution => "COLLAPSE_RESOLUTION",
             SemanticPhase::HealingPropagation => "HEALING_PROPAGATION",
-            SemanticPhase::ResultFormation    => "RESULT_FORMATION",
+            SemanticPhase::ResultFormation => "RESULT_FORMATION",
         }
     }
 
     /// The active `SemanticField` most relevant to this phase.
     pub fn dominant_field(self) -> SemanticField {
         match self {
-            SemanticPhase::Parsing            => SemanticField::Attention,
-            SemanticPhase::TensorCompilation  => SemanticField::Stability,
-            SemanticPhase::QueryInjection     => SemanticField::Attention,
+            SemanticPhase::Parsing => SemanticField::Attention,
+            SemanticPhase::TensorCompilation => SemanticField::Stability,
+            SemanticPhase::QueryInjection => SemanticField::Attention,
             SemanticPhase::OrbitStabilization => SemanticField::Stability,
             SemanticPhase::CollapseResolution => SemanticField::Collapse,
             SemanticPhase::HealingPropagation => SemanticField::Healing,
-            SemanticPhase::ResultFormation    => SemanticField::Stability,
+            SemanticPhase::ResultFormation => SemanticField::Stability,
         }
     }
 
@@ -172,10 +178,16 @@ mod tests {
 
     #[test]
     fn stabilising_and_destabilising_partition() {
-        let stab: Vec<_> = SemanticField::all().iter().filter(|f| f.is_stabilising()).collect();
-        let destab: Vec<_> = SemanticField::all().iter().filter(|f| f.is_destabilising()).collect();
+        let stab: Vec<_> = SemanticField::all()
+            .iter()
+            .filter(|f| f.is_stabilising())
+            .collect();
+        let destab: Vec<_> = SemanticField::all()
+            .iter()
+            .filter(|f| f.is_destabilising())
+            .collect();
         // Attention and Learning are only one of each; make sure no overlap
-        assert_eq!(stab.len(), 3);   // Stability, Healing, Learning
+        assert_eq!(stab.len(), 3); // Stability, Healing, Learning
         assert_eq!(destab.len(), 3); // Chaos, Entropy, Collapse
     }
 

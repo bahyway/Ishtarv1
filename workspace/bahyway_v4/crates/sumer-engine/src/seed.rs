@@ -21,7 +21,10 @@ pub fn meszl_eav_rows(sign: &MesZLSign) -> Vec<(String, String)> {
             "meszl.unicode_hex".to_string(),
             format!("U+{:X}", sign.glyph as u32),
         ),
-        ("meszl.phonetic.0".to_string(), sign.phonetic_primary.to_string()),
+        (
+            "meszl.phonetic.0".to_string(),
+            sign.phonetic_primary.to_string(),
+        ),
         ("meszl.phonetic_count".to_string(), "1".to_string()),
         (
             "meszl.tradition".to_string(),
@@ -74,8 +77,12 @@ mod tests {
     fn dimensional_signs_carry_dimension_rows() {
         let me = meszl::by_name("ME").unwrap();
         let rows = meszl_eav_rows(me);
-        assert!(rows.iter().any(|(k, v)| k == "meszl.dimension" && v == "ME"));
-        assert!(rows.iter().any(|(k, v)| k == "meszl.akkadianAOL" && v == "true"));
+        assert!(rows
+            .iter()
+            .any(|(k, v)| k == "meszl.dimension" && v == "ME"));
+        assert!(rows
+            .iter()
+            .any(|(k, v)| k == "meszl.akkadianAOL" && v == "true"));
     }
 
     #[test]

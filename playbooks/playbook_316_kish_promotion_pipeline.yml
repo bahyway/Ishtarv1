@@ -4,16 +4,48 @@
 # signed, Kish pinned, rebuilt, smoked, promotion KAKI. Tested by REFUSAL:
 # run with -e candidate=broken and the pipeline must reject at stage 2.
 - name: PB-316 | Kish promotion pipeline
-  hosts: host_forge
+  hosts: uruk
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
   vars:
     candidate: "{{ candidate_override | default('release') }}"
-    forge: "{{ forge_subvol }}/bahyway_v4"
+    # 2026-08-24, found live: forge_subvol (/home/bfadam/Forge) is the
+    # Architect's own personal research area, not this repo -- same class
+    # of bug as PB-427-530's finalization suite. The bahyway_v4 Rust
+    # workspace this stage's cargo fmt/clippy/test/tag/manifest operate on
+    # is this repo's own workspace/bahyway_v4, not a path under forge_subvol.
+    forge: "{{ playbook_dir }}/../workspace/bahyway_v4"
     manifest: /tmp/zagesi_manifest.json
   tasks:
     - name: Stage 1 | Freeze candidate set (git tag on Uruk)
       ansible.builtin.command: git -C {{ forge }} tag -f candidate/{{ ansible_date_time.date }}
       changed_when: true
+
+    # 2026-08-23, found live (twice): Stage 2 below assumes `cargo fmt` is
+    # available. First fix tried `rustup component add rustfmt clippy` --
+    # still failed with the identical "no such command: `fmt`" on the next
+    # run. Root cause: this host's Rust toolchain is the Fedora dnf package
+    # (rustc/cargo installed as RPMs), not a rustup-managed toolchain --
+    # `rustup` either isn't installed or manages a toolchain cargo isn't
+    # actually using, so `rustup component add` silently did nothing
+    # useful (and failed_when: false hid whatever it really did). Fedora
+    # ships rustfmt and clippy as their own RPMs, not rustup components --
+    # installs those instead, which is the real fix for a dnf-provisioned
+    # toolchain.
+    - name: "Stage 1.5 | Ensure rustfmt + clippy are installed (Fedora RPMs)"
+      ansible.builtin.dnf:
+        name: [rustfmt, clippy]
+        state: present
+      become: true
+      register: fmt_clippy_dnf
+      failed_when: false
+
+    - name: "Stage 1.5b | Fallback: rustup component add, if this IS a rustup toolchain"
+      ansible.builtin.command: rustup component add rustfmt clippy
+      changed_when: true
+      failed_when: false
+      when: fmt_clippy_dnf.failed | default(false)
 
     - name: Stage 2 | Four-stage gate (PB-153) — fmt, clippy, test, integration
       ansible.builtin.shell: |
@@ -25,9 +57,43 @@
         cargo fmt --all -- --check
         cargo clippy --workspace -- -D warnings
         cargo test --workspace
+      args: {executable: /bin/bash}
       register: gate
-    - name: Stage 3 | Gate G4 markers green (Lean4/Z3 obligations)
-      ansible.builtin.shell: test -f {{ forge }}/g4/OBLIGATIONS_GREEN
+    # 2026-08-25, found live: Stage 3 below was `test -f {{ forge }}/g4/
+    # OBLIGATIONS_GREEN` against a marker nothing in this repo ever wrote --
+    # no playbook, script, or crate produced it, so the gate either always
+    # failed or was silently skipped. The only obligation-checking tool that
+    # actually exists is bahyway-z3 (dev-time-only WHERE/WHY satisfiability
+    # checker, crates/bahyway-z3) -- there is no Lean4 toolchain or .lean
+    # source anywhere in this repo, so PA-1..PA-16 theorem coverage
+    # (docs/03_kernel_mummu/lean4_verification.md) remains aspirational, not
+    # automated. Stage 2.5 now generates the marker for real from the one
+    # obligation suite that is real, and binds it to tree_sha so a marker
+    # left over from an earlier tree can't wave a changed workspace through
+    # (the "inherited certificate" problem AAOL forbids elsewhere).
+    - name: "Stage 2.5 | Generate Gate G4 marker (bahyway-z3 obligations, tree_sha-bound)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cd {{ forge }}
+        cargo test -p bahyway-z3
+        mkdir -p g4
+        printf '{"tree_sha":"%s","scope":"bahyway-z3 satisfiability suite only -- Lean4 PA-1..PA-16 proof obligations not yet automated"}' \
+          "$(git rev-parse HEAD)" > g4/OBLIGATIONS_GREEN
+      args: {executable: /bin/bash}
+      changed_when: true
+
+    - name: Stage 3 | Gate G4 markers green and current (Lean4/Z3 obligations)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cd {{ forge }}
+        test -f g4/OBLIGATIONS_GREEN
+        marker_sha=$(python3 -c "import json;print(json.load(open('g4/OBLIGATIONS_GREEN'))['tree_sha'])")
+        head_sha=$(git rev-parse HEAD)
+        if [ "$marker_sha" != "$head_sha" ]; then
+          echo "G4 marker stale: marker tree_sha=$marker_sha, HEAD=$head_sha" >&2
+          exit 1
+        fi
+      args: {executable: /bin/bash}
       changed_when: false
 
     - name: Stage 4 | Build Zagesi manifest (crates + sha256) and sign
@@ -46,20 +112,25 @@
         ssh-keygen -Y sign -f {{ signing_key }} -n zagesi {{ manifest }}
         cp {{ manifest }}* {{ vault_mount | default('/nuzivault') }}/manifests/ 2>/dev/null || \
           scp {{ manifest }}* {{ ship_user }}@{{ ship_target_host }}:{{ vault_mount }}/manifests/
+      args: {executable: /bin/bash}
 
     - name: Stage 5 | Pin Kish to the manifest
       ansible.builtin.lineinfile:
-        path: inventories/kish/group_vars/all.yml
+        path: "{{ playbook_dir }}/../inventories/kish/group_vars/all.yml"
         regexp: '^pinned_manifest:'
         line: "pinned_manifest: {{ vault_mount | default('/nuzivault') }}/manifests/{{ manifest | basename }}"
 
     - name: Stage 6 | Rebuild Kish from playbooks alone + smoke rites
       ansible.builtin.command: >
-        ansible-playbook -i inventories/kish pb320_vm_disk_provisioning.yml --check
+        ansible-playbook -i inventories/kish playbooks/playbook_320_vm_disk_provisioning.yml --check
       changed_when: false
-      # NOTE: first Kish era runs --check until the second box exists; then flip live.
+      # NOTE: -i inventories/kish deliberately has no hosts.yml (kish's second
+      # box doesn't exist yet) -- this fails cleanly with zero hosts matched
+      # until the Architect adds one, per this repo's fail-clean-not-silent
+      # doctrine (PB-210). Runs --check until then; flip live once real.
 
     - name: Promotion KAKI
       ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
         PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
         echo "{\"pb\":\"PB-316\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"manifest\":\"{{ manifest | basename }}\",\"gate\":\"promoted\"}" >> {{ kaki_runs }}

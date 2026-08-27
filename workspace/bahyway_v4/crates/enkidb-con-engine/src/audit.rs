@@ -14,12 +14,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // [62..64] crc16: u16 LE (CRC-16 of bytes [0..62])
 
 pub struct NaruEntry {
-    entry_seq:        u32,
-    timestamp_epoch:  u32,
-    tribe_id:         u32,
-    operation_code:   u32,
-    surrogate_kaki:   [u8; 32],
-    reserved:         [u8; 14],
+    entry_seq: u32,
+    timestamp_epoch: u32,
+    tribe_id: u32,
+    operation_code: u32,
+    surrogate_kaki: [u8; 32],
+    reserved: [u8; 14],
 }
 
 impl NaruEntry {
@@ -29,12 +29,12 @@ impl NaruEntry {
             .map(|d| d.as_secs() as u32)
             .unwrap_or(0);
         Self {
-            entry_seq:       seq,
+            entry_seq: seq,
             timestamp_epoch: ts,
             tribe_id,
-            operation_code:  op_code,
-            surrogate_kaki:  [0u8; 32],
-            reserved:        [0u8; 14],
+            operation_code: op_code,
+            surrogate_kaki: [0u8; 32],
+            reserved: [0u8; 14],
         }
     }
 
@@ -53,19 +53,22 @@ impl NaruEntry {
 
     pub fn verify(bytes: &[u8; 64]) -> bool {
         let stored_crc = u16::from_le_bytes([bytes[62], bytes[63]]);
-        let computed   = bahyway_crc::crc16(&bytes[0..62]);
+        let computed = bahyway_crc::crc16(&bytes[0..62]);
         computed == stored_crc
     }
 }
 
 pub struct NaruJournal {
-    entries:     Vec<NaruEntry>,
+    entries: Vec<NaruEntry>,
     max_entries: usize,
 }
 
 impl NaruJournal {
     pub fn new(max_entries: usize) -> Self {
-        Self { entries: Vec::new(), max_entries }
+        Self {
+            entries: Vec::new(),
+            max_entries,
+        }
     }
 
     pub fn append(&mut self, tribe_id: u32, op_code: u32) -> Result<(), ConError> {
@@ -77,9 +80,13 @@ impl NaruJournal {
         Ok(())
     }
 
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 
     pub fn verify_all(&self) -> bool {
         self.entries.iter().all(|e| {

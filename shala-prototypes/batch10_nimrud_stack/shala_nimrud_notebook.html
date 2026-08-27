@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Nimrud Notebook — GL-NTB-001 · The Interrogation Stage</title>
+<style>
+  :root{
+    --field:#0A0D14; --membrane:#24406E; --gold:#D9A93B; --gold-hi:#F0C75E;
+    --lapis:#5B85D6; --emerald:#37B37E; --crimson:#C05050; --clay:#C9B896;
+    --crystal:#E8ECF4; --ink:#0E1320; --maroon:#800000;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:var(--field);
+    font-family:Palatino,"Book Antiqua",Georgia,serif;color:#D8CBB8}
+  body{display:grid;grid-template-columns:1fr min(360px,42vw);gap:14px;
+    padding:16px 18px;height:100vh;overflow:hidden}
+
+  #left{overflow-y:auto;padding-right:6px}
+  #die{margin-bottom:14px}
+  #die .tab{font-size:11px;letter-spacing:.35em;color:var(--gold);text-transform:uppercase}
+  #die h1{font-size:20px;font-weight:600;color:var(--crystal);margin:.25em 0 .2em}
+  #die .seal{font-size:12px;color:#8fa0c0;font-style:italic}
+  #die .seal b{color:var(--gold-hi);font-style:normal}
+  #banner{display:inline-block;margin-top:7px;font:10px ui-monospace,monospace;
+    letter-spacing:.22em;color:var(--crimson);border:1px solid var(--crimson);
+    border-radius:3px;padding:2px 8px}
+
+  .cell{background:rgba(14,19,32,.86);border:1px solid #22314F;border-radius:6px;
+    margin-bottom:14px;overflow:hidden}
+  .cell header{display:flex;justify-content:space-between;align-items:center;
+    padding:7px 12px;border-bottom:1px solid #22314F}
+  .cell header .n{font-size:11px;letter-spacing:.24em;text-transform:uppercase;
+    color:var(--lapis)}
+  .runbtn{border:1px solid var(--gold);background:none;color:var(--gold-hi);
+    font:11px ui-monospace,monospace;letter-spacing:.14em;border-radius:4px;
+    padding:4px 12px;cursor:pointer}
+  .runbtn:hover{background:#1a2338}
+  pre.hs{padding:10px 14px;font:12.5px/1.6 ui-monospace,Consolas,Menlo,monospace;
+    color:#aeb9d0;white-space:pre-wrap}
+  pre.hs .v{color:var(--gold-hi);font-weight:600}      /* sovereign verbs */
+  pre.hs .w{color:var(--emerald)}                       /* W5H2 clause words */
+  pre.hs .a{color:var(--lapis)}                         /* address / values */
+  pre.hs .sql{color:var(--crimson);text-decoration:line-through 1px}
+  .result{border-top:1px dashed #22314F;display:none}
+  .result.on{display:block}
+  .result canvas{display:block;width:100%;height:230px;cursor:grab}
+  .result canvas.dragging{cursor:grabbing}
+  .result .cap{padding:6px 12px 10px;font:11px ui-monospace,monospace;color:#8fa0c0}
+  .chip{font:9px ui-monospace,monospace;letter-spacing:.12em;border:1px solid;
+    border-radius:3px;padding:1px 6px;margin-left:6px}
+  .MEASURED{color:var(--emerald);border-color:var(--emerald)}
+  .DERIVED{color:var(--gold);border-color:var(--gold)}
+  .ESTIMATED{color:var(--lapis);border-color:var(--lapis)}
+  .ADVISED{color:var(--clay);border-color:var(--clay)}
+  table.dv{width:100%;border-collapse:collapse;font:11.5px ui-monospace,monospace}
+  table.dv td{padding:5px 12px;border-top:1px solid #182238;vertical-align:top}
+  table.dv td:first-child{color:#67779a;white-space:nowrap}
+  table.dv td:nth-child(2){color:var(--crystal)}
+  .refusal{padding:12px 14px;color:var(--crimson);
+    font:12px/1.6 ui-monospace,monospace}
+  .refusal b{letter-spacing:.2em}
+
+  #right{display:flex;flex-direction:column;min-height:0}
+  #journal{background:rgba(14,19,32,.86);border:1px solid #22314F;border-radius:6px;
+    display:flex;flex-direction:column;flex:1;min-height:0}
+  #journal header{padding:8px 12px;border-bottom:1px solid #22314F;font-size:11px;
+    letter-spacing:.26em;text-transform:uppercase;color:var(--lapis)}
+  #journal header small{display:block;letter-spacing:.04em;text-transform:none;
+    color:#6d7c99;margin-top:2px}
+  #entries{overflow-y:auto;padding:8px 12px 12px;
+    font:12px/1.55 ui-monospace,Consolas,Menlo,monospace}
+  #entries .e{margin-bottom:9px;border-left:2px solid #33518B;padding-left:8px}
+  #entries .e.gold{border-color:var(--gold)}
+  #entries .e.emerald{border-color:var(--emerald)}
+  #entries .e.clay{border-color:var(--clay)}
+  #entries .e.crimson{border-color:var(--crimson);color:#d9a3a3}
+  #entries .t{color:#67779a;margin-right:.5em}
+  #legend{margin-top:10px;font-size:11.5px;line-height:1.8;color:#8fa0c0}
+  #legend .hint{font-style:italic}
+
+  @media (max-width:820px){body{grid-template-columns:1fr;overflow:auto;height:auto}
+    #right{min-height:220px}}
+</style>
+</head>
+<body>
+<div id="left">
+  <div id="die">
+    <div class="tab">Abūbu Court · Šala prototype</div>
+    <h1>Nimrud Notebook — The Interrogation Stage</h1>
+    <div class="seal">GL-NTB-001 under GL-STK-001 · <b>Awaiting CSR-08</b> · delivery PB-356 ·
+      one language, one address, four views. Stage is theater, never truth (GL-DST-001).</div>
+    <span id="banner">REHEARSAL DATA — reads a rehearsal ledger · EMIT disabled on stage</span>
+  </div>
+
+  <!-- CELL 1 · ORBIT VIEW -->
+  <div class="cell" id="c1">
+    <header><span class="n">cell 1 · Orbit View</span>
+      <button class="runbtn" onclick="run1(this)">▶ RUN</button></header>
+    <pre class="hs"><span class="v">ORBIT</span> WaterNet
+  <span class="w">WINDOW</span> epochs t₀..t₄
+  <span class="v">PRESENT</span> particles <span class="w">WHERE</span> tribe <span class="a">0x0007</span>
+  <span class="v">WITNESS</span> standing</pre>
+    <div class="result"><canvas id="v1"></canvas>
+      <div class="cap">tribe 0x0007 over t₀..t₄ — GOLDEN limit cycles hold; the leak
+        cell's particles decay toward FUZZY (maroon drift)
+        <span class="chip DERIVED">DERIVED</span></div></div>
+  </div>
+
+  <!-- CELL 2 · DATA VIEW -->
+  <div class="cell" id="c2">
+    <header><span class="n">cell 2 · Data View</span>
+      <button class="runbtn" onclick="run2(this)">▶ RUN</button></header>
+    <pre class="hs"><span class="v">PROVE</span> verdict <span class="a">L-2026-0341</span>
+  <span class="v">PRESENT</span> W5H2 <span class="w">ALL</span>
+  <span class="v">WITNESS</span> class, ε</pre>
+    <div class="result"><div id="v2"></div>
+      <div class="cap">the Verdict Tablet fetched, stamps intact — a view never strips
+        the class (B4)</div></div>
+  </div>
+
+  <!-- CELL 3 · MEMBRANE VIEW -->
+  <div class="cell" id="c3">
+    <header><span class="n">cell 3 · Membrane View</span>
+      <button class="runbtn" onclick="run3(this)">▶ RUN</button></header>
+    <pre class="hs"><span class="v">WITNESS</span> membrane strain
+  <span class="w">WHERE</span> address <span class="a">∅.2.5.0.3.1.6.4.2.0.5.3</span>
+  <span class="w">WINDOW</span> epochs t₂..t₄
+  <span class="v">PRESENT</span> dent, halo</pre>
+    <div class="result"><canvas id="v3"></canvas>
+      <div class="cap">corridor membrane at the address — moisture halo dents the sheet;
+        drag to turn, scroll to zoom <span class="chip MEASURED">MEASURED</span>
+        <span class="chip DERIVED">DERIVED</span></div></div>
+  </div>
+
+  <!-- CELL 4 · PARTICLES VIEW -->
+  <div class="cell" id="c4">
+    <header><span class="n">cell 4 · Particles View</span>
+      <button class="runbtn" onclick="run4(this)">▶ RUN</button></header>
+    <pre class="hs"><span class="v">PRESENT</span> particles
+  <span class="w">WHERE</span> address <span class="a">∅.2.5.0.3.1.6.4.2.0.5.3</span> <span class="w">DEPTH</span> <span class="a">11</span>
+  <span class="v">WITNESS</span> ownership</pre>
+    <div class="result"><canvas id="v4"></canvas>
+      <div class="cap">the verdict cell at d*=11 — 46 witnesses owned, edge 21 cm ≤ 3σ_d;
+        left-click a particle to depose it <span class="chip DERIVED">DERIVED</span></div></div>
+  </div>
+
+  <!-- CELL 5 · SQL REFUSAL -->
+  <div class="cell" id="c5">
+    <header><span class="n">cell 5 · a foreign tongue</span>
+      <button class="runbtn" onclick="run5(this)">▶ RUN</button></header>
+    <pre class="hs"><span class="sql">SELECT * FROM leaks WHERE id = 'L-2026-0341';</span></pre>
+    <div class="result"><div class="refusal"><b>REFUSAL RECORD</b><br>
+      Refused at parse, not errored (B1). The ABSOLUTE QUERY LAW admits five sovereign
+      operations — ORBIT, EMIT, PROVE, SYNC, WITNESS — and no SQL, ever. The question
+      itself was lawful; ask it again in HeptaScript (cell 2 is that question).
+      <br><br><i>The unborn receive only their refusal.</i></div></div>
+  </div>
+</div>
+
+<div id="right">
+  <div id="journal">
+    <header>StoryEngine Journal <small>append-only · every run is a rite (B5)</small></header>
+    <div id="entries"></div>
+  </div>
+  <div id="legend">
+    <div>One address joins all four views: <span style="color:var(--lapis)">∅.2.5.0.3.1.6.4.2.0.5.3</span> × epochs t₂..t₄.</div>
+    <div>Enūma Eliš writes OntoGraph · Nimrud reads it · the Notebook reads both, writes neither.</div>
+    <div class="hint">drag view canvases to turn · scroll to zoom · left-click particles to depose</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* Nimrud Notebook · NASARU style · stage never truth (GL-DST-001).
+   Canonical interactions live on the view canvases: scroll-zoom,
+   drag-rotate (moving membrane), left-click depose to StoryEngine;
+   right-click on stage is the refusal cell itself (cell 5).
+   All values REHEARSAL — fetched from a rehearsal ledger object,
+   never recomputed on stage. */
+
+const mReduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const entries=document.getElementById('entries');
+function stamp(){return new Date().toTimeString().slice(0,8);}
+function depose(cls,html){const e=document.createElement('div');
+  e.className='e '+(cls||'');e.innerHTML='<span class="t">'+stamp()+'</span>'+html;
+  entries.prepend(e);}
+depose('emerald','⟡ Notebook convened. Five cells loaded; one address binds the views. REHEARSAL DATA; EMIT disabled on stage.');
+
+/* the rehearsal ledger — fetched, never recomputed on stage (B2) */
+const LEDGER={addr:'∅.2.5.0.3.1.6.4.2.0.5.3',epochs:'t₂..t₄',
+  ind:[['WHERE · Location','Pipe P-114 · chainage 342.6 m · σ_d 0.08 m','DERIVED'],
+       ['WHEN · Onset','t₂ · 2026-07-29 02:10 · ±12 d (SAR)','DERIVED'],
+       ['HOW LONG · Duration','22 d and running','DERIVED'],
+       ['WHAT · Release','Supply main · DN300 ductile iron · 1998','DERIVED'],
+       ['WHAT · Pattern','night-flow step + monotone |Φ′| · loadings 0.81/0.52','DERIVED'],
+       ['WHY · Cause','gasket 0.62 · corrosion 0.27 · third-party 0.11','ADVISED'],
+       ['HOW MUCH · Loss rate','4.7 m³/h · MNF-corroborated','MEASURED'],
+       ['HOW MUCH · Volume','≈ 2 480 m³','DERIVED'],
+       ['HOW MUCH · Crack','A_eff ≈ 310 mm² · Ø≈20 mm · ±30%','ESTIMATED'],
+       ['HOW FAST · Deterioration','dΦ_Enbi/dt +0.9/wk · T_j ≈ 6 wk','DERIVED'],
+       ['HOW · Solution','cut-out + sleeve DN300 · 1.2 m · crew: vehicle','ADVISED'],
+       ['HOW MUCH · Cost','≈ €8 400 ± 25% · tablet UP-2026-Q3','DERIVED']]};
+
+/* tiny view-canvas kit: DPR fit + drag/zoom state per canvas */
+function viewKit(cv,draw){
+  const cx=cv.getContext('2d');let W,H,rotY=0.5,rotX=0.7,zoom=1,drag=null,t=0;
+  function fit(){const D=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight||230;cv.width=W*D;cv.height=H*D;
+    cx.setTransform(D,0,0,D,0,0);}
+  fit();addEventListener('resize',fit);
+  cv.addEventListener('wheel',e=>{e.preventDefault();
+    zoom=Math.min(2.6,Math.max(.55,zoom*(e.deltaY<0?1.07:0.93)));},{passive:false});
+  cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};
+    cv.classList.add('dragging');});
+  addEventListener('pointermove',e=>{if(!drag)return;
+    rotY+=(e.clientX-drag.x)*0.006;rotX+=(e.clientY-drag.y)*0.005;
+    rotX=Math.min(1.35,Math.max(0.15,rotX));drag={x:e.clientX,y:e.clientY};});
+  addEventListener('pointerup',e=>{
+    if(drag&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<4&&kit.onclickpt)
+      kit.onclickpt(e);
+    drag=null;cv.classList.remove('dragging');});
+  function project(x,y,z){
+    const cyr=Math.cos(rotY),syr=Math.sin(rotY);[x,z]=[x*cyr-z*syr,x*syr+z*cyr];
+    const cxr=Math.cos(rotX),sxr=Math.sin(rotX);[y,z]=[y*cxr-z*sxr,y*sxr+z*cxr];
+    const d=3.4,s=(d/(d-z))*Math.min(W,H)*0.42*zoom;
+    return[W/2+x*s,H/2+y*s,s];}
+  const kit={cx,project,get W(){return W},get H(){return H},get t(){return t},onclickpt:null};
+  (function loop(){t+=1/60;if(!mReduce&&!drag)rotY+=0.0012;
+    cx.fillStyle='#0A0D14';cx.fillRect(0,0,W,H);draw(kit);
+    requestAnimationFrame(loop);})();
+  return kit;}
+
+function show(btn){const r=btn.closest('.cell').querySelector('.result');
+  r.classList.add('on');btn.textContent='▶ RE-RUN';}
+
+/* ── CELL 1 · Orbit View ─────────────────────────────────────── */
+let k1=null;
+function run1(b){show(b);
+  depose('gold','⟡ cell 1 · ORBIT WaterNet · WINDOW t₀..t₄ — 3 orbits presented; leak-cell particles drifting GOLDEN→FUZZY. [DERIVED]');
+  if(k1)return;
+  const orbits=[{r:.36,n:9,fuzzy:0},{r:.58,n:13,fuzzy:.35},{r:.80,n:17,fuzzy:0}];
+  k1=viewKit(document.getElementById('v1'),k=>{const{cx,project,t}=k;
+    // core
+    let[cxp,cyp]=project(0,0,0);
+    cx.fillStyle='#F0C75E';cx.beginPath();cx.arc(cxp,cyp,6,0,6.29);cx.fill();
+    cx.fillStyle='#8fa0c0';cx.font='9px ui-monospace,monospace';cx.textAlign='center';
+    cx.fillText('tribe 0x0007',cxp,cyp-11);
+    for(const o of orbits){
+      cx.strokeStyle='#24406E';cx.beginPath();
+      for(let i=0;i<=72;i++){const a=i/72*6.283;
+        const[px,py]=project(o.r*Math.cos(a),o.r*Math.sin(a)*0.72,0);
+        i?cx.lineTo(px,py):cx.moveTo(px,py);}cx.stroke();
+      for(let i=0;i<o.n;i++){const a=t*(0.25+o.r*0.2)+i/o.n*6.283;
+        const fz=o.fuzzy&&i%3===0;
+        const[px,py]=project(o.r*Math.cos(a),o.r*Math.sin(a)*0.72,
+          fz?0.05*Math.sin(t*3+i):0);
+        cx.fillStyle=fz?'#800000':'#D9A93B';
+        cx.beginPath();cx.arc(px,py,fz?3.4:2.6,0,6.29);cx.fill();}}});}
+
+/* ── CELL 2 · Data View ──────────────────────────────────────── */
+function run2(b){show(b);
+  const host=document.getElementById('v2');
+  if(!host.innerHTML){let h='<table class="dv">';
+    for(const[q,v,c]of LEDGER.ind)
+      h+='<tr><td>'+q+'</td><td>'+v+'<span class="chip '+c+'">'+c+'</span></td></tr>';
+    host.innerHTML=h+'</table>';}
+  depose('emerald','⟡ cell 2 · PROVE verdict L-2026-0341 · PRESENT W5H2 ALL — twelve rows fetched with classes and ε intact (B4). Same question cell 5 asked in the refused tongue.');}
+
+/* ── CELL 3 · Membrane View ──────────────────────────────────── */
+let k3=null;
+function run3(b){show(b);
+  depose('gold','⟡ cell 3 · WITNESS membrane strain WHERE '+LEDGER.addr+' · t₂..t₄ — dent depth and halo fetched; the sheet is theater, the number is EnkiDB\'s. [MEASURED strain · DERIVED halo]');
+  if(k3)return;
+  k3=viewKit(document.getElementById('v3'),k=>{const{cx,project}=k;
+    const dent=(x,y)=>{const d=Math.hypot(x-0.1,y+0.05);
+      return -0.22*Math.exp(-(d*d)/0.055);};
+    cx.strokeStyle='#24406E';
+    for(let i=0;i<=14;i++){cx.beginPath();
+      for(let j=0;j<=14;j++){const x=-0.9+i/14*1.8,y=-0.62+j/14*1.24;
+        const[px,py]=project(x,y,dent(x,y));j?cx.lineTo(px,py):cx.moveTo(px,py);}
+      cx.stroke();cx.beginPath();
+      for(let j=0;j<=14;j++){const x=-0.9+j/14*1.8,y=-0.62+i/14*1.24;
+        const[px,py]=project(x,y,dent(x,y));j?cx.lineTo(px,py):cx.moveTo(px,py);}
+      cx.stroke();}
+    // halo witnesses
+    for(let i=0;i<40;i++){const a=i*2.399,r=0.03+((i*37)%100)/100*0.20;
+      const x=0.1+r*Math.cos(a),y=-0.05+r*Math.sin(a)*0.8;
+      const[px,py]=project(x,y,dent(x,y)-0.012);
+      cx.fillStyle=r<0.12?'#C05050':'#D9A93B';
+      cx.beginPath();cx.arc(px,py,r<0.12?3:2.2,0,6.29);cx.fill();}
+    const[lx,ly]=project(0.1,-0.05,-0.26);
+    cx.fillStyle='#E8ECF4';cx.font='10px ui-monospace,monospace';cx.textAlign='center';
+    cx.fillText(LEDGER.addr,lx,ly-6);});}
+
+/* ── CELL 4 · Particles View ─────────────────────────────────── */
+let k4=null,pts4=[];
+function run4(b){show(b);
+  depose('gold','⟡ cell 4 · PRESENT particles WHERE '+LEDGER.addr+' DEPTH 11 — 46 owned witnesses in the verdict cell, edge 21 cm ≤ 3σ_d. Ownership by codec, not by hand.');
+  if(k4)return;
+  for(let i=0;i<46;i++){const r=Math.sqrt(((i*53)%100)/100)*0.34,a=i*2.399;
+    pts4.push({x:r*Math.cos(a),y:r*Math.sin(a)*0.9,hot:i%3===0,id:i});}
+  k4=viewKit(document.getElementById('v4'),k=>{const{cx,project}=k;
+    // the heptagonal verdict cell
+    cx.strokeStyle='#37B37E';cx.lineWidth=1.8;cx.beginPath();
+    for(let i=0;i<=7;i++){const a=-Math.PI/2+i*2*Math.PI/7;
+      const[px,py]=project(0.62*Math.cos(a),0.62*Math.sin(a),0);
+      i?cx.lineTo(px,py):cx.moveTo(px,py);}cx.stroke();cx.lineWidth=1;
+    const[nx,ny]=project(0,-0.74,0);
+    cx.fillStyle='#37B37E';cx.font='10px ui-monospace,monospace';cx.textAlign='center';
+    cx.fillText('verdict cell · shell 11 · edge 21 cm',nx,ny);
+    for(const p of pts4){const[px,py,s]=project(p.x,p.y,-0.02);
+      p.sx=px;p.sy=py;
+      cx.fillStyle=p.hot?'#C05050':'#F0C75E';
+      cx.beginPath();cx.arc(px,py,p.hot?3.4:2.6,0,6.29);cx.fill();}});
+  k4.onclickpt=e=>{const r=k4.cx.canvas.getBoundingClientRect();
+    const x=e.clientX-r.left,y=e.clientY-r.top;
+    for(const p of pts4)if(Math.hypot(x-p.sx,y-p.sy)<7){
+      depose('clay','§ witness #'+p.id+' — born event-KAKI, tribe 0x0007, owner '+
+        LEDGER.addr+' (facet, never κ) · '+(p.hot?'|Φ′| above floor':'moisture > kσ')+
+        ' · epochs '+LEDGER.epochs+'.');return;}};}
+
+/* ── CELL 5 · SQL refusal ────────────────────────────────────── */
+function run5(b){show(b);
+  depose('crimson','⊘ cell 5 — REFUSED at parse. SELECT/FROM is a foreign tongue on this stage (ABSOLUTE QUERY LAW). The question was lawful; the language was not. Cell 2 asks it rightly.');}
+</script>
+</body>
+</html>

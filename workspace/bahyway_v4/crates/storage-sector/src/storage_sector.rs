@@ -9,25 +9,25 @@
 //! Sealing is a one-way door: this type exposes no method to remove, read
 //! back into the pipeline, or requeue a sealed particle.
 
-use enkidb_kaki::{EventKaki, IdentityKaki, KakiMinter, KakiRole, Kaki};
-use enkidb_journal::{Journal, JournalEntry, EventCause};
+use enkidb_journal::{EventCause, Journal, JournalEntry};
+use enkidb_kaki::{EventKaki, IdentityKaki, Kaki, KakiMinter, KakiRole};
 use enkisdb::sdb_store::StagedParticle;
 
 /// One particle permanently sealed in the Storage Sector.
 #[derive(Debug, Clone)]
 pub struct SealedParticle {
     /// Raw 16-byte KAKI identity bytes.
-    pub kaki_bytes:   [u8; 16],
+    pub kaki_bytes: [u8; 16],
     /// Tribe this particle claimed to belong to.
-    pub tribe_id:     u16,
+    pub tribe_id: u16,
     /// Epoch at time of original arrival in the SDB.
-    pub epoch:        u32,
+    pub epoch: u32,
     /// Color_ID(RGB) at time of sealing.
-    pub color_rgb:    [u8; 3],
+    pub color_rgb: [u8; 3],
     /// Tick when the particle first arrived in the SDB.
     pub arrived_tick: u64,
     /// Tick when the seal decision was made.
-    pub sealed_tick:  u64,
+    pub sealed_tick: u64,
 }
 
 /// Aggregate counts for the sealed archive.
@@ -43,7 +43,9 @@ pub struct StorageSector {
 
 impl StorageSector {
     pub fn new() -> Self {
-        StorageSector { records: Vec::new() }
+        StorageSector {
+            records: Vec::new(),
+        }
     }
 
     /// Seal a confirmed-harmful particle.  Writes a `StorageSectorMove`
@@ -51,18 +53,18 @@ impl StorageSector {
     /// corresponding "unseal" — this is the terminal state.
     pub fn seal(
         &mut self,
-        particle:     &StagedParticle,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        particle: &StagedParticle,
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> usize {
         let record = SealedParticle {
-            kaki_bytes:   particle.kaki_bytes,
-            tribe_id:     particle.tribe_id,
-            epoch:        particle.epoch,
-            color_rgb:    particle.color_rgb,
+            kaki_bytes: particle.kaki_bytes,
+            tribe_id: particle.tribe_id,
+            epoch: particle.epoch,
+            color_rgb: particle.color_rgb,
             arrived_tick: particle.arrived_tick,
-            sealed_tick:  current_tick,
+            sealed_tick: current_tick,
         };
 
         if let Some(target_kaki) = reconstruct_identity(&particle.kaki_bytes) {
@@ -81,20 +83,31 @@ impl StorageSector {
 
     /// Build a summary report.
     pub fn report(&self) -> StorageSectorReport {
-        StorageSectorReport { total_sealed: self.records.len() }
+        StorageSectorReport {
+            total_sealed: self.records.len(),
+        }
     }
 
-    pub fn all(&self)      -> &[SealedParticle] { &self.records }
-    pub fn len(&self)      -> usize              { self.records.len() }
-    pub fn is_empty(&self) -> bool               { self.records.is_empty() }
+    pub fn all(&self) -> &[SealedParticle] {
+        &self.records
+    }
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
 }
 
 impl Default for StorageSector {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn reconstruct_identity(bytes: &[u8; 16]) -> Option<IdentityKaki> {
-    Kaki::from_bytes(*bytes).ok()
+    Kaki::from_bytes(*bytes)
+        .ok()
         .and_then(|k| IdentityKaki::try_from_kaki(k).ok())
 }
 
@@ -102,8 +115,8 @@ fn reconstruct_identity(bytes: &[u8; 16]) -> Option<IdentityKaki> {
 mod tests {
     use super::*;
     use bahyway_core::TribeId;
-    use enkidb_kaki::KakiMinter;
     use enkidb_journal::Journal;
+    use enkidb_kaki::KakiMinter;
     use enkisdb::sdb_store::SdbStatus;
 
     fn make_minter() -> KakiMinter {
@@ -111,14 +124,15 @@ mod tests {
     }
 
     fn make_staged(minter: &KakiMinter) -> StagedParticle {
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     1,
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [255, 0, 0],
-            status:       SdbStatus::Quarantined,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: 1,
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [255, 0, 0],
+            status: SdbStatus::Quarantined,
             arrived_tick: 0,
             malware_flag: true,
         }
@@ -128,8 +142,8 @@ mod tests {
     fn seal_writes_journal_entry() {
         let minter = make_minter();
         let mut sector = StorageSector::new();
-        let mut jnl    = Journal::new(64);
-        let particle   = make_staged(&minter);
+        let mut jnl = Journal::new(64);
+        let particle = make_staged(&minter);
 
         sector.seal(&particle, &mut jnl, &minter, 900);
 
@@ -142,7 +156,7 @@ mod tests {
     fn report_counts_all_sealed() {
         let minter = make_minter();
         let mut sector = StorageSector::new();
-        let mut jnl    = Journal::new(64);
+        let mut jnl = Journal::new(64);
 
         sector.seal(&make_staged(&minter), &mut jnl, &minter, 1);
         sector.seal(&make_staged(&minter), &mut jnl, &minter, 2);
@@ -154,7 +168,7 @@ mod tests {
     fn terminal_no_removal() {
         let minter = make_minter();
         let mut sector = StorageSector::new();
-        let mut jnl    = Journal::new(64);
+        let mut jnl = Journal::new(64);
 
         sector.seal(&make_staged(&minter), &mut jnl, &minter, 0);
         sector.seal(&make_staged(&minter), &mut jnl, &minter, 1);

@@ -38,18 +38,30 @@
   connection: local
   become: false
   vars:
-    enkiddb_read_ip: "192.168.122.107"   # enkidb-node-read, per ansible/inventory.ini
     enkiddb_search_phrase: "Onion Layers"  # PB-211's own proven-good default (see that
                                             # playbook's header for why "WebGPU" was a
                                             # false-negative trap) -- still applies here.
 
   tasks:
+    # PB-212.7 FIX (found live, 2026-08-21, in PB-208's identical pattern):
+    # play-level `vars:` Jinja templating `groups[...]`/`hostvars[...]`
+    # doesn't reliably resolve before task execution on this ansible-core
+    # version -- confirmed live in PB-208 as "'enkiddb_write_ip' is
+    # undefined" at first use. `set_fact` (task-time, inventory guaranteed
+    # loaded by then) is the reliable pattern; moved here as the first
+    # task, before task 0.1 below needs enkiddb_write_host/read_host.
+    - name: "0.05 | Resolve real write/read host+IP from inventory (PB-212.7)"
+      ansible.builtin.set_fact:
+        enkiddb_write_host: "{{ groups['enkidb_write'][0] }}"
+        enkiddb_read_host: "{{ groups['enkidb_read'][0] }}"
+        enkiddb_read_ip: "{{ hostvars[groups['enkidb_read'][0]]['ansible_host'] }}"
+
     - name: "0.1 | Confirm all four containers are up before touching anything"
       ansible.builtin.command: podman ps --filter "name=enkiddb" --filter "name=enkimdb"
       delegate_to: "{{ item }}"
       loop:
-        - enkidb-node-write
-        - enkidb-node-read
+        - "{{ enkiddb_write_host }}"
+        - "{{ enkiddb_read_host }}"
       register: containers_up
       changed_when: false
 
@@ -66,8 +78,8 @@
         enkiddb_db_label: "enkiddb"
         enkiddb_write_volume: "enkiddb-write-data"
         enkiddb_read_volume: "enkiddb-read-data"
-        enkiddb_write_host: "enkidb-node-write"
-        enkiddb_read_host: "enkidb-node-read"
+        # enkiddb_write_host/read_host deliberately NOT re-declared here
+        # (PB-212.6) -- falls through to the play-level vars above.
         enkiddb_write_port: 7101
         enkiddb_read_port: 7102
         enkiddb_query_what: "meta.title, meta.collection"
@@ -81,8 +93,8 @@
         enkiddb_db_label: "enkimdb"
         enkiddb_write_volume: "enkimdb-write-data"
         enkiddb_read_volume: "enkimdb-read-data"
-        enkiddb_write_host: "enkidb-node-write"
-        enkiddb_read_host: "enkidb-node-read"
+        # enkiddb_write_host/read_host deliberately NOT re-declared here
+        # (PB-212.6) -- falls through to the play-level vars above.
         enkiddb_write_port: 7201
         enkiddb_read_port: 7202
         enkiddb_query_what: "artifact.name, artifact.kind"

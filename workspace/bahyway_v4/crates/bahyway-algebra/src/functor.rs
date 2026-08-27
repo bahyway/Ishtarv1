@@ -58,7 +58,9 @@ mod tests {
     // D: raw u8 → normalised f32
     impl Decode for RawScore {
         type Output = NormScore;
-        fn decode(&self) -> NormScore { NormScore(self.0 as f32 / 255.0) }
+        fn decode(&self) -> NormScore {
+            NormScore(self.0 as f32 / 255.0)
+        }
     }
 
     struct Classifier;
@@ -67,9 +69,13 @@ mod tests {
     impl Interpret<NormScore> for Classifier {
         type Projection = Label;
         fn interpret(&self, d: &NormScore) -> Label {
-            if d.0 >= 0.6 { Label("GOLDEN") }
-            else if d.0 >= 0.2 { Label("FUZZY") }
-            else { Label("DEAD") }
+            if d.0 >= 0.6 {
+                Label("GOLDEN")
+            } else if d.0 >= 0.2 {
+                Label("FUZZY")
+            } else {
+                Label("DEAD")
+            }
         }
     }
 

@@ -25,11 +25,11 @@ impl FormatLayer {
     /// Human-readable label.
     pub fn label(self) -> &'static str {
         match self {
-            FormatLayer::CivilRegistry       => "CivilRegistry",
-            FormatLayer::MedicalRecord       => "MedicalRecord",
-            FormatLayer::PipelineData        => "PipelineData",
+            FormatLayer::CivilRegistry => "CivilRegistry",
+            FormatLayer::MedicalRecord => "MedicalRecord",
+            FormatLayer::PipelineData => "PipelineData",
             FormatLayer::CuneiformDictionary => "CuneiformDictionary",
-            FormatLayer::GenericEav          => "GenericEav",
+            FormatLayer::GenericEav => "GenericEav",
         }
     }
 
@@ -38,26 +38,26 @@ impl FormatLayer {
     pub fn required_dimensions(self) -> u8 {
         match self {
             // D1, D2, D3, D4, D6, D8 required (bits 0,1,2,3,5,7)
-            FormatLayer::CivilRegistry       => 0b_1010_1111,
+            FormatLayer::CivilRegistry => 0b_1010_1111,
             // D1, D2, D4, D6 required (bits 0,1,3,5)
-            FormatLayer::MedicalRecord       => 0b_0010_1011,
+            FormatLayer::MedicalRecord => 0b_0010_1011,
             // D1, D6 required (bits 0,5)
-            FormatLayer::PipelineData        => 0b_0010_0001,
+            FormatLayer::PipelineData => 0b_0010_0001,
             // D1, D2, D8 required (bits 0,1,7)
             FormatLayer::CuneiformDictionary => 0b_1000_0011,
             // D1 only (bit 0)
-            FormatLayer::GenericEav          => 0b_0000_0001,
+            FormatLayer::GenericEav => 0b_0000_0001,
         }
     }
 
     /// Score multiplier applied to the raw centroid defuzz result.
     pub fn score_multiplier(self) -> f32 {
         match self {
-            FormatLayer::CivilRegistry       => 1.00,
-            FormatLayer::MedicalRecord       => 0.95,
-            FormatLayer::PipelineData        => 0.90,
+            FormatLayer::CivilRegistry => 1.00,
+            FormatLayer::MedicalRecord => 0.95,
+            FormatLayer::PipelineData => 0.90,
             FormatLayer::CuneiformDictionary => 0.85,
-            FormatLayer::GenericEav          => 0.75,
+            FormatLayer::GenericEav => 0.75,
         }
     }
 
@@ -94,8 +94,14 @@ mod tests {
     fn civil_registry_requires_id_and_date() {
         let req = FormatLayer::CivilRegistry.required_dimensions();
         // D3 = bit 2, D4 = bit 3
-        assert!(req & 0b_0000_0100 != 0, "CivilRegistry must require D3 (ID)");
-        assert!(req & 0b_0000_1000 != 0, "CivilRegistry must require D4 (date)");
+        assert!(
+            req & 0b_0000_0100 != 0,
+            "CivilRegistry must require D3 (ID)"
+        );
+        assert!(
+            req & 0b_0000_1000 != 0,
+            "CivilRegistry must require D4 (date)"
+        );
     }
 
     #[test]

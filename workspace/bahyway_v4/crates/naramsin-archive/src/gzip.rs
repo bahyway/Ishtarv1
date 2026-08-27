@@ -9,9 +9,9 @@ const GZIP_MAGIC: [u8; 2] = [0x1F, 0x8B];
 const CM_DEFLATE: u8 = 8;
 
 // Flag bits
-const FHCRC:    u8 = 1 << 1;
-const FEXTRA:   u8 = 1 << 2;
-const FNAME:    u8 = 1 << 3;
+const FHCRC: u8 = 1 << 1;
+const FEXTRA: u8 = 1 << 2;
+const FNAME: u8 = 1 << 3;
 const FCOMMENT: u8 = 1 << 4;
 
 /// Unwrap a gzip stream and return the raw uncompressed bytes.
@@ -32,28 +32,40 @@ pub fn unwrap_gzip(data: &[u8]) -> Result<Vec<u8>, ArchiveError> {
 
     // FEXTRA: skip extra field
     if flags & FEXTRA != 0 {
-        if pos + 2 > data.len() { return Err(ArchiveError::Truncated); }
-        let xlen = u16::from_le_bytes([data[pos], data[pos+1]]) as usize;
+        if pos + 2 > data.len() {
+            return Err(ArchiveError::Truncated);
+        }
+        let xlen = u16::from_le_bytes([data[pos], data[pos + 1]]) as usize;
         pos += 2 + xlen;
     }
 
     // FNAME: skip null-terminated filename
     if flags & FNAME != 0 {
-        while pos < data.len() && data[pos] != 0 { pos += 1; }
-        if pos >= data.len() { return Err(ArchiveError::Truncated); }
+        while pos < data.len() && data[pos] != 0 {
+            pos += 1;
+        }
+        if pos >= data.len() {
+            return Err(ArchiveError::Truncated);
+        }
         pos += 1; // skip null terminator
     }
 
     // FCOMMENT: skip null-terminated comment
     if flags & FCOMMENT != 0 {
-        while pos < data.len() && data[pos] != 0 { pos += 1; }
-        if pos >= data.len() { return Err(ArchiveError::Truncated); }
+        while pos < data.len() && data[pos] != 0 {
+            pos += 1;
+        }
+        if pos >= data.len() {
+            return Err(ArchiveError::Truncated);
+        }
         pos += 1;
     }
 
     // FHCRC: 2-byte header CRC
     if flags & FHCRC != 0 {
-        if pos + 2 > data.len() { return Err(ArchiveError::Truncated); }
+        if pos + 2 > data.len() {
+            return Err(ArchiveError::Truncated);
+        }
         pos += 2;
     }
 
@@ -62,13 +74,18 @@ pub fn unwrap_gzip(data: &[u8]) -> Result<Vec<u8>, ArchiveError> {
         return Err(ArchiveError::Truncated);
     }
     let trailer_start = data.len() - 8;
-    let expected_crc  = u32::from_le_bytes(data[trailer_start..trailer_start+4].try_into().unwrap());
-    let expected_size = u32::from_le_bytes(data[trailer_start+4..trailer_start+8].try_into().unwrap());
+    let expected_crc =
+        u32::from_le_bytes(data[trailer_start..trailer_start + 4].try_into().unwrap());
+    let expected_size = u32::from_le_bytes(
+        data[trailer_start + 4..trailer_start + 8]
+            .try_into()
+            .unwrap(),
+    );
 
     let compressed = &data[pos..trailer_start];
 
-    let decompressed = inflate_raw(compressed, expected_size as usize)
-        .ok_or(ArchiveError::Truncated)?;
+    let decompressed =
+        inflate_raw(compressed, expected_size as usize).ok_or(ArchiveError::Truncated)?;
 
     // Verify CRC-32 and ISIZE
     if crc32(&decompressed) != expected_crc {

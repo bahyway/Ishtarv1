@@ -13,11 +13,11 @@ pub enum ConfidenceTier {
     /// TIER 0 — Sovereign sensor: Diyala ASHNAN pilot network.
     Tier0Sovereign = 0,
     /// TIER 1 — Official direct feed (national met API, satellite NDVI).
-    Tier1Official  = 1,
+    Tier1Official = 1,
     /// TIER 2 — Official bulletin (FAO, WOAH, ministry press releases).
-    Tier2Bulletin  = 2,
+    Tier2Bulletin = 2,
     /// TIER 3 — Modelled / third-hand (regional indices, NGO field summaries).
-    Tier3Modelled  = 3,
+    Tier3Modelled = 3,
 }
 
 /// Mandatory provenance block attached to every external ingestion particle.
@@ -43,7 +43,9 @@ impl ProvenanceBlock {
         }
         if let Some(cv) = self.cross_validation_score {
             if !(0.0..=1.0).contains(&cv) {
-                return Err(AshnanError::MissingProvenance("cross_validation_score out of range"));
+                return Err(AshnanError::MissingProvenance(
+                    "cross_validation_score out of range",
+                ));
             }
         }
         Ok(())

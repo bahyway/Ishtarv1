@@ -54,10 +54,10 @@ impl NarrativeBuilder {
         recommendations: &[Recommendation],
     ) -> Narrative {
         Narrative {
-            headline:      Self::headline(query_id, state, alignment_pct),
+            headline: Self::headline(query_id, state, alignment_pct),
             journey_story: Self::journey_story(journey, bottlenecks),
-            top_action:    Self::top_action(recommendations),
-            verdict:       Self::verdict(state, recommendations.len()),
+            top_action: Self::top_action(recommendations),
+            verdict: Self::verdict(state, recommendations.len()),
         }
     }
 
@@ -79,10 +79,7 @@ impl NarrativeBuilder {
                 .to_string();
         }
 
-        let fragments: Vec<String> = bottlenecks
-            .iter()
-            .map(|b| Self::describe_bottleneck(b))
-            .collect();
+        let fragments: Vec<String> = bottlenecks.iter().map(Self::describe_bottleneck).collect();
 
         format!(
             "The particle passed {} of 7 gates but was blocked by: {}.",
@@ -174,7 +171,11 @@ pub fn gate_summary(journey: &SevenLevelJourney) -> Vec<String> {
     JourneyLevelId::all()
         .iter()
         .map(|id| {
-            let icon    = if journey.level_score(*id) >= 1.0 { "✓" } else { "✗" };
+            let icon = if journey.level_score(*id) >= 1.0 {
+                "✓"
+            } else {
+                "✗"
+            };
             let finding = journey.level_finding(*id);
             format!("[{}] {} — {}", icon, id.label(), finding)
         })
@@ -187,15 +188,17 @@ mod tests {
     use crate::bottleneck::BottleneckDetector;
     use crate::journey::SevenLevelJourney;
     use crate::oracle::TheOracle;
-    use crate::plan::{sales_order_plan, simple_nested_loop_plan, OpKind, PlanNode, QueryPlan, ScanType};
+    use crate::plan::{
+        sales_order_plan, simple_nested_loop_plan, OpKind, PlanNode, QueryPlan, ScanType,
+    };
     use crate::DmwAnalyzer;
 
     fn narrative_for(plan: &QueryPlan) -> Narrative {
-        let bns   = BottleneckDetector::detect(plan);
-        let j     = SevenLevelJourney::analyze(plan, &bns);
-        let recs  = TheOracle::advise(plan, &bns, &j);
+        let bns = BottleneckDetector::detect(plan);
+        let j = SevenLevelJourney::analyze(plan, &bns);
+        let recs = TheOracle::advise(plan, &bns, &j);
         let state = j.state();
-        let pct   = j.alignment_score();
+        let pct = j.alignment_score();
         NarrativeBuilder::build(plan.query_id.as_str(), state, pct, &j, &bns, &recs)
     }
 
@@ -211,58 +214,87 @@ mod tests {
         let known_states = ["Golden", "Stable", "Turbulent", "Critical"];
         assert!(
             known_states.iter().any(|s| n.headline.contains(s)),
-            "headline must name the state: {}", n.headline
+            "headline must name the state: {}",
+            n.headline
         );
     }
 
     #[test]
     fn headline_contains_alignment_pct() {
         let n = narrative_for(&sales_order_plan());
-        assert!(n.headline.contains('%'), "headline must include alignment %: {}", n.headline);
+        assert!(
+            n.headline.contains('%'),
+            "headline must include alignment %: {}",
+            n.headline
+        );
     }
 
     #[test]
     fn journey_story_mentions_gates() {
         let n = narrative_for(&sales_order_plan());
-        assert!(n.journey_story.contains("7"), "story must mention 7 gates: {}", n.journey_story);
+        assert!(
+            n.journey_story.contains("7"),
+            "story must mention 7 gates: {}",
+            n.journey_story
+        );
     }
 
     #[test]
     fn top_action_present_when_bottlenecks_exist() {
         let n = narrative_for(&simple_nested_loop_plan());
-        assert!(n.top_action.is_some(), "simple nested-loop plan has bottlenecks → top_action expected");
+        assert!(
+            n.top_action.is_some(),
+            "simple nested-loop plan has bottlenecks → top_action expected"
+        );
     }
 
     #[test]
     fn top_action_contains_gain() {
         let n = narrative_for(&simple_nested_loop_plan());
         if let Some(ref a) = n.top_action {
-            assert!(a.contains('%'), "top_action must mention alignment gain: {a}");
+            assert!(
+                a.contains('%'),
+                "top_action must mention alignment gain: {a}"
+            );
         }
     }
 
     #[test]
     fn perfect_plan_no_top_action() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         let n = narrative_for(&plan);
-        assert!(n.top_action.is_none(), "perfect plan has no bottlenecks → no top action");
+        assert!(
+            n.top_action.is_none(),
+            "perfect plan has no bottlenecks → no top action"
+        );
     }
 
     #[test]
     fn perfect_plan_all_gates_story() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         let n = narrative_for(&plan);
         assert!(
             n.journey_story.contains("all 7 gates"),
-            "perfect plan story: {}", n.journey_story
+            "perfect plan story: {}",
+            n.journey_story
         );
     }
 
@@ -272,14 +304,23 @@ mod tests {
         assert!(!n.verdict.is_empty());
         // Must mention number of rotations
         let has_digit = n.verdict.chars().any(|c| c.is_ascii_digit());
-        assert!(has_digit, "verdict must contain rotation count: {}", n.verdict);
+        assert!(
+            has_digit,
+            "verdict must contain rotation count: {}",
+            n.verdict
+        );
     }
 
     #[test]
     fn golden_verdict_says_sovereign() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         let n = narrative_for(&plan);
@@ -300,9 +341,9 @@ mod tests {
 
     #[test]
     fn from_report_matches_manual_build() {
-        let plan   = sales_order_plan();
+        let plan = sales_order_plan();
         let report = DmwAnalyzer::analyze(&plan);
-        let n      = NarrativeBuilder::from_report(&report);
+        let n = NarrativeBuilder::from_report(&report);
         assert!(!n.headline.is_empty());
         assert!(!n.journey_story.is_empty());
     }
@@ -310,17 +351,17 @@ mod tests {
     #[test]
     fn gate_summary_has_seven_entries() {
         let plan = sales_order_plan();
-        let bns  = BottleneckDetector::detect(&plan);
-        let j    = SevenLevelJourney::analyze(&plan, &bns);
-        let gs   = gate_summary(&j);
+        let bns = BottleneckDetector::detect(&plan);
+        let j = SevenLevelJourney::analyze(&plan, &bns);
+        let gs = gate_summary(&j);
         assert_eq!(gs.len(), 7);
     }
 
     #[test]
     fn gate_summary_entries_non_empty() {
         let plan = sales_order_plan();
-        let bns  = BottleneckDetector::detect(&plan);
-        let j    = SevenLevelJourney::analyze(&plan, &bns);
+        let bns = BottleneckDetector::detect(&plan);
+        let j = SevenLevelJourney::analyze(&plan, &bns);
         for line in gate_summary(&j) {
             assert!(!line.is_empty());
         }
@@ -331,7 +372,8 @@ mod tests {
         let n = narrative_for(&sales_order_plan());
         assert!(
             n.journey_story.contains("outer join") || n.journey_story.contains("deadlock"),
-            "SalesOrder story must mention outer joins or deadlock: {}", n.journey_story
+            "SalesOrder story must mention outer joins or deadlock: {}",
+            n.journey_story
         );
     }
 }

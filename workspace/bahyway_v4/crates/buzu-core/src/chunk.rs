@@ -16,12 +16,12 @@
 //! `ChunkHeader` is a fixed 32-byte, `#[repr(C)]` record (verified by
 //! `header_is_32_bytes`): nucleus (12B) + bivector (12B) + count (4B)
 //! + checksum (4B). [`CHUNK_CAPACITY`] = 65536 = 2^16 particles/chunk,
-//! aligned to real GPU workgroup sizes (32/64-wide warps/wavefronts)
-//! so a chunk dispatches with no partial-warp waste; 1B particles ->
-//! ~15,259 chunks, each independently LOD/cull-able. The checksum is
-//! FNV-1a (32-bit, non-cryptographic) -- a load-integrity check, not a
-//! security boundary; this ecosystem's real crypto (kupru's
-//! Argon2id/ChaCha20-Poly1305) is reserved for actual secrets.
+//!   aligned to real GPU workgroup sizes (32/64-wide warps/wavefronts)
+//!   so a chunk dispatches with no partial-warp waste; 1B particles ->
+//!   ~15,259 chunks, each independently LOD/cull-able. The checksum is
+//!   FNV-1a (32-bit, non-cryptographic) -- a load-integrity check, not a
+//!   security boundary; this ecosystem's real crypto (kupru's
+//!   Argon2id/ChaCha20-Poly1305) is reserved for actual secrets.
 //!
 //! D3 (FUZZY encoding) -- sparse index+delta side-array
 //! (`fuzzy: Vec<(u32, [i8;3])>`), present ONLY for particles that
@@ -103,8 +103,19 @@ pub struct BuzuChunk {
     pub fuzzy: Vec<(u32, [i8; 3])>,
 }
 
-fn checksum_of(nucleus: [f32; 3], bivector: [f32; 3], count: u32, theta: &[f32], fuzzy: &[(u32, [i8; 3])]) -> u32 {
-    let header0 = ChunkHeader { nucleus, bivector, count, checksum: 0 };
+fn checksum_of(
+    nucleus: [f32; 3],
+    bivector: [f32; 3],
+    count: u32,
+    theta: &[f32],
+    fuzzy: &[(u32, [i8; 3])],
+) -> u32 {
+    let header0 = ChunkHeader {
+        nucleus,
+        bivector,
+        count,
+        checksum: 0,
+    };
     let mut buf = Vec::with_capacity(HEADER_BYTES + theta.len() * 4 + fuzzy.len() * 7);
     buf.extend_from_slice(&header0.to_bytes());
     for t in theta {
@@ -123,7 +134,12 @@ impl BuzuChunk {
     /// Seal a chunk: immutable from this point (D2). Panics if
     /// `theta.len() > CHUNK_CAPACITY` -- a caller error, not a
     /// runtime condition to silently truncate.
-    pub fn seal(nucleus: [f32; 3], bivector: [f32; 3], theta: Vec<f32>, fuzzy: Vec<(u32, [i8; 3])>) -> Self {
+    pub fn seal(
+        nucleus: [f32; 3],
+        bivector: [f32; 3],
+        theta: Vec<f32>,
+        fuzzy: Vec<(u32, [i8; 3])>,
+    ) -> Self {
         assert!(
             theta.len() <= CHUNK_CAPACITY,
             "a BUZU chunk holds at most {CHUNK_CAPACITY} particles, got {}",
@@ -131,17 +147,33 @@ impl BuzuChunk {
         );
         let count = theta.len() as u32;
         let checksum = checksum_of(nucleus, bivector, count, &theta, &fuzzy);
-        BuzuChunk { header: ChunkHeader { nucleus, bivector, count, checksum }, theta, fuzzy }
+        BuzuChunk {
+            header: ChunkHeader {
+                nucleus,
+                bivector,
+                count,
+                checksum,
+            },
+            theta,
+            fuzzy,
+        }
     }
 
     /// Recompute and compare the checksum -- the load-integrity check.
     pub fn verify(&self) -> bool {
-        let expected = checksum_of(self.header.nucleus, self.header.bivector, self.header.count, &self.theta, &self.fuzzy);
+        let expected = checksum_of(
+            self.header.nucleus,
+            self.header.bivector,
+            self.header.count,
+            &self.theta,
+            &self.fuzzy,
+        );
         expected == self.header.checksum
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(HEADER_BYTES + self.theta.len() * 4 + self.fuzzy.len() * 7 + 4);
+        let mut buf =
+            Vec::with_capacity(HEADER_BYTES + self.theta.len() * 4 + self.fuzzy.len() * 7 + 4);
         buf.extend_from_slice(&self.header.to_bytes());
         for t in &self.theta {
             buf.extend_from_slice(&t.to_le_bytes());
@@ -178,7 +210,11 @@ impl BuzuChunk {
             fuzzy.push((idx, [d[0] as i8, d[1] as i8, d[2] as i8]));
             off += 7;
         }
-        let chunk = BuzuChunk { header, theta, fuzzy };
+        let chunk = BuzuChunk {
+            header,
+            theta,
+            fuzzy,
+        };
         if chunk.verify() {
             Some(chunk)
         } else {
@@ -198,7 +234,11 @@ impl BuzuChunk {
             b02: self.header.bivector[1] as f64,
             b12: self.header.bivector[2] as f64,
         };
-        let nucleus = [self.header.nucleus[0] as f64, self.header.nucleus[1] as f64, self.header.nucleus[2] as f64];
+        let nucleus = [
+            self.header.nucleus[0] as f64,
+            self.header.nucleus[1] as f64,
+            self.header.nucleus[2] as f64,
+        ];
         let refdir = plane.canonical_reference();
         let reference = [refdir[0] * radius, refdir[1] * radius, refdir[2] * radius];
         let theta = self.theta[i] as f64;
@@ -223,9 +263,18 @@ mod tests {
 
     #[test]
     fn header_is_32_bytes() {
-        assert_eq!(std::mem::size_of::<ChunkHeader>(), 32, "repr(C) in-memory size must match the wire format");
+        assert_eq!(
+            std::mem::size_of::<ChunkHeader>(),
+            32,
+            "repr(C) in-memory size must match the wire format"
+        );
         assert_eq!(HEADER_BYTES, 32);
-        let h = ChunkHeader { nucleus: [1.0, 2.0, 3.0], bivector: [0.1, 0.2, 0.3], count: 7, checksum: 42 };
+        let h = ChunkHeader {
+            nucleus: [1.0, 2.0, 3.0],
+            bivector: [0.1, 0.2, 0.3],
+            count: 7,
+            checksum: 42,
+        };
         assert_eq!(h.to_bytes().len(), 32);
     }
 
@@ -240,12 +289,16 @@ mod tests {
         assert!(chunk.verify());
 
         let bytes = chunk.to_bytes();
-        let restored = BuzuChunk::from_bytes(&bytes).expect("a freshly sealed chunk must parse and verify");
+        let restored =
+            BuzuChunk::from_bytes(&bytes).expect("a freshly sealed chunk must parse and verify");
         assert_eq!(restored, chunk);
 
         let mut corrupted = bytes.clone();
         corrupted[40] ^= 0xFF; // flip a byte inside the theta array
-        assert!(BuzuChunk::from_bytes(&corrupted).is_none(), "a corrupted chunk must fail verification, not silently load");
+        assert!(
+            BuzuChunk::from_bytes(&corrupted).is_none(),
+            "a corrupted chunk must fail verification, not silently load"
+        );
     }
 
     #[test]
@@ -255,7 +308,11 @@ mod tests {
         let theta: Vec<f32> = (0..1000).map(|i| i as f32 * 0.001).collect();
         let fuzzy = vec![(10u32, [1i8, 0, 0]), (500, [0, -2, 1]), (999, [3, 3, 3])];
         let chunk = BuzuChunk::seal([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], theta, fuzzy);
-        assert_eq!(chunk.fuzzy.len(), 3, "fuzzy side-array must hold only the deviating particles, not all 1000");
+        assert_eq!(
+            chunk.fuzzy.len(),
+            3,
+            "fuzzy side-array must hold only the deviating particles, not all 1000"
+        );
         assert!(chunk.verify());
     }
 
@@ -271,10 +328,16 @@ mod tests {
         let bivector = [1.0f32, 0.2, -0.3];
         let nucleus = [5.0f32, -1.0, 2.0];
         let radius = 3.0f64;
-        let thetas: Vec<f32> = (0..64).map(|i| i as f32 * std::f32::consts::TAU / 64.0).collect();
+        let thetas: Vec<f32> = (0..64)
+            .map(|i| i as f32 * std::f32::consts::TAU / 64.0)
+            .collect();
         let chunk = BuzuChunk::seal(nucleus, bivector, thetas.clone(), vec![]);
 
-        let plane = Bivector { b01: bivector[0] as f64, b02: bivector[1] as f64, b12: bivector[2] as f64 };
+        let plane = Bivector {
+            b01: bivector[0] as f64,
+            b02: bivector[1] as f64,
+            b12: bivector[2] as f64,
+        };
         let n = [nucleus[0] as f64, nucleus[1] as f64, nucleus[2] as f64];
         let refdir = plane.canonical_reference();
         let reference = [refdir[0] * radius, refdir[1] * radius, refdir[2] * radius];
@@ -283,7 +346,10 @@ mod tests {
             let expected = orbit_position(n, reference, &plane, *theta as f64);
             let got = chunk.position(i, radius, 0.01);
             for k in 0..3 {
-                assert!((expected[k] - got[k]).abs() < 1e-5, "chunk-packed evaluation must match direct orbit_position");
+                assert!(
+                    (expected[k] - got[k]).abs() < 1e-5,
+                    "chunk-packed evaluation must match direct orbit_position"
+                );
             }
         }
     }
@@ -297,11 +363,19 @@ mod tests {
         let theta = vec![0.3f32];
         let chunk = BuzuChunk::seal(nucleus, bivector, theta, vec![(0, [10, -20, 5])]);
 
-        let plane = Bivector { b01: 1.0, b02: 0.0, b12: 0.0 };
+        let plane = Bivector {
+            b01: 1.0,
+            b02: 0.0,
+            b12: 0.0,
+        };
         let refdir = plane.canonical_reference();
         let reference = [refdir[0] * radius, refdir[1] * radius, refdir[2] * radius];
         let golden = orbit_position([0.0; 3], reference, &plane, 0.3);
-        let expected_delta = [10.0 * perturb_scale, -20.0 * perturb_scale, 5.0 * perturb_scale];
+        let expected_delta = [
+            10.0 * perturb_scale,
+            -20.0 * perturb_scale,
+            5.0 * perturb_scale,
+        ];
 
         let got = chunk.position(0, radius, perturb_scale);
         for k in 0..3 {
@@ -329,7 +403,12 @@ mod tests {
         for i in 0..N {
             theta_buf.push((i as f32) * 0.0001);
             if theta_buf.len() == CHUNK_CAPACITY {
-                chunks.push(BuzuChunk::seal(nucleus, bivector, std::mem::take(&mut theta_buf), vec![]));
+                chunks.push(BuzuChunk::seal(
+                    nucleus,
+                    bivector,
+                    std::mem::take(&mut theta_buf),
+                    vec![],
+                ));
             }
         }
         if !theta_buf.is_empty() {
@@ -357,7 +436,15 @@ mod tests {
         );
 
         // Generous, non-flaky bound: this is a correctness+sanity gate,
-        // not the real 1B/<1s claim (which needs the GPU path).
-        assert!(pack_elapsed.as_secs_f64() < 10.0 && eval_elapsed.as_secs_f64() < 10.0);
+        // not the real 1B/<1s claim (which needs the GPU path). `cargo
+        // test` always builds unoptimized (debug_assertions on), where
+        // position()'s per-call rotor/trig math (canonical_reference()
+        // and the orbit_position* call, both recomputed per index) runs
+        // far slower than in --release -- observed ~32s for 2M calls in
+        // debug vs. a sub-second release run. The bound below is scaled
+        // for that so the gate still fires on a genuine regression
+        // without requiring --release to pass under `cargo test --workspace`.
+        let bound_secs = if cfg!(debug_assertions) { 60.0 } else { 10.0 };
+        assert!(pack_elapsed.as_secs_f64() < bound_secs && eval_elapsed.as_secs_f64() < bound_secs);
     }
 }

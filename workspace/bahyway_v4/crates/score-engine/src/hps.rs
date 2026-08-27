@@ -9,12 +9,16 @@
 pub struct HpsScore(f32);
 
 impl HpsScore {
-    pub const PERFECT:  HpsScore = HpsScore(1.0);
-    pub const ZERO:     HpsScore = HpsScore(0.0);
+    pub const PERFECT: HpsScore = HpsScore(1.0);
+    pub const ZERO: HpsScore = HpsScore(0.0);
 
-    pub fn new(v: f32) -> Self { HpsScore(v.clamp(0.0, 1.0)) }
+    pub fn new(v: f32) -> Self {
+        HpsScore(v.clamp(0.0, 1.0))
+    }
 
-    pub fn value(self) -> f32 { self.0 }
+    pub fn value(self) -> f32 {
+        self.0
+    }
 
     /// Classify into Golden / Fuzzy / Dead based on HPS thresholds.
     /// Thresholds can be overridden by Template — these are defaults.
@@ -22,7 +26,7 @@ impl HpsScore {
         match self.0 {
             v if v >= 0.8 => bahyway_core::ParticleState::Golden,
             v if v >= 0.3 => bahyway_core::ParticleState::Fuzzy,
-            _             => bahyway_core::ParticleState::Dead,
+            _ => bahyway_core::ParticleState::Dead,
         }
     }
 
@@ -32,7 +36,9 @@ impl HpsScore {
 }
 
 impl From<f32> for HpsScore {
-    fn from(v: f32) -> Self { HpsScore::new(v) }
+    fn from(v: f32) -> Self {
+        HpsScore::new(v)
+    }
 }
 
 #[cfg(test)]
@@ -41,9 +47,18 @@ mod tests {
 
     #[test]
     fn thresholds() {
-        assert_eq!(HpsScore::new(0.95).to_state(), bahyway_core::ParticleState::Golden);
-        assert_eq!(HpsScore::new(0.50).to_state(), bahyway_core::ParticleState::Fuzzy);
-        assert_eq!(HpsScore::new(0.10).to_state(), bahyway_core::ParticleState::Dead);
+        assert_eq!(
+            HpsScore::new(0.95).to_state(),
+            bahyway_core::ParticleState::Golden
+        );
+        assert_eq!(
+            HpsScore::new(0.50).to_state(),
+            bahyway_core::ParticleState::Fuzzy
+        );
+        assert_eq!(
+            HpsScore::new(0.10).to_state(),
+            bahyway_core::ParticleState::Dead
+        );
     }
 
     #[test]

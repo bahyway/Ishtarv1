@@ -8,7 +8,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use akkvalue::AkkValue;
-use enkidb_journal::{ErrorTypeSpec, ErrorOccurrenceSpec};
+use enkidb_journal::{ErrorOccurrenceSpec, ErrorTypeSpec};
 use enkidb_kaki::{IdentityKaki, KakiMinter, KakiRole};
 use enkidb_particles::Particle;
 use template_engine::AttrTypeSpec;
@@ -33,10 +33,30 @@ impl<'a> RegistryEmitter<'a> {
         let now = now_secs();
 
         let particles = vec![
-            Particle::base(kaki, "error_type.code", AkkValue::Text(spec.code.to_string()), now),
-            Particle::base(kaki, "error_type.summary", AkkValue::Text(spec.summary.to_string()), now),
-            Particle::base(kaki, "error_type.severity", AkkValue::Int(spec.severity.to_byte() as i64), now),
-            Particle::base(kaki, "error_type.defined_by", AkkValue::Text(spec.defined_by.to_string()), now),
+            Particle::base(
+                kaki,
+                "error_type.code",
+                AkkValue::Text(spec.code.to_string()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "error_type.summary",
+                AkkValue::Text(spec.summary.to_string()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "error_type.severity",
+                AkkValue::Int(spec.severity.to_byte() as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "error_type.defined_by",
+                AkkValue::Text(spec.defined_by.to_string()),
+                now,
+            ),
         ];
 
         (kaki, particles)
@@ -47,11 +67,25 @@ impl<'a> RegistryEmitter<'a> {
     /// ErrorType's existing identity (the caller supplies it as
     /// `JournalEntry::target_kaki`); this only builds the occurrence's
     /// own attribute rows.
-    pub fn emit_error_occurrence(&self, error_type_kaki: IdentityKaki, occurrence: &ErrorOccurrenceSpec) -> Vec<Particle> {
+    pub fn emit_error_occurrence(
+        &self,
+        error_type_kaki: IdentityKaki,
+        occurrence: &ErrorOccurrenceSpec,
+    ) -> Vec<Particle> {
         let now = now_secs();
         vec![
-            Particle::base(error_type_kaki, "error_occurrence.source", AkkValue::Text(occurrence.source.to_string()), now),
-            Particle::base(error_type_kaki, "error_occurrence.detail", AkkValue::Text(occurrence.detail.clone()), now),
+            Particle::base(
+                error_type_kaki,
+                "error_occurrence.source",
+                AkkValue::Text(occurrence.source.to_string()),
+                now,
+            ),
+            Particle::base(
+                error_type_kaki,
+                "error_occurrence.detail",
+                AkkValue::Text(occurrence.detail.clone()),
+                now,
+            ),
         ]
     }
 
@@ -63,10 +97,30 @@ impl<'a> RegistryEmitter<'a> {
         let now = now_secs();
 
         let particles = vec![
-            Particle::base(kaki, "attr_type.name", AkkValue::Text(spec.name.to_string()), now),
-            Particle::base(kaki, "attr_type.representation", AkkValue::Text(spec.attr_type.as_str().to_string()), now),
-            Particle::base(kaki, "attr_type.attr_hash", AkkValue::Int(spec.attr_hash as i64), now),
-            Particle::base(kaki, "attr_type.version", AkkValue::Int(spec.version as i64), now),
+            Particle::base(
+                kaki,
+                "attr_type.name",
+                AkkValue::Text(spec.name.to_string()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "attr_type.representation",
+                AkkValue::Text(spec.attr_type.as_str().to_string()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "attr_type.attr_hash",
+                AkkValue::Int(spec.attr_hash as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "attr_type.version",
+                AkkValue::Int(spec.version as i64),
+                now,
+            ),
         ];
 
         (kaki, particles)
@@ -93,14 +147,54 @@ impl<'a> RegistryEmitter<'a> {
         let now = now_secs();
 
         let particles = vec![
-            Particle::base(kaki, "passport.passport_id", AkkValue::Text(spec.passport_id.clone()), now),
-            Particle::base(kaki, "passport.subject_kaki_hex", AkkValue::Text(spec.subject_kaki_hex.clone()), now),
-            Particle::base(kaki, "passport.issuer_kaki_hex", AkkValue::Text(spec.issuer_kaki_hex.clone()), now),
-            Particle::base(kaki, "passport.realm", AkkValue::Text(spec.realm.clone()), now),
-            Particle::base(kaki, "passport.privilege_level", AkkValue::Int(spec.privilege_level as i64), now),
-            Particle::base(kaki, "passport.scopes_csv", AkkValue::Text(spec.scopes_csv.clone()), now),
-            Particle::base(kaki, "passport.created_at", AkkValue::Int(spec.created_at as i64), now),
-            Particle::base(kaki, "passport.expires_at", AkkValue::Int(spec.expires_at as i64), now),
+            Particle::base(
+                kaki,
+                "passport.passport_id",
+                AkkValue::Text(spec.passport_id.clone()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "passport.subject_kaki_hex",
+                AkkValue::Text(spec.subject_kaki_hex.clone()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "passport.issuer_kaki_hex",
+                AkkValue::Text(spec.issuer_kaki_hex.clone()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "passport.realm",
+                AkkValue::Text(spec.realm.clone()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "passport.privilege_level",
+                AkkValue::Int(spec.privilege_level as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "passport.scopes_csv",
+                AkkValue::Text(spec.scopes_csv.clone()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "passport.created_at",
+                AkkValue::Int(spec.created_at as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "passport.expires_at",
+                AkkValue::Int(spec.expires_at as i64),
+                now,
+            ),
         ];
 
         (kaki, particles)
@@ -120,44 +214,132 @@ impl<'a> RegistryEmitter<'a> {
 
     /// Mint an Identity-Kaki (role=Zikru) for one AnuGovernor run's
     /// confirmation record and emit its EAV rows.
-    pub fn emit_anu_governor_run(&self, spec: &AnuGovernorRunRecordSpec) -> (IdentityKaki, Vec<Particle>) {
+    pub fn emit_anu_governor_run(
+        &self,
+        spec: &AnuGovernorRunRecordSpec,
+    ) -> (IdentityKaki, Vec<Particle>) {
         let kaki = IdentityKaki::try_from_kaki(self.minter.identity(KakiRole::Zikru))
             .expect("KakiMinter::identity always mints kaki_type=Identity");
         let now = now_secs();
 
         let mut particles = vec![
-            Particle::base(kaki, "anu_governor_run.run_id", AkkValue::Text(spec.run_id.clone()), now),
-            Particle::base(kaki, "anu_governor_run.started_at", AkkValue::Int(spec.started_at as i64), now),
-            Particle::base(kaki, "anu_governor_run.finished_at", AkkValue::Int(spec.finished_at as i64), now),
-            Particle::base(kaki, "anu_governor_run.playbook_count", AkkValue::Int(spec.playbook_count as i64), now),
-            Particle::base(kaki, "anu_governor_run.ok_count", AkkValue::Int(spec.ok_count as i64), now),
-            Particle::base(kaki, "anu_governor_run.warned_count", AkkValue::Int(spec.warned_count as i64), now),
-            Particle::base(kaki, "anu_governor_run.failed_count", AkkValue::Int(spec.failed_count as i64), now),
-            Particle::base(kaki, "anu_governor_run.skipped_count", AkkValue::Int(spec.skipped_count as i64), now),
-            Particle::base(kaki, "anu_governor_run.outcome", AkkValue::Text(spec.outcome.clone()), now),
-            Particle::base(kaki, "anu_governor_run.report_path", AkkValue::Text(spec.report_path.clone()), now),
+            Particle::base(
+                kaki,
+                "anu_governor_run.run_id",
+                AkkValue::Text(spec.run_id.clone()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.started_at",
+                AkkValue::Int(spec.started_at as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.finished_at",
+                AkkValue::Int(spec.finished_at as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.playbook_count",
+                AkkValue::Int(spec.playbook_count as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.ok_count",
+                AkkValue::Int(spec.ok_count as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.warned_count",
+                AkkValue::Int(spec.warned_count as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.failed_count",
+                AkkValue::Int(spec.failed_count as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.skipped_count",
+                AkkValue::Int(spec.skipped_count as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.outcome",
+                AkkValue::Text(spec.outcome.clone()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "anu_governor_run.report_path",
+                AkkValue::Text(spec.report_path.clone()),
+                now,
+            ),
         ];
 
         if let Some(reason) = &spec.blocked_reason {
-            particles.push(Particle::base(kaki, "anu_governor_run.blocked_reason", AkkValue::Text(reason.clone()), now));
+            particles.push(Particle::base(
+                kaki,
+                "anu_governor_run.blocked_reason",
+                AkkValue::Text(reason.clone()),
+                now,
+            ));
         }
         if let Some(hex) = &spec.operator_subject_kaki_hex {
-            particles.push(Particle::base(kaki, "anu_governor_run.operator_subject_kaki_hex", AkkValue::Text(hex.clone()), now));
+            particles.push(Particle::base(
+                kaki,
+                "anu_governor_run.operator_subject_kaki_hex",
+                AkkValue::Text(hex.clone()),
+                now,
+            ));
         }
         if let Some(realm) = &spec.operator_realm {
-            particles.push(Particle::base(kaki, "anu_governor_run.operator_realm", AkkValue::Text(realm.clone()), now));
+            particles.push(Particle::base(
+                kaki,
+                "anu_governor_run.operator_realm",
+                AkkValue::Text(realm.clone()),
+                now,
+            ));
         }
         if let Some(level) = spec.operator_privilege_level {
-            particles.push(Particle::base(kaki, "anu_governor_run.operator_privilege_level", AkkValue::Int(level as i64), now));
+            particles.push(Particle::base(
+                kaki,
+                "anu_governor_run.operator_privilege_level",
+                AkkValue::Int(level as i64),
+                now,
+            ));
         }
         if let Some(user) = &spec.os_username {
-            particles.push(Particle::base(kaki, "anu_governor_run.os_username", AkkValue::Text(user.clone()), now));
+            particles.push(Particle::base(
+                kaki,
+                "anu_governor_run.os_username",
+                AkkValue::Text(user.clone()),
+                now,
+            ));
         }
         if let Some(groups) = &spec.os_groups_csv {
-            particles.push(Particle::base(kaki, "anu_governor_run.os_groups_csv", AkkValue::Text(groups.clone()), now));
+            particles.push(Particle::base(
+                kaki,
+                "anu_governor_run.os_groups_csv",
+                AkkValue::Text(groups.clone()),
+                now,
+            ));
         }
         if let Some(role) = &spec.os_bahyway_role {
-            particles.push(Particle::base(kaki, "anu_governor_run.os_bahyway_role", AkkValue::Text(role.clone()), now));
+            particles.push(Particle::base(
+                kaki,
+                "anu_governor_run.os_bahyway_role",
+                AkkValue::Text(role.clone()),
+                now,
+            ));
         }
 
         (kaki, particles)
@@ -211,17 +393,27 @@ mod tests {
 
         assert_eq!(particles.len(), 2);
         for p in &particles {
-            assert_eq!(p.entity, type_kaki, "occurrence rows must target the ErrorType's own identity");
+            assert_eq!(
+                p.entity, type_kaki,
+                "occurrence rows must target the ErrorType's own identity"
+            );
         }
     }
 
     #[test]
     fn emits_attr_type_identity_with_parzu_role() {
         let m = minter();
-        let spec = AttrTypeSpec::new(0x1001, "price_usd", AttrType::FixedPointScaledInteger { scale: 2 }, 1);
+        let spec = AttrTypeSpec::new(
+            0x1001,
+            "price_usd",
+            AttrType::FixedPointScaledInteger { scale: 2 },
+            1,
+        );
         let (kaki, particles) = RegistryEmitter::new(&m).emit_attr_type(&spec);
         assert_eq!(kaki.role(), KakiRole::Parzu);
-        assert!(particles.iter().any(|p| p.attribute == "attr_type.representation"));
+        assert!(particles
+            .iter()
+            .any(|p| p.attribute == "attr_type.representation"));
     }
 
     fn sample_passport_spec() -> PassportRecordSpec {
@@ -244,7 +436,9 @@ mod tests {
         let (kaki, particles) = RegistryEmitter::new(&m).emit_passport_record(&spec);
         assert_eq!(kaki.role(), KakiRole::Zikru);
         assert_eq!(particles.len(), 8);
-        assert!(particles.iter().any(|p| p.attribute == "passport.privilege_level"));
+        assert!(particles
+            .iter()
+            .any(|p| p.attribute == "passport.privilege_level"));
     }
 
     #[test]
@@ -256,9 +450,14 @@ mod tests {
         let (_, particles) = RegistryEmitter::new(&m).emit_passport_record(&sample_passport_spec());
         for p in &particles {
             let a = p.attribute.to_lowercase();
-            assert!(!a.contains("hmac") && !a.contains("nonce") && !a.contains("content_hash")
-                && !a.contains("signing_key") && !a.contains("private"),
-                "passport.* particle leaked seal/key-shaped attribute: {a}");
+            assert!(
+                !a.contains("hmac")
+                    && !a.contains("nonce")
+                    && !a.contains("content_hash")
+                    && !a.contains("signing_key")
+                    && !a.contains("private"),
+                "passport.* particle leaked seal/key-shaped attribute: {a}"
+            );
         }
     }
 
@@ -296,7 +495,9 @@ mod tests {
         assert_eq!(kaki.role(), KakiRole::Zikru);
         // 10 base fields + 3 operator_* + 3 os_* = 16
         assert_eq!(particles.len(), 16);
-        assert!(particles.iter().any(|p| p.attribute == "anu_governor_run.outcome"));
+        assert!(particles
+            .iter()
+            .any(|p| p.attribute == "anu_governor_run.outcome"));
     }
 
     #[test]
@@ -304,13 +505,20 @@ mod tests {
         let m = minter();
         let mut spec = sample_run_spec(None);
         spec.outcome = "BlockedByAuthority".to_string();
-        spec.blocked_reason = Some("vault_check_enabled=false: run was unauthenticated".to_string());
+        spec.blocked_reason =
+            Some("vault_check_enabled=false: run was unauthenticated".to_string());
         let (_, particles) = RegistryEmitter::new(&m).emit_anu_governor_run(&spec);
-        assert!(!particles.iter().any(|p| p.attribute.starts_with("anu_governor_run.operator_")));
-        assert!(particles.iter().any(|p| p.attribute == "anu_governor_run.blocked_reason"));
+        assert!(!particles
+            .iter()
+            .any(|p| p.attribute.starts_with("anu_governor_run.operator_")));
+        assert!(particles
+            .iter()
+            .any(|p| p.attribute == "anu_governor_run.blocked_reason"));
         // OS identity is independent of vault-passport authentication --
         // it must still be present on an unauthenticated (no-vault) run.
-        assert!(particles.iter().any(|p| p.attribute == "anu_governor_run.os_username"));
+        assert!(particles
+            .iter()
+            .any(|p| p.attribute == "anu_governor_run.os_username"));
     }
 
     #[test]
@@ -318,11 +526,18 @@ mod tests {
         let m = minter();
         let mut spec = sample_run_spec(Some(("bb".repeat(16).as_str(), "bahyway", 3)));
         spec.outcome = "BlockedByAuthority".to_string();
-        spec.blocked_reason = Some("operator privilege_level=3 below required minimum=5".to_string());
+        spec.blocked_reason =
+            Some("operator privilege_level=3 below required minimum=5".to_string());
         let (_, particles) = RegistryEmitter::new(&m).emit_anu_governor_run(&spec);
-        let outcome = particles.iter().find(|p| p.attribute == "anu_governor_run.outcome").unwrap();
+        let outcome = particles
+            .iter()
+            .find(|p| p.attribute == "anu_governor_run.outcome")
+            .unwrap();
         assert!(matches!(&outcome.value, AkkValue::Text(t) if t == "BlockedByAuthority"));
-        let level = particles.iter().find(|p| p.attribute == "anu_governor_run.operator_privilege_level").unwrap();
+        let level = particles
+            .iter()
+            .find(|p| p.attribute == "anu_governor_run.operator_privilege_level")
+            .unwrap();
         assert!(matches!(level.value, AkkValue::Int(3)));
     }
 }

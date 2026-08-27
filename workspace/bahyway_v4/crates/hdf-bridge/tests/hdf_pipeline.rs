@@ -1,11 +1,11 @@
 //! Integration tests: Hepta .hepta files → DFG plan → UEK kernel execution.
 
-use hepta::parse as hepta_parse;
-use hdf_bridge::{translate, UekKernel, UekEvent, ExecuteOutcome, DefaultSteward};
-use dfg_engine::{NodeKind, EdgeKind};
+use dfg_engine::{EdgeKind, NodeKind};
+use hdf_bridge::{translate, DefaultSteward, ExecuteOutcome, UekEvent, UekKernel};
+use hepta_spatial::parse as hepta_parse;
 
-const BAGHDAD: &str = include_str!("../../hepta/maps/baghdad_primary.hepta");
-const WADI:    &str = include_str!("../../hepta/maps/wadi_al_salam_primary.hepta");
+const BAGHDAD: &str = include_str!("../../hepta-spatial/maps/baghdad_primary.hepta");
+const WADI: &str = include_str!("../../hepta-spatial/maps/wadi_al_salam_primary.hepta");
 
 // ── Baghdad plan ──────────────────────────────────────────────────────────────
 
@@ -49,7 +49,11 @@ fn baghdad_moon_node_has_two_outgoing_edges() {
     let plan = translate(&file);
     let moon = plan.node_by_label("MOON").expect("MOON node");
     let out: Vec<_> = plan.edges_from(moon.id).collect();
-    assert_eq!(out.len(), 2, "MOON should have BEAM/2 and BEAM/3 outgoing edges");
+    assert_eq!(
+        out.len(),
+        2,
+        "MOON should have BEAM/2 and BEAM/3 outgoing edges"
+    );
 }
 
 #[test]
@@ -58,7 +62,10 @@ fn baghdad_mars_has_elevated_risk_condition() {
     let plan = translate(&file);
     let mars = plan.node_by_label("MARS").expect("MARS node");
     let cond = mars.condition.as_deref().unwrap_or("");
-    assert!(cond.contains("ELEVATED_RISK"), "MARS should carry ELEVATED_RISK condition");
+    assert!(
+        cond.contains("ELEVATED_RISK"),
+        "MARS should carry ELEVATED_RISK condition"
+    );
 }
 
 #[test]
@@ -67,9 +74,12 @@ fn baghdad_edges_all_resolved() {
     let plan = translate(&file);
     for edge in &plan.edges {
         assert_ne!(
-            edge.to, u32::MAX,
+            edge.to,
+            u32::MAX,
             "unresolved edge from {} → {} (label: {})",
-            edge.from, edge.to, edge.target_label
+            edge.from,
+            edge.to,
+            edge.target_label
         );
     }
 }
@@ -88,7 +98,10 @@ fn baghdad_attribs_translated_to_feature_vector() {
 fn baghdad_coord_system_preserved() {
     let file = hepta_parse(BAGHDAD).unwrap();
     let plan = translate(&file);
-    assert!(plan.coord_system.contains("Kaki7d"), "coord_system should be Kaki7d");
+    assert!(
+        plan.coord_system.contains("Kaki7d"),
+        "coord_system should be Kaki7d"
+    );
 }
 
 // ── Wadi al-Salam plan ────────────────────────────────────────────────────────
@@ -155,10 +168,10 @@ fn uek_kernel_executes_clean_events_on_baghdad_plan() {
     let mut kernel = UekKernel::new(plan, DefaultSteward);
 
     let event = UekEvent {
-        kaki_id:          [1u8; 16],
-        timestamp:        1_000_000,
-        attribute:        "occupation_rate".into(),
-        value:            "0.72".into(),
+        kaki_id: [1u8; 16],
+        timestamp: 1_000_000,
+        attribute: "occupation_rate".into(),
+        value: "0.72".into(),
         governance_score: 0.9,
     };
 
@@ -175,9 +188,13 @@ fn uek_kernel_accumulates_stalk_append_only() {
 
     let kaki = [2u8; 16];
     for ts in [100u64, 200, 300, 400, 500] {
-        let e = UekEvent { kaki_id: kaki, timestamp: ts,
-                           attribute: "status".into(), value: "active".into(),
-                           governance_score: 0.95 };
+        let e = UekEvent {
+            kaki_id: kaki,
+            timestamp: ts,
+            attribute: "status".into(),
+            value: "active".into(),
+            governance_score: 0.95,
+        };
         assert_eq!(kernel.execute(e), ExecuteOutcome::Accepted);
     }
     assert_eq!(kernel.stalk_count(), 1);
@@ -186,7 +203,7 @@ fn uek_kernel_accumulates_stalk_append_only() {
 
 #[test]
 fn uek_kernel_journals_flagged_events_on_wadi() {
-    use dfg_engine::{DataSteward, GovernanceDecision, FeatureAttrib, DfgNode};
+    use dfg_engine::{DataSteward, DfgNode, FeatureAttrib, GovernanceDecision};
 
     struct FlagAll;
     impl DataSteward for FlagAll {
@@ -199,7 +216,13 @@ fn uek_kernel_journals_flagged_events_on_wadi() {
     let plan = translate(&file);
     let mut kernel = UekKernel::new(plan, FlagAll);
 
-    kernel.execute(UekEvent { kaki_id: [3u8;16], timestamp: 1, attribute: "x".into(), value: "y".into(), governance_score: 0.5 });
+    kernel.execute(UekEvent {
+        kaki_id: [3u8; 16],
+        timestamp: 1,
+        attribute: "x".into(),
+        value: "y".into(),
+        governance_score: 0.5,
+    });
     assert_eq!(kernel.journal.len(), 1);
     assert_eq!(kernel.stalk_count(), 0);
 }
@@ -215,10 +238,10 @@ fn full_dfg_pipeline_baghdad_multinode() {
     for (i, kaki) in kakis.iter().enumerate() {
         for ts in 0u64..4 {
             let e = UekEvent {
-                kaki_id:          *kaki,
-                timestamp:        i as u64 * 100 + ts,
-                attribute:        "district_load".into(),
-                value:            format!("{}", 0.5 + ts as f64 * 0.1),
+                kaki_id: *kaki,
+                timestamp: i as u64 * 100 + ts,
+                attribute: "district_load".into(),
+                value: format!("{}", 0.5 + ts as f64 * 0.1),
                 governance_score: 0.85,
             };
             assert_eq!(kernel.execute(e), ExecuteOutcome::Accepted);

@@ -46,16 +46,20 @@ impl Smi {
             return Err(EsarhaddonError::InsufficientSensorData);
         }
         let product = weight * f_acc * f_tilt * f_crack * f_aftershock;
-        let score = product.powf(0.25).min(1.0_f32).max(0.0_f32);
+        let score = product.powf(0.25).clamp(0.0_f32, 1.0_f32);
         let state = match score {
             s if s < 0.25 => SmiState::Golden,
             s if s < 0.60 => SmiState::Fuzzy,
             s if s < 0.85 => SmiState::Dead,
-            _             => SmiState::DeadCritical,
+            _ => SmiState::DeadCritical,
         };
         // ColourID: round(score × 240), never 255 (ADR-001)
         let colour_id = (score * 240.0).round().min(240.0) as u8;
-        Ok(Self { score, state, colour_id })
+        Ok(Self {
+            score,
+            state,
+            colour_id,
+        })
     }
 }
 

@@ -50,14 +50,14 @@ pub enum SetOperator {
 impl SetOperator {
     pub fn symbol(self) -> &'static str {
         match self {
-            SetOperator::Selection        => "σ",
-            SetOperator::Projection       => "π",
-            SetOperator::Join             => "⋈",
+            SetOperator::Selection => "σ",
+            SetOperator::Projection => "π",
+            SetOperator::Join => "⋈",
             SetOperator::CartesianProduct => "×",
-            SetOperator::Union            => "∪",
-            SetOperator::Intersect        => "∩",
-            SetOperator::Difference       => "−",
-            SetOperator::Rename           => "ρ",
+            SetOperator::Union => "∪",
+            SetOperator::Intersect => "∩",
+            SetOperator::Difference => "−",
+            SetOperator::Rename => "ρ",
         }
     }
 
@@ -72,10 +72,10 @@ impl SetOperator {
 /// One node in the decomposed set expression tree.
 #[derive(Debug, Clone)]
 pub struct SetExprNode {
-    pub operator:              SetOperator,
-    pub table_refs:            Vec<String>,
-    pub predicate:             Option<String>,
-    pub is_correlated:         bool,
+    pub operator: SetOperator,
+    pub table_refs: Vec<String>,
+    pub predicate: Option<String>,
+    pub is_correlated: bool,
     pub estimated_output_rows: u64,
 }
 
@@ -131,9 +131,9 @@ impl SmellSeverity {
     pub fn label(self) -> &'static str {
         match self {
             SmellSeverity::Critical => "Critical",
-            SmellSeverity::High     => "High",
-            SmellSeverity::Medium   => "Medium",
-            SmellSeverity::Low      => "Low",
+            SmellSeverity::High => "High",
+            SmellSeverity::Medium => "Medium",
+            SmellSeverity::Low => "Low",
         }
     }
 }
@@ -141,11 +141,11 @@ impl SmellSeverity {
 /// A set theory–level smell — a mathematical problem in query intent.
 #[derive(Debug, Clone)]
 pub struct SetSmell {
-    pub kind:         SetSmellKind,
-    pub description:  String,
+    pub kind: SetSmellKind,
+    pub description: String,
     pub sql_fragment: String,
-    pub fix:          String,
-    pub severity:     SmellSeverity,
+    pub fix: String,
+    pub severity: SmellSeverity,
 }
 
 // ── Set Theory Analysis ───────────────────────────────────────────────────────
@@ -154,24 +154,29 @@ pub struct SetSmell {
 #[derive(Debug, Clone)]
 pub struct SetTheoryAnalysis {
     /// Formal relational algebra expression (human-readable)
-    pub formal_expression:    String,
+    pub formal_expression: String,
     /// Decomposed operation nodes
-    pub operations:           Vec<SetExprNode>,
+    pub operations: Vec<SetExprNode>,
     /// Detected smells at the set theory level
-    pub smells:               Vec<SetSmell>,
+    pub smells: Vec<SetSmell>,
     /// Rewritten sovereign expression (when smells detected)
     pub sovereign_expression: Option<String>,
     /// ColorID contribution from Level 1
-    pub color_contribution:   ColorId,
+    pub color_contribution: ColorId,
 }
 
 impl SetTheoryAnalysis {
     pub fn has_critical_smell(&self) -> bool {
-        self.smells.iter().any(|s| s.severity == SmellSeverity::Critical)
+        self.smells
+            .iter()
+            .any(|s| s.severity == SmellSeverity::Critical)
     }
 
     pub fn critical_smell_count(&self) -> usize {
-        self.smells.iter().filter(|s| s.severity == SmellSeverity::Critical).count()
+        self.smells
+            .iter()
+            .filter(|s| s.severity == SmellSeverity::Critical)
+            .count()
     }
 }
 
@@ -186,16 +191,16 @@ impl SetTheoryAnalyser {
     /// In production this would parse the SQL AST. Here we use structural
     /// flags that the caller derives from the query plan.
     pub fn analyse(
-        query_sql:               &str,
+        query_sql: &str,
         has_correlated_subquery: bool,
-        has_wildcard_select:     bool,
-        join_count:              usize,
-        subquery_depth:          u8,
+        has_wildcard_select: bool,
+        join_count: usize,
+        subquery_depth: u8,
     ) -> SetTheoryAnalysis {
         let mut smells = Vec::new();
-        let mut ops    = Vec::new();
-        let mut red    = 20u8;
-        let mut green  = 220u8;
+        let mut ops = Vec::new();
+        let mut red = 20u8;
+        let mut green = 220u8;
 
         // Correlated subquery — hidden cartesian product
         if has_correlated_subquery {
@@ -203,12 +208,14 @@ impl SetTheoryAnalyser {
                 kind: SetSmellKind::CorrelatedSubquery,
                 description: "Correlated subquery in SELECT/WHERE is a hidden \
                               Cartesian product (×). For each outer row the \
-                              inner query executes independently — O(n²) risk.".into(),
+                              inner query executes independently — O(n²) risk."
+                    .into(),
                 sql_fragment: extract_subquery_hint(query_sql),
                 fix: "Rewrite as an explicit JOIN:\n\
                       FROM SalesOrder Sl\n\
                       JOIN Production.ProductListColors Color\n\
-                        ON Color.ProductID = Sl.ProductID".into(),
+                        ON Color.ProductID = Sl.ProductID"
+                    .into(),
                 severity: SmellSeverity::Critical,
             });
             ops.push(
@@ -219,7 +226,7 @@ impl SetTheoryAnalyser {
                 .with_predicate("ProductID = Sl.ProductID")
                 .correlated(),
             );
-            red   = red.saturating_add(160);
+            red = red.saturating_add(160);
             green = green.saturating_sub(80);
         }
 
@@ -228,7 +235,8 @@ impl SetTheoryAnalyser {
             smells.push(SetSmell {
                 kind: SetSmellKind::ScalarSubqueryInSelect,
                 description: "Scalar subquery in SELECT clause executes once per \
-                              output row — cursor behaviour. Examined further at Level 5 (IZI).".into(),
+                              output row — cursor behaviour. Examined further at Level 5 (IZI)."
+                    .into(),
                 sql_fragment: "(SELECT Color FROM ... WHERE ProductID = Sl.ProductID)".into(),
                 fix: "Move to JOIN — result computed set-based, not per-row.".into(),
                 severity: SmellSeverity::Critical,
@@ -241,7 +249,8 @@ impl SetTheoryAnalyser {
                 kind: SetSmellKind::WildcardProjection,
                 description: "SELECT * fetches every column — including unused ones. \
                               Excess columns increase network IO and prevent \
-                              covering index use.".into(),
+                              covering index use."
+                    .into(),
                 sql_fragment: "SELECT *".into(),
                 fix: "Enumerate only required columns in SELECT list.".into(),
                 severity: SmellSeverity::Medium,
@@ -262,17 +271,19 @@ impl SetTheoryAnalyser {
                 fix: "Flatten using CTEs or derived tables at the same level.".into(),
                 severity: SmellSeverity::High,
             });
-            red   = red.saturating_add(40);
+            red = red.saturating_add(40);
             green = green.saturating_sub(30);
         }
 
         // Formal expression
-        let formal_expression = build_formal_expression(
-            join_count, has_correlated_subquery, query_sql,
-        );
+        let formal_expression =
+            build_formal_expression(join_count, has_correlated_subquery, query_sql);
 
         let sovereign_expression = if !smells.is_empty() {
-            Some(build_sovereign_expression(join_count, has_correlated_subquery))
+            Some(build_sovereign_expression(
+                join_count,
+                has_correlated_subquery,
+            ))
         } else {
             None
         };
@@ -318,10 +329,12 @@ fn extract_subquery_hint(sql: &str) -> String {
 fn build_formal_expression(joins: usize, correlated: bool, _sql: &str) -> String {
     if correlated {
         "π(CarrierNumber, Color) σ(YEAR(date)=2024) \
-         [SalesOrder × (σ(ProductID=Sl.ProductID) ProductListColors)]".into()
+         [SalesOrder × (σ(ProductID=Sl.ProductID) ProductListColors)]"
+            .into()
     } else if joins > 0 {
         "π(CarrierNumber, Color) σ(date BETWEEN) \
-         [SalesOrder ⋈(ProductID) ProductListColors]".into()
+         [SalesOrder ⋈(ProductID) ProductListColors]"
+            .into()
     } else {
         "π(*) σ(condition) [Table]".into()
     }
@@ -331,7 +344,8 @@ fn build_sovereign_expression(joins: usize, correlated: bool) -> String {
     if correlated {
         "π(CarrierNumber, Color) \
          [σ(date≥'2024-01-01' ∧ date<'2025-01-01') SalesOrder] \
-         ⋈(ProductID) ProductListColors".into()
+         ⋈(ProductID) ProductListColors"
+            .into()
     } else {
         format!("π(cols) σ(sargable_pred) [T1 ⋈ ... ⋈ T{}]", joins + 1)
     }
@@ -343,8 +357,7 @@ fn build_sovereign_expression(joins: usize, correlated: bool) -> String {
 mod tests {
     use super::*;
 
-    const CORRELATED_SQL: &str =
-        "SELECT Sl.CarrierTrackingNumber, \
+    const CORRELATED_SQL: &str = "SELECT Sl.CarrierTrackingNumber, \
          (SELECT Color FROM Production.ProductListColors \
           WHERE ProductID = Sl.ProductID) \
          FROM Sales.SalesOrderDetail Sl \
@@ -357,13 +370,19 @@ mod tests {
     #[test]
     fn correlated_subquery_detected_as_smell() {
         let a = analyse_correlated();
-        assert!(a.smells.iter().any(|s| s.kind == SetSmellKind::CorrelatedSubquery));
+        assert!(a
+            .smells
+            .iter()
+            .any(|s| s.kind == SetSmellKind::CorrelatedSubquery));
     }
 
     #[test]
     fn correlated_elevates_red_channel() {
         let a = analyse_correlated();
-        assert!(a.color_contribution.red > 100, "correlated subquery must elevate red");
+        assert!(
+            a.color_contribution.red > 100,
+            "correlated subquery must elevate red"
+        );
     }
 
     #[test]
@@ -378,7 +397,10 @@ mod tests {
     #[test]
     fn cartesian_product_op_present_for_correlated() {
         let a = analyse_correlated();
-        assert!(a.operations.iter().any(|o| o.operator == SetOperator::CartesianProduct));
+        assert!(a
+            .operations
+            .iter()
+            .any(|o| o.operator == SetOperator::CartesianProduct));
     }
 
     #[test]
@@ -391,7 +413,10 @@ mod tests {
     fn clean_query_has_no_smells() {
         let a = SetTheoryAnalyser::analyse(
             "SELECT a, b FROM T1 JOIN T2 ON T1.id = T2.id WHERE T1.date >= '2024-01-01'",
-            false, false, 1, 0,
+            false,
+            false,
+            1,
+            0,
         );
         assert!(a.smells.is_empty());
         assert!(a.sovereign_expression.is_none());
@@ -400,7 +425,10 @@ mod tests {
     #[test]
     fn wildcard_select_detected() {
         let a = SetTheoryAnalyser::analyse("SELECT * FROM T", false, true, 0, 0);
-        assert!(a.smells.iter().any(|s| s.kind == SetSmellKind::WildcardProjection));
+        assert!(a
+            .smells
+            .iter()
+            .any(|s| s.kind == SetSmellKind::WildcardProjection));
     }
 
     #[test]
@@ -432,9 +460,12 @@ mod tests {
 
     #[test]
     fn smell_severity_labels_non_empty() {
-        for s in [SmellSeverity::Critical, SmellSeverity::High,
-                  SmellSeverity::Medium, SmellSeverity::Low]
-        {
+        for s in [
+            SmellSeverity::Critical,
+            SmellSeverity::High,
+            SmellSeverity::Medium,
+            SmellSeverity::Low,
+        ] {
             assert!(!s.label().is_empty(), "{s:?}");
         }
     }

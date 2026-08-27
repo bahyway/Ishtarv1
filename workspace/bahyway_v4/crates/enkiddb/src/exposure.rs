@@ -49,7 +49,13 @@ impl ConceptGraph {
     /// document re-ingested under a new epoch is recorded again,
     /// consistent with this Ecosystem's insert-only Journal model; the
     /// exposure preview de-duplicates by KAKI when reading back out.
-    pub fn record_document(&mut self, kaki: IdentityKaki, title: &str, collection: &str, mentions: &[ConceptEntry]) {
+    pub fn record_document(
+        &mut self,
+        kaki: IdentityKaki,
+        title: &str,
+        collection: &str,
+        mentions: &[ConceptEntry],
+    ) {
         self.documents.push(DocumentEntry {
             kaki: *kaki.bytes(),
             title: title.to_string(),
@@ -93,7 +99,11 @@ impl ConceptGraph {
     /// Every distinct collection tag seen so far, sorted — lets a caller
     /// enumerate what's even grantable before previewing any one of them.
     pub fn known_collections(&self) -> Vec<String> {
-        let mut out: Vec<String> = self.documents.iter().map(|d| d.collection.clone()).collect();
+        let mut out: Vec<String> = self
+            .documents
+            .iter()
+            .map(|d| d.collection.clone())
+            .collect();
         out.sort();
         out.dedup();
         out
@@ -114,7 +124,10 @@ impl ExposureReport {
     /// asked "what happens if I grant this."
     pub fn narrate(&self) -> String {
         if self.document_count == 0 {
-            return format!("Collection \"{}\" has no documents yet — nothing would be revealed.", self.collection);
+            return format!(
+                "Collection \"{}\" has no documents yet — nothing would be revealed.",
+                self.collection
+            );
         }
         if self.revealed_concepts.is_empty() {
             return format!(
@@ -146,11 +159,15 @@ mod tests {
 
     fn kaki(seed: u32) -> IdentityKaki {
         let minter = KakiMinter::new(TribeId::from_u16(0xFF20));
-        IdentityKaki::try_from_kaki(minter.mint_identity(seed, enkidb_kaki::KakiRole::Zikru)).unwrap()
+        IdentityKaki::try_from_kaki(minter.mint_identity(seed, enkidb_kaki::KakiRole::Zikru))
+            .unwrap()
     }
 
     fn concept(name: &str, kind: ConceptKind) -> ConceptEntry {
-        ConceptEntry { name: name.to_string(), kind }
+        ConceptEntry {
+            name: name.to_string(),
+            kind,
+        }
     }
 
     #[test]
@@ -166,26 +183,47 @@ mod tests {
             kaki(1),
             "Gate G1 Runbook",
             "gates",
-            &[concept("APSU", ConceptKind::Gate), concept("enkiddb", ConceptKind::Crate)],
+            &[
+                concept("APSU", ConceptKind::Gate),
+                concept("enkiddb", ConceptKind::Crate),
+            ],
         );
         graph.record_document(
             kaki(2),
             "Gate G7 Runbook",
             "gates",
-            &[concept("ENLIL", ConceptKind::Gate), concept("enkiddb", ConceptKind::Crate)],
+            &[
+                concept("ENLIL", ConceptKind::Gate),
+                concept("enkiddb", ConceptKind::Crate),
+            ],
         );
-        graph.record_document(kaki(3), "Unrelated Glossary Entry", "glossary", &[concept("Tigris", ConceptKind::SovereignName)]);
+        graph.record_document(
+            kaki(3),
+            "Unrelated Glossary Entry",
+            "glossary",
+            &[concept("Tigris", ConceptKind::SovereignName)],
+        );
 
         let report = graph.exposure_preview("gates");
         assert_eq!(report.document_count, 2);
-        assert_eq!(report.documents, vec!["Gate G1 Runbook".to_string(), "Gate G7 Runbook".to_string()]);
+        assert_eq!(
+            report.documents,
+            vec!["Gate G1 Runbook".to_string(), "Gate G7 Runbook".to_string()]
+        );
         // enkiddb mentioned by both documents but only reported once.
         assert_eq!(report.revealed_concepts.len(), 3);
-        let names: Vec<&str> = report.revealed_concepts.iter().map(|c| c.name.as_str()).collect();
+        let names: Vec<&str> = report
+            .revealed_concepts
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
         assert!(names.contains(&"APSU"));
         assert!(names.contains(&"ENLIL"));
         assert!(names.contains(&"enkiddb"));
-        assert!(!names.contains(&"Tigris"), "glossary-collection concepts must not leak into the gates preview");
+        assert!(
+            !names.contains(&"Tigris"),
+            "glossary-collection concepts must not leak into the gates preview"
+        );
     }
 
     #[test]
@@ -201,8 +239,18 @@ mod tests {
     fn same_kaki_recorded_twice_is_not_double_counted() {
         let mut graph = ConceptGraph::new();
         let doc = kaki(9);
-        graph.record_document(doc, "Re-ingested Doc", "gates", &[concept("APSU", ConceptKind::Gate)]);
-        graph.record_document(doc, "Re-ingested Doc", "gates", &[concept("APSU", ConceptKind::Gate)]);
+        graph.record_document(
+            doc,
+            "Re-ingested Doc",
+            "gates",
+            &[concept("APSU", ConceptKind::Gate)],
+        );
+        graph.record_document(
+            doc,
+            "Re-ingested Doc",
+            "gates",
+            &[concept("APSU", ConceptKind::Gate)],
+        );
         let report = graph.exposure_preview("gates");
         assert_eq!(report.document_count, 1);
     }
@@ -213,13 +261,21 @@ mod tests {
         graph.record_document(kaki(1), "A", "gates", &[]);
         graph.record_document(kaki(2), "B", "architecture-reference", &[]);
         graph.record_document(kaki(3), "C", "gates", &[]);
-        assert_eq!(graph.known_collections(), vec!["architecture-reference".to_string(), "gates".to_string()]);
+        assert_eq!(
+            graph.known_collections(),
+            vec!["architecture-reference".to_string(), "gates".to_string()]
+        );
     }
 
     #[test]
     fn narrate_names_every_revealed_concept() {
         let mut graph = ConceptGraph::new();
-        graph.record_document(kaki(1), "Gate Doc", "gates", &[concept("ENLIL", ConceptKind::Gate)]);
+        graph.record_document(
+            kaki(1),
+            "Gate Doc",
+            "gates",
+            &[concept("ENLIL", ConceptKind::Gate)],
+        );
         let narration = graph.exposure_preview("gates").narrate();
         assert!(narration.contains("ENLIL (gate)"));
         assert!(narration.contains("1 document"));

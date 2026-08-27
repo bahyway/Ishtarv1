@@ -10,7 +10,7 @@
 //!
 //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust
 
-use crate::constants::{RESONANCE_RADIUS, TAU_R7, CLUSTER_THRESH};
+use crate::constants::{CLUSTER_THRESH, RESONANCE_RADIUS, TAU_R7};
 
 /// Density band of a particle based on its neighbourhood count.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,15 +25,19 @@ pub enum DensityBand {
 
 impl DensityBand {
     pub fn from_count(count: usize) -> Self {
-        if count >= TAU_R7 { Self::Rule7Overflow }
-        else if count >= CLUSTER_THRESH { Self::Cluster }
-        else { Self::Isolated }
+        if count >= TAU_R7 {
+            Self::Rule7Overflow
+        } else if count >= CLUSTER_THRESH {
+            Self::Cluster
+        } else {
+            Self::Isolated
+        }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Isolated      => "ISOLATED",
-            Self::Cluster       => "CLUSTER",
+            Self::Isolated => "ISOLATED",
+            Self::Cluster => "CLUSTER",
             Self::Rule7Overflow => "RULE7_OVERFLOW",
         }
     }
@@ -46,7 +50,9 @@ impl DensityBand {
 /// Returns 0.0 for r ≥ h (outside the kernel support).
 #[inline]
 pub fn sph_kernel(r: f32, h: f32) -> f32 {
-    if r >= h || h <= 0.0 { return 0.0; }
+    if r >= h || h <= 0.0 {
+        return 0.0;
+    }
     let q = r / h;
     let base = 1.0 - q;
     base * base * base
@@ -61,17 +67,25 @@ pub fn sph_kernel(r: f32, h: f32) -> f32 {
 pub fn neighbourhood_counts(positions: &[[f32; 3]]) -> Vec<usize> {
     let r2_max = RESONANCE_RADIUS * RESONANCE_RADIUS;
 
-    positions.iter().enumerate().map(|(i, pi)| {
-        positions.iter().enumerate()
-            .filter(|(j, pj)| {
-                if *j == i { return false; }
-                let dx = pi[0] - pj[0];
-                let dy = pi[1] - pj[1];
-                let dz = pi[2] - pj[2];
-                dx * dx + dy * dy + dz * dz < r2_max
-            })
-            .count()
-    }).collect()
+    positions
+        .iter()
+        .enumerate()
+        .map(|(i, pi)| {
+            positions
+                .iter()
+                .enumerate()
+                .filter(|(j, pj)| {
+                    if *j == i {
+                        return false;
+                    }
+                    let dx = pi[0] - pj[0];
+                    let dy = pi[1] - pj[1];
+                    let dz = pi[2] - pj[2];
+                    dx * dx + dy * dy + dz * dz < r2_max
+                })
+                .count()
+        })
+        .collect()
 }
 
 /// Compute SPH density for each particle.
@@ -80,18 +94,24 @@ pub fn neighbourhood_counts(positions: &[[f32; 3]]) -> Vec<usize> {
 pub fn sph_densities(positions: &[[f32; 3]]) -> Vec<f32> {
     let h = RESONANCE_RADIUS;
 
-    positions.iter().enumerate().map(|(i, pi)| {
-        let mut rho = 0.0f32;
-        for (j, pj) in positions.iter().enumerate() {
-            if j == i { continue; }
-            let dx = pi[0] - pj[0];
-            let dy = pi[1] - pj[1];
-            let dz = pi[2] - pj[2];
-            let r = (dx * dx + dy * dy + dz * dz).sqrt();
-            rho += sph_kernel(r, h);
-        }
-        rho
-    }).collect()
+    positions
+        .iter()
+        .enumerate()
+        .map(|(i, pi)| {
+            let mut rho = 0.0f32;
+            for (j, pj) in positions.iter().enumerate() {
+                if j == i {
+                    continue;
+                }
+                let dx = pi[0] - pj[0];
+                let dy = pi[1] - pj[1];
+                let dz = pi[2] - pj[2];
+                let r = (dx * dx + dy * dy + dz * dz).sqrt();
+                rho += sph_kernel(r, h);
+            }
+            rho
+        })
+        .collect()
 }
 
 /// Classify each particle into its density band.
@@ -107,12 +127,16 @@ pub fn classify_density(positions: &[[f32; 3]]) -> Vec<DensityBand> {
 /// Returns groups of particle indices where density ≥ τ_R7=11.
 pub fn find_rule7_clusters(positions: &[[f32; 3]]) -> Vec<Vec<usize>> {
     let counts = neighbourhood_counts(positions);
-    let overflow: Vec<usize> = counts.iter().enumerate()
+    let overflow: Vec<usize> = counts
+        .iter()
+        .enumerate()
         .filter(|(_, &c)| c >= TAU_R7)
         .map(|(i, _)| i)
         .collect();
 
-    if overflow.is_empty() { return Vec::new(); }
+    if overflow.is_empty() {
+        return Vec::new();
+    }
 
     // Group into connected components (within resonance_radius)
     let r2_max = RESONANCE_RADIUS * RESONANCE_RADIUS;
@@ -120,7 +144,9 @@ pub fn find_rule7_clusters(positions: &[[f32; 3]]) -> Vec<Vec<usize>> {
     let mut clusters = Vec::new();
 
     for start in 0..overflow.len() {
-        if visited[start] { continue; }
+        if visited[start] {
+            continue;
+        }
         let mut cluster = vec![overflow[start]];
         visited[start] = true;
 
@@ -128,7 +154,9 @@ pub fn find_rule7_clusters(positions: &[[f32; 3]]) -> Vec<Vec<usize>> {
         while let Some(qi) = queue.pop() {
             let pi = positions[overflow[qi]];
             for next in 0..overflow.len() {
-                if visited[next] { continue; }
+                if visited[next] {
+                    continue;
+                }
                 let pj = positions[overflow[next]];
                 let dx = pi[0] - pj[0];
                 let dy = pi[1] - pj[1];
@@ -152,12 +180,16 @@ mod tests {
     use super::*;
 
     fn make_cluster(n: usize, centre: [f32; 3], jitter: f32) -> Vec<[f32; 3]> {
-        (0..n).map(|i| {
-            let angle = i as f32 * 0.1;
-            [centre[0] + angle.cos() * jitter,
-             centre[1] + angle.sin() * jitter,
-             centre[2]]
-        }).collect()
+        (0..n)
+            .map(|i| {
+                let angle = i as f32 * 0.1;
+                [
+                    centre[0] + angle.cos() * jitter,
+                    centre[1] + angle.sin() * jitter,
+                    centre[2],
+                ]
+            })
+            .collect()
     }
 
     #[test]
@@ -217,8 +249,14 @@ mod tests {
         // 12 particles packed tightly within resonance_radius
         let positions = make_cluster(12, [0.0, 0.0, 0.0], 0.02);
         let bands = classify_density(&positions);
-        let overflow_count = bands.iter().filter(|&&b| b == DensityBand::Rule7Overflow).count();
-        assert!(overflow_count > 0, "12 particles packed tightly should trigger Rule 7");
+        let overflow_count = bands
+            .iter()
+            .filter(|&&b| b == DensityBand::Rule7Overflow)
+            .count();
+        assert!(
+            overflow_count > 0,
+            "12 particles packed tightly should trigger Rule 7"
+        );
     }
 
     #[test]

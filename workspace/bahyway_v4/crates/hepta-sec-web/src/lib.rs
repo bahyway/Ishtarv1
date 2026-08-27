@@ -42,7 +42,7 @@
 //! ```
 //! Requests without this header produce `HttpVerdict::Forbidden` (Dead Axiom).
 
-use hepta_sec_firewall::{KakiPacket, PacketProtocol, FirewallVerdict};
+use hepta_sec_firewall::{FirewallVerdict, KakiPacket, PacketProtocol};
 use hepta_sec_sentinel::HeptaSecSentinel;
 
 // ── HTTP header name ──────────────────────────────────────────────────────────
@@ -65,7 +65,10 @@ pub enum HttpVerdict {
     Forbidden,
     /// KAKI is first-seen (Unknown) or suspicious — hold for steward review.
     /// Caller should return 202 Accepted or an opaque acknowledgment.
-    Quarantine { kaki_hash: u32, reason: &'static str },
+    Quarantine {
+        kaki_hash: u32,
+        reason: &'static str,
+    },
     /// KAKI is not registered — redirect to sovereign identity registration.
     /// Caller should return 302 to the registration URL.
     Redirect { to: &'static str },
@@ -114,12 +117,15 @@ pub struct WebSentinelGuard {
 impl WebSentinelGuard {
     /// Create a new guard with a fresh `HeptaSecSentinel`.
     pub fn new() -> Self {
-        WebSentinelGuard { sentinel: HeptaSecSentinel::new() }
+        WebSentinelGuard {
+            sentinel: HeptaSecSentinel::new(),
+        }
     }
 
     /// Pre-register a trusted KAKI (e.g. internal services, registered Write Pods).
     pub fn register_trusted(&mut self, kaki_hash: u32, b11_score: u8, now_epoch: u32) {
-        self.sentinel.register_kaki_b11(kaki_hash, b11_score, now_epoch);
+        self.sentinel
+            .register_kaki_b11(kaki_hash, b11_score, now_epoch);
     }
 
     /// Inspect an incoming HTTP request.
@@ -131,22 +137,22 @@ impl WebSentinelGuard {
     /// Returns the `HttpVerdict` the HTTP layer must enforce.
     pub fn inspect(
         &mut self,
-        headers:     &[(&[u8], &[u8])],
+        headers: &[(&[u8], &[u8])],
         payload_len: u32,
-        now_epoch:   u32,
+        now_epoch: u32,
     ) -> HttpVerdict {
         let kaki_hash = match KakiExtractor::from_headers(headers) {
             Some(h) => h,
-            None    => return HttpVerdict::Forbidden,
+            None => return HttpVerdict::Forbidden,
         };
 
         let packet = KakiPacket {
             src_kaki_hash: Some(kaki_hash),
             dst_kaki_hash: Some(WEB_GATEWAY_KAKI_HASH),
-            payload_fnv:   0,
-            protocol:      PacketProtocol::Tcp,
-            epoch:         now_epoch,
-            size_bytes:    payload_len,
+            payload_fnv: 0,
+            protocol: PacketProtocol::Tcp,
+            epoch: now_epoch,
+            size_bytes: payload_len,
         };
 
         match self.sentinel.inspect_packet(&packet, now_epoch) {
@@ -170,14 +176,16 @@ impl WebSentinelGuard {
 }
 
 impl Default for WebSentinelGuard {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── FNV-1a (const-friendly) ───────────────────────────────────────────────────
 
 const fn fnv1a_u32(data: &[u8]) -> u32 {
     const OFFSET: u32 = 2_166_136_261;
-    const PRIME:  u32 = 16_777_619;
+    const PRIME: u32 = 16_777_619;
     let mut h = OFFSET;
     let mut i = 0;
     while i < data.len() {
@@ -221,8 +229,8 @@ mod tests {
     #[test]
     fn from_headers_case_insensitive() {
         let headers: &[(&[u8], &[u8])] = &[
-            (b"content-type",   b"application/json"),
-            (b"x-kaki-hash",    b"aabbccdd"),
+            (b"content-type", b"application/json"),
+            (b"x-kaki-hash", b"aabbccdd"),
         ];
         let hash = KakiExtractor::from_headers(headers).unwrap();
         assert_eq!(hash, 0xAABB_CCDD);
@@ -230,9 +238,7 @@ mod tests {
 
     #[test]
     fn from_headers_absent_returns_none() {
-        let headers: &[(&[u8], &[u8])] = &[
-            (b"content-type", b"text/html"),
-        ];
+        let headers: &[(&[u8], &[u8])] = &[(b"content-type", b"text/html")];
         assert!(KakiExtractor::from_headers(headers).is_none());
     }
 

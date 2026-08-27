@@ -22,8 +22,10 @@ pub mod kinetic;
 pub mod markov;
 
 pub use agent::{AgentClass, AgentSnapshot, AgentState};
-pub use behavior::{BehaviorPolicy, TransitionOutcome, apply_transition};
-pub use kinetic::{KineticState, kinetic_step, kinetic_step_batch, j_phys, j_mem, j_learn, policy_for};
+pub use behavior::{apply_transition, BehaviorPolicy, TransitionOutcome};
+pub use kinetic::{
+    j_learn, j_mem, j_phys, kinetic_step, kinetic_step_batch, policy_for, KineticState,
+};
 
 /// Advance one sovereign tribe (up to 7 agents) by one kinetic timestep.
 ///
@@ -33,9 +35,9 @@ pub use kinetic::{KineticState, kinetic_step, kinetic_step_batch, j_phys, j_mem,
 ///
 /// Returns a `Vec<KineticState>` in the same order as `snapshots`.
 pub fn step_tribe(
-    snapshots:      &[AgentSnapshot],
+    snapshots: &[AgentSnapshot],
     density_counts: &[usize],
-    delta_hs:       &[f32],
+    delta_hs: &[f32],
 ) -> Vec<KineticState> {
     kinetic_step_batch(snapshots, density_counts, delta_hs)
 }
@@ -43,10 +45,10 @@ pub fn step_tribe(
 /// Count how many agents ascended, descended, and sank this step.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct StepStats {
-    pub ascended:   usize,
-    pub descended:  usize,
+    pub ascended: usize,
+    pub descended: usize,
     pub rule7_sink: usize,
-    pub stable:     usize,
+    pub stable: usize,
 }
 
 impl StepStats {
@@ -54,10 +56,10 @@ impl StepStats {
         let mut s = Self::default();
         for ks in states {
             match ks.outcome {
-                TransitionOutcome::Ascend    => s.ascended  += 1,
-                TransitionOutcome::Descend   => s.descended += 1,
+                TransitionOutcome::Ascend => s.ascended += 1,
+                TransitionOutcome::Descend => s.descended += 1,
                 TransitionOutcome::Rule7Sink => s.rule7_sink += 1,
-                TransitionOutcome::Stable    => s.stable    += 1,
+                TransitionOutcome::Stable => s.stable += 1,
             }
         }
         s
@@ -76,19 +78,19 @@ mod tests {
     fn step_tribe_returns_same_count() {
         let snaps: Vec<_> = (0..7).map(|i| make_snap(30 + i as u8 * 30)).collect();
         let counts = vec![0usize; 7];
-        let dhs    = vec![0.0f32; 7];
+        let dhs = vec![0.0f32; 7];
         let result = step_tribe(&snaps, &counts, &dhs);
         assert_eq!(result.len(), 7);
     }
 
     #[test]
     fn step_stats_counts_correctly() {
-        let snaps  = vec![make_snap(240), make_snap(30), make_snap(50)];
+        let snaps = vec![make_snap(240), make_snap(30), make_snap(50)];
         let counts = vec![0usize, 11, 11]; // last two in overflow
-        let dhs    = vec![0.0f32; 3];
+        let dhs = vec![0.0f32; 3];
         let states = step_tribe(&snaps, &counts, &dhs);
-        let stats  = StepStats::from_states(&states);
-        assert_eq!(stats.stable, 1);     // GEM stays stable
+        let stats = StepStats::from_states(&states);
+        assert_eq!(stats.stable, 1); // GEM stays stable
         assert_eq!(stats.rule7_sink, 2); // both dead/fuzzy + density≥11 → sink
     }
 

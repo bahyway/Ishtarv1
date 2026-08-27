@@ -16,10 +16,10 @@
 //!   ClientDqProfile + EAV triples → FuzzyDimensions
 //!   FuzzyDimensions → score_engine::score() → ScoreResult (B11, State, ColorRGB, Freshness)
 
-pub mod profile;
 pub mod compute;
 pub mod parse;
+pub mod profile;
 
-pub use profile::{AttrProfile, ClientDqProfile, DimTag, SourceTrustLevel, FormatLayerCode};
 pub use compute::compute_dims;
 pub use parse::{parse_profile, to_profile_text};
+pub use profile::{AttrProfile, ClientDqProfile, DimTag, FormatLayerCode, SourceTrustLevel};

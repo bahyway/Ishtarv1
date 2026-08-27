@@ -28,25 +28,25 @@
 
 #![forbid(unsafe_code)]
 
-use najaf_engine::{
-    DiscoverySource, GraveCondition, GraveId, GraveParticle, GraveRegistry,
-    IdentityCandidate, InscriptionMatcher, NajafSector, NaviCoord, QUALITY_DIVISOR,
-};
 use bahyway_core::TribeId;
+use najaf_engine::{
+    DiscoverySource, GraveCondition, GraveId, GraveParticle, GraveRegistry, IdentityCandidate,
+    InscriptionMatcher, NajafSector, NaviCoord, QUALITY_DIVISOR,
+};
 
 // ── Raw discovery row ─────────────────────────────────────────────────────────
 
 /// One row from a satellite/drone CSV sidecar — pre-parse, before enrichment.
 #[derive(Debug, Clone)]
 pub struct DiscoveryRow {
-    pub grave_id:         GraveId,
-    pub lat_center:       f32,
-    pub lon_center:       f32,
-    pub condition:        GraveCondition,
+    pub grave_id: GraveId,
+    pub lat_center: f32,
+    pub lon_center: f32,
+    pub condition: GraveCondition,
     /// Raw inscription text from image recognition (may be empty).
     pub inscription_text: String,
     /// Confidence from imagery AI, 0–100 (will be scaled to 0–240).
-    pub confidence_pct:   u8,
+    pub confidence_pct: u8,
     pub death_hijri_year: Option<u32>,
 }
 
@@ -55,22 +55,23 @@ pub struct DiscoveryRow {
 /// Summary produced after processing one CSV batch.
 #[derive(Debug, Default)]
 pub struct GraveDiscoveryReport {
-    pub total_rows:         usize,
-    pub parse_errors:       usize,
-    pub graves_updated:     usize,
-    pub graves_not_found:   usize,
-    pub identity_matched:   usize,
-    pub damaged_count:      usize,
-    pub destroyed_count:    usize,
-    pub partial_count:      usize,
-    pub intact_count:       usize,
+    pub total_rows: usize,
+    pub parse_errors: usize,
+    pub graves_updated: usize,
+    pub graves_not_found: usize,
+    pub identity_matched: usize,
+    pub damaged_count: usize,
+    pub destroyed_count: usize,
+    pub partial_count: usize,
+    pub intact_count: usize,
     /// Candidate identities resolved (confidence ≥ 150).
-    pub candidates:         Vec<IdentityCandidate>,
+    pub candidates: Vec<IdentityCandidate>,
 }
 
 impl GraveDiscoveryReport {
     pub fn unresolved_count(&self) -> usize {
-        self.total_rows.saturating_sub(self.parse_errors + self.graves_not_found)
+        self.total_rows
+            .saturating_sub(self.parse_errors + self.graves_not_found)
     }
 }
 
@@ -92,7 +93,7 @@ impl core::fmt::Display for ParseError {
 
 /// Processes CSV sidecar files into GraveParticle updates.
 pub struct GraveDiscoveryStation {
-    source:  DiscoverySource,
+    source: DiscoverySource,
     matcher: InscriptionMatcher,
 }
 
@@ -143,7 +144,7 @@ impl GraveDiscoveryStation {
             report.total_rows += 1;
 
             let row = match parse_row(line, line_idx + 1) {
-                Ok(r)  => r,
+                Ok(r) => r,
                 Err(e) => {
                     report.parse_errors += 1;
                     let _ = e; // errors counted; caller inspects via error_count
@@ -164,7 +165,9 @@ impl GraveDiscoveryStation {
                     .with_discovery_source(self.source);
                 let g = if let Some(yr) = row.death_hijri_year {
                     g.with_death_year(yr)
-                } else { g };
+                } else {
+                    g
+                };
                 registry.register(g);
             }
 
@@ -172,10 +175,10 @@ impl GraveDiscoveryStation {
 
             // Account for condition in report
             match row.condition {
-                GraveCondition::Intact    => report.intact_count    += 1,
-                GraveCondition::Partial   => report.partial_count   += 1,
+                GraveCondition::Intact => report.intact_count += 1,
+                GraveCondition::Partial => report.partial_count += 1,
                 GraveCondition::Destroyed => report.destroyed_count += 1,
-                GraveCondition::Unknown   => {}
+                GraveCondition::Unknown => {}
             }
             if row.condition.is_damaged() {
                 report.damaged_count += 1;
@@ -209,8 +212,10 @@ impl GraveDiscoveryStation {
         tribe: TribeId,
         sector: NajafSector,
     ) -> GraveDiscoveryReport {
-        let mut report = GraveDiscoveryReport::default();
-        report.total_rows = rows.len();
+        let mut report = GraveDiscoveryReport {
+            total_rows: rows.len(),
+            ..Default::default()
+        };
 
         for row in rows {
             if let Some(g) = registry.get_mut(row.grave_id) {
@@ -222,19 +227,25 @@ impl GraveDiscoveryStation {
                     .with_condition(row.condition)
                     .with_confidence(scale_confidence(row.confidence_pct))
                     .with_discovery_source(self.source);
-                let g = if let Some(yr) = row.death_hijri_year { g.with_death_year(yr) } else { g };
+                let g = if let Some(yr) = row.death_hijri_year {
+                    g.with_death_year(yr)
+                } else {
+                    g
+                };
                 registry.register(g);
             }
 
             report.graves_updated += 1;
 
             match row.condition {
-                GraveCondition::Intact    => report.intact_count    += 1,
-                GraveCondition::Partial   => report.partial_count   += 1,
+                GraveCondition::Intact => report.intact_count += 1,
+                GraveCondition::Partial => report.partial_count += 1,
                 GraveCondition::Destroyed => report.destroyed_count += 1,
-                GraveCondition::Unknown   => {}
+                GraveCondition::Unknown => {}
             }
-            if row.condition.is_damaged() { report.damaged_count += 1; }
+            if row.condition.is_damaged() {
+                report.damaged_count += 1;
+            }
 
             if !row.inscription_text.is_empty() {
                 let candidates = self.matcher.match_inscription(&row.inscription_text);
@@ -265,7 +276,7 @@ pub fn scale_confidence(pct: u8) -> u8 {
 }
 
 fn apply_row_to_grave(g: &mut GraveParticle, row: &DiscoveryRow, source: DiscoverySource) {
-    g.condition        = row.condition;
+    g.condition = row.condition;
     g.discovery_source = source;
     let new_conf = scale_confidence(row.confidence_pct);
     // Only raise confidence, never lower it (AI can confirm but not un-confirm)
@@ -291,13 +302,16 @@ fn parse_row(line: &str, line_num: usize) -> Result<DiscoveryRow, ParseError> {
     }
 
     let grave_id = parts[0].trim().parse::<u32>().map_err(|e| ParseError {
-        line: line_num, message: format!("grave_id: {e}"),
+        line: line_num,
+        message: format!("grave_id: {e}"),
     })?;
     let lat_center = parts[1].trim().parse::<f32>().map_err(|e| ParseError {
-        line: line_num, message: format!("lat_center: {e}"),
+        line: line_num,
+        message: format!("lat_center: {e}"),
     })?;
     let lon_center = parts[2].trim().parse::<f32>().map_err(|e| ParseError {
-        line: line_num, message: format!("lon_center: {e}"),
+        line: line_num,
+        message: format!("lon_center: {e}"),
     })?;
     let condition = parse_condition(parts[3].trim()).ok_or_else(|| ParseError {
         line: line_num,
@@ -305,29 +319,36 @@ fn parse_row(line: &str, line_num: usize) -> Result<DiscoveryRow, ParseError> {
     })?;
     let inscription_text = parts[4].trim().to_string();
     let confidence_pct = parts[5].trim().parse::<u8>().map_err(|e| ParseError {
-        line: line_num, message: format!("confidence_pct: {e}"),
+        line: line_num,
+        message: format!("confidence_pct: {e}"),
     })?;
     let death_hijri_year = if parts.len() > 6 && !parts[6].trim().is_empty() {
         Some(parts[6].trim().parse::<u32>().map_err(|e| ParseError {
-            line: line_num, message: format!("death_hijri_year: {e}"),
+            line: line_num,
+            message: format!("death_hijri_year: {e}"),
         })?)
     } else {
         None
     };
 
     Ok(DiscoveryRow {
-        grave_id, lat_center, lon_center, condition,
-        inscription_text, confidence_pct, death_hijri_year,
+        grave_id,
+        lat_center,
+        lon_center,
+        condition,
+        inscription_text,
+        confidence_pct,
+        death_hijri_year,
     })
 }
 
 fn parse_condition(s: &str) -> Option<GraveCondition> {
     match s {
-        "Intact"    => Some(GraveCondition::Intact),
-        "Partial"   => Some(GraveCondition::Partial),
+        "Intact" => Some(GraveCondition::Intact),
+        "Partial" => Some(GraveCondition::Partial),
         "Destroyed" => Some(GraveCondition::Destroyed),
-        "Unknown"   => Some(GraveCondition::Unknown),
-        _           => None,
+        "Unknown" => Some(GraveCondition::Unknown),
+        _ => None,
     }
 }
 
@@ -336,19 +357,36 @@ fn parse_condition(s: &str) -> Option<GraveCondition> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use najaf_engine::{GraveParticle, GraveRegistry, NajafSector, NaviCoord};
     use bahyway_core::TribeId;
+    use najaf_engine::{GraveParticle, GraveRegistry, NajafSector, NaviCoord};
 
-    fn tribe() -> TribeId { TribeId::from_u16(0x0001) }
+    fn tribe() -> TribeId {
+        TribeId::from_u16(0x0001)
+    }
 
     fn base_registry() -> GraveRegistry {
         let mut r = GraveRegistry::new();
-        r.register(GraveParticle::new(101, NaviCoord::new(31.995, 44.320, 0.0),
-                                      NajafSector::Entrance, tribe(), 1400));
-        r.register(GraveParticle::new(102, NaviCoord::new(32.005, 44.320, 0.0),
-                                      NajafSector::Shuhadaa, tribe(), 1410));
-        r.register(GraveParticle::new(103, NaviCoord::new(32.003, 44.333, 0.0),
-                                      NajafSector::Awliya, tribe(), 1420));
+        r.register(GraveParticle::new(
+            101,
+            NaviCoord::new(31.995, 44.320, 0.0),
+            NajafSector::Entrance,
+            tribe(),
+            1400,
+        ));
+        r.register(GraveParticle::new(
+            102,
+            NaviCoord::new(32.005, 44.320, 0.0),
+            NajafSector::Shuhadaa,
+            tribe(),
+            1410,
+        ));
+        r.register(GraveParticle::new(
+            103,
+            NaviCoord::new(32.003, 44.333, 0.0),
+            NajafSector::Awliya,
+            tribe(),
+            1420,
+        ));
         r
     }
 
@@ -422,7 +460,10 @@ grave_id\tlat_center\tlon_center\tcondition\tinscription_text\tconfidence_pct\td
         let mut station = GraveDiscoveryStation::new(DiscoverySource::Drone);
         station.process_csv(CSV, &mut reg, tribe(), NajafSector::Entrance);
         for id in [101u32, 102, 103] {
-            assert_eq!(reg.get(id).unwrap().discovery_source, DiscoverySource::Drone);
+            assert_eq!(
+                reg.get(id).unwrap().discovery_source,
+                DiscoverySource::Drone
+            );
         }
     }
 
@@ -431,17 +472,18 @@ grave_id\tlat_center\tlon_center\tcondition\tinscription_text\tconfidence_pct\td
         let mut reg = base_registry();
         let mut station = GraveDiscoveryStation::new(DiscoverySource::Satellite);
         let report = station.process_csv(CSV, &mut reg, tribe(), NajafSector::Entrance);
-        assert_eq!(report.intact_count,    1); // grave 103
-        assert_eq!(report.partial_count,   1); // grave 101
+        assert_eq!(report.intact_count, 1); // grave 103
+        assert_eq!(report.partial_count, 1); // grave 101
         assert_eq!(report.destroyed_count, 1); // grave 102
-        assert_eq!(report.damaged_count,   2); // partial + destroyed
+        assert_eq!(report.damaged_count, 2); // partial + destroyed
     }
 
     #[test]
     fn parse_error_counted_not_fatal() {
         let mut reg = base_registry();
         let mut station = GraveDiscoveryStation::new(DiscoverySource::Drone);
-        let bad_csv = "not_a_number\t31.0\t44.0\tIntact\t\t50\n101\t31.9950\t44.3200\tPartial\t\t0\t\n";
+        let bad_csv =
+            "not_a_number\t31.0\t44.0\tIntact\t\t50\n101\t31.9950\t44.3200\tPartial\t\t0\t\n";
         let report = station.process_csv(bad_csv, &mut reg, tribe(), NajafSector::Entrance);
         assert_eq!(report.parse_errors, 1);
         assert_eq!(report.graves_updated, 1); // only grave 101
@@ -449,9 +491,9 @@ grave_id\tlat_center\tlon_center\tcondition\tinscription_text\tconfidence_pct\td
 
     #[test]
     fn scale_confidence_boundaries() {
-        assert_eq!(scale_confidence(0),   0);
+        assert_eq!(scale_confidence(0), 0);
         assert_eq!(scale_confidence(100), 240);
-        assert_eq!(scale_confidence(50),  120);
+        assert_eq!(scale_confidence(50), 120);
         assert_eq!(scale_confidence(255), 240); // clamped at 100% then scaled
     }
 
@@ -492,13 +534,15 @@ grave_id\tlat_center\tlon_center\tcondition\tinscription_text\tconfidence_pct\td
     fn process_rows_api() {
         let mut reg = base_registry();
         let mut station = GraveDiscoveryStation::new(DiscoverySource::Satellite);
-        let rows = vec![
-            DiscoveryRow {
-                grave_id: 101, lat_center: 31.995, lon_center: 44.320,
-                condition: GraveCondition::Intact, inscription_text: String::new(),
-                confidence_pct: 80, death_hijri_year: Some(1395),
-            },
-        ];
+        let rows = vec![DiscoveryRow {
+            grave_id: 101,
+            lat_center: 31.995,
+            lon_center: 44.320,
+            condition: GraveCondition::Intact,
+            inscription_text: String::new(),
+            confidence_pct: 80,
+            death_hijri_year: Some(1395),
+        }];
         let report = station.process_rows(&rows, &mut reg, tribe(), NajafSector::Entrance);
         assert_eq!(report.graves_updated, 1);
         assert_eq!(reg.get(101).unwrap().condition, GraveCondition::Intact);

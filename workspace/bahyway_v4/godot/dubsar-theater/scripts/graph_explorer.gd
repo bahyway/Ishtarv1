@@ -112,7 +112,7 @@ func _on_search_pressed() -> void:
 		return
 	var host := host_input.text.strip_edges()
 	if host.is_empty():
-		# FIXED 2026-08-02, live: was "192.168.122.107" -- a stale
+		# FIXED 2026-08-02, live: was "192.168.122.112" -- a stale
 		# eriduous-vdi-era libvirt IP. This host and DubSar Theater are
 		# now both local to the same bare-metal machine (see PB-290),
 		# so 127.0.0.1 is the correct default, not a remote VM address.

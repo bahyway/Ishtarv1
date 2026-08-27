@@ -10,15 +10,19 @@ use bahyway_core::TribeId;
 /// Identifies one Journal partition — the logical path for a particle's events.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PartitionKey {
-    pub tribe_id:    TribeId,
-    pub shard:       u16,
-    pub time_epoch:  u32,
+    pub tribe_id: TribeId,
+    pub shard: u16,
+    pub time_epoch: u32,
 }
 
 impl PartitionKey {
     pub fn new(tribe_id: TribeId, uuid_hash: u32, time_epoch: u32, shard_count: u16) -> Self {
         let shard = (uuid_hash % shard_count as u32) as u16;
-        PartitionKey { tribe_id, shard, time_epoch }
+        PartitionKey {
+            tribe_id,
+            shard,
+            time_epoch,
+        }
     }
 
     /// Format as a directory path component: "tribe_XXXX/shard_YYYY/epoch_ZZZZ"

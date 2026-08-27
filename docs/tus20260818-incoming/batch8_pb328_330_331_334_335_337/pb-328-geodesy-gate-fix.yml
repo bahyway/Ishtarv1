@@ -1,0 +1,225 @@
+---
+# ============================================================================
+# PB-328 — GEODESY GATE fix for HeptaSpaceMap (script v2)
+# BahyWay.Ecosystem v4.0 — SilaEngine
+# ----------------------------------------------------------------------------
+# CORRECTION SEALED BY THIS TABLET (supersedes PB-327's geometry statement):
+#   THERE IS NO FLAT GROUND. EARTH IS CURVED.
+#   * Gauss–Bonnet ledger for any closed degree-3 tiling of the sphere:
+#         SUM (6 - n) * F_n = 12   =>   F5 - F7 = 12
+#     Pentagons deposit curvature (+pi/3 each); heptagons WITHDRAW it
+#     (-pi/3 each). Heptagons are lawful NEGATIVE-CURVATURE DEFECT GATES,
+#     each paid for by an extra pentagon somewhere on the globe.
+#   * For a bounded patch (Najaf old city) the curvature debt is exported
+#     to the patch boundary cells. Fadam Floor restated: curvature debt is
+#     ledgered, never erased.
+#   * GEODESY GATE: truth is NEVER computed in raw geographic degrees
+#     (EPSG:4326). All inputs are reprojected to UTM 38N (EPSG:32638,
+#     correct for Najaf) before the Voronoi truth runs. Outputs are sealed
+#     in EPSG:32638.
+#
+# ACTION: deterministically overwrites hepta_space_map.py with v2.
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-328-geodesy-gate-fix.yml
+# ============================================================================
+
+- name: "PB-328 | Geodesy Gate — HeptaSpaceMap script v2 (curved Earth)"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    workshop_root: /opt/bahyway/workshop/najaf_navi
+    qgis_scripts_dir: "{{ ansible_env.HOME }}/.local/share/QGIS/QGIS3/profiles/default/processing/scripts"
+    target_crs: "EPSG:32638"   # UTM zone 38N — Najaf
+
+  tasks:
+
+    - name: "1.1 | Assert PB-327 script exists (fix targets it)"
+      ansible.builtin.stat:
+        path: "{{ qgis_scripts_dir }}/hepta_space_map.py"
+      register: scr
+
+    - name: "1.2 | Halt if PB-327 was never run"
+      ansible.builtin.assert:
+        that: scr.stat.exists
+        fail_msg: "REFUSED: run PB-327 first — there is no script to correct."
+
+    - name: "2.1 | Overwrite with hepta_space_map.py v2 (Geodesy Gate)"
+      ansible.builtin.copy:
+        dest: "{{ qgis_scripts_dir }}/hepta_space_map.py"
+        mode: "0640"
+        content: |
+          # ==================================================================
+          # HeptaSpaceMap v2 — QGIS Processing script (PB-328, design-time)
+          # THERE IS NO FLAT GROUND. EARTH IS CURVED.
+          #   Gauss-Bonnet ledger: F5 - F7 = 12 on the closed sphere.
+          #   Heptagons = negative-curvature defect gates, pentagon-paid.
+          #   Bounded patches export curvature debt to boundary cells.
+          # GEODESY GATE: inputs are reprojected to {{ target_crs }} (UTM 38N)
+          #   before truth is computed. Raw-degree Voronoi is forbidden.
+          # Truth = Voronoi membership in metric CRS; Glyph = 7-gate cell.
+          # ==================================================================
+          from qgis.core import (
+              QgsProcessing, QgsProcessingAlgorithm,
+              QgsProcessingParameterFeatureSource,
+              QgsProcessingParameterFeatureSink,
+              QgsField, QgsFields, QgsFeature, QgsGeometry,
+              QgsWkbTypes, QgsFeatureSink,
+              QgsCoordinateReferenceSystem)
+          from qgis.PyQt.QtCore import QVariant
+          import processing
+
+          TARGET_CRS = '{{ target_crs }}'
+
+          class HeptaSpaceMap(QgsProcessingAlgorithm):
+              SEEDS = 'SEEDS'
+              BOUNDARY = 'BOUNDARY'
+              CELLS = 'CELLS'
+              GATES = 'GATES'
+
+              def initAlgorithm(self, config=None):
+                  self.addParameter(QgsProcessingParameterFeatureSource(
+                      self.SEEDS, 'Destination seeds (points)',
+                      [QgsProcessing.TypeVectorPoint]))
+                  self.addParameter(QgsProcessingParameterFeatureSource(
+                      self.BOUNDARY, 'Area boundary (polygon)',
+                      [QgsProcessing.TypeVectorPolygon]))
+                  self.addParameter(QgsProcessingParameterFeatureSink(
+                      self.CELLS, 'Hepta cells (UTM 38N)'))
+                  self.addParameter(QgsProcessingParameterFeatureSink(
+                      self.GATES, 'Hepta gates / shortcut graph (UTM 38N)'))
+
+              def to_seven_vertices(self, geom):
+                  """Glyph layer only: simplify toward exactly 7 vertices.
+                  Truth remains the metric Voronoi membership."""
+                  poly = geom.asPolygon()
+                  ring = poly[0] if poly else []
+                  n = len(ring) - 1
+                  tol = 0.0
+                  step = geom.length() / 200.0 if geom.length() else 1.0
+                  g = QgsGeometry(geom)
+                  while n > 7 and tol < geom.length():
+                      tol += step
+                      g = geom.simplify(tol)
+                      p2 = g.asPolygon()
+                      if not p2:
+                          break
+                      n = len(p2[0]) - 1
+                  return g if not g.isEmpty() else geom
+
+              def processAlgorithm(self, parameters, context, feedback):
+                  # ---- GEODESY GATE (PB-328) --------------------------------
+                  # Earth is curved. Truth is never computed in raw degrees.
+                  # Reproject BOTH inputs to the metric CRS unconditionally.
+                  feedback.pushInfo('GEODESY GATE: reprojecting inputs to '
+                                    + TARGET_CRS + ' (UTM 38N, Najaf). '
+                                    'Raw-degree Voronoi is forbidden.')
+                  seeds_utm = processing.run('native:reprojectlayer', {
+                      'INPUT': parameters[self.SEEDS],
+                      'TARGET_CRS': TARGET_CRS,
+                      'OUTPUT': 'memory:'}, context=context,
+                      feedback=feedback)['OUTPUT']
+                  boundary_utm = processing.run('native:reprojectlayer', {
+                      'INPUT': parameters[self.BOUNDARY],
+                      'TARGET_CRS': TARGET_CRS,
+                      'OUTPUT': 'memory:'}, context=context,
+                      feedback=feedback)['OUTPUT']
+
+                  # ---- TRUTH LAYER: metric Voronoi, clipped to boundary -----
+                  vor = processing.run('qgis:voronoipolygons', {
+                      'INPUT': seeds_utm,
+                      'BUFFER': 10,
+                      'OUTPUT': 'memory:'}, context=context,
+                      feedback=feedback)['OUTPUT']
+                  clipped = processing.run('native:clip', {
+                      'INPUT': vor,
+                      'OVERLAY': boundary_utm,
+                      'OUTPUT': 'memory:'}, context=context,
+                      feedback=feedback)['OUTPUT']
+
+                  out_crs = QgsCoordinateReferenceSystem(TARGET_CRS)
+
+                  cell_fields = QgsFields()
+                  cell_fields.append(QgsField('hepta_id', QVariant.String))
+                  cell_fields.append(QgsField('n_gates', QVariant.Int))
+                  cell_fields.append(QgsField('curv_units', QVariant.Int))
+                  # curv_units = 6 - n_gates : the cell's entry in the
+                  # Gauss-Bonnet ledger (heptagon = -1, pentagon = +1).
+                  (cells_sink, cells_id) = self.parameterAsSink(
+                      parameters, self.CELLS, context, cell_fields,
+                      QgsWkbTypes.Polygon, out_crs)
+
+                  gate_fields = QgsFields()
+                  gate_fields.append(QgsField('from_id', QVariant.String))
+                  gate_fields.append(QgsField('to_id', QVariant.String))
+                  (gates_sink, gates_id) = self.parameterAsSink(
+                      parameters, self.GATES, context, gate_fields,
+                      QgsWkbTypes.LineString, out_crs)
+
+                  glyphs = []
+                  for i, f in enumerate(clipped.getFeatures()):
+                      g7 = self.to_seven_vertices(f.geometry())
+                      hid = 'SILA-%04d' % i
+                      glyphs.append((hid, g7))
+
+                  ledger = 0
+                  for hid, g in glyphs:
+                      nf = QgsFeature(cell_fields)
+                      npoly = g.asPolygon()
+                      nverts = (len(npoly[0]) - 1) if npoly else 0
+                      cu = 6 - nverts
+                      ledger += cu
+                      nf.setAttributes([hid, nverts, cu])
+                      nf.setGeometry(g)
+                      cells_sink.addFeature(nf, QgsFeatureSink.FastInsert)
+
+                  for a in range(len(glyphs)):
+                      for b in range(a + 1, len(glyphs)):
+                          ha, ga = glyphs[a]
+                          hb, gb = glyphs[b]
+                          if ga.touches(gb) or ga.intersects(gb):
+                              gf = QgsFeature(gate_fields)
+                              gf.setAttributes([ha, hb])
+                              gf.setGeometry(QgsGeometry.fromPolylineXY([
+                                  ga.centroid().asPoint(),
+                                  gb.centroid().asPoint()]))
+                              gates_sink.addFeature(gf, QgsFeatureSink.FastInsert)
+
+                  feedback.pushInfo(
+                      'HeptaSpaceMap v2: %d cells sealed in %s. '
+                      'Curvature ledger for this patch: %+d units '
+                      '(closed-sphere law: F5 - F7 = 12; a bounded patch '
+                      'exports its debt to the boundary cells). '
+                      'Earth is curved; the debt is ledgered, never erased.'
+                      % (len(glyphs), TARGET_CRS, ledger))
+                  return {self.CELLS: cells_id, self.GATES: gates_id}
+
+              def name(self): return 'heptaspacemap'
+              def displayName(self): return 'HeptaSpaceMap v2 (Geodesy Gate, PB-328)'
+              def group(self): return 'BahyWay Workshop'
+              def groupId(self): return 'bahyway'
+              def createInstance(self): return HeptaSpaceMap()
+
+    - name: "3.1 | Leave a NUZI provenance note for the correction"
+      ansible.builtin.copy:
+        dest: "{{ workshop_root }}/nuzi_provenance/pb-328-note.md"
+        mode: "0640"
+        content: |
+          PB-328 GEODESY GATE (correction of PB-327's geometry statement).
+          Sealed: THERE IS NO FLAT GROUND — EARTH IS CURVED.
+          - Gauss-Bonnet ledger: F5 - F7 = 12 on the closed sphere;
+            heptagons are pentagon-paid negative-curvature defect gates.
+          - Bounded patches export curvature debt to boundary cells.
+          - Truth computation forbidden in raw degrees; all inputs
+            reprojected to EPSG:32638 (UTM 38N) before Voronoi.
+          - Each hepta cell now carries curv_units = 6 - n_gates,
+            its personal entry in the planetary ledger.
+
+    - name: "4.1 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "hepta_space_map.py v2 sealed with the Geodesy Gate."
+          - "Ledger law recorded: F5 - F7 = 12; curv_units per cell."
+          - "All truth now computed in {{ target_crs }} — never in degrees."

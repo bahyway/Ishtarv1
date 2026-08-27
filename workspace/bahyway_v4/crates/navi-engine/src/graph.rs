@@ -5,11 +5,11 @@
 //!
 //! Edge chord types: Spoke(0.80×) | Rim(1.00×) | Local(1.10×) | Diagonal(1.40×)
 
-use std::collections::HashMap;
 use crate::error::{NaviError, NaviResult};
 use crate::navimap::NaviMap;
 use crate::particle::{NaviCoord, NaviNodeId, NaviParticle};
 use bahyway_core::TribeId;
+use std::collections::HashMap;
 
 // ── Heptagram sector ──────────────────────────────────────────────────────────
 
@@ -40,11 +40,11 @@ impl HeptaSector {
 
     pub fn index(self) -> u8 {
         match self {
-            HeptaSector::Centre    => 0,
-            HeptaSector::North     => 1,
+            HeptaSector::Centre => 0,
+            HeptaSector::North => 1,
             HeptaSector::NorthEast => 2,
             HeptaSector::SouthEast => 3,
-            HeptaSector::South     => 4,
+            HeptaSector::South => 4,
             HeptaSector::SouthWest => 5,
             HeptaSector::NorthWest => 6,
         }
@@ -52,18 +52,27 @@ impl HeptaSector {
 
     /// Adjacency topology: Centre touches all; outer sectors touch their two rim neighbours.
     pub fn is_adjacent(self, other: HeptaSector) -> bool {
-        if self == other { return false; }
+        if self == other {
+            return false;
+        }
         if matches!(self, HeptaSector::Centre) || matches!(other, HeptaSector::Centre) {
             return true;
         }
         use HeptaSector::*;
-        matches!((self, other),
-            (North, NorthEast) | (NorthEast, North)     |
-            (NorthEast, SouthEast) | (SouthEast, NorthEast) |
-            (SouthEast, South) | (South, SouthEast)     |
-            (South, SouthWest) | (SouthWest, South)     |
-            (SouthWest, NorthWest) | (NorthWest, SouthWest) |
-            (NorthWest, North) | (North, NorthWest)
+        matches!(
+            (self, other),
+            (North, NorthEast)
+                | (NorthEast, North)
+                | (NorthEast, SouthEast)
+                | (SouthEast, NorthEast)
+                | (SouthEast, South)
+                | (South, SouthEast)
+                | (South, SouthWest)
+                | (SouthWest, South)
+                | (SouthWest, NorthWest)
+                | (NorthWest, SouthWest)
+                | (NorthWest, North)
+                | (North, NorthWest)
         )
     }
 }
@@ -85,54 +94,72 @@ pub enum HeptaChordType {
 impl HeptaChordType {
     pub fn base_multiplier(self) -> f32 {
         match self {
-            HeptaChordType::Spoke    => 0.80,
-            HeptaChordType::Rim      => 1.00,
-            HeptaChordType::Local    => 1.10,
+            HeptaChordType::Spoke => 0.80,
+            HeptaChordType::Rim => 1.00,
+            HeptaChordType::Local => 1.10,
             HeptaChordType::Diagonal => 1.40,
         }
     }
 
     pub fn infer(from: HeptaSector, to: HeptaSector) -> Self {
-        if from == to                          { return HeptaChordType::Local; }
+        if from == to {
+            return HeptaChordType::Local;
+        }
         if matches!(from, HeptaSector::Centre) || matches!(to, HeptaSector::Centre) {
             return HeptaChordType::Spoke;
         }
-        if from.is_adjacent(to) { HeptaChordType::Rim }
-        else                    { HeptaChordType::Diagonal }
+        if from.is_adjacent(to) {
+            HeptaChordType::Rim
+        } else {
+            HeptaChordType::Diagonal
+        }
     }
 }
 
 // ── NaviNode ──────────────────────────────────────────────────────────────────
 
 pub struct NaviNode {
-    pub id:       NaviNodeId,
+    pub id: NaviNodeId,
     pub particle: NaviParticle,
-    pub sector:   HeptaSector,
+    pub sector: HeptaSector,
 }
 
 impl NaviNode {
     pub fn new(id: NaviNodeId, particle: NaviParticle, sector: HeptaSector) -> Self {
-        NaviNode { id, particle, sector }
+        NaviNode {
+            id,
+            particle,
+            sector,
+        }
     }
 
-    pub fn is_passable(&self)    -> bool  { self.particle.is_passable() }
-    pub fn intrinsic_cost(&self) -> f32   { self.particle.intrinsic_cost() }
+    pub fn is_passable(&self) -> bool {
+        self.particle.is_passable()
+    }
+    pub fn intrinsic_cost(&self) -> f32 {
+        self.particle.intrinsic_cost()
+    }
 }
 
 // ── NaviEdge ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct NaviEdge {
-    pub from:      NaviNodeId,
-    pub to:        NaviNodeId,
+    pub from: NaviNodeId,
+    pub to: NaviNodeId,
     /// Raw geometric distance (metres) — the sovereign ground truth from the map.
     pub base_cost: f32,
-    pub chord:     HeptaChordType,
+    pub chord: HeptaChordType,
 }
 
 impl NaviEdge {
     pub fn new(from: NaviNodeId, to: NaviNodeId, base_cost: f32, chord: HeptaChordType) -> Self {
-        NaviEdge { from, to, base_cost, chord }
+        NaviEdge {
+            from,
+            to,
+            base_cost,
+            chord,
+        }
     }
 
     /// Effective cost = base_cost × chord multiplier.
@@ -144,8 +171,8 @@ impl NaviEdge {
 // ── NaviGraph ─────────────────────────────────────────────────────────────────
 
 pub struct NaviGraph {
-    nodes:     HashMap<NaviNodeId, NaviNode>,
-    edges:     Vec<NaviEdge>,
+    nodes: HashMap<NaviNodeId, NaviNode>,
+    edges: Vec<NaviEdge>,
     /// Pre-built adjacency index: id → [(neighbour_id, effective_cost)].
     /// Paid once at add_edge() time; O(1) lookup during Dijkstra inner loop.
     adjacency: HashMap<NaviNodeId, Vec<(NaviNodeId, f32)>>,
@@ -154,8 +181,8 @@ pub struct NaviGraph {
 impl NaviGraph {
     pub fn new() -> Self {
         NaviGraph {
-            nodes:     HashMap::new(),
-            edges:     Vec::new(),
+            nodes: HashMap::new(),
+            edges: Vec::new(),
             adjacency: HashMap::new(),
         }
     }
@@ -167,7 +194,10 @@ impl NaviGraph {
 
     pub fn add_edge(&mut self, edge: NaviEdge) {
         let ec = edge.effective_cost();
-        self.adjacency.entry(edge.from).or_default().push((edge.to, ec));
+        self.adjacency
+            .entry(edge.from)
+            .or_default()
+            .push((edge.to, ec));
         self.edges.push(edge);
     }
 
@@ -181,21 +211,25 @@ impl NaviGraph {
         let tribe = TribeId::from_u16(0x0001); // default; overridden per node below
 
         for mn in &map.nodes {
-            let coord   = NaviCoord::new(mn.lat, mn.lon, mn.alt);
-            let t       = TribeId::from_u16(mn.tribe);
-            let p   = NaviParticle::new(coord, t);
+            let coord = NaviCoord::new(mn.lat, mn.lon, mn.alt);
+            let t = TribeId::from_u16(mn.tribe);
+            let p = NaviParticle::new(coord, t);
             // Inherit state defaults — all nodes start Active
             let _ = p.state; // already Active from NaviParticle::new
-            let sector  = HeptaSector::from_u8(mn.sector);
+            let sector = HeptaSector::from_u8(mn.sector);
             g.add_node(NaviNode::new(mn.id, p, sector));
         }
         let _ = tribe; // used only for clarity above
 
         for mb in &map.beams {
-            let from_sector = g.nodes.get(&mb.from)
+            let from_sector = g
+                .nodes
+                .get(&mb.from)
                 .map(|n| n.sector)
                 .unwrap_or(HeptaSector::Centre);
-            let to_sector   = g.nodes.get(&mb.to)
+            let to_sector = g
+                .nodes
+                .get(&mb.to)
                 .map(|n| n.sector)
                 .unwrap_or(HeptaSector::Centre);
             let chord = HeptaChordType::infer(from_sector, to_sector);
@@ -209,10 +243,18 @@ impl NaviGraph {
         Ok(g)
     }
 
-    pub fn node(&self, id: NaviNodeId)      -> Option<&NaviNode>   { self.nodes.get(&id) }
-    pub fn node_mut(&mut self, id: NaviNodeId) -> Option<&mut NaviNode> { self.nodes.get_mut(&id) }
-    pub fn node_count(&self)                -> usize { self.nodes.len() }
-    pub fn edge_count(&self)                -> usize { self.edges.len() }
+    pub fn node(&self, id: NaviNodeId) -> Option<&NaviNode> {
+        self.nodes.get(&id)
+    }
+    pub fn node_mut(&mut self, id: NaviNodeId) -> Option<&mut NaviNode> {
+        self.nodes.get_mut(&id)
+    }
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+    pub fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
 
     /// O(1) — pre-built adjacency index.
     pub fn neighbours(&self, id: NaviNodeId) -> &[(NaviNodeId, f32)] {
@@ -231,11 +273,15 @@ impl NaviGraph {
         self.nodes.keys().copied().collect()
     }
 
-    pub fn edges(&self) -> &[NaviEdge] { &self.edges }
+    pub fn edges(&self) -> &[NaviEdge] {
+        &self.edges
+    }
 }
 
 impl Default for NaviGraph {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -308,8 +354,14 @@ mod tests {
 
     #[test]
     fn sector_adjacency_centre_touches_all() {
-        for s in [HeptaSector::North, HeptaSector::NorthEast, HeptaSector::SouthEast,
-                  HeptaSector::South, HeptaSector::SouthWest, HeptaSector::NorthWest] {
+        for s in [
+            HeptaSector::North,
+            HeptaSector::NorthEast,
+            HeptaSector::SouthEast,
+            HeptaSector::South,
+            HeptaSector::SouthWest,
+            HeptaSector::NorthWest,
+        ] {
             assert!(HeptaSector::Centre.is_adjacent(s));
         }
     }
@@ -335,9 +387,11 @@ mod tests {
 
     #[test]
     fn chord_multiplier_order() {
-        assert!(HeptaChordType::Spoke.base_multiplier()    < HeptaChordType::Rim.base_multiplier());
-        assert!(HeptaChordType::Rim.base_multiplier()      < HeptaChordType::Local.base_multiplier());
-        assert!(HeptaChordType::Local.base_multiplier()    < HeptaChordType::Diagonal.base_multiplier());
+        assert!(HeptaChordType::Spoke.base_multiplier() < HeptaChordType::Rim.base_multiplier());
+        assert!(HeptaChordType::Rim.base_multiplier() < HeptaChordType::Local.base_multiplier());
+        assert!(
+            HeptaChordType::Local.base_multiplier() < HeptaChordType::Diagonal.base_multiplier()
+        );
     }
 
     #[test]

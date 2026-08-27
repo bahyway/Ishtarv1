@@ -35,20 +35,17 @@
 
 #![forbid(unsafe_code)]
 
-pub mod vec7d;
-pub mod force;
 pub mod accumulator;
+pub mod force;
 pub mod fuzzy;
 pub mod plimpton;
+pub mod vec7d;
 
 // Flat re-exports — the sovereign public surface
-pub use vec7d::Vec7D;
-pub use force::{
-    ForceGenerator, HeptaDimension,
-    PhysicalForce, MemoryForce, LearningForce, ConstantForce,
-};
 pub use accumulator::{KineticParticle, SovereignAccumulator};
-pub use fuzzy::{
-    MembershipFunction, FuzzyRule, ScoringEngine, HealthClassification,
+pub use force::{
+    ConstantForce, ForceGenerator, HeptaDimension, LearningForce, MemoryForce, PhysicalForce,
 };
+pub use fuzzy::{FuzzyRule, HealthClassification, MembershipFunction, ScoringEngine};
 pub use plimpton::{PlimptonAnchors, PlimptonTrigger, TriggerAction};
+pub use vec7d::Vec7D;

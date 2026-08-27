@@ -57,7 +57,10 @@ impl ConceptRegistry {
     }
 
     pub fn with_entry(mut self, name: impl Into<String>, kind: ConceptKind) -> Self {
-        self.entries.push(ConceptEntry { name: name.into(), kind });
+        self.entries.push(ConceptEntry {
+            name: name.into(),
+            kind,
+        });
         self
     }
 
@@ -66,14 +69,20 @@ impl ConceptRegistry {
     /// crate never has to depend on `enkimdb` just to build a registry.
     pub fn extend_crates(mut self, crate_names: impl IntoIterator<Item = String>) -> Self {
         for name in crate_names {
-            self.entries.push(ConceptEntry { name, kind: ConceptKind::Crate });
+            self.entries.push(ConceptEntry {
+                name,
+                kind: ConceptKind::Crate,
+            });
         }
         self
     }
 
     pub fn extend_sovereign_names(mut self, names: impl IntoIterator<Item = String>) -> Self {
         for name in names {
-            self.entries.push(ConceptEntry { name, kind: ConceptKind::SovereignName });
+            self.entries.push(ConceptEntry {
+                name,
+                kind: ConceptKind::SovereignName,
+            });
         }
         self
     }
@@ -91,7 +100,9 @@ impl ConceptRegistry {
     pub fn with_known_gates(self) -> Self {
         bahyway_core::hepta_gate::HeptaGate::all()
             .into_iter()
-            .fold(self, |registry, gate| registry.with_entry(gate.akkadian_name(), ConceptKind::Gate))
+            .fold(self, |registry, gate| {
+                registry.with_entry(gate.akkadian_name(), ConceptKind::Gate)
+            })
     }
 
     /// Every sovereign name this Ecosystem has actually sealed for one of
@@ -174,7 +185,13 @@ mod tests {
     #[test]
     fn finds_a_whole_word_mention_case_insensitively() {
         let hits = registry().scan_mentions("The Enlil gate governs SLA sign-off.");
-        assert_eq!(hits, vec![ConceptEntry { name: "ENLIL".into(), kind: ConceptKind::Gate }]);
+        assert_eq!(
+            hits,
+            vec![ConceptEntry {
+                name: "ENLIL".into(),
+                kind: ConceptKind::Gate
+            }]
+        );
     }
 
     #[test]
@@ -192,8 +209,13 @@ mod tests {
                      ENKIDU review, DUBSAR cleansing, ENLIL governance.";
         let hits = registry().scan_mentions(text);
         let names: Vec<&str> = hits.iter().map(|c| c.name.as_str()).collect();
-        for expected in ["APSU", "ADAD", "SHEDU", "MUMMU", "ENKIDU", "DUBSAR", "ENLIL"] {
-            assert!(names.contains(&expected), "missing sealed gate name {expected}");
+        for expected in [
+            "APSU", "ADAD", "SHEDU", "MUMMU", "ENKIDU", "DUBSAR", "ENLIL",
+        ] {
+            assert!(
+                names.contains(&expected),
+                "missing sealed gate name {expected}"
+            );
         }
         assert!(hits.iter().all(|c| c.kind == ConceptKind::Gate));
     }
@@ -202,11 +224,15 @@ mod tests {
     fn finds_all_known_sovereign_names_including_nergal() {
         // Nergal is the sovereign AV/firewall defender (Architect-
         // confirmed 2026-07-19) — a SovereignName, never a Hepta Gate.
-        let text = "Tigris, Euphrates, Anu, IRKALLA, NUZI, and Nergal are all real sovereign names.";
+        let text =
+            "Tigris, Euphrates, Anu, IRKALLA, NUZI, and Nergal are all real sovereign names.";
         let hits = registry().scan_mentions(text);
         let names: Vec<&str> = hits.iter().map(|c| c.name.as_str()).collect();
         for expected in ["Tigris", "Euphrates", "Anu", "IRKALLA", "NUZI", "Nergal"] {
-            assert!(names.contains(&expected), "missing sovereign name {expected}");
+            assert!(
+                names.contains(&expected),
+                "missing sovereign name {expected}"
+            );
         }
         assert!(hits.iter().all(|c| c.kind == ConceptKind::SovereignName));
     }
@@ -223,7 +249,11 @@ mod tests {
         assert!(names.contains(&"Tigris"));
         assert!(names.contains(&"Euphrates"));
         assert!(names.contains(&"IRKALLA"));
-        assert_eq!(hits.len(), 6, "Enlil among the 7 gates, plus 5 non-gate concepts, are mentioned");
+        assert_eq!(
+            hits.len(),
+            6,
+            "Enlil among the 7 gates, plus 5 non-gate concepts, are mentioned"
+        );
     }
 
     #[test]

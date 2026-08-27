@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · the Agû Wave — one wave, many dashboards, one GOLDEN heart</title>
+<style>
+  :root{--basalt:#14120f;--tablet:#1f1b16;--gold:#c9a227;--lapis:#2e5d8c;
+    --copper:#b0642f;--alarm:#c23b2a;--bone:#e8e0cf;--tablet-edge:#3a332a;
+    --dim:#8f8672;--green:#7fbf5f;--violet:#a58cc0;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--basalt);color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden;}
+  #crumbs{padding:8px 16px 0;font-size:12px;color:var(--dim);letter-spacing:.08em;}
+  #crumbs b{color:var(--gold);font-weight:normal;}
+  #lede{padding:2px 16px 6px;font-size:12.5px;}
+  #banner{background:var(--alarm);color:var(--bone);text-align:center;
+    font-size:10.5px;letter-spacing:.28em;padding:3px 0;font-family:monospace;}
+  #grid{display:grid;grid-template-columns:1fr 340px;gap:10px;
+    padding:8px 16px 14px;height:calc(100% - 78px);}
+  .panel{background:var(--tablet);border:1px solid var(--tablet-edge);
+    border-radius:6px;position:relative;overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block;}
+  #cv{width:100%;height:100%;}
+  #status{position:absolute;top:8px;left:12px;right:12px;z-index:5;
+    font-family:monospace;font-size:10.5px;color:var(--gold);
+    background:rgba(20,18,15,.78);padding:5px 9px;border-radius:4px;
+    border:1px solid var(--tablet-edge);}
+  #tabs{position:absolute;bottom:10px;left:10px;display:flex;gap:5px;z-index:5;flex-wrap:wrap;}
+  #tabs button{background:var(--basalt);color:var(--copper);font-family:inherit;
+    border:1px solid var(--copper);border-radius:4px;padding:6px 10px;
+    font-size:11px;cursor:pointer;}
+  #tabs button:hover{color:var(--gold);border-color:var(--gold);}
+  #tabs button.on{color:var(--green);border-color:var(--green);}
+  #lawtags{position:absolute;bottom:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:5;}
+  .lawtag{font-family:monospace;font-size:10px;color:var(--basalt);
+    background:var(--gold);padding:2px 7px;border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis);color:var(--bone);}
+  #side{display:flex;flex-direction:column;overflow:hidden;}
+  #side h2{font-size:11px;letter-spacing:.2em;color:var(--gold);
+    padding:7px 12px 4px;border-bottom:1px solid var(--tablet-edge);flex:none;}
+  #rez{flex:0 0 auto;max-height:30%;overflow-y:auto;border-bottom:1px solid var(--tablet-edge);padding:4px 0 6px;}
+  .rzg{font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:.14em;padding:5px 12px 2px;}
+  .rz{display:flex;align-items:center;gap:8px;padding:2px 12px;font-size:10.5px;}
+  .rz .lb{flex:0 0 108px;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .rz .tr{flex:1;height:11px;background:rgba(58,51,42,.6);border-radius:2px;overflow:hidden;}
+  .rz .fl{height:100%;background:linear-gradient(90deg,#c9a227,#c4586e,#c23b2a);}
+  .rz .vl{flex:0 0 52px;text-align:right;font-family:monospace;font-size:10px;color:var(--gold);}
+  .rz .vl.hot{color:var(--alarm);font-weight:bold;}
+  #seqWrap{flex:0 0 auto;border-bottom:1px solid var(--tablet-edge);padding:6px 12px;}
+  #seqcv{width:100%;height:96px;display:block;background:rgba(20,18,15,.5);border:1px solid var(--tablet-edge);border-radius:3px;}
+  #tplRow{display:flex;gap:8px;align-items:center;margin-top:5px;}
+  #tplRow button{background:var(--basalt);color:var(--gold);border:1px solid var(--gold);
+    border-radius:3px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:inherit;}
+  #tplState{font-family:monospace;font-size:9.5px;color:var(--dim);}
+  #tcases{margin-top:5px;}
+  .tc{border-left:3px solid var(--alarm);background:rgba(194,59,42,.08);
+    padding:4px 8px;margin-bottom:4px;font-size:10.5px;}
+  .tc .id{font-family:monospace;font-size:9px;color:var(--alarm);}
+  #story{flex:1 1 22%;overflow-y:auto;padding:6px 12px;font-size:11px;
+    line-height:1.45;border-bottom:1px solid var(--tablet-edge);}
+  #story .ev{margin-bottom:5px;border-left:2px solid var(--lapis);padding-left:7px;}
+  #story .ev .e{color:var(--gold);font-family:monospace;font-size:9px;}
+  #story .empty{color:var(--dim);font-style:italic;}
+  #journal{flex:1;overflow-y:auto;padding:7px 12px;font-size:11px;line-height:1.45;}
+  .entry{margin-bottom:7px;border-left:2px solid var(--copper);padding-left:7px;}
+  .entry .t{color:var(--dim);font-family:monospace;font-size:9px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Dashboards ▸ <b>the Agû Wave — BIGRING as a WAVE, and the tribes fall together into the GOLDEN heart</b></div>
+<div id="lede">Agû is Akkadian for both <b>wave</b> and <b>crown</b> — this dashboard is both at once. The membrane is a great ring-wave: a crest travels the ring forever, and each <b>sector</b>'s swell height and glow are its <b>live metric</b> — here, Storage IO &amp; resource utilization. GOLDEN tribes ride the moving surface (never floating in vacuum — the Membrane Motion Doctrine); at each <b>confluence</b>, a sector's tribe <b>falls inward along the wave</b> into the <b>GOLDEN HEART (libbu)</b>, whose pulse-rate IS the system's health — calm gold when all is well, racing and reddening under stress. The tabs below prove the decree: <b>one wave engine, many dashboards</b> — Monitoring, Maintenance, Image History, Templates &amp; Patterns — same die, different sectors. Click sectors or tribes for stories · <b>C</b> cinema (WAVEFRONT chases the crest around the ring) · <b>B</b> bird · drag &amp; zoom.</div>
+<div id="banner">THE AGÛ STANDARD — ONE WAVE, MANY DASHBOARDS · SECTORS ARE LIVE METRICS · TRIBES RIDE THE MEMBRANE · THE HEART'S BEAT IS THE VERDICT</div>
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="status">…</div>
+    <div id="tabs"></div>
+    <div id="lawtags">
+      <span class="lawtag">AGÛ · WAVE-CROWN</span>
+      <span class="lawtag lapis">LIBBU HEART</span>
+      <span class="lawtag lapis">MEMBRANE MOTION</span>
+      <span class="lawtag">NAṢĀRU DEFAULT</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>RESOURCE UTILIZATION — LIVE (WORST FIRST)</h2>
+    <div id="rez"></div>
+    <h2>INGESTION SEQUENCE — SMOOTH · STRAINED · ALARM</h2>
+    <div id="seqWrap">
+      <canvas id="seqcv" width="330" height="96"></canvas>
+      <div id="tplRow"><button id="tplSave">⤓ SAVE TEMPLATE (.json)</button><span id="tplState">no ingestion recorded yet</span></div>
+      <div id="tcases"></div>
+    </div>
+    <h2>STORY — STORYENGINE</h2>
+    <div id="story"><div class="empty">click a sector's swell, or a tribe riding it</div></div>
+    <h2>COURT JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============================================================================
+   BahyWay Šala House Standard — NAṢĀRU INSTRUMENTS (ŠALA-STD-001, N2–N4)
+   Camera + selection machinery every court imports by default.
+   Usage:
+     var cam=NasaruCamera({yaw:0.6,pitch:0.35,z:1});
+     cam.bindPointer(stageEl,{onClick:function(mx,my){...}});   // N2 drag/zoom/guard
+     cam.project(x,y,z,cv)                    -> {x,y,f}
+     cam.landOn({yaw,pitch,z})                // N3: depart to space, descend on target
+     cam.toggleBird()                         // N4: gliding flight above the membrane
+     cam.tick(nowMs)                          // each frame before projecting
+     NasaruBounce(selT,nowMs)                 -> vertical offset 0..1 (decaying |sin|)
+   Any pointer input interrupts bird-flight and landing, returning control.
+   ========================================================================== */
+function NasaruCamera(init){
+  var cam={yaw:init.yaw||0.6,pitch:init.pitch||0.35,z:init.z||1,
+    px:init.px||0,py:init.py||0,cx:0,cy:0,cz:0};   /* cx,cy,cz: look-at center (N9) */
+  var landing=null,bird=false,birdT=0,drag=null,dragMoved=false,dragDist=0;
+  function tick(now){
+    if(landing){
+      var ph=landing.t<0.35?'up':'down';
+      landing.t=Math.min(1,landing.t+0.016);
+      var e=landing.t<0.35?landing.t/0.35:(landing.t-0.35)/0.65;
+      e=e*e*(3-2*e);
+      if(landing.t<0.35){ /* depart to space */
+        cam.z=landing.z0+(landing.zSpace-landing.z0)*e;
+        cam.yaw=landing.yaw0+(landing.tgt.yaw-landing.yaw0)*e*0.4;
+        cam.pitch=landing.p0+(0.9-landing.p0)*e*0.5;
+      }else{ /* descend onto the address */
+        cam.z=landing.zSpace+(landing.tgt.z-landing.zSpace)*e;
+        cam.yaw=cam.yaw+(landing.tgt.yaw-cam.yaw)*0.10;
+        cam.pitch=cam.pitch+(landing.tgt.pitch-cam.pitch)*0.10;
+      }
+      if(landing.t>=1){landing=null;}
+    }else if(bird){
+      birdT+=0.016;
+      cam.yaw+=0.0035;                                  /* slow circuit */
+      cam.pitch=0.72+0.16*Math.sin(birdT*0.5);          /* wingbeat breathing */
+      cam.z=cam.z+( (1.35+0.25*Math.sin(birdT*0.23)) - cam.z )*0.02;
+    }
+  }
+  function interrupt(){landing=null;bird=false;}
+  function landOn(tgt){
+    interrupt();
+    landing={tgt:tgt,t:0,z0:cam.z,yaw0:cam.yaw,p0:cam.pitch,
+      zSpace:Math.max(0.42,Math.min(0.6,cam.z*0.4))};}
+  function toggleBird(){bird=!bird;if(bird)landing=null;return bird;}
+  function project(x,y,z,cv){
+    x-=cam.cx; y-=cam.cy; z-=cam.cz;
+    var cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+    var cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+    var X=x*cy+z*sy,Z=-x*sy+z*cy;
+    var Y=y*cp-Z*sp,Z2=y*sp+Z*cp;
+    var S=Math.min(cv.width,cv.height)*0.5*cam.z;
+    var f=2.6/(2.6+Z2);
+    return {x:cv.width*0.42+X*S*f+cam.px,y:cv.height*0.50-Y*S*f+cam.py,f:f};}
+  function bindPointer(stage,opts){
+    opts=opts||{};
+    stage.addEventListener('wheel',function(e){e.preventDefault();interrupt();
+      cam.z=Math.min(8,Math.max(0.4,cam.z*(e.deltaY<0?1.12:0.89)));
+      if(opts.onWheel)opts.onWheel();},{passive:false});
+    stage.addEventListener('mousedown',function(e){if(e.button!==0)return;
+      interrupt();drag={x:e.clientX,y:e.clientY};dragMoved=false;dragDist=0;});
+    window.addEventListener('mouseup',function(){drag=null;});
+    stage.addEventListener('mousemove',function(e){
+      if(!drag)return;
+      var dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      dragDist+=Math.abs(dx)+Math.abs(dy);if(dragDist>9)dragMoved=true;
+      cam.yaw+=dx*0.005;
+      cam.pitch=Math.max(-0.9,Math.min(1.35,cam.pitch+dy*0.005));
+      drag={x:e.clientX,y:e.clientY};});
+    stage.addEventListener('click',function(e){
+      if(dragMoved)return;
+      var r=stage.getBoundingClientRect();
+      if(opts.onClick)opts.onClick(e.clientX-r.left,e.clientY-r.top);});
+  }
+  return {cam:cam,tick:tick,project:project,landOn:landOn,
+    toggleBird:toggleBird,interrupt:interrupt,bindPointer:bindPointer,
+    get landing(){return !!landing;},get bird(){return bird;},
+    get dragMoved(){return dragMoved;}};
+}
+/* ---- N9 · CINEMATIC CAMERA (SALA-STD-001-A1) --------------------------------
+   Look-at tracking in the membrane. Modes:
+     'off'        — manual control
+     'wavefront'  — dolly with a propagating front (target = front position)
+     'follow'     — damped chase of a particle/structure centroid
+     'crane'      — hold target, slow rise-and-fall sweep
+     'orbit'      — circle the target while tracking it
+   Usage: var CIN=NasaruCinema(NAV);
+          CIN.setMode('wavefront'); CIN.cycle();
+          CIN.tick(now, target);               // target={x,y,z}; call AFTER NAV.tick
+   Any user drag/wheel should set CIN.setMode('off') — the human outranks
+   the director. Landing-from-space outranks the cinema.
+   MEMBRANE MOTION DOCTRINE: dynamics are rendered as deformation of the
+   membrane surface, particles RIDING it — never dots in empty space. */
+function NasaruCinema(NAVOBJ){
+  var mode='off',t0=0,MODES=['off','wavefront','follow','crane','orbit'];
+  function setMode(m){mode=m;t0=0;}
+  function cycle(){var i=(MODES.indexOf(mode)+1)%MODES.length;mode=MODES[i];t0=0;return mode;}
+  function tick(now,target){
+    if(mode==='off'||!target||NAVOBJ.landing)return;
+    var cam=NAVOBJ.cam; t0+=0.016;
+    var k=0.08;
+    cam.cx+=(target.x-cam.cx)*k;
+    cam.cy+=((target.y||0)-cam.cy)*k;
+    cam.cz+=((target.z||0)-cam.cz)*k;
+    if(mode==='wavefront'){
+      cam.pitch+=(0.44-cam.pitch)*0.04;
+      cam.z+=(2.2-cam.z)*0.03;
+      cam.yaw+=Math.sin(t0*0.35)*0.0009;            /* gentle handheld drift */
+    }else if(mode==='follow'){
+      cam.pitch+=(0.55-cam.pitch)*0.04;
+      cam.z+=(2.6-cam.z)*0.03;
+    }else if(mode==='crane'){
+      cam.pitch+=((0.95+0.30*Math.sin(t0*0.4))-cam.pitch)*0.05;
+      cam.z+=((1.6+0.35*Math.sin(t0*0.27))-cam.z)*0.03;
+    }else if(mode==='orbit'){
+      cam.yaw+=0.005;
+      cam.pitch+=(0.5-cam.pitch)*0.03;
+      cam.z+=(2.0-cam.z)*0.03;
+    }
+  }
+  return {get mode(){return mode;},setMode:setMode,cycle:cycle,tick:tick,MODES:MODES};
+}
+function NasaruBounce(selT,now){
+  var bt=(now-selT)/1000;
+  return Math.abs(Math.sin(bt*6))*Math.exp(-bt*0.3);}
+if(typeof module!=='undefined')module.exports={NasaruCamera:NasaruCamera,NasaruBounce:NasaruBounce,NasaruCinema:NasaruCinema};
+
+/* ============================================================================
+   BahyWay Šala House Standard — the ŠURINNU LEGEND (GL-VIZ-002 candidate)
+   ----------------------------------------------------------------------------
+   A bordered stele of numbered rows and state-cells, replacing prose legends.
+   NAME: shurinnu — the divine EMBLEM-STANDARDS carved in registers upon a
+   kudurru stone. The Kudurru (sealed earlier in KAKIGIS) is the stone in the
+   field — the beacon landmarks of Najaf; the Shurinnu are the emblems in its
+   registers — this panel. One name, one meaning, and the two hold the exact
+   relation their namesakes held.
+   Grammar (emblems in registers, never paragraphs):
+     - GROUPS  = column bands (TRIBES | ORBITS | EVENTS ...), label rotated.
+     - ROWS    = one citizen-class per row, numbered on the left.
+     - CELLS   = squares per group column:
+         state 0 = HOLLOW  (declared, inactive)
+         state 1 = FILLED  (present/active)          — in the row's colour
+         state 2 = PULSING (firing NOW)              — alarm rhythm
+       frac (0..1) optionally part-fills a cell (counts as fill height).
+     - CLICK   = the legend is a CONTROLLER: select/filter/fly, never décor.
+     - HOVER/SELECT gloss = ONE line, drawn in the stele footer.
+   Usage:
+     var K = SurinnuLegend(ctx, spec);   // spec: see below
+     K.draw(nowMs);                      // each frame
+     var hit = K.hitTest(mx,my);         // {gi,ri} | null  → act on it
+   Spec:
+     { x,y, cell:13, title:'ŠĒTU COURT',
+       groups:[ {label:'TRIBES', rows:[
+                   {id:'RIB', label:'ALLEY·RIBBON', color:'#6ea0cd',
+                    state:1, frac:1, gloss:'26×~5 cells · PASSABLE map'}, ...]},
+                {label:'EVENTS', rows:[...]} ],
+       footer: '' }                      // set to gloss on hover/click
+   ========================================================================== */
+function SurinnuLegend(g,spec){
+  var CS=spec.cell||13,GAP=3,ROWH=CS+GAP;
+  function groupX(gi){var x=spec.x+26;for(var q=0;q<gi;q++)x+=CS+18;return x;}
+  function rowsMax(){var m=0;spec.groups.forEach(function(G){m=Math.max(m,G.rows.length);});return m;}
+  function panelW(){return 26+spec.groups.length*(CS+18)+34;}
+  function panelH(){return 34+rowsMax()*ROWH+26;}
+  function draw(now){
+    var t=now/1000,X=spec.x,Y=spec.y,W=panelW(),H=panelH();
+    g.fillStyle='rgba(20,18,15,0.88)';g.fillRect(X,Y,W,H);
+    g.strokeStyle='#c9a227';g.lineWidth=1.2;g.strokeRect(X,Y,W,H);
+    g.fillStyle='#c9a227';g.font='9.5px monospace';g.textAlign='left';
+    g.fillText(spec.title||'ŠURINNU',X+8,Y+13);
+    var mr=rowsMax();
+    for(var r=0;r<mr;r++){
+      g.fillStyle='rgba(143,134,114,0.85)';g.font='8.5px monospace';g.textAlign='right';
+      g.fillText(String(r+1),X+20,Y+30+r*ROWH+CS-3);}
+    spec.groups.forEach(function(G,gi){
+      var gx=groupX(gi);
+      g.save();g.translate(gx+CS+9,Y+30+((G.rows.length*ROWH))/2);
+      g.rotate(Math.PI/2);
+      g.fillStyle='rgba(143,134,114,0.9)';g.font='8.5px monospace';g.textAlign='center';
+      g.fillText(G.label,0,0);g.restore();
+      G.rows.forEach(function(R,ri){
+        var cy=Y+30+ri*ROWH,col=R.color||'#e8e0cf';
+        g.strokeStyle=col;g.lineWidth=1.3;
+        g.strokeRect(gx,cy,CS,CS);
+        var f=(R.state>=1)?(R.frac==null?1:Math.max(0,Math.min(1,R.frac))):0;
+        if(R.state===2){var pl=0.45+0.55*Math.abs(Math.sin(t*4));
+          g.globalAlpha=pl;f=1;}
+        if(f>0){g.fillStyle=col;
+          g.fillRect(gx+1.5,cy+1.5+(CS-3)*(1-f),CS-3,(CS-3)*f);}
+        g.globalAlpha=1;
+        if(R.sel){g.strokeStyle='#e8e0cf';g.lineWidth=1.6;
+          g.strokeRect(gx-2.5,cy-2.5,CS+5,CS+5);}
+      });});
+    g.fillStyle='rgba(232,224,207,0.85)';g.font='8.5px monospace';g.textAlign='left';
+    g.fillText((spec.footer||'').slice(0,Math.floor((W-14)/5.1)),X+8,Y+H-9);}
+  function hitTest(mx,my){
+    for(var gi=0;gi<spec.groups.length;gi++){
+      var gx=groupX(gi);
+      for(var ri=0;ri<spec.groups[gi].rows.length;ri++){
+        var cy=spec.y+30+ri*ROWH;
+        if(mx>=gx-2&&mx<=gx+CS+2&&my>=cy-2&&my<=cy+CS+2)return {gi:gi,ri:ri};}}
+    return null;}
+  return {draw:draw,hitTest:hitTest,panelW:panelW,panelH:panelH,spec:spec};
+}
+if(typeof module!=='undefined')module.exports=SurinnuLegend;
+
+window.onerror=function(m,s,l){var e=document.getElementById('status');
+  if(e)e.textContent='RUNTIME FAULT: '+m+' (line '+l+')';return false;};
+var DASH=[{"id": "MON", "n": "MONITORING \u2014 STORAGE IO & RESOURCES", "unit": "%util", "sectors": [["NVMe READ", "#6ea0cd"], ["NVMe WRITE", "#2e5d8c"], ["RAM", "#7fbf5f"], ["CPU", "#c9a227"], ["NETWORK", "#a58cc0"], ["EnkiSDB\u00b77001 IO", "#b0642f"], ["EnkiMDB\u00b77006 IO", "#c4586e"], ["KVM POOL", "#8f8672"]]}, {"id": "MNT", "n": "MAINTENANCE \u2014 THE HEALING LEDGER", "unit": "load", "sectors": [["PLAYBOOK RUNS", "#7fbf5f"], ["DRILL DEBT", "#c9a227"], ["DORMANT WATCH", "#8f8672"], ["ELDER-SOURCE", "#b0642f"], ["GATE REFUSALS", "#c4586e"], ["PATCH QUEUE", "#6ea0cd"]]}, {"id": "IMG", "n": "IMAGE-ANALYZING HISTORY \u2014 THE SPECTRAL LEDGER", "unit": "flow", "sectors": [["EMIT GRANULES", "#6ea0cd"], ["ONTOGRAPH FORGES", "#c9a227"], ["SAM DRIFT", "#c4586e"], ["rel-RMSE TREND", "#7fbf5f"], ["MOLD CASTS", "#b0642f"]]}, {"id": "TPL", "n": "TEMPLATES & PATTERNS \u2014 THE MOLD HOUSE", "unit": "stock", "sectors": [["NALBANU MOLDS", "#b0642f"], ["ADANNU EPOCHS", "#c9a227"], ["BORSIPPA PATTERNS", "#a58cc0"], ["\u0160URINNU DIES", "#6ea0cd"], ["LIBITTU RECASTS", "#7fbf5f"]]}, {"id":"ENK","n":"ENKIDB — THE SEVEN WATERS & THE GATES","unit":"left",
+  "sectors":[["EnkiSDB·7001",'#6ea0cd'],["EnkiODB·7002",'#2e5d8c'],["EnkiQDB·7003",'#a58cc0'],
+   ["EnkiDB·7004",'#c9a227'],["EnkiDW·7005",'#7fbf5f'],["EnkiMDB·7006",'#c4586e'],["EnkiDDB·7007",'#b0642f']]}];
+var cv=document.getElementById('cv');
+var g=cv.getContext('2d');
+var stage=document.getElementById('stage'),statusEl=document.getElementById('status');
+function fit(){cv.width=stage.clientWidth;cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit);fit();
+var jEl=document.getElementById('journal'),sEl=document.getElementById('story');
+var canDOM=!!document.createElement;
+function journal(t){if(!canDOM)return;
+  var d=document.createElement('div');d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;jEl.prepend(d);}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+/* ---------------- dashboard state ---------------- */
+var di=0; /* current dashboard */
+var S=[];  /* sectors runtime: {util, target, tribe:[{a,r,falling,fp}], fed} */
+var beats=0,beatPhase=0,confT=0,confSector=0;
+var rnd=mulberry32(0xA6C0FFEE);
+function loadDash(i){
+  di=i;S=DASH[i].sectors.map(function(sc,q){
+    var tr=[];
+    for(var m=0;m<10;m++)tr.push({a:(q+0.15+0.7*rnd())*(2*Math.PI/DASH[i].sectors.length),
+      r:0.62+0.16*rnd(),fall:false,fp:0});
+    return {util:0.25+0.5*rnd(),target:0.5,tribe:tr,fed:0};});
+  beats=0;confT=0;confSector=0;
+  ENK=null;if(DASH[i].id==='ENK')initEnk();
+  buildStele();
+  if(canDOM)document.querySelectorAll('#tabs button').forEach(function(b,q){
+    b.classList.toggle('on',q===i);});
+  journal('⊕ <b>'+DASH[i].n+'</b> mounts the SAME wave — '+DASH[i].sectors.length+' sectors, unit '+DASH[i].unit+'. One die, another duty: the decree performed.');}
+function stepMetrics(){
+  S.forEach(function(sc,q){
+    if(rnd()<0.02)sc.target=0.15+0.75*rnd();
+    sc.util+=(sc.target-sc.util)*0.02+0.015*(rnd()-0.5);
+    sc.util=Math.max(0.05,Math.min(0.98,sc.util));});}
+function health(){var m=0;S.forEach(function(sc){m+=sc.util;});return m/S.length;}
+/* ---------------- the wave field (Membrane Motion Doctrine) ---------------- */
+var R0=0.34,R1=0.86;
+function sectorOf(a){var n=S.length;
+  return Math.floor(((a%(2*Math.PI))+2*Math.PI)%(2*Math.PI)/(2*Math.PI/n))%n;}
+function waveH(a,r,tt){
+  var q=sectorOf(a);
+  var amp=0.05+0.16*S[q].util;
+  var crest=Math.sin(a*3-tt*1.4)+0.5*Math.sin(a*7+tt*0.9);
+  var prof=Math.sin((r-R0)/(R1-R0)*Math.PI);
+  return amp*crest*prof;}
+function surf3(a,r,tt){return {x:Math.cos(a)*r,y:waveH(a,r,tt),z:Math.sin(a)*r};}
+/* ---------------- confluence: tribes fall into the heart ---------------- */
+function stepConfluence(tt){
+  confT+=0.016;
+  if(confT>5.5){confT=0;
+    var q=confSector%S.length;confSector++;
+    S[q].tribe.forEach(function(p){p.fall=true;p.fp=0;});
+    journal('⚘ <b>CONFLUENCE</b> — the '+DASH[di].sectors[q][0]+' tribe falls together along the wave into the <b>libbu</b>: the sector\u2019s harvest becomes the heart\u2019s food.');}
+  S.forEach(function(sc,q){
+    sc.tribe.forEach(function(p){
+      if(p.fall){p.fp+=0.008+0.004*rnd();
+        p.r=(0.62+0.16*0.5)*(1-p.fp)+0.06*p.fp;
+        if(p.fp>=1){p.fall=false;p.fp=0;
+          p.r=0.62+0.16*rnd();beats++;sc.fed++;}}
+      else{p.a+=0.0012;}});});}
+function tellSector(q){
+  var sc=S[q],D=DASH[di];
+  if(D.id==='ENK'&&ENK){
+    var left=q<4?ENK.Q[q]:ENK.G[q-4];
+    var evs2=[{e:'THE ANTI-SQL LENS',t:'<pre style="font-family:monospace;font-size:10px;color:var(--gold);white-space:pre">'+ANTI_SQL_LENS[q]+'</pre>this census is a sovereign clause — there are no tables, no rows, no foreign tongue: particles are WITNESSED and PRESENTED, never selected.'},
+      {e:q<4?'LEFT PARTICLES':'GOLDEN DELIVERED',t:'<b>'+left+'</b> '+(q<4?'waiting in this water — the swell you see is exactly this queue.':'GOLDEN particles converted along the pathway EnkiDB·7004 → '+D.sectors[q][0]+'.')},
+      {e:'TRANSPARENCY',t:'every stakeholder reads the same wave: waters, pathways, deliveries — and the refused outside the Gates ('+ENK.refused+' so far), because honesty counts what it turns away.'}];
+    if(canDOM)sEl.innerHTML=evs2.map(function(x){return '<div class="ev"><div class="e">'+x.e+'</div>'+x.t+'</div>';}).join('');
+    journal('WITNESS '+D.sectors[q][0]+' — '+left+' '+(q<4?'left':'GOLDEN')+', told through the Anti-SQL lens.');
+    return evs2.length;}
+  var evs=[{e:'SECTOR · '+D.sectors[q][0],t:'live '+D.unit+' = <b>'+(sc.util*100).toFixed(0)+'</b> — the swell height and glow of this slice of the wave IS this number; no gauge needles, the membrane itself testifies.'},
+   {e:'TRIBE',t:sc.tribe.length+' GOLDEN citizens riding this sector\u2019s surface; fed the heart '+sc.fed+' times this session.'},
+   {e:'DASHBOARD',t:D.n+' — one of the many decreed dashboards on the one Agû die.'}];
+  if(canDOM)sEl.innerHTML=evs.map(function(x){return '<div class="ev"><div class="e">'+x.e+'</div>'+x.t+'</div>';}).join('');
+  journal('WITNESS sector <b>'+D.sectors[q][0]+'</b> — '+(sc.util*100).toFixed(0)+' '+D.unit+'.');
+  return evs.length;}
+/* ---------------- ENK · Seven Waters engine ---------------- */
+var ENK=null; /* {Q:[7],G:[3],flows:[],out:[],admitted,refused,delivered} */
+var ENK_CHAIN=[[0,1],[1,2],[2,3]]; /* staged waters */
+var ENK_BRANCH=[4,5,6];            /* 7004 -> DW / MDB / DDB */
+var NERGAL_BERTH={a:-0.62,r:R1+0.34};
+var REFUSE_REASONS=['CRC-16 SEAL BROKEN','NO KANĪKU RECEIPT','KAKI BYTES MALFORMED',
+  'EAV MANDATORY ATTRIBUTES MISSING','ḪUBURU ABOVE THE DECLARED FLOOR'];
+var ANTI_SQL_LENS=[
+ 'WITNESS PARTICLES OF EnkiSDB·7001\n  PRESENT count, intake_age, kaniku\n  ORBIT BY arrival',
+ 'WITNESS PARTICLES OF EnkiODB·7002\n  PRESENT count, orbit_state\n  ORBIT BY tribe',
+ 'WITNESS PARTICLES OF EnkiQDB·7003\n  PRESENT count, quarantine_age, verdict\n  ORBIT BY tribe',
+ 'WITNESS PARTICLES OF EnkiDB·7004\n  PRESENT count, awaiting_path\n  ORBIT BY destiny',
+ 'WITNESS PARTICLES OF EnkiDW·7005\n  PRESENT golden_count, epoch\n  ORBIT BY adannu',
+ 'WITNESS PARTICLES OF EnkiMDB·7006\n  PRESENT golden_count, pattern\n  ORBIT BY masku',
+ 'WITNESS PARTICLES OF EnkiDDB·7007\n  PRESENT golden_count, facet\n  ORBIT BY simtu'];
+function initEnk(){ENK={Q:[26,18,12,20,0,0,0],G:[0,0,0],flows:[],out:[],
+  admitted:0,refused:0,delivered:0,spawnT:0,gateT:0,t:0,
+  gold:[],couplings:0,nuzi:0,remanded:0,
+  ingest:{remaining:0,total:0},
+  res:{CPU:0.22,RAM:0.35,'NVMe R':0.18,'NVMe W':0.15,NET:0.12,'ETL LANES':0.2},
+  lat:{open:[],samples:[],delivT:[]}};}
+var REC_KEYS=['NVMe W','CPU','ETL LANES','NET'];
+function classify(res){var m=0;REC_KEYS.forEach(function(k){m=Math.max(m,res[k]);});
+  return m>0.85?2:m>0.70?1:0;}
+function startIngest(n,profile){
+  if(!ENK)return;
+  ENK.ingest.remaining=n;ENK.ingest.total=n;
+  ENK.profile=profile||'normal';
+  ENK.rec={active:true,t0:ENK.t,samples:[],lastS:0,endT:null,n:n,profile:ENK.profile};
+  journal('⛴ <b>INGESTION ORDERED — '+n+' compressed crates</b> ('+ENK.profile+' endpoint) approach the Gates in a sustained stream. Steward: watch the upper rail — NVMe WRITE and ETL LANES will climb; the SLA stele will tell you, in measured numbers, whether the chain holds its covenant under load.');}
+function slaMetrics(){
+  var L=ENK.lat;
+  var p95=null;
+  if(L.samples.length>=5){var s=L.samples.slice().sort(function(a,b){return a-b;});
+    p95=s[Math.min(s.length-1,Math.floor(s.length*0.95))];}
+  var nowT=ENK.t,thr=0;
+  L.delivT=L.delivT.filter(function(x){return nowT-x<=30;});
+  thr=L.delivT.length*2; /* per 60s from 30s window */
+  var rr=(ENK.refused+ENK.admitted)>0?ENK.refused/(ENK.refused+ENK.admitted):0;
+  return {p95:p95,thr:thr,rr:rr};}
+var SLA_TARGETS={p95:36,thr:4,rr:0.42};
+function slaVerdict(m){
+  return {p95:(m.p95==null)?'—':(m.p95<=SLA_TARGETS.p95?'PASS':'BREACH'),
+    thr:(m.thr>=SLA_TARGETS.thr?'PASS':'BREACH'),
+    rr:(m.rr<=SLA_TARGETS.rr?'PASS':'BREACH')};}
+var ENKTPL={templates:[],cases:[]};
+function down48(vals){var out=[];for(var i=0;i<48;i++){
+  out.push(vals[Math.min(vals.length-1,Math.floor(i/48*vals.length))]);}return out;}
+function finalizeTemplate(){
+  var R=ENK.rec;R.active=false;
+  var peaks={},alarms=0;
+  REC_KEYS.forEach(function(k){peaks[k]=0;});
+  R.samples.forEach(function(s){
+    REC_KEYS.forEach(function(k){peaks[k]=Math.max(peaks[k],s.res[k]);});
+    if(s.cls===2)alarms++;});
+  var T={id:'TPL-'+String(ENKTPL.templates.length+1).padStart(3,'0'),
+    n:R.n,profile:R.profile,dur:R.samples.length?R.samples[R.samples.length-1].t:0,
+    peaks:peaks,alarms:alarms,
+    curve:{}};
+  REC_KEYS.forEach(function(k){T.curve[k]=down48(R.samples.map(function(s){return s.res[k];}));});
+  T.cls=down48(R.samples.map(function(s){return s.cls;}));
+  ENKTPL.templates.push(T);
+  var base=null;
+  for(var q=0;q<ENKTPL.templates.length-1;q++)
+    if(ENKTPL.templates[q].n===T.n){base=ENKTPL.templates[q];break;}
+  if(!base){
+    journal('📐 <b>'+T.id+' RECORDED</b> — the ingestion of '+T.n+' crates leaves its signature: duration '+T.dur.toFixed(0)+' s, peak NVMe W '+(T.peaks['NVMe W']*100).toFixed(0)+'%, '+T.alarms+' alarm samples. <b>This IS the template</b> (Adannu: same amount, same place in the chain) — the next endpoint of '+T.n+' will be judged against it.');
+    if(canDOM)document.getElementById('tplState').textContent=T.id+' recorded · baseline for n='+T.n;
+  } else {
+    var C=compareTemplates(base,T);
+    if(C.match){
+      journal('📐 <b>'+T.id+' vs '+base.id+': MATCH</b> — the pipeline repeated its signature within covenant (Δpeaks ≤ 12 pts, Δduration ≤ 25%, Δalarms ≤ 30%). Stakeholders may trust the rhythm: same amount, another endpoint, same breath.');
+      if(canDOM)document.getElementById('tplState').textContent=T.id+' ✓ MATCH vs '+base.id;
+    }else{
+      var tc={id:'TC-'+String(ENKTPL.cases.length+1).padStart(3,'0'),
+        vs:base.id+' → '+T.id,reasons:C.reasons};
+      ENKTPL.cases.push(tc);
+      journal('🔎 <b style="color:var(--alarm)">'+T.id+' vs '+base.id+': MISMATCH — '+tc.id+' OPENED.</b> Diverged: '+C.reasons.join(' · ')+'. Same amount, different breath — <i>a case is opened to search the reasoning</i>: endpoint latency? gate refusals? lane starvation? host contention? The template does not forgive; it asks why.');
+      if(canDOM){document.getElementById('tplState').textContent=T.id+' ✕ MISMATCH — '+tc.id;
+        var d=document.createElement('div');d.className='tc';
+        d.innerHTML='<div class="id">'+tc.id+' · '+tc.vs+'</div>diverged: '+C.reasons.join(' · ')+' — search the reasoning.';
+        document.getElementById('tcases').prepend(d);}}}
+}
+function compareTemplates(A,B){
+  var reasons=[];
+  REC_KEYS.forEach(function(k){
+    var d=Math.abs(A.peaks[k]-B.peaks[k]);
+    if(d>0.12)reasons.push('PEAK '+k+' ('+(d>0?'+':'')+(100*(B.peaks[k]-A.peaks[k])).toFixed(0)+' pts)');});
+  var dd=Math.abs(A.dur-B.dur)/Math.max(1,Math.max(A.dur,B.dur));
+  if(dd>0.25)reasons.push('DURATION ('+(100*(B.dur-A.dur)/Math.max(1,A.dur)).toFixed(0)+'%)');
+  if(Math.abs(A.alarms-B.alarms)>Math.max(3,0.30*Math.max(A.alarms,B.alarms)))reasons.push('ALARM COUNT ('+A.alarms+'→'+B.alarms+')');
+  return {match:reasons.length===0,reasons:reasons};}
+/* ---------------- THE HIGGS FIELD — Sibu coupling gives mass, mass gives orbit ---------------- */
+var HIGGS_EPS=0.08, HIGGS_V=1.0, SB_ELDER=1.2, GOLD_CAP=44;
+function higgsMass(sb){return sb*HIGGS_V;}                    /* m = sb·v (Yukawa-like) */
+function higgsPurity(sb){return 1/(1+sb);}                    /* 100% golden only at sb=0 */
+function higgsOrbitR(sb){return 0.30-0.20*Math.min(1,sb);}    /* deeper coupling, tighter orbit (BahyWay convention) */
+function higgsOmega(r){return 0.012*Math.pow(0.30/Math.max(0.08,r),1.5);} /* Kepler-flavored: inner runs faster */
+function spawnGold(){
+  if(!ENK)return;
+  if(ENK.gold.length>=GOLD_CAP){
+    var qi=ENK.gold.findIndex(function(p){return p.state==='massless';});
+    if(qi>=0)ENK.gold.splice(qi,1);else ENK.gold.shift();}
+  ENK.gold.push({a:rnd()*2*Math.PI,sb:0,state:'massless',rw:R0+0.055,ph:rnd()*2*Math.PI});}
+function stepHiggs(){
+  if(!ENK)return;
+  ENK.gold.forEach(function(p){
+    p.sb+=0.0004+0.0012*rnd();
+    if(p.state==='massless'){
+      p.a+=0.011;  /* photon-like: fast along the wave */
+      if(p.sb>=HIGGS_EPS){p.state='coupled';
+        if(ENK.couplings%4===0)journal('⚛ <b>COUPLING EVENT</b> — the field grips a golden citizen: above the Fadam floor ε its Šību coupling gives it mass (m = šb·v); it leaves the free wave and takes orbit. <i>Radius is now its honesty: the closer to the heart, the less 100% golden it is.</i>');
+        ENK.couplings++;}}
+    else{
+      p.a+=higgsOmega(higgsOrbitR(p.sb));
+      if(p.sb>=SB_ELDER){p.state='elder';}}});
+  var elders=ENK.gold.filter(function(p){return p.state==='elder';});
+  if(elders.length){
+    ENK.gold=ENK.gold.filter(function(p){return p.state!=='elder';});
+    ENK.nuzi+=elders.length;
+    journal('⚱ <b>ŠĪBU-ELDER → NUZI-ARCHIVE</b> — '+elders.length+' innermost citizen(s) crossed šb='+SB_ELDER+': GL-AGE-001’s verdict routes them from the deepest orbit to the archive. The orbits keep only the living gold.');}}
+function goldPos3(p,tt){
+  if(p.state==='massless'){var w=surf3(p.a,p.rw,tt);
+    return {x:w.x,y:w.y+0.012,z:w.z,r:p.rw};}
+  var r=higgsOrbitR(p.sb);
+  return {x:Math.cos(p.a)*r,y:0.015*Math.sin(tt*1.3+p.ph),z:Math.sin(p.a)*r,r:r};}
+function tellGold(gi){
+  var p=ENK.gold[gi];
+  var pur=higgsPurity(p.sb);
+  var evs=[{e:p.state==='massless'?'MASSLESS · GOLDEN HEALTHY':'COUPLED · GOLDEN AGED',
+    t:p.state==='massless'
+      ?'šb = '+p.sb.toFixed(3)+' &lt; ε — it does not couple to the field: <b>no mass, no orbit, 100% golden</b>, riding the free wave photon-fast.'
+      :'šb = '+p.sb.toFixed(3)+' → mass m = '+higgsMass(p.sb).toFixed(3)+' — the field holds it in orbit at r = '+higgsOrbitR(p.sb).toFixed(3)+'; purity <b>'+(pur*100).toFixed(0)+'%</b>. <i>The radius is the reading: closer to the heart, less golden.</i>'},
+   {e:'THE COUPLING IS ŠĪBU',t:'GL-AGE-001’s aging composite plays the Yukawa role: šb·v = m. At šb ≥ '+SB_ELDER+' the elder verdict routes it to NUZI-ARCHIVE.'},
+   {e:'PROVENANCE (ḪUBULLU)',t:'the Higgs mechanism lends the coupling→mass rite, credited whole; the orbit-radius reading (mass as bondage to the center) is BahyWay’s own sealed convention.'}];
+  if(canDOM)sEl.innerHTML=evs.map(function(x){return '<div class="ev"><div class="e">'+x.e+'</div>'+x.t+'</div>';}).join('');
+  journal('WITNESS a '+(p.state==='massless'?'massless healthy':'coupled aged')+' golden citizen — purity '+(pur*100).toFixed(0)+'%.');
+  return evs.length;}
+var ONTO={nodes:[
+  {id:'GATES',x:0.06,y:0.82,c:'#c23b2a'},{id:'7001',x:0.20,y:0.60,c:'#6ea0cd'},
+  {id:'7002',x:0.34,y:0.44,c:'#2e5d8c'},{id:'7003',x:0.48,y:0.60,c:'#a58cc0'},
+  {id:'7004',x:0.62,y:0.44,c:'#c9a227'},{id:'7005',x:0.80,y:0.24,c:'#7fbf5f'},
+  {id:'7006',x:0.86,y:0.50,c:'#c4586e'},{id:'7007',x:0.80,y:0.76,c:'#b0642f'},
+  {id:'LIBBU',x:0.96,y:0.50,c:'#e8e0cf'}],
+ edges:[[0,1],[1,2],[2,3],[3,4],[4,5],[4,6],[4,7],[5,8],[6,8],[7,8]],
+ classes:['SHIPMENT ⊐ CRATE','CRATE ⊐ PARTICLE (KAKI+EAV)','PARTICLE ∈ TRIBE','TRIBE ⊳ MOLD (Nalbanu)','MOLD → GOLDEN']};
+function ontoCount(id){
+  if(!ENK)return '';
+  if(id==='GATES')return ENK.refused+'✕';
+  if(id==='LIBBU')return beats+'♥';
+  var m={'7001':0,'7002':1,'7003':2,'7004':3}[id];
+  if(m!=null)return ENK.Q[m];
+  var g={'7005':0,'7006':1,'7007':2}[id];
+  return ENK.G[g];}
+function enkTotal(){var s=ENK.admitted;return s;}
+function sectorAngle(q,f){var n=S.length;return (q+ (f==null?0.5:f))*2*Math.PI/n;}
+function stepEnk(tt){
+  if(!ENK)return;
+  ENK.t+=0.016;
+  /* resource rail: base load + ingestion + conversion coupling, smoothed */
+  var ing=ENK.ingest.remaining>0?1:0;
+  var conv=Math.min(1,ENK.flows.length/8);
+  var tgt={CPU:0.20+0.45*ing+0.20*conv,RAM:0.32+0.25*ing+0.10*conv,
+    'NVMe R':0.15+0.20*conv,'NVMe W':0.12+(ENK.profile==='degraded'?0.80:0.62)*ing,
+    NET:0.10+0.55*ing,'ETL LANES':0.15+0.30*ing+0.45*conv};
+  Object.keys(ENK.res).forEach(function(k){
+    ENK.res[k]+=(Math.min(0.97,tgt[k]+0.04*(rnd()-0.5))-ENK.res[k])*0.03;});
+  /* outside-the-gates arrivals: base trickle + ingestion stream */
+  ENK.gateT+=0.016;
+  var period=ENK.ingest.remaining>0?(ENK.profile==='degraded'?0.34:0.22):1.6;
+  if(ENK.gateT>period){ENK.gateT=0;
+    if(ENK.ingest.remaining>0){ENK.ingest.remaining--;
+      if(ENK.ingest.remaining===0)journal('⛴ the last of the '+ENK.ingest.total+' crates stands at the Gates — the rail will now settle as the waters digest.');}
+    ENK.out.push({a:rnd()*2*Math.PI,rr:R1+0.16+0.10*rnd(),
+      state:'approach',fp:0,reason:null,drift:rnd()*2*Math.PI});}
+  ENK.out.forEach(function(o){
+    if(o.state==='approach'){o.fp+=0.01;
+      o.rr=(R1+0.16)*(1-o.fp)+(R1+0.015)*o.fp;
+      if(o.fp>=1){
+        var pass=rnd()<0.62;
+        if(pass){o.state='gone';ENK.admitted++;ENK.Q[0]++;
+          ENK.lat.open.push(ENK.t);
+          S[0].util=Math.min(0.98,ENK.Q[0]/40);
+          if(ENK.ingest.remaining===0||ENK.admitted%20===0)journal('⛩ <b>THE GATE ADMITS</b> — resistance proven; EnkiSDB·7001 holds '+ENK.Q[0]+' left.');}
+        else{o.state='refused';o.fp=0;
+          o.reason=REFUSE_REASONS[(ENK.refused)%REFUSE_REASONS.length];
+          ENK.refused++;
+          if(ENK.ingest.remaining===0||ENK.refused%7===0)journal('⛩ <b style="color:var(--alarm)">THE GATE REFUSES</b> — '+o.reason+' · outside now: '+ENK.refused+'.');}}}
+    else if(o.state==='refused'){
+      o.rem=(o.rem||0)+0.016;
+      o.rr=Math.min(R1+0.26,o.rr+0.002);o.a+=0.0006;
+      if(o.rem>6){o.state='remand';o.fp=0;
+        o.ra=o.a;o.rr0=o.rr;}}
+    else if(o.state==='remand'){
+      o.fp+=0.012;
+      var na=NERGAL_BERTH.a,da=na-o.ra;
+      while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+      o.a=o.ra+da*o.fp;
+      o.rr=o.rr0+(NERGAL_BERTH.r-o.rr0)*o.fp;
+      if(o.fp>=1){o.state='gone';ENK.remanded++;
+        if(ENK.remanded%5===1)journal('⚖ <b>REMANDED TO IRKALLA</b> — the refused are not left to drift: Nergal AV takes custody in the JAILED sector (zip_jail/, chattr +i, tribe IRKALLA 0x0002). The Agû shows the handoff; <b>the Cubic shows the custody</b> — open the Nergal court to see it stacked, layer by layer.');}}});
+  ENK.out=ENK.out.filter(function(o){return o.state!=='gone';});
+  if(ENK.out.length>26)ENK.out.splice(0,ENK.out.length-26);
+  /* conversions along the chain */
+  ENK.spawnT+=0.016;
+  if(ENK.spawnT>0.9){ENK.spawnT=0;
+    ENK_CHAIN.forEach(function(E){
+      if(ENK.Q[E[0]]>0&&rnd()<0.7){ENK.Q[E[0]]--;
+        ENK.flows.push({from:E[0],to:E[1],fp:0,branch:false});}});
+    if(ENK.Q[3]>0&&rnd()<0.8){ENK.Q[3]--;
+      var dest=ENK_BRANCH[(ENK.delivered+ENK.refused)%3];
+      ENK.flows.push({from:3,to:dest,fp:0,branch:true});}}
+  ENK.flows.forEach(function(F){
+    F.fp+=0.006;
+    if(F.fp>=1){
+      if(F.branch){ENK.G[F.to-4]++;ENK.delivered++;beats++;spawnGold();
+        if(ENK.lat.open.length){var t0=ENK.lat.open.shift();
+          ENK.lat.samples.push(ENK.t-t0);
+          if(ENK.lat.samples.length>200)ENK.lat.samples.shift();}
+        ENK.lat.delivT.push(ENK.t);
+        if(ENK.delivered%5===0||ENK.ingest.total===0)journal('⚱ <b>CONVERSION COMPLETE</b> — 7004 → '+DASH[di].sectors[F.to][0]+' · GOLDEN '+ENK.delivered+'; the heart is fed.');}
+      else{ENK.Q[F.to]++;}
+      F.done=true;}});
+  ENK.flows=ENK.flows.filter(function(F){return !F.done;});
+  stepHiggs();
+  /* the recorder */
+  if(ENK.rec&&ENK.rec.active){
+    if(ENK.t-ENK.rec.lastS>=0.5){ENK.rec.lastS=ENK.t;
+      var snap={};Object.keys(ENK.res).forEach(function(k){snap[k]=ENK.res[k];});
+      ENK.rec.samples.push({t:ENK.t-ENK.rec.t0,res:snap,cls:classify(ENK.res)});}
+    if(ENK.ingest.remaining===0&&ENK.rec.endT==null)ENK.rec.endT=ENK.t;
+    if(ENK.rec.endT!=null&&ENK.t-ENK.rec.endT>8)finalizeTemplate();}
+  /* swell = left particles (bounded) */
+  for(var q=0;q<7;q++){var left=q<4?ENK.Q[q]:ENK.G[q-4];
+    S[q].util=Math.max(0.05,Math.min(0.98,left/40));}}
+function flowPos3(F,tt){
+  var a0=sectorAngle(F.from),a1=sectorAngle(F.to);
+  var da=a1-a0;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+  var a=a0+da*F.fp,r=0.60+0.06*Math.sin(F.fp*Math.PI);
+  var w=surf3(a,r,tt);return {x:w.x,y:w.y+0.02,z:w.z};}
+/* ---------------- Nasaru ---------------- */
+var spec={x:0,y:0,cell:11,title:'AGÛ · ŠURINNU',footer:'',groups:[]};
+var K2=null;
+function buildStele(){
+  var rows=DASH[di].sectors.map(function(sc,q){
+    return {id:'S:'+q,label:sc[0],color:sc[1],state:1,frac:0.4+0.6*(S[q]?S[q].util:0.5),
+      gloss:sc[0]+' — click for its census through the Anti-SQL lens'};});
+  spec.groups=[{label:'SECTORS',rows:rows}];
+  if(DASH[di].id==='ENK'){
+    spec.groups.push({label:'PATHS',rows:[
+      {id:'P:dw',label:'7004→DW',color:'#7fbf5f',state:1,gloss:'conversion pathway to the warehouse'},
+      {id:'P:mdb',label:'7004→MDB',color:'#c4586e',state:1,gloss:'conversion pathway to the pattern membrane'},
+      {id:'P:ddb',label:'7004→DDB',color:'#b0642f',state:1,gloss:'conversion pathway to the facet store'}]});
+    spec.groups.push({label:'HIGGS',rows:[
+      {id:'H:free',label:'MASSLESS · 100%',color:'#e8e0cf',state:1,gloss:'šb < ε — uncoupled, riding the free wave'},
+      {id:'H:cpl',label:'COUPLED · ORBITING',color:'#c9a227',state:1,gloss:'šb ≥ ε — mass acquired; radius = honesty'},
+      {id:'H:nuzi',label:'NUZI-ARCHIVED',color:'#8f8672',state:0,gloss:'šb ≥ '+SB_ELDER+' — elders routed by GL-AGE-001'}]});
+    spec.groups.push({label:'GATES',rows:[
+      {id:'G:in',label:'ADMITTED',color:'#7fbf5f',state:1,gloss:'particles that proved resistance and entered'},
+      {id:'G:out',label:'REFUSED→IRKALLA',color:'#c23b2a',state:2,gloss:'refused at the Gates, then remanded to Nergal AV custody — counted, never drifting'}]});}
+  K2=SurinnuLegend(g,spec);}
+var NAV=NasaruCamera({yaw:0.4,pitch:0.72,z:1.05});
+var CIN=NasaruCinema(NAV);
+var sel={k:null,q:-1,m:-1},selT=0;
+if(canDOM){var tabs=document.getElementById('tabs');
+  DASH.forEach(function(D,q){
+    var b=document.createElement('button');b.textContent=D.id+' · '+D.n.split(' — ')[0];
+    b.addEventListener('click',function(){loadDash(q);});tabs.appendChild(b);});
+  var bi=document.createElement('button');bi.id='ingBtn';bi.textContent='⛴ INGEST 120 CRATES';
+  bi.addEventListener('click',function(){if(DASH[di].id!=='ENK')loadDash(DASH.length-1);startIngest(120);});
+  tabs.appendChild(bi);}
+NAV.bindPointer(stage,{onClick:function(mx,my){
+  var now=performance.now(),tt=now/1000,best=null,bd=14*14;
+  if(ENK&&ENK.gold.length){var bg=-1,bgd=12*12;
+    for(var gi2=0;gi2<ENK.gold.length;gi2++){
+      var wg2=goldPos3(ENK.gold[gi2],tt);
+      var pg2=NAV.project(wg2.x,wg2.y,wg2.z,cv);
+      var dg2=(pg2.x-mx)*(pg2.x-mx)+(pg2.y-my)*(pg2.y-my);
+      if(dg2<bgd){bgd=dg2;bg=gi2;}}
+    if(bg>=0){sel={k:'g',q:bg,m:-1};selT=now;tellGold(bg);return;}}
+  if(K2){var hh=K2.hitTest(mx,my);
+    if(hh){var R3=spec.groups[hh.gi].rows[hh.ri];
+      if(R3.id.slice(0,2)==='S:'){tellSector(+R3.id.slice(2));return;}
+      if(R3.id==='H:free'){journal('⚛ MASSLESS: '+ENK.gold.filter(function(p){return p.state==='massless';}).length+' healthy golden citizens — uncoupled, 100% pure, free on the wave.');return;}
+      if(R3.id==='H:cpl'){journal('⚛ COUPLED: '+ENK.gold.filter(function(p){return p.state!=='massless';}).length+' aged citizens in orbit — read their radius, read their purity.');return;}
+      if(R3.id==='H:nuzi'){journal('⚱ NUZI-ARCHIVED: '+ENK.nuzi+' elders — GL-AGE-001’s routing honored: the innermost orbit is a waiting room, not a graveyard on display.');return;}
+      if(R3.id==='G:out'){journal('⛩ REFUSED: <b>'+(ENK?ENK.refused:0)+'</b> at the Gates, of which <b>'+(ENK?ENK.remanded:0)+' remanded to IRKALLA</b> — Nergal AV’s JAILED sector holds them as immutable cubes (zip_jail/, chattr +i). The wave shows the handoff; the Cubic shows the custody. Transparency includes the turned-away — and their cell.');return;}
+      if(R3.id==='G:in'){journal('⛩ ADMITTED: <b>'+(ENK?ENK.admitted:0)+'</b> proved damage-and-corruption resistance at the rim.');return;}
+      journal('ŠURINNU — '+R3.gloss);return;}}
+  S.forEach(function(sc,q){sc.tribe.forEach(function(p,m){
+    var w=surf3(p.a,p.r,tt);
+    var pp=NAV.project(w.x,w.y+0.02,w.z,cv);
+    var d2=(pp.x-mx)*(pp.x-mx)+(pp.y-my)*(pp.y-my);
+    if(d2<bd){bd=d2;best={k:'m',q:q,m:m};}});});
+  if(!best){var n=S.length;
+    for(var q2=0;q2<n;q2++){var a=(q2+0.5)*2*Math.PI/n;
+      var w2=surf3(a,0.72,tt);
+      var pp2=NAV.project(w2.x,w2.y,w2.z,cv);
+      var d3=(pp2.x-mx)*(pp2.x-mx)+(pp2.y-my)*(pp2.y-my);
+      if(d3<40*40){best={k:'s',q:q2,m:-1};break;}}}
+  if(best){sel=best;selT=now;
+    if(best.k==='s')tellSector(best.q);
+    else{journal('WITNESS a GOLDEN citizen of '+DASH[di].sectors[best.q][0]+' — it moves because the wave moves; at its confluence it will fall with its tribe into the heart.');
+      sEl&&tellSector(best.q);}}},
+  onWheel:function(){CIN.setMode('off');}});
+stage.addEventListener('mousedown',function(){if(CIN.mode!=='off')CIN.setMode('off');});
+window.addEventListener('keydown',function(e2){
+  var n=parseInt(e2.key,10);
+  if(n>=1&&n<=DASH.length)loadDash(n-1);
+  if(e2.key==='5'&&DASH.length>=5)loadDash(4);
+  if(e2.key==='b'||e2.key==='B'){CIN.setMode('off');
+    journal(NAV.toggleBird()?'🕊 BIRD over the wave-crown.':'🕊 landed.');}
+  if(e2.key==='c'||e2.key==='C')journal('🎥 CAMERA → '+CIN.cycle().toUpperCase());});
+function updateRez(){
+  if(!canDOM)return;
+  var el=document.getElementById('rez');el.innerHTML='';
+  function group(title,rows,fmt,cap){
+    var gEl=document.createElement('div');gEl.className='rzg';gEl.textContent=title;el.appendChild(gEl);
+    rows.sort(function(a,b){return b[1]-a[1];}).forEach(function(R){
+      var d=document.createElement('div');d.className='rz';
+      var pct=Math.min(1,R[1]/cap);
+      d.innerHTML='<span class="lb">'+R[0]+'</span>'
+        +'<span class="tr"><span class="fl" style="width:'+(pct*100).toFixed(0)+'%"></span></span>'
+        +'<span class="vl'+(pct>0.85?' hot':'')+'">'+fmt(R[1])+'</span>';
+      el.appendChild(d);});}
+  if(ENK){
+    group('BY RESOURCE — the machines',Object.keys(ENK.res).map(function(k){return [k,ENK.res[k]];}),
+      function(v){return (v*100).toFixed(0)+'%';},1);
+    group('BY WATER — left particles',DASH[di].sectors.map(function(sc,q){
+      return [sc[0],q<4?ENK.Q[q]:ENK.G[q-4]];}),
+      function(v){return v+' left';},40);
+  } else {
+    group('BY SECTOR — '+DASH[di].unit,DASH[di].sectors.map(function(sc,q){
+      return [sc[0],S[q]?S[q].util:0];}),
+      function(v){return (v*100).toFixed(0)+' '+DASH[di].unit;},1);}}
+function drawSeq(){
+  if(!canDOM)return;
+  var scv=document.getElementById('seqcv');if(!scv||!scv.getContext)return;
+  var sg=scv.getContext('2d');if(!sg||!sg.clearRect)return;
+  var W=scv.width,H=scv.height;
+  sg.clearRect(0,0,W,H);
+  var R=ENK&&ENK.rec;var S2=R?R.samples:[];
+  if(!S2.length){sg.fillStyle='#8f8672';sg.font='9px monospace';
+    sg.fillText('order an ingestion — the sequence records here',8,H/2);return;}
+  var cols={'NVMe W':'#6ea0cd','CPU':'#c9a227','ETL LANES':'#a58cc0','NET':'#7fbf5f'};
+  REC_KEYS.forEach(function(k){
+    sg.beginPath();
+    S2.forEach(function(s,i2){
+      var x=i2/(S2.length-1||1)*(W-8)+4,y=(H-18)-s.res[k]*(H-26);
+      i2?sg.lineTo(x,y):sg.moveTo(x,y);});
+    sg.strokeStyle=cols[k];sg.lineWidth=1;sg.stroke();});
+  S2.forEach(function(s,i2){
+    var x=i2/(S2.length-1||1)*(W-8)+4;
+    sg.fillStyle=s.cls===2?'#c23b2a':s.cls===1?'#c9a227':'#2f4a2f';
+    sg.fillRect(x-1.5,H-12,3,8);});
+  sg.fillStyle='#8f8672';sg.font='8px monospace';
+  sg.fillText((R.active?'RECORDING':'SEALED')+' · '+S2.length+' samples · band: smooth/strained/ALARM',6,10);}
+if(canDOM){var tsb=document.getElementById('tplSave');
+  if(tsb)tsb.addEventListener('click',function(){
+    if(!ENKTPL.templates.length){journal('No template yet — order an ingestion first.');return;}
+    var T=ENKTPL.templates[ENKTPL.templates.length-1];
+    var b=new Blob([JSON.stringify(T,null,1)],{type:'application/json'});
+    var a2=document.createElement('a');a2.href=URL.createObjectURL(b);
+    a2.download=T.id+'_ingestion_template.json';a2.click();
+    journal('⤓ '+T.id+' sails to disk — carry it to the next endpoint’s trial.');});}
+var rezT=0;
+loadDash(0);
+function frame(now){
+  var tt=now/1000;
+  if(DASH[di].id==='ENK'){stepEnk(tt);stepConfluence(tt);}
+  else{stepMetrics();stepConfluence(tt);}
+  NAV.tick(now);
+  var crestA=(tt*1.4/3)%(2*Math.PI);
+  var cw=surf3(crestA,0.7,tt);
+  CIN.tick(now,CIN.mode==='wavefront'?cw:{x:0,y:0,z:0});
+  var H=health();
+  beatPhase+=0.016*(0.8+2.2*H);
+  var pulse=0.5+0.5*Math.sin(beatPhase*2*Math.PI);
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle='#14120f';g.fillRect(0,0,cv.width,cv.height);
+  var n=S.length;
+  /* radial spokes of the weave */
+  for(var q=0;q<n*6;q++){var a=q/(n*6)*2*Math.PI;
+    g.beginPath();
+    for(var ri=0;ri<=12;ri++){var r=R0+(R1-R0)*ri/12;
+      var w=surf3(a,r,tt);
+      var p=NAV.project(w.x,w.y,w.z,cv);
+      ri?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y);}
+    var sq=sectorOf(a);
+    var edge=(q%6===0);
+    g.strokeStyle=edge?'rgba(232,224,207,0.35)':DASH[di].sectors[sq][1];
+    g.globalAlpha=edge?0.5:0.10+0.5*S[sq].util;
+    g.lineWidth=edge?1.1:0.8;g.stroke();g.globalAlpha=1;}
+  /* concentric rings */
+  for(var ri2=0;ri2<=10;ri2++){var r2=R0+(R1-R0)*ri2/10;
+    g.beginPath();
+    for(var q3=0;q3<=140;q3++){var a3=q3/140*2*Math.PI;
+      var w3=surf3(a3,r2,tt);
+      var p3=NAV.project(w3.x,w3.y,w3.z,cv);
+      q3?g.lineTo(p3.x,p3.y):g.moveTo(p3.x,p3.y);}
+    g.closePath();
+    g.strokeStyle='rgba(110,160,205,'+(0.10+0.10*Math.sin(ri2))+')';
+    g.lineWidth=0.7;g.stroke();}
+  /* sector labels + live numbers */
+  for(var q4=0;q4<n;q4++){var a4=(q4+0.5)*2*Math.PI/n;
+    var w4=surf3(a4,R1+0.10,tt);
+    var p4=NAV.project(w4.x,w4.y*0.3,w4.z,cv);
+    var hot=sel.q===q4;
+    g.fillStyle=hot?'#e8e0cf':DASH[di].sectors[q4][1];
+    g.font=(hot?'bold ':'')+'9px monospace';g.textAlign='center';
+    g.fillText(DASH[di].sectors[q4][0],p4.x,p4.y);
+    g.fillStyle='rgba(232,224,207,0.75)';g.font='8.5px monospace';
+    g.fillText((S[q4].util*100).toFixed(0)+' '+DASH[di].unit,p4.x,p4.y+11);}
+  /* tribes riding the wave + falling confluences */
+  S.forEach(function(sc,q5){sc.tribe.forEach(function(p,m){
+    var w5=surf3(p.a,p.r,tt);
+    var y5=w5.y+0.015+(sel.k==='m'&&sel.q===q5&&sel.m===m?NasaruBounce(selT,now)*0.04:0);
+    var pp5=NAV.project(w5.x,y5,w5.z,cv);
+    var rad=(p.fall?3.4:2.2)*pp5.f*Math.sqrt(NAV.cam.z);
+    g.beginPath();g.arc(pp5.x,pp5.y,rad,0,2*Math.PI);
+    g.fillStyle=p.fall?'#e8e0cf':'#c9a227';
+    g.globalAlpha=p.fall?0.95:0.8;g.fill();g.globalAlpha=1;
+    if(p.fall){g.strokeStyle='rgba(201,162,39,0.4)';g.lineWidth=0.7;
+      var hc=NAV.project(0,0.02,0,cv);
+      g.beginPath();g.moveTo(pp5.x,pp5.y);g.lineTo(hc.x,hc.y);g.stroke();}});});
+  /* ENK overlays: the Gates, the outside, the conversion flows */
+  if(ENK){
+    g.beginPath();
+    for(var qg=0;qg<=120;qg++){var ag=qg/120*2*Math.PI;
+      var wg=surf3(ag,R1+0.03,tt);
+      var pg=NAV.project(wg.x,wg.y*0.4,wg.z,cv);
+      qg?g.lineTo(pg.x,pg.y):g.moveTo(pg.x,pg.y);}
+    g.closePath();g.setLineDash([6,5]);
+    g.strokeStyle='rgba(194,59,42,0.5)';g.lineWidth=1.4;g.stroke();g.setLineDash([]);
+    var gl=NAV.project(R1+0.03,0.1,0,cv);
+    g.fillStyle='rgba(194,59,42,0.8)';g.font='8.5px monospace';g.textAlign='left';
+    g.fillText('THE ECOSYSTEM GATES — resistance proven here',gl.x+8,gl.y);
+    ENK.out.forEach(function(o){
+      var wo={x:Math.cos(o.a)*o.rr,y:0.01*Math.sin(tt+o.drift),z:Math.sin(o.a)*o.rr};
+      var po=NAV.project(wo.x,wo.y,wo.z,cv);
+      g.beginPath();g.arc(po.x,po.y,2.4*po.f,0,2*Math.PI);
+      g.fillStyle=o.state==='refused'?'#5a4f42':'#9fc0dd';
+      g.globalAlpha=o.state==='refused'?0.8:0.9;g.fill();g.globalAlpha=1;
+      if(o.state==='refused'){g.strokeStyle='rgba(194,59,42,0.8)';g.lineWidth=0.9;
+        g.beginPath();g.moveTo(po.x-3,po.y-3);g.lineTo(po.x+3,po.y+3);
+        g.moveTo(po.x+3,po.y-3);g.lineTo(po.x-3,po.y+3);g.stroke();}});
+    ENK.flows.forEach(function(F){
+      var w6=flowPos3(F,tt);
+      var p6=NAV.project(w6.x,w6.y,w6.z,cv);
+      g.beginPath();g.arc(p6.x,p6.y,(F.branch?3:2.2)*p6.f,0,2*Math.PI);
+      g.fillStyle=F.branch?'#e8e0cf':'#6ea0cd';g.fill();
+      if(F.branch){g.strokeStyle='rgba(201,162,39,0.7)';g.lineWidth=0.8;
+        g.beginPath();g.arc(p6.x,p6.y,5*p6.f,-Math.PI/2,-Math.PI/2+F.fp*2*Math.PI);g.stroke();}});
+    /* THE NERGAL BERTH — where the refused are remanded */
+    var nb=NAV.project(Math.cos(NERGAL_BERTH.a)*NERGAL_BERTH.r,0.02,Math.sin(NERGAL_BERTH.a)*NERGAL_BERTH.r,cv);
+    for(var ci2=0;ci2<3;ci2++){for(var cj=0;cj<(3-ci2);cj++){
+      g.fillStyle='rgba(128,0,32,'+(0.55+0.12*ci2)+')';
+      g.strokeStyle='rgba(232,224,207,0.35)';g.lineWidth=0.6;
+      var cs=7*nb.f,cx3=nb.x+(cj-(3-ci2-1)/2)*cs*1.15,cy3=nb.y-ci2*cs*1.05;
+      g.fillRect(cx3-cs/2,cy3-cs/2,cs,cs);g.strokeRect(cx3-cs/2,cy3-cs/2,cs,cs);}}
+    g.fillStyle='rgba(196,88,110,0.9)';g.font='8px monospace';g.textAlign='center';
+    g.fillText('NERGAL AV · IRKALLA JAIL',nb.x,nb.y+16*nb.f+8);
+    g.fillStyle='rgba(143,134,114,0.85)';
+    g.fillText('remanded: '+ENK.remanded+' · chattr +i',nb.x,nb.y+16*nb.f+18);
+    g.fillStyle='rgba(232,224,207,0.8)';g.font='8.5px monospace';g.textAlign='center';
+    var st=NAV.project(0,-0.02,-1.02,cv);
+    g.fillText('OUTSIDE: '+(ENK.refused-ENK.remanded)+' awaiting remand · REMANDED→IRKALLA: '+ENK.remanded+' · ADMITTED: '+ENK.admitted+' · GOLDEN: '+ENK.delivered,st.x,st.y);}
+  if(ENK){
+    /* THE STEWARD'S RAIL — upper resource gauges */
+    var keys=Object.keys(ENK.res),gw=Math.min(92,(cv.width*0.6)/keys.length),gy=44;
+    g.fillStyle='rgba(143,134,114,0.8)';g.font='8.5px monospace';g.textAlign='left';
+    g.fillText("THE STEWARD'S RAIL — resource utilization (live)"+(ENK.ingest.remaining>0?(' · INGESTING '+(ENK.ingest.total-ENK.ingest.remaining)+'/'+ENK.ingest.total):''),14,gy-14);
+    keys.forEach(function(k,qi){
+      var cx2=24+qi*gw+gw*0.35,cy2=gy+16,rr2=13,v=ENK.res[k];
+      g.beginPath();g.arc(cx2,cy2,rr2,Math.PI*0.75,Math.PI*2.25);
+      g.strokeStyle='#3a332a';g.lineWidth=3.5;g.stroke();
+      g.beginPath();g.arc(cx2,cy2,rr2,Math.PI*0.75,Math.PI*0.75+v*Math.PI*1.5);
+      g.strokeStyle=v>0.85?'#c23b2a':v>0.6?'#c9a227':'#7fbf5f';g.lineWidth=3.5;g.stroke();
+      g.fillStyle='rgba(232,224,207,0.9)';g.font='8px monospace';g.textAlign='center';
+      g.fillText(Math.round(v*100)+'%',cx2,cy2+3);
+      g.fillStyle='rgba(143,134,114,0.85)';
+      g.fillText(k,cx2,cy2+rr2+11);});
+    /* THE ONTOGRAPH — topology + ontology of the ingested */
+    var ox=14,oy=cv.height-176,ow=cv.width*0.30,oh=150;
+    g.strokeStyle='#3a332a';g.strokeRect(ox,oy,ow,oh);
+    g.fillStyle='rgba(201,162,39,0.85)';g.font='8.5px monospace';g.textAlign='left';
+    g.fillText('ONTOGRAPH — topology of the stations · ontology of the ingested',ox+6,oy+12);
+    ONTO.edges.forEach(function(E){
+      var A=ONTO.nodes[E[0]],B=ONTO.nodes[E[1]];
+      g.strokeStyle='rgba(201,162,39,0.30)';g.lineWidth=0.9;
+      g.beginPath();g.moveTo(ox+A.x*ow,oy+18+A.y*(oh-30));
+      g.lineTo(ox+B.x*ow,oy+18+B.y*(oh-30));g.stroke();});
+    ONTO.nodes.forEach(function(N){
+      var nx=ox+N.x*ow,ny=oy+18+N.y*(oh-30);
+      g.beginPath();g.arc(nx,ny,4,0,2*Math.PI);
+      g.fillStyle=N.c;g.fill();
+      g.fillStyle='rgba(232,224,207,0.9)';g.font='7.5px monospace';g.textAlign='center';
+      g.fillText(N.id,nx,ny-7);
+      g.fillStyle='rgba(201,162,39,0.9)';
+      g.fillText(String(ontoCount(N.id)),nx,ny+13);});
+    g.fillStyle='rgba(143,134,114,0.75)';g.font='7.5px monospace';g.textAlign='left';
+    ONTO.classes.forEach(function(cl,ci){
+      g.fillText(cl,ox+8,oy+oh-8-(ONTO.classes.length-1-ci)*10);});
+    /* THE SLA STELE — covenant vs measured */
+    var m=slaMetrics(),V=slaVerdict(m);
+    var sx=cv.width-K2.panelW()-14,sy2=cv.height-118,sw2=K2.panelW(),sh2=104;
+    g.strokeStyle='#3a332a';g.strokeRect(sx,sy2,sw2,sh2);
+    g.fillStyle='rgba(201,162,39,0.85)';g.font='8.5px monospace';g.textAlign='left';
+    g.fillText('SLA — the covenant of the ingested',sx+6,sy2+13);
+    var rows=[['intake→GOLDEN p95','≤ '+SLA_TARGETS.p95+' s',m.p95==null?'—':m.p95.toFixed(1)+' s',V.p95],
+      ['throughput','≥ '+SLA_TARGETS.thr+' /min',m.thr+' /min',V.thr],
+      ['refusal rate','≤ '+(SLA_TARGETS.rr*100).toFixed(0)+'%',(m.rr*100).toFixed(0)+'%',V.rr]];
+    rows.forEach(function(R4,ri4){
+      var ry=sy2+30+ri4*24;
+      g.fillStyle='rgba(232,224,207,0.85)';g.font='8px monospace';g.textAlign='left';
+      g.fillText(R4[0],sx+8,ry);
+      g.fillStyle='rgba(143,134,114,0.85)';
+      g.fillText('covenant '+R4[1]+' · measured '+R4[2],sx+8,ry+10);
+      g.fillStyle=R4[3]==='PASS'?'#7fbf5f':R4[3]==='—'?'#8f8672':'#c23b2a';
+      g.font='bold 8.5px monospace';g.textAlign='right';
+      g.fillText(R4[3],sx+sw2-8,ry+5);});}
+  if(K2){spec.x=cv.width-K2.panelW()-14;spec.y=14;
+    if(DASH[di].id==='ENK'&&spec.groups[2])spec.groups[2].rows[1].frac=Math.min(1,(ENK.refused/12));
+    spec.groups[0].rows.forEach(function(r3,q7){if(S[q7])r3.frac=0.4+0.6*S[q7].util;});
+    K2.draw(now);}
+  if(ENK){
+    /* THE ORBITS OF THE AGED — Higgs shells inside the wave's shore */
+    [0.28,0.20,0.12].forEach(function(ro,oi){
+      g.beginPath();
+      for(var qo=0;qo<=90;qo++){var ao=qo/90*2*Math.PI;
+        var po=NAV.project(Math.cos(ao)*ro,0,Math.sin(ao)*ro,cv);
+        qo?g.lineTo(po.x,po.y):g.moveTo(po.x,po.y);}
+      g.closePath();g.setLineDash([3,4]);
+      g.strokeStyle='rgba(201,162,39,'+(0.14+0.08*oi)+')';g.lineWidth=0.8;g.stroke();g.setLineDash([]);});
+    var ol=NAV.project(0.30,0.05,0,cv);
+    g.fillStyle='rgba(201,162,39,0.7)';g.font='8px monospace';g.textAlign='left';
+    g.fillText('ORBITS OF THE AGED — inner = older · radius = honesty',ol.x+6,ol.y);
+    ENK.gold.forEach(function(p,gi){
+      var w=goldPos3(p,tt);
+      var y2=w.y+(sel.k==='g'&&sel.q===gi?NasaruBounce(selT,now)*0.04:0);
+      var pp=NAV.project(w.x,y2,w.z,cv);
+      var pur=higgsPurity(p.sb);
+      var rad=(sel.k==='g'&&sel.q===gi?4.2:(p.state==='massless'?2.6:2.9))*pp.f*Math.sqrt(NAV.cam.z);
+      g.beginPath();g.arc(pp.x,pp.y,rad,0,2*Math.PI);
+      if(p.state==='massless'){
+        g.fillStyle='rgba(255,248,225,0.95)';g.fill();
+        g.strokeStyle='rgba(232,224,207,0.6)';g.lineWidth=0.7;
+        g.beginPath();g.arc(pp.x,pp.y,rad+1.8,0,2*Math.PI);g.stroke();}
+      else{
+        var cr=Math.round(201*pur+143*(1-pur)),cg=Math.round(162*pur+134*(1-pur)),cb=Math.round(39*pur+114*(1-pur));
+        g.fillStyle='rgba('+cr+','+cg+','+cb+',0.92)';g.fill();}
+      if(sel.k==='g'&&sel.q===gi){g.strokeStyle='#e8e0cf';g.lineWidth=1.2;
+        g.beginPath();g.arc(pp.x,pp.y,rad+2,0,2*Math.PI);g.stroke();}});}
+  /* THE GOLDEN HEART — libbu */
+  var hp=NAV.project(0,0.02,0,cv);
+  var hr=(20+9*pulse)*hp.f;
+  var stress=H>0.75;
+  var gr=g.createRadialGradient(hp.x,hp.y,2,hp.x,hp.y,hr);
+  gr.addColorStop(0,'rgba(255,244,214,'+(0.85+0.15*pulse)+')');
+  gr.addColorStop(0.45,stress?'rgba(194,59,42,0.55)':'rgba(201,162,39,0.6)');
+  gr.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=gr;g.beginPath();g.arc(hp.x,hp.y,hr,0,2*Math.PI);g.fill();
+  g.fillStyle='rgba(232,224,207,0.9)';g.font='9px monospace';g.textAlign='center';
+  g.fillText('LIBBU — '+beats+' beats fed',hp.x,hp.y+hr+12);
+  g.fillStyle=stress?'#c23b2a':'rgba(143,134,114,0.8)';g.font='8.5px monospace';
+  g.fillText(stress?'THE HEART RACES — the wave is heavy':'the heart is calm — the wave carries lightly',hp.x,hp.y+hr+24);
+  rezT+=0.016;
+  if(rezT>0.5){rezT=0;updateRez();drawSeq();}
+  statusEl.textContent='AGÛ WAVE · '+DASH[di].id+' · '+n+' sectors live · health '+(H*100).toFixed(0)+'% · ♥ '
+    +(0.8+2.2*H).toFixed(1)+' Hz · beats '+beats+' · 🎥 '+CIN.mode.toUpperCase()
+    +' · keys 1–'+DASH.length+' switch dashboards · C cinema chases the crest · B bird';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('THE AGÛ WAVE RISES — wave and crown in one word, dashboard and organism in one membrane. The crest circles forever; each sector\u2019s swell is its living number; the tribes ride the surface and fall together, sector by sector, into the <b>libbu</b> — and the heart\u2019s pace tells you in one glance what pages of gauges never could. Press 2, 3, 4 — Maintenance, the Image ledger, the Mold house; press <b>5</b> for the <b>Seven Waters</b> — the Data Steward’s chair: the upper rail of resource gauges, the OntoGraph of the ingested, the SLA covenant measured live, and the ⛴ button to ingest 120 crates — and now the <b>Higgs field</b>: massless 100%-golden citizens ride the wave free, while the Šību-coupled acquire mass and fall to the <b>orbits of the aged</b> around the libbu — <i>the radius is the honesty</i>: left particles as swells, conversions flowing 7004→DW/MDB/DDB, and the refused standing OUTSIDE the Gates — counted, ashen, never hidden. <b>One die, many duties — as decreed.</b>');
+</script>
+</body>
+</html>

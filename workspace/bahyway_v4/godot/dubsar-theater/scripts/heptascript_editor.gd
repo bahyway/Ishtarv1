@@ -86,7 +86,7 @@ func _chosen_targets() -> Array:
 		# matching every other Godot script in this project
 		# (dubsar_proof.gd, enkidb_tcp.gd, theater_3d.gd, etc.), which
 		# never changed away from this IP in the first place.
-		host = "192.168.122.107"
+		host = "192.168.122.112"
 	var targets: Array = []
 	var engines: Array = []
 	if _all_check.button_pressed:

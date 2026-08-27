@@ -243,7 +243,7 @@ resolves it. If it still happens, check `/tmp/dubsar_godot_launch.log` (or
   real event log (`EventCause` in `crates/enkidb-journal`) yet; that would
   need new `EventCause` variants and an optional, best-effort network path
   from these two tools, which is real, separate future work.
-- **Other future EriduOS/BahyWay.Ecosystem v4.0 apps don't get this for
+- **Other future UrOS/BahyWay.Ecosystem v4.0 apps don't get this for
   free.** Godot's `user://` storage is per-project, so a new Godot app
   wanting the same Import-Passport pattern needs its own copy of
   `kupru.gdextension` + `bin/libkupru_gdext.so` and its own launch playbook

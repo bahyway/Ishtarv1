@@ -1,7 +1,7 @@
 # 00_codex_government_by_sevens — Why 7?
 ## BahyWay.Ecosystem v4.0 Manual — answering the question the Architect asked directly
 
-**Status:** DRAFT — awaiting Architect seal (CSR-08)
+**Status:** SEALED-CONCEPT (per CSR-08 chat confirmation, 2026-08-15)
 **Author:** DUB.SAR 𒁾
 **Placement:** `00_codex` — foundational doctrine, read before any component-level doc.
 
@@ -67,7 +67,7 @@ Majors table).
 VGCA-Σ (one of three VGCA cleansing-analysis instruments) scores text
 fields across a **7D Feature Score Vector**, tied to KAKI bytes B0–B6 via
 `BLAKE3(FSV)[0..7]` — training-free, pure geometry, no ML.
-*Cited:* `docs/00_codex/EriduOS_v4.0_Sovereign_Document_2026-07-07.md`
+*Cited:* `docs/00_codex/UrOS_v4.0_Sovereign_Document_2026-07-07.md`
 ("VGCA-Σ | 7D FSV (text values)"), corroborated in
 `docs/05_storage/ENKIMDB_REGISTRIES.md`.
 
@@ -76,7 +76,7 @@ fields across a **7D Feature Score Vector**, tied to KAKI bytes B0–B6 via
 Particles Algebra theorem PA-12 defines `HPS(p)` as a weighted dot product
 in `[0,1]⁷` — a canonical quality scalar computed over the same seven Hepta
 Space dimensions as §1.1.
-*Cited:* `docs/00_codex/EriduOS_v4.0_Sovereign_Document_2026-07-07.md`
+*Cited:* `docs/00_codex/UrOS_v4.0_Sovereign_Document_2026-07-07.md`
 §2.7, "PA-12 | Hepta Priority Score."
 
 ### 1.7 · The 7 tribes → BIGRING
@@ -128,7 +128,7 @@ to this one — this entry is that catalog's first landing.
 GOLD → AGED → DECAY → POSITION → LOCATION → TIME → GOLD — seven stages, a
 teaching device (not a new state machine) for holding the Golden Particle
 lifecycle's ideas in one frame.
-*Cited:* `docs/05_storage/GL-GLD-001_Golden_Lifecycle_Law_DRAFT.md` §6,
+*Cited:* `docs/05_storage/GL-GLD-001_Golden_Lifecycle_Law.md` §6,
 sealed alongside this document.
 
 ### 1.12 · The 7 Sagas
@@ -173,7 +173,12 @@ this repo, landing it and updating this citation is real follow-on work.
 ## 4 · Seal
 
 ```
-Sealed by: ______________________  (DUB.SAR 𒁾, CSR-08)
-Date:      ______________________
-AkkadianSeal (Ed25519): ______________________
+Sealed by: DUB.SAR 𒁾 (Bahaa Fadam), via explicit chat confirmation (CSR-08)
+Date:      2026-08-15
+AkkadianSeal (Ed25519): PENDING — no real signing infrastructure wired
+                        yet (no Sargon/Gilgamesh passport ceremony run
+                        against this tablet). The chat confirmation above
+                        is the Architect's real CSR-08 act; the
+                        cryptographic seal is separate, real follow-on
+                        work, not fabricated here.
 ```

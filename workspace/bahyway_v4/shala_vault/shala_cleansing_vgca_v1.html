@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ŠALA · DATA CLEANSING STATION — VGCA Court · Σ–Λ Plane · Persistence Barcode</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abzu:#070B14; --abzu-2:#0C1220;
+  --lapis:#24406E; --lapis-soft:#31517F;
+  --gold:#D4A945; --gold-dim:#8F7430;
+  --alabaster:#E9E2D0; --alabaster-dim:#9C9584;
+  --clay:#C1603A; --reed:#6E9C7C;
+  --line:rgba(212,169,69,.18);
+  --card:#0E1524; --card-2:#111A2E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--abzu);color:var(--alabaster);font-family:'IBM Plex Sans',sans-serif;font-weight:300;overflow:hidden}
+header{height:62px;display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0B1120,#070B14)}
+.glyph{font-size:24px;color:var(--gold);line-height:1;user-select:none}
+h1{font-family:'Marcellus',serif;font-weight:400;font-size:16px;letter-spacing:.11em;white-space:nowrap}
+h1 span{color:var(--gold)}
+.subtitle{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.07em;border-left:1px solid var(--line);padding-left:16px;line-height:1.55}
+.subtitle b{color:var(--gold);font-weight:500}
+.wrap{display:flex;height:calc(100vh - 62px)}
+.stage{flex:1;position:relative;min-width:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.stage-caption{position:absolute;left:16px;bottom:10px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim);letter-spacing:.07em;line-height:1.7;pointer-events:none}
+.stage-caption b{color:var(--clay);font-weight:500}
+aside{width:440px;flex-shrink:0;border-left:1px solid var(--line);background:var(--abzu-2);display:flex;flex-direction:column;overflow:hidden}
+.engine-head{padding:11px 16px 9px;border-bottom:1px solid var(--line)}
+.engine-head .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.engine-head h2{font-family:'Marcellus',serif;font-weight:400;font-size:15px;letter-spacing:.05em;margin-top:3px}
+.engine-head .gloss{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.05em;margin-top:2px;line-height:1.5}
+.tabs{display:flex;border-bottom:1px solid var(--line);background:#0A0F1C}
+.tab{flex:1;padding:9px 2px;background:none;border:none;border-bottom:2px solid transparent;color:var(--alabaster-dim);font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.14em;cursor:pointer;transition:all .18s}
+.tab.on{color:var(--gold);border-bottom-color:var(--gold)}
+.tabpane{flex:1;overflow-y:auto;display:none;padding:12px 14px}
+.tabpane.on{display:block}
+.tabpane::-webkit-scrollbar,.journal::-webkit-scrollbar{width:8px}
+.tabpane::-webkit-scrollbar-thumb,.journal::-webkit-scrollbar-thumb{background:var(--lapis);border-radius:4px}
+.kv{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;margin-top:4px;color:var(--alabaster-dim)}
+.kv b{color:var(--alabaster);font-weight:500}
+.kv b.bad{color:var(--clay)}.kv b.good{color:var(--reed)}
+.metricrow{display:grid;grid-template-columns:110px 1fr 44px;gap:8px;align-items:center;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--alabaster-dim)}
+.metricrow .bar{height:7px;background:var(--card-2);border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.metricrow .bar i{display:block;height:100%;background:var(--lapis-soft);transition:width .4s}
+.pairbox{border:1px solid var(--line);border-radius:4px;background:var(--card);padding:10px 12px;margin-bottom:10px;font-size:11px;line-height:1.6}
+.pairbox .mono{font-family:'IBM Plex Mono',monospace;font-size:10.5px}
+.pairbox b{color:var(--gold);font-weight:500}
+.delta{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--reed);margin-top:4px}
+.slider-row{display:flex;align-items:center;gap:10px;margin:8px 0 4px}
+.slider-row input[type=range]{flex:1;accent-color:var(--gold)}
+.slider-row .val{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gold);min-width:44px;text-align:right}
+#barcode{width:100%;height:190px;display:block}
+.mini{width:100%;padding:9px;border-radius:3px;border:1px solid var(--gold-dim);background:var(--gold);color:#14100a;font-weight:600;font-size:11.5px;letter-spacing:.04em;cursor:pointer;margin-top:9px}
+.mini.ghost{background:var(--card);color:var(--alabaster);border-color:var(--line)}
+.mini:disabled{background:var(--card-2);color:var(--alabaster-dim);border-color:var(--line);cursor:not-allowed}
+.mini:focus-visible,.chip:focus-visible,.tab:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.empty-note{font-size:11px;color:var(--alabaster-dim);line-height:1.7;padding:8px 2px}
+.cli-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;padding:4px 9px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--alabaster-dim);cursor:pointer;transition:all .15s}
+.chip:hover{color:var(--gold);border-color:var(--gold-dim)}
+.chip.gold{color:var(--gold);border-color:var(--gold-dim)}
+.cli-inbox{border:1px solid var(--gold-dim);border-radius:4px;background:#0A0F1C;margin-bottom:10px;overflow:hidden}
+#cliIn{width:100%;background:transparent;border:none;resize:vertical;min-height:50px;padding:9px 10px;color:var(--alabaster);font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.6;outline:none}
+.cli-actions{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-top:1px solid var(--line);background:var(--card)}
+.cli-hint{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--alabaster-dim);letter-spacing:.08em}
+.runb{padding:7px 16px;border-radius:3px;border:1px solid var(--gold-dim);background:var(--gold);color:#14100a;font-weight:600;font-size:11px;cursor:pointer}
+.cell{border:1px solid var(--line);border-radius:4px;margin-bottom:9px;overflow:hidden}
+.cell .cq{background:#0A0F1C;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.65;white-space:pre-wrap;border-bottom:1px solid var(--line)}
+.cell .co{background:var(--card);padding:9px 10px;font-size:10.5px;line-height:1.65}
+.cell.err .co{color:#E8B9A4}
+.cell .co b{color:var(--gold);font-weight:500}
+.cell .co .clay{color:var(--clay)}.cell .co .reed{color:var(--reed)}
+.cli-tbl{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:9.5px}
+.cli-tbl th{text-align:left;font-size:8px;letter-spacing:.14em;color:var(--alabaster-dim);padding:3px 6px;border-bottom:1px solid var(--line);text-transform:uppercase}
+.cli-tbl td{padding:3px 6px;border-bottom:1px solid rgba(212,169,69,.07)}
+.hx-stage{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;margin:10px 0 6px;color:var(--gold)}
+.hk{color:var(--gold);font-weight:500}.hw{color:#7FA0D0}.hp{color:var(--reed)}.hv{color:#D8A08A}.hc{color:#5E6878;font-style:italic}
+.journal{height:104px;flex-shrink:0;border-top:1px solid var(--line);background:#080D18;padding:9px 14px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:9.5px;line-height:1.75;color:var(--alabaster-dim)}
+.journal .j-eyebrow{font-size:8.5px;letter-spacing:.22em;color:var(--gold);margin-bottom:4px;text-transform:uppercase}
+.journal .ln b{color:var(--gold);font-weight:500}
+.journal .ln .clay{color:var(--clay)}.journal .ln .reed{color:var(--reed)}
+@media (max-width:1000px){aside{width:340px}.subtitle{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="glyph">𒀯</div>
+  <h1>ŠALA <span>·</span> DATA CLEANSING STATION <span>·</span> VGCA COURT</h1>
+  <div class="subtitle"><b>Vector Geometric Cleansing Analysis</b> — six commodity verdicts fused into sovereign geometry<br>Σ = ⟨m,u⟩ agreement · Λ = ‖m∧u‖ the wedge of disagreement · Δ = the cleansing displacement · entity resolution as 0-dim persistence</div>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="stage-caption">
+      Every candidate pair is a vector of six verdicts. <b>Σ</b> is agreement with unanimity; <b>Λ</b> is the bivector area where the algorithms quarrel.<br>
+      High-Σ low-Λ merges itself. High-Σ <b>high-Λ</b> is the conflicted zone — the metrics disagree, and the steward must judge.
+    </div>
+  </div>
+
+  <aside>
+    <div class="engine-head">
+      <div class="eyebrow">Presiding · Data Cleansing Station</div>
+      <h2>THE VGCA COURT</h2>
+      <div class="gloss">Jaro-Winkler · Levenshtein · MinHash · Soundex · cosine (HNSW-served in production) · Shannon entropy → fused by VGCA-Σ / Δ / Λ · TDA barcode · minimal-surface entropy descent · GeoEngine authority</div>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-pane="panePair">PAIR</button>
+      <button class="tab" data-pane="paneBar">BARCODE</button>
+      <button class="tab" data-pane="paneCli">𒉺 CLI</button>
+    </div>
+
+    <div class="tabpane on" id="panePair">
+      <div class="empty-note" id="pairEmpty">Click a pair on the Σ–Λ plane. Its six verdicts, its wedge, and its Δ cleansing path will stand here.</div>
+      <div id="pairDetail" style="display:none">
+        <div class="pairbox">
+          <div class="mono" id="prA"></div>
+          <div class="mono" id="prB" style="color:var(--alabaster-dim)"></div>
+          <div class="kv"><span>VGCA-Σ · agreement</span><b id="pSig">—</b></div>
+          <div class="kv"><span>VGCA-Λ · wedge of disagreement</span><b id="pLam">—</b></div>
+          <div class="delta" id="pDelta"></div>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.18em;color:var(--alabaster-dim);margin-bottom:2px">THE SIX VERDICTS · m ∈ ℝ⁶</div>
+        <div class="metricrow"><span>Jaro-Winkler</span><div class="bar"><i id="mJW"></i></div><span id="vJW">—</span></div>
+        <div class="metricrow"><span>Levenshtein sim</span><div class="bar"><i id="mLV"></i></div><span id="vLV">—</span></div>
+        <div class="metricrow"><span>MinHash Jaccard</span><div class="bar"><i id="mMH"></i></div><span id="vMH">—</span></div>
+        <div class="metricrow"><span>Soundex</span><div class="bar"><i id="mSX"></i></div><span id="vSX">—</span></div>
+        <div class="metricrow"><span>cosine 3-gram</span><div class="bar"><i id="mCS"></i></div><span id="vCS">—</span></div>
+        <div class="metricrow"><span>entropy affinity</span><div class="bar"><i id="mEN"></i></div><span id="vEN">—</span></div>
+        <button class="mini" id="btnMergeOne">Merge this pair — apply Δ, canonical survives</button>
+      </div>
+      <div class="pairbox" style="margin-top:12px">
+        <div class="kv"><span>RECORDS LIVE</span><b id="sRec">—</b></div>
+        <div class="kv"><span>ENTITIES AT THRESHOLD σ (β₀)</span><b id="sEnt">—</b></div>
+        <div class="kv"><span>CONFLICTED PAIRS (high-Σ · high-Λ)</span><b id="sConf" class="bad">—</b></div>
+        <div class="kv"><span>MEAN FIELD ENTROPY (roughness)</span><b id="sEntropy">—</b></div>
+        <button class="mini" id="btnAuto">Auto-merge the confident quadrant (Σ ≥ σ, Λ < λ)</button>
+      </div>
+    </div>
+
+    <div class="tabpane" id="paneBar">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--alabaster-dim);line-height:1.65;margin-bottom:8px">Entity resolution is 0-dimensional persistence: sweep σ and records merge into entities. The widest gap in the barcode <b style="color:var(--gold)">names the threshold</b> — the court does not guess.</div>
+      <div class="slider-row"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--alabaster-dim)">σ</span><input type="range" id="sigSlider" min="40" max="98" value="78"><span class="val" id="sigVal">0.78</span></div>
+      <canvas id="barcode"></canvas>
+      <div class="kv"><span>PERSISTENCE-GAP SUGGESTION</span><b id="sGap" class="good">—</b></div>
+      <button class="mini ghost" id="btnGap">Adopt the suggested σ</button>
+    </div>
+
+    <div class="tabpane" id="paneCli"><div id="clibox"></div></div>
+    <div class="journal" id="journal"><div class="j-eyebrow">StoryEngine Journal · append-only</div></div>
+  </aside>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   ŠALA DATA CLEANSING STATION — VGCA Court (DRAFT prototype)
+   Real algorithms, no mockups: Jaro-Winkler, Levenshtein,
+   MinHash (32 hashes over char 3-grams), Soundex, cosine over
+   3-gram vectors (HNSW-served at scale), Shannon entropy.
+   Sovereign fusion: m ∈ R^6 per pair; u = unanimity axis;
+   VGCA-Σ = <m,u> agreement · VGCA-Λ = ||m ∧ u|| disagreement
+   bivector · VGCA-Δ = displacement to canonical form.
+   Entity resolution = 0-dim persistence over the Σ filtration.
+   ============================================================ */
+
+/* ---------- the dirty tribe ---------- */
+const RAW=[
+ 'Bahaa Fadam','B. Fadam','Baha Fadam','BAHAA FADAM','Bahaa  Fadam',
+ 'Enki Street 7','Enki St 7','Enki Str. 07','Enki Street 7 Amsterdam',
+ 'Nisaba Papers BV','Nisaba Papers B.V.','Nisaba Paper BV','NISABA PAPERS BV',
+ 'Girsu Canal Guild','Girsu Canal Gild','Girsu Kanal Guild',
+ 'Marduk Trading','Marduk Traiding','Mardouk Trading',
+ 'Uruk Ledger Office','Uruk Ledger Ofice','Uruk Leger Office',
+ 'Shala Grain Co','Shala Grain Company','Sala Grain Co',
+ 'Kish Basin Works','Kish Bassin Works',
+ 'Eridu Water Board','Eridu Waterboard',
+ 'Nippur Archive','Nippur Archives',
+ 'Lagash Metals','Lagaš Metals',
+ 'Umma Textiles','Ума Textiles',
+ 'Adab Salt Co','Isin Pottery','Larsa Reeds','Sippar Glass',
+];
+/* ---------- real algorithms ---------- */
+function norm(s){return s.toLowerCase().replace(/\s+/g,' ').trim();}
+function jaroWinkler(a,b){
+  a=norm(a);b=norm(b);
+  if(a===b)return 1;
+  const la=a.length,lb=b.length;
+  const md=Math.max(0,Math.floor(Math.max(la,lb)/2)-1);
+  const am=new Array(la).fill(false),bm=new Array(lb).fill(false);
+  let matches=0;
+  for(let i=0;i<la;i++){
+    for(let j=Math.max(0,i-md);j<Math.min(lb,i+md+1);j++){
+      if(!bm[j]&&a[i]===b[j]){am[i]=bm[j]=true;matches++;break;}
+    }
+  }
+  if(!matches)return 0;
+  let k=0,trans=0;
+  for(let i=0;i<la;i++){if(am[i]){while(!bm[k])k++;if(a[i]!==b[k])trans++;k++;}}
+  const j=(matches/la+matches/lb+(matches-trans/2)/matches)/3;
+  let prefix=0;while(prefix<4&&a[prefix]===b[prefix])prefix++;
+  return j+prefix*0.1*(1-j);
+}
+function levenshteinSim(a,b){
+  a=norm(a);b=norm(b);
+  const la=a.length,lb=b.length;
+  const d=Array.from({length:la+1},(_,i)=>[i,...new Array(lb).fill(0)]);
+  for(let j=0;j<=lb;j++)d[0][j]=j;
+  for(let i=1;i<=la;i++)for(let j=1;j<=lb;j++)
+    d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return 1-d[la][lb]/Math.max(la,lb);
+}
+function grams3(s){s='  '+norm(s)+'  ';const g=new Set();for(let i=0;i<s.length-2;i++)g.add(s.slice(i,i+3));return g;}
+function hash32(str,seed){let h=seed>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h;}
+const MH_SEEDS=Array.from({length:32},(_,i)=>0x9E3779B9+i*0x85EBCA6B);
+function minhashSig(s){
+  const g=grams3(s);
+  return MH_SEEDS.map(seed=>{let m=0xFFFFFFFF;g.forEach(x=>{const h=hash32(x,seed);if(h<m)m=h;});return m;});
+}
+function minhashJaccard(sigA,sigB){let eq=0;for(let i=0;i<32;i++)if(sigA[i]===sigB[i])eq++;return eq/32;}
+function soundex(s){
+  s=norm(s).replace(/[^a-z]/g,'');if(!s)return '0000';
+  const code=c=>('bfpv'.includes(c)?'1':'cgjkqsxz'.includes(c)?'2':'dt'.includes(c)?'3':c==='l'?'4':'mn'.includes(c)?'5':c==='r'?'6':'');
+  let out=s[0].toUpperCase(),last=code(s[0]);
+  for(let i=1;i<s.length&&out.length<4;i++){
+    const c=code(s[i]);
+    if(c&&c!==last)out+=c;
+    if(!'hw'.includes(s[i]))last=c;
+  }
+  return (out+'000').slice(0,4);
+}
+function soundexScore(a,b){
+  const ta=norm(a).split(' '),tb=norm(b).split(' ');
+  let hit=0,n=Math.max(ta.length,tb.length);
+  ta.forEach((w,i)=>{if(tb[i]&&soundex(w)===soundex(tb[i]))hit++;});
+  return n?hit/n:0;
+}
+function gramVec(s){const m={};const t='  '+norm(s)+'  ';for(let i=0;i<t.length-2;i++){const g=t.slice(i,i+3);m[g]=(m[g]||0)+1;}return m;}
+function cosine(a,b){
+  const va=gramVec(a),vb=gramVec(b);
+  let dot=0,na=0,nb=0;
+  for(const k in va){na+=va[k]*va[k];if(vb[k])dot+=va[k]*vb[k];}
+  for(const k in vb)nb+=vb[k]*vb[k];
+  return dot/Math.sqrt(na*nb||1);
+}
+function entropy(s){
+  const t=norm(s).replace(/ /g,'');const m={};
+  for(const c of t)m[c]=(m[c]||0)+1;
+  let e=0;for(const k in m){const p=m[k]/t.length;e-=p*Math.log2(p);}
+  return e;
+}
+function entropyAffinity(a,b){
+  const ea=entropy(a),eb=entropy(b);
+  return 1-Math.min(1,Math.abs(ea-eb)/2.5);
+}
+/* ---------- VGCA fusion ---------- */
+const U=1/Math.sqrt(6);
+function vgca(m){
+  const sig=m.reduce((s,x)=>s+x,0)*U/Math.sqrt(6)*Math.sqrt(6); /* <m,u> */
+  const dot=m.reduce((s,x)=>s+x*U,0);
+  const n2=m.reduce((s,x)=>s+x*x,0);
+  const lam=Math.sqrt(Math.max(0,n2-dot*dot)); /* ||m ^ u|| */
+  return {sig:dot/Math.sqrt(6)*Math.sqrt(6)/Math.sqrt(6),lam, sigma:dot/Math.sqrt(6)};
+}
+function vgcaPair(m){
+  const dot=m.reduce((s,x)=>s+x*U,0);          /* projection length onto u */
+  const n2=m.reduce((s,x)=>s+x*x,0);
+  const lam=Math.sqrt(Math.max(0,n2-dot*dot)); /* wedge magnitude */
+  return {sigma:dot/Math.sqrt(6),lam};         /* sigma in [0,1] when all metrics in [0,1] */
+}
+function deltaPath(a,b){
+  const steps=[];
+  if(norm(a)!==a.toLowerCase().trim()||norm(b)!==b.toLowerCase().trim())steps.push('case-fold');
+  if(/\s{2,}/.test(a)||/\s{2,}/.test(b))steps.push('whitespace-collapse');
+  if(/\b(st|str)\.?\b/i.test(a+b))steps.push('token-expand (St \u2192 Street)');
+  if(/\b(bv|b\.v\.)\b/i.test(a+b))steps.push('legal-form-normalise');
+  if(/\d/.test(a)&&/\d/.test(b))steps.push('numeral-normalise (07 \u2192 7)');
+  if(levenshteinSim(a,b)<0.97)steps.push('char-repair (\u22641 edit token)');
+  return steps.length?steps:['identity \u2014 already canonical'];
+}
+
+/* ---------- pairs (blocked candidates) ---------- */
+let records=[],pairs=[],selPair=null,sigma=0.78,lambdaTau=0.62,merges=0;
+function seed(){
+  records=RAW.map((s,i)=>({id:i,txt:s,alive:true,canon:s}));
+  const sigs=records.map(r=>minhashSig(r.txt));
+  pairs=[];
+  for(let i=0;i<records.length;i++)for(let j=i+1;j<records.length;j++){
+    const a=records[i].txt,b=records[j].txt;
+    const cs=cosine(a,b);
+    if(cs<0.18)continue; /* blocking: cheap prefilter, HNSW's job at scale */
+    const m=[jaroWinkler(a,b),levenshteinSim(a,b),minhashJaccard(sigs[i],sigs[j]),soundexScore(a,b),cs,entropyAffinity(a,b)];
+    const v=vgcaPair(m);
+    pairs.push({i,j,m,sigma:v.sigma,lam:v.lam,merged:false});
+  }
+  merges=0;selPair=null;
+  clearJournal();
+  jlog('VGCA court convenes \u00B7 '+records.length+' raw records \u00B7 '+pairs.length+' candidate pairs vectorised \u00B7 six verdicts each, fused by \u03A3 and \u039B');
+  updateStats();renderPair();drawBarcode();
+}
+/* union-find over sigma-filtration */
+function componentsAt(thr){
+  const parent=records.map((_,i)=>i);
+  const find=x=>{while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;};
+  pairs.forEach(p=>{
+    if(p.sigma>=thr){const a=find(p.i),b=find(p.j);if(a!==b)parent[a]=b;}
+  });
+  const roots=new Set(records.map((_,i)=>find(i)));
+  return roots.size;
+}
+function mergeEvents(){
+  const ev=pairs.slice().sort((a,b)=>b.sigma-a.sigma);
+  const parent=records.map((_,i)=>i);
+  const find=x=>{while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;};
+  const events=[];
+  ev.forEach(p=>{
+    const a=find(p.i),b=find(p.j);
+    if(a!==b){parent[a]=b;events.push(p.sigma);}
+  });
+  return events; /* descending sigma at which merges happen */
+}
+function gapSuggestion(){
+  const ev=mergeEvents();
+  if(ev.length<2)return 0.78;
+  let best=0,at=0.78;
+  for(let i=0;i<ev.length-1;i++){
+    const gap=ev[i]-ev[i+1];
+    if(gap>best){best=gap;at=(ev[i]+ev[i+1])/2;}
+  }
+  return at;
+}
+function updateStats(){
+  const alive=records.filter(r=>r.alive).length;
+  const conf=pairs.filter(p=>!p.merged&&p.sigma>=sigma&&p.lam>=lambdaTau).length;
+  const meanE=(records.filter(r=>r.alive).reduce((s,r)=>s+entropy(r.canon),0)/alive);
+  document.getElementById('sRec').textContent=alive;
+  document.getElementById('sEnt').textContent=componentsAt(sigma);
+  document.getElementById('sConf').textContent=conf;
+  document.getElementById('sEntropy').textContent=meanE.toFixed(3)+' bits';
+  const gap=gapSuggestion();
+  document.getElementById('sGap').textContent='\u03C3 \u2248 '+gap.toFixed(2);
+}
+/* ---------- stage: Σ–Λ plane ---------- */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+function resize(){const r=cv.parentElement.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+window.addEventListener('resize',resize);
+function planeXY(p){
+  const x=60+(p.sigma)*(W-110);
+  const y=H-70-(Math.min(1.1,p.lam)/1.1)*(H-140);
+  return {x,y};
+}
+function draw(t){
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createRadialGradient(W/2,H/2,80,W/2,H/2,Math.max(W,H)*.7);
+  g.addColorStop(0,'#0A101E');g.addColorStop(1,'#070B14');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  /* axes */
+  ctx.strokeStyle='rgba(212,169,69,.35)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(60,H-70);ctx.lineTo(W-40,H-70);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(60,H-70);ctx.lineTo(60,60);ctx.stroke();
+  ctx.fillStyle='rgba(233,226,208,.7)';ctx.font='10px "IBM Plex Mono",monospace';ctx.textAlign='center';
+  ctx.fillText('VGCA-\u03A3 \u00B7 agreement with unanimity \u2192',W/2,H-46);
+  ctx.save();ctx.translate(30,H/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText('VGCA-\u039B \u00B7 wedge of disagreement \u2192',0,0);ctx.restore();
+  /* quadrant guides */
+  const sx=60+sigma*(W-110);
+  ctx.strokeStyle='rgba(212,169,69,.5)';ctx.setLineDash([4,5]);
+  ctx.beginPath();ctx.moveTo(sx,60);ctx.lineTo(sx,H-70);ctx.stroke();
+  const ly=H-70-(lambdaTau/1.1)*(H-140);
+  ctx.strokeStyle='rgba(193,96,58,.45)';
+  ctx.beginPath();ctx.moveTo(60,ly);ctx.lineTo(W-40,ly);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='rgba(212,169,69,.6)';ctx.textAlign='left';ctx.font='9px "IBM Plex Mono",monospace';
+  ctx.fillText('\u03C3 = '+sigma.toFixed(2),sx+5,72);
+  ctx.fillStyle='rgba(193,96,58,.7)';
+  ctx.fillText('\u03BB = '+lambdaTau.toFixed(2)+' \u00B7 above: the metrics quarrel',66,ly-6);
+  /* quadrant labels */
+  ctx.fillStyle='rgba(110,156,124,.45)';ctx.font='9.5px "IBM Plex Mono",monospace';
+  ctx.fillText('CONFIDENT \u00B7 merges itself',sx+8,H-84);
+  ctx.fillStyle='rgba(193,96,58,.6)';
+  ctx.fillText('CONFLICTED \u00B7 steward judges',sx+8,78+14);
+  ctx.fillStyle='rgba(156,149,132,.4)';
+  ctx.fillText('DISTINCT',70,H-84);
+  /* pairs */
+  pairs.forEach(p=>{
+    if(p.merged)return;
+    const {x,y}=planeXY(p);
+    const conflicted=p.sigma>=sigma&&p.lam>=lambdaTau;
+    const confident=p.sigma>=sigma&&p.lam<lambdaTau;
+    if(p===selPair){
+      ctx.strokeStyle='rgba(233,226,208,.95)';ctx.lineWidth=1.3;
+      ctx.strokeRect(x-6,y-6,12,12);
+    }
+    if(conflicted){
+      const pulse=2.6+Math.sin(t*4+p.i)*0.8;
+      ctx.fillStyle='rgba(193,96,58,.95)';
+      ctx.beginPath();ctx.arc(x,y,pulse,0,Math.PI*2);ctx.fill();
+    }else if(confident){
+      ctx.fillStyle='rgba(110,156,124,.9)';
+      ctx.fillRect(x-2,y-2,4,4);
+    }else{
+      ctx.fillStyle='rgba(127,160,208,.55)';
+      ctx.fillRect(x-1.6,y-1.6,3.2,3.2);
+    }
+  });
+}
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  let best=null,bd=180;
+  pairs.forEach(p=>{
+    if(p.merged)return;
+    const {x,y}=planeXY(p);
+    const d=(x-mx)**2+(y-my)**2;
+    if(d<bd){bd=d;best=p;}
+  });
+  if(best){selPair=best;renderPair();switchTab('panePair');}
+});
+
+/* ---------- pair panel ---------- */
+function renderPair(){
+  const det=document.getElementById('pairDetail'),emp=document.getElementById('pairEmpty');
+  if(!selPair){det.style.display='none';emp.style.display='block';return;}
+  det.style.display='block';emp.style.display='none';
+  const p=selPair,a=records[p.i],b=records[p.j];
+  document.getElementById('prA').textContent='A \u00B7 "'+a.txt+'"';
+  document.getElementById('prB').textContent='B \u00B7 "'+b.txt+'"';
+  document.getElementById('pSig').textContent=p.sigma.toFixed(3);
+  const lamEl=document.getElementById('pLam');
+  lamEl.textContent=p.lam.toFixed(3);
+  lamEl.className=p.lam>=lambdaTau?'bad':'good';
+  document.getElementById('pDelta').innerHTML='\u0394 \u00B7 cleansing path: '+deltaPath(a.txt,b.txt).join(' \u2192 ');
+  const ids=['JW','LV','MH','SX','CS','EN'];
+  p.m.forEach((v,i)=>{
+    document.getElementById('m'+ids[i]).style.width=(v*100).toFixed(0)+'%';
+    document.getElementById('v'+ids[i]).textContent=v.toFixed(2);
+  });
+  document.getElementById('btnMergeOne').disabled=p.merged;
+}
+function mergePair(p,how){
+  if(p.merged)return 0;
+  const a=records[p.i],b=records[p.j];
+  const canon=a.txt.length>=b.txt.length?a:b; /* longest-form canonical, prototype rule */
+  const gone=canon===a?b:a;
+  gone.alive=false;p.merged=true;merges++;
+  pairs.forEach(q=>{if(q!==p&&(q.i===gone.id||q.j===gone.id))q.merged=true;});
+  jlog((how==='auto'?'AUTO-MERGE':'MERGE')+' \u00B7 "'+gone.txt+'" \u2192 "'+canon.canon+'" \u00B7 \u03A3 '+p.sigma.toFixed(2)+' \u00B7 \u039B '+p.lam.toFixed(2)+' \u00B7 \u0394 applied, one survives with the seal');
+  return 1;
+}
+document.getElementById('btnMergeOne').addEventListener('click',()=>{
+  if(!selPair)return;
+  mergePair(selPair,'hand');selPair=null;
+  renderPair();updateStats();drawBarcode();
+});
+document.getElementById('btnAuto').addEventListener('click',()=>{
+  let n=0;
+  pairs.slice().sort((a,b)=>b.sigma-a.sigma).forEach(p=>{
+    if(!p.merged&&p.sigma>=sigma&&p.lam<lambdaTau)n+=mergePair(p,'auto');
+  });
+  jlog('AUTO-MERGE sweep \u00B7 '+n+' confident pairs merged \u00B7 the conflicted quadrant remains for the steward \u2014 the wedge protected it');
+  updateStats();drawBarcode();renderPair();
+});
+
+/* ---------- barcode (0-dim persistence) ---------- */
+const bc=document.getElementById('barcode'),bctx=bc.getContext('2d');
+function drawBarcode(){
+  const r=bc.getBoundingClientRect();bc.width=r.width*2;bc.height=190*2;bctx.setTransform(2,0,0,2,0,0);
+  const Wb=r.width,Hb=190;
+  bctx.clearRect(0,0,Wb,Hb);
+  const ev=mergeEvents(); /* descending sigma of merge events */
+  /* bars: each merge kills a component born at sigma=1 */
+  const bars=ev.map(s=>({birth:1,death:s})).sort((a,b)=>a.death-b.death);
+  const x0=34,x1=Wb-10;
+  const X=s=>x0+(1-s)*(x1-x0); /* sigma 1 at left */
+  bctx.strokeStyle='rgba(212,169,69,.3)';bctx.lineWidth=1;
+  bctx.beginPath();bctx.moveTo(x0,Hb-18);bctx.lineTo(x1,Hb-18);bctx.stroke();
+  bctx.fillStyle='rgba(156,149,132,.7)';bctx.font='8.5px "IBM Plex Mono",monospace';bctx.textAlign='center';
+  [1,0.9,0.8,0.7,0.6,0.5].forEach(s=>{bctx.fillText(s.toFixed(1),X(s),Hb-6);});
+  const rowH=Math.min(10,(Hb-30)/Math.max(1,bars.length));
+  bars.forEach((b,i)=>{
+    const y=8+i*rowH;
+    bctx.strokeStyle='rgba(127,160,208,.85)';bctx.lineWidth=Math.min(4,rowH-3);
+    bctx.beginPath();bctx.moveTo(X(b.birth),y);bctx.lineTo(X(b.death),y);bctx.stroke();
+  });
+  /* sigma line */
+  bctx.strokeStyle='rgba(212,169,69,.9)';bctx.setLineDash([3,4]);
+  bctx.beginPath();bctx.moveTo(X(sigma),4);bctx.lineTo(X(sigma),Hb-18);bctx.stroke();bctx.setLineDash([]);
+  const gap=gapSuggestion();
+  bctx.strokeStyle='rgba(110,156,124,.8)';bctx.setLineDash([2,3]);
+  bctx.beginPath();bctx.moveTo(X(gap),4);bctx.lineTo(X(gap),Hb-18);bctx.stroke();bctx.setLineDash([]);
+  updateStats();
+}
+document.getElementById('sigSlider').addEventListener('input',e=>{
+  sigma=+e.target.value/100;
+  document.getElementById('sigVal').textContent=sigma.toFixed(2);
+  drawBarcode();
+});
+document.getElementById('btnGap').addEventListener('click',()=>{
+  sigma=gapSuggestion();
+  document.getElementById('sigSlider').value=Math.round(sigma*100);
+  document.getElementById('sigVal').textContent=sigma.toFixed(2);
+  jlog('THRESHOLD \u00B7 the widest persistence gap names \u03C3 = '+sigma.toFixed(2)+' \u2014 the court does not guess');
+  drawBarcode();
+});
+
+/* ---------- tabs ---------- */
+const panes=['panePair','paneBar','paneCli'];
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.pane)));
+function switchTab(id){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.pane===id));
+  panes.forEach(p=>document.getElementById(p).classList.toggle('on',p===id));
+  if(id==='paneBar')drawBarcode();
+}
+
+/* ---------- CLI (mandatory HELP) ---------- */
+const clibox=document.getElementById('clibox');
+function hxHighlight(code){
+  let s=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s=s.replace(/(--[^\n]*)/g,'<span class="hc">$1</span>');
+  s=s.replace(/\b(PRESENT|ORBIT|EMIT|PROVE|SYNC|WITNESS|VIA|MERGE)\b/g,'<span class="hk">$1</span>');
+  s=s.replace(/\b(WHO|WHAT|WHEN|WHERE|WHY|HOW MUCH|HOW)\b/g,'<span class="hw">$1</span>');
+  s=s.replace(/\b(PHYSICS|META)\b/g,'<span class="hp">$1</span>');
+  s=s.replace(/\b(PAIRS?|PLANE|BARCODE|QUADRANT|THRESHOLD|FOR|OF|IS|AT|IN|WITH)\b/g,'<span class="hv">$1</span>');
+  return s;
+}
+const SNIPPETS=[
+ {t:'Present the \u03A3\u2013\u039B plane of candidate pairs',g:'<b>Plain gloss:</b> every candidate pair is a vector of six verdicts \u2014 Jaro-Winkler, Levenshtein, MinHash, Soundex, cosine, entropy affinity \u2014 fused into two sovereign coordinates: \u03A3, how strongly the algorithms agree; \u039B, the wedge area where they quarrel.',
+  c:'PRESENT plane OF pairs\n  HOW   m = (jw, lev, minhash, soundex, cosine, entropy)\n  META  \u03A3 = \u27E8m,u\u27E9 \u00B7 \u039B = \u2016m \u2227 u\u2016   -- unanimity axis u\nWITNESS INTO vgca.court'},
+ {t:'Judge the conflicted quadrant \u2014 where the wedge protects',g:'<b>Plain gloss:</b> high \u03A3 with low \u039B merges itself. High \u03A3 with high \u039B means the algorithms disagree about WHY they agree \u2014 Soundex hears sameness while Levenshtein sees distance. The wedge holds these back from auto-merge; the steward judges them by eye and \u0394.',
+  c:'PRESENT pairs IN quadrant conflicted\n  WHAT  \u03A3 >= \u03C3 AND \u039B >= \u03BB\n  WHY   verdicts, \u0394.path\nEMIT judgment INTO steward.court'},
+ {t:'Let persistence name the threshold',g:'<b>Plain gloss:</b> entity resolution is 0-dimensional persistence: sweep \u03C3 and records merge into entities, each merge a bar\u2019s death. The widest gap between consecutive deaths is where the true entities separate from the noise \u2014 the barcode names \u03C3; the court does not guess.',
+  c:'PROVE threshold VIA persistence\n  HOW   sweep \u03C3 OVER \u03A3.filtration\n  META  suggest = widest.gap          -- \u03B2\u2080 barcode\nEMIT \u03C3 INTO vgca.court'},
+ {t:'Merge \u2014 apply \u0394 and let the canonical survive',g:'<b>Plain gloss:</b> the confident quadrant merges in one sweep; each merge applies the \u0394 cleansing path (case-fold, token-expand, numeral-normalise\u2026) and one canonical record survives with the seal. Entropy falls \u2014 the record cloud descends toward its minimal surface.',
+  c:'EMIT merge FOR quadrant confident\n  HOW   apply \u0394, canonical survives\n  HOW MUCH entropy.before, entropy.after\nWITNESS lineage INTO nuzi              -- nothing is lost, only stilled'},
+];
+const CHIPS=[
+ {l:'plane',q:()=>'PRESENT plane OF pairs'},
+ {l:'conflicted',gold:true,q:()=>'PRESENT pairs IN quadrant conflicted'},
+ {l:'threshold',gold:true,q:()=>'PROVE threshold VIA persistence'},
+ {l:'auto-merge',q:()=>'EMIT merge FOR quadrant confident'},
+ {l:'grimoire',q:()=>'GRIMOIRE'},{l:'help',q:()=>'HELP'},{l:'reseed',q:()=>'RESEED'},
+];
+function buildCli(){
+  clibox.innerHTML='<div style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;letter-spacing:.08em;color:var(--alabaster-dim);margin-bottom:10px;line-height:1.65">HeptaScript CLI \u00B7 the court of six verdicts and one wedge<br>Anti-SQL enforced \u00B7 HELP (grammar + snippets) is mandatory \u2014 pinned below, always.</div>'
+   +'<div class="cli-chips" id="cliChips"></div>'
+   +'<div class="cli-inbox"><textarea id="cliIn" rows="2" spellcheck="false" placeholder="PROVE threshold VIA persistence"></textarea>'
+   +'<div class="cli-actions"><span class="cli-hint">the wedge protects what the mean would betray</span><button class="runb" id="cliRun">RUN \u25B8</button></div></div>'
+   +'<div id="cliCells"></div>';
+  const box=document.getElementById('cliChips');
+  CHIPS.forEach(ch=>{const b=document.createElement('button');b.className='chip'+(ch.gold?' gold':'');b.textContent=ch.l;
+    b.addEventListener('click',()=>{const i=document.getElementById('cliIn');i.value=ch.q();i.focus();});box.appendChild(b);});
+  document.getElementById('cliRun').addEventListener('click',cliSubmit);
+  document.getElementById('cliIn').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();cliSubmit();}});
+  mandatoryHelp();
+}
+function mandatoryHelp(){
+  const box=document.getElementById('cliCells');
+  if(!box||box.querySelector('.cell.mandatory'))return;
+  const d=document.createElement('div');d.className='cell mandatory';
+  d.innerHTML='<div class="cq">'+hxHighlight('HELP')+'  <span style="color:var(--gold);font-size:8.5px;letter-spacing:.14em">\u00B7 MANDATORY RITE \u2014 always on the tablet</span></div><div class="co">'+cliHelp()+'</div>';
+  box.appendChild(d);
+}
+function cliSubmit(){
+  const inp=document.getElementById('cliIn');const raw=inp.value.trim();if(!raw)return;
+  const r=runHepta(raw);cliCell(raw,r.html,!r.ok);inp.value='';
+}
+function cliCell(q,out,err){
+  const box=document.getElementById('cliCells');if(!box)return;
+  const d=document.createElement('div');d.className='cell'+(err?' err':'');
+  d.innerHTML='<div class="cq">'+hxHighlight(q)+'</div><div class="co">'+out+'</div>';
+  box.prepend(d);switchTab('paneCli');
+}
+function runHepta(q){
+  const bad=q.match(/\b(select|insert\s+into|update|delete|drop|join|group\s+by|order\s+by|exists)\b/i);
+  if(bad)return{ok:false,html:'<span class="clay">Anti-SQL refusal.</span> The sovereign tongue has no <b>'+bad[1].toUpperCase()+'</b>. Type <b>HELP</b>.'};
+  if(/^help$/i.test(q))return{ok:true,html:cliHelp()};
+  if(/^grimoire$/i.test(q))return{ok:true,html:cliGrimoire()};
+  if(/^reseed$/i.test(q)){seed();return{ok:true,html:'The raw tribe returns \u2014 all records live again, all pairs re-vectorised.'};}
+  if(/^present\s+plane/i.test(q)){
+    const live=pairs.filter(p=>!p.merged);
+    const conf=live.filter(p=>p.sigma>=sigma&&p.lam<lambdaTau).length;
+    const cfl=live.filter(p=>p.sigma>=sigma&&p.lam>=lambdaTau).length;
+    return{ok:true,html:'\u03A3\u2013\u039B plane \u00B7 '+live.length+' live pairs \u00B7 <span class="reed">'+conf+' confident</span> \u00B7 <span class="clay">'+cfl+' conflicted</span> \u00B7 '+(live.length-conf-cfl)+' distinct \u00B7 \u03C3='+sigma.toFixed(2)+', \u03BB='+lambdaTau.toFixed(2)};
+  }
+  if(/^present\s+pairs\s+in\s+quadrant\s+conflicted/i.test(q)){
+    const cf=pairs.filter(p=>!p.merged&&p.sigma>=sigma&&p.lam>=lambdaTau).sort((a,b)=>b.lam-a.lam).slice(0,8);
+    if(!cf.length)return{ok:true,html:'The conflicted quadrant is empty \u2014 the verdicts speak with one voice.'};
+    let rows=cf.map(p=>'<tr><td>"'+records[p.i].txt+'"</td><td>"'+records[p.j].txt+'"</td><td>'+p.sigma.toFixed(2)+'</td><td style="color:var(--clay)">'+p.lam.toFixed(2)+'</td></tr>').join('');
+    return{ok:true,html:'<b>The wedge holds these back</b> \u2014 the algorithms agree in sum but quarrel in kind:'
+      +'<table class="cli-tbl" style="margin-top:5px"><tr><th>A</th><th>B</th><th>\u03A3</th><th>\u039B</th></tr>'+rows+'</table>'
+      +'<div style="margin-top:4px;font-size:9.5px;color:var(--alabaster-dim)">click a pulsing point on the plane to see its six verdicts and its \u0394 path</div>'};
+  }
+  if(/^prove\s+threshold/i.test(q)){
+    const g=gapSuggestion();
+    sigma=g;document.getElementById('sigSlider').value=Math.round(g*100);
+    document.getElementById('sigVal').textContent=g.toFixed(2);
+    drawBarcode();switchTab('paneBar');
+    return{ok:true,html:'The barcode speaks: '+mergeEvents().length+' merge events on the \u03A3-filtration; the widest persistence gap names <b>\u03C3 = '+g.toFixed(2)+'</b>. \u03B2\u2080 at this threshold: <b>'+componentsAt(g)+' entities</b> from '+records.filter(r=>r.alive).length+' records. The court does not guess.'};
+  }
+  if(/^emit\s+merge\s+for\s+quadrant\s+confident/i.test(q)){
+    const eBefore=records.filter(r=>r.alive).reduce((s,r)=>s+entropy(r.canon),0)/records.filter(r=>r.alive).length;
+    let n=0;
+    pairs.slice().sort((a,b)=>b.sigma-a.sigma).forEach(p=>{if(!p.merged&&p.sigma>=sigma&&p.lam<lambdaTau)n+=mergePair(p,'auto');});
+    updateStats();drawBarcode();renderPair();
+    const alive=records.filter(r=>r.alive);
+    const eAfter=alive.reduce((s,r)=>s+entropy(r.canon),0)/alive.length;
+    return{ok:true,html:'<span class="reed">'+n+' confident pairs merged.</span> \u0394 applied; canonicals survive; retired records stilled into NUZI lineage.<br>Mean field entropy: '+eBefore.toFixed(3)+' \u2192 <b>'+eAfter.toFixed(3)+' bits</b> \u2014 the record cloud descends toward its minimal surface. The conflicted quadrant remains: <span class="clay">the wedge protected it</span> for the steward\u2019s eye.'};
+  }
+  return{ok:false,html:'Unrecognised rite. Type <b>HELP</b> or press a chip.'};
+}
+function cliHelp(){
+  return '<b>The grammar of the VGCA court</b> \u2014 six verdicts, one wedge:<br><br>'
+   +'<b>PRESENT plane OF pairs</b> \u2014 the \u03A3\u2013\u039B plane: confident, conflicted, distinct<br>'
+   +'<b>PRESENT pairs IN quadrant conflicted</b> \u2014 where the algorithms quarrel; the wedge holds them for judgment<br>'
+   +'<b>PROVE threshold VIA persistence</b> \u2014 the \u03B2\u2080 barcode names \u03C3 at the widest gap; no guessing<br>'
+   +'<b>EMIT merge FOR quadrant confident</b> \u2014 \u0394 applied, canonicals survive, entropy descends<br>'
+   +'<b>RESEED</b> \u2014 the raw tribe returns \u00B7 <b>GRIMOIRE</b> \u2014 snippets alone'
+   +'<div style="margin-top:11px;border-top:1px solid var(--line);padding-top:8px">'+cliGrimoire()+'</div>';
+}
+function cliGrimoire(){
+  let h='<b>The grimoire of the VGCA court</b>:';
+  SNIPPETS.forEach(sn=>{
+    h+='<div class="hx-stage">'+sn.t+'</div>'
+     +'<div style="font-style:italic;color:var(--alabaster-dim);font-size:10px;margin-bottom:4px">'+sn.g+'</div>'
+     +'<pre style="margin:0 0 8px;padding:7px 9px;background:#0A0F1C;border:1px solid var(--line);border-radius:3px;font-family:\'IBM Plex Mono\',monospace;font-size:10px;line-height:1.65;overflow-x:auto">'+hxHighlight(sn.c)+'</pre>';
+  });
+  return h;
+}
+
+/* ---------- journal ---------- */
+const journal=document.getElementById('journal');
+function jlog(html){
+  const ts=new Date().toTimeString().slice(0,8);
+  const ln=document.createElement('div');ln.className='ln';
+  ln.innerHTML='<b>'+ts+'</b> \u00B7 '+html;
+  journal.appendChild(ln);journal.scrollTop=journal.scrollHeight;
+}
+function clearJournal(){journal.innerHTML='<div class="j-eyebrow">StoryEngine Journal \u00B7 append-only</div>';}
+
+/* ---------- loop ---------- */
+let tPrev=performance.now();
+function loop(now){
+  draw(now/1000);
+  requestAnimationFrame(loop);
+}
+resize();seed();buildCli();requestAnimationFrame(loop);
+</script>
+</body>
+</html>

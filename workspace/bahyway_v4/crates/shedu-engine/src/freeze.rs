@@ -30,10 +30,10 @@ impl FreezeReason {
     pub fn label(self) -> &'static str {
         match self {
             Self::GpuThermalCritical => "GPU_THERMAL_CRITICAL",
-            Self::VramExhausted      => "VRAM_EXHAUSTED",
-            Self::NodeIsolated       => "NODE_ISOLATED",
-            Self::LastNodeFailing    => "LAST_NODE_FAILING",
-            Self::ManualTrigger      => "MANUAL_TRIGGER",
+            Self::VramExhausted => "VRAM_EXHAUSTED",
+            Self::NodeIsolated => "NODE_ISOLATED",
+            Self::LastNodeFailing => "LAST_NODE_FAILING",
+            Self::ManualTrigger => "MANUAL_TRIGGER",
         }
     }
 
@@ -74,7 +74,10 @@ pub struct FreezeResult {
 
 impl FreezeResult {
     pub fn is_recoverable(&self) -> bool {
-        matches!(self.reason, FreezeReason::ManualTrigger | FreezeReason::NodeIsolated)
+        matches!(
+            self.reason,
+            FreezeReason::ManualTrigger | FreezeReason::NodeIsolated
+        )
     }
 }
 
@@ -84,16 +87,16 @@ impl FreezeResult {
 /// `reason`       — why the freeze was triggered
 /// `timestamp_ms` — caller-supplied timestamp (allows deterministic testing)
 pub fn trigger_quantum_freeze(
-    health:       &NodeHealth,
-    reason:       FreezeReason,
+    health: &NodeHealth,
+    reason: FreezeReason,
     timestamp_ms: u64,
 ) -> FreezeResult {
     let freeze_kaki = derive_freeze_kaki(health.node_id, health.b11, timestamp_ms);
     FreezeResult {
         reason,
-        node_id:             health.node_id,
-        b11_at_freeze:       health.b11,
-        d7_at_freeze:        health.d7_integrity,
+        node_id: health.node_id,
+        b11_at_freeze: health.b11,
+        d7_at_freeze: health.d7_integrity,
         timestamp_ms,
         freeze_kaki,
         stakeholder_message: reason.stakeholder_message(),
@@ -130,7 +133,7 @@ fn derive_freeze_kaki(node_id: u8, b11: u8, timestamp_ms: u64) -> [u8; 16] {
     let mut hash = FNV_BASIS;
     for &byte in &data {
         hash ^= byte as u64;
-        hash  = hash.wrapping_mul(FNV_PRIME);
+        hash = hash.wrapping_mul(FNV_PRIME);
     }
     let hash2 = hash.wrapping_mul(FNV_PRIME).wrapping_add(0xDEAD_BEEF);
 
@@ -157,7 +160,7 @@ mod tests {
     fn healthy_node_should_not_freeze() {
         let h = make_health(HardwareMetrics::simulated_healthy(0));
         assert_eq!(should_freeze(&h, false), None);
-        assert_eq!(should_freeze(&h, true),  None);
+        assert_eq!(should_freeze(&h, true), None);
     }
 
     #[test]
@@ -172,13 +175,13 @@ mod tests {
         // VRAM not critical but node is dying (low B11)
         let h = make_health(HardwareMetrics {
             gpu_temp_celsius: 50.0,
-            vram_used_mb:     4_000,
-            vram_total_mb:    16_384,
-            cpu_load:         0.99,
-            ram_used_mb:      30_000,
-            ram_total_mb:     32_768,
-            net_latency_ms:   450.0,
-            timestamp_ms:     0,
+            vram_used_mb: 4_000,
+            vram_total_mb: 16_384,
+            cpu_load: 0.99,
+            ram_used_mb: 30_000,
+            ram_total_mb: 32_768,
+            net_latency_ms: 450.0,
+            timestamp_ms: 0,
         });
         // Only fires if last node
         assert_eq!(should_freeze(&h, false), None);
@@ -202,7 +205,10 @@ mod tests {
     fn freeze_kaki_type_byte_is_event() {
         let h = make_health(HardwareMetrics::simulated_critical(0));
         let result = trigger_quantum_freeze(&h, FreezeReason::LastNodeFailing, 42_000);
-        assert_eq!(result.freeze_kaki[6], 0x02, "freeze KAKI must be EventKaki type");
+        assert_eq!(
+            result.freeze_kaki[6], 0x02,
+            "freeze KAKI must be EventKaki type"
+        );
     }
 
     #[test]
@@ -215,9 +221,13 @@ mod tests {
 
     #[test]
     fn freeze_reason_labels_non_empty() {
-        for r in [FreezeReason::GpuThermalCritical, FreezeReason::VramExhausted,
-                  FreezeReason::NodeIsolated, FreezeReason::LastNodeFailing,
-                  FreezeReason::ManualTrigger] {
+        for r in [
+            FreezeReason::GpuThermalCritical,
+            FreezeReason::VramExhausted,
+            FreezeReason::NodeIsolated,
+            FreezeReason::LastNodeFailing,
+            FreezeReason::ManualTrigger,
+        ] {
             assert!(!r.label().is_empty());
             assert!(!r.stakeholder_message().is_empty());
         }

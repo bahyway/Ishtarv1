@@ -1,0 +1,211 @@
+---
+# PB-400 · Apply the per-type segment policy and measure the shape
+# GL-SEG-001 · the cause of fragmentation is write order, not neglect
+- name: PB-400 segment shape across all seven types
+  hosts: girsu
+  vars:
+    bahyway_provides: ["artifact:segment_shape.json", "policy:segment"]
+    bahyway_requires: ["law:GL-SEG-001", "artifact:substrate.json", "engine:ENLIL"]
+    out: "{{ ansible_env.HOME }}/bahyway/segment"
+    policy:
+      EnkiSDB:  {port: 7001, cluster: "tribe,timestamp", fill: 100, secondary_indexes: 0, expire: "drop-partition",  layout: "log-structured"}
+      EnkiODB:  {port: 7002, cluster: "tribe,timestamp", fill: 100, secondary_indexes: 2, expire: "new-particle",    layout: "cached-append-only"}
+      EnkiQDB:  {port: 7003, cluster: "deadline,tribe",  fill: 100, secondary_indexes: 1, expire: "drop-partition",  layout: "append"}
+      EnkiDB:   {port: 7004, cluster: "tribe,epoch",     fill: 100, secondary_indexes: 0, expire: "new-particle",    layout: "clustered-append-only"}
+      EnkiDW:   {port: 7005, cluster: "epoch,leaf",      fill: 100, secondary_indexes: 0, expire: "rebuild",         layout: "columnar-write-once"}
+      EnkiMDB:  {port: 7006, cluster: "u,v",             fill: 100, secondary_indexes: 0, expire: "rebuild",         layout: "regenerable"}
+      EnkiDDB:  {port: 7007, cluster: "seal,epoch",      fill: 100, secondary_indexes: 0, expire: "never",           layout: "worm"}
+    thresholds: {locality_max: 4.0, split_rate_max: 0.0, frag_cosmetic: 0.25, blob_locality_max: 4.0}
+    page_bytes: 8192
+    oversized:
+      rule: "tile into citizens where possible; otherwise out-of-line, content-addressed, immutable"
+      chunk_grain: "band,tile"
+      descriptor: [content_hash, byte_length, codec, geometry, chunk_map_ref]
+  tasks:
+    - name: Ensure output
+      ansible.builtin.file: {path: "{{ out }}", state: directory, mode: "0750"}
+
+    - name: Gate S0 · the clustering key is never the uuid_hash (§2)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys
+        P = {{ policy | to_json }}
+        bad = [k for k, v in P.items() if "hash" in v["cluster"] or v["cluster"].startswith("uuid")]
+        print("types clustered on the hash:", bad)
+        print("a hash may be an identity and a lookup key; it may never be the physical order")
+        sys.exit(1 if bad else 0)
+        PY
+      changed_when: false
+
+    - name: Gate S0b · no type declares an update path, and none reserves fill headroom for one (§7)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import sys
+        P = {{ policy | to_json }}
+        bad = [k for k, v in P.items() if v["fill"] < 100 or "update" in str(v).lower() or v["expire"] == "supersede"]
+        print("types implying an update path or reserving row-growth headroom:", bad)
+        print("BahyWay has no UPDATE - a correction is a new particle; fill is 100% everywhere (GL-SEG-001 §7)")
+        sys.exit(1 if bad else 0)
+        PY
+      changed_when: false
+
+    - name: Gate S0c · no inline value can reach a page, in any type (§11)
+      ansible.builtin.command: >
+        bahyway-enkidb prove --db {{ item.key }} --port {{ item.value.port }}
+        --rule no_inline_value_over {{ page_bytes }}
+      loop: "{{ policy | dict2items }}"
+      changed_when: false
+      register: s0c
+      failed_when: false
+
+    - name: Report any object found sitting in a row
+      ansible.builtin.debug:
+        msg: >
+          {{ s0c.results | map(attribute='stdout') | list }}
+          - an oversized value is not a grown row; it is an object that never belonged in the row.
+          Tile it into citizens (preferred) or move it out of line, content-addressed and immutable (GL-SEG-001 §11).
+
+    - name: Measure blob locality for tiled acquisitions (§12)
+      ansible.builtin.command: >
+        bahyway-enlil blob-locality --db {{ item.key }} --port {{ item.value.port }}
+        --grain band,tile --emit chunks_touched,chunks_required --json
+      loop: "{{ policy | dict2items }}"
+      register: bloc
+      changed_when: false
+      failed_when: false
+
+    - name: Gate S0d · chunking matches the access, or rechunk (§12)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, sys
+        B = {{ bloc.results | map(attribute='stdout') | list | to_json }}
+        bad = []
+        for b in B:
+            try: j = json.loads(b or "{}")
+            except Exception: continue
+            t, r = j.get("chunks_touched"), j.get("chunks_required")
+            if t and r and (t / r) > {{ thresholds.blob_locality_max }}:
+                bad.append((j.get("db"), round(t / r, 2)))
+        for x in bad: print("RECHUNK", x[0], "L_blob =", x[1])
+        print("rechunk along the access; do not add an index to hide it")
+        sys.exit(0)
+        PY
+      changed_when: false
+
+    - name: Apply the per-type layout policy (idempotent; reports what it would change)
+      ansible.builtin.command: >
+        bahyway-enkidb segment-policy --db {{ item.key }} --port {{ item.value.port }}
+        --cluster "{{ item.value.cluster }}" --fill {{ item.value.fill }}
+        --max-secondary-indexes {{ item.value.secondary_indexes }}
+        --expire {{ item.value.expire }} --layout {{ item.value.layout }} --report
+      loop: "{{ policy | dict2items }}"
+      register: applied
+      changed_when: "'CHANGED' in applied.stdout | default('')"
+
+    - name: Measure orbit locality L per tribe (§3) — the number that matters
+      ansible.builtin.command: >
+        bahyway-enlil locality --db {{ item.key }} --port {{ item.value.port }}
+        --scan orbit --emit extents_touched,extents_required --json
+      loop: "{{ policy | dict2items }}"
+      register: loc
+      changed_when: false
+
+    - name: Count page splits this epoch WITH their causes (§6)
+      ansible.builtin.command: >
+        bahyway-enkidb splits --db {{ item.key }} --port {{ item.value.port }}
+        --epoch current --with-cause --emit-event-kaki --json
+      loop: "{{ policy | dict2items }}"
+      register: splits
+      changed_when: false
+
+    - name: Compose segment_shape.json, unknown bucket included (§9)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib, time
+        L = {{ loc.results | map(attribute='stdout') | list | to_json }}
+        S = {{ splits.results | map(attribute='stdout') | list | to_json }}
+        names = {{ policy.keys() | list | to_json }}
+        rep = []
+        for nm, l, s in zip(names, L, S):
+            try: lj = json.loads(l or "{}")
+            except Exception: lj = {}
+            try: sj = json.loads(s or "{}")
+            except Exception: sj = {}
+            touched, req = lj.get("extents_touched"), lj.get("extents_required")
+            rep.append({"db": nm,
+                        "locality": (touched / req) if (touched and req) else None,
+                        "extents_touched": touched, "extents_required": req,
+                        "splits": sj.get("count"), "causes": sj.get("causes", {}),
+                        "inserts": sj.get("inserts"),
+                        "split_rate": (sj.get("count", 0) / sj["inserts"]) if sj.get("inserts") else None,
+                        "unknown_extents": lj.get("unreadable", 0),
+                        "class": "MEASURED" if touched is not None else "UNKNOWN"})
+        pathlib.Path("{{ out }}/segment_shape.json").write_text(
+            json.dumps({"generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "report": rep}, indent=2))
+        for r in rep:
+            print(f"{r['db']:9s} L={r['locality']} splits={r['splits']} rate={r['split_rate']} unknown={r['unknown_extents']}")
+        PY
+      register: shape
+      changed_when: true
+
+    - name: Show the shape
+      ansible.builtin.debug: {msg: "{{ shape.stdout_lines }}"}
+
+    - name: Gate S1 · locality within threshold, or a reclustering rite is required (§8)
+      ansible.builtin.shell: |
+        python3 -c "
+        import json,sys
+        d=json.load(open('{{ out }}/segment_shape.json'))
+        bad=[r['db'] for r in d['report'] if (r['locality'] or 0) > {{ thresholds.locality_max }}]
+        print('types whose shape has drifted from the ontology:',bad)
+        print('L>4 means an orbit scan costs several times the honest I/O - recluster, do not reorganise for tidiness')
+        sys.exit(1 if bad else 0)"
+      changed_when: false
+      failed_when: false
+      register: s1
+
+    - name: Gate S2 · a split storm indicts the clustering key, not the disk (§8)
+      ansible.builtin.shell: |
+        python3 -c "
+        import json,sys
+        d=json.load(open('{{ out }}/segment_shape.json'))
+        bad=[(r['db'],r['split_rate'],r['causes']) for r in d['report'] if (r['split_rate'] or 0) > {{ thresholds.split_rate_max }}]
+        for b in bad: print('SPLIT STORM',b[0],b[1],b[2])
+        print('cause insert-out-of-order means the physical order is wrong (GL-SEG-001 §2)')
+        sys.exit(1 if bad else 0)"
+      changed_when: false
+      failed_when: false
+      register: s2
+
+    - name: Gate S2b · a split caused by update-grew-row is a BREACH, not a tuning matter (§7.2)
+      ansible.builtin.shell: |
+        python3 -c "
+        import json,sys
+        d=json.load(open('{{ out }}/segment_shape.json'))
+        breach=[(r['db'],r['causes']) for r in d['report'] if 'update-grew-row' in (r['causes'] or {})]
+        for b in breach: print('BREACH - something wrote in place:',b[0],b[1])
+        print('there is no UPDATE in this ecosystem; a row that grew was written by something that should not exist')
+        sys.exit(1 if breach else 0)"
+      changed_when: false
+
+    - name: Gate S3 · refuse cosmetic reorganisation (§8)
+      ansible.builtin.shell: |
+        python3 -c "
+        import json
+        d=json.load(open('{{ out }}/segment_shape.json'))
+        cosmetic=[r['db'] for r in d['report'] if (r['locality'] or 9) <= 1.5]
+        print('types with healthy locality - do NOT reorganise them for fragmentation percentage:',cosmetic)
+        print('reorganisation is justified by L, never by tidiness')"
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: >
+          {{ s1.stdout_lines | default([]) }} {{ s2.stdout_lines | default([]) }}
+          - the instruments report; reclustering is a numbered rite with a receipt (§10).
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-400 segment shape measured across seven types - locality and split causes published"

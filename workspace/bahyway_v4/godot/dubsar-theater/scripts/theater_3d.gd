@@ -17,8 +17,8 @@
 # this session's infrastructure -- confirmed via `pgrep`-gated
 # playbook_111's own header and the absence of any port-7001 task
 # anywhere in playbook_212 onward) to the two databases that ARE really
-# deployed: EnkiDDB (Tigris, 192.168.122.107:7102) and EnkiMDB
-# (Euphrates, 192.168.122.107:7202). The old target's demo data
+# deployed: EnkiDDB (Tigris, 192.168.122.112:7102) and EnkiMDB
+# (Euphrates, 192.168.122.112:7202). The old target's demo data
 # ("NAJAF_CEMETERY", person.name_arabic/death.date/grave.section, a
 # B11 GEM/ORBIT/FUZZY quality-tier scheme) belonged to a separate,
 # unrelated particle store -- none of it exists in EnkiDDB/EnkiMDB's
@@ -91,7 +91,7 @@ const TARGETS = {
         # match is the honest, correct way to "show it in <1s" at any N;
         # see readnode.rs::safe_early_limit for the fix that makes this
         # bounded page stay fast regardless of the true match count.
-        "host": "192.168.122.107", "port": 7001,
+        "host": "192.168.122.112", "port": 7001,
         "group_attr": "station",
         "default_query": "WHO T.E\nWHAT E[station]\nWHERE E[station] = \"data-cleansing-station\"\nHOW_MUCH LIMIT 1000",
         "presets": [
@@ -101,7 +101,7 @@ const TARGETS = {
         ],
     },
     "EnkiDDB": {
-        "host": "192.168.122.107", "port": 7102,
+        "host": "192.168.122.112", "port": 7102,
         "group_attr": "meta.collection",
         "default_query": "WHO T.E\nWHAT E[meta.title, meta.collection]\nWHERE E[meta.collection] = \"general\"\nHOW_MUCH LIMIT 100",
         "presets": [
@@ -112,7 +112,7 @@ const TARGETS = {
         ],
     },
     "EnkiMDB": {
-        "host": "192.168.122.107", "port": 7202,
+        "host": "192.168.122.112", "port": 7202,
         "group_attr": "artifact.kind",
         "default_query": "WHO T.E\nWHAT E[artifact.name, artifact.kind, artifact.path]\nWHERE E[artifact.kind] = \"Crate\"\nHOW_MUCH LIMIT 200",
         "presets": [
@@ -425,7 +425,7 @@ func _build_left_ui():
     target_bar.add_child(btn_target_mdb)
     vbox.add_child(target_bar)
 
-    lbl_target = _lbl("Read node:  192.168.122.107:7001", 11, C_TEAL)
+    lbl_target = _lbl("Read node:  192.168.122.112:7001", 11, C_TEAL)
     vbox.add_child(lbl_target)
     vbox.add_child(_lbl("Engine:     HeptaScript v1.0  W5H2", 10, C_DIM))
 

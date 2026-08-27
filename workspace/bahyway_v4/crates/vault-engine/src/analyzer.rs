@@ -12,39 +12,39 @@ use std::path::PathBuf;
 /// Without evidence, we NEVER classify as Dead.
 #[derive(Debug, Clone)]
 pub struct DeadEvidence {
-    pub path:   PathBuf,
+    pub path: PathBuf,
     pub reason: DeadReason,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeadReason {
-    ZeroByte,             // file has 0 bytes
-    DuplicateCandidate,   // same size + same extension as another file
-    VeryOld,              // > 5 years untouched AND > 0 bytes (archive candidate)
-    OrphanExtension,      // extension unknown, isolated file
+    ZeroByte,           // file has 0 bytes
+    DuplicateCandidate, // same size + same extension as another file
+    VeryOld,            // > 5 years untouched AND > 0 bytes (archive candidate)
+    OrphanExtension,    // extension unknown, isolated file
 }
 
 impl DeadReason {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::ZeroByte           => "Zero-byte file",
+            Self::ZeroByte => "Zero-byte file",
             Self::DuplicateCandidate => "Duplicate candidate",
-            Self::VeryOld            => "Very old (>5 years)",
-            Self::OrphanExtension    => "Orphan extension",
+            Self::VeryOld => "Very old (>5 years)",
+            Self::OrphanExtension => "Orphan extension",
         }
     }
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct AnalysisReport {
-    pub summary:           ScanSummary,
-    pub dead_evidence:     Vec<DeadEvidence>,
+    pub summary: ScanSummary,
+    pub dead_evidence: Vec<DeadEvidence>,
     pub reclaimable_bytes: u64,
-    pub duplicate_groups:  u64,
-    pub zero_byte_count:   u64,
-    pub old_files_count:   u64,
-    pub orphan_count:      u64,
-    pub duration_ms:       u64,
+    pub duplicate_groups: u64,
+    pub zero_byte_count: u64,
+    pub old_files_count: u64,
+    pub orphan_count: u64,
+    pub duration_ms: u64,
 }
 
 impl AnalysisReport {
@@ -53,7 +53,8 @@ impl AnalysisReport {
     }
 
     pub fn problems_in(&self, collection_path: &std::path::Path) -> usize {
-        self.dead_evidence.iter()
+        self.dead_evidence
+            .iter()
             .filter(|e| e.path.starts_with(collection_path))
             .count()
     }
@@ -63,14 +64,17 @@ impl AnalysisReport {
 /// Returns a report with evidence-backed findings only.
 pub fn analyze_scan(files: &[FileRecord], summary: &ScanSummary) -> AnalysisReport {
     let start = std::time::Instant::now();
-    let mut evidence   = Vec::new();
+    let mut evidence = Vec::new();
     let mut reclaimable = 0_u64;
 
     // ── 1. Zero-byte files — always suspicious ──────────────────────────────
     let mut zero_count = 0_u64;
     for f in files {
         if f.is_zero {
-            evidence.push(DeadEvidence { path: f.path.clone(), reason: DeadReason::ZeroByte });
+            evidence.push(DeadEvidence {
+                path: f.path.clone(),
+                reason: DeadReason::ZeroByte,
+            });
             zero_count += 1;
         }
     }
@@ -78,14 +82,20 @@ pub fn analyze_scan(files: &[FileRecord], summary: &ScanSummary) -> AnalysisRepo
     // ── 2. Duplicate candidates — same size + extension ─────────────────────
     let mut by_size_ext: HashMap<(u64, String), Vec<&FileRecord>> = HashMap::new();
     for f in files.iter().filter(|f| !f.is_zero) {
-        by_size_ext.entry((f.size, f.extension.clone())).or_default().push(f);
+        by_size_ext
+            .entry((f.size, f.extension.clone()))
+            .or_default()
+            .push(f);
     }
     let mut dup_groups = 0_u64;
     for group in by_size_ext.values() {
         if group.len() >= 2 {
             dup_groups += 1;
             for f in group.iter().skip(1) {
-                evidence.push(DeadEvidence { path: f.path.clone(), reason: DeadReason::DuplicateCandidate });
+                evidence.push(DeadEvidence {
+                    path: f.path.clone(),
+                    reason: DeadReason::DuplicateCandidate,
+                });
                 reclaimable += f.size;
             }
         }
@@ -95,7 +105,10 @@ pub fn analyze_scan(files: &[FileRecord], summary: &ScanSummary) -> AnalysisRepo
     let mut old_count = 0_u64;
     for f in files {
         if !f.is_zero && f.age_days() > 5.0 * 365.0 {
-            evidence.push(DeadEvidence { path: f.path.clone(), reason: DeadReason::VeryOld });
+            evidence.push(DeadEvidence {
+                path: f.path.clone(),
+                reason: DeadReason::VeryOld,
+            });
             old_count += 1;
         }
     }
@@ -106,7 +119,10 @@ pub fn analyze_scan(files: &[FileRecord], summary: &ScanSummary) -> AnalysisRepo
         if summary.extension_counts.get(&f.extension).copied() == Some(1)
             && !is_common_extension(&f.extension)
         {
-            evidence.push(DeadEvidence { path: f.path.clone(), reason: DeadReason::OrphanExtension });
+            evidence.push(DeadEvidence {
+                path: f.path.clone(),
+                reason: DeadReason::OrphanExtension,
+            });
             orphan_count += 1;
         }
     }
@@ -124,14 +140,47 @@ pub fn analyze_scan(files: &[FileRecord], summary: &ScanSummary) -> AnalysisRepo
 }
 
 fn is_common_extension(ext: &str) -> bool {
-    matches!(ext,
-        "txt" | "md" | "pdf" | "docx" | "xlsx" | "pptx" |
-        "jpg" | "jpeg" | "png" | "gif" | "svg" | "webp" |
-        "mp3" | "mp4" | "mov" | "avi" | "wav" | "flac" |
-        "zip" | "tar" | "gz" | "7z" | "rar" |
-        "rs" | "py" | "js" | "ts" | "html" | "css" | "json" | "xml" | "yaml" | "toml" |
-        "exe" | "dll" | "so" | "dylib" |
-        "(none)")
+    matches!(
+        ext,
+        "txt"
+            | "md"
+            | "pdf"
+            | "docx"
+            | "xlsx"
+            | "pptx"
+            | "jpg"
+            | "jpeg"
+            | "png"
+            | "gif"
+            | "svg"
+            | "webp"
+            | "mp3"
+            | "mp4"
+            | "mov"
+            | "avi"
+            | "wav"
+            | "flac"
+            | "zip"
+            | "tar"
+            | "gz"
+            | "7z"
+            | "rar"
+            | "rs"
+            | "py"
+            | "js"
+            | "ts"
+            | "html"
+            | "css"
+            | "json"
+            | "xml"
+            | "yaml"
+            | "toml"
+            | "exe"
+            | "dll"
+            | "so"
+            | "dylib"
+            | "(none)"
+    )
 }
 
 #[cfg(test)]
@@ -141,8 +190,13 @@ mod tests {
 
     fn make_temp_dir() -> std::path::PathBuf {
         let mut p = std::env::temp_dir();
-        p.push(format!("vault_ana_test_{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+        p.push(format!(
+            "vault_ana_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+        ));
         std::fs::create_dir_all(&p).unwrap();
         p
     }
@@ -177,10 +231,15 @@ mod tests {
         let (files, summary) = walk_folder(&dir);
         let report = analyze_scan(&files, &summary);
         assert!(report.duplicate_groups >= 1);
-        let dup_evidence: Vec<_> = report.dead_evidence.iter()
+        let dup_evidence: Vec<_> = report
+            .dead_evidence
+            .iter()
             .filter(|e| e.reason == DeadReason::DuplicateCandidate)
             .collect();
-        assert!(!dup_evidence.is_empty(), "duplicate files must produce DuplicateCandidate evidence");
+        assert!(
+            !dup_evidence.is_empty(),
+            "duplicate files must produce DuplicateCandidate evidence"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -191,10 +250,15 @@ mod tests {
         let (files, summary) = walk_folder(&dir);
         let report = analyze_scan(&files, &summary);
         // A single .rs file with content — no zero byte, no duplicate, no orphan (rs is common)
-        let rs_evidence: Vec<_> = report.dead_evidence.iter()
+        let rs_evidence: Vec<_> = report
+            .dead_evidence
+            .iter()
             .filter(|e| e.path.extension().map(|x| x == "rs").unwrap_or(false))
             .collect();
-        assert!(rs_evidence.is_empty(), "healthy unique .rs file must have no evidence");
+        assert!(
+            rs_evidence.is_empty(),
+            "healthy unique .rs file must have no evidence"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -206,7 +270,10 @@ mod tests {
         let report = analyze_scan(&files, &summary);
         assert!(report.problems_in(&dir) >= 1);
         // Different path → no problems
-        assert_eq!(report.problems_in(std::path::Path::new("/nonexistent/path")), 0);
+        assert_eq!(
+            report.problems_in(std::path::Path::new("/nonexistent/path")),
+            0
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -218,7 +285,10 @@ mod tests {
         std::fs::write(dir.join("b.bin"), content).unwrap();
         let (files, summary) = walk_folder(&dir);
         let report = analyze_scan(&files, &summary);
-        assert_eq!(report.reclaimable_bytes, 14, "reclaimable = size of one duplicate = 14 bytes");
+        assert_eq!(
+            report.reclaimable_bytes, 14,
+            "reclaimable = size of one duplicate = 14 bytes"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

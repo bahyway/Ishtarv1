@@ -33,12 +33,12 @@
 //! Emitted on every lifecycle transition: Published, NashShift, Deprecated,
 //! SimulationComplete, StewardDecision.
 
-pub mod tier;
-pub mod registry;
 pub mod narudu;
 pub mod nash;
+pub mod registry;
+pub mod tier;
 
-pub use tier::{StorageTier, PatternRecord};
-pub use registry::PatternRegistry;
 pub use narudu::{NaruduEvent, NaruduEventKind};
 pub use nash::NashState;
+pub use registry::PatternRegistry;
+pub use tier::{PatternRecord, StorageTier};

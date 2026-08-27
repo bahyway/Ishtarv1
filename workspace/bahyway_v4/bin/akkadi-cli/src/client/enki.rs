@@ -2,9 +2,9 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct HealthResponse {
-    pub status:  String,
+    pub status: String,
     pub version: String,
-    pub uptime:  u64,
+    pub uptime: u64,
 }
 
 /// HTTP client for the EnkiDB sovereign server.
@@ -14,7 +14,9 @@ pub struct EnkiClient {
 
 impl EnkiClient {
     pub fn new(base_url: impl Into<String>) -> Self {
-        Self { base_url: base_url.into() }
+        Self {
+            base_url: base_url.into(),
+        }
     }
 
     pub fn health(&self) -> Result<HealthResponse, String> {

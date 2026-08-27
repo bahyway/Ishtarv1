@@ -65,14 +65,24 @@ impl GridNavLens {
     #[func]
     fn add_node(&mut self, injection_re: f64, injection_im: f64) -> i64 {
         let id = self.network.nodes.len() as u32;
-        self.network.nodes.push(Node { id, injection: Phasor::new(injection_re, injection_im) });
+        self.network.nodes.push(Node {
+            id,
+            injection: Phasor::new(injection_re, injection_im),
+        });
         (id) as i64
     }
 
     /// Adds one edge (admittance `coeff_re + i*coeff_im`) between two
     /// existing node indices. Returns the new edge's index.
     #[func]
-    fn add_edge(&mut self, from: i64, to: i64, coeff_re: f64, coeff_im: f64, in_service: bool) -> i64 {
+    fn add_edge(
+        &mut self,
+        from: i64,
+        to: i64,
+        coeff_re: f64,
+        coeff_im: f64,
+        in_service: bool,
+    ) -> i64 {
         let idx = self.network.edges.len();
         self.network.edges.push(Edge {
             from: from as u32,
@@ -95,7 +105,8 @@ impl GridNavLens {
     /// these plus each node's known injection.
     #[func]
     fn set_known_voltage(&mut self, node_idx: i64, re: f64, im: f64) {
-        self.known_voltages.push((node_idx as usize, Phasor::new(re, im)));
+        self.known_voltages
+            .push((node_idx as usize, Phasor::new(re, im)));
     }
 
     #[func]
@@ -160,7 +171,12 @@ impl GridNavLens {
         if edge_idx < 0 || edge_idx as usize >= self.network.edges.len() {
             return -1;
         }
-        match exclusion::simulate_exclusion(&self.network, &self.estimated_phi, edge_idx as usize, tol) {
+        match exclusion::simulate_exclusion(
+            &self.network,
+            &self.estimated_phi,
+            edge_idx as usize,
+            tol,
+        ) {
             Ok(exclusion::Verdict::Proven) => 0,
             Ok(exclusion::Verdict::Refused(unserved)) => unserved.len() as i64,
             Err(_) => -1,
@@ -172,7 +188,9 @@ impl GridNavLens {
     /// the asset maps to a node, or if no estimate is available yet).
     #[func]
     fn dispatch_priority_for_asset(&self, asset_idx: i64, tol: f64) -> f64 {
-        let Some(asset) = self.registry.assets.get(asset_idx as usize) else { return 0.0 };
+        let Some(asset) = self.registry.assets.get(asset_idx as usize) else {
+            return 0.0;
+        };
         let tier = match self.histories.get(asset_idx as usize) {
             Some(h) => horizon::tier(h, self.threshold),
             None => return 0.0,
@@ -189,6 +207,11 @@ impl GridNavLens {
     /// a Godot error if `kaki_hex` is not exactly 32 valid hex
     /// characters — the caller must not proceed as if the asset were
     /// registered.
+    // Each parameter is a distinct required field of the asset record
+    // (identity, kind, topology role, grid position, and 3D coordinate) --
+    // not artificial padding, so bundling into a params struct is a real
+    // API-design tradeoff rather than a mechanical fix.
+    #[allow(clippy::too_many_arguments)]
     #[func]
     fn add_asset(
         &mut self,
@@ -218,7 +241,11 @@ impl GridNavLens {
         self.registry.assets.push(Asset {
             kaki,
             kind,
-            grid_ref: if is_edge { GridRef::Edge(grid_index as usize) } else { GridRef::Node(grid_index as u32) },
+            grid_ref: if is_edge {
+                GridRef::Edge(grid_index as usize)
+            } else {
+                GridRef::Node(grid_index as u32)
+            },
             lat,
             lon,
             depth_m,
@@ -246,7 +273,11 @@ impl GridNavLens {
     /// horizon_days), 2 = Birqu (red).
     #[func]
     fn asset_tier(&self, asset_idx: i64) -> i64 {
-        match self.histories.get(asset_idx as usize).map(|h| horizon::tier(h, self.threshold)) {
+        match self
+            .histories
+            .get(asset_idx as usize)
+            .map(|h| horizon::tier(h, self.threshold))
+        {
             Some(horizon::Tier::Birqu) => 2,
             Some(horizon::Tier::Horizon(_)) => 1,
             _ => 0,
@@ -257,7 +288,11 @@ impl GridNavLens {
     /// the maintenance planner reads.
     #[func]
     fn horizon_days(&self, asset_idx: i64) -> f64 {
-        match self.histories.get(asset_idx as usize).map(|h| horizon::tier(h, self.threshold)) {
+        match self
+            .histories
+            .get(asset_idx as usize)
+            .map(|h| horizon::tier(h, self.threshold))
+        {
             Some(horizon::Tier::Horizon(d)) => d,
             Some(horizon::Tier::Birqu) => 0.0,
             _ => -1.0,
@@ -271,8 +306,10 @@ impl GridNavLens {
         match self.registry.assets.get(asset_idx as usize) {
             Some(a) => {
                 let kaki: String = a.kaki.iter().map(|b| format!("{b:02x}")).collect();
-                let mut out =
-                    format!("KAKI {kaki}\nkind {:?}\nlat {} lon {} depth {} m\n", a.kind, a.lat, a.lon, a.depth_m);
+                let mut out = format!(
+                    "KAKI {kaki}\nkind {:?}\nlat {} lon {} depth {} m\n",
+                    a.kind, a.lat, a.lon, a.depth_m
+                );
                 for (k, v) in &a.passport {
                     out += &format!("{k}: {v}\n");
                 }

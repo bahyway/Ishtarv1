@@ -56,35 +56,50 @@ pub fn estimate(plan: &PhysicalPlan) -> Cost {
             // which zk circuit to instantiate — larger witness = larger circuit.
             let (io, cpu, proof, memory) = match index {
                 IndexKind::EntityAttrTime => (1.0, 0.50, 0.5, 0.25),
-                IndexKind::AttrValueTime  => (1.5, 0.75, 1.0, 0.38),
-                IndexKind::ValueAttr      => (2.0, 1.00, 1.5, 0.50),
-                IndexKind::ShardTime      => (2.0, 1.00, 1.5, 0.50),
-                IndexKind::ProofCtxTime   => (3.0, 1.50, 6.0, 0.75),
+                IndexKind::AttrValueTime => (1.5, 0.75, 1.0, 0.38),
+                IndexKind::ValueAttr => (2.0, 1.00, 1.5, 0.50),
+                IndexKind::ShardTime => (2.0, 1.00, 1.5, 0.50),
+                IndexKind::ProofCtxTime => (3.0, 1.50, 6.0, 0.75),
             };
-            Cost { io, cpu, proof, memory }
+            Cost {
+                io,
+                cpu,
+                proof,
+                memory,
+            }
         }
         PhysicalPlan::FullScan => Cost {
-            io:     100.0,
-            cpu:    50.0,
-            proof:  1.0,
+            io: 100.0,
+            cpu: 50.0,
+            proof: 1.0,
             memory: 16.0,
         },
         PhysicalPlan::Filter { input, .. } => {
             let child = estimate(input);
-            child.add(&Cost { io: 0.0, cpu: 1.0, proof: 0.0, memory: 0.5 })
+            child.add(&Cost {
+                io: 0.0,
+                cpu: 1.0,
+                proof: 0.0,
+                memory: 0.5,
+            })
         }
         PhysicalPlan::Projection { input, fields } => {
             let child = estimate(input);
             let f = fields.len() as f64;
-            child.add(&Cost { io: 0.0, cpu: f * 0.1, proof: 0.0, memory: f * 0.1 })
+            child.add(&Cost {
+                io: 0.0,
+                cpu: f * 0.1,
+                proof: 0.0,
+                memory: f * 0.1,
+            })
         }
         PhysicalPlan::NestedLoopJoin { outer, inner, .. } => {
             let oc = estimate(outer);
             let ic = estimate(inner);
             Cost {
-                io:     oc.io + ic.io * 10.0,
-                cpu:    oc.cpu + ic.cpu * 10.0,
-                proof:  oc.proof + ic.proof,
+                io: oc.io + ic.io * 10.0,
+                cpu: oc.cpu + ic.cpu * 10.0,
+                proof: oc.proof + ic.proof,
                 memory: oc.memory + ic.memory,
             }
         }
@@ -133,8 +148,18 @@ mod tests {
 
     #[test]
     fn test_cost_add_commutative() {
-        let a = Cost { io: 1.0, cpu: 2.0, proof: 3.0, memory: 4.0 };
-        let b = Cost { io: 0.5, cpu: 1.0, proof: 0.5, memory: 1.0 };
+        let a = Cost {
+            io: 1.0,
+            cpu: 2.0,
+            proof: 3.0,
+            memory: 4.0,
+        };
+        let b = Cost {
+            io: 0.5,
+            cpu: 1.0,
+            proof: 0.5,
+            memory: 1.0,
+        };
         let ab = a.add(&b);
         let ba = b.add(&a);
         assert_eq!(ab, ba);
@@ -142,7 +167,12 @@ mod tests {
 
     #[test]
     fn test_total_cost_formula() {
-        let c = Cost { io: 10.0, cpu: 10.0, proof: 10.0, memory: 10.0 };
+        let c = Cost {
+            io: 10.0,
+            cpu: 10.0,
+            proof: 10.0,
+            memory: 10.0,
+        };
         // 10*1.0 + 10*0.5 + 10*3.0 + 10*1.5 = 10 + 5 + 30 + 15 = 60
         assert!((total_cost(&c) - 60.0_f64).abs() < f64::EPSILON);
     }

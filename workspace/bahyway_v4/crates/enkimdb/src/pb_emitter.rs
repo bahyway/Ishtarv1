@@ -36,10 +36,20 @@ impl<'a> PbEmitter<'a> {
             Particle::base(kaki, "pb.path", AkkValue::Text(profile.path.clone()), now),
         ];
         if let Some(status) = &profile.status {
-            particles.push(Particle::base(kaki, "pb.status", AkkValue::Text(status.clone()), now));
+            particles.push(Particle::base(
+                kaki,
+                "pb.status",
+                AkkValue::Text(status.clone()),
+                now,
+            ));
         }
         if let Some(summary) = &profile.summary {
-            particles.push(Particle::base(kaki, "pb.summary", AkkValue::Text(summary.clone()), now));
+            particles.push(Particle::base(
+                kaki,
+                "pb.summary",
+                AkkValue::Text(summary.clone()),
+                now,
+            ));
         }
 
         (kaki, particles)
@@ -92,7 +102,9 @@ mod tests {
         assert!(with_particles.iter().any(|p| p.attribute == "pb.status"));
         assert!(with_particles.iter().any(|p| p.attribute == "pb.summary"));
         assert!(!without_particles.iter().any(|p| p.attribute == "pb.status"));
-        assert!(!without_particles.iter().any(|p| p.attribute == "pb.summary"));
+        assert!(!without_particles
+            .iter()
+            .any(|p| p.attribute == "pb.summary"));
     }
 
     #[test]

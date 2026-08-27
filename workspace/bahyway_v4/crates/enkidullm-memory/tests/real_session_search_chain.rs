@@ -17,20 +17,28 @@
 //! persistence, because none exists yet; see playbook_250 for the tracked
 //! doc/reality mismatch.
 
-use enkidullm_memory::{MemoryStore, MemorySearch};
+use enkidullm_memory::{MemorySearch, MemoryStore};
 
 #[test]
 fn real_store_session_search_round_trip() {
     let mut store = MemoryStore::new();
     let sid = store.new_session("HeptaScript walkthrough");
 
-    store.add_user(sid, "What does KAKI stand for in the sovereign ecosystem?").unwrap();
-    store.add_assistant(sid, "KAKI is the 16-byte sovereign identity particle.").unwrap();
-    store.add_user(sid, "How does zikru-embed pool sector attention?").unwrap();
-    store.add_assistant(
-        sid,
-        "zikru-embed uses TribalFieldAttention then pool_sectors across 7 sectors.",
-    ).unwrap();
+    store
+        .add_user(sid, "What does KAKI stand for in the sovereign ecosystem?")
+        .unwrap();
+    store
+        .add_assistant(sid, "KAKI is the 16-byte sovereign identity particle.")
+        .unwrap();
+    store
+        .add_user(sid, "How does zikru-embed pool sector attention?")
+        .unwrap();
+    store
+        .add_assistant(
+            sid,
+            "zikru-embed uses TribalFieldAttention then pool_sectors across 7 sectors.",
+        )
+        .unwrap();
 
     assert_eq!(store.total_turns(), 4);
 
@@ -40,7 +48,10 @@ fn real_store_session_search_round_trip() {
     // "zikru-embed" and "pool_sectors" only appear in one turn — a real
     // TF-IDF search over the real store should surface it first.
     let results = MemorySearch::semantic_search(&particles, "zikru-embed pool_sectors", 3);
-    assert!(!results.is_empty(), "semantic_search over a real MemoryStore found nothing");
+    assert!(
+        !results.is_empty(),
+        "semantic_search over a real MemoryStore found nothing"
+    );
     assert!(
         results[0].particle.turn.content.contains("zikru-embed"),
         "expected the zikru-embed turn to rank first, got: {}",

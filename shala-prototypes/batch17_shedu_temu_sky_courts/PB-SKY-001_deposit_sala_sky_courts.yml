@@ -1,0 +1,92 @@
+---
+# ============================================================================
+# PB-SKY-001 — Deposit Šala Sky Courts prototype (InSAR & ISAR under Triple-O)
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series
+# Artifact   : sala_sky_courts_insar_isar.html (Šala REHEARSAL ONLY)
+# Discipline : CSR-08 (running this playbook IS the confirmation act)
+# Host       : Fedora bare-metal HOST (Ansible control node; no VDIs)
+# Doctrine   : Append-only deposit into the Šala prototype shelf. This is a
+#              rehearsal artifact, NOT a component build — the governing
+#              build-order law is untouched. Production visualization remains
+#              sovereign egui/WGPU; HTML is Šala only.
+# Renumber   : If the PB ledger has advanced, renumber to the next ordinal
+#              before running; the deposit act itself is unchanged.
+# ============================================================================
+
+- name: "PB-SKY-001 :: Deposit Sala Sky Courts prototype (append-only)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    sala_root: "/opt/bahyway/v4/sala"
+    ledger_path: "/opt/bahyway/v4/sala/LEDGER-SALA.tsv"
+    proto_id: "SALA-SKY-001"
+    proto_src: "{{ playbook_dir }}/sala_sky_courts_insar_isar.html"
+    proto_dst: "{{ sala_root }}/sala_sky_courts_insar_isar.html"
+    seal_note: "Sky Courts — InSAR (ground Tribe strained across epochs) + ISAR (Tribe imaged by its own Orbit); two-witness law, WITHHELD below epsilon, Apsu autofocus"
+
+  tasks:
+
+    - name: "WITNESS :: Sala shelf directory exists"
+      ansible.builtin.file:
+        path: "{{ sala_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: "WITNESS :: source prototype is present beside this playbook"
+      ansible.builtin.stat:
+        path: "{{ proto_src }}"
+      register: src_stat
+
+    - name: "JUDGE :: refuse if source prototype is absent"
+      ansible.builtin.assert:
+        that: src_stat.stat.exists
+        fail_msg: "REFUSED — prototype source {{ proto_src }} not found; nothing deposited."
+
+    - name: "WITNESS :: check whether prototype already sits on the shelf"
+      ansible.builtin.stat:
+        path: "{{ proto_dst }}"
+      register: dst_stat
+
+    - name: "JUDGE :: refuse re-deposit (append-only doctrine)"
+      ansible.builtin.assert:
+        that: not dst_stat.stat.exists
+        fail_msg: >-
+          REFUSED — {{ proto_id }} already deposited at {{ proto_dst }}.
+          Sala shelf is append-only; a revised rehearsal is a NEW numbered
+          deposit, never an overwrite.
+
+    - name: "MOVE :: deposit the prototype onto the Sala shelf"
+      ansible.builtin.copy:
+        src: "{{ proto_src }}"
+        dest: "{{ proto_dst }}"
+        mode: "0444"
+
+    - name: "MOVE :: compute SHA-256 checksum of the deposited prototype"
+      ansible.builtin.stat:
+        path: "{{ proto_dst }}"
+        checksum_algorithm: sha256
+      register: sealed_stat
+
+    - name: "STAGE :: ensure the Sala ledger exists (header on first creation only)"
+      ansible.builtin.copy:
+        dest: "{{ ledger_path }}"
+        content: "proto_id\tdeposited_utc\tsha256\tnote\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: append the seal entry to the Sala ledger"
+      ansible.builtin.lineinfile:
+        path: "{{ ledger_path }}"
+        line: "{{ proto_id }}\t{{ ansible_date_time.iso8601 }}\t{{ sealed_stat.stat.checksum }}\t{{ seal_note }}"
+        insertafter: EOF
+        create: false
+
+    - name: "STAGE :: proclaim the seal"
+      ansible.builtin.debug:
+        msg:
+          - "SEALED :: {{ proto_id }} deposited at {{ proto_dst }}"
+          - "SHA-256 :: {{ sealed_stat.stat.checksum }}"
+          - "DOCTRINE:: Rehearsal only. Two sky witnesses, one Napharu schema. Sovereign render remains egui/WGPU."

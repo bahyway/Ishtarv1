@@ -6,18 +6,23 @@ use crate::errors::HeptaError;
 
 /// Arabic MDM weights — BahyWay sovereign default.
 /// Accuracy (Arabic name correctness) weighted highest at 0.30.
-pub const SOVEREIGN_ARABIC_MDM_WEIGHTS: [f32; 7] =
-    [0.30, 0.20, 0.15, 0.15, 0.10, 0.05, 0.05];
+pub const SOVEREIGN_ARABIC_MDM_WEIGHTS: [f32; 7] = [0.30, 0.20, 0.15, 0.15, 0.10, 0.05, 0.05];
 
 /// Equal weights — all 7 dimensions contribute equally (1/7 each).
 pub const EQUAL_WEIGHTS: [f32; 7] = [
-    1.0/7.0, 1.0/7.0, 1.0/7.0, 1.0/7.0, 1.0/7.0, 1.0/7.0, 1.0/7.0,
+    1.0 / 7.0,
+    1.0 / 7.0,
+    1.0 / 7.0,
+    1.0 / 7.0,
+    1.0 / 7.0,
+    1.0 / 7.0,
+    1.0 / 7.0,
 ];
 
 /// A named weight profile for a specific domain.
 #[derive(Debug, Clone)]
 pub struct WeightProfile {
-    pub name:    String,
+    pub name: String,
     /// The 7 dimension weights — must sum to 1.0.
     pub weights: [f32; 7],
 }
@@ -28,7 +33,10 @@ impl WeightProfile {
         if (sum - 1.0).abs() > 0.001 {
             return Err(HeptaError::WeightsDoNotSumToOne(sum));
         }
-        Ok(Self { name: name.into(), weights })
+        Ok(Self {
+            name: name.into(),
+            weights,
+        })
     }
 }
 

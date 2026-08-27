@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Šala · PB-346 — The Nanshe Court (GL-HSI-001)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#050912;overflow:hidden;
+    font-family:Georgia,serif;color:#d8cfae}
+  canvas#cv{display:block;position:absolute;inset:0}
+  .panel{position:absolute;background:rgba(9,14,26,.9);border:1px solid #34456a;
+    border-radius:8px;padding:10px 13px;font-size:12.5px;line-height:1.5;
+    box-shadow:0 4px 24px rgba(0,0,0,.5)}
+  #title{top:12px;left:12px;max-width:320px}
+  #title h1{margin:0 0 3px;font-size:16px;color:#e8b84b}
+  #title .law{color:#7f93b8;font-size:11px}
+  #controls{top:12px;right:12px;width:210px;text-align:center}
+  #controls button{display:block;width:100%;margin:4px 0;padding:7px;border-radius:6px;
+    border:1px solid #4a5c84;background:#152244;color:#cdd8ee;font-family:Georgia;
+    font-size:12.5px;cursor:pointer}
+  #controls button:hover{background:#1e2f5c}
+  #witness{top:190px;right:12px;width:210px}
+  .meter{margin:6px 0}.meter .bar{height:10px;background:#101a30;border:1px solid #2a3a5a;
+    border-radius:5px;overflow:hidden}.meter .fill{height:100%;transition:width .3s}
+  .meter .lab{display:flex;justify-content:space-between;font-size:11px;color:#8fa4c8}
+  #verdict{left:50%;transform:translateX(-50%);top:12px;padding:8px 22px;
+    font-size:14px;letter-spacing:1px;text-align:center}
+  .v-none{border-color:#3a4a6a;color:#8fa4c8}
+  .v-omen{border-color:#e8b84b;color:#f0dfa0;box-shadow:0 0 24px rgba(232,184,75,.35)}
+  .v-quar{border-color:#a03a2a;color:#e0a090}
+  .v-arch{border-color:#5a8ac0;color:#a8c8e8}
+  #chart{bottom:12px;left:12px;width:380px;height:170px;padding:8px}
+  #chart canvas{width:100%;height:128px}
+  #chart .cl{font-size:11px;color:#8fa4c8}
+  #journal{bottom:12px;right:12px;width:280px;max-height:34vh;overflow-y:auto}
+  #journal h2{margin:0 0 6px;font-size:12px;color:#8fb0d8;letter-spacing:1px}
+  #journal .entry{border-top:1px dotted #33456a;padding:4px 0;font-size:11.5px}
+  #journal .who{color:#e8b84b}
+  #lanes{bottom:196px;left:12px;width:380px;display:flex;gap:8px;text-align:center;font-size:11px}
+  #lanes div{flex:1;border:1px solid #2c3c5e;border-radius:6px;padding:5px;background:rgba(9,14,26,.9)}
+  #lanes b{display:block;font-size:15px}
+  #ctx{display:none;position:absolute;z-index:50;background:#101a30;
+    border:1px solid #5a6a8a;border-radius:6px;min-width:220px;overflow:hidden}
+  #ctx .item{padding:8px 12px;font-size:12.5px;cursor:pointer}
+  #ctx .item:hover{background:#1c2a48}
+  #ctx .head{padding:6px 12px;font-size:11px;color:#7f93b8;background:#0a1224;border-bottom:1px solid #2a3a5a}
+  .hint{position:absolute;top:46%;left:12px;font-size:11px;color:#54688e;line-height:1.7}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="title" class="panel"><h1>PB-346 · The Nanshe Court</h1>
+ <div class="law">GL-HSI-001 — the hidden-sign reader. Regions live on the Hepta-shadow
+ membrane; two witnesses (T² within, Q orthogonal) must agree before any bell.
+ The horizon fires on acceleration, never weather.</div></div>
+<div id="verdict" class="panel v-none">NO VERDICT — weather</div>
+<div id="controls" class="panel"><b style="color:#8fb0d8;font-size:12px">EPOCH BENCH</b>
+ <button id="bAdv">⟶ Advance epoch</button>
+ <button id="bCor">⚠ Inject corrupt spectrum</button>
+ <button id="bRes">≈ Resolve ramp (archive)</button>
+ <div style="font-size:11px;color:#7f93b8;margin-top:4px">epoch <span id="ep">0</span> · subspace cited: <b>42</b></div></div>
+<div id="witness" class="panel"><b style="color:#8fb0d8;font-size:12px">TWO WITNESSES · LEAK-A</b>
+ <div class="meter"><div class="lab"><span>T² (within P)</span><span id="t2v">0</span></div>
+  <div class="bar"><div class="fill" id="t2f" style="background:#7fd8a0;width:5%"></div></div></div>
+ <div class="meter"><div class="lab"><span>Q (orthogonal)</span><span id="qv">0</span></div>
+  <div class="bar"><div class="fill" id="qf" style="background:#7fb0e8;width:5%"></div></div></div>
+ <div style="font-size:11px;color:#8fa4c8">limits: T²>18 · Q>60 · bell = both, or one sustained ×2</div></div>
+<div id="lanes"><div>NANSHE-OMEN<b id="cO" style="color:#e8b84b">0</b></div>
+ <div>QUARANTINE<b id="cQ" style="color:#e07a6a">0</b></div>
+ <div>NUZI-ARCHIVE<b id="cA" style="color:#7fb0e8">0</b></div></div>
+<div id="chart" class="panel"><div class="cl">Q trajectory · quadratic fit · <span style="color:#e8b84b">T_leak intercept</span></div>
+ <canvas id="ch" width="360" height="128"></canvas></div>
+<div id="journal" class="panel"><h2>STORYENGINE · NĀRU JOURNAL</h2><div id="jbody"></div></div>
+<div id="ctx"></div>
+<div class="hint">scroll · zoom<br>drag · rotate<br>left-click region · bounce + journal<br>right-click · court menu</div>
+<script>
+"use strict";
+const cv=document.getElementById("cv"),cx=cv.getContext("2d");
+let W,H;function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight}rs();addEventListener("resize",rs);
+let zoom=1.2,yaw=.7,pitch=.44,auto=true,drag=null,moved=0;
+addEventListener("wheel",e=>{zoom=Math.min(4,Math.max(.55,zoom*(e.deltaY<0?1.08:.925)));e.preventDefault()},{passive:false});
+cv.addEventListener("mousedown",e=>{if(e.button===0){drag={x:e.clientX,y:e.clientY};moved=0}});
+addEventListener("mousemove",e=>{if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  moved+=Math.abs(dx)+Math.abs(dy);yaw+=dx*.006;pitch=Math.min(1.25,Math.max(.08,pitch+dy*.004));
+  drag={x:e.clientX,y:e.clientY};auto=false}});
+addEventListener("mouseup",e=>{if(drag&&moved<3&&e.button===0)pick(e.clientX,e.clientY);drag=null});
+function proj(x,y,z){const cy=Math.cos(yaw),sy=Math.sin(yaw);
+  let X=x*cy-z*sy,Z=x*sy+z*cy;const cp=Math.cos(pitch),sp=Math.sin(pitch);
+  let Y=y*cp-Z*sp;Z=y*sp+Z*cp;const d=560/(560+Z*.9);
+  return{x:W/2+X*d*zoom,y:H/2+40+Y*d*zoom,d}}
+function memY(x,z,t){return 12*Math.sin(x*.013+t*.0007)+9*Math.cos(z*.015-t*.0005)}
+/* deterministic sm64-style rng */
+let s=0x9E3779B97F4A7C15n;function rnd(){s=(s+0x9E3779B97F4A7C15n)&0xFFFFFFFFFFFFFFFFn;
+  let z=s;z=((z^(z>>30n))*0xBF58476D1CE4E5B9n)&0xFFFFFFFFFFFFFFFFn;
+  z=((z^(z>>27n))*0x94D049BB133111EBn)&0xFFFFFFFFFFFFFFFFn;
+  return Number((z^(z>>31n))>>11n)/9007199254740992}
+/* ── particles: healthy cloud + tracked ── */
+const healthy=[];for(let i=0;i<130;i++){const a=rnd()*7,r=25+rnd()*95;
+  healthy.push({x:Math.cos(a)*r,z:Math.sin(a)*r,tw:rnd()*7})}
+const tracked=[
+ {id:"LEAK-A",born:true,x:60,z:40,bounce:0,bv:0,col:"#e8b84b",
+  lore:"buried water main region — SWIR moisture feature deepening, red-edge shifting"},
+ {id:"WX-B",born:true,x:-80,z:60,bounce:0,bv:0,col:"#7fd8a0",
+  lore:"surface region — a wet week: Q moves, never accelerates. Weather, not omen"},
+ {id:"NON-P",born:false,x:-40,z:-100,bounce:0,bv:0,col:"#6a5a4a",
+  lore:"cloud-shadow segment refused at SUSA gate — never born, no KAKI, no story"}];
+/* ── state ── */
+let epoch=0,qSeries=[2.5],corrupt=false,resolved=false;
+const T2L=18,QL=60;let counts={O:0,Q:0,A:0};
+const jb=document.getElementById("jbody");
+function journal(who,txt){const d=document.createElement("div");d.className="entry";
+  d.innerHTML=`<span class="who">${who}</span> — ${txt}`;jb.prepend(d);
+  while(jb.children.length>26)jb.lastChild.remove()}
+journal("COURT","The Nanshe Court convenes. Healthy subspace epoch 42 cited for every judgment.");
+/* witnesses for LEAK-A: T2 grows linearly (drift within P), Q grows quadratically (novel chemistry) */
+function witnesses(){if(resolved)return{t2:4+rnd(),q:3+rnd()*2};
+  const t=epoch;return{t2:4+2.1*t+rnd(),q:2.5+0.9*t*t+rnd()*2}}
+function fitQuad(ys){const n=ys.length;if(n<3)return null;
+  let s0=0,s1=0,s2=0,s3=0,s4=0,sy=0,sty=0,st2y=0;
+  ys.forEach((y,i)=>{const t=i;s0++;s1+=t;s2+=t*t;s3+=t**3;s4+=t**4;sy+=y;sty+=t*y;st2y+=t*t*y});
+  const M=[[s4,s3,s2],[s3,s2,s1],[s2,s1,s0]],R=[st2y,sty,sy];
+  const det=m=>m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])-m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])+m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
+  const D=det(M);if(Math.abs(D)<1e-9)return null;const out=[];
+  for(let c=0;c<3;c++){const Mc=M.map(r=>r.slice());for(let r=0;r<3;r++)Mc[r][c]=R[r];out.push(det(Mc)/D)}
+  return{a:out[0],b:out[1],c:out[2]}}
+function judge(){const w=witnesses();
+  document.getElementById("t2v").textContent=w.t2.toFixed(1);
+  document.getElementById("qv").textContent=w.q.toFixed(1);
+  document.getElementById("t2f").style.width=Math.min(100,w.t2/T2L*50)+"%";
+  document.getElementById("t2f").style.background=w.t2>T2L?"#e07a6a":"#7fd8a0";
+  document.getElementById("qf").style.width=Math.min(100,w.q/QL*50)+"%";
+  document.getElementById("qf").style.background=w.q>QL?"#e07a6a":"#7fb0e8";
+  const V=document.getElementById("verdict");
+  if(corrupt){V.className="panel v-quar";V.textContent="EnkiQDB-QUARANTINE — corruption is evidence, never prophecy";return}
+  if(resolved){V.className="panel v-arch";V.textContent="NUZI-ARCHIVE — ramp resolved; lineage deposited";return}
+  const prev=qSeries.length>1?qSeries[qSeries.length-2]:0;
+  const two=(w.t2>T2L&&w.q>QL)||(w.q>QL&&prev>QL);
+  const f=fitQuad(qSeries),accel=f?2*f.a:0;
+  if(two&&accel>0&&f){const tn=qSeries.length-1,c2=f.c-QL,disc=f.b*f.b-4*f.a*c2;
+    let tl=null;if(disc>=0){const tc=(-f.b+Math.sqrt(disc))/(2*f.a);tl=Math.max(0,tc-tn)}
+    V.className="panel v-omen";
+    V.textContent=`NANSHE-OMEN — T_leak ≈ ${tl!==null?tl.toFixed(1):"…"} epochs (subspace 42 cited)`;}
+  else if(w.t2>T2L||w.q>QL){V.className="panel v-none";
+    V.textContent="NO VERDICT — one witness is weather (GL-HSI-001 §4)"}
+  else{V.className="panel v-none";V.textContent="NO VERDICT — weather"}}
+/* ── chart ── */
+const ch=document.getElementById("ch"),cc=ch.getContext("2d");
+function drawChart(){cc.clearRect(0,0,360,128);
+  const maxY=Math.max(QL*1.4,...qSeries)*1.1,n=Math.max(qSeries.length,10);
+  const X=i=>14+i/(n-1||1)*332,Y=v=>120-v/maxY*112;
+  cc.strokeStyle="#a03a2a";cc.setLineDash([4,3]);cc.beginPath();
+  cc.moveTo(14,Y(QL));cc.lineTo(346,Y(QL));cc.stroke();cc.setLineDash([]);
+  cc.fillStyle="#8fa4c8";cc.font="10px Georgia";cc.fillText("Q limit",300,Y(QL)-4);
+  const f=fitQuad(qSeries);
+  if(f){cc.strokeStyle="rgba(232,184,75,.6)";cc.beginPath();
+    for(let t=0;t<=n+6;t+=.5){const v=f.a*t*t+f.b*t+f.c;
+      t===0?cc.moveTo(X(t),Y(v)):cc.lineTo(X(t),Y(Math.min(v,maxY)))}cc.stroke();
+    if(2*f.a>0){const c2=f.c-QL,disc=f.b*f.b-4*f.a*c2;
+      if(disc>=0){const tc=(-f.b+Math.sqrt(disc))/(2*f.a);
+        cc.fillStyle="#e8b84b";cc.beginPath();cc.arc(X(tc),Y(QL),4,0,7);cc.fill();
+        cc.fillText("T_leak",X(tc)-14,Y(QL)+14)}}}
+  cc.strokeStyle="#7fb0e8";cc.beginPath();
+  qSeries.forEach((v,i)=>i===0?cc.moveTo(X(i),Y(v)):cc.lineTo(X(i),Y(v)));cc.stroke();
+  cc.fillStyle="#cdd8ee";qSeries.forEach((v,i)=>{cc.beginPath();cc.arc(X(i),Y(v),2.4,0,7);cc.fill()})}
+/* ── bench ── */
+document.getElementById("bAdv").onclick=()=>{epoch++;corrupt=false;
+  document.getElementById("ep").textContent=epoch;
+  const w=witnesses();qSeries.push(w.q);
+  tracked[0].x=60+epoch*9;tracked[0].z=40+epoch*6; /* δc drift */
+  journal("EPOCH",`epoch ${epoch}: LEAK-A δc drifts outward; Q=${w.q.toFixed(1)} (ramping${epoch>2?", accelerating":""}).`);
+  judge();drawChart();
+  if(document.getElementById("verdict").className.includes("omen")&&!judge.rang){judge.rang=true;
+    counts.O++;document.getElementById("cO").textContent=counts.O;
+    journal("NANSHE","OMEN — two witnesses agree and the ramp accelerates. Signed Alert KAKI → Nisaba declares, Kittu delivers.")}};
+document.getElementById("bCor").onclick=()=>{corrupt=true;counts.Q++;
+  document.getElementById("cQ").textContent=counts.Q;
+  journal("GATE","corrupt spectrum injected (sensor artifact) → EnkiQDB-QUARANTINE. Evidence-grade, prune-exempt, never an omen.");
+  judge()};
+document.getElementById("bRes").onclick=()=>{resolved=true;corrupt=false;counts.A++;
+  document.getElementById("cA").textContent=counts.A;
+  journal("NUZI","ramp resolved — region archived with full lineage; healthy subspace re-estimation now lawful by decree.");
+  judge()};
+/* ── pick / context ── */
+let pts=[];
+function pick(mx,my){for(const p of pts){if(Math.hypot(mx-p.x,my-p.y)<p.r+6){const g=p.g;
+  if(g.born){g.bv=-7;journal(g.id,`bounced. ${g.lore}.`)}
+  else journal(g.id,`refused non-particle: no bounce, no story — only a Refusal Record.`);return}}}
+const ctxM=document.getElementById("ctx");
+addEventListener("contextmenu",e=>{e.preventDefault();
+  for(const p of pts){if(Math.hypot(e.clientX-p.x,e.clientY-p.y)<p.r+6){const g=p.g;
+    ctxM.style.display="block";ctxM.style.left=e.clientX+"px";ctxM.style.top=e.clientY+"px";
+    ctxM.innerHTML=g.born
+     ?`<div class="head">${g.id} · born particle (KAKI minted)</div>
+       <div class="item" data-a="j">Open StoryEngine journal</div>
+       <div class="item" data-a="c">Add to cohort</div>`
+     :`<div class="head">${g.id} · refused non-particle</div>
+       <div class="item" data-a="r">Show Refusal Record</div>`;
+    ctxM.querySelectorAll(".item").forEach(it=>it.onclick=()=>{ctxM.style.display="none";
+      if(it.dataset.a==="j")journal(g.id,`journal: ${g.lore}.`);
+      if(it.dataset.a==="c")journal("COHORT",`${g.id} added to the watch cohort.`);
+      if(it.dataset.a==="r")journal("REFUSAL",`${g.id}: refused at the SUSA gate (cloud shadow). Never born — no KAKI, no orbit, no journal.`)});
+    return}}ctxM.style.display="none"});
+addEventListener("click",()=>ctxM.style.display="none");
+/* ── render ── */
+function frame(t){if(auto)yaw+=.0003;
+  cx.fillStyle="#050912";cx.fillRect(0,0,W,H);
+  cx.strokeStyle="rgba(70,100,160,.2)";cx.lineWidth=1;
+  for(let gx=-300;gx<=300;gx+=40){cx.beginPath();
+    for(let gz=-300;gz<=300;gz+=20){const p=proj(gx,-memY(gx,gz,t),gz);
+      gz===-300?cx.moveTo(p.x,p.y):cx.lineTo(p.x,p.y)}cx.stroke()}
+  for(let gz=-300;gz<=300;gz+=40){cx.beginPath();
+    for(let gx=-300;gx<=300;gx+=20){const p=proj(gx,-memY(gx,gz,t),gz);
+      gx===-300?cx.moveTo(p.x,p.y):cx.lineTo(p.x,p.y)}cx.stroke()}
+  /* healthy centroid ring */
+  const c0=proj(0,-memY(0,0,t)-2,0);cx.beginPath();cx.arc(c0.x,c0.y,110*zoom*c0.d,0,7);
+  cx.strokeStyle="rgba(127,176,232,.25)";cx.stroke();
+  cx.fillStyle="#7f93b8";cx.font="10px Georgia";cx.textAlign="center";
+  cx.fillText("healthy subspace P (epoch 42)",c0.x,c0.y-114*zoom*c0.d);
+  for(const h of healthy){const y=-memY(h.x,h.z,t)-3-2*Math.sin(t*.001+h.tw);
+    const p=proj(h.x,y,h.z);cx.beginPath();cx.arc(p.x,p.y,2.2*zoom*p.d,0,7);
+    cx.fillStyle="rgba(127,176,232,.55)";cx.fill()}
+  pts=[];
+  for(const g of tracked){g.bv+=1.1;g.bounce=Math.max(0,g.bounce-g.bv*.28);
+    if(g.bounce===0&&g.bv>0)g.bv=0;if(g.bv<0)g.bounce-=g.bv;
+    const y=-memY(g.x,g.z,t)-6-g.bounce,p=proj(g.x,y,g.z);
+    if(g.bounce>0.5){const b=proj(g.x,-memY(g.x,g.z,t),g.z);
+      cx.strokeStyle="rgba(180,200,240,.5)";cx.beginPath();cx.moveTo(b.x,b.y);cx.lineTo(p.x,p.y);cx.stroke()}
+    const r=(g.born?9:7)*zoom*p.d;cx.beginPath();cx.arc(p.x,p.y,r,0,7);
+    cx.fillStyle=g.col;cx.globalAlpha=g.born?.95:.6;cx.fill();cx.globalAlpha=1;
+    if(!g.born){cx.strokeStyle="#a08a6a";cx.beginPath();
+      cx.moveTo(p.x-r*.6,p.y-r*.6);cx.lineTo(p.x+r*.6,p.y+r*.6);
+      cx.moveTo(p.x+r*.6,p.y-r*.6);cx.lineTo(p.x-r*.6,p.y+r*.6);cx.stroke()}
+    if(g.id==="LEAK-A"&&epoch>2&&!corrupt&&!resolved){cx.beginPath();
+      cx.arc(p.x,p.y,r+5+3*Math.sin(t*.004),0,7);
+      cx.strokeStyle="rgba(232,184,75,.5)";cx.stroke()}
+    cx.fillStyle="#c8d4ea";cx.font=`${Math.max(8,10*zoom*p.d)}px Georgia`;
+    cx.fillText(g.id,p.x,p.y-r-5);pts.push({x:p.x,y:p.y,r,g})}
+  requestAnimationFrame(frame)}
+judge();drawChart();requestAnimationFrame(frame);
+</script></body></html>

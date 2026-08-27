@@ -24,14 +24,14 @@ pub enum SessionRole {
 
 #[derive(Debug, Clone)]
 pub struct SessionEntry {
-    pub id:        String,
-    pub host:      String,
-    pub port:      u16,
-    pub role:      SessionRole,
+    pub id: String,
+    pub host: String,
+    pub port: u16,
+    pub role: SessionRole,
     pub node_type: NodeType,
     pub tribe_ids: Vec<u32>,
-    pub label:     String,
-    pub enabled:   bool,
+    pub label: String,
+    pub enabled: bool,
 }
 
 // ── Error ──────────────────────────────────────────────────────────────────────
@@ -47,10 +47,10 @@ pub enum RegistryError {
 impl core::fmt::Display for RegistryError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::ParseError(s)    => write!(f, "session registry parse error: {s}"),
-            Self::InvalidRole(s)   => write!(f, "invalid session role: {s}"),
+            Self::ParseError(s) => write!(f, "session registry parse error: {s}"),
+            Self::InvalidRole(s) => write!(f, "invalid session role: {s}"),
             Self::InvalidNodeType(s) => write!(f, "invalid node type: {s}"),
-            Self::InvalidPort(s)   => write!(f, "invalid port: {s}"),
+            Self::InvalidPort(s) => write!(f, "invalid port: {s}"),
         }
     }
 }
@@ -69,14 +69,14 @@ impl SessionRegistry {
         let mut sessions: Vec<SessionEntry> = Vec::new();
 
         // Working builder fields
-        let mut id        = String::new();
-        let mut host      = String::new();
+        let mut id = String::new();
+        let mut host = String::new();
         let mut port: u16 = 0;
-        let mut role      = SessionRole::Read;
+        let mut role = SessionRole::Read;
         let mut node_type = NodeType::EnkiDB;
         let mut tribe_ids: Vec<u32> = Vec::new();
-        let mut label     = String::new();
-        let mut enabled   = true;
+        let mut label = String::new();
+        let mut enabled = true;
         let mut in_session = false;
 
         for (lineno, raw_line) in src.lines().enumerate() {
@@ -91,20 +91,25 @@ impl SessionRegistry {
             if line == "[[session]]" {
                 if in_session {
                     sessions.push(SessionEntry {
-                        id: id.clone(), host: host.clone(), port,
-                        role: role.clone(), node_type: node_type.clone(),
-                        tribe_ids: tribe_ids.clone(), label: label.clone(), enabled,
+                        id: id.clone(),
+                        host: host.clone(),
+                        port,
+                        role: role.clone(),
+                        node_type: node_type.clone(),
+                        tribe_ids: tribe_ids.clone(),
+                        label: label.clone(),
+                        enabled,
                     });
                 }
                 // Reset builder
-                id        = String::new();
-                host      = String::new();
-                port      = 0;
-                role      = SessionRole::Read;
+                id = String::new();
+                host = String::new();
+                port = 0;
+                role = SessionRole::Read;
                 node_type = NodeType::EnkiDB;
                 tribe_ids = Vec::new();
-                label     = String::new();
-                enabled   = true;
+                label = String::new();
+                enabled = true;
                 in_session = true;
                 continue;
             }
@@ -116,36 +121,37 @@ impl SessionRegistry {
 
             // Parse key = value
             let Some(eq_pos) = line.find('=') else {
-                return Err(RegistryError::ParseError(
-                    format!("line {}: no '=' found: {line}", lineno + 1)
-                ));
+                return Err(RegistryError::ParseError(format!(
+                    "line {}: no '=' found: {line}",
+                    lineno + 1
+                )));
             };
             let key = line[..eq_pos].trim();
-            let val_raw = line[eq_pos+1..].trim();
+            let val_raw = line[eq_pos + 1..].trim();
 
             match key {
-                "id"        => id        = parse_string_val(val_raw),
-                "host"      => host      = parse_string_val(val_raw),
-                "label"     => label     = parse_string_val(val_raw),
-                "enabled"   => enabled   = val_raw == "true",
+                "id" => id = parse_string_val(val_raw),
+                "host" => host = parse_string_val(val_raw),
+                "label" => label = parse_string_val(val_raw),
+                "enabled" => enabled = val_raw == "true",
                 "port" => {
-                    port = val_raw.parse::<u16>().map_err(|_| {
-                        RegistryError::InvalidPort(val_raw.to_string())
-                    })?;
+                    port = val_raw
+                        .parse::<u16>()
+                        .map_err(|_| RegistryError::InvalidPort(val_raw.to_string()))?;
                 }
                 "role" => {
                     let s = parse_string_val(val_raw);
                     role = match s.to_uppercase().as_str() {
                         "WRITE" => SessionRole::Write,
-                        "READ"  => SessionRole::Read,
+                        "READ" => SessionRole::Read,
                         _ => return Err(RegistryError::InvalidRole(s)),
                     };
                 }
                 "node_type" => {
                     let s = parse_string_val(val_raw);
                     node_type = match s.as_str() {
-                        "EnkiDB"  => NodeType::EnkiDB,
-                        "EnkiDW"  => NodeType::EnkiDW,
+                        "EnkiDB" => NodeType::EnkiDB,
+                        "EnkiDW" => NodeType::EnkiDW,
                         "EnkiSDB" => NodeType::EnkiSDB,
                         "EnkiODB" => NodeType::EnkiODB,
                         "EnkiQDB" => NodeType::EnkiQDB,
@@ -155,9 +161,8 @@ impl SessionRegistry {
                     };
                 }
                 "tribe_ids" => {
-                    tribe_ids = parse_u32_array(val_raw).map_err(|e| {
-                        RegistryError::ParseError(format!("tribe_ids: {e}"))
-                    })?;
+                    tribe_ids = parse_u32_array(val_raw)
+                        .map_err(|e| RegistryError::ParseError(format!("tribe_ids: {e}")))?;
                 }
                 _ => { /* Unknown key — ignore for forward compat */ }
             }
@@ -166,7 +171,14 @@ impl SessionRegistry {
         // Flush last session
         if in_session {
             sessions.push(SessionEntry {
-                id, host, port, role, node_type, tribe_ids, label, enabled,
+                id,
+                host,
+                port,
+                role,
+                node_type,
+                tribe_ids,
+                label,
+                enabled,
             });
         }
 
@@ -188,7 +200,8 @@ impl SessionRegistry {
     /// Returns sessions that serve the given tribe_id.
     /// A session with empty tribe_ids serves all tribes.
     pub fn by_tribe(&self, tribe_id: u32) -> Vec<&SessionEntry> {
-        self.sessions.iter()
+        self.sessions
+            .iter()
             .filter(|s| s.tribe_ids.is_empty() || s.tribe_ids.contains(&tribe_id))
             .collect()
     }
@@ -204,7 +217,7 @@ impl SessionRegistry {
 fn parse_string_val(s: &str) -> String {
     let s = s.trim();
     if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 {
-        s[1..s.len()-1].to_string()
+        s[1..s.len() - 1].to_string()
     } else {
         s.to_string()
     }
@@ -216,13 +229,16 @@ fn parse_u32_array(s: &str) -> Result<Vec<u32>, String> {
     if !s.starts_with('[') || !s.ends_with(']') {
         return Err(format!("expected array, got: {s}"));
     }
-    let inner = s[1..s.len()-1].trim();
+    let inner = s[1..s.len() - 1].trim();
     if inner.is_empty() {
         return Ok(Vec::new());
     }
-    inner.split(',')
+    inner
+        .split(',')
         .map(|tok| {
-            tok.trim().parse::<u32>().map_err(|_| format!("not a u32: '{}'", tok.trim()))
+            tok.trim()
+                .parse::<u32>()
+                .map_err(|_| format!("not a u32: '{}'", tok.trim()))
         })
         .collect()
 }

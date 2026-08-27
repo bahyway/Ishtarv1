@@ -9,8 +9,8 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct SearchResult<'a> {
     pub particle: &'a ConversationParticle,
-    pub score:    f32,
-    pub snippet:  String,
+    pub score: f32,
+    pub snippet: String,
 }
 
 /// Sovereign memory search — no vector DB, no external index.
@@ -33,19 +33,31 @@ impl MemorySearch {
         // doc id -> particle, keyed by the same hex id adapa-recall uses,
         // so results map back to real particles without re-scanning.
         let mut by_id: HashMap<String, &'a ConversationParticle> = HashMap::new();
-        let docs: Vec<Document> = particles.iter().map(|p| {
-            let id = kaki_hex(p);
-            by_id.insert(id.clone(), p);
-            Document::new(id, p.turn.content.clone())
-        }).collect();
+        let docs: Vec<Document> = particles
+            .iter()
+            .map(|p| {
+                let id = kaki_hex(p);
+                by_id.insert(id.clone(), p);
+                Document::new(id, p.turn.content.clone())
+            })
+            .collect();
 
         let index = RecallIndex::build(docs);
-        index.query(query, max_results).into_iter().filter_map(|(id, score)| {
-            let particle = *by_id.get(&id)?;
-            let terms: Vec<String> = query.split_whitespace().map(|w| w.to_lowercase()).collect();
-            let snippet = extract_snippet(&particle.turn.content, &terms);
-            Some(SearchResult { particle, score, snippet })
-        }).collect()
+        index
+            .query(query, max_results)
+            .into_iter()
+            .filter_map(|(id, score)| {
+                let particle = *by_id.get(&id)?;
+                let terms: Vec<String> =
+                    query.split_whitespace().map(|w| w.to_lowercase()).collect();
+                let snippet = extract_snippet(&particle.turn.content, &terms);
+                Some(SearchResult {
+                    particle,
+                    score,
+                    snippet,
+                })
+            })
+            .collect()
     }
 
     /// Search particles by keyword query.
@@ -55,19 +67,28 @@ impl MemorySearch {
         max_results: usize,
     ) -> Vec<SearchResult<'a>> {
         let query_terms: Vec<String> = tokenize_query(query);
-        if query_terms.is_empty() { return Vec::new(); }
+        if query_terms.is_empty() {
+            return Vec::new();
+        }
 
         let total = particles.len() as f32;
-        let mut results: Vec<SearchResult> = particles.iter().filter_map(|p| {
-            let content = p.turn.content.to_lowercase();
-            let score   = score_document(&content, &query_terms, total);
-            if score > 0.0 {
-                let snippet = extract_snippet(&p.turn.content, &query_terms);
-                Some(SearchResult { particle: p, score, snippet })
-            } else {
-                None
-            }
-        }).collect();
+        let mut results: Vec<SearchResult> = particles
+            .iter()
+            .filter_map(|p| {
+                let content = p.turn.content.to_lowercase();
+                let score = score_document(&content, &query_terms, total);
+                if score > 0.0 {
+                    let snippet = extract_snippet(&p.turn.content, &query_terms);
+                    Some(SearchResult {
+                        particle: p,
+                        score,
+                        snippet,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
         results.truncate(max_results);
@@ -80,7 +101,8 @@ impl MemorySearch {
         crate_name: &str,
     ) -> Vec<&'a ConversationParticle> {
         let name = crate_name.to_lowercase();
-        particles.iter()
+        particles
+            .iter()
             .filter(|p| p.turn.content.to_lowercase().contains(&name))
             .copied()
             .collect()
@@ -91,7 +113,8 @@ impl MemorySearch {
         particles: &[&'a ConversationParticle],
         role: crate::conversation::TurnRole,
     ) -> Vec<&'a ConversationParticle> {
-        particles.iter()
+        particles
+            .iter()
             .filter(|p| p.turn.role == role)
             .copied()
             .collect()
@@ -99,8 +122,13 @@ impl MemorySearch {
 }
 
 fn tokenize_query(query: &str) -> Vec<String> {
-    query.split_whitespace()
-        .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+    query
+        .split_whitespace()
+        .map(|w| {
+            w.to_lowercase()
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_string()
+        })
         .filter(|w| w.len() > 2)
         .collect()
 }
@@ -108,18 +136,27 @@ fn tokenize_query(query: &str) -> Vec<String> {
 fn score_document(content: &str, terms: &[String], _total_docs: f32) -> f32 {
     let words: Vec<&str> = content.split_whitespace().collect();
     let doc_len = words.len() as f32;
-    if doc_len == 0.0 { return 0.0; }
+    if doc_len == 0.0 {
+        return 0.0;
+    }
 
     let mut score = 0.0f32;
     for term in terms {
         let tf = words.iter().filter(|w| w.contains(term.as_str())).count() as f32 / doc_len;
-        if tf > 0.0 { score += tf; }
+        if tf > 0.0 {
+            score += tf;
+        }
     }
     score
 }
 
 fn kaki_hex(p: &ConversationParticle) -> String {
-    p.turn.kaki.bytes().iter().map(|b| format!("{b:02x}")).collect()
+    p.turn
+        .kaki
+        .bytes()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 fn extract_snippet(content: &str, terms: &[String]) -> String {
@@ -127,23 +164,31 @@ fn extract_snippet(content: &str, terms: &[String]) -> String {
     for term in terms {
         if let Some(pos) = lower.find(term.as_str()) {
             let start = pos.saturating_sub(30);
-            let end   = (pos + 80).min(content.len());
+            let end = (pos + 80).min(content.len());
             let mut snippet = String::new();
-            if start > 0 { snippet.push_str("..."); }
+            if start > 0 {
+                snippet.push_str("...");
+            }
             snippet.push_str(&content[start..end]);
-            if end < content.len() { snippet.push_str("..."); }
+            if end < content.len() {
+                snippet.push_str("...");
+            }
             return snippet;
         }
     }
-    if content.len() > 80 { format!("{}...", &content[..80]) } else { content.to_string() }
+    if content.len() > 80 {
+        format!("{}...", &content[..80])
+    } else {
+        content.to_string()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::conversation::{Turn, TurnRole, ConversationParticle, CONV_TRIBE_ID};
-    use enkidb_kaki::KakiMinter;
+    use crate::conversation::{ConversationParticle, Turn, TurnRole, CONV_TRIBE_ID};
     use bahyway_core::TribeId;
+    use enkidb_kaki::KakiMinter;
 
     fn make_particle(content: &str) -> ConversationParticle {
         let minter = KakiMinter::new(TribeId::from_u16(CONV_TRIBE_ID));
@@ -179,7 +224,8 @@ mod tests {
         let p3 = make_particle("esarhaddon computes structural mortality for kaki particles");
         let particles = vec![&p1, &p2, &p3];
 
-        let results = MemorySearch::semantic_search(&particles, "esarhaddon structural mortality", 3);
+        let results =
+            MemorySearch::semantic_search(&particles, "esarhaddon structural mortality", 3);
         assert!(!results.is_empty());
         assert!(results[0].particle.turn.content.contains("esarhaddon"));
     }

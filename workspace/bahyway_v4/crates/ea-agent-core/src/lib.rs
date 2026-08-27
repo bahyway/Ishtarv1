@@ -16,11 +16,11 @@
 #![forbid(unsafe_code)]
 
 pub mod agent_kaki;
+pub mod constants;
 pub mod decision;
 pub mod particle_state;
-pub mod constants;
 
 pub use agent_kaki::{AgentKaki, AgentTribe, AGENT_TRIBE_ID};
+pub use constants::*;
 pub use decision::{AgentDecision, DecisionKind, DecisionResult};
 pub use particle_state::{HeptaVector, ParticleSnapshot, QuantumState};
-pub use constants::*;

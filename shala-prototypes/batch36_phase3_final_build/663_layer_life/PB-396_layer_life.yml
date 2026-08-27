@@ -1,0 +1,139 @@
+---
+# PB-396 · Layer Life · compute g, rate, coherence and state for every layer in all seven types
+# GL-LYF-001 · a layer is DEAD when g = RU spread / OU >= 1, or when a FUZZY deadline expires unresolved
+- name: PB-396 measure the life of every membrane layer
+  hosts: girsu
+  vars:
+    bahyway_provides: ["artifact:layers.json"]
+    bahyway_requires: ["law:GL-LYF-001", "law:GL-UNT-001", "engine:LamassuEngine", "engine:ENLIL"]
+    ports: {EnkiSDB: 7001, EnkiODB: 7002, EnkiQDB: 7003, EnkiDB: 7004, EnkiDW: 7005, EnkiMDB: 7006, EnkiDDB: 7007}
+    fuzzy_deadline_epochs: 3
+    out: "{{ ansible_env.HOME }}/bahyway/layers"
+  tasks:
+    - name: Ensure output
+      ansible.builtin.file: {path: "{{ out }}", state: directory, mode: "0750"}
+
+    - name: Measure RU spread and OU girth per layer (MEASURED)
+      ansible.builtin.command: >
+        bahyway-enlil layer-metrics --db {{ item.key }} --port {{ item.value }}
+        --shells -3..3 --emit ru_spread,ou_girth,population --json
+      loop: "{{ ports | dict2items }}"
+      register: metrics
+      changed_when: false
+
+    - name: Ask LamassuEngine for the phase coherence of each layer across two epochs
+      ansible.builtin.command: >
+        bahyway-lamassu coherence --db {{ item.key }} --port {{ item.value }} --shells -3..3 --epochs 2 --json
+      loop: "{{ ports | dict2items }}"
+      register: coh
+      changed_when: false
+      failed_when: false
+
+    - name: Record layers whose evidence could NOT be read (they are FUZZY, not healthy)
+      ansible.builtin.shell: |
+        bahyway-enlil layer-metrics --db {{ item.key }} --port {{ item.value }} --shells -3..3 --list-unreadable
+      loop: "{{ ports | dict2items }}"
+      register: unread
+      changed_when: false
+      failed_when: false
+
+    - name: Compose layers.json with states, rates and deadlines
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib, time
+        M = {{ metrics.results | map(attribute='stdout') | list | to_json }}
+        K = {{ coh.results | map(attribute='stdout') | list | to_json }}
+        U = {{ unread.results | map(attribute='stdout') | list | to_json }}
+        names = {{ ports.keys() | list | to_json }}
+        prev_path = pathlib.Path("{{ out }}/layers.prev.json")
+        prev = json.loads(prev_path.read_text()) if prev_path.exists() else {"layers": []}
+        prev_by = {l["key"]: l for l in prev.get("layers", [])}
+        out = []
+        for nm, m, k, u in zip(names, M, K, U):
+            try: mj = json.loads(m or "[]")
+            except Exception: mj = []
+            try: kj = {x["shell"]: x for x in json.loads(k or "[]")}
+            except Exception: kj = {}
+            unreadable = set((u or "").split())
+            for L in mj:
+                key = f"{nm}|MLU{L['shell']:+d}"
+                g = (L["ru_spread"] / L["ou_girth"]) if L.get("ou_girth") else None
+                p = prev_by.get(key, {})
+                rate = (g - p["g"]) if (g is not None and p.get("g") is not None) else None
+                coh_v = kj.get(L["shell"], {}).get("coherence")
+                fuzzy = (coh_v is not None and coh_v < 0.28) or (str(L["shell"]) in unreadable)
+                since = p.get("fuzzy_since") if p.get("fuzzy_since") is not None else (p.get("epoch", 0) if fuzzy else None)
+                if fuzzy and since is None: since = p.get("epoch", 0)
+                state = None
+                if g is not None and g >= 1.0: state = "DEAD"
+                elif fuzzy:
+                    age = (p.get("epoch", 0) + 1) - (since or 0)
+                    state = "DEAD" if age > {{ fuzzy_deadline_epochs }} else "FUZZY"
+                elif rate is not None and rate > 0.02 and g and g > 0.55: state = "DECAY"
+                elif (g and g > 0.55) or (rate and rate > 0.05) or (coh_v is not None and coh_v < 0.4): state = "STRAINED"
+                else: state = "LIVING"
+                out.append({"key": key, "db": nm, "shell": L["shell"], "g": g, "rate": rate,
+                            "coherence": coh_v, "unreadable": str(L["shell"]) in unreadable,
+                            "state": state, "fuzzy_since": since,
+                            "deadline_in": ({{ fuzzy_deadline_epochs }} - ((p.get("epoch", 0) + 1) - since)) if (state == "FUZZY" and since is not None) else None,
+                            "neglect": bool(fuzzy and state == "DEAD"),
+                            "witnesses": p.get("witnesses", 0) + (1 if state in ("DECAY", "DEAD") else 0),
+                            "epoch": p.get("epoch", 0) + 1,
+                            "class": "UNKNOWN" if str(L["shell"]) in unreadable else "MEASURED"})
+        doc = {"generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "layers": out}
+        pathlib.Path("{{ out }}/layers.json").write_text(json.dumps(doc, indent=2))
+        prev_path.write_text(json.dumps(doc, indent=2))
+        from collections import Counter
+        print(Counter(l["state"] for l in out))
+        PY
+      register: compose
+      changed_when: true
+
+    - name: Show the census
+      ansible.builtin.debug: {msg: "{{ compose.stdout_lines }}"}
+
+    - name: Gate L1 · no layer is DEAD on fewer than two witnesses (§3)
+      ansible.builtin.shell: |
+        python3 -c "
+        import json,sys
+        d=json.load(open('{{ out }}/layers.json'))
+        bad=[l['key'] for l in d['layers'] if l['state']=='DEAD' and l['witnesses']<2]
+        print('deaths on one witness:',len(bad),bad[:8])
+        sys.exit(1 if bad else 0)"
+      changed_when: false
+
+    - name: Gate L2 · every FUZZY layer carries a deadline (§5)
+      ansible.builtin.shell: |
+        python3 -c "
+        import json,sys
+        d=json.load(open('{{ out }}/layers.json'))
+        bad=[l['key'] for l in d['layers'] if l['state']=='FUZZY' and l['deadline_in'] is None]
+        print('fuzzy without a deadline:',len(bad))
+        sys.exit(1 if bad else 0)"
+      changed_when: false
+
+    - name: Gate L3 · deaths by neglect are named as such, never folded into ordinary deaths (§5)
+      ansible.builtin.shell: |
+        python3 -c "
+        import json
+        d=json.load(open('{{ out }}/layers.json'))
+        n=[l['key'] for l in d['layers'] if l.get('neglect')]
+        print('DIED BY NEGLECT:',len(n),n[:10])
+        print('the cause of these deaths was the court, not the data (GL-LYF-001 §5)')"
+      changed_when: false
+
+    - name: Escalate fuzzy deadlines expiring within one epoch to a named human role
+      ansible.builtin.shell: |
+        python3 -c "
+        import json
+        d=json.load(open('{{ out }}/layers.json'))
+        soon=[l['key'] for l in d['layers'] if l['state']=='FUZZY' and (l['deadline_in'] or 9)<=1]
+        print('ESCALATE to the data steward:',soon)"
+      register: esc
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-396 layer life measured - {{ compose.stdout | default('') | truncate(90) }} · {{ esc.stdout | default('') | truncate(80) }}"

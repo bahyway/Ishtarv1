@@ -41,7 +41,9 @@ pub struct MandatoryPatternResult {
 /// mean) → confidence near 1.0; scattered values → confidence near 0.0.
 /// Returns `None` for fewer than 2 samples (no meaningful spread to
 /// measure).
-pub fn score_mandatory_value_pattern(samples: &[MandatoryAttrSample]) -> Option<MandatoryPatternResult> {
+pub fn score_mandatory_value_pattern(
+    samples: &[MandatoryAttrSample],
+) -> Option<MandatoryPatternResult> {
     if samples.len() < 2 {
         return None;
     }
@@ -62,8 +64,18 @@ pub fn score_mandatory_value_pattern(samples: &[MandatoryAttrSample]) -> Option<
 
     let mut total = 0.0f32;
     for s in samples {
-        let m_f = f_tri(s.freshness, mean_freshness - half_width_f, mean_freshness, mean_freshness + half_width_f);
-        let m_v = f_tri(s.velocity, mean_velocity - half_width_v, mean_velocity, mean_velocity + half_width_v);
+        let m_f = f_tri(
+            s.freshness,
+            mean_freshness - half_width_f,
+            mean_freshness,
+            mean_freshness + half_width_f,
+        );
+        let m_v = f_tri(
+            s.velocity,
+            mean_velocity - half_width_v,
+            mean_velocity,
+            mean_velocity + half_width_v,
+        );
         total += (m_f + m_v) / 2.0;
     }
     let confidence = (total / n) as f64;
@@ -93,37 +105,76 @@ mod tests {
     #[test]
     fn identical_values_score_full_confidence() {
         let samples = vec![
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.5 },
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.5 },
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.5 },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.5,
+            },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.5,
+            },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.5,
+            },
         ];
         let result = score_mandatory_value_pattern(&samples).unwrap();
-        assert!(result.confidence > 0.95, "identical samples must score near-perfect coherence, got {}", result.confidence);
+        assert!(
+            result.confidence > 0.95,
+            "identical samples must score near-perfect coherence, got {}",
+            result.confidence
+        );
     }
 
     #[test]
     fn wildly_scattered_values_score_low_confidence() {
         let samples = vec![
-            MandatoryAttrSample { freshness: 0.0, velocity: 0.0 },
-            MandatoryAttrSample { freshness: 1.0, velocity: 1.0 },
-            MandatoryAttrSample { freshness: 0.5, velocity: 0.9 },
-            MandatoryAttrSample { freshness: 0.9, velocity: 0.1 },
+            MandatoryAttrSample {
+                freshness: 0.0,
+                velocity: 0.0,
+            },
+            MandatoryAttrSample {
+                freshness: 1.0,
+                velocity: 1.0,
+            },
+            MandatoryAttrSample {
+                freshness: 0.5,
+                velocity: 0.9,
+            },
+            MandatoryAttrSample {
+                freshness: 0.9,
+                velocity: 0.1,
+            },
         ];
         let result = score_mandatory_value_pattern(&samples).unwrap();
-        assert!(result.confidence < 0.5, "scattered samples must score low coherence, got {}", result.confidence);
+        assert!(
+            result.confidence < 0.5,
+            "scattered samples must score low coherence, got {}",
+            result.confidence
+        );
     }
 
     #[test]
     fn fewer_than_two_samples_returns_none() {
         assert!(score_mandatory_value_pattern(&[]).is_none());
-        assert!(score_mandatory_value_pattern(&[MandatoryAttrSample { freshness: 0.5, velocity: 0.5 }]).is_none());
+        assert!(score_mandatory_value_pattern(&[MandatoryAttrSample {
+            freshness: 0.5,
+            velocity: 0.5
+        }])
+        .is_none());
     }
 
     #[test]
     fn mean_values_are_computed_correctly() {
         let samples = vec![
-            MandatoryAttrSample { freshness: 0.2, velocity: 0.4 },
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.6 },
+            MandatoryAttrSample {
+                freshness: 0.2,
+                velocity: 0.4,
+            },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.6,
+            },
         ];
         let result = score_mandatory_value_pattern(&samples).unwrap();
         assert!((result.mean_freshness - 0.5).abs() < 1e-6);

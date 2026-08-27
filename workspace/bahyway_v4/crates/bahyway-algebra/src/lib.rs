@@ -53,60 +53,76 @@
 //! internal workspace crates (e.g. `alert-engine`, for Milu's alert
 //! bridge) are not third-party and don't violate this.
 
-pub mod clifford;
-pub mod fields;
-pub mod lie;
-pub mod rotor;
-pub mod functor;
-pub mod topology;
-pub mod axioms;
-pub mod shells;
-pub mod orbital;
-pub mod enlil;
 pub mod anshar;
-pub mod enbilulu;
-pub mod octonion;
-pub mod persistence;
 pub mod arsenal;
+pub mod axioms;
+pub mod clifford;
+pub mod enbilulu;
+pub mod enlil;
+pub mod fields;
+pub mod functor;
+pub mod lie;
+pub mod octonion;
+pub mod orbital;
+pub mod persistence;
+pub mod rotor;
+pub mod shells;
+pub mod topology;
 
-pub use functor::{Decode, Interpret, Evolve};
+pub use axioms::{trajectory_momentum, PA13_THETA_MAX};
+pub use functor::{Decode, Evolve, Interpret};
+pub use orbital::{
+    altitude_scatter, is_rim_particle, orbital_position, orbital_ring_layer, sub_ring_azimuth,
+    OrbitalPosition, RIM_BIRTH_THRESHOLD,
+};
+pub use shells::{
+    b11_to_shell, quality_distance, shell_boundaries, shell_index, sovereign_5_shells,
+    sovereign_shell_label,
+};
 pub use topology::{
-    // Set-theoretic
-    interior, boundary, closure, exterior,
-    // DE-9IM binary relations
-    disjoint, intersects, within, touches, overlaps,
+    boundary,
     // Algebraic topology
-    boundary_n, exterior_derivative, cup_product, cap_product, hodge_star,
+    boundary_n,
+    cap_product,
+    closing,
+    closure,
+    cup_product,
+    curl,
     // Morphological
-    dilation, erosion, opening, closing,
+    dilation,
+    // DE-9IM binary relations
+    disjoint,
+    divergence,
+    erosion,
+    exterior,
+    exterior_derivative,
     // Field (vector calculus)
-    gradient, divergence, curl, laplacian,
+    gradient,
+    hodge_star,
+    // Set-theoretic
+    interior,
+    intersects,
+    laplacian,
+    opening,
+    overlaps,
+    touches,
+    within,
 };
-pub use axioms::{PA13_THETA_MAX, trajectory_momentum};
-pub use shells::{quality_distance, shell_boundaries, shell_index, b11_to_shell,
-                 sovereign_5_shells, sovereign_shell_label};
-pub use orbital::{OrbitalPosition, orbital_position, orbital_ring_layer,
-                  sub_ring_azimuth, altitude_scatter,
-                  RIM_BIRTH_THRESHOLD, is_rim_particle};
 
-pub use enlil::{
-    ENLIL_ALGEBRA, EnlilGate, JnfShape,
-    QuantumState, QuantumCoord, ExclusionResult, pauli_check,
-};
 pub use anshar::{
-    SIGMA_BW, ANSHAR_ALGEBRA, SigmaOp, AnsharParticle,
-    VerificationResult, AnsharEngine,
+    AnsharEngine, AnsharParticle, SigmaOp, VerificationResult, ANSHAR_ALGEBRA, SIGMA_BW,
+};
+pub use enlil::{
+    pauli_check, EnlilGate, ExclusionResult, JnfShape, QuantumCoord, QuantumState, ENLIL_ALGEBRA,
 };
 pub use fields::{SemanticField, SemanticPhase};
-pub use persistence::{
-    Point3, PersistencePair, PersistenceDiagram, vietoris_rips_persistence,
-};
+pub use persistence::{vietoris_rips_persistence, PersistenceDiagram, PersistencePair, Point3};
 
 pub mod prelude {
-    pub use super::functor::{Decode, Interpret, Evolve};
-    pub use super::axioms::{PA13_THETA_MAX, trajectory_momentum};
+    pub use super::anshar::{AnsharEngine, AnsharParticle, SigmaOp, ANSHAR_ALGEBRA};
+    pub use super::axioms::{trajectory_momentum, PA13_THETA_MAX};
+    pub use super::enlil::{pauli_check, EnlilGate, JnfShape, QuantumState, ENLIL_ALGEBRA};
+    pub use super::functor::{Decode, Evolve, Interpret};
+    pub use super::orbital::{orbital_position, OrbitalPosition};
     pub use super::shells::{quality_distance, shell_index, sovereign_5_shells};
-    pub use super::orbital::{OrbitalPosition, orbital_position};
-    pub use super::enlil::{ENLIL_ALGEBRA, EnlilGate, JnfShape, QuantumState, pauli_check};
-    pub use super::anshar::{ANSHAR_ALGEBRA, SigmaOp, AnsharParticle, AnsharEngine};
 }

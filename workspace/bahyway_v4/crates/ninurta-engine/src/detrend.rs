@@ -48,7 +48,11 @@ mod tests {
         // this step exists to remove.
         let series: Vec<f64> = (0..21).map(|i| i as f64).collect();
         let out = running_mean_detrend(&series, 7);
-        assert!(out[10].abs() < 1e-9, "interior residual should be ~0 for a linear ramp, got {}", out[10]);
+        assert!(
+            out[10].abs() < 1e-9,
+            "interior residual should be ~0 for a linear ramp, got {}",
+            out[10]
+        );
     }
 
     #[test]

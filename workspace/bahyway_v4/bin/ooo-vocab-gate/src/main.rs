@@ -58,10 +58,19 @@ fn main() -> ExitCode {
             continue;
         }
         files_dirty += 1;
-        let path_str = report.path.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
+        let path_str = report
+            .path
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
         for v in &report.violations {
             total_violations += 1;
-            println!("{path_str}:{}: forbidden vocabulary '{}' -- {}", v.line, v.matched, v.context.trim());
+            println!(
+                "{path_str}:{}: forbidden vocabulary '{}' -- {}",
+                v.line,
+                v.matched,
+                v.context.trim()
+            );
         }
     }
 

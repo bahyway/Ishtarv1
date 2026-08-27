@@ -83,7 +83,11 @@ impl WahshiyyaSign {
     pub fn new(planet: Planet, ordinal: u8) -> Self {
         assert!((1..=4).contains(&ordinal), "Phase-1 ordinal is 1..=4");
         let name = format!("{}-{}", planet.arabic_name(), ordinal);
-        WahshiyyaSign { planet, ordinal, name }
+        WahshiyyaSign {
+            planet,
+            ordinal,
+            name,
+        }
     }
 }
 
@@ -116,7 +120,10 @@ pub fn all_signs() -> Vec<WahshiyyaSign> {
 /// The 7 planetary anchor signs — ordinal 1 of each planet,
 /// one per Heptagon dimension.
 pub fn planetary_anchor_signs() -> Vec<WahshiyyaSign> {
-    Planet::ALL.iter().map(|p| WahshiyyaSign::new(*p, 1)).collect()
+    Planet::ALL
+        .iter()
+        .map(|p| WahshiyyaSign::new(*p, 1))
+        .collect()
 }
 
 #[cfg(test)]
@@ -154,7 +161,10 @@ mod tests {
         let wah: Vec<u64> = all_signs().iter().map(|s| s.seed(0)).collect();
         let mes: Vec<u64> = meszl::PHASE1_SIGNS.iter().map(|s| s.seed(0)).collect();
         for w in wah.iter() {
-            assert!(!mes.contains(w), "Wahshiyya(0x11) != MesZL(0x10) guaranteed");
+            assert!(
+                !mes.contains(w),
+                "Wahshiyya(0x11) != MesZL(0x10) guaranteed"
+            );
         }
     }
 

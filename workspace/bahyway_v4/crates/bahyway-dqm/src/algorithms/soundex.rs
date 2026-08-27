@@ -23,7 +23,7 @@ pub fn soundex(input: &str) -> [u8; 4] {
         .collect();
 
     if upper.is_empty() {
-        return [b'Z', b'0', b'0', b'0'];
+        return *b"Z000";
     }
 
     let first = upper[0];
@@ -32,7 +32,9 @@ pub fn soundex(input: &str) -> [u8; 4] {
     let mut prev_digit = soundex_digit(first);
 
     for &ch in &upper[1..] {
-        if pos >= 4 { break; }
+        if pos >= 4 {
+            break;
+        }
         let d = soundex_digit(ch);
         if d != 0 && d != prev_digit {
             code[pos] = b'0' + d;
@@ -62,13 +64,13 @@ pub fn sounds_like(a: &str, b: &str) -> bool {
 
 fn soundex_digit(ch: u8) -> u8 {
     match ch {
-        b'B' | b'F' | b'P' | b'V'                         => 1,
+        b'B' | b'F' | b'P' | b'V' => 1,
         b'C' | b'G' | b'J' | b'K' | b'Q' | b'S' | b'X' | b'Z' => 2,
-        b'D' | b'T'                                         => 3,
-        b'L'                                                => 4,
-        b'M' | b'N'                                         => 5,
-        b'R'                                                => 6,
-        _                                                   => 0, // vowels, H, W, Y
+        b'D' | b'T' => 3,
+        b'L' => 4,
+        b'M' | b'N' => 5,
+        b'R' => 6,
+        _ => 0, // vowels, H, W, Y
     }
 }
 
@@ -89,7 +91,10 @@ mod tests {
 
     #[test]
     fn sounds_like_is_symmetric() {
-        assert_eq!(sounds_like("Robert", "Rupert"), sounds_like("Rupert", "Robert"));
+        assert_eq!(
+            sounds_like("Robert", "Rupert"),
+            sounds_like("Rupert", "Robert")
+        );
     }
 
     #[test]

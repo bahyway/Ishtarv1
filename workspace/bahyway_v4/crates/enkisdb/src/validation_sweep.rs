@@ -6,8 +6,8 @@
 //! Both outcomes are recorded as Journal events with the correct EventCause.
 
 use bahyway_core::TribeId;
-use enkidb_kaki::{EventKaki, IdentityKaki, KakiMinter, KakiRole, Kaki};
-use enkidb_journal::{Journal, JournalEntry, EventCause};
+use enkidb_journal::{EventCause, Journal, JournalEntry};
+use enkidb_kaki::{EventKaki, IdentityKaki, Kaki, KakiMinter, KakiRole};
 
 use crate::sdb_store::SdbStore;
 use musaru_security::check::{check_sovereignty, SecurityResult};
@@ -18,19 +18,22 @@ pub const DEFAULT_SWEEP_INTERVAL_TICKS: u64 = 900;
 /// Outcome of one sweep run.
 #[derive(Debug, Default, Clone)]
 pub struct SweepResult {
-    pub promoted:    usize,
+    pub promoted: usize,
     pub quarantined: usize,
 }
 
 /// Tick-based sweep scheduler.  Call `is_due()` each tick; call `run()` when due.
 pub struct ValidationSweep {
     interval_ticks: u64,
-    last_run_tick:  u64,
+    last_run_tick: u64,
 }
 
 impl ValidationSweep {
     pub fn new(interval_ticks: u64) -> Self {
-        ValidationSweep { interval_ticks, last_run_tick: 0 }
+        ValidationSweep {
+            interval_ticks,
+            last_run_tick: 0,
+        }
     }
 
     /// Convenience constructor using the sovereign default (900 ticks).
@@ -49,10 +52,10 @@ impl ValidationSweep {
     /// `tribe_id` is the owning tribe of this SDB instance.
     pub fn run(
         &mut self,
-        store:        &mut SdbStore,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
-        tribe_id:     TribeId,
+        store: &mut SdbStore,
+        journal: &mut Journal,
+        minter: &KakiMinter,
+        tribe_id: TribeId,
         current_tick: u64,
     ) -> SweepResult {
         self.last_run_tick = current_tick;
@@ -62,7 +65,7 @@ impl ValidationSweep {
         for idx in indices {
             let p = match store.get(idx) {
                 Some(p) => p.clone(),
-                None    => continue,
+                None => continue,
             };
 
             let cause = self.decide_cause(&p, tribe_id);
@@ -74,7 +77,7 @@ impl ValidationSweep {
                 .and_then(|k| IdentityKaki::try_from_kaki(k).ok())
             {
                 Some(ik) => ik,
-                None     => {
+                None => {
                     // Unreconstructable KAKI → quarantine without a Journal entry.
                     store.quarantine(idx);
                     result.quarantined += 1;
@@ -103,11 +106,7 @@ impl ValidationSweep {
         result
     }
 
-    fn decide_cause(
-        &self,
-        p:        &crate::sdb_store::StagedParticle,
-        tribe_id: TribeId,
-    ) -> EventCause {
+    fn decide_cause(&self, p: &crate::sdb_store::StagedParticle, tribe_id: TribeId) -> EventCause {
         if p.malware_flag {
             return EventCause::SdbValidationFail;
         }
@@ -115,16 +114,20 @@ impl ValidationSweep {
             .ok()
             .and_then(|k| IdentityKaki::try_from_kaki(k).ok())
         {
-            None     => EventCause::SdbValidationFail,
+            None => EventCause::SdbValidationFail,
             Some(ik) => match check_sovereignty(tribe_id, &ik) {
                 SecurityResult::Approved => EventCause::SdbValidationPass,
-                _                        => EventCause::SdbValidationFail,
+                _ => EventCause::SdbValidationFail,
             },
         }
     }
 
-    pub fn interval_ticks(&self) -> u64 { self.interval_ticks }
-    pub fn last_run_tick(&self)  -> u64 { self.last_run_tick }
+    pub fn interval_ticks(&self) -> u64 {
+        self.interval_ticks
+    }
+    pub fn last_run_tick(&self) -> u64 {
+        self.last_run_tick
+    }
 
     /// Admin reconfiguration — change the sweep cadence at runtime.
     pub fn set_interval(&mut self, ticks: u64) {
@@ -136,25 +139,26 @@ impl ValidationSweep {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sdb_store::{SdbStatus, SdbStore, StagedParticle};
     use bahyway_core::TribeId;
-    use enkidb_kaki::{KakiMinter, KakiRole};
     use enkidb_journal::Journal;
-    use crate::sdb_store::{SdbStore, StagedParticle, SdbStatus};
+    use enkidb_kaki::{KakiMinter, KakiRole};
 
     fn make_sweep() -> ValidationSweep {
         ValidationSweep::new(10) // short interval for tests
     }
 
     fn make_store_with_valid_particle(minter: &KakiMinter) -> (SdbStore, usize) {
-        let ik  = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut store = SdbStore::new();
         let idx = store.stage(StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     1,
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [100, 200, 255],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: 1,
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [100, 200, 255],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: false,
         });
@@ -171,14 +175,14 @@ mod tests {
 
     #[test]
     fn valid_particle_promoted() {
-        let tid    = TribeId::from_u16(0x0001);
+        let tid = TribeId::from_u16(0x0001);
         let minter = KakiMinter::new(tid);
         let (mut store, idx) = make_store_with_valid_particle(&minter);
-        let mut jnl    = Journal::new(64);
-        let mut sweep  = make_sweep();
+        let mut jnl = Journal::new(64);
+        let mut sweep = make_sweep();
 
         let res = sweep.run(&mut store, &mut jnl, &minter, tid, 10);
-        assert_eq!(res.promoted,    1);
+        assert_eq!(res.promoted, 1);
         assert_eq!(res.quarantined, 0);
         assert_eq!(store.get(idx).unwrap().status, SdbStatus::Promoted);
         assert_eq!(jnl.entry_count(), 1);
@@ -189,22 +193,23 @@ mod tests {
 
     #[test]
     fn malware_flagged_particle_quarantined() {
-        let tid    = TribeId::from_u16(0x0001);
+        let tid = TribeId::from_u16(0x0001);
         let minter = KakiMinter::new(tid);
-        let ik     = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut store = SdbStore::new();
         let idx = store.stage(StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     1,
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [255, 0, 0],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: 1,
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [255, 0, 0],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: true,
         });
 
-        let mut jnl   = Journal::new(64);
+        let mut jnl = Journal::new(64);
         let mut sweep = make_sweep();
         let res = sweep.run(&mut store, &mut jnl, &minter, tid, 10);
 
@@ -214,13 +219,13 @@ mod tests {
 
     #[test]
     fn wrong_tribe_particle_quarantined() {
-        let tid1   = TribeId::from_u16(0x0001);
-        let tid2   = TribeId::from_u16(0x0002);
-        let m1     = KakiMinter::new(tid1);
+        let tid1 = TribeId::from_u16(0x0001);
+        let tid2 = TribeId::from_u16(0x0002);
+        let m1 = KakiMinter::new(tid1);
         let (mut store, idx) = make_store_with_valid_particle(&m1);
-        let m2     = KakiMinter::new(tid2);
+        let m2 = KakiMinter::new(tid2);
 
-        let mut jnl   = Journal::new(64);
+        let mut jnl = Journal::new(64);
         let mut sweep = make_sweep();
         // sweep runs in the context of tribe 2, but particle belongs to tribe 1
         let res = sweep.run(&mut store, &mut jnl, &m2, tid2, 10);
@@ -231,10 +236,10 @@ mod tests {
 
     #[test]
     fn second_run_ignores_already_decided() {
-        let tid    = TribeId::from_u16(0x0001);
+        let tid = TribeId::from_u16(0x0001);
         let minter = KakiMinter::new(tid);
         let (mut store, _) = make_store_with_valid_particle(&minter);
-        let mut jnl   = Journal::new(64);
+        let mut jnl = Journal::new(64);
         let mut sweep = make_sweep();
 
         sweep.run(&mut store, &mut jnl, &minter, tid, 10);

@@ -1,0 +1,351 @@
+---
+# =============================================================================
+# PB-604 — APSÛ MIRROR: UNDERSIDE REFLECTION + ABSENCE CERTIFICATION
+# BahyWay.Ecosystem v4.+ · extends the Gula agent (requires PB-602, PB-603)
+# CSR-08: running this playbook is Bahaa's confirmation act.
+#
+# Delivers:
+#   1. apsu.rs — the underside of the membrane. Recovered upper-face
+#      patterns reflect into APPLICATION CANDIDATES (derivative along the
+#      domain axis; Tribe face substituted across concrete carriers).
+#      First dossiers: immersed-rail-tunnel (rupture·limit-cycle·pipe →
+#      Bārûtu / WPDEngine / Šību / Igigi carriers) and the humanitarian
+#      clearance court.
+#   2. certify_absence — the Never-Averaged gate: clearance certification
+#      is boolean on ZERO remaining Unnamed Particles. No percentages,
+#      ever. A field that is almost clear is not clear.
+#   3. lib.rs v3 — apsu module registered
+#   4. COMPILE + RUNTIME gates re-run — both blocking
+#
+# Reflections are §2.4 recommendation prose. The agent proposes carriers;
+# every seal remains Bahaa's. The name Apsû-Mirror enters the naming queue.
+# =============================================================================
+- name: "PB-604 · Apsû Mirror — underside reflection + absence certification"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    gula_crate_dir: "{{ repo_root }}/engines/gula"
+    naru_dir: "{{ repo_root }}/naru"
+
+  tasks:
+    - name: "Preflight · PB-602/358 must have run (zaqiqu module exists)"
+      ansible.builtin.stat:
+        path: "{{ gula_crate_dir }}/src/zaqiqu.rs"
+      register: zaqiqu_stat
+
+    - name: "Preflight · refuse if the phantom court is absent"
+      ansible.builtin.assert:
+        that: zaqiqu_stat.stat.exists
+        fail_msg: "zaqiqu.rs not found — run PB-602 then PB-603 first. Playbooks are ordered acts."
+
+    - name: "Preflight · cargo must exist on the host"
+      ansible.builtin.command: cargo --version
+      register: cargo_check
+      changed_when: false
+
+    - name: "Write src/lib.rs (PB-604 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! GULA — the grammar-minting agent (candidate name, pending CSR-08 seal).
+          //! Governed by GL-LSN-001 (Lišānu Law) under GL-ALG-002 (Unified Algebra).
+          //!
+          //! The arc: WITNESS → JUDGE → MOVE → STAGE (Nimrud discipline, GL-STK-001).
+          //! The agent heals the corpus from its own flesh: wounds (three-gloss
+          //! collisions) become grafts (dialect candidates), staged in URUK only.
+          //! Sealing to KISH is Bahaa's act alone — no code path here writes to kish/.
+          //!
+          //! Zero external dependencies. std only. No Z3, no solvers, no ML.
+
+          pub mod apsu;
+          pub mod arc;
+          pub mod court;
+          pub mod graft;
+          pub mod harvest;
+          pub mod naru;
+          pub mod uruk;
+          pub mod wound;
+          pub mod zaqiqu;
+
+          /// The canonical structural signature of a pattern family, decomposed on the
+          /// three faces of the GL-ALG-002 triality.
+          #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+          pub struct Signature {
+              pub particle_face: String,
+              pub orbit_face: String,
+              pub tribe_face: String,
+          }
+
+          impl Signature {
+              pub fn new(particle: &str, orbit: &str, tribe: &str) -> Self {
+                  Self {
+                      particle_face: normalize(particle),
+                      orbit_face: normalize(orbit),
+                      tribe_face: normalize(tribe),
+                  }
+              }
+
+              /// Canonical key: the shape as one string. Two patterns share a key
+              /// iff they share the same deep structure on all three faces.
+              pub fn key(&self) -> String {
+                  format!(
+                      "P[{}]|O[{}]|T[{}]",
+                      self.particle_face, self.orbit_face, self.tribe_face
+                  )
+              }
+          }
+
+          fn normalize(s: &str) -> String {
+              s.trim().to_lowercase().split_whitespace().collect::<Vec<_>>().join("-")
+          }
+
+          /// One engine's testimony: "I hold this pattern shape, and I gloss it thus."
+          #[derive(Debug, Clone)]
+          pub struct PatternWitness {
+              pub engine: String,
+              pub signature: Signature,
+              pub hubullu_gloss: String,
+          }
+
+          /// Verdict vocabulary of GL-LSN-001 §6.2. SEALED-KISH is intentionally
+          /// absent: the agent cannot pronounce it.
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum Verdict {
+              Observed,
+              Triggered,
+              Minted,
+              RejectedForeign(String),
+              RejectedTumor(String),
+              StagedUruk(String),
+              /// A phantom pattern predicted from the lattice's negative space
+              /// (zaqiqu). Prune-exempt; a prediction, never a dialect.
+              PhantomPredicted(String),
+              /// A live testimony matched a phantom's signature — prophecy fulfilled.
+              PhantomRecovered(String),
+          }
+
+          impl Verdict {
+              pub fn as_str(&self) -> &'static str {
+                  match self {
+                      Verdict::Observed => "OBSERVED",
+                      Verdict::Triggered => "TRIGGERED",
+                      Verdict::Minted => "MINTED",
+                      Verdict::RejectedForeign(_) => "REJECTED-FOREIGN",
+                      Verdict::RejectedTumor(_) => "REJECTED-TUMOR",
+                      Verdict::StagedUruk(_) => "STAGED-URUK",
+                      Verdict::PhantomPredicted(_) => "PHANTOM-PREDICTED",
+                      Verdict::PhantomRecovered(_) => "PHANTOM-RECOVERED",
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn signature_key_is_canonical() {
+                  let a = Signature::new("  Leak  Event ", "decay ORBIT", "pipe tribe");
+                  let b = Signature::new("leak event", "Decay Orbit", "Pipe   Tribe");
+                  assert_eq!(a.key(), b.key());
+              }
+          }
+    - name: "Write src/apsu.rs (PB-604 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/apsu.rs"
+        mode: "0644"
+        content: |
+          //! APSÛ MIRROR — the underside of the membrane (PB-604).
+          //! The upper face of the membrane is ontology: which patterns exist.
+          //! The underside is the Apsû — Enki's freshwater abyss — praxis: what
+          //! each pattern can DO in the world.
+          //!
+          //! When PHANTOM-RECOVERED fires on the upper face, the Apsû reflects it
+          //! downward as the pattern's derivative along the domain axis: hold the
+          //! abstract signature fixed, differentiate the Tribe face across concrete
+          //! carriers. Reflections are APPLICATION CANDIDATES — journaled prose
+          //! recommendations under GL-LSN-001 §2.4, never sealed by the agent.
+          //!
+          //! Also home of ABSENCE CERTIFICATION — the Zaqīqu court run in reverse
+          //! for humanitarian clearance (mine action, UXO): a suspected hazard is
+          //! an Unnamed Particle held prune-exempt until recovered (excavated) or
+          //! its void is certified empty. Certification is boolean on ZERO
+          //! remaining suspects — the Never-Averaged Theorem. A field that is
+          //! "99.8% clear" is not clear: no one encounters a percentage.
+
+          use crate::Signature;
+
+          #[derive(Debug, Clone)]
+          pub struct ApplicationCandidate {
+              /// Upper-face pattern this application reflects.
+              pub pattern_key: String,
+              /// Concrete carrier domain on the underside.
+              pub domain: String,
+              /// Sealed engines already able to carry this application.
+              pub carrier_engines: Vec<String>,
+              /// One-paragraph dossier — recommendation prose (§2.4), never a seal.
+              pub dossier: String,
+          }
+
+          /// Tribe face → concrete carrier domains. Deterministic substitution
+          /// table; extending it is a tablet edit, not a code rewrite.
+          const TRIBE_CARRIERS: &[(&str, &[&str])] = &[
+              (
+                  "pipe",
+                  &[
+                      "water-mains",
+                      "immersed-rail-tunnel",
+                      "district-heat-network",
+                      "estuary-pipeline",
+                  ],
+              ),
+              ("membrane", &["tunnel-lining", "dam-face", "levee"]),
+              ("vine", &["orchard-irrigation", "greenhouse-lines"]),
+          ];
+
+          /// Engines that carry each domain (sealed corpus references).
+          fn carriers_for(domain: &str) -> Vec<String> {
+              let base: &[&str] = match domain {
+                  "immersed-rail-tunnel" => &["wpdengine", "nanshe", "igigi", "sibu"],
+                  "water-mains" => &["wpdengine", "igigi"],
+                  "district-heat-network" | "estuary-pipeline" => &["wpdengine", "nanshe"],
+                  "tunnel-lining" | "dam-face" | "levee" => &["nanshe", "lamassu"],
+                  _ => &["nanshe"],
+              };
+              base.iter().map(|s| s.to_string()).collect()
+          }
+
+          fn dossier_for(sig: &Signature, domain: &str) -> String {
+              match domain {
+                  "immersed-rail-tunnel" => format!(
+                      "An immersed-tube rail tunnel is a pipe at civilizational scale: a Tribe of \
+                       segments with joints as vulnerable organs, tidal/thermal loading as the \
+                       literal {} orbit, and a rupture ceiling per GL-HSI-001-A2. Carriers: \
+                       Bārûtu wall-as-Masku-organ channels for the lining; Ninety-Day Kanīku \
+                       horizon for joint-seal prophecy; WPDEngine Cramér–Rao pinpoint gate \
+                       (σ_d ≤ 0.10 m) for leak localization; Šību for gasket aging; Igigi \
+                       Three Bells alarming on acceleration, never weather.",
+                      sig.orbit_face
+                  ),
+                  _ => format!(
+                      "Underside reflection of {} onto carrier '{}': same genome, concrete flesh. \
+                       Recommendation prose only — the seal is Bahaa's.",
+                      sig.key(),
+                      domain
+                  ),
+              }
+          }
+
+          /// The mirror: reflect an upper-face pattern into its Apsû applications.
+          pub fn reflect(sig: &Signature) -> Vec<ApplicationCandidate> {
+              let carriers = TRIBE_CARRIERS
+                  .iter()
+                  .find(|(t, _)| *t == sig.tribe_face)
+                  .map(|(_, d)| *d)
+                  .unwrap_or(&[]);
+              carriers
+                  .iter()
+                  .map(|domain| ApplicationCandidate {
+                      pattern_key: sig.key(),
+                      domain: (*domain).to_string(),
+                      carrier_engines: carriers_for(domain),
+                      dossier: dossier_for(sig, domain),
+                  })
+                  .collect()
+          }
+
+          /// ABSENCE CERTIFICATION — the Never-Averaged gate.
+          /// `suspects_remaining` counts Unnamed Particles still held prune-exempt
+          /// inside the polygon (suspected hazards neither recovered nor disproven).
+          /// Certification is granted ONLY at zero. There is no partial certificate,
+          /// no percentage, no averaging — ever.
+          pub fn certify_absence(polygon_id: &str, suspects_remaining: usize) -> Result<String, String> {
+              if suspects_remaining == 0 {
+                  Ok(format!(
+                      "ABSENCE CERTIFIED · polygon {} · zero unnamed particles remain · \
+                       Kanīku chain may now seal the handover",
+                      polygon_id
+                  ))
+              } else {
+                  Err(format!(
+                      "CERTIFICATION REFUSED · polygon {} · {} unnamed particle(s) still held \
+                       prune-exempt · Never-Averaged Theorem: a field that is almost clear is \
+                       not clear — no one encounters a percentage",
+                      polygon_id, suspects_remaining
+                  ))
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn recovered_rupture_pipe_reflects_the_tunnel() {
+                  let sig = Signature::new("rupture", "limit-cycle", "pipe");
+                  let apps = reflect(&sig);
+                  assert!(apps.iter().any(|a| a.domain == "immersed-rail-tunnel"));
+                  let tunnel = apps.iter().find(|a| a.domain == "immersed-rail-tunnel").unwrap();
+                  assert!(tunnel.carrier_engines.contains(&"wpdengine".to_string()));
+                  assert!(tunnel.dossier.contains("GL-HSI-001-A2"));
+                  assert!(tunnel.dossier.contains("limit-cycle"));
+              }
+
+              #[test]
+              fn unknown_tribe_reflects_nothing_rather_than_inventing() {
+                  let sig = Signature::new("x", "y", "unknown-tribe");
+                  assert!(reflect(&sig).is_empty(), "no carrier table entry → no fabricated applications");
+              }
+
+              #[test]
+              fn never_averaged_refuses_one_remaining_suspect() {
+                  let refused = certify_absence("MF-ALPHA-07", 1);
+                  assert!(refused.is_err());
+                  assert!(refused.unwrap_err().contains("Never-Averaged"));
+              }
+
+              #[test]
+              fn certification_granted_only_at_zero() {
+                  assert!(certify_absence("MF-ALPHA-07", 0).is_ok());
+                  assert!(certify_absence("MF-ALPHA-07", 340).is_err());
+              }
+          }
+
+    - name: "GATE · COMPILE (cargo build) — blocking"
+      ansible.builtin.command: cargo build
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: compile_gate
+      changed_when: true
+
+    - name: "GATE · RUNTIME (cargo test) — blocking"
+      ansible.builtin.command: cargo test
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: runtime_gate
+      changed_when: false
+
+    - name: "NĀRU · record the act"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/playbook_acts.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-604","act":"apsu-mirror","law":"GL-LSN-001",
+          "doctrine":"upper face is ontology, underside is praxis",
+          "gates":{"compile":"green","runtime":"green"},
+          "applications":["immersed-rail-tunnel","humanitarian-clearance"],
+          "never_averaged":"certification boolean on zero suspects",
+          "naming_queue":["Apsu-Mirror"]}
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "PB-604 complete. Both gates green."
+          - "The membrane now has an underside: recovered patterns reflect"
+          - "into application candidates in the Apsû — tunnels beneath water,"
+          - "certified voids beneath cleared ground."
+          - "The Never-Averaged gate refuses every certificate above zero."

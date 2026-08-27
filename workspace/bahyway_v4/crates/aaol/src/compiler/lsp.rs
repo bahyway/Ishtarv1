@@ -17,5 +17,7 @@ pub async fn run_lsp_server() {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_lsp_stub_compiles() { assert!(true); }
+    fn test_lsp_stub_compiles() {
+        assert!(true);
+    }
 }

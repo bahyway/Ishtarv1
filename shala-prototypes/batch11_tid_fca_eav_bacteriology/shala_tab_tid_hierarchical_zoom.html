@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hierarchical TID Zoom Visualizer Prototype</title>
+    <!-- Tailwind CSS for modern responsive architecture -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .zoom-transition {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Custom scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+
+    <!-- Header Control Bar -->
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between sticky top-0 z-50 gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 rounded-xl shadow-lg shadow-purple-500/10">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight bg-gradient-to-r from-slate-100 via-purple-200 to-pink-200 bg-clip-text text-transparent">Multi-Scale Topological Document Router</h1>
+                <p class="text-xs text-slate-400">Zoom-In / Zoom-Out Dynamics: Family Clusters &rarr; Species Coordinates &rarr; Linked Document Fields</p>
+            </div>
+        </div>
+        
+        <!-- Navigation Breadcrumbs & Dynamic Zoom Controls -->
+        <div class="flex items-center space-x-3">
+            <div id="breadcrumb-container" class="flex items-center space-x-1 bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-300 font-medium">
+                <!-- Breadcrumbs injected by JS -->
+            </div>
+            <button id="btn-zoom-out" onclick="navigateUp()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-700 transition flex items-center space-x-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                <span>Zoom Out</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Split-Grid -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 overflow-hidden">
+        
+        <!-- Left Side: Interactive Topology Map Canvas (8 Cols) -->
+        <section class="lg:col-span-8 flex flex-col space-y-4 min-h-[450px]">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col flex-1 shadow-xl relative overflow-hidden">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-sm font-semibold tracking-wider text-slate-400 uppercase flex items-center space-x-2">
+                        <span id="level-indicator-dot" class="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+                        <span id="topology-view-title">Logical Manifold Space: Global Bacterial Families</span>
+                    </h2>
+                    <span class="text-[10px] code-font bg-slate-950 text-slate-400 px-2 py-1 border border-slate-800 rounded-lg">Click spaces/nodes to Zoom In</span>
+                </div>
+
+                <!-- Active Visual Subspace Container -->
+                <div class="relative bg-slate-950 rounded-xl border border-slate-800 flex-1 min-h-[350px] flex items-center justify-center overflow-hidden">
+                    <canvas id="hierarchical-canvas" class="absolute inset-0 w-full h-full cursor-pointer"></canvas>
+                    
+                    <!-- Interactive Info Overlay Matrix HUD -->
+                    <div class="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur border border-slate-800 px-3 py-2 rounded-xl text-[10px] code-font space-y-0.5 text-slate-400 shadow-lg">
+                        <div id="hud-scale-layer">Active Metric Resolution: H₀ Cluster Level</div>
+                        <div id="hud-selected-target" class="text-purple-400 font-semibold">Focus: Roots Domain Space</div>
+                    </div>
+
+                    <div class="absolute top-3 right-3 bg-slate-900/90 backdrop-blur border border-slate-800 px-2 py-1 rounded-lg text-[10px] text-slate-500 code-font">
+                        Continuous Scale Manifold
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Side: Deep Materialized Documentations & Generated Physical EAV Manifests (4 Cols) -->
+        <section class="lg:col-span-4 flex flex-col space-y-6 overflow-y-auto max-h-[calc(100vh-120px)] pr-1">
+            
+            <!-- Contextual Documentation & Microscopy Visuals Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <h2 class="text-sm font-semibold tracking-wider text-slate-400 uppercase">Document &amp; Microscopy Fields</h2>
+                    <span id="badge-microscopy-status" class="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-purple-950 text-purple-300 border border-purple-800">Global Cluster</span>
+                </div>
+
+                <!-- Dynamic Microscopy Image Element -->
+                <div class="relative h-44 w-full rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden group shadow-inner">
+                    <img id="detail-image" src="https://images.unsplash.com/photo-1174341792525-683b103fffe8?fm=jpg&q=60&w=3000&auto=format&fit=crop" 
+                         alt="Microscopic representation" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700">
+                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
+                    <div class="absolute bottom-2.5 left-3 right-3 flex justify-between items-end">
+                        <span id="detail-img-caption" class="text-xs font-medium text-slate-200 drop-shadow-md">Bacterial Cultures Overview</span>
+                        <span class="text-[9px] code-font text-slate-400 bg-slate-900/80 backdrop-blur px-1.5 py-0.5 rounded border border-slate-700">Unsplash Asset</span>
+                    </div>
+                </div>
+
+                <!-- Text Abstract Documentation Window -->
+                <div class="space-y-1">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Semantic Text Documentation Abstract</h3>
+                    <div id="detail-doc-text" class="bg-slate-950 rounded-xl p-3.5 border border-slate-800/60 text-xs leading-relaxed text-slate-300 max-h-36 overflow-y-auto">
+                        Select a specific bacteria family cluster or individual node vector on the geometric layout to view its integrated text documentation and linked metadata repository.
+                    </div>
+                </div>
+
+                <!-- Explicit Actionable Web Links Segment -->
+                <div class="space-y-2">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Verified External Repositories</h3>
+                    <div id="detail-links-container" class="flex flex-col space-y-2">
+                        <!-- Dynamic external reference links go here -->
+                        <span class="text-xs text-slate-500 italic p-2 bg-slate-950/40 rounded-lg border border-slate-950 text-center">No reference targets loaded.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EAV Mapped Projection Schema Real-time Target Container -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-sm font-semibold tracking-wider text-slate-400 uppercase">Physical Projection: Local EAV Target</h2>
+                    <span class="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-900 font-mono px-1.5 py-0.5 rounded animate-pulse">Synchronized</span>
+                </div>
+                
+                <div class="overflow-x-auto text-[11px] code-font bg-slate-950 rounded-xl p-3 border border-slate-800">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="text-slate-500 border-b border-slate-800/80">
+                                <th class="pb-2 font-medium">Entity_Key (H₀)</th>
+                                <th class="pb-2 font-medium">Attribute (1-Simplex)</th>
+                                <th class="pb-2 font-medium">Resolved_Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dynamic-eav-tbody" class="text-slate-300">
+                            <!-- Rows injected by JavaScript Engine -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Script Orchestration Architecture: Nested Topological Engine -->
+    <script>
+        // Complex Hierarchy Dataset Structure representing the dynamic mapping levels
+        const bacteriologyHierarchy = {
+            level: 'global',
+            name: 'Bacteria Domain',
+            description: 'The global bacteriology configuration maps structural classification metrics into stable continuous manifold clusters.',
+            imageUrl: 'https://images.unsplash.com/photo-1703500584838-ba17cd6c1b5f?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+            imgCaption: 'Bacterial colonies in a petri dish',
+            links: [
+                { name: 'NCBI Taxonomy Browser', url: 'https://google.com' },
+                { name: 'Public Domain Bacteriology Archive', url: 'https://google.com' }
+            ],
+            eavData: [
+                { entity: 'Vibrionaceae', attribute: 'Taxon Class', value: 'Gammaproteobacteria' },
+                { entity: 'Enterobacteriaceae', attribute: 'Taxon Class', value: 'Gammaproteobacteria' },
+                { entity: 'Bacillaceae', attribute: 'Taxon Class', value: 'Bacilli' }
+            ],
+            children: {
+                'Vibrionaceae': {
+                    level: 'family',
+                    name: 'Vibrionaceae Family',
+                    description: 'A family of Gram-negative bacteria, ordered under Vibrionales. Commonly found in marine habitats and estuaries, utilizing flagellated pathways for vector locomotion.',
+                    imageUrl: 'https://images.unsplash.com/photo-1574341792525-683b103fffe8?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                    imgCaption: 'Microbial water cluster sample',
+                    links: [
+                        { name: 'Vibrionaceae Family Registry', url: 'https://google.com' },
+                        { name: 'Marine Microbiology Systems', url: 'https://google.com' }
+                    ],
+                    eavData: [
+                        { entity: 'Vibrio', attribute: 'Metabolism', value: 'Facultative Anaerobe' },
+                        { entity: 'Aliivibrio', attribute: 'Bioluminescence', value: 'Lux Operon Expressed' }
+                    ],
+                    children: {
+                        'Vibrio cholerae': {
+                            level: 'species',
+                            name: 'Vibrio cholerae',
+                            description: 'A facultative anaerobic, comma-shaped Gram-negative bacterium. It triggers critical virulent reactions via the cholera toxin invariant cycle, causing acute dehydrating diarrhea in human subjects.',
+                            imageUrl: 'https://images.unsplash.com/photo-1706204787101-0e86c5ab20d6?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            imgCaption: 'Vibrio cholerae microscope field',
+                            links: [
+                                { name: 'CDC Cholera Information Portal', url: 'https://google.com' },
+                                { name: 'V. cholerae Genome Project Map', url: 'https://google.com' }
+                            ],
+                            eavData: [
+                                { entity: 'Vibrio cholerae', attribute: 'Gram Stain', value: 'Negative' },
+                                { entity: 'Vibrio cholerae', attribute: 'Morphology', value: 'Comma-shaped Rod' },
+                                { entity: 'Vibrio cholerae', attribute: 'Primary Toxin', value: 'Cholera Toxin (CTX)' },
+                                { entity: 'Vibrio cholerae', attribute: 'Optimal pH', value: '8.0 - 8.5' }
+                            ]
+                        },
+                        'Vibrio vulnificus': {
+                            level: 'species',
+                            name: 'Vibrio vulnificus',
+                            description: 'A virulent halophilic bacterium causing severe necrotizing fasciitis and septicemia. Thrives in warm marine environments and aggregates intensely inside shellfish tissues.',
+                            imageUrl: 'https://images.unsplash.com/photo-1574342117829-f44f2cd15fc4?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            imgCaption: 'Halophilic marine microbes',
+                            links: [
+                                { name: 'FDA Seafood Safety Standards', url: 'https://google.com' }
+                            ],
+                            eavData: [
+                                { entity: 'Vibrio vulnificus', attribute: 'Halophilism', value: 'Required (Na+ Dependent)' },
+                                { entity: 'Vibrio vulnificus', attribute: 'Pathogenicity', value: 'Cytolysin Induced Necrosis' }
+                            ]
+                        }
+                    }
+                },
+                'Enterobacteriaceae': {
+                    level: 'family',
+                    name: 'Enterobacteriaceae Family',
+                    description: 'A large family of Gram-negative rod-shaped bacteria. This family acts as a key semantic category node in gut microbiome mapping frameworks.',
+                    imageUrl: 'https://images.unsplash.com/photo-1631824683860-9a7aa1fe0713?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                    imgCaption: 'Escherichia coli microscope field',
+                    links: [
+                        { name: 'Enteric Bacteria Reference Base', url: 'https://google.com' }
+                    ],
+                    eavData: [
+                        { entity: 'Escherichia', attribute: 'Fermentation', value: 'Lactose Positive' },
+                        { entity: 'Salmonella', attribute: 'Antigenic Type', value: 'O, H, and Vi Loops' }
+                    ],
+                    children: {
+                        'Escherichia coli': {
+                            level: 'species',
+                            name: 'Escherichia coli',
+                            description: 'A rod-shaped, facultative anaerobic coliform bacterium. While mostly harmless, enterotoxic strains express Shiga toxins that break cellular structures in mammalian intestines.',
+                            imageUrl: 'https://images.unsplash.com/photo-1631824683860-9a7aa1fe0713?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            imgCaption: 'E. coli cellular rods',
+                            links: [
+                                { name: 'E. coli Model Organism Database', url: 'https://google.com' }
+                            ],
+                            eavData: [
+                                { entity: 'Escherichia coli', attribute: 'Gram Stain', value: 'Negative' },
+                                { entity: 'Escherichia coli', attribute: 'Morphology', value: 'Straight Rod' },
+                                { entity: 'Escherichia coli', attribute: 'Habitat', value: 'Lower Intestines' }
+                            ]
+                        },
+                        'Salmonella enterica': {
+                            level: 'species',
+                            name: 'Salmonella enterica',
+                            description: 'A rod-shaped flagellated pathogen responsible for widespread salmonellosis and typhoid cycles. Utilizes complex type-III secretion setups to breach host cell lines.',
+                            imageUrl: 'https://images.unsplash.com/photo-1574342118072-4be46442de5c?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            imgCaption: 'Flagellated enteric rods',
+                            links: [
+                                { name: 'WHO Salmonellosis Information', url: 'https://google.com' }
+                            ],
+                            eavData: [
+                                { entity: 'Salmonella enterica', attribute: 'Motility', value: 'Peritrichous Flagella' },
+                                { entity: 'Salmonella enterica', attribute: 'Disease State', value: 'Gastroenteritis / Enteric Fever' }
+                            ]
+                        }
+                    }
+                },
+                'Bacillaceae': {
+                    level: 'family',
+                    name: 'Bacillaceae Family',
+                    description: 'A family of Gram-positive, heterotrophic, rod-shaped bacteria that produce robust endospores to survive extreme environment perturbations.',
+                    imageUrl: 'https://images.unsplash.com/photo-1574342117829-f44f2cd15fc4?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                    imgCaption: 'Endospore forming rods',
+                    links: [
+                        { name: 'Firmicutes Structural Database', url: 'https://google.com' }
+                    ],
+                    eavData: [
+                        { entity: 'Bacillus', attribute: 'Oxygen Demand', value: 'Aerobic or Facultative' },
+                        { entity: 'Clostridium', attribute: 'Oxygen Demand', value: 'Strict Anaerobic' }
+                    ],
+                    children: {
+                        'Bacillus anthracis': {
+                            level: 'species',
+                            name: 'Bacillus anthracis',
+                            description: 'The causative pathogen of anthrax. Forms highly resilient spores surviving decades in dry soils; contains key invariant plasmid complexes coding for lethal factor toxification.',
+                            imageUrl: 'https://images.unsplash.com/photo-1574341792525-683b103fffe8?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            imgCaption: 'Resilient bacterial endospores',
+                            links: [
+                                { name: 'CDC Anthrax Safety Guidelines', url: 'https://google.com' }
+                            ],
+                            eavData: [
+                                { entity: 'Bacillus anthracis', attribute: 'Gram Stain', value: 'Positive' },
+                                { entity: 'Bacillus anthracis', attribute: 'Spore Formation', value: 'True (Central Spores)' },
+                                { entity: 'Bacillus anthracis', attribute: 'Virulence Factors', value: 'pXO1 and pXO2 Plasmids' }
+                            ]
+                        }
+                    }
+                }
+            }
+        };
+
+        // Navigation Navigation State Trackers
+        let navigationStack = [bacteriologyHierarchy];
+        
+        // Canvas Geometry Rendering Configurations
+        const canvas = document.getElementById('hierarchical-canvas');
+        const ctx = canvas.getContext('2d');
+        let geometryNodes = [];
+
+        // UI Element Hooks
+        const viewTitle = document.getElementById('topology-view-title');
+        const btnZoomOut = document.getElementById('btn-zoom-out');
+        const breadcrumbContainer = document.getElementById('breadcrumb-container');
+        
+        // Detail Panel Hooks
+        const detailImg = document.getElementById('detail-image');
+        const detailImgCaption = document.getElementById('detail-img-caption');
+        const detailDocText = document.getElementById('detail-doc-text');
+        const detailLinksContainer = document.getElementById('detail-links-container');
+        const dynamicEavTbody = document.getElementById('dynamic-eav-tbody');
+        const badgeMicroscopy = document.getElementById('badge-microscopy-status');
+        
+        // HUD Overlay Hooks
+        const hudScale = document.getElementById('hud-scale-layer');
+        const hudSelected = document.getElementById('hud-selected-target');
+
+        // Initialize Application Responsive Sizing Layout
+        function initializeCanvasSizing() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            recalculateGeometryNodes();
+        }
+
+        // Map abstract logical hierarchies to localized geometric center coordinates inside the vector box
+        function recalculateGeometryNodes() {
+            const currentState = getCurrentState();
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            geometryNodes = [];
+
+            if (currentState.level === 'global' || currentState.level === 'family') {
+                // Render sub-cluster fields orbiting around a logical systemic core focus
+                const keys = Object.keys(currentState.children || {});
+                const totalNodes = keys.length;
+                
+                // Add the local structural parent center reference point
+                geometryNodes.push({
+                    id: 'core-anchor',
+                    name: currentState.name,
+                    isCenter: true,
+                    x: cx,
+                    y: cy,
+                    radius: 20,
+                    color: '#a855f7' // Purple core focus
+                });
+
+                // Compute geometric orbital positions for satellite manifolds
+                keys.forEach((key, index) => {
+                    const angle = (index * 2 * Math.PI) / totalNodes;
+                    const radiusDistance = Math.min(canvas.width, canvas.height) * 0.32;
+                    
+                    geometryNodes.push({
+                        id: key,
+                        name: key,
+                        isCenter: false,
+                        x: cx + radiusDistance * Math.cos(angle),
+                        y: cy + radiusDistance * Math.sin(angle),
+                        radius: currentState.level === 'global' ? 14 : 11,
+                        color: currentState.level === 'global' ? '#6366f1' : '#ec4899', // Indigo for Families, Pink for Species
+                        targetData: currentState.children[key]
+                    });
+                });
+            } else {
+                // Terminal Species level: display detailed interconnected field properties (EAV simplicial view)
+                geometryNodes.push({
+                    id: 'species-core',
+                    name: currentState.name,
+                    isCenter: true,
+                    x: cx,
+                    y: cy,
+                    radius: 18,
+                    color: '#10b981' // Emerald Terminal Node
+                });
+
+                // Display vector dimensions reflecting localized data properties
+                currentState.eavData.forEach((item, index) => {
+                    const totalProps = currentState.eavData.length;
+                    const angle = (index * 2 * Math.PI) / totalProps;
+                    const radiusDistance = Math.min(canvas.width, canvas.height) * 0.34;
+
+                    geometryNodes.push({
+                        id: `prop-${index}`,
+                        name: `${item.attribute}: ${item.value}`,
+                        isCenter: false,
+                        x: cx + radiusDistance * Math.cos(angle),
+                        y: cy + radiusDistance * Math.sin(angle),
+                        radius: 7,
+                        color: '#64748b', // Slate for bound components
+                        isProperty: true
+                    });
+                });
+            }
+            renderTopologyFrame();
+        }
+
+        // Core Rendering Pipeline Draw Operation Loop
+        function renderTopologyFrame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const currentState = getCurrentState();
+
+            // 1. Draw continuous neighborhood vector connection links (simplices edges)
+            const centerNode = geometryNodes.find(n => n.isCenter);
+            if (centerNode) {
+                geometryNodes.forEach(node => {
+                    if (!node.isCenter) {
+                        ctx.beginPath();
+                        ctx.moveTo(centerNode.x, centerNode.y);
+                        ctx.lineTo(node.x, node.y);
+                        ctx.lineWidth = node.isProperty ? 1.5 : 2;
+                        ctx.strokeStyle = node.isProperty ? 'rgba(100, 116, 139, 0.4)' : 'rgba(168, 85, 247, 0.4)';
+                        ctx.stroke();
+
+                        // Add small moving directional flow markers to indicate gradient path alignment
+                        const midX = (centerNode.x + node.x) / 2;
+                        const midY = (centerNode.y + node.y) / 2;
+                        ctx.beginPath();
+                        ctx.arc(midX, midY, 3, 0, 2 * Math.PI);
+                        ctx.fillStyle = node.color;
+                        ctx.fill();
+                    }
+                });
+            }
+
+            // 2. Render discrete topological coordinate nodes spheres
+            geometryNodes.forEach(node => {
+                // Apply soft visual depth glow matrices
+                ctx.shadowBlur = node.isCenter ? 16 : 8;
+                ctx.shadowColor = node.color + '55';
+
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI);
+                ctx.fillStyle = node.color;
+                ctx.fill();
+
+                ctx.shadowBlur = 0; // Reset canvas filter buffer states
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Draw Text Parameter Overlays inside the box layout
+                ctx.fillStyle = '#f1f5f9';
+                ctx.font = node.isCenter ? 'bold 12px "Plus Jakarta Sans", sans-serif' : '500 11px "Plus Jakarta Sans", sans-serif';
+                ctx.textAlign = 'center';
+                
+                // Adjust typography placement vector alignment to prevent overlaps
+                const offsetDirection = node.y > canvas.height / 2 ? 15 + node.radius : -8 - node.radius;
+                ctx.fillText(node.name, node.x, node.y + offsetDirection);
+            });
+        }
+
+        // Return current hierarchy scope context element
+        function getCurrentState() {
+            return navigationStack[navigationStack.length - 1];
+        }
+
+        // Update view components and synchronize layout metadata tables
+        function synchronizeViewData() {
+            const state = getCurrentState();
+            
+            // 1. Title bar alignment routing
+            if (state.level === 'global') {
+                viewTitle.textContent = "Logical Manifold Space: Global Bacterial Families";
+                hudScale.textContent = "Active Metric Resolution: H₀ Cluster Level";
+                badgeMicroscopy.textContent = "Global Space";
+                badgeMicroscopy.className = "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-purple-950 text-purple-300 border border-purple-800";
+            } else if (state.level === 'family') {
+                viewTitle.textContent = `Family Manifold Space: ${state.name}`;
+                hudScale.textContent = "Active Metric Resolution: H₁ Flux Invariants";
+                badgeMicroscopy.textContent = "Family Cluster";
+                badgeMicroscopy.className = "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-indigo-950 text-indigo-300 border border-indigo-800";
+            } else {
+                viewTitle.textContent = `Terminal Dimension View: ${state.name}`;
+                hudScale.textContent = "Active Metric Resolution: Value Target Attractors";
+                badgeMicroscopy.textContent = "Species Invariant";
+                badgeMicroscopy.className = "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-emerald-950 text-emerald-300 border border-emerald-800";
+            }
+
+            hudSelected.textContent = `Focus: ${state.name}`;
+            btnZoomOut.disabled = navigationStack.length === 1;
+
+            // 2. Synchronize Documentation text abstract window elements
+            detailDocText.textContent = state.description;
+            detailImg.src = state.imageUrl;
+            detailImgCaption.textContent = state.imgCaption;
+
+            // 3. Render integrated Actionable Hyperlink records
+            detailLinksContainer.innerHTML = '';
+            state.links.forEach(link => {
+                detailLinksContainer.innerHTML += `
+                    <a href="${link.url}" target="_blank" rel="noopener noreferrer" 
+                       class="text-xs text-purple-400 bg-purple-950/30 hover:bg-purple-950/60 border border-purple-900/60 px-3 py-2 rounded-xl transition flex items-center justify-between group">
+                        <span class="font-medium group-hover:text-purple-300">${link.name}</span>
+                        <svg class="w-3 h-3 text-purple-500 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                    </a>
+                `;
+            });
+
+            // 4. Update physical EAV structured relational table matrix target view
+            dynamicEavTbody.innerHTML = '';
+            if (state.eavData.length === 0) {
+                dynamicEavTbody.innerHTML = `<tr><td colspan="3" class="py-2 text-slate-600 text-center italic">No data columns allocated at this boundary.</td></tr>`;
+            } else {
+                state.eavData.forEach(row => {
+                    dynamicEavTbody.innerHTML += `
+                        <tr class="hover:bg-slate-900 border-b border-slate-900/40 transition">
+                            <td class="py-2 text-purple-400 font-medium">${row.entity}</td>
+                            <td class="py-2 text-indigo-400 font-medium">${row.attribute}</td>
+                            <td class="py-2 text-emerald-400 font-semibold">${row.value}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            // 5. Update Breadcrumb Navigation Trails elements
+            updateBreadcrumbUI();
+            recalculateGeometryNodes();
+        }
+
+        // Draw Navigation Breadcrumbs Interface Element
+        function updateBreadcrumbUI() {
+            breadcrumbContainer.innerHTML = '';
+            navigationStack.forEach((state, index) => {
+                const isLast = index === navigationStack.length - 1;
+                breadcrumbContainer.innerHTML += `
+                    <span class="${isLast ? 'text-purple-400 font-semibold' : 'text-slate-400 cursor-pointer hover:text-slate-200'}" 
+                          onclick="jumpToBreadcrumb(${index})">
+                        ${state.name === 'Bacteria Domain' ? 'Bacteria Roots' : state.name.split(' ')[0]}
+                    </span>
+                `;
+                if (!isLast) {
+                    breadcrumbContainer.innerHTML += `
+                        <span class="text-slate-600 font-light mx-1">&sol;</span>
+                    `;
+                }
+            });
+        }
+
+        // Zoom-In Vector Routing Action handler
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            // Check spatial overlap proximity constraints for any interactive node element
+            for (let node of geometryNodes) {
+                if (node.isCenter) continue; // Root center navigation skip conditions
+                
+                const distance = Math.sqrt((clickX - node.x) ** 2 + (clickY - node.y) ** 2);
+                if (distance <= node.radius + 12) { // Apply generous spatial padding boundaries
+                    if (node.targetData) {
+                        // Traverse deeper into topological workspace manifold layer
+                        navigationStack.push(node.targetData);
+                        synchronizeViewData();
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Zoom-Out / Hierarchy Return dynamic step control logic
+        function navigateUp() {
+            if (navigationStack.length > 1) {
+                navigationStack.pop();
+                synchronizeViewData();
+            }
+        }
+
+        // Direct Breadcrumb jumping layout handler
+        window.jumpToBreadcrumb = function(index) {
+            if (index < navigationStack.length - 1) {
+                navigationStack = navigationStack.slice(0, index + 1);
+                synchronizeViewData();
+            }
+        }
+
+        // Initialize setup hooks and trigger layout cycle components loops
+        window.onload = function() {
+            initializeCanvasSizing();
+            synchronizeViewData();
+        };
+        
+        window.addEventListener('resize', () => {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            recalculateGeometryNodes();
+        });
+    </script>
+</body>
+</html>

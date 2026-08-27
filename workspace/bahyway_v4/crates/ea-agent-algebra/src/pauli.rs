@@ -4,17 +4,17 @@
 //!  triplet simultaneously." — The High Council of Data
 #![forbid(unsafe_code)]
 
-use ea_agent_core::{ParticleSnapshot, QuantumState};
 use ea_agent_core::constants::PAULI_EXCLUSION_THRESHOLD;
+use ea_agent_core::ParticleSnapshot;
 
 /// A detected Pauli violation between two particles.
 #[derive(Debug, Clone)]
 pub struct PauliViolation {
-    pub particle_a:  String,
-    pub particle_b:  String,
-    pub distance:    f64,
-    pub dimension:   Option<usize>,  // which dimension is closest to collision
-    pub severity:    PauliSeverity,
+    pub particle_a: String,
+    pub particle_b: String,
+    pub distance: f64,
+    pub dimension: Option<usize>, // which dimension is closest to collision
+    pub severity: PauliSeverity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,8 +31,8 @@ impl PauliSeverity {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Critical => "CRITICAL — Identity Crisis",
-            Self::High     => "HIGH — Repulsion Needed",
-            Self::Warning  => "WARNING — Monitor",
+            Self::High => "HIGH — Repulsion Needed",
+            Self::Warning => "WARNING — Monitor",
         }
     }
 }
@@ -40,22 +40,34 @@ impl PauliSeverity {
 /// Result of a Pauli Exclusion check on a set of particles.
 #[derive(Debug)]
 pub struct PauliResult {
-    pub violations:  Vec<PauliViolation>,
-    pub checked:     usize,
-    pub sovereign:   bool,
+    pub violations: Vec<PauliViolation>,
+    pub checked: usize,
+    pub sovereign: bool,
 }
 
 impl PauliResult {
-    pub fn has_violations(&self) -> bool { !self.violations.is_empty() }
+    pub fn has_violations(&self) -> bool {
+        !self.violations.is_empty()
+    }
     pub fn critical_count(&self) -> usize {
-        self.violations.iter().filter(|v| v.severity == PauliSeverity::Critical).count()
+        self.violations
+            .iter()
+            .filter(|v| v.severity == PauliSeverity::Critical)
+            .count()
     }
     pub fn summary(&self) -> String {
         if self.sovereign {
-            format!("✅ Sovereign — {} particles checked, no violations", self.checked)
+            format!(
+                "✅ Sovereign — {} particles checked, no violations",
+                self.checked
+            )
         } else {
-            format!("⚠ {} violation(s) in {} particles checked ({} critical)",
-                self.violations.len(), self.checked, self.critical_count())
+            format!(
+                "⚠ {} violation(s) in {} particles checked ({} critical)",
+                self.violations.len(),
+                self.checked,
+                self.critical_count()
+            )
         }
     }
 }
@@ -67,7 +79,9 @@ pub struct PauliChecker {
 
 impl PauliChecker {
     pub fn new() -> Self {
-        Self { threshold: PAULI_EXCLUSION_THRESHOLD }
+        Self {
+            threshold: PAULI_EXCLUSION_THRESHOLD,
+        }
     }
 
     pub fn with_threshold(threshold: f64) -> Self {
@@ -80,12 +94,14 @@ impl PauliChecker {
         let mut violations = Vec::new();
 
         for i in 0..particles.len() {
-            for j in i+1..particles.len() {
+            for j in i + 1..particles.len() {
                 let a = &particles[i];
                 let b = &particles[j];
 
                 // Only check particles in the same quantum state (same shell)
-                if a.state != b.state { continue; }
+                if a.state != b.state {
+                    continue;
+                }
 
                 let dist = a.hepta.manhattan_distance(&b.hepta);
 
@@ -99,10 +115,15 @@ impl PauliChecker {
                     };
 
                     // Find the dimension causing the closest overlap
-                    let dimension = a.hepta.d.iter().zip(b.hepta.d.iter())
+                    let dimension = a
+                        .hepta
+                        .d
+                        .iter()
+                        .zip(b.hepta.d.iter())
                         .enumerate()
-                        .min_by(|(_, (a1, b1)), (_, (a2, b2))|
-                            (*a1-*b1).abs().partial_cmp(&(*a2-*b2).abs()).unwrap())
+                        .min_by(|(_, (a1, b1)), (_, (a2, b2))| {
+                            (*a1 - *b1).abs().partial_cmp(&(*a2 - *b2).abs()).unwrap()
+                        })
                         .map(|(i, _)| i);
 
                     violations.push(PauliViolation {
@@ -117,22 +138,32 @@ impl PauliChecker {
         }
 
         let sovereign = violations.is_empty();
-        PauliResult { violations, checked: particles.len(), sovereign }
+        PauliResult {
+            violations,
+            checked: particles.len(),
+            sovereign,
+        }
     }
 
     /// Quick check if two specific particles violate Pauli.
     pub fn check_pair(&self, a: &ParticleSnapshot, b: &ParticleSnapshot) -> bool {
-        if a.state != b.state { return false; }
+        if a.state != b.state {
+            return false;
+        }
         a.hepta.manhattan_distance(&b.hepta) < self.threshold
     }
 }
 
-impl Default for PauliChecker { fn default() -> Self { Self::new() } }
+impl Default for PauliChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ea_agent_core::{HeptaVector};
+    use ea_agent_core::{HeptaVector, QuantumState};
 
     fn make_particle(name: &str, d: [f64; 7]) -> ParticleSnapshot {
         ParticleSnapshot::new(name, fnv(name), 0x0001, HeptaVector::new(d))
@@ -140,7 +171,10 @@ mod tests {
 
     fn fnv(s: &str) -> u32 {
         let mut h: u32 = 2166136261;
-        for b in s.bytes() { h ^= b as u32; h = h.wrapping_mul(16777619); }
+        for b in s.bytes() {
+            h ^= b as u32;
+            h = h.wrapping_mul(16777619);
+        }
         h
     }
 

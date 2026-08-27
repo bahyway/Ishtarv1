@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Šala · PB-345 — The WPD Closure Court</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#060a14;overflow:hidden;
+    font-family:Georgia,'Times New Roman',serif;color:#d8cfae}
+  canvas{display:block;position:absolute;inset:0}
+  .panel{position:absolute;background:rgba(10,16,30,.88);border:1px solid #3a4a6a;
+    border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.5;
+    box-shadow:0 4px 24px rgba(0,0,0,.5)}
+  #title{top:14px;left:14px;max-width:330px}
+  #title h1{margin:0 0 4px;font-size:17px;color:#e8b84b;letter-spacing:.5px}
+  #title .law{color:#7f93b8;font-size:11px}
+  #gates{top:14px;right:14px;width:230px}
+  #gates label{display:flex;gap:8px;align-items:center;cursor:pointer;margin:3px 0}
+  #gates .g-pass{color:#7fd8a0}#gates .g-fail{color:#e07a6a}
+  #colophon{bottom:14px;left:14px;width:360px;white-space:pre-wrap;
+    font-family:'Courier New',monospace;font-size:11.5px}
+  #colophon.concord{border-color:#e8b84b;color:#e8d9a0}
+  #colophon.refusal{border-color:#a03a2a;color:#e0a090}
+  #journal{bottom:14px;right:14px;width:290px;max-height:38vh;overflow-y:auto}
+  #journal h2{margin:0 0 6px;font-size:12px;color:#8fb0d8;letter-spacing:1px}
+  #journal .entry{border-top:1px dotted #33456a;padding:5px 0;font-size:12px}
+  #journal .who{color:#e8b84b}
+  #ctx{display:none;position:absolute;z-index:50;background:#101a30;
+    border:1px solid #5a6a8a;border-radius:6px;min-width:210px;overflow:hidden}
+  #ctx .item{padding:8px 12px;font-size:12.5px;cursor:pointer}
+  #ctx .item:hover{background:#1c2a48}
+  #ctx .head{padding:6px 12px;font-size:11px;color:#7f93b8;background:#0a1224;
+    border-bottom:1px solid #2a3a5a}
+  .hint{position:absolute;top:50%;left:14px;transform:translateY(-50%);
+    font-size:11px;color:#5a6f96;max-width:150px;line-height:1.7}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="title" class="panel"><h1>PB-345 · The WPD Closure Court</h1>
+  <div class="law">Rigmu doctrine: no silent close. Six gates orbit the seal;
+  the CONCORD colophon writes itself only when every gate is green. A red gate
+  is a refused close — it has a Refusal Record, never a story.</div></div>
+<div id="gates" class="panel"><b style="color:#8fb0d8;font-size:12px">AUDIT SIMULATOR</b><div id="gatelist"></div></div>
+<div id="colophon" class="panel refusal"></div>
+<div id="journal" class="panel"><h2>STORYENGINE · NĀRU JOURNAL</h2><div id="jbody"></div></div>
+<div id="ctx"></div>
+<div class="hint">scroll · zoom<br>drag · rotate membrane<br>left-click gate · bounce + journal<br>right-click · court menu</div>
+<script>
+"use strict";
+const cv=document.getElementById("cv"),cx=cv.getContext("2d");
+let W,H;function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight}rs();addEventListener("resize",rs);
+/* ── NASARU core: camera ── */
+let zoom=1.15,yaw=0.6,pitch=0.42,auto=true;
+addEventListener("wheel",e=>{zoom=Math.min(4,Math.max(.55,zoom*(e.deltaY<0?1.08:0.925)));e.preventDefault()},{passive:false});
+let drag=null,moved=0;
+cv.addEventListener("mousedown",e=>{if(e.button===0){drag={x:e.clientX,y:e.clientY};moved=0}});
+addEventListener("mousemove",e=>{if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;moved+=Math.abs(dx)+Math.abs(dy);
+  yaw+=dx*.006;pitch=Math.min(1.25,Math.max(.08,pitch+dy*.004));drag={x:e.clientX,y:e.clientY};auto=false}});
+addEventListener("mouseup",e=>{if(drag&&moved<3&&e.button===0)pick(e.clientX,e.clientY);drag=null});
+function proj(x,y,z){const cy=Math.cos(yaw),sy=Math.sin(yaw);
+  let X=x*cy - z*sy, Z=x*sy + z*cy;
+  const cp=Math.cos(pitch),sp=Math.sin(pitch);
+  let Y=y*cp - Z*sp; Z=y*sp + Z*cp;
+  const d=560/(560+Z*0.9);
+  return {x:W/2+X*d*zoom,y:H/2+52+Y*d*zoom,d};}
+/* ── the six gates ── */
+const GATES=[
+ ["G1","Registry read (never stale)","The living BLOCKERS.md, deposited verbatim as Labīru origin."],
+ ["G2","Workspace build + test","cargo build/test --workspace --release under current source."],
+ ["G3","Phase 1 Blocks A–F","TESTING_PLAYBOOK_PHASE1 suite — the sealed gate of the era."],
+ ["G4","Runtime Law bench","One billion particles under one second, release + LTO."],
+ ["G5","SEC-1 · CSR-08 code","Enforcement present in enkidb-con-engine — the human seal in code."],
+ ["G6","Enbilulu law tests","Φ_Enbi weights, TIAMAT bands, T_j horizon still true today."]];
+const gates=GATES.map((g,i)=>({id:g[0],name:g[1],lore:g[2],pass:i!==3,
+  ang:i/6*Math.PI*2,bounce:0,bv:0}));
+/* gate G4 starts red on purpose: the court must be seen refusing */
+const gl=document.getElementById("gatelist");
+gates.forEach((g,i)=>{const l=document.createElement("label");
+  l.innerHTML=`<input type="checkbox" ${g.pass?"checked":""} data-i="${i}">
+   <span class="${g.pass?'g-pass':'g-fail'}">${g.id} · ${g.name}</span>`;
+  l.querySelector("input").addEventListener("change",ev=>{g.pass=ev.target.checked;
+    l.querySelector("span").className=g.pass?"g-pass":"g-fail";
+    journal("AUDIT",`${g.id} re-judged: ${g.pass?"PASS":"FAIL"} — the ledger ${allPass()?"may close":"stays open"}.`)});
+  gl.appendChild(l)});
+function allPass(){return gates.every(g=>g.pass)}
+/* ── journal ── */
+const jb=document.getElementById("jbody");
+function journal(who,txt){const d=document.createElement("div");d.className="entry";
+  d.innerHTML=`<span class="who">${who}</span> — ${txt}`;jb.prepend(d);
+  while(jb.children.length>24)jb.lastChild.remove()}
+journal("COURT","The WPD Closure Court convenes. Six gates orbit the unwritten seal.");
+/* ── colophon ── */
+const col=document.getElementById("colophon");
+function colophon(){if(allPass()){col.className="panel concord";
+  col.textContent=`CLOSURE-WPD-001 — CONCORD\n`+
+   `All six gates green under CURRENT source.\n`+
+   `The WPDEngine era closes; the completion law's\n`+
+   `gate opens. PB-346 (Nanshe) is now lawful.\n\nSealed: DUB.SAR 𒁾 (CSR-08)`;}
+ else{const red=gates.filter(g=>!g.pass).map(g=>g.id).join(", ");
+  col.className="panel refusal";
+  col.textContent=`RIGMU REFUSAL — ledger OPEN\n`+
+   `Red gates: ${red}\n`+
+   `The colophon remains unwritten. No silent close:\n`+
+   `a judgment cites the gate, never the wish.`}}
+/* ── picking / bounce / context ── */
+function gatePos(g,t){const R=190;
+  const x=Math.cos(g.ang+t*.00006)*R, z=Math.sin(g.ang+t*.00006)*R;
+  const y=-membraneY(x,z,t)-g.bounce;return{x,y,z}}
+let screenPts=[];
+function pick(mx,my){for(const s of screenPts){
+  if(Math.hypot(mx-s.x,my-s.y)<s.r+6){const g=s.g;
+    if(g.pass){g.bv=-7;journal(g.id,`bounced on its stem. ${g.lore}`)}
+    else journal(g.id,`is a REFUSED close — no bounce, no story. Reason: gate red under current source.`);
+    return}}}
+const ctx=document.getElementById("ctx");
+addEventListener("contextmenu",e=>{e.preventDefault();
+  for(const s of screenPts){if(Math.hypot(e.clientX-s.x,e.clientY-s.y)<s.r+6){
+    const g=s.g;ctx.style.display="block";ctx.style.left=e.clientX+"px";ctx.style.top=e.clientY+"px";
+    ctx.innerHTML=g.pass
+     ?`<div class="head">${g.id} · born (gate green)</div>
+       <div class="item" data-a="j">Open StoryEngine journal</div>
+       <div class="item" data-a="c">Add to cohort</div>`
+     :`<div class="head">${g.id} · refused (gate red)</div>
+       <div class="item" data-a="r">Show Refusal Record</div>`;
+    ctx.querySelectorAll(".item").forEach(it=>it.onclick=()=>{ctx.style.display="none";
+      const a=it.dataset.a;
+      if(a==="j")journal(g.id,`journal opened — ${g.lore}`);
+      if(a==="c")journal("COHORT",`${g.id} added to the closure cohort.`);
+      if(a==="r")journal("REFUSAL",`${g.id} Refusal Record: gate failed under current source; `+
+        `the ledger cannot be closed against a red gate. Never born, no colophon.`)});
+    return}}
+  ctx.style.display="none"});
+addEventListener("click",()=>ctx.style.display="none");
+/* ── membrane ── */
+function membraneY(x,z,t){return 14*Math.sin(x*.012+t*.0007)+10*Math.cos(z*.014-t*.0005)}
+/* ── render ── */
+function frame(t){if(auto)yaw+=.00035;
+  cx.fillStyle="#060a14";cx.fillRect(0,0,W,H);
+  /* membrane grid */
+  cx.strokeStyle="rgba(70,100,160,.22)";cx.lineWidth=1;
+  for(let gx=-320;gx<=320;gx+=40){cx.beginPath();
+    for(let gz=-320;gz<=320;gz+=20){const p=proj(gx,-membraneY(gx,gz,t),gz);
+      gz===-320?cx.moveTo(p.x,p.y):cx.lineTo(p.x,p.y)}cx.stroke()}
+  for(let gz=-320;gz<=320;gz+=40){cx.beginPath();
+    for(let gx=-320;gx<=320;gx+=20){const p=proj(gx,-membraneY(gx,gz,t),gz);
+      gx===-320?cx.moveTo(p.x,p.y):cx.lineTo(p.x,p.y)}cx.stroke()}
+  /* CONCORD seal */
+  const ok=allPass(),c0=proj(0,-membraneY(0,0,t)-26,0);
+  cx.beginPath();cx.arc(c0.x,c0.y,34*zoom*c0.d,0,7);
+  cx.strokeStyle=ok?"#e8b84b":"#5a4a3a";cx.lineWidth=ok?3:1.5;cx.stroke();
+  if(ok){cx.beginPath();cx.arc(c0.x,c0.y,44*zoom*c0.d,0,7);
+    cx.strokeStyle="rgba(232,184,75,.35)";cx.lineWidth=8;cx.stroke()}
+  cx.fillStyle=ok?"#e8d9a0":"#6a6050";cx.font=`${Math.max(9,11*zoom*c0.d)}px Georgia`;
+  cx.textAlign="center";cx.fillText(ok?"CONCORD":"UNWRITTEN",c0.x,c0.y+4);
+  /* gates */
+  screenPts=[];
+  for(const g of gates){g.bv+=1.1;g.bounce=Math.max(0,g.bounce- g.bv*.28);
+    if(g.bounce===0&&g.bv>0)g.bv=0; if(g.bv<0)g.bounce-=g.bv;
+    const p3=gatePos(g,t),p=proj(p3.x,p3.y,p3.z),base=proj(p3.x,-membraneY(p3.x,p3.z,t),p3.z);
+    if(g.bounce>0.5){cx.strokeStyle="rgba(180,200,240,.5)";cx.beginPath();
+      cx.moveTo(base.x,base.y);cx.lineTo(p.x,p.y);cx.stroke()}
+    const r=(g.pass?11:9)*zoom*p.d;
+    cx.beginPath();cx.arc(p.x,p.y,r,0,7);
+    cx.fillStyle=g.pass?"rgba(127,216,160,.9)":"rgba(160,58,42,.85)";cx.fill();
+    if(!g.pass){cx.strokeStyle="#e07a6a";cx.lineWidth=1.5;
+      cx.beginPath();cx.moveTo(p.x-r*.6,p.y-r*.6);cx.lineTo(p.x+r*.6,p.y+r*.6);
+      cx.moveTo(p.x+r*.6,p.y-r*.6);cx.lineTo(p.x-r*.6,p.y+r*.6);cx.stroke()}
+    cx.fillStyle="#c8d4ea";cx.font=`${Math.max(8,10*zoom*p.d)}px Georgia`;
+    cx.fillText(g.id,p.x,p.y-r-5);
+    screenPts.push({x:p.x,y:p.y,r,g})}
+  colophon();requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+</script></body></html>

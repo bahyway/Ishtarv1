@@ -24,16 +24,23 @@ pub struct DirectedGraph {
 
 impl DirectedGraph {
     pub fn new(n: usize) -> Self {
-        DirectedGraph { n, adj: vec![Vec::new(); n] }
+        DirectedGraph {
+            n,
+            adj: vec![Vec::new(); n],
+        }
     }
 
     pub fn add_edge(&mut self, from: usize, to: usize) {
         self.adj[from].push(to);
     }
 
-    pub fn neighbors(&self, node: usize) -> &[usize] { &self.adj[node] }
+    pub fn neighbors(&self, node: usize) -> &[usize] {
+        &self.adj[node]
+    }
 
-    pub fn out_degree(&self, node: usize) -> usize { self.adj[node].len() }
+    pub fn out_degree(&self, node: usize) -> usize {
+        self.adj[node].len()
+    }
 
     // ------------------------------------------------------------------
     // PageRank — power iteration with damping.
@@ -44,7 +51,9 @@ impl DirectedGraph {
     /// formulation.
     pub fn pagerank(&self, damping: f64, max_iter: usize, tol: f64) -> Vec<f64> {
         let n = self.n;
-        if n == 0 { return Vec::new(); }
+        if n == 0 {
+            return Vec::new();
+        }
         let mut rank = vec![1.0 / n as f64; n];
 
         for _ in 0..max_iter {
@@ -54,21 +63,31 @@ impl DirectedGraph {
                 .sum();
 
             let mut next = vec![(1.0 - damping) / n as f64; n];
-            for i in 0..n {
+            for (i, &ri) in rank.iter().enumerate() {
                 let deg = self.out_degree(i);
-                if deg == 0 { continue; }
-                let share = damping * rank[i] / deg as f64;
+                if deg == 0 {
+                    continue;
+                }
+                let share = damping * ri / deg as f64;
                 for &j in self.neighbors(i) {
                     next[j] += share;
                 }
             }
             // redistribute dangling mass uniformly
             let dangling_share = damping * dangling_mass / n as f64;
-            for v in next.iter_mut() { *v += dangling_share; }
+            for v in next.iter_mut() {
+                *v += dangling_share;
+            }
 
-            let delta: f64 = next.iter().zip(rank.iter()).map(|(a, b)| (a - b).abs()).sum();
+            let delta: f64 = next
+                .iter()
+                .zip(rank.iter())
+                .map(|(a, b)| (a - b).abs())
+                .sum();
             rank = next;
-            if delta < tol { break; }
+            if delta < tol {
+                break;
+            }
         }
         rank
     }
@@ -154,7 +173,9 @@ impl DirectedGraph {
                     let w = st.stack.pop().unwrap();
                     st.on_stack[w] = false;
                     component.push(w);
-                    if w == v { break; }
+                    if w == v {
+                        break;
+                    }
                 }
                 st.components.push(component);
             }
@@ -189,7 +210,12 @@ impl DirectedGraph {
                 // representative hash: XOR of member uuid_hashes, stable
                 // regardless of Tarjan's internal component ordering.
                 let rep_hash = component.iter().fold(0u32, |acc, &n| acc ^ node_uuid[n]);
-                Alert::new(rep_hash, AlertSeverity::Critical, DriftCause::Fraud, component.len() as f32)
+                Alert::new(
+                    rep_hash,
+                    AlertSeverity::Critical,
+                    DriftCause::Fraud,
+                    component.len() as f32,
+                )
             })
             .collect()
     }
@@ -225,7 +251,10 @@ mod tests {
         g.add_edge(2, 3);
         let pr = g.pagerank(PAGERANK_DAMPING, 200, 1e-12);
         let total: f64 = pr.iter().sum();
-        assert!((total - 1.0).abs() < 1e-6, "pagerank should sum to 1, got {total}");
+        assert!(
+            (total - 1.0).abs() < 1e-6,
+            "pagerank should sum to 1, got {total}"
+        );
     }
 
     #[test]
@@ -235,8 +264,14 @@ mod tests {
         g.add_edge(0, 1);
         g.add_edge(2, 1);
         let pr = g.pagerank(PAGERANK_DAMPING, 200, 1e-12);
-        assert!(pr[1] > pr[0], "node 1 (2 inlinks) should outrank node 0 (0 inlinks)");
-        assert!(pr[1] > pr[2], "node 1 (2 inlinks) should outrank node 2 (0 inlinks)");
+        assert!(
+            pr[1] > pr[0],
+            "node 1 (2 inlinks) should outrank node 0 (0 inlinks)"
+        );
+        assert!(
+            pr[1] > pr[2],
+            "node 1 (2 inlinks) should outrank node 2 (0 inlinks)"
+        );
     }
 
     #[test]
@@ -247,7 +282,11 @@ mod tests {
         g.add_edge(0, 1);
         g.add_edge(1, 2);
         let cb = g.betweenness_centrality();
-        assert!(cb[1] > 0.0, "bridge node should have positive betweenness, got {}", cb[1]);
+        assert!(
+            cb[1] > 0.0,
+            "bridge node should have positive betweenness, got {}",
+            cb[1]
+        );
         assert_eq!(cb[0], 0.0);
         assert_eq!(cb[2], 0.0);
     }
@@ -266,7 +305,11 @@ mod tests {
             s.sort_unstable();
             s
         };
-        assert_eq!(sizes, vec![1, 3], "expected one singleton (node 3) and one 3-cycle");
+        assert_eq!(
+            sizes,
+            vec![1, 3],
+            "expected one singleton (node 3) and one 3-cycle"
+        );
     }
 
     #[test]
@@ -292,6 +335,9 @@ mod tests {
         g.add_edge(1, 0);
         let uuids = [1, 2];
         let alerts = g.scc_alerts(&uuids);
-        assert!(alerts.is_empty(), "SCC of size 2 must not trigger the >=3 AML rule");
+        assert!(
+            alerts.is_empty(),
+            "SCC of size 2 must not trigger the >=3 AML rule"
+        );
     }
 }

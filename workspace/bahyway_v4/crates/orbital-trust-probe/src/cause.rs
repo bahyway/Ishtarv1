@@ -46,12 +46,12 @@ impl DeviationCause {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::FuzzyRulesChanged         => "FUZZY_RULES_CHANGED",
-            Self::LegitimateStateEvolution  => "LEGITIMATE_STATE_EVOLUTION",
-            Self::NeighborDensityShift      => "NEIGHBOR_DENSITY_SHIFT",
-            Self::FreshnessDecay            => "FRESHNESS_DECAY",
-            Self::ThresholdBoundaryNoise    => "THRESHOLD_BOUNDARY_NOISE",
-            Self::Unexplained               => "UNEXPLAINED",
+            Self::FuzzyRulesChanged => "FUZZY_RULES_CHANGED",
+            Self::LegitimateStateEvolution => "LEGITIMATE_STATE_EVOLUTION",
+            Self::NeighborDensityShift => "NEIGHBOR_DENSITY_SHIFT",
+            Self::FreshnessDecay => "FRESHNESS_DECAY",
+            Self::ThresholdBoundaryNoise => "THRESHOLD_BOUNDARY_NOISE",
+            Self::Unexplained => "UNEXPLAINED",
         }
     }
 }
@@ -84,6 +84,8 @@ mod tests {
             DeviationCause::ThresholdBoundaryNoise,
             DeviationCause::Unexplained,
         ];
-        for c in causes { assert!(!c.label().is_empty()); }
+        for c in causes {
+            assert!(!c.label().is_empty());
+        }
     }
 }

@@ -11,9 +11,9 @@ pub enum ParticleState {
     /// Fully validated, current, healthy.
     Golden = 0x01,
     /// Partially validated, ambiguous, or stale — awaiting steward review.
-    Fuzzy  = 0x02,
+    Fuzzy = 0x02,
     /// Decayed / end-of-life.  KAKI and full Journal remain forever.
-    Dead   = 0x03,
+    Dead = 0x03,
 }
 
 impl ParticleState {
@@ -33,8 +33,8 @@ impl ParticleState {
     pub fn as_str(self) -> &'static str {
         match self {
             ParticleState::Golden => "GOLDEN",
-            ParticleState::Fuzzy  => "FUZZY",
-            ParticleState::Dead   => "DEAD",
+            ParticleState::Fuzzy => "FUZZY",
+            ParticleState::Dead => "DEAD",
         }
     }
 }
@@ -51,8 +51,8 @@ pub fn compose_link_state(a: ParticleState, b: ParticleState) -> LinkState {
     use ParticleState::*;
     match (a, b) {
         (Dead, _) | (_, Dead) => LinkState::Gray,
-        (Golden, Golden)      => LinkState::Gold,
-        _                     => LinkState::Orange,
+        (Golden, Golden) => LinkState::Gold,
+        _ => LinkState::Orange,
     }
 }
 
@@ -67,9 +67,9 @@ pub enum LinkState {
 impl core::fmt::Display for LinkState {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let s = match self {
-            LinkState::Gold   => "GOLD",
+            LinkState::Gold => "GOLD",
             LinkState::Orange => "ORANGE",
-            LinkState::Gray   => "GRAY",
+            LinkState::Gray => "GRAY",
         };
         f.write_str(s)
     }
@@ -83,11 +83,11 @@ mod tests {
     fn composition_table() {
         use ParticleState::*;
         assert_eq!(compose_link_state(Golden, Golden), LinkState::Gold);
-        assert_eq!(compose_link_state(Golden, Fuzzy),  LinkState::Orange);
-        assert_eq!(compose_link_state(Fuzzy,  Fuzzy),  LinkState::Orange);
-        assert_eq!(compose_link_state(Dead,   Golden), LinkState::Gray);
-        assert_eq!(compose_link_state(Golden, Dead),   LinkState::Gray);
-        assert_eq!(compose_link_state(Dead,   Dead),   LinkState::Gray);
+        assert_eq!(compose_link_state(Golden, Fuzzy), LinkState::Orange);
+        assert_eq!(compose_link_state(Fuzzy, Fuzzy), LinkState::Orange);
+        assert_eq!(compose_link_state(Dead, Golden), LinkState::Gray);
+        assert_eq!(compose_link_state(Golden, Dead), LinkState::Gray);
+        assert_eq!(compose_link_state(Dead, Dead), LinkState::Gray);
     }
 
     #[test]

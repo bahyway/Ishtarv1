@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ŠALA — 3D membrane pipeline · rejected-particle StoryEngine (rehearsal)</title>
+<!-- ════════════════════════════════════════════════════════════════
+     ŠALA TAB — 3D MEMBRANE PIPELINE + REJECTED-PARTICLE STORYENGINE
+     BahyWay.Ecosystem v4.0 · rehearsal only (Way-of-Work rule 5)
+     Honours the Curved-Space Decree (GL-VIZ-001): the pipeline rides a
+     curved, breathing HeptaSpaceMap MEMBRANE — never a flat plane.
+     Canonical interactions:
+       · scroll        → zoom
+       · drag          → rotate (turntable + tilt)
+       · left-click a rejected particle → it BOUNCES + opens its
+         StoryEngine journal (append-only events + reason for logging)
+     Particles ride the membrane through the gates. Those that reach the
+     EnkiDDB GOLDEN store turn GOLDEN. Those REJECTED / FILTERED stop on
+     the membrane and BOUNCE in place (grey, Unknown) — and you can
+     inspect exactly WHY each was logged and never sealed. Transparency
+     is not only about what reached GOLDEN, but about what did not.
+     Pure-canvas 3D (sovereign, offline). Figures illustrative.
+     ════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022; --bg-deep:#121315;
+  --bg-hover:#383A3E; --bg-selected:#404349; --stroke:#3D3F43;
+  --gold:#D6A44C; --teal:#4FB8A8; --orange:#D98E3E; --crimson:#C34A3F;
+  --purple:#9B7FC7; --pale:#C9CDD4; --grey:#8A8D92;
+  --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+  --serif:"Iowan Old Style",Palatino,Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:"Inter","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:baseline;gap:16px;padding:14px 22px;border-bottom:1px solid var(--stroke)}
+header h1{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:.24em;color:var(--gold)}
+header .sub{font-size:12px;color:var(--dim)}
+.wrap{padding:16px 22px;max-width:1240px;margin:0 auto;width:100%}
+.bar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+button{background:var(--bg-widget);color:var(--ink);border:1px solid var(--stroke);border-radius:6px;padding:8px 14px;font-size:12.5px;cursor:pointer}
+button:hover{background:var(--bg-hover)}
+button.gold{border-color:var(--gold);color:var(--gold)}
+.stat{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+.scene{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px}
+.stagewrap{position:relative}
+canvas{display:block;width:100%;background:radial-gradient(ellipse at 60% 40%,#1a1c1f,#121315);border:1px solid var(--stroke);border-radius:8px;cursor:grab}
+canvas:active{cursor:grabbing}
+.hint{position:absolute;left:10px;bottom:8px;font-family:var(--mono);font-size:9.5px;color:var(--dim);background:rgba(18,19,21,.7);padding:3px 8px;border-radius:8px}
+.zoomctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:4px}
+.zoomctl button{padding:3px 9px;font-size:14px;line-height:1}
+.kakikey{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:10.5px;color:var(--muted);align-items:center}
+.kakikey .k{display:inline-flex;align-items:center;gap:5px}
+.kakikey .dot{width:10px;height:10px;border-radius:50%}
+/* storyengine journal */
+.journal{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-height:420px}
+.journal .jh{padding:11px 14px;border-bottom:1px solid var(--stroke);background:var(--bg-widget)}
+.journal .jh .t{font-family:var(--serif);font-size:14px;color:var(--gold)}
+.journal .jh .s{font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-top:2px}
+.journal .jb{padding:13px 14px;flex:1;overflow-y:auto}
+.jempty{color:var(--dim);font-family:var(--serif);font-style:italic;text-align:center;padding:40px 16px;line-height:1.7}
+.kakibox{font-family:var(--mono);font-size:9px;color:var(--dim);background:var(--bg-deep);border:1px solid var(--stroke);border-radius:6px;padding:7px;margin-bottom:12px;word-break:break-all}
+.kakibox b{color:var(--grey)}
+.jstate{display:inline-block;font-family:var(--mono);font-size:9px;color:var(--crimson);border:1px solid var(--crimson);border-radius:9px;padding:2px 8px;margin-bottom:12px}
+.tl{position:relative;padding-left:16px}
+.tl::before{content:"";position:absolute;left:4px;top:4px;bottom:4px;width:1px;background:var(--stroke)}
+.ev{position:relative;margin-bottom:11px}
+.ev::before{content:"";position:absolute;left:-15px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--dim);border:2px solid var(--bg-panel)}
+.ev.warn::before{background:var(--orange)} .ev.rej::before{background:var(--crimson)} .ev.ok::before{background:var(--teal)}
+.ev .et{font-family:var(--mono);font-size:9px;color:var(--dim)}
+.ev .em{font-size:11.5px;color:var(--pale);line-height:1.5;margin-top:1px}
+.ev .em b{color:var(--ink)}
+.reason{margin-top:6px;background:var(--bg-widget);border-left:3px solid var(--crimson);border-radius:5px;padding:9px 11px;font-size:11.5px;color:var(--pale);line-height:1.55}
+.reason .rl{font-family:var(--mono);font-size:8.5px;color:var(--crimson);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:3px}
+footer{padding:10px 22px;font-family:var(--serif);font-style:italic;font-size:12px;color:var(--dim);text-align:center}
+@media(max-width:1000px){.scene{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>Š A L A</h1><span class="sub">3D membrane pipeline · rejected particles &amp; their StoryEngine</span></header>
+<div class="wrap">
+  <div class="bar">
+    <button class="gold" id="runBtn">▶ Birth the document onto the membrane</button>
+    <button id="resetBtn">↺ reset</button>
+    <span class="stat" id="stat">the membrane awaits — scroll to zoom, drag to rotate</span>
+  </div>
+
+  <div class="scene">
+    <div class="stagewrap">
+      <canvas id="cv" height="460"></canvas>
+      <div class="hint">scroll = zoom · drag = rotate · click a grey bouncing particle = its StoryEngine</div>
+      <div class="zoomctl"><button id="zin">+</button><button id="zout">−</button></div>
+    </div>
+    <div class="journal">
+      <div class="jh"><div class="t" id="jTitle">StoryEngine — rejected particle journal</div>
+        <div class="s" id="jSub">click a bouncing grey particle to read why it never reached GOLDEN</div></div>
+      <div class="jb" id="jBody"><div class="jempty">Nothing selected.<br><br>Grey particles are <b>rejected / filtered</b> — they never reached the GOLDEN store. Click one (it bounces) to open its append-only event journal and the reason it was logged.</div></div>
+    </div>
+  </div>
+
+  <div class="kakikey">
+    <span class="k"><span class="dot" style="background:var(--gold)"></span>Identity 0x01</span>
+    <span class="k"><span class="dot" style="background:var(--teal)"></span>Event 0x02</span>
+    <span class="k"><span class="dot" style="background:var(--purple)"></span>CrossTribe 0x03</span>
+    <span class="k"><span class="dot" style="background:var(--grey)"></span>REJECTED / Unknown · bounces in place</span>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--dim)">curved HeptaSpaceMap membrane · GL-VIZ-001</span>
+  </div>
+</div>
+<footer>Rehearsal only. The pipeline rides a curved 3D membrane (Curved-Space Decree). Particles reaching EnkiDDB turn GOLDEN; rejected/filtered ones bounce in place and carry a StoryEngine journal with their events and the reason they were logged. Transparency covers what did NOT reach GOLDEN, not only what did. Pure-canvas 3D, sovereign/offline. Figures illustrative. — inscribed for DUB.SAR 𒁾</footer>
+
+<script>
+"use strict";
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let DPR=Math.min(2,devicePixelRatio||1),W,H=460;
+function size(){W=cv.clientWidth;cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';}
+size();addEventListener('resize',size);
+
+/* ── camera ── */
+let zoom=1.0, yaw=0.62, pitch=0.52, tPhase=0;
+let dragging=false, lastX=0, lastY=0;
+cv.addEventListener('wheel',e=>{e.preventDefault();zoom*=e.deltaY<0?1.08:0.93;zoom=Math.max(0.5,Math.min(3,zoom));},{passive:false});
+cv.addEventListener('mousedown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
+addEventListener('mousemove',e=>{if(!dragging)return;
+  yaw+=(e.clientX-lastX)*0.005; pitch+=(e.clientY-lastY)*0.004;
+  pitch=Math.max(0.12,Math.min(1.2,pitch)); lastX=e.clientX;lastY=e.clientY;});
+addEventListener('mouseup',()=>dragging=false);
+document.getElementById('zin').addEventListener('click',()=>{zoom=Math.min(3,zoom*1.12);});
+document.getElementById('zout').addEventListener('click',()=>{zoom=Math.max(0.5,zoom*0.9);});
+
+/* ── membrane surface: u∈[0,1] flow, v∈[-1,1] lateral ── */
+function surf(u,v){
+  const z = 0.24*Math.sin(u*Math.PI*1.6 + tPhase*0.6)
+          + 0.12*Math.cos(v*Math.PI*0.9 + tPhase*0.4)
+          - 0.10*v*v;
+  return {x:(u-0.5)*2.4, y:v*1.15, z};
+}
+function project(p){
+  // turntable yaw (around Y), then pitch (around X), then perspective
+  const cy=Math.cos(yaw), sy=Math.sin(yaw);
+  let x=p.x*cy - p.z*sy, z=p.x*sy + p.z*cy, y=p.y;
+  const cp=Math.cos(pitch), sp=Math.sin(pitch);
+  let y2=y*cp - z*sp, z2=y*sp + z*cp;
+  const d=4.2, persp=d/(d - z2);
+  const base=Math.min(W,H)*0.34*zoom;
+  return {px:W/2 + x*base*persp, py:H*0.52 + y2*base*persp, depth:z2, sc:persp};
+}
+/* gates along u */
+const GATES=[
+ {u:0.10,n:'Landing',db:'SDB'},{u:0.30,n:'Shape',db:'ODB'},
+ {u:0.52,n:'BlackBox',db:'?'},{u:0.72,n:'Proven·G4',db:'QDB'},{u:0.90,n:'GOLDEN',db:'DDB'}
+];
+
+/* ── particles ── */
+const KCOL={id:[214,164,76],ev:[79,184,168],ct:[155,127,199]};
+const GREY=[138,141,146];
+let parts=[], running=false, selected=null;
+function mkJournal(kind, gateName, reason, rl){
+  return {
+    kaki:'kaki:'+Math.random().toString(16).slice(2,10)+' · type '+(kind==='id'?'01':kind==='ev'?'02':'03'),
+    events:[
+      {t:'14:50:01',cls:'ok',m:'<b>Born</b> at Landing — KAKI minted, entered EnkiSDB'},
+      {t:'14:50:03',cls:'',m:'Traversed to <b>'+gateName+'</b> station'},
+      {t:'14:50:04',cls:'warn',m:'<b>'+gateName+'</b> could not resolve this particle'},
+      {t:'14:50:04',cls:'rej',m:'<b>Marked Unknown</b> — rejected from the GOLDEN path'},
+      {t:'14:50:05',cls:'rej',m:'Logged to StoryEngine · quarantined in EnkiQDB (prune-exempt)'},
+    ],
+    reason, rl
+  };
+}
+function spawn(){
+  parts=[];
+  const lanes=[-0.7,-0.42,-0.15,0.12,0.4,0.68];
+  const spec=[
+    {k:'id',lane:0},{k:'ev',lane:1},{k:'ct',lane:2},{k:'ev',lane:3},{k:'ct',lane:4},{k:'id',lane:5},
+    {k:'ev',lane:0},{k:'ct',lane:2},{k:'ev',lane:4},
+    // rejected ones
+    {k:'ct',lane:1,rejU:0.30,gate:'Shape Station',
+      reason:'The lateral structure could not be inferred: this fragment carried three candidate schemas at once and none proved unique. A shape must resolve to ONE structure to pass; ambiguity is rejected, not guessed.',rl:'shape ambiguity'},
+    {k:'ev',lane:3,rejU:0.52,gate:'BlackBox',
+      reason:'Byte-fragmentation detected: the payload was truncated mid-record (CRC-16 mismatch at κ[14..15]). Incomplete evidence cannot be sealed; the particle is held for investigation rather than admitted as false-complete.',rl:'crc / fragmentation'},
+    {k:'ct',lane:5,rejU:0.52,gate:'BlackBox',
+      reason:'Orphan dependency: this CrossTribe link pointed at a tribe that does not exist in this batch. A dangling link would corrupt the OntoGraph, so it is filtered and logged for the steward to resolve.',rl:'orphan link'},
+  ];
+  spec.forEach((s,i)=>{
+    parts.push({k:s.k, lane:lanes[s.lane], u:0.02, v:lanes[s.lane],
+      rejU:s.rejU||null, gate:s.gate||null,
+      state:'flow', speed:0.0016+Math.random()*0.0009, born:false, bounce:0,
+      journal: s.rejU?mkJournal(s.k,s.gate,s.reason,s.rl):null, delay:i*10});
+  });
+}
+function draw(){
+  tPhase+=0.016;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+  // membrane wireframe
+  const NU=26, NV=14;
+  // u-lines
+  for(let j=0;j<=NV;j++){const v=-1+2*j/NV;
+    ctx.beginPath();let started=false;
+    for(let i=0;i<=NU;i++){const u=i/NU;const P=project(surf(u,v));
+      if(!started){ctx.moveTo(P.px,P.py);started=true;}else ctx.lineTo(P.px,P.py);}
+    ctx.strokeStyle='rgba(79,184,168,0.08)';ctx.lineWidth=1;ctx.stroke();
+  }
+  for(let i=0;i<=NU;i++){const u=i/NU;
+    ctx.beginPath();let started=false;
+    for(let j=0;j<=NV;j++){const v=-1+2*j/NV;const P=project(surf(u,v));
+      if(!started){ctx.moveTo(P.px,P.py);started=true;}else ctx.lineTo(P.px,P.py);}
+    ctx.strokeStyle='rgba(79,184,168,0.06)';ctx.lineWidth=1;ctx.stroke();
+  }
+  // gate ribs
+  GATES.forEach(g=>{
+    ctx.beginPath();let started=false;
+    for(let j=0;j<=NV;j++){const v=-1+2*j/NV;const P=project(surf(g.u,v));
+      if(!started){ctx.moveTo(P.px,P.py);started=true;}else ctx.lineTo(P.px,P.py);}
+    const isG=g.n==='GOLDEN';
+    ctx.strokeStyle=isG?'rgba(214,164,76,0.7)':'rgba(155,127,199,0.35)';
+    ctx.lineWidth=isG?2.2:1.3;ctx.stroke();
+    // label at top of rib
+    const top=project(surf(g.u,-1.05));
+    ctx.fillStyle=isG?'#D6A44C':'#9A9C9F';ctx.font='10px monospace';ctx.textAlign='center';
+    ctx.fillText(g.n,top.px,top.py-4);
+  });
+  ctx.textAlign='left';
+  // particles (depth sorted)
+  const gGold=GATES[4].u;
+  const drawn=[];
+  parts.forEach(p=>{
+    if(p.delay>0){p.delay--;return;}
+    if(!p.born){p.born=true;}
+    // advance
+    if(p.state==='flow'){
+      const stop = p.rejU!==null ? p.rejU : gGold;
+      p.u+=p.speed;
+      if(p.u>=stop){p.u=stop; p.state = p.rejU!==null ? 'rejected':'golden'; p.gage=0;}
+    }
+    // bounce offset for rejected
+    let vz=0;
+    if(p.state==='rejected'){p.bounce+=0.13; vz=Math.abs(Math.sin(p.bounce))*0.16;}
+    if(p.state==='golden'){p.gage=(p.gage||0)+1;}
+    const base=surf(p.u,p.v); base.z+=vz;
+    const P=project(base);
+    let col = p.state==='golden'?[214,164,76] : p.state==='rejected'?GREY : KCOL[p.k];
+    let r=(p.state==='golden'?4.2:3.4)*P.sc*(selected===p?1.5:1);
+    drawn.push({p,P,col,r});
+  });
+  drawn.sort((a,b)=>a.P.depth-b.P.depth);
+  ctx.globalCompositeOperation='lighter';
+  drawn.forEach(({p,P,col,r})=>{
+    // selection halo
+    if(selected===p){ctx.globalCompositeOperation='source-over';
+      ctx.strokeStyle='rgba(214,164,76,.9)';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(P.px,P.py,r+5,0,6.2832);ctx.stroke();ctx.globalCompositeOperation='lighter';}
+    const glow = p.state==='rejected'?(0.5+0.4*Math.abs(Math.sin(p.bounce))) : p.state==='golden'?0.9:0.7;
+    ctx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+glow+')';
+    ctx.beginPath();ctx.arc(P.px,P.py,Math.max(1.5,r),0,6.2832);ctx.fill();
+    if(p.state==='golden'&&p.gage<16){ctx.strokeStyle='rgba(214,164,76,'+(0.7-p.gage/24)+')';
+      ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(P.px,P.py,r+p.gage*1.0,0,6.2832);ctx.stroke();}
+    // '?' over rejected
+    if(p.state==='rejected'){ctx.globalCompositeOperation='source-over';
+      ctx.fillStyle='rgba(138,141,146,'+glow+')';ctx.font='9px monospace';ctx.textAlign='center';
+      ctx.fillText('?',P.px,P.py-r-3);ctx.textAlign='left';ctx.globalCompositeOperation='lighter';}
+  });
+  ctx.globalCompositeOperation='source-over';
+  // store projected positions for hit-testing
+  parts._drawn=drawn;
+  // status when settled
+  if(running){
+    const moving=parts.some(p=>p.state==='flow');
+    if(!moving){running=false;
+      const rej=parts.filter(p=>p.state==='rejected').length;
+      const gold=parts.filter(p=>p.state==='golden').length;
+      document.getElementById('stat').textContent='settled — '+gold+' GOLDEN · '+rej+' rejected (grey, bouncing) · click a grey one to inspect';
+    }
+  }
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* click: select rejected particle → StoryEngine */
+cv.addEventListener('click',e=>{
+  if(dragging)return;
+  const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  const drawn=parts._drawn||[];let best=null,bd=340;
+  drawn.forEach(({p,P})=>{const d=(mx-P.px)**2+(my-P.py)**2;if(d<bd){bd=d;best=p;}});
+  if(best && best.state==='rejected'){selected=best;openJournal(best);}
+  else if(best && best.state!=='rejected'){
+    document.getElementById('jSub').textContent='that particle reached GOLDEN — only rejected particles carry a rejection journal';
+  }
+});
+function openJournal(p){
+  const j=p.journal;
+  document.getElementById('jTitle').textContent='StoryEngine — '+(p.gate||'')+' rejection';
+  document.getElementById('jSub').textContent='append-only event journal · why this particle never sealed';
+  let h='<div class="kakibox"><b>'+j.kaki+'</b></div>'
+    +'<span class="jstate">✗ REJECTED · Unknown · not GOLDEN</span>'
+    +'<div class="tl">';
+  j.events.forEach(ev=>{h+='<div class="ev '+ev.cls+'"><div class="et">'+ev.t+'</div><div class="em">'+ev.m+'</div></div>';});
+  h+='</div><div class="reason"><span class="rl">reason logged · '+j.rl+'</span>'+j.reason+'</div>';
+  document.getElementById('jBody').innerHTML=h;
+}
+function reset(){parts=[];running=false;selected=null;
+  document.getElementById('jTitle').textContent='StoryEngine — rejected particle journal';
+  document.getElementById('jSub').textContent='click a bouncing grey particle to read why it never reached GOLDEN';
+  document.getElementById('jBody').innerHTML='<div class="jempty">Nothing selected.<br><br>Grey particles are <b>rejected / filtered</b> — they never reached the GOLDEN store. Click one (it bounces) to open its append-only event journal and the reason it was logged.</div>';
+  document.getElementById('stat').textContent='the membrane awaits — scroll to zoom, drag to rotate';
+}
+document.getElementById('runBtn').addEventListener('click',()=>{reset();spawn();running=true;
+  document.getElementById('stat').textContent='particles riding the membrane — some will be rejected and bounce…';});
+document.getElementById('resetBtn').addEventListener('click',reset);
+</script>
+</body>
+</html>

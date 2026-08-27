@@ -79,6 +79,14 @@ impl eframe::App for GirraApp {
 fn main() -> eframe::Result<()> {
     let registry: Shared = Arc::new(Mutex::new(Registry::default()));
     ingest::spawn_listener(registry.clone(), ingest::DEFAULT_PORT);
-    let app = GirraApp { registry, prev_jiffies: None, last_collect: Instant::now() - Duration::from_secs(2) };
-    eframe::run_native("GirraEngine", eframe::NativeOptions::default(), Box::new(|_| Ok(Box::new(app))))
+    let app = GirraApp {
+        registry,
+        prev_jiffies: None,
+        last_collect: Instant::now() - Duration::from_secs(2),
+    };
+    eframe::run_native(
+        "GirraEngine",
+        eframe::NativeOptions::default(),
+        Box::new(|_| Ok(Box::new(app))),
+    )
 }

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · GL-REL-001 · Kanīku of the Gate</title>
+<style>
+  :root{
+    --basalt:#14120f; --tablet:#1f1b16; --gold:#c9a227; --lapis:#2e5d8c;
+    --copper:#b0642f; --alarm:#c23b2a; --bone:#e8e0cf;
+    --tablet-edge:#3a332a; --dim:#8f8672;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--basalt); color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif; overflow:hidden;}
+  #crumbs{padding:10px 16px 0; font-size:12px; color:var(--dim); letter-spacing:.08em;}
+  #crumbs b{color:var(--gold); font-weight:normal;}
+  #lede{padding:2px 16px 8px; font-size:15px; color:var(--bone);}
+  #banner{background:var(--alarm); color:var(--bone); text-align:center;
+    font-size:11px; letter-spacing:.35em; padding:3px 0; font-family:monospace;}
+  #grid{display:grid; grid-template-columns:1fr 320px; gap:10px;
+    padding:10px 16px 16px; height:calc(100% - 92px);}
+  .panel{background:var(--tablet); border:1px solid var(--tablet-edge);
+    border-radius:6px; position:relative; overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block; width:100%; height:100%;}
+  #deck{position:absolute; top:10px; right:10px; display:flex; gap:6px;}
+  #deck button{width:34px; height:34px; background:var(--basalt); color:var(--gold);
+    border:1px solid var(--tablet-edge); border-radius:4px; font-size:16px;
+    cursor:pointer;}
+  #deck button.on{border-color:var(--gold);}
+  #lawtags{position:absolute; bottom:10px; left:10px; display:flex; gap:6px; flex-wrap:wrap;}
+  .lawtag{font-family:monospace; font-size:10px; color:var(--basalt);
+    background:var(--gold); padding:2px 7px; border-radius:3px; letter-spacing:.05em;}
+  .lawtag.lapis{background:var(--lapis); color:var(--bone);}
+  #side{display:flex; flex-direction:column;}
+  #side h2{font-size:12px; letter-spacing:.25em; color:var(--gold);
+    padding:10px 12px 6px; border-bottom:1px solid var(--tablet-edge);}
+  #journal{flex:1; overflow-y:auto; padding:10px 12px; font-size:12.5px; line-height:1.5;}
+  .entry{margin-bottom:10px; border-left:2px solid var(--copper); padding-left:8px;}
+  .entry .t{color:var(--dim); font-family:monospace; font-size:10px;}
+  #lever{border-top:1px solid var(--tablet-edge); padding:10px 12px;}
+  #lever button{width:100%; background:var(--basalt); color:var(--copper);
+    border:1px solid var(--copper); border-radius:4px; padding:7px; font-size:12px;
+    letter-spacing:.1em; cursor:pointer; font-family:inherit;}
+  #lever button:hover{color:var(--gold); border-color:var(--gold);}
+  #ctx{position:fixed; display:none; background:var(--tablet);
+    border:1px solid var(--gold); border-radius:5px; z-index:50; min-width:190px;
+    font-size:12.5px; box-shadow:0 6px 20px rgba(0,0,0,.6);}
+  #ctx .hd{padding:7px 10px; color:var(--gold); font-size:11px; letter-spacing:.15em;
+    border-bottom:1px solid var(--tablet-edge);}
+  #ctx .it{padding:7px 10px; cursor:pointer;}
+  #ctx .it:hover{background:var(--basalt); color:var(--gold);}
+  #ctx.refused{border-color:var(--alarm);} #ctx.refused .hd{color:var(--alarm);}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Release Court ▸ <b>GL-REL-001 · Kanīku of the Gate</b></div>
+<div id="lede">The SUSA gate stands sealed. Five gate-conditions orbit it; the gate does not open — even fully green, it only fires the GL-REL-002 trigger.</div>
+<div id="banner">ŠALA REHEARSAL ONLY — NOT PRODUCTION — SOVEREIGN RENDER IS EGUI/WGPU</div>
+
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="deck">
+      <button id="bHome" title="Reset camera">⌖</button>
+      <button id="bPan"  title="Pan mode">✛</button>
+      <button id="bOrb"  title="Orbit mode" class="on">⟳</button>
+    </div>
+    <div id="lawtags">
+      <span class="lawtag">GL-REL-001</span>
+      <span class="lawtag lapis">PB-REL-001</span>
+      <span class="lawtag lapis">GL-VIZ-001 NASARU</span>
+      <span class="lawtag">CSR-08</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>STORYENGINE JOURNAL</h2>
+    <div id="journal"></div>
+    <div id="lever">
+      <button id="bRite">REHEARSE · turn next gate green</button>
+    </div>
+  </div>
+</div>
+
+<div id="ctx"><div class="hd"></div><div class="body"></div></div>
+
+<script>
+"use strict";
+/* ---- mulberry32 seeded determinism (Abūbu Court die) ---- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+const rnd = mulberry32(0x47524C31); /* seed: "GRL1" */
+
+const cv = document.getElementById('cv'), ctx2 = cv.getContext('2d');
+const stage = document.getElementById('stage');
+function fit(){cv.width=stage.clientWidth; cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit); fit();
+
+/* ---- camera: orbit + pan + scroll-zoom ---- */
+const cam0 = {yaw:-0.55, pitch:0.42, zoom:1.0, px:0, py:0};
+let cam = {...cam0}, mode='orbit', drag=null;
+document.getElementById('bHome').onclick=()=>{cam={...cam0}; journal('Camera returned home. The gate faces the scribe again.');};
+const bPan=document.getElementById('bPan'), bOrb=document.getElementById('bOrb');
+bPan.onclick=()=>{mode='pan'; bPan.classList.add('on'); bOrb.classList.remove('on');};
+bOrb.onclick=()=>{mode='orbit'; bOrb.classList.add('on'); bPan.classList.remove('on');};
+stage.addEventListener('wheel',e=>{e.preventDefault();
+  cam.zoom=Math.min(3,Math.max(.4,cam.zoom*(e.deltaY<0?1.08:0.92)));},{passive:false});
+stage.addEventListener('mousedown',e=>{if(e.button!==0)return; drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mousemove',e=>{if(!drag)return;
+  const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY};
+  if(mode==='orbit'){cam.yaw+=dx*.005; cam.pitch=Math.min(1.2,Math.max(-.2,cam.pitch+dy*.005));}
+  else{cam.px+=dx; cam.py+=dy;}});
+window.addEventListener('mouseup',()=>drag=null);
+
+/* ---- 3D helpers: curved membrane (never flat) ---- */
+function proj(p){
+  const cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  let x=p.x*cy - p.z*sy, z=p.x*sy + p.z*cy, y=p.y;
+  let y2=y*cp - z*sp, z2=y*sp + z*cp;
+  const d=4.2, s=(cv.height*0.42)*cam.zoom * (d/(d+z2));
+  return {x:cv.width/2 + cam.px + x*s, y:cv.height*0.55 + cam.py - y2*s, z:z2, s:s};
+}
+
+/* ---- the five gate-conditions of §3, orbiting the sealed gate ---- */
+const GATES=[
+  {id:1, name:'Playbooks complete & tested', green:false},
+  {id:2, name:'Engines proven vs tablets',   green:false},
+  {id:3, name:'First-ingest rite (Najaf)',   green:false},
+  {id:4, name:'1B particles < 1s benchmark', green:false},
+  {id:5, name:'Law corpus reconciled',       green:false},
+];
+GATES.forEach((g,i)=>{g.phase=rnd()*Math.PI*2; g.r=0.95+0.18*i; g.tilt=0.25+rnd()*0.3;
+  g.speed=0.12+rnd()*0.08; g.bounce=0; g.born=true;});
+/* one refused non-particle: a fragment attempting to cross (§6) */
+const FRAG={name:'Fragment (unlawful crossing attempt)', born:false,
+  phase:rnd()*Math.PI*2, r:1.9, tilt:-0.5, speed:0.3, bounce:0};
+let nextGate=0, trigger=false;
+
+/* ---- journal (StoryEngine) ---- */
+const jEl=document.getElementById('journal');
+function journal(txt){
+  const d=document.createElement('div'); d.className='entry';
+  const t=new Date().toISOString().slice(11,19);
+  d.innerHTML='<div class="t">'+t+' UTC</div>'+txt;
+  jEl.prepend(d);
+}
+journal('Tablet GL-REL-001 deposited. The Kanīku is pressed into the gate; the SUSA boundary is law, not mood.');
+journal('Five gate-conditions orbit the arch. One refused fragment circles outside — it will never be admitted (§6).');
+
+/* ---- rehearsal lever ---- */
+document.getElementById('bRite').onclick=()=>{
+  if(nextGate<GATES.length){
+    GATES[nextGate].green=true; GATES[nextGate].bounce=1;
+    journal('REHEARSAL — gate §3.'+GATES[nextGate].id+' turns green: <b>'+GATES[nextGate].name+'</b>.');
+    nextGate++;
+    if(nextGate===GATES.length){trigger=true;
+      journal('<b style="color:var(--gold)">ALL GATES GREEN.</b> The arch does not open. Per §8 it fires the trigger: draft GL-REL-002, the Release Rite. The seal holds until that tablet is sealed.');}
+  } else journal('Rehearsal complete. The gate awaits GL-REL-002 — nothing more can happen on this tablet.');
+};
+
+/* ---- picking ---- */
+function positions(t){
+  const out=[];
+  GATES.concat([FRAG]).forEach(g=>{
+    const a=g.phase+t*g.speed;
+    const p={x:Math.cos(a)*g.r, y:Math.sin(a*0.9)*0.18+Math.sin(g.tilt)*0.3
+      + (g.bounce>0?Math.sin(g.bounce*Math.PI)*0.35:0), z:Math.sin(a)*g.r};
+    out.push({g:g, p:p, q:proj(p)});
+    if(g.bounce>0)g.bounce=Math.max(0,g.bounce-0.02);
+  });
+  return out;
+}
+let lastPos=[];
+function pick(mx,my){
+  let best=null,bd=18*18;
+  lastPos.forEach(o=>{const dx=o.q.x-mx,dy=o.q.y-my,d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=o;}});
+  return best;
+}
+stage.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(), hit=pick(e.clientX-r.left,e.clientY-r.top);
+  if(!hit)return;
+  hit.g.bounce=1;
+  if(hit.g.born){
+    journal('Witness bounce — §3.'+hit.g.id+' <b>'+hit.g.name+'</b> · status: '+
+      (hit.g.green?'<b style="color:#7fbf5f">GREEN</b>':'<span style="color:var(--copper)">PENDING</span>')+
+      '. The gate stays sealed while any sibling is pending.');
+  } else {
+    journal('<span style="color:var(--alarm)">Refused</span> — the fragment strikes the boundary and rebounds. No fragment crosses alone (§6).');
+  }
+});
+
+/* ---- context menu, discriminated by birth-status ---- */
+const cm=document.getElementById('ctx');
+stage.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(), hit=pick(e.clientX-r.left,e.clientY-r.top);
+  const hd=cm.querySelector('.hd'), body=cm.querySelector('.body');
+  cm.classList.remove('refused');
+  if(!hit){
+    hd.textContent='MEMBRANE'; body.innerHTML=
+      '<div class="it" data-a="home">Center on the gate</div>'+
+      '<div class="it" data-a="law">Recite the seal (§1–§8)</div>';
+  } else if(hit.g.born){
+    hd.textContent='BORN PARTICLE · §3.'+hit.g.id; body.innerHTML=
+      '<div class="it" data-a="witness">Witness entry</div>'+
+      '<div class="it" data-a="lineage">Trace lineage (PB ledger)</div>'+
+      '<div class="it" data-a="center">Bounce</div>';
+    cm.dataset.gid=hit.g.id;
+  } else {
+    cm.classList.add('refused');
+    hd.textContent='REFUSED NON-PARTICLE'; body.innerHTML=
+      '<div class="it" data-a="why">Why refused</div>'+
+      '<div class="it" data-a="banish">Banish bounce</div>';
+  }
+  cm.style.left=e.clientX+'px'; cm.style.top=e.clientY+'px'; cm.style.display='block';
+});
+window.addEventListener('click',()=>cm.style.display='none');
+cm.addEventListener('click',e=>{
+  const a=e.target.dataset.a; if(!a)return;
+  if(a==='home'){cam={...cam0}; journal('Camera centered on the sealed arch.');}
+  if(a==='law') journal('Recital: §2 the boundary · §3 the five gates · §4 the confirmation act (numbered PB only) · §5 witnesses in order · §6 no fragments · §7 declarations pass, disclosures do not · §8 green gates fire GL-REL-002, they do not open the arch.');
+  if(a==='witness'){const g=GATES.find(x=>x.id==cm.dataset.gid); if(g){g.bounce=1;
+    journal('Witness — §3.'+g.id+' '+g.name+' recorded as '+(g.green?'GREEN':'PENDING')+'.');}}
+  if(a==='lineage') journal('Lineage — this condition binds to PB-REL-001 and forward to every numbered playbook it gates. Append-only; the chain never rewrites.');
+  if(a==='center'){const g=GATES.find(x=>x.id==cm.dataset.gid); if(g)g.bounce=1;}
+  if(a==='why') journal('Refused because it was never born through the gate rite: no numbered PB, no seal, no lawful crossing (§4, §6). It orbits outside as a warning, not a member.');
+  if(a==='banish'){FRAG.bounce=1; journal('The fragment rebounds from the boundary membrane.');}
+});
+
+/* ---- render loop: curved membrane, sealed arch, orbits ---- */
+let t0=performance.now();
+function frame(now){
+  const t=(now-t0)/1000;
+  ctx2.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--basalt');
+  ctx2.fillRect(0,0,cv.width,cv.height);
+
+  /* curved membrane: breathing sphere-patch grid (never flat) */
+  ctx2.lineWidth=1;
+  for(let i=0;i<=10;i++){
+    ctx2.beginPath();
+    for(let j=0;j<=40;j++){
+      const u=(i/10-0.5)*Math.PI*0.9, v=(j/40-0.5)*Math.PI*1.6;
+      const R=2.2+0.05*Math.sin(t*0.7+u*3);
+      const p={x:R*Math.cos(u)*Math.sin(v), y:R*Math.sin(u)*0.45-0.9
+        +0.04*Math.sin(t+v*2), z:R*Math.cos(u)*Math.cos(v)-1.2};
+      const q=proj(p);
+      j? ctx2.lineTo(q.x,q.y): ctx2.moveTo(q.x,q.y);
+    }
+    ctx2.strokeStyle='rgba(46,93,140,'+(0.10+0.05*Math.sin(t+i)).toFixed(3)+')';
+    ctx2.stroke();
+  }
+  for(let j=0;j<=16;j++){
+    ctx2.beginPath();
+    for(let i=0;i<=20;i++){
+      const u=(i/20-0.5)*Math.PI*0.9, v=(j/16-0.5)*Math.PI*1.6;
+      const R=2.2+0.05*Math.sin(t*0.7+u*3);
+      const p={x:R*Math.cos(u)*Math.sin(v), y:R*Math.sin(u)*0.45-0.9
+        +0.04*Math.sin(t+v*2), z:R*Math.cos(u)*Math.cos(v)-1.2};
+      const q=proj(p);
+      i? ctx2.lineTo(q.x,q.y): ctx2.moveTo(q.x,q.y);
+    }
+    ctx2.strokeStyle='rgba(46,93,140,0.08)'; ctx2.stroke();
+  }
+
+  /* the sealed SUSA arch at origin */
+  ctx2.beginPath();
+  for(let k=0;k<=32;k++){
+    const a=Math.PI*(k/32);
+    const q=proj({x:Math.cos(a)*0.55, y:Math.sin(a)*0.8, z:0});
+    k? ctx2.lineTo(q.x,q.y): ctx2.moveTo(q.x,q.y);
+  }
+  const glow=trigger?(0.6+0.4*Math.sin(t*3)):0.9;
+  ctx2.strokeStyle=trigger?'rgba(201,162,39,'+glow.toFixed(2)+')':'rgba(201,162,39,0.9)';
+  ctx2.lineWidth=trigger?4:3; ctx2.stroke();
+  /* the kanīku seal across the arch mouth */
+  const sA=proj({x:-0.55,y:0,z:0}), sB=proj({x:0.55,y:0,z:0}), sM=proj({x:0,y:0.4,z:0});
+  ctx2.beginPath(); ctx2.moveTo(sA.x,sA.y); ctx2.lineTo(sB.x,sB.y);
+  ctx2.strokeStyle='var(--alarm)'; ctx2.strokeStyle='#c23b2a'; ctx2.lineWidth=3; ctx2.stroke();
+  ctx2.fillStyle='#e8e0cf'; ctx2.font='11px monospace'; ctx2.textAlign='center';
+  ctx2.fillText(trigger?'SEALED · GL-REL-002 TRIGGER FIRED':'SEALED · KANĪKU', sM.x, sM.y);
+
+  /* orbits + particles */
+  lastPos=positions(t);
+  lastPos.sort((a,b)=>b.q.z-a.q.z);
+  lastPos.forEach(o=>{
+    const g=o.g, q=o.q, rad=Math.max(4,(g.born?7:6)*q.s/(cv.height*0.42));
+    ctx2.beginPath(); ctx2.arc(q.x,q.y,rad,0,Math.PI*2);
+    if(!g.born){ctx2.strokeStyle='#c23b2a'; ctx2.lineWidth=1.5;
+      ctx2.setLineDash([3,3]); ctx2.stroke(); ctx2.setLineDash([]);}
+    else{ctx2.fillStyle=g.green?'#7fbf5f':'#b0642f'; ctx2.fill();
+      ctx2.strokeStyle='rgba(232,224,207,.5)'; ctx2.lineWidth=1; ctx2.stroke();}
+    if(g.born){ctx2.fillStyle='rgba(232,224,207,.75)'; ctx2.font='10px monospace';
+      ctx2.fillText('§3.'+g.id, q.x, q.y-rad-4);}
+  });
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

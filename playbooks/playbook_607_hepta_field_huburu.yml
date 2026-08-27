@@ -1,0 +1,504 @@
+---
+# =============================================================================
+# PB-607 — HEPTA CLEARANCE FIELD + HUBURU NOISE FORENSICS (Bahaa's algebra)
+# BahyWay.Ecosystem v4.+ · extends the Gula agent (requires PB-602..361)
+# CSR-08: running this playbook is Bahaa's confirmation act.
+#
+# Bahaa's four ideas, judged and sealed into code:
+#   1. HEPTAGON, not polygon — the clearance field lives on GL-MAP-001's
+#      gapless tiling: no slivers, no unowned ground, curvature-native.
+#   2. HIGGS-STYLE BORDER FIELD — φ = 0 unbroken (unassessed) → φ → v
+#      (certified) by local symmetry breaking. THE BORDER LAW: no cell
+#      certifies while touching unassessed ground; the clean front is
+#      continuous; the domain wall receives KAKI border identities.
+#   3. LiDAR HONESTY — typed witnesses. Surface (LiDAR micro-topography:
+#      the SKIN of the soil) may summon, never certify. Subsurface
+#      (GPR/magnetometry) is required for certification. Enforced in code.
+#   4. NOISE AS WITNESS — huburu forensics: structured residue (spatial
+#      memory or heavy tails) betrays hidden objects; the cell is demoted
+#      and targeted. The pattern discovered INSIDE the noise.
+#
+# The honest form of "+1000%": the gain lives in the EXPONENT —
+# miss_multiplier([0.6,0.7]) = 0.12 per added independent pass — and the
+# gapless field removes averaging and boundary failure modes entirely.
+# Probability is bounded by 1; exponents are not.
+# =============================================================================
+- name: "PB-607 · Hepta clearance field + huburu noise forensics"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    gula_crate_dir: "{{ repo_root }}/engines/gula"
+    naru_dir: "{{ repo_root }}/naru"
+
+  tasks:
+    - name: "Preflight · PB-606 must have run (residual module exists)"
+      ansible.builtin.stat:
+        path: "{{ gula_crate_dir }}/src/residual.rs"
+      register: residual_stat
+
+    - name: "Preflight · refuse if the Puluḫtu gate is absent"
+      ansible.builtin.assert:
+        that: residual_stat.stat.exists
+        fail_msg: "residual.rs not found — run PB-602..361 first. Playbooks are ordered acts."
+
+    - name: "Preflight · cargo must exist on the host"
+      ansible.builtin.command: cargo --version
+      register: cargo_check
+      changed_when: false
+
+    - name: "Write src/lib.rs (PB-607 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! GULA — the grammar-minting agent (candidate name, pending CSR-08 seal).
+          //! Governed by GL-LSN-001 (Lišānu Law) under GL-ALG-002 (Unified Algebra).
+          //!
+          //! The arc: WITNESS → JUDGE → MOVE → STAGE (Nimrud discipline, GL-STK-001).
+          //! The agent heals the corpus from its own flesh: wounds (three-gloss
+          //! collisions) become grafts (dialect candidates), staged in URUK only.
+          //! Sealing to KISH is Bahaa's act alone — no code path here writes to kish/.
+          //!
+          //! Zero external dependencies. std only. No Z3, no solvers, no ML.
+
+          pub mod apsu;
+          pub mod arc;
+          pub mod court;
+          pub mod graft;
+          pub mod harvest;
+          pub mod field;
+          pub mod naru;
+          pub mod noise;
+          pub mod residual;
+          pub mod tissue;
+          pub mod uruk;
+          pub mod wound;
+          pub mod zaqiqu;
+
+          /// The canonical structural signature of a pattern family, decomposed on the
+          /// three faces of the GL-ALG-002 triality.
+          #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+          pub struct Signature {
+              pub particle_face: String,
+              pub orbit_face: String,
+              pub tribe_face: String,
+          }
+
+          impl Signature {
+              pub fn new(particle: &str, orbit: &str, tribe: &str) -> Self {
+                  Self {
+                      particle_face: normalize(particle),
+                      orbit_face: normalize(orbit),
+                      tribe_face: normalize(tribe),
+                  }
+              }
+
+              /// Canonical key: the shape as one string. Two patterns share a key
+              /// iff they share the same deep structure on all three faces.
+              pub fn key(&self) -> String {
+                  format!(
+                      "P[{}]|O[{}]|T[{}]",
+                      self.particle_face, self.orbit_face, self.tribe_face
+                  )
+              }
+          }
+
+          fn normalize(s: &str) -> String {
+              s.trim().to_lowercase().split_whitespace().collect::<Vec<_>>().join("-")
+          }
+
+          /// One engine's testimony: "I hold this pattern shape, and I gloss it thus."
+          #[derive(Debug, Clone)]
+          pub struct PatternWitness {
+              pub engine: String,
+              pub signature: Signature,
+              pub hubullu_gloss: String,
+          }
+
+          /// Verdict vocabulary of GL-LSN-001 §6.2. SEALED-KISH is intentionally
+          /// absent: the agent cannot pronounce it.
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum Verdict {
+              Observed,
+              Triggered,
+              Minted,
+              RejectedForeign(String),
+              RejectedTumor(String),
+              StagedUruk(String),
+              /// A phantom pattern predicted from the lattice's negative space
+              /// (zaqiqu). Prune-exempt; a prediction, never a dialect.
+              PhantomPredicted(String),
+              /// A live testimony matched a phantom's signature — prophecy fulfilled.
+              PhantomRecovered(String),
+          }
+
+          impl Verdict {
+              pub fn as_str(&self) -> &'static str {
+                  match self {
+                      Verdict::Observed => "OBSERVED",
+                      Verdict::Triggered => "TRIGGERED",
+                      Verdict::Minted => "MINTED",
+                      Verdict::RejectedForeign(_) => "REJECTED-FOREIGN",
+                      Verdict::RejectedTumor(_) => "REJECTED-TUMOR",
+                      Verdict::StagedUruk(_) => "STAGED-URUK",
+                      Verdict::PhantomPredicted(_) => "PHANTOM-PREDICTED",
+                      Verdict::PhantomRecovered(_) => "PHANTOM-RECOVERED",
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn signature_key_is_canonical() {
+                  let a = Signature::new("  Leak  Event ", "decay ORBIT", "pipe tribe");
+                  let b = Signature::new("leak event", "Decay Orbit", "Pipe   Tribe");
+                  assert_eq!(a.key(), b.key());
+              }
+          }
+    - name: "Write src/field.rs (PB-607 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/field.rs"
+        mode: "0644"
+        content: |
+          //! HEPTA CLEARANCE FIELD — the Higgs-style border law (PB-607).
+          //! GL-MAP-001's gapless heptagonal tiling carries a clearance field φ:
+          //! unassessed ground sits in the unbroken phase (φ = 0); a cell whose
+          //! residual bound is met breaks symmetry locally (φ → v, certified).
+          //! The border of the clean area is the domain wall where φ transitions —
+          //! KAKI v4.0 mints identity per border cell (border-witness clause).
+          //!
+          //! THE BORDER LAW: a cell may never certify while touching unassessed
+          //! ground. No certified islands floating in ignorance — the clean region
+          //! grows only by continuous front. This kills the classic handover
+          //! failure: certified patches with unassessed seams between them.
+          //!
+          //! WITNESS TYPING (Kīnu honesty in the type system):
+          //!   Surface    — LiDAR micro-topography. Sees the SKIN of the soil:
+          //!                disturbance texture, subsidence dimples, tripwires.
+          //!                It can summon; it can NEVER certify alone.
+          //!   Subsurface — GPR, magnetometry. Sees depth. Required for any
+          //!                certification.
+          //!   NoiseForensic — huburu structure verdict on residuals (noise.rs).
+
+          use std::collections::BTreeSet;
+
+          #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+          pub enum WitnessKind {
+              Surface,
+              Subsurface,
+              NoiseForensic,
+          }
+
+          #[derive(Debug, Clone, Default)]
+          pub struct HeptaCell {
+              /// Indices of neighboring cells in the gapless tiling (7 interior;
+              /// rim cells of a finite patch may hold fewer).
+              pub neighbors: Vec<usize>,
+              /// Residual bound (puluḫtu) once assessed; None = unbroken phase.
+              pub residual: Option<f64>,
+              pub witness_kinds: BTreeSet<WitnessKind>,
+              pub certified: bool,
+          }
+
+          #[derive(Debug, Default)]
+          pub struct HeptaField {
+              pub cells: Vec<HeptaCell>,
+          }
+
+          impl HeptaField {
+              pub fn new(neighbor_lists: Vec<Vec<usize>>) -> Self {
+                  Self {
+                      cells: neighbor_lists
+                          .into_iter()
+                          .map(|neighbors| HeptaCell { neighbors, ..Default::default() })
+                          .collect(),
+                  }
+              }
+
+              /// Record an assessment for a cell: witnesses seen, residual bound.
+              pub fn assess(&mut self, i: usize, residual: f64, kinds: &[WitnessKind]) {
+                  let c = &mut self.cells[i];
+                  c.residual = Some(residual);
+                  c.witness_kinds.extend(kinds.iter().cloned());
+              }
+
+              /// Attempt local symmetry breaking (certification). Refusals name
+              /// their law; there is no silent failure.
+              pub fn try_certify(&mut self, i: usize, eps_theta: f64) -> Result<(), String> {
+                  let (residual, kinds, neighbors) = {
+                      let c = &self.cells[i];
+                      (c.residual, c.witness_kinds.clone(), c.neighbors.clone())
+                  };
+                  let r = residual.ok_or_else(|| {
+                      format!("cell {} unassessed — the unbroken phase cannot certify", i)
+                  })?;
+                  if !kinds.contains(&WitnessKind::Subsurface) {
+                      return Err(format!(
+                          "cell {} has no subsurface witness — LiDAR sees the skin of the \
+                           soil, not its depth; it may summon, never certify",
+                          i
+                      ));
+                  }
+                  if r > eps_theta {
+                      return Err(format!(
+                          "cell {} residual {:.2e} exceeds ε(Θ) {:.2e} — the bound is not met",
+                          i, r, eps_theta
+                      ));
+                  }
+                  for &n in &neighbors {
+                      if self.cells[n].residual.is_none() {
+                          return Err(format!(
+                              "BORDER LAW · cell {} touches unassessed cell {} — no certified \
+                               island may float in ignorance; the front must be continuous",
+                              i, n
+                          ));
+                      }
+                  }
+                  self.cells[i].certified = true;
+                  Ok(())
+              }
+
+              /// The domain wall: certified cells with at least one uncertified
+              /// neighbor. These receive KAKI border identities.
+              pub fn border(&self) -> Vec<usize> {
+                  (0..self.cells.len())
+                      .filter(|&i| {
+                          self.cells[i].certified
+                              && self.cells[i].neighbors.iter().any(|&n| !self.cells[n].certified)
+                      })
+                      .collect()
+              }
+          }
+
+          /// The honest form of "+1000%": the gain lives in the exponent.
+          /// Adding independent witness passes multiplies the miss product.
+          pub fn miss_multiplier(added_witness_p: &[f64]) -> f64 {
+              added_witness_p.iter().fold(1.0, |m, p| m * (1.0 - p))
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              /// Central cell 0 with 7 neighbors 1..=7 (rim cells neighbor 0 only —
+              /// a minimal finite patch of the tiling).
+              fn patch() -> HeptaField {
+                  let mut lists = vec![(1..=7).collect::<Vec<_>>()];
+                  for _ in 1..=7 {
+                      lists.push(vec![0]);
+                  }
+                  HeptaField::new(lists)
+              }
+
+              #[test]
+              fn lidar_alone_may_summon_never_certify() {
+                  let mut f = patch();
+                  for i in 1..=7 {
+                      f.assess(i, 1e-4, &[WitnessKind::Subsurface]);
+                  }
+                  f.assess(0, 1e-6, &[WitnessKind::Surface, WitnessKind::NoiseForensic]);
+                  let v = f.try_certify(0, 1e-3);
+                  assert!(v.is_err());
+                  assert!(v.unwrap_err().contains("skin of the"));
+              }
+
+              #[test]
+              fn border_law_refuses_islands_in_ignorance() {
+                  let mut f = patch();
+                  f.assess(0, 1e-6, &[WitnessKind::Subsurface]);
+                  // neighbor 3 left unassessed
+                  for i in [1, 2, 4, 5, 6, 7] {
+                      f.assess(i, 1e-4, &[WitnessKind::Subsurface]);
+                  }
+                  let v = f.try_certify(0, 1e-3);
+                  assert!(v.is_err());
+                  assert!(v.unwrap_err().contains("BORDER LAW"));
+                  // assess the missing neighbor → the front is continuous → certify
+                  f.assess(3, 2e-4, &[WitnessKind::Subsurface]);
+                  assert!(f.try_certify(0, 1e-3).is_ok());
+              }
+
+              #[test]
+              fn domain_wall_is_computed() {
+                  let mut f = patch();
+                  for i in 0..=7 {
+                      f.assess(i, 1e-6, &[WitnessKind::Subsurface]);
+                  }
+                  f.try_certify(0, 1e-3).unwrap();
+                  assert_eq!(f.border(), vec![0], "certified center bordered by uncertified rim");
+                  for i in 1..=7 {
+                      f.try_certify(i, 1e-3).unwrap();
+                  }
+                  assert!(f.border().is_empty(), "fully certified patch has no interior wall");
+              }
+
+              #[test]
+              fn the_gain_lives_in_the_exponent() {
+                  let m = miss_multiplier(&[0.6, 0.7]);
+                  assert!((m - 0.12).abs() < 1e-12);
+                  assert!(m < 0.2, "two added witnesses: nearly an order of magnitude per pass");
+              }
+          }
+    - name: "Write src/noise.rs (PB-607 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/noise.rs"
+        mode: "0644"
+        content: |
+          //! HUBURU FORENSICS — the noise is a witness too (PB-607).
+          //! After explained structure is removed from HSI / LiDAR residuals,
+          //! honest noise should be white: no spatial memory (lag-1 autocorrelation
+          //! near zero) and no heavy tails (excess kurtosis near zero). Structured
+          //! residue betrays a hidden object. A cell whose noise testifies as
+          //! structured is demoted from certification and targeted — the pattern
+          //! discovered INSIDE the noise.
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum NoiseVerdict {
+              White,
+              Structured { autocorr: f64, kurtosis: f64, cause: String },
+          }
+
+          pub fn lag1_autocorr(xs: &[f64]) -> f64 {
+              let n = xs.len();
+              if n < 3 {
+                  return 0.0;
+              }
+              let mean = xs.iter().sum::<f64>() / n as f64;
+              let var = xs.iter().map(|x| (x - mean) * (x - mean)).sum::<f64>();
+              if var == 0.0 {
+                  return 0.0;
+              }
+              let cov: f64 = xs.windows(2).map(|w| (w[0] - mean) * (w[1] - mean)).sum();
+              cov / var
+          }
+
+          pub fn excess_kurtosis(xs: &[f64]) -> f64 {
+              let n = xs.len();
+              if n < 4 {
+                  return 0.0;
+              }
+              let mean = xs.iter().sum::<f64>() / n as f64;
+              let m2 = xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
+              if m2 == 0.0 {
+                  return 0.0;
+              }
+              let m4 = xs.iter().map(|x| (x - mean).powi(4)).sum::<f64>() / n as f64;
+              m4 / (m2 * m2) - 3.0
+          }
+
+          /// Judge a residual series. Thresholds are court-set; defaults below are
+          /// generous so honest noise passes and real structure does not.
+          pub fn judge_noise(xs: &[f64], r_max: f64, k_max: f64) -> NoiseVerdict {
+              let r = lag1_autocorr(xs);
+              let k = excess_kurtosis(xs);
+              if r.abs() > r_max {
+                  return NoiseVerdict::Structured {
+                      autocorr: r,
+                      kurtosis: k,
+                      cause: format!("spatial memory: |lag-1 autocorr| {:.2} > {:.2}", r.abs(), r_max),
+                  };
+              }
+              if k.abs() > k_max {
+                  return NoiseVerdict::Structured {
+                      autocorr: r,
+                      kurtosis: k,
+                      cause: format!("heavy tails: |excess kurtosis| {:.2} > {:.2}", k.abs(), k_max),
+                  };
+              }
+              NoiseVerdict::White
+          }
+
+          pub const R_MAX_DEFAULT: f64 = 0.20;
+          pub const K_MAX_DEFAULT: f64 = 1.00;
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              /// Deterministic near-Gaussian noise: sum of four LCG uniforms
+              /// (Irwin–Hall; excess kurtosis ≈ −0.3, no lag memory).
+              fn honest_noise(n: usize) -> Vec<f64> {
+                  let mut state: u64 = 3600;
+                  let mut next = move || {
+                      state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                      ((state >> 33) as f64) / (u32::MAX as f64 + 1.0)
+                  };
+                  (0..n).map(|_| next() + next() + next() + next() - 2.0).collect()
+              }
+
+              #[test]
+              fn honest_noise_passes_as_white() {
+                  let xs = honest_noise(4000);
+                  assert_eq!(judge_noise(&xs, R_MAX_DEFAULT, K_MAX_DEFAULT), NoiseVerdict::White);
+              }
+
+              #[test]
+              fn buried_periodicity_betrays_itself_by_memory() {
+                  let mut xs = honest_noise(4000);
+                  for (i, x) in xs.iter_mut().enumerate() {
+                      *x += 1.4 * (i as f64 * 0.35).sin(); // smooth buried structure
+                  }
+                  match judge_noise(&xs, R_MAX_DEFAULT, K_MAX_DEFAULT) {
+                      NoiseVerdict::Structured { cause, .. } => assert!(cause.contains("spatial memory")),
+                      _ => panic!("periodic residue must be flagged"),
+                  }
+              }
+
+              #[test]
+              fn sparse_spikes_betray_themselves_by_tails() {
+                  let mut xs = honest_noise(4000);
+                  for i in (0..xs.len()).step_by(500) {
+                      xs[i] += 14.0; // rare localized anomalies
+                  }
+                  match judge_noise(&xs, R_MAX_DEFAULT, K_MAX_DEFAULT) {
+                      NoiseVerdict::Structured { cause, .. } => assert!(cause.contains("heavy tails")),
+                      _ => panic!("spiked residue must be flagged"),
+                  }
+              }
+
+              #[test]
+              fn degenerate_series_do_not_lie() {
+                  assert_eq!(judge_noise(&[0.0, 0.0], 0.2, 1.0), NoiseVerdict::White);
+                  assert_eq!(lag1_autocorr(&[1.0, 1.0, 1.0]), 0.0, "zero variance → no memory claim");
+              }
+          }
+
+    - name: "GATE · COMPILE (cargo build) — blocking"
+      ansible.builtin.command: cargo build
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: compile_gate
+      changed_when: true
+
+    - name: "GATE · RUNTIME (cargo test) — blocking"
+      ansible.builtin.command: cargo test
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: runtime_gate
+      changed_when: false
+
+    - name: "NĀRU · record the act"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/playbook_acts.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-607","act":"hepta-field+huburu","law":"GL-MAP-001+GL-RU-001",
+          "border_law":"no certified island may float in ignorance",
+          "lidar":"surface witness — may summon, never certify",
+          "noise":"structured residue betrays hidden objects",
+          "honest_gain":"exponent, not percentage: x0.12 miss per added pass",
+          "gates":{"compile":"green","runtime":"green"}}
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "PB-607 complete. Both gates green."
+          - "The clearance court now grows as a field on gapless heptagons:"
+          - "continuous front, KAKI-minted domain wall, typed witnesses,"
+          - "and the noise itself sworn in as a witness."

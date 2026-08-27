@@ -31,8 +31,14 @@ const TRIBE_B11: i64 = 140;
 const CRITICAL_B11_THRESHOLD: i64 = 60;
 
 const NAMES: &[&str] = &[
-    "حسن العامري", "فاطمة الزهراء", "محمد عبدالله", "علي كريم",
-    "زينب حسين", "عمر الشمري", "نور الهدى", "كريم الجبوري",
+    "حسن العامري",
+    "فاطمة الزهراء",
+    "محمد عبدالله",
+    "علي كريم",
+    "زينب حسين",
+    "عمر الشمري",
+    "نور الهدى",
+    "كريم الجبوري",
 ];
 const BURIAL_TYPES: &[&str] = &["دفن عادي", "قبر مؤقت", "دفن جماعي"];
 const DEATH_CAUSES: &[&str] = &["مرض طبيعي", "غير محدد", "حادث"];
@@ -94,7 +100,10 @@ fn parse_args() -> Args {
         match arg.as_str() {
             "--total-rows" => total_rows = next_num(&mut it, "--total-rows"),
             "--rows-per-file" => rows_per_file = next_num(&mut it, "--rows-per-file"),
-            "--out-dir" => out_dir = PathBuf::from(it.next().unwrap_or_else(|| fail("--out-dir needs a value"))),
+            "--out-dir" => {
+                out_dir =
+                    PathBuf::from(it.next().unwrap_or_else(|| fail("--out-dir needs a value")))
+            }
             "--zip" => zip = true,
             "--seed" => seed = next_num(&mut it, "--seed"),
             "--progress-every" => progress_every = next_num(&mut it, "--progress-every"),
@@ -108,7 +117,14 @@ fn parse_args() -> Args {
     if rows_per_file == 0 {
         fail("--rows-per-file must be >= 1");
     }
-    Args { total_rows, rows_per_file, out_dir, zip, seed, progress_every }
+    Args {
+        total_rows,
+        rows_per_file,
+        out_dir,
+        zip,
+        seed,
+        progress_every,
+    }
 }
 
 fn next_num(it: &mut impl Iterator<Item = String>, flag: &str) -> u64 {
@@ -142,7 +158,11 @@ fn gen_row(rng: &mut Rng, seq: u64) -> String {
     let month = rng.next_range(1, 12);
     let day = rng.next_range(1, 28);
     let national_id = format!("190{:06X}", rng.next_u64() % 0xFFFFFF);
-    let source_trust = if rng.next_range(0, 9) > 7 { "Authoritative" } else { "Official" };
+    let source_trust = if rng.next_range(0, 9) > 7 {
+        "Authoritative"
+    } else {
+        "Official"
+    };
     let validity_flag = rng.next_range(0, 9) > 1;
     let completeness = 0.5 + (rng.next_range(0, 480) as f64) / 1000.0;
     let arabic_density = 0.6 + (rng.next_range(0, 300) as f64) / 1000.0;
@@ -196,7 +216,11 @@ fn main() {
         args.rows_per_file,
         args.seed,
         est_bytes as f64 / 1_073_741_824.0,
-        if args.zip { " (--zip wraps in STORE zips -- same size, not smaller)" } else { "" }
+        if args.zip {
+            " (--zip wraps in STORE zips -- same size, not smaller)"
+        } else {
+            ""
+        }
     );
 
     let t0 = Instant::now();
@@ -290,11 +314,18 @@ mod tests {
             let entry = enkidw::kaki_generate(&minter, record);
             seen_kakis.insert(*entry.particle.bytes());
             assert!(
-                entry.eav.iter().any(|t| t.attr_hash == enkidw::kaki_generator::fnv1a_32(b"civil_name")),
+                entry
+                    .eav
+                    .iter()
+                    .any(|t| t.attr_hash == enkidw::kaki_generator::fnv1a_32(b"civil_name")),
                 "expected a civil_name EAV attribute on every generated row"
             );
         }
-        assert_eq!(seen_kakis.len(), 30, "each source row must mint a distinct particle");
+        assert_eq!(
+            seen_kakis.len(),
+            30,
+            "each source row must mint a distinct particle"
+        );
     }
 
     #[test]
@@ -312,9 +343,16 @@ mod tests {
         let buf = buffer(2000, 4);
         let records = enkidw::parse_csv(&buf);
         let b11_idx = records[0].headers.iter().position(|h| h == "b11").unwrap();
-        let state_idx = records[0].headers.iter().position(|h| h == "state").unwrap();
+        let state_idx = records[0]
+            .headers
+            .iter()
+            .position(|h| h == "state")
+            .unwrap();
         for r in &records {
-            let b11: i64 = std::str::from_utf8(&r.values[b11_idx]).unwrap().parse().unwrap();
+            let b11: i64 = std::str::from_utf8(&r.values[b11_idx])
+                .unwrap()
+                .parse()
+                .unwrap();
             let state = std::str::from_utf8(&r.values[state_idx]).unwrap();
             if b11 >= TRIBE_B11 {
                 assert_eq!(state, "golden");

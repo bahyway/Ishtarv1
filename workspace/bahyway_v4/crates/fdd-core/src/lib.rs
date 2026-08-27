@@ -73,14 +73,23 @@ pub struct Network<Q: Quantity> {
 impl<Q: Quantity> Network<Q> {
     fn validate(&self, phi: &[Q]) -> Result<(), FddError> {
         if phi.len() != self.nodes.len() {
-            return Err(FddError::PotentialLengthMismatch { expected: self.nodes.len(), got: phi.len() });
+            return Err(FddError::PotentialLengthMismatch {
+                expected: self.nodes.len(),
+                got: phi.len(),
+            });
         }
         for (i, e) in self.edges.iter().enumerate() {
             if e.from as usize >= self.nodes.len() {
-                return Err(FddError::NodeIndexOutOfRange { edge_index: i, node_index: e.from });
+                return Err(FddError::NodeIndexOutOfRange {
+                    edge_index: i,
+                    node_index: e.from,
+                });
             }
             if e.to as usize >= self.nodes.len() {
-                return Err(FddError::NodeIndexOutOfRange { edge_index: i, node_index: e.to });
+                return Err(FddError::NodeIndexOutOfRange {
+                    edge_index: i,
+                    node_index: e.to,
+                });
             }
         }
         Ok(())
@@ -143,28 +152,71 @@ mod tests {
     #[test]
     fn mismatched_potential_length_is_a_typed_error() {
         let net = Network::<f64> {
-            nodes: vec![Node { id: 0, injection: 0.0 }, Node { id: 1, injection: 0.0 }],
+            nodes: vec![
+                Node {
+                    id: 0,
+                    injection: 0.0,
+                },
+                Node {
+                    id: 1,
+                    injection: 0.0,
+                },
+            ],
             edges: vec![],
         };
         let err = residuals(&net, &[1.0], &Identity).unwrap_err();
-        assert_eq!(err, FddError::PotentialLengthMismatch { expected: 2, got: 1 });
+        assert_eq!(
+            err,
+            FddError::PotentialLengthMismatch {
+                expected: 2,
+                got: 1
+            }
+        );
     }
 
     #[test]
     fn out_of_range_edge_is_a_typed_error() {
         let net = Network::<f64> {
-            nodes: vec![Node { id: 0, injection: 0.0 }],
-            edges: vec![Edge { from: 0, to: 5, coeff: 1.0, in_service: true }],
+            nodes: vec![Node {
+                id: 0,
+                injection: 0.0,
+            }],
+            edges: vec![Edge {
+                from: 0,
+                to: 5,
+                coeff: 1.0,
+                in_service: true,
+            }],
         };
         let err = residuals(&net, &[0.0], &Identity).unwrap_err();
-        assert_eq!(err, FddError::NodeIndexOutOfRange { edge_index: 0, node_index: 5 });
+        assert_eq!(
+            err,
+            FddError::NodeIndexOutOfRange {
+                edge_index: 0,
+                node_index: 5
+            }
+        );
     }
 
     #[test]
     fn balanced_network_has_near_zero_residual() {
         let net = Network::<f64> {
-            nodes: vec![Node { id: 0, injection: -1.0 }, Node { id: 1, injection: 1.0 }],
-            edges: vec![Edge { from: 0, to: 1, coeff: 1.0, in_service: true }],
+            nodes: vec![
+                Node {
+                    id: 0,
+                    injection: -1.0,
+                },
+                Node {
+                    id: 1,
+                    injection: 1.0,
+                },
+            ],
+            edges: vec![Edge {
+                from: 0,
+                to: 1,
+                coeff: 1.0,
+                in_service: true,
+            }],
         };
         let r = residuals(&net, &[1.0, 0.0], &Identity).unwrap();
         assert!(r.iter().all(|k| *k < 1e-9));

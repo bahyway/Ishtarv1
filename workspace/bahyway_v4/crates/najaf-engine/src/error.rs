@@ -1,8 +1,8 @@
 //! NajafError — domain errors for the cemetery navigation engine.
 
+use crate::sector::NajafSector;
 use core::fmt;
 use navi_engine::NaviError;
-use crate::sector::NajafSector;
 
 #[derive(Debug)]
 pub enum NajafError {
@@ -25,18 +25,22 @@ pub type NajafResult<T> = Result<T, NajafError>;
 impl fmt::Display for NajafError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NajafError::GraveNotFound(id)               => write!(f, "grave {id} not found"),
-            NajafError::SectorBlocked(s)                => write!(f, "sector {:?} is blocked", s),
-            NajafError::RouteError(e)                   => write!(f, "route error: {e}"),
-            NajafError::InvalidGraveId(msg)             => write!(f, "invalid grave id: {msg}"),
-            NajafError::EmptyCemetery                   => write!(f, "cemetery registry is empty"),
-            NajafError::NoAccessibleGravesInSector(s)  => write!(f, "no accessible graves in {:?}", s),
+            NajafError::GraveNotFound(id) => write!(f, "grave {id} not found"),
+            NajafError::SectorBlocked(s) => write!(f, "sector {:?} is blocked", s),
+            NajafError::RouteError(e) => write!(f, "route error: {e}"),
+            NajafError::InvalidGraveId(msg) => write!(f, "invalid grave id: {msg}"),
+            NajafError::EmptyCemetery => write!(f, "cemetery registry is empty"),
+            NajafError::NoAccessibleGravesInSector(s) => {
+                write!(f, "no accessible graves in {:?}", s)
+            }
         }
     }
 }
 
 impl From<NaviError> for NajafError {
-    fn from(e: NaviError) -> Self { NajafError::RouteError(e) }
+    fn from(e: NaviError) -> Self {
+        NajafError::RouteError(e)
+    }
 }
 
 impl core::error::Error for NajafError {}

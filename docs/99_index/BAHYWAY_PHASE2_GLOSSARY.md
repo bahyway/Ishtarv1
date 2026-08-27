@@ -125,6 +125,36 @@ Entries are grouped by rough theme, each tagged with its source batch(es).
   the deterministic recognizer misses, that gap justifies improving the
   pure-Rust algorithm, never promoting the ML model into production.
 
+## naṣāru Sensing / Stochastic Geometry (2026-08-15, DRAFT in `GL-SEN-001`, batch 8)
+- **Phase S** — naṣāru's fourth phase, sitting beside Phase G/V/L in
+  `PB-360-374_naṣāru_BWVL_Playbook_Suite_DRAFT.md`: pointing the same
+  particle-monist, Mašḫalu-membrane, zoom-as-necessity instrument at a
+  physical corridor or area instead of a data lifecycle. See `GL-SEN-001`
+  §0.
+- **Spatial witness** — the requirement that a sensed anomaly's spatial
+  arrangement be tested against a Poisson null (Ripley's K(r), g(r), or
+  F(r)) on the surface it actually lives on before it becomes a claim —
+  never on brightness/threshold alone, never on a flattened projection.
+  See `GL-SEN-001` §1, §3.3.
+- **Geodesic K(r)** — the Ripley K-function computed with the surface's
+  real metric: `d = √((Δs·L)² + (R·Δθ)²)` on an (isometrically-unrolling)
+  cylinder membrane, exact rather than approximated; planar distance on a
+  terrain sheet. See `GL-SEN-001` §2.
+- **Corridor infrastructure defect detection** — this law's deliberate
+  name over "leak detection," so the electricity chapter (thermal/corona
+  proxies, not substance) is not a category error. Five medium profiles,
+  one rite sequence. See `GL-SEN-001` §4.
+- **UXO limitation clause** — binding, not advisory: this rite detects
+  hazard *proxies* (craters, disturbed soil, burn scars) and infers a
+  probability surface; it never detects buried ordnance directly, and no
+  output under this law may imply otherwise. See `GL-SEN-001` §4.
+- **Membrane Courts** — the Šala rehearsal artifact
+  (`shala-prototypes/batch8_nasaru_sensing_membrane_courts/shala_membrane_courts_v4.html`)
+  demonstrating the staging/instrument grammar this law formalizes:
+  dents-are-physics, the flat K(r) panel that never bends (GL-DST-001
+  §4), one grammar across five courts. Evidence for the grammar, not a
+  validated detector — synthetic seeded data throughout.
+
 ## CompareEngine / Jaccard (batch 1)
 - **CompareEngine** — the ETL comparison station; design target for a
   two-level Jaccard similarity measure (schema-presence + value cf/df).

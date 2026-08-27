@@ -42,7 +42,7 @@
 //! radix_spline   epoch/quality range    learned index (12GB -> 2KB,   epoch/quality
 //!                replaces the retired BTreeRange)
 //! hepta_shell    7D spatial (E7)        zone table, 126 neighbours    orbital (r,θ,φ)
-//! nairu_index    state+gate pruning     RoaringBitmap                 orbital state
+//! natiru_index   orbital-range pruning  sorted Vec + binary search    orbital (temporal)
 //! snapshot_idx   latest-snapshot query  HashMap<uuid_hash,            snapshot EAV
 //!                sorted Vec<(epoch,entry)>>, binary search
 //!                (was BTreeMap<uuid_hash, BTreeMap<epoch,_>> -- an outer
@@ -56,19 +56,19 @@
 /// crate doc comment for the full provenance of both renames.
 pub const SOVEREIGN_NAME: &str = "elu";
 
-pub mod identity;
-pub mod sovereignty;
-pub mod typerole;
-pub mod temporal;
+pub mod bloom;
 pub mod colorid;
 pub mod eav;
-pub mod snapshot_idx;
-pub mod bloom;
-pub mod surrogate;
-pub mod radix_spline;
-pub mod hepta_shell;
-pub mod nairu_index;
 pub mod eav_exact_index;
+pub mod hepta_shell;
+pub mod identity;
+pub mod natiru_index;
+pub mod radix_spline;
+pub mod snapshot_idx;
+pub mod sovereignty;
+pub mod surrogate;
+pub mod temporal;
+pub mod typerole;
 
 /// Vector ID kind for index registration in Default.Indexes.
 pub use enkidb_vector_id::VectorId as IndexVectorId;
@@ -76,17 +76,17 @@ pub use enkidb_vector_id::VectorId as IndexVectorId;
 pub use bloom::BloomFilter;
 
 pub mod prelude {
-    pub use super::identity::IdentityIndex;
-    pub use super::sovereignty::SovereigntyIndex;
-    pub use super::typerole::TypeRoleIndex;
-    pub use super::temporal::TemporalIndex;
+    pub use super::bloom::BloomFilter;
     pub use super::colorid::ColorIdIndex;
     pub use super::eav::EavIndex;
-    pub use super::snapshot_idx::SnapshotIndex;
-    pub use super::bloom::BloomFilter;
-    pub use super::surrogate::SurrogateMap;
-    pub use super::radix_spline::RadixSplineIndex;
-    pub use super::hepta_shell::HeptaShellIndex;
-    pub use super::nairu_index::{NatiruIndex, BUCKET_ORBITALS};
     pub use super::eav_exact_index::EavExactIndex;
+    pub use super::hepta_shell::HeptaShellIndex;
+    pub use super::identity::IdentityIndex;
+    pub use super::natiru_index::{NatiruIndex, BUCKET_ORBITALS};
+    pub use super::radix_spline::RadixSplineIndex;
+    pub use super::snapshot_idx::SnapshotIndex;
+    pub use super::sovereignty::SovereigntyIndex;
+    pub use super::surrogate::SurrogateMap;
+    pub use super::temporal::TemporalIndex;
+    pub use super::typerole::TypeRoleIndex;
 }

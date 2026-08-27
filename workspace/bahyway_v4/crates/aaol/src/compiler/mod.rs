@@ -6,19 +6,17 @@
 //!                → `semantic::SemanticAnalyser` → checked AST
 //!                → `codegen::CodeGen` → Rust / Python / JSON / PS / XML
 
+pub mod codegen;
 pub mod lexer;
+pub mod lsp;
 pub mod parser;
 pub mod semantic;
-pub mod codegen;
-pub mod lsp;
 
-pub use lexer::{Lexer, AkkToken, AOLCat, Span, SpannedToken, LexError};
+pub use codegen::{CodeGen, CodeGenOutput, CodeGenTarget};
+pub use lexer::{AOLCat, AkkToken, LexError, Lexer, Span, SpannedToken};
 pub use parser::{
-    Parser, ParseError,
-    AkkFile, AkkTablet, AkkDecl, AkkField, AkkExpr,
-    AkkSignDecl, AkkWordDecl, AkkAolMapDecl, AkkMapping,
-    AkkSeekDecl, AkkIngestDecl, AkkPolicyDecl, AkkRule,
-    AkkAnnotation, AnnotationKind, RuleKind,
+    AkkAnnotation, AkkAolMapDecl, AkkDecl, AkkExpr, AkkField, AkkFile, AkkIngestDecl, AkkMapping,
+    AkkPolicyDecl, AkkRule, AkkSeekDecl, AkkSignDecl, AkkTablet, AkkWordDecl, AnnotationKind,
+    ParseError, Parser, RuleKind,
 };
-pub use semantic::{SemanticAnalyser, SemanticDiag, DiagLevel};
-pub use codegen::{CodeGen, CodeGenTarget, CodeGenOutput};
+pub use semantic::{DiagLevel, SemanticAnalyser, SemanticDiag};

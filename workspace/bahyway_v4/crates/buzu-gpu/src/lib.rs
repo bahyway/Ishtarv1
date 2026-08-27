@@ -87,8 +87,14 @@ async fn run_async(n_particles_for_benchmark: usize) -> Result<Option<GpuRunResu
     let info = adapter.get_info();
     let backend = format!("{:?}", info.backend);
     let adapter_kind = match info.device_type {
-        wgpu::DeviceType::Cpu => AdapterKind::Software { name: info.name.clone(), backend: backend.clone() },
-        _ => AdapterKind::Hardware { name: info.name.clone(), backend: backend.clone() },
+        wgpu::DeviceType::Cpu => AdapterKind::Software {
+            name: info.name.clone(),
+            backend: backend.clone(),
+        },
+        _ => AdapterKind::Hardware {
+            name: info.name.clone(),
+            backend: backend.clone(),
+        },
     };
 
     let (device, queue) = adapter
@@ -107,25 +113,41 @@ async fn run_async(n_particles_for_benchmark: usize) -> Result<Option<GpuRunResu
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
                 count: None,
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 1,
                 visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
                 count: None,
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 2,
                 visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None },
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
                 count: None,
             },
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
                 visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None },
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
                 count: None,
             },
         ],
@@ -156,7 +178,14 @@ async fn run_async(n_particles_for_benchmark: usize) -> Result<Option<GpuRunResu
         .collect();
     let verify_chunk = buzu_core::chunk::BuzuChunk::seal(nucleus, bivector, thetas.clone(), vec![]);
 
-    let gpu_positions = dispatch(&device, &queue, &pipeline, &bind_group_layout, &verify_chunk, radius as f32);
+    let gpu_positions = dispatch(
+        &device,
+        &queue,
+        &pipeline,
+        &bind_group_layout,
+        &verify_chunk,
+        radius as f32,
+    );
 
     let mut max_err = 0.0f64;
     for (i, _theta) in thetas.iter().enumerate() {
@@ -181,10 +210,11 @@ async fn run_async(n_particles_for_benchmark: usize) -> Result<Option<GpuRunResu
     // is correct and the gap is this specific software adapter's trig
     // precision, not a logic bug. Real hardware has no such excuse: its
     // tolerance stays tight.
-    let tolerance = radius * match &adapter_kind {
-        AdapterKind::Hardware { .. } => 1e-4,
-        AdapterKind::Software { .. } => 1e-2,
-    };
+    let tolerance = radius
+        * match &adapter_kind {
+            AdapterKind::Hardware { .. } => 1e-4,
+            AdapterKind::Software { .. } => 1e-2,
+        };
     let correctness_passed = max_err < tolerance;
 
     // ---- Throughput: as many chunks as needed, GPU-side only ----
@@ -195,7 +225,12 @@ async fn run_async(n_particles_for_benchmark: usize) -> Result<Option<GpuRunResu
     while remaining > 0 {
         let n = remaining.min(cap);
         let theta: Vec<f32> = (0..n).map(|j| ((i * cap + j) as f32) * 0.0001).collect();
-        bench_chunks.push(buzu_core::chunk::BuzuChunk::seal(nucleus, bivector, theta, vec![]));
+        bench_chunks.push(buzu_core::chunk::BuzuChunk::seal(
+            nucleus,
+            bivector,
+            theta,
+            vec![],
+        ));
         remaining -= n;
         i += 1;
     }
@@ -203,7 +238,14 @@ async fn run_async(n_particles_for_benchmark: usize) -> Result<Option<GpuRunResu
     let start = std::time::Instant::now();
     let mut total = 0usize;
     for chunk in &bench_chunks {
-        let out = dispatch(&device, &queue, &pipeline, &bind_group_layout, chunk, radius as f32);
+        let out = dispatch(
+            &device,
+            &queue,
+            &pipeline,
+            &bind_group_layout,
+            chunk,
+            radius as f32,
+        );
         total += out.len();
     }
     let gpu_elapsed = start.elapsed();
@@ -234,7 +276,10 @@ fn dispatch(
         count: chunk.header.count,
         checksum: chunk.header.checksum,
     };
-    let params = GpuParams { radius, _pad: [0.0; 3] };
+    let params = GpuParams {
+        radius,
+        _pad: [0.0; 3],
+    };
     let count = chunk.theta.len();
 
     let header_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -270,16 +315,33 @@ fn dispatch(
         label: Some("buzu-bg"),
         layout: bind_group_layout,
         entries: &[
-            wgpu::BindGroupEntry { binding: 0, resource: header_buf.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 1, resource: params_buf.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 2, resource: theta_buf.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 3, resource: out_buf.as_entire_binding() },
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: header_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: params_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: theta_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: out_buf.as_entire_binding(),
+            },
         ],
     });
 
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("buzu-encoder") });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("buzu-encoder"),
+    });
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("buzu-pass"), timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("buzu-pass"),
+            timestamp_writes: None,
+        });
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &bind_group, &[]);
         let workgroups = (count as u32).div_ceil(64).max(1);

@@ -6,7 +6,7 @@
 extends Node
 
 
-const DEFAULT_HOST = "192.168.122.107"
+const DEFAULT_HOST = "192.168.122.112"
 const DEFAULT_PORT = 7001
 const CONNECT_TIMEOUT = 5.0  # seconds
 const READ_TIMEOUT    = 120.0

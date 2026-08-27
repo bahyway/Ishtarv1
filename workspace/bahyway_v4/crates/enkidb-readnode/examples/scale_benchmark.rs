@@ -27,7 +27,10 @@ const STATIONS: &[&str] = &[
 ];
 
 fn main() {
-    let n: usize = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(1_000_000);
+    let n: usize = env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1_000_000);
     let base = env::temp_dir().join("enkidb_readnode_scale_benchmark");
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
@@ -52,7 +55,8 @@ fn main() {
         // already produced a duplicate KAKI). See the writeup for why
         // this is a real, separate finding worth fixing in KakiMinter.
         let e = IdentityKaki::try_from_kaki(m.mint_identity(i as u32, KakiRole::Zikru)).unwrap();
-        let ek = EventKaki::try_from_kaki(m.mint_event((i as u32) ^ 0xFFFF_FFFF, KakiRole::Zikru)).unwrap();
+        let ek = EventKaki::try_from_kaki(m.mint_event((i as u32) ^ 0xFFFF_FFFF, KakiRole::Zikru))
+            .unwrap();
         let station = STATIONS[i % STATIONS.len()];
         let mut eav = vec![EavTriple::new(
             bahyway_crc::crc16("station".as_bytes()) as u32,
@@ -68,7 +72,13 @@ fn main() {
                 codec::encode(&AkkValue::Text("needle-particle-42".into())),
             ));
         }
-        jnl.append(enkidb_journal::entry::JournalEntry::new(ek, e.clone(), 1, eav)).unwrap();
+        jnl.append(enkidb_journal::entry::JournalEntry::new(
+            ek,
+            e.clone(),
+            1,
+            eav,
+        ))
+        .unwrap();
         if i == n / 2 {
             needle = Some(e);
         }
@@ -91,7 +101,10 @@ fn main() {
     let t2 = Instant::now();
     let mut rn = ReadNode::open(&entities_base, &eav_base).unwrap();
     let open_elapsed = t2.elapsed();
-    println!("ReadNode::open (no journal replay):  {open_elapsed:?}  (entity_count={})", rn.entity_count());
+    println!(
+        "ReadNode::open (no journal replay):  {open_elapsed:?}  (entity_count={})",
+        rn.entity_count()
+    );
 
     // ── Query 1: unbounded broad match (~1/5 of the dataset) -- the
     // honest worst case: HeptaScript has to fetch and materialize every
@@ -100,7 +113,9 @@ fn main() {
     // it's the same physics as any database asked to return millions of
     // rows. Kept here specifically so this stays measured, not assumed.
     let t3 = Instant::now();
-    let broad = rn.query("WHO T.E\nWHERE E[station] = \"data-cleansing-station\"").unwrap();
+    let broad = rn
+        .query("WHO T.E\nWHERE E[station] = \"data-cleansing-station\"")
+        .unwrap();
     let broad_elapsed = t3.elapsed();
     println!(
         "query WHERE station = 'data-cleansing-station' (UNBOUNDED)  ->  {} matched  in {broad_elapsed:?}",
@@ -124,9 +139,14 @@ fn main() {
     // ── Query 3: single-entity needle-in-haystack -- the demo-relevant
     // case (find *this* particle out of N), not a category listing. ──
     let t4 = Instant::now();
-    let needle_result = rn.query("WHO T.E\nWHERE E[needle_id] = \"needle-particle-42\"").unwrap();
+    let needle_result = rn
+        .query("WHO T.E\nWHERE E[needle_id] = \"needle-particle-42\"")
+        .unwrap();
     let needle_elapsed = t4.elapsed();
-    let found_needle = needle_result.matched.iter().any(|me| *me.entity.bytes() == *needle.bytes());
+    let found_needle = needle_result
+        .matched
+        .iter()
+        .any(|me| *me.entity.bytes() == *needle.bytes());
     println!(
         "query WHERE needle_id = 'needle-particle-42' (1 match out of {n})  in {needle_elapsed:?}  needle_found={found_needle}"
     );

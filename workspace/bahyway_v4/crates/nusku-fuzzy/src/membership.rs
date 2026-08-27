@@ -27,24 +27,32 @@ impl MembershipFn {
     pub fn eval(&self, x: f32) -> f32 {
         match self {
             Self::Triangular { a, b, c } => {
-                if x <= *a || x >= *c { 0.0 }
-                else if x < *b        { (x - a) / (b - a) }
-                else if (x - b).abs() < 1e-8 { 1.0 }
-                else                  { (c - x) / (c - b) }
+                if x <= *a || x >= *c {
+                    0.0
+                } else if x < *b {
+                    (x - a) / (b - a)
+                } else if (x - b).abs() < 1e-8 {
+                    1.0
+                } else {
+                    (c - x) / (c - b)
+                }
             }
             Self::Trapezoidal { a, b, c, d } => {
-                if x <= *a || x >= *d          { 0.0 }
-                else if x >= *b && x <= *c     { 1.0 }
-                else if x < *b                 { (x - a) / (b - a) }
-                else                           { (d - x) / (d - c) }
+                if x <= *a || x >= *d {
+                    0.0
+                } else if x >= *b && x <= *c {
+                    1.0
+                } else if x < *b {
+                    (x - a) / (b - a)
+                } else {
+                    (d - x) / (d - c)
+                }
             }
             Self::Gaussian { mean, sigma } => {
                 let exp = -((x - mean).powi(2)) / (2.0 * sigma.powi(2));
                 exp.exp().clamp(0.0, 1.0)
             }
-            Self::Sigmoid { steepness, center } => {
-                1.0 / (1.0 + (-steepness * (x - center)).exp())
-            }
+            Self::Sigmoid { steepness, center } => 1.0 / (1.0 + (-steepness * (x - center)).exp()),
             Self::SigmoidRev { steepness, center } => {
                 1.0 / (1.0 + (steepness * (x - center)).exp())
             }
@@ -58,20 +66,24 @@ impl MembershipFn {
 /// Named fuzzy variable with labeled membership functions per term.
 #[derive(Debug, Clone)]
 pub struct LinguisticVar {
-    pub name:  String,
+    pub name: String,
     pub terms: Vec<(String, MembershipFn)>,
     pub range: (f32, f32),
 }
 
 impl LinguisticVar {
     pub fn eval_term(&self, term: &str, x: f32) -> Option<f32> {
-        self.terms.iter()
+        self.terms
+            .iter()
             .find(|(t, _)| t == term)
             .map(|(_, f)| f.eval(x))
     }
 
     pub fn eval_all(&self, x: f32) -> Vec<(String, f32)> {
-        self.terms.iter().map(|(t, f)| (t.clone(), f.eval(x))).collect()
+        self.terms
+            .iter()
+            .map(|(t, f)| (t.clone(), f.eval(x)))
+            .collect()
     }
 }
 
@@ -83,11 +95,49 @@ pub fn var_torso_dev() -> LinguisticVar {
         name: "torso_deviation".into(),
         range: (-4.0, 4.0),
         terms: vec![
-            ("cold_shadow".into(),   MembershipFn::Trapezoidal { a: -4.0, b: -3.0, c: -1.5, d: -0.8 }),
-            ("slightly_cool".into(), MembershipFn::Triangular  { a: -1.5, b: -0.5, c:  0.2 }),
-            ("normal".into(),        MembershipFn::Trapezoidal { a: -0.5, b: -0.2, c:  0.2, d:  0.6 }),
-            ("warm".into(),          MembershipFn::Triangular  { a:  0.4, b:  1.0, c:  1.8 }),
-            ("hot_fever".into(),     MembershipFn::Trapezoidal { a:  1.2, b:  1.8, c:  3.5, d:  4.0 }),
+            (
+                "cold_shadow".into(),
+                MembershipFn::Trapezoidal {
+                    a: -4.0,
+                    b: -3.0,
+                    c: -1.5,
+                    d: -0.8,
+                },
+            ),
+            (
+                "slightly_cool".into(),
+                MembershipFn::Triangular {
+                    a: -1.5,
+                    b: -0.5,
+                    c: 0.2,
+                },
+            ),
+            (
+                "normal".into(),
+                MembershipFn::Trapezoidal {
+                    a: -0.5,
+                    b: -0.2,
+                    c: 0.2,
+                    d: 0.6,
+                },
+            ),
+            (
+                "warm".into(),
+                MembershipFn::Triangular {
+                    a: 0.4,
+                    b: 1.0,
+                    c: 1.8,
+                },
+            ),
+            (
+                "hot_fever".into(),
+                MembershipFn::Trapezoidal {
+                    a: 1.2,
+                    b: 1.8,
+                    c: 3.5,
+                    d: 4.0,
+                },
+            ),
         ],
     }
 }
@@ -98,10 +148,38 @@ pub fn var_head_dev() -> LinguisticVar {
         name: "head_deviation".into(),
         range: (-3.0, 4.0),
         terms: vec![
-            ("cold".into(),           MembershipFn::Sigmoid    { steepness: -3.0, center: -1.0 }),
-            ("normal".into(),         MembershipFn::Triangular { a: -0.3, b:  0.0, c:  0.5 }),
-            ("stress_elevated".into(),MembershipFn::Triangular { a:  0.4, b:  0.9, c:  1.6 }),
-            ("fever_elevated".into(), MembershipFn::Trapezoidal{ a:  1.2, b:  1.8, c:  3.5, d: 4.0 }),
+            (
+                "cold".into(),
+                MembershipFn::Sigmoid {
+                    steepness: -3.0,
+                    center: -1.0,
+                },
+            ),
+            (
+                "normal".into(),
+                MembershipFn::Triangular {
+                    a: -0.3,
+                    b: 0.0,
+                    c: 0.5,
+                },
+            ),
+            (
+                "stress_elevated".into(),
+                MembershipFn::Triangular {
+                    a: 0.4,
+                    b: 0.9,
+                    c: 1.6,
+                },
+            ),
+            (
+                "fever_elevated".into(),
+                MembershipFn::Trapezoidal {
+                    a: 1.2,
+                    b: 1.8,
+                    c: 3.5,
+                    d: 4.0,
+                },
+            ),
         ],
     }
 }
@@ -112,10 +190,40 @@ pub fn var_arm_dev() -> LinguisticVar {
         name: "arm_deviation".into(),
         range: (-3.0, 4.0),
         terms: vec![
-            ("cold_hands".into(), MembershipFn::Trapezoidal { a: -3.0, b: -2.0, c: -0.8, d: -0.3 }),
-            ("normal".into(),     MembershipFn::Triangular  { a: -0.4, b:  0.0, c:  0.4 }),
-            ("warm".into(),       MembershipFn::Triangular  { a:  0.3, b:  0.8, c:  1.5 }),
-            ("hot_wiring".into(), MembershipFn::Trapezoidal { a:  1.0, b:  1.5, c:  3.5, d: 4.0 }),
+            (
+                "cold_hands".into(),
+                MembershipFn::Trapezoidal {
+                    a: -3.0,
+                    b: -2.0,
+                    c: -0.8,
+                    d: -0.3,
+                },
+            ),
+            (
+                "normal".into(),
+                MembershipFn::Triangular {
+                    a: -0.4,
+                    b: 0.0,
+                    c: 0.4,
+                },
+            ),
+            (
+                "warm".into(),
+                MembershipFn::Triangular {
+                    a: 0.3,
+                    b: 0.8,
+                    c: 1.5,
+                },
+            ),
+            (
+                "hot_wiring".into(),
+                MembershipFn::Trapezoidal {
+                    a: 1.0,
+                    b: 1.5,
+                    c: 3.5,
+                    d: 4.0,
+                },
+            ),
         ],
     }
 }
@@ -126,9 +234,32 @@ pub fn var_symmetry() -> LinguisticVar {
         name: "symmetry".into(),
         range: (0.0, 1.0),
         terms: vec![
-            ("asymmetric".into(), MembershipFn::Trapezoidal { a: 0.0,  b: 0.0,  c: 0.35, d: 0.55 }),
-            ("moderate".into(),   MembershipFn::Triangular  { a: 0.4,  b: 0.65, c: 0.82 }),
-            ("symmetric".into(),  MembershipFn::Trapezoidal { a: 0.72, b: 0.85, c: 1.0,  d: 1.0  }),
+            (
+                "asymmetric".into(),
+                MembershipFn::Trapezoidal {
+                    a: 0.0,
+                    b: 0.0,
+                    c: 0.35,
+                    d: 0.55,
+                },
+            ),
+            (
+                "moderate".into(),
+                MembershipFn::Triangular {
+                    a: 0.4,
+                    b: 0.65,
+                    c: 0.82,
+                },
+            ),
+            (
+                "symmetric".into(),
+                MembershipFn::Trapezoidal {
+                    a: 0.72,
+                    b: 0.85,
+                    c: 1.0,
+                    d: 1.0,
+                },
+            ),
         ],
     }
 }
@@ -139,9 +270,32 @@ pub fn var_torso_arm_inversion() -> LinguisticVar {
         name: "torso_arm_inversion".into(),
         range: (0.0, 1.0),
         terms: vec![
-            ("none".into(),    MembershipFn::Trapezoidal { a: 0.0, b: 0.0,  c: 0.15, d: 0.30 }),
-            ("partial".into(), MembershipFn::Triangular  { a: 0.2, b: 0.40, c: 0.60 }),
-            ("strong".into(),  MembershipFn::Trapezoidal { a: 0.5, b: 0.65, c: 1.0,  d: 1.0  }),
+            (
+                "none".into(),
+                MembershipFn::Trapezoidal {
+                    a: 0.0,
+                    b: 0.0,
+                    c: 0.15,
+                    d: 0.30,
+                },
+            ),
+            (
+                "partial".into(),
+                MembershipFn::Triangular {
+                    a: 0.2,
+                    b: 0.40,
+                    c: 0.60,
+                },
+            ),
+            (
+                "strong".into(),
+                MembershipFn::Trapezoidal {
+                    a: 0.5,
+                    b: 0.65,
+                    c: 1.0,
+                    d: 1.0,
+                },
+            ),
         ],
     }
 }
@@ -152,12 +306,56 @@ pub fn var_state_output() -> LinguisticVar {
         name: "state".into(),
         range: (0.0, 1.0),
         terms: vec![
-            ("clear".into(),           MembershipFn::Trapezoidal { a: 0.0,  b: 0.0,  c: 0.20, d: 0.35 }),
-            ("fever".into(),           MembershipFn::Triangular  { a: 0.25, b: 0.40, c: 0.55 }),
-            ("stress".into(),          MembershipFn::Triangular  { a: 0.30, b: 0.45, c: 0.60 }),
-            ("medical_other".into(),   MembershipFn::Triangular  { a: 0.35, b: 0.50, c: 0.65 }),
-            ("ambiguous".into(),       MembershipFn::Triangular  { a: 0.50, b: 0.65, c: 0.78 }),
-            ("security_threat".into(), MembershipFn::Trapezoidal { a: 0.70, b: 0.82, c: 1.0,  d: 1.0  }),
+            (
+                "clear".into(),
+                MembershipFn::Trapezoidal {
+                    a: 0.0,
+                    b: 0.0,
+                    c: 0.20,
+                    d: 0.35,
+                },
+            ),
+            (
+                "fever".into(),
+                MembershipFn::Triangular {
+                    a: 0.25,
+                    b: 0.40,
+                    c: 0.55,
+                },
+            ),
+            (
+                "stress".into(),
+                MembershipFn::Triangular {
+                    a: 0.30,
+                    b: 0.45,
+                    c: 0.60,
+                },
+            ),
+            (
+                "medical_other".into(),
+                MembershipFn::Triangular {
+                    a: 0.35,
+                    b: 0.50,
+                    c: 0.65,
+                },
+            ),
+            (
+                "ambiguous".into(),
+                MembershipFn::Triangular {
+                    a: 0.50,
+                    b: 0.65,
+                    c: 0.78,
+                },
+            ),
+            (
+                "security_threat".into(),
+                MembershipFn::Trapezoidal {
+                    a: 0.70,
+                    b: 0.82,
+                    c: 1.0,
+                    d: 1.0,
+                },
+            ),
         ],
     }
 }
@@ -170,46 +368,73 @@ mod tests {
 
     #[test]
     fn triangular_peak_returns_one() {
-        let f = MembershipFn::Triangular { a: 0.0, b: 1.0, c: 2.0 };
+        let f = MembershipFn::Triangular {
+            a: 0.0,
+            b: 1.0,
+            c: 2.0,
+        };
         assert!((f.eval(1.0) - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn triangular_outside_range_returns_zero() {
-        let f = MembershipFn::Triangular { a: 0.0, b: 1.0, c: 2.0 };
+        let f = MembershipFn::Triangular {
+            a: 0.0,
+            b: 1.0,
+            c: 2.0,
+        };
         assert_eq!(f.eval(-0.1), 0.0);
-        assert_eq!(f.eval(2.0),  0.0);
-        assert_eq!(f.eval(3.0),  0.0);
+        assert_eq!(f.eval(2.0), 0.0);
+        assert_eq!(f.eval(3.0), 0.0);
     }
 
     #[test]
     fn trapezoidal_flat_region_returns_one() {
-        let f = MembershipFn::Trapezoidal { a: 0.0, b: 1.0, c: 3.0, d: 4.0 };
+        let f = MembershipFn::Trapezoidal {
+            a: 0.0,
+            b: 1.0,
+            c: 3.0,
+            d: 4.0,
+        };
         assert_eq!(f.eval(2.0), 1.0);
     }
 
     #[test]
     fn trapezoidal_outside_returns_zero() {
-        let f = MembershipFn::Trapezoidal { a: 0.0, b: 1.0, c: 3.0, d: 4.0 };
+        let f = MembershipFn::Trapezoidal {
+            a: 0.0,
+            b: 1.0,
+            c: 3.0,
+            d: 4.0,
+        };
         assert_eq!(f.eval(-1.0), 0.0);
-        assert_eq!(f.eval(5.0),  0.0);
+        assert_eq!(f.eval(5.0), 0.0);
     }
 
     #[test]
     fn gaussian_at_mean_returns_one() {
-        let f = MembershipFn::Gaussian { mean: 0.5, sigma: 0.2 };
+        let f = MembershipFn::Gaussian {
+            mean: 0.5,
+            sigma: 0.2,
+        };
         assert!((f.eval(0.5) - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn sigmoid_at_center_returns_half() {
-        let f = MembershipFn::Sigmoid { steepness: 5.0, center: 0.5 };
+        let f = MembershipFn::Sigmoid {
+            steepness: 5.0,
+            center: 0.5,
+        };
         assert!((f.eval(0.5) - 0.5).abs() < 1e-4);
     }
 
     #[test]
     fn sigmoid_rev_at_center_returns_half() {
-        let f = MembershipFn::SigmoidRev { steepness: 5.0, center: 0.5 };
+        let f = MembershipFn::SigmoidRev {
+            steepness: 5.0,
+            center: 0.5,
+        };
         assert!((f.eval(0.5) - 0.5).abs() < 1e-4);
     }
 
@@ -221,11 +446,29 @@ mod tests {
     #[test]
     fn all_membership_values_bounded() {
         let fns = [
-            MembershipFn::Triangular { a: 0.0, b: 0.5, c: 1.0 },
-            MembershipFn::Trapezoidal { a: 0.0, b: 0.3, c: 0.7, d: 1.0 },
-            MembershipFn::Gaussian { mean: 0.5, sigma: 0.15 },
-            MembershipFn::Sigmoid { steepness: 10.0, center: 0.5 },
-            MembershipFn::SigmoidRev { steepness: 10.0, center: 0.5 },
+            MembershipFn::Triangular {
+                a: 0.0,
+                b: 0.5,
+                c: 1.0,
+            },
+            MembershipFn::Trapezoidal {
+                a: 0.0,
+                b: 0.3,
+                c: 0.7,
+                d: 1.0,
+            },
+            MembershipFn::Gaussian {
+                mean: 0.5,
+                sigma: 0.15,
+            },
+            MembershipFn::Sigmoid {
+                steepness: 10.0,
+                center: 0.5,
+            },
+            MembershipFn::SigmoidRev {
+                steepness: 10.0,
+                center: 0.5,
+            },
         ];
         for x_i in 0..=20 {
             let x = x_i as f32 * 0.1 - 0.5;

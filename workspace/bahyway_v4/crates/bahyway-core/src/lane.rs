@@ -17,40 +17,50 @@ pub enum Lane {
     /// Blocked, revoked, or permanently denied.
     Black = 0x02,
     /// Evidence-required — particle has an attached Evidence event (A3).
-    Gray  = 0x03,
+    Gray = 0x03,
 }
 
 impl Lane {
     /// Returns `true` for `White` — no evidence required, default entry lane.
     #[inline]
-    pub fn is_white(self) -> bool { self == Lane::White }
+    pub fn is_white(self) -> bool {
+        self == Lane::White
+    }
 
     /// Returns `true` for `Black` — access blocked regardless of evidence.
     #[inline]
-    pub fn is_black(self) -> bool { self == Lane::Black }
+    pub fn is_black(self) -> bool {
+        self == Lane::Black
+    }
 
     /// Returns `true` for `Gray` — evidence obligation active (A3).
     #[inline]
-    pub fn is_gray(self) -> bool { self == Lane::Gray }
+    pub fn is_gray(self) -> bool {
+        self == Lane::Gray
+    }
 
     /// Returns `true` if a transition *into* this lane would require
     /// an Evidence event to accompany it (i.e., this is Gray).
     #[inline]
-    pub fn requires_evidence(self) -> bool { self == Lane::Gray }
+    pub fn requires_evidence(self) -> bool {
+        self == Lane::Gray
+    }
 
     /// Display name used in HeptaScript LANE clauses and STIR output.
     pub fn as_str(self) -> &'static str {
         match self {
             Lane::White => "WHITE",
             Lane::Black => "BLACK",
-            Lane::Gray  => "GRAY",
+            Lane::Gray => "GRAY",
         }
     }
 }
 
 impl Default for Lane {
     /// New particles enter the White lane by default (no obligations).
-    fn default() -> Self { Lane::White }
+    fn default() -> Self {
+        Lane::White
+    }
 }
 
 impl core::fmt::Display for Lane {
@@ -69,8 +79,8 @@ pub fn compose_lanes(a: Lane, b: Lane) -> Lane {
     use Lane::*;
     match (a, b) {
         (Black, _) | (_, Black) => Black,
-        (Gray, _)  | (_, Gray)  => Gray,
-        _                       => White,
+        (Gray, _) | (_, Gray) => Gray,
+        _ => White,
     }
 }
 
@@ -103,23 +113,23 @@ mod tests {
     fn display() {
         assert_eq!(Lane::White.to_string(), "WHITE");
         assert_eq!(Lane::Black.to_string(), "BLACK");
-        assert_eq!(Lane::Gray.to_string(),  "GRAY");
+        assert_eq!(Lane::Gray.to_string(), "GRAY");
     }
 
     #[test]
     fn compose_black_dominates() {
         assert_eq!(compose_lanes(Lane::Black, Lane::White), Lane::Black);
         assert_eq!(compose_lanes(Lane::White, Lane::Black), Lane::Black);
-        assert_eq!(compose_lanes(Lane::Black, Lane::Gray),  Lane::Black);
-        assert_eq!(compose_lanes(Lane::Gray,  Lane::Black), Lane::Black);
+        assert_eq!(compose_lanes(Lane::Black, Lane::Gray), Lane::Black);
+        assert_eq!(compose_lanes(Lane::Gray, Lane::Black), Lane::Black);
         assert_eq!(compose_lanes(Lane::Black, Lane::Black), Lane::Black);
     }
 
     #[test]
     fn compose_gray_propagates() {
-        assert_eq!(compose_lanes(Lane::Gray,  Lane::White), Lane::Gray);
-        assert_eq!(compose_lanes(Lane::White, Lane::Gray),  Lane::Gray);
-        assert_eq!(compose_lanes(Lane::Gray,  Lane::Gray),  Lane::Gray);
+        assert_eq!(compose_lanes(Lane::Gray, Lane::White), Lane::Gray);
+        assert_eq!(compose_lanes(Lane::White, Lane::Gray), Lane::Gray);
+        assert_eq!(compose_lanes(Lane::Gray, Lane::Gray), Lane::Gray);
     }
 
     #[test]

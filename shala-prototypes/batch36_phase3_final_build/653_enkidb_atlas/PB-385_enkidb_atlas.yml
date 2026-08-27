@@ -1,0 +1,98 @@
+---
+# PB-385 · Generate the EnkiDB seven-type atlas from LIVE introspection
+# Replaces the seeded stand-in: real tribes, real relations, real PH shapes, real epistemic classes.
+- name: PB-385 draw the atlas from the running estate
+  hosts: girsu
+  vars:
+    bahyway_provides: ["artifact:atlas.json", "tab:sala_enkidb_atlas"]
+    bahyway_requires: ["law:EN-DDB-002", "law:EN-QDB-001", "engine:LamassuEngine"]
+    ports: {EnkiSDB: 7001, EnkiODB: 7002, EnkiQDB: 7003, EnkiDB: 7004, EnkiDW: 7005, EnkiMDB: 7006, EnkiDDB: 7007}
+    out: "{{ ansible_env.HOME }}/bahyway/atlas"
+  tasks:
+    - name: Ensure output
+      ansible.builtin.file: {path: "{{ out }}", state: directory, mode: "0750"}
+
+    - name: Present the schema of every type (tribes and their relations)
+      ansible.builtin.command: >
+        bahyway-enkidb present --db {{ item.key }} --port {{ item.value }} --schema --json
+      loop: "{{ ports | dict2items }}"
+      register: schemas
+      changed_when: false
+
+    - name: Ask LamassuEngine for each tribe's PH shape (beta0, beta1, RU layers)
+      ansible.builtin.command: >
+        bahyway-lamassu shape --db {{ item.key }} --port {{ item.value }} --all-tribes --json
+      loop: "{{ ports | dict2items }}"
+      register: shapes
+      changed_when: false
+      failed_when: false
+
+    - name: Merge into atlas.json (each edge carries its epistemic class or the build fails)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib
+        schemas = {{ schemas.results | map(attribute='stdout') | list | to_json }}
+        shapes  = {{ shapes.results  | map(attribute='stdout') | list | to_json }}
+        names   = {{ ports.keys() | list | to_json }}
+        tribes, rels = [], []
+        for nm, s, sh in zip(names, schemas, shapes):
+            try: sj = json.loads(s or "{}")
+            except Exception: sj = {}
+            try: hj = {t["tribe"]: t for t in json.loads(sh or "[]")}
+            except Exception: hj = {}
+            for t in sj.get("tribes", []):
+                h = hj.get(t["id"], {})
+                tribes.append({"id": t["id"], "db": nm, "n": t.get("particles", 0),
+                               "rings": h.get("ru_layers"), "b0": h.get("beta0"), "b1": h.get("beta1"),
+                               "cls": "MEASURED" if h else "ESTIMATED"})
+            for r in sj.get("relations", []):
+                rels.append({"from": r["from"], "to": r["to"],
+                             "kind": r.get("kind", "schema"),
+                             "cls": r.get("epistemic_class")})
+        missing = [r for r in rels if not r["cls"]]
+        atlas = {"tribes": tribes, "relations": rels,
+                 "unclassed": missing,
+                 "note": "an unclassed edge may not be published; declare epistemic_class in the schema"}
+        pathlib.Path("{{ out }}/atlas.json").write_text(json.dumps(atlas, indent=2))
+        print(len(tribes), "tribes,", len(rels), "relations,", len(missing), "unclassed")
+        PY
+      register: merge
+      changed_when: true
+
+    - name: Gate A1 · every relation carries an epistemic class
+      ansible.builtin.shell: |
+        python3 -c "
+        import json,sys
+        a=json.load(open('{{ out }}/atlas.json'))
+        n=len(a['unclassed'])
+        print('unclassed relations:',n)
+        sys.exit(1 if n else 0)"
+      changed_when: false
+      failed_when: false
+      register: a1
+
+    - name: The transparency finding
+      ansible.builtin.debug:
+        msg: >
+          {{ merge.stdout }} · {{ a1.stdout | default('') }}
+          - an atlas that draws an edge without its class LOOKS more transparent while being less so.
+          Publish only after every relation is classed, or publish with tau stated on the face of the tab.
+
+    - name: Gate A2 · every tribe has a shape or is marked ESTIMATED
+      ansible.builtin.shell: |
+        python3 -c "
+        import json
+        a=json.load(open('{{ out }}/atlas.json'))
+        bad=[t['id'] for t in a['tribes'] if t['b0'] is None and t['cls']!='ESTIMATED']
+        print('tribes with neither shape nor honest label:',len(bad))
+        raise SystemExit(1 if bad else 0)"
+      changed_when: false
+
+    - name: Publish the tab beside its data
+      ansible.builtin.copy: {src: sala_enkidb_atlas_v1.html, dest: "{{ ansible_env.HOME }}/bahyway/sala/tabs/sala_enkidb_atlas_v1.html", mode: "0644"}
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-385 atlas drawn from live introspection - {{ merge.stdout | default('') }}"

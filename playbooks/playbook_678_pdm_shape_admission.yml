@@ -1,0 +1,128 @@
+---
+# PB-414 · DubSar PDM · shape admission · a SHAPE is judged before it may become a template
+# GL-AGT-001 §6 (name, author and engine are cosmetics) · §7 (a template is a particle) · GL-STW-001 §3
+- name: PB-414 admit or refuse a candidate SHAPE
+  hosts: girsu
+  vars:
+    bahyway_provides: ["gate:shape_admission", "page:pdm.shape_admission"]
+    bahyway_requires: ["law:GL-AGT-001", "tribe:mdb.template"]
+    pdm: "{{ ansible_env.HOME }}/bahyway/pdm"
+    reg: "{{ ansible_env.HOME }}/bahyway/templates/canonical"
+    shape: "{{ cand | default('') }}"          # -e cand=/path/to/shape.json
+    near_threshold: 0.90
+  tasks:
+    - name: Ensure the PDM directories
+      ansible.builtin.file: {path: "{{ pdm }}/{{ item }}", state: directory, mode: "0750"}
+      loop: ["admissions", "pages"]
+
+    - name: Place the admission court
+      ansible.builtin.copy: {src: sala_nisaba_court_v2.html, dest: "{{ pdm }}/pages/sala_nisaba_court_v2.html", mode: "0644"}
+
+    - name: Gate P0 · a candidate SHAPE was named
+      ansible.builtin.assert:
+        that: [shape | length > 0]
+        fail_msg: "pass -e cand=/path/to/shape.json"
+
+    - name: Canonicalise — name, author and engine are cosmetics (§6)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, hashlib, pathlib
+        src = json.load(open("{{ shape }}"))
+        COSMETIC = {"name","author","engine","colour","color","size","label","labels",
+                    "speed","camera","tone","alpha","font","caption","created","version"}
+        def canon(o):
+            if isinstance(o, dict):
+                return {k: canon(v) for k, v in sorted(o.items()) if k not in COSMETIC}
+            if isinstance(o, list): return sorted((canon(v) for v in o), key=lambda x: json.dumps(x, sort_keys=True))
+            if isinstance(o, float): return round(o, 6)
+            return o
+        c = canon(src)
+        blob = json.dumps(c, sort_keys=True, separators=(",", ":")).encode()
+        out = {"canonical": c,
+               "digest": hashlib.blake2b(blob, digest_size=32).hexdigest(),
+               "claimed_name": src.get("name"), "claimed_author": src.get("author"),
+               "claimed_engine": src.get("engine")}
+        pathlib.Path("{{ pdm }}/admissions/_candidate.json").write_text(json.dumps(out, indent=2))
+        print("candidate", out["claimed_name"], "by", out["claimed_author"], "· digest", out["digest"][:16])
+        PY
+      register: canon
+      changed_when: false
+
+    - name: Gate P1 · EXACT — refuse the mint and return the original, author intact (§6)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib, sys
+        cand = json.load(open("{{ pdm }}/admissions/_candidate.json"))
+        for f in pathlib.Path("{{ reg }}").glob("tpl_*.json"):
+            t = json.load(open(f))
+            if t["digest"] == cand["digest"]:
+                print("REFUSED - this shape already exists")
+                print("  claimed as:", cand["claimed_name"], "by", cand["claimed_author"])
+                print("  it is    :", t.get("name"), "by", t.get("author"), "·", t.get("kaki"))
+                print("  a name is a cosmetic. Renaming a shape does not create one (GL-AGT-001 §6).")
+                print("  the existing KAKI is returned, with its original author intact.")
+                sys.exit(2)
+        print("P1 green - no exact match")
+        PY
+      register: p1
+      changed_when: false
+      failed_when: p1.rc not in [0, 2]
+
+    - name: A refused admission is recorded, never erased
+      ansible.builtin.lineinfile:
+        path: "{{ pdm }}/admissions/REFUSED.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} REFUSED duplicate claim: {{ (canon.stdout_lines[0] | default('')) }}"
+      when: p1.rc == 2
+
+    - name: Stop — the shape exists
+      ansible.builtin.meta: end_play
+      when: p1.rc == 2
+
+    - name: Gate P2 · NEAR — raised to a steward, never auto-resolved (DERIVED)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib
+        cand = json.load(open("{{ pdm }}/admissions/_candidate.json"))["canonical"]
+        def sim(a, b):
+            sc = tot = 0
+            tot += 1; sc += 1 if a.get("mode") == b.get("mode") else 0
+            for k in ("units", "strata"):
+                tot += 1
+                A, B = set(a.get(k) or []), set(b.get(k) or [])
+                sc += (len(A & B) / len(A | B)) if (A | B) else 1
+            return sc / tot
+        near = []
+        for f in pathlib.Path("{{ reg }}").glob("tpl_*.json"):
+            t = json.load(open(f))
+            s = sim(cand, t["canonical"])
+            if s >= {{ near_threshold }}:
+                near.append((round(s, 3), t.get("name"), t.get("author"), t.get("kaki")))
+        for n in sorted(near, reverse=True): print("NEAR", *n)
+        print(len(near), "candidate duplicate(s) - a steward disposes of them; the watcher may not")
+        PY
+      changed_when: false
+
+    - name: Gate P3 · the seven rules judge the shape's own snippet before admission
+      ansible.builtin.command: >
+        python3 {{ ansible_env.HOME }}/bahyway/watcher/watcher.py
+        --orbit mdb.template --repo {{ ansible_env.HOME }}/Forge/bahyway_v4
+        --playbooks {{ ansible_env.HOME }}/Forge/bahyway_v4/playbooks
+        --carto {{ ansible_env.HOME }}/bahyway/carto
+        --work {{ pdm }}/admissions/run
+      register: seven
+      changed_when: false
+      failed_when: false
+
+    - name: Report the admission
+      ansible.builtin.debug:
+        msg: >
+          {{ seven.stdout_lines | default([]) }}
+          - admission is not approval. The shape passes to a steward with two witnesses
+          and a sealed clause before PB-412 mints it (GL-STW-001 §3).
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-414 shape admission - exact duplicates refused with the original author returned, near duplicates raised to a steward"

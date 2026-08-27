@@ -10,13 +10,13 @@ use score_engine::color_id::ColorRgb;
 #[derive(Debug, Clone)]
 pub struct ColorIdDisplay {
     /// ANSI-compatible 256-color escape sequence string.
-    pub ansi_fg:    String,
+    pub ansi_fg: String,
     /// Short symbolic label: Golden / Drifting / Gray.
-    pub label:      &'static str,
+    pub label: &'static str,
     /// Drift bar ASCII art: "▓▓▓▒▒░░░" (8 chars, full=█ empty=░).
-    pub drift_bar:  String,
+    pub drift_bar: String,
     /// Numeric drift distance from pure gold.
-    pub drift:      f32,
+    pub drift: f32,
 }
 
 /// Convert a ColorRgb to its display representation.
@@ -40,11 +40,14 @@ pub fn render(rgb: &ColorRgb) -> ColorIdDisplay {
 
     // Drift bar: 8 segments, each covers drift/37.5 (300/8=37.5 max drift range)
     let filled = ((drift / 37.5).min(8.0) as usize).min(8);
-    let bar: String = (0..8)
-        .map(|i| if i < filled { '█' } else { '░' })
-        .collect();
+    let bar: String = (0..8).map(|i| if i < filled { '█' } else { '░' }).collect();
 
-    ColorIdDisplay { ansi_fg, label, drift_bar: bar, drift }
+    ColorIdDisplay {
+        ansi_fg,
+        label,
+        drift_bar: bar,
+        drift,
+    }
 }
 
 #[cfg(test)]
@@ -68,21 +71,31 @@ mod tests {
 
     #[test]
     fn drift_bar_is_8_chars() {
-        let d = render(&ColorRgb { r: 200, g: 200, b: 200 });
+        let d = render(&ColorRgb {
+            r: 200,
+            g: 200,
+            b: 200,
+        });
         assert_eq!(d.drift_bar.chars().count(), 8);
     }
 
     #[test]
     fn golden_drift_bar_all_empty() {
         let d = render(&ColorRgb::GOLDEN);
-        assert!(d.drift_bar.chars().all(|c| c == '░'),
-            "golden should have zero filled segments");
+        assert!(
+            d.drift_bar.chars().all(|c| c == '░'),
+            "golden should have zero filled segments"
+        );
     }
 
     #[test]
     fn ansi_escape_contains_rgb() {
-        let rgb = ColorRgb { r: 100, g: 150, b: 200 };
-        let d   = render(&rgb);
+        let rgb = ColorRgb {
+            r: 100,
+            g: 150,
+            b: 200,
+        };
+        let d = render(&rgb);
         assert!(d.ansi_fg.contains("100"));
         assert!(d.ansi_fg.contains("150"));
         assert!(d.ansi_fg.contains("200"));

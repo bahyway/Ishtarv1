@@ -20,10 +20,14 @@ pub enum ArchiveError {
 impl core::fmt::Display for ArchiveError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Truncated              => write!(f, "NARAMSIN NRM_TRUNCATED: archive truncated mid-transfer"),
-            Self::UnknownFormat          => write!(f, "NARAMSIN NRM_UNKNOWN_FORMAT: unsupported archive format"),
-            Self::EmptyInput             => write!(f, "NARAMSIN: empty input byte slice"),
-            Self::MaxRecursionDepth(d)   => write!(f, "NARAMSIN: max nested archive depth {d} exceeded"),
+            Self::Truncated => write!(f, "NARAMSIN NRM_TRUNCATED: archive truncated mid-transfer"),
+            Self::UnknownFormat => {
+                write!(f, "NARAMSIN NRM_UNKNOWN_FORMAT: unsupported archive format")
+            }
+            Self::EmptyInput => write!(f, "NARAMSIN: empty input byte slice"),
+            Self::MaxRecursionDepth(d) => {
+                write!(f, "NARAMSIN: max nested archive depth {d} exceeded")
+            }
             Self::UnsupportedFormat(msg) => write!(f, "NARAMSIN NRM_UNSUPPORTED: {msg}"),
         }
     }

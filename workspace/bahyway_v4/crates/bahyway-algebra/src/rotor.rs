@@ -8,17 +8,25 @@
 /// A rotor in a single bivector plane: R = a + b·(e_i∧e_j).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rotor {
-    pub scalar: f64,      // cos(θ/2)
-    pub bivector: f64,    // -sin(θ/2) magnitude in plane
+    pub scalar: f64,   // cos(θ/2)
+    pub bivector: f64, // -sin(θ/2) magnitude in plane
 }
 
 impl Rotor {
     /// Identity rotor (no change).
-    pub fn identity() -> Self { Rotor { scalar: 1.0, bivector: 0.0 } }
+    pub fn identity() -> Self {
+        Rotor {
+            scalar: 1.0,
+            bivector: 0.0,
+        }
+    }
 
     /// Rotor for a rotation of `theta` radians in the plane.
     pub fn from_angle(theta: f64) -> Self {
-        Rotor { scalar: (theta / 2.0).cos(), bivector: -(theta / 2.0).sin() }
+        Rotor {
+            scalar: (theta / 2.0).cos(),
+            bivector: -(theta / 2.0).sin(),
+        }
     }
 
     /// Recover the rotation angle θ from the rotor.
@@ -33,7 +41,10 @@ impl Rotor {
 
     /// Reverse (inverse for unit rotor): R⁻¹ = a - b·B.
     pub fn reverse(&self) -> Rotor {
-        Rotor { scalar: self.scalar, bivector: -self.bivector }
+        Rotor {
+            scalar: self.scalar,
+            bivector: -self.bivector,
+        }
     }
 
     /// Compose two daily rotors (rotor product in the single plane).
@@ -58,20 +69,29 @@ pub struct RotorJournal {
 }
 
 impl RotorJournal {
-    pub fn new() -> Self { RotorJournal { daily: Vec::new() } }
+    pub fn new() -> Self {
+        RotorJournal { daily: Vec::new() }
+    }
 
-    pub fn record(&mut self, r: Rotor) { self.daily.push(r); }
+    pub fn record(&mut self, r: Rotor) {
+        self.daily.push(r);
+    }
 
     /// Net evolution rotor from day 0 to now (ordered composition).
     pub fn net(&self) -> Rotor {
-        self.daily.iter().fold(Rotor::identity(), |acc, r| acc.compose(r))
+        self.daily
+            .iter()
+            .fold(Rotor::identity(), |acc, r| acc.compose(r))
     }
 
     /// Days whose change exceeded the anomaly threshold.
     pub fn anomalies(&self, threshold_rad: f64) -> Vec<usize> {
-        self.daily.iter().enumerate()
+        self.daily
+            .iter()
+            .enumerate()
             .filter(|(_, r)| r.is_anomaly(threshold_rad))
-            .map(|(i, _)| i).collect()
+            .map(|(i, _)| i)
+            .collect()
     }
 
     /// Rotor-sector partition key: which angle-band this day falls in.
@@ -123,8 +143,8 @@ mod tests {
     #[test]
     fn anomaly_detection_flags_large_change() {
         let mut j = RotorJournal::new();
-        j.record(Rotor::from_angle(0.1));  // calm
-        j.record(Rotor::from_angle(1.5));  // spike
+        j.record(Rotor::from_angle(0.1)); // calm
+        j.record(Rotor::from_angle(1.5)); // spike
         let flagged = j.anomalies(1.0);
         assert_eq!(flagged, vec![1]);
     }

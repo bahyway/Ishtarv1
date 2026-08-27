@@ -30,7 +30,10 @@ struct UnionFind {
 
 impl UnionFind {
     fn new(n: usize) -> Self {
-        Self { parent: (0..n).collect(), rank: vec![0; n] }
+        Self {
+            parent: (0..n).collect(),
+            rank: vec![0; n],
+        }
     }
 
     fn find(&mut self, x: usize) -> usize {
@@ -79,7 +82,10 @@ pub fn betti_1(g: &RelationGraph) -> usize {
     let e = g.edges.len() as isize;
     let v = g.node_count as isize;
     let b1 = e - v + b0;
-    debug_assert!(b1 >= 0, "circuit rank computed negative -- invalid graph (edge index out of range?)");
+    debug_assert!(
+        b1 >= 0,
+        "circuit rank computed negative -- invalid graph (edge index out of range?)"
+    );
     b1.max(0) as usize
 }
 
@@ -89,14 +95,20 @@ mod tests {
 
     #[test]
     fn empty_graph_has_no_components_and_no_cycles() {
-        let g = RelationGraph { node_count: 0, edges: vec![] };
+        let g = RelationGraph {
+            node_count: 0,
+            edges: vec![],
+        };
         assert_eq!(betti_0(&g), 0);
         assert_eq!(betti_1(&g), 0);
     }
 
     #[test]
     fn isolated_nodes_are_each_their_own_component() {
-        let g = RelationGraph { node_count: 5, edges: vec![] };
+        let g = RelationGraph {
+            node_count: 5,
+            edges: vec![],
+        };
         assert_eq!(betti_0(&g), 5);
         assert_eq!(betti_1(&g), 0);
     }
@@ -104,7 +116,10 @@ mod tests {
     #[test]
     fn a_tree_has_one_component_and_no_cycles() {
         // 0-1-2-3, a path (a tree): 4 nodes, 3 edges.
-        let g = RelationGraph { node_count: 4, edges: vec![(0, 1), (1, 2), (2, 3)] };
+        let g = RelationGraph {
+            node_count: 4,
+            edges: vec![(0, 1), (1, 2), (2, 3)],
+        };
         assert_eq!(betti_0(&g), 1);
         assert_eq!(betti_1(&g), 0);
     }
@@ -112,7 +127,10 @@ mod tests {
     #[test]
     fn a_ring_has_one_component_and_one_independent_loop() {
         // 0-1-2-3-0, a 4-cycle: 4 nodes, 4 edges.
-        let g = RelationGraph { node_count: 4, edges: vec![(0, 1), (1, 2), (2, 3), (3, 0)] };
+        let g = RelationGraph {
+            node_count: 4,
+            edges: vec![(0, 1), (1, 2), (2, 3), (3, 0)],
+        };
         assert_eq!(betti_0(&g), 1);
         assert_eq!(betti_1(&g), 1);
     }

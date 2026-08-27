@@ -903,7 +903,7 @@ This is Claude's **honest evaluation** of the first document (and related docume
 ### The Four Unanswered Questions (Still Unanswered)
 
 1. **"Is HOMT a Linux kernel module, custom microkernel, or userspace runtime?"**
-   - **v4.0 Answer:** Userspace runtime on Fedora. The "bootable microkernel" path is closed by the permanent constraint (no custom kernel development). HOMT runs as a `tokio` async task on EriduOS (Fedora spin).
+   - **v4.0 Answer:** Userspace runtime on Fedora. The "bootable microkernel" path is closed by the permanent constraint (no custom kernel development). HOMT runs as a `tokio` async task on UrOS (Fedora spin).
 
 2. **"What's the actual current state?"**
    - **v4.0 Answer:** Walking skeletons exist. `enkidb-journal` compiles, `story-engine` compiles, `dubsar-visualizer` compiles with StoryEngine integration. The WGSL kernel from HOMT docs is **not** compiled or running. The GPU layer is entirely unbuilt.
@@ -917,7 +917,7 @@ This is Claude's **honest evaluation** of the first document (and related docume
 ### The Honest Assessment That Still Holds
 
 From the second document:
-> "EriduOS in its full vision — sovereign Linux distribution with HOMT field-kernel runtime, HeptaScript and Nabu compilers, DubSar IDE, EnkiDB EAV database, formal Lean 4 verification, multi-GPU cluster orchestration, Bevy+Hanabi visualization at 1 billion particles — is realistically a 5-10 year project for a small team, not a single solo developer."
+> "UrOS in its full vision — sovereign Linux distribution with HOMT field-kernel runtime, HeptaScript and Nabu compilers, DubSar IDE, EnkiDB EAV database, formal Lean 4 verification, multi-GPU cluster orchestration, Bevy+Hanabi visualization at 1 billion particles — is realistically a 5-10 year project for a small team, not a single solo developer."
 
 This assessment is **still correct**. The parallel skeletons strategy you adopted (EnkiDB + DubSar + HeptaScript + Tēmu simultaneously) is the right response to it — but the scope gap remains real.
 

@@ -55,29 +55,49 @@ mod tests {
     /// correct, not to re-derive the underlying math.
     fn octahedron_shell() -> Vec<[f64; 3]> {
         vec![
-            [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0], [0.0, -1.0, 0.0],
-            [0.0, 0.0, 1.0], [0.0, 0.0, -1.0],
+            [1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
         ]
     }
 
     #[test]
     fn a_hollow_shell_of_survey_points_reports_one_void() {
-        let cloud = PointCloud { points: octahedron_shell(), colors: None };
+        let cloud = PointCloud {
+            points: octahedron_shell(),
+            colors: None,
+        };
         let report = detect_voids(&cloud, 0.01, 1.5);
         assert_eq!(report.input_point_count, 6);
-        assert_eq!(report.downsampled_point_count, 6, "voxel size smaller than point spacing must not merge any points");
+        assert_eq!(
+            report.downsampled_point_count, 6,
+            "voxel size smaller than point spacing must not merge any points"
+        );
         assert_eq!(report.component_count(), 1);
-        assert_eq!(report.void_count(), 1, "a hollow shell of survey points must report a real void");
+        assert_eq!(
+            report.void_count(),
+            1,
+            "a hollow shell of survey points must report a real void"
+        );
     }
 
     #[test]
     fn supplying_the_missing_center_point_collapses_the_reported_void() {
         let mut points = octahedron_shell();
         points.push([0.0, 0.0, 0.0]);
-        let cloud = PointCloud { points, colors: None };
+        let cloud = PointCloud {
+            points,
+            colors: None,
+        };
         let report = detect_voids(&cloud, 0.01, 1.5);
-        assert_eq!(report.void_count(), 0, "a previously-missing survey point, once present, must close the void");
+        assert_eq!(
+            report.void_count(),
+            0,
+            "a previously-missing survey point, once present, must close the void"
+        );
     }
 
     #[test]
@@ -97,7 +117,10 @@ mod tests {
         for i in 0..20 {
             points.push([i as f64 * 0.01, 0.0, 0.0]);
         }
-        let cloud = PointCloud { points, colors: None };
+        let cloud = PointCloud {
+            points,
+            colors: None,
+        };
         let report = detect_voids(&cloud, 1.0, 1.0);
         assert_eq!(report.input_point_count, 20);
         assert!(report.downsampled_point_count < 20);

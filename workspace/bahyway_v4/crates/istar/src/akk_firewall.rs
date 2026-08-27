@@ -18,11 +18,11 @@ pub enum FirewallVerdict {
 impl std::fmt::Display for FirewallVerdict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Allow    => write!(f, "ALLOW"),
-            Self::Deny     => write!(f, "DENY"),
+            Self::Allow => write!(f, "ALLOW"),
+            Self::Deny => write!(f, "DENY"),
             Self::Escalate => write!(f, "ESCALATE"),
-            Self::Redact   => write!(f, "REDACT"),
-            Self::Audit    => write!(f, "AUDIT"),
+            Self::Redact => write!(f, "REDACT"),
+            Self::Audit => write!(f, "AUDIT"),
         }
     }
 }
@@ -32,26 +32,26 @@ impl std::fmt::Display for FirewallVerdict {
 /// Sovereign subject of an access request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AkkSubject {
-    pub id:         String,
-    pub domain:     u8,
-    pub quality:    u8,     // KAKI B11 (0–240)
-    pub tribe:      Option<String>,
-    pub clearance:  u8,     // 0x00 = none … 0xFF = sovereign
+    pub id: String,
+    pub domain: u8,
+    pub quality: u8, // KAKI B11 (0–240)
+    pub tribe: Option<String>,
+    pub clearance: u8, // 0x00 = none … 0xFF = sovereign
 }
 
 /// Resource being accessed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AkkResource {
-    pub path:       String,
-    pub domain:     u8,
-    pub sensitivity: u8,    // 0 = public … 0xFF = sealed
+    pub path: String,
+    pub domain: u8,
+    pub sensitivity: u8, // 0 = public … 0xFF = sealed
 }
 
 /// Full access-check context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AkkContext {
-    pub subject:   AkkSubject,
-    pub resource:  AkkResource,
+    pub subject: AkkSubject,
+    pub resource: AkkResource,
     pub operation: AkkOperation,
     pub timestamp: u64,
 }
@@ -67,11 +67,14 @@ pub enum AkkOperation {
 
 // ── Rule ──────────────────────────────────────────────────────────────────
 
+/// A compiled rule's evaluation closure.
+type AkkRuleEval = Box<dyn Fn(&AkkContext) -> Option<FirewallVerdict> + Send + Sync>;
+
 /// A compiled firewall rule.
 pub struct AkkRule {
-    pub name:    String,
+    pub name: String,
     pub priority: u8,
-    pub eval:    Box<dyn Fn(&AkkContext) -> Option<FirewallVerdict> + Send + Sync>,
+    pub eval: AkkRuleEval,
 }
 
 impl std::fmt::Debug for AkkRule {
@@ -85,11 +88,15 @@ impl std::fmt::Debug for AkkRule {
 
 impl AkkRule {
     pub fn new(
-        name:     impl Into<String>,
+        name: impl Into<String>,
         priority: u8,
-        eval:     impl Fn(&AkkContext) -> Option<FirewallVerdict> + Send + Sync + 'static,
+        eval: impl Fn(&AkkContext) -> Option<FirewallVerdict> + Send + Sync + 'static,
     ) -> Self {
-        Self { name: name.into(), priority, eval: Box::new(eval) }
+        Self {
+            name: name.into(),
+            priority,
+            eval: Box::new(eval),
+        }
     }
 }
 
@@ -153,14 +160,16 @@ pub struct AkkFirewall {
 
 impl AkkFirewall {
     pub fn new() -> Self {
-        let mut fw = Self { rules: meta_rules() };
-        fw.rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        let mut fw = Self {
+            rules: meta_rules(),
+        };
+        fw.rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
         fw
     }
 
     pub fn add_rule(&mut self, rule: AkkRule) {
         self.rules.push(rule);
-        self.rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
     }
 
     /// Evaluate context. First non-None verdict wins (by priority).
@@ -178,10 +187,16 @@ impl AkkFirewall {
         FirewallVerdict::Allow
     }
 
-    pub fn rule_count(&self) -> usize { self.rules.len() }
+    pub fn rule_count(&self) -> usize {
+        self.rules.len()
+    }
 }
 
-impl Default for AkkFirewall { fn default() -> Self { Self::new() } }
+impl Default for AkkFirewall {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl std::fmt::Debug for AkkFirewall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -199,32 +214,24 @@ pub mod gates {
 
     /// Zero trust: deny unless quality ≥ threshold.
     pub fn zero_trust_gate(threshold: u8) -> AkkRule {
-        AkkRule::new(
-            format!("Zero:QualityGate({threshold})"),
-            200,
-            move |ctx| {
-                if ctx.subject.quality < threshold {
-                    Some(FirewallVerdict::Deny)
-                } else {
-                    None
-                }
-            },
-        )
+        AkkRule::new(format!("Zero:QualityGate({threshold})"), 200, move |ctx| {
+            if ctx.subject.quality < threshold {
+                Some(FirewallVerdict::Deny)
+            } else {
+                None
+            }
+        })
     }
 
     /// Sho (show) gate: redact if quality below threshold.
     pub fn sho_redact_gate(threshold: u8) -> AkkRule {
-        AkkRule::new(
-            format!("Sho:RedactGate({threshold})"),
-            150,
-            move |ctx| {
-                if ctx.subject.quality < threshold {
-                    Some(FirewallVerdict::Redact)
-                } else {
-                    None
-                }
-            },
-        )
+        AkkRule::new(format!("Sho:RedactGate({threshold})"), 150, move |ctx| {
+            if ctx.subject.quality < threshold {
+                Some(FirewallVerdict::Redact)
+            } else {
+                None
+            }
+        })
     }
 
     /// Build a standard firewall with Zero + Sho gates.
@@ -368,7 +375,9 @@ mod tests {
     #[test]
     fn add_rule_increases_count_and_respects_priority() {
         let mut fw = AkkFirewall::new();
-        fw.add_rule(AkkRule::new("Custom:AlwaysDeny", 255, |_| Some(FirewallVerdict::Deny)));
+        fw.add_rule(AkkRule::new("Custom:AlwaysDeny", 255, |_| {
+            Some(FirewallVerdict::Deny)
+        }));
         assert_eq!(fw.rule_count(), 6);
         // A high-quality, low-risk context that would otherwise Allow now
         // hits the custom top-priority Deny rule.

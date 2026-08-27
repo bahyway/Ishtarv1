@@ -1,0 +1,90 @@
+---
+# ============================================================================
+# PB-REL-001 — Deposit GL-REL-001 (Kanīku of the Gate) into the law corpus
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series
+# Law        : GL-REL-001 (Release Law — Kanīku of the Gate)
+# Discipline : CSR-08 (running this playbook IS the confirmation act)
+# Host       : Fedora bare-metal HOST (Ansible control node; no VDIs)
+# Doctrine   : Append-only. This playbook FAILS if the tablet already exists.
+#              Nothing mutates. Re-running against a deposited tablet is a
+#              refused act, not an overwrite.
+# Renumber   : If the PB ledger has advanced, renumber this file to the next
+#              ordinal before running; the deposit act itself is unchanged.
+# ============================================================================
+
+- name: "PB-REL-001 :: Deposit GL-REL-001 Kaniku of the Gate (append-only)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    corpus_root: "/opt/bahyway/v4/laws"
+    ledger_path: "/opt/bahyway/v4/laws/LEDGER-GL.tsv"
+    tablet_id: "GL-REL-001"
+    tablet_src: "{{ playbook_dir }}/GL-REL-001_Kaniku_of_the_Gate.md"
+    tablet_dst: "{{ corpus_root }}/GL-REL-001_Kaniku_of_the_Gate.md"
+    seal_note: "Release Law — SUSA gate sealed until all v4.0 gates green; successor trigger GL-REL-002"
+
+  tasks:
+
+    - name: "WITNESS :: law corpus directory exists"
+      ansible.builtin.file:
+        path: "{{ corpus_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: "WITNESS :: source tablet is present beside this playbook"
+      ansible.builtin.stat:
+        path: "{{ tablet_src }}"
+      register: src_stat
+
+    - name: "JUDGE :: refuse if source tablet is absent"
+      ansible.builtin.assert:
+        that: src_stat.stat.exists
+        fail_msg: "REFUSED — tablet source {{ tablet_src }} not found; nothing deposited."
+
+    - name: "WITNESS :: check whether tablet already sits in the corpus"
+      ansible.builtin.stat:
+        path: "{{ tablet_dst }}"
+      register: dst_stat
+
+    - name: "JUDGE :: refuse re-deposit (append-only doctrine)"
+      ansible.builtin.assert:
+        that: not dst_stat.stat.exists
+        fail_msg: >-
+          REFUSED — {{ tablet_id }} already deposited at {{ tablet_dst }}.
+          Laws are append-only; supersede with a later tablet, never overwrite.
+
+    - name: "MOVE :: deposit the tablet into the corpus (copy, never edit)"
+      ansible.builtin.copy:
+        src: "{{ tablet_src }}"
+        dest: "{{ tablet_dst }}"
+        mode: "0444"          # read-only at rest: a sealed tablet does not bend
+
+    - name: "MOVE :: compute SHA-256 checksum of the deposited tablet"
+      ansible.builtin.stat:
+        path: "{{ tablet_dst }}"
+        checksum_algorithm: sha256
+      register: sealed_stat
+
+    - name: "STAGE :: ensure the GL ledger exists (header on first creation only)"
+      ansible.builtin.copy:
+        dest: "{{ ledger_path }}"
+        content: "tablet_id\tdeposited_utc\tsha256\tnote\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: append the seal entry to the GL ledger"
+      ansible.builtin.lineinfile:
+        path: "{{ ledger_path }}"
+        line: "{{ tablet_id }}\t{{ ansible_date_time.iso8601 }}\t{{ sealed_stat.stat.checksum }}\t{{ seal_note }}"
+        insertafter: EOF
+        create: false
+
+    - name: "STAGE :: proclaim the seal"
+      ansible.builtin.debug:
+        msg:
+          - "SEALED :: {{ tablet_id }} deposited at {{ tablet_dst }}"
+          - "SHA-256 :: {{ sealed_stat.stat.checksum }}"
+          - "DOCTRINE :: SUSA gate closed. No artifact crosses until all v4.0 gates are green AND GL-REL-002 is sealed."

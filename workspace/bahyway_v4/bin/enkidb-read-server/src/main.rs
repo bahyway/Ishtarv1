@@ -35,23 +35,25 @@
 //! One request frame in, one response frame out (the same length-
 //! prefixed-u32-LE + trailing 0-terminator framing every server in this
 //! fleet already uses):
-//!   - `QUERY:<heptascript source>` -> a binary response frame:
-//!       `[1 byte tag]`
-//!         `0x00` success, followed by:
-//!           `[u32 LE row_count]`
-//!           for each row: `[16B kaki] [u16 LE attr_count] {attrs} [u16 LE history_count] {history_snapshots}`
-//!             attr = `[u8 name_len][name bytes][u8 type_tag][value bytes]`
+//! ```text
+//!   - QUERY:<heptascript source> -> a binary response frame:
+//!       [1 byte tag]
+//!         0x00 success, followed by:
+//!           [u32 LE row_count]
+//!           for each row: [16B kaki] [u16 LE attr_count] {attrs} [u16 LE history_count] {history_snapshots}
+//!             attr = [u8 name_len][name bytes][u8 type_tag][value bytes]
 //!               type_tag: 0=Null 1=Bool(1B) 2=Int(8B LE i64) 3=Float(8B LE f64)
 //!                         4=Text(u32 LE len + bytes) 5=KakiPk(16B)
-//!             history snapshot = `[u32 LE epoch][u16 LE attr_count]{attrs}`
-//!           `[u8 trailer_tag]` 0=none 1=sync_fingerprint 2=witness_digest,
-//!             followed by `[u8 len][bytes]` (hex-string bytes) when non-zero
-//!         `0x01` error, followed by `[u32 LE len][utf8 message bytes]`
-//!   - `TRIBES:<heptascript source>` -> same shape as QUERY:, answered
-//!       from the real per-tribe particle-count corpus `materialize()`
+//!             history snapshot = [u32 LE epoch][u16 LE attr_count]{attrs}
+//!           [u8 trailer_tag] 0=none 1=sync_fingerprint 2=witness_digest,
+//!             followed by [u8 len][bytes] (hex-string bytes) when non-zero
+//!         0x01 error, followed by [u32 LE len][utf8 message bytes]
+//!   - TRIBES:<heptascript source> -> same shape as QUERY:, answered
+//!       from the real per-tribe particle-count corpus materialize()
 //!       writes alongside the main one (2026-07-21, the Architect's "PU"
-//!       idea) -- `tribe.id`/`tribe.particle_count`/`meta.kind` attrs.
-//!   - anything else -> the same `0x01` error frame shape
+//!       idea) -- tribe.id/tribe.particle_count/meta.kind attrs.
+//!   - anything else -> the same 0x01 error frame shape
+//! ```
 #![forbid(unsafe_code)]
 
 use std::env;
@@ -81,7 +83,10 @@ fn data_dir() -> PathBuf {
     PathBuf::from(env::var("DATA_DIR").unwrap_or_else(|_| "/data".to_string()))
 }
 fn reload_secs() -> u64 {
-    env::var("RELOAD_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(30)
+    env::var("RELOAD_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30)
 }
 
 struct Live {
@@ -99,16 +104,22 @@ fn try_load(data_dir: &std::path::Path) -> Option<Live> {
 }
 
 fn main() {
-    eprintln!("𒁾 enkidb-read-server — EnkiDB (core particle store) Read Node [in-memory, binary wire]");
+    eprintln!(
+        "𒁾 enkidb-read-server — EnkiDB (core particle store) Read Node [in-memory, binary wire]"
+    );
 
     let data_dir = data_dir();
     let reload_secs = reload_secs();
-    let state: Arc<RwLock<Option<Arc<Live>>>> = Arc::new(RwLock::new(try_load(&data_dir).map(Arc::new)));
+    let state: Arc<RwLock<Option<Arc<Live>>>> =
+        Arc::new(RwLock::new(try_load(&data_dir).map(Arc::new)));
 
     {
         let ready = state.read().unwrap().is_some();
         eprintln!("  data_dir = {}", data_dir.display());
-        eprintln!("  initial state: {}", if ready { "loaded" } else { "not ready yet" });
+        eprintln!(
+            "  initial state: {}",
+            if ready { "loaded" } else { "not ready yet" }
+        );
     }
 
     {
@@ -140,7 +151,10 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(s) => {
-                let peer = s.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "?".into());
+                let peer = s
+                    .peer_addr()
+                    .map(|a| a.to_string())
+                    .unwrap_or_else(|_| "?".into());
                 let state = Arc::clone(&state);
                 thread::spawn(move || {
                     if let Err(e) = handle(s, &state) {
@@ -185,7 +199,10 @@ fn handle(mut stream: TcpStream, state: &RwLock<Option<Arc<Live>>>) -> io::Resul
         };
     }
 
-    send_error(&mut stream, "unrecognized request -- use QUERY:<heptascript> or TRIBES:<heptascript>")
+    send_error(
+        &mut stream,
+        "unrecognized request -- use QUERY:<heptascript> or TRIBES:<heptascript>",
+    )
 }
 
 // ── Binary encoding (see module doc comment for the exact frame layout) ──
@@ -354,7 +371,6 @@ fn encode_gravity_key(buf: &mut Vec<u8>, key: &heptascript::GravityKey) {
     }
 }
 
-
 fn encode_short_string(buf: &mut Vec<u8>, s: &str) {
     let bytes = &s.as_bytes()[..s.len().min(255)];
     buf.push(bytes.len() as u8);
@@ -376,7 +392,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

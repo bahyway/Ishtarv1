@@ -39,7 +39,10 @@ pub struct SecurityScanResult {
 /// `DocumentParser` or the Journal.
 pub fn scan_document(bytes: &[u8]) -> SecurityScanResult {
     let result = zip_scan::scan(bytes);
-    SecurityScanResult { clean: !result.malware_detected, detail: result.detail }
+    SecurityScanResult {
+        clean: !result.malware_detected,
+        detail: result.detail,
+    }
 }
 
 #[cfg(test)]

@@ -65,8 +65,17 @@ fn db_config_from_variant(v: &Variant) -> Option<DbConfig> {
 }
 
 fn build_tablet(version: i64, created_millis: i64, dbs: &Array<Variant>) -> Tablet {
-    let dbs: Vec<DbConfig> = dbs.iter_shared().filter_map(|v| db_config_from_variant(&v)).collect();
-    Tablet { version: version as u32, created_millis: created_millis as u64, dbs, fis: FisConfig::default(), seal: None }
+    let dbs: Vec<DbConfig> = dbs
+        .iter_shared()
+        .filter_map(|v| db_config_from_variant(&v))
+        .collect();
+    Tablet {
+        version: version as u32,
+        created_millis: created_millis as u64,
+        dbs,
+        fis: FisConfig::default(),
+        seal: None,
+    }
 }
 
 #[godot_api]
@@ -74,7 +83,10 @@ impl ConfigPanelBridge {
     /// Tab names for the Theater UI, pipeline order.
     #[func]
     fn database_tabs(&self) -> PackedStringArray {
-        tupsimati::ENKIDB_SEVEN.iter().map(|(n, _)| GString::from(*n)).collect()
+        tupsimati::ENKIDB_SEVEN
+            .iter()
+            .map(|(n, _)| GString::from(*n))
+            .collect()
     }
 
     /// Validate the whole tablet built from the caller-supplied db rows.
@@ -101,7 +113,11 @@ impl ConfigPanelBridge {
     /// Sovereign line-format preview for the Theater's tablet view.
     #[func]
     fn preview_lines(&self, version: i64, created_millis: i64, dbs: Array<Variant>) -> GString {
-        GString::from(build_tablet(version, created_millis, &dbs).to_lines().as_str())
+        GString::from(
+            build_tablet(version, created_millis, &dbs)
+                .to_lines()
+                .as_str(),
+        )
     }
 
     /// Seal the tablet with a real Ed25519 signing key (32 raw bytes --
@@ -140,12 +156,18 @@ impl ConfigPanelBridge {
         match emit_playbook(&tablet, pb_number as u32) {
             Ok(text) => {
                 out.set("ok", true);
-                out.set("seal", &PackedByteArray::from(tablet.seal.as_deref().unwrap_or(&[])));
+                out.set(
+                    "seal",
+                    &PackedByteArray::from(tablet.seal.as_deref().unwrap_or(&[])),
+                );
                 out.set("playbook", text);
             }
             Err(e) => {
                 out.set("ok", false);
-                out.set("error", format!("sealed but playbook emission refused: {e}"));
+                out.set(
+                    "error",
+                    format!("sealed but playbook emission refused: {e}"),
+                );
             }
         }
         out

@@ -34,29 +34,37 @@ pub enum ReplicationError {
 impl core::fmt::Display for ReplicationError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ReplicationError::SequenceGap { expected, got } =>
-                write!(f, "sequence gap: expected {expected}, got {got}"),
-            ReplicationError::ChainBroken =>
-                write!(f, "chain broken: prev_digest mismatch"),
-            ReplicationError::SealInvalid =>
-                write!(f, "KANĀKU seal invalid: Ed25519 verification failed"),
-            ReplicationError::DigestMismatch =>
-                write!(f, "ŠIPIR ŠARRI digest mismatch: payload corrupted"),
-            ReplicationError::EpochExpired { event_epoch, now_epoch } =>
-                write!(f, "epoch expired: event={event_epoch} now={now_epoch} delta={}s",
-                       now_epoch.saturating_sub(*event_epoch)),
-            ReplicationError::PassportExpired =>
-                write!(f, "SargonPassport expired (SATTATU_MAX)"),
-            ReplicationError::PassportScopeInsufficient =>
-                write!(f, "SargonPassport lacks replication:emit scope"),
-            ReplicationError::KakiBlocked =>
-                write!(f, "HeptaSecSentinel blocked Write Pod KAKI"),
-            ReplicationError::InvalidFrame =>
-                write!(f, "invalid frame: bad magic or truncated log"),
-            ReplicationError::Io(e) =>
-                write!(f, "I/O error: {e}"),
-            ReplicationError::DeltaDecodeFailed =>
-                write!(f, "verified event's delta bytes did not decode as the expected payload"),
+            ReplicationError::SequenceGap { expected, got } => {
+                write!(f, "sequence gap: expected {expected}, got {got}")
+            }
+            ReplicationError::ChainBroken => write!(f, "chain broken: prev_digest mismatch"),
+            ReplicationError::SealInvalid => {
+                write!(f, "KANĀKU seal invalid: Ed25519 verification failed")
+            }
+            ReplicationError::DigestMismatch => {
+                write!(f, "ŠIPIR ŠARRI digest mismatch: payload corrupted")
+            }
+            ReplicationError::EpochExpired {
+                event_epoch,
+                now_epoch,
+            } => write!(
+                f,
+                "epoch expired: event={event_epoch} now={now_epoch} delta={}s",
+                now_epoch.saturating_sub(*event_epoch)
+            ),
+            ReplicationError::PassportExpired => write!(f, "SargonPassport expired (SATTATU_MAX)"),
+            ReplicationError::PassportScopeInsufficient => {
+                write!(f, "SargonPassport lacks replication:emit scope")
+            }
+            ReplicationError::KakiBlocked => write!(f, "HeptaSecSentinel blocked Write Pod KAKI"),
+            ReplicationError::InvalidFrame => {
+                write!(f, "invalid frame: bad magic or truncated log")
+            }
+            ReplicationError::Io(e) => write!(f, "I/O error: {e}"),
+            ReplicationError::DeltaDecodeFailed => write!(
+                f,
+                "verified event's delta bytes did not decode as the expected payload"
+            ),
         }
     }
 }

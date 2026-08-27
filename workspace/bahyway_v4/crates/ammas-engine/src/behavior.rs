@@ -53,12 +53,12 @@ impl BehaviorPolicy {
     pub fn null() -> Self {
         Self {
             l6_sovereign: false,
-            l4_ascend:    false,
+            l4_ascend: false,
             l5_stabilise: false,
-            l2_promote:   false,
-            l1_identity:  false,
-            l7_overflow:  false,
-            l3_degrade:   false,
+            l2_promote: false,
+            l1_identity: false,
+            l7_overflow: false,
+            l3_degrade: false,
         }
     }
 
@@ -73,8 +73,8 @@ impl BehaviorPolicy {
     /// Policy for a GEM particle — identity locked, orbit law active.
     pub fn gem_locked() -> Self {
         Self {
-            l1_identity:  true,
-            l4_ascend:    true,
+            l1_identity: true,
+            l4_ascend: true,
             l6_sovereign: true,
             ..Self::null()
         }
@@ -134,30 +134,30 @@ fn can_ascend(state: AgentState) -> bool {
 /// Ascend/Descend move exactly one lane; Rule7Sink → Dead.
 pub fn apply_transition(state: AgentState, outcome: TransitionOutcome) -> AgentState {
     match outcome {
-        TransitionOutcome::Stable    => state,
+        TransitionOutcome::Stable => state,
         TransitionOutcome::Rule7Sink => AgentState::Dead,
-        TransitionOutcome::Ascend    => ascend_one(state),
-        TransitionOutcome::Descend   => descend_one(state),
+        TransitionOutcome::Ascend => ascend_one(state),
+        TransitionOutcome::Descend => descend_one(state),
     }
 }
 
 fn ascend_one(s: AgentState) -> AgentState {
     match s {
-        AgentState::Dead   => AgentState::Fuzzy,
-        AgentState::Fuzzy  => AgentState::Active,
+        AgentState::Dead => AgentState::Fuzzy,
+        AgentState::Fuzzy => AgentState::Active,
         AgentState::Active => AgentState::Tribe,
-        AgentState::Tribe  => AgentState::Gem,
-        AgentState::Gem    => AgentState::Gem, // already at top
+        AgentState::Tribe => AgentState::Gem,
+        AgentState::Gem => AgentState::Gem, // already at top
     }
 }
 
 fn descend_one(s: AgentState) -> AgentState {
     match s {
-        AgentState::Gem    => AgentState::Tribe,
-        AgentState::Tribe  => AgentState::Active,
+        AgentState::Gem => AgentState::Tribe,
+        AgentState::Tribe => AgentState::Active,
         AgentState::Active => AgentState::Fuzzy,
-        AgentState::Fuzzy  => AgentState::Dead,
-        AgentState::Dead   => AgentState::Dead, // floor
+        AgentState::Fuzzy => AgentState::Dead,
+        AgentState::Dead => AgentState::Dead, // floor
     }
 }
 
@@ -170,8 +170,13 @@ mod tests {
     #[test]
     fn null_policy_always_stable() {
         let p = BehaviorPolicy::null();
-        for &state in &[AgentState::Gem, AgentState::Tribe, AgentState::Active,
-                        AgentState::Fuzzy, AgentState::Dead] {
+        for &state in &[
+            AgentState::Gem,
+            AgentState::Tribe,
+            AgentState::Active,
+            AgentState::Fuzzy,
+            AgentState::Dead,
+        ] {
             assert_eq!(p.resolve(state), TransitionOutcome::Stable);
         }
     }
@@ -180,7 +185,7 @@ mod tests {
     fn rule7_overflow_sinks_to_dead() {
         let p = BehaviorPolicy::rule7_overflow();
         assert_eq!(p.resolve(AgentState::Fuzzy), TransitionOutcome::Rule7Sink);
-        assert_eq!(p.resolve(AgentState::Dead),  TransitionOutcome::Rule7Sink);
+        assert_eq!(p.resolve(AgentState::Dead), TransitionOutcome::Rule7Sink);
     }
 
     #[test]
@@ -191,7 +196,10 @@ mod tests {
 
     #[test]
     fn l4_ascend_promotes_tribe_to_gem() {
-        let p = BehaviorPolicy { l4_ascend: true, ..BehaviorPolicy::null() };
+        let p = BehaviorPolicy {
+            l4_ascend: true,
+            ..BehaviorPolicy::null()
+        };
         assert_eq!(p.resolve(AgentState::Tribe), TransitionOutcome::Ascend);
         let next = apply_transition(AgentState::Tribe, TransitionOutcome::Ascend);
         assert_eq!(next, AgentState::Gem);
@@ -199,7 +207,10 @@ mod tests {
 
     #[test]
     fn l3_degrade_demotes_active() {
-        let p = BehaviorPolicy { l3_degrade: true, ..BehaviorPolicy::null() };
+        let p = BehaviorPolicy {
+            l3_degrade: true,
+            ..BehaviorPolicy::null()
+        };
         assert_eq!(p.resolve(AgentState::Active), TransitionOutcome::Descend);
         let next = apply_transition(AgentState::Active, TransitionOutcome::Descend);
         assert_eq!(next, AgentState::Fuzzy);
@@ -207,7 +218,11 @@ mod tests {
 
     #[test]
     fn l4_overrides_l3() {
-        let p = BehaviorPolicy { l4_ascend: true, l3_degrade: true, ..BehaviorPolicy::null() };
+        let p = BehaviorPolicy {
+            l4_ascend: true,
+            l3_degrade: true,
+            ..BehaviorPolicy::null()
+        };
         // L4 has higher priority than L3, so ascend wins
         assert_eq!(p.resolve(AgentState::Active), TransitionOutcome::Ascend);
     }
@@ -215,26 +230,29 @@ mod tests {
     #[test]
     fn apply_transition_rule7_always_dead() {
         for &s in &[AgentState::Gem, AgentState::Tribe, AgentState::Fuzzy] {
-            assert_eq!(apply_transition(s, TransitionOutcome::Rule7Sink), AgentState::Dead);
+            assert_eq!(
+                apply_transition(s, TransitionOutcome::Rule7Sink),
+                AgentState::Dead
+            );
         }
     }
 
     #[test]
     fn ascend_one_full_chain() {
-        assert_eq!(ascend_one(AgentState::Dead),   AgentState::Fuzzy);
-        assert_eq!(ascend_one(AgentState::Fuzzy),  AgentState::Active);
+        assert_eq!(ascend_one(AgentState::Dead), AgentState::Fuzzy);
+        assert_eq!(ascend_one(AgentState::Fuzzy), AgentState::Active);
         assert_eq!(ascend_one(AgentState::Active), AgentState::Tribe);
-        assert_eq!(ascend_one(AgentState::Tribe),  AgentState::Gem);
-        assert_eq!(ascend_one(AgentState::Gem),    AgentState::Gem);
+        assert_eq!(ascend_one(AgentState::Tribe), AgentState::Gem);
+        assert_eq!(ascend_one(AgentState::Gem), AgentState::Gem);
     }
 
     #[test]
     fn descend_one_full_chain() {
-        assert_eq!(descend_one(AgentState::Gem),    AgentState::Tribe);
-        assert_eq!(descend_one(AgentState::Tribe),  AgentState::Active);
+        assert_eq!(descend_one(AgentState::Gem), AgentState::Tribe);
+        assert_eq!(descend_one(AgentState::Tribe), AgentState::Active);
         assert_eq!(descend_one(AgentState::Active), AgentState::Fuzzy);
-        assert_eq!(descend_one(AgentState::Fuzzy),  AgentState::Dead);
-        assert_eq!(descend_one(AgentState::Dead),   AgentState::Dead);
+        assert_eq!(descend_one(AgentState::Fuzzy), AgentState::Dead);
+        assert_eq!(descend_one(AgentState::Dead), AgentState::Dead);
     }
 
     #[test]

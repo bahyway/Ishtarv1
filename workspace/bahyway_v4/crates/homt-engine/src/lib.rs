@@ -27,33 +27,28 @@
 //!
 //! Permanent constraint: zero third-party dependencies.
 
-pub mod field;
 pub mod convergence;
-pub mod sector;
+pub mod field;
 pub mod render_modes;
+pub mod sector;
 
-pub use field::OrbitField;
 pub use convergence::{
-    QUALITY_DEAD_BOUNDARY,
-    QUALITY_GOLDEN_BOUNDARY,
-    MAX_STABLE_STEP,
-    is_converged,
-    lipschitz_bound,
-    Matrix7, StateVec7, IDENTITY_7, ZERO_7,
-    state_evolution, trajectory,
+    is_converged, lipschitz_bound, state_evolution, trajectory, Matrix7, StateVec7, IDENTITY_7,
+    MAX_STABLE_STEP, QUALITY_DEAD_BOUNDARY, QUALITY_GOLDEN_BOUNDARY, ZERO_7,
+};
+pub use field::OrbitField;
+pub use render_modes::{
+    rendering_mode, tribe_rendering_mode, RenderingMode, INSTANCED_THRESHOLD,
+    POINT_SPRITE_THRESHOLD,
 };
 pub use sector::HeptaSectorMap;
-pub use render_modes::{
-    RenderingMode, rendering_mode, tribe_rendering_mode,
-    POINT_SPRITE_THRESHOLD, INSTANCED_THRESHOLD,
-};
 
 pub const HOMT_VERSION: &str = "4.0.0";
 pub const HEPTA_DIMENSIONS: usize = 7;
 
 pub mod prelude {
-    pub use super::field::OrbitField;
     pub use super::convergence::{QUALITY_DEAD_BOUNDARY, QUALITY_GOLDEN_BOUNDARY};
+    pub use super::field::OrbitField;
+    pub use super::render_modes::{rendering_mode, RenderingMode, POINT_SPRITE_THRESHOLD};
     pub use super::sector::HeptaSectorMap;
-    pub use super::render_modes::{RenderingMode, rendering_mode, POINT_SPRITE_THRESHOLD};
 }

@@ -14,35 +14,32 @@
 #![allow(missing_docs)]
 #![forbid(unsafe_code)]
 
+pub mod backend;
+pub mod errors;
+pub mod ir;
+pub mod kinetic;
 pub mod node;
 pub mod node_id;
-pub mod ir;
-pub mod backend;
-pub mod walker;
 pub mod quality;
-pub mod kinetic;
 pub mod span;
-pub mod errors;
+pub mod walker;
 
+pub use backend::{AkkBackend, AkkGenBackend, DebugBackend, RustHintBackend};
+pub use errors::IrError;
+pub use ir::{AkkIr, IrBuilder};
+pub use kinetic::{ForceKind, KineticForce};
 pub use node::{
-    AkkNode,
-    ParticleNode, TribeNode, RuleNode, EquationNode,
-    FlowNode, ObserveNode, EmitNode, GuardNode, PipelineNode,
-    FieldDecl, QualityConstraint, WeightProfile,
-    RuleCondition, RuleAction, ConditionRhs, ConditionOp,
-    FlowStage, FlowSource, FlowSink,
-    ObserveFrom, ObserveFilter, ObserveSort, ObserveProperty,
-    EmitTarget, EmitContext,
-    KineticTerm, EquationBody,
+    AkkNode, ConditionOp, ConditionRhs, EmitContext, EmitNode, EmitTarget, EquationBody,
+    EquationNode, FieldDecl, FlowNode, FlowSink, FlowSource, FlowStage, GuardNode, KineticTerm,
+    ObserveFilter, ObserveFrom, ObserveNode, ObserveProperty, ObserveSort, ParticleNode,
+    PipelineNode, QualityConstraint, RuleAction, RuleCondition, RuleNode, TribeNode, WeightProfile,
 };
 pub use node_id::{NodeId, NodeIdBuilder};
-pub use ir::{AkkIr, IrBuilder};
-pub use backend::{AkkBackend, DebugBackend, AkkGenBackend, RustHintBackend};
-pub use walker::{AkkWalker, WalkAction, CollectNames, ValidateQuality, NodeCounter, FindGenerative};
-pub use quality::{QualityLane, HeptaDim, HEPTA_DIMS};
-pub use kinetic::{KineticForce, ForceKind};
+pub use quality::{HeptaDim, QualityLane, HEPTA_DIMS};
 pub use span::Span;
-pub use errors::IrError;
+pub use walker::{
+    AkkWalker, CollectNames, FindGenerative, NodeCounter, ValidateQuality, WalkAction,
+};
 
 // ── ADR-001 sovereign constants ───────────────────────────────────────────────
 

@@ -155,7 +155,11 @@ impl AnuGovernorApp {
                 self.status_line = format!(
                     "config ✓ {} playbooks resolved{}",
                     cfg.run.playbooks.len(),
-                    if cfg.run.simulate { " · SIMULATE mode" } else { "" }
+                    if cfg.run.simulate {
+                        " · SIMULATE mode"
+                    } else {
+                        ""
+                    }
                 );
                 self.cfg = Some(cfg);
             }
@@ -345,7 +349,9 @@ impl AnuGovernorApp {
 fn handle_border_resize(ctx: &egui::Context) {
     const MARGIN: f32 = 6.0;
     let rect = ctx.input(|i| i.screen_rect());
-    let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) else { return };
+    let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) else {
+        return;
+    };
 
     let near_left = pos.x <= rect.left() + MARGIN;
     let near_right = pos.x >= rect.right() - MARGIN;
@@ -379,7 +385,10 @@ fn phase_badge(phase: RunPhase) -> (String, Color32) {
         RunPhase::Idle => ("IDLE".to_string(), DIM),
         RunPhase::Running => ("RUNNING".to_string(), RUN),
         RunPhase::Halted(i) => (
-            format!("⏸ HALTED — MAJOR at stage {} · awaiting Architect (CSR-08)", i + 1),
+            format!(
+                "⏸ HALTED — MAJOR at stage {} · awaiting Architect (CSR-08)",
+                i + 1
+            ),
             ERR,
         ),
         RunPhase::Finished => ("FINISHED".to_string(), OK),
@@ -412,57 +421,70 @@ impl eframe::App for AnuGovernorApp {
         // ── title bar (self-drawn: with_decorations(false) means the OS/
         // compositor gives us none — drag-to-move, minimize, maximize and
         // close all have to live here) ──
-        egui::TopBottomPanel::top("title").exact_height(32.0).show(ctx, |ui| {
-            let bar_rect = ui.max_rect();
-            let bar_resp = ui.interact(bar_rect, egui::Id::new("anu_governor_titlebar_drag"), egui::Sense::click_and_drag());
-            let is_maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
-            if bar_resp.double_clicked() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_maximized));
-            } else if bar_resp.drag_started() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
-            }
+        egui::TopBottomPanel::top("title")
+            .exact_height(32.0)
+            .show(ctx, |ui| {
+                let bar_rect = ui.max_rect();
+                let bar_resp = ui.interact(
+                    bar_rect,
+                    egui::Id::new("anu_governor_titlebar_drag"),
+                    egui::Sense::click_and_drag(),
+                );
+                let is_maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+                if bar_resp.double_clicked() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_maximized));
+                } else if bar_resp.drag_started() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
 
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("𒀭 AnuGovernor").size(19.0).color(WAX));
-                ui.add_space(10.0);
-                let (txt, col) = match self.tab {
-                    Tab::Corpus => phase_badge(self.phase),
-                    Tab::Hala => phase_badge(self.dp_phase),
-                };
-                ui.label(RichText::new(txt).color(col).monospace());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let win_btn = |ui: &mut egui::Ui, glyph: &str, color: Color32| {
-                        ui.add(
-                            egui::Button::new(RichText::new(glyph).color(color).monospace().size(14.0))
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("𒀭 AnuGovernor").size(19.0).color(WAX));
+                    ui.add_space(10.0);
+                    let (txt, col) = match self.tab {
+                        Tab::Corpus => phase_badge(self.phase),
+                        Tab::Hala => phase_badge(self.dp_phase),
+                    };
+                    ui.label(RichText::new(txt).color(col).monospace());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let win_btn = |ui: &mut egui::Ui, glyph: &str, color: Color32| {
+                            ui.add(
+                                egui::Button::new(
+                                    RichText::new(glyph).color(color).monospace().size(14.0),
+                                )
                                 .frame(false)
                                 .min_size(egui::vec2(24.0, 24.0)),
-                        )
-                    };
-                    if win_btn(ui, "✕", ERR).on_hover_text("Close").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                    }
-                    if win_btn(ui, if is_maximized { "❐" } else { "□" }, WAX)
-                        .on_hover_text(if is_maximized { "Restore" } else { "Maximize" })
-                        .clicked()
-                    {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_maximized));
-                    }
-                    if win_btn(ui, "—", WAX).on_hover_text("Minimize").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
-                    }
-                    // Dragging a border can leave the window an awkward
-                    // size with no way back — this snaps it to the app's
-                    // designed default (must match main.rs's with_inner_size).
-                    if win_btn(ui, "⟲", WAX).on_hover_text("Reset window size").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
-                        // Must match main.rs's with_inner_size.
-                        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(900.0, 620.0)));
-                    }
-                    ui.add_space(10.0);
-                    ui.label(RichText::new(&self.status_line).color(DIM).small());
+                            )
+                        };
+                        if win_btn(ui, "✕", ERR).on_hover_text("Close").clicked() {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                        if win_btn(ui, if is_maximized { "❐" } else { "□" }, WAX)
+                            .on_hover_text(if is_maximized { "Restore" } else { "Maximize" })
+                            .clicked()
+                        {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_maximized));
+                        }
+                        if win_btn(ui, "—", WAX).on_hover_text("Minimize").clicked() {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                        }
+                        // Dragging a border can leave the window an awkward
+                        // size with no way back — this snaps it to the app's
+                        // designed default (must match main.rs's with_inner_size).
+                        if win_btn(ui, "⟲", WAX)
+                            .on_hover_text("Reset window size")
+                            .clicked()
+                        {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+                            // Must match main.rs's with_inner_size.
+                            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+                                900.0, 620.0,
+                            )));
+                        }
+                        ui.add_space(10.0);
+                        ui.label(RichText::new(&self.status_line).color(DIM).small());
+                    });
                 });
             });
-        });
 
         // ── tab bar ──
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
@@ -490,30 +512,66 @@ impl AnuGovernorApp {
                     self.load_config();
                 }
                 ui.separator();
-                let can_run = self.cfg.is_some() && matches!(self.phase, RunPhase::Idle | RunPhase::Finished | RunPhase::Aborted);
-                if ui.add_enabled(can_run, egui::Button::new(RichText::new("▶ Run").color(Color32::BLACK)).fill(HONEY)).clicked() {
+                let can_run = self.cfg.is_some()
+                    && matches!(
+                        self.phase,
+                        RunPhase::Idle | RunPhase::Finished | RunPhase::Aborted
+                    );
+                if ui
+                    .add_enabled(
+                        can_run,
+                        egui::Button::new(RichText::new("▶ Run").color(Color32::BLACK)).fill(HONEY),
+                    )
+                    .clicked()
+                {
                     self.start_run();
                 }
                 let running = matches!(self.phase, RunPhase::Running | RunPhase::Halted(_));
-                if ui.add_enabled(running, egui::Button::new(RichText::new("■ Abort").color(ERR))).clicked() {
-                    if let Some(t) = &self.ctl_tx { let _ = t.send(Ctl::Abort); }
+                if ui
+                    .add_enabled(
+                        running,
+                        egui::Button::new(RichText::new("■ Abort").color(ERR)),
+                    )
+                    .clicked()
+                {
+                    if let Some(t) = &self.ctl_tx {
+                        let _ = t.send(Ctl::Abort);
+                    }
                 }
             });
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("PARAMETERS").color(HONEY).small().monospace());
                 let mut remove: Option<usize> = None;
                 for (i, (k, v)) in self.params.iter().enumerate() {
-                    ui.label(RichText::new(format!("{k} = {v}")).monospace().small().color(WAX)
-                        .background_color(PANEL));
+                    ui.label(
+                        RichText::new(format!("{k} = {v}"))
+                            .monospace()
+                            .small()
+                            .color(WAX)
+                            .background_color(PANEL),
+                    );
                     if ui.small_button(RichText::new("×").color(ERR)).clicked() {
                         remove = Some(i);
                     }
                 }
-                if let Some(i) = remove { self.params.remove(i); }
-                ui.add(egui::TextEdit::singleline(&mut self.new_key).hint_text("key").desired_width(90.0));
-                ui.add(egui::TextEdit::singleline(&mut self.new_val).hint_text("value").desired_width(130.0));
+                if let Some(i) = remove {
+                    self.params.remove(i);
+                }
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.new_key)
+                        .hint_text("key")
+                        .desired_width(90.0),
+                );
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.new_val)
+                        .hint_text("value")
+                        .desired_width(130.0),
+                );
                 if ui.button("+ add").clicked() && !self.new_key.is_empty() {
-                    self.params.push((std::mem::take(&mut self.new_key), std::mem::take(&mut self.new_val)));
+                    self.params.push((
+                        std::mem::take(&mut self.new_key),
+                        std::mem::take(&mut self.new_val),
+                    ));
                 }
             });
         });
@@ -608,22 +666,32 @@ impl AnuGovernorApp {
         });
 
         // ── left: queue ──
-        egui::SidePanel::left("queue").min_width(240.0).show(ctx, |ui| {
-            ui.label(RichText::new("Playbook queue").color(WAX).size(15.0));
-            ui.separator();
-            egui::ScrollArea::vertical().id_salt("queue_scroll").show(ui, |ui| {
-                if let Some(cfg) = &self.cfg {
-                    for (i, pb) in cfg.run.playbooks.iter().enumerate() {
-                        let st = self.statuses.get(i).copied().unwrap_or(PbStatus::Pending);
-                        let col = status_color(st);
-                        let text = RichText::new(format!("{} {}", st.icon(), pb)).monospace().small().color(col);
-                        if ui.selectable_label(self.selected_pb == Some(i), text).clicked() {
-                            self.selected_pb = Some(i);
+        egui::SidePanel::left("queue")
+            .min_width(240.0)
+            .show(ctx, |ui| {
+                ui.label(RichText::new("Playbook queue").color(WAX).size(15.0));
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .id_salt("queue_scroll")
+                    .show(ui, |ui| {
+                        if let Some(cfg) = &self.cfg {
+                            for (i, pb) in cfg.run.playbooks.iter().enumerate() {
+                                let st = self.statuses.get(i).copied().unwrap_or(PbStatus::Pending);
+                                let col = status_color(st);
+                                let text = RichText::new(format!("{} {}", st.icon(), pb))
+                                    .monospace()
+                                    .small()
+                                    .color(col);
+                                if ui
+                                    .selectable_label(self.selected_pb == Some(i), text)
+                                    .clicked()
+                                {
+                                    self.selected_pb = Some(i);
+                                }
+                            }
                         }
-                    }
-                }
+                    });
             });
-        });
 
         // ── right: remedy ──
         egui::SidePanel::right("remedy").min_width(300.0).show(ctx, |ui| {
@@ -691,7 +759,11 @@ impl AnuGovernorApp {
 
         // ── center: errors & warnings grid ──
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label(RichText::new(format!("Errors & warnings — {} events", self.events.len())).color(WAX).size(15.0));
+            ui.label(
+                RichText::new(format!("Errors & warnings — {} events", self.events.len()))
+                    .color(WAX)
+                    .size(15.0),
+            );
             ui.separator();
             use egui_extras::{Column, TableBuilder};
             TableBuilder::new(ui)
@@ -703,20 +775,41 @@ impl AnuGovernorApp {
                 .sense(egui::Sense::click())
                 .header(20.0, |mut h| {
                     for t in ["PB", "TASK", "SEV", "ERROR TYPE"] {
-                        h.col(|ui| { ui.label(RichText::new(t).color(HONEY).monospace().small()); });
+                        h.col(|ui| {
+                            ui.label(RichText::new(t).color(HONEY).monospace().small());
+                        });
                     }
                 })
                 .body(|mut body| {
                     for ev in self.events.iter() {
                         body.row(20.0, |mut row| {
                             row.set_selected(self.selected_pb == Some(ev.pb_index));
-                            row.col(|ui| { ui.label(RichText::new(format!("{}", ev.pb_index + 1)).monospace().small()); });
-                            row.col(|ui| { ui.label(RichText::new(&ev.task).monospace().small()); });
                             row.col(|ui| {
-                                let c = if ev.severity == Severity::Major { ERR } else { WARN };
-                                ui.label(RichText::new(ev.severity.to_string()).color(c).monospace().small());
+                                ui.label(
+                                    RichText::new(format!("{}", ev.pb_index + 1))
+                                        .monospace()
+                                        .small(),
+                                );
                             });
-                            row.col(|ui| { ui.label(RichText::new(&ev.error_type).monospace().small()); });
+                            row.col(|ui| {
+                                ui.label(RichText::new(&ev.task).monospace().small());
+                            });
+                            row.col(|ui| {
+                                let c = if ev.severity == Severity::Major {
+                                    ERR
+                                } else {
+                                    WARN
+                                };
+                                ui.label(
+                                    RichText::new(ev.severity.to_string())
+                                        .color(c)
+                                        .monospace()
+                                        .small(),
+                                );
+                            });
+                            row.col(|ui| {
+                                ui.label(RichText::new(&ev.error_type).monospace().small());
+                            });
                             if row.response().clicked() {
                                 self.selected_pb = Some(ev.pb_index);
                             }
@@ -772,13 +865,29 @@ impl AnuGovernorApp {
         // ── progress + halt banner ──
         egui::TopBottomPanel::top("dp_progress").show(ctx, |ui| {
             let n = self.dp_statuses.len().max(1);
-            let done = self.dp_statuses.iter().filter(|s| !matches!(s, PbStatus::Pending | PbStatus::Running)).count();
-            let cur = self.dp_statuses.iter().position(|s| *s == PbStatus::Running);
+            let done = self
+                .dp_statuses
+                .iter()
+                .filter(|s| !matches!(s, PbStatus::Pending | PbStatus::Running))
+                .count();
+            let cur = self
+                .dp_statuses
+                .iter()
+                .position(|s| *s == PbStatus::Running);
             ui.horizontal(|ui| {
                 let name = cur.map(|i| docpulse::STAGE_NAMES[i]).unwrap_or_default();
-                ui.label(RichText::new(format!("Stage {}/{} {}", done, n, name)).monospace().small().color(WAX));
+                ui.label(
+                    RichText::new(format!("Stage {}/{} {}", done, n, name))
+                        .monospace()
+                        .small()
+                        .color(WAX),
+                );
             });
-            ui.add(egui::ProgressBar::new(done as f32 / n as f32).desired_width(f32::INFINITY).fill(HONEY));
+            ui.add(
+                egui::ProgressBar::new(done as f32 / n as f32)
+                    .desired_width(f32::INFINITY)
+                    .fill(HONEY),
+            );
 
             // The blob audit is a MAJOR by design (CSR-08): the pulse halts
             // and the Architect rules. Skip is not offered meaningfully here
@@ -786,19 +895,34 @@ impl AnuGovernorApp {
             // only Retry-after-manual-amend or Abort.
             if let RunPhase::Halted(i) = self.dp_phase {
                 ui.add_space(4.0);
-                egui::Frame::none().fill(Color32::from_rgb(0x2A, 0x15, 0x12)).inner_margin(8.0).show(ui, |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        let msg = self.dp_halt_event.and_then(|e| self.dp_events.get(e)).map(|e| e.message.clone())
-                            .unwrap_or_else(|| format!("MAJOR at stage {}", i + 1));
-                        ui.label(RichText::new(format!("MAJOR · {msg}")).color(ERR).monospace().small());
-                        if ui.button("Retry after amend").clicked() {
-                            if let Some(t) = &self.dp_ctl_tx { let _ = t.send(Ctl::Retry); }
-                        }
-                        if ui.button(RichText::new("Abort pulse").color(ERR)).clicked() {
-                            if let Some(t) = &self.dp_ctl_tx { let _ = t.send(Ctl::Abort); }
-                        }
+                egui::Frame::none()
+                    .fill(Color32::from_rgb(0x2A, 0x15, 0x12))
+                    .inner_margin(8.0)
+                    .show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            let msg = self
+                                .dp_halt_event
+                                .and_then(|e| self.dp_events.get(e))
+                                .map(|e| e.message.clone())
+                                .unwrap_or_else(|| format!("MAJOR at stage {}", i + 1));
+                            ui.label(
+                                RichText::new(format!("MAJOR · {msg}"))
+                                    .color(ERR)
+                                    .monospace()
+                                    .small(),
+                            );
+                            if ui.button("Retry after amend").clicked() {
+                                if let Some(t) = &self.dp_ctl_tx {
+                                    let _ = t.send(Ctl::Retry);
+                                }
+                            }
+                            if ui.button(RichText::new("Abort pulse").color(ERR)).clicked() {
+                                if let Some(t) = &self.dp_ctl_tx {
+                                    let _ = t.send(Ctl::Abort);
+                                }
+                            }
+                        });
                     });
-                });
             }
         });
 
@@ -821,43 +945,76 @@ impl AnuGovernorApp {
         });
 
         // ── left: stage queue (same visual language as the Corpus queue) ──
-        egui::SidePanel::left("dp_queue").min_width(240.0).show(ctx, |ui| {
-            ui.label(RichText::new("Reform stages").color(WAX).size(15.0));
-            ui.separator();
-            egui::ScrollArea::vertical().id_salt("dp_queue_scroll").show(ui, |ui| {
-                for (i, name) in docpulse::STAGE_NAMES.iter().enumerate() {
-                    let st = self.dp_statuses.get(i).copied().unwrap_or(PbStatus::Pending);
-                    let col = status_color(st);
-                    let text = RichText::new(format!("{} {} · {}", st.icon(), i, name)).monospace().small().color(col);
-                    ui.label(text);
-                }
+        egui::SidePanel::left("dp_queue")
+            .min_width(240.0)
+            .show(ctx, |ui| {
+                ui.label(RichText::new("Reform stages").color(WAX).size(15.0));
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .id_salt("dp_queue_scroll")
+                    .show(ui, |ui| {
+                        for (i, name) in docpulse::STAGE_NAMES.iter().enumerate() {
+                            let st = self
+                                .dp_statuses
+                                .get(i)
+                                .copied()
+                                .unwrap_or(PbStatus::Pending);
+                            let col = status_color(st);
+                            let text = RichText::new(format!("{} {} · {}", st.icon(), i, name))
+                                .monospace()
+                                .small()
+                                .color(col);
+                            ui.label(text);
+                        }
+                    });
             });
-        });
 
         // ── right: events (blob audit / commit warnings land here) ──
-        egui::SidePanel::right("dp_events").min_width(300.0).show(ctx, |ui| {
-            ui.label(RichText::new("Events").color(WAX).size(15.0));
-            ui.separator();
-            if self.dp_events.is_empty() {
-                ui.label(RichText::new("no warnings or errors yet").color(DIM).small());
-            }
-            for ev in &self.dp_events {
-                let c = if ev.severity == Severity::Major { ERR } else { WARN };
-                ui.label(RichText::new(format!("{} · {}", ev.severity, ev.error_type)).color(c).monospace().small());
-                ui.label(RichText::new(&ev.message).small().color(DIM));
-                ui.add_space(4.0);
-            }
-        });
+        egui::SidePanel::right("dp_events")
+            .min_width(300.0)
+            .show(ctx, |ui| {
+                ui.label(RichText::new("Events").color(WAX).size(15.0));
+                ui.separator();
+                if self.dp_events.is_empty() {
+                    ui.label(
+                        RichText::new("no warnings or errors yet")
+                            .color(DIM)
+                            .small(),
+                    );
+                }
+                for ev in &self.dp_events {
+                    let c = if ev.severity == Severity::Major {
+                        ERR
+                    } else {
+                        WARN
+                    };
+                    ui.label(
+                        RichText::new(format!("{} · {}", ev.severity, ev.error_type))
+                            .color(c)
+                            .monospace()
+                            .small(),
+                    );
+                    ui.label(RichText::new(&ev.message).small().color(DIM));
+                    ui.add_space(4.0);
+                }
+            });
 
         // ── center: log (reform manifest / blob audit / ingest manifest lines) ──
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label(RichText::new("Log — reform, audit, pulse, ingestion").color(WAX).size(15.0));
+            ui.label(
+                RichText::new("Log — reform, audit, pulse, ingestion")
+                    .color(WAX)
+                    .size(15.0),
+            );
             ui.separator();
-            egui::ScrollArea::vertical().id_salt("dp_log_scroll").stick_to_bottom(true).show(ui, |ui| {
-                for line in &self.dp_log {
-                    ui.label(RichText::new(line).monospace().small().color(WAX));
-                }
-            });
+            egui::ScrollArea::vertical()
+                .id_salt("dp_log_scroll")
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    for line in &self.dp_log {
+                        ui.label(RichText::new(line).monospace().small().color(WAX));
+                    }
+                });
         });
     }
 }

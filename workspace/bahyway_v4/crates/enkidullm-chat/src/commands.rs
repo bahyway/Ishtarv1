@@ -7,27 +7,29 @@
 /// A parsed quick command.
 #[derive(Debug, Clone, PartialEq)]
 pub enum QuickCommand {
-    Adr(u32),           // !adr 3 → explain ADR-003
-    Crate(String),      // !crate enkidb-kaki → explain crate
-    Next,               // !next → what to build next
-    Law(u32),           // !law 1 → explain sovereign law 1
-    Kaki,               // !kaki → full KAKI byte layout
-    Enkiddb(String),    // !enkiddb <phrase> → real SEARCH: against EnkiDDB's Read Node
-    Help,               // !help → all commands
-    Status,             // !status → model status
-    History,            // !history → session history
-    Clear,              // !clear → clear conversation
-    Unknown(String),    // unknown command
+    Adr(u32),        // !adr 3 → explain ADR-003
+    Crate(String),   // !crate enkidb-kaki → explain crate
+    Next,            // !next → what to build next
+    Law(u32),        // !law 1 → explain sovereign law 1
+    Kaki,            // !kaki → full KAKI byte layout
+    Enkiddb(String), // !enkiddb <phrase> → real SEARCH: against EnkiDDB's Read Node
+    Help,            // !help → all commands
+    Status,          // !status → model status
+    History,         // !history → session history
+    Clear,           // !clear → clear conversation
+    Unknown(String), // unknown command
 }
 
 /// Parse a user message for quick commands (starts with !).
 pub fn parse_quick_command(msg: &str) -> Option<QuickCommand> {
     let msg = msg.trim();
-    if !msg.starts_with('!') { return None; }
+    if !msg.starts_with('!') {
+        return None;
+    }
 
     let parts: Vec<&str> = msg[1..].splitn(2, ' ').collect();
-    let cmd   = parts[0].to_lowercase();
-    let arg   = parts.get(1).map(|s| s.trim());
+    let cmd = parts[0].to_lowercase();
+    let arg = parts.get(1).map(|s| s.trim());
 
     Some(match cmd.as_str() {
         "adr" => {
@@ -35,18 +37,18 @@ pub fn parse_quick_command(msg: &str) -> Option<QuickCommand> {
             QuickCommand::Adr(n)
         }
         "crate" => QuickCommand::Crate(arg.unwrap_or("").to_string()),
-        "next"  => QuickCommand::Next,
-        "law"   => {
+        "next" => QuickCommand::Next,
+        "law" => {
             let n = arg.and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
             QuickCommand::Law(n)
         }
-        "kaki"    => QuickCommand::Kaki,
+        "kaki" => QuickCommand::Kaki,
         "enkiddb" => QuickCommand::Enkiddb(arg.unwrap_or("").to_string()),
-        "help"    => QuickCommand::Help,
-        "status"  => QuickCommand::Status,
+        "help" => QuickCommand::Help,
+        "status" => QuickCommand::Status,
         "history" => QuickCommand::History,
-        "clear"   => QuickCommand::Clear,
-        other     => QuickCommand::Unknown(other.to_string()),
+        "clear" => QuickCommand::Clear,
+        other => QuickCommand::Unknown(other.to_string()),
     })
 }
 

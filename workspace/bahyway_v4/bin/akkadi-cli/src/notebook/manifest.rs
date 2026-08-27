@@ -67,7 +67,8 @@ mod tests {
             title: "Slow WHERE clause on components collection".to_string(),
             issue: "Client reports the query takes >5s and sometimes times out.".to_string(),
             target: "127.0.0.1:7102".to_string(),
-            query: "QUERY:WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.collection] = \"components\"".to_string(),
+            query: "QUERY:WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.collection] = \"components\""
+                .to_string(),
             captured_at: "2026-07-19T12:00:00Z".to_string(),
             elapsed_ms: 42,
             dataset_generation: Some("Tigris v4.0".to_string()),

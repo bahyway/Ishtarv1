@@ -26,18 +26,26 @@ pub struct TargetId(pub &'static str);
 pub struct DataBatch {
     pub source_id: SourceId,
     /// Each record is a Vec of (attr_hash, value) pairs.
-    pub records:   Vec<Vec<(u32, Vec<u8>)>>,
+    pub records: Vec<Vec<(u32, Vec<u8>)>>,
     /// Monotonic epoch assigned by the source at extraction time.
-    pub epoch:     u32,
+    pub epoch: u32,
 }
 
 impl DataBatch {
     pub fn new(source_id: SourceId, records: Vec<Vec<(u32, Vec<u8>)>>, epoch: u32) -> Self {
-        DataBatch { source_id, records, epoch }
+        DataBatch {
+            source_id,
+            records,
+            epoch,
+        }
     }
 
-    pub fn len(&self) -> usize { self.records.len() }
-    pub fn is_empty(&self) -> bool { self.records.is_empty() }
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
 }
 
 /// Cursor that tracks the extraction position inside a source,
@@ -47,7 +55,7 @@ pub struct ExtractionCursor {
     /// Last successfully processed epoch.
     pub last_epoch: u32,
     /// Opaque offset blob interpreted by each connector.
-    pub offset:     Vec<u8>,
+    pub offset: Vec<u8>,
 }
 
 // ── Delivery Receipt ─────────────────────────────────────────────────────────
@@ -55,10 +63,10 @@ pub struct ExtractionCursor {
 /// Proof that a target received and accepted a batch.
 #[derive(Debug, Clone)]
 pub struct DeliveryReceipt {
-    pub target_id:      TargetId,
+    pub target_id: TargetId,
     pub records_accepted: usize,
     /// Target-assigned confirmation token (e.g. commit ID, message ID).
-    pub token:          Vec<u8>,
+    pub token: Vec<u8>,
 }
 
 // ── Source Connector Trait ───────────────────────────────────────────────────

@@ -13,24 +13,26 @@ use std::time::SystemTime;
 /// Contains ONLY real properties read from the file system.
 #[derive(Debug, Clone)]
 pub struct FileRecord {
-    pub path:       PathBuf,
-    pub size:       u64,
-    pub extension:  String,
-    pub modified:   Option<SystemTime>,
-    pub is_zero:    bool,
+    pub path: PathBuf,
+    pub size: u64,
+    pub extension: String,
+    pub modified: Option<SystemTime>,
+    pub is_zero: bool,
     pub parent_dir: PathBuf,
 }
 
 impl FileRecord {
     pub fn file_name(&self) -> String {
-        self.path.file_name()
+        self.path
+            .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("(unnamed)")
             .to_string()
     }
 
     pub fn parent_name(&self) -> String {
-        self.parent_dir.file_name()
+        self.parent_dir
+            .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("(root)")
             .to_string()
@@ -38,8 +40,12 @@ impl FileRecord {
 
     /// Age in days since last modification
     pub fn age_days(&self) -> f32 {
-        let Some(modified) = self.modified else { return 0.0 };
-        let Ok(elapsed)    = modified.elapsed()  else { return 0.0 };
+        let Some(modified) = self.modified else {
+            return 0.0;
+        };
+        let Ok(elapsed) = modified.elapsed() else {
+            return 0.0;
+        };
         elapsed.as_secs() as f32 / 86_400.0
     }
 }
@@ -47,19 +53,19 @@ impl FileRecord {
 /// Aggregate stats from a scan pass.
 #[derive(Debug, Clone, Default)]
 pub struct ScanSummary {
-    pub root:             PathBuf,
-    pub total_files:      u64,
-    pub total_bytes:      u64,
-    pub zero_byte_count:  u64,
+    pub root: PathBuf,
+    pub total_files: u64,
+    pub total_bytes: u64,
+    pub zero_byte_count: u64,
     pub extension_counts: std::collections::BTreeMap<String, u64>,
-    pub deepest_path:     u32,
+    pub deepest_path: u32,
     pub scan_duration_ms: u64,
 }
 
 /// Walk a folder and return `(records, summary)`.
 /// Pure-std recursive scan — no external dependencies.
 pub fn walk_folder(root: &Path) -> (Vec<FileRecord>, ScanSummary) {
-    let start   = std::time::Instant::now();
+    let start = std::time::Instant::now();
     let mut records = Vec::new();
     let mut summary = ScanSummary {
         root: root.to_path_buf(),
@@ -73,55 +79,79 @@ pub fn walk_folder(root: &Path) -> (Vec<FileRecord>, ScanSummary) {
 }
 
 fn walk_recursive(
-    dir:       &Path,
-    root:      &Path,
-    depth:     u32,
+    dir: &Path,
+    root: &Path,
+    depth: u32,
     max_depth: u32,
-    records:   &mut Vec<FileRecord>,
-    summary:   &mut ScanSummary,
+    records: &mut Vec<FileRecord>,
+    summary: &mut ScanSummary,
 ) {
-    if depth > max_depth { return; }
+    if depth > max_depth {
+        return;
+    }
 
-    let Ok(read) = std::fs::read_dir(dir) else { return };
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return;
+    };
 
     for entry in read.filter_map(|e| e.ok()) {
         let path = entry.path();
-        let Ok(metadata) = entry.metadata() else { continue };
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
 
         if metadata.is_dir() {
             walk_recursive(&path, root, depth + 1, max_depth, records, summary);
             continue;
         }
-        if !metadata.is_file() { continue; }
+        if !metadata.is_file() {
+            continue;
+        }
 
         let size = metadata.len();
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|s| s.to_str())
             .map(|s| s.to_ascii_lowercase())
             .unwrap_or_else(|| "(none)".to_string());
 
-        let parent_dir = path.parent()
+        let parent_dir = path
+            .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| root.to_path_buf());
 
         let modified = metadata.modified().ok();
-        let is_zero  = size == 0;
+        let is_zero = size == 0;
 
-        if is_zero { summary.zero_byte_count += 1; }
+        if is_zero {
+            summary.zero_byte_count += 1;
+        }
         summary.total_files += 1;
         summary.total_bytes += size;
-        *summary.extension_counts.entry(extension.clone()).or_insert(0) += 1;
-        if depth > summary.deepest_path { summary.deepest_path = depth; }
+        *summary
+            .extension_counts
+            .entry(extension.clone())
+            .or_insert(0) += 1;
+        if depth > summary.deepest_path {
+            summary.deepest_path = depth;
+        }
 
-        records.push(FileRecord { path, size, extension, modified, is_zero, parent_dir });
+        records.push(FileRecord {
+            path,
+            size,
+            extension,
+            modified,
+            is_zero,
+            parent_dir,
+        });
     }
 }
 
 /// Non-blocking scan via a background thread.
 /// Returns a receiver; poll once in an async or update loop.
-pub fn walk_folder_async(root: PathBuf)
-    -> std::sync::mpsc::Receiver<(Vec<FileRecord>, ScanSummary)>
-{
+pub fn walk_folder_async(
+    root: PathBuf,
+) -> std::sync::mpsc::Receiver<(Vec<FileRecord>, ScanSummary)> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let result = walk_folder(&root);
@@ -135,8 +165,13 @@ mod tests {
     use super::*;
     fn make_temp_dir() -> std::path::PathBuf {
         let mut path = std::env::temp_dir();
-        path.push(format!("vault_test_{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+        path.push(format!(
+            "vault_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+        ));
         std::fs::create_dir_all(&path).unwrap();
         path
     }
@@ -223,7 +258,7 @@ mod tests {
 
         let rx = walk_folder_async(dir.clone());
         let (async_records, async_summary) = rx.recv().unwrap();
-        let (sync_records, sync_summary)   = walk_folder(&dir);
+        let (sync_records, sync_summary) = walk_folder(&dir);
 
         assert_eq!(async_records.len(), sync_records.len());
         assert_eq!(async_summary.total_files, sync_summary.total_files);

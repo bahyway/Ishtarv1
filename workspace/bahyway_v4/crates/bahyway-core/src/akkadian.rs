@@ -4,10 +4,10 @@
 //! purpose semantically.  These constants are the single source of truth for
 //! the naming convention sealed in the Nabu Notebook document (2026-05).
 
-/// Akkadian name → purpose constants for the 13 principal crates.
-///
-/// These are declared as `&str` constants rather than an enum so downstream
-/// crates can reference individual names without pulling in the full map.
+//! Akkadian name → purpose constants for the 13 principal crates.
+//!
+//! These are declared as `&str` constants rather than an enum so downstream
+//! crates can reference individual names without pulling in the full map.
 
 /// Nabu (𒀭𒀜) — god of scribes, wisdom, and writing.
 /// Role: AkkadianAOL v4.0 compiler + Notebook engine (`.akk` files).
@@ -61,7 +61,7 @@ pub const CRATE_HEPTASCRIPT: &str = "heptascript";
 /// Role: `.way` security/policy language compiler (placeholder until post-demo).
 pub const CRATE_WAY: &str = "way";
 
-/// File extensions — locked per collision check (2026-05).
+// File extensions — locked per collision check (2026-05).
 
 /// AkkadianAOL / Nabu source files.
 pub const EXT_AKK: &str = ".akk";
@@ -124,19 +124,19 @@ mod tests {
 
     #[test]
     fn principal_names_correct() {
-        assert_eq!(CRATE_NABU,       "nabu");
-        assert_eq!(CRATE_ZAKARU,     "zakaru");
-        assert_eq!(CRATE_LAMASSU,    "lamassu");
-        assert_eq!(CRATE_ISHTAR,     "ishtar");
-        assert_eq!(CRATE_ISDU,       "isdu");
-        assert_eq!(CRATE_EBBERU,     "ebberu");
-        assert_eq!(CRATE_KAKKABU,    "kakkabu");
-        assert_eq!(CRATE_TEMU,       "temu");
-        assert_eq!(CRATE_SHEDU,      "shedu");
-        assert_eq!(CRATE_QUPPU,      "quppu");
-        assert_eq!(CRATE_KUPRU,      "kupru");
-        assert_eq!(CRATE_HEPTASCRIPT,"heptascript");
-        assert_eq!(CRATE_WAY,        "way");
+        assert_eq!(CRATE_NABU, "nabu");
+        assert_eq!(CRATE_ZAKARU, "zakaru");
+        assert_eq!(CRATE_LAMASSU, "lamassu");
+        assert_eq!(CRATE_ISHTAR, "ishtar");
+        assert_eq!(CRATE_ISDU, "isdu");
+        assert_eq!(CRATE_EBBERU, "ebberu");
+        assert_eq!(CRATE_KAKKABU, "kakkabu");
+        assert_eq!(CRATE_TEMU, "temu");
+        assert_eq!(CRATE_SHEDU, "shedu");
+        assert_eq!(CRATE_QUPPU, "quppu");
+        assert_eq!(CRATE_KUPRU, "kupru");
+        assert_eq!(CRATE_HEPTASCRIPT, "heptascript");
+        assert_eq!(CRATE_WAY, "way");
     }
 
     #[test]

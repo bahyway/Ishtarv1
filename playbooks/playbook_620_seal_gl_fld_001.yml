@@ -1,0 +1,89 @@
+---
+# PB-363 · Seal GL-FLD-001 · Tablet of the Wave-Field Membrane
+# CSR-08: running this playbook IS the confirmation of the seal.
+- name: PB-363 seal GL-FLD-001
+  hosts: girsu
+  gather_facts: true
+  vars:
+    law_root: "{{ ansible_env.HOME }}/bahyway/laws"
+    tablet: GL-FLD-001_SEALED.md
+    tablet_id: GL-FLD-001
+    seal_key: "{{ ansible_env.HOME }}/bahyway/keys/akkadian_seal_ed25519"
+  tasks:
+    - name: Ensure law and seal directories
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0750"}
+      loop: ["{{ law_root }}", "{{ law_root }}/sealed", "{{ law_root }}/receipts"]
+
+    - name: Refuse to re-seal an already sealed tablet
+      ansible.builtin.stat: {path: "{{ law_root }}/sealed/{{ tablet }}"}
+      register: existing
+    # FIXED 2026-08-26 -- see playbook_618_seal_gl_unt_001.yml's own
+    # identical FIXED comment: a fatal assert here used to halt the
+    # ENTIRE ansible-playbook run (proven empirically), not just this
+    # play, permanently blocking PB-626's own later steps.
+    - name: Gate G0 · already sealed -- no silent overwrite, no action taken
+      ansible.builtin.debug:
+        msg: "{{ tablet_id }} is already sealed. Amendments require GL-FLD-001-A1 and a fresh CSR-08 rite. No action taken (idempotent no-op, not a failure)."
+      when: existing.stat.exists
+
+    - name: Gate G0 · end this play cleanly when already sealed
+      ansible.builtin.meta: end_play
+      when: existing.stat.exists
+
+    - name: Gate G0 · tablet not yet sealed, proceeding
+      ansible.builtin.debug:
+        msg: "G0 green - tablet not yet sealed"
+      when: not existing.stat.exists
+
+    - name: Place the tablet
+      ansible.builtin.copy: {src: "{{ tablet }}", dest: "{{ law_root }}/sealed/{{ tablet }}", mode: "0440"}
+
+    - name: Gate G1 · required sections present
+      ansible.builtin.shell: |
+        set -e
+        for s in "## §1" "## §2" "## §3" "## §4" "## §5" "## §6" "## §7" "## §8" "## §9" "## §10" "## §11"; do
+          grep -q "$s" "{{ law_root }}/sealed/{{ tablet }}" || { echo "missing $s"; exit 1; }
+        done
+        echo "G1 green - eleven sections"
+      changed_when: false
+      register: g1
+
+    - name: Gate G2 · no SQL syntax anywhere in the tablet
+      ansible.builtin.shell: |
+        ! grep -Eiq 'SELECT +[A-Za-z*].{0,200}\bFROM\b|INNER JOIN|LEFT JOIN|EXISTS *\(' "{{ law_root }}/sealed/{{ tablet }}"
+      changed_when: false
+
+    - name: Compute Ed25519 AkkadianSeal
+      ansible.builtin.shell: |
+        openssl pkeyutl -sign -rawin -inkey "{{ seal_key }}" \
+          -in "{{ law_root }}/sealed/{{ tablet }}" | base64 -w0
+      register: seal
+      changed_when: true
+      no_log: false
+
+    - name: Write the Kanīku receipt
+      ansible.builtin.copy:
+        dest: "{{ law_root }}/receipts/{{ tablet_id }}.kaniku.yml"
+        mode: "0440"
+        content: |
+          tablet: {{ tablet_id }}
+          file: {{ tablet }}
+          sha256: "{{ (lookup('pipe', 'sha256sum ' + law_root + '/sealed/' + tablet)).split()[0] }}"
+          seal_ed25519: "{{ seal.stdout }}"
+          sealed_on: "{{ ansible_date_time.iso8601 }}"
+          sealed_by: "DUB.SAR"
+          rite: CSR-08
+          gates: {G0: green, G1: green, G2: green}
+
+    - name: Register in the law registry
+      ansible.builtin.lineinfile:
+        path: "{{ law_root }}/REGISTRY.log"
+        create: true
+        mode: "0640"
+        line: "{{ ansible_date_time.iso8601 }} SEALED {{ tablet_id }} sha256={{ (lookup('pipe', 'sha256sum ' + law_root + '/sealed/' + tablet)).split()[0] }}"
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-363 {{ tablet_id }} SEALED - amplitude is density; two instruments; Anti-SQL account"

@@ -6,12 +6,10 @@
 //! applies the KAKI firewall + policy, and emits security events.
 //!
 //! Phase 1: in-process sentinel (library).
-//! Phase 2: standalone EriduOS process with NajafEngine topology feed.
+//! Phase 2: standalone UrOS process with NajafEngine topology feed.
 //! Phase 3: kernel-level WPDEngine packet inspection on bare metal.
 
-use hepta_sec_firewall::{
-    BlockReason, FirewallVerdict, KakiFirewall, KakiPacket, TrustState,
-};
+use hepta_sec_firewall::{BlockReason, FirewallVerdict, KakiFirewall, KakiPacket, TrustState};
 use hepta_sec_policy::{PolicyAction, PolicyEngine};
 
 /// Maximum number of security events retained in the event ring buffer.
@@ -68,7 +66,7 @@ pub struct SentinelStats {
 /// Integrates `KakiFirewall` (trust table + verdict) with `PolicyEngine`
 /// (rule evaluation) and emits `SecurityEvent`s for every Block/Quarantine
 /// decision.  All state is in-process; Phase 2 will extract this into a
-/// standalone EriduOS service.
+/// standalone UrOS service.
 pub struct HeptaSecSentinel {
     firewall: KakiFirewall,
     policy: PolicyEngine,
@@ -106,18 +104,17 @@ impl HeptaSecSentinel {
         // If the firewall allows the packet, run it through the policy engine for
         // any additional rule-based restrictions (e.g. protocol/size rules).
         let fw_verdict = if let FirewallVerdict::Allow { tunnel_id } = &fw_verdict {
-            let trust = packet.src_kaki_hash
+            let trust = packet
+                .src_kaki_hash
                 .and_then(|h| self.firewall.trust_entry(h));
             match self.policy.evaluate(packet, trust) {
-                Some(PolicyAction::Deny(reason)) => {
-                    FirewallVerdict::Block { reason }
-                }
-                Some(PolicyAction::QuarantineAndAlert(_msg)) => {
-                    FirewallVerdict::Quarantine { reason: BlockReason::PolicyViolation("policy_engine") }
-                }
-                Some(PolicyAction::Permit) | None => {
-                    FirewallVerdict::Allow { tunnel_id: *tunnel_id }
-                }
+                Some(PolicyAction::Deny(reason)) => FirewallVerdict::Block { reason },
+                Some(PolicyAction::QuarantineAndAlert(_msg)) => FirewallVerdict::Quarantine {
+                    reason: BlockReason::PolicyViolation("policy_engine"),
+                },
+                Some(PolicyAction::Permit) | None => FirewallVerdict::Allow {
+                    tunnel_id: *tunnel_id,
+                },
             }
         } else {
             fw_verdict
@@ -131,13 +128,34 @@ impl HeptaSecSentinel {
             FirewallVerdict::Block { reason } => {
                 self.stats.blocked += 1;
                 let (detail, kind) = match reason {
-                    BlockReason::NoSourceKaki   => ("blocked: no source KAKI", SecurityEventKind::PacketBlocked(*reason)),
-                    BlockReason::InvalidChecksum => ("blocked: invalid KAKI checksum", SecurityEventKind::PacketBlocked(*reason)),
-                    BlockReason::RevokedKaki    => ("blocked: KAKI revoked", SecurityEventKind::PacketBlocked(*reason)),
-                    BlockReason::ExpiredKaki    => ("blocked: KAKI expired (SATTATU_MAX)", SecurityEventKind::KakiExpired),
-                    BlockReason::DeadB11        => ("blocked: B11 below minimum trust quantum", SecurityEventKind::PacketBlocked(*reason)),
-                    BlockReason::FuzzyRateLimited => ("blocked: Fuzzy rate limit exceeded", SecurityEventKind::PacketBlocked(*reason)),
-                    BlockReason::PolicyViolation(_) => ("blocked: policy violation", SecurityEventKind::PolicyViolation),
+                    BlockReason::NoSourceKaki => (
+                        "blocked: no source KAKI",
+                        SecurityEventKind::PacketBlocked(*reason),
+                    ),
+                    BlockReason::InvalidChecksum => (
+                        "blocked: invalid KAKI checksum",
+                        SecurityEventKind::PacketBlocked(*reason),
+                    ),
+                    BlockReason::RevokedKaki => (
+                        "blocked: KAKI revoked",
+                        SecurityEventKind::PacketBlocked(*reason),
+                    ),
+                    BlockReason::ExpiredKaki => (
+                        "blocked: KAKI expired (SATTATU_MAX)",
+                        SecurityEventKind::KakiExpired,
+                    ),
+                    BlockReason::DeadB11 => (
+                        "blocked: B11 below minimum trust quantum",
+                        SecurityEventKind::PacketBlocked(*reason),
+                    ),
+                    BlockReason::FuzzyRateLimited => (
+                        "blocked: Fuzzy rate limit exceeded",
+                        SecurityEventKind::PacketBlocked(*reason),
+                    ),
+                    BlockReason::PolicyViolation(_) => (
+                        "blocked: policy violation",
+                        SecurityEventKind::PolicyViolation,
+                    ),
                 };
                 self.emit_event(SecurityEvent {
                     epoch: now_epoch,
@@ -151,14 +169,19 @@ impl HeptaSecSentinel {
                 let (detail, kind) = match reason {
                     BlockReason::NoSourceKaki => {
                         // Could be first-seen device
-                        ("quarantined: unknown source KAKI — first contact", SecurityEventKind::NewDeviceDetected)
+                        (
+                            "quarantined: unknown source KAKI — first contact",
+                            SecurityEventKind::NewDeviceDetected,
+                        )
                     }
-                    BlockReason::FuzzyRateLimited => {
-                        ("quarantined: suspicious Fuzzy B11 source", SecurityEventKind::PacketQuarantined(*reason))
-                    }
-                    _ => {
-                        ("quarantined: policy hold", SecurityEventKind::PacketQuarantined(*reason))
-                    }
+                    BlockReason::FuzzyRateLimited => (
+                        "quarantined: suspicious Fuzzy B11 source",
+                        SecurityEventKind::PacketQuarantined(*reason),
+                    ),
+                    _ => (
+                        "quarantined: policy hold",
+                        SecurityEventKind::PacketQuarantined(*reason),
+                    ),
                 };
                 self.emit_event(SecurityEvent {
                     epoch: now_epoch,
@@ -247,7 +270,7 @@ impl Default for HeptaSecSentinel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hepta_sec_firewall::{KakiPacket, PacketProtocol, FirewallVerdict, BlockReason};
+    use hepta_sec_firewall::{BlockReason, FirewallVerdict, KakiPacket, PacketProtocol};
 
     fn make_packet(src: Option<u32>) -> KakiPacket {
         KakiPacket {
@@ -298,7 +321,12 @@ mod tests {
         // B11 = 50 < 59 → Blocked
         sentinel.register_kaki_b11(0xCCCC_0003, 50, 900);
         let verdict = sentinel.inspect_packet(&make_packet(Some(0xCCCC_0003)), 1_000);
-        assert_eq!(verdict, FirewallVerdict::Block { reason: BlockReason::DeadB11 });
+        assert_eq!(
+            verdict,
+            FirewallVerdict::Block {
+                reason: BlockReason::DeadB11
+            }
+        );
         assert_eq!(sentinel.stats().blocked, 1);
         assert_eq!(sentinel.events().len(), 1);
         assert!(matches!(
@@ -333,7 +361,12 @@ mod tests {
         sentinel.register_kaki_b11(0xEEEE_0005, 200, 900);
         sentinel.revoke_kaki(0xEEEE_0005, 950);
         let verdict = sentinel.inspect_packet(&make_packet(Some(0xEEEE_0005)), 1_000);
-        assert_eq!(verdict, FirewallVerdict::Block { reason: BlockReason::RevokedKaki });
+        assert_eq!(
+            verdict,
+            FirewallVerdict::Block {
+                reason: BlockReason::RevokedKaki
+            }
+        );
         assert_eq!(sentinel.stats().blocked, 1);
     }
 
@@ -343,7 +376,12 @@ mod tests {
     fn no_kaki_blocked() {
         let mut sentinel = HeptaSecSentinel::new();
         let verdict = sentinel.inspect_packet(&make_packet(None), 1_000);
-        assert_eq!(verdict, FirewallVerdict::Block { reason: BlockReason::NoSourceKaki });
+        assert_eq!(
+            verdict,
+            FirewallVerdict::Block {
+                reason: BlockReason::NoSourceKaki
+            }
+        );
     }
 
     // ── Event ring caps at 500 ────────────────────────────────────────────────

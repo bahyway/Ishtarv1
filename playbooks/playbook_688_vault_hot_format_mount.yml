@@ -1,0 +1,187 @@
+# ── PB-688 — Format and mount vault_hot on uruk-node-vault ─────────────
+# Closes the gap the go-live runbook already names honestly: PB-265
+# creates the vault-librarian VM and enables Podman on it -- nothing
+# more. This playbook is deliberately NOT the PB-310-320 continuity
+# suite (RAID-Z2 across a physical NAS, a second machine `kish`) -- that
+# suite is real backup/disaster-recovery hardening, a separate concern
+# from "does the vault VM have a private place to keep real material."
+# This playbook does exactly the second thing, nothing more:
+#   1. Confirm the vault_hot disk (attached by playbook_320's
+#      vgcreate/lvcreate on the host, seen inside this guest as a plain
+#      block device) actually exists here -- refuses to guess a device
+#      name if it doesn't.
+#   2. Format it once (idempotent -- skips if already has a filesystem).
+#   3. Mount it at a real, private path, persisted in /etc/fstab.
+#   4. Lock down ownership/mode so it's fit to hold real key material.
+#
+# Deliberately does NOT touch kupru-vault or any Sargon/Gilgamesh
+# tooling: kupru-vault-cli only verifies a passport vault's identity
+# (see its own Cargo.toml description) -- it is not a general secrets
+# store, and claiming otherwise here would be exactly the kind of
+# "plausible sentence replacing a proof" GL-AGT-001 SS8 forbids. What
+# lives in this mount is a human decision (move the Gilgamesh Shamir
+# shares / Sargon passports here, out of any git-tracked path), not
+# something this playbook automates.
+- name: "PB-688 -- Format and mount vault_hot on uruk-node-vault"
+  hosts: enkidb_vault
+  become: true
+  vars:
+    vault_device: /dev/vdb
+    vault_mount_point: /vault/hot
+    vault_owner: bahyway
+    vault_group: bahyway
+    vault_mode: "0700"
+
+  tasks:
+    - name: "0.1 | Confirm the vault_hot device actually exists here"
+      ansible.builtin.stat:
+        path: "{{ vault_device }}"
+      register: vault_dev
+
+    - name: "FAIL | vault_hot device not found -- provision it first"
+      ansible.builtin.fail:
+        msg: >-
+          {{ vault_device }} does not exist on this VM. This playbook does
+          not create it -- that's playbook_320's job (vgcreate/lvcreate on
+          the uruk host, then attach the LV to this guest). Confirm that
+          step actually completed (check on the uruk host: `sudo vgs;
+          sudo lvs bahyvg`) before re-running this playbook.
+      when: not vault_dev.stat.exists
+
+    - name: "0.2 | Check whether the device already has a filesystem"
+      ansible.builtin.command: "blkid -o value -s TYPE {{ vault_device }}"
+      register: existing_fs
+      changed_when: false
+      failed_when: false
+
+    - name: "1.1 | Format vault_hot as XFS (only if it has no filesystem yet)"
+      ansible.builtin.filesystem:
+        fstype: xfs
+        dev: "{{ vault_device }}"
+      when: existing_fs.stdout | default('') == ''
+
+    - name: "1.2 | Refuse to reformat a device that already has real data"
+      ansible.builtin.debug:
+        msg: >-
+          {{ vault_device }} already has a {{ existing_fs.stdout }}
+          filesystem -- leaving it alone. Delete it yourself first if you
+          genuinely want to reformat (this playbook never does that for you).
+      when: existing_fs.stdout | default('') != ''
+
+    - name: "1.5 | Ensure /vault itself is traversable by {{ vault_owner }}"
+      # Real bug found live (this session, third bare-metal pass): SELinux
+      # was never the blocker on this run -- /vault (the parent of
+      # vault_mount_point, owned by lahamu:root, mode 0750) has no
+      # execute/traverse bit for "other", and {{ vault_owner }} is neither
+      # the owner nor in group root. No permission on vault_mount_point
+      # itself can compensate for a parent directory bahyway cannot even
+      # enter. This playbook deliberately never owns /vault (see header
+      # comment) -- this only adds the minimum traverse bit, it does not
+      # change ownership or grant read/list access to /vault's own
+      # contents.
+      ansible.builtin.file:
+        path: "{{ vault_mount_point | dirname }}"
+        state: directory
+        mode: "o+x"
+
+    - name: "2.1 | Ensure the mount point exists"
+      ansible.builtin.file:
+        path: "{{ vault_mount_point }}"
+        state: directory
+        owner: "{{ vault_owner }}"
+        group: "{{ vault_group }}"
+        mode: "{{ vault_mode }}"
+
+    - name: "2.2 | Mount vault_hot and persist it in /etc/fstab"
+      ansible.posix.mount:
+        path: "{{ vault_mount_point }}"
+        src: "{{ vault_device }}"
+        fstype: xfs
+        state: mounted
+
+    - name: "2.3 | Re-apply ownership/mode after mount (mount can reset it to root:root)"
+      ansible.builtin.file:
+        path: "{{ vault_mount_point }}"
+        state: directory
+        owner: "{{ vault_owner }}"
+        group: "{{ vault_group }}"
+        mode: "{{ vault_mode }}"
+
+    - name: "2.4 | Check SELinux enforcement status"
+      # Real bug found live (this session): standard Unix ownership/mode
+      # were reported correct by 2.3, but the write-test in 3.1 still got
+      # Permission denied. Same failure family as playbook_200's :Z/:z
+      # SELinux mount bug already fixed elsewhere in this repo -- Unix
+      # permissions and SELinux are two separate, independently-enforced
+      # layers, and a freshly-formatted XFS filesystem mounted under a
+      # path (/vault) that no existing policy covers gets no sane label
+      # at all, which denies writes regardless of chown/chmod.
+      ansible.builtin.command: getenforce
+      register: selinux_status
+      changed_when: false
+      failed_when: false
+
+    - name: "2.4b | Ensure semanage is available (only if SELinux is enforcing)"
+      # Real bug found live (this session, second bare-metal pass): SELinux
+      # being Enforcing does not imply `semanage` is installed -- it ships
+      # in policycoreutils-python-utils, a separate package not present on
+      # this minimal Fedora guest, so 2.5 failed with ENOENT before it ever
+      # got to the actual fcontext/rc check.
+      ansible.builtin.dnf:
+        name: policycoreutils-python-utils
+        state: present
+      when: selinux_status.stdout | default('') == 'Enforcing'
+
+    - name: "2.5 | Give /vault a persistent SELinux context (only if SELinux is enforcing)"
+      ansible.builtin.command: >-
+        semanage fcontext -a -t user_home_t "{{ vault_mount_point }}(/.*)?"
+      register: fcontext_add
+      changed_when: "'already defined' not in (fcontext_add.stderr | default(''))"
+      failed_when: >-
+        fcontext_add.rc != 0 and 'already defined' not in (fcontext_add.stderr | default(''))
+      when: selinux_status.stdout | default('') == 'Enforcing'
+
+    - name: "2.6 | Apply the context to the actual mounted files (restorecon)"
+      ansible.builtin.command: "restorecon -Rv {{ vault_mount_point }}"
+      register: restorecon_out
+      changed_when: "'Relabeled' in restorecon_out.stdout"
+      when: selinux_status.stdout | default('') == 'Enforcing'
+
+    - name: "3.1 | Confirm real, mounted, writable"
+      block:
+        - name: "3.1a | The actual write test"
+          ansible.builtin.shell: |
+            set -e
+            touch {{ vault_mount_point }}/.pb688_write_test
+            rm -f {{ vault_mount_point }}/.pb688_write_test
+            df -h {{ vault_mount_point }} | tail -1
+          become: true
+          become_user: "{{ vault_owner }}"
+          register: confirm
+          changed_when: false
+      rescue:
+        - name: "3.1b | Write test failed -- gather the real cause instead of guessing"
+          ansible.builtin.shell: |
+            echo "--- ls -laZ {{ vault_mount_point }} ---"
+            ls -laZ {{ vault_mount_point }}
+            echo "--- id {{ vault_owner }} ---"
+            id {{ vault_owner }}
+            echo "--- getenforce ---"
+            getenforce
+          register: diag
+          changed_when: false
+        - name: "3.1c | Fail loudly with the diagnostic attached"
+          ansible.builtin.fail:
+            msg: >-
+              {{ vault_mount_point }} write test still failed after the
+              ownership + SELinux fix (2.3-2.6). Diagnostic output:
+              {{ diag.stdout }}
+
+    - name: report
+      ansible.builtin.debug:
+        msg: >-
+          {{ vault_mount_point }} is real, mounted, and writable by
+          {{ vault_owner }}: {{ confirm.stdout }}.
+          Move real key material here by hand when ready (e.g. the
+          Gilgamesh Shamir shares) -- this playbook only prepares the
+          place, it does not move anything into it.

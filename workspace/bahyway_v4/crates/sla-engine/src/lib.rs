@@ -40,15 +40,15 @@
 //!
 //! GEM threshold (go-live safe) = 180/240 (75%).
 
-pub mod requirements;
-pub mod profile;
 pub mod evaluator;
 pub mod gui;
+pub mod profile;
+pub mod requirements;
 
-pub use requirements::{ComplianceDomain, SlaRequirement, ALL_REQUIREMENTS, requirement_by_id};
-pub use profile::{AppTopology, MaturityLevel, SlaProfile};
-pub use evaluator::{ComplianceState, ComplianceCheckResult, DomainScore, SlaReport, SlaEvaluator};
+pub use evaluator::{ComplianceCheckResult, ComplianceState, DomainScore, SlaEvaluator, SlaReport};
 pub use gui::SlaGuiRenderer;
+pub use profile::{AppTopology, MaturityLevel, SlaProfile};
+pub use requirements::{requirement_by_id, ComplianceDomain, SlaRequirement, ALL_REQUIREMENTS};
 
 /// B11 quality divisor — must match ADR-001 (QUALITY_DIVISOR = 240).
 pub const QUALITY_DIVISOR: u8 = 240;

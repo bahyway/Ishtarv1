@@ -10,47 +10,47 @@
 #[repr(u8)]
 pub enum EventCause {
     // ── Particle lifecycle ─────────────────────────────────────────────────
-    KakiBorn                   = 0x01, // KAKI minted; particle enters existence
+    KakiBorn = 0x01, // KAKI minted; particle enters existence
 
     // ── Pauli Exclusion Gate outcomes (§7, four-gate sequence) ────────────
-    AdadPass                   = 0x10, // ADAD temporal gate — passed
-    AdadFail                   = 0x11, // ADAD temporal gate — rejected (duplicate breath)
-    AnuPass                    = 0x12, // ANU authority gate — passed
-    AnuFail                    = 0x13, // ANU authority gate — rejected (insufficient authority)
-    MardukPass                 = 0x14, // MARDUK transform-lock gate — passed
-    MardukFail                 = 0x15, // MARDUK transform-lock gate — rejected (lock conflict)
-    ShamashPass                = 0x16, // SHAMASH state gate — passed (particle alive)
-    ShamashFail                = 0x17, // SHAMASH state gate — rejected (dead particle)
+    AdadPass = 0x10,    // ADAD temporal gate — passed
+    AdadFail = 0x11,    // ADAD temporal gate — rejected (duplicate breath)
+    AnuPass = 0x12,     // ANU authority gate — passed
+    AnuFail = 0x13,     // ANU authority gate — rejected (insufficient authority)
+    MardukPass = 0x14,  // MARDUK transform-lock gate — passed
+    MardukFail = 0x15,  // MARDUK transform-lock gate — rejected (lock conflict)
+    ShamashPass = 0x16, // SHAMASH state gate — passed (particle alive)
+    ShamashFail = 0x17, // SHAMASH state gate — rejected (dead particle)
 
     // ── Orbital assignment ─────────────────────────────────────────────────
-    OrbitAssigned              = 0x20, // PA-14 orbit ring computed and recorded
+    OrbitAssigned = 0x20, // PA-14 orbit ring computed and recorded
 
     // ── Musarû security events ─────────────────────────────────────────────
-    MusaruMalwareDetected      = 0x30, // pre-extraction ZIP byte scan hit malware signature
+    MusaruMalwareDetected = 0x30, // pre-extraction ZIP byte scan hit malware signature
     MusaruProximityDegradation = 0x31, // particle color degraded by proximity to infected zone
-    MusaruLateQuarantine       = 0x32, // post-extraction late discovery; batch moved to EnkiQDB
+    MusaruLateQuarantine = 0x32,  // post-extraction late discovery; batch moved to EnkiQDB
 
     // ── Diagnosis Engine color events ──────────────────────────────────────
-    DiagnosisWatch             = 0x40, // color drift first detected (watch level)
-    DiagnosisWarning           = 0x41, // drift crossed warning threshold
-    DiagnosisCritical          = 0x42, // drift crossed critical threshold — R channel dominant
+    DiagnosisWatch = 0x40,    // color drift first detected (watch level)
+    DiagnosisWarning = 0x41,  // drift crossed warning threshold
+    DiagnosisCritical = 0x42, // drift crossed critical threshold — R channel dominant
 
     // ── Five-tier EnkiDB tier transitions ─────────────────────────────────
-    SdbValidationPass          = 0x50, // EnkiSDB sweep passed; particle promoted to EnkiODB
-    SdbValidationFail          = 0x51, // EnkiSDB sweep failed; particle sent to EnkiQDB
-    EnkidbTransactionCommit    = 0x52, // GUI transaction committed through EnkiDB→EnkiODB
-    QuarantineMove             = 0x53, // particle archived in EnkiQDB (permanent)
-    ArchiveMove                = 0x54, // particle archived in EnkiDW (read-only cold storage)
+    SdbValidationPass = 0x50, // EnkiSDB sweep passed; particle promoted to EnkiODB
+    SdbValidationFail = 0x51, // EnkiSDB sweep failed; particle sent to EnkiQDB
+    EnkidbTransactionCommit = 0x52, // GUI transaction committed through EnkiDB→EnkiODB
+    QuarantineMove = 0x53,    // particle archived in EnkiQDB (permanent)
+    ArchiveMove = 0x54,       // particle archived in EnkiDW (read-only cold storage)
 
     // ── BlackBox Station / Storage Sector / Steward loop-back ──────────────
-    BlackBoxRoutedHarmful      = 0x60, // BlackBox scan confirmed harmful; routed to Storage Sector
-    BlackBoxRoutedFuzzy        = 0x61, // BlackBox scan inconclusive; routed to EnkiQDB for Steward review
-    StorageSectorMove          = 0x62, // particle sealed in the hardware-isolated Storage Sector (terminal)
-    StewardResolvedRequeue     = 0x63, // Data Steward cleared a fuzzy particle; requeued into EnkiSDB
+    BlackBoxRoutedHarmful = 0x60, // BlackBox scan confirmed harmful; routed to Storage Sector
+    BlackBoxRoutedFuzzy = 0x61, // BlackBox scan inconclusive; routed to EnkiQDB for Steward review
+    StorageSectorMove = 0x62, // particle sealed in the hardware-isolated Storage Sector (terminal)
+    StewardResolvedRequeue = 0x63, // Data Steward cleared a fuzzy particle; requeued into EnkiSDB
 
     // ── NINSUN advisory / Data Steward review (Stage 2b, §BC-NINSUN-001) ───
-    NinsunAdvisoryConfirmed    = 0x64, // Data Steward confirmed a NINSUN_REFINE proposal
-    NinsunAdvisoryRejected     = 0x65, // Data Steward rejected a NINSUN_REFINE proposal
+    NinsunAdvisoryConfirmed = 0x64, // Data Steward confirmed a NINSUN_REFINE proposal
+    NinsunAdvisoryRejected = 0x65,  // Data Steward rejected a NINSUN_REFINE proposal
 
     // ── Error Registry / Journal + Unified Attribute Type Registry ─────────
     // (2026-07-24, EnkiMDB internal registries -- see enkidb_journal::
@@ -60,29 +60,29 @@ pub enum EventCause {
     // is that same Identity-Kaki -- exactly the existing "N events, one
     // target" shape enkidb-journal already uses elsewhere, not a new
     // mechanism.
-    ErrorTypeRegistered        = 0x70, // a new ErrorType Particle born (Registry write)
-    ErrorOccurred              = 0x71, // an ErrorOccurrence logged against an existing ErrorType
-    ErrorTypeUnknown           = 0x72, // an occurrence referenced an ErrorType that was never registered
-    AttrTypeRegistered         = 0x73, // a new canonical AttrType Particle born (Registry write)
+    ErrorTypeRegistered = 0x70, // a new ErrorType Particle born (Registry write)
+    ErrorOccurred = 0x71,       // an ErrorOccurrence logged against an existing ErrorType
+    ErrorTypeUnknown = 0x72,    // an occurrence referenced an ErrorType that was never registered
+    AttrTypeRegistered = 0x73,  // a new canonical AttrType Particle born (Registry write)
 
     // ── Passport audit trail (2026-07-29) ──────────────────────────────────
-    PassportMinted             = 0x74, // a SargonPassport was issued; audit-metadata-only record born
+    PassportMinted = 0x74, // a SargonPassport was issued; audit-metadata-only record born
 
     // ── AnuGovernor run-confirmation registry (2026-07-29) ─────────────────
-    AnuGovernorRunRecorded     = 0x75, // one AnuGovernor corpus run's outcome + operator identity recorded
+    AnuGovernorRunRecorded = 0x75, // one AnuGovernor corpus run's outcome + operator identity recorded
 
     // ── KAKI-at-authoring-time (ADR-014, 2026-07-30) ────────────────────────
     // A playbook is a Particle: it gets a real Identity-Kaki (role=Parzu) the
     // moment it's a real, numbered file in playbooks/ -- see
     // enkimdb::pb_emitter::PbEmitter / enkimdb::writenode::WriteNode::ingest_pb.
-    PbRegistered               = 0x76, // a new, numbered playbook Particle born (Registry write)
+    PbRegistered = 0x76, // a new, numbered playbook Particle born (Registry write)
     // A document's supersession is an APPEND on its OWN existing Identity-
     // Kaki (never a new Identity, never a delete) -- see
     // enkiddb::emitter::DocumentEmitter::emit_supersession /
     // enkiddb::writenode::WriteNode::supersede_document. This is the
     // mechanism ADR-014 Decision 2 promised: "why did v4.5 replace v4.4"
     // becomes a queryable hist.reason on this event, not lost history.
-    DocumentSuperseded         = 0x77, // a document's prior version was recorded as superseded, with a reason
+    DocumentSuperseded = 0x77, // a document's prior version was recorded as superseded, with a reason
 
     // ── Girsu IDE "mark as final" KAKI generator (2026-07-30) ──────────────
     // A .akk/.way/.tmpl tablet mints its own Identity-Kaki (role=Parzu) the
@@ -91,7 +91,7 @@ pub enum EventCause {
     // ingest_tablet. One cause covers all three kinds; tablet.kind (an EAV
     // attribute, not a separate cause per language) is what distinguishes
     // them at query time.
-    TabletRegistered           = 0x78, // a .akk/.way/.tmpl tablet Particle born (Girsu "mark as final")
+    TabletRegistered = 0x78, // a .akk/.way/.tmpl tablet Particle born (Girsu "mark as final")
 
     // ── ODB -> EnkiDB Golden Records promotion (2026-07-31) ─────────────────
     // An Active EnkiODB particle was committed into EnkiDb as a real Golden
@@ -99,7 +99,7 @@ pub enum EventCause {
     // straight to EnkiDW (only EnkiDB's own snapshot/partition job feeds
     // EnkiDW); this is the ODB -> EnkiDB(Golden) hop specifically. See
     // enkiodb::odb_store::OdbStore::promote_to_golden.
-    OdbPromotedToGolden        = 0x79, // an Active ODB particle was committed to EnkiDb as a Golden Record
+    OdbPromotedToGolden = 0x79, // an Active ODB particle was committed to EnkiDb as a Golden Record
 
     // ── Data Steward's third QDB-review outcome (2026-07-31) ────────────────
     // QuarantineReviewQueue (data-steward-station) already had two of its
@@ -108,7 +108,7 @@ pub enum EventCause {
     // (StorageSectorMove, 0x62). This is the third: the Steward judges the
     // quarantined particle clean enough to skip re-validation entirely and
     // land straight in EnkiODB as Active.
-    StewardPromotedToOdb       = 0x7A, // Steward judged a quarantined particle clean -> straight to ODB, no re-validation
+    StewardPromotedToOdb = 0x7A, // Steward judged a quarantined particle clean -> straight to ODB, no re-validation
 
     // ── Pattern-as-Particle migration (2026-07-31, ADR-016) ─────────────────
     // A discovered pattern (nisaba::discovery::DiscoveredPattern) was minted
@@ -116,7 +116,7 @@ pub enum EventCause {
     // Hot/Warm/Cold/Crystallized store, per the law that no particle lives
     // outside the 7 Types EnkiDB. See enkimdb::pattern_emitter::PatternEmitter
     // / enkimdb::writenode::WriteNode::ingest_pattern.
-    PatternRegistered          = 0x7B, // a discovered Pattern Particle born (EnkiMDB write)
+    PatternRegistered = 0x7B, // a discovered Pattern Particle born (EnkiMDB write)
 
     // ── Multi-location playbook catalog (2026-08-02) ────────────────────────
     // A neutral cross-reference between two already-minted documents --
@@ -127,7 +127,7 @@ pub enum EventCause {
     // anu_governor::pb_catalog uses to graph playbook sightings across
     // multiple historical/backup locations without silently picking a
     // winner -- that stays the Architect's call.
-    DocumentCrossReferenced    = 0x7C, // a neutral link between two documents (location, unreconciled collision)
+    DocumentCrossReferenced = 0x7C, // a neutral link between two documents (location, unreconciled collision)
 }
 
 impl EventCause {
@@ -179,7 +179,7 @@ impl EventCause {
             0x7A => Some(Self::StewardPromotedToOdb),
             0x7B => Some(Self::PatternRegistered),
             0x7C => Some(Self::DocumentCrossReferenced),
-            _    => None,
+            _ => None,
         }
     }
 
@@ -187,7 +187,10 @@ impl EventCause {
     pub fn is_gate_failure(self) -> bool {
         matches!(
             self,
-            Self::AdadFail | Self::AnuFail | Self::MardukFail | Self::ShamashFail
+            Self::AdadFail
+                | Self::AnuFail
+                | Self::MardukFail
+                | Self::ShamashFail
                 | Self::SdbValidationFail
         )
     }
@@ -196,8 +199,12 @@ impl EventCause {
     pub fn is_quarantine(self) -> bool {
         matches!(
             self,
-            Self::MusaruMalwareDetected | Self::MusaruLateQuarantine | Self::QuarantineMove
-                | Self::BlackBoxRoutedHarmful | Self::BlackBoxRoutedFuzzy | Self::StorageSectorMove
+            Self::MusaruMalwareDetected
+                | Self::MusaruLateQuarantine
+                | Self::QuarantineMove
+                | Self::BlackBoxRoutedHarmful
+                | Self::BlackBoxRoutedFuzzy
+                | Self::StorageSectorMove
         )
     }
 }
@@ -210,16 +217,23 @@ mod tests {
     fn round_trip_all_variants() {
         let variants = [
             EventCause::KakiBorn,
-            EventCause::AdadPass, EventCause::AdadFail,
-            EventCause::AnuPass,  EventCause::AnuFail,
-            EventCause::MardukPass, EventCause::MardukFail,
-            EventCause::ShamashPass, EventCause::ShamashFail,
+            EventCause::AdadPass,
+            EventCause::AdadFail,
+            EventCause::AnuPass,
+            EventCause::AnuFail,
+            EventCause::MardukPass,
+            EventCause::MardukFail,
+            EventCause::ShamashPass,
+            EventCause::ShamashFail,
             EventCause::OrbitAssigned,
             EventCause::MusaruMalwareDetected,
             EventCause::MusaruProximityDegradation,
             EventCause::MusaruLateQuarantine,
-            EventCause::DiagnosisWatch, EventCause::DiagnosisWarning, EventCause::DiagnosisCritical,
-            EventCause::SdbValidationPass, EventCause::SdbValidationFail,
+            EventCause::DiagnosisWatch,
+            EventCause::DiagnosisWarning,
+            EventCause::DiagnosisCritical,
+            EventCause::SdbValidationPass,
+            EventCause::SdbValidationFail,
             EventCause::EnkidbTransactionCommit,
             EventCause::QuarantineMove,
             EventCause::ArchiveMove,

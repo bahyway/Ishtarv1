@@ -20,8 +20,8 @@
 
 pub mod odb_store;
 
-pub use odb_store::{OdbStore, OdbParticle, OdbStatus, OdbSource, OdbStats};
+pub use odb_store::{OdbParticle, OdbSource, OdbStats, OdbStatus, OdbStore};
 
 pub mod prelude {
-    pub use super::odb_store::{OdbStore, OdbParticle, OdbStatus, OdbSource};
+    pub use super::odb_store::{OdbParticle, OdbSource, OdbStatus, OdbStore};
 }

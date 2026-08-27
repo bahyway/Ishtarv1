@@ -21,8 +21,8 @@
 //! root = "/run/media/bfadam/VMLAB/__All_BahyWay/Forge_Daily_Backups/20260729"
 //! ```
 
-use serde::Deserialize;
 use anu_governor::pb_catalog::{catalog_playbooks, CatalogLocation};
+use serde::Deserialize;
 use std::path::PathBuf;
 
 #[derive(Deserialize)]
@@ -39,7 +39,9 @@ struct CliConfig {
 }
 
 fn main() {
-    let config_path = std::env::args().nth(1).unwrap_or_else(|| "pb_catalog.toml".to_string());
+    let config_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "pb_catalog.toml".to_string());
 
     let text = match std::fs::read_to_string(&config_path) {
         Ok(t) => t,
@@ -63,16 +65,26 @@ fn main() {
     let locations: Vec<CatalogLocation> = cfg
         .locations
         .into_iter()
-        .map(|l| CatalogLocation { name: l.name, root: PathBuf::from(l.root) })
+        .map(|l| CatalogLocation {
+            name: l.name,
+            root: PathBuf::from(l.root),
+        })
         .collect();
 
-    println!("𒁾 pb-catalog-cli — scanning {} location(s)", locations.len());
+    println!(
+        "𒁾 pb-catalog-cli — scanning {} location(s)",
+        locations.len()
+    );
     for loc in &locations {
         println!("   · {} → {}", loc.name, loc.root.display());
     }
     println!();
 
-    let log = catalog_playbooks(&locations, &PathBuf::from(&cfg.registry_path), &PathBuf::from(&cfg.enkiddb_output_root));
+    let log = catalog_playbooks(
+        &locations,
+        &PathBuf::from(&cfg.registry_path),
+        &PathBuf::from(&cfg.enkiddb_output_root),
+    );
     for line in &log {
         println!("{line}");
     }

@@ -38,10 +38,10 @@ pub const STAGE_NAMES: [&str; 6] = [
 
 #[derive(Clone)]
 pub struct DocPulseCfg {
-    pub repo_path: String,       // the input field: any BahyWay repo
-    pub message: String,         // commit message
-    pub limit_mb: u64,           // quarantine threshold (default 90)
-    pub archive_dir: String,     // OUTSIDE the repo
+    pub repo_path: String,           // the input field: any BahyWay repo
+    pub message: String,             // commit message
+    pub limit_mb: u64,               // quarantine threshold (default 90)
+    pub archive_dir: String,         // OUTSIDE the repo
     pub ingest_manifest_dir: String, // where the JSONL audit copy lands
     pub chronicle_dir: String,
     /// Where this run's real EnkiDDB Tigris generation is materialized
@@ -96,13 +96,21 @@ fn expand_home(p: &str) -> String {
 }
 
 fn git(repo: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git").arg("-C").arg(repo).args(args).output()
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(args)
+        .output()
         .map_err(|e| format!("git spawn failed: {e}"))?;
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
     if out.status.success() {
         Ok(stdout)
     } else {
-        Err(format!("git {:?}: {}", args, String::from_utf8_lossy(&out.stderr)))
+        Err(format!(
+            "git {:?}: {}",
+            args,
+            String::from_utf8_lossy(&out.stderr)
+        ))
     }
 }
 
@@ -125,11 +133,19 @@ struct DocKakiRegistryLine {
 /// error (first pulse ever against this repo): returns an empty map.
 fn load_doc_kaki_registry(path: &Path) -> HashMap<String, [u8; 16]> {
     let mut out = HashMap::new();
-    let Ok(text) = std::fs::read_to_string(path) else { return out };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return out;
+    };
     for line in text.lines() {
-        let Ok(rec) = serde_json::from_str::<DocKakiRegistryLine>(line) else { continue };
-        let Ok(raw) = hex::decode(&rec.kaki_hex) else { continue };
-        let Ok(bytes): Result<[u8; 16], _> = raw.try_into() else { continue };
+        let Ok(rec) = serde_json::from_str::<DocKakiRegistryLine>(line) else {
+            continue;
+        };
+        let Ok(raw) = hex::decode(&rec.kaki_hex) else {
+            continue;
+        };
+        let Ok(bytes): Result<[u8; 16], _> = raw.try_into() else {
+            continue;
+        };
         out.insert(rec.path, bytes);
     }
     out
@@ -157,7 +173,9 @@ pub fn spawn_docpulse(
 fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
     let chr = Chronicle::open(&cfg.chronicle_dir).ok();
     let send = |ev: RunnerEvent| {
-        if let Some(c) = &chr { let _ = c.record(&ev); }
+        if let Some(c) = &chr {
+            let _ = c.record(&ev);
+        }
         let _ = tx.send(ev);
     };
     let log = |s: String| send(RunnerEvent::Log(s));
@@ -166,17 +184,41 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
 
     // Guard: archive OUTSIDE the repo; branch devVM
     if Path::new(&archive_dir).starts_with(&repo) {
-        send(RunnerEvent::PbFailed(0, major(&repo, "guard", "ArchiveInsideRepo",
-            "ARCHIVE_DIR must be outside the repository")));
-        wait_abort(&ctl_rx, &send); return;
+        send(RunnerEvent::PbFailed(
+            0,
+            major(
+                &repo,
+                "guard",
+                "ArchiveInsideRepo",
+                "ARCHIVE_DIR must be outside the repository",
+            ),
+        ));
+        wait_abort(&ctl_rx, &send);
+        return;
     }
     match git(&repo, &["rev-parse", "--abbrev-ref", "HEAD"]) {
         Ok(b) if b.trim() == "devVM" => log("✓ on branch devVM".into()),
-        Ok(b) => { send(RunnerEvent::PbFailed(0, major(&repo, "branch guard",
-                 "WrongBranch", &format!("expected devVM, on '{}'", b.trim()))));
-                 wait_abort(&ctl_rx, &send); return; }
-        Err(e) => { send(RunnerEvent::PbFailed(0, major(&repo, "git", "NotARepo", &e)));
-                 wait_abort(&ctl_rx, &send); return; }
+        Ok(b) => {
+            send(RunnerEvent::PbFailed(
+                0,
+                major(
+                    &repo,
+                    "branch guard",
+                    "WrongBranch",
+                    &format!("expected devVM, on '{}'", b.trim()),
+                ),
+            ));
+            wait_abort(&ctl_rx, &send);
+            return;
+        }
+        Err(e) => {
+            send(RunnerEvent::PbFailed(
+                0,
+                major(&repo, "git", "NotARepo", &e),
+            ));
+            wait_abort(&ctl_rx, &send);
+            return;
+        }
     }
 
     // ── Stage: HALA REFORM ───────────────────────────────────────
@@ -193,29 +235,43 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
         let tracked: Vec<&str> = listing.lines().collect();
         let to_untrack = paths_to_untrack(&tracked);
         if !to_untrack.is_empty() {
-            log(format!("𒁾 untracking {} already-committed path(s) matching .gitignore fences", to_untrack.len()));
+            log(format!(
+                "𒁾 untracking {} already-committed path(s) matching .gitignore fences",
+                to_untrack.len()
+            ));
             let mut args = vec!["rm", "-q", "--cached", "--"];
             args.extend(to_untrack.iter().map(|s| s.as_str()));
             let _ = git(&repo, &args);
         }
     }
     let stamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
-    let repo_name = Path::new(&repo).file_name()
-        .map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "repo".into());
+    let repo_name = Path::new(&repo)
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "repo".into());
     let dest = PathBuf::from(&archive_dir).join(format!("{repo_name}_{stamp}"));
     let mut moved = 0usize;
 
     // tracked + untracked-but-addable
-    for list_args in [vec!["ls-files"], vec!["ls-files", "--others", "--exclude-standard"]] {
+    for list_args in [
+        vec!["ls-files"],
+        vec!["ls-files", "--others", "--exclude-standard"],
+    ] {
         if let Ok(listing) = git(&repo, &list_args) {
             for rel in listing.lines() {
                 let full = Path::new(&repo).join(rel);
-                let Ok(md) = std::fs::metadata(&full) else { continue };
-                if !md.is_file() { continue; }
+                let Ok(md) = std::fs::metadata(&full) else {
+                    continue;
+                };
+                if !md.is_file() {
+                    continue;
+                }
                 let mb = md.len() / (1024 * 1024);
                 if mb > cfg.limit_mb {
                     let target = dest.join(rel);
-                    if let Some(p) = target.parent() { let _ = std::fs::create_dir_all(p); }
+                    if let Some(p) = target.parent() {
+                        let _ = std::fs::create_dir_all(p);
+                    }
                     if std::fs::rename(&full, &target).is_ok() {
                         let _ = git(&repo, &["rm", "-q", "--cached", "--ignore-unmatch", rel]);
                         append(&dest.join("MANIFEST.txt"), &format!("{mb} MB\t{rel}\n"));
@@ -226,8 +282,11 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
             }
         }
     }
-    log(if moved > 0 { format!("✓ reform: {moved} file(s) → {}", dest.display()) }
-        else { "✓ records already clean".into() });
+    log(if moved > 0 {
+        format!("✓ reform: {moved} file(s) → {}", dest.display())
+    } else {
+        "✓ records already clean".into()
+    });
     send(RunnerEvent::PbOk(0));
 
     // ── Stage: COMMIT ────────────────────────────────────────────
@@ -238,8 +297,15 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
     // commit happened to change and mislabel those docs as this pulse's output.
     let mut committed_now = false;
     if dirty.trim().is_empty() {
-        send(RunnerEvent::PbWarned(1, warn_ev(&repo, "commit",
-            "NothingToCommit", "working tree clean — proceeding by law")));
+        send(RunnerEvent::PbWarned(
+            1,
+            warn_ev(
+                &repo,
+                "commit",
+                "NothingToCommit",
+                "working tree clean — proceeding by law",
+            ),
+        ));
     } else {
         let _ = git(&repo, &["add", "."]);
         match git(&repo, &["commit", "-m", &cfg.message]) {
@@ -248,15 +314,25 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
                 send(RunnerEvent::PbOk(1));
                 committed_now = true;
             }
-            Err(e) => { send(RunnerEvent::PbFailed(1, major(&repo, "commit", "CommitFailed", &e)));
-                        if !architect_continues(&ctl_rx, &send) { return; } }
+            Err(e) => {
+                send(RunnerEvent::PbFailed(
+                    1,
+                    major(&repo, "commit", "CommitFailed", &e),
+                ));
+                if !architect_continues(&ctl_rx, &send) {
+                    return;
+                }
+            }
         }
     }
 
     // ── Stage: BLOB AUDIT (halts on major) ───────────────────────
     send(RunnerEvent::PbStarted(2));
-    let range = if git(&repo, &["rev-parse", "--verify", "origin/devVM"]).is_ok()
-        { "origin/devVM..HEAD" } else { "HEAD" };
+    let range = if git(&repo, &["rev-parse", "--verify", "origin/devVM"]).is_ok() {
+        "origin/devVM..HEAD"
+    } else {
+        "HEAD"
+    };
     match audit_blobs(&repo, range, 95 * 1024 * 1024) {
         Ok(big) if big.is_empty() => {
             log("✓ no oversized blobs in outgoing history".into());
@@ -264,32 +340,47 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
         }
         Ok(big) => {
             let msg = format!("oversized blobs in outgoing history: {}", big.join("; "));
-            send(RunnerEvent::PbFailed(2, major(&repo, "blob audit", "OversizedBlob", &msg)));
+            send(RunnerEvent::PbFailed(
+                2,
+                major(&repo, "blob audit", "OversizedBlob", &msg),
+            ));
             // HALT — Architect decides (Skip is NOT offered meaningfully here;
             // Retry after manual amend, or Abort).
-            if !architect_continues(&ctl_rx, &send) { return; }
+            if !architect_continues(&ctl_rx, &send) {
+                return;
+            }
         }
         Err(e) => {
-            send(RunnerEvent::PbFailed(2, major(&repo, "blob audit", "AuditFailed", &e)));
-            if !architect_continues(&ctl_rx, &send) { return; }
+            send(RunnerEvent::PbFailed(
+                2,
+                major(&repo, "blob audit", "AuditFailed", &e),
+            ));
+            if !architect_continues(&ctl_rx, &send) {
+                return;
+            }
         }
     }
 
     // ── Stage: PULSE devVM → main ────────────────────────────────
     send(RunnerEvent::PbStarted(3));
     for (label, args) in [
-        ("push devVM",  vec!["push", "origin", "devVM"]),
+        ("push devVM", vec!["push", "origin", "devVM"]),
         ("checkout main", vec!["checkout", "main"]),
-        ("pull main",   vec!["pull", "origin", "main"]),
+        ("pull main", vec!["pull", "origin", "main"]),
         ("merge devVM", vec!["merge", "devVM", "--no-edit"]),
-        ("push main",   vec!["push", "origin", "main"]),
+        ("push main", vec!["push", "origin", "main"]),
         ("back to devVM", vec!["checkout", "devVM"]),
     ] {
         match git(&repo, &args) {
             Ok(_) => log(format!("✓ {label}")),
             Err(e) => {
-                send(RunnerEvent::PbFailed(3, major(&repo, label, "GitStepFailed", &e)));
-                if !architect_continues(&ctl_rx, &send) { return; }
+                send(RunnerEvent::PbFailed(
+                    3,
+                    major(&repo, label, "GitStepFailed", &e),
+                ));
+                if !architect_continues(&ctl_rx, &send) {
+                    return;
+                }
             }
         }
     }
@@ -312,21 +403,34 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
         }
         return;
     }
-    let commit = git(&repo, &["rev-parse", "HEAD"]).unwrap_or_default().trim().to_string();
+    let commit = git(&repo, &["rev-parse", "HEAD"])
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     // `git show --name-only HEAD` (not `diff HEAD~1..HEAD`) also works on a
     // repo's very first commit, where `HEAD~1` doesn't exist and the old
     // `diff` form would silently fail and produce an empty (not erroring)
     // manifest via `unwrap_or_default()`.
-    let changed = git(&repo, &["show", "--pretty=format:", "--name-only", "HEAD"]).unwrap_or_default();
-    let qualifying: Vec<String> = changed.lines().filter(|p| !p.trim().is_empty()).filter(|p| {
-        let l = p.to_lowercase();
-        l.ends_with(".md") || l.ends_with(".akk") || l.ends_with(".svg")
-            || l.ends_with(".png") || l.ends_with(".toml") || l.ends_with(".hepta")
-    }).map(str::to_string).collect();
+    let changed =
+        git(&repo, &["show", "--pretty=format:", "--name-only", "HEAD"]).unwrap_or_default();
+    let qualifying: Vec<String> = changed
+        .lines()
+        .filter(|p| !p.trim().is_empty())
+        .filter(|p| {
+            let l = p.to_lowercase();
+            l.ends_with(".md")
+                || l.ends_with(".akk")
+                || l.ends_with(".svg")
+                || l.ends_with(".png")
+                || l.ends_with(".toml")
+                || l.ends_with(".hepta")
+        })
+        .map(str::to_string)
+        .collect();
 
     let _ = std::fs::create_dir_all(&cfg.ingest_manifest_dir);
-    let manifest_path = PathBuf::from(&cfg.ingest_manifest_dir)
-        .join(format!("enkiddb_ingest_{stamp}.jsonl"));
+    let manifest_path =
+        PathBuf::from(&cfg.ingest_manifest_dir).join(format!("enkiddb_ingest_{stamp}.jsonl"));
     // Which path last minted which Kaki -- read BEFORE this run's own
     // mints so a document promoted again under the same path is
     // recognized as a new version of something real (supersede_document),
@@ -339,10 +443,14 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
     let mut n = 0usize;
     for (i, rel) in qualifying.iter().enumerate() {
         let full = Path::new(&repo).join(rel);
-        let Ok(bytes) = std::fs::read(&full) else { continue };
+        let Ok(bytes) = std::fs::read(&full) else {
+            continue;
+        };
         let rec = IngestRecord {
             ts: chrono::Utc::now().to_rfc3339(),
-            repo: &repo_name, commit: &commit, path: rel,
+            repo: &repo_name,
+            commit: &commit,
+            path: rel,
             bytes: bytes.len() as u64,
             sha256: sha256_hex(&bytes),
             kaki_type_hint: "document-particle-precursor",
@@ -365,8 +473,16 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
                 if let Some(old_bytes) = previous_kakis.get(rel) {
                     if let Ok(old_raw) = Kaki::from_bytes(*old_bytes) {
                         if let Ok(old_kaki) = IdentityKaki::try_from_kaki(old_raw) {
-                            write_node.supersede_document(old_kaki, kaki, &cfg.message, i as u32 + 1);
-                            log(format!("  ↻ superseded prior version of {rel}: {old_kaki} → {kaki} ({})", cfg.message));
+                            write_node.supersede_document(
+                                old_kaki,
+                                kaki,
+                                &cfg.message,
+                                i as u32 + 1,
+                            );
+                            log(format!(
+                                "  ↻ superseded prior version of {rel}: {old_kaki} → {kaki} ({})",
+                                cfg.message
+                            ));
                         }
                     }
                 }
@@ -383,18 +499,26 @@ fn run(cfg: DocPulseCfg, tx: Sender<RunnerEvent>, ctl_rx: Receiver<Ctl>) {
             Err(e) => log(format!("  ⚠ could not mint {rel}: {e}")),
         }
     }
-    log(format!("𒁾 audit manifest: {} record(s) → {}", qualifying.len(), manifest_path.display()));
+    log(format!(
+        "𒁾 audit manifest: {} record(s) → {}",
+        qualifying.len(),
+        manifest_path.display()
+    ));
 
     if write_node.document_count() > 0 {
         match enkiddb::materialize_version(&write_node, &cfg.enkiddb_output_root, &stamp) {
             Ok((generation, stats)) => log(format!(
                 "𒁾 EnkiDDB Tigris generation {stamp} materialized: {} entities → {}",
-                stats.entities, generation.entities_path.display()
+                stats.entities,
+                generation.entities_path.display()
             )),
             Err(e) => log(format!("⚠ EnkiDDB materialize failed: {e}")),
         }
     }
-    log(format!("✓ {n}/{} document(s) minted as real EnkiDDB particles", qualifying.len()));
+    log(format!(
+        "✓ {n}/{} document(s) minted as real EnkiDDB particles",
+        qualifying.len()
+    ));
     send(RunnerEvent::PbOk(4));
 
     // ── Stage: OFFICIAL REPO LANDING (gated, opt-in) ──────────────
@@ -438,7 +562,10 @@ fn stage_official_repo_landing(
     }
     let official_repo = expand_home(&cfg.official_repo_path);
     let branch = cfg.official_repo_branch.trim();
-    if branch.is_empty() || branch.eq_ignore_ascii_case("main") || branch.eq_ignore_ascii_case("master") {
+    if branch.is_empty()
+        || branch.eq_ignore_ascii_case("main")
+        || branch.eq_ignore_ascii_case("master")
+    {
         send(RunnerEvent::PbFailed(5, major(&official_repo, "official repo landing", "UnsafeTargetBranch",
             "official_repo_branch must be set and must not be main/master — land on a review branch, let a PR gate the merge")));
         return architect_continues(ctl_rx, send);
@@ -446,11 +573,17 @@ fn stage_official_repo_landing(
 
     if git(&official_repo, &["rev-parse", "--verify", branch]).is_ok() {
         if let Err(e) = git(&official_repo, &["checkout", branch]) {
-            send(RunnerEvent::PbFailed(5, major(&official_repo, "checkout", "GitStepFailed", &e)));
+            send(RunnerEvent::PbFailed(
+                5,
+                major(&official_repo, "checkout", "GitStepFailed", &e),
+            ));
             return architect_continues(ctl_rx, send);
         }
     } else if let Err(e) = git(&official_repo, &["checkout", "-b", branch]) {
-        send(RunnerEvent::PbFailed(5, major(&official_repo, "checkout -b", "GitStepFailed", &e)));
+        send(RunnerEvent::PbFailed(
+            5,
+            major(&official_repo, "checkout -b", "GitStepFailed", &e),
+        ));
         return architect_continues(ctl_rx, send);
     }
 
@@ -458,9 +591,13 @@ fn stage_official_repo_landing(
     let mut landed = 0usize;
     for rel in qualifying {
         let src = Path::new(source_repo).join(rel);
-        let Ok(bytes) = std::fs::read(&src) else { continue };
+        let Ok(bytes) = std::fs::read(&src) else {
+            continue;
+        };
         let dest = dest_root.join(rel);
-        if let Some(p) = dest.parent() { let _ = std::fs::create_dir_all(p); }
+        if let Some(p) = dest.parent() {
+            let _ = std::fs::create_dir_all(p);
+        }
         if std::fs::write(&dest, &bytes).is_ok() {
             log(format!("  staged: {} → {}", rel, dest.display()));
             landed += 1;
@@ -475,18 +612,28 @@ fn stage_official_repo_landing(
     let _ = git(&official_repo, &["add", cfg.official_repo_subdir.as_str()]);
     let msg = format!("docs: promote {landed} document(s) via Hala from {source_repo_name}");
     match git(&official_repo, &["commit", "-m", &msg]) {
-        Ok(_) => log(format!("✓ committed {landed} document(s) on branch {branch} in {official_repo}")),
+        Ok(_) => log(format!(
+            "✓ committed {landed} document(s) on branch {branch} in {official_repo}"
+        )),
         Err(e) => {
-            send(RunnerEvent::PbFailed(5, major(&official_repo, "commit", "CommitFailed", &e)));
+            send(RunnerEvent::PbFailed(
+                5,
+                major(&official_repo, "commit", "CommitFailed", &e),
+            ));
             return architect_continues(ctl_rx, send);
         }
     }
 
     if cfg.auto_push_to_official_repo {
         match git(&official_repo, &["push", "origin", branch]) {
-            Ok(_) => log(format!("✓ pushed {branch} to origin — open a PR to merge into main")),
+            Ok(_) => log(format!(
+                "✓ pushed {branch} to origin — open a PR to merge into main"
+            )),
             Err(e) => {
-                send(RunnerEvent::PbFailed(5, major(&official_repo, "push", "GitStepFailed", &e)));
+                send(RunnerEvent::PbFailed(
+                    5,
+                    major(&official_repo, "push", "GitStepFailed", &e),
+                ));
                 return architect_continues(ctl_rx, send);
             }
         }
@@ -518,10 +665,13 @@ fn fence_gitignore(repo: &str) {
     let mut add = String::new();
     for pat in FENCED_PATTERNS {
         if !existing.lines().any(|l| l.trim() == pat) {
-            add.push_str(pat); add.push('\n');
+            add.push_str(pat);
+            add.push('\n');
         }
     }
-    if !add.is_empty() { append(&gi, &add); }
+    if !add.is_empty() {
+        append(&gi, &add);
+    }
 }
 
 /// Whether `path` (a `/`-separated repo-relative path, as `git ls-files`
@@ -538,7 +688,7 @@ fn matches_fenced_pattern(path: &str) -> bool {
                 if components.iter().any(|c| c.starts_with(prefix)) {
                     return true;
                 }
-            } else if components.iter().any(|c| *c == dirname) {
+            } else if components.contains(&dirname) {
                 // e.g. "target/" / "node_modules/" / ".npm/" -- an exact
                 // component match anywhere in the path, not just the root.
                 return true;
@@ -560,7 +710,11 @@ fn matches_fenced_pattern(path: &str) -> bool {
 /// stops being tracked, instead of silently surviving in the next
 /// commit and every commit after it.
 fn paths_to_untrack(tracked: &[&str]) -> Vec<String> {
-    tracked.iter().filter(|p| matches_fenced_pattern(p)).map(|p| p.to_string()).collect()
+    tracked
+        .iter()
+        .filter(|p| matches_fenced_pattern(p))
+        .map(|p| p.to_string())
+        .collect()
 }
 
 /// One `git cat-file --batch-check` process, not one `git cat-file -s`
@@ -573,15 +727,25 @@ fn audit_blobs(repo: &str, range: &str, limit: u64) -> Result<Vec<String>, Strin
     let mut oid_paths: Vec<(String, String)> = Vec::new();
     for line in objects.lines() {
         let mut it = line.splitn(2, ' ');
-        let (Some(oid), Some(path)) = (it.next(), it.next()) else { continue };
-        if path.is_empty() { continue; }
+        let (Some(oid), Some(path)) = (it.next(), it.next()) else {
+            continue;
+        };
+        if path.is_empty() {
+            continue;
+        }
         oid_paths.push((oid.to_string(), path.to_string()));
     }
-    if oid_paths.is_empty() { return Ok(vec![]); }
+    if oid_paths.is_empty() {
+        return Ok(vec![]);
+    }
 
     let mut child = Command::new("git")
-        .arg("-C").arg(repo)
-        .args(["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"])
+        .arg("-C")
+        .arg(repo)
+        .args([
+            "cat-file",
+            "--batch-check=%(objectname) %(objecttype) %(objectsize)",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -601,28 +765,45 @@ fn audit_blobs(repo: &str, range: &str, limit: u64) -> Result<Vec<String>, Strin
     });
 
     let mut stdout = String::new();
-    child.stdout.take().expect("stdout was piped")
+    child
+        .stdout
+        .take()
+        .expect("stdout was piped")
         .read_to_string(&mut stdout)
         .map_err(|e| format!("reading git cat-file --batch-check output failed: {e}"))?;
     let _ = writer.join();
-    let status = child.wait().map_err(|e| format!("git cat-file --batch-check wait failed: {e}"))?;
+    let status = child
+        .wait()
+        .map_err(|e| format!("git cat-file --batch-check wait failed: {e}"))?;
     if !status.success() {
         let mut stderr = String::new();
-        if let Some(mut e) = child.stderr.take() { let _ = e.read_to_string(&mut stderr); }
-        return Err(format!("git cat-file --batch-check exited non-zero: {stderr}"));
+        if let Some(mut e) = child.stderr.take() {
+            let _ = e.read_to_string(&mut stderr);
+        }
+        return Err(format!(
+            "git cat-file --batch-check exited non-zero: {stderr}"
+        ));
     }
 
     let mut sizes: HashMap<&str, u64> = HashMap::new();
     for line in stdout.lines() {
         let mut parts = line.split(' ');
-        let (Some(oid), Some(ty), Some(sz)) = (parts.next(), parts.next(), parts.next()) else { continue };
-        if ty != "blob" { continue; }
-        if let Ok(bytes) = sz.parse::<u64>() { sizes.insert(oid, bytes); }
+        let (Some(oid), Some(ty), Some(sz)) = (parts.next(), parts.next(), parts.next()) else {
+            continue;
+        };
+        if ty != "blob" {
+            continue;
+        }
+        if let Ok(bytes) = sz.parse::<u64>() {
+            sizes.insert(oid, bytes);
+        }
     }
 
-    Ok(oid_paths.iter()
+    Ok(oid_paths
+        .iter()
         .filter_map(|(oid, path)| {
-            sizes.get(oid.as_str())
+            sizes
+                .get(oid.as_str())
                 .filter(|&&bytes| bytes > limit)
                 .map(|&bytes| format!("{} ({} MB)", path, bytes / 1_048_576))
         })
@@ -630,7 +811,11 @@ fn audit_blobs(repo: &str, range: &str, limit: u64) -> Result<Vec<String>, Strin
 }
 
 fn append(path: &Path, text: &str) {
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
         let _ = f.write_all(text.as_bytes());
     }
 }
@@ -647,21 +832,38 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 fn major(pb: &str, task: &str, ty: &str, msg: &str) -> ErrorEvent {
-    ErrorEvent { pb_index: 0, playbook: pb.into(), task: task.into(),
-        error_type: ty.into(), message: msg.into(),
-        severity: Severity::Major, remedy_id: None }
+    ErrorEvent {
+        pb_index: 0,
+        playbook: pb.into(),
+        task: task.into(),
+        error_type: ty.into(),
+        message: msg.into(),
+        severity: Severity::Major,
+        remedy_id: None,
+    }
 }
 fn warn_ev(pb: &str, task: &str, ty: &str, msg: &str) -> ErrorEvent {
-    ErrorEvent { pb_index: 0, playbook: pb.into(), task: task.into(),
-        error_type: ty.into(), message: msg.into(),
-        severity: Severity::Warning, remedy_id: None }
+    ErrorEvent {
+        pb_index: 0,
+        playbook: pb.into(),
+        task: task.into(),
+        error_type: ty.into(),
+        message: msg.into(),
+        severity: Severity::Warning,
+        remedy_id: None,
+    }
 }
 
 fn architect_continues(ctl_rx: &Receiver<Ctl>, send: &impl Fn(RunnerEvent)) -> bool {
     match ctl_rx.recv() {
         Ok(Ctl::SkipContinue) | Ok(Ctl::Retry) => {
-            send(RunnerEvent::Log("↻ Architect ruled: continue".into())); true }
-        _ => { send(RunnerEvent::Aborted); false }
+            send(RunnerEvent::Log("↻ Architect ruled: continue".into()));
+            true
+        }
+        _ => {
+            send(RunnerEvent::Aborted);
+            false
+        }
     }
 }
 fn wait_abort(ctl_rx: &Receiver<Ctl>, send: &impl Fn(RunnerEvent)) {
@@ -678,27 +880,37 @@ mod tests {
         // The exact real-world case that broke live 2026-08-01: a target/
         // directory nested under a differently-named parent, which the
         // old hardcoded `git rm --cached target` pathspec never matched.
-        assert!(matches_fenced_pattern("_DailyWorsk/target/debug/deps/dubsar_visualizer-abc123"));
+        assert!(matches_fenced_pattern(
+            "_DailyWorsk/target/debug/deps/dubsar_visualizer-abc123"
+        ));
         assert!(matches_fenced_pattern("target/debug/foo"));
         assert!(matches_fenced_pattern("a/b/c/target/x"));
     }
 
     #[test]
     fn nested_backups_dir_matches() {
-        assert!(matches_fenced_pattern("_Backups20260626/dubsar-theater/godot/Godot_v4.7-stable_linux.x86_64"));
-        assert!(matches_fenced_pattern("_Backups20260626/dubsar-theater/godot/godot.zip"));
+        assert!(matches_fenced_pattern(
+            "_Backups20260626/dubsar-theater/godot/Godot_v4.7-stable_linux.x86_64"
+        ));
+        assert!(matches_fenced_pattern(
+            "_Backups20260626/dubsar-theater/godot/godot.zip"
+        ));
     }
 
     #[test]
     fn node_modules_and_npm_and_log_still_match() {
-        assert!(matches_fenced_pattern("frontend/node_modules/react/index.js"));
+        assert!(matches_fenced_pattern(
+            "frontend/node_modules/react/index.js"
+        ));
         assert!(matches_fenced_pattern("some/.npm/cache"));
         assert!(matches_fenced_pattern("logs/build.log"));
     }
 
     #[test]
     fn ordinary_source_paths_do_not_match() {
-        assert!(!matches_fenced_pattern("docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md"));
+        assert!(!matches_fenced_pattern(
+            "docs/19_roadmap/BAHYWAY_ECOSYSTEM_V4_ROADMAP.md"
+        ));
         assert!(!matches_fenced_pattern("crates/naming-registry/src/lib.rs"));
         // "targeting.md" contains "target" as a substring but not as a
         // path COMPONENT -- must not false-positive.
@@ -716,8 +928,12 @@ mod tests {
         ];
         let result = paths_to_untrack(&tracked);
         assert_eq!(result.len(), 3);
-        assert!(result.contains(&"_DailyWorsk/target/debug/deps/dubsar_visualizer-0a7adf20c7d40abb".to_string()));
-        assert!(result.contains(&"_Backups20260626/dubsar-theater/godot/Godot_v4.7-stable_linux.x86_64".to_string()));
+        assert!(result.contains(
+            &"_DailyWorsk/target/debug/deps/dubsar_visualizer-0a7adf20c7d40abb".to_string()
+        ));
+        assert!(result.contains(
+            &"_Backups20260626/dubsar-theater/godot/Godot_v4.7-stable_linux.x86_64".to_string()
+        ));
         assert!(result.contains(&"node_modules/left-pad/index.js".to_string()));
     }
 
@@ -739,7 +955,11 @@ mod tests {
         );
     }
 
-    fn test_cfg(official_repo_path: &str, official_repo_branch: &str, auto_push: bool) -> DocPulseCfg {
+    fn test_cfg(
+        official_repo_path: &str,
+        official_repo_branch: &str,
+        auto_push: bool,
+    ) -> DocPulseCfg {
         DocPulseCfg {
             repo_path: "/tmp/unused_source_repo".into(),
             message: "test".into(),
@@ -761,12 +981,23 @@ mod tests {
         let cfg = test_cfg("", "docs-intake", false);
         let (tx, rx) = crossbeam_channel::unbounded();
         let (_ctl_tx, ctl_rx) = crossbeam_channel::unbounded::<Ctl>();
-        let send = |ev: RunnerEvent| { let _ = tx.send(ev); };
+        let send = |ev: RunnerEvent| {
+            let _ = tx.send(ev);
+        };
         let log = |_: String| {};
         let proceed = stage_official_repo_landing(
-            &cfg, "/tmp/src", "src_repo", &["a.md".to_string()], &send, &log, &ctl_rx,
+            &cfg,
+            "/tmp/src",
+            "src_repo",
+            &["a.md".to_string()],
+            &send,
+            &log,
+            &ctl_rx,
         );
-        assert!(proceed, "an unconfigured landing stage must not block Finished");
+        assert!(
+            proceed,
+            "an unconfigured landing stage must not block Finished"
+        );
         let events: Vec<RunnerEvent> = rx.try_iter().collect();
         assert!(matches!(events[0], RunnerEvent::PbStarted(5)));
         assert!(matches!(events[1], RunnerEvent::PbOk(5)));
@@ -781,12 +1012,23 @@ mod tests {
         let (tx, rx) = crossbeam_channel::unbounded();
         let (ctl_tx, ctl_rx) = crossbeam_channel::unbounded::<Ctl>();
         ctl_tx.send(Ctl::Abort).unwrap();
-        let send = |ev: RunnerEvent| { let _ = tx.send(ev); };
+        let send = |ev: RunnerEvent| {
+            let _ = tx.send(ev);
+        };
         let log = |_: String| {};
         let proceed = stage_official_repo_landing(
-            &cfg, "/tmp/src", "src_repo", &["a.md".to_string()], &send, &log, &ctl_rx,
+            &cfg,
+            "/tmp/src",
+            "src_repo",
+            &["a.md".to_string()],
+            &send,
+            &log,
+            &ctl_rx,
         );
-        assert!(!proceed, "must not proceed to Finished after the Architect chose Abort");
+        assert!(
+            !proceed,
+            "must not proceed to Finished after the Architect chose Abort"
+        );
         let events: Vec<RunnerEvent> = rx.try_iter().collect();
         assert!(matches!(events[0], RunnerEvent::PbStarted(5)));
         match &events[1] {
@@ -821,10 +1063,20 @@ mod tests {
             kaki_hex: hex::encode([0x22u8; 16]),
             minted_at: "2026-07-30T00:00:00Z".to_string(),
         };
-        append(&path, &format!("{}\n", serde_json::to_string(&older).unwrap()));
-        append(&path, &format!("{}\n", serde_json::to_string(&newer).unwrap()));
+        append(
+            &path,
+            &format!("{}\n", serde_json::to_string(&older).unwrap()),
+        );
+        append(
+            &path,
+            &format!("{}\n", serde_json::to_string(&newer).unwrap()),
+        );
 
         let map = load_doc_kaki_registry(&path);
-        assert_eq!(map.get("docs/guide.md"), Some(&[0x22u8; 16]), "the later line must win over the earlier one");
+        assert_eq!(
+            map.get("docs/guide.md"),
+            Some(&[0x22u8; 16]),
+            "the later line must win over the earlier one"
+        );
     }
 }

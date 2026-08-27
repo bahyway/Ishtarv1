@@ -1,0 +1,1006 @@
+---
+# =============================================================================
+# PB-602 — GULA AGENT SCAFFOLD (grammar-minting agent under GL-LSN-001)
+# BahyWay.Ecosystem v4.+ · Way of Work: runs FROM bare-metal Fedora HOST
+# CSR-08: running this playbook is Bahaa's confirmation act.
+#
+# Delivers:
+#   1. gula/ crate (zero-dependency, std-only, offline-buildable)
+#   2. GL-LSN-001 Lišānu Law tablet (status PROPOSED) into laws/
+#   3. COMPILE gate (cargo build) + RUNTIME gate (cargo test) — both blocking
+#   4. NĀRU note appended recording the scaffold act
+#
+# The agent stages grafts in uruk/ ONLY. No task here, and no code path in
+# the crate, writes to kish/. The Kish crossing is a future playbook.
+# =============================================================================
+- name: "PB-602 · Gula agent scaffold (GL-LSN-001 Lišānu court)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    gula_crate_dir: "{{ repo_root }}/engines/gula"
+    laws_dir: "{{ repo_root }}/docs/09_observatory"
+    naru_dir: "{{ repo_root }}/naru"
+
+  tasks:
+    # -------------------------------------------------------------- preflight
+    - name: "Preflight · cargo must exist on the host"
+      ansible.builtin.command: cargo --version
+      register: cargo_check
+      changed_when: false
+
+    - name: "Preflight · report toolchain"
+      ansible.builtin.debug:
+        msg: "Toolchain: {{ cargo_check.stdout }}"
+
+    - name: "Preflight · create directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ gula_crate_dir }}/src"
+        - "{{ laws_dir }}"
+        - "{{ naru_dir }}"
+
+    # ----------------------------------------------------------- crate source
+    - name: "Write Cargo.toml"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name = "gula"
+          version = "0.1.0"
+          edition = "2021"
+          description = "GULA (candidate name, pending CSR-08) — grammar-minting agent under GL-LSN-001, BahyWay.Ecosystem v4.+. Zero dependencies, std only."
+          license = "LicenseRef-BahyWay-Sovereign"
+
+          [dependencies]
+          # Deliberately empty. Sovereign, offline-buildable, no crates.io fetch.
+    - name: "Write src/lib.rs"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! GULA — the grammar-minting agent (candidate name, pending CSR-08 seal).
+          //! Governed by GL-LSN-001 (Lišānu Law) under GL-ALG-002 (Unified Algebra).
+          //!
+          //! The arc: WITNESS → JUDGE → MOVE → STAGE (Nimrud discipline, GL-STK-001).
+          //! The agent heals the corpus from its own flesh: wounds (three-gloss
+          //! collisions) become grafts (dialect candidates), staged in URUK only.
+          //! Sealing to KISH is Bahaa's act alone — no code path here writes to kish/.
+          //!
+          //! Zero external dependencies. std only. No Z3, no solvers, no ML.
+
+          pub mod arc;
+          pub mod court;
+          pub mod graft;
+          pub mod naru;
+          pub mod uruk;
+          pub mod wound;
+
+          /// The canonical structural signature of a pattern family, decomposed on the
+          /// three faces of the GL-ALG-002 triality.
+          #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+          pub struct Signature {
+              pub particle_face: String,
+              pub orbit_face: String,
+              pub tribe_face: String,
+          }
+
+          impl Signature {
+              pub fn new(particle: &str, orbit: &str, tribe: &str) -> Self {
+                  Self {
+                      particle_face: normalize(particle),
+                      orbit_face: normalize(orbit),
+                      tribe_face: normalize(tribe),
+                  }
+              }
+
+              /// Canonical key: the shape as one string. Two patterns share a key
+              /// iff they share the same deep structure on all three faces.
+              pub fn key(&self) -> String {
+                  format!(
+                      "P[{}]|O[{}]|T[{}]",
+                      self.particle_face, self.orbit_face, self.tribe_face
+                  )
+              }
+          }
+
+          fn normalize(s: &str) -> String {
+              s.trim().to_lowercase().split_whitespace().collect::<Vec<_>>().join("-")
+          }
+
+          /// One engine's testimony: "I hold this pattern shape, and I gloss it thus."
+          #[derive(Debug, Clone)]
+          pub struct PatternWitness {
+              pub engine: String,
+              pub signature: Signature,
+              pub hubullu_gloss: String,
+          }
+
+          /// Verdict vocabulary of GL-LSN-001 §6.2. SEALED-KISH is intentionally
+          /// absent: the agent cannot pronounce it.
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum Verdict {
+              Observed,
+              Triggered,
+              Minted,
+              RejectedForeign(String),
+              RejectedTumor(String),
+              StagedUruk(String),
+          }
+
+          impl Verdict {
+              pub fn as_str(&self) -> &'static str {
+                  match self {
+                      Verdict::Observed => "OBSERVED",
+                      Verdict::Triggered => "TRIGGERED",
+                      Verdict::Minted => "MINTED",
+                      Verdict::RejectedForeign(_) => "REJECTED-FOREIGN",
+                      Verdict::RejectedTumor(_) => "REJECTED-TUMOR",
+                      Verdict::StagedUruk(_) => "STAGED-URUK",
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn signature_key_is_canonical() {
+                  let a = Signature::new("  Leak  Event ", "decay ORBIT", "pipe tribe");
+                  let b = Signature::new("leak event", "Decay Orbit", "Pipe   Tribe");
+                  assert_eq!(a.key(), b.key());
+              }
+          }
+    - name: "Write src/wound.rs"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/wound.rs"
+        mode: "0644"
+        content: |
+          //! GL-LSN-001 §1 — The Wound Trigger.
+          //! Three distinct Ḫubullu glosses on one structural signature = a wound.
+          //! Two independent engine witnesses required before the wound may TRIGGER.
+
+          use crate::{PatternWitness, Signature, Verdict};
+          use std::collections::{BTreeMap, BTreeSet};
+
+          pub const GLOSS_TRIGGER: usize = 3; // §1.2 — three-gloss rule
+          pub const WITNESS_TRIGGER: usize = 2; // §1.3 — two-witness rule
+
+          #[derive(Debug, Clone)]
+          pub struct Wound {
+              pub signature: Signature,
+              pub glosses: BTreeSet<String>,
+              pub engines: BTreeSet<String>,
+          }
+
+          impl Wound {
+              pub fn status(&self) -> Verdict {
+                  if self.glosses.len() >= GLOSS_TRIGGER && self.engines.len() >= WITNESS_TRIGGER {
+                      Verdict::Triggered
+                  } else {
+                      Verdict::Observed
+                  }
+              }
+          }
+
+          /// Append-only registry of the corpus's wounds.
+          #[derive(Debug, Default)]
+          pub struct WoundRegistry {
+              wounds: BTreeMap<String, Wound>,
+          }
+
+          impl WoundRegistry {
+              pub fn new() -> Self {
+                  Self::default()
+              }
+
+              /// WITNESS phase: ingest one testimony.
+              pub fn witness(&mut self, w: &PatternWitness) -> Verdict {
+                  let key = w.signature.key();
+                  let entry = self.wounds.entry(key).or_insert_with(|| Wound {
+                      signature: w.signature.clone(),
+                      glosses: BTreeSet::new(),
+                      engines: BTreeSet::new(),
+                  });
+                  entry.glosses.insert(w.hubullu_gloss.trim().to_lowercase());
+                  entry.engines.insert(w.engine.trim().to_lowercase());
+                  entry.status()
+              }
+
+              /// JUDGE phase: all wounds currently past the trigger.
+              pub fn triggered(&self) -> Vec<&Wound> {
+                  self.wounds
+                      .values()
+                      .filter(|w| w.status() == Verdict::Triggered)
+                      .collect()
+              }
+
+              pub fn all(&self) -> impl Iterator<Item = &Wound> {
+                  self.wounds.values()
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn w(engine: &str, gloss: &str) -> PatternWitness {
+                  PatternWitness {
+                      engine: engine.into(),
+                      signature: Signature::new("state-change", "limit-cycle", "golden-tribe"),
+                      hubullu_gloss: gloss.into(),
+                  }
+              }
+
+              #[test]
+              fn three_glosses_one_engine_stays_observed() {
+                  let mut reg = WoundRegistry::new();
+                  reg.witness(&w("nanshe", "a ripening"));
+                  reg.witness(&w("nanshe", "a maturation"));
+                  let v = reg.witness(&w("nanshe", "a settling"));
+                  assert_eq!(v, Verdict::Observed, "one witness must never trigger (§1.3)");
+              }
+
+              #[test]
+              fn two_glosses_two_engines_stays_observed() {
+                  let mut reg = WoundRegistry::new();
+                  reg.witness(&w("nanshe", "a ripening"));
+                  let v = reg.witness(&w("karanu", "a maturation"));
+                  assert_eq!(v, Verdict::Observed, "two glosses is not yet a wound (§1.2)");
+              }
+
+              #[test]
+              fn three_glosses_two_engines_triggers() {
+                  let mut reg = WoundRegistry::new();
+                  reg.witness(&w("nanshe", "a ripening"));
+                  reg.witness(&w("karanu", "a maturation"));
+                  let v = reg.witness(&w("nanshe", "a settling"));
+                  assert_eq!(v, Verdict::Triggered);
+                  assert_eq!(reg.triggered().len(), 1);
+              }
+          }
+    - name: "Write src/graft.rs"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/graft.rs"
+        mode: "0644"
+        content: |
+          //! GL-LSN-001 §2, §5 — The Graft.
+          //! One dialect candidate per wound; ancestry from sealed flesh only (§5.2).
+          //! Productions are cut from the wound's own signature — the autograft
+          //! principle: same genome, no foreign tissue.
+
+          use crate::wound::Wound;
+          use std::collections::BTreeSet;
+
+          #[derive(Debug, Clone)]
+          pub struct DialectCandidate {
+              /// Deterministic candidate id, e.g. "LSN-CAND-P[x]|O[y]|T[z]".
+              pub id: String,
+              /// Grammar-sketch productions, AkkadianAOL sub-dialect (never a DSL).
+              pub productions: Vec<String>,
+              /// Mandatory plain-language gloss at minting time (GL-NAM-002).
+              pub hubullu_gloss: String,
+              /// Sealed ancestors only (§5.2) — law/theorem ids this graft grows from.
+              pub sealed_ancestry: Vec<String>,
+              /// The glosses whose collision proved the notation missing.
+              pub wound_glosses: Vec<String>,
+          }
+
+          /// Mints at most one candidate per signature key, ever (§5.2 regulatory layer).
+          #[derive(Debug, Default)]
+          pub struct GraftMint {
+              minted_keys: BTreeSet<String>,
+          }
+
+          impl GraftMint {
+              pub fn new() -> Self {
+                  Self::default()
+              }
+
+              /// MOVE phase: cut a graft from a triggered wound.
+              /// Returns None if this wound already received its one candidate.
+              pub fn mint(&mut self, wound: &Wound) -> Option<DialectCandidate> {
+                  let key = wound.signature.key();
+                  if !self.minted_keys.insert(key.clone()) {
+                      return None; // one graft per wound, no self-similar overgrowth
+                  }
+                  let sig = &wound.signature;
+                  let productions = vec![
+                      // Sovereign constructs only: ORBIT / EMIT / PROVE / SYNC / WITNESS,
+                      // PRESENT clause, W5H2, PHYSICS/META predicates.
+                      format!("dialect      ::= ORBIT {} PRESENT particle-clause", sig.orbit_face),
+                      format!("particle-clause ::= WITNESS {} EMIT verdict-line", sig.particle_face),
+                      format!("verdict-line ::= PROVE tribe({}) SYNC naru-journal", sig.tribe_face),
+                      "naru-journal ::= META(w5h2) PHYSICS(membrane) ;".to_string(),
+                  ];
+                  Some(DialectCandidate {
+                      id: format!("LSN-CAND-{}", key),
+                      productions,
+                      hubullu_gloss: format!(
+                          "A small shared notation for the pattern shaped '{}', which until now \
+                           needed {} different explanations across {} engines.",
+                          key,
+                          wound.glosses.len(),
+                          wound.engines.len()
+                      ),
+                      sealed_ancestry: vec!["GL-ALG-002".into(), "GL-LSN-001".into()],
+                      wound_glosses: wound.glosses.iter().cloned().collect(),
+                  })
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use crate::Signature;
+              use std::collections::BTreeSet;
+
+              fn triggered_wound() -> Wound {
+                  let mut g = BTreeSet::new();
+                  g.insert("a".into());
+                  g.insert("b".into());
+                  g.insert("c".into());
+                  let mut e = BTreeSet::new();
+                  e.insert("nanshe".into());
+                  e.insert("karanu".into());
+                  Wound { signature: Signature::new("p", "o", "t"), glosses: g, engines: e }
+              }
+
+              #[test]
+              fn one_graft_per_wound() {
+                  let mut mint = GraftMint::new();
+                  let w = triggered_wound();
+                  assert!(mint.mint(&w).is_some());
+                  assert!(mint.mint(&w).is_none(), "second mint on same wound must refuse (§5.2)");
+              }
+
+              #[test]
+              fn ancestry_is_sealed_only() {
+                  let mut mint = GraftMint::new();
+                  let c = mint.mint(&triggered_wound()).unwrap();
+                  assert!(c.sealed_ancestry.iter().all(|a| a.starts_with("GL-")));
+                  assert!(!c.id.is_empty() && c.productions.len() == 4);
+              }
+          }
+    - name: "Write src/court.rs"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/court.rs"
+        mode: "0644"
+        content: |
+          //! GL-LSN-001 §4, §5 — The Immune Clause and the Genome Check.
+          //! Foreign tissue (SQL, embedded foreign DSL directives) is rejected before
+          //! staging. A graft that fails the triality gate τ + ε ≥ ε(Θ) is a tumor.
+
+          use crate::graft::DialectCandidate;
+          use crate::Verdict;
+
+          /// §4.1 — non-sovereign constructs. Matched as whole uppercase words.
+          const FOREIGN_TISSUE: &[&str] = &[
+              "SELECT", "FROM", "WHERE", "JOIN", "EXISTS", "INSERT", "UPDATE", "DELETE",
+              "GROUP BY", "ORDER BY",
+          ];
+
+          /// Witnessed inputs to the triality gate. The proxy formula that produces
+          /// these from wound statistics is documented at the call site (arc.rs) and
+          /// remains subject to court calibration under the Fadam functional (§6.1).
+          #[derive(Debug, Clone, Copy)]
+          pub struct TrialityWitness {
+              pub tau: f64,           // transparency deficit carried by the wound
+              pub epsilon: f64,       // uncertainty the graft admits
+              pub epsilon_theta: f64, // stakeholder-template floor ε(Θ)
+          }
+
+          pub fn triality_holds(t: TrialityWitness) -> bool {
+              t.tau + t.epsilon >= t.epsilon_theta
+          }
+
+          /// The judging bench. Order of rites: immune check first, genome second.
+          pub fn judge(candidate: &DialectCandidate, t: TrialityWitness) -> Verdict {
+              // §4 — immune clause
+              for prod in &candidate.productions {
+                  let upper = prod.to_uppercase();
+                  for kw in FOREIGN_TISSUE {
+                      if contains_word(&upper, kw) {
+                          return Verdict::RejectedForeign(format!(
+                              "foreign tissue '{}' in production '{}'",
+                              kw, prod
+                          ));
+                      }
+                  }
+                  if upper.contains("DSL") {
+                      return Verdict::RejectedForeign(
+                          "candidate designates itself a DSL; AkkadianAOL dialects are not DSLs".into(),
+                      );
+                  }
+              }
+              // §5 — genome check
+              if candidate.sealed_ancestry.is_empty()
+                  || !candidate.sealed_ancestry.iter().any(|a| a == "GL-ALG-002")
+              {
+                  return Verdict::RejectedTumor("graft does not grow from GL-ALG-002 flesh".into());
+              }
+              if !triality_holds(t) {
+                  return Verdict::RejectedTumor(format!(
+                      "triality gate failed: τ({}) + ε({}) < ε(Θ)({})",
+                      t.tau, t.epsilon, t.epsilon_theta
+                  ));
+              }
+              Verdict::Minted
+          }
+
+          /// Whole-word match on already-uppercased haystack (handles "GROUP BY" too).
+          fn contains_word(hay: &str, needle: &str) -> bool {
+              let bytes = hay.as_bytes();
+              let mut start = 0;
+              while let Some(pos) = hay[start..].find(needle) {
+                  let i = start + pos;
+                  let j = i + needle.len();
+                  let left_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
+                  let right_ok = j >= hay.len() || !bytes[j].is_ascii_alphanumeric();
+                  if left_ok && right_ok {
+                      return true;
+                  }
+                  start = i + 1;
+              }
+              false
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn cand(productions: Vec<String>, ancestry: Vec<String>) -> DialectCandidate {
+                  DialectCandidate {
+                      id: "LSN-CAND-TEST".into(),
+                      productions,
+                      hubullu_gloss: "test gloss".into(),
+                      sealed_ancestry: ancestry,
+                      wound_glosses: vec!["a".into(), "b".into(), "c".into()],
+                  }
+              }
+
+              fn ok_triality() -> TrialityWitness {
+                  TrialityWitness { tau: 2.0, epsilon: 0.5, epsilon_theta: 1.0 }
+              }
+
+              #[test]
+              fn sql_is_foreign_tissue() {
+                  let c = cand(
+                      vec!["clause ::= SELECT particle FROM tribe".into()],
+                      vec!["GL-ALG-002".into()],
+                  );
+                  assert_eq!(judge(&c, ok_triality()).as_str(), "REJECTED-FOREIGN");
+              }
+
+              #[test]
+              fn word_boundary_does_not_false_positive() {
+                  // "WHEREABOUTS" must not match WHERE; "FROMAGE" must not match FROM.
+                  let c = cand(
+                      vec!["clause ::= WITNESS whereabouts EMIT fromage".into()],
+                      vec!["GL-ALG-002".into()],
+                  );
+                  assert_eq!(judge(&c, ok_triality()), Verdict::Minted);
+              }
+
+              #[test]
+              fn tumor_without_algebra_ancestry() {
+                  let c = cand(vec!["clause ::= ORBIT x".into()], vec![]);
+                  assert_eq!(judge(&c, ok_triality()).as_str(), "REJECTED-TUMOR");
+              }
+
+              #[test]
+              fn triality_gate_rejects() {
+                  let c = cand(vec!["clause ::= ORBIT x".into()], vec!["GL-ALG-002".into()]);
+                  let bad = TrialityWitness { tau: 0.1, epsilon: 0.1, epsilon_theta: 1.0 };
+                  assert_eq!(judge(&c, bad).as_str(), "REJECTED-TUMOR");
+              }
+
+              #[test]
+              fn sovereign_candidate_is_minted() {
+                  let c = cand(
+                      vec!["dialect ::= ORBIT o PRESENT p WITNESS t".into()],
+                      vec!["GL-ALG-002".into(), "GL-LSN-001".into()],
+                  );
+                  assert_eq!(judge(&c, ok_triality()), Verdict::Minted);
+              }
+          }
+    - name: "Write src/naru.rs"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/naru.rs"
+        mode: "0644"
+        content: |
+          //! GL-LSN-001 §7 — The NĀRU journal. Append-only JSON Lines.
+          //! No silent close: every wound receives a verdict line naming its
+          //! witnesses, its signature, and its cause.
+
+          use crate::Verdict;
+          use std::fs::OpenOptions;
+          use std::io::Write;
+          use std::path::Path;
+          use std::time::{SystemTime, UNIX_EPOCH};
+
+          #[derive(Debug, Clone)]
+          pub struct JournalEntry {
+              pub verdict: Verdict,
+              pub signature_key: String,
+              pub witnesses: Vec<String>,
+              pub cause: String,
+          }
+
+          impl JournalEntry {
+              pub fn to_json_line(&self) -> String {
+                  let ts = SystemTime::now()
+                      .duration_since(UNIX_EPOCH)
+                      .map(|d| d.as_secs())
+                      .unwrap_or(0);
+                  let witnesses = self
+                      .witnesses
+                      .iter()
+                      .map(|w| format!("\"{}\"", esc(w)))
+                      .collect::<Vec<_>>()
+                      .join(",");
+                  let detail = match &self.verdict {
+                      Verdict::RejectedForeign(c) | Verdict::RejectedTumor(c) | Verdict::StagedUruk(c) => {
+                          c.clone()
+                      }
+                      _ => String::new(),
+                  };
+                  format!(
+                      "{{\"ts\":{},\"verdict\":\"{}\",\"signature\":\"{}\",\"witnesses\":[{}],\"cause\":\"{}\",\"detail\":\"{}\"}}",
+                      ts,
+                      self.verdict.as_str(),
+                      esc(&self.signature_key),
+                      witnesses,
+                      esc(&self.cause),
+                      esc(&detail)
+                  )
+              }
+          }
+
+          /// Minimal JSON string escaping (quotes, backslash, control chars).
+          fn esc(s: &str) -> String {
+              let mut out = String::with_capacity(s.len());
+              for c in s.chars() {
+                  match c {
+                      '"' => out.push_str("\\\""),
+                      '\\' => out.push_str("\\\\"),
+                      '\n' => out.push_str("\\n"),
+                      '\r' => out.push_str("\\r"),
+                      '\t' => out.push_str("\\t"),
+                      c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+                      c => out.push(c),
+                  }
+              }
+              out
+          }
+
+          pub fn append(journal_path: &Path, entry: &JournalEntry) -> std::io::Result<()> {
+              if let Some(parent) = journal_path.parent() {
+                  std::fs::create_dir_all(parent)?;
+              }
+              let mut f = OpenOptions::new().create(true).append(true).open(journal_path)?;
+              writeln!(f, "{}", entry.to_json_line())
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn json_line_escapes_and_is_wellformed() {
+                  let e = JournalEntry {
+                      verdict: Verdict::RejectedForeign("tissue \"SELECT\"\nline".into()),
+                      signature_key: "P[a]|O[b]|T[c]".into(),
+                      witnesses: vec!["nanshe".into(), "karanu".into()],
+                      cause: "immune clause".into(),
+                  };
+                  let line = e.to_json_line();
+                  assert!(line.starts_with('{') && line.ends_with('}'));
+                  assert!(line.contains("\\\"SELECT\\\""));
+                  assert!(line.contains("\\n"));
+                  assert!(!line.contains('\n'));
+              }
+
+              #[test]
+              fn append_is_append_only() {
+                  let dir = std::env::temp_dir().join("gula_naru_test");
+                  let path = dir.join("naru.jsonl");
+                  let _ = std::fs::remove_file(&path);
+                  let e = JournalEntry {
+                      verdict: Verdict::Observed,
+                      signature_key: "k".into(),
+                      witnesses: vec![],
+                      cause: "witnessed".into(),
+                  };
+                  append(&path, &e).unwrap();
+                  append(&path, &e).unwrap();
+                  let text = std::fs::read_to_string(&path).unwrap();
+                  assert_eq!(text.lines().count(), 2);
+              }
+          }
+    - name: "Write src/uruk.rs"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/uruk.rs"
+        mode: "0644"
+        content: |
+          //! GL-LSN-001 §2.2, §3.1 — Uruk-only staging.
+          //! Candidates are written UNSEALED under uruk/. There is deliberately no
+          //! function in this crate that writes, moves, or copies into kish/ —
+          //! the Kish crossing exists only as a numbered playbook run by Bahaa (CSR-08).
+
+          use crate::graft::DialectCandidate;
+          use std::fs;
+          use std::path::{Path, PathBuf};
+
+          /// STAGE phase: write the unsealed dialect tablet under `<root>/uruk/`.
+          pub fn stage(root: &Path, c: &DialectCandidate) -> std::io::Result<PathBuf> {
+              let uruk = root.join("uruk");
+              fs::create_dir_all(&uruk)?;
+              let file = uruk.join(format!("{}.dialect.akk.md", safe_name(&c.id)));
+              let mut body = String::new();
+              body.push_str("# UNSEALED DIALECT CANDIDATE — URUK STREAM\n");
+              body.push_str("# Status: UNSEALED. Kish crossing requires Bahaa's playbook (GL-LSN-001 §3.1).\n\n");
+              body.push_str(&format!("id: {}\n", c.id));
+              body.push_str("ancestry (sealed only):\n");
+              for a in &c.sealed_ancestry {
+                  body.push_str(&format!("  - {}\n", a));
+              }
+              body.push_str("\n## Productions (AkkadianAOL sub-dialect)\n\n```\n");
+              for p in &c.productions {
+                  body.push_str(p);
+                  body.push('\n');
+              }
+              body.push_str("```\n\n## Ḫubullu gloss (GL-NAM-002)\n\n");
+              body.push_str(&c.hubullu_gloss);
+              body.push_str("\n\n## The wound this graft heals\n\n");
+              for g in &c.wound_glosses {
+                  body.push_str(&format!("  - \"{}\"\n", g));
+              }
+              fs::write(&file, body)?;
+              Ok(file)
+          }
+
+          fn safe_name(id: &str) -> String {
+              id.chars()
+                  .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' })
+                  .collect()
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use crate::graft::DialectCandidate;
+
+              fn cand() -> DialectCandidate {
+                  DialectCandidate {
+                      id: "LSN-CAND-P[a]|O[b]|T[c]".into(),
+                      productions: vec!["dialect ::= ORBIT b PRESENT a".into()],
+                      hubullu_gloss: "plain words".into(),
+                      sealed_ancestry: vec!["GL-ALG-002".into()],
+                      wound_glosses: vec!["x".into()],
+                  }
+              }
+
+              #[test]
+              fn stages_into_uruk_and_never_touches_kish() {
+                  let root = std::env::temp_dir().join("gula_uruk_test");
+                  let _ = std::fs::remove_dir_all(&root);
+                  let path = stage(&root, &cand()).unwrap();
+                  assert!(path.starts_with(root.join("uruk")));
+                  let text = std::fs::read_to_string(&path).unwrap();
+                  assert!(text.contains("UNSEALED"));
+                  assert!(
+                      !root.join("kish").exists(),
+                      "the agent must possess no write path to kish/ (§2.2)"
+                  );
+              }
+          }
+    - name: "Write src/arc.rs"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/arc.rs"
+        mode: "0644"
+        content: |
+          //! The Nimrud arc for the grammar court: WITNESS → JUDGE → MOVE → STAGE.
+          //! Every phase journals to NĀRU. No wound is silently closed (§7.1).
+
+          use crate::court::{judge, TrialityWitness};
+          use crate::graft::GraftMint;
+          use crate::naru::{append, JournalEntry};
+          use crate::wound::WoundRegistry;
+          use crate::{PatternWitness, Verdict};
+          use std::path::Path;
+
+          /// Proxy formula for the triality witness, pending court calibration under
+          /// the Fadam functional (§6.1): the transparency deficit τ carried by a wound
+          /// grows with each gloss beyond the first; the graft admits a fixed candidate
+          /// uncertainty ε; the stakeholder floor ε(Θ) is one unit — meaning any wound
+          /// deep enough to trigger (three glosses) always clears the gate, while the
+          /// gate remains a real refusal surface once calibrated values arrive.
+          fn triality_proxy(gloss_count: usize) -> TrialityWitness {
+              TrialityWitness {
+                  tau: (gloss_count.saturating_sub(1)) as f64 * 0.5,
+                  epsilon: 0.25,
+                  epsilon_theta: 1.0,
+              }
+          }
+
+          pub struct ArcReport {
+              pub verdicts: Vec<(String, Verdict)>,
+              pub staged_files: Vec<std::path::PathBuf>,
+          }
+
+          /// Run the full arc over a batch of testimonies against a corpus root.
+          /// `root` is the agent's territory; the NĀRU journal lives at
+          /// `<root>/naru/lisanu.jsonl` and grafts stage under `<root>/uruk/`.
+          pub fn run_arc(root: &Path, witnesses: &[PatternWitness]) -> std::io::Result<ArcReport> {
+              let journal = root.join("naru").join("lisanu.jsonl");
+              let mut registry = WoundRegistry::new();
+              let mut mint = GraftMint::new();
+              let mut verdicts = Vec::new();
+              let mut staged_files = Vec::new();
+
+              // WITNESS
+              for w in witnesses {
+                  let v = registry.witness(w);
+                  append(
+                      &journal,
+                      &JournalEntry {
+                          verdict: v.clone(),
+                          signature_key: w.signature.key(),
+                          witnesses: vec![w.engine.clone()],
+                          cause: format!("testimony: \"{}\"", w.hubullu_gloss),
+                      },
+                  )?;
+                  verdicts.push((w.signature.key(), v));
+              }
+
+              // JUDGE → MOVE → STAGE
+              for wound in registry.triggered() {
+                  let engines: Vec<String> = wound.engines.iter().cloned().collect();
+                  let Some(candidate) = mint.mint(wound) else {
+                      continue; // already grafted; §5.2 refuses overgrowth silently is
+                                // forbidden — but a prior MINTED line already exists.
+                  };
+                  let t = triality_proxy(wound.glosses.len());
+                  let verdict = judge(&candidate, t);
+                  append(
+                      &journal,
+                      &JournalEntry {
+                          verdict: verdict.clone(),
+                          signature_key: wound.signature.key(),
+                          witnesses: engines.clone(),
+                          cause: format!("candidate {}", candidate.id),
+                      },
+                  )?;
+                  verdicts.push((wound.signature.key(), verdict.clone()));
+
+                  if verdict == Verdict::Minted {
+                      let path = crate::uruk::stage(root, &candidate)?;
+                      let staged = Verdict::StagedUruk(path.display().to_string());
+                      append(
+                          &journal,
+                          &JournalEntry {
+                              verdict: staged.clone(),
+                              signature_key: wound.signature.key(),
+                              witnesses: engines,
+                              cause: "graft staged UNSEALED in Uruk; Kish awaits the word".into(),
+                          },
+                      )?;
+                      verdicts.push((wound.signature.key(), staged));
+                      staged_files.push(path);
+                  }
+              }
+
+              Ok(ArcReport { verdicts, staged_files })
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              use crate::Signature;
+
+              fn w(engine: &str, gloss: &str) -> PatternWitness {
+                  PatternWitness {
+                      engine: engine.into(),
+                      signature: Signature::new("leak-onset", "night-flow-orbit", "pipe-tribe"),
+                      hubullu_gloss: gloss.into(),
+                  }
+              }
+
+              #[test]
+              fn full_arc_wound_to_uruk() {
+                  let root = std::env::temp_dir().join("gula_arc_test");
+                  let _ = std::fs::remove_dir_all(&root);
+                  let report = run_arc(
+                      &root,
+                      &[
+                          w("wpdengine", "the moment a pipe first begins to lose water"),
+                          w("nanshe", "the earliest visible onset of a hidden loss"),
+                          w("igigi", "the first breath of a leak before any alarm"),
+                      ],
+                  )
+                  .unwrap();
+                  assert_eq!(report.staged_files.len(), 1, "one graft staged");
+                  assert!(report.verdicts.iter().any(|(_, v)| v.as_str() == "TRIGGERED"));
+                  assert!(report.verdicts.iter().any(|(_, v)| v.as_str() == "MINTED"));
+                  assert!(report.verdicts.iter().any(|(_, v)| v.as_str() == "STAGED-URUK"));
+                  let journal = std::fs::read_to_string(root.join("naru/lisanu.jsonl")).unwrap();
+                  assert!(journal.lines().count() >= 5, "no silent close: every act journaled");
+                  assert!(!root.join("kish").exists());
+              }
+          }
+
+    # ------------------------------------------------------------- law tablet
+    - name: "Write GL-LSN-001 Lišānu Law tablet (status PROPOSED)"
+      ansible.builtin.copy:
+        dest: "{{ laws_dir }}/GL-LSN-001_Lisanu_Law.md"
+        mode: "0644"
+        content: |
+          # GL-LSN-001 — THE LIŠĀNU LAW (Law of the Tongue)
+          **Charter of the Grammar-Minting Agent · BahyWay.Ecosystem v4.+**
+
+          | Field | Value |
+          |---|---|
+          | Law ID | GL-LSN-001 |
+          | Status | **PROPOSED — awaiting Bahaa's word (CSR-08)** |
+          | Engine (candidate name) | **Gula** — goddess of healing; *the agent heals the corpus from its own flesh*. Name enters the naming queue per NL-001 (gods name engines) pending seal. |
+          | Parent theorem | GL-ALG-002 — BahyWay Unified Algebra Theorem (triality τ+ε ≥ ε(Θ)) |
+          | Sibling laws | GL-NAM-002 (Ḫubullu), GL-OPS-002 (URUK–KISH), GL-NIM arc (WITNESS→JUDGE→MOVE→STAGE) |
+          | Date drafted | 2026-08-23 |
+
+          ---
+
+          ## PREAMBLE — The Wound and the Graft
+
+          Notation trails discovery. When the same deep pattern recurs across engines and
+          must be glossed three different ways, the corpus is wounded: the tongue cannot
+          speak what the algebra already knows. This law charters an agent that detects
+          such wounds and proposes grafts — dialect candidates cut from the body's own
+          flesh, the Unified Algebra itself — while reserving the act of sealing to the
+          Architect alone.
+
+          *That struggle is the wound; the dialect is the graft.*
+
+          ---
+
+          ## §1 — THE WOUND TRIGGER (Three-Gloss, Two-Witness)
+
+          1.1. A **structural signature** is the canonical shape of a pattern family,
+          derived from GL-ALG-002 face decomposition (Particle / Orbit / Tribe).
+
+          1.2. A **wound** exists when one structural signature has accumulated **three
+          or more distinct Ḫubullu glosses** (GL-NAM-002 plain-language glosses) across
+          the corpus. Three glosses for one shape is proof the shared notation is missing.
+
+          1.3. A wound may only *trigger* graft-minting when witnessed by **two or more
+          independent engines** (the Two-Witness rule, sibling to GL-AGE-001 Šību).
+          A wound seen by one engine alone remains OBSERVED, never TRIGGERED.
+
+          ## §2 — WHAT THE AGENT MAY PROPOSE (Uruk-Only)
+
+          2.1. The agent MAY mint **unsealed dialect tablets**: grammar-candidate
+          productions derived exclusively from the triggered wound's structural
+          signature and the sealed arsenal of GL-ALG-002.
+
+          2.2. All proposals are born in the **URUK stream** (GL-OPS-002) as files under
+          `uruk/`, marked `UNSEALED`. The agent possesses **no write path to Kish**.
+          No function, task, or code path of the agent shall move, copy, or promote a
+          tablet into `kish/`.
+
+          2.3. The agent MAY extract and refine **template molds** (Nalbanu-style,
+          deterministic, never ML) from already-sealed patterns.
+
+          2.4. The agent MAY recommend — in journal prose only — that a dialect family
+          has matured enough to deserve the Architect's attention.
+
+          ## §3 — WHAT ONLY BAHAA MAY SEAL
+
+          3.1. The **Kish crossing**: promotion of any dialect tablet from `uruk/` to
+          `kish/` occurs only through a numbered playbook run by Bahaa (CSR-08 —
+          running the playbook is the confirmation act).
+
+          3.2. **New axioms.** The agent extends within the algebra's closure; it is
+          structurally blind to what the axioms make invisible. Any change to the axiom
+          base of GL-ALG-002 requires the external witness — Bahaa's word.
+
+          3.3. **AkkadianAOL core grammar.** Dialects live *under* AkkadianAOL as
+          sub-grammars the code generator learns to emit — flesh of the same body,
+          never a second person. The core language is untouchable by the agent.
+
+          3.4. **Names.** Per NL-001, engine and dialect naming is sealed by Bahaa alone.
+
+          ## §4 — FOREIGN-TISSUE REJECTION (The Immune Clause)
+
+          4.1. Any candidate production containing non-sovereign constructs is
+          **REJECTED as foreign tissue** before staging. Non-exhaustive blocklist:
+          SQL keywords (SELECT, FROM, WHERE, JOIN, EXISTS, INSERT, UPDATE, DELETE),
+          embedded foreign DSL directives, or any designation of AkkadianAOL or its
+          dialects as a "DSL".
+
+          4.2. Rejection is recorded with cause in the NĀRU journal. No silent
+          rejection, no silent close (Simmu discipline, GL-HSI-001-A3/A4).
+
+          ## §5 — THE AUTOGRAFT PRINCIPLE
+
+          5.1. Every graft carries the genome: the triality **τ + ε ≥ ε(Θ)**, the three
+          faces (Particle / Orbit / Tribe), and W5H2 predicate compatibility. A candidate
+          failing the genome check is not a graft but a tumor, and is refused.
+
+          5.2. Regulatory layer against self-similar overgrowth: no more than **one
+          dialect candidate per wound**, and no candidate may cite another unsealed
+          candidate as ancestry. Grafts grow from sealed flesh only.
+
+          ## §6 — ADJUDICATION
+
+          6.1. Contested cases (conflicting witnesses, ambiguous genome check, gloss
+          disputes) are routed to the **Fadam functional** for adjudication.
+
+          6.2. Verdict vocabulary: `OBSERVED` → `TRIGGERED` → `MINTED` →
+          `REJECTED-FOREIGN` / `REJECTED-TUMOR` / `STAGED-URUK` → (Bahaa only)
+          `SEALED-KISH`.
+
+          ## §7 — THE JOURNAL (No Silent Close)
+
+          7.1. Every wound receives a verdict line in the append-only **NĀRU journal**
+          (JSON Lines). Every verdict names its witnesses, its signature, and its cause.
+
+          7.2. Z3 does not appear in this agent. It is runtime-free of solvers
+          (design-time verification remains MUMMU/Gate G4 territory).
+
+          ---
+
+          ## ḪUBULLU GLOSS (GL-NAM-002 — plain language, mandatory)
+
+          > **In plain words:** This law creates a scribe-assistant that watches for
+          > moments when the same idea keeps needing different explanations in different
+          > parts of the system. When that happens in at least two places, it drafts a
+          > small shared notation for that idea — built only from rules we already
+          > agreed on — and puts the draft in the experimental pile. It can never make
+          > anything official, never touch the core language, never invent new
+          > foundations, and never use borrowed database syntax. Only Bahaa promotes a
+          > draft to law, by running a playbook.
+
+          ---
+
+          *Tablet drafted by DUB.SAR 𒁾 session scribe. Awaiting the word.*
+
+    # ------------------------------------------------------------ gate: COMPILE
+    - name: "GATE · COMPILE (cargo build) — blocking"
+      ansible.builtin.command: cargo build
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: compile_gate
+      changed_when: true
+
+    # ------------------------------------------------------------ gate: RUNTIME
+    - name: "GATE · RUNTIME (cargo test) — blocking"
+      ansible.builtin.command: cargo test
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: runtime_gate
+      changed_when: false
+
+    # ---------------------------------------------------------------- journal
+    - name: "NĀRU · record the scaffold act"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/playbook_acts.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-602","act":"gula-scaffold","law":"GL-LSN-001",
+          "status":"PROPOSED","gates":{"compile":"green","runtime":"green"},
+          "note":"agent stages uruk-only; kish crossing reserved to Bahaa"}
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "PB-602 complete. COMPILE gate green. RUNTIME gate green."
+          - "Crate: {{ gula_crate_dir }}"
+          - "Law tablet (PROPOSED): {{ laws_dir }}/GL-LSN-001_Lisanu_Law.md"
+          - "The graft awaits the word. Kish is closed until you open it."

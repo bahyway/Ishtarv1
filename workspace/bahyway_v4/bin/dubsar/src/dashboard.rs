@@ -10,24 +10,24 @@
 /// A single particle row to embed in the dashboard.
 pub struct ParticleRow {
     pub uuid_hash: u32,
-    pub state:     &'static str,  // "GOLDEN" / "FUZZY" / "DEAD"
-    pub epoch:     u32,
-    pub events:    usize,
+    pub state: &'static str, // "GOLDEN" / "FUZZY" / "DEAD"
+    pub epoch: u32,
+    pub events: usize,
 }
 
 /// Generate a fully self-contained showway.html as a String.
 ///
 /// Embeds all metrics and particle data as inline JSON — no external deps.
 pub fn generate_dashboard(
-    tribe_id:  u16,
-    golden:    usize,
-    fuzzy:     usize,
-    dead:      usize,
-    epoch:     u32,
+    tribe_id: u16,
+    golden: usize,
+    fuzzy: usize,
+    dead: usize,
+    epoch: u32,
     particles: &[ParticleRow],
 ) -> String {
     let total = golden + fuzzy + dead;
-    let entropy = if total > 0 { (total - golden) * 100 / total } else { 0 };
+    let entropy = ((total - golden) * 100).checked_div(total).unwrap_or(0);
 
     // Build JSON particle array
     let mut particle_json = String::from("[\n");
@@ -43,7 +43,8 @@ pub fn generate_dashboard(
     // Build DAMA knowledge area data
     let dama_areas = build_dama_areas_json();
 
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -481,7 +482,7 @@ window.addEventListener('DOMContentLoaded', () => {{
 
 /// Build the DAMA knowledge-area JSON for the dashboard.
 fn build_dama_areas_json() -> String {
-    use damadmbok_dictionary::{KnowledgeArea, by_area};
+    use damadmbok_dictionary::{by_area, KnowledgeArea};
 
     let mut out = String::from("[\n");
     let areas = KnowledgeArea::all();
@@ -489,14 +490,18 @@ fn build_dama_areas_json() -> String {
         let comma = if i + 1 < areas.len() { "," } else { "" };
         out.push_str(&format!(
             "  {{\"code\":\"{}\",\"label\":\"{}\",\"chapter\":{},\"terms\":[\n",
-            ka.code(), escape_json(ka.label()), ka.chapter_number()
+            ka.code(),
+            escape_json(ka.label()),
+            ka.chapter_number()
         ));
         let terms: Vec<_> = by_area(*ka).collect();
         for (j, t) in terms.iter().enumerate() {
             let tc = if j + 1 < terms.len() { "," } else { "" };
             out.push_str(&format!(
                 "    {{\"code\":\"{}\",\"label\":\"{}\"}}{}\n",
-                t.code, escape_json(t.label), tc
+                t.code,
+                escape_json(t.label),
+                tc
             ));
         }
         out.push_str(&format!("  ]}}{}\n", comma));
@@ -508,7 +513,7 @@ fn build_dama_areas_json() -> String {
 /// Escape a string for safe JSON embedding.
 fn escape_json(s: &str) -> String {
     s.replace('\\', "\\\\")
-     .replace('"',  "\\\"")
-     .replace('\n', "\\n")
-     .replace('\r', "\\r")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
 }

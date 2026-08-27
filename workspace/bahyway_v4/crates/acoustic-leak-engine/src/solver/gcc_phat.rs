@@ -64,10 +64,17 @@ pub fn gcc_phat_delay(x: &[f64], y: &[f64], sample_rate_hz: f64) -> Option<Delay
         return None;
     }
     // Index > m/2 means a negative lag: y LEADS x.
-    let lag_samples = if best_idx > m / 2 { best_idx as f64 - m as f64 } else { best_idx as f64 };
+    let lag_samples = if best_idx > m / 2 {
+        best_idx as f64 - m as f64
+    } else {
+        best_idx as f64
+    };
     // Sign convention check: R = X*conj(Y) peaks at lag = -(delay of y).
     // We therefore negate to report "delay of y relative to x".
     let delay_s = -lag_samples / sample_rate_hz;
 
-    Some(DelayEstimate { delay_s, peak_quality: (best_val / energy).clamp(0.0, 1.0) })
+    Some(DelayEstimate {
+        delay_s,
+        peak_quality: (best_val / energy).clamp(0.0, 1.0),
+    })
 }

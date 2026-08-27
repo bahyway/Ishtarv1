@@ -1,0 +1,122 @@
+---
+# ============================================================================
+# PB-331 — PALAHU CLAUSE (reverence descent) fix for the Šala v2 court
+# BahyWay.Ecosystem v4.0 — SilaEngine · amends GL-VIZ-001 for grief domains
+# ----------------------------------------------------------------------------
+# LAW SEALED BY THIS TABLET (Palahu Clause — palahu: reverence):
+#   In grief-sensitive domains (graves, casualties, Kidinnu civil
+#   protection), the LAND-FROM-SKY interaction is REPLACED by the
+#   VEIL DESCENT:
+#     1. NO aerial traversal or wide-view dwell over the field of graves.
+#        The slow rise-glide-descend sweep is forbidden.
+#     2. Arrival happens under a veil: dim ~160ms -> reposition entirely
+#        while veiled -> reveal ~240ms already centred and close.
+#        Total ~400ms: fast, softened at both edges.
+#     3. ARRIVAL IS EXACT: truth coords are UTM 38N f64; arrival error
+#        < 1 cm. In the prototype the Mobius arrival is settled
+#        iteratively to numerical zero, never animated toward.
+#     4. TALUKU auto-orbit defaults OFF in grief courts.
+#   Production egui/WGPU MUST implement the same clause.
+#
+# ACTION: injects the Palahu patch <script> into the deployed v2 court.
+#   The patch redefines sweepTo/stepCine; the old slow sweep is dead code.
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-331-palahu-clause-veil-descent.yml
+# ============================================================================
+
+- name: "PB-331 | Palāḫu Clause — veil descent in the Šala v2 court"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    workshop_root: /opt/bahyway/workshop/najaf_navi
+    court: "{{ workshop_root }}/shala/shala_silaengine_heptaspacemap_v2.html"
+
+  tasks:
+
+    - name: "1.1 | Assert the v2 court is deployed (PB-329)"
+      ansible.builtin.stat:
+        path: "{{ court }}"
+      register: c
+
+    - name: "1.2 | Halt if the court is missing"
+      ansible.builtin.assert:
+        that: c.stat.exists
+        fail_msg: "REFUSED: run PB-329 first — the v2 court is not deployed."
+
+    - name: "2.1 | Inject the Palāḫu veil-descent patch before </body>"
+      ansible.builtin.blockinfile:
+        path: "{{ court }}"
+        insertbefore: "</body>"
+        marker: "<!-- {mark} PB-331 PALAHU CLAUSE -->"
+        block: |
+          <script>
+          /* ================================================================
+             PB-331 — PALAHU CLAUSE (reverence descent).
+             No flight over the graves. Dim -> arrive under the veil,
+             exactly -> reveal. ~400ms total. Arrival settled to numerical
+             zero (per-cm law; truth space is UTM 38N f64 in the engine).
+             This redefines sweepTo/stepCine; the slow sweep is dead code.
+             ============================================================== */
+          var _veil=document.createElement('div');
+          _veil.style.cssText='position:fixed;inset:0;background:#060a18;'
+            +'opacity:0;transition:opacity .16s ease;pointer-events:none;'
+            +'z-index:25;';
+          document.body.appendChild(_veil);
+          var _pal=null;
+          function sweepTo(p){          // reverent descent — never a flight
+            dest=p; cine=null;
+            _pal={phase:'veil',t:0,p:p};
+            _veil.style.opacity='1';
+          }
+          function stepCine(dt){
+            if(!_pal)return;
+            _pal.t+=dt;
+            if(_pal.phase==='veil'&&_pal.t>=160){
+              /* reposition entirely under the veil — no traversal seen */
+              var pos=mApply(M,cells[_pal.p.cell].c);
+              M=mCompose(mTranslate(cscale(pos,-1)),M);
+              /* settle to numerical zero: the per-cm arrival contract */
+              for(var i=0;i<3;i++){
+                var q=mApply(M,cells[_pal.p.cell].c);
+                if(Math.hypot(q.re,q.im)>1e-12){
+                  M=mCompose(mTranslate(cscale(q,-1)),M);
+                }
+              }
+              cam.zoom=2.35;cam.tilt=0.62;
+              orbitOn=false;                    // no idle circling here
+              var ob=document.getElementById('btnOrbit');
+              if(ob)ob.classList.remove('on');
+              _pal.phase='reveal';_pal.t=0;
+              _veil.style.opacity='0';
+            } else if(_pal.phase==='reveal'&&_pal.t>=240){
+              _pal=null;
+              bounce(dest);                     // the one, greeted gently
+            }
+          }
+          </script>
+
+    - name: "3.1 | NUZI provenance note"
+      ansible.builtin.copy:
+        dest: "{{ workshop_root }}/nuzi_provenance/pb-331-note.md"
+        mode: "0640"
+        content: |
+          PB-331 PALAHU CLAUSE sealed (amendment to GL-VIZ-001 for
+          grief-sensitive domains).
+          Reason: a slow aerial sweep over millions of graves forces a
+          grieving visitor to witness the whole field of the dead before
+          reaching their one — a trauma, and a visual violation of the
+          Never-Averaged spirit.
+          Replacement: VEIL DESCENT — dim ~160ms, exact repositioning
+          under the veil (settled to numerical zero; engine truth UTM 38N
+          f64, arrival contract < 1 cm), reveal ~240ms. ~400ms total.
+          No traversal. TALUKU auto-orbit off by default in grief courts.
+          Production egui/WGPU must implement the same clause.
+
+    - name: "4.1 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "Palāḫu veil descent injected into the v2 court."
+          - "No flight over the graves. Arrival exact. ~400ms, softened."

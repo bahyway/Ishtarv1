@@ -53,9 +53,9 @@ impl EnlilGate {
     /// Returns the Kaki type this gate primarily governs (as a static label).
     pub fn governs(&self) -> &'static str {
         match self {
-            EnlilGate::Adad    => "Events-KAKI",
-            EnlilGate::Anu     => "CrossTribe-KAKI",
-            EnlilGate::Marduk  => "Transformation",
+            EnlilGate::Adad => "Events-KAKI",
+            EnlilGate::Anu => "CrossTribe-KAKI",
+            EnlilGate::Marduk => "Transformation",
             EnlilGate::Shamash => "Identity-KAKI",
         }
     }
@@ -63,9 +63,9 @@ impl EnlilGate {
     /// The exclusion principle this gate enforces.
     pub fn exclusion_kind(&self) -> &'static str {
         match self {
-            EnlilGate::Adad    => "Temporal Exclusion",
-            EnlilGate::Anu     => "Authority Exclusion",
-            EnlilGate::Marduk  => "Structural Exclusion",
+            EnlilGate::Adad => "Temporal Exclusion",
+            EnlilGate::Anu => "Authority Exclusion",
+            EnlilGate::Marduk => "Structural Exclusion",
             EnlilGate::Shamash => "State Exclusion",
         }
     }
@@ -141,9 +141,9 @@ impl QuantumState {
     /// Canonical energy level (higher = more active).
     pub fn energy_level(self) -> i8 {
         match self {
-            QuantumState::Active      =>  1,
-            QuantumState::Stewardship =>  0,
-            QuantumState::Dead        => -1,
+            QuantumState::Active => 1,
+            QuantumState::Stewardship => 0,
+            QuantumState::Dead => -1,
         }
     }
 }
@@ -167,7 +167,10 @@ pub enum ExclusionResult {
     Allowed,
     /// The coordinate is already occupied.
     /// The `gate` indicates which Council member detected the violation.
-    Excluded { gate: EnlilGate, reason: &'static str },
+    Excluded {
+        gate: EnlilGate,
+        reason: &'static str,
+    },
 }
 
 impl ExclusionResult {
@@ -180,24 +183,27 @@ impl ExclusionResult {
 ///
 /// This is the pure logic of the Pauli Exclusion Principle — no I/O needed.
 /// The caller supplies the set of currently occupied coordinates.
-pub fn pauli_check(
-    incoming:  &QuantumCoord,
-    occupied:  &[QuantumCoord],
-) -> ExclusionResult {
+pub fn pauli_check(incoming: &QuantumCoord, occupied: &[QuantumCoord]) -> ExclusionResult {
     for existing in occupied {
-        if existing.kaki_prefix    != incoming.kaki_prefix    { continue; }
-        if existing.orbit_position != incoming.orbit_position { continue; }
-        if existing.state          != incoming.state          { continue; }
+        if existing.kaki_prefix != incoming.kaki_prefix {
+            continue;
+        }
+        if existing.orbit_position != incoming.orbit_position {
+            continue;
+        }
+        if existing.state != incoming.state {
+            continue;
+        }
         // All three quantum numbers match → Pauli Violation
         let gate = match incoming.state {
-            QuantumState::Active      => EnlilGate::Shamash, // State/Life judgment
-            QuantumState::Stewardship => EnlilGate::Marduk,  // Transformation lock
-            QuantumState::Dead        => EnlilGate::Shamash, // Underworld guard
+            QuantumState::Active => EnlilGate::Shamash, // State/Life judgment
+            QuantumState::Stewardship => EnlilGate::Marduk, // Transformation lock
+            QuantumState::Dead => EnlilGate::Shamash,   // Underworld guard
         };
         let reason = match incoming.state {
-            QuantumState::Active      => "Active head already occupied — Golden Record unique",
+            QuantumState::Active => "Active head already occupied — Golden Record unique",
             QuantumState::Stewardship => "Stewardship locked — Marduk holds the transformation",
-            QuantumState::Dead        => "Dead particle blocks reincarnation — SHAMASH Gate required",
+            QuantumState::Dead => "Dead particle blocks reincarnation — SHAMASH Gate required",
         };
         return ExclusionResult::Excluded { gate, reason };
     }
@@ -216,15 +222,15 @@ mod tests {
 
     #[test]
     fn test_gate_governs() {
-        assert_eq!(EnlilGate::Adad.governs(),    "Events-KAKI");
-        assert_eq!(EnlilGate::Anu.governs(),     "CrossTribe-KAKI");
-        assert_eq!(EnlilGate::Marduk.governs(),  "Transformation");
+        assert_eq!(EnlilGate::Adad.governs(), "Events-KAKI");
+        assert_eq!(EnlilGate::Anu.governs(), "CrossTribe-KAKI");
+        assert_eq!(EnlilGate::Marduk.governs(), "Transformation");
         assert_eq!(EnlilGate::Shamash.governs(), "Identity-KAKI");
     }
 
     #[test]
     fn test_gate_exclusion_kind() {
-        assert_eq!(EnlilGate::Adad.exclusion_kind(),    "Temporal Exclusion");
+        assert_eq!(EnlilGate::Adad.exclusion_kind(), "Temporal Exclusion");
         assert_eq!(EnlilGate::Shamash.exclusion_kind(), "State Exclusion");
     }
 
@@ -252,7 +258,11 @@ mod tests {
     // ── Pauli Exclusion tests ─────────────────────────────────────────────────
 
     fn coord(pos: u32, state: QuantumState) -> QuantumCoord {
-        QuantumCoord { kaki_prefix: [1, 2, 3, 4, 5, 6, 7, 8], orbit_position: pos, state }
+        QuantumCoord {
+            kaki_prefix: [1, 2, 3, 4, 5, 6, 7, 8],
+            orbit_position: pos,
+            state,
+        }
     }
 
     #[test]
@@ -267,7 +277,13 @@ mod tests {
         let occupied = [c.clone()];
         let result = pauli_check(&c, &occupied);
         assert!(!result.is_allowed());
-        assert!(matches!(result, ExclusionResult::Excluded { gate: EnlilGate::Shamash, .. }));
+        assert!(matches!(
+            result,
+            ExclusionResult::Excluded {
+                gate: EnlilGate::Shamash,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -280,7 +296,7 @@ mod tests {
     #[test]
     fn test_pauli_allows_different_state_same_position() {
         let active = coord(0, QuantumState::Active);
-        let dead   = coord(0, QuantumState::Dead);
+        let dead = coord(0, QuantumState::Dead);
         // Active and Dead can coexist at position 0 — different shells
         assert_eq!(pauli_check(&dead, &[active]), ExclusionResult::Allowed);
     }
@@ -289,14 +305,20 @@ mod tests {
     fn test_pauli_stewardship_lock_detected_by_marduk() {
         let s = coord(0, QuantumState::Stewardship);
         let result = pauli_check(&s, &[s.clone()]);
-        assert!(matches!(result, ExclusionResult::Excluded { gate: EnlilGate::Marduk, .. }));
+        assert!(matches!(
+            result,
+            ExclusionResult::Excluded {
+                gate: EnlilGate::Marduk,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn test_quantum_state_energy_levels() {
-        assert_eq!(QuantumState::Active.energy_level(),      1);
+        assert_eq!(QuantumState::Active.energy_level(), 1);
         assert_eq!(QuantumState::Stewardship.energy_level(), 0);
-        assert_eq!(QuantumState::Dead.energy_level(),       -1);
+        assert_eq!(QuantumState::Dead.energy_level(), -1);
     }
 
     #[test]

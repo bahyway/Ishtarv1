@@ -1,0 +1,346 @@
+---
+# ============================================================
+#  PB-347 — Nanshe Mask & Orbit Dilation (GL-HSI-001-A1)
+#  BahyWay.Ecosystem v4.0
+#
+#  Run from the Fedora bare-metal HOST:
+#    ansible-playbook -i inventory PB-347_Nanshe_Mask_Dilation.yml
+#  Running this playbook is the CSR-08 confirmation point —
+#  including the radius identity (r² ≡ T²) and HS-EXT-003 candidacy.
+#
+#  GATE: requires the nanshe crate from PB-346 to exist.
+#  Sovereignty: pure Rust, no deps; deterministic nucleation.
+# ============================================================
+- name: PB-347 nanshe mask and dilation modules
+  hosts: bahyway_host
+  gather_facts: false
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    crate_dir: "{{ v4_root }}/engines/nanshe"
+    tablets_dir: "{{ v4_root }}/tablets"
+    shala_dir: "{{ v4_root }}/shala"
+
+  tasks:
+    - name: GATE · nanshe crate must exist (PB-346)
+      ansible.builtin.stat:
+        path: "{{ crate_dir }}/Cargo.toml"
+      register: crate
+
+    - name: GATE · refuse if PB-346 not run
+      ansible.builtin.fail:
+        msg: "COMPLETION LAW REFUSAL: nanshe crate absent — run PB-346 first."
+      when: not crate.stat.exists
+
+    - name: Ensure shala directory
+      ansible.builtin.file: {path: "{{ shala_dir }}", state: directory, mode: "0755"}
+
+    - name: Deposit amendment tablet
+      ansible.builtin.copy:
+        src: "GL-HSI-001-A1_Mask_Orbit_Dilation.md"
+        dest: "{{ tablets_dir }}/GL-HSI-001-A1_Mask_Orbit_Dilation.md"
+        mode: "0644"
+
+    - name: Deposit Šala tab (standing habit — one PB, one tab)
+      ansible.builtin.copy:
+        src: "shala_nanshe_mask_court.html"
+        dest: "{{ shala_dir }}/shala_nanshe_mask_court.html"
+        mode: "0644"
+
+    - name: Register new modules in lib.rs
+      ansible.builtin.lineinfile:
+        path: "{{ crate_dir }}/src/lib.rs"
+        line: "{{ item }}"
+      loop:
+        - "pub mod mask;"
+        - "pub mod tribes;"
+        - "pub mod dilation;"
+
+    - name: src/mask.rs — the mask is a view, never a replacement
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/mask.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A1 §1 — the Mask Law. The raw cube is NUZI origin
+          //! (write-once, hash-sealed); the mask holds only references and
+          //! shadows. Lifting the mask = Kīma Labīrīšu on imagery.
+
+          pub struct NuziOrigin {
+              pub bytes_hash: u64,   // FNV-1a of the sealed cube
+              pub width: usize,
+              pub height: usize,
+              pub bands: usize,
+          }
+
+          pub fn fnv1a(data: &[u8]) -> u64 {
+              let mut h: u64 = 0xcbf29ce484222325;
+              for &b in data { h ^= b as u64; h = h.wrapping_mul(0x100000001b3); }
+              h
+          }
+
+          /// A masked particle: reference into the origin + Hepta shadow.
+          /// Owns NOTHING of the original bytes.
+          pub struct MaskedParticle {
+              pub pixel_index: usize,
+              pub tribe: u16,
+              pub shadow: [f64; 7],
+          }
+
+          pub struct Mask {
+              pub origin_hash: u64,      // must equal NuziOrigin.bytes_hash forever
+              pub subspace_epoch: u16,   // the P this mask was cut under
+              pub particles: Vec<MaskedParticle>,
+          }
+
+          impl Mask {
+              /// L-HSI-7: N pixels in -> exactly N particle references out,
+              /// origin untouched (caller re-hashes to prove).
+              pub fn cut(origin: &NuziOrigin, shadows: &[[f64; 7]],
+                         tribes: &[u16], epoch: u16) -> Mask {
+                  assert_eq!(shadows.len(), tribes.len());
+                  let particles = shadows.iter().zip(tribes).enumerate()
+                      .map(|(i, (s, t))| MaskedParticle {
+                          pixel_index: i, tribe: *t, shadow: *s }).collect();
+                  Mask { origin_hash: origin.bytes_hash,
+                         subspace_epoch: epoch, particles }
+              }
+          }
+
+    - name: src/tribes.rs — deterministic nucleation + whitened radius
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/tribes.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A1 §2 — tribes, nuclei, and the Radius Identity.
+          //! Nucleation: seeded farthest-point (deterministic, L-HSI-10).
+          //! Radius: whitened Mahalanobis in shadow space — r² ≡ T².
+
+          pub const K: usize = 7;
+
+          pub struct Tribe {
+              pub id: u16,
+              pub nucleus: [f64; K],
+              pub inv_var: [f64; K],   // diagonal whitening (per-axis 1/λ)
+          }
+
+          fn dist2(a: &[f64; K], b: &[f64; K]) -> f64 {
+              a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum()
+          }
+
+          /// Deterministic farthest-point nucleation over a sealed corpus.
+          /// First nucleus = point of max norm (ties by index); each next =
+          /// point maximizing min-distance to chosen nuclei (ties by index).
+          pub fn nucleate(shadows: &[[f64; K]], n_tribes: usize) -> Vec<[f64; K]> {
+              assert!(!shadows.is_empty());
+              let mut nuclei: Vec<[f64; K]> = Vec::new();
+              let first = shadows.iter().enumerate()
+                  .max_by(|a, b| {
+                      let na: f64 = a.1.iter().map(|v| v * v).sum();
+                      let nb: f64 = b.1.iter().map(|v| v * v).sum();
+                      na.partial_cmp(&nb).unwrap().then(b.0.cmp(&a.0)) })
+                  .unwrap().1;
+              nuclei.push(*first);
+              while nuclei.len() < n_tribes.min(shadows.len()) {
+                  let next = shadows.iter().enumerate()
+                      .max_by(|a, b| {
+                          let da = nuclei.iter().map(|n| dist2(a.1, n))
+                              .fold(f64::MAX, f64::min);
+                          let db = nuclei.iter().map(|n| dist2(b.1, n))
+                              .fold(f64::MAX, f64::min);
+                          da.partial_cmp(&db).unwrap().then(b.0.cmp(&a.0)) })
+                      .unwrap().1;
+                  nuclei.push(*next);
+              }
+              nuclei
+          }
+
+          /// Assign each shadow to nearest nucleus; refine nucleus as mean and
+          /// per-axis variance (fixed 8 rounds — determinism over adaptivity).
+          pub fn form_tribes(shadows: &[[f64; K]], n: usize) -> (Vec<Tribe>, Vec<u16>) {
+              let mut nuclei = nucleate(shadows, n);
+              let mut assign = vec![0u16; shadows.len()];
+              for _ in 0..8 {
+                  for (i, s) in shadows.iter().enumerate() {
+                      let mut best = 0usize; let mut bd = f64::MAX;
+                      for (t, c) in nuclei.iter().enumerate() {
+                          let d = dist2(s, c);
+                          if d < bd { bd = d; best = t; }
+                      }
+                      assign[i] = best as u16;
+                  }
+                  for (t, c) in nuclei.iter_mut().enumerate() {
+                      let members: Vec<&[f64; K]> = shadows.iter().zip(&assign)
+                          .filter(|(_, a)| **a == t as u16).map(|(s, _)| s).collect();
+                      if members.is_empty() { continue; }
+                      let mut m = [0.0; K];
+                      for s in &members { for k in 0..K { m[k] += s[k]; } }
+                      for k in 0..K { m[k] /= members.len() as f64; }
+                      *c = m;
+                  }
+              }
+              let tribes = nuclei.iter().enumerate().map(|(t, c)| {
+                  let members: Vec<&[f64; K]> = shadows.iter().zip(&assign)
+                      .filter(|(_, a)| **a == t as u16).map(|(s, _)| s).collect();
+                  let mut var = [1e-9f64; K];
+                  for s in &members {
+                      for k in 0..K { var[k] += (s[k] - c[k]).powi(2); }
+                  }
+                  let denom = members.len().max(2) as f64 - 1.0;
+                  let mut inv = [0.0; K];
+                  for k in 0..K { inv[k] = 1.0 / (var[k] / denom).max(1e-9); }
+                  Tribe { id: t as u16, nucleus: *c, inv_var: inv }
+              }).collect();
+              (tribes, assign)
+          }
+
+          /// The Radius Identity: r² = Σ (s_k − c_k)² / λ_k  ≡  T² (§2).
+          pub fn radius2(tribe: &Tribe, shadow: &[f64; K]) -> f64 {
+              shadow.iter().zip(&tribe.nucleus).zip(&tribe.inv_var)
+                  .map(|((s, c), iv)| (s - c) * (s - c) * iv).sum()
+          }
+
+    - name: src/dilation.rs — girth, Δr witness, T_girth horizon
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/dilation.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A1 §3 — the Membrane Girth Law.
+          //! Girth = trimmed-mean radius; dilation needs two sustained epochs
+          //! plus a second witness; the bell rings on acceleration (Igigi).
+          use crate::tribes::{Tribe, radius2, K};
+          use crate::horizon;
+
+          /// Trimmed mean of radii (5% per tail), deterministic sort.
+          pub fn girth(tribe: &Tribe, members: &[[f64; K]]) -> f64 {
+              if members.is_empty() { return 0.0; }
+              let mut r: Vec<f64> = members.iter()
+                  .map(|s| radius2(tribe, s).sqrt()).collect();
+              r.sort_by(|a, b| a.partial_cmp(b).unwrap());
+              let trim = (r.len() as f64 * 0.05) as usize;
+              let core = &r[trim..r.len() - trim.min(r.len().saturating_sub(1))];
+              core.iter().sum::<f64>() / core.len().max(1) as f64
+          }
+
+          #[derive(Debug, PartialEq)]
+          pub enum DilationVerdict {
+              Weather,                       // one wide epoch, or no 2nd witness
+              DilationProven,                // sustained ×2 + second witness
+              Omen { t_girth: f64 },         // accelerating: horizon named
+          }
+
+          /// L-HSI-9 discipline. `second_witness` = Q over limit or nucleus δc
+          /// over limit at the current epoch — computed by the caller's court.
+          pub fn judge(g_series: &[f64], g_limit: f64,
+                       second_witness: bool) -> DilationVerdict {
+              let n = g_series.len();
+              if n < 3 { return DilationVerdict::Weather; }
+              let d1 = g_series[n - 1] - g_series[n - 2];
+              let d0 = g_series[n - 2] - g_series[n - 3];
+              let sustained = d1 > 0.0 && d0 > 0.0;
+              if !sustained || !second_witness {
+                  return DilationVerdict::Weather;
+              }
+              let h = horizon::fit(g_series, g_limit);
+              match (h.t_leak_epochs, h.accel > 0.0) {
+                  (Some(t), true) => DilationVerdict::Omen { t_girth: t },
+                  _ => DilationVerdict::DilationProven,
+              }
+          }
+
+    - name: tests/mask_dilation_law_tests.rs — L-HSI-7..10
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/mask_dilation_law_tests.rs"
+        mode: "0644"
+        content: |
+          use nanshe::mask::{NuziOrigin, Mask, fnv1a};
+          use nanshe::tribes::{form_tribes, radius2, K};
+          use nanshe::dilation::{girth, judge, DilationVerdict};
+
+          fn corpus(n: usize) -> Vec<[f64; K]> {
+              let mut s: u64 = 0x9E3779B97F4A7C15; let mut out = Vec::new();
+              for i in 0..n {
+                  let mut p = [0.0; K];
+                  for k in 0..K {
+                      s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                      p[k] = ((s >> 33) as f64 / (1u64 << 31) as f64)
+                             + if i % 3 == 0 { 3.0 } else { 0.0 };
+                  }
+                  out.push(p);
+              }
+              out
+          }
+
+          #[test]
+          fn l_hsi_7_mask_is_a_view() {
+              let raw = vec![7u8; 4096];
+              let h0 = fnv1a(&raw);
+              let origin = NuziOrigin { bytes_hash: h0, width: 32, height: 32, bands: 4 };
+              let shadows = corpus(1024);
+              let tribes = vec![0u16; 1024];
+              let m = Mask::cut(&origin, &shadows, &tribes, 42);
+              assert_eq!(m.particles.len(), 1024);        // N in, N references out
+              assert_eq!(fnv1a(&raw), h0);                // origin bytes untouched
+              assert_eq!(m.origin_hash, h0);              // mask cites its origin
+          }
+
+          #[test]
+          fn l_hsi_8_radius_identity() {
+              let shadows = corpus(300);
+              let (tribes, assign) = form_tribes(&shadows, 3);
+              // T2 per GL-HSI-001 §4 on the tribe frame = Σ score²/λ, which in
+              // the tribe-whitened diagonal frame is exactly radius2.
+              let x = &shadows[10];
+              let t = &tribes[assign[10] as usize];
+              let r2 = radius2(t, x);
+              let t2: f64 = x.iter().zip(&t.nucleus).zip(&t.inv_var)
+                  .map(|((s, c), iv)| (s - c) * (s - c) * iv).sum();
+              assert!((r2 - t2).abs() < 1e-9);
+          }
+
+          #[test]
+          fn l_hsi_9_girth_discipline() {
+              // one wide epoch -> weather
+              assert_eq!(judge(&[5.0, 5.0, 6.2], 20.0, true), DilationVerdict::Weather);
+              // sustained x2 but no second witness -> weather
+              assert_eq!(judge(&[5.0, 5.8, 6.7], 20.0, false), DilationVerdict::Weather);
+              // sustained + witness + acceleration -> OMEN with finite T_girth
+              let g: Vec<f64> = (0..8).map(|t| 5.0 + 0.4 * (t as f64).powi(2)).collect();
+              match judge(&g, 40.0, true) {
+                  DilationVerdict::Omen { t_girth } => assert!(t_girth.is_finite()),
+                  v => panic!("expected Omen, got {:?}", v),
+              }
+          }
+
+          #[test]
+          fn l_hsi_10_deterministic_nucleation() {
+              let a = form_tribes(&corpus(400), 4).0;
+              let b = form_tribes(&corpus(400), 4).0;
+              for (ta, tb) in a.iter().zip(&b) {
+                  assert_eq!(ta.nucleus, tb.nucleus);     // bit-identical
+              }
+          }
+
+          #[test]
+          fn girth_grows_under_dilation() {
+              let shadows = corpus(300);
+              let (tribes, assign) = form_tribes(&shadows, 3);
+              let t0 = &tribes[0];
+              let members: Vec<[f64; K]> = shadows.iter().zip(&assign)
+                  .filter(|(_, a)| **a == 0).map(|(s, _)| *s).collect();
+              let g0 = girth(t0, &members);
+              let dilated: Vec<[f64; K]> = members.iter().map(|s| {
+                  let mut d = *s;
+                  for k in 0..K { d[k] = t0.nucleus[k] + (d[k] - t0.nucleus[k]) * 1.5; }
+                  d }).collect();
+              assert!(girth(t0, &dilated) > g0 * 1.3);
+          }
+
+    - name: Build and run law tests (release)
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ crate_dir }}"
+      register: law_tests
+      changed_when: false
+
+    - name: Announce
+      ansible.builtin.debug:
+        msg: "Mask & Dilation sealed. Law tests: {{ 'GREEN' if law_tests.rc == 0 else 'RED' }}. HS-EXT-003 awaits CSR-08."

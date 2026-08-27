@@ -24,8 +24,8 @@
 
 #![forbid(unsafe_code)]
 
-pub mod particle;
 pub mod null_semantics;
+pub mod particle;
 
-pub use particle::{Particle, ParticleBirthState};
 pub use null_semantics::NullSemantics;
+pub use particle::{Particle, ParticleBirthState};

@@ -27,7 +27,10 @@ pub struct PatternProfile {
 
 impl PatternProfile {
     pub fn new(pattern: DiscoveredPattern, age_orbitals: u64) -> Self {
-        PatternProfile { pattern, age_orbitals }
+        PatternProfile {
+            pattern,
+            age_orbitals,
+        }
     }
 
     pub fn tier(&self) -> StorageTier {

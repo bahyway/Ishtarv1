@@ -1,0 +1,115 @@
+---
+# ============================================================================
+# PB-ALG-002 — Deposit GL-ALG-002 (Napharu Theorem) into the law corpus
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series
+# Law        : GL-ALG-002 (BahyWay Unified Algebra — Napharu Theorem)
+# Discipline : CSR-08 (running this playbook IS the confirmation act)
+# Host       : Fedora bare-metal HOST (Ansible control node; no VDIs)
+# Doctrine   : Append-only. FAILS if the tablet already exists. Also deposits
+#              the five open Proof Obligations (PO-1..PO-5) into the PO ledger
+#              so the theorem's honesty is tracked, not forgotten.
+# Renumber   : If the PB ledger has advanced, renumber to the next ordinal
+#              before running; the deposit act itself is unchanged.
+# ============================================================================
+
+- name: "PB-ALG-002 :: Deposit GL-ALG-002 Napharu Theorem (append-only)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    corpus_root: "/opt/bahyway/v4/laws"
+    ledger_path: "/opt/bahyway/v4/laws/LEDGER-GL.tsv"
+    po_ledger:   "/opt/bahyway/v4/laws/LEDGER-PO.tsv"
+    tablet_id: "GL-ALG-002"
+    tablet_src: "{{ playbook_dir }}/GL-ALG-002_Napharu_Theorem.md"
+    tablet_dst: "{{ corpus_root }}/GL-ALG-002_Napharu_Theorem.md"
+    seal_note: "Napharu Theorem — one stage, one deficit schema, discrete verdicts; 53 members become corollaries; PO-1..PO-5 open"
+    proof_obligations:
+      - { id: "PO-1", note: "Verdict-schema universality (two-witness trigger, strain, Sibu under one T)" }
+      - { id: "PO-2", note: "Tau-duality: Transparency Deficit judges the observer — dual formulation or sealed exception" }
+      - { id: "PO-3", note: "Triality rigor: gauge group + two-determine-the-third for Judgment tier" }
+      - { id: "PO-4", note: "Floor coherence: epsilon composes lawfully across fused witnesses" }
+      - { id: "PO-5", note: "Closure: no member of the 53 needs a verdict logic outside section 4" }
+
+  tasks:
+
+    - name: "WITNESS :: law corpus directory exists"
+      ansible.builtin.file:
+        path: "{{ corpus_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: "WITNESS :: source tablet is present beside this playbook"
+      ansible.builtin.stat:
+        path: "{{ tablet_src }}"
+      register: src_stat
+
+    - name: "JUDGE :: refuse if source tablet is absent"
+      ansible.builtin.assert:
+        that: src_stat.stat.exists
+        fail_msg: "REFUSED — tablet source {{ tablet_src }} not found; nothing deposited."
+
+    - name: "WITNESS :: check whether tablet already sits in the corpus"
+      ansible.builtin.stat:
+        path: "{{ tablet_dst }}"
+      register: dst_stat
+
+    - name: "JUDGE :: refuse re-deposit (append-only doctrine)"
+      ansible.builtin.assert:
+        that: not dst_stat.stat.exists
+        fail_msg: >-
+          REFUSED — {{ tablet_id }} already deposited at {{ tablet_dst }}.
+          Laws are append-only; supersede with a later tablet, never overwrite.
+
+    - name: "MOVE :: deposit the tablet into the corpus (copy, never edit)"
+      ansible.builtin.copy:
+        src: "{{ tablet_src }}"
+        dest: "{{ tablet_dst }}"
+        mode: "0444"          # sealed tablets do not bend
+
+    - name: "MOVE :: compute SHA-256 checksum of the deposited tablet"
+      ansible.builtin.stat:
+        path: "{{ tablet_dst }}"
+        checksum_algorithm: sha256
+      register: sealed_stat
+
+    - name: "STAGE :: ensure the GL ledger exists (header on first creation only)"
+      ansible.builtin.copy:
+        dest: "{{ ledger_path }}"
+        content: "tablet_id\tdeposited_utc\tsha256\tnote\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: append the seal entry to the GL ledger"
+      ansible.builtin.lineinfile:
+        path: "{{ ledger_path }}"
+        line: "{{ tablet_id }}\t{{ ansible_date_time.iso8601 }}\t{{ sealed_stat.stat.checksum }}\t{{ seal_note }}"
+        insertafter: EOF
+        create: false
+
+    - name: "STAGE :: ensure the Proof Obligation ledger exists"
+      ansible.builtin.copy:
+        dest: "{{ po_ledger }}"
+        content: "po_id\tparent_tablet\topened_utc\tstatus\tnote\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: open the five proof obligations (append-only)"
+      ansible.builtin.lineinfile:
+        path: "{{ po_ledger }}"
+        line: "{{ item.id }}\t{{ tablet_id }}\t{{ ansible_date_time.iso8601 }}\tOPEN\t{{ item.note }}"
+        insertafter: EOF
+        create: false
+      loop: "{{ proof_obligations }}"
+      loop_control:
+        label: "{{ item.id }}"
+
+    - name: "STAGE :: proclaim the seal"
+      ansible.builtin.debug:
+        msg:
+          - "SEALED :: {{ tablet_id }} deposited at {{ tablet_dst }}"
+          - "SHA-256 :: {{ sealed_stat.stat.checksum }}"
+          - "OPEN    :: PO-1..PO-5 deposited in {{ po_ledger }} — the theorem carries its honesty with it."
+          - "DOCTRINE:: 53 members are now corollaries. New calculi enter only with their (Theta, D, T, witnesses) quadruple and epsilon."

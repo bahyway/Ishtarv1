@@ -1,0 +1,108 @@
+# =============================================================================
+# PB-570 — The Rigmu Inquest Doctrine: Concept Seal (GL-NSR-001-A2)
+# BahyWay.Ecosystem v4.0 — 2026-08-21
+#
+# WHY THIS PLAYBOOK EXISTS
+#   Seals GL-NSR-001-A2, the mandatory W5H2 investigation opened by
+#   every RIGMU (GL-NSR-001-A1, PB-569). The explanation particle has
+#   seven mandatory fields (WHEN/WHO/WHAT/WHERE/WHY/HOW/HOW MUCH), each
+#   bound to a specific instrument (bisection against NUZI snapshots,
+#   lineage sweep, Mandatory-EAV diff, per-dimension onset, two-witness
+#   root cause, Sen slope, theta ratio + horizon). The Inquest is
+#   spoken only in five sovereign HeptaScript operations (ORBIT / PROVE
+#   / PROVE / PROVE / WITNESS / EMIT / SYNC) -- no SQL exists here and
+#   none may be smuggled in. Close requires W5H2-complete plus
+#   two-witness WHY plus Architect/Madanu signature; any lesser close
+#   attempt is refused and journaled.
+#
+#   Landed from a parallel Claude session's Sat20260815 thread,
+#   evaluated file-by-file against this repo before landing and
+#   RENUMBERED per this repo's standing rule: the other session's own
+#   PB-332 -> PB-570 here. See
+#   shala-prototypes/batch12_nasaru_saturday_courts/README.md for the
+#   full renumbering table.
+#
+# WHAT THIS PLAYBOOK DOES
+#   PROVEs the seven-field W5H2 frame and the five sovereign operations
+#   are sealed in the tablet, and PROVEs the Sala rehearsal
+#   (shala_rigmu_inquest.html) renders the operation sequence.
+#   Deposits nothing new -- docs and Sala tab are committed directly
+#   into docs/ and shala-prototypes/, this playbook is a pointer/
+#   verification record.
+#
+# Running this playbook = CSR-08 confirmation. Review -> --check -> live.
+# =============================================================================
+
+- name: "PB-570 | Seal the Rigmu Inquest Doctrine (GL-NSR-001-A2)"
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    tablet_file: "{{ repo_root }}/docs/09_observatory/GL-NSR-001-A2_Rigmu_Inquest_Doctrine.md"
+    court_file: "{{ repo_root }}/shala-prototypes/batch12_nasaru_saturday_courts/shala_rigmu_inquest.html"
+
+  tasks:
+
+    - name: "0.1 | Confirm the tablet and the Sala court are landed"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: land_stat
+      loop:
+        - "{{ tablet_file }}"
+        - "{{ court_file }}"
+      loop_control: { label: "{{ item }}" }
+
+    - name: "FAIL | required file missing"
+      ansible.builtin.fail:
+        msg: "{{ item.item }} not found -- nothing to seal."
+      loop: "{{ land_stat.results }}"
+      loop_control: { label: "{{ item.item }}" }
+      when: not item.stat.exists
+
+    - name: "1.1 | PROVE the seven-field W5H2 frame is sealed"
+      ansible.builtin.shell: |
+        set -e
+        for field in WHEN WHO WHAT WHERE WHY HOW; do
+          grep -qF "**$field**" "{{ tablet_file }}"
+        done
+        grep -qF "HOW MUCH" "{{ tablet_file }}"
+        grep -qF "cannot be minted" "{{ tablet_file }}"
+        echo "PROVEN: all seven W5H2 fields present, missing-field-refuses-mint rule sealed"
+      register: prove_w5h2
+      changed_when: false
+
+    - name: "1.2 | PROVE the five sovereign HeptaScript operations are sealed"
+      ansible.builtin.shell: |
+        set -e
+        grep -qF "ORBIT   tribe:<id> SPAN temennu..now" "{{ tablet_file }}"
+        grep -qF "PROVE   WHEN  onset BY bisection AGAINST nuzi" "{{ tablet_file }}"
+        grep -qF "WITNESS nāru  CASE <rigmu-id>" "{{ tablet_file }}"
+        grep -qF "EMIT    explanation-particle KAKI <addr>" "{{ tablet_file }}"
+        grep -qF "SYNC    case CLOSED → unfreeze GateG4" "{{ tablet_file }}"
+        grep -qF "No SQL exists here and none may be smuggled in" "{{ tablet_file }}"
+        echo "PROVEN: ORBIT/PROVE/WITNESS/EMIT/SYNC operations and the no-SQL clause sealed"
+      register: prove_ops
+      changed_when: false
+
+    - name: "1.3 | PROVE the Sala rehearsal renders the five-operation sequence"
+      ansible.builtin.command: >-
+        grep -c 'ORBIT\|PROVE\|WITNESS\|EMIT\|SYNC'
+        {{ court_file }}
+      register: prove_court
+      changed_when: false
+      failed_when: prove_court.stdout | int < 5
+
+    - name: "2.1 | Report"
+      ansible.builtin.debug:
+        msg: >
+          PB-570 complete. GL-NSR-001-A2 sealed: the seven-field W5H2
+          explanation particle (WHEN/WHO/WHAT/WHERE/WHY/HOW/HOW MUCH,
+          refused if any field is missing), the five sovereign
+          HeptaScript operations (ORBIT/PROVE/WITNESS/EMIT/SYNC, no SQL
+          smuggled in), and the close-requires-signature rule all hold.
+          The Sala rehearsal (shala_rigmu_inquest.html) renders the
+          full operation sequence. Renumbered from the source session's
+          PB-332; see
+          shala-prototypes/batch12_nasaru_saturday_courts/README.md for
+          the full renumbering table.

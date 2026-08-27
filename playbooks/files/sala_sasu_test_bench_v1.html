@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Šasû Test Bench · what a change does to the shape · PB-409</title>
+<style>
+:root{--bg:#0b1218;--rail:#111b23;--panel:#16222c;--line:#22323e;--ink:#fff;--dim:#7fa3bd;--gold:#ffc600;--lapis:#0088ff;--green:#3ad900;--violet:#fb94ff;--alarm:#ff628c;--hi:#ffee80;--basalt:#5b6b78;
+--mono:"IBM Plex Mono","JetBrains Mono",ui-monospace,Menlo,monospace;--serif:"Iowan Old Style",Palatino,Georgia,serif}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1.45 var(--serif);overflow:hidden}
+#app{display:grid;grid-template-rows:38px 1fr 26px;height:100vh}
+#top{display:flex;align-items:center;gap:12px;padding:0 10px;background:var(--rail);border-bottom:1px solid var(--line);font:11px var(--mono);color:var(--dim)}
+#top b{color:var(--gold)}#top .cune{color:var(--gold)}
+#burger{background:none;border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:2px 8px;cursor:pointer;font:13px var(--mono)}
+#top .honest{color:var(--hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+#body{display:grid;grid-template-columns:262px 1fr;min-height:0}#body.railoff{grid-template-columns:0 1fr}
+#rail{background:var(--rail);border-right:1px solid var(--line);overflow:auto}#rail.hidden{display:none}
+.sec{border-bottom:1px solid var(--line)}
+.sec>h3{margin:0;font:600 10px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);padding:7px 9px;cursor:pointer;display:flex;justify-content:space-between}
+.sec>h3 i{color:var(--dim);font-style:normal}
+.sec .in{padding:6px 9px 10px;display:grid;gap:6px;font:11px var(--mono)}.sec.closed .in{display:none}
+button,select{background:#0d171e;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 7px;font:11px var(--mono);cursor:pointer}
+button:hover{border-color:var(--gold);color:var(--hi)}button[aria-pressed=true]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+label{display:flex;align-items:center;gap:5px;color:var(--dim)}
+.row{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+input[type=range]{width:100%;accent-color:var(--gold)}.val{color:var(--hi)}
+#jr{font:10px/1.45 var(--mono);color:var(--dim);max-height:150px;overflow:auto;white-space:pre-wrap}#jr .t{color:var(--hi)}
+table.t{width:100%;border-collapse:collapse;font:10px var(--mono)}table.t td,table.t th{border-bottom:1px solid var(--line);padding:2px 3px;text-align:left}
+table.t th{color:var(--gold)}table.t tr:hover{background:#1b2a35;cursor:pointer}
+#stagewrap{position:relative;min-width:0}
+canvas#c{display:block;width:100%;height:100%;background:linear-gradient(180deg,#0d1a22 0%,#070d12 100%);cursor:crosshair;touch-action:none}
+.rites{position:absolute;display:none;z-index:9;background:var(--panel);border:1px solid var(--gold);border-radius:6px;padding:6px;min-width:270px;box-shadow:0 8px 24px #000c}
+.rites h3{font:600 10px var(--mono);letter-spacing:.1em;color:var(--gold);margin:2px 4px 6px;text-transform:uppercase}
+.rites button{display:block;width:100%;text-align:left;margin:2px 0}.rites .kaki{font:10px var(--mono);color:var(--violet);margin:0 4px 6px}
+#status{display:flex;align-items:center;gap:14px;padding:0 10px;background:var(--rail);border-top:1px solid var(--line);font:11px var(--mono);color:var(--dim);overflow:hidden}
+#status b{color:var(--hi)}#status .ok{color:var(--green)}#status .bad{color:var(--alarm)}#status .wait{color:var(--violet)}
+#tick{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cand{padding:4px 6px;border-radius:4px;cursor:pointer;border:1px solid var(--line)}
+.cand[aria-pressed=true]{border-color:var(--gold);background:#1b2a35}
+.cand .nm{color:var(--hi)}.cand .it{color:var(--dim)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <button id="burger">☰</button>
+    <span>ŠASÛ TEST BENCH · <b>PB-409</b> · a change is judged by the <b>shape</b> it leaves, never by a count of rows</span>
+    <span class="honest" id="honest">rehearsal · seeded 3600 · the bench proposes and simulates; it never writes, and it never runs the candidate against a store</span>
+    <span class="cune">𒁾</span>
+  </div>
+
+  <div id="body">
+    <div id="rail">
+      <div class="sec" data-s="cand"><h3>Candidate change <i>▾</i></h3><div class="in"><div id="cands" style="display:grid;gap:4px"></div></div></div>
+
+      <div class="sec" data-s="scope"><h3>Scale <i>▾</i></h3><div class="in">
+        <div class="row">
+          <button data-scope="tribe" aria-pressed="true">one tribe</button>
+          <button data-scope="tribes">many tribes</button></div>
+        <div class="row">
+          <button data-scope="bigring">one BIGRING</button>
+          <button data-scope="federation">the federation</button></div>
+        <div style="color:var(--dim)">the same change, judged at four scales — an effect invisible in one tribe can be the whole federation’s problem</div>
+      </div></div>
+
+      <div class="sec" data-s="view"><h3>View <i>▾</i></h3><div class="in">
+        <div class="row"><button data-view="before" aria-pressed="true">as it stands</button><button data-view="after">as it would stand</button>
+          <button data-view="diff">the difference</button><button data-view="both">side by side</button></div>
+        <div class="row"><button data-cam="home" aria-pressed="true">⌖ home</button><button data-cam="orbit">⟳ orbit</button>
+          <button id="landing">🛬 land on the worst</button><button id="bird">🕊 fly the change</button><button id="freeze">❄ freeze</button></div>
+        <label>epoch <input id="epoch" type="range" min="0" max="9" step="1" value="5"><span class="val" id="eV">5</span></label>
+        <label><input type="checkbox" id="memb" checked> membrane behind</label>
+      </div></div>
+
+      <div class="sec" data-s="shape"><h3>Shape difference <i>▾</i></h3><div class="in"><table class="t" id="shapeT"></table></div></div>
+      <div class="sec" data-s="intent"><h3>Intent vs effect <i>▾</i></h3><div class="in"><div id="intent" style="color:var(--dim)"></div></div></div>
+      <div class="sec closed" data-s="leg"><h3>Legend <i>▸</i></h3><div class="in" style="color:var(--dim);font:10px var(--mono)">
+        <div><span style="color:var(--green)">unchanged</span> · <span style="color:var(--gold)">degraded</span> · <span style="color:var(--alarm)">broken</span> · <span style="color:var(--dim)">UNKNOWN — the test could not tell</span></div>
+        <div style="margin-top:4px">β₀ splits · β₁ holes · g girth ratio · L orbit locality · τ share not MEASURED</div>
+        <div style="margin-top:4px">A count of records is not a result. The result is the shape the change leaves behind.</div>
+      </div></div>
+      <div class="sec closed" data-s="jr"><h3>Journal <i>▸</i></h3><div class="in"><div id="jr"></div></div></div>
+    </div>
+
+    <div id="stagewrap"><canvas id="c"></canvas><div class="rites" id="rites" role="menu"></div></div>
+  </div>
+
+  <div id="status"><span id="verdict">—</span><span id="tick"></span></div>
+</div>
+
+<script>
+(function(){"use strict";
+const $=id=>document.getElementById(id);
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function h32(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const C={line:'#22323e',ink:'#fff',dim:'#7fa3bd',gold:'#ffc600',lapis:'#0088ff',green:'#3ad900',violet:'#fb94ff',alarm:'#ff628c',hi:'#ffee80',basalt:'#5b6b78'};
+const J=$('jr');function journal(s){const t=new Date().toISOString().slice(11,19);J.innerHTML+='<span class="t">'+t+'</span> '+s+'\n';J.scrollTop=J.scrollHeight;$('tick').textContent='· '+s;}
+function kakiOf(s){let o='';const r=mulberry32(h32(s));for(let b=0;b<16;b++){o+=('0'+Math.floor(r()*256).toString(16)).slice(-2);if(b%4===3&&b<15)o+='·';}return o;}
+
+/* ================= the estate under test ================= */
+const RINGS=['BIGRING-A · water','BIGRING-B · burial','BIGRING-C · sensing'];
+const TRIBES=[];
+(function(){const names=['pipe.reach','pipe.valve','pipe.joint','pipe.meter',
+                         'wadi.plot','wadi.row','wadi.marker','wadi.unnamed',
+                         'hsi.tile','hsi.band','sensor.stream','sensor.gauge'];
+ names.forEach((n,i)=>{const r=mulberry32(h32(n));
+   TRIBES.push({id:n,ring:Math.floor(i/4),i,kaki:kakiOf(n),
+     n:Math.round(2e7+r()*9e8), b0:1+(r()<.18?1:0), b1:r()<.30?1:0,
+     g:.22+r()*.45, L:1.0+r()*.5, tau:.08+r()*.22,
+     layers:Array.from({length:7},(_,k)=>({m:k-3,state:r()<.72?'LIVING':r()<.9?'STRAINED':'FUZZY',g:.2+r()*.5}))});});})();
+
+/* ================= candidates ================= */
+const CANDS=[
+{id:'CAND-0',nm:'no change',intent:'the baseline — nothing is proposed',
+ code:'// nothing changed',
+ effect:()=>({}),unknowns:[]},
+{id:'CAND-1',nm:'widen Kaki to 24 bytes',intent:'add a provenance field to the identity',
+ code:'pub struct Kaki { … , provenance: [u8; 8] }   // 16 → 24',
+ effect:(T,scope)=>({kind:'broken',b0:+0,b1:+0,gd:0,Ld:0,taud:+0.55,
+   note:'every KAKI already on disk is read at the wrong stride — the identity of the whole estate becomes UNKNOWN',
+   unknownAll:true}),
+ unknowns:['every persisted particle: its tribe, its time and its CRC are now read from the wrong bytes']},
+{id:'CAND-2',nm:'cluster on uuid_hash',intent:'make a point lookup by hash faster',
+ code:'ORDER BY … no. // physical order := κ[0..3]',
+ effect:()=>({kind:'degraded',Ld:+38,gd:0,taud:+0.04,
+   note:'point lookup does get faster; every orbit scan gets 40× slower and the segment stops matching the ontology'}),
+ unknowns:[]},
+{id:'CAND-3',nm:'sample 1-in-16 in the field pass',intent:'make the pass four times faster',
+ code:'for (i, p) in ps.iter().enumerate() { if i % 16 != 0 { continue; } … }',
+ effect:(T)=>({kind:'broken',b0:-0,b1:-1,gd:-0.03,taud:+0.30,embers:true,
+   note:'the field looks identical and the rare particle is gone — β₁ falls because holes stop being sampled, not because they closed'}),
+ unknowns:['every ember: a rare particle cannot be shown to be absent by a sampled pass']},
+{id:'CAND-4',nm:'relax BĀB-4 to one witness',intent:'clear the validation backlog',
+ code:'gate.witnesses_required = 1;  // was 2',
+ effect:()=>({kind:'degraded',taud:+0.18,gates:true,
+   note:'backlog clears; suspicions are admitted as verdicts, and the confidence of the whole Golden Store is inflated'}),
+ unknowns:[]},
+{id:'CAND-5',nm:'reuse the bin buffer across tribes',intent:'save an allocation per pass',
+ code:'self.bins.fill(0); // instead of Field::new(grid) per tribe',
+ effect:()=>({kind:'degraded',b0:+1,taud:+0.05,
+   note:'cheap, and correct only if every tribe shares one grid — the moment two grids differ, one tribe’s crowd is counted into another’s bins'}),
+ unknowns:['whether every tribe in the federation shares one grid — the bench cannot see the callers']}];
+let CAND=CANDS[3],SCOPE='tribe',VIEW='before',EPOCH=5,FROZEN=false,MEMB=true,t=0,sel=null,camAuto=false;
+
+function inScope(T){if(SCOPE==='tribe')return T.i===0;if(SCOPE==='tribes')return T.ring===0;
+  if(SCOPE==='bigring')return T.ring===0;return true;}
+function scopeSet(){return TRIBES.filter(inScope);}
+function after(T){
+  const e=CAND.effect(T,SCOPE)||{};const o=Object.assign({},T);
+  o.b0=Math.max(1,T.b0+(e.b0||0));o.b1=Math.max(0,T.b1+(e.b1||0));
+  o.g=Math.min(1.4,Math.max(0,T.g+(e.gd||0)));o.L=Math.max(.5,T.L+(e.Ld||0));
+  o.tau=Math.min(1,T.tau+(e.taud||0));o.kind=e.kind||'same';o.note=e.note;o.unknownAll=!!e.unknownAll;
+  o.embers=!!e.embers;o.gates=!!e.gates;
+  o.layers=T.layers.map(l=>{let st=l.state;
+    if(e.kind==='broken'&&e.unknownAll)st='UNKNOWN';
+    else if(e.taud>0.2&&l.state==='LIVING'&&Math.abs(l.m)>=2)st='STRAINED';
+    else if(e.Ld>10&&l.state==='LIVING'&&Math.abs(l.m)>=1)st='STRAINED';
+    return {m:l.m,state:st,g:Math.min(1.4,l.g+(e.gd||0))};});
+  return o;}
+function severity(T,A){if(A.unknownAll)return 'unknown';
+  if(A.b0>T.b0||A.b1<T.b1&&CAND.effect(T).embers||A.g>=1)return 'broken';
+  if(A.L>T.L*2||A.tau>T.tau+.1||A.kind==='degraded')return 'degraded';
+  if(A.kind==='broken')return 'broken';return 'same';}
+const SEVCOL={same:C.green,degraded:C.gold,broken:C.alarm,unknown:C.dim};
+
+/* ================= canvas ================= */
+const cv=$('c'),ctx=cv.getContext('2d');
+const cam={yaw:.5,pitch:1.10,dist:5.0,tx:0,ty:0},camT={yaw:.5,pitch:1.10,dist:5.0,tx:0,ty:0};
+const lerp=(a,b,k)=>a+(b-a)*k;
+let lastW=0,lastH=0;
+function fit(){const r=$('stagewrap').getBoundingClientRect();
+  const w=Math.max(320,Math.floor(r.width*devicePixelRatio)),h=Math.max(240,Math.floor(r.height*devicePixelRatio));
+  if(w!==lastW||h!==lastH){cv.width=w;cv.height=h;lastW=w;lastH=h;}}
+function proj(p,rect){const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  let x=p[0]-cam.tx,y=p[1]-cam.ty,z=p[2];let x1=x*cy-y*sy,y1=x*sy+y*cy;let y2=y1*cp-z*sp,z2=y1*sp+z*cp;
+  const d=cam.dist-y2;if(d<.05)return null;const f=rect.h/(2*Math.tan(1.04/2))/d;
+  return [rect.x+rect.w/2+x1*f,rect.y+rect.h/2-z2*f,d];}
+function H(txt,x,y,s,col){ctx.font='600 '+s*devicePixelRatio+'px '+getComputedStyle(document.documentElement).getPropertyValue('--mono');
+  ctx.lineWidth=4;ctx.strokeStyle='#050a0e';ctx.lineJoin='round';ctx.strokeText(txt,x,y);ctx.fillStyle=col;ctx.fillText(txt,x,y);}
+
+/* the Membrane · the wave of the change itself */
+function membrane(rect,alpha,kind){
+  if(!MEMB)return;const R=14,N=70,cx=rect.x+rect.w/2,cy=rect.y+rect.h*.55;
+  const tone=SEVCOL[kind]||C.dim;
+  for(let j=0;j<R;j++){const y=-1+2*j/(R-1);ctx.beginPath();
+    for(let i=0;i<N;i++){const x=-1+2*i/(N-1);
+      let z;
+      if(kind==='same')z=.35*Math.sin(x*4-t)*Math.exp(-y*y);
+      else if(kind==='degraded')z=.35*Math.sin(x*4-t)+.18*Math.sin(x*23+t*3)*Math.cos(y*7);
+      else if(kind==='broken')z=.30*Math.sin(x*4-t)+.45*Math.sin(x*41+y*17+t*5);
+      else z=.10*Math.sin(x*3-t*.4);
+      const sx=cx+x*rect.w*.38+y*rect.w*.05, sy=cy+y*rect.h*.15-z*rect.h*.12;
+      i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy);}
+    ctx.strokeStyle=tone;ctx.globalAlpha=alpha*(.28+.5*(1-Math.abs(y)));ctx.stroke();}
+  ctx.globalAlpha=1;}
+
+/* a tribe rosette: petals = β₀, red loops = β₁, radius = g */
+function rosette(x,y,R,T,col,ghost){
+  for(let k=1;k<=3;k++){ctx.beginPath();ctx.arc(x,y,R*(.4+.2*k),0,7);
+    ctx.strokeStyle=col;ctx.globalAlpha=ghost?.20:.35;ctx.stroke();ctx.globalAlpha=1;}
+  for(let p=0;p<T.b0;p++){const a=p/T.b0*Math.PI*2-.4;
+    ctx.beginPath();ctx.moveTo(x,y);
+    ctx.quadraticCurveTo(x+Math.cos(a-.35)*R*1.05,y+Math.sin(a-.35)*R*1.05,x+Math.cos(a)*R,y+Math.sin(a)*R);
+    ctx.quadraticCurveTo(x+Math.cos(a+.35)*R*1.05,y+Math.sin(a+.35)*R*1.05,x,y);
+    ctx.fillStyle=col;ctx.globalAlpha=ghost?.10:.28;ctx.fill();
+    ctx.strokeStyle=col;ctx.globalAlpha=ghost?.35:.9;ctx.stroke();ctx.globalAlpha=1;}
+  for(let h=0;h<T.b1;h++){const a=h/Math.max(1,T.b1)*Math.PI*2+.6;
+    ctx.beginPath();ctx.arc(x+Math.cos(a)*R*.5,y+Math.sin(a)*R*.5,R*.16,0,7);
+    ctx.strokeStyle=C.alarm;ctx.globalAlpha=ghost?.4:1;ctx.lineWidth=1.6*devicePixelRatio;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}
+  ctx.beginPath();ctx.arc(x,y,R/Math.max(.3,Math.min(1.2,T.g)),0,7);
+  ctx.strokeStyle=C.basalt;ctx.globalAlpha=ghost?.15:.3;ctx.setLineDash([1,4]);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;}
+
+let picks=[];
+function layout(){const set=scopeSet(),n=set.length;
+  const cols=Math.ceil(Math.sqrt(n)),rows=Math.ceil(n/cols);
+  return set.map((T,k)=>({T,x:-1.4+ (k%cols)*(2.8/Math.max(1,cols-1||1)), y:-.9+Math.floor(k/cols)*(1.8/Math.max(1,rows-1||1))}));}
+function draw(){fit();ctx.clearRect(0,0,cv.width,cv.height);picks=[];
+  const two=VIEW==='both';
+  const rects=two?[{x:0,y:0,w:cv.width/2,h:cv.height},{x:cv.width/2,y:0,w:cv.width/2,h:cv.height}]
+                 :[{x:0,y:0,w:cv.width,h:cv.height}];
+  const modes=two?['before','after']:[VIEW];
+  rects.forEach((rect,ri)=>{
+    ctx.save();ctx.beginPath();ctx.rect(rect.x,rect.y,rect.w,rect.h);ctx.clip();
+    const mode=modes[ri];
+    const worst=scopeSet().map(T=>severity(T,after(T))).reduce((a,b)=>
+      ({same:0,degraded:1,broken:2,unknown:3}[b]>{same:0,degraded:1,broken:2,unknown:3}[a]?b:a),'same');
+    membrane(rect,mode==='before'?.5:1,mode==='before'?'same':worst);
+    layout().forEach(o=>{
+      const T=o.T,A=after(T),sev=severity(T,A);
+      const q=proj([o.x,o.y,0],rect);if(!q)return;
+      const R=Math.max(14,(30+34*Math.min(1.2,(mode==='after'?A.g:T.g)))*devicePixelRatio/(q[2]*.5));
+      if(mode==='before')rosette(q[0],q[1],R,T,C.lapis,false);
+      else if(mode==='after')rosette(q[0],q[1],R,A,SEVCOL[sev],false);
+      else{ // difference: ghost of before, solid of after, an arrow between the numbers
+        rosette(q[0],q[1],R,T,C.lapis,true);
+        if(sev!=='same')rosette(q[0],q[1],R*1.02,A,SEVCOL[sev],false);}
+      if(sev==='unknown'&&mode!=='before'){ctx.strokeStyle=C.dim;ctx.lineWidth=2*devicePixelRatio;
+        ctx.beginPath();ctx.moveTo(q[0]-R,q[1]-R);ctx.lineTo(q[0]+R,q[1]+R);ctx.moveTo(q[0]+R,q[1]-R);ctx.lineTo(q[0]-R,q[1]+R);ctx.stroke();ctx.lineWidth=1;}
+      if(sel===T){const pr=R+8+7*(.5+.5*Math.sin(t*7));ctx.beginPath();ctx.arc(q[0],q[1],pr,0,7);
+        ctx.strokeStyle=C.hi;ctx.globalAlpha=1-(pr-R-8)/15;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}
+      picks.push({T,x:q[0],y:q[1],r:R,rect:ri});
+      const lab=mode==='before'?T.id+' · β₀'+T.b0+' β₁'+T.b1+' · g'+T.g.toFixed(2)+' · L'+T.L.toFixed(1)
+        :mode==='after'?T.id+' · β₀'+A.b0+' β₁'+A.b1+' · g'+A.g.toFixed(2)+' · L'+A.L.toFixed(1)
+        :(sev==='same'?T.id+' · unchanged'
+          :T.id+' · β₀'+T.b0+'→'+A.b0+' β₁'+T.b1+'→'+A.b1+' · L'+T.L.toFixed(1)+'→'+A.L.toFixed(1)+' · τ'+(T.tau*100|0)+'→'+(A.tau*100|0)+'%');
+      H(lab,q[0]+R+6*devicePixelRatio,q[1]+4*devicePixelRatio,9,mode==='before'?C.dim:SEVCOL[sev]);});
+    H((mode==='before'?'AS IT STANDS':mode==='after'?'AS IT WOULD STAND · '+CAND.nm:mode==='diff'?'THE DIFFERENCE · only what changed':'')+
+      '  ·  '+({tribe:'one tribe',tribes:'many tribes',bigring:'one BIGRING',federation:'the federation'})[SCOPE],
+      rect.x+14,rect.y+22*devicePixelRatio,12,mode==='before'?C.lapis:C.gold);
+    ctx.strokeStyle=C.line;ctx.strokeRect(rect.x+1,rect.y+1,rect.w-2,rect.h-2);
+    ctx.restore();});
+  H('a count of records is not a result — the result is the shape the change leaves behind',14,cv.height-14*devicePixelRatio,10,C.dim);
+  if(FROZEN)H('❄ COURT IN SESSION · Esc releases',14,42*devicePixelRatio,11,C.hi);}
+
+/* ================= panels ================= */
+function shapeRow(l,a,b,fmt2,inv){const A=fmt2?fmt2(a):a,B=fmt2?fmt2(b):b;
+  const worse=inv?(b<a):(b>a);const same=a===b;
+  return '<tr><td>'+l+'</td><td>'+A+'</td><td style="color:'+(same?C.dim:worse?C.alarm:C.green)+'">'+B+'</td></tr>';}
+function drawShape(){const set=scopeSet();
+  const agg=o=>({b0:set.reduce((s,T)=>s+(o?after(T).b0:T.b0),0),
+                 b1:set.reduce((s,T)=>s+(o?after(T).b1:T.b1),0),
+                 g:set.reduce((s,T)=>s+(o?after(T).g:T.g),0)/set.length,
+                 L:set.reduce((s,T)=>s+(o?after(T).L:T.L),0)/set.length,
+                 tau:set.reduce((s,T)=>s+(o?after(T).tau:T.tau),0)/set.length,
+                 dead:set.reduce((s,T)=>s+(o?after(T).layers:T.layers).filter(l=>l.state==='DEAD').length,0),
+                 unk:set.reduce((s,T)=>s+(o?after(T).layers:T.layers).filter(l=>l.state==='UNKNOWN').length,0)});
+  const B=agg(false),A=agg(true);
+  $('shapeT').innerHTML='<tr><th>measure</th><th>stands</th><th>would</th></tr>'
+    +shapeRow('β₀ components',B.b0,A.b0)
+    +shapeRow('β₁ holes',B.b1,A.b1)
+    +shapeRow('g girth ratio',B.g.toFixed(2),A.g.toFixed(2))
+    +shapeRow('L orbit locality',B.L.toFixed(1),A.L.toFixed(1))
+    +shapeRow('τ not MEASURED',(B.tau*100|0)+'%',(A.tau*100|0)+'%')
+    +shapeRow('layers UNKNOWN',B.unk,A.unk)
+    +'<tr><td colspan="3" style="color:'+C.dim+';padding-top:4px">tribes in scope: '+set.length+' · particles: '+(set.reduce((s,T)=>s+T.n,0)/1e6|0)+'M</td></tr>';}
+function drawIntent(){const e=CAND.effect(TRIBES[0],SCOPE)||{};
+  const eff=[];
+  if(e.Ld)eff.push(['orbit locality L +'+e.Ld,'not in the intent']);
+  if(e.taud)eff.push(['τ +'+(e.taud*100|0)+'%','not in the intent']);
+  if(e.b0)eff.push(['β₀ '+(e.b0>0?'+':'')+e.b0,'not in the intent']);
+  if(e.b1)eff.push(['β₁ '+e.b1+' — holes stop being sampled','not in the intent']);
+  if(e.embers)eff.push(['every ember lost','not in the intent']);
+  if(e.gates)eff.push(['suspicions admitted as verdicts','not in the intent']);
+  if(e.unknownAll)eff.push(['the identity of the estate becomes UNKNOWN','not in the intent']);
+  $('intent').innerHTML='<div style="color:'+C.hi+'">declared intent</div><div>'+CAND.intent+'</div>'
+    +'<div style="margin-top:6px;color:'+C.hi+'">observed effect</div>'
+    +(eff.length?eff.map(x=>'<div style="color:'+C.alarm+'">· '+x[0]+' <span style="color:'+C.dim+'">('+x[1]+')</span></div>').join('')
+      :'<div style="color:'+C.green+'">· nothing beyond the intent</div>')
+    +(CAND.unknowns.length?'<div style="margin-top:6px;color:'+C.dim+'">the bench could not determine</div>'
+      +CAND.unknowns.map(u=>'<div style="color:'+C.dim+'">? '+u+'</div>').join(''):'')
+    +'<div style="margin-top:6px;color:'+C.dim+'">an effect the intent did not claim is the finding — not the speed-up that was claimed</div>';}
+function setVerdict(){const set=scopeSet();
+  const sev=set.map(T=>severity(T,after(T)));
+  const nb=sev.filter(s=>s==='broken').length,nd=sev.filter(s=>s==='degraded').length,nu=sev.filter(s=>s==='unknown').length;
+  const A=set.map(T=>after(T));
+  const dL=(A.reduce((s,x)=>s+x.L,0)/set.length)-(set.reduce((s,T)=>s+T.L,0)/set.length);
+  const dTau=(A.reduce((s,x)=>s+x.tau,0)/set.length)-(set.reduce((s,T)=>s+T.tau,0)/set.length);
+  $('verdict').innerHTML='<b>'+CAND.id+'</b> '+CAND.nm+' · at <b>'+({tribe:'one tribe',tribes:'many tribes',bigring:'one BIGRING',federation:'the federation'})[SCOPE]+'</b> · '
+    +(nu?'<span class="wait">'+nu+' UNKNOWN</span> · ':'')
+    +(nb?'<span class="bad">'+nb+' broken</span> · ':'')
+    +(nd?'<span class="wait">'+nd+' degraded</span> · ':'')
+    +(!nb&&!nd&&!nu?'<span class="ok">shape unchanged</span> · ':'')
+    +'ΔL <b>'+(dL>=0?'+':'')+dL.toFixed(1)+'</b> · Δτ <b>'+(dTau>=0?'+':'')+(dTau*100|0)+'%</b>';
+  drawShape();drawIntent();}
+
+/* ================= interaction ================= */
+function toCv(e){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height];}
+function pick(x,y){let b=null,bd=1e9;for(const p of picks){const d=Math.hypot(p.x-x,p.y-y);if(d<Math.max(20*devicePixelRatio,p.r)&&d<bd){bd=d;b=p.T;}}return b;}
+let drag=null,moved=false;
+cv.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,yaw:cam.yaw,pitch:cam.pitch};moved=false;cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(!moved&&Math.hypot(dx,dy)<7)return;moved=true;camAuto=false;camT.yaw=drag.yaw+dx*.008;camT.pitch=Math.max(.2,Math.min(1.5,drag.pitch+dy*.006));});
+cv.addEventListener('pointerup',e=>{if(drag&&!moved){const [x,y]=toCv(e);const T=pick(x,y);
+  if(T){sel=T;FROZEN=true;story(T);}else{sel=null;FROZEN=false;}}drag=null;});
+cv.addEventListener('click',e=>{if(!e.isTrusted)runtime.click=true;});
+cv.addEventListener('wheel',e=>{e.preventDefault();camAuto=false;camT.dist=Math.max(1.4,Math.min(10,camT.dist*(e.deltaY>0?1.1:.9)));if(!e.isTrusted)runtime.wheel=true;},{passive:false});
+cv.addEventListener('dblclick',()=>{camT.yaw=.5;camT.pitch=1.10;camT.dist=5.0;camT.tx=0;camT.ty=0;});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){sel=null;FROZEN=false;$('rites').style.display='none';}});
+function story(T){const A=after(T),sev=severity(T,A);
+  journal('held '+T.id+' · '+sev.toUpperCase()+' · β₀ '+T.b0+'→'+A.b0+' · β₁ '+T.b1+'→'+A.b1
+    +' · g '+T.g.toFixed(2)+'→'+A.g.toFixed(2)+' · L '+T.L.toFixed(1)+'→'+A.L.toFixed(1)
+    +' · τ '+(T.tau*100|0)+'→'+(A.tau*100|0)+'%'+(A.note?' · '+A.note:''));}
+const rites=$('rites');
+cv.addEventListener('contextmenu',e=>{e.preventDefault();const [x,y]=toCv(e);const T=pick(x,y);
+  const wrap=$('stagewrap').getBoundingClientRect();
+  rites.style.left=(e.clientX-wrap.left+8)+'px';rites.style.top=(e.clientY-wrap.top+8)+'px';
+  let h='<h3>Bench rites</h3>';
+  if(T)h+='<div class="kaki">'+T.kaki.slice(0,19)+' · '+T.id+'</div>'
+    +'<button data-r="story">📖 StoryEngine · what the change does here</button>'
+    +'<button data-r="why">why does the shape move?</button>'
+    +'<button data-r="scale">judge the same change at the federation</button>'
+    +'<button data-r="propose">✱ propose this candidate (a rite, not a write)</button>';
+  else h+='<div class="kaki">open ground</div><button data-r="diff">show only the difference</button>'
+    +'<button data-r="home">⌖ home</button><button data-r="fz">'+(FROZEN?'▶ resume':'❄ freeze')+'</button>';
+  rites.innerHTML=h;rites.style.display='block';
+  rites.querySelectorAll('button').forEach(b=>b.onclick=()=>{rite(b.dataset.r,T);rites.style.display='none';});
+  if(!e.isTrusted)runtime.ctx=true;journal('rites · menu opened');});
+document.addEventListener('pointerdown',e=>{if(!rites.contains(e.target))rites.style.display='none';});
+function rite(r,T){switch(r){
+  case 'story':if(T){sel=T;FROZEN=true;story(T);}break;
+  case 'why':journal(T.id+' · '+(after(T).note||'no shape change: the candidate does not touch this tribe’s structure'));break;
+  case 'scale':SCOPE='federation';document.querySelectorAll('#rail button[data-scope]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.scope==='federation'));
+    journal('the same change, judged at the federation — an effect invisible in one tribe can be the whole estate’s problem');setVerdict();break;
+  case 'propose':journal('PROPOSED · '+CAND.id+' '+CAND.nm+' · the bench proposes; PB-410 would run it against a rehearsal store and write the receipt. Nothing has been changed.');break;
+  case 'diff':VIEW='diff';document.querySelectorAll('#rail button[data-view]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='diff'));break;
+  case 'home':camT.yaw=.5;camT.pitch=1.10;camT.dist=5.0;break;
+  case 'fz':FROZEN=!FROZEN;break;}
+  setVerdict();}
+
+/* ================= rail ================= */
+function buildCands(){$('cands').innerHTML=CANDS.map((c,i)=>
+  '<div class="cand" data-i="'+i+'" aria-pressed="'+(c===CAND)+'"><div class="nm">'+c.id+' · '+c.nm+'</div><div class="it">intent: '+c.intent+'</div></div>').join('');
+  $('cands').querySelectorAll('.cand').forEach(el=>el.onclick=()=>{CAND=CANDS[+el.dataset.i];buildCands();
+    journal('candidate · '+CAND.id+' '+CAND.nm+' · '+CAND.code);setVerdict();});}
+document.querySelectorAll('.sec>h3').forEach(h=>h.onclick=()=>{const s=h.parentElement;s.classList.toggle('closed');
+  h.querySelector('i').textContent=s.classList.contains('closed')?'▸':'▾';});
+$('burger').onclick=()=>{$('body').classList.toggle('railoff');$('rail').classList.toggle('hidden');};
+document.querySelectorAll('#rail button[data-scope]').forEach(b=>b.onclick=()=>{SCOPE=b.dataset.scope;
+  document.querySelectorAll('#rail button[data-scope]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.scope===SCOPE));
+  journal('scale · '+SCOPE);setVerdict();});
+document.querySelectorAll('#rail button[data-view]').forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;
+  document.querySelectorAll('#rail button[data-view]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view===VIEW));
+  journal('view · '+VIEW);});
+document.querySelectorAll('#rail button[data-cam]').forEach(b=>b.onclick=()=>{const m=b.dataset.cam;
+  document.querySelectorAll('#rail button[data-cam]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.cam===m));
+  if(m==='home'){camT.yaw=.5;camT.pitch=1.10;camT.dist=5.0;camT.tx=0;camAuto=false;}
+  if(m==='orbit'){camAuto=true;FROZEN=false;}journal('N9 camera · '+m);});
+$('landing').onclick=()=>{const set=scopeSet();
+  const worst=set.map(T=>({T,s:severity(T,after(T))})).sort((a,b)=>
+    ({same:0,degraded:1,broken:2,unknown:3}[b.s])-({same:0,degraded:1,broken:2,unknown:3}[a.s]))[0];
+  if(worst){sel=worst.T;VIEW='diff';document.querySelectorAll('#rail button[data-view]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view==='diff'));
+    camT.dist=2.6;FROZEN=true;story(worst.T);journal('🛬 landed on the worst-affected tribe · '+worst.T.id+' · '+worst.s.toUpperCase());}};
+$('bird').onclick=()=>{camAuto=!camAuto;journal(camAuto?'🕊 flying the change':'🕊 controls returned');};
+$('freeze').onclick=()=>{FROZEN=!FROZEN;$('freeze').setAttribute('aria-pressed',FROZEN?'true':'false');};
+$('epoch').oninput=e=>{EPOCH=+e.target.value;$('eV').textContent=EPOCH;setVerdict();};
+$('memb').onchange=e=>{MEMB=e.target.checked;};
+
+/* ================= loop ================= */
+const runtime={click:false,ctx:false,wheel:false};
+setTimeout(()=>{const r=cv.getBoundingClientRect(),cx=r.left+r.width*.4,cy=r.top+r.height*.5;
+  cv.dispatchEvent(new MouseEvent('click',{clientX:cx,clientY:cy,bubbles:true}));
+  cv.dispatchEvent(new MouseEvent('contextmenu',{clientX:cx,clientY:cy,bubbles:true,cancelable:true}));rites.style.display='none';
+  cv.dispatchEvent(new WheelEvent('wheel',{deltaY:-1,clientX:cx,clientY:cy,bubbles:true,cancelable:true}));camT.dist=5.0;
+  journal('RUNTIME gate · '+(runtime.click&&runtime.ctx&&runtime.wheel?'green · click ✓ contextmenu ✓ wheel ✓':'red'));},600);
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;if(!reduced&&!FROZEN)t+=dt;
+  if(camAuto)camT.yaw+=dt*.2;
+  for(const k of ['yaw','pitch','dist','tx','ty'])cam[k]=lerp(cam[k],camT[k],reduced?1:.09);
+  draw();requestAnimationFrame(frame);}
+buildCands();setVerdict();fit();requestAnimationFrame(frame);
+journal('COMPILE gate · green · 12 tribes · 3 BIGRINGs · 6 candidates · the bench simulates and never writes');
+journal('hint · pick a candidate, then walk the four scales. CAND-3 is the one to show a junior: at one tribe it looks free, at the federation it has deleted every ember.');
+})();
+</script>
+</body>
+</html>

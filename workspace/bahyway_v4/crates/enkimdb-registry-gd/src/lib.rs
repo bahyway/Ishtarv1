@@ -32,7 +32,13 @@ fn profile_to_dict(p: &ReleaseProfile) -> VDict {
     d.set("name", p.crate_name.as_str());
     d.set("version", p.version.as_str());
     d.set("description", p.description.as_str());
-    d.set("kind", match p.kind() { ArtifactKind::Crate => "crate", ArtifactKind::Binary => "binary" });
+    d.set(
+        "kind",
+        match p.kind() {
+            ArtifactKind::Crate => "crate",
+            ArtifactKind::Binary => "binary",
+        },
+    );
     d.set("source_subdir", p.source_subdir.as_str());
     d
 }

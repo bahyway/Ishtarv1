@@ -29,16 +29,96 @@ pub struct AncientCity {
 
 /// Ten Phase-1 anchor cities of Sumer and Akkad.
 pub const ANCIENT_CITIES: [AncientCity; 10] = [
-    AncientCity { name_sumerian: "Eridug", name_akkadian: "Eridu",   name_modern: "Tell Abu Shahrain", patron_deity: "Enki",     period: SumerianPeriod::Ubaid,         lat: 30.8158, lon: 45.9960 },
-    AncientCity { name_sumerian: "Urim",   name_akkadian: "Uru",     name_modern: "Tell el-Muqayyar",  patron_deity: "Nanna",    period: SumerianPeriod::UrIII,         lat: 30.9626, lon: 46.1032 },
-    AncientCity { name_sumerian: "Unug",   name_akkadian: "Uruk",    name_modern: "Warka",             patron_deity: "Inanna",   period: SumerianPeriod::Uruk,          lat: 31.3241, lon: 45.6367 },
-    AncientCity { name_sumerian: "Nibru",  name_akkadian: "Nippur",  name_modern: "Nuffar",            patron_deity: "Enlil",    period: SumerianPeriod::EarlyDynastic, lat: 32.1266, lon: 45.2306 },
-    AncientCity { name_sumerian: "Lagash", name_akkadian: "Lagash",  name_modern: "Al-Hiba",           patron_deity: "Ningirsu", period: SumerianPeriod::EarlyDynastic, lat: 31.4183, lon: 46.4075 },
-    AncientCity { name_sumerian: "Girsu",  name_akkadian: "Girsu",   name_modern: "Telloh",            patron_deity: "Ningirsu", period: SumerianPeriod::EarlyDynastic, lat: 31.5619, lon: 46.1776 },
-    AncientCity { name_sumerian: "Kish",   name_akkadian: "Kishatu", name_modern: "Tell al-Uhaymir",   patron_deity: "Zababa",   period: SumerianPeriod::EarlyDynastic, lat: 32.5399, lon: 44.6089 },
-    AncientCity { name_sumerian: "Larsam", name_akkadian: "Larsa",   name_modern: "Tell as-Senkereh",  patron_deity: "Utu",      period: SumerianPeriod::OldBabylonian, lat: 31.2857, lon: 45.8534 },
-    AncientCity { name_sumerian: "Isin",   name_akkadian: "Isin",    name_modern: "Ishan al-Bahriyat", patron_deity: "Gula",     period: SumerianPeriod::OldBabylonian, lat: 31.8839, lon: 45.2697 },
-    AncientCity { name_sumerian: "Ka-dingirra", name_akkadian: "Babilim", name_modern: "Babylon",      patron_deity: "Marduk",   period: SumerianPeriod::OldBabylonian, lat: 32.5423, lon: 44.4211 },
+    AncientCity {
+        name_sumerian: "Eridug",
+        name_akkadian: "Eridu",
+        name_modern: "Tell Abu Shahrain",
+        patron_deity: "Enki",
+        period: SumerianPeriod::Ubaid,
+        lat: 30.8158,
+        lon: 45.9960,
+    },
+    AncientCity {
+        name_sumerian: "Urim",
+        name_akkadian: "Uru",
+        name_modern: "Tell el-Muqayyar",
+        patron_deity: "Nanna",
+        period: SumerianPeriod::UrIII,
+        lat: 30.9626,
+        lon: 46.1032,
+    },
+    AncientCity {
+        name_sumerian: "Unug",
+        name_akkadian: "Uruk",
+        name_modern: "Warka",
+        patron_deity: "Inanna",
+        period: SumerianPeriod::Uruk,
+        lat: 31.3241,
+        lon: 45.6367,
+    },
+    AncientCity {
+        name_sumerian: "Nibru",
+        name_akkadian: "Nippur",
+        name_modern: "Nuffar",
+        patron_deity: "Enlil",
+        period: SumerianPeriod::EarlyDynastic,
+        lat: 32.1266,
+        lon: 45.2306,
+    },
+    AncientCity {
+        name_sumerian: "Lagash",
+        name_akkadian: "Lagash",
+        name_modern: "Al-Hiba",
+        patron_deity: "Ningirsu",
+        period: SumerianPeriod::EarlyDynastic,
+        lat: 31.4183,
+        lon: 46.4075,
+    },
+    AncientCity {
+        name_sumerian: "Girsu",
+        name_akkadian: "Girsu",
+        name_modern: "Telloh",
+        patron_deity: "Ningirsu",
+        period: SumerianPeriod::EarlyDynastic,
+        lat: 31.5619,
+        lon: 46.1776,
+    },
+    AncientCity {
+        name_sumerian: "Kish",
+        name_akkadian: "Kishatu",
+        name_modern: "Tell al-Uhaymir",
+        patron_deity: "Zababa",
+        period: SumerianPeriod::EarlyDynastic,
+        lat: 32.5399,
+        lon: 44.6089,
+    },
+    AncientCity {
+        name_sumerian: "Larsam",
+        name_akkadian: "Larsa",
+        name_modern: "Tell as-Senkereh",
+        patron_deity: "Utu",
+        period: SumerianPeriod::OldBabylonian,
+        lat: 31.2857,
+        lon: 45.8534,
+    },
+    AncientCity {
+        name_sumerian: "Isin",
+        name_akkadian: "Isin",
+        name_modern: "Ishan al-Bahriyat",
+        patron_deity: "Gula",
+        period: SumerianPeriod::OldBabylonian,
+        lat: 31.8839,
+        lon: 45.2697,
+    },
+    AncientCity {
+        name_sumerian: "Ka-dingirra",
+        name_akkadian: "Babilim",
+        name_modern: "Babylon",
+        patron_deity: "Marduk",
+        period: SumerianPeriod::OldBabylonian,
+        lat: 32.5423,
+        lon: 44.4211,
+    },
 ];
 
 /// Great-circle distance in kilometres (pure-std haversine).
@@ -63,7 +143,10 @@ pub struct NajafSumerianContext {
 impl NajafSumerianContext {
     /// Wadi al-Salam cemetery, Najaf.
     pub fn wadi_al_salam() -> Self {
-        NajafSumerianContext { lat: 32.0190, lon: 44.3150 }
+        NajafSumerianContext {
+            lat: 32.0190,
+            lon: 44.3150,
+        }
     }
 
     /// Nearest ancient city and its distance in km.
@@ -97,8 +180,7 @@ mod tests {
 
     #[test]
     fn ten_cities_with_unique_modern_names() {
-        let mut names: Vec<&str> =
-            ANCIENT_CITIES.iter().map(|c| c.name_modern).collect();
+        let mut names: Vec<&str> = ANCIENT_CITIES.iter().map(|c| c.name_modern).collect();
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), 10);
@@ -123,7 +205,10 @@ mod tests {
 
     #[test]
     fn ur_matches_the_sealed_coordinates() {
-        let ur = ANCIENT_CITIES.iter().find(|c| c.name_akkadian == "Uru").unwrap();
+        let ur = ANCIENT_CITIES
+            .iter()
+            .find(|c| c.name_akkadian == "Uru")
+            .unwrap();
         assert!((ur.lat - 30.9626).abs() < 1e-6);
         assert!((ur.lon - 46.1032).abs() < 1e-6);
     }

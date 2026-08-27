@@ -19,15 +19,21 @@ pub enum RuleVerdict {
 }
 
 impl RuleVerdict {
-    pub fn is_pass(&self) -> bool { matches!(self, RuleVerdict::Pass) }
-    pub fn is_fail(&self) -> bool { matches!(self, RuleVerdict::Fail { .. }) }
+    pub fn is_pass(&self) -> bool {
+        matches!(self, RuleVerdict::Pass)
+    }
+    pub fn is_fail(&self) -> bool {
+        matches!(self, RuleVerdict::Fail { .. })
+    }
 }
+
+/// Closure signature: (attr_hash, value_bytes) pairs → RuleVerdict.
+type RuleCheck = Box<dyn Fn(&[(u32, Vec<u8>)]) -> RuleVerdict + Send + Sync>;
 
 /// A named validation rule.
 pub struct Rule {
     pub name: &'static str,
-    /// Closure: (attr_hash, value_bytes) pairs → RuleVerdict
-    check: Box<dyn Fn(&[(u32, Vec<u8>)]) -> RuleVerdict + Send + Sync>,
+    check: RuleCheck,
 }
 
 impl Rule {
@@ -35,7 +41,10 @@ impl Rule {
         name: &'static str,
         check: impl Fn(&[(u32, Vec<u8>)]) -> RuleVerdict + Send + Sync + 'static,
     ) -> Self {
-        Rule { name, check: Box::new(check) }
+        Rule {
+            name,
+            check: Box::new(check),
+        }
     }
 
     pub fn evaluate(&self, record: &[(u32, Vec<u8>)]) -> RuleVerdict {
@@ -46,17 +55,19 @@ impl Rule {
 /// Result of evaluating all rules against one record.
 #[derive(Debug, Clone)]
 pub struct RuleResult {
-    pub passed:  usize,
-    pub failed:  usize,
+    pub passed: usize,
+    pub failed: usize,
     pub skipped: usize,
-    pub violations: Vec<(&'static str, &'static str)>,  // (rule_name, reason)
+    pub violations: Vec<(&'static str, &'static str)>, // (rule_name, reason)
 }
 
 impl RuleResult {
     /// Validity score = passing / (passing + failing).  Skipped rules are neutral.
     pub fn validity_score(&self) -> f32 {
         let total = self.passed + self.failed;
-        if total == 0 { return 1.0; }
+        if total == 0 {
+            return 1.0;
+        }
         self.passed as f32 / total as f32
     }
 }
@@ -67,7 +78,9 @@ pub struct RuleEngine {
 }
 
 impl RuleEngine {
-    pub fn new() -> Self { RuleEngine { rules: Vec::new() } }
+    pub fn new() -> Self {
+        RuleEngine { rules: Vec::new() }
+    }
 
     /// Register a custom rule.
     pub fn add_rule(&mut self, rule: Rule) {
@@ -76,28 +89,43 @@ impl RuleEngine {
 
     /// Evaluate all rules against a record; returns aggregated result.
     pub fn evaluate(&self, record: &[(u32, Vec<u8>)]) -> RuleResult {
-        let mut passed  = 0;
-        let mut failed  = 0;
+        let mut passed = 0;
+        let mut failed = 0;
         let mut skipped = 0;
         let mut violations = Vec::new();
 
         for rule in &self.rules {
             match rule.evaluate(record) {
-                RuleVerdict::Pass                => { passed += 1; }
-                RuleVerdict::Fail { reason }    => {
+                RuleVerdict::Pass => {
+                    passed += 1;
+                }
+                RuleVerdict::Fail { reason } => {
                     failed += 1;
                     violations.push((rule.name, reason));
                 }
-                RuleVerdict::NotApplicable       => { skipped += 1; }
+                RuleVerdict::NotApplicable => {
+                    skipped += 1;
+                }
             }
         }
-        RuleResult { passed, failed, skipped, violations }
+        RuleResult {
+            passed,
+            failed,
+            skipped,
+            violations,
+        }
     }
 
-    pub fn rule_count(&self) -> usize { self.rules.len() }
+    pub fn rule_count(&self) -> usize {
+        self.rules.len()
+    }
 }
 
-impl Default for RuleEngine { fn default() -> Self { Self::new() } }
+impl Default for RuleEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 // ── Built-in Rule Constructors ────────────────────────────────────────────────
 
@@ -105,9 +133,13 @@ impl Default for RuleEngine { fn default() -> Self { Self::new() } }
 pub fn rule_not_empty(name: &'static str, attr_hash: u32) -> Rule {
     Rule::new(name, move |record| {
         match record.iter().find(|(h, _)| *h == attr_hash) {
-            None               => RuleVerdict::Fail { reason: "field absent" },
-            Some((_, v)) if v.is_empty() => RuleVerdict::Fail { reason: "field empty" },
-            _                  => RuleVerdict::Pass,
+            None => RuleVerdict::Fail {
+                reason: "field absent",
+            },
+            Some((_, v)) if v.is_empty() => RuleVerdict::Fail {
+                reason: "field empty",
+            },
+            _ => RuleVerdict::Pass,
         }
     })
 }
@@ -116,11 +148,16 @@ pub fn rule_not_empty(name: &'static str, attr_hash: u32) -> Rule {
 pub fn rule_contains_char(name: &'static str, attr_hash: u32, ch: char) -> Rule {
     Rule::new(name, move |record| {
         match record.iter().find(|(h, _)| *h == attr_hash) {
-            None               => RuleVerdict::NotApplicable,
+            None => RuleVerdict::NotApplicable,
             Some((_, v)) => {
                 let text = std::str::from_utf8(v).unwrap_or("");
-                if text.contains(ch) { RuleVerdict::Pass }
-                else { RuleVerdict::Fail { reason: "required character absent" } }
+                if text.contains(ch) {
+                    RuleVerdict::Pass
+                } else {
+                    RuleVerdict::Fail {
+                        reason: "required character absent",
+                    }
+                }
             }
         }
     })
@@ -134,9 +171,13 @@ pub fn rule_numeric_range(name: &'static str, attr_hash: u32, min: f64, max: f64
             Some((_, v)) => {
                 let text = std::str::from_utf8(v).unwrap_or("");
                 match text.trim().parse::<f64>() {
-                    Err(_)                       => RuleVerdict::Fail { reason: "not a number" },
-                    Ok(n) if n < min || n > max => RuleVerdict::Fail { reason: "out of range" },
-                    Ok(_)                        => RuleVerdict::Pass,
+                    Err(_) => RuleVerdict::Fail {
+                        reason: "not a number",
+                    },
+                    Ok(n) if n < min || n > max => RuleVerdict::Fail {
+                        reason: "out of range",
+                    },
+                    Ok(_) => RuleVerdict::Pass,
                 }
             }
         }
@@ -147,10 +188,15 @@ pub fn rule_numeric_range(name: &'static str, attr_hash: u32, min: f64, max: f64
 pub fn rule_min_length(name: &'static str, attr_hash: u32, min_len: usize) -> Rule {
     Rule::new(name, move |record| {
         match record.iter().find(|(h, _)| *h == attr_hash) {
-            None           => RuleVerdict::NotApplicable,
+            None => RuleVerdict::NotApplicable,
             Some((_, v)) => {
-                if v.len() >= min_len { RuleVerdict::Pass }
-                else { RuleVerdict::Fail { reason: "value too short" } }
+                if v.len() >= min_len {
+                    RuleVerdict::Pass
+                } else {
+                    RuleVerdict::Fail {
+                        reason: "value too short",
+                    }
+                }
             }
         }
     })
@@ -160,10 +206,15 @@ pub fn rule_min_length(name: &'static str, attr_hash: u32, min_len: usize) -> Ru
 pub fn rule_digits_only(name: &'static str, attr_hash: u32) -> Rule {
     Rule::new(name, move |record| {
         match record.iter().find(|(h, _)| *h == attr_hash) {
-            None           => RuleVerdict::NotApplicable,
+            None => RuleVerdict::NotApplicable,
             Some((_, v)) => {
-                if v.iter().all(|b| b.is_ascii_digit()) { RuleVerdict::Pass }
-                else { RuleVerdict::Fail { reason: "non-digit characters present" } }
+                if v.iter().all(|b| b.is_ascii_digit()) {
+                    RuleVerdict::Pass
+                } else {
+                    RuleVerdict::Fail {
+                        reason: "non-digit characters present",
+                    }
+                }
             }
         }
     })
@@ -249,7 +300,7 @@ mod tests {
 
         let r = rec(&[
             (0x01, b"present"),
-            (0x02, b"bad_email"),      // fails
+            (0x02, b"bad_email"), // fails
             (0x03, b"25"),
         ]);
         let result = engine.evaluate(&r);

@@ -4,11 +4,11 @@
 //! and enkidullm-chat quick commands into a unified sovereign chat interface.
 #![forbid(unsafe_code)]
 
-use crate::commands::{parse_quick_command, handle_quick_command, QuickCommand};
+use crate::commands::{handle_quick_command, parse_quick_command, QuickCommand};
 use crate::enkiddb_bridge::{self, DEFAULT_HOST, DEFAULT_PORT};
-use crate::prompt::PromptBuilder;
-use crate::model_loader::{ModelLoader, ModelStatus};
+use crate::model_loader::ModelLoader;
 use crate::panel_state::TamuzPanelState;
+use crate::prompt::PromptBuilder;
 
 /// Chat engine errors.
 #[derive(Debug)]
@@ -21,9 +21,11 @@ pub enum ChatError {
 impl std::fmt::Display for ChatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ModelNotLoaded        => write!(f, "Model not loaded. Type !help for setup instructions."),
-            Self::InferenceError(e)     => write!(f, "Inference error: {e}"),
-            Self::MemoryError(e)        => write!(f, "Memory error: {e}"),
+            Self::ModelNotLoaded => {
+                write!(f, "Model not loaded. Type !help for setup instructions.")
+            }
+            Self::InferenceError(e) => write!(f, "Inference error: {e}"),
+            Self::MemoryError(e) => write!(f, "Memory error: {e}"),
         }
     }
 }
@@ -31,17 +33,18 @@ impl std::fmt::Display for ChatError {
 /// Response from the chat engine.
 #[derive(Debug, Clone)]
 pub struct ChatResponse {
-    pub text:       String,
-    pub from_quick: bool,  // true = quick command, false = LLM inference
-    pub tokens:     usize,
+    pub text: String,
+    pub from_quick: bool, // true = quick command, false = LLM inference
+    pub tokens: usize,
 }
 
 /// The TamuzAI chat engine.
 pub struct ChatEngine {
-    pub loader:   ModelLoader,
-    pub panel:    TamuzPanelState,
+    pub loader: ModelLoader,
+    pub panel: TamuzPanelState,
+    #[allow(dead_code)] // scaffolded for prompt-building, not yet wired into chat()
     prompt_builder: PromptBuilder,
-    session_id:   u64,
+    session_id: u64,
     /// EnkiDDB Read Node this engine's `!enkiddb` command dials --
     /// defaults to the same host:port every other client in this
     /// ecosystem defaults to. Override with `set_enkiddb_target` to
@@ -56,11 +59,11 @@ impl ChatEngine {
         loader.discover();
         Self {
             loader,
-            panel:          TamuzPanelState::new(),
+            panel: TamuzPanelState::new(),
             prompt_builder: PromptBuilder::tamuzai(),
-            session_id:     1,
-            enkiddb_host:   DEFAULT_HOST.to_string(),
-            enkiddb_port:   DEFAULT_PORT,
+            session_id: 1,
+            enkiddb_host: DEFAULT_HOST.to_string(),
+            enkiddb_port: DEFAULT_PORT,
         }
     }
 
@@ -77,7 +80,9 @@ impl ChatEngine {
         let msg = user_msg.trim();
         if msg.is_empty() {
             return Ok(ChatResponse {
-                text: String::new(), from_quick: true, tokens: 0
+                text: String::new(),
+                from_quick: true,
+                tokens: 0,
             });
         }
 
@@ -92,7 +97,11 @@ impl ChatEngine {
             if let QuickCommand::Enkiddb(query) = &cmd {
                 let response = self.run_enkiddb_search(query);
                 self.panel.push_command(&response);
-                return Ok(ChatResponse { text: response, from_quick: true, tokens: 0 });
+                return Ok(ChatResponse {
+                    text: response,
+                    from_quick: true,
+                    tokens: 0,
+                });
             }
 
             let response = handle_quick_command(&cmd);
@@ -100,11 +109,19 @@ impl ChatEngine {
             // Handle special commands
             if cmd == QuickCommand::Clear {
                 self.panel.clear();
-                return Ok(ChatResponse { text: response, from_quick: true, tokens: 0 });
+                return Ok(ChatResponse {
+                    text: response,
+                    from_quick: true,
+                    tokens: 0,
+                });
             }
 
             self.panel.push_command(&response);
-            return Ok(ChatResponse { text: response, from_quick: true, tokens: 0 });
+            return Ok(ChatResponse {
+                text: response,
+                from_quick: true,
+                tokens: 0,
+            });
         }
 
         // For LLM inference — check model is loaded
@@ -116,7 +133,11 @@ impl ChatEngine {
                  To enable full AI responses:\n{instructions}"
             );
             self.panel.push_assistant(&resp);
-            return Ok(ChatResponse { text: resp, from_quick: true, tokens: 0 });
+            return Ok(ChatResponse {
+                text: resp,
+                from_quick: true,
+                tokens: 0,
+            });
         }
 
         // Model is ready — run inference
@@ -124,7 +145,11 @@ impl ChatEngine {
         // For now return a structured placeholder
         let resp = self.structured_response(msg);
         self.panel.push_assistant(&resp);
-        Ok(ChatResponse { text: resp, from_quick: false, tokens: 0 })
+        Ok(ChatResponse {
+            text: resp,
+            from_quick: false,
+            tokens: 0,
+        })
     }
 
     /// Runs a real `SEARCH:` call against `self.enkiddb_host:enkiddb_port`
@@ -143,7 +168,9 @@ impl ChatEngine {
             Ok(hits) => {
                 let mut out = format!(
                     "𒀭 EnkiDDB ({}:{}) — {} result(s) for \"{query}\":\n",
-                    self.enkiddb_host, self.enkiddb_port, hits.len()
+                    self.enkiddb_host,
+                    self.enkiddb_port,
+                    hits.len()
                 );
                 for hit in hits {
                     let snippet = if hit.text.len() > 160 {
@@ -175,7 +202,8 @@ impl ChatEngine {
             return handle_quick_command(&QuickCommand::Next);
         }
         if lower.contains("law") || lower.contains("sovereign") {
-            return "Type !law <N> to see any of the 10 sovereign laws.\nExample: !law 1, !law 9".to_string();
+            return "Type !law <N> to see any of the 10 sovereign laws.\nExample: !law 1, !law 9"
+                .to_string();
         }
         if lower.contains("adr") {
             return "Type !adr <N> to see any ADR.\nExample: !adr 3 (seq_counter), !adr 6 (no DELETE)".to_string();
@@ -196,16 +224,24 @@ impl ChatEngine {
 
     /// Model status summary for display.
     pub fn status_line(&self) -> String {
-        format!("TamuzAI {} | Session {}",
+        format!(
+            "TamuzAI {} | Session {}",
             self.loader.status.status_str(),
-            self.session_id)
+            self.session_id
+        )
     }
 
     /// Check if model is ready for inference.
-    pub fn is_ready(&self) -> bool { self.loader.status.is_ready() }
+    pub fn is_ready(&self) -> bool {
+        self.loader.status.is_ready()
+    }
 }
 
-impl Default for ChatEngine { fn default() -> Self { Self::new() } }
+impl Default for ChatEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -220,7 +256,7 @@ mod tests {
     #[test]
     fn enkiddb_defaults_match_the_ecosystem_convention() {
         let engine = ChatEngine::new();
-        assert_eq!(engine.enkiddb_host, "192.168.122.107");
+        assert_eq!(engine.enkiddb_host, "192.168.122.112");
         assert_eq!(engine.enkiddb_port, 7102);
     }
 

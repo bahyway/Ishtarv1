@@ -49,7 +49,12 @@ pub fn deming_fit(x: &[f64], y: &[f64], lambda: f64) -> Option<DemingFit> {
             r * r / norm
         })
         .sum();
-    Some(DemingFit { slope, intercept, resid_sd: (ss / denom).sqrt(), n })
+    Some(DemingFit {
+        slope,
+        intercept,
+        resid_sd: (ss / denom).sqrt(),
+        n,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

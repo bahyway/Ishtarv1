@@ -1,7 +1,7 @@
 //! TemplateRegistry — in-memory catalog of all registered templates (§6.2).
 
-use std::collections::HashMap;
 use crate::template::Template;
+use std::collections::HashMap;
 
 /// Central registry — holds Default and Stakeholder templates by name.
 pub struct TemplateRegistry {
@@ -10,7 +10,9 @@ pub struct TemplateRegistry {
 
 impl TemplateRegistry {
     pub fn new() -> Self {
-        TemplateRegistry { templates: HashMap::new() }
+        TemplateRegistry {
+            templates: HashMap::new(),
+        }
     }
 
     /// Register a template. Returns false if the name already exists.

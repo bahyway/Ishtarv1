@@ -12,11 +12,11 @@ pub enum WpdError {
 impl core::fmt::Display for WpdError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            WpdError::SegmentNotFound(id)       => write!(f, "segment not found: {id}"),
-            WpdError::InvalidScan(msg)           => write!(f, "invalid scan: {msg}"),
-            WpdError::ClassificationFailed(msg)  => write!(f, "classification failed: {msg}"),
-            WpdError::RouteNotFound(msg)         => write!(f, "route not found: {msg}"),
-            WpdError::NoBands                    => write!(f, "no spectral bands provided"),
+            WpdError::SegmentNotFound(id) => write!(f, "segment not found: {id}"),
+            WpdError::InvalidScan(msg) => write!(f, "invalid scan: {msg}"),
+            WpdError::ClassificationFailed(msg) => write!(f, "classification failed: {msg}"),
+            WpdError::RouteNotFound(msg) => write!(f, "route not found: {msg}"),
+            WpdError::NoBands => write!(f, "no spectral bands provided"),
         }
     }
 }

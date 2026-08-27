@@ -23,6 +23,6 @@ pub mod agent;
 pub mod council;
 pub mod vote;
 
-pub use agent::{AgentId, AgentEvaluation};
+pub use agent::{AgentEvaluation, AgentId};
 pub use council::{AiCouncil, CouncilDecision};
-pub use vote::{Vote, VoteRecord, ConsensusResult};
+pub use vote::{ConsensusResult, Vote, VoteRecord};

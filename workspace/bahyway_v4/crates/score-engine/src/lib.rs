@@ -13,14 +13,14 @@ pub mod freshness;
 pub mod fuzzy_scorer;
 pub mod hps;
 
-pub use color_id::{ColorRgb, compute_color};
+pub use color_id::{compute_color, ColorRgb};
 pub use freshness::FreshnessDecay;
-pub use fuzzy_scorer::{score, ScoreInput, ScoreResult, tier_to_state};
+pub use fuzzy_scorer::{score, tier_to_state, ScoreInput, ScoreResult};
 pub use hps::HpsScore;
 
 pub mod prelude {
-    pub use super::color_id::{ColorRgb, compute_color};
+    pub use super::color_id::{compute_color, ColorRgb};
     pub use super::freshness::FreshnessDecay;
-    pub use super::fuzzy_scorer::{score, ScoreInput, ScoreResult, tier_to_state};
+    pub use super::fuzzy_scorer::{score, tier_to_state, ScoreInput, ScoreResult};
     pub use super::hps::HpsScore;
 }

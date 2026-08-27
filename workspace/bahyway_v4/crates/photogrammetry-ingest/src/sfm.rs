@@ -48,7 +48,10 @@ impl std::fmt::Display for SfmError {
                 write!(f, "SfM engine exited with code {code:?}: {stderr}")
             }
             SfmError::Parse(e) => {
-                write!(f, "SfM engine finished, but its output point cloud didn't parse: {e}")
+                write!(
+                    f,
+                    "SfM engine finished, but its output point cloud didn't parse: {e}"
+                )
             }
         }
     }
@@ -85,7 +88,10 @@ mod tests {
 
     fn unique_temp_dir(tag: &str) -> PathBuf {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("photogrammetry_ingest_test_{tag}_{}_{n}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "photogrammetry_ingest_test_{tag}_{}_{n}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -114,9 +120,16 @@ mod tests {
         let script = write_stub_script(
             &dir,
             "fake_engine.sh",
-            &format!("cat > '{}' <<'EOF'\n{STUB_PLY}EOF\nexit 0\n", out_path.display()),
+            &format!(
+                "cat > '{}' <<'EOF'\n{STUB_PLY}EOF\nexit 0\n",
+                out_path.display()
+            ),
         );
-        let cfg = SfmConfig { command: script.to_string_lossy().to_string(), args: vec![], output_point_cloud_path: out_path };
+        let cfg = SfmConfig {
+            command: script.to_string_lossy().to_string(),
+            args: vec![],
+            output_point_cloud_path: out_path,
+        };
         let cloud = run_sfm(&dir, &cfg).unwrap();
         assert_eq!(cloud.points.len(), 2);
         std::fs::remove_dir_all(&dir).ok();
@@ -125,7 +138,11 @@ mod tests {
     #[test]
     fn a_failing_engine_reports_its_nonzero_exit_and_stderr() {
         let dir = unique_temp_dir("fail");
-        let script = write_stub_script(&dir, "fake_engine.sh", "echo 'reconstruction failed: no matches found' 1>&2\nexit 1\n");
+        let script = write_stub_script(
+            &dir,
+            "fake_engine.sh",
+            "echo 'reconstruction failed: no matches found' 1>&2\nexit 1\n",
+        );
         let cfg = SfmConfig {
             command: script.to_string_lossy().to_string(),
             args: vec![],
@@ -146,8 +163,16 @@ mod tests {
     fn an_engine_that_produces_unparseable_output_reports_a_parse_error() {
         let dir = unique_temp_dir("badout");
         let out_path = dir.join("cloud.ply");
-        let script = write_stub_script(&dir, "fake_engine.sh", &format!("echo 'not a real ply' > '{}'\nexit 0\n", out_path.display()));
-        let cfg = SfmConfig { command: script.to_string_lossy().to_string(), args: vec![], output_point_cloud_path: out_path };
+        let script = write_stub_script(
+            &dir,
+            "fake_engine.sh",
+            &format!("echo 'not a real ply' > '{}'\nexit 0\n", out_path.display()),
+        );
+        let cfg = SfmConfig {
+            command: script.to_string_lossy().to_string(),
+            args: vec![],
+            output_point_cloud_path: out_path,
+        };
         let err = run_sfm(&dir, &cfg).unwrap_err();
         assert!(matches!(err, SfmError::Parse(_)), "{err}");
         std::fs::remove_dir_all(&dir).ok();

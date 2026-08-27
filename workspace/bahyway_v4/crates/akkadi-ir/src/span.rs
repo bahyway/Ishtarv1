@@ -4,22 +4,36 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Span {
     pub source: String,
-    pub line:   u32,
-    pub col:    u32,
+    pub line: u32,
+    pub col: u32,
     pub offset: usize,
-    pub len:    usize,
+    pub len: usize,
 }
 
 impl Span {
     pub fn new(source: &str, line: u32, col: u32, offset: usize, len: usize) -> Self {
-        Self { source: source.to_string(), line, col, offset, len }
+        Self {
+            source: source.to_string(),
+            line,
+            col,
+            offset,
+            len,
+        }
     }
 
     pub fn generated() -> Self {
-        Self { source: "<generated>".into(), line: 0, col: 0, offset: 0, len: 0 }
+        Self {
+            source: "<generated>".into(),
+            line: 0,
+            col: 0,
+            offset: 0,
+            len: 0,
+        }
     }
 
-    pub fn is_generated(&self) -> bool { self.line == 0 }
+    pub fn is_generated(&self) -> bool {
+        self.line == 0
+    }
 }
 
 impl std::fmt::Display for Span {
@@ -33,5 +47,7 @@ impl std::fmt::Display for Span {
 }
 
 impl Default for Span {
-    fn default() -> Self { Self::generated() }
+    fn default() -> Self {
+        Self::generated()
+    }
 }

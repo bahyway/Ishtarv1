@@ -6,7 +6,7 @@
 > Law, from a separate Phase 2 thread). Content unchanged; only IDs moved.
 > See `docs/phase2-incoming/RENUMBERING_MAP.md`.
 ## Non-Matching Discovered Shapes · New / Template-Defect / Incomplete · The Map-Direction Discriminant
-### BahyWay.Ecosystem v4.0 · Phase Two (GL-STD-002) · extends GL-VIZ-007 · Status: DRAFT — pending CSR-08 sealing by DUB.SAR 𒁾
+### BahyWay.Ecosystem v4.0 · Phase Two (GL-STD-002) · extends GL-VIZ-007 · Status: SEALED — landed by PB-346 as `crates/shape-verdict`, 5/5 tests passing (all three verdict cases plus the both-maps-exist / not-a-non-match case)
 
 ---
 
@@ -111,10 +111,28 @@ visual impression alone.
   paths).
 
 ## 5 · Open seals for CSR-08
-GL-VIZ-008 adoption · sovereign names for the three verdicts · whether Verdict 1
-new-template minting requires full tri-approval or Architect+Steward only ·
-PB-346/347 numbering · whether the Verdict particle lives in EnkiMDB (arsenal
-metadata) or a dedicated Verdict tribe.
 
-*Recorded in the reign of Gudea 1.0, Phase Two. Nothing herein is sealed until
-DUB.SAR confirms under CSR-08.*
+**Resolved by this seal** (2026-08-27, explicit chat confirmation, CSR-08):
+GL-VIZ-008 adoption · PB-346/347 numbering (PB-346 landed as `crates/shape-verdict`; PB-347 `arsenal-amend` remains unbuilt, tracked as follow-on work).
+
+**Still open, not decided here:** sovereign names for the three verdicts ·
+whether Verdict 1 new-template minting requires full tri-approval or
+Architect+Steward only · whether the Verdict particle lives in EnkiMDB
+(arsenal metadata) or a dedicated Verdict tribe -- these are governance/
+naming decisions this crate's kernel does not need answered to be correct,
+left to a future decree.
+
+## 6 · Seal
+
+```
+Sealed by: DUB.SAR 𒁾 (Bahaa Fadam), via explicit chat confirmation (CSR-08)
+Date:      2026-08-27
+AkkadianSeal (Ed25519): PENDING — no real signing infrastructure wired
+                        yet (no Sargon/Gilgamesh passport ceremony run
+                        against this tablet). The chat confirmation above
+                        is the Architect's real CSR-08 act; the
+                        cryptographic seal is separate, real follow-on
+                        work.
+```
+
+*Recorded in the reign of Gudea 1.0, Phase Two.*

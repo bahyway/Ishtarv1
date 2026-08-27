@@ -35,7 +35,10 @@ impl UnsealedPlan {
     /// Admission check (Section A.3, corrected): refuses a plan with any
     /// `FullScan` access path. Never guesses which index would have
     /// covered a clause — that's the real planner's job, not this type's.
-    pub fn try_new(source_query: impl Into<String>, access_paths: Vec<AccessPath>) -> Result<Self, PlanSealError> {
+    pub fn try_new(
+        source_query: impl Into<String>,
+        access_paths: Vec<AccessPath>,
+    ) -> Result<Self, PlanSealError> {
         let offending: Vec<usize> = access_paths
             .iter()
             .enumerate()
@@ -43,9 +46,14 @@ impl UnsealedPlan {
             .map(|(i, _)| i)
             .collect();
         if !offending.is_empty() {
-            return Err(PlanSealError::RequiresFullScan { offending_clauses: offending });
+            return Err(PlanSealError::RequiresFullScan {
+                offending_clauses: offending,
+            });
         }
-        Ok(UnsealedPlan { source_query: source_query.into(), access_paths })
+        Ok(UnsealedPlan {
+            source_query: source_query.into(),
+            access_paths,
+        })
     }
 
     /// Seal with a caller-supplied signing function (e.g. `kupru`'s Ed25519
@@ -53,7 +61,11 @@ impl UnsealedPlan {
     pub fn seal_with(self, sign: impl FnOnce(&[u8]) -> Vec<u8>) -> SealedPlan {
         let bytes = self.canonical_bytes();
         let seal = sign(&bytes);
-        SealedPlan { source_query: self.source_query, access_paths: self.access_paths, seal }
+        SealedPlan {
+            source_query: self.source_query,
+            access_paths: self.access_paths,
+            seal,
+        }
     }
 
     fn canonical_bytes(&self) -> Vec<u8> {
@@ -89,7 +101,9 @@ mod tests {
     fn admits_a_fully_index_covered_plan() {
         let plan = UnsealedPlan::try_new(
             "WHO T.E\nWHAT E[quality]\nWHERE E[tribe] = 1",
-            vec![AccessPath::IndexCovered { index_name: "surrogate".into() }],
+            vec![AccessPath::IndexCovered {
+                index_name: "surrogate".into(),
+            }],
         );
         assert!(plan.is_ok());
     }
@@ -98,16 +112,28 @@ mod tests {
     fn refuses_a_plan_requiring_full_scan() {
         let plan = UnsealedPlan::try_new(
             "WHO T.E\nWHAT E[*]",
-            vec![AccessPath::IndexCovered { index_name: "surrogate".into() }, AccessPath::FullScan],
+            vec![
+                AccessPath::IndexCovered {
+                    index_name: "surrogate".into(),
+                },
+                AccessPath::FullScan,
+            ],
         );
-        assert_eq!(plan.unwrap_err(), PlanSealError::RequiresFullScan { offending_clauses: vec![1] });
+        assert_eq!(
+            plan.unwrap_err(),
+            PlanSealError::RequiresFullScan {
+                offending_clauses: vec![1]
+            }
+        );
     }
 
     #[test]
     fn seal_with_produces_a_sealed_plan_carrying_the_signature() {
         let plan = UnsealedPlan::try_new(
             "WHO T.E",
-            vec![AccessPath::IndexCovered { index_name: "eav_exact_index".into() }],
+            vec![AccessPath::IndexCovered {
+                index_name: "eav_exact_index".into(),
+            }],
         )
         .unwrap();
         let sealed = plan.seal_with(|bytes| bytes.iter().map(|b| b.wrapping_add(1)).collect());

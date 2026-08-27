@@ -1,0 +1,50 @@
+---
+# PB-680 · Promote the remaining Wed0826 Sala tabs
+# Landed alongside playbook_673-679 (informally PB-406..416, the Visualization Solution /
+# Watcher / RewardEngine / Immune Logical Model corpus). playbook_673/674/675/678/679 each
+# already deposit their OWN single artifact (sala_viz_solution_enlil_v1/v2.html,
+# sala_sasu_test_bench_v1.html, sala_nisaba_court_v2.html, GL-BND-001_the_band.md); this
+# playbook covers everything from that same day that has no dedicated deposit playbook of
+# its own -- chiefly the Nisaba Court's own UI-bugfix iteration history (v1, v3..v9: the
+# camera-drift hunt documented in GL-AGT-001's own commit trail) plus the RewardEngine,
+# the membrane-waves iteration of the ENLIL viz solution, and the Immune Logical Model.
+#
+# Per this repo's concordance doctrine (history annotated, not silently deleted, same as
+# playbook_625's wave_field_membrane v1..v4): every version is deposited side by side under
+# its own filename. Nothing here overwrites or supersedes playbook_678's v2 deposit.
+- name: PB-680 promote the remaining Wed0826 Sala tabs
+  hosts: girsu
+  vars:
+    sala: "{{ ansible_env.HOME }}/bahyway/sala/tabs"
+    tabs:
+      - sala_nisaba_court_v1.html
+      - sala_nisaba_court_v3.html
+      - sala_nisaba_court_v4.html
+      - sala_nisaba_court_v5.html
+      - sala_nisaba_court_v6.html
+      - sala_nisaba_court_v7.html
+      - sala_nisaba_court_v8.html
+      - sala_nisaba_court_v9.html
+      - sala_viz_solution_enlil_v3.html
+      - sala_reward_engine_v1.html
+      - sala_immune_logical_model_v1.html
+  tasks:
+    - name: Ensure tabs directory
+      ansible.builtin.file: {path: "{{ sala }}", state: directory, mode: "0755"}
+
+    - name: Place tabs
+      ansible.builtin.copy: {src: "{{ item }}", dest: "{{ sala }}/{{ item }}", mode: "0644"}
+      loop: "{{ tabs }}"
+
+    - name: Gate S1 · every tab still parses
+      ansible.builtin.shell: |
+        node -e "const h=require('fs').readFileSync('{{ sala }}/{{ item }}','utf8');
+                 new Function(h.split('<script>')[1].split('</script>')[0]);console.log('ok');"
+      loop: "{{ tabs }}"
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-680 promoted {{ tabs | length }} Wed0826 Sala tabs (Nisaba Court v1,v3-v9 · RewardEngine · ENLIL viz v3 · Immune Logical Model)"

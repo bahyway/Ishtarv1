@@ -1,0 +1,43 @@
+# =============================================================================
+# enkidw-read-server — EnkiDW (Data Warehouse) Read Node container image.
+#
+# Build (from the repo root):
+#   podman build -t enkidw-read-server:latest \
+#     -f deploy/podman/Containerfile.enkidw-read-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkidw-read \
+#     -p 7002:7002 \
+#     -v enkidw-read-data:/data:Z \
+#     -e RELOAD_SECS=30 \
+#     --restart=always \
+#     enkidw-read-server:latest
+#
+# Lifecycle (no systemd anywhere -- plain Podman commands):
+#   podman stop enkidw-read
+#   podman start enkidw-read
+#   podman logs -f enkidw-read
+#
+# Data path: this container never writes -- it only opens
+# /data/current/{entities,eav} read-only and reloads on a timer. Getting
+# the Write Node's materialized generation into that path is a separate
+# step; see scripts/enkidw-sync-data.sh.
+#
+# `:Z` on the volume mount is required on Fedora/SELinux-enforcing hosts.
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkidw-read-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkidw
+COPY --from=builder /build/target/release/enkidw-read-server /usr/local/bin/enkidw-read-server
+USER enkidw
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7002
+ENV DATA_DIR=/data
+EXPOSE 7002
+ENTRYPOINT ["/usr/local/bin/enkidw-read-server"]

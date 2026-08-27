@@ -8,11 +8,11 @@ use enkidb_kaki::{Kaki, PatternLifecycle, PatternType};
 #[repr(u8)]
 pub enum StorageTier {
     /// Hot: 0–3 orbitals old. Full 7D data, sub-millisecond access.
-    Hot          = 0,
+    Hot = 0,
     /// Warm: 3–30 orbitals. Reduced semantic dimensions cached.
-    Warm         = 1,
+    Warm = 1,
     /// Cold: 30–365 orbitals. Aggregate statistics only in memory.
-    Cold         = 2,
+    Cold = 2,
     /// Crystallized: 365+ orbitals. Blob-only, archived to long-term storage.
     Crystallized = 3,
 }
@@ -21,18 +21,18 @@ impl StorageTier {
     /// Compute the tier from the pattern's age in BASE orbitals.
     pub fn from_age(age_orbitals: u64) -> Self {
         match age_orbitals {
-            0..=2          => StorageTier::Hot,
-            3..=29         => StorageTier::Warm,
-            30..=364       => StorageTier::Cold,
-            _              => StorageTier::Crystallized,
+            0..=2 => StorageTier::Hot,
+            3..=29 => StorageTier::Warm,
+            30..=364 => StorageTier::Cold,
+            _ => StorageTier::Crystallized,
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            StorageTier::Hot          => "Hot",
-            StorageTier::Warm         => "Warm",
-            StorageTier::Cold         => "Cold",
+            StorageTier::Hot => "Hot",
+            StorageTier::Warm => "Warm",
+            StorageTier::Cold => "Cold",
             StorageTier::Crystallized => "Crystallized",
         }
     }
@@ -40,9 +40,9 @@ impl StorageTier {
     /// Expected access latency description for this tier.
     pub fn latency_hint(self) -> &'static str {
         match self {
-            StorageTier::Hot          => "<1ms",
-            StorageTier::Warm         => "<10ms",
-            StorageTier::Cold         => "<1s",
+            StorageTier::Hot => "<1ms",
+            StorageTier::Warm => "<10ms",
+            StorageTier::Cold => "<1s",
             StorageTier::Crystallized => "minutes",
         }
     }
@@ -95,11 +95,11 @@ mod tests {
 
     #[test]
     fn tier_from_age() {
-        assert_eq!(StorageTier::from_age(0),   StorageTier::Hot);
-        assert_eq!(StorageTier::from_age(2),   StorageTier::Hot);
-        assert_eq!(StorageTier::from_age(3),   StorageTier::Warm);
-        assert_eq!(StorageTier::from_age(29),  StorageTier::Warm);
-        assert_eq!(StorageTier::from_age(30),  StorageTier::Cold);
+        assert_eq!(StorageTier::from_age(0), StorageTier::Hot);
+        assert_eq!(StorageTier::from_age(2), StorageTier::Hot);
+        assert_eq!(StorageTier::from_age(3), StorageTier::Warm);
+        assert_eq!(StorageTier::from_age(29), StorageTier::Warm);
+        assert_eq!(StorageTier::from_age(30), StorageTier::Cold);
         assert_eq!(StorageTier::from_age(364), StorageTier::Cold);
         assert_eq!(StorageTier::from_age(365), StorageTier::Crystallized);
     }

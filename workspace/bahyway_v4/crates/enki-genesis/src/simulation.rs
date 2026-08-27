@@ -4,31 +4,31 @@
 //! Runs 1 000 iterations × 100 agents × 1 000 steps, extracts trajectory
 //! clusters, and returns GaClusters ready for NISABA pattern discovery.
 
+use crate::rng::XorShift64;
+use crate::social_force::{step, Agent2D, SocialForceParams};
 use enkidb_kaki::FixedCoord7D;
 use nisaba::cluster::GaCluster;
-use crate::rng::XorShift64;
-use crate::social_force::{Agent2D, SocialForceParams, step};
 
 /// Configuration for one simulation run (defaults match GEN-PARAMS-001).
 #[derive(Clone, Debug)]
 pub struct SimulationConfig {
-    pub iterations:   u32,   // 1 000 Monte Carlo iterations
-    pub agents:       u32,   // 100 agents per iteration
-    pub steps:        u32,   // 1 000 steps per iteration (10s at dt=0.01)
-    pub room_width:   f64,   // metres
-    pub room_height:  f64,   // metres
-    pub params:       SocialForceParams,
+    pub iterations: u32,  // 1 000 Monte Carlo iterations
+    pub agents: u32,      // 100 agents per iteration
+    pub steps: u32,       // 1 000 steps per iteration (10s at dt=0.01)
+    pub room_width: f64,  // metres
+    pub room_height: f64, // metres
+    pub params: SocialForceParams,
 }
 
 impl Default for SimulationConfig {
     fn default() -> Self {
         Self {
-            iterations:  1_000,
-            agents:      100,
-            steps:       1_000,
-            room_width:  20.0,
+            iterations: 1_000,
+            agents: 100,
+            steps: 1_000,
+            room_width: 20.0,
             room_height: 10.0,
-            params:      SocialForceParams::default(),
+            params: SocialForceParams::default(),
         }
     }
 }
@@ -66,18 +66,20 @@ impl GenesisSimulation {
 
         for _iter in 0..cfg.iterations {
             // Spawn agents with random positions and cross-room goals
-            let mut agents: Vec<Agent2D> = (0..cfg.agents).map(|_| {
-                let x = rng.next_f64_range(0.5, cfg.room_width - 0.5);
-                let y = rng.next_f64_range(0.5, cfg.room_height - 0.5);
-                // Goals on the opposite horizontal side (corridor simulation)
-                let gx = if x < cfg.room_width / 2.0 {
-                    rng.next_f64_range(cfg.room_width * 0.8, cfg.room_width - 0.5)
-                } else {
-                    rng.next_f64_range(0.5, cfg.room_width * 0.2)
-                };
-                let gy = rng.next_f64_range(0.5, cfg.room_height - 0.5);
-                Agent2D::new([x, y], [gx, gy])
-            }).collect();
+            let mut agents: Vec<Agent2D> = (0..cfg.agents)
+                .map(|_| {
+                    let x = rng.next_f64_range(0.5, cfg.room_width - 0.5);
+                    let y = rng.next_f64_range(0.5, cfg.room_height - 0.5);
+                    // Goals on the opposite horizontal side (corridor simulation)
+                    let gx = if x < cfg.room_width / 2.0 {
+                        rng.next_f64_range(cfg.room_width * 0.8, cfg.room_width - 0.5)
+                    } else {
+                        rng.next_f64_range(0.5, cfg.room_width * 0.2)
+                    };
+                    let gy = rng.next_f64_range(0.5, cfg.room_height - 0.5);
+                    Agent2D::new([x, y], [gx, gy])
+                })
+                .collect();
 
             for _ in 0..cfg.steps {
                 step(&mut agents, &cfg.params, cfg.room_width, cfg.room_height);
@@ -96,15 +98,18 @@ impl GenesisSimulation {
         }
 
         // Extract clusters from hot cells (visit count > mean × 2)
-        let total_visits: u64 = grid.iter().flat_map(|col| col.iter()).map(|&v| v as u64).sum();
+        let total_visits: u64 = grid
+            .iter()
+            .flat_map(|col| col.iter())
+            .map(|&v| v as u64)
+            .sum();
         let cell_count = (COLS * ROWS) as u64;
         let mean = (total_visits / cell_count.max(1)) as u32;
         let threshold = mean.saturating_mul(2).max(1);
 
         let mut clusters: Vec<GaCluster> = Vec::new();
-        for col in 0..COLS {
-            for row in 0..ROWS {
-                let visits = grid[col][row];
+        for (col, col_cells) in grid.iter().enumerate().take(COLS) {
+            for (row, &visits) in col_cells.iter().enumerate().take(ROWS) {
                 if visits > threshold {
                     let cx_m = (col as f64 + 0.5) / COLS as f64 * cfg.room_width;
                     let cy_m = (row as f64 + 0.5) / ROWS as f64 * cfg.room_height;
@@ -113,7 +118,11 @@ impl GenesisSimulation {
                         d: [
                             (cx_m * 1_000.0) as i32,
                             (cy_m * 1_000.0) as i32,
-                            0, 0, 0, 0, 0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
                         ],
                     };
                     let density = (visits as f64 / total_visits.max(1) as f64 * cell_count as f64)
@@ -140,9 +149,9 @@ mod tests {
 
     fn fast_config() -> SimulationConfig {
         SimulationConfig {
-            iterations:  10,   // reduced for test speed
-            agents:      10,
-            steps:       50,
+            iterations: 10, // reduced for test speed
+            agents: 10,
+            steps: 50,
             ..Default::default()
         }
     }

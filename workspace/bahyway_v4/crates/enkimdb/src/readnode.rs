@@ -46,7 +46,12 @@ pub fn materialize_version(
     root: impl AsRef<Path>,
     version: &str,
 ) -> io::Result<(Generation, MaterializeStats)> {
-    enkidb_readnode::generation::materialize_generation(write_node.journal(), root, SOVEREIGN_NAME, version)
+    enkidb_readnode::generation::materialize_generation(
+        write_node.journal(),
+        root,
+        SOVEREIGN_NAME,
+        version,
+    )
 }
 
 /// Every Euphrates version materialized so far under `root`, sorted.
@@ -104,13 +109,29 @@ mod tests {
 
         let mut rn_v41 = gen_v41.open().unwrap();
         let mut rn_v42 = gen_v42.open().unwrap();
-        assert_eq!(rn_v41.entity_count(), 1, "Euphrates v4.1 catalogs one artifact");
-        assert_eq!(rn_v42.entity_count(), 2, "Euphrates v4.2 has grown to two artifacts");
+        assert_eq!(
+            rn_v41.entity_count(),
+            1,
+            "Euphrates v4.1 catalogs one artifact"
+        );
+        assert_eq!(
+            rn_v42.entity_count(),
+            2,
+            "Euphrates v4.2 has grown to two artifacts"
+        );
 
-        let only_in_v42 = rn_v42.query("WHO T.E\nWHERE E[artifact.name] = \"algebra-arsenal\"").unwrap();
+        let only_in_v42 = rn_v42
+            .query("WHO T.E\nWHERE E[artifact.name] = \"algebra-arsenal\"")
+            .unwrap();
         assert_eq!(only_in_v42.matched.len(), 1);
-        let absent_from_v41 = rn_v41.query("WHO T.E\nWHERE E[artifact.name] = \"algebra-arsenal\"").unwrap();
-        assert_eq!(absent_from_v41.matched.len(), 0, "algebra-arsenal postdates Euphrates v4.1's generation");
+        let absent_from_v41 = rn_v41
+            .query("WHO T.E\nWHERE E[artifact.name] = \"algebra-arsenal\"")
+            .unwrap();
+        assert_eq!(
+            absent_from_v41.matched.len(),
+            0,
+            "algebra-arsenal postdates Euphrates v4.1's generation"
+        );
     }
 
     #[test]
@@ -119,13 +140,21 @@ mod tests {
         let kaki = wn.ingest_artifact(&profile("bahyway-algebra"), 1);
 
         let base = tmp_base("round_trip");
-        let stats = materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let stats = materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
         assert_eq!(stats.entities, 1);
 
-        let mut rn = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let mut rn =
+            ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
         assert_eq!(rn.entity_count(), 1);
 
-        let res = rn.query("WHO T.E\nWHERE E[artifact.name] = \"bahyway-algebra\"").unwrap();
+        let res = rn
+            .query("WHO T.E\nWHERE E[artifact.name] = \"bahyway-algebra\"")
+            .unwrap();
         assert_eq!(res.matched.len(), 1);
         assert_eq!(*res.matched[0].entity.bytes(), *kaki.bytes());
     }

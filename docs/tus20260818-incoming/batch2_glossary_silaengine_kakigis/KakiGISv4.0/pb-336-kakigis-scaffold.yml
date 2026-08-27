@@ -1,0 +1,109 @@
+---
+# ============================================================================
+# PB-336 — KAKIGISv4.0 scaffold (Leaflet + OSM + HeptaSpaceMap + SilaEngine)
+# BahyWay.Ecosystem v4.0
+# ----------------------------------------------------------------------------
+# LAW OF THIS TABLET:
+#   * KAKIGIS is YOUR runtime GIS. Zero AI anywhere in the runtime.
+#     QGIS is NOT forked and NOT modified — it remains the design-time
+#     workshop (PB-325/327). KAKIGIS is a separate, sovereign member.
+#   * Leaflet.js (BSD-2) is VENDORED locally — downloaded once by this
+#     playbook, served from your own disk, no CDN at runtime.
+#   * Basemap: OSM raster tiles for rehearsal (ODbL attribution shown,
+#     always). For full offline sovereignty: self-hosted tiles rendered
+#     from the Geofabrik Iraq extract — a later tablet.
+#   * PALAHU LAW FOR LEAFLET: map.flyTo() is FORBIDDEN — it is the slow
+#     aerial traversal over the graves. All search arrivals use
+#     setView(..., {animate:false}) under the veil. Exact, per cm.
+#   * HeptaSpaceMap: on-fly generation (PB-334 rule) bound to Leaflet's
+#     moveend/zoomend. Real boundary from PB-335's susa_outbox GeoJSON.
+#   * SilaEngine bridge: plots fetched from http://127.0.0.1:7010/plots
+#     (pure-Rust service, later tablet); graceful mock fallback until then.
+#
+# FILE LAYOUT EXPECTED BESIDE THIS PLAYBOOK:
+#   files/kakigis_index.html
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-336-kakigis-scaffold.yml
+# THEN OPEN:
+#   cd /opt/bahyway/kakigis && python3 -m http.server 8090
+#   -> http://127.0.0.1:8090
+# ============================================================================
+
+- name: "PB-336 | Scaffold KAKIGISv4.0 (sovereign Leaflet GIS, no AI runtime)"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    kakigis_root: /opt/bahyway/kakigis
+    workshop_root: /opt/bahyway/workshop/najaf_navi
+    leaflet_ver: "1.9.4"
+
+  tasks:
+
+    - name: "1.1 | Create KAKIGIS directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0750"
+      loop:
+        - "{{ kakigis_root }}"
+        - "{{ kakigis_root }}/vendor"
+        - "{{ kakigis_root }}/data"
+
+    - name: "2.1 | Vendor Leaflet JS (downloaded once, served locally forever)"
+      ansible.builtin.get_url:
+        url: "https://unpkg.com/leaflet@{{ leaflet_ver }}/dist/leaflet.js"
+        dest: "{{ kakigis_root }}/vendor/leaflet.js"
+        mode: "0640"
+
+    - name: "2.2 | Vendor Leaflet CSS"
+      ansible.builtin.get_url:
+        url: "https://unpkg.com/leaflet@{{ leaflet_ver }}/dist/leaflet.css"
+        dest: "{{ kakigis_root }}/vendor/leaflet.css"
+        mode: "0640"
+
+    - name: "3.1 | Check for the REAL boundary (PB-335)"
+      ansible.builtin.stat:
+        path: "{{ workshop_root }}/susa_outbox/wadi_us_salam_boundary_REAL.geojson"
+      register: realb
+
+    - name: "3.2 | Copy REAL boundary into KAKIGIS data"
+      ansible.builtin.copy:
+        src: "{{ workshop_root }}/susa_outbox/wadi_us_salam_boundary_REAL.geojson"
+        dest: "{{ kakigis_root }}/data/yard.geojson"
+        mode: "0640"
+        remote_src: true
+      when: realb.stat.exists
+
+    - name: "3.3 | Warn if the real boundary is missing"
+      ansible.builtin.debug:
+        msg: "NOTE: run PB-335 first for the REAL yard; KAKIGIS will refuse to draw a mask without data/yard.geojson."
+      when: not realb.stat.exists
+
+    - name: "4.1 | Deploy the KAKIGIS app"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/kakigis_index.html"
+        dest: "{{ kakigis_root }}/index.html"
+        mode: "0640"
+
+    - name: "5.1 | NUZI provenance note"
+      ansible.builtin.copy:
+        dest: "{{ workshop_root }}/nuzi_provenance/pb-336-note.md"
+        mode: "0640"
+        content: |
+          PB-336 KAKIGISv4.0 scaffolded at {{ kakigis_root }}.
+          Runtime: vendored Leaflet {{ leaflet_ver }} (BSD-2) + OSM tiles
+          (ODbL, attribution shown) + on-fly HeptaSpaceMap layer bound to
+          moveend/zoomend + real yard boundary from PB-335 + SilaEngine
+          bridge (127.0.0.1:7010, mock fallback). ZERO AI in the runtime.
+          QGIS untouched — design-time workshop only. flyTo() forbidden
+          (Palahu); arrivals via setView animate:false under the veil.
+
+    - name: "6.1 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "KAKIGISv4.0 at {{ kakigis_root }} — serve with: python3 -m http.server 8090"
+          - "Real boundary present: {{ realb.stat.exists }}"
+          - "No AI, no CDN at runtime, no QGIS fork. Yours."

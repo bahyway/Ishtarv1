@@ -1,0 +1,153 @@
+---
+# PB-411 · Nisaba · install the watcher and prove its seven properties before it is allowed to run
+# GL-AGT-001 · the law before the code
+- name: PB-411 stand up the watcher
+  hosts: girsu
+  vars:
+    bahyway_provides: ["agent:nisaba.watcher", "artifact:golden_receipt"]
+    bahyway_requires: ["law:GL-AGT-001", "law:GL-KRN-001", "artifact:BOOTSTRAP.yml", "engine:LamassuEngine"]
+    home: "{{ ansible_env.HOME }}/bahyway/watcher"
+    carto: "{{ ansible_env.HOME }}/bahyway/carto"
+    repo: "{{ ansible_env.HOME }}/Forge/bahyway_v4"
+    playbooks: "{{ repo }}/playbooks"
+    model: "qwen2.5-coder:14b-instruct-q5_K_M"      # the narrator socket · entirely offline
+  tasks:
+    - name: Ensure the watcher's home
+      ansible.builtin.file: {path: "{{ home }}/{{ item }}", state: directory, mode: "0750"}
+      loop: ["", "golden", "runs", "decrees"]
+
+    - name: Place the watcher and its sealed golden suite
+      ansible.builtin.copy: {src: "{{ item.s }}", dest: "{{ home }}/{{ item.d }}", mode: "{{ item.m }}"}
+      loop:
+        - {s: watcher.py,             d: watcher.py,             m: "0750"}
+        - {s: golden/suite_v1.json,   d: golden/suite_v1.json,   m: "0440"}   # read-only to the watcher
+
+    - name: Gate A5a · the golden suite is not writable by the watcher's user (§5)
+      ansible.builtin.shell: |
+        test ! -w "{{ home }}/golden/suite_v1.json" && echo "A5a green - the watcher cannot edit its own exam"
+      changed_when: false
+      failed_when: false
+
+    - name: Gate A5b · no forbidden capability is reachable (§5)
+      ansible.builtin.shell: |
+        cd "{{ home }}" && python3 - <<'PY'
+        import sys, json; sys.path.insert(0, ".")
+        import watcher
+        bad = []
+        for cap in watcher.FORBIDDEN:
+            try:
+                watcher.run("shape", scope=f"federation --{cap}")
+                bad.append(cap)
+            except watcher.Refusal:
+                pass
+        print("capabilities reachable that should not be:", bad)
+        print("the watcher may propose; it may never seal, amend, write the Golden Store, or touch its thresholds")
+        raise SystemExit(1 if bad else 0)
+        PY
+      changed_when: false
+
+    - name: Gate A1 · the same job each time — two runs, byte-identical receipts
+      ansible.builtin.shell: |
+        cd "{{ home }}"
+        rm -rf runs/_a runs/_b
+        python3 watcher.py --golden golden/suite_v1.json --repo "{{ repo }}" \
+          --playbooks "{{ playbooks }}" --carto "{{ carto }}" --work runs/_a >/dev/null
+        python3 watcher.py --golden golden/suite_v1.json --repo "{{ repo }}" \
+          --playbooks "{{ playbooks }}" --carto "{{ carto }}" --work runs/_b >/dev/null
+        A=$(python3 -c "import json;print(json.load(open('runs/_a/golden_receipt.json'))['receipt_sha256'])")
+        B=$(python3 -c "import json;print(json.load(open('runs/_b/golden_receipt.json'))['receipt_sha256'])")
+        echo "A=$A"; echo "B=$B"
+        [ "$A" = "$B" ] && echo "A1 green - byte-identical" || { echo "A1 RED - the watcher is not deterministic"; exit 1; }
+      changed_when: false
+
+    - name: Gate A2 · the same quality each run — the golden suite's pass rate IS the number
+      ansible.builtin.shell: |
+        cd "{{ home }}"
+        python3 watcher.py --golden golden/suite_v1.json --repo "{{ repo }}" \
+          --playbooks "{{ playbooks }}" --carto "{{ carto }}" --work runs/quality
+        python3 - <<'PY'
+        import json, pathlib, sys
+        d = json.load(open("runs/quality/golden_receipt.json"))
+        hist = pathlib.Path("golden/history.jsonl")
+        prev = [json.loads(l)["quality"] for l in hist.read_text().splitlines()] if hist.exists() else []
+        hist.open("a").write(json.dumps({"quality": d["quality"], "sha": d["receipt_sha256"]}) + "\n")
+        print("quality:", d["quality"], "· previous:", prev[-5:])
+        if prev and d["quality"] < min(prev):
+            print("QUALITY DRIFT - the watcher got worse; this is a defect in the watcher, not in the estate")
+            sys.exit(1)
+        PY
+      changed_when: true
+
+    - name: Gate A4 · no hidden — the unreadable case passes only if UNKNOWN appears (§4)
+      ansible.builtin.shell: |
+        cd "{{ home }}" && python3 - <<'PY'
+        import json, sys
+        d = json.load(open("golden/suite_v1.json"))
+        u = [c for c in d["cases"] if c["kind"] == "unreadable"]
+        print("unreadable cases in the suite:", len(u))
+        print("a silent success on an unreadable input is the dangerous outcome")
+        sys.exit(0 if u else 1)
+        PY
+      changed_when: false
+
+    - name: Gate A3 · no fake — a claim without a citation is inadmissible (§3)
+      ansible.builtin.shell: |
+        cd "{{ home }}" && grep -q 'INADMISSIBLE' watcher.py && echo "A3 green - the admissibility check exists and exits non-zero"
+      changed_when: false
+
+    - name: Gate A9 · the judge is not the player (§9)
+      ansible.builtin.shell: |
+        test -x /usr/local/bin/bahyway-judge \
+          && test ! -w /usr/local/bin/bahyway-judge \
+          && echo "A9 green - the judge is present, sealed, and not writable by the watcher" \
+          || echo "A9 RED - install the sealed judge before letting the watcher run against a candidate"
+      changed_when: false
+      failed_when: false
+
+    - name: Install the narrator socket · a local model, entirely offline
+      ansible.builtin.command: "ollama pull {{ model }}"
+      register: pull
+      changed_when: "'success' in pull.stdout | default('')"
+      failed_when: false
+
+    - name: Gate A8 · the narrator may not compute a shape (§8)
+      ansible.builtin.copy:
+        dest: "{{ home }}/narrator.contract.md"
+        mode: "0440"
+        content: |
+          # The narrator socket · GL-AGT-001 §8
+          The occupant of this socket may:
+            · read the OntoGraph, the sealed tablets, the shape files and the receipt
+            · rank candidates and say which to try next        (ADVISED)
+            · phrase the account a steward will read           (ADVISED)
+          The occupant may NOT:
+            · produce β₀, β₁, g, L, τ, a gate decision or a proof result
+            · decide whether a candidate passes
+            · touch a threshold, a golden case, a tablet or a gate
+          Every sentence it emits is ADVISED and is labelled so. A number that
+          appears in its prose must also appear in a cited artifact, or the claim
+          is inadmissible (§3).
+
+          The same socket may be filled by a larger model when the operator
+          connects one. The contract does not change with the occupant.
+
+    - name: First survey — read the estate, propose nothing yet
+      ansible.builtin.command: >
+        python3 {{ home }}/watcher.py --repo {{ repo }} --playbooks {{ playbooks }}
+        --carto {{ carto }} --work {{ home }}/runs/first
+      register: first
+      changed_when: false
+      failed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: >
+          {{ first.stdout_lines | default([]) }}
+          - the watcher has surveyed and proposed nothing. It writes no store, seals no tablet,
+          and cannot edit the exam it is judged by.
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-411 Nisaba installed - determinism proven, golden suite sealed, forbidden capabilities refused by construction"

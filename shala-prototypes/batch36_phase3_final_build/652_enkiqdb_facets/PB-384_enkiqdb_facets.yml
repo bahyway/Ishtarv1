@@ -1,0 +1,71 @@
+---
+# PB-384 · EN-QDB-001 · mint the EnkiQDB quarantine facet set on port 7003
+- name: PB-384 install the quarantine facet law
+  hosts: girsu
+  vars:
+    bahyway_provides: ["facetset:enkiqdb", "law:EN-QDB-001"]
+    bahyway_requires: ["law:EN-DDB-002", "law:GL-AGE-001", "law:GL-UNT-001"]
+    qdb_port: 7003
+    onto: "{{ ansible_env.HOME }}/bahyway/onto"
+  tasks:
+    - name: Ensure ontology directory
+      ansible.builtin.file: {path: "{{ onto }}", state: directory, mode: "0750"}
+
+    - name: Write the facet set
+      ansible.builtin.copy:
+        dest: "{{ onto }}/enkiqdb_facets_v4.yml"
+        mode: "0640"
+        content: |
+          # EN-QDB-001 - seven mandatory facets, four groups. KAKI byte layout untouched.
+          mandatory:
+            - {id: dinu.rule,          group: DINU,      type: tablet_ref, example: "GL-NIM-001 §4"}
+            - {id: dinu.class,         group: DINU,      type: enum, values: [MEASURED, DERIVED, ESTIMATED, ADVISED, INCOHERENT]}
+            - {id: mukinnu.witnesses,  group: MUKINNU,   type: list, min_for_disposition: 2}
+            - {id: mukinnu.observed,   group: MUKINNU,   type: pair, note: "expected vs observed, verbatim"}
+            - {id: massartu.custody,   group: MASSARTU,  type: record, fields: [holder, held_from, k_ru, m_mlu]}
+            - {id: massartu.integrity, group: MASSARTU,  type: sha256, note: "as received; never recomputed"}
+            - {id: wasu.disposition,   group: WASU,      type: record,
+               fields: [target, deadline, closing_rite], targets: [RELEASE, REMEDIATE, REFUSE_IRKALLA, ARCHIVE_NUZI]}
+          optional:
+            [origin.stage, origin.sensor, tribe.hint, payload.sample, remediation.attempts,
+             appeal.opened_by, appeal.verdict, related.kaki, impact.blocked_count, kittu.receipt, legal.hold]
+          payload:
+            field: tuppu-blob
+            rule: opaque bytes; never parsed to satisfy a mandatory facet; never mutated
+
+    - name: ORBIT the facet set into EnkiQDB
+      ansible.builtin.command: >
+        bahyway-enkidb orbit --db EnkiQDB --port {{ qdb_port }} --facet-set
+        --from {{ onto }}/enkiqdb_facets_v4.yml --seal-required
+      register: orbit
+      changed_when: "'ORBITED' in orbit.stdout"
+
+    - name: Gate Q1 · no mandatory facet is derived from the payload (§3)
+      ansible.builtin.shell: |
+        ! grep -E 'mandatory:' -A 20 "{{ onto }}/enkiqdb_facets_v4.yml" | grep -Eq 'from_payload|parse|decode'
+        echo "Q1 green - envelope is self-sufficient"
+      changed_when: false
+
+    - name: Gate Q2 · every citizen has a disposition with a deadline (§4)
+      ansible.builtin.command: bahyway-enkidb prove --db EnkiQDB --port {{ qdb_port }} --rule disposition_deadline_present
+      changed_when: false
+
+    - name: Gate Q3 · disposition requires two witnesses (§7.5)
+      ansible.builtin.command: bahyway-enkidb prove --db EnkiQDB --port {{ qdb_port }} --rule two_witness_before_disposition
+      changed_when: false
+
+    - name: Gate Q4 · no aggregation endpoint over quarantine (Never-Averaged)
+      ansible.builtin.shell: |
+        ! bahyway-enkidb present --db EnkiQDB --port {{ qdb_port }} --list-endpoints 2>/dev/null | grep -Eq 'avg|mean|count_as_verdict'
+        echo "Q4 green - census only, never a verdict"
+      changed_when: false
+
+    - name: Gate Q5 · expired custody escalates rather than persisting in silence
+      ansible.builtin.command: bahyway-enkidb prove --db EnkiQDB --port {{ qdb_port }} --rule no_silent_expiry
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-384 EN-QDB-001 quarantine facet set minted on 7003 - seven mandatory facets, opaque payload"

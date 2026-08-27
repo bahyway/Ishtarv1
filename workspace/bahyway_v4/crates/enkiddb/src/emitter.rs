@@ -4,7 +4,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use akkvalue::AkkValue;
-use enkidb_kaki::{IdentityKaki, KakiRole, KakiMinter};
+use enkidb_kaki::{IdentityKaki, KakiMinter, KakiRole};
 use enkidb_particles::Particle;
 
 use crate::concepts::ConceptEntry;
@@ -60,11 +60,19 @@ impl<'a> DocumentEmitter<'a> {
     /// This lets a caller re-journal the SAME content under the SAME
     /// identity every time it's seen, keeping every generation
     /// self-sufficient.
-    pub fn emit_document_for(&self, doc_kaki: IdentityKaki, structure: &DocumentStructure) -> Vec<Particle> {
+    pub fn emit_document_for(
+        &self,
+        doc_kaki: IdentityKaki,
+        structure: &DocumentStructure,
+    ) -> Vec<Particle> {
         self.document_particles(doc_kaki, structure)
     }
 
-    fn document_particles(&self, doc_kaki: IdentityKaki, structure: &DocumentStructure) -> Vec<Particle> {
+    fn document_particles(
+        &self,
+        doc_kaki: IdentityKaki,
+        structure: &DocumentStructure,
+    ) -> Vec<Particle> {
         let now = Self::now_secs();
         let mut particles = Vec::new();
 
@@ -190,12 +198,32 @@ impl<'a> DocumentEmitter<'a> {
     /// promised: "why did v4.5 replace v4.4" becomes a queryable
     /// `hist.reason` on `old`, not lost history. Storage is the caller's
     /// concern, same contract as `emit_document`/`emit_link`.
-    pub fn emit_supersession(&self, old: IdentityKaki, new: IdentityKaki, reason: &str) -> [Particle; 3] {
+    pub fn emit_supersession(
+        &self,
+        old: IdentityKaki,
+        new: IdentityKaki,
+        reason: &str,
+    ) -> [Particle; 3] {
         let now = Self::now_secs();
         [
-            Particle::base(old, DocOrbit::Hist.attr("event"), AkkValue::Text("SUPERSEDED".to_string()), now),
-            Particle::base(old, DocOrbit::Hist.attr("superseded_by"), AkkValue::KakiPk(*new.bytes()), now),
-            Particle::base(old, DocOrbit::Hist.attr("reason"), AkkValue::Text(reason.to_string()), now),
+            Particle::base(
+                old,
+                DocOrbit::Hist.attr("event"),
+                AkkValue::Text("SUPERSEDED".to_string()),
+                now,
+            ),
+            Particle::base(
+                old,
+                DocOrbit::Hist.attr("superseded_by"),
+                AkkValue::KakiPk(*new.bytes()),
+                now,
+            ),
+            Particle::base(
+                old,
+                DocOrbit::Hist.attr("reason"),
+                AkkValue::Text(reason.to_string()),
+                now,
+            ),
         ]
     }
 
@@ -217,18 +245,19 @@ impl<'a> DocumentEmitter<'a> {
     /// Mint one child Identity-Kaki per section of `structure` (see
     /// `DocumentStructure::sections`), each carrying:
     ///   - `meta.title`     -- "<parent_title> § <header text>" (or just
-    ///                         `parent_title` for a headerless preamble)
+    ///     `parent_title` for a headerless preamble)
     ///   - `meta.section_order` -- the section's position in the document
     ///   - `body.summary`   -- the RAG "key": header text + a preview of
-    ///                         the section's body, for cheap topical search
+    ///     the section's body, for cheap topical search
     ///   - `body.text`      -- the RAG "value": the section's full,
-    ///                         untouched text (every paragraph and code
-    ///                         block, verbatim) -- nothing is summarized
-    ///                         away, only indexed by a summary alongside it
+    ///     untouched text (every paragraph and code
+    ///     block, verbatim) -- nothing is summarized
+    ///     away, only indexed by a summary alongside it
     ///   - `link.target`/`link.description` -- a link back to `parent`
     ///     (reusing `emit_link`'s CrossTribe-style mechanism), so every
     ///     chunk stays traceable to the document it came from
     ///   - `hist.event = "BIRTH"`
+    ///
     /// Returns one `(section Identity-Kaki, particles)` pair per section, in
     /// document order. No particles are appended to the Journal here --
     /// storage is the caller's concern, same contract as `emit_document`.
@@ -244,8 +273,9 @@ impl<'a> DocumentEmitter<'a> {
             .into_iter()
             .enumerate()
             .map(|(idx, section)| {
-                let section_kaki = IdentityKaki::try_from_kaki(self.minter.identity(KakiRole::Zikru))
-                    .expect("KakiMinter::identity always mints kaki_type=Identity");
+                let section_kaki =
+                    IdentityKaki::try_from_kaki(self.minter.identity(KakiRole::Zikru))
+                        .expect("KakiMinter::identity always mints kaki_type=Identity");
 
                 let title = match &section.header {
                     Some(h) => format!("{parent_title} \u{a7} {}", h.text),
@@ -255,11 +285,36 @@ impl<'a> DocumentEmitter<'a> {
                 let summary = Self::heuristic_summary(&section, &title);
 
                 let mut particles = vec![
-                    Particle::base(section_kaki, DocOrbit::Meta.attr("title"), AkkValue::Text(title), now),
-                    Particle::base(section_kaki, DocOrbit::Meta.attr("section_order"), AkkValue::Int(idx as i64), now),
-                    Particle::base(section_kaki, DocOrbit::Body.attr("summary"), AkkValue::Text(summary), now),
-                    Particle::base(section_kaki, DocOrbit::Body.attr("text"), AkkValue::Text(full_text), now),
-                    Particle::base(section_kaki, DocOrbit::Hist.attr("event"), AkkValue::Text("BIRTH".to_string()), now),
+                    Particle::base(
+                        section_kaki,
+                        DocOrbit::Meta.attr("title"),
+                        AkkValue::Text(title),
+                        now,
+                    ),
+                    Particle::base(
+                        section_kaki,
+                        DocOrbit::Meta.attr("section_order"),
+                        AkkValue::Int(idx as i64),
+                        now,
+                    ),
+                    Particle::base(
+                        section_kaki,
+                        DocOrbit::Body.attr("summary"),
+                        AkkValue::Text(summary),
+                        now,
+                    ),
+                    Particle::base(
+                        section_kaki,
+                        DocOrbit::Body.attr("text"),
+                        AkkValue::Text(full_text),
+                        now,
+                    ),
+                    Particle::base(
+                        section_kaki,
+                        DocOrbit::Hist.attr("event"),
+                        AkkValue::Text("BIRTH".to_string()),
+                        now,
+                    ),
                 ];
                 particles.extend(self.emit_link(section_kaki, parent, "section-of"));
 
@@ -276,6 +331,7 @@ impl<'a> DocumentEmitter<'a> {
     ///     (reusing `emit_link`, same mechanism `emit_sections` uses for
     ///     its "section-of" edges), tagged `"mentioned-in"`
     ///   - `hist.event = "BIRTH"`
+    ///
     /// Same shape and same "storage is the caller's concern" contract as
     /// `emit_sections` — deliberately mirrored, not a new pattern.
     pub fn emit_concept_mentions(
@@ -287,17 +343,28 @@ impl<'a> DocumentEmitter<'a> {
         mentions
             .iter()
             .map(|mention| {
-                let mention_kaki = IdentityKaki::try_from_kaki(self.minter.identity(KakiRole::Zikru))
-                    .expect("KakiMinter::identity always mints kaki_type=Identity");
+                let mention_kaki =
+                    IdentityKaki::try_from_kaki(self.minter.identity(KakiRole::Zikru))
+                        .expect("KakiMinter::identity always mints kaki_type=Identity");
                 let mut particles = vec![
-                    Particle::base(mention_kaki, DocOrbit::Meta.attr("title"), AkkValue::Text(mention.name.clone()), now),
+                    Particle::base(
+                        mention_kaki,
+                        DocOrbit::Meta.attr("title"),
+                        AkkValue::Text(mention.name.clone()),
+                        now,
+                    ),
                     Particle::base(
                         mention_kaki,
                         DocOrbit::Meta.attr("concept_kind"),
                         AkkValue::Text(mention.kind.as_str().to_string()),
                         now,
                     ),
-                    Particle::base(mention_kaki, DocOrbit::Hist.attr("event"), AkkValue::Text("BIRTH".to_string()), now),
+                    Particle::base(
+                        mention_kaki,
+                        DocOrbit::Hist.attr("event"),
+                        AkkValue::Text("BIRTH".to_string()),
+                        now,
+                    ),
                 ];
                 particles.extend(self.emit_link(mention_kaki, parent, "mentioned-in"));
                 (mention_kaki, particles)
@@ -443,9 +510,16 @@ mod tests {
         let (kaki_v44, _) = emitter.emit_document(&doc_v44);
         let (kaki_v45, _) = emitter.emit_document(&doc_v45);
 
-        let particles = emitter.emit_supersession(kaki_v44, kaki_v45, "v4.5 closes the KAKI-minting gap v4.4 left open");
+        let particles = emitter.emit_supersession(
+            kaki_v44,
+            kaki_v45,
+            "v4.5 closes the KAKI-minting gap v4.4 left open",
+        );
         for p in &particles {
-            assert_eq!(p.entity, kaki_v44, "supersession particles must target the OLD document's own identity");
+            assert_eq!(
+                p.entity, kaki_v44,
+                "supersession particles must target the OLD document's own identity"
+            );
         }
     }
 
@@ -460,19 +534,32 @@ mod tests {
 
         let particles = emitter.emit_supersession(kaki_a, kaki_b, "because the Architect said so");
 
-        let event = particles.iter().find(|p| p.attribute == "hist.event").unwrap();
+        let event = particles
+            .iter()
+            .find(|p| p.attribute == "hist.event")
+            .unwrap();
         match &event.value {
             AkkValue::Text(t) => assert_eq!(t, "SUPERSEDED"),
             _ => panic!("expected Text"),
         }
 
-        let link = particles.iter().find(|p| p.attribute == "hist.superseded_by").unwrap();
+        let link = particles
+            .iter()
+            .find(|p| p.attribute == "hist.superseded_by")
+            .unwrap();
         match link.value {
-            AkkValue::KakiPk(bytes) => assert_eq!(bytes, *kaki_b.bytes(), "must link to the NEW document's identity"),
+            AkkValue::KakiPk(bytes) => assert_eq!(
+                bytes,
+                *kaki_b.bytes(),
+                "must link to the NEW document's identity"
+            ),
             _ => panic!("expected KakiPk"),
         }
 
-        let reason = particles.iter().find(|p| p.attribute == "hist.reason").unwrap();
+        let reason = particles
+            .iter()
+            .find(|p| p.attribute == "hist.reason")
+            .unwrap();
         match &reason.value {
             AkkValue::Text(t) => assert_eq!(t, "because the Architect said so"),
             _ => panic!("expected Text"),
@@ -508,24 +595,36 @@ mod tests {
         let (alpha_kaki, alpha_particles) = &sections[0];
         assert_ne!(alpha_kaki.bytes(), parent.bytes());
 
-        let title = alpha_particles.iter().find(|p| p.attribute == "meta.title").unwrap();
+        let title = alpha_particles
+            .iter()
+            .find(|p| p.attribute == "meta.title")
+            .unwrap();
         match &title.value {
             AkkValue::Text(t) => assert_eq!(t, "Guide § Alpha"),
             _ => panic!("expected Text"),
         }
 
-        let link_target = alpha_particles.iter().find(|p| p.attribute == "link.target").unwrap();
+        let link_target = alpha_particles
+            .iter()
+            .find(|p| p.attribute == "link.target")
+            .unwrap();
         match link_target.value {
             AkkValue::KakiPk(bytes) => assert_eq!(bytes, *parent.bytes()),
             _ => panic!("expected KakiPk"),
         }
 
         let (_beta_kaki, beta_particles) = &sections[1];
-        let text = beta_particles.iter().find(|p| p.attribute == "body.text").unwrap();
+        let text = beta_particles
+            .iter()
+            .find(|p| p.attribute == "body.text")
+            .unwrap();
         match &text.value {
             AkkValue::Text(t) => {
                 assert!(t.contains("Beta body text."));
-                assert!(t.contains("fn f() {}"), "code block must survive verbatim in the section value");
+                assert!(
+                    t.contains("fn f() {}"),
+                    "code block must survive verbatim in the section value"
+                );
             }
             _ => panic!("expected Text"),
         }
@@ -541,9 +640,16 @@ mod tests {
         let (parent, _) = emitter.emit_document(&doc);
         let sections = emitter.emit_sections(parent, &doc.title, &doc);
 
-        let summary = sections[0].1.iter().find(|p| p.attribute == "body.summary").unwrap();
+        let summary = sections[0]
+            .1
+            .iter()
+            .find(|p| p.attribute == "body.summary")
+            .unwrap();
         match &summary.value {
-            AkkValue::Text(t) => assert!(t.len() < long_body.len(), "summary must be shorter than the full body"),
+            AkkValue::Text(t) => assert!(
+                t.len() < long_body.len(),
+                "summary must be shorter than the full body"
+            ),
             _ => panic!("expected Text"),
         }
     }

@@ -26,7 +26,7 @@ pub const DEFAULT_EPSILON: u32 = 32;
 #[derive(Clone, Debug)]
 pub struct SplineSegment {
     pub start_key: u64,
-    pub slope:     f64,
+    pub slope: f64,
     pub intercept: f64,
 }
 
@@ -57,7 +57,11 @@ impl RadixSplineIndex {
     /// Build from **sorted** (key, value) pairs.
     /// Panics if `keys` and `values` differ in length or are unsorted.
     pub fn build(keys: Vec<u64>, values: Vec<u32>, epsilon: u32) -> Self {
-        assert_eq!(keys.len(), values.len(), "keys and values must be the same length");
+        assert_eq!(
+            keys.len(),
+            values.len(),
+            "keys and values must be the same length"
+        );
         // Verify ascending order in debug builds.
         debug_assert!(keys.windows(2).all(|w| w[0] <= w[1]), "keys must be sorted");
 
@@ -80,12 +84,19 @@ impl RadixSplineIndex {
         let mut upper_slope = f64::INFINITY;
         let mut lower_slope = f64::NEG_INFINITY;
 
-        let close_segment = |seg_start: usize, upper_slope: f64, lower_slope: f64,
-                             segs: &mut Vec<SplineSegment>, rt: &mut Vec<u32>,
+        let close_segment = |seg_start: usize,
+                             upper_slope: f64,
+                             lower_slope: f64,
+                             segs: &mut Vec<SplineSegment>,
+                             rt: &mut Vec<u32>,
                              k_start: u64| {
             let slope = (upper_slope + lower_slope) / 2.0;
             let intercept = seg_start as f64 - slope * k_start as f64;
-            segs.push(SplineSegment { start_key: k_start, slope, intercept });
+            segs.push(SplineSegment {
+                start_key: k_start,
+                slope,
+                intercept,
+            });
             // Fill radix table slot.
             let prefix = (k_start >> (64 - RADIX_BITS)).min(RADIX_SIZE as u64 - 1) as usize;
             rt[prefix] = (segs.len() as u32).saturating_sub(1);
@@ -93,7 +104,9 @@ impl RadixSplineIndex {
 
         for i in 1..n {
             let dx = (keys[i] as i128 - keys[seg_start] as i128) as f64;
-            if dx == 0.0 { continue; }
+            if dx == 0.0 {
+                continue;
+            }
 
             let y_top = (i as f64) + epsilon as f64;
             let y_bot = (i as f64) - epsilon as f64;
@@ -105,32 +118,56 @@ impl RadixSplineIndex {
 
             if lower_slope > upper_slope {
                 // Constraint violated — close segment at i−1
-                close_segment(seg_start, upper_slope, lower_slope,
-                              &mut segments, &mut radix_table, keys[seg_start]);
+                close_segment(
+                    seg_start,
+                    upper_slope,
+                    lower_slope,
+                    &mut segments,
+                    &mut radix_table,
+                    keys[seg_start],
+                );
                 seg_start = i - 1;
                 upper_slope = f64::INFINITY;
                 lower_slope = f64::NEG_INFINITY;
             }
         }
         // Close final segment.
-        close_segment(seg_start, upper_slope.min(1.0), lower_slope.max(0.0),
-                      &mut segments, &mut radix_table, keys[seg_start]);
+        close_segment(
+            seg_start,
+            upper_slope.min(1.0),
+            lower_slope.max(0.0),
+            &mut segments,
+            &mut radix_table,
+            keys[seg_start],
+        );
 
         // Forward-fill radix table gaps (point empty slots to the last valid segment).
         let mut last = 0u32;
         for slot in radix_table.iter_mut() {
-            if *slot != 0 { last = *slot; } else { *slot = last; }
+            if *slot != 0 {
+                last = *slot;
+            } else {
+                *slot = last;
+            }
         }
 
-        Self { radix_table, segments, keys, values, epsilon }
+        Self {
+            radix_table,
+            segments,
+            keys,
+            values,
+            epsilon,
+        }
     }
 
     /// Range query: returns surrogates for all keys in `[min_epoch, max_epoch]`.
     pub fn range_query(&self, min_epoch: u64, max_epoch: u64) -> Vec<u32> {
-        if self.keys.is_empty() { return vec![]; }
+        if self.keys.is_empty() {
+            return vec![];
+        }
 
         let start_est = self.estimate(min_epoch);
-        let end_est   = self.estimate(max_epoch);
+        let end_est = self.estimate(max_epoch);
         let eps = self.epsilon as usize;
 
         let n = self.keys.len();
@@ -142,10 +179,8 @@ impl RadixSplineIndex {
         }
 
         // Binary search within the ε window.
-        let exact_lo = self.keys[lo..=hi]
-            .partition_point(|&k| k < min_epoch) + lo;
-        let exact_hi = self.keys[lo..=hi]
-            .partition_point(|&k| k <= max_epoch) + lo;
+        let exact_lo = self.keys[lo..=hi].partition_point(|&k| k < min_epoch) + lo;
+        let exact_hi = self.keys[lo..=hi].partition_point(|&k| k <= max_epoch) + lo;
 
         self.values[exact_lo..exact_hi].to_vec()
     }
@@ -159,9 +194,15 @@ impl RadixSplineIndex {
         seg.estimate(key)
     }
 
-    pub fn len(&self)      -> usize { self.keys.len() }
-    pub fn is_empty(&self) -> bool  { self.keys.is_empty() }
-    pub fn segment_count(&self) -> usize { self.segments.len() }
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+    pub fn segment_count(&self) -> usize {
+        self.segments.len()
+    }
 }
 
 #[cfg(test)]
@@ -169,7 +210,7 @@ mod tests {
     use super::*;
 
     fn build_dense(n: usize) -> RadixSplineIndex {
-        let keys:   Vec<u64> = (0..n as u64).collect();
+        let keys: Vec<u64> = (0..n as u64).collect();
         let values: Vec<u32> = (0..n as u32).collect();
         RadixSplineIndex::build(keys, values, DEFAULT_EPSILON)
     }
@@ -211,6 +252,10 @@ mod tests {
     fn segment_count_reasonable() {
         let idx = build_dense(10_000);
         // Should compress into far fewer segments than 10 000 keys.
-        assert!(idx.segment_count() < 1000, "expected fewer than 1000 segments, got {}", idx.segment_count());
+        assert!(
+            idx.segment_count() < 1000,
+            "expected fewer than 1000 segments, got {}",
+            idx.segment_count()
+        );
     }
 }

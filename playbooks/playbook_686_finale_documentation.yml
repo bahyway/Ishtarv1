@@ -1,0 +1,159 @@
+---
+# PB-686 · Finale documentation · Manual, Glossary, README
+#
+# WHAT THIS IS NOT: this is not the ecosystem's PB-999. PB-999
+# (playbooks/cartographer.py, driven by playbook_650/PB-380) is the real
+# "run everything" playbook -- generated fresh from every playbook's own
+# declared bahyway_provides/bahyway_requires contract, dependency-ordered,
+# written to ~/bahyway/carto/PB-999_regenerate_environment.yml on the
+# target host. It is deliberately not hand-authored or checked into this
+# repo: a static copy would go stale the moment a new playbook landed,
+# which is exactly the "plausible sentence replacing a proof" GL-AGT-001
+# §8 forbids. Run PB-380 (playbook_650_cartographer.yml) to regenerate it.
+#
+# WHAT THIS IS: the gate below only asserts today's Wed0826 batch
+# (PB-673..685, walked by PB-672) is journaled done, then this playbook
+# writes real, dated landing-note sections into the three living documents
+# -- docs/00_codex/BahyWay_Ecosystem_Manual.md, docs/00_codex/
+# BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md, and README.md -- citing only files
+# that actually exist in this repo as of this run. Each insertion is a
+# marked blockinfile block (idempotent: re-running this playbook updates
+# the same block in place rather than duplicating it), same append-not-
+# rewrite discipline as the Manual's own existing "Landing note" convention.
+- name: PB-686 finale documentation for the Wed0826 batch
+  hosts: girsu
+  gather_facts: true
+  vars:
+    bahyway_provides: ["artifact:wed0826_finale_docs"]
+    bahyway_requires: ["law:GL-AGT-001", "law:GL-BND-001", "law:GL-IMM-001", "law:GL-ALG-001"]
+    repo: "{{ playbook_dir }}/.."
+    manifest_log: "{{ repo }}/naru/run_manifest_672_log.jsonl"
+    gated_files:
+      - playbook_681_seal_gl_agt_001.yml
+      - playbook_682_seal_gl_bnd_001.yml
+      - playbook_683_seal_gl_imm_001.yml
+      - playbook_684_seal_gl_alg_001.yml
+      - playbook_685_promote_algebra_register_tabs.yml
+  tasks:
+    - name: Gate G0 · each of PB-681..685 is journaled done in PB-672's walk
+      ansible.builtin.shell: >-
+        grep -F '"file": "{{ item }}"' {{ manifest_log }} 2>/dev/null
+        | grep -qE '"live_rc": 0|"skipped": true'
+      args: {executable: /bin/bash}
+      loop: "{{ gated_files }}"
+      changed_when: false
+
+    - name: Count real artifacts (computed, not asserted)
+      ansible.builtin.shell: |
+        echo "tablets=$(ls {{ repo }}/playbooks/files/GL-*.md 2>/dev/null | wc -l) \
+              playbooks=$(ls {{ repo }}/playbooks/playbook_*.yml 2>/dev/null | wc -l) \
+              tree_sha=$(git -C {{ repo }} rev-parse --short HEAD)"
+      args: {executable: /bin/bash}
+      register: counts
+      changed_when: false
+
+    - name: Check whether the seal chain has actually sealed (computed, not asserted)
+      ansible.builtin.stat: {path: "{{ ansible_env.HOME }}/bahyway/laws/receipts/{{ item }}.kaniku.yml"}
+      loop: [GL-AGT-001, GL-BND-001, GL-IMM-001, GL-ALG-001]
+      register: seal_receipts
+
+    - name: Set a real, computed seal-chain status line (not a static claim -- GL-AGT-001 §8)
+      ansible.builtin.set_fact:
+        seal_chain_status: >-
+          {{ 'all four sealed real Ed25519 receipts confirmed present at ~/bahyway/laws/receipts/'
+             if (seal_receipts.results | map(attribute='stat.exists') | list | unique == [true])
+             else (seal_receipts.results | selectattr('stat.exists', 'equalto', true) | list | length | string)
+               + ' of 4 sealed so far; the rest still need the Ed25519 signing key at ~/bahyway/keys/akkadian_seal_ed25519 generated' }}
+
+    - name: Manual · insert the Wed0826 Landings section before the Appendix
+      ansible.builtin.blockinfile:
+        path: "{{ repo }}/docs/00_codex/BahyWay_Ecosystem_Manual.md"
+        marker: "<!-- {mark} PB-686 WED0826 LANDINGS -->"
+        insertbefore: "^## Appendix — Foundational Documents"
+        block: |
+          ## 6. The Wed0826 Landings (2026-08-26)
+
+          Four law tablets drafted and deposited this session, each in `playbooks/files/`
+          and mirrored to `docs/09_observatory/`:
+
+          | Tablet | Governs | Sealed by |
+          |---|---|---|
+          | **GL-AGT-001** — Tablet of the Watcher | determinism, no fake, computed never predicted | `playbook_681` |
+          | **GL-BND-001** — Tablet of the Band | canonical identity, near-match disposal | `playbook_682` |
+          | **GL-IMM-001** — Tablet of the Shared Membrane | the compatibility algebra between layers | `playbook_683` |
+          | **GL-ALG-001** — Tablet of the Algebra Register | what algebra Triple-O produces, HeptaScript's base calculus, and the claim gate | `playbook_684` |
+
+          GL-ALG-001 (§9) is the source of this ecosystem's ANTI-SQL doctrine: HeptaScript has no
+          product, so it cannot express a join — an absence by construction, not a policy. **ANTI-SQL
+          is the only term in the ecosystem permitted to name that other system, and only to name what
+          BahyWay does not have.** Its claim gate (§12-17) is the discipline behind every entry in the
+          Algebra Register: prior-art search, then a Lean4/Z3 proof green at G4, then a published date
+          — *priority is a date, not a declaration.*
+
+          Four visualization tabs accompany the register (`sala_algebra_register_v1..v4.html`,
+          promoted by `playbook_685`): the register and claim gate (v1), the ANTI-SQL banner (v2), the
+          arsenal's actual-vs-envisioned-vs-candidate-vs-leaning-on-air view across services (v3), and
+          the self-drawing legend (v4).
+
+          As of this landing: {{ counts.stdout }}.
+
+    - name: Glossary · append Wed0826 terms
+      ansible.builtin.blockinfile:
+        path: "{{ repo }}/docs/00_codex/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md"
+        marker: "<!-- {mark} PB-686 WED0826 TERMS -->"
+        block: |
+
+          ---
+
+          ## Addenda — Wed0826 Landing (2026-08-26)
+
+          ### ANTI-SQL
+          **🔒 LAW** — `playbooks/files/GL-ALG-001_algebra_register.md` §9. Names an absence, not a
+          comparison: HeptaScript has no Cartesian product, so no table-shaped operation of the
+          classical calculus can be built in it. The only term in the ecosystem permitted to refer to
+          that other system, and only to name what BahyWay does not have.
+
+          ### Girth ratio (g = RU ÷ OU)
+          **🔒 LAW** — `playbooks/files/GL-ALG-001_algebra_register.md` §8, `GL-LYF-001` §2.
+          Dimensionless by construction; a layer is DEAD when g ≥ 1. Comparable across tribes of any
+          size for exactly that reason.
+
+          ### Tolerance relation
+          **🔒 LAW** — `playbooks/files/GL-ALG-001_algebra_register.md` §7. Reflexive and symmetric but
+          **not transitive**; near-similarity is a tolerance, not an equivalence, which is the formal
+          reason the watcher (`GL-AGT-001`) may never auto-resolve a near match — chaining
+          near-neighbours would merge shapes that are not the same shape.
+
+          ### Claim gate
+          **🔒 LAW** — `playbooks/files/GL-ALG-001_algebra_register.md` §12-17. Five questions an
+          entry must answer before it reaches `CLAIMED`: is it a construction of ours; has prior art
+          been searched; is it a known result renamed; is the obligation discharged and green at G4;
+          is it published, with a date. An entry without all five is `CONJECTURE` or `UNSEARCHED`,
+          never `CLAIMED`.
+
+    - name: README · insert Recent Landings before the Documentation section
+      ansible.builtin.blockinfile:
+        path: "{{ repo }}/README.md"
+        marker: "<!-- {mark} PB-686 WED0826 LANDINGS -->"
+        insertbefore: "^## Documentation"
+        block: |
+          ## Recent Landings — Wed0826 (2026-08-26)
+
+          Four law tablets (GL-AGT-001 the Watcher, GL-BND-001 the Band, GL-IMM-001 the shared
+          membrane, GL-ALG-001 the Algebra Register) landed in `playbooks/files/` and
+          `docs/09_observatory/`, each with a seal playbook (`playbook_681`..`playbook_684`) — as
+          of this run, {{ seal_chain_status }}.
+          GL-ALG-001's four visualization tabs (`sala_algebra_register_v1..v4.html`) are promoted by
+          `playbook_685`. All five are walked by `playbook_672`'s extended backlog
+          (`playbooks/data/run_manifest_672_backlog.yml`, group `wed0826_corpus`).
+
+          See `docs/00_codex/BahyWay_Ecosystem_Manual.md` §6 and
+          `docs/00_codex/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md` (Wed0826 addenda) for the full account.
+
+          ---
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-686 finale documentation written - Manual §6, Glossary addenda, README landings ({{ counts.stdout }})"

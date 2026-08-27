@@ -9,23 +9,23 @@
 /// Int8-quantized weight matrix with per-row affine quantization.
 #[derive(Debug, Clone)]
 pub struct QuantizedMatrix {
-    pub rows:        usize,
-    pub cols:        usize,
+    pub rows: usize,
+    pub cols: usize,
     /// Per-row scale factors (dequantization: float = int8 * scale + offset).
-    pub scales:      Vec<f32>,
+    pub scales: Vec<f32>,
     /// Per-row zero points.
     pub zero_points: Vec<i8>,
     /// Flat int8 storage: data[r * cols + c].
-    pub data:        Vec<i8>,
+    pub data: Vec<i8>,
 }
 
 impl QuantizedMatrix {
     /// Create a quantized matrix from f32 weights (affine per-row quantization).
     pub fn from_f32(rows: usize, cols: usize, weights: &[f32]) -> Self {
         assert_eq!(weights.len(), rows * cols);
-        let mut scales      = Vec::with_capacity(rows);
+        let mut scales = Vec::with_capacity(rows);
         let mut zero_points = Vec::with_capacity(rows);
-        let mut data        = Vec::with_capacity(rows * cols);
+        let mut data = Vec::with_capacity(rows * cols);
 
         for r in 0..rows {
             let row = &weights[r * cols..(r + 1) * cols];
@@ -37,7 +37,11 @@ impl QuantizedMatrix {
             // dequantize(quantize(c)) == c exactly instead of collapsing to ~0.
             let (scale, zero) = if range < 1e-8 {
                 let abs_val = min.abs();
-                if abs_val < 1e-8 { (1.0f32, 0i8) } else { (abs_val / 127.0, 0i8) }
+                if abs_val < 1e-8 {
+                    (1.0f32, 0i8)
+                } else {
+                    (abs_val / 127.0, 0i8)
+                }
             } else {
                 let s = range / 255.0;
                 let z = ((-min / s) - 128.0).round().clamp(-128.0, 127.0) as i8;
@@ -52,7 +56,13 @@ impl QuantizedMatrix {
             }
         }
 
-        Self { rows, cols, scales, zero_points, data }
+        Self {
+            rows,
+            cols,
+            scales,
+            zero_points,
+            data,
+        }
     }
 
     /// Dequantize one element.
@@ -66,7 +76,7 @@ impl QuantizedMatrix {
     /// Get all dequantized values in a row as f32.
     pub fn get_row(&self, row: usize) -> Vec<f32> {
         let scale = self.scales[row];
-        let zero  = self.zero_points[row] as i32;
+        let zero = self.zero_points[row] as i32;
         let start = row * self.cols;
         self.data[start..start + self.cols]
             .iter()
@@ -79,27 +89,27 @@ impl QuantizedMatrix {
     pub fn matvec(&self, vec: &[f32]) -> Vec<f32> {
         assert_eq!(vec.len(), self.cols);
         let mut out = vec![0.0f32; self.rows];
-        for r in 0..self.rows {
+        for (r, out_r) in out.iter_mut().enumerate().take(self.rows) {
             let scale = self.scales[r];
-            let zero  = self.zero_points[r] as i32;
+            let zero = self.zero_points[r] as i32;
             let row_start = r * self.cols;
             let mut acc = 0.0f32;
             // Process 4 columns at a time for cache locality
             let chunk = self.cols / 4 * 4;
             let mut c = 0;
             while c < chunk {
-                let q0 = (self.data[row_start + c    ] as i32 - zero) as f32;
+                let q0 = (self.data[row_start + c] as i32 - zero) as f32;
                 let q1 = (self.data[row_start + c + 1] as i32 - zero) as f32;
                 let q2 = (self.data[row_start + c + 2] as i32 - zero) as f32;
                 let q3 = (self.data[row_start + c + 3] as i32 - zero) as f32;
-                acc += (q0 * vec[c] + q1 * vec[c+1] + q2 * vec[c+2] + q3 * vec[c+3]) * scale;
+                acc += (q0 * vec[c] + q1 * vec[c + 1] + q2 * vec[c + 2] + q3 * vec[c + 3]) * scale;
                 c += 4;
             }
             while c < self.cols {
                 acc += (self.data[row_start + c] as i32 - zero) as f32 * scale * vec[c];
                 c += 1;
             }
-            out[r] = acc;
+            *out_r = acc;
         }
         out
     }
@@ -156,14 +166,21 @@ mod tests {
 
     #[test]
     fn matvec_larger_matrix() {
-        let rows = 8; let cols = 16;
+        let rows = 8;
+        let cols = 16;
         // All-ones matrix × all-ones vector = [cols, cols, ..., cols]
         let weights = vec![1.0f32; rows * cols];
         let m = QuantizedMatrix::from_f32(rows, cols, &weights);
         let v = vec![1.0f32; cols];
         let out = m.matvec(&v);
         for (i, &o) in out.iter().enumerate() {
-            assert!((o - cols as f32).abs() < 0.5, "out[{}]={} expected {}", i, o, cols);
+            assert!(
+                (o - cols as f32).abs() < 0.5,
+                "out[{}]={} expected {}",
+                i,
+                o,
+                cols
+            );
         }
     }
 

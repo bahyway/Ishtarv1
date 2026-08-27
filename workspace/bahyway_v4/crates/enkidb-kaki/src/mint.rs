@@ -7,43 +7,76 @@
 use std::cell::Cell;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use bahyway_core::TribeId;
 use crate::{Kaki, KakiRole, KakiType};
+use bahyway_core::TribeId;
 
 /// Mints new KAKIs for a single tribe.
 pub struct KakiMinter {
     tribe_id: TribeId,
-    counter:  Cell<u32>,
+    counter: Cell<u32>,
 }
 
 impl KakiMinter {
     pub fn new(tribe_id: TribeId) -> Self {
-        KakiMinter { tribe_id, counter: Cell::new(0) }
+        KakiMinter {
+            tribe_id,
+            counter: Cell::new(0),
+        }
     }
 
     /// Mint an Identity-Kaki (kaki_type = 0x01) with an auto-generated uuid_hash.
     pub fn identity(&self, role: KakiRole) -> Kaki {
-        Kaki::mint(self.new_uuid_hash(), self.tribe_id, KakiType::Identity, role, self.timestamp())
+        Kaki::mint(
+            self.new_uuid_hash(),
+            self.tribe_id,
+            KakiType::Identity,
+            role,
+            self.timestamp(),
+        )
     }
 
     /// Mint an Event-Kaki (kaki_type = 0x02) with an auto-generated uuid_hash.
     pub fn event(&self, role: KakiRole) -> Kaki {
-        Kaki::mint(self.new_uuid_hash(), self.tribe_id, KakiType::Event, role, self.timestamp())
+        Kaki::mint(
+            self.new_uuid_hash(),
+            self.tribe_id,
+            KakiType::Event,
+            role,
+            self.timestamp(),
+        )
     }
 
     /// Mint a CrossTribe-Kaki (kaki_type = 0x03) with an auto-generated uuid_hash.
     pub fn crosstribe(&self, role: KakiRole) -> Kaki {
-        Kaki::mint(self.new_uuid_hash(), self.tribe_id, KakiType::CrossTribe, role, self.timestamp())
+        Kaki::mint(
+            self.new_uuid_hash(),
+            self.tribe_id,
+            KakiType::CrossTribe,
+            role,
+            self.timestamp(),
+        )
     }
 
     /// Mint an Identity-Kaki with a caller-supplied uuid_hash (deterministic).
     pub fn mint_identity(&self, uuid_hash: u32, role: KakiRole) -> Kaki {
-        Kaki::mint(uuid_hash, self.tribe_id, KakiType::Identity, role, self.timestamp())
+        Kaki::mint(
+            uuid_hash,
+            self.tribe_id,
+            KakiType::Identity,
+            role,
+            self.timestamp(),
+        )
     }
 
     /// Mint an Event-Kaki with a caller-supplied uuid_hash (deterministic).
     pub fn mint_event(&self, uuid_hash: u32, role: KakiRole) -> Kaki {
-        Kaki::mint(uuid_hash, self.tribe_id, KakiType::Event, role, self.timestamp())
+        Kaki::mint(
+            uuid_hash,
+            self.tribe_id,
+            KakiType::Event,
+            role,
+            self.timestamp(),
+        )
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────
@@ -78,8 +111,8 @@ impl KakiMinter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bahyway_core::TribeId;
     use crate::types::{KakiRole, KakiType};
+    use bahyway_core::TribeId;
 
     #[test]
     fn identity_kaki_correct_type() {

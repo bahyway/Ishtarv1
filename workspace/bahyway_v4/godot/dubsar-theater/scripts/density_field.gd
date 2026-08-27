@@ -31,7 +31,7 @@ extends MultiMeshInstance3D
 
 const SumuUkinClient = preload("res://scripts/sumuukin_client.gd")
 
-const ENKIDB_HOST:   String = "192.168.122.107"
+const ENKIDB_HOST:   String = "192.168.122.112"
 const ENKIDB_PORT:   int    = 7001
 const REFRESH_SEC:   float  = 10.0
 const CONNECT_TIMEOUT: float = 5.0

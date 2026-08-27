@@ -27,24 +27,20 @@
 //!
 //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust
 
-use vgca_engine::{
-    analyse_text, analyse_bytes,
-    DomainCentroid, GeometricFit,
-    BinaryFeatureVector, FeatureScoreVector,
-};
-use bahyway_dqm::{
-    DqmEngine, DqmSla, DqmDimension, DqmReport,
-    RuleEngine, rule_not_empty,
-};
-use template_engine::Template;
+use bahyway_dqm::{rule_not_empty, DqmDimension, DqmEngine, DqmReport, DqmSla, RuleEngine};
 use enkidb_journal::entry::EavTriple;
+use template_engine::Template;
+use vgca_engine::{
+    analyse_bytes, analyse_text, BinaryFeatureVector, DomainCentroid, FeatureScoreVector,
+    GeometricFit,
+};
 
 // ── Sovereign Constants (ADR-001, ADR-008) ───────────────────────────────────
 
-pub const GEM_B11:    u8 = 200;
-pub const TRIBE_B11:  u8 = 140;
+pub const GEM_B11: u8 = 200;
+pub const TRIBE_B11: u8 = 140;
 pub const ACTIVE_B11: u8 = 100;
-pub const FUZZY_B11:  u8 =  60;
+pub const FUZZY_B11: u8 = 60;
 
 // ── Particle Lane ─────────────────────────────────────────────────────────────
 
@@ -66,29 +62,33 @@ pub enum ParticleLane {
 impl ParticleLane {
     pub fn from_b11(b11: u8) -> Self {
         match b11 {
-            b if b >= GEM_B11    => Self::Gem,
-            b if b >= TRIBE_B11  => Self::Tribe,
+            b if b >= GEM_B11 => Self::Gem,
+            b if b >= TRIBE_B11 => Self::Tribe,
             b if b >= ACTIVE_B11 => Self::Active,
-            b if b >= FUZZY_B11  => Self::Fuzzy,
-            _                    => Self::Dead,
+            b if b >= FUZZY_B11 => Self::Fuzzy,
+            _ => Self::Dead,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Gem    => "GEM",
-            Self::Tribe  => "TRIBE",
+            Self::Gem => "GEM",
+            Self::Tribe => "TRIBE",
             Self::Active => "ACTIVE",
-            Self::Fuzzy  => "FUZZY",
-            Self::Dead   => "DEAD",
+            Self::Fuzzy => "FUZZY",
+            Self::Dead => "DEAD",
         }
     }
 
     /// GEM particles are routed to the central orbit and update the centroid.
-    pub fn is_gem(self) -> bool { matches!(self, Self::Gem) }
+    pub fn is_gem(self) -> bool {
+        matches!(self, Self::Gem)
+    }
 
     /// Dead particles go to the dead-letter queue; not to storage.
-    pub fn is_dead(self) -> bool { matches!(self, Self::Dead) }
+    pub fn is_dead(self) -> bool {
+        matches!(self, Self::Dead)
+    }
 }
 
 // ── Per-field VGCA result ─────────────────────────────────────────────────────
@@ -99,9 +99,9 @@ pub struct FieldVgcaResult {
     /// EAV attribute hash this result belongs to.
     pub attr_hash: u32,
     /// GeometricFit category (Clean/Suspect/Outlier/Alien).
-    pub fit:       GeometricFit,
+    pub fit: GeometricFit,
     /// Geometric fit score [0.0–1.0].
-    pub score:     f64,
+    pub score: f64,
     /// True if the field was classified as a binary block (VGCA-Δ path).
     pub is_binary: bool,
     /// Fragmentation flag (only meaningful when is_binary=true).
@@ -111,8 +111,10 @@ pub struct FieldVgcaResult {
 impl FieldVgcaResult {
     /// Returns true if this field needs steward attention.
     pub fn needs_review(&self) -> bool {
-        matches!(self.fit, GeometricFit::Suspect | GeometricFit::Outlier | GeometricFit::Alien)
-            || self.fragmented
+        matches!(
+            self.fit,
+            GeometricFit::Suspect | GeometricFit::Outlier | GeometricFit::Alien
+        ) || self.fragmented
     }
 }
 
@@ -122,13 +124,25 @@ impl FieldVgcaResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DqFinding {
     pub term_code: &'static str,
-    pub passed:    bool,
-    pub detail:    &'static str,
+    pub passed: bool,
+    pub detail: &'static str,
 }
 
 impl DqFinding {
-    fn pass(code: &'static str) -> Self { DqFinding { term_code: code, passed: true,  detail: "" } }
-    fn fail(code: &'static str, detail: &'static str) -> Self { DqFinding { term_code: code, passed: false, detail } }
+    fn pass(code: &'static str) -> Self {
+        DqFinding {
+            term_code: code,
+            passed: true,
+            detail: "",
+        }
+    }
+    fn fail(code: &'static str, detail: &'static str) -> Self {
+        DqFinding {
+            term_code: code,
+            passed: false,
+            detail,
+        }
+    }
 }
 
 // ── Full Cleansing Report ─────────────────────────────────────────────────────
@@ -140,13 +154,13 @@ impl DqFinding {
 #[derive(Debug, Clone)]
 pub struct CleansingReport {
     /// DAMA-DMBOK dimension findings (completeness, uniqueness, validity).
-    pub findings:        Vec<DqFinding>,
+    pub findings: Vec<DqFinding>,
     /// VGCA per-field classification results.
-    pub field_results:   Vec<FieldVgcaResult>,
+    pub field_results: Vec<FieldVgcaResult>,
     /// Full DQM 6-dimension report (composite score, B11, SLA compliance).
-    pub dqm_report:      DqmReport,
+    pub dqm_report: DqmReport,
     /// Particle lane derived from the DQM composite B11.
-    pub lane:            ParticleLane,
+    pub lane: ParticleLane,
     /// True if this particle should update the domain centroid (GEM lane only).
     pub updates_centroid: bool,
     /// Summary: proportion of VGCA-Clean fields in this record.
@@ -161,12 +175,18 @@ impl CleansingReport {
 
     /// Number of fields classified as VGCA Alien (zero domain resemblance).
     pub fn alien_field_count(&self) -> usize {
-        self.field_results.iter().filter(|r| r.fit == GeometricFit::Alien).count()
+        self.field_results
+            .iter()
+            .filter(|r| r.fit == GeometricFit::Alien)
+            .count()
     }
 
     /// Fields that need steward review (Suspect, Outlier, Alien, or fragmented).
     pub fn fields_needing_review(&self) -> Vec<&FieldVgcaResult> {
-        self.field_results.iter().filter(|r| r.needs_review()).collect()
+        self.field_results
+            .iter()
+            .filter(|r| r.needs_review())
+            .collect()
     }
 
     /// Iterate over DAMA findings that failed.
@@ -181,7 +201,11 @@ impl CleansingReport {
             self.lane.label(),
             self.dqm_report.composite_b11,
             self.vgca_clean_ratio * 100.0,
-            if self.dqm_report.sla_compliant { "SLA_PASS" } else { "SLA_FAIL" },
+            if self.dqm_report.sla_compliant {
+                "SLA_PASS"
+            } else {
+                "SLA_FAIL"
+            },
         )
     }
 }
@@ -194,7 +218,7 @@ impl CleansingReport {
 /// the centroid drifts toward the domain ideal as GEM particles pass through.
 pub struct VgcaCleansingStation {
     centroid: DomainCentroid,
-    dqm:      DqmEngine,
+    dqm: DqmEngine,
 }
 
 impl VgcaCleansingStation {
@@ -202,7 +226,7 @@ impl VgcaCleansingStation {
     pub fn new() -> Self {
         Self {
             centroid: DomainCentroid::new(),
-            dqm:      DqmEngine::new(DqmSla::enterprise()),
+            dqm: DqmEngine::new(DqmSla::enterprise()),
         }
     }
 
@@ -210,7 +234,7 @@ impl VgcaCleansingStation {
     pub fn with_seed(seed: [f64; 7]) -> Self {
         Self {
             centroid: DomainCentroid::from_seed(seed),
-            dqm:      DqmEngine::new(DqmSla::enterprise()),
+            dqm: DqmEngine::new(DqmSla::enterprise()),
         }
     }
 
@@ -243,15 +267,15 @@ impl VgcaCleansingStation {
     /// first text field's FSV (self-calibrating rule, ADR-008).
     pub fn cleanse(
         &mut self,
-        record:           &[(u32, Vec<u8>)],
-        template:         &Template,
-        current_epoch:    u32,
-        record_epoch:     u32,
+        record: &[(u32, Vec<u8>)],
+        template: &Template,
+        current_epoch: u32,
+        record_epoch: u32,
         freshness_window: u32,
     ) -> CleansingReport {
         // ── STEP 1: VGCA per-field analysis ─────────────────────────────────
         let mut field_results = Vec::with_capacity(record.len());
-        let mut clean_count   = 0usize;
+        let mut clean_count = 0usize;
         let mut first_text_fsv = None::<FeatureScoreVector>;
 
         for (attr_hash, value) in record {
@@ -266,33 +290,36 @@ impl VgcaCleansingStation {
                 }
                 FieldVgcaResult {
                     attr_hash: *attr_hash,
-                    fit:       vgca_result.fit,
-                    score:     vgca_result.score,
+                    fit: vgca_result.fit,
+                    score: vgca_result.score,
                     is_binary: false,
                     fragmented: false,
                 }
             } else {
                 let (bfv, fragmented) = analyse_bytes(value);
                 let score = bfv_to_fit_score(&bfv);
-                let fit   = GeometricFit::from_score(score);
-                if fit == GeometricFit::Clean { clean_count += 1; }
+                let fit = GeometricFit::from_score(score);
+                if fit == GeometricFit::Clean {
+                    clean_count += 1;
+                }
                 FieldVgcaResult {
-                    attr_hash:  *attr_hash,
+                    attr_hash: *attr_hash,
                     fit,
                     score,
-                    is_binary:  true,
+                    is_binary: true,
                     fragmented,
                 }
             };
             field_results.push(field_result);
         }
 
-        let total_fields    = record.len().max(1);
+        let total_fields = record.len().max(1);
         let vgca_clean_ratio = clean_count as f32 / total_fields as f32;
 
         // ── STEP 2: DQM 6-dimension assessment ──────────────────────────────
         let mut rule_engine = RuleEngine::new();
-        let present_attrs: Vec<u32> = record.iter()
+        let present_attrs: Vec<u32> = record
+            .iter()
             .filter(|(_, v)| !v.is_empty())
             .map(|(h, _)| *h)
             .collect();
@@ -312,14 +339,15 @@ impl VgcaCleansingStation {
         );
 
         // ── STEP 3: DAMA-DMBOK findings ──────────────────────────────────────
-        let eav_triples: Vec<EavTriple> = record.iter()
+        let eav_triples: Vec<EavTriple> = record
+            .iter()
             .map(|(h, v)| EavTriple::new(*h, v.clone()))
             .collect();
         let findings = dama_findings(template, &eav_triples, &dqm_report);
 
         // ── STEP 4: Lane classification and centroid update ──────────────────
-        let lane              = ParticleLane::from_b11(dqm_report.composite_b11);
-        let updates_centroid  = lane.is_gem();
+        let lane = ParticleLane::from_b11(dqm_report.composite_b11);
+        let updates_centroid = lane.is_gem();
 
         if updates_centroid {
             if let Some(fsv) = first_text_fsv {
@@ -341,14 +369,23 @@ impl VgcaCleansingStation {
     /// density snapshot of the current tribe orbit state.
     pub fn cleanse_batch(
         &mut self,
-        batch:            &[Vec<(u32, Vec<u8>)>],
-        template:         &Template,
-        current_epoch:    u32,
-        record_epoch:     u32,
+        batch: &[Vec<(u32, Vec<u8>)>],
+        template: &Template,
+        current_epoch: u32,
+        record_epoch: u32,
         freshness_window: u32,
     ) -> (Vec<CleansingReport>, OrbitDensitySnapshot) {
-        let reports: Vec<CleansingReport> = batch.iter()
-            .map(|record| self.cleanse(record, template, current_epoch, record_epoch, freshness_window))
+        let reports: Vec<CleansingReport> = batch
+            .iter()
+            .map(|record| {
+                self.cleanse(
+                    record,
+                    template,
+                    current_epoch,
+                    record_epoch,
+                    freshness_window,
+                )
+            })
             .collect();
         let snapshot = OrbitDensitySnapshot::from_reports(&reports);
         (reports, snapshot)
@@ -356,7 +393,9 @@ impl VgcaCleansingStation {
 }
 
 impl Default for VgcaCleansingStation {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Orbit Density Snapshot ────────────────────────────────────────────────────
@@ -366,12 +405,12 @@ impl Default for VgcaCleansingStation {
 /// Used by the Dashboard to render animated Tribe Orbit rings with density.
 #[derive(Debug, Clone, Default)]
 pub struct OrbitDensitySnapshot {
-    pub gem_count:    usize,
-    pub tribe_count:  usize,
+    pub gem_count: usize,
+    pub tribe_count: usize,
     pub active_count: usize,
-    pub fuzzy_count:  usize,
-    pub dead_count:   usize,
-    pub total:        usize,
+    pub fuzzy_count: usize,
+    pub dead_count: usize,
+    pub total: usize,
     /// Mean DQM composite score across all records (0.0–1.0).
     pub mean_quality: f32,
     /// Domain centroid calibration depth (number of GEM particles seen).
@@ -381,24 +420,34 @@ pub struct OrbitDensitySnapshot {
 impl OrbitDensitySnapshot {
     pub fn from_reports(reports: &[CleansingReport]) -> Self {
         let total = reports.len();
-        if total == 0 { return Self::default(); }
+        if total == 0 {
+            return Self::default();
+        }
 
-        let mut gem = 0; let mut tribe = 0; let mut active = 0;
-        let mut fuzzy = 0; let mut dead = 0; let mut q_sum = 0.0f32;
+        let mut gem = 0;
+        let mut tribe = 0;
+        let mut active = 0;
+        let mut fuzzy = 0;
+        let mut dead = 0;
+        let mut q_sum = 0.0f32;
 
         for r in reports {
             q_sum += r.dqm_report.composite;
             match r.lane {
-                ParticleLane::Gem    => gem    += 1,
-                ParticleLane::Tribe  => tribe  += 1,
+                ParticleLane::Gem => gem += 1,
+                ParticleLane::Tribe => tribe += 1,
                 ParticleLane::Active => active += 1,
-                ParticleLane::Fuzzy  => fuzzy  += 1,
-                ParticleLane::Dead   => dead   += 1,
+                ParticleLane::Fuzzy => fuzzy += 1,
+                ParticleLane::Dead => dead += 1,
             }
         }
         Self {
-            gem_count: gem, tribe_count: tribe, active_count: active,
-            fuzzy_count: fuzzy, dead_count: dead, total,
+            gem_count: gem,
+            tribe_count: tribe,
+            active_count: active,
+            fuzzy_count: fuzzy,
+            dead_count: dead,
+            total,
             mean_quality: q_sum / total as f32,
             centroid_gem_depth: 0,
         }
@@ -407,19 +456,23 @@ impl OrbitDensitySnapshot {
     /// GEM rate — fraction of particles reaching GEM lane.
     /// ADR-004 target: 0.354 (35.4%).
     pub fn gem_rate(&self) -> f32 {
-        if self.total == 0 { return 0.0; }
+        if self.total == 0 {
+            return 0.0;
+        }
         self.gem_count as f32 / self.total as f32
     }
 
     /// Density for a given lane as a fraction of total (for orbit ring radius).
     pub fn lane_density(&self, lane: ParticleLane) -> f32 {
-        if self.total == 0 { return 0.0; }
+        if self.total == 0 {
+            return 0.0;
+        }
         let count = match lane {
-            ParticleLane::Gem    => self.gem_count,
-            ParticleLane::Tribe  => self.tribe_count,
+            ParticleLane::Gem => self.gem_count,
+            ParticleLane::Tribe => self.tribe_count,
             ParticleLane::Active => self.active_count,
-            ParticleLane::Fuzzy  => self.fuzzy_count,
-            ParticleLane::Dead   => self.dead_count,
+            ParticleLane::Fuzzy => self.fuzzy_count,
+            ParticleLane::Dead => self.dead_count,
         };
         count as f32 / self.total as f32
     }
@@ -429,9 +482,12 @@ impl OrbitDensitySnapshot {
 
 /// Heuristic: is this value likely UTF-8 text rather than raw binary?
 fn is_likely_text(value: &[u8]) -> bool {
-    if value.is_empty() { return true; }
+    if value.is_empty() {
+        return true;
+    }
     // Fast check: if > 15% bytes are non-UTF8-printable, treat as binary
-    let non_text = value.iter()
+    let non_text = value
+        .iter()
         .filter(|&&b| b < 0x09 || (b > 0x0D && b < 0x20) || b == 0x7F)
         .count();
     non_text as f64 / (value.len() as f64) < 0.15
@@ -445,19 +501,15 @@ fn bfv_to_fit_score(bfv: &BinaryFeatureVector) -> f64 {
     let score = bfv.printable_ratio * 0.60
         + (1.0 - bfv.null_density) * 0.20
         + (1.0 - bfv.byte_entropy) * 0.20;
-    score.min(1.0).max(0.0)
+    score.clamp(0.0, 1.0)
 }
 
 /// Build DAMA-DMBOK findings from template + DQM report.
-fn dama_findings(
-    template:   &Template,
-    eav:        &[EavTriple],
-    dqm_report: &DqmReport,
-) -> Vec<DqFinding> {
+fn dama_findings(template: &Template, eav: &[EavTriple], dqm_report: &DqmReport) -> Vec<DqFinding> {
     let completeness_score = dqm_report.score_for(DqmDimension::Completeness);
-    let validity_score     = dqm_report.score_for(DqmDimension::Validity);
-    let timeliness_score   = dqm_report.score_for(DqmDimension::Timeliness);
-    let consistency_score  = dqm_report.score_for(DqmDimension::Consistency);
+    let validity_score = dqm_report.score_for(DqmDimension::Validity);
+    let timeliness_score = dqm_report.score_for(DqmDimension::Timeliness);
+    let consistency_score = dqm_report.score_for(DqmDimension::Consistency);
 
     // Completeness: check template required fields
     let present: Vec<u32> = eav.iter().map(|t| t.attr_hash).collect();
@@ -472,7 +524,10 @@ fn dama_findings(
         if completeness_ok {
             DqFinding::pass("DQ.COMPLETENESS")
         } else {
-            DqFinding::fail("DQ.COMPLETENESS", "Required fields absent or score below threshold.")
+            DqFinding::fail(
+                "DQ.COMPLETENESS",
+                "Required fields absent or score below threshold.",
+            )
         },
         if !has_duplicate {
             DqFinding::pass("DQ.UNIQUENESS")
@@ -487,12 +542,18 @@ fn dama_findings(
         if consistency_score >= 0.95 {
             DqFinding::pass("DQ.CONSISTENCY")
         } else {
-            DqFinding::fail("DQ.CONSISTENCY", "Cross-field conflict marker (0xFF) detected.")
+            DqFinding::fail(
+                "DQ.CONSISTENCY",
+                "Cross-field conflict marker (0xFF) detected.",
+            )
         },
         if timeliness_score >= 0.70 {
             DqFinding::pass("DQ.TIMELINESS")
         } else {
-            DqFinding::fail("DQ.TIMELINESS", "Record epoch lag exceeds freshness window.")
+            DqFinding::fail(
+                "DQ.TIMELINESS",
+                "Record epoch lag exceeds freshness window.",
+            )
         },
     ]
 }
@@ -505,7 +566,7 @@ fn dama_findings(
 /// For full VGCA-powered cleansing use `VgcaCleansingStation::cleanse()`.
 pub fn cleanse(template: &Template, eav: &[EavTriple]) -> CleansingReportLegacy {
     let present: Vec<u32> = eav.iter().map(|t| t.attr_hash).collect();
-    let missing  = template_engine::validate_required(template, &present);
+    let missing = template_engine::validate_required(template, &present);
 
     let completeness = if missing.is_empty() {
         DqFinding::pass("DQ.COMPLETENESS")
@@ -526,7 +587,9 @@ pub fn cleanse(template: &Template, eav: &[EavTriple]) -> CleansingReportLegacy 
         DqFinding::pass("DQ.VALIDITY")
     };
 
-    CleansingReportLegacy { findings: vec![completeness, uniqueness, validity] }
+    CleansingReportLegacy {
+        findings: vec![completeness, uniqueness, validity],
+    }
 }
 
 /// Legacy report type — retained for backward compatibility.
@@ -535,7 +598,9 @@ pub struct CleansingReportLegacy {
 }
 
 impl CleansingReportLegacy {
-    pub fn is_clean(&self) -> bool { self.findings.iter().all(|f| f.passed) }
+    pub fn is_clean(&self) -> bool {
+        self.findings.iter().all(|f| f.passed)
+    }
     pub fn issues(&self) -> impl Iterator<Item = &DqFinding> {
         self.findings.iter().filter(|f| !f.passed)
     }
@@ -550,9 +615,10 @@ mod tests {
 
     fn template() -> Template {
         Template::default_template(
-            "t.test", "Test",
+            "t.test",
+            "Test",
             &[
-                FieldSpec::new(0x1A4Bu32, "name",   true),
+                FieldSpec::new(0x1A4Bu32, "name", true),
                 FieldSpec::new(0x2C5Eu32, "amount", true),
                 FieldSpec::new(0x3D6Fu32, "status", false),
             ],
@@ -580,7 +646,11 @@ mod tests {
         let mut station = VgcaCleansingStation::new();
         let t = template();
         let r = station.cleanse(&record_clean(), &t, 10, 10, 5);
-        assert!(r.vgca_clean_ratio > 0.0, "vgca_clean_ratio={}", r.vgca_clean_ratio);
+        assert!(
+            r.vgca_clean_ratio > 0.0,
+            "vgca_clean_ratio={}",
+            r.vgca_clean_ratio
+        );
     }
 
     #[test]
@@ -609,9 +679,14 @@ mod tests {
         let mut station = VgcaCleansingStation::new();
         let t = template();
         let r = station.cleanse(&record_clean(), &t, 100, 50, 10);
-        let timeliness_fail = r.findings.iter()
+        let timeliness_fail = r
+            .findings
+            .iter()
             .any(|f| f.term_code == "DQ.TIMELINESS" && !f.passed);
-        assert!(timeliness_fail, "epoch lag 50 >> window 10 should fail timeliness");
+        assert!(
+            timeliness_fail,
+            "epoch lag 50 >> window 10 should fail timeliness"
+        );
     }
 
     #[test]
@@ -619,7 +694,9 @@ mod tests {
         let mut station = VgcaCleansingStation::new();
         let t = template();
         let r = station.cleanse(&[], &t, 10, 10, 5);
-        let completeness_fail = r.findings.iter()
+        let completeness_fail = r
+            .findings
+            .iter()
             .any(|f| f.term_code == "DQ.COMPLETENESS" && !f.passed);
         assert!(completeness_fail);
     }
@@ -630,11 +707,13 @@ mod tests {
         let t = template();
         let record = vec![
             (0x1A4Bu32, b"John Smith".to_vec()),
-            (0x2C5Eu32, vec![0xFF, b'0']),  // conflict sentinel
+            (0x2C5Eu32, vec![0xFF, b'0']), // conflict sentinel
             (0x3D6Fu32, b"ACTIVE".to_vec()),
         ];
         let r = station.cleanse(&record, &t, 10, 10, 5);
-        let consistency_fail = r.findings.iter()
+        let consistency_fail = r
+            .findings
+            .iter()
             .any(|f| f.term_code == "DQ.CONSISTENCY" && !f.passed);
         assert!(consistency_fail);
     }
@@ -645,7 +724,7 @@ mod tests {
         let t = template();
         let record = vec![
             (0x1A4Bu32, b"John Smith".to_vec()),
-            (0x2C5Eu32, vec![0x00u8; 32]),  // null bytes → binary → fragmented
+            (0x2C5Eu32, vec![0x00u8; 32]), // null bytes → binary → fragmented
         ];
         let r = station.cleanse(&record, &t, 10, 10, 5);
         let binary_field = r.field_results.iter().find(|f| f.is_binary);
@@ -656,22 +735,28 @@ mod tests {
     fn orbit_density_snapshot_lane_counts_sum_to_total() {
         let mut station = VgcaCleansingStation::new();
         let t = template();
-        let records: Vec<Vec<(u32, Vec<u8>)>> = (0..10)
-            .map(|_| record_clean())
-            .collect();
+        let records: Vec<Vec<(u32, Vec<u8>)>> = (0..10).map(|_| record_clean()).collect();
         let batch_refs: Vec<Vec<(u32, Vec<u8>)>> = records;
         let (_, snap) = station.cleanse_batch(&batch_refs, &t, 10, 10, 5);
-        let lane_sum = snap.gem_count + snap.tribe_count + snap.active_count
-            + snap.fuzzy_count + snap.dead_count;
+        let lane_sum = snap.gem_count
+            + snap.tribe_count
+            + snap.active_count
+            + snap.fuzzy_count
+            + snap.dead_count;
         assert_eq!(lane_sum, snap.total);
     }
 
     #[test]
     fn lane_density_sums_to_one() {
         let snap = OrbitDensitySnapshot {
-            gem_count: 4, tribe_count: 3, active_count: 2,
-            fuzzy_count: 1, dead_count: 0, total: 10,
-            mean_quality: 0.8, centroid_gem_depth: 0,
+            gem_count: 4,
+            tribe_count: 3,
+            active_count: 2,
+            fuzzy_count: 1,
+            dead_count: 0,
+            total: 10,
+            mean_quality: 0.8,
+            centroid_gem_depth: 0,
         };
         let sum = snap.lane_density(ParticleLane::Gem)
             + snap.lane_density(ParticleLane::Tribe)
@@ -684,9 +769,14 @@ mod tests {
     #[test]
     fn gem_rate_adr004_target_reference() {
         let snap = OrbitDensitySnapshot {
-            gem_count: 354, tribe_count: 300, active_count: 200,
-            fuzzy_count: 100, dead_count: 46, total: 1000,
-            mean_quality: 0.75, centroid_gem_depth: 354,
+            gem_count: 354,
+            tribe_count: 300,
+            active_count: 200,
+            fuzzy_count: 100,
+            dead_count: 46,
+            total: 1000,
+            mean_quality: 0.75,
+            centroid_gem_depth: 354,
         };
         // ADR-004 target = 0.354
         assert!((snap.gem_rate() - 0.354).abs() < 1e-3);
@@ -700,10 +790,10 @@ mod tests {
         assert_eq!(ParticleLane::from_b11(140), ParticleLane::Tribe);
         assert_eq!(ParticleLane::from_b11(139), ParticleLane::Active);
         assert_eq!(ParticleLane::from_b11(100), ParticleLane::Active);
-        assert_eq!(ParticleLane::from_b11(99),  ParticleLane::Fuzzy);
-        assert_eq!(ParticleLane::from_b11(60),  ParticleLane::Fuzzy);
-        assert_eq!(ParticleLane::from_b11(59),  ParticleLane::Dead);
-        assert_eq!(ParticleLane::from_b11(0),   ParticleLane::Dead);
+        assert_eq!(ParticleLane::from_b11(99), ParticleLane::Fuzzy);
+        assert_eq!(ParticleLane::from_b11(60), ParticleLane::Fuzzy);
+        assert_eq!(ParticleLane::from_b11(59), ParticleLane::Dead);
+        assert_eq!(ParticleLane::from_b11(0), ParticleLane::Dead);
     }
 
     #[test]
@@ -713,18 +803,18 @@ mod tests {
         let r = station.cleanse(&record_clean(), &t, 10, 10, 5);
         let s = r.summary();
         assert!(s.contains("lane="), "summary={s}");
-        assert!(s.contains("B11="),  "summary={s}");
+        assert!(s.contains("B11="), "summary={s}");
     }
 
     // Legacy shim tests
     #[test]
     fn legacy_cleanse_clean_passes() {
-        let t   = template();
+        let t = template();
         let eav = vec![
             EavTriple::new(0x1A4Bu32, b"test".to_vec()),
             EavTriple::new(0x2C5Eu32, b"1.00".to_vec()),
         ];
-        let r   = cleanse(&t, &eav);
+        let r = cleanse(&t, &eav);
         assert!(r.is_clean());
     }
 

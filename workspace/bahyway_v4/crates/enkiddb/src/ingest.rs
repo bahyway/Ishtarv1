@@ -57,10 +57,7 @@ pub fn infer_collection(path: &Path) -> String {
         .map(|s| s.to_string_lossy().to_lowercase())
         .unwrap_or_default();
 
-    if path
-        .to_string_lossy()
-        .to_lowercase()
-        .contains("playbooks/")
+    if path.to_string_lossy().to_lowercase().contains("playbooks/")
         || file_stem.starts_with("playbook_")
     {
         return "playbook-record".to_string();
@@ -90,8 +87,13 @@ pub fn infer_collection(path: &Path) -> String {
 /// `docs/_meta/01_templates/x.md`, still collapses to `"meta"`) — one
 /// level of granularity per the Architect's own numbered layout.
 fn docs_subfolder_collection(path: &Path) -> Option<String> {
-    let components: Vec<&str> = path.components().filter_map(|c| c.as_os_str().to_str()).collect();
-    let docs_idx = components.iter().rposition(|c| c.eq_ignore_ascii_case("docs"))?;
+    let components: Vec<&str> = path
+        .components()
+        .filter_map(|c| c.as_os_str().to_str())
+        .collect();
+    let docs_idx = components
+        .iter()
+        .rposition(|c| c.eq_ignore_ascii_case("docs"))?;
     let folder = components.get(docs_idx + 1)?;
 
     // The file itself must be at least one more segment past `folder` --
@@ -118,11 +120,17 @@ pub enum IngestError {
     /// A file's git commit author is not on the team allowlist (or has
     /// no determinable author at all) — see
     /// [`crate::writenode::WriteNode::ingest_directory_categorized_checked`].
-    UnauthorizedCreator { path: PathBuf, author: Option<String> },
+    UnauthorizedCreator {
+        path: PathBuf,
+        author: Option<String>,
+    },
     /// A file's raw bytes matched a known malware/webshell/dropper
     /// signature — see [`crate::security::scan_document`]. Fails closed:
     /// the file is never parsed or journaled.
-    SecurityRejected { path: PathBuf, detail: String },
+    SecurityRejected {
+        path: PathBuf,
+        detail: String,
+    },
 }
 
 impl From<std::io::Error> for IngestError {
@@ -212,7 +220,10 @@ pub fn scan_markdown_directory(root: &Path) -> Result<Vec<PathBuf>, IngestError>
 /// this same walk so the two directory-ingestion entry points (this
 /// module's particle-only `ingest_directory` and the Journal-writing one on
 /// `WriteNode`) never drift apart on which files they consider documents.
-pub(crate) fn collect_markdown_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), IngestError> {
+pub(crate) fn collect_markdown_files(
+    dir: &Path,
+    out: &mut Vec<PathBuf>,
+) -> Result<(), IngestError> {
     let mut entries: Vec<_> = fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.file_name());
 
@@ -287,12 +298,30 @@ mod tests {
 
     #[test]
     fn infer_collection_classifies_known_path_conventions() {
-        assert_eq!(infer_collection(Path::new("playbooks/playbook_176_foo.yml")), "playbook-record");
-        assert_eq!(infer_collection(Path::new("docs/components/KAKI_V4.md")), "components");
-        assert_eq!(infer_collection(Path::new("docs/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md")), "glossary");
-        assert_eq!(infer_collection(Path::new("docs/BAHYWAY_V4_ARCHITECTURE_REFERENCE.md")), "architecture-reference");
-        assert_eq!(infer_collection(Path::new("docs/TRANSPARENCY_STANDARD.md")), "concept-law");
-        assert_eq!(infer_collection(Path::new("docs/random_notes.md")), "general");
+        assert_eq!(
+            infer_collection(Path::new("playbooks/playbook_176_foo.yml")),
+            "playbook-record"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/components/KAKI_V4.md")),
+            "components"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md")),
+            "glossary"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/BAHYWAY_V4_ARCHITECTURE_REFERENCE.md")),
+            "architecture-reference"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/TRANSPARENCY_STANDARD.md")),
+            "concept-law"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/random_notes.md")),
+            "general"
+        );
     }
 
     #[test]
@@ -300,14 +329,35 @@ mod tests {
         // The Architect's real docs/ layout: numbered top-level folders
         // (docs/NN_name/) and leading-underscore folders (docs/_name/) both
         // become the collection tag directly, prefix stripped, kebab-cased.
-        assert_eq!(infer_collection(Path::new("docs/00_codex/axioms.md")), "codex");
-        assert_eq!(infer_collection(Path::new("docs/02_identity/identity_kaki.md")), "identity");
-        assert_eq!(infer_collection(Path::new("docs/06_governance_parzu/parzu_laws.md")), "governance-parzu");
-        assert_eq!(infer_collection(Path::new("docs/14_decisions_adr/adr_001_no_external_db.md")), "decisions-adr");
-        assert_eq!(infer_collection(Path::new("docs/_start_here/for_architects.md")), "start-here");
-        assert_eq!(infer_collection(Path::new("docs/_diagrams/high_council_diagram.md")), "diagrams");
+        assert_eq!(
+            infer_collection(Path::new("docs/00_codex/axioms.md")),
+            "codex"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/02_identity/identity_kaki.md")),
+            "identity"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/06_governance_parzu/parzu_laws.md")),
+            "governance-parzu"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/14_decisions_adr/adr_001_no_external_db.md")),
+            "decisions-adr"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/_start_here/for_architects.md")),
+            "start-here"
+        );
+        assert_eq!(
+            infer_collection(Path::new("docs/_diagrams/high_council_diagram.md")),
+            "diagrams"
+        );
         // Nested deeper than one level still collapses to the top folder.
-        assert_eq!(infer_collection(Path::new("docs/_meta/01_templates/help_page_template.md")), "meta");
+        assert_eq!(
+            infer_collection(Path::new("docs/_meta/01_templates/help_page_template.md")),
+            "meta"
+        );
         // A file directly in docs/'s own root has no subfolder to use --
         // falls through to the filename heuristics instead.
         assert_eq!(infer_collection(Path::new("docs/README.md")), "general");
@@ -329,13 +379,21 @@ mod tests {
         assert_eq!(docs.len(), 1);
         let doc = &docs[0];
         assert_eq!(doc.collection, "components");
-        assert!(doc.particles.iter().any(|p| p.attribute == "meta.collection"));
+        assert!(doc
+            .particles
+            .iter()
+            .any(|p| p.attribute == "meta.collection"));
         assert_eq!(doc.sections.len(), 2, "Overview + Usage sections");
         for (section_kaki, section_particles) in &doc.sections {
             assert_ne!(section_kaki.bytes(), doc.kaki.bytes());
-            assert!(section_particles.iter().any(|p| p.attribute == "body.summary"));
+            assert!(section_particles
+                .iter()
+                .any(|p| p.attribute == "body.summary"));
             assert!(section_particles.iter().any(|p| p.attribute == "body.text"));
-            let link = section_particles.iter().find(|p| p.attribute == "link.target").unwrap();
+            let link = section_particles
+                .iter()
+                .find(|p| p.attribute == "link.target")
+                .unwrap();
             match link.value {
                 AkkValue::KakiPk(bytes) => assert_eq!(bytes, *doc.kaki.bytes()),
                 _ => panic!("expected KakiPk"),

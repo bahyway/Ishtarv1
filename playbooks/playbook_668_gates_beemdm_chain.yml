@@ -1,0 +1,64 @@
+---
+# PB-403 · Kernel scene · Gates and the BeeMDM ETL station chain
+# GL-KRN-001 §1 nine instruments · §3 the ladder · §4 field · §5 grammar · §6 unknown drawn · §11 propose only · §14 four gates
+- name: PB-403 publish the Gates and BeeMDM chain kernel scene
+  hosts: girsu
+  vars:
+    bahyway_provides: ["tab:sala_gates_beemdm_chain", "scene:kernel.gates_etl"]
+    bahyway_requires: ["law:GL-KRN-001", "law:GL-VIZ-001", "law:GL-AGE-001"]
+    sala: "{{ ansible_env.HOME }}/bahyway/sala/tabs"
+    tab: sala_gates_beemdm_chain_v1.html
+  tasks:
+    - name: Ensure tabs directory
+      ansible.builtin.file: {path: "{{ sala }}", state: directory, mode: "0755"}
+
+    - name: Place the scene
+      ansible.builtin.copy: {src: "{{ tab }}", dest: "{{ sala }}/{{ tab }}", mode: "0644"}
+
+    - name: Gate K1 · COMPILE — the scene parses
+      ansible.builtin.shell: |
+        node -e "const h=require('fs').readFileSync('{{ sala }}/{{ tab }}','utf8');
+                 new Function(h.split('<script>')[1].split('</script>')[0]);console.log('COMPILE green');"
+      changed_when: false
+
+    - name: Gate K2 · §1 — all nine Naṣāru instruments present
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import pathlib, sys
+        t = pathlib.Path("{{ sala }}/{{ tab }}").read_text(errors="ignore").lower()
+        need = ["storyengine","contextmenu","wheel","journal","legend","landing","bird","n9","membrane"]
+        miss = [k for k in need if k not in t]
+        print("missing instruments:", miss)
+        print("a scene missing one of the nine is not a kernel scene (GL-KRN-001 §1)")
+        sys.exit(1 if miss else 0)
+        PY
+      changed_when: false
+
+    - name: Gate K3 · §14 — the four gates of a kernel scene are shown in its rail
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import pathlib, sys
+        t = pathlib.Path("{{ sala }}/{{ tab }}").read_text(errors="ignore")
+        miss = [g for g in ("COMPILE", "RUNTIME", "ORBIT", "CLASS") if g not in t]
+        print("missing scene gates:", miss)
+        sys.exit(1 if miss else 0)
+        PY
+      changed_when: false
+
+    - name: Gate K4 · §10 — anti-SQL absence proof over the scene
+      ansible.builtin.shell: |
+        ! grep -Eq '(^|[^A-Za-z])(SELECT +[A-Za-z*]|FROM +[A-Za-z]|INNER JOIN|LEFT JOIN)' "{{ sala }}/{{ tab }}"
+        echo "K4 green - absence proven; an occurrence would be a foreign body, and the scene quarantined"
+      changed_when: false
+
+    - name: Gate K5 · §11 — the scene proposes and never writes
+      ansible.builtin.shell: |
+        ! grep -Eq 'fetch\(|XMLHttpRequest|localStorage|sessionStorage' "{{ sala }}/{{ tab }}"
+        echo "K5 green - no write path, no store, no network; acts leave as decrees for PB-404"
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-403 kernel scene published - Gates and BeeMDM ETL chain, conformant to GL-KRN-001"

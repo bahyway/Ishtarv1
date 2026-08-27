@@ -3,8 +3,8 @@
 //! Snapshots are taken after every successful score-engine pass. The probe
 //! compares two consecutive snapshots to detect unexplained motion.
 
-use tribe_orbit_engine::{OrbitalRing, OrbitalAssignment};
 use fuzzy_engine::QualityTier;
+use tribe_orbit_engine::{OrbitalAssignment, OrbitalRing};
 
 /// Immutable orbital state captured after one scoring cycle.
 #[derive(Debug, Clone)]
@@ -30,12 +30,12 @@ pub struct OrbitalSnapshot {
 
 impl OrbitalSnapshot {
     pub fn new(
-        epoch:            u64,
-        b11:              u8,
-        tier:             QualityTier,
-        assignment:       OrbitalAssignment,
-        neighbour_count:  usize,
-        freshness_byte:   u8,
+        epoch: u64,
+        b11: u8,
+        tier: QualityTier,
+        assignment: OrbitalAssignment,
+        neighbour_count: usize,
+        freshness_byte: u8,
         rules_fingerprint: u64,
     ) -> Self {
         Self {
@@ -101,6 +101,6 @@ mod tests {
     fn away_from_boundary_not_near() {
         assert!(!near_boundary(240)); // deep Gem
         assert!(!near_boundary(150)); // mid Tribe
-        assert!(!near_boundary(50));  // deep Dead
+        assert!(!near_boundary(50)); // deep Dead
     }
 }

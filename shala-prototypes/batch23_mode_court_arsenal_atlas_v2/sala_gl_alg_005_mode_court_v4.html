@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · GL-ALG-005 · Mode Court v3 — right-click rites &amp; the Witness Workbench</title>
+<style>
+  :root{--basalt:#14120f;--tablet:#1f1b16;--gold:#c9a227;--lapis:#2e5d8c;
+    --copper:#b0642f;--alarm:#c23b2a;--bone:#e8e0cf;--tablet-edge:#3a332a;
+    --dim:#8f8672;--green:#7fbf5f;--violet:#a58cc0;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--basalt);color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden;}
+  #crumbs{padding:8px 16px 0;font-size:12px;color:var(--dim);letter-spacing:.08em;}
+  #crumbs b{color:var(--gold);font-weight:normal;}
+  #lede{padding:2px 16px 6px;font-size:12.5px;}
+  #banner{background:var(--alarm);color:var(--bone);text-align:center;
+    font-size:10.5px;letter-spacing:.28em;padding:3px 0;font-family:monospace;}
+  #grid{display:grid;grid-template-columns:1fr 350px;gap:10px;
+    padding:8px 16px 14px;height:calc(100% - 78px);}
+  .panel{background:var(--tablet);border:1px solid var(--tablet-edge);
+    border-radius:6px;position:relative;overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block;}
+  #cv{width:100%;height:100%;}
+  #status{position:absolute;top:8px;left:12px;right:12px;z-index:5;
+    font-family:monospace;font-size:10.5px;color:var(--gold);
+    background:rgba(20,18,15,.78);padding:5px 9px;border-radius:4px;
+    border:1px solid var(--tablet-edge);}
+  #tabs{position:absolute;top:42px;left:12px;z-index:5;display:flex;gap:6px;}
+  #tabs button{background:var(--basalt);color:var(--dim);font-family:monospace;
+    border:1px solid var(--tablet-edge);border-radius:4px;padding:5px 11px;
+    font-size:11px;cursor:pointer;}
+  #tabs button.on{color:var(--gold);border-color:var(--gold);}
+  #deck{position:absolute;top:42px;right:10px;z-index:5;}
+  #deck button{width:32px;height:32px;background:var(--basalt);color:var(--gold);
+    border:1px solid var(--tablet-edge);border-radius:4px;font-size:15px;cursor:pointer;}
+  #acts{position:absolute;bottom:10px;left:10px;display:flex;gap:6px;z-index:5;}
+  #acts button{background:var(--basalt);color:var(--copper);font-family:inherit;
+    border:1px solid var(--copper);border-radius:4px;padding:6px 12px;
+    font-size:12px;cursor:pointer;}
+  #acts button:hover{color:var(--gold);border-color:var(--gold);}
+  #acts button.on{color:var(--green);border-color:var(--green);}
+  #lawtags{position:absolute;bottom:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:5;}
+  .lawtag{font-family:monospace;font-size:10px;color:var(--basalt);
+    background:var(--gold);padding:2px 7px;border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis);color:var(--bone);}
+  /* ---- BahyWay context menu ---- */
+  #ctx{position:absolute;z-index:20;display:none;min-width:230px;
+    background:var(--tablet);border:1px solid var(--gold);border-radius:6px;
+    box-shadow:0 6px 24px rgba(0,0,0,.6);font-size:12px;overflow:hidden;}
+  #ctx .hd{padding:7px 12px;font-family:monospace;font-size:10px;
+    color:var(--gold);border-bottom:1px solid var(--tablet-edge);letter-spacing:.1em;}
+  #ctx .it{padding:8px 12px;cursor:pointer;color:var(--bone);}
+  #ctx .it:hover{background:rgba(201,162,39,.12);color:var(--gold);}
+  #ctx .it .k{color:var(--dim);font-family:monospace;font-size:10px;float:right;}
+  /* drop zone */
+  #dropz{position:absolute;top:80px;bottom:60px;right:0;width:64px;z-index:8;
+    display:none;align-items:center;justify-content:center;
+    background:rgba(201,162,39,.10);border-left:2px dashed var(--gold);
+    color:var(--gold);font-family:monospace;font-size:10px;
+    writing-mode:vertical-rl;letter-spacing:.3em;}
+  #dropz.hot{background:rgba(201,162,39,.25);}
+  #side{display:flex;flex-direction:column;overflow:hidden;}
+  #side h2{font-size:11px;letter-spacing:.2em;color:var(--gold);
+    padding:7px 12px 4px;border-bottom:1px solid var(--tablet-edge);flex:none;}
+  #mode{padding:6px 12px;border-bottom:1px solid var(--tablet-edge);flex:none;
+    font-size:11px;line-height:1.5;}
+  #mode .empty{color:var(--dim);font-style:italic;}
+  #story{flex:1 1 36%;overflow-y:auto;padding:6px 12px;font-size:11px;
+    line-height:1.45;border-bottom:1px solid var(--tablet-edge);}
+  #story .ev{margin-bottom:5px;border-left:2px solid var(--lapis);padding-left:7px;}
+  #story .ev .e{color:var(--gold);font-family:monospace;font-size:9px;}
+  #story .empty{color:var(--dim);font-style:italic;}
+  #journal{flex:1 1 24%;overflow-y:auto;padding:7px 12px;font-size:11px;line-height:1.45;}
+  .entry{margin-bottom:7px;border-left:2px solid var(--copper);padding-left:7px;}
+  .entry .t{color:var(--dim);font-family:monospace;font-size:9px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Askuppu Court ▸ <b>Mode Court v3 — right-click rites &amp; the Witness Workbench</b></div>
+<div id="lede"><b>Right-click any particle</b> for its rites: <b>📖 tell its story</b>, <b>⊕ maximize</b> it in place, or <b>⇱ open in the Workbench</b>. Or simply <b>drag a particle</b> — a ghost follows your hand; release it on the golden drop-zone and the <b>WITNESS WORKBENCH</b> tab opens: the particle maximized at center, its <b>real dependencies</b> (top co-movers from the live correlation matrix, edge = measured correlation), its <b>Tribe &amp; orbit specification</b>, its <b>OntoGraph lineage</b>, and its <b>HyperGraph membership collection</b> — everything one witness point IS, on one screen.</div>
+<div id="banner">GUARDED STONE 3.077 · PERSISTENCE M=8 · REPLAY COVENANT 0x4D4F4445 — DEPENDENCIES ARE MEASURED CORRELATIONS, NEVER DECOR</div>
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="status">…</div>
+    <div id="tabs">
+      <button id="tFace" class="on">DAM FACE</button>
+      <button id="tRing">BIGRING ORBIT</button>
+      <button id="tBench">WITNESS WORKBENCH</button>
+    </div>
+    <div id="deck"><button id="bHome" title="Reset view">⌖</button></div>
+    <div id="acts">
+      <button id="aRun">▶ RUN CAMPAIGNS</button>
+      <button id="aStep">STEP ▸</button>
+    </div>
+    <div id="dropz">⇓ DROP — WORKBENCH</div>
+    <div id="ctx"></div>
+    <div id="lawtags">
+      <span class="lawtag">GL-ALG-005</span>
+      <span class="lawtag lapis">RIGHT-CLICK RITES</span>
+      <span class="lawtag lapis">DRAG → WORKBENCH</span>
+      <span class="lawtag">MEASURED DEPENDENCIES</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>MODE DOSSIER</h2>
+    <div id="mode"><div class="empty">no mode admitted — the sea is not interpreted</div></div>
+    <h2>PARTICLE STORY — STORYENGINE</h2>
+    <div id="story"><div class="empty">right-click a witness point → 📖</div></div>
+    <h2>COURT JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+<script>
+"use strict";
+window.onerror=function(m,s,l){var e=document.getElementById('status');
+  if(e)e.textContent='RUNTIME FAULT: '+m+' (line '+l+')';return false;};
+var E={"P": [[7, 0], [31, 0], [7, 1], [31, 1], [7, 2], [31, 2], [7, 3], [31, 3], [7, 4], [31, 4], [7, 5], [31, 5], [7, 6], [31, 6], [7, 7], [31, 7], [7, 8], [31, 8], [7, 9], [31, 9], [7, 10], [31, 10], [7, 11], [31, 11], [7, 12], [31, 12], [7, 13], [31, 13], [7, 14], [31, 14], [7, 15], [31, 15], [7, 16], [31, 16], [7, 17], [31, 17], [7, 18], [31, 18], [7, 19], [31, 19], [7, 20], [31, 20], [7, 21], [31, 21], [7, 22], [31, 22], [7, 23], [31, 23], [7, 24], [31, 24], [7, 25], [31, 25], [7, 26], [31, 26], [7, 27], [31, 27], [7, 28], [31, 28], [7, 29], [31, 29], [7, 30], [31, 30], [7, 31], [31, 31], [7, 32], [31, 32], [7, 33], [31, 33], [7, 34], [31, 34], [7, 35], [31, 35], [7, 36], [31, 36], [7, 37], [31, 37], [7, 38], [31, 38], [7, 39], [31, 39], [7, 40], [31, 40], [7, 41], [31, 41], [7, 42], [31, 42], [7, 43], [31, 43], [7, 44], [31, 44], [7, 45], [31, 45], [7, 46], [31, 46], [7, 47], [31, 47]], "C": [0, 2, 4, 6, 8, 10, 12, 14, 57, 59, 61, 63, 65, 67, 69, 71, 73, 75, 77, 79], "N": 48};
+var P=E.P,COH=E.C,NM=E.N,NP=P.length;
+var cv=document.getElementById('cv');
+var g=cv.getContext('2d');
+var stage=document.getElementById('stage'),statusEl=document.getElementById('status');
+function fit(){cv.width=stage.clientWidth;cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit);fit();
+var jEl=document.getElementById('journal'),mEl=document.getElementById('mode'),sEl=document.getElementById('story');
+var canDOM=!!document.createElement;
+function journal(t){if(!canDOM)return;
+  var d=document.createElement('div');d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;jEl.prepend(d);}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+var rnd=mulberry32(0x4D4F4445);
+function gauss(){var u=1-rnd(),v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+var W=192,TMAX=360,Q=NP/W,STONE=Math.pow(1+Math.sqrt(Q),2),GUARD=0.1623,
+    STONE_EFF=STONE+GUARD,T0=210,LOADFLOOR=0.10,PERS=8,persCnt=0;
+var isC=new Uint8Array(NP);COH.forEach(function(q){isC[q]=1;});
+var loadTrue=new Float32Array(NP);
+COH.forEach(function(q){loadTrue[q]=0.55+0.45*rnd();});
+var H=new Float32Array(TMAX*NP);
+(function(){for(var t=0;t<TMAX;t++){
+  var s=(t>=T0)?0.28+0.55*Math.min(1,(t-T0)/90):0;
+  var drv=gauss();
+  for(var i=0;i<NP;i++)H[t*NP+i]=gauss()+(isC[i]?loadTrue[i]*s*drv:0);}})();
+var C=new Float32Array(NP*NP),mean=new Float32Array(NP),sd=new Float32Array(NP);
+var v1=new Float32Array(NP),lam1=0,lam1hist=[];
+for(var i=0;i<NP;i++)v1[i]=rnd()-0.5;
+function eigenAt(t){
+  var a=t-W;
+  for(var i2=0;i2<NP;i2++){var m=0;
+    for(var tt=a;tt<t;tt++)m+=H[tt*NP+i2];
+    m/=W;mean[i2]=m;var s2=0;
+    for(tt=a;tt<t;tt++){var d=H[tt*NP+i2]-m;s2+=d*d;}
+    sd[i2]=Math.sqrt(s2/W)||1;}
+  for(i2=0;i2<NP;i2++)for(var j=i2;j<NP;j++){
+    var s3=0;
+    for(tt=a;tt<t;tt++)s3+=(H[tt*NP+i2]-mean[i2])*(H[tt*NP+j]-mean[j]);
+    s3/=(W*sd[i2]*sd[j]);C[i2*NP+j]=s3;C[j*NP+i2]=s3;}
+  var v=v1;
+  for(var it=0;it<40;it++){
+    var w2=new Float32Array(NP);
+    for(i2=0;i2<NP;i2++){var acc=0;
+      for(j=0;j<NP;j++)acc+=C[i2*NP+j]*v[j];w2[i2]=acc;}
+    var n=0;for(i2=0;i2<NP;i2++)n+=w2[i2]*w2[i2];n=Math.sqrt(n)||1;
+    for(i2=0;i2<NP;i2++)v[i2]=w2[i2]/n;}
+  var l=0;
+  for(i2=0;i2<NP;i2++){var acc2=0;
+    for(j=0;j<NP;j++)acc2+=C[i2*NP+j]*v[j];l+=v[i2]*acc2;}
+  lam1=l;v1=v;}
+var t=W,running=false,lastStep=0,admitted=false,onsetT=-1,assemble=0;
+var sel=-1,selT=0,maxi=-1,benchP=-1;
+function cohortNow(){
+  var mx=0;for(var i2=0;i2<NP;i2++)mx=Math.max(mx,Math.abs(v1[i2]));
+  var mem=[];for(i2=0;i2<NP;i2++)if(Math.abs(v1[i2])>=LOADFLOOR&&Math.abs(v1[i2])>0.35*mx)mem.push(i2);
+  return mem;}
+function memberNow(i2){return admitted&&Math.abs(v1[i2])>=LOADFLOOR;}
+function topDeps(i2,k){
+  var arr=[];
+  for(var j=0;j<NP;j++)if(j!==i2)arr.push({j:j,c:C[i2*NP+j]});
+  arr.sort(function(a,b){return Math.abs(b.c)-Math.abs(a.c);});
+  return arr.slice(0,k||8);}
+function kakiOf(i2){return ('K'+((i2*2654435761)>>>0).toString(16).slice(0,8)).toUpperCase();}
+function step(){
+  if(t>=TMAX)return;
+  t++;eigenAt(t);lam1hist.push({t:t,l:lam1});
+  if(!admitted){if(lam1>STONE_EFF)persCnt++;else persCnt=0;}
+  if(!admitted&&persCnt>=PERS){
+    admitted=true;onsetT=t-PERS+1;
+    journal('<b style="color:var(--alarm)">⚑ COLLECTIVE-ONSET (§6)</b> — campaign '+onsetT+': the guarded stone crossed and held. The cohort assembles; the orbit is born; the Workbench now shows real mode-dependencies for any dropped witness.');
+    if(canDOM)updateMode(cohortNow());}
+  if(admitted&&canDOM&&t%12===0)updateMode(cohortNow());
+  if(sel>=0&&t%10===0)tellPoint(sel,true);}
+function updateMode(mem){
+  mEl.innerHTML='<b style="color:var(--alarm)">MODE-1 · ADMITTED</b> — λ₁='+lam1.toFixed(3)
+    +' vs guarded stone '+STONE_EFF.toFixed(3)+' (+'+((lam1/STONE_EFF-1)*100).toFixed(0)+'%)<br>'
+    +'cohort <b>'+mem.length+'</b> · onset '+onsetT+' · register DERIVED · two witnesses';}
+function tellPoint(i2,silent){
+  var kaki=kakiOf(i2),ld=Math.abs(v1[i2]),mem=memberNow(i2);
+  var evs=[{e:'S0 · BIRTH',t:'Fused witness point at (u:'+P[i2][0]+', v:'+P[i2][1]+') — KAKI '+kaki+'.'}];
+  evs.push({e:'QUIET ERA',t:'Held in the sea beneath the guarded stone; the court drew nothing (§8).'});
+  if(admitted){
+    if(mem){evs.push({e:'⚑ COLLECTIVE-ONSET · '+onsetT,t:'Named to MODE-1; it left the sea-ring for the newborn orbit.'});
+      evs.push({e:'NOW · '+t,t:'Loading '+ld.toFixed(3)+' · DERIVED · Bārûtu holds its cohort for dating.'});}
+    else evs.push({e:'NOW · '+t,t:'Onset passed it by (loading '+ld.toFixed(3)+'): a sea-citizen, honestly uninterpreted.'});}
+  else evs.push({e:'NOW · '+t,t:'No mode admitted; the whole face rides the sea together.'});
+  if(canDOM)sEl.innerHTML=evs.map(function(x){return '<div class="ev"><div class="e">'+x.e+'</div>'+x.t+'</div>';}).reverse().join('');
+  if(!silent)journal('📖 STORY — '+kaki+' told through campaign '+t+'.');
+  return evs.length;}
+/* ---- views & cameras ---- */
+var view='face';
+var cam2={z:1,px:0,py:0},cam3={yaw:0.6,pitch:0.42,z:1};
+function setView(v2){view=v2;
+  if(canDOM)['tFace','tRing','tBench'].forEach(function(id,q){
+    document.getElementById(id).classList.toggle('on',
+      (q===0&&v2==='face')||(q===1&&v2==='ring')||(q===2&&v2==='bench'));});}
+function faceXY(i2){
+  var fw=cv.width*0.78,fh=cv.height*0.52;
+  return {x:cv.width*0.08+P[i2][0]/(NM-1)*fw,y:cv.height*0.10+P[i2][1]/(NM-1)*fh};}
+function faceT(p){return {x:p.x*cam2.z+cam2.px+cv.width/2*(1-cam2.z),
+  y:p.y*cam2.z+cam2.py+cv.height/2*(1-cam2.z)};}
+var angA=new Float32Array(NP);
+for(i=0;i<NP;i++)angA[i]=((i*2654435761)>>>8&1023)/1023*2*Math.PI;
+var rpos=new Float32Array(NP*3),rtgt=new Float32Array(NP*3);
+function ringTargets(){
+  var mx=0.0001;for(var i2=0;i2<NP;i2++)mx=Math.max(mx,Math.abs(v1[i2]));
+  for(i2=0;i2<NP;i2++){
+    var a=angA[i2],mem=memberNow(i2);
+    var r=mem?0.30-0.06*(Math.abs(v1[i2])/mx):0.58;
+    var tl=mem?0.28:0.06;
+    var x=Math.cos(a)*r,z=Math.sin(a)*r;
+    rtgt[i2*3]=x;rtgt[i2*3+1]=x*Math.sin(tl);rtgt[i2*3+2]=z;}}
+ringTargets();for(i=0;i<NP*3;i++)rpos[i]=rtgt[i];
+function project3(x,y,z){
+  var cy=Math.cos(cam3.yaw),sy=Math.sin(cam3.yaw);
+  var cp=Math.cos(cam3.pitch),sp=Math.sin(cam3.pitch);
+  var X=x*cy+z*sy,Z=-x*sy+z*cy;
+  var Y=y*cp-Z*sp,Z2=y*sp+Z*cp;
+  var S=Math.min(cv.width,cv.height)*0.62*cam3.z;
+  var f=2.4/(2.4+Z2);
+  return {x:cv.width*0.46+X*S*f,y:cv.height*0.42+Y*S*f,f:f};}
+function screenPos(i2,now){
+  var bounce=0;
+  if(sel===i2){var bt=(now-selT)/1000;
+    bounce=Math.abs(Math.sin(bt*6))*Math.exp(-bt*0.3);}
+  if(view==='face'){var p=faceT(faceXY(i2));
+    return {x:p.x,y:p.y-bounce*14*cam2.z,f:1};}
+  if(view==='ring'){var x=rpos[i2*3],y=rpos[i2*3+1]-bounce*0.10,z=rpos[i2*3+2];
+    return project3(x,y,z);}
+  /* bench: only benchP + its deps laid out radially */
+  if(i2===benchP)return {x:cv.width*0.30,y:cv.height*0.40-bounce*16,f:1};
+  var deps=benchP>=0?topDeps(benchP,8):[];
+  for(var q2=0;q2<deps.length;q2++)if(deps[q2].j===i2){
+    var a2=q2/deps.length*2*Math.PI-Math.PI/2;
+    return {x:cv.width*0.30+Math.cos(a2)*cv.height*0.22,
+            y:cv.height*0.40+Math.sin(a2)*cv.height*0.22,f:1};}
+  return null;}
+/* ---- context menu ---- */
+var ctxEl=document.getElementById('ctx'),ctxTarget=-1;
+function hideCtx(){if(canDOM)ctxEl.style.display='none';ctxTarget=-1;}
+function showCtx(mx,my,i2){
+  if(!canDOM)return;
+  ctxTarget=i2;
+  var kaki=kakiOf(i2);
+  ctxEl.innerHTML='<div class="hd">'+kaki+' · Tribe '+(memberNow(i2)?'MODE-1':'SEA')+' — RITES</div>'
+    +'<div class="it" data-a="story">📖 Tell its story <span class="k">StoryEngine</span></div>'
+    +'<div class="it" data-a="max">⊕ Maximize witness <span class="k">focus</span></div>'
+    +'<div class="it" data-a="bench">⇱ Open in Workbench <span class="k">deps·tribe·orbit·onto·hyper</span></div>'
+    +'<div class="it" data-a="close">✕ Close</div>';
+  ctxEl.style.left=Math.min(mx,cv.width-250)+'px';
+  ctxEl.style.top=Math.min(my,cv.height-160)+'px';
+  ctxEl.style.display='block';}
+if(canDOM)ctxEl.addEventListener('click',function(ev){
+  var it=ev.target.closest('.it');if(!it)return;
+  var a=it.getAttribute('data-a'),i2=ctxTarget;hideCtx();
+  if(a==='story'&&i2>=0){sel=i2;selT=performance.now();tellPoint(i2,false);}
+  if(a==='max'&&i2>=0){sel=i2;selT=performance.now();maxi=(maxi===i2?-1:i2);
+    journal('⊕ MAXIMIZE — '+kakiOf(i2)+(maxi>=0?' held in focus: enlarged in place, siblings dimmed.':' released.'));}
+  if(a==='bench'&&i2>=0)sendToBench(i2);
+});
+function sendToBench(i2){
+  benchP=i2;sel=i2;selT=performance.now();setView('bench');
+  var mem=memberNow(i2),deps=topDeps(i2,8);
+  journal('⇱ WORKBENCH — '+kakiOf(i2)+' unfolded: '+deps.length+' measured dependencies (strongest |ρ|='
+    +Math.abs(deps[0].c).toFixed(3)+'), Tribe '+(mem?'MODE-1':'SEA')+', orbit spec, OntoGraph lineage, and its hyperedge collection — everything this witness IS, on one screen.');
+  tellPoint(i2,true);}
+/* ---- pointer logic: pan/rotate, click, right-click, drag-to-bench ---- */
+var drag=null,dragMoved=false,dragDist=0,pDrag=-1,pGhost=null,dropHot=false;
+var dropzEl=document.getElementById('dropz');
+function pickAt(mx,my,now){
+  var best=-1,bd=14*14;
+  for(var i2=0;i2<NP;i2++){var p=screenPos(i2,now);if(!p)continue;
+    var d=(p.x-mx)*(p.x-mx)+(p.y-my)*(p.y-my);
+    if(d<bd){bd=d;best=i2;}}
+  return best;}
+stage.addEventListener('contextmenu',function(ev){
+  ev.preventDefault();
+  var r=cv.getBoundingClientRect(),mx=ev.clientX-r.left,my=ev.clientY-r.top;
+  var hit=pickAt(mx,my,performance.now());
+  if(hit>=0){sel=hit;selT=performance.now();showCtx(mx,my,hit);}
+  else hideCtx();});
+stage.addEventListener('wheel',function(e2){e2.preventDefault();hideCtx();
+  var f=(e2.deltaY<0?1.12:0.89);
+  if(view==='face')cam2.z=Math.min(8,Math.max(0.6,cam2.z*f));
+  else if(view==='ring')cam3.z=Math.min(6,Math.max(0.5,cam3.z*f));},{passive:false});
+stage.addEventListener('mousedown',function(e2){
+  if(e2.button!==0)return;hideCtx();
+  var r=cv.getBoundingClientRect(),mx=e2.clientX-r.left,my=e2.clientY-r.top;
+  var hit=pickAt(mx,my,performance.now());
+  if(hit>=0&&view!=='bench'){pDrag=hit;pGhost={x:mx,y:my};
+    if(canDOM)dropzEl.style.display='flex';}
+  drag={x:e2.clientX,y:e2.clientY};dragMoved=false;dragDist=0;});
+window.addEventListener('mouseup',function(e2){
+  if(pDrag>=0){
+    if(dropHot){sendToBench(pDrag);}
+    else if(!dragMoved){sel=pDrag;selT=performance.now();tellPoint(pDrag,false);}
+    pDrag=-1;pGhost=null;dropHot=false;
+    if(canDOM){dropzEl.style.display='none';dropzEl.classList.remove('hot');}}
+  drag=null;});
+stage.addEventListener('mousemove',function(e2){
+  var r=cv.getBoundingClientRect(),mx=e2.clientX-r.left,my=e2.clientY-r.top;
+  if(pDrag>=0){pGhost={x:mx,y:my};
+    dropHot=mx>cv.width-70;
+    if(canDOM)dropzEl.classList.toggle('hot',dropHot);
+    if(drag){var dx0=e2.clientX-drag.x,dy0=e2.clientY-drag.y;
+      dragDist+=Math.abs(dx0)+Math.abs(dy0);if(dragDist>9)dragMoved=true;
+      drag={x:e2.clientX,y:e2.clientY};}
+    return;}
+  if(!drag)return;
+  var dx=e2.clientX-drag.x,dy=e2.clientY-drag.y;
+  dragDist+=Math.abs(dx)+Math.abs(dy);if(dragDist>9)dragMoved=true;
+  if(view==='face'){cam2.px+=dx;cam2.py+=dy;}
+  else if(view==='ring'){cam3.yaw+=dx*0.005;
+    cam3.pitch=Math.max(-1.3,Math.min(1.3,cam3.pitch+dy*0.005));}
+  drag={x:e2.clientX,y:e2.clientY};});
+if(canDOM){
+  document.getElementById('tFace').addEventListener('click',function(){setView('face');});
+  document.getElementById('tRing').addEventListener('click',function(){setView('ring');});
+  document.getElementById('tBench').addEventListener('click',function(){
+    if(benchP<0){journal('The Workbench awaits a witness: right-click → ⇱, or drag a particle onto the golden zone.');}
+    setView('bench');});
+  document.getElementById('bHome').addEventListener('click',function(){
+    cam2={z:1,px:0,py:0};cam3={yaw:0.6,pitch:0.42,z:1};});
+  document.getElementById('aRun').addEventListener('click',function(){
+    running=!running;this.classList.toggle('on',running);});
+  document.getElementById('aStep').addEventListener('click',step);
+}
+window.addEventListener('keydown',function(e2){
+  if(e2.key===' '&&canDOM)document.getElementById('aRun').click();
+  if(e2.key==='ArrowRight')step();
+  if(e2.key==='v'||e2.key==='V')setView(view==='face'?'ring':view==='ring'?'bench':'face');
+  if(e2.key==='Escape'){hideCtx();maxi=-1;}});
+/* ---- render ---- */
+function frame(now){
+  var tt=now/1000;
+  if(running&&now-lastStep>110){lastStep=now;step();
+    if(t>=TMAX){running=false;if(canDOM)document.getElementById('aRun').classList.remove('on');}}
+  assemble+=((admitted?1:0)-assemble)*0.04;
+  ringTargets();
+  for(var q3=0;q3<NP*3;q3++)rpos[q3]+=(rtgt[q3]-rpos[q3])*0.06;
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle='#14120f';g.fillRect(0,0,cv.width,cv.height);
+  var mem=admitted?cohortNow():[];
+  var mx=0.0001;for(var i3=0;i3<NP;i3++)mx=Math.max(mx,Math.abs(v1[i3]));
+  if(view==='face'||view==='ring'){
+    if(view==='face'){
+      var f0=faceT({x:cv.width*0.06,y:cv.height*0.075});
+      g.strokeStyle='#3a332a';g.lineWidth=1.5;
+      g.strokeRect(f0.x,f0.y,cv.width*0.82*cam2.z,cv.height*0.57*cam2.z);
+      if(assemble>0.02&&mem.length){
+        var cx=0,cy=0;mem.forEach(function(q){var p=faceT(faceXY(q));cx+=p.x;cy+=p.y;});
+        cx/=mem.length;cy/=mem.length;
+        mem.forEach(function(q){var p=faceT(faceXY(q));
+          g.strokeStyle='rgba(194,59,42,'+(0.55*assemble*Math.abs(v1[q])/mx)+')';
+          g.lineWidth=0.8+1.6*Math.abs(v1[q])/mx;
+          g.beginPath();g.moveTo(cx,cy);g.lineTo(p.x,p.y);g.stroke();});
+        g.fillStyle='rgba(232,224,207,'+assemble+')';g.font='10px monospace';g.textAlign='center';
+        g.fillText('MODE-1 · λ₁='+lam1.toFixed(2),cx,cy-18);}
+    }else{
+      [[0.58,0.06,'rgba(143,134,114,0.35)'],[0.30,0.28,'rgba(194,59,42,'+(0.15+0.5*assemble)+')']].forEach(function(rg,ri){
+        if(ri===1&&assemble<0.02)return;
+        g.beginPath();
+        for(var q2=0;q2<=90;q2++){var a=q2/90*2*Math.PI;
+          var x=Math.cos(a)*rg[0],z=Math.sin(a)*rg[0],y=x*Math.sin(rg[1]);
+          var p=project3(x,y,z);
+          q2?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y);}
+        g.strokeStyle=rg[2];g.lineWidth=1.2;g.stroke();});}
+    for(i3=0;i3<NP;i3++){
+      var m2=memberNow(i3);
+      var p3=screenPos(i3,now);if(!p3)continue;
+      var dimmed=maxi>=0&&maxi!==i3;
+      var rad=(sel===i3?5:(m2?3.4:2.4));
+      if(maxi===i3)rad=9+2*Math.sin(tt*4);
+      g.beginPath();
+      g.arc(p3.x,p3.y,rad*(view==='ring'?p3.f*Math.sqrt(cam3.z):Math.sqrt(cam2.z)),0,2*Math.PI);
+      g.globalAlpha=dimmed?0.18:(view==='ring'?(0.35+0.6*Math.max(0,Math.min(1,(p3.f-0.4)*1.6))):0.85);
+      g.fillStyle=m2?'rgba(194,59,42,'+(0.5+0.5*assemble)+')':'rgba(143,134,114,0.8)';
+      g.fill();g.globalAlpha=1;
+      if(sel===i3||maxi===i3){g.strokeStyle='#e8e0cf';g.lineWidth=1.4;g.stroke();}
+      if(maxi===i3){g.fillStyle='#e8e0cf';g.font='10px monospace';g.textAlign='center';
+        g.fillText(kakiOf(i3)+' · '+(m2?'MODE-1 · load '+Math.abs(v1[i3]).toFixed(3):'SEA'),p3.x,p3.y-rad*2-6);}}
+  }else{
+    /* ---- WITNESS WORKBENCH ---- */
+    if(benchP<0){
+      g.fillStyle='rgba(143,134,114,0.7)';g.font='13px monospace';g.textAlign='center';
+      g.fillText('the Workbench awaits a witness — right-click → ⇱, or drag one onto the golden zone',cv.width*0.44,cv.height*0.4);
+    }else{
+      var bp=screenPos(benchP,now);
+      var deps=topDeps(benchP,8);
+      var isM=memberNow(benchP);
+      /* dependencies constellation (left) */
+      deps.forEach(function(d2,q2){
+        var p=screenPos(d2.j,now);if(!p)return;
+        g.strokeStyle=(d2.c>=0?'rgba(201,162,39,':'rgba(46,93,140,')+Math.min(0.9,Math.abs(d2.c)*2)+')';
+        g.lineWidth=0.8+4*Math.abs(d2.c);
+        g.beginPath();g.moveTo(bp.x,bp.y);g.lineTo(p.x,p.y);g.stroke();
+        g.beginPath();g.arc(p.x,p.y,4.5,0,2*Math.PI);
+        g.fillStyle=memberNow(d2.j)?'#c23b2a':'#8f8672';g.fill();
+        g.fillStyle='rgba(232,224,207,0.85)';g.font='9px monospace';g.textAlign='center';
+        g.fillText(kakiOf(d2.j).slice(0,6)+' ρ='+d2.c.toFixed(2),p.x,p.y-9);});
+      /* the maximized witness */
+      var R=16+3*Math.sin(tt*3);
+      var gr=g.createRadialGradient(bp.x,bp.y,3,bp.x,bp.y,R*2.2);
+      gr.addColorStop(0,'rgba(232,224,207,0.95)');
+      gr.addColorStop(0.4,isM?'rgba(194,59,42,0.6)':'rgba(143,134,114,0.5)');
+      gr.addColorStop(1,'rgba(0,0,0,0)');
+      g.fillStyle=gr;g.beginPath();g.arc(bp.x,bp.y,R*2.2,0,2*Math.PI);g.fill();
+      g.fillStyle='#e8e0cf';g.font='12px monospace';g.textAlign='center';
+      g.fillText(kakiOf(benchP),bp.x,bp.y-R*2.2-8);
+      g.font='9px monospace';g.fillStyle='rgba(143,134,114,0.9)';
+      g.fillText('MEASURED DEPENDENCIES — edge = live correlation ρ over the window',bp.x,cv.height*0.72);
+      /* right column cards */
+      var cx2=cv.width*0.66,cw=cv.width*0.30,ch=cv.height*0.155,gap=cv.height*0.02,cy0=cv.height*0.09;
+      function card(iy,title,lines,col){
+        var y0=cy0+iy*(ch+gap);
+        g.strokeStyle=col;g.lineWidth=1.2;g.strokeRect(cx2,y0,cw,ch);
+        g.fillStyle=col;g.font='9.5px monospace';g.textAlign='left';
+        g.fillText(title,cx2+9,y0+14);
+        g.fillStyle='rgba(232,224,207,0.85)';g.font='9px monospace';
+        lines.forEach(function(L,li){g.fillText(L,cx2+9,y0+29+li*12);});}
+      card(0,'TRIBE',[
+        isM?'MODE-1 — the assembling cohort ('+mem.length+' members)':'THE SEA — chance, uninterpreted',
+        isM?'loading '+Math.abs(v1[benchP]).toFixed(3)+' (floor '+LOADFLOOR+')':'loading '+Math.abs(v1[benchP]).toFixed(3)+' — below floor',
+        isM?'second witness: Ṭēmu band CONFIRMED':'no tribe claim is lawful for it (§8)'],isM?'#c23b2a':'#8f8672');
+      card(1,'ORBIT SPECIFICATION',[
+        'ring: '+(isM?'MODE-1 orbit r≈0.30 (tilt 0.28)':'sea-ring r=0.58 (tilt 0.06)'),
+        'angle '+angA[benchP].toFixed(2)+' rad · migrated: '+(isM?'YES, at onset '+onsetT:'no'),
+        'state is position; change is motion'],'#c9a227');
+      card(2,'ONTOGRAPH LINEAGE',[
+        kakiOf(benchP)+' ← MODE-1 ← survey template',
+        '← GL-ALG-005 (Askuppu) ← GL-ALG-002 (Napharu)',
+        'stone 3.077 sealed · replay seed 0x4D4F4445'],'#2e5d8c');
+      card(3,'HYPERGRAPH MEMBERSHIP',[
+        'e₁ survey-window {96} · e₂ '+(isM?'MODE-1 cohort {'+mem.length+'}':'sea {'+(NP-mem.length)+'}'),
+        (isM?'e₃ Ṭēmu band {aligned} · ':'')+'e'+(isM?'₄':'₃')+' deps {'+deps.length+' by ρ}',
+        'every edge measured — none decorative'],'#a58cc0');
+    }
+  }
+  /* drag ghost */
+  if(pDrag>=0&&pGhost){
+    g.beginPath();g.arc(pGhost.x,pGhost.y,7,0,2*Math.PI);
+    g.fillStyle=memberNow(pDrag)?'rgba(194,59,42,0.85)':'rgba(143,134,114,0.85)';g.fill();
+    g.strokeStyle='#c9a227';g.setLineDash([3,3]);g.lineWidth=1.4;g.stroke();g.setLineDash([]);
+    g.fillStyle='#c9a227';g.font='9px monospace';g.textAlign='center';
+    g.fillText('⇱ '+kakiOf(pDrag),pGhost.x,pGhost.y-12);}
+  statusEl.textContent='MODE COURT v3 · '+(view==='face'?'DAM FACE':view==='ring'?'BIGRING':'WORKBENCH'+(benchP>=0?' · '+kakiOf(benchP):''))
+    +' · campaign '+t+'/'+TMAX+' · λ₁='+(lam1?lam1.toFixed(3):'—')+' vs '+STONE_EFF.toFixed(3)
+    +' · right-click = rites · drag → golden zone · V cycles views · ESC releases';
+  requestAnimationFrame(frame);
+}
+eigenAt(t);lam1hist.push({t:t,l:lam1});
+requestAnimationFrame(frame);
+journal('MODE COURT v3 OPENS — the witness gains its rites. Right-click any particle: 📖 story, ⊕ maximize, ⇱ Workbench. Or DRAG it — a ghost follows your hand to the golden drop-zone, and the Workbench unfolds everything the witness IS: measured dependencies (live ρ from the correlation matrix — never decoration), Tribe, orbit specification, OntoGraph lineage, hyperedge collection. One particle, whole.');
+</script>
+</body>
+</html>

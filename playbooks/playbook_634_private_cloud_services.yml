@@ -1,0 +1,108 @@
+---
+# PB-375 · Private cloud services on the NAS · files, ingest, EnkiDB, backup
+# Everything binds to 127.0.0.1 or the tailnet interface. Nothing binds 0.0.0.0.
+#
+# "Private cloud" here means PRIVATE self-hosted NAS, not a public cloud
+# provider -- see PB-633's header for the full note (no AWS/Azure/GCP/SaaS
+# anywhere in this ecosystem). The CDSE ingest worker below is the same
+# arsenal fetch as PB-631, landing Copernicus data under {{ data }}/
+# landing_zone for hyperspectral-image analysis -- its cold-storage
+# destination is PB-632's 250GB Archive Storage Sector until the 200TB NAS
+# this playbook is ultimately written for is bought.
+- name: PB-375 stand up the private cloud services
+  hosts: nas
+  become: true
+  vars:
+    # See PB-632 for the shared nas_dedicated rationale: no dedicated NAS is
+    # purchased yet and none is required to run this playbook, only more
+    # effective/suitable once one exists (bigger capacity, its own network
+    # path). False runs the same services directly on the current box.
+    nas_dedicated: "{{ (lookup('env','NAS_DEDICATED') | default('false', true)) | bool }}"
+    bind: "{{ tailscale_ip | default('100.64.0.1') }}"
+    data: "{{ '/volume1/bahyway' if nas_dedicated else (ansible_env.HOME + '/bahyway') }}"
+  tasks:
+    - name: Dataset layout
+      ansible.builtin.file: {path: "{{ data }}/{{ item }}", state: directory, mode: "0750"}
+      loop: [landing_zone/raw, landing_zone/receipts, derived, archive, sala/tabs, laws, docker]
+
+    # community.docker.docker_container below is UGOS Pro's own supported
+    # container runtime on a real NAS -- not this ecosystem's general choice,
+    # which is Podman everywhere else (both CQRS node VMs run 7 Podman
+    # containers each, no Docker). The current-hardware fallback path below
+    # uses containers.podman.podman_container instead, matching that.
+    - name: File access (WebDAV/sync) bound to the tailnet only (Docker, UGOS Pro)
+      community.docker.docker_container:
+        name: files
+        image: nextcloud:stable
+        restart_policy: unless-stopped
+        ports: ["{{ bind }}:8443:80"]
+        volumes: ["{{ data }}/derived:/var/www/html/data/derived:ro", "{{ data }}/docker/nextcloud:/var/www/html"]
+        env: {TRUSTED_PROXIES: "100.64.0.0/10"}
+      when: nas_dedicated
+
+    - name: File access (WebDAV/sync) bound to the tailnet only (Podman, current hardware)
+      containers.podman.podman_container:
+        name: files
+        image: nextcloud:stable
+        restart_policy: unless-stopped
+        ports: ["{{ bind }}:8443:80"]
+        volumes: ["{{ data }}/derived:/var/www/html/data/derived:ro", "{{ data }}/podman/nextcloud:/var/www/html"]
+        env: {TRUSTED_PROXIES: "100.64.0.0/10"}
+      when: not nas_dedicated
+
+    - name: CDSE ingest worker (PB-371 on a schedule) (Docker, UGOS Pro)
+      community.docker.docker_container:
+        name: arsenal
+        image: python:3.12-slim
+        restart_policy: unless-stopped
+        volumes: ["{{ data }}/landing_zone:/lz"]
+        env:
+          CDSE_USER: "{{ lookup('env','CDSE_USER') }}"
+          CDSE_PASS: "{{ lookup('env','CDSE_PASS') }}"
+        command: ["sleep", "infinity"]
+      when: nas_dedicated
+
+    - name: CDSE ingest worker (PB-371 on a schedule) (Podman, current hardware)
+      containers.podman.podman_container:
+        name: arsenal
+        image: python:3.12-slim
+        restart_policy: unless-stopped
+        volumes: ["{{ data }}/landing_zone:/lz"]
+        env:
+          CDSE_USER: "{{ lookup('env','CDSE_USER') }}"
+          CDSE_PASS: "{{ lookup('env','CDSE_PASS') }}"
+        command: ["sleep", "infinity"]
+      when: not nas_dedicated
+
+    - name: Weekly ingest timer
+      ansible.builtin.cron:
+        name: bahyway-arsenal
+        weekday: "1"
+        hour: "3"
+        minute: "20"
+        job: >-
+          {{ 'docker' if nas_dedicated else 'podman' }} exec arsenal python3 /lz/arsenal.py --wkt "$AOI"
+          --start $(date -d '-7 days' +\%F) --end $(date +\%F) --out /lz/raw >> {{ data }}/sala/court_journal.log 2>&1
+
+    - name: Gate S1 · nothing binds 0.0.0.0
+      ansible.builtin.shell: |
+        ! ss -ltn | awk '{print $4}' | grep -qE '^0\.0\.0\.0:|^\*:'
+      changed_when: false
+
+    - name: Gate S2 · off-site copy exists and is younger than 8 days (3-2-1 copy 2)
+      ansible.builtin.shell: |
+        newest=$(find {{ data }}/archive/.offsite_stamp -mtime -8 2>/dev/null | wc -l)
+        [ "$newest" -ge 1 ] || { echo "no recent off-site copy - derived data is NOT re-fetchable"; exit 1; }
+      changed_when: false
+      failed_when: false
+      register: s2
+
+    - name: Report 3-2-1 state
+      ansible.builtin.debug:
+        msg: "{{ 'copy 2 fresh' if s2.rc == 0 else 'WARNING - derived tier has no fresh off-site copy' }}"
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ data }}/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-375 private cloud services up - tailnet-bound, weekly ingest armed"

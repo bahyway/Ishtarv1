@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Uṣurtu Descent — GL-NIM-002 · The Address Is the Story</title>
+<style>
+  :root{
+    --field:#0A0D14; --membrane:#24406E; --gold:#D9A93B; --gold-hi:#F0C75E;
+    --lapis:#5B85D6; --emerald:#37B37E; --crimson:#C05050; --clay:#C9B896;
+    --crystal:#E8ECF4; --ink:#0E1320;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:var(--field);
+    font-family:Palatino,"Book Antiqua",Georgia,serif;color:#D8CBB8}
+  canvas#c{display:block;cursor:grab}
+  canvas#c.dragging{cursor:grabbing}
+
+  #die{position:absolute;top:18px;left:22px;pointer-events:none;max-width:47ch}
+  #die .tab{font-size:11px;letter-spacing:.35em;color:var(--gold);text-transform:uppercase}
+  #die h1{font-size:20px;font-weight:600;color:var(--crystal);margin:.25em 0 .2em}
+  #die .seal{font-size:12px;color:#8fa0c0;font-style:italic}
+  #die .seal b{color:var(--gold-hi);font-style:normal}
+  #banner{display:inline-block;margin-top:7px;font:10px ui-monospace,monospace;
+    letter-spacing:.22em;color:var(--crimson);border:1px solid var(--crimson);
+    border-radius:3px;padding:2px 8px}
+
+  #col{position:absolute;top:18px;right:18px;width:min(370px,46vw);
+    display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 36px)}
+  .panel{background:rgba(14,19,32,.86);border:1px solid #22314F;border-radius:6px;
+    backdrop-filter:blur(3px);display:flex;flex-direction:column;min-height:0}
+  .panel header{padding:8px 12px;border-bottom:1px solid #22314F;font-size:11px;
+    letter-spacing:.26em;text-transform:uppercase;color:var(--lapis)}
+  .panel header small{display:block;letter-spacing:.04em;text-transform:none;
+    color:#6d7c99;margin-top:2px}
+  #meter{padding:10px 12px;font:12px/1.7 ui-monospace,Consolas,monospace}
+  #meter .kv{display:flex;justify-content:space-between}
+  #meter .kv b{color:var(--crystal);font-weight:600}
+  #meter .law{margin-top:6px;padding-top:6px;border-top:1px dashed #22314F;
+    color:#8fa0c0}
+  #meter .law i{color:var(--gold-hi);font-style:normal}
+  #addr{margin-top:6px;word-break:break-all}
+  #addr .d{display:inline-block;border:1px solid var(--gold);color:var(--gold-hi);
+    border-radius:3px;padding:0 5px;margin:1px 2px;font-weight:600}
+  #addr .sealed{border-color:var(--emerald);color:var(--emerald)}
+  #descbtn{margin:0 12px 12px;padding:8px;border:1px solid var(--gold);
+    background:none;color:var(--gold-hi);font:12px ui-monospace,monospace;
+    letter-spacing:.15em;border-radius:4px;cursor:pointer}
+  #descbtn:hover{background:#1a2338}
+  #descbtn:disabled{border-color:var(--emerald);color:var(--emerald);cursor:default}
+
+  #journal{flex:1}
+  #entries{overflow-y:auto;padding:8px 12px 12px;
+    font:12px/1.55 ui-monospace,Consolas,Menlo,monospace}
+  #entries .e{margin-bottom:9px;border-left:2px solid #33518B;padding-left:8px}
+  #entries .e.gold{border-color:var(--gold)}
+  #entries .e.emerald{border-color:var(--emerald)}
+  #entries .e.clay{border-color:var(--clay)}
+  #entries .e.crimson{border-color:var(--crimson);color:#d9a3a3}
+  #entries .t{color:#67779a;margin-right:.5em}
+
+  #legend{position:absolute;left:22px;bottom:18px;font-size:12px;line-height:1.85;
+    pointer-events:none;max-width:44ch}
+  #legend .k{display:inline-block;width:10px;height:10px;border-radius:50%;
+    margin-right:7px;vertical-align:-1px}
+  #legend .hint{color:#6d7c99;font-style:italic;margin-top:4px}
+
+  #menu{position:absolute;display:none;min-width:240px;z-index:10;background:var(--ink);
+    border:1px solid #2A3A5E;border-radius:5px;box-shadow:0 8px 28px rgba(0,0,0,.55);
+    font-size:13px;overflow:hidden}
+  #menu .head{padding:8px 12px;border-bottom:1px solid #22314F;color:var(--crystal)}
+  #menu .item{padding:8px 12px;cursor:pointer}
+  #menu .item:hover{background:#182338;color:var(--crystal)}
+  #menu .silent{padding:10px 12px;color:var(--clay);
+    font:12px/1.5 ui-monospace,monospace;cursor:default}
+  #menu .silent b{letter-spacing:.16em}
+
+  @media (max-width:760px){#col{width:calc(100vw - 36px);top:auto;bottom:12px;
+    max-height:54vh}#legend{display:none}#die h1{font-size:16px}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="die">
+  <div class="tab">Abūbu Court · Šala prototype</div>
+  <h1>Uṣurtu Descent — The Address Is the Story</h1>
+  <div class="seal">GL-NIM-002 under GL-STK-001 · <b>Awaiting CSR-08</b> · delivery PB-355 ·
+    two witnesses of place: UTM truth + hepta-address. Truth stays UTM; the veil maps between.</div>
+  <span id="banner">REHEARSAL DATA — witnesses illustrative until the SUSA stream is live</span>
+</div>
+
+<div id="col">
+  <div class="panel">
+    <header>Address-Depth Meter · leak L-2026-0341
+      <small>d* = ⌈log_√7(E₀ / 3σ_d)⌉ — as deep as the variance earned</small></header>
+    <div id="meter">
+      <div class="kv"><span>root edge E₀</span><b>10 000 m</b></div>
+      <div class="kv"><span>σ_d (Enbilulu)</span><b>0.08 m</b></div>
+      <div class="kv"><span>floor 3σ_d</span><b>0.24 m</b></div>
+      <div class="kv"><span>required depth d*</span><b id="dstar">—</b></div>
+      <div class="kv"><span>current shell</span><b id="depth">0</b></div>
+      <div class="kv"><span>current cell edge</span><b id="edge">10 000.0 m</b></div>
+      <div class="law">deeper = <i>false precision</i> · shallower = <i>wasting the proof</i></div>
+      <div id="addr">address&nbsp;<span class="d">∅</span></div>
+    </div>
+    <button id="descbtn">▼ DESCEND INTO THE OWNING CHILD</button>
+  </div>
+  <div class="panel" id="journal">
+    <header>StoryEngine Journal <small>append-only · one chapter per digit</small></header>
+    <div id="entries"></div>
+  </div>
+</div>
+
+<div id="legend">
+  <div><span class="k" style="background:var(--gold-hi)"></span>leak witnesses — born event-KAKIs (unstructured ≠ unborn)</div>
+  <div><span class="k" style="background:var(--emerald)"></span>owning cell of the cluster centroid — the descent path</div>
+  <div><span class="k" style="background:#3d5f9e"></span>owned-but-silent cells — lawful (eventless interior)</div>
+  <div class="hint">drag to tilt the bowl · scroll to zoom · left-click a child to descend ·
+    right-click a cell for its record · no point is unowned</div>
+</div>
+
+<div id="menu"></div>
+
+<script>
+"use strict";
+/* Uṣurtu Descent · NASARU style · Curved-Space Decree: the {7,3} disk is the
+   hyperbolic bowl seen through the Poincaré veil, tilted in 3D and breathing.
+   Four canonical interactions: scroll-zoom · moving membrane · left-click
+   descend + StoryEngine chapter · right-click record (verdict cell vs
+   owned-but-silent). Ownership is deterministic geometry (Uṣurtu codec,
+   PB-347) — EE is not summoned. */
+
+const cv=document.getElementById('c'),cx=cv.getContext('2d');
+const menu=document.getElementById('menu'),entries=document.getElementById('entries');
+const mReduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let W,H,DPR;
+function fit(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;
+  cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';
+  cx.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',fit);fit();
+
+/* ── the law ─────────────────────────────────────────────────── */
+const E0=10000, SIGMA=0.08, K=3, S7=Math.sqrt(7);
+const DSTAR=Math.ceil(Math.log(E0/(K*SIGMA))/Math.log(S7));   // = 11
+document.getElementById('dstar').textContent=DSTAR+' shells';
+let depth=0, address=[];                                       // digits so far
+const edgeAt=d=>E0/Math.pow(S7,d);
+
+/* deterministic descent path (rehearsal): digit per shell from a seed */
+function digitFor(d){let x=Math.sin((d+1)*12.9898+78.233)*43758.5453;
+  return Math.abs(Math.floor(x))%7;}
+
+/* ── camera: tilted breathing disk ───────────────────────────── */
+let t=0,rotY=0.0,rotX=0.62,zoom=1,drag=null;
+function project(px,py,ph){
+  let z=-0.10*(px*px+py*py);                    // shallow bowl through the veil
+  if(!mReduce)z+=0.022*Math.sin(t*0.9+(ph||0)); // breath
+  let x=px,y=py;
+  const cyr=Math.cos(rotY),syr=Math.sin(rotY);[x,z]=[x*cyr-z*syr,x*syr+z*cyr];
+  const cxr=Math.cos(rotX),sxr=Math.sin(rotX);[y,z]=[y*cxr-z*sxr,y*sxr+z*cxr];
+  const d=3.4,s=(d/(d-z))*Math.min(W,H)*0.40*zoom;
+  return[W*0.40+x*s,H*0.55+y*s,s];}
+
+/* ── {7,3} through the veil: navel + 7 children + outer shell ─ */
+function heptPath(cxu,cyu,r,rot){const pts=[];
+  for(let i=0;i<7;i++){const a=rot+i*2*Math.PI/7;
+    pts.push([cxu+r*Math.cos(a),cyu+r*Math.sin(a)]);}return pts;}
+const CHILD_R=0.52, CHILD_S=0.245, NAVEL_S=0.26;
+function children(){const arr=[];
+  for(let k=0;k<7;k++){const a=-Math.PI/2+k*2*Math.PI/7;
+    arr.push({digit:k,cx:CHILD_R*Math.cos(a),cy:CHILD_R*Math.sin(a),
+      rot:a+Math.PI/7,ph:k*0.9});}return arr;}
+const CH=children();
+
+/* ── witnesses: cluster inside the descent path child ────────── */
+const witnesses=[];
+(function(){const tgt=CH[digitFor(depth)];
+  for(let i=0;i<46;i++){const r=Math.sqrt(Math.random())*0.16,
+    a=Math.random()*6.283;
+    witnesses.push({x:tgt.cx*0.94+r*Math.cos(a),y:tgt.cy*0.94+r*Math.sin(a),
+      ph:Math.random()*6.28,hot:Math.random()<0.35});}
+  for(let i=0;i<10;i++){const r=0.55+Math.random()*0.32,a=Math.random()*6.283;
+    witnesses.push({x:r*Math.cos(a),y:r*Math.sin(a),ph:Math.random()*6.28,hot:false});}})();
+
+/* ── journal ─────────────────────────────────────────────────── */
+function stamp(){return new Date().toTimeString().slice(0,8);}
+function depose(cls,html){const e=document.createElement('div');
+  e.className='e '+(cls||'');e.innerHTML='<span class="t">'+stamp()+'</span>'+html;
+  entries.prepend(e);}
+depose('emerald','⟡ Descent court convened. E₀ 10 000 m · σ_d 0.08 m → d* = '+DSTAR+
+  ' shells. Two witnesses of place required for interment: UTM truth + hepta-address. '+
+  'REHEARSAL DATA.');
+
+const CHAPTERS=[
+ 'Shell 1 — the district. PC-trajectory drift first crossed its band here, weeks before any threshold: the months-ahead witness (GL-NIM-001 N3).',
+ 'Shell 2 — the DMA. Minimum Night Flow began its quiet step; r(S) trend turned persistently positive.',
+ 'Shell 3 — the sector. Moisture excess crossed kσ over the seasonal baseline: first witness seated.',
+ 'Shell 4 — the block. |Φ′| rose above its coherence noise floor: second witness seated.',
+ 'Shell 5 — the two-witness/two-epoch trigger fired at t₂; the cell was remanded to the leak court.',
+ 'Shell 6 — nested r(S) narrowing began: conservation residual isolated the subgraph.',
+ 'Shell 7 — the residual held 4.7 m³/h across epochs; Têrtu fingerprint matched night-flow-step pattern.',
+ 'Shell 8 — Enbilulu ODR convened on the pressure pairs; the King-plot residual pointed along P-114.',
+ 'Shell 9 — chainage bracketed to metres; PCA loadings 0.81/0.52 entered the Kanīku receipt as testimony.',
+ 'Shell 10 — the Cramér–Rao gate passed: σ_d 0.08 m sealed. The proof is spent; the address must now stop.',
+ 'Shell 11 — the verdict cell. Edge ≤ 3σ_d: interment. Ḫarrānu routes the crew; the family of this pipe knows where to stand.'];
+
+/* ── meter ───────────────────────────────────────────────────── */
+const btn=document.getElementById('descbtn');
+function refreshMeter(){
+  document.getElementById('depth').textContent=depth;
+  const e=edgeAt(depth);
+  document.getElementById('edge').textContent=
+    e>=1?e.toFixed(1)+' m':(e*100).toFixed(1)+' cm';
+  const a=document.getElementById('addr');
+  a.innerHTML='address&nbsp;<span class="d'+(depth>=DSTAR?' sealed':'')+'">∅</span>'+
+    address.map(d=>'<span class="d'+(depth>=DSTAR?' sealed':'')+'">'+d+'</span>').join('');
+  if(depth>=DSTAR){btn.disabled=true;btn.textContent='■ ADDRESS SEALED AT d* — DEEPER IS FALSE PRECISION';}
+}
+refreshMeter();
+
+function descend(chosen){
+  if(depth>=DSTAR)return;
+  const lawful=digitFor(depth);
+  if(chosen!==undefined&&chosen!==lawful){
+    depose('crimson','⊘ Cell '+chosen+' — owned but silent. The cluster centroid is owned by cell '+
+      lawful+'; the codec, not the hand, names the owner. Descent refused.');return;}
+  const d=lawful;address.push(d);depth++;
+  depose(depth>=DSTAR?'emerald':'gold','⟡ <b>digit '+d+'</b> · shell '+depth+' of '+DSTAR+
+    ' · edge '+(edgeAt(depth)>=1?edgeAt(depth).toFixed(1)+' m':(edgeAt(depth)*100).toFixed(1)+' cm')+
+    ' — '+CHAPTERS[Math.min(depth-1,CHAPTERS.length-1)]);
+  if(depth>=DSTAR){
+    depose('emerald','§ <b>INTERMENT</b> — verdict laid with two witnesses of place: '+
+      'UTM truth (P-114 · chainage 342.6 m · σ_d 0.08 m) + hepta-address ∅.'+address.join('.')+
+      ' (EnkiMDB facet — never in κ bytes). The address is the story; the story is '+DSTAR+' chapters long.');}
+  refreshMeter();}
+btn.onclick=()=>descend();
+
+/* ── draw ────────────────────────────────────────────────────── */
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function drawHept(cxu,cyu,r,rot,ph,stroke,fill,lw){
+  const pts=heptPath(cxu,cyu,r,rot).map(p=>project(p[0],p[1],ph));
+  cx.beginPath();pts.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));
+  cx.closePath();
+  if(fill){cx.fillStyle=fill;cx.fill();}
+  cx.strokeStyle=stroke;cx.lineWidth=lw||1.2;cx.stroke();}
+function frame(){t+=1/60;if(!mReduce&&!drag)rotY+=0.0009;
+  cx.fillStyle=css('--field');cx.fillRect(0,0,W,H);
+
+  // horizon ring — the endless doll
+  cx.strokeStyle=css('--gold');cx.globalAlpha=.5;
+  const ring=[];for(let i=0;i<=90;i++){const a=i/90*6.283;
+    ring.push(project(0.98*Math.cos(a),0.98*Math.sin(a),0));}
+  cx.beginPath();ring.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));
+  cx.stroke();cx.globalAlpha=1;
+
+  // outer decorative shell (grandchildren band)
+  cx.strokeStyle='#1d3358';
+  for(let k=0;k<28;k++){const a=k/28*6.283;
+    drawHept(0.84*Math.cos(a),0.84*Math.sin(a),0.075,a,k,'#1d3358',null,0.8);}
+
+  // navel + 7 children
+  const lawful=depth<DSTAR?digitFor(depth):-1;
+  drawHept(0,0,NAVEL_S,-Math.PI/2+0.03,0,css('--crystal'),'rgba(35,45,70,.45)',1.6);
+  for(const ch of CH){
+    const own=ch.digit===lawful;
+    drawHept(ch.cx,ch.cy,CHILD_S,ch.rot,ch.ph,
+      own?css('--emerald'):css('--lapis'),
+      own?'rgba(55,179,126,.10)':'rgba(30,44,75,.28)',own?2:1.2);
+    const[lx,ly]=project(ch.cx,ch.cy,ch.ph);
+    cx.fillStyle=own?css('--emerald'):'#7f93b8';
+    cx.font='600 13px ui-monospace,monospace';cx.textAlign='center';
+    cx.fillText(ch.digit,lx,ly+4);}
+  const[nx,ny]=project(0,0,0);
+  cx.fillStyle=css('--gold-hi');cx.font='11px ui-monospace,monospace';
+  cx.textAlign='center';
+  cx.fillText('navel · ∅'+(address.length?'.'+address.join('.'):''),nx,ny-6);
+  cx.fillStyle='#8fa0c0';cx.font='9px ui-monospace,monospace';
+  cx.fillText('shell '+depth+' · edge '+(edgeAt(depth)>=1?edgeAt(depth).toFixed(0)+' m':
+    (edgeAt(depth)*100).toFixed(0)+' cm'),nx,ny+10);
+
+  // witnesses
+  for(const w of witnesses){
+    const[sx,sy,s]=project(w.x,w.y,w.ph);
+    cx.fillStyle=w.hot?css('--crimson'):css('--gold-hi');
+    cx.globalAlpha=w.hot?.95:.85;
+    cx.beginPath();cx.arc(sx,sy,Math.max(s*0.007,2.1),0,6.29);cx.fill();}
+  cx.globalAlpha=1;
+  requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+
+/* ── interactions ───────────────────────────────────────────── */
+function childAt(x,y){for(const ch of CH){const[sx,sy,s]=project(ch.cx,ch.cy,ch.ph);
+  if(Math.hypot(x-sx,y-sy)<s*CHILD_S*0.9)return ch;}return null;}
+
+cv.addEventListener('wheel',e=>{e.preventDefault();
+  zoom=Math.min(2.6,Math.max(.55,zoom*(e.deltaY<0?1.07:0.93)));},{passive:false});
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};
+  cv.classList.add('dragging');hideMenu();});
+addEventListener('pointermove',e=>{if(!drag)return;
+  rotY+=(e.clientX-drag.x)*0.004;rotX+=(e.clientY-drag.y)*0.004;
+  rotX=Math.min(1.25,Math.max(0.15,rotX));drag={x:e.clientX,y:e.clientY};});
+addEventListener('pointerup',e=>{
+  if(drag&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<4){
+    const ch=childAt(e.clientX,e.clientY);if(ch)descend(ch.digit);}
+  drag=null;cv.classList.remove('dragging');});
+
+cv.addEventListener('contextmenu',e=>{e.preventDefault();
+  const ch=childAt(e.clientX,e.clientY);if(!ch){hideMenu();return;}
+  const lawful=depth<DSTAR?digitFor(depth):-1;
+  menu.innerHTML='';
+  if(ch.digit===lawful){
+    menu.innerHTML='<div class="head" style="color:var(--emerald)">cell '+ch.digit+
+      ' · owner of the cluster centroid</div>';
+    const items=[
+      ['Read chapter',()=>depose('gold','§ '+CHAPTERS[Math.min(depth,CHAPTERS.length-1)])],
+      ['Witness census',()=>depose('clay','§ Census — 46 witnesses owned by this subtree, 10 scattered elsewhere (owned by their own cells). No point unowned; the court counts, it does not assume.')],
+      ['Kanīku receipt (partial)',()=>depose('emerald','§ Receipt so far — ∅'+(address.length?'.'+address.join('.'):'')+' at shell '+depth+' · UTM truth pending terminal shell · loadings 0.81/0.52 riding as testimony.')],
+    ];
+    for(const[l,f]of items){const d=document.createElement('div');d.className='item';
+      d.textContent=l;d.onclick=()=>{f();hideMenu();};menu.appendChild(d);}}
+  else{
+    menu.innerHTML='<div class="head" style="color:var(--clay)">cell '+ch.digit+'</div>'+
+      '<div class="silent"><b>OWNED BUT SILENT</b><br>Eventless interior — lawful '+
+      '(GL-MAP-001). This cell owns its ground and reports nothing, which is a true report. '+
+      'Vacancy would be forbidden; silence is not.</div>';}
+  menu.style.left=Math.min(e.clientX,W-270)+'px';
+  menu.style.top=Math.min(e.clientY,H-170)+'px';menu.style.display='block';});
+function hideMenu(){menu.style.display='none';}
+addEventListener('keydown',e=>{if(e.key==='Escape')hideMenu();});
+</script>
+</body>
+</html>

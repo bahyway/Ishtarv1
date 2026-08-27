@@ -24,7 +24,13 @@
   hosts: localhost
   gather_facts: true
   vars:
-    repo_root: "{{ repo_root | default(playbook_dir + '/..') }}"  # FIXED 2026-08-15: was ansible_env.HOME + "/BahyWay-Ecosystem" (a path that does not exist); playbook_dir/.. matches this repo's own established convention and actually resolves
+    # FIXED 2026-08-23: the 2026-08-15 fix introduced a self-reference --
+    # "{{ repo_root | default(...) }}" inside repo_root's own definition
+    # makes Jinja resolve repo_root in order to evaluate repo_root's
+    # default, an infinite loop ("Recursive loop detected in template",
+    # found live). No default() needed at all: -e repo_root=... already
+    # overrides a plain vars: entry at higher precedence with no trick.
+    repo_root: "{{ playbook_dir }}/.."
     report_dir: "{{ ansible_env.HOME }}/bahyway-reports"
     report_file: "{{ report_dir }}/ARSENAL-INVENTORY-001.md"
     # ------------------------------------------------------------------

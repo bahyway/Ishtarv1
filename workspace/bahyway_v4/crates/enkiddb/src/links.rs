@@ -45,7 +45,9 @@ fn scan_markdown_links(text: &str, out: &mut Vec<String>) {
     let mut search_from = 0;
     while let Some(rel) = text[search_from..].find("](") {
         let start = search_from + rel + 2;
-        let Some(rel_end) = text[start..].find(')') else { break };
+        let Some(rel_end) = text[start..].find(')') else {
+            break;
+        };
         let end = start + rel_end;
         let candidate = text[start..end].trim();
         if has_known_extension(candidate) && !candidate.contains(char::is_whitespace) {
@@ -86,13 +88,19 @@ mod tests {
     #[test]
     fn finds_a_markdown_link_reference() {
         let text = "See the [deploy script](./scripts/deploy.sh) for details.";
-        assert_eq!(discover_referenced_paths(text), vec!["./scripts/deploy.sh".to_string()]);
+        assert_eq!(
+            discover_referenced_paths(text),
+            vec!["./scripts/deploy.sh".to_string()]
+        );
     }
 
     #[test]
     fn finds_a_backtick_bare_path_reference() {
         let text = "Run `scripts/etl.py` to process the export.";
-        assert_eq!(discover_referenced_paths(text), vec!["scripts/etl.py".to_string()]);
+        assert_eq!(
+            discover_referenced_paths(text),
+            vec!["scripts/etl.py".to_string()]
+        );
     }
 
     #[test]
@@ -125,14 +133,20 @@ mod tests {
         let text = "Deploy via [deploy.sh](./scripts/deploy.sh), then run `scripts/etl.py`.";
         assert_eq!(
             discover_referenced_paths(text),
-            vec!["./scripts/deploy.sh".to_string(), "scripts/etl.py".to_string()]
+            vec![
+                "./scripts/deploy.sh".to_string(),
+                "scripts/etl.py".to_string()
+            ]
         );
     }
 
     #[test]
     fn each_reference_reported_once_even_if_mentioned_repeatedly() {
         let text = "Run `deploy.sh`. Later, run `deploy.sh` again.";
-        assert_eq!(discover_referenced_paths(text), vec!["deploy.sh".to_string()]);
+        assert_eq!(
+            discover_referenced_paths(text),
+            vec!["deploy.sh".to_string()]
+        );
     }
 
     #[test]

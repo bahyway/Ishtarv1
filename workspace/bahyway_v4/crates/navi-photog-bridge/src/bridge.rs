@@ -29,11 +29,11 @@ pub enum SourceCrs {
 }
 
 impl SourceCrs {
-    fn to_lat_lon(&self, x: f64, y: f64) -> (f32, f32) {
+    fn to_lat_lon(self, x: f64, y: f64) -> (f32, f32) {
         match self {
             SourceCrs::Wgs84 => (y as f32, x as f32),
             SourceCrs::Utm(zone) => {
-                let (lat, lon) = utm_to_latlon(x, y, *zone);
+                let (lat, lon) = utm_to_latlon(x, y, zone);
                 (lat as f32, lon as f32)
             }
         }
@@ -61,7 +61,10 @@ impl Default for MarkerLinking {
     /// 15 m / 4 neighbours: plausible grave-to-grave footpath spacing and
     /// branching in a burial ground. Tune per real survey density.
     fn default() -> Self {
-        MarkerLinking { max_link_distance_m: 15.0, max_links_per_marker: 4 }
+        MarkerLinking {
+            max_link_distance_m: 15.0,
+            max_links_per_marker: 4,
+        }
     }
 }
 
@@ -155,9 +158,17 @@ mod tests {
     #[test]
     fn wgs84_axis_convention_is_x_equals_lon_y_equals_lat() {
         let mut map = empty_najaf_map();
-        let cloud = PointCloud { points: vec![[44.320, 31.995, 0.0]], colors: None };
+        let cloud = PointCloud {
+            points: vec![[44.320, 31.995, 0.0]],
+            colors: None,
+        };
         let ids = place_point_cloud_as_grave_markers(
-            &mut map, &cloud, SourceCrs::Wgs84, tribe(), 5, &MarkerLinking::default(),
+            &mut map,
+            &cloud,
+            SourceCrs::Wgs84,
+            tribe(),
+            5,
+            &MarkerLinking::default(),
         );
         let p = map.get(ids[0]).unwrap();
         assert!((p.coord.lat - 31.995).abs() < 1e-4, "lat={}", p.coord.lat);
@@ -168,9 +179,17 @@ mod tests {
     fn utm_source_crs_recovers_the_original_lat_lon() {
         let (easting, northing, zone) = crate::geo_convert::latlon_to_utm(31.995, 44.320);
         let mut map = empty_najaf_map();
-        let cloud = PointCloud { points: vec![[easting, northing, 0.0]], colors: None };
+        let cloud = PointCloud {
+            points: vec![[easting, northing, 0.0]],
+            colors: None,
+        };
         let ids = place_point_cloud_as_grave_markers(
-            &mut map, &cloud, SourceCrs::Utm(zone), tribe(), 5, &MarkerLinking::default(),
+            &mut map,
+            &cloud,
+            SourceCrs::Utm(zone),
+            tribe(),
+            5,
+            &MarkerLinking::default(),
         );
         let p = map.get(ids[0]).unwrap();
         assert!((p.coord.lat - 31.995).abs() < 1e-4, "lat={}", p.coord.lat);
@@ -194,10 +213,19 @@ mod tests {
             SourceCrs::Wgs84,
             tribe(),
             5,
-            &MarkerLinking { max_link_distance_m: 50.0, max_links_per_marker: 8 },
+            &MarkerLinking {
+                max_link_distance_m: 50.0,
+                max_links_per_marker: 8,
+            },
         );
-        assert!(!map.neighbours(ids[0]).is_empty(), "the two close markers must be linked");
-        assert!(map.neighbours(ids[2]).is_empty(), "the far marker must not be linked to anything");
+        assert!(
+            !map.neighbours(ids[0]).is_empty(),
+            "the two close markers must be linked"
+        );
+        assert!(
+            map.neighbours(ids[2]).is_empty(),
+            "the far marker must not be linked to anything"
+        );
     }
 
     #[test]
@@ -208,14 +236,20 @@ mod tests {
         for i in 0..10 {
             points.push([44.320 + (i as f64) * 0.00002, 31.995, 0.0]);
         }
-        let cloud = PointCloud { points, colors: None };
+        let cloud = PointCloud {
+            points,
+            colors: None,
+        };
         let ids = place_point_cloud_as_grave_markers(
             &mut map,
             &cloud,
             SourceCrs::Wgs84,
             tribe(),
             5,
-            &MarkerLinking { max_link_distance_m: 100.0, max_links_per_marker: 3 },
+            &MarkerLinking {
+                max_link_distance_m: 100.0,
+                max_links_per_marker: 3,
+            },
         );
         assert!(
             map.neighbours(ids[0]).len() <= 3,
@@ -236,19 +270,31 @@ mod tests {
         for i in 0..5 {
             points.push([44.320 + (i as f64) * 0.00015, 31.995, 0.0]);
         }
-        let cloud = PointCloud { points, colors: None };
+        let cloud = PointCloud {
+            points,
+            colors: None,
+        };
         let ids = place_point_cloud_as_grave_markers(
             &mut map,
             &cloud,
             SourceCrs::Wgs84,
             tribe(),
             5,
-            &MarkerLinking { max_link_distance_m: 25.0, max_links_per_marker: 2 },
+            &MarkerLinking {
+                max_link_distance_m: 25.0,
+                max_links_per_marker: 2,
+            },
         );
 
         let router = MachineRouter::new(&map);
         let route = router
-            .route(ids[0], ids[4], &RoutingMode::Pilgrimage { prefer_sacred: false })
+            .route(
+                ids[0],
+                ids[4],
+                &RoutingMode::Pilgrimage {
+                    prefer_sacred: false,
+                },
+            )
             .expect("a real route must be found across the drone-surveyed marker chain");
         assert!(route.is_valid());
         assert_eq!(route.start(), Some(ids[0]));

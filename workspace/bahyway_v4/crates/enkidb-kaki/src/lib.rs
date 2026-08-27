@@ -4,27 +4,25 @@
 //! See KAKI_v4.0.pdf §1–§2 for the canonical specification.
 
 pub mod kaki;
-pub mod types;
-pub mod newtypes;
 pub mod mint;
+pub mod newtypes;
 pub mod pattern;
+pub mod types;
 
 pub use kaki::Kaki;
-pub use types::{KakiType, KakiRole};
-pub use newtypes::{IdentityKaki, EventKaki, CrossTribeKaki, PatternKaki};
 pub use mint::KakiMinter;
+pub use newtypes::{CrossTribeKaki, EventKaki, IdentityKaki, PatternKaki};
 pub use pattern::{
-    FixedCoord7D, PatternType, PatternLifecycle,
-    derive_pattern_kaki, pattern_kaki_confidence,
+    derive_pattern_kaki, pattern_kaki_confidence, FixedCoord7D, PatternLifecycle, PatternType,
 };
+pub use types::{KakiRole, KakiType};
 
 pub mod prelude {
     pub use super::kaki::Kaki;
-    pub use super::types::{KakiType, KakiRole};
-    pub use super::newtypes::{IdentityKaki, EventKaki, CrossTribeKaki, PatternKaki};
     pub use super::mint::KakiMinter;
+    pub use super::newtypes::{CrossTribeKaki, EventKaki, IdentityKaki, PatternKaki};
     pub use super::pattern::{
-        FixedCoord7D, PatternType, PatternLifecycle,
-        derive_pattern_kaki, pattern_kaki_confidence,
+        derive_pattern_kaki, pattern_kaki_confidence, FixedCoord7D, PatternLifecycle, PatternType,
     };
+    pub use super::types::{KakiRole, KakiType};
 }

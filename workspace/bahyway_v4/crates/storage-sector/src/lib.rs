@@ -20,7 +20,7 @@
 
 pub mod storage_sector;
 
-pub use storage_sector::{StorageSector, SealedParticle, StorageSectorReport};
+pub use storage_sector::{SealedParticle, StorageSector, StorageSectorReport};
 
 /// This jail's sovereign name — IRKALLA, per the Architect's naming
 /// (2026-07-17, DubSar Nergal AV panel work). See the crate doc comment.
@@ -31,5 +31,5 @@ pub const SOVEREIGN_NAME: &str = "irkalla";
 pub const IRKALLA_TRIBE: u16 = 0x0002;
 
 pub mod prelude {
-    pub use super::storage_sector::{StorageSector, SealedParticle, StorageSectorReport};
+    pub use super::storage_sector::{SealedParticle, StorageSector, StorageSectorReport};
 }

@@ -10,17 +10,17 @@
 
 #![forbid(unsafe_code)]
 
+pub mod chunker;
+pub mod epub;
 pub mod inflate;
 pub mod pdf;
-pub mod epub;
-pub mod chunker;
 pub mod tokenizer;
 
+pub use chunker::{chunk_text, ChunkConfig, TextChunk};
+pub use epub::{extract_epub, EpubExtract};
 pub use inflate::{inflate, inflate_zlib};
 pub use pdf::{extract_pdf, PdfExtract};
-pub use epub::{extract_epub, EpubExtract};
-pub use chunker::{chunk_text, ChunkConfig, TextChunk};
-pub use tokenizer::{tokenize, TokenUnit, TokenClass, TokenStats};
+pub use tokenizer::{tokenize, TokenClass, TokenStats, TokenUnit};
 
 /// Auto-detect format from file extension and extract text.
 pub fn ingest_file(path: &str, data: &[u8]) -> IngestResult {
@@ -28,28 +28,31 @@ pub fn ingest_file(path: &str, data: &[u8]) -> IngestResult {
     if path_lc.ends_with(".pdf") {
         let extracted = extract_pdf(data);
         IngestResult {
-            title:     extracted.title,
-            author:    extracted.author,
-            isbn:      None,
+            title: extracted.title,
+            author: extracted.author,
+            isbn: None,
             publisher: None,
             full_text: extracted.full_text,
-            format:    DocFormat::Pdf,
+            format: DocFormat::Pdf,
         }
     } else if path_lc.ends_with(".epub") {
         let extracted = extract_epub(data);
         IngestResult {
-            title:     extracted.title,
-            author:    extracted.author,
-            isbn:      extracted.isbn,
+            title: extracted.title,
+            author: extracted.author,
+            isbn: extracted.isbn,
             publisher: extracted.publisher,
             full_text: extracted.full_text,
-            format:    DocFormat::Epub,
+            format: DocFormat::Epub,
         }
     } else {
         // Plain text fallback
         let text = String::from_utf8_lossy(data).into_owned();
         IngestResult {
-            title: None, author: None, isbn: None, publisher: None,
+            title: None,
+            author: None,
+            isbn: None,
+            publisher: None,
             full_text: text,
             format: DocFormat::PlainText,
         }
@@ -58,17 +61,21 @@ pub fn ingest_file(path: &str, data: &[u8]) -> IngestResult {
 
 /// Document format detected at ingest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DocFormat { Pdf, Epub, PlainText }
+pub enum DocFormat {
+    Pdf,
+    Epub,
+    PlainText,
+}
 
 /// Unified result from any document format.
 #[derive(Debug, Clone)]
 pub struct IngestResult {
-    pub title:     Option<String>,
-    pub author:    Option<String>,
-    pub isbn:      Option<String>,
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub isbn: Option<String>,
     pub publisher: Option<String>,
     pub full_text: String,
-    pub format:    DocFormat,
+    pub format: DocFormat,
 }
 
 #[cfg(test)]
@@ -85,7 +92,8 @@ mod tests {
 
     #[test]
     fn ingest_pdf_detects_format() {
-        let pdf = b"%PDF-1.4\n4 0 obj\n<</Length 30>>\nstream\nBT (Test Text) Tj ET\nendstream\nendobj\n";
+        let pdf =
+            b"%PDF-1.4\n4 0 obj\n<</Length 30>>\nstream\nBT (Test Text) Tj ET\nendstream\nendobj\n";
         let result = ingest_file("book.pdf", pdf);
         assert_eq!(result.format, DocFormat::Pdf);
     }

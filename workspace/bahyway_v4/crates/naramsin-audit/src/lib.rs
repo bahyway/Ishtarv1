@@ -23,10 +23,10 @@ pub enum DestinationModule {
 impl DestinationModule {
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Nanshe      => "NANSHE",
-            Self::Esarhaddon  => "ESARHADDON",
-            Self::Ashnan      => "ASHNAN",
-            Self::Other       => "OTHER",
+            Self::Nanshe => "NANSHE",
+            Self::Esarhaddon => "ESARHADDON",
+            Self::Ashnan => "ASHNAN",
+            Self::Other => "OTHER",
         }
     }
 }

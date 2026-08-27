@@ -9,6 +9,7 @@
   tasks:
     - name: create workspace root
       ansible.builtin.file: {path: "{{ forge_root }}", state: directory, mode: "0755"}
+      check_mode: false
 
     - name: workspace Cargo.toml
       ansible.builtin.copy:
@@ -19,12 +20,25 @@
           members = [{% for c in crates %}"{{ c }}"{{ "," if not loop.last }}{% endfor %}]
           # pure Rust · no runtime Z3 · no CDN · feed contract ws://:9000/position (sealed)
 
+    # 2026-08-23, found live: "Path .../hendursaga-core/Cargo.toml does not
+    # exist!" on the blockinfile task below -- during --check. A command
+    # task that carries `creates:` gets PARTIAL check-mode support from
+    # Ansible: it uses the creates path to predict changed/not-changed
+    # without actually running cargo new, so under --check no crate ever
+    # gets scaffolded and every downstream task that reads a member crate's
+    # Cargo.toml fails. (Revises this repo's earlier working assumption
+    # that command/shell tasks always run for real regardless of check
+    # mode -- true only when the task has no creates/removes argument.)
+    # check_mode: false forces a real cargo new even during --check, so
+    # PB-609's check-then-live gate can ever reach this playbook's LIVE
+    # phase.
     - name: member crates
       ansible.builtin.command:
         cmd: "cargo new --lib {{ item }}"
         chdir: "{{ forge_root }}"
         creates: "{{ forge_root }}/{{ item }}/Cargo.toml"
       loop: "{{ crates }}"
+      check_mode: false
 
     - name: pin the sovereign dependency set (gnss/imu/ekf/serve)
       ansible.builtin.blockinfile:

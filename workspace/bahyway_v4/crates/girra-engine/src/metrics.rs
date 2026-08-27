@@ -67,7 +67,10 @@ impl Registry {
     }
 
     pub fn latest(&self, name: &str) -> Option<f64> {
-        self.series.get(name).and_then(|s| s.last()).map(|s| s.value)
+        self.series
+            .get(name)
+            .and_then(|s| s.last())
+            .map(|s| s.value)
     }
 }
 
@@ -77,18 +80,78 @@ impl Registry {
 /// vitals.
 pub fn gauge_laws() -> Vec<(&'static str, &'static str, Thresholds)> {
     vec![
-        ("ingest_pps", "Ingest particles/sec", Thresholds { amber: 1.0e9, red: 1.0e8, high_is_bad: false }),
-        ("cqrs_lag_ms", "CQRS lag (ms)", Thresholds { amber: 100.0, red: 1000.0, high_is_bad: true }),
-        ("quarantine_ratio", "Quarantine ratio", Thresholds { amber: 0.02, red: 0.10, high_is_bad: true }),
+        (
+            "ingest_pps",
+            "Ingest particles/sec",
+            Thresholds {
+                amber: 1.0e9,
+                red: 1.0e8,
+                high_is_bad: false,
+            },
+        ),
+        (
+            "cqrs_lag_ms",
+            "CQRS lag (ms)",
+            Thresholds {
+                amber: 100.0,
+                red: 1000.0,
+                high_is_bad: true,
+            },
+        ),
+        (
+            "quarantine_ratio",
+            "Quarantine ratio",
+            Thresholds {
+                amber: 0.02,
+                red: 0.10,
+                high_is_bad: true,
+            },
+        ),
         (
             "projection_fidelity",
             "Projection fidelity",
-            Thresholds { amber: 0.85, red: 0.60, high_is_bad: false },
+            Thresholds {
+                amber: 0.85,
+                red: 0.60,
+                high_is_bad: false,
+            },
         ),
-        ("anomaly_rate", "Anomaly rate (>3sigma)", Thresholds { amber: 0.005, red: 0.03, high_is_bad: true }),
-        ("cluster_churn", "Cluster churn", Thresholds { amber: 0.01, red: 0.05, high_is_bad: true }),
-        ("host_cpu", "Host CPU load", Thresholds { amber: 0.75, red: 0.90, high_is_bad: true }),
-        ("host_mem", "Host memory used", Thresholds { amber: 0.80, red: 0.95, high_is_bad: true }),
+        (
+            "anomaly_rate",
+            "Anomaly rate (>3sigma)",
+            Thresholds {
+                amber: 0.005,
+                red: 0.03,
+                high_is_bad: true,
+            },
+        ),
+        (
+            "cluster_churn",
+            "Cluster churn",
+            Thresholds {
+                amber: 0.01,
+                red: 0.05,
+                high_is_bad: true,
+            },
+        ),
+        (
+            "host_cpu",
+            "Host CPU load",
+            Thresholds {
+                amber: 0.75,
+                red: 0.90,
+                high_is_bad: true,
+            },
+        ),
+        (
+            "host_mem",
+            "Host memory used",
+            Thresholds {
+                amber: 0.80,
+                red: 0.95,
+                high_is_bad: true,
+            },
+        ),
     ]
 }
 
@@ -98,7 +161,11 @@ mod tests {
 
     #[test]
     fn band_for_high_is_bad_metric() {
-        let t = Thresholds { amber: 100.0, red: 1000.0, high_is_bad: true };
+        let t = Thresholds {
+            amber: 100.0,
+            red: 1000.0,
+            high_is_bad: true,
+        };
         assert_eq!(t.band(10.0), Band::Green);
         assert_eq!(t.band(150.0), Band::Amber);
         assert_eq!(t.band(1500.0), Band::Red);
@@ -106,7 +173,11 @@ mod tests {
 
     #[test]
     fn band_for_low_is_bad_metric() {
-        let t = Thresholds { amber: 0.85, red: 0.60, high_is_bad: false };
+        let t = Thresholds {
+            amber: 0.85,
+            red: 0.60,
+            high_is_bad: false,
+        };
         assert_eq!(t.band(0.99), Band::Green);
         assert_eq!(t.band(0.70), Band::Amber);
         assert_eq!(t.band(0.30), Band::Red);

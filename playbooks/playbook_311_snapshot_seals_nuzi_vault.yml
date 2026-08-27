@@ -3,9 +3,59 @@
 # Ledger sealed AT WATERMARK (never a naive fs instant); EnkiDW at post-ETL
 # quiescence; EnkiQDB quarantine sealed ON EVERY ADMISSION, custody in lineage,
 # EXEMPT from pruning while any PARZU investigation is open (flag dir non-empty).
+#
+# PREREQUISITE THIS PLAYBOOK CANNOT SATISFY ON ITS OWN (2026-08-23, found
+# live): "LVM snapshot of ledger LV" needs {{ ledger_lv }}'s volume group
+# ({{ host_vg }}, bahyvg) to already exist. Same gap as PB-320 — see that
+# playbook's header for the full explanation. Only PB-319 creates the VG,
+# gated behind an explicit `-e confirm_pv=true` the Architect must supply
+# after verifying host_pv is free; PB-609's unattended walk never passes
+# that flag by design. Intentional CSR-08-class human gate, not a bug.
+#
+# 2026-08-24, found live: "Volume group 'bahyvg' not found" -- this whole
+# play targeted hosts: uruk-node-write (the guest VM), but bahyvg only
+# exists on uruk (the hypervisor host); a guest only ever sees /dev/vdb
+# as a plain virtio block device, with zero visibility into the host's
+# LVM. Every real task here (lvcreate/lvremove on {{ host_vg }}, the SSH
+# shipping via {{ ship_user }}@{{ ship_target_host }}, {{ signing_key }})
+# is a host-level operation -- same class of guest-vs-host hosts:
+# mistargeting already found and fixed across PB-312 and the PB-432-530
+# batch this session. Retargeted to hosts: uruk. (The Freeze/Thaw
+# enkidb-quiesce calls are conceptually guest-side once that tool
+# actually exists -- it doesn't yet, "TODO native tool", already
+# tolerated via failed_when: false -- so this doesn't make them any
+# less functional than they already were; revisit with delegate_to or a
+# split play once enkidb-quiesce is real.)
 - name: PB-311 | Snapshot seals and NUZI vault
-  hosts: write_node
+  hosts: uruk
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
+  vars:
+    # 2026-08-24, found live (via PB-310's identical issue): plain ssh
+    # calls to a first-time host (no known_hosts entry yet for
+    # uruk-node-vault) hang forever on an interactive host-key prompt
+    # that a non-interactive Ansible run can never answer -- a real
+    # hang, not a slow step, and a violation of this Ecosystem's own
+    # zero-prompt-automation doctrine. accept-new (not =no) still fails
+    # loudly if a host key later CHANGES (compromise signal); it only
+    # skips the prompt on a genuinely first-time connection.
+    ssh_opts: "-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
+    # 2026-08-24, found live (third attempt): "Couldn't load public key
+    # /root/.bahyway/keys/zagesi_ed25519: No such file or directory"
+    # persisted even after delegate_to correctly generated the key ON
+    # the vault host -- because /root is mode 0700, and the ssh-keygen
+    # -Y sign command below runs as lahamu (ssh lahamu@...), which has
+    # zero access to ANYTHING under /root regardless of what's inside
+    # it. ssh-keygen reports blocked-by-directory-permissions as "No
+    # such file or directory" rather than "Permission denied" (common
+    # practice to avoid confirming a restricted path exists), which is
+    # why this looked identical to the earlier "key doesn't exist" bug.
+    # {{ signing_key }} (/root/.bahyway/...) stays untouched for PB-316's
+    # own use, which signs locally on uruk as root -- no access problem
+    # there. This is a SEPARATE key, in lahamu's own home dir, that only
+    # this playbook's vault-side signing/verification actually needs.
+    vault_signing_key: "/home/{{ ship_user }}/.bahyway/keys/zagesi_ed25519"
   tasks:
     - name: Freeze at watermark (quiesce ledger appends briefly)
       ansible.builtin.command: /usr/local/bin/enkidb-quiesce --begin   # TODO native tool
@@ -20,40 +70,166 @@
       ansible.builtin.command: /usr/local/bin/enkidb-quiesce --end
       failed_when: false
 
+    # 2026-08-24, found live: "ssh: Could not resolve hostname
+    # uruk-node-vault: Name or service not known" (same root cause as
+    # PB-310's identical fix). ansible_host=192.168.122.113 (ansible/
+    # inventory.ini) is known to Ansible for its OWN ssh connections,
+    # but never reaches this host's OS-level /etc/hosts -- the shell
+    # task below's embedded `ssh`/`dd` pipeline runs through uruk's own
+    # resolver, which has nothing for the libvirt VM network.
+    - name: "Ensure {{ ship_target_host }} resolves (host has no DNS for the libvirt VM network)"
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '\s{{ ship_target_host }}$'
+        line: "{{ hostvars[groups['enkidb_vault'][0]].ansible_host }} {{ ship_target_host }}"
+
+    # 2026-08-24, found live: "Permission denied (publickey,gssapi-keyex,
+    # gssapi-with-mic)" -- lahamu was only ever created (nologin,
+    # no-home) on uruk; nothing ever created it on uruk-node-vault, and
+    # no key was ever trusted. See this task file's own header for the
+    # full explanation -- shared with PB-310, which has the identical
+    # problem shipping from a different source host.
+    - name: "Ensure SSH trust to {{ ship_target_host }} before attempting to ship"
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/tasks/ensure_ship_target_trust.yml"
+
+    # 2026-08-24, found live: "bash: line 1: /nuzivault/enkidb/
+    # ledger_seal_....img.zst: No such file or directory" -- the first
+    # ssh (dd | zstd | ssh "cat > ...") silently couldn't write into
+    # /nuzivault/enkidb either, since that directory never existed;
+    # the failure only surfaced clearly on the SECOND ssh call
+    # (ssh-keygen -Y sign), which expects the file the first call was
+    # supposed to have created. vault_datasets already names every
+    # dataset this vault is meant to hold -- create all of them, not
+    # just enkidb, so the Quarantine/Retention/GATE tasks below (which
+    # reference enkiqdb/enkidw/enkisdb too) don't hit the identical gap.
+    - name: "Ensure the vault dataset directories exist on {{ ship_target_host }}"
+      ansible.builtin.file:
+        path: "{{ vault_mount }}/{{ item }}"
+        state: directory
+        owner: "{{ ship_user }}"
+        mode: "0750"
+      loop: "{{ vault_datasets }}"
+      delegate_to: "{{ ship_target_host }}"
+
+    - name: "Ensure {{ vault_signing_key | dirname }} exists on {{ ship_target_host }}, owned by {{ ship_user }}"
+      ansible.builtin.file:
+        path: "{{ vault_signing_key | dirname }}"
+        state: directory
+        owner: "{{ ship_user }}"
+        mode: "0700"
+      delegate_to: "{{ ship_target_host }}"
+
+    # 2026-08-24, found live: "Failed to set permissions on the temporary
+    # files Ansible needs to create when becoming an unprivileged user
+    # (chmod: invalid mode: 'A+user:lahamu:rx:allow')" -- become_user:
+    # lahamu made Ansible try its own internal file-permission dance for
+    # switching from root to an unprivileged user, which attempted a
+    # Solaris/BSD-style NFSv4 ACL chmod syntax Fedora's GNU chmod doesn't
+    # understand. This is a known Ansible fragility around become-to-
+    # unprivileged-user, unrelated to this repo's own infra. Simplest
+    # robust fix: generate the key as root (which root can always do
+    # without any user-switching), then chown it afterward -- root
+    # changing file ownership needs none of that machinery.
+    - name: "Ensure the vault-side signing keypair exists on {{ ship_target_host }}"
+      ansible.builtin.command: ssh-keygen -t ed25519 -N "" -f {{ vault_signing_key }}
+      args: { creates: "{{ vault_signing_key }}" }
+      delegate_to: "{{ ship_target_host }}"
+      check_mode: false
+
+    - name: "Ensure the vault-side signing keypair is owned by {{ ship_user }} (it must be readable by the account that actually signs with it)"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ ship_user }}"
+        mode: "0600"
+      loop:
+        - "{{ vault_signing_key }}"
+        - "{{ vault_signing_key }}.pub"
+      delegate_to: "{{ ship_target_host }}"
+
+    # 2026-08-24, found live: GATE's "ssh-keygen -Y verify" reported
+    # "Could not verify signature." even though the sign step just
+    # above it succeeded. Root cause: `-Y verify -f FILE` expects FILE
+    # to be an "allowed signers" file (format: "<principal> <keytype>
+    # <base64key>"), NOT a raw .pub file -- the raw .pub content
+    # (`ssh-ed25519 AAAA... comment`) has no principal column, so
+    # ssh-keygen can never match it against -I bahyway. Sign doesn't
+    # need this format (it just uses the raw private key directly),
+    # which is why sign worked but verify never could. Build the
+    # correctly-formatted file once here rather than reformat inline
+    # in the GATE task's own embedded script.
+    - name: "Read the vault-side signing public key"
+      ansible.builtin.slurp:
+        src: "{{ vault_signing_key }}.pub"
+      register: vault_pubkey
+      delegate_to: "{{ ship_target_host }}"
+
+    - name: "Build the allowed-signers file GATE's -Y verify actually needs"
+      ansible.builtin.copy:
+        dest: "{{ vault_signing_key }}.allowed_signers"
+        content: "bahyway {{ vault_pubkey.content | b64decode | trim }}\n"
+        owner: "{{ ship_user }}"
+        mode: "0600"
+      delegate_to: "{{ ship_target_host }}"
+
     - name: Ship seal to vault dataset and sign (Ed25519)
       ansible.builtin.shell: |
         set -euo pipefail
         SEAL=$(ls /dev/{{ host_vg }}/ledger_seal_* | tail -n1)
         NAME=$(basename $SEAL).img.zst
         dd if=$SEAL bs=4M | zstd -3 | \
-          ssh {{ ship_user }}@{{ ship_target_host }} "cat > {{ vault_mount }}/enkidb/$NAME"
-        ssh {{ ship_user }}@{{ ship_target_host }} \
-          "ssh-keygen -Y sign -f {{ signing_key }} -n bahyway-seal {{ vault_mount }}/enkidb/$NAME"
+          ssh {{ ssh_opts }} {{ ship_user }}@{{ ship_target_host }} "cat > {{ vault_mount }}/enkidb/$NAME"
+        ssh {{ ssh_opts }} {{ ship_user }}@{{ ship_target_host }} \
+          "ssh-keygen -Y sign -f {{ vault_signing_key }} -n bahyway-seal {{ vault_mount }}/enkidb/$NAME"
         lvremove -y $SEAL
 
     - name: Quarantine admission seal (EnkiQDB) — custody lineage, prune-exempt while open
       ansible.builtin.shell: |
-        OPEN=$(ssh {{ ship_user }}@{{ ship_target_host }} \
+        OPEN=$(ssh {{ ssh_opts }} {{ ship_user }}@{{ ship_target_host }} \
           "ls {{ vault_mount }}/enkiqdb/OPEN_PARZU 2>/dev/null | wc -l")
         echo "open PARZU investigations: $OPEN (prune exempt while > 0)"
       changed_when: false
 
     - name: Retention prune (respecting exemptions)
       ansible.builtin.shell: |
-        ssh {{ ship_user }}@{{ ship_target_host }} '
+        ssh {{ ssh_opts }} {{ ship_user }}@{{ ship_target_host }} '
           find {{ vault_mount }}/enkidw  -name "*.img.zst" -mtime +{{ retention_days.dw }} -delete
           find {{ vault_mount }}/enkisdb -name "*.img.zst" -mtime +{{ retention_days.staging }} -delete
           # enkiqdb: NEVER auto-pruned here — quarantine custody rule'
 
+    # 2026-08-24, found live: GATE (below) picks the NEWEST *and* OLDEST
+    # /nuzivault/enkidb/*.img.zst and verifies both. It failed with
+    # "Couldn't read signature file: No such file or directory" -- not on
+    # the seal this run just shipped (that one verified fine, "Good
+    # signature"), but on the OLDEST file in the dataset: a leftover
+    # .img.zst shipped by an earlier, interrupted run of this same
+    # playbook from earlier today, back when the sign step was still
+    # broken (missing key / become_user ACL crash, fixed above). The ship
+    # and sign steps are two separate ssh calls (line ~174), so a run
+    # that shipped the bytes but died before signing leaves a real
+    # .img.zst with no .sig next to it -- an incomplete seal, not a
+    # verification bug. An unsigned "seal" was never actually sealed, so
+    # it doesn't belong in the vault at all; self-heal by pruning any
+    # .img.zst lacking its .sig before GATE ever looks at the dataset,
+    # so this can't reaccumulate from a future interrupted run either.
+    - name: "Prune incomplete seals (shipped but never signed, e.g. from an earlier interrupted run)"
+      ansible.builtin.shell: |
+        ssh {{ ssh_opts }} {{ ship_user }}@{{ ship_target_host }} '
+          find {{ vault_mount }}/enkidb -maxdepth 1 -name "*.img.zst" | while read -r f; do
+            [ -e "$f.sig" ] || rm -fv "$f"
+          done'
+      register: pruned_incomplete
+      changed_when: "'removed' in pruned_incomplete.stdout"
+
     - name: GATE | verify newest + oldest retained seals, incl. oldest open-custody quarantine seal
       ansible.builtin.shell: |
-        ssh {{ ship_user }}@{{ ship_target_host }} '
+        ssh {{ ssh_opts }} {{ ship_user }}@{{ ship_target_host }} '
           for f in $(ls -t {{ vault_mount }}/enkidb/*.img.zst | sed -n "1p;\$p"); do
-            ssh-keygen -Y verify -f {{ signing_key }}.pub -I bahyway -n bahyway-seal \
+            ssh-keygen -Y verify -f {{ vault_signing_key }}.allowed_signers -I bahyway -n bahyway-seal \
               -s $f.sig < $f || exit 1; done'
       changed_when: false
 
     - name: Run-KAKI
       ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
         PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
         echo "{\"pb\":\"PB-311\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"seals-verified\"}" >> {{ kaki_runs }}

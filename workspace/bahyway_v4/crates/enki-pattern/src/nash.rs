@@ -19,14 +19,23 @@ pub struct NashState {
 
 impl NashState {
     pub fn stable(orbital: u64) -> Self {
-        Self { equilibrium_score: 0.0, anarchy_score: 0.0, deviation_count: 0, computed_at_orbital: orbital }
+        Self {
+            equilibrium_score: 0.0,
+            anarchy_score: 0.0,
+            deviation_count: 0,
+            computed_at_orbital: orbital,
+        }
     }
 
     /// True if equilibrium is breaking (score > 0.85 triggers SA-001 anomaly).
-    pub fn is_breaking(&self) -> bool { self.equilibrium_score > 0.85 }
+    pub fn is_breaking(&self) -> bool {
+        self.equilibrium_score > 0.85
+    }
 
     /// True if the pattern is fully stable (score < 0.05).
-    pub fn is_stable(&self) -> bool { self.equilibrium_score < 0.05 }
+    pub fn is_stable(&self) -> bool {
+        self.equilibrium_score < 0.05
+    }
 
     /// TiamatLevel as u8: 0=GREEN, 1=DILBAT, 2=KAKKAB, 3=NERGAL, 4=MAROON.
     pub fn tiamat_level(&self) -> u8 {
@@ -35,7 +44,7 @@ impl NashState {
             s if s < 0.40 => 1, // DILBAT
             s if s < 0.60 => 2, // KAKKAB
             s if s < 0.85 => 3, // NERGAL
-            _             => 4, // MAROON
+            _ => 4,             // MAROON
         }
     }
 }

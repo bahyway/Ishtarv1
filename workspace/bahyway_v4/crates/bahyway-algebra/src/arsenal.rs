@@ -77,8 +77,8 @@ pub mod simplicial {
 /// generalized eigenvectors for defective n×n matrices) — nothing in
 /// the workspace computes that; said plainly rather than implied.
 pub mod eigen {
-    pub use ea_agent_algebra::matrix::{Eigenvalue, SovereignMatrix};
     pub use ea_agent_algebra::jordan::{JordanAnalyzer, JordanResult, StabilityState};
+    pub use ea_agent_algebra::matrix::{Eigenvalue, SovereignMatrix};
 }
 
 /// ## Jordan Normal Form, symmetric case (Part I) — `ea-agent-algebra::jnf`
@@ -99,8 +99,8 @@ pub mod differential_geometry {
 
 /// ## Shannon Entropy / KL Divergence (Part V, Layer 7) — `vgca-engine`
 pub mod information_theory {
-    pub use vgca_engine::{shannon_entropy, is_arabic_char};
     pub use vgca_engine::kl_divergence::{kl_divergence, normalize, KL_EPSILON};
+    pub use vgca_engine::{is_arabic_char, shannon_entropy};
 }
 
 /// ## Directed Graph / PageRank / Betweenness Centrality / SCC
@@ -139,9 +139,9 @@ pub mod pauli_monitor {
 /// uses.
 pub mod vgca_validation {
     pub use vgca_validation::vgca::{
-        BlockFeatureVector, ColumnGeometryDescriptor, CorruptionClass, FieldSignatureVector,
-        GeometricFit, InferredColumnType, VgcaBlockResult, VgcaTextResult,
-        geometric_fit, infer_column_type, vgca_delta, vgca_score,
+        geometric_fit, infer_column_type, vgca_delta, vgca_score, BlockFeatureVector,
+        ColumnGeometryDescriptor, CorruptionClass, FieldSignatureVector, GeometricFit,
+        InferredColumnType, VgcaBlockResult, VgcaTextResult,
     };
 }
 
@@ -209,7 +209,10 @@ mod tests {
         let r = 2.0;
         let m = differential_geometry::RiemannianManifold::new(2, move |x: &[f64]| {
             let theta = x[0];
-            vec![vec![r * r, 0.0], vec![0.0, r * r * theta.sin() * theta.sin()]]
+            vec![
+                vec![r * r, 0.0],
+                vec![0.0, r * r * theta.sin() * theta.sin()],
+            ]
         });
         let k = m.gaussian_curvature_2d(&[std::f64::consts::FRAC_PI_2, 0.7]);
         assert!((k - 1.0 / (r * r)).abs() < 1e-2);
@@ -249,6 +252,9 @@ mod tests {
         // Zero distance from the centroid must classify as Clean.
         let score = vgca_validation::vgca_score(0.0, 1.0);
         assert_eq!(score, 1.0);
-        assert_eq!(vgca_validation::geometric_fit(score), vgca_validation::GeometricFit::Clean);
+        assert_eq!(
+            vgca_validation::geometric_fit(score),
+            vgca_validation::GeometricFit::Clean
+        );
     }
 }

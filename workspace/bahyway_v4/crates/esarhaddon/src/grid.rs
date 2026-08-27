@@ -23,9 +23,9 @@ impl ZoneClass {
     /// Derive zone class from SMI EAV state.
     pub fn from_smi_state(state: SmiState) -> Self {
         match state {
-            SmiState::Golden       => Self::Green,
-            SmiState::Fuzzy        => Self::Amber,
-            SmiState::Dead         => Self::Red,
+            SmiState::Golden => Self::Green,
+            SmiState::Fuzzy => Self::Amber,
+            SmiState::Dead => Self::Red,
             SmiState::DeadCritical => Self::Black,
         }
     }

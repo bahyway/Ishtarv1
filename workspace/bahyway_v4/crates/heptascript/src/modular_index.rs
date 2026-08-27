@@ -73,7 +73,7 @@ pub const MAX_BUCKETS: usize = 512;
 
 /// Divisor-sum function σ₁(n) = sum of all positive divisors of n.
 fn sigma1(n: u32) -> u32 {
-    (1..=n).filter(|&d| n % d == 0).sum()
+    (1..=n).filter(|&d| n.is_multiple_of(d)).sum()
 }
 
 /// E₂-inspired Fourier cosine coefficient at heptagram sector k.
@@ -120,14 +120,14 @@ fn e2_sector_cosine(k: u8, n_terms: u32) -> f64 {
 pub struct E2FourierWeights {
     weights: [f32; 7],
     /// Raw (un-normalised) cosine sums before mapping to [LOW, HIGH].
-    raw:     [f64; 7],
+    raw: [f64; 7],
 }
 
 impl E2FourierWeights {
     /// Lower bound of the weight interval — most elevated (highest routing priority).
-    pub const LOW:     f32 = 0.80;
+    pub const LOW: f32 = 0.80;
     /// Upper bound — neutral routing cost.
-    pub const HIGH:    f32 = 1.00;
+    pub const HIGH: f32 = 1.00;
     /// Number of Fourier terms — 100 gives < 10⁻⁴ residual error.
     pub const N_TERMS: u32 = 100;
 
@@ -163,7 +163,9 @@ impl E2FourierWeights {
     }
 
     /// All 7 weights [w₀..w₆].
-    pub fn all(&self) -> &[f32; 7] { &self.weights }
+    pub fn all(&self) -> &[f32; 7] {
+        &self.weights
+    }
 
     /// Raw (un-normalised) Fourier cosine sum for sector k.
     pub fn raw_cosine(&self, k: u8) -> f64 {
@@ -172,7 +174,9 @@ impl E2FourierWeights {
 
     /// Index of the sector with the lowest weight (highest routing priority).
     pub fn most_elevated(&self) -> u8 {
-        self.weights.iter().enumerate()
+        self.weights
+            .iter()
+            .enumerate()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal))
             .map(|(i, _)| i as u8)
             .unwrap_or(0)
@@ -180,7 +184,9 @@ impl E2FourierWeights {
 
     /// Index of the sector with the highest weight (most neutral cost).
     pub fn most_neutral(&self) -> u8 {
-        self.weights.iter().enumerate()
+        self.weights
+            .iter()
+            .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal))
             .map(|(i, _)| i as u8)
             .unwrap_or(0)
@@ -201,7 +207,9 @@ impl E2FourierWeights {
     /// True if the two symmetric sectors (k and 7-k) have the same weight
     /// (within floating-point tolerance). Always true for k ∈ {1,2,3}.
     pub fn are_symmetric(&self, k: u8) -> bool {
-        if k == 0 { return true; } // only one sector at k=0
+        if k == 0 {
+            return true;
+        } // only one sector at k=0
         let mirror = 7u8.wrapping_sub(k) % 7;
         (self.weight(k) - self.weight(mirror)).abs() < 1e-4
     }
@@ -213,24 +221,32 @@ impl E2FourierWeights {
 mod e2_tests {
     use super::*;
 
-    fn weights() -> E2FourierWeights { E2FourierWeights::compute() }
+    fn weights() -> E2FourierWeights {
+        E2FourierWeights::compute()
+    }
 
     // ── sigma1 arithmetic ─────────────────────────────────────────────────────
 
     #[test]
-    fn sigma1_of_1_is_1()  { assert_eq!(sigma1(1), 1); }
-
-    #[test]
-    fn sigma1_of_6_is_12() { assert_eq!(sigma1(6), 1+2+3+6); }
-
-    #[test]
-    fn sigma1_of_prime_is_p_plus_1() {
-        assert_eq!(sigma1(7),  1 + 7);   // prime
-        assert_eq!(sigma1(11), 1 + 11);  // prime
+    fn sigma1_of_1_is_1() {
+        assert_eq!(sigma1(1), 1);
     }
 
     #[test]
-    fn sigma1_of_4_is_7() { assert_eq!(sigma1(4), 1+2+4); }
+    fn sigma1_of_6_is_12() {
+        assert_eq!(sigma1(6), 1 + 2 + 3 + 6);
+    }
+
+    #[test]
+    fn sigma1_of_prime_is_p_plus_1() {
+        assert_eq!(sigma1(7), 1 + 7); // prime
+        assert_eq!(sigma1(11), 1 + 11); // prime
+    }
+
+    #[test]
+    fn sigma1_of_4_is_7() {
+        assert_eq!(sigma1(4), 1 + 2 + 4);
+    }
 
     // ── Raw cosine ordering ───────────────────────────────────────────────────
 
@@ -239,8 +255,12 @@ mod e2_tests {
         let w = weights();
         let r0 = w.raw_cosine(0);
         for k in 1u8..7 {
-            assert!(r0 >= w.raw_cosine(k),
-                "C(0) must dominate C({k}): {} vs {}", r0, w.raw_cosine(k));
+            assert!(
+                r0 >= w.raw_cosine(k),
+                "C(0) must dominate C({k}): {} vs {}",
+                r0,
+                w.raw_cosine(k)
+            );
         }
     }
 
@@ -249,14 +269,22 @@ mod e2_tests {
         // cos(4π/7) ≈ −0.2225 is the most-negative n=1 cosine term.
         // Summed over N terms with σ₁(n)/n weights, k=2 and k=5 produce
         // the minimum (most negative) raw cosine sums.
-        let w   = weights();
-        let r2  = w.raw_cosine(2);
-        let r5  = w.raw_cosine(5);
+        let w = weights();
+        let r2 = w.raw_cosine(2);
+        let r5 = w.raw_cosine(5);
         for k in [0u8, 1, 3, 4, 6] {
-            assert!(w.raw_cosine(k) >= r2,
-                "C({k}) must be >= C(2): {} vs {}", w.raw_cosine(k), r2);
-            assert!(w.raw_cosine(k) >= r5,
-                "C({k}) must be >= C(5): {} vs {}", w.raw_cosine(k), r5);
+            assert!(
+                w.raw_cosine(k) >= r2,
+                "C({k}) must be >= C(2): {} vs {}",
+                w.raw_cosine(k),
+                r2
+            );
+            assert!(
+                w.raw_cosine(k) >= r5,
+                "C({k}) must be >= C(5): {} vs {}",
+                w.raw_cosine(k),
+                r5
+            );
         }
     }
 
@@ -270,7 +298,8 @@ mod e2_tests {
             assert!(
                 wk >= E2FourierWeights::LOW - 1e-5 && wk <= E2FourierWeights::HIGH + 1e-5,
                 "weight({k}) = {wk} out of [{}, {}]",
-                E2FourierWeights::LOW, E2FourierWeights::HIGH
+                E2FourierWeights::LOW,
+                E2FourierWeights::HIGH
             );
         }
     }
@@ -281,7 +310,8 @@ mod e2_tests {
         let w = weights();
         assert!(
             (w.weight(0) - E2FourierWeights::HIGH).abs() < 1e-3,
-            "Entrance (k=0) must be HIGH (neutral ≈ 1.00), got {}", w.weight(0)
+            "Entrance (k=0) must be HIGH (neutral ≈ 1.00), got {}",
+            w.weight(0)
         );
     }
 
@@ -290,7 +320,7 @@ mod e2_tests {
         // C(2)=C(5) produce the minimum raw cosine sum → lowest weight (most elevated).
         // Awliya (k=2) and Ulamaa (k=5) sit at cos(4π/7) < 0 — the most
         // harmonically distant positions from the Entrance DC component.
-        let w    = weights();
+        let w = weights();
         let peak = w.most_elevated();
         assert!(
             peak == 2 || peak == 5,
@@ -308,15 +338,27 @@ mod e2_tests {
     #[test]
     fn at_least_one_weight_equals_low() {
         let w = weights();
-        let has_low = w.all().iter().any(|&wk| (wk - E2FourierWeights::LOW).abs() < 1e-4);
-        assert!(has_low, "After normalisation, at least one weight must equal LOW");
+        let has_low = w
+            .all()
+            .iter()
+            .any(|&wk| (wk - E2FourierWeights::LOW).abs() < 1e-4);
+        assert!(
+            has_low,
+            "After normalisation, at least one weight must equal LOW"
+        );
     }
 
     #[test]
     fn at_least_one_weight_equals_high() {
         let w = weights();
-        let has_high = w.all().iter().any(|&wk| (wk - E2FourierWeights::HIGH).abs() < 1e-4);
-        assert!(has_high, "After normalisation, at least one weight must equal HIGH");
+        let has_high = w
+            .all()
+            .iter()
+            .any(|&wk| (wk - E2FourierWeights::HIGH).abs() < 1e-4);
+        assert!(
+            has_high,
+            "After normalisation, at least one weight must equal HIGH"
+        );
     }
 
     // ── Cosine symmetry of the 7th-root lattice ───────────────────────────────
@@ -327,7 +369,8 @@ mod e2_tests {
         assert!(
             (w.weight(1) - w.weight(6)).abs() < 1e-4,
             "Shuhadaa(1) and Anbiya(6) must be symmetric: {} vs {}",
-            w.weight(1), w.weight(6)
+            w.weight(1),
+            w.weight(6)
         );
     }
 
@@ -337,7 +380,8 @@ mod e2_tests {
         assert!(
             (w.weight(2) - w.weight(5)).abs() < 1e-4,
             "Awliya(2) and Ulamaa(5) must be symmetric: {} vs {}",
-            w.weight(2), w.weight(5)
+            w.weight(2),
+            w.weight(5)
         );
     }
 
@@ -347,7 +391,8 @@ mod e2_tests {
         assert!(
             (w.weight(3) - w.weight(4)).abs() < 1e-4,
             "Huffaz(3) and Momineen(4) must be symmetric: {} vs {}",
-            w.weight(3), w.weight(4)
+            w.weight(3),
+            w.weight(4)
         );
     }
 
@@ -383,7 +428,8 @@ mod e2_tests {
         assert!(
             w.weight(2) < w.weight(3),
             "Awliya(2) must be more elevated than Huffaz(3): {} vs {}",
-            w.weight(2), w.weight(3)
+            w.weight(2),
+            w.weight(3)
         );
     }
 
@@ -394,7 +440,8 @@ mod e2_tests {
         assert!(
             w.weight(3) < w.weight(1),
             "Huffaz(3) must be more elevated than Shuhadaa(1): {} vs {}",
-            w.weight(3), w.weight(1)
+            w.weight(3),
+            w.weight(1)
         );
     }
 
@@ -420,7 +467,10 @@ mod e2_tests {
         // Canonical Entrance = 1.00 = HIGH; Fourier w(0) = 1.00 exactly.
         let w = weights();
         let d = w.delta_vs_canonical(0, 1.00);
-        assert!(d.abs() < 1e-3, "Entrance delta vs canonical 1.00 should be ~0, got {d}");
+        assert!(
+            d.abs() < 1e-3,
+            "Entrance delta vs canonical 1.00 should be ~0, got {d}"
+        );
     }
 
     #[test]
@@ -428,10 +478,13 @@ mod e2_tests {
         // Canonical Shuhadaa = 0.85; Fourier w(1) ≈ 0.804.
         // The Fourier derivation gives Shuhadaa HIGHER priority (lower cost) than
         // the hand-chosen weight, because outer sectors cluster near LOW.
-        let w  = weights();
+        let w = weights();
         let wk = w.weight(1);
         // Fourier weight is below the canonical 0.85 — math gives higher elevation
-        assert!(wk < 0.85, "Fourier Shuhadaa ({wk:.4}) should be below canonical 0.85");
+        assert!(
+            wk < 0.85,
+            "Fourier Shuhadaa ({wk:.4}) should be below canonical 0.85"
+        );
     }
 
     // ── Out-of-range ──────────────────────────────────────────────────────────
@@ -439,7 +492,7 @@ mod e2_tests {
     #[test]
     fn out_of_range_sector_returns_high() {
         let w = weights();
-        assert_eq!(w.weight(7),  E2FourierWeights::HIGH);
+        assert_eq!(w.weight(7), E2FourierWeights::HIGH);
         assert_eq!(w.weight(99), E2FourierWeights::HIGH);
     }
 
@@ -451,16 +504,21 @@ mod e2_tests {
         // Tolerance 0.005 gives ~2× margin while confirming convergence.
         let w100 = E2FourierWeights::compute();
         let mut raw200 = [0.0f64; 7];
-        for k in 0..7u8 { raw200[k as usize] = e2_sector_cosine(k, 200); }
-        let min  = raw200.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max  = raw200.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        for k in 0..7u8 {
+            raw200[k as usize] = e2_sector_cosine(k, 200);
+        }
+        let min = raw200.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = raw200.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let span = max - min;
         let range = (E2FourierWeights::HIGH - E2FourierWeights::LOW) as f64;
         for k in 0..7usize {
             // Use the same normalisation formula as the implementation (LOW + ...)
             let w200 = (E2FourierWeights::LOW as f64 + (raw200[k] - min) / span * range) as f32;
             let diff = (w100.weight(k as u8) - w200).abs();
-            assert!(diff < 0.005, "100 vs 200 terms: sector {k} diff = {diff:.6}");
+            assert!(
+                diff < 0.005,
+                "100 vs 200 terms: sector {k} diff = {diff:.6}"
+            );
         }
     }
 }
@@ -470,10 +528,10 @@ mod e2_tests {
 /// Modular weight for each chord type.
 pub fn chord_weight(chord: HeptaChordType) -> i8 {
     match chord {
-        HeptaChordType::Spoke    => -1,
-        HeptaChordType::Rim      =>  0,
-        HeptaChordType::Local    =>  1,
-        HeptaChordType::Diagonal =>  2,
+        HeptaChordType::Spoke => -1,
+        HeptaChordType::Rim => 0,
+        HeptaChordType::Local => 1,
+        HeptaChordType::Diagonal => 2,
     }
 }
 
@@ -481,9 +539,9 @@ pub fn chord_weight(chord: HeptaChordType) -> i8 {
 pub fn weight_chord(weight: i8) -> HeptaChordType {
     match weight {
         -1 => HeptaChordType::Spoke,
-         0 => HeptaChordType::Rim,
-         1 => HeptaChordType::Local,
-         _ => HeptaChordType::Diagonal,
+        0 => HeptaChordType::Rim,
+        1 => HeptaChordType::Local,
+        _ => HeptaChordType::Diagonal,
     }
 }
 
@@ -494,12 +552,12 @@ pub fn weight_chord(weight: i8) -> HeptaChordType {
 pub struct ModularNaviIndex {
     /// Modular weight — determined by the dominant HeptaChordType.
     /// Spoke=−1, Rim=0, Local=1, Diagonal=2. Ties resolved toward lower weight.
-    pub weight:   i8,
+    pub weight: i8,
     /// Level — NaviGraph node count at index build time.
-    pub level:    u32,
+    pub level: u32,
     /// Fourier coefficients: a(n) = directed edges in cost bucket n.
     /// Only non-trailing-zero entries are stored.
-    pub coeffs:   Vec<u32>,
+    pub coeffs: Vec<u32>,
     /// CRC-16/CCITT over the serialized (weight, level, coeffs) — map signature.
     pub checksum: u16,
 }
@@ -530,16 +588,12 @@ impl ModularNaviIndex {
     /// Structural routing equivalence: same weight, level, and checksum.
     /// Two maps passing this check share their optimal path topology.
     pub fn is_equivalent(&self, other: &Self) -> bool {
-        self.weight == other.weight
-            && self.level == other.level
-            && self.checksum == other.checksum
+        self.weight == other.weight && self.level == other.level && self.checksum == other.checksum
     }
 
     /// Exact coefficient match — stronger than is_equivalent (immune to CRC collision).
     pub fn coeffs_match(&self, other: &Self) -> bool {
-        self.weight == other.weight
-            && self.level == other.level
-            && self.coeffs == other.coeffs
+        self.weight == other.weight && self.level == other.level && self.coeffs == other.coeffs
     }
 
     /// Sum of all Fourier coefficients = total directed edge count.
@@ -554,7 +608,9 @@ impl ModularNaviIndex {
 
     /// Bucket index n with the highest coefficient a(n).
     pub fn spectral_peak_bucket(&self) -> usize {
-        self.coeffs.iter().enumerate()
+        self.coeffs
+            .iter()
+            .enumerate()
             .max_by_key(|(_, &v)| v)
             .map(|(i, _)| i)
             .unwrap_or(0)
@@ -589,9 +645,13 @@ impl ModularNaviIndex {
     /// Used by NC2 ResonanceSeek in place of the flat tribe-bonus.
     pub fn resonance_score(&self, edge_cost: f32) -> f32 {
         let mass = self.total_mass();
-        if mass == 0 { return 0.0; }
+        if mass == 0 {
+            return 0.0;
+        }
         let peak = self.coeffs.iter().copied().max().unwrap_or(0);
-        if peak == 0 { return 0.0; }
+        if peak == 0 {
+            return 0.0;
+        }
         self.coeff_at_cost(edge_cost) as f32 / peak as f32
     }
 
@@ -605,11 +665,19 @@ impl ModularNaviIndex {
     /// Compact human-readable Fourier representation.
     /// Only non-zero buckets are shown: "θ{w=−1 L=7 a(4)=24}"
     pub fn fourier_repr(&self) -> String {
-        let non_zero: Vec<String> = self.coeffs.iter().enumerate()
+        let non_zero: Vec<String> = self
+            .coeffs
+            .iter()
+            .enumerate()
             .filter(|(_, &v)| v > 0)
             .map(|(i, v)| format!("a({i})={v}"))
             .collect();
-        format!("θ{{w={} L={} {}}}", self.weight, self.level, non_zero.join(" "))
+        format!(
+            "θ{{w={} L={} {}}}",
+            self.weight,
+            self.level,
+            non_zero.join(" ")
+        )
     }
 
     // ── Internal build ────────────────────────────────────────────────────────
@@ -621,25 +689,31 @@ impl ModularNaviIndex {
 
         for e in edges {
             let idx = match e.chord {
-                HeptaChordType::Spoke    => 0,
-                HeptaChordType::Rim      => 1,
-                HeptaChordType::Local    => 2,
+                HeptaChordType::Spoke => 0,
+                HeptaChordType::Rim => 1,
+                HeptaChordType::Local => 2,
                 HeptaChordType::Diagonal => 3,
             };
             chord_counts[idx] += 1;
             let ec = e.effective_cost();
-            if ec.is_finite() && ec > max_cost { max_cost = ec; }
+            if ec.is_finite() && ec > max_cost {
+                max_cost = ec;
+            }
         }
 
         // Dominant chord: highest count; lowest index (weight) wins ties
-        let dominant_idx = chord_counts.iter().enumerate()
-            .rev()                         // start from highest index...
-            .max_by_key(|(_, &c)| c)       // ...so lowest-idx wins ties
+        let dominant_idx = chord_counts
+            .iter()
+            .enumerate()
+            .rev() // start from highest index...
+            .max_by_key(|(_, &c)| c) // ...so lowest-idx wins ties
             .map(|(i, _)| i)
             .unwrap_or(0);
         let dominant = [
-            HeptaChordType::Spoke, HeptaChordType::Rim,
-            HeptaChordType::Local, HeptaChordType::Diagonal,
+            HeptaChordType::Spoke,
+            HeptaChordType::Rim,
+            HeptaChordType::Local,
+            HeptaChordType::Diagonal,
         ][dominant_idx];
         let weight = chord_weight(dominant);
 
@@ -664,7 +738,12 @@ impl ModularNaviIndex {
         }
 
         let checksum = Self::compute_checksum(weight, level, &coeffs);
-        ModularNaviIndex { weight, level, coeffs, checksum }
+        ModularNaviIndex {
+            weight,
+            level,
+            coeffs,
+            checksum,
+        }
     }
 
     fn compute_checksum(weight: i8, level: u32, coeffs: &[u32]) -> u16 {
@@ -691,7 +770,7 @@ fn cost_to_bucket(cost: f32) -> usize {
 /// edges at the spectral peak get `bonus_scale` (max bonus), edges in
 /// empty buckets get 0.0. The bonus is smooth across cost buckets.
 pub struct ResonanceScorerNc2 {
-    index:       ModularNaviIndex,
+    index: ModularNaviIndex,
     bonus_scale: f32,
 }
 
@@ -707,7 +786,9 @@ impl ResonanceScorerNc2 {
         self.index.resonance_score(edge_cost) * self.bonus_scale
     }
 
-    pub fn index(&self) -> &ModularNaviIndex { &self.index }
+    pub fn index(&self) -> &ModularNaviIndex {
+        &self.index
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -715,7 +796,7 @@ impl ResonanceScorerNc2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use navi_engine::{NaviGraph, seven_node_map};
+    use navi_engine::{seven_node_map, NaviGraph};
 
     fn seven_graph() -> NaviGraph {
         NaviGraph::from_navimap(&seven_node_map()).unwrap()
@@ -731,8 +812,11 @@ mod tests {
     fn from_seven_node_map_weight_is_neg_one_or_zero() {
         let idx = seven_index();
         // Spoke(12) ties with Rim(12); lowest index (Spoke=−1) wins
-        assert!(idx.weight == -1 || idx.weight == 0,
-            "dominant must be Spoke or Rim, got {}", idx.weight);
+        assert!(
+            idx.weight == -1 || idx.weight == 0,
+            "dominant must be Spoke or Rim, got {}",
+            idx.weight
+        );
     }
 
     #[test]
@@ -807,7 +891,9 @@ mod tests {
     fn coeffs_do_not_match_modified() {
         let a = seven_index();
         let mut b = a.clone();
-        if let Some(v) = b.coeffs.get_mut(0) { *v = v.wrapping_add(1); }
+        if let Some(v) = b.coeffs.get_mut(0) {
+            *v = v.wrapping_add(1);
+        }
         assert!(!a.coeffs_match(&b));
     }
 
@@ -850,9 +936,9 @@ mod tests {
 
     #[test]
     fn coeff_at_cost_matches_coeff_at_bucket() {
-        let idx   = seven_index();
-        let cost  = idx.spectral_peak_cost();
-        let n     = idx.spectral_peak_bucket();
+        let idx = seven_index();
+        let cost = idx.spectral_peak_cost();
+        let n = idx.spectral_peak_bucket();
         assert_eq!(idx.coeff_at_cost(cost), idx.coeff_at_bucket(n));
     }
 
@@ -860,8 +946,8 @@ mod tests {
 
     #[test]
     fn dominant_chord_roundtrips_through_weight() {
-        let idx    = seven_index();
-        let chord  = idx.dominant_chord();
+        let idx = seven_index();
+        let chord = idx.dominant_chord();
         let weight = chord_weight(chord);
         assert_eq!(weight, idx.weight);
     }
@@ -887,7 +973,7 @@ mod tests {
 
     #[test]
     fn resonance_score_at_peak_is_one() {
-        let idx  = seven_index();
+        let idx = seven_index();
         let cost = idx.spectral_peak_cost();
         // The peak bucket has the highest count → normalised score = 1.0
         assert!((idx.resonance_score(cost) - 1.0).abs() < 1e-6);
@@ -898,7 +984,10 @@ mod tests {
         let idx = seven_index();
         for cost in [0.0f32, 100.0, 400.0, 1000.0, 9999.0] {
             let s = idx.resonance_score(cost);
-            assert!(s >= 0.0 && s <= 1.0, "score {s} out of [0,1] for cost {cost}");
+            assert!(
+                s >= 0.0 && s <= 1.0,
+                "score {s} out of [0,1] for cost {cost}"
+            );
         }
     }
 
@@ -911,7 +1000,7 @@ mod tests {
 
     #[test]
     fn is_resonant_above_threshold() {
-        let idx  = seven_index();
+        let idx = seven_index();
         let cost = idx.spectral_peak_cost();
         assert!(idx.is_resonant(cost, 0.99));
     }
@@ -933,40 +1022,49 @@ mod tests {
     #[test]
     fn fourier_repr_contains_nonzero_bucket() {
         let repr = seven_index().fourier_repr();
-        assert!(repr.contains("a("), "repr must contain at least one a(n): {repr}");
+        assert!(
+            repr.contains("a("),
+            "repr must contain at least one a(n): {repr}"
+        );
     }
 
     #[test]
     fn fourier_repr_total_matches_mass() {
-        let idx  = seven_index();
+        let idx = seven_index();
         let repr = idx.fourier_repr();
         // Extract all a(n)=v terms and sum v
-        let total: u32 = repr.split("a(")
+        let total: u32 = repr
+            .split("a(")
             .skip(1)
             .filter_map(|seg| {
-                seg.split(')').nth(1)
-                   .and_then(|after| after.trim_start_matches('=').split_whitespace().next())
-                   .and_then(|v| v.trim_end_matches('}').parse::<u32>().ok())
+                seg.split(')')
+                    .nth(1)
+                    .and_then(|after| after.trim_start_matches('=').split_whitespace().next())
+                    .and_then(|v| v.trim_end_matches('}').parse::<u32>().ok())
             })
             .sum();
-        assert_eq!(total, idx.total_mass(), "fourier_repr must account for all edges");
+        assert_eq!(
+            total,
+            idx.total_mass(),
+            "fourier_repr must account for all edges"
+        );
     }
 
     // ── ResonanceScorerNc2 ────────────────────────────────────────────────────
 
     #[test]
     fn nc2_scorer_bonus_at_peak_equals_scale() {
-        let idx    = seven_index();
-        let scale  = 0.60_f32;
+        let idx = seven_index();
+        let scale = 0.60_f32;
         let scorer = ResonanceScorerNc2::new(idx.clone(), scale);
-        let cost   = idx.spectral_peak_cost();
+        let cost = idx.spectral_peak_cost();
         assert!((scorer.score(cost) - scale).abs() < 1e-6);
     }
 
     #[test]
     fn nc2_scorer_bonus_bounded_by_scale() {
-        let idx    = seven_index();
-        let scale  = 0.60_f32;
+        let idx = seven_index();
+        let scale = 0.60_f32;
         let scorer = ResonanceScorerNc2::new(idx, scale);
         for cost in [0.0f32, 100.0, 400.0, 800.0, 9999.0] {
             assert!(scorer.score(cost) <= scale + 1e-6);

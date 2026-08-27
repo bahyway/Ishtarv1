@@ -35,7 +35,9 @@ impl XorShift64 {
     /// Generate a usize in [0, max).
     #[inline]
     pub fn next_usize(&mut self, max: usize) -> usize {
-        if max == 0 { return 0; }
+        if max == 0 {
+            return 0;
+        }
         (self.next_u64() % max as u64) as usize
     }
 

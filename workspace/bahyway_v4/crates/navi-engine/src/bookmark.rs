@@ -7,9 +7,9 @@
 
 #![forbid(unsafe_code)]
 
-use std::collections::HashMap;
 use bahyway_core::TribeId;
 use enkidb_kaki::{Kaki, KakiMinter, KakiRole};
+use std::collections::HashMap;
 
 use crate::particle::NaviCoord;
 use crate::route::haversine_m;
@@ -35,12 +35,12 @@ pub enum BookmarkCategory {
 impl BookmarkCategory {
     pub fn label(self) -> &'static str {
         match self {
-            BookmarkCategory::Grave          => "Grave",
+            BookmarkCategory::Grave => "Grave",
             BookmarkCategory::Infrastructure => "Infrastructure",
-            BookmarkCategory::Waypoint       => "Waypoint",
-            BookmarkCategory::Hazard         => "Hazard",
-            BookmarkCategory::Sacred         => "Sacred",
-            BookmarkCategory::Personal       => "Personal",
+            BookmarkCategory::Waypoint => "Waypoint",
+            BookmarkCategory::Hazard => "Hazard",
+            BookmarkCategory::Sacred => "Sacred",
+            BookmarkCategory::Personal => "Personal",
         }
     }
 }
@@ -48,22 +48,24 @@ impl BookmarkCategory {
 // ── Bookmark ──────────────────────────────────────────────────────────────────
 
 pub struct Bookmark {
-    pub id:           u32,
+    pub id: u32,
     /// Immutable sovereign identity.
-    pub kaki:         Kaki,
+    pub kaki: Kaki,
     /// Canonical Arabic name — sovereign label.
-    pub name_arabic:  String,
+    pub name_arabic: String,
     /// Optional Latin transliteration.
-    pub name_latin:   Option<String>,
-    pub coord:        NaviCoord,
-    pub category:     BookmarkCategory,
-    pub notes:        Option<String>,
+    pub name_latin: Option<String>,
+    pub coord: NaviCoord,
+    pub category: BookmarkCategory,
+    pub notes: Option<String>,
     /// Creation epoch (Hijri year or Unix seconds — caller's choice).
-    pub epoch:        u32,
+    pub epoch: u32,
 }
 
 impl Bookmark {
-    pub fn kaki_hash(&self) -> u32 { self.kaki.uuid_hash() }
+    pub fn kaki_hash(&self) -> u32 {
+        self.kaki.uuid_hash()
+    }
 }
 
 // ── BookmarkStore ─────────────────────────────────────────────────────────────
@@ -74,30 +76,38 @@ pub struct BookmarkStore {
 }
 
 impl BookmarkStore {
-    pub fn new() -> Self { BookmarkStore { entries: HashMap::new(), next_id: 1 } }
+    pub fn new() -> Self {
+        BookmarkStore {
+            entries: HashMap::new(),
+            next_id: 1,
+        }
+    }
 
     /// Create and store a new bookmark.  Returns the assigned ID.
     pub fn add(
         &mut self,
         name_arabic: impl Into<String>,
-        coord:       NaviCoord,
-        category:    BookmarkCategory,
-        tribe:       TribeId,
-        epoch:       u32,
+        coord: NaviCoord,
+        category: BookmarkCategory,
+        tribe: TribeId,
+        epoch: u32,
     ) -> u32 {
-        let id     = self.next_id;
+        let id = self.next_id;
         let minter = KakiMinter::new(tribe);
-        let kaki   = minter.mint_identity(id, KakiRole::Zikru);
-        self.entries.insert(id, Bookmark {
+        let kaki = minter.mint_identity(id, KakiRole::Zikru);
+        self.entries.insert(
             id,
-            kaki,
-            name_arabic: name_arabic.into(),
-            name_latin:  None,
-            coord,
-            category,
-            notes: None,
-            epoch,
-        });
+            Bookmark {
+                id,
+                kaki,
+                name_arabic: name_arabic.into(),
+                name_latin: None,
+                coord,
+                category,
+                notes: None,
+                epoch,
+            },
+        );
         self.next_id += 1;
         id
     }
@@ -107,7 +117,9 @@ impl BookmarkStore {
         if let Some(b) = self.entries.get_mut(&id) {
             b.name_latin = Some(name_latin.into());
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     /// Add notes to an existing bookmark.
@@ -115,16 +127,25 @@ impl BookmarkStore {
         if let Some(b) = self.entries.get_mut(&id) {
             b.notes = Some(notes.into());
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
-    pub fn get(&self, id: u32) -> Option<&Bookmark> { self.entries.get(&id) }
+    pub fn get(&self, id: u32) -> Option<&Bookmark> {
+        self.entries.get(&id)
+    }
 
-    pub fn remove(&mut self, id: u32) -> bool { self.entries.remove(&id).is_some() }
+    pub fn remove(&mut self, id: u32) -> bool {
+        self.entries.remove(&id).is_some()
+    }
 
     /// All bookmarks in a given category.
     pub fn by_category(&self, category: BookmarkCategory) -> Vec<&Bookmark> {
-        self.entries.values().filter(|b| b.category == category).collect()
+        self.entries
+            .values()
+            .filter(|b| b.category == category)
+            .collect()
     }
 
     /// The nearest bookmark to a coordinate.
@@ -137,8 +158,13 @@ impl BookmarkStore {
     }
 
     /// Nearest bookmark in a specific category.
-    pub fn nearest_in_category(&self, coord: NaviCoord, category: BookmarkCategory) -> Option<&Bookmark> {
-        self.entries.values()
+    pub fn nearest_in_category(
+        &self,
+        coord: NaviCoord,
+        category: BookmarkCategory,
+    ) -> Option<&Bookmark> {
+        self.entries
+            .values()
             .filter(|b| b.category == category)
             .min_by(|a, b| {
                 let da = haversine_m(a.coord.lat, a.coord.lon, coord.lat, coord.lon);
@@ -149,20 +175,29 @@ impl BookmarkStore {
 
     /// Bookmarks within `radius_m` of a coordinate.
     pub fn within_radius(&self, coord: NaviCoord, radius_m: f32) -> Vec<&Bookmark> {
-        self.entries.values()
+        self.entries
+            .values()
             .filter(|b| haversine_m(b.coord.lat, b.coord.lon, coord.lat, coord.lon) <= radius_m)
             .collect()
     }
 
-    pub fn count(&self) -> usize { self.entries.len() }
+    pub fn count(&self) -> usize {
+        self.entries.len()
+    }
 
-    pub fn all(&self) -> impl Iterator<Item = &Bookmark> { self.entries.values() }
+    pub fn all(&self) -> impl Iterator<Item = &Bookmark> {
+        self.entries.values()
+    }
 
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 }
 
 impl Default for BookmarkStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -170,19 +205,39 @@ impl Default for BookmarkStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bahyway_core::TribeId;
     use crate::particle::NaviCoord;
+    use bahyway_core::TribeId;
 
-    fn tribe() -> TribeId { TribeId::from_u16(0x0001) }
-    fn najaf() -> NaviCoord { NaviCoord::new(31.995, 44.320, 0.0) }
+    fn tribe() -> TribeId {
+        TribeId::from_u16(0x0001)
+    }
+    fn najaf() -> NaviCoord {
+        NaviCoord::new(31.995, 44.320, 0.0)
+    }
 
     fn store_with_entries() -> BookmarkStore {
         let mut s = BookmarkStore::new();
-        s.add("مرقد الإمام علي", najaf(), BookmarkCategory::Sacred, tribe(), 1445);
-        s.add("مقبرة الشهيد الكاظمي", NaviCoord::new(32.005, 44.320, 0.0),
-              BookmarkCategory::Grave, tribe(), 1440);
-        s.add("محطة ضخ الماء", NaviCoord::new(31.980, 44.310, 0.0),
-              BookmarkCategory::Infrastructure, tribe(), 1445);
+        s.add(
+            "مرقد الإمام علي",
+            najaf(),
+            BookmarkCategory::Sacred,
+            tribe(),
+            1445,
+        );
+        s.add(
+            "مقبرة الشهيد الكاظمي",
+            NaviCoord::new(32.005, 44.320, 0.0),
+            BookmarkCategory::Grave,
+            tribe(),
+            1440,
+        );
+        s.add(
+            "محطة ضخ الماء",
+            NaviCoord::new(31.980, 44.310, 0.0),
+            BookmarkCategory::Infrastructure,
+            tribe(),
+            1445,
+        );
         s
     }
 
@@ -214,10 +269,10 @@ mod tests {
     #[test]
     fn by_category_filters_correctly() {
         let s = store_with_entries();
-        assert_eq!(s.by_category(BookmarkCategory::Sacred).len(),         1);
-        assert_eq!(s.by_category(BookmarkCategory::Grave).len(),          1);
+        assert_eq!(s.by_category(BookmarkCategory::Sacred).len(), 1);
+        assert_eq!(s.by_category(BookmarkCategory::Grave).len(), 1);
         assert_eq!(s.by_category(BookmarkCategory::Infrastructure).len(), 1);
-        assert_eq!(s.by_category(BookmarkCategory::Hazard).len(),         0);
+        assert_eq!(s.by_category(BookmarkCategory::Hazard).len(), 0);
     }
 
     #[test]
@@ -231,7 +286,9 @@ mod tests {
     #[test]
     fn nearest_in_category() {
         let s = store_with_entries();
-        let infra = s.nearest_in_category(najaf(), BookmarkCategory::Infrastructure).unwrap();
+        let infra = s
+            .nearest_in_category(najaf(), BookmarkCategory::Infrastructure)
+            .unwrap();
         assert_eq!(infra.category, BookmarkCategory::Infrastructure);
     }
 
@@ -276,9 +333,12 @@ mod tests {
     #[test]
     fn bookmark_category_labels_non_empty() {
         for cat in [
-            BookmarkCategory::Grave, BookmarkCategory::Infrastructure,
-            BookmarkCategory::Waypoint, BookmarkCategory::Hazard,
-            BookmarkCategory::Sacred, BookmarkCategory::Personal,
+            BookmarkCategory::Grave,
+            BookmarkCategory::Infrastructure,
+            BookmarkCategory::Waypoint,
+            BookmarkCategory::Hazard,
+            BookmarkCategory::Sacred,
+            BookmarkCategory::Personal,
         ] {
             assert!(!cat.label().is_empty());
         }

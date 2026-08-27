@@ -16,11 +16,11 @@
 //! keeps the journal entry a real, auditable record rather than a
 //! best-effort string lookup.
 
-use enkidb_kaki::{Kaki, EventKaki, IdentityKaki, KakiMinter, KakiRole};
-use enkidb_journal::{Journal, JournalEntry, EventCause};
-use ninsun_agent::RefineProposal;
-use esarhaddon::smi::Smi;
 use crate::hazard::{classify_hazard, HazardDomain, UrgencyKey};
+use enkidb_journal::{EventCause, Journal, JournalEntry};
+use enkidb_kaki::{EventKaki, IdentityKaki, Kaki, KakiMinter, KakiRole};
+use esarhaddon::smi::Smi;
+use ninsun_agent::RefineProposal;
 
 /// What the Data Steward decided about a proposal.  `Pending` cases are
 /// still waiting for review.
@@ -37,12 +37,12 @@ pub enum AdvisoryDecision {
 pub struct AdvisoryCase {
     pub proposal: RefineProposal,
     pub decision: AdvisoryDecision,
-    pub hazard:   HazardDomain,
+    pub hazard: HazardDomain,
     /// Present only for hazard-tagged cases where a caller supplied a
     /// computed SMI (ESARHADDON does not itself carry tribe/KAKI state,
     /// so this must be threaded through by whoever ran the SMI computation
     /// upstream of this queue).
-    pub smi:      Option<Smi>,
+    pub smi: Option<Smi>,
 }
 
 impl AdvisoryCase {
@@ -82,7 +82,12 @@ impl NinsunAdvisoryQueue {
     pub fn receive_with_smi(&mut self, items: Vec<(RefineProposal, Option<Smi>)>) {
         for (proposal, smi) in items {
             let hazard = classify_hazard(&proposal.tribe_id);
-            self.cases.push(AdvisoryCase { proposal, decision: AdvisoryDecision::Pending, hazard, smi });
+            self.cases.push(AdvisoryCase {
+                proposal,
+                decision: AdvisoryDecision::Pending,
+                hazard,
+                smi,
+            });
         }
         self.cases.sort_by(|a, b| {
             b.urgency_key()
@@ -93,12 +98,21 @@ impl NinsunAdvisoryQueue {
 
     /// All still-undecided cases, highest confidence first.
     pub fn pending(&self) -> Vec<&AdvisoryCase> {
-        self.cases.iter().filter(|c| c.decision == AdvisoryDecision::Pending).collect()
+        self.cases
+            .iter()
+            .filter(|c| c.decision == AdvisoryDecision::Pending)
+            .collect()
     }
 
-    pub fn cases(&self)    -> &[AdvisoryCase] { &self.cases }
-    pub fn len(&self)      -> usize           { self.cases.len() }
-    pub fn is_empty(&self) -> bool            { self.cases.is_empty() }
+    pub fn cases(&self) -> &[AdvisoryCase] {
+        &self.cases
+    }
+    pub fn len(&self) -> usize {
+        self.cases.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.cases.is_empty()
+    }
 
     /// Steward confirms the case at `case_idx`: NINSUN's read was right.
     /// Journals a `NinsunAdvisoryConfirmed` entry against the real particle
@@ -106,40 +120,65 @@ impl NinsunAdvisoryQueue {
     /// targets, are never mutated — only the decision state changes.
     pub fn confirm(
         &mut self,
-        case_idx:         usize,
+        case_idx: usize,
         target_kaki_bytes: [u8; 16],
-        epoch:            u32,
-        journal:          &mut Journal,
-        minter:           &KakiMinter,
+        epoch: u32,
+        journal: &mut Journal,
+        minter: &KakiMinter,
     ) -> bool {
-        self.decide(case_idx, target_kaki_bytes, epoch, journal, minter, AdvisoryDecision::Confirmed, EventCause::NinsunAdvisoryConfirmed)
+        self.decide(
+            case_idx,
+            target_kaki_bytes,
+            epoch,
+            journal,
+            minter,
+            AdvisoryDecision::Confirmed,
+            EventCause::NinsunAdvisoryConfirmed,
+        )
     }
 
     /// Steward rejects the case at `case_idx`: NINSUN's flag was a false
     /// positive. Journals a `NinsunAdvisoryRejected` entry.
     pub fn reject(
         &mut self,
-        case_idx:         usize,
+        case_idx: usize,
         target_kaki_bytes: [u8; 16],
-        epoch:            u32,
-        journal:          &mut Journal,
-        minter:           &KakiMinter,
+        epoch: u32,
+        journal: &mut Journal,
+        minter: &KakiMinter,
     ) -> bool {
-        self.decide(case_idx, target_kaki_bytes, epoch, journal, minter, AdvisoryDecision::Rejected, EventCause::NinsunAdvisoryRejected)
+        self.decide(
+            case_idx,
+            target_kaki_bytes,
+            epoch,
+            journal,
+            minter,
+            AdvisoryDecision::Rejected,
+            EventCause::NinsunAdvisoryRejected,
+        )
     }
 
+    // Each parameter is a distinct required input shared by every advisory
+    // decision path (approve/reject/etc. all funnel through this one
+    // journal-write) -- not artificial padding, so bundling into a params
+    // struct is a real API-design tradeoff rather than a mechanical fix.
+    #[allow(clippy::too_many_arguments)]
     fn decide(
         &mut self,
-        case_idx:          usize,
+        case_idx: usize,
         target_kaki_bytes: [u8; 16],
-        epoch:             u32,
-        journal:           &mut Journal,
-        minter:            &KakiMinter,
-        decision:          AdvisoryDecision,
-        cause:             EventCause,
+        epoch: u32,
+        journal: &mut Journal,
+        minter: &KakiMinter,
+        decision: AdvisoryDecision,
+        cause: EventCause,
     ) -> bool {
-        let Some(case) = self.cases.get_mut(case_idx) else { return false; };
-        if case.decision != AdvisoryDecision::Pending { return false; }
+        let Some(case) = self.cases.get_mut(case_idx) else {
+            return false;
+        };
+        if case.decision != AdvisoryDecision::Pending {
+            return false;
+        }
         case.decision = decision;
 
         if let Some(target_kaki) = reconstruct_identity(&target_kaki_bytes) {
@@ -154,11 +193,14 @@ impl NinsunAdvisoryQueue {
 }
 
 impl Default for NinsunAdvisoryQueue {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn reconstruct_identity(bytes: &[u8; 16]) -> Option<IdentityKaki> {
-    Kaki::from_bytes(*bytes).ok()
+    Kaki::from_bytes(*bytes)
+        .ok()
         .and_then(|k| IdentityKaki::try_from_kaki(k).ok())
 }
 
@@ -173,11 +215,11 @@ mod tests {
 
     fn make_proposal(confidence: f64, target_kaki: &str) -> RefineProposal {
         RefineProposal {
-            proposal_id:   "p1".into(),
-            target_kaki:   target_kaki.into(),
-            tribe_id:      "test_tribe".into(),
+            proposal_id: "p1".into(),
+            target_kaki: target_kaki.into(),
+            tribe_id: "test_tribe".into(),
             drift_pattern: "STUCK_SENSOR_6HR".into(),
-            explanation:   "value unchanged for 6 hours".into(),
+            explanation: "value unchanged for 6 hours".into(),
             suggested_eav: vec![("ninsun_reviewed".into(), "true".into())],
             confidence,
         }
@@ -192,14 +234,19 @@ mod tests {
             make_proposal(0.7, "k3"),
         ]);
 
-        let ordered: Vec<f64> = queue.cases().iter().map(|c| c.proposal.confidence).collect();
+        let ordered: Vec<f64> = queue
+            .cases()
+            .iter()
+            .map(|c| c.proposal.confidence)
+            .collect();
         assert_eq!(ordered, vec![0.9, 0.7, 0.4]);
     }
 
     #[test]
     fn pending_excludes_decided_cases() {
         let minter = make_minter();
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut jnl = Journal::new(64);
 
         let mut queue = NinsunAdvisoryQueue::new();
@@ -213,7 +260,8 @@ mod tests {
     #[test]
     fn confirm_writes_journal_entry_with_correct_cause() {
         let minter = make_minter();
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut jnl = Journal::new(64);
 
         let mut queue = NinsunAdvisoryQueue::new();
@@ -228,7 +276,8 @@ mod tests {
     #[test]
     fn reject_writes_journal_entry_with_correct_cause() {
         let minter = make_minter();
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut jnl = Journal::new(64);
 
         let mut queue = NinsunAdvisoryQueue::new();
@@ -243,7 +292,8 @@ mod tests {
     #[test]
     fn double_decision_is_rejected_as_noop() {
         let minter = make_minter();
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut jnl = Journal::new(64);
 
         let mut queue = NinsunAdvisoryQueue::new();
@@ -257,7 +307,8 @@ mod tests {
     #[test]
     fn unknown_index_returns_false() {
         let minter = make_minter();
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut jnl = Journal::new(64);
         let mut queue = NinsunAdvisoryQueue::new();
 
@@ -266,11 +317,11 @@ mod tests {
 
     fn make_proposal_tribe(confidence: f64, target_kaki: &str, tribe_id: &str) -> RefineProposal {
         RefineProposal {
-            proposal_id:   "p1".into(),
-            target_kaki:   target_kaki.into(),
-            tribe_id:      tribe_id.into(),
+            proposal_id: "p1".into(),
+            target_kaki: target_kaki.into(),
+            tribe_id: tribe_id.into(),
             drift_pattern: "STUCK_SENSOR_6HR".into(),
-            explanation:   "value unchanged for 6 hours".into(),
+            explanation: "value unchanged for 6 hours".into(),
             suggested_eav: vec![],
             confidence,
         }
@@ -280,12 +331,18 @@ mod tests {
     #[test]
     fn low_confidence_earthquake_case_still_outranks_high_confidence_ordinary_case() {
         let dead_critical_smi = Smi::compute(1.0, 0.9, 0.9, 0.9, 0.9).unwrap();
-        assert_eq!(dead_critical_smi.state, esarhaddon::smi::SmiState::DeadCritical);
+        assert_eq!(
+            dead_critical_smi.state,
+            esarhaddon::smi::SmiState::DeadCritical
+        );
 
         let mut queue = NinsunAdvisoryQueue::new();
         queue.receive_with_smi(vec![
-            (make_proposal_tribe(0.99, "ordinary-k1", "5"), None),          // ordinary tribe, very confident
-            (make_proposal_tribe(0.10, "quake-k1", "8192"), Some(dead_critical_smi)), // 0x2000, DeadCritical, low confidence
+            (make_proposal_tribe(0.99, "ordinary-k1", "5"), None), // ordinary tribe, very confident
+            (
+                make_proposal_tribe(0.10, "quake-k1", "8192"),
+                Some(dead_critical_smi),
+            ), // 0x2000, DeadCritical, low confidence
         ]);
 
         // DeadCritical structural case must sort first despite far lower confidence.
@@ -319,7 +376,11 @@ mod tests {
             make_proposal(0.9, "k2"),
             make_proposal(0.7, "k3"),
         ]);
-        let ordered: Vec<f64> = queue.cases().iter().map(|c| c.proposal.confidence).collect();
+        let ordered: Vec<f64> = queue
+            .cases()
+            .iter()
+            .map(|c| c.proposal.confidence)
+            .collect();
         assert_eq!(ordered, vec![0.9, 0.7, 0.4]);
     }
 }

@@ -35,7 +35,10 @@ pub struct Document {
 
 impl Document {
     pub fn new(id: impl Into<DocId>, content: impl Into<String>) -> Self {
-        Document { id: id.into(), content: content.into() }
+        Document {
+            id: id.into(),
+            content: content.into(),
+        }
     }
 }
 
@@ -54,7 +57,11 @@ pub struct RecallIndex {
 
 fn tokenize(text: &str) -> Vec<String> {
     text.split_whitespace()
-        .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+        .map(|w| {
+            w.to_lowercase()
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_string()
+        })
         .filter(|w| w.len() > 2)
         .collect()
 }
@@ -66,7 +73,9 @@ fn term_freq(tokens: &[String]) -> HashMap<String, f32> {
     }
     let total = tokens.len() as f32;
     if total > 0.0 {
-        for v in tf.values_mut() { *v /= total; }
+        for v in tf.values_mut() {
+            *v /= total;
+        }
     }
     tf
 }
@@ -77,8 +86,13 @@ fn norm(v: &HashMap<String, f32>) -> f32 {
 
 fn cosine(a: &HashMap<String, f32>, a_norm: f32, b: &HashMap<String, f32>) -> f32 {
     let b_norm = norm(b);
-    if a_norm == 0.0 || b_norm == 0.0 { return 0.0; }
-    let dot: f32 = a.iter().map(|(k, v)| v * b.get(k).copied().unwrap_or(0.0)).sum();
+    if a_norm == 0.0 || b_norm == 0.0 {
+        return 0.0;
+    }
+    let dot: f32 = a
+        .iter()
+        .map(|(k, v)| v * b.get(k).copied().unwrap_or(0.0))
+        .sum();
     dot / (a_norm * b_norm)
 }
 
@@ -100,24 +114,32 @@ impl RecallIndex {
             token_lists.push(toks);
         }
 
-        let idf: HashMap<String, f32> = df.into_iter()
+        let idf: HashMap<String, f32> = df
+            .into_iter()
             .map(|(term, doc_freq)| {
                 let w = ((n + 1.0) / (doc_freq + 1.0)).ln() + 1.0;
                 (term, w)
             })
             .collect();
 
-        let doc_vectors = token_lists.iter().map(|toks| {
-            let tf = term_freq(toks);
-            let mut v = HashMap::new();
-            for (term, tf_val) in tf {
-                let idf_val = *idf.get(&term).unwrap_or(&1.0);
-                v.insert(term, tf_val * idf_val);
-            }
-            TermVector(v)
-        }).collect();
+        let doc_vectors = token_lists
+            .iter()
+            .map(|toks| {
+                let tf = term_freq(toks);
+                let mut v = HashMap::new();
+                for (term, tf_val) in tf {
+                    let idf_val = *idf.get(&term).unwrap_or(&1.0);
+                    v.insert(term, tf_val * idf_val);
+                }
+                TermVector(v)
+            })
+            .collect();
 
-        RecallIndex { docs, doc_vectors, idf }
+        RecallIndex {
+            docs,
+            doc_vectors,
+            idf,
+        }
     }
 
     /// Ranks documents by cosine similarity to `query`'s TF-IDF vector
@@ -126,7 +148,9 @@ impl RecallIndex {
     /// only.
     pub fn query(&self, query: &str, top_k: usize) -> Vec<(DocId, f32)> {
         let q_tokens = tokenize(query);
-        if q_tokens.is_empty() { return Vec::new(); }
+        if q_tokens.is_empty() {
+            return Vec::new();
+        }
 
         let q_tf = term_freq(&q_tokens);
         let mut q_vec = HashMap::new();
@@ -135,12 +159,21 @@ impl RecallIndex {
             q_vec.insert(term, tf_val * idf_val);
         }
         let q_norm = norm(&q_vec);
-        if q_norm == 0.0 { return Vec::new(); }
+        if q_norm == 0.0 {
+            return Vec::new();
+        }
 
-        let mut scored: Vec<(DocId, f32)> = self.docs.iter().zip(self.doc_vectors.iter())
+        let mut scored: Vec<(DocId, f32)> = self
+            .docs
+            .iter()
+            .zip(self.doc_vectors.iter())
             .filter_map(|(doc, dv)| {
                 let score = cosine(&q_vec, q_norm, &dv.0);
-                if score > 0.0 { Some((doc.id.clone(), score)) } else { None }
+                if score > 0.0 {
+                    Some((doc.id.clone(), score))
+                } else {
+                    None
+                }
             })
             .collect();
 
@@ -149,8 +182,12 @@ impl RecallIndex {
         scored
     }
 
-    pub fn len(&self) -> usize { self.docs.len() }
-    pub fn is_empty(&self) -> bool { self.docs.is_empty() }
+    pub fn len(&self) -> usize {
+        self.docs.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.docs.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -160,7 +197,10 @@ mod tests {
     #[test]
     fn query_ranks_exact_topical_match_first() {
         let index = RecallIndex::build(vec![
-            Document::new("d1", "KAKI is the sovereign 16-byte identity used everywhere in EnkiDB"),
+            Document::new(
+                "d1",
+                "KAKI is the sovereign 16-byte identity used everywhere in EnkiDB",
+            ),
             Document::new("d2", "HeptaScript is the W5H2 anti-SQL query language"),
             Document::new("d3", "The weather today is cloudy with a chance of rain"),
         ]);
@@ -178,7 +218,10 @@ mod tests {
         let index = RecallIndex::build(vec![
             Document::new("common1", "particle particle particle data particle"),
             Document::new("common2", "particle particle data particle particle"),
-            Document::new("rare", "esarhaddon computes structural mortality for particle rescue"),
+            Document::new(
+                "rare",
+                "esarhaddon computes structural mortality for particle rescue",
+            ),
         ]);
         let results = index.query("esarhaddon structural mortality", 3);
         assert_eq!(results[0].0, "rare");
@@ -204,9 +247,7 @@ mod tests {
 
     #[test]
     fn unrelated_query_returns_empty_or_low_score() {
-        let index = RecallIndex::build(vec![
-            Document::new("d1", "KAKI is the sovereign identity"),
-        ]);
+        let index = RecallIndex::build(vec![Document::new("d1", "KAKI is the sovereign identity")]);
         let results = index.query("zzz completely unrelated qqq wwww", 5);
         assert!(results.is_empty());
     }

@@ -73,7 +73,8 @@ pub fn split_architect_key(
     if threshold < 2 {
         return Err(KupruError::InvalidInput(
             "DŪRU: threshold must be >= 2 -- a threshold of 1 means any single \
-             share reconstructs the key, defeating the split entirely".into(),
+             share reconstructs the key, defeating the split entirely"
+                .into(),
         ));
     }
     if total_shares < threshold {
@@ -121,7 +122,8 @@ pub fn reconstruct_architect_key(shares: &[ArchitectKeyShare]) -> KupruResult<Se
     if shares.iter().any(|s| s.split_id != split_id) {
         return Err(KupruError::InvalidInput(
             "DŪRU: shares from different splits cannot be combined -- \
-             check they all came from the same split_id".into(),
+             check they all came from the same split_id"
+                .into(),
         ));
     }
     if (shares.len() as u8) < threshold {
@@ -149,7 +151,8 @@ pub fn reconstruct_architect_key(shares: &[ArchitectKeyShare]) -> KupruResult<Se
         signing_key_bytes.zeroize();
         return Err(KupruError::Crypto(
             "NAKRU: reconstructed key has the wrong length -- shares may be corrupt \
-             or from an unrelated split".into(),
+             or from an unrelated split"
+                .into(),
         ));
     }
 
@@ -169,13 +172,13 @@ pub fn reconstruct_architect_key(shares: &[ArchitectKeyShare]) -> KupruResult<Se
 /// ecosystem; it is simply issued with `IshtarLayer::architect()`
 /// scopes instead of a narrower role.
 pub fn issue_architect_passport(
-    root_keypair:     &SealKeyPair,
-    realm:            &str,
-    subject_kaki:     [u8; 16],
-    subject_name:     AkkadianName,
+    root_keypair: &SealKeyPair,
+    realm: &str,
+    subject_kaki: [u8; 16],
+    subject_name: AkkadianName,
     linguistic_proof: LinguisticProof,
-    issuer_kaki:      [u8; 16],
-    integrity_key:    &[u8; 32],
+    issuer_kaki: [u8; 16],
+    integrity_key: &[u8; 32],
 ) -> KupruResult<SargonPassport> {
     let naru = NaruLayer {
         subject_kaki,
@@ -263,14 +266,20 @@ mod tests {
 
         let mixed = vec![split_1[0].clone(), split_1[1].clone(), split_2[2].clone()];
         let result = reconstruct_architect_key(&mixed);
-        assert!(result.is_err(), "shares from different splits must never combine");
+        assert!(
+            result.is_err(),
+            "shares from different splits must never combine"
+        );
     }
 
     #[test]
     fn threshold_of_one_is_rejected_outright() {
         let original = SealKeyPair::generate().unwrap();
         let result = split_architect_key(&original, 1, 5);
-        assert!(result.is_err(), "threshold=1 defeats the entire purpose of splitting");
+        assert!(
+            result.is_err(),
+            "threshold=1 defeats the entire purpose of splitting"
+        );
     }
 
     /// End-to-end ceremony: split the root key, reconstruct it from
@@ -296,7 +305,8 @@ mod tests {
             LinguisticProof::create("sar-kibrat-arbaim").unwrap(),
             [0x01u8; 16],
             &[0x99u8; 32],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(passport.verify_seal().is_ok());
         assert_eq!(passport.istar.privilege_level, 7);
@@ -304,7 +314,11 @@ mod tests {
         assert!(passport.has_scope("enki:write"));
         assert!(passport.has_scope("zero:anything"));
         // Still a normal, expiring credential -- no special exemption.
-        assert!(!passport.quppu.expires_at.checked_sub(passport.quppu.created_at).is_none());
+        assert!(!passport
+            .quppu
+            .expires_at
+            .checked_sub(passport.quppu.created_at)
+            .is_none());
         assert_eq!(
             passport.quppu.expires_at - passport.quppu.created_at,
             crate::sargon_kdf::SATTATU_MAX

@@ -1,0 +1,349 @@
+---
+# ============================================================
+#  PB-350 — Nanshe Simmu Law & Kīnu Witness (GL-HSI-001-A4)
+#  BahyWay.Ecosystem v4.0
+#
+#  Run from the Fedora bare-metal HOST:
+#    ansible-playbook -i inventory PB-350_Nanshe_Simmu_Kinu.yml
+#  Running this playbook is the CSR-08 confirmation point.
+#
+#  GATE: requires nanshe story module (PB-349).
+#  Sovereignty: pure Rust, no deps, deterministic, raw values in EAV
+#  (never verdicts) — thresholds are laws applied at WITNESS time.
+# ============================================================
+- name: PB-350 nanshe simmu and kinu
+  hosts: bahyway_host
+  gather_facts: false
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    crate_dir: "{{ v4_root }}/engines/nanshe"
+    tablets_dir: "{{ v4_root }}/tablets"
+    shala_dir: "{{ v4_root }}/shala"
+
+  tasks:
+    - name: GATE · story module must exist (PB-349)
+      ansible.builtin.stat:
+        path: "{{ crate_dir }}/src/story.rs"
+      register: st
+
+    - name: GATE · refuse if PB-349 not run
+      ansible.builtin.fail:
+        msg: "COMPLETION LAW REFUSAL: story.rs absent — run PB-349 first."
+      when: not st.stat.exists
+
+    - name: Deposit amendment tablet
+      ansible.builtin.copy:
+        src: "GL-HSI-001-A4_Simmu_Kinu_Witness.md"
+        dest: "{{ tablets_dir }}/GL-HSI-001-A4_Simmu_Kinu_Witness.md"
+        mode: "0644"
+
+    - name: Deposit Šala tab (standing habit — one PB, one tab)
+      ansible.builtin.copy:
+        src: "shala_simmu_court.html"
+        dest: "{{ shala_dir }}/shala_simmu_court.html"
+        mode: "0644"
+
+    - name: Register modules in lib.rs
+      ansible.builtin.lineinfile:
+        path: "{{ crate_dir }}/src/lib.rs"
+        line: "{{ item }}"
+      loop:
+        - "pub mod membrane;"
+        - "pub mod kinu;"
+        - "pub mod scada;"
+
+    - name: src/membrane.rs — the wall is particles; the simmu accretes
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/membrane.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A4 §1–2 — the membrane particleized. Wall particles
+          //! carry accreted mass (raw values, EAV discipline); the simmu is a
+          //! connected sub-tribe under accretion; its mass induces the
+          //! deformation field delta(x) on the tube surface.
+          use crate::particle::crc16_ccitt;
+
+          pub const ADHESION_FLOOR: f64 = 0.05;   // mass floor for SIMMU-BIRTH
+          pub const SIG_DEF: f64 = 0.06;          // deformation kernel width (s-units)
+
+          #[derive(Clone, Debug)]
+          pub struct WallParticle {
+              pub kaki: [u8; 16],
+              pub s: f64,          // axial position 0..1
+              pub th: f64,         // circumferential angle
+              pub mass: f64,       // accreted sediment mass (raw, per-epoch EAV)
+          }
+
+          pub fn mint_wall(index: u32, tribe: u16, epoch: u16,
+                           s: f64, th: f64) -> WallParticle {
+              let mut k = [0u8; 16];
+              k[0..4].copy_from_slice(&index.to_be_bytes());
+              k[4..6].copy_from_slice(&tribe.to_be_bytes());
+              k[6] = 0x01;             // Identity
+              k[7] = 0x01;             // KISHIB
+              k[12..14].copy_from_slice(&epoch.to_be_bytes());
+              let crc = crc16_ccitt(&k[0..14]);
+              k[14..16].copy_from_slice(&crc.to_be_bytes());
+              WallParticle { kaki: k, s, th, mass: 0.0 }
+          }
+
+          /// L-HSI-21: particleize the wall — N elements, N KAKIs.
+          pub fn particleize(n_s: usize, n_th: usize, tribe: u16,
+                             epoch: u16) -> Vec<WallParticle> {
+              let mut out = Vec::with_capacity(n_s * n_th);
+              for i in 0..n_s {
+                  for j in 0..n_th {
+                      let s = (i as f64 + 0.5) / n_s as f64;
+                      let th = (j as f64 + 0.5) / n_th as f64
+                               * std::f64::consts::TAU;
+                      out.push(mint_wall((i * n_th + j) as u32, tribe, epoch, s, th));
+                  }
+              }
+              out
+          }
+
+          fn geo(s1: f64, t1: f64, s2: f64, t2: f64) -> f64 {
+              let ds = s1 - s2;
+              let mut dt = (t1 - t2).abs() % std::f64::consts::TAU;
+              if dt > std::f64::consts::PI { dt = std::f64::consts::TAU - dt; }
+              (ds * ds + (dt * 0.28) * (dt * 0.28)).sqrt()
+          }
+
+          /// SIMMU-BIRTH epoch: first epoch any wall particle in the seeded
+          /// region exceeds the adhesion floor under the sealed growth model.
+          pub fn simmu_birth_epoch(mass_series: &[Vec<f64>]) -> Option<usize> {
+              for (ep, masses) in mass_series.iter().enumerate() {
+                  if masses.iter().any(|&m| m > ADHESION_FLOOR) { return Some(ep); }
+              }
+              None
+          }
+
+          /// Deformation field at a fluid position from the simmu mass field.
+          /// delta points radially inward (the tumor bulges into the lumen);
+          /// here we return the scalar magnitude and the axial gradient sign.
+          pub fn deformation(wall: &[WallParticle], s: f64, th: f64) -> f64 {
+              wall.iter().map(|w| {
+                  let g = geo(w.s, w.th, s, th);
+                  w.mass * (-g * g / (2.0 * SIG_DEF * SIG_DEF)).exp()
+              }).sum()
+          }
+
+    - name: src/kinu.rs — the steadfast witness and the chorus
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/kinu.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A4 §3 — the Kīnu Witness. Dimensions 1–5,7 unchanged;
+          //! dimension 6 (OrbitalPosition) shifted ==> the space moved.
+          //! One witness is noise; the chorus convicts on coherence.
+
+          pub const EPS_POS: f64 = 0.02;
+          pub const THETA_COH: f64 = 0.75;
+          pub const MIN_CHORUS: usize = 6;
+
+          /// Identity dimensions snapshot (6 excluded — that's the position).
+          #[derive(Clone, Debug, PartialEq)]
+          pub struct IdentityDims {
+              pub uuid_hash: u32,
+              pub tribe_id: u16,
+              pub lineage: u16,       // timestamp-lineage marker
+              pub checksum: u16,
+              pub eav_digest: u64,    // digest of EAV attributes
+              pub colour_id: u16,
+          }
+
+          #[derive(Clone, Debug)]
+          pub struct FluidObs {
+              pub id: IdentityDims,
+              pub pos: [f64; 2],      // (s, th·k) surface chart of dimension 6
+          }
+
+          /// L-HSI-22: kīnu iff identity unchanged AND position shifted.
+          pub fn is_kinu(before: &FluidObs, after: &FluidObs) -> bool {
+              if before.id != after.id { return false; }   // any changed dim: not kīnu
+              let dx = after.pos[0] - before.pos[0];
+              let dy = after.pos[1] - before.pos[1];
+              (dx * dx + dy * dy).sqrt() > EPS_POS
+          }
+
+          fn norm(v: [f64; 2]) -> f64 { (v[0] * v[0] + v[1] * v[1]).sqrt() }
+
+          /// Chorus coherence: mean pairwise alignment of displacement unit
+          /// vectors among kīnu witnesses. 1.0 = perfectly common field.
+          pub fn coherence(pairs: &[(&FluidObs, &FluidObs)]) -> (usize, f64) {
+              let disps: Vec<[f64; 2]> = pairs.iter()
+                  .filter(|(b, a)| is_kinu(b, a))
+                  .map(|(b, a)| {
+                      let d = [a.pos[0] - b.pos[0], a.pos[1] - b.pos[1]];
+                      let n = norm(d).max(1e-12);
+                      [d[0] / n, d[1] / n] })
+                  .collect();
+              let k = disps.len();
+              if k < 2 { return (k, 0.0); }
+              let mut sum = 0.0; let mut cnt = 0.0;
+              for i in 0..k { for j in i + 1..k {
+                  sum += disps[i][0] * disps[j][0] + disps[i][1] * disps[j][1];
+                  cnt += 1.0; } }
+              (k, sum / cnt)
+          }
+
+          /// L-HSI-23: the chorus fires at the first of two consecutive epochs
+          /// with k >= MIN_CHORUS and coherence >= THETA_COH.
+          pub fn chorus_epoch(per_epoch: &[(usize, f64)]) -> Option<usize> {
+              for i in 0..per_epoch.len().saturating_sub(1) {
+                  let ok = |t: &(usize, f64)| t.0 >= MIN_CHORUS && t.1 >= THETA_COH;
+                  if ok(&per_epoch[i]) && ok(&per_epoch[i + 1]) { return Some(i); }
+              }
+              None
+          }
+
+    - name: src/scada.rs — hydraulic power and the lag theorem
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/scada.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A4 §5 — the SCADA Lag Theorem, on the sealed growth
+          //! model. P_hyd = Q * dp; Q falls with blocked area; SCADA rings at
+          //! the first epoch P < (1 - delta_s) * P0. BahyWay rings at birth.
+
+          pub const DELTA_S: f64 = 0.07;   // SCADA sensitivity (7% power drop)
+
+          /// Sealed toy transport: blockage fraction f in [0,1) reduces flow
+          /// as (1-f)^2 (area law), raises dp mildly as 1 + 0.3 f.
+          pub fn hydraulic_power(p0: f64, blockage: f64) -> f64 {
+              let f = blockage.clamp(0.0, 0.95);
+              p0 * (1.0 - f) * (1.0 - f) * (1.0 + 0.3 * f)
+          }
+
+          /// First epoch SCADA rings, given the blockage series.
+          pub fn scada_epoch(p0: f64, blockage: &[f64]) -> Option<usize> {
+              blockage.iter().position(|&b|
+                  hydraulic_power(p0, b) < (1.0 - DELTA_S) * p0)
+          }
+
+          /// The theorem's arithmetic: lag = t_scada - t_birth (L-HSI-24).
+          pub fn lag(t_birth: usize, t_scada: usize) -> i64 {
+              t_scada as i64 - t_birth as i64
+          }
+
+    - name: tests/simmu_law_tests.rs — L-HSI-21..25
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/simmu_law_tests.rs"
+        mode: "0644"
+        content: |
+          use nanshe::membrane::*;
+          use nanshe::kinu::*;
+          use nanshe::scada::*;
+
+          fn lcg(seed: &mut u64) -> f64 {
+              *seed = seed.wrapping_mul(6364136223846793005)
+                          .wrapping_add(1442695040888963407);
+              ((*seed >> 33) as f64) / (1u64 << 31) as f64
+          }
+
+          #[test]
+          fn l_hsi_21_wall_is_particles() {
+              let wall = particleize(20, 16, 0x0201, 42);
+              assert_eq!(wall.len(), 320);                    // N elements, N KAKIs
+              let mut seen = std::collections::HashSet::new();
+              for w in &wall { assert!(seen.insert(w.kaki)); } // unique KAKIs
+              // deformation is data: zero mass => zero field, mass => field
+              assert_eq!(deformation(&wall, 0.5, 1.0), 0.0);
+              let mut wall2 = wall.clone();
+              wall2[100].mass = 1.0;
+              assert!(deformation(&wall2, wall2[100].s, wall2[100].th) > 0.5);
+          }
+
+          fn obs(h: u32, eav: u64, pos: [f64; 2]) -> FluidObs {
+              FluidObs { id: IdentityDims { uuid_hash: h, tribe_id: 1,
+                  lineage: 7, checksum: 9, eav_digest: eav, colour_id: 3 }, pos }
+          }
+
+          #[test]
+          fn l_hsi_22_kinu_strictness() {
+              let b = obs(1, 100, [0.40, 1.00]);
+              let moved = obs(1, 100, [0.46, 1.02]);
+              assert!(is_kinu(&b, &moved));                 // steadfast + shifted
+              let eav_changed = obs(1, 101, [0.60, 1.30]);
+              assert!(!is_kinu(&b, &eav_changed));          // changed dim: never kīnu
+              let still = obs(1, 100, [0.401, 1.001]);
+              assert!(!is_kinu(&b, &still));                // no shift: no witness
+          }
+
+          #[test]
+          fn l_hsi_23_coherence_discipline() {
+              let mut seed = 350u64;
+              // incoherent: random directions — chorus must never fire
+              let mut incoh = Vec::new();
+              for e in 0..12 {
+                  let pairs: Vec<(FluidObs, FluidObs)> = (0..10).map(|i| {
+                      let b = obs(i, 5, [0.3 + 0.05 * i as f64, 1.0]);
+                      let ang = lcg(&mut seed) * std::f64::consts::TAU;
+                      let a = obs(i, 5, [b.pos[0] + 0.05 * ang.cos(),
+                                         b.pos[1] + 0.05 * ang.sin()]);
+                      (b, a) }).collect();
+                  let refs: Vec<(&FluidObs, &FluidObs)> =
+                      pairs.iter().map(|(b, a)| (b, a)).collect();
+                  incoh.push(coherence(&refs));
+                  let _ = e;
+              }
+              assert_eq!(chorus_epoch(&incoh), None);
+              // coherent: common field from epoch 4 — fires exactly at 4
+              let mut coh = Vec::new();
+              for e in 0..12 {
+                  let mag = if e >= 4 { 0.05 } else { 0.001 };
+                  let pairs: Vec<(FluidObs, FluidObs)> = (0..10).map(|i| {
+                      let b = obs(i, 5, [0.3 + 0.05 * i as f64, 1.0]);
+                      let a = obs(i, 5, [b.pos[0] + mag, b.pos[1] + mag * 0.4]);
+                      (b, a) }).collect();
+                  let refs: Vec<(&FluidObs, &FluidObs)> =
+                      pairs.iter().map(|(b, a)| (b, a)).collect();
+                  coh.push(coherence(&refs));
+              }
+              assert_eq!(chorus_epoch(&coh), Some(4));
+          }
+
+          #[test]
+          fn l_hsi_24_scada_lag_theorem() {
+              // sealed growth: mass quadratic from epoch 5; blockage ~ mass
+              let n = 80usize;
+              let mass: Vec<Vec<f64>> = (0..n).map(|t| {
+                  let m = if t > 5 { 0.0006 * ((t - 5) as f64).powi(2) } else { 0.0 };
+                  vec![m] }).collect();
+              let t_birth = simmu_birth_epoch(&mass).expect("simmu is born");
+              let blockage: Vec<f64> = mass.iter().map(|v| (v[0] * 0.6).min(0.9)).collect();
+              let t_scada = scada_epoch(100.0, &blockage).expect("scada eventually rings");
+              assert!((t_birth as i64 - 5).abs() <= 2 + 5); // detection near onset
+              assert!(lag(t_birth, t_scada) > 0, "SCADA must ring after birth");
+              assert!(t_scada - t_birth >= 10, "the lead time is the product");
+          }
+
+          #[test]
+          fn l_hsi_25_fragmentation_determinism() {
+              // adjacency flip proxy: count of fluid pairs whose nearest-wall
+              // assignment changes under a sealed deformation — bit-stable.
+              let wall_a = {
+                  let mut w = particleize(10, 10, 0x0201, 42);
+                  w[45].mass = 2.0; w };
+              let count = |wall: &Vec<nanshe::membrane::WallParticle>| {
+                  let mut c = 0u32;
+                  for i in 0..25 {
+                      let s = 0.1 + 0.03 * i as f64;
+                      let d = deformation(wall, s, 1.4);
+                      if d > 0.4 { c += 1; } }
+                  c };
+              assert_eq!(count(&wall_a), count(&wall_a.clone()));  // deterministic
+              let calm = particleize(10, 10, 0x0201, 42);
+              assert_eq!(count(&calm), 0);                          // onset only above floor
+          }
+
+    - name: Build and run law tests (release)
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ crate_dir }}"
+      register: law_tests
+      changed_when: false
+
+    - name: Announce
+      ansible.builtin.debug:
+        msg: "Simmu & Kīnu sealed. Law tests: {{ 'GREEN' if law_tests.rc == 0 else 'RED' }}. GL-HSI-001-A4 awaits CSR-08."

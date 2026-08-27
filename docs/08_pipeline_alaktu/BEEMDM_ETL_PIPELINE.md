@@ -85,7 +85,7 @@ test:
 ## Entry criteria before that test may begin (still-open items, stated plainly)
 
 1. ✅ Preflight/Phase A–B green — full-workspace `cargo test` clean.
-2. ❌ CSR-08 implemented in code (PB-170) — still open, see `CONENGINE_CSR.md`.
+2. ✅ CSR-08 implemented in code (PB-170) — closed 2026-08-27, see `CONENGINE_CSR.md`. (One honest scope limit remains there: the crate enforces the gate but doesn't itself provide the Architect-confirmation channel.)
 3. ✅ GATE-1 (pipeline-step half) ruled and coded — `HeptaGate`.
 4. ⏳ Test dataset staged on real hardware — cannot be checked from a sandbox.
 5. ❌ Latency budget table accepted as pass/fail criteria — needs the Architect's confirmation.

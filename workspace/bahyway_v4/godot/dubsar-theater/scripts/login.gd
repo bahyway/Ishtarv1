@@ -34,12 +34,13 @@ class_name DubSarLogin
 # `verify_passport()` seal check the standalone tools use -- forged or
 # expired passports are rejected here exactly as they would be there.
 #
-# HONEST LIMIT: this verifies WHO presented a genuine, non-expired,
-# unbroken-seal Passport, and records its privilege_level in
-# SessionIdentity for the rest of the session -- but nothing in DubSar
-# Theater yet READS that to gate or restrict any feature. Enforcing
-# privilege levels against actual Theater capabilities is real, separate
-# future work, not done in this pass.
+# HONEST LIMIT (narrowed 2026-08-21): this verifies WHO presented a
+# genuine, non-expired, unbroken-seal Passport, and records its
+# privilege_level in SessionIdentity for the rest of the session.
+# theater_controller.gd's open_enkidb_wizard() now reads that to gate
+# the EnkiDB Connector Wizard to Architect-privilege passports only --
+# see session_identity.gd's own comment for exactly what is and isn't
+# gated yet.
 #
 # 2026-07-23: the Architect's own words — "It is NO MORE a Godot, it is
 # now a DubSar IDE." No user-facing copy or window chrome anywhere in

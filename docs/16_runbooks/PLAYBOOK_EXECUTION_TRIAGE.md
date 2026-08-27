@@ -164,7 +164,7 @@ and its reasoning stay visible in the sequence rather than disappearing.
 | 185 | `playbook_185_anu_index_prebuild_readiness_for_enkiddb.yml` | `[ ]` | |
 | 186 | `playbook_186_mandatory_vs_optional_attributes_reference.yml` | `[ ]` | |
 | 187 | `playbook_187_sumer_engine_and_nergal_av_sealed.yml` | `[ ]` | |
-| 188 | `playbook_188_irkalla_sovereign_name_and_eridu_os_layout.yml` | `[ ]` | |
+| 188 | `playbook_188_irkalla_sovereign_name_and_uros_layout.yml` | `[ ]` | |
 | 189 | `playbook_189_nisaba_not_naba_correction.yml` | `[ ]` | naming fix, run before 190/191 |
 | 190 | `playbook_190_nisaba_internal_interface_lamassu_tda.yml` | `[ ]` | |
 | 191 | `playbook_191_nisaba_bounded_autonomy_grant.yml` | `[ ]` | |
@@ -241,7 +241,7 @@ target — run PB-234 (not 231/233 separately, it supersedes both).**
 | 227 | `playbook_227_build_and_launch_kupru_tools.yml` | `[ ]` | |
 | 261 | `playbook_261_isimud_headless_bootstrap_passport.yml` | `[x]` | Written 2026-07-27, answering the Architect's own question — how does an unattended first-time IsimudEngine run get past DubSar's login gate without a human clicking through a Godot GUI window to mint a Passport. Runs `scripts/isimud_bootstrap_mint.gd` via `godot --headless --script` inside the dubsar-theater project. **First real run on eriduous-vdi (2026-07-27) caught a genuine, severe, pre-existing bug**, not a bug in this playbook: `derive_key()` mints a fresh RANDOM salt on every call by design (`kupru::sargon_kdf::SargonKdf::new`), but `login.gd` (DubSar + DubSar PDM) and Sargon Passport Manager's/Gilgamesh's own vault/ledger code all called it a second time at decrypt time expecting the SAME key back — meaning **no one could ever have successfully logged into DubSar, or reopened a Sargon vault / Gilgamesh ledger across an app restart, before this fix**, in any prior session. This playbook's own round-trip check (mint→import→decrypt→verify, not just a file write) is what surfaced it: the priming import step crashed (rc=134) obscuring the real signal at first, but the mint script itself failed cleanly at `roundtrip decrypt_vault_blob: aead::Error` once isolated. Fixed same-day: added `KupruBridge.derive_key_with_salt()` (kupru-gdext), persisted the salt alongside every sealed blob (`salt_b64` field in the two JSON login vaults; 32 raw bytes prepended to Sargon's/Gilgamesh's own single-blob vault/ledger files), switched every decrypt-time caller to `derive_key_with_salt`, and added 3 new regression tests to `kupru::sargon_kdf` pinning the exact property that broke (`with_salt` must reproduce `new`'s key given its salt) — 20/20 `kupru` tests passing, full `cargo build --workspace` clean. Mints a Sargon **gardener** (privilege 1) Passport via `KupruBridge.issue_gardener_passport` (the exact call Sargon Passport Manager's own GUI makes for its lowest tier — no new mint path invented). **Gilgamesh (architect, privilege 7, Shamir M-of-N ceremony) is never touched by this playbook and never will be** — that stays 100% human, by design, per the Architect's own explicit choice when asked. **Confirmed fully working end-to-end on real eriduous-vdi infra, 2026-07-27** (two runs): first re-run after the salt fix hit `rc=0` with `ISIMUD-BOOTSTRAP OK: minted + imported + round-trip-verified a gardener Passport` in the log, but the playbook itself still hard-failed from a second, unrelated bug in its own success-detection (its shell task redirects output to `{{ godot_log }}` via `>`, so Ansible's `mint_result.stdout` was always empty, and `failed_when` was checking that empty string for the OK marker) — fixed same-day by reading the real output back with `cat` before checking it. Second re-run: **`ok=14 failed=0`, clean pass.** Also fixed a cosmetic report bug the same run surfaced: the "Report what was minted" section was leaking unrelated `at: ...` stack-trace lines (from three separate, pre-existing, unrelated missing GDExtensions — `libdubsar_gridnav_gd.so`, `libmarduk_gdext.so`, `libnaming_registry_gd.so` — none of which this playbook builds or copies; a different subsystem's own gap, not investigated further here) into the summary, because they share the same two-space indent; tightened the match regex to exclude them. The priming import step's `rc=134` crash still happens every run and remains unexplained but confirmed non-blocking — KupruBridge loads and works correctly regardless, three runs running now. |
 | 228 | `playbook_228_build_bahyway_codium_theme_extension.yml` | `[ ]` | |
-| 229 | `playbook_229_eriduos_unified_desktop_theme.yml` | `[ ]` | |
+| 229 | `playbook_229_uros_unified_desktop_theme.yml` | `[ ]` | |
 | 230 | `playbook_230_build_and_launch_dubsar_pdm.yml` | `[ ]` | |
 | 231 | `playbook_231_build_navi_translate_plugin.yml` | `SKIP` | run PB-234 instead |
 | 232 | `playbook_232_impact_gate_deterministic.yml` | `[ ]` | |
@@ -530,3 +530,234 @@ ZFS filesystems most of these playbooks check for real, so hosted runners
 would just report BLOCKED across most phases. Runs `ci_fast` on every
 push/PR, `full` nightly at 03:00 UTC, and on-demand via workflow_dispatch
 with a selectable profile and optional `pb_filter_numbers`.
+
+## Auto-discovered — not yet triaged
+
+Rows below are appended automatically (anu-governor's Corpus scan, `enkimdb::pb::append_untriaged_rows`) whenever a real, numbered playbook has no row anywhere above -- move a row up into its real phase section by hand once it's actually been triaged. This section never edits or deletes a row once written; only a human promotes one out of it.
+
+| # | File | Status | Note |
+|---|------|--------|------|
+| 35 | `playbook_35_retroactive_audit_nusku_family_port.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 160 | `playbook_160_tpl_001_section_e_RECOVERY.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 235 | `playbook_235_egdengine_gibil_calculus.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 236 | `playbook_236_mardukengine_position_horizon.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 237 | `playbook_237_egdengine_n1_contingency_dispatch.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 238 | `playbook_238_mardukengine_topology_betti.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 239 | `playbook_239_egdengine_linear_state_estimator.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 240 | `playbook_240_grid_marduk_dubsar_bridge.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 241 | `playbook_241_heptascript_historical_background.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 242 | `playbook_242_massartu_pattern.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 243 | `playbook_243_puhu_law_top_algebra.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 244 | `playbook_244_naming_registry_glossary_phase1.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 245 | `playbook_245_naming_registry_glossary_phase2.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 246 | `playbook_246_naming_registry_glossary_phase3.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 262 | `playbook_262_build_rebranded_godot_engine.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 263 | `playbook_263_deploy_anu_governor.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 265 | `playbook_265_anu_governor_type1_infra_cqrs_nodes.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 270 | `playbook_270_anu_governor_one_central_kaki_tool.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 273 | `playbook_273_fetch_os_image.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 291 | `playbook_291_deploy_rimush_entrance_gui.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 301 | `playbook_301_flight_to_location_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 310 | `playbook_310_lahmu_ledger_shipping.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 311 | `playbook_311_snapshot_seals_nuzi_vault.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 312 | `playbook_312_read_node_rebuild.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 313 | `playbook_313_promotion_ceremony.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 314 | `playbook_314_backup_muster.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 315 | `playbook_315_two_inventories.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 316 | `playbook_316_kish_promotion_pipeline.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 317 | `playbook_317_game_day.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 318 | `playbook_318_vault_body_zfs.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 319 | `playbook_319_host_storage_layout.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 320 | `playbook_320_vm_disk_provisioning.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 321 | `playbook_321_kidinnu_engine.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 322 | `playbook_322_ontograph_scaffold.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 330 | `playbook_330_karu_cold_archive.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 338 | `playbook_338_sibittu_jail.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 339 | `playbook_339_parzu_case_particle.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 344 | `playbook_344_nergal_transport_kernel.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 348 | `playbook_348_babturdi_engine.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 350 | `playbook_350_ninazu_engine.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 420 | `playbook_420_field_core_scaffold.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 421 | `playbook_421_tile_pipeline.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 422 | `playbook_422_rtk_base_station.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 423 | `playbook_423_field_sbc_image.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 424 | `playbook_424_feed_and_ui_deploy.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 425 | `playbook_425_gpr_anomaly_minting.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 426 | `playbook_426_registry_bridge.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 427 | `playbook_427_shala_tablet_vault.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 428 | `playbook_428_vgca_calculus_crate.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 429 | `playbook_429_catenoid_quality_crate.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 430 | `playbook_430_asalluhi_engine_crate.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 431 | `playbook_431_hendursaga_theater_feed.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 432 | `playbook_432_dashboard_census_service.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 433 | `playbook_433_conservation_delta_auditd.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 434 | `playbook_434_seven_gates_enforcement.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 435 | `playbook_435_blackbox_cycle_wiring.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 436 | `playbook_436_invoice_datum_service.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 437 | `playbook_437_finalization_gate.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 500 | `playbook_500_igigi_watch_core.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 501 | `playbook_501_bells_service.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 502 | `playbook_502_lamassu_cadence_daemon.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 503 | `playbook_503_seismograph_drill.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 504 | `playbook_504_uruk_kish_weir.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 505 | `playbook_505_lahmu_lahamu_heartbeat.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 506 | `playbook_506_backpressure_ladder.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 507 | `playbook_507_kittu_alert_wiring.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 508 | `playbook_508_shakkanakku_chronicle_sink.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 509 | `playbook_509_watch_ui_deploy.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 510 | `playbook_510_rite_lamassu_sweep.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 511 | `playbook_511_rite_enlil_reconsecration.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 512 | `playbook_512_rite_snapshot_partition.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 513 | `playbook_513_rite_nuzi_prune.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 514 | `playbook_514_rite_chaos_drill.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 515 | `playbook_515_vineyard_extent_registry.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 516 | `playbook_516_vineyard_harvest_rules.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 517 | `playbook_517_sila_grid_crate.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 518 | `playbook_518_maxpressure_scheduler.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 519 | `playbook_519_osm_province_ingest.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 520 | `playbook_520_arterial_template_mint.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 521 | `playbook_521_typed_census_service.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 522 | `playbook_522_scenario_engine.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 523 | `playbook_523_cell_transmission_model.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 524 | `playbook_524_mfd_perimeter_control.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 525 | `playbook_525_hotspot_detection.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 526 | `playbook_526_parking_assignment.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 527 | `playbook_527_heptamapspace_renderer.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 528 | `playbook_528_uniqueness_reach_lens.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 529 | `playbook_529_heptascript_ext_cluster.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 530 | `playbook_530_traffic_arc_gate.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 531 | `playbook_531_arsenal_inventory_survey.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 532 | `playbook_532_deploy_shala_v4.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 533 | `playbook_533_orbit_witness_isolation_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 534 | `playbook_534_tupsimati_connector_wizard_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 535 | `playbook_535_madanu_court_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 536 | `playbook_536_pattern_minting_template_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 537 | `playbook_537_ticket_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 538 | `playbook_538_storyengine_journal_event_ontology_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 539 | `playbook_539_harmonization_survey_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 540 | `playbook_540_homeostasis_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 541 | `playbook_541_living_shape_drift_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 542 | `playbook_542_girsu_vulkan_classroom.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 543 | `playbook_543_girsu_extension_naming_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 544 | `playbook_544_physics_service_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 545 | `playbook_545_foreign_pattern_quarantine_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 546 | `playbook_546_pattern_maturation_delivery_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 547 | `playbook_547_no_false_authority_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 548 | `playbook_548_single_glossary_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 549 | `playbook_549_gula_federation_advisory_api.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 550 | `playbook_550_synthetic_baghdad_federation_dataset.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 551 | `playbook_551_godot_mobile_hubble_scaffold.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 552 | `playbook_552_offline_osm_tile_bundler.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 553 | `playbook_553_signed_advisory_verifier.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 554 | `playbook_554_medicine_batch_audit.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 555 | `playbook_555_hala_naming_correction_uruinimgina.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 556 | `playbook_556_deploy_bahyway_websites_nginx.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 557 | `playbook_557_production_golive_from_accept.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 558 | `playbook_558_eridu_scaffold_ota_ground_and_build_dag.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 559 | `playbook_559_shala_hub_observatory_learning_tool.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 560 | `playbook_560_nimrud_stack_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 561 | `playbook_561_nimrud_observatory.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 562 | `playbook_562_usurtu_descent.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 563 | `playbook_563_nimrud_notebook.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 564 | `playbook_564_tid_fca_eav_bacteriology_batch.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 565 | `playbook_565_book_court_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 566 | `playbook_566_abubu_calculus_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 567 | `playbook_567_ishum_engine_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 568 | `playbook_568_markasu_alert_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 569 | `playbook_569_temennu_rigmu_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 570 | `playbook_570_rigmu_inquest_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 571 | `playbook_571_najaf_grave_court_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 572 | `playbook_572_saturday_rehearsal_suite_batch.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 573 | `playbook_573_shape_pattern_court_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 574 | `playbook_574_salmu_registry_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 575 | `playbook_575_story_membrane_court_batch.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 576 | `playbook_576_bwvl_verb_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 577 | `playbook_577_labiru_doctrine_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 578 | `playbook_578_migration_chapter_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 579 | `playbook_579_misru_rite_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 580 | `playbook_580_alaa_doctrine_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 581 | `playbook_581_kinu_network_amendment_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 582 | `playbook_582_kulla_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 583 | `playbook_583_preflight_github_deploy_keys.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 584 | `playbook_584_saadoun_calculus_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 585 | `playbook_585_saadounshape_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 586 | `playbook_586_puluhtu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 587 | `playbook_587_shedu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 588 | `playbook_588_temu_amendment_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 589 | `playbook_589_napharu_theorem_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 590 | `playbook_590_kaniku_gate_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 591 | `playbook_591_adannu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 592 | `playbook_592_askuppu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 593 | `playbook_593_kisru_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 594 | `playbook_594_asakku_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 595 | `playbook_595_epeshu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 596 | `playbook_596_nasaru_instrument_standard_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 597 | `playbook_597_shetu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 598 | `playbook_598_tirku_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 599 | `playbook_599_ummanu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 600 | `playbook_600_zimu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 601 | `playbook_601_lisanu_law_seal.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 602 | `playbook_602_gula_agent_scaffold.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 603 | `playbook_603_zaqiqu_harvest.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 604 | `playbook_604_apsu_mirror.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 605 | `playbook_605_uttu_tissue_loom.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 606 | `playbook_606_puluhtu_gate.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 607 | `playbook_607_hepta_field_huburu.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 608 | `playbook_608_usurtu_map.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 609 | `playbook_609_run_manifest.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 610 | `playbook_610_bigring_relief_ru_mlu.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 611 | `playbook_611_bigring_relief_ru_mlu_v2.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 612 | `playbook_612_biomechatronic_federation.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 613 | `playbook_613_federation_human_robot.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 614 | `playbook_614_wave_field_membrane.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 615 | `playbook_615_wave_field_membrane_v2.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 616 | `playbook_616_wave_field_membrane_v3.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 617 | `playbook_617_wave_field_membrane_v4.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 618 | `playbook_618_seal_gl_unt_001.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 619 | `playbook_619_seal_gl_fed_001.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 620 | `playbook_620_seal_gl_fld_001.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 621 | `playbook_621_register_units.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 622 | `playbook_622_factor_leaf_particles.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 623 | `playbook_623_enlil_field_kernel.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 624 | `playbook_624_account_emitter.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 625 | `playbook_625_promote_sala_tabs.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 626 | `playbook_626_site_seal_rite.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 628 | `playbook_628_wound_herd_harvester.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 631 | `playbook_631_cdse_arsenal_fetch.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 632 | `playbook_632_landing_zone_provision.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 633 | `playbook_633_private_cloud_access.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 634 | `playbook_634_private_cloud_services.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 635 | `playbook_635_nergal_av_posture.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 636 | `playbook_636_sala_run_bridge.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 646 | `playbook_646_ansharv4_engine.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 647 | `playbook_647_palu_crossing.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 648 | `playbook_648_riksu_verification_harvest.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 649 | `playbook_649_hundred_crates_landing_to_golden.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 650 | `playbook_650_cartographer.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 651 | `playbook_651_cartographer_runtime_witness.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 652 | `playbook_652_enkiqdb_facets.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 653 | `playbook_653_enkidb_atlas.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 654 | `playbook_654_seal_gl_krn_001.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 655 | `playbook_655_segment_policy.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 657 | `playbook_657_steward_decrees.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 663 | `playbook_663_layer_life.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 668 | `playbook_668_gates_beemdm_chain.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 670 | `playbook_670_dfg_snapshot_stack.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 671 | `playbook_671_dfg_storage_threat.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 672 | `playbook_672_run_manifest_phase3.yml` | `[ ]` | auto-added at epoch 1787849484 — real file on disk, no triage row yet |
+| 673 | `playbook_673_ddb_viz_solution_enlil.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=9 changed=3 failed=0. Report drift task flagged crates not found on disk: kaki-core, hepta-grid, enlil-field -- page content vs actual crate paths worth a follow-up check, not a run failure. |
+| 674 | `playbook_674_ddb_notebook_bridge.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=14 changed=6 failed=0. PyO3 bridge built and installed into the notebook environment. |
+| 675 | `playbook_675_sasu_test_bench.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=12 changed=3 failed=0. Shape diff computed at all four scales (tribe/tribes/bigring/federation), all deltas zero for the rehearsal candidate. |
+| 676 | `playbook_676_watcher_core.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=15 changed=5 failed=0. Nisaba watcher installed, determinism gate (A1) and golden-suite gate (A2) both green, receipt sha256 computed. |
+| 677 | `playbook_677_template_registry.yml` | `[~]` | real bare-metal run (uruk/girsu), 2026-08-27: Gate T0 correctly refuses with no candidate named -- requires -e tpl=/path/to/pattern.json. Not a bug: an admission gate meant to run per real candidate, not standalone. |
+| 678 | `playbook_678_pdm_shape_admission.yml` | `[~]` | real bare-metal run (uruk/girsu), 2026-08-27: Gate P0 correctly refuses with no candidate named -- requires -e cand=/path/to/shape.json. Not a bug: an admission gate meant to run per real candidate, not standalone. |
+| 679 | `playbook_679_watcher_scanner.yml` | `[~]` | real bare-metal run (uruk/girsu), 2026-08-27: Gate B1 correctly refuses with no stakeholder named -- requires -e who=<stakeholder>. Not a bug: an admission gate meant to run per real submission, not standalone. |
+| 680 | `playbook_680_promote_wed0826_sala_tabs.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=5 changed=3 failed=0. 11 Sala tabs promoted, all parse. |
+| 681 | `playbook_681_seal_gl_agt_001.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=12 changed=5 failed=0. GL-AGT-001 SEALED for real -- Ed25519 AkkadianSeal computed, Kaniku receipt written, registered in the law registry. |
+| 682 | `playbook_682_seal_gl_bnd_001.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=12 changed=5 failed=0. GL-BND-001 SEALED for real -- Ed25519 AkkadianSeal computed, Kaniku receipt written, registered. |
+| 683 | `playbook_683_seal_gl_imm_001.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=12 changed=5 failed=0. GL-IMM-001 SEALED for real -- was draft/unsealed earlier this session, now genuinely sealed with Ed25519 AkkadianSeal + Kaniku receipt. |
+| 684 | `playbook_684_seal_gl_alg_001.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=12 changed=5 failed=0. GL-ALG-001 SEALED for real -- Ed25519 AkkadianSeal computed, Kaniku receipt written, registered. |
+| 685 | `playbook_685_promote_algebra_register_tabs.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=6 changed=2 failed=0. 4 Algebra Register tabs promoted, all parse, no SQL leakage. |
+| 686 | `playbook_686_finale_documentation.yml` | `[x]` | real bare-metal run (uruk/girsu), 2026-08-27: ok=9 changed=3 failed=0. Confirmed all four PB-681..684 seal receipts genuinely exist on disk (computed, not asserted); Manual/Glossary/README updated. |
+| 687 | `playbook_687_deploy_bahyway_enkidb_lamassu.yml` | `[x]` | real bare-metal run, 2026-08-27: root cause was `orbit()` loading-and-appending to a persistent store instead of resetting it, so a store carrying particles from an earlier run broke the smoke test's `count==1` assumption -- not a bug in `orbit`/`present` themselves. Fixed by clearing the disposable PB687Smoke store before the smoke test. Re-run clean: `present --count` reported `[1]`, `bahyway-enlil` independently proved `no_silent_decimation` against the same store (ok=10 changed=3 failed=0). |
+| 688 | `playbook_688_vault_hot_format_mount.yml` | `[x]` | real bare-metal run (uruk-node-vault), 2026-08-27: three real bugs found and fixed in sequence -- (1) SELinux context missing on the freshly-mounted XFS filesystem, fixed with `semanage fcontext` + `restorecon`; (2) `semanage` itself wasn't installed (ships in `policycoreutils-python-utils`, separate from SELinux being Enforcing), fixed with a gated `dnf install`; (3) the real blocker: `/vault` (the mount point's parent, owned by `lahamu:root` mode 0750) had no traverse bit for `bahyway`, so no permission on `/vault/hot` itself could ever have worked -- fixed with a minimal `o+x` traverse-only bit on `/vault`, no ownership or read/list access changed. Re-run clean: `/vault/hot` confirmed real, mounted, and writable by bahyway (ok=14 changed=2 failed=0). |

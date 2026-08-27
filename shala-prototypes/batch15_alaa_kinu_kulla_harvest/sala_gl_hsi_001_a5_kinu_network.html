@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · GL-HSI-001-A5 · The Kīnu Network Court</title>
+<style>
+  :root{
+    --basalt:#14120f; --tablet:#1f1b16; --gold:#c9a227; --lapis:#2e5d8c;
+    --copper:#b0642f; --alarm:#c23b2a; --bone:#e8e0cf;
+    --tablet-edge:#3a332a; --dim:#8f8672; --green:#7fbf5f; --violet:#a58cc0;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--basalt); color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif; overflow:hidden;}
+  #crumbs{padding:10px 16px 0; font-size:12px; color:var(--dim); letter-spacing:.08em;}
+  #crumbs b{color:var(--gold); font-weight:normal;}
+  #lede{padding:2px 16px 8px; font-size:14.5px;}
+  #banner{background:var(--alarm); color:var(--bone); text-align:center;
+    font-size:11px; letter-spacing:.35em; padding:3px 0; font-family:monospace;}
+  #grid{display:grid; grid-template-columns:1fr 320px; gap:10px;
+    padding:10px 16px 16px; height:calc(100% - 92px);}
+  .panel{background:var(--tablet); border:1px solid var(--tablet-edge);
+    border-radius:6px; position:relative; overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block; width:100%; height:100%;}
+  #deck{position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:5;}
+  #deck button{width:34px; height:34px; background:var(--basalt); color:var(--gold);
+    border:1px solid var(--tablet-edge); border-radius:4px; font-size:16px; cursor:pointer;}
+  #acts{position:absolute; bottom:44px; left:10px; display:flex; gap:6px; flex-wrap:wrap; z-index:5;}
+  #acts button{background:var(--basalt); color:var(--copper); font-family:inherit;
+    border:1px solid var(--copper); border-radius:4px; padding:6px 10px;
+    font-size:11.5px; cursor:pointer;}
+  #acts button:hover{color:var(--gold); border-color:var(--gold);}
+  #acts button.done{color:var(--green); border-color:var(--green);}
+  #lawtags{position:absolute; bottom:10px; left:10px; display:flex; gap:6px;
+    flex-wrap:wrap; z-index:5;}
+  .lawtag{font-family:monospace; font-size:10px; color:var(--basalt);
+    background:var(--gold); padding:2px 7px; border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis); color:var(--bone);}
+  #side{display:flex; flex-direction:column;}
+  #side h2{font-size:12px; letter-spacing:.25em; color:var(--gold);
+    padding:10px 12px 6px; border-bottom:1px solid var(--tablet-edge);}
+  #journal{flex:1; overflow-y:auto; padding:10px 12px; font-size:12.5px; line-height:1.5;}
+  .entry{margin-bottom:10px; border-left:2px solid var(--copper); padding-left:8px;}
+  .entry .t{color:var(--dim); font-family:monospace; font-size:10px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Nanshe Court ▸ <b>GL-HSI-001-A5 · The Kīnu Network</b></div>
+<div id="lede"><i>"Estimation may pool; verdicts may not."</i> Epochs pass; the stable are chosen by proof; the nuisance is read through them and removed; the siblings are admitted by test — and the Event fires per-Tribe, never by the pooling.</div>
+<div id="banner">ŠALA REHEARSAL ONLY — SELECTION BY STATISTIC, ADMISSION BY VERDICT — SOVEREIGN RENDER IS EGUI/WGPU</div>
+
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="deck">
+      <button id="bHome" title="Reset view">⌖</button>
+      <button id="bZi" title="Zoom in">＋</button>
+      <button id="bZo" title="Zoom out">－</button>
+    </div>
+    <div id="acts">
+      <button id="aEp">① WITNESS EPOCH</button>
+      <button id="aKin">② SELECT THE KĪNU</button>
+      <button id="aNui">③ REMOVE THE NUISANCE</button>
+      <button id="aTri">④ ADMIT THE TRIBES</button>
+      <button id="aSq">⑤ SQUEEZE &amp; JUDGE</button>
+    </div>
+    <div id="lawtags">
+      <span class="lawtag">GL-HSI-001-A5</span>
+      <span class="lawtag lapis">PB-HSI-005</span>
+      <span class="lawtag lapis">KĪNU WITNESS</span>
+      <span class="lawtag">DERIVED · GL-NIM-001</span>
+      <span class="lawtag lapis">TWO WITNESSES · EGMS</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>STORYENGINE JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+const rnd=mulberry32(0x4B494E55); /* "KINU" */
+
+const cv=document.getElementById('cv'), g=cv.getContext('2d');
+const stage=document.getElementById('stage');
+function fit(){cv.width=stage.clientWidth; cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit); fit();
+let view={x:0,y:0,z:1}, drag=null;
+document.getElementById('bHome').onclick=()=>view={x:0,y:0,z:1};
+document.getElementById('bZi').onclick=()=>view.z=Math.min(2.4,view.z*1.15);
+document.getElementById('bZo').onclick=()=>view.z=Math.max(.55,view.z/1.15);
+stage.addEventListener('wheel',e=>{e.preventDefault();
+  view.z=Math.min(2.4,Math.max(.55,view.z*(e.deltaY<0?1.08:0.92)));},{passive:false});
+stage.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mousemove',e=>{if(!drag)return;
+  view.x+=e.clientX-drag.x; view.y+=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mouseup',()=>drag=null);
+
+const jEl=document.getElementById('journal');
+function journal(t){const d=document.createElement('div'); d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;
+  jEl.prepend(d);}
+
+/* ---- the scene: 18x12 spectral particles ---- */
+const NX=18, NY=12, N_KINU=4;
+const px=[];
+for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){
+  let type='field';
+  if((i<4&&j<3)||(i>13&&j<4)||(i>14&&j>8)) type='struct';       /* buildings/rock: Kinu candidates */
+  if(j===6) type='road';                                        /* road strip: contaminant in the field */
+  const ev=(i>=6&&i<=9&&j>=8&&j<=10);                           /* event patch: decays late */
+  px.push({i:i,j:j,type:type,ev:ev,hist:[],kinu:false,tribe:0,refused:false});
+}
+let E=0, acts={kin:false,nui:false,tri:false,sq:false}, eventFired=false;
+function nuisance(i,j,e){ return acts.nui?0 : 0.16*Math.sin(e*1.7+1)+0.12*(i/NX)*Math.cos(e*1.1); }
+function truth(p,e){
+  let base = p.type==='struct'?0.30 : p.type==='road'?0.42 : 0.62;
+  const noise = (p.type==='struct'?0.012:0.05)*(rnd()-0.5)*2;
+  if(p.ev && e>=5) base -= 0.06*(e-4);            /* DECAY-ONSET after epoch 5 */
+  return base+noise;
+}
+document.getElementById('aEp').onclick=()=>{
+  E++;
+  px.forEach(p=>p.hist.push(truth(p,E)));
+  journal('① EPOCH '+E+' witnessed — a campaign pass over the scene; every particle appends its spectral index to history. The nuisance field (smooth in space, random in epoch) rides on all of it.'+(E>=5&&px.some(p=>p.ev)?' Something in the south field has begun to change…':''));
+};
+document.getElementById('aKin').onclick=()=>{
+  if(E<N_KINU){journal('② WITHHELD — the Kīnu selection floor is N='+N_KINU+' epochs (§2, declared in advance); only '+E+' stand. Selection by fewer would be assumption, not proof.'); return;}
+  acts.kin=true; document.getElementById('aKin').classList.add('done');
+  let n=0;
+  px.forEach(p=>{
+    const m=p.hist.reduce((a,b)=>a+b,0)/p.hist.length;
+    const sd=Math.sqrt(p.hist.reduce((a,b)=>a+(b-m)*(b-m),0)/p.hist.length);
+    p.kinu=(sd<0.03); if(p.kinu)n++;
+  });
+  journal('② KĪNU SELECTED — '+n+' particles admitted to the network by demonstrated stability (declared statistic, not land-cover assumption). Gold rings mark the trusted lattice; a Kīnu that drifts in later epochs is demoted by the same statistic.');
+};
+document.getElementById('aNui').onclick=()=>{
+  if(!acts.kin){journal('The nuisance is read THROUGH the network (§3) — select the Kīnu first.'); return;}
+  acts.nui=true; document.getElementById('aNui').classList.add('done');
+  journal('③ NUISANCE REMOVED — estimated on the Kīnu network only (smooth-in-space, random-in-epoch signature) and interpolated between them; every particle\'s correction journaled to EAV as a calibration act. The scene\'s breathing gradient stills; what remains is the ground\'s own truth.');
+};
+document.getElementById('aTri').onclick=()=>{
+  if(!acts.nui){journal('Admission tests run on cleaned histories (§4) — remove the nuisance first.'); return;}
+  acts.tri=true; document.getElementById('aTri').classList.add('done');
+  px.forEach(p=>{
+    if(p.type==='field'){p.tribe=p.ev?2:1;}
+    if(p.type==='road'){p.refused=true;}
+  });
+  journal('④ TRIBES ADMITTED — the homogeneity test on full time histories gathers the field into siblinghood (lapis) and the changing patch into its own family (violet). The road strip FAILED the test at the declared significance floor: <span style="color:var(--alarm)">refused siblings</span>, dashed — a crowd has no standing in the court.');
+};
+document.getElementById('aSq').onclick=()=>{
+  if(!acts.tri){journal('Only admitted Tribes may be squeezed (§5) — run the admission first.'); return;}
+  if(E<7){journal('⑤ The squeeze runs, but no verdict crosses yet — witness more epochs; the court does not hurry a DECAY.'); acts.sq=true; document.getElementById('aSq').classList.add('done'); return;}
+  acts.sq=true; document.getElementById('aSq').classList.add('done');
+  if(!eventFired){eventFired=true;
+    journal('⑤ SQUEEZE &amp; JUDGE — each Tribe\'s shared signature is jointly estimated, classed <b>DERIVED</b> (never MEASURED), coherence in EAV. Then the verdict: the violet Tribe\'s signature crosses the decline threshold in two consecutive epochs — <b style="color:var(--gold)">EVENT KAKI: DECAY-ONSET</b>, fired per-Tribe by crossing, not by the pooling. <i>Estimation may pool; verdicts may not.</i> An EGMS point (☆) over the same address awaits the ground\'s motion: only a joint crossing routes to Nimrud — one witness alone is watchfulness.');}
+};
+
+let t0=performance.now();
+function frame(now){
+  const t=now/1000;
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle='#14120f'; g.fillRect(0,0,cv.width,cv.height);
+  g.setTransform(view.z,0,0,view.z,view.x+cv.width*(1-view.z)/2,view.y+cv.height*(1-view.z)/2);
+
+  const gw=Math.min(cv.width*0.62/NX, cv.height*0.72/NY);
+  const ox=cv.width*0.06+Math.sin(t*0.4)*3, oy=cv.height*0.12+Math.cos(t*0.35)*3;
+
+  px.forEach(p=>{
+    const x=ox+p.i*gw, y=oy+p.j*gw+3*Math.sin(t*0.6+p.i*0.4+p.j*0.3);
+    let v=p.hist.length? p.hist[p.hist.length-1] : (p.type==='struct'?0.3:0.55);
+    v+=nuisance(p.i,p.j,Math.max(1,E))* (acts.nui?0:1);
+    const hue=100-40*(0.62-v); const light=30+35*v;
+    g.fillStyle='hsl('+Math.max(20,hue)+',45%,'+light+'%)';
+    g.fillRect(x,y,gw-2,gw-2);
+    if(p.tribe===1){g.strokeStyle='rgba(46,93,140,0.9)'; g.lineWidth=1.4; g.strokeRect(x+1,y+1,gw-4,gw-4);}
+    if(p.tribe===2){g.strokeStyle='rgba(165,140,192,0.95)'; g.lineWidth=1.6; g.strokeRect(x+1,y+1,gw-4,gw-4);}
+    if(p.refused){g.strokeStyle='#c23b2a'; g.setLineDash([3,3]); g.lineWidth=1.4;
+      g.strokeRect(x+1,y+1,gw-4,gw-4); g.setLineDash([]);}
+    if(p.kinu){g.beginPath(); g.arc(x+gw/2-1,y+gw/2-1,gw*0.28,0,2*Math.PI);
+      g.strokeStyle='#c9a227'; g.lineWidth=1.6; g.stroke();}
+  });
+  /* EGMS PSI point over the event patch */
+  const exx=ox+7.5*gw, eyy=oy+9*gw-14;
+  g.fillStyle=eventFired?'#c9a227':'rgba(232,224,207,0.5)';
+  g.font='14px monospace'; g.textAlign='center'; g.fillText('☆',exx,eyy);
+  g.font='9px monospace'; g.fillText('EGMS PSI',exx,eyy-12);
+
+  /* signature inset after squeeze */
+  if(acts.sq){
+    const mx=cv.width*0.70, my=cv.height*0.14, mw=cv.width*0.26, mh=cv.height*0.34;
+    g.fillStyle='rgba(20,18,15,0.85)'; g.fillRect(mx,my,mw,mh);
+    g.strokeStyle='#3a332a'; g.strokeRect(mx,my,mw,mh);
+    g.fillStyle='#c9a227'; g.font='10px monospace'; g.textAlign='center';
+    g.fillText('TRIBE SIGNATURES — DERIVED', mx+mw/2, my-5);
+    [[1,'#2e5d8c'],[2,'#a58cc0']].forEach(([tr,col])=>{
+      const fam=px.filter(p=>p.tribe===tr&&p.hist.length);
+      if(!fam.length)return;
+      g.beginPath();
+      for(let e=0;e<E;e++){
+        const m=fam.reduce((a,p)=>a+p.hist[e],0)/fam.length;
+        const X=mx+10+(e/(Math.max(1,E-1)))*(mw-20), Y=my+mh-15-(m-0.2)*(mh-30)/0.6;
+        e?g.lineTo(X,Y):g.moveTo(X,Y);
+      }
+      g.strokeStyle=col; g.lineWidth=1.6; g.stroke();
+    });
+    const thY=my+mh-15-(0.50-0.2)*(mh-30)/0.6;
+    g.setLineDash([4,4]); g.beginPath(); g.moveTo(mx+8,thY); g.lineTo(mx+mw-8,thY);
+    g.strokeStyle='#c23b2a'; g.lineWidth=1; g.stroke(); g.setLineDash([]);
+    g.fillStyle='#c23b2a'; g.font='9px monospace'; g.textAlign='left';
+    g.fillText('decline threshold',mx+10,thY-4);
+    if(eventFired){g.fillStyle='#c9a227'; g.font='10px monospace'; g.textAlign='center';
+      g.fillText('EVENT KAKI · DECAY-ONSET (per-Tribe crossing)', mx+mw/2, my+mh+13);}
+  }
+  /* epoch counter */
+  g.fillStyle='rgba(232,224,207,0.75)'; g.font='11px monospace'; g.textAlign='left';
+  g.fillText('epochs witnessed: '+E+'   ·   Kinu floor N='+N_KINU+'   ·   gold ring = Kinu · lapis/violet = admitted Tribe · dashed = refused', ox, oy-12);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('THE KĪNU COURT opens over a scene: structures at the corners, a broad field, a road strip crossing it, and — unknown to the court yet — a patch that will begin to fail. Witness epochs (①, at least '+N_KINU+'), then let the acts follow in order.');
+</script>
+</body>
+</html>

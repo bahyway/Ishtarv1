@@ -1,0 +1,118 @@
+# =============================================================================
+# PB-672 -- Automated run-manifest: walk the Phase-3 corpus (PB-610..671),
+# fully unattended. 2026-08-25.
+#
+# WHAT THIS IS: the Mon0824 + Sun0823-leftover + Tu0825 Sala-prototype corpus
+# (Bahaa's local design sessions, checked round by round against this repo
+# throughout an earlier review) renumbered out of the other session's
+# informal PB-353..405 sequence -- which was never targeting this repo's
+# playbooks/ directory, and collided both with itself (three independent
+# threads reusing the same numbers) and with a pre-existing repo doc -- into
+# this repo's own real, sequential PB-610..671. See
+# shala-prototypes/batch36_phase3_final_build/README.md for the full
+# per-entry provenance (old informal number -> new real number) and for the
+# two bugs fixed during landing: the GL-ALG-003->GL-ALG-005 mis-citation in
+# the Hititu Mode Court tabs, and the GL-VIZ-002->GL-VIZ-010 rename (the
+# corpus's "Snapshot Stack" tablet collided with this repo's real, unrelated
+# GL-VIZ-002-orbit-witness-isolation.md). A third collision -- PB-646's
+# Knowledge Graph engine reusing the Anšar god-name already taken by the
+# real, compiled workspace/bahyway_v4/crates/bahyway-algebra/src/
+# anshar.rs::AnsharEngine -- is resolved the same way, per the Architect's
+# naming rule (any collision keeps the same name, suffixed `v4`): the new
+# engine is AnsharV4Engine, in its own engines/ansharv4 crate
+# (playbook_646_ansharv4_engine.yml), coexisting with the original rather
+# than reusing its name.
+#
+# Same discipline as PB-609 (the finalization-suite walker this one is
+# modeled on): invoking this playbook IS the one CSR-08 confirmation. From
+# here it runs --check then LIVE for every item automatically, start to
+# finish, no pause of any kind.
+#
+# STOP-ON-ERROR: controlled by `stop_on_error` (default false) -- see
+# PB-609's header for the full rationale; identical semantics here.
+#
+# THE ORDERING: strict ascending PB-number order, which is also this
+# corpus's own narrative/dependency order (the Kaniku Seal chain PB-618..627
+# must run before anything treating GL-UNT-001/GL-FED-001/GL-FLD-001 as
+# sealed; PB-654 seals the Kernel Scene tablet and PB-655 seals Segment
+# Shape, both depended on by later entries in the range).
+#
+# WHAT'S NOT IN THIS BACKLOG: the ~21 html-only Šala tabs in this range
+# (Hititu Mode Court base..v9, the Wave Dynamics/Steward Court v1..v5
+# lineage, Layer Life's Hubble/Cinema/Sectors views, the Šala Shell, Bīt Asî
+# base+v2, the Kaniku Seal Court tab, Gates&BeeMDM v2) have no playbook of
+# their own -- they are static prototypes checked into
+# shala-prototypes/batch36_phase3_final_build/, not independently run.
+# PB-677/678/679 (Template Registry, PDM Shape Admission, Watcher Scanner)
+# are also removed as of 2026-08-26: each is an operator-invoked rite
+# gated on a required -e var with no default (tpl=/cand=/who=) -- run them
+# by hand with a real argument, not through this unattended walk.
+#
+# EXTENDED 2026-08-26: the backlog now also carries the Wed0826 corpus
+# proper (PB-673..686) under group wed0826_corpus -- the Watcher/Band/
+# Immune-Model/Algebra-Register law tablets and their seal + tab-promotion
+# + finale-documentation playbooks (PB-681..686), which existed in
+# playbooks/ but had never been added to this walker before. This
+# playbook's own number stays PB-672 per
+# this repo's "extend the backlog, don't rename the walker" discipline
+# (see PB-609's header) -- the range in this file's name/messages is kept
+# honest below rather than left to imply the original PB-610..671 scope.
+#
+# EXTENDED 2026-08-26: the backlog now also carries the Wed0826 corpus
+# proper (PB-673..686) under group wed0826_corpus -- the Watcher/Band/
+# Immune-Model/Algebra-Register law tablets and their seal + tab-promotion
+# + finale-documentation playbooks (PB-681..686), which existed in
+# playbooks/ but had never been added to this walker before. This
+# playbook's own number stays PB-672 per
+# this repo's "extend the backlog, don't rename the walker" discipline
+# (see PB-609's header) -- the range in this file's name/messages is kept
+# honest below rather than left to imply the original PB-610..671 scope.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_672_run_manifest_phase3.yml
+#   ansible-playbook playbooks/playbook_672_run_manifest_phase3.yml -e stop_on_error=true
+#
+# Every step is journaled to naru/run_manifest_672_log.jsonl (append-only) --
+# re-running skips anything that already succeeded.
+# =============================================================================
+- name: "PB-672 · Automated run-manifest — the Phase-3 + Wed0826 corpus (PB-610..686)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    manifest_log: "{{ repo_root }}/naru/run_manifest_672_log.jsonl"
+    stop_on_error: false
+
+  tasks:
+    - name: Load the Phase-3 backlog
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/data/run_manifest_672_backlog.yml"
+
+    - name: Ensure NARU dir exists
+      ansible.builtin.file:
+        path: "{{ repo_root }}/naru"
+        state: directory
+        mode: "0755"
+
+    - name: "Announce the walk (no pause — fully unattended, zero prompts)"
+      ansible.builtin.debug:
+        msg: >-
+          PB-672 walking {{ manifest | length }} Phase-3 + Wed0826 playbooks (PB-610..686)
+          UNATTENDED: --check then LIVE, automatically, no prompts at all.
+          stop_on_error={{ stop_on_error }} ({{ 'halts on the first failure' if stop_on_error else 'failures are journaled, walk continues' }}).
+
+    - name: "Walk the Phase-3 backlog, unattended"
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/run_manifest_one.yml"
+      loop: "{{ manifest }}"
+      loop_control:
+        loop_var: item
+        label: "{{ item.pb }} — {{ item.what }}"
+
+    - name: "Walk complete"
+      ansible.builtin.debug:
+        msg: >-
+          PB-672 walk finished. See {{ manifest_log }} for the full
+          per-item journal (dry/live rc, skips). The ~21 html-only Šala
+          tabs in this range are static content, not run by this walk --
+          see shala-prototypes/batch36_phase3_final_build/README.md.

@@ -30,15 +30,25 @@ pub enum DriftCause {
 #[derive(Clone, Debug)]
 pub struct Alert {
     /// uuid_hash of the flagged particle.
-    pub uuid_hash:  u32,
-    pub severity:   AlertSeverity,
-    pub cause:      DriftCause,
+    pub uuid_hash: u32,
+    pub severity: AlertSeverity,
+    pub cause: DriftCause,
     /// Measured drift distance from the particle's last healthy color state.
     pub drift_distance: f32,
 }
 
 impl Alert {
-    pub fn new(uuid_hash: u32, severity: AlertSeverity, cause: DriftCause, drift_distance: f32) -> Self {
-        Alert { uuid_hash, severity, cause, drift_distance }
+    pub fn new(
+        uuid_hash: u32,
+        severity: AlertSeverity,
+        cause: DriftCause,
+        drift_distance: f32,
+    ) -> Self {
+        Alert {
+            uuid_hash,
+            severity,
+            cause,
+            drift_distance,
+        }
     }
 }

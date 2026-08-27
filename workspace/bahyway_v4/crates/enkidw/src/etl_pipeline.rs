@@ -18,57 +18,76 @@ use enkidb_kaki::KakiMinter;
 use enkidb_persist::PersistedDb;
 use enkidb_storage::FsyncPolicy;
 
-use crate::landing_zone::{LandingFileKind, LandingZone};
-use crate::zip_engine::{self, ZipError};
 use crate::kaki_generator::{self, RawRecord};
-use crate::way_file::WayFile;
+use crate::landing_zone::{LandingFileKind, LandingZone};
 use crate::way_compiler;
+use crate::way_file::WayFile;
+use crate::zip_engine::{self, ZipError};
 
 use compare_tribe_schema::{compare_versions, CompareVerdict, FieldMeta, FieldType, SchemaVersion};
 use musaru_security::zip_scan as musaru_scan;
 
 /// Severity level for a DW pipeline alert.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DwAlertSeverity { Info, Warning, Error }
+pub enum DwAlertSeverity {
+    Info,
+    Warning,
+    Error,
+}
 
 /// An alert emitted by the ETL pipeline during processing.
 #[derive(Debug, Clone)]
 pub struct DwAlert {
     pub severity: DwAlertSeverity,
-    pub message:  String,
+    pub message: String,
 }
 
 impl DwAlert {
-    fn info(msg: impl Into<String>)    -> Self { DwAlert { severity: DwAlertSeverity::Info,    message: msg.into() } }
-    fn warning(msg: impl Into<String>) -> Self { DwAlert { severity: DwAlertSeverity::Warning, message: msg.into() } }
-    fn error(msg: impl Into<String>)   -> Self { DwAlert { severity: DwAlertSeverity::Error,   message: msg.into() } }
+    fn info(msg: impl Into<String>) -> Self {
+        DwAlert {
+            severity: DwAlertSeverity::Info,
+            message: msg.into(),
+        }
+    }
+    fn warning(msg: impl Into<String>) -> Self {
+        DwAlert {
+            severity: DwAlertSeverity::Warning,
+            message: msg.into(),
+        }
+    }
+    fn error(msg: impl Into<String>) -> Self {
+        DwAlert {
+            severity: DwAlertSeverity::Error,
+            message: msg.into(),
+        }
+    }
 }
 
 /// Statistics accumulated during pipeline execution.
 #[derive(Debug, Default, Clone)]
 pub struct EtlStats {
     /// Files polled from the landing zone.
-    pub files_seen:       usize,
+    pub files_seen: usize,
     /// ZIP archives processed (entries extracted).
-    pub zips_processed:   usize,
+    pub zips_processed: usize,
     /// `.way` files compiled.
-    pub way_compiled:     usize,
+    pub way_compiled: usize,
     /// Data records successfully ingested as particles.
     pub records_ingested: usize,
     /// Records or entries that were skipped due to errors.
-    pub records_skipped:  usize,
+    pub records_skipped: usize,
     /// Total DW alerts emitted (info + warning + error).
-    pub alerts_emitted:   usize,
+    pub alerts_emitted: usize,
 }
 
 /// The ETL pipeline — drives the full LandingZone→PersistedDb flow.
 pub struct EtlPipeline {
-    landing:        LandingZone,
-    pdb:            PersistedDb,
-    minter:         KakiMinter,
-    stats:          EtlStats,
-    alerts:         Vec<DwAlert>,
-    last_schema:    Option<SchemaVersion>,
+    landing: LandingZone,
+    pdb: PersistedDb,
+    minter: KakiMinter,
+    stats: EtlStats,
+    alerts: Vec<DwAlert>,
+    last_schema: Option<SchemaVersion>,
     schema_version: u32,
 }
 
@@ -76,20 +95,20 @@ impl EtlPipeline {
     /// Open the pipeline: create the landing zone directory and open PersistedDb.
     pub fn open(
         landing_path: &Path,
-        data_dir:     &Path,
-        tribe_id:     TribeId,
-        policy:       FsyncPolicy,
+        data_dir: &Path,
+        tribe_id: TribeId,
+        policy: FsyncPolicy,
     ) -> std::io::Result<Self> {
         let landing = LandingZone::new(landing_path)?;
-        let pdb     = PersistedDb::open(data_dir, tribe_id, policy)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let pdb = PersistedDb::open(data_dir, tribe_id, policy)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(EtlPipeline {
             landing,
             pdb,
-            minter:         KakiMinter::new(tribe_id),
-            stats:          EtlStats::default(),
-            alerts:         Vec::new(),
-            last_schema:    None,
+            minter: KakiMinter::new(tribe_id),
+            stats: EtlStats::default(),
+            alerts: Vec::new(),
+            last_schema: None,
             schema_version: 0,
         })
     }
@@ -98,13 +117,20 @@ impl EtlPipeline {
     /// Returns a reference to the updated stats.
     pub fn run_once(&mut self) -> &EtlStats {
         let new_files = self.landing.poll();
-        if new_files.is_empty() { return &self.stats; }
+        if new_files.is_empty() {
+            return &self.stats;
+        }
 
-        self.emit(DwAlert::info(format!("{} new file(s) in landing zone", new_files.len())));
+        self.emit(DwAlert::info(format!(
+            "{} new file(s) in landing zone",
+            new_files.len()
+        )));
         self.stats.files_seen += new_files.len();
 
         for lf in new_files {
-            let fname = lf.path.file_name()
+            let fname = lf
+                .path
+                .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
@@ -115,7 +141,9 @@ impl EtlPipeline {
                 LandingFileKind::Tsv => self.process_records(&lf.path, &fname, false),
                 LandingFileKind::Csv => self.process_records(&lf.path, &fname, true),
                 LandingFileKind::Other => {
-                    self.emit(DwAlert::warning(format!("{fname}: unrecognised file type — skipping")));
+                    self.emit(DwAlert::warning(format!(
+                        "{fname}: unrecognised file type — skipping"
+                    )));
                     self.stats.records_skipped += 1;
                 }
             }
@@ -128,7 +156,7 @@ impl EtlPipeline {
 
     fn process_zip(&mut self, path: &Path, fname: &str) {
         let data = match fs::read(path) {
-            Ok(d)  => d,
+            Ok(d) => d,
             Err(e) => {
                 self.emit(DwAlert::error(format!("{fname}: read error — {e}")));
                 self.stats.records_skipped += 1;
@@ -150,7 +178,10 @@ impl EtlPipeline {
 
         let results = zip_engine::extract(&data);
         self.stats.zips_processed += 1;
-        self.emit(DwAlert::info(format!("{fname}: extracted {} ZIP entries", results.len())));
+        self.emit(DwAlert::info(format!(
+            "{fname}: extracted {} ZIP entries",
+            results.len()
+        )));
 
         for result in results {
             match result {
@@ -183,21 +214,25 @@ impl EtlPipeline {
             self.ingest_records(entry_name, records);
         } else if is_way {
             let src = match std::str::from_utf8(data) {
-                Ok(s)  => s.to_string(),
+                Ok(s) => s.to_string(),
                 Err(_) => {
-                    self.emit(DwAlert::error(format!("{entry_name}: invalid UTF-8 in .way file")));
+                    self.emit(DwAlert::error(format!(
+                        "{entry_name}: invalid UTF-8 in .way file"
+                    )));
                     return;
                 }
             };
             self.compile_way_source(&src, entry_name);
         } else {
-            self.emit(DwAlert::warning(format!("{entry_name}: skipped (not TSV/CSV/WAY)")));
+            self.emit(DwAlert::warning(format!(
+                "{entry_name}: skipped (not TSV/CSV/WAY)"
+            )));
         }
     }
 
     fn process_way(&mut self, path: &Path, fname: &str) {
         let src = match fs::read_to_string(path) {
-            Ok(s)  => s,
+            Ok(s) => s,
             Err(e) => {
                 self.emit(DwAlert::error(format!("{fname}: cannot read — {e}")));
                 return;
@@ -207,7 +242,7 @@ impl EtlPipeline {
     }
 
     fn compile_way_source(&mut self, src: &str, fname: &str) {
-        match WayFile::parse(src).and_then(|w| way_compiler::compile(&w).map_err(|e| e)) {
+        match WayFile::parse(src).and_then(|w| way_compiler::compile(&w)) {
             Ok(res) => {
                 self.stats.way_compiled += 1;
                 self.emit(DwAlert::info(format!(
@@ -224,7 +259,7 @@ impl EtlPipeline {
 
     fn process_records(&mut self, path: &Path, fname: &str, is_csv: bool) {
         let data = match fs::read(path) {
-            Ok(d)  => d,
+            Ok(d) => d,
             Err(e) => {
                 self.emit(DwAlert::error(format!("{fname}: read error — {e}")));
                 self.stats.records_skipped += 1;
@@ -240,17 +275,20 @@ impl EtlPipeline {
     }
 
     fn ingest_records(&mut self, source: &str, records: Vec<RawRecord>) {
-        if records.is_empty() { return; }
+        if records.is_empty() {
+            return;
+        }
         let count = records.len();
 
         // ── Schema sniff + compare ───────────────────────────────────────────
         let headers = &records[0].headers;
         if !headers.is_empty() {
-            let tribe_name  = strip_ext(source);
+            let tribe_name = strip_ext(source);
             self.schema_version += 1;
             let new_schema = headers_to_schema(headers, &tribe_name, self.schema_version);
             if let Some(ref old_schema) = self.last_schema {
-                let report = compare_versions(old_schema, &new_schema, &tribe_name, self.schema_version);
+                let report =
+                    compare_versions(old_schema, &new_schema, &tribe_name, self.schema_version);
                 if report.verdict == CompareVerdict::SchemaMismatch {
                     if report.has_breaking_changes() {
                         self.emit(DwAlert::error(format!("{source}: {}", report.summary())));
@@ -279,9 +317,12 @@ impl EtlPipeline {
                 self.stats.records_skipped += 1;
                 continue;
             }
-            match self.pdb.commit(ge.event_kaki, ge.particle, ge.epoch, ge.eav) {
-                Ok(())  => ok += 1,
-                Err(e)  => {
+            match self
+                .pdb
+                .commit(ge.event_kaki, ge.particle, ge.epoch, ge.eav)
+            {
+                Ok(()) => ok += 1,
+                Err(e) => {
                     self.emit(DwAlert::error(format!("{source}: commit error — {e}")));
                     self.stats.records_skipped += 1;
                 }
@@ -289,9 +330,11 @@ impl EtlPipeline {
         }
 
         self.stats.records_ingested += ok;
-        self.stats.records_skipped  += count - ok;
+        self.stats.records_skipped += count - ok;
         if ok > 0 {
-            self.emit(DwAlert::info(format!("{source}: ingested {ok}/{count} records")));
+            self.emit(DwAlert::info(format!(
+                "{source}: ingested {ok}/{count} records"
+            )));
         }
     }
 
@@ -308,16 +351,35 @@ impl EtlPipeline {
     }
 
     /// Peek at alerts without consuming them.
-    pub fn alerts(&self) -> &[DwAlert] { &self.alerts }
+    pub fn alerts(&self) -> &[DwAlert] {
+        &self.alerts
+    }
 
-    pub fn stats(&self)       -> &EtlStats   { &self.stats }
-    pub fn pdb(&self)         -> &PersistedDb { &self.pdb }
-    pub fn pdb_mut(&mut self) -> &mut PersistedDb { &mut self.pdb }
+    pub fn stats(&self) -> &EtlStats {
+        &self.stats
+    }
+    pub fn pdb(&self) -> &PersistedDb {
+        &self.pdb
+    }
+    pub fn pdb_mut(&mut self) -> &mut PersistedDb {
+        &mut self.pdb
+    }
 }
 
 fn headers_to_schema(headers: &[String], tribe_name: &str, version: u32) -> SchemaVersion {
-    let fields = headers.iter().enumerate()
-        .map(|(i, name)| FieldMeta::new(name.trim(), FieldType::Text, None, (i + 1) as u16, false, true))
+    let fields = headers
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            FieldMeta::new(
+                name.trim(),
+                FieldType::Text,
+                None,
+                (i + 1) as u16,
+                false,
+                true,
+            )
+        })
         .collect();
     SchemaVersion::new(version, tribe_name, version, fields)
 }
@@ -325,16 +387,16 @@ fn headers_to_schema(headers: &[String], tribe_name: &str, version: u32) -> Sche
 fn strip_ext(fname: &str) -> String {
     match fname.rfind('.') {
         Some(pos) => fname[..pos].to_string(),
-        None      => fname.to_string(),
+        None => fname.to_string(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::zip_engine::build_store_zip;
     use std::fs;
     use std::path::PathBuf;
-    use crate::zip_engine::build_store_zip;
 
     fn tmp_dir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("enkidw_etl_{}", tag));
@@ -344,9 +406,9 @@ mod tests {
     }
 
     fn make_pipeline(base: &PathBuf) -> EtlPipeline {
-        let landing  = base.join("landing");
+        let landing = base.join("landing");
         let data_dir = base.join("data");
-        let tid      = TribeId::from_u16(0x0001);
+        let tid = TribeId::from_u16(0x0001);
         EtlPipeline::open(&landing, &data_dir, tid, FsyncPolicy::Never).unwrap()
     }
 
@@ -360,7 +422,7 @@ mod tests {
 
         pipe.run_once();
         assert_eq!(pipe.stats().records_ingested, 2);
-        assert_eq!(pipe.stats().records_skipped,  0);
+        assert_eq!(pipe.stats().records_skipped, 0);
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -387,8 +449,8 @@ mod tests {
         fs::write(base.join("landing").join("batch.zip"), &zip).unwrap();
 
         pipe.run_once();
-        assert_eq!(pipe.stats().zips_processed,   1);
-        assert_eq!(pipe.stats().records_ingested,  1);
+        assert_eq!(pipe.stats().zips_processed, 1);
+        assert_eq!(pipe.stats().records_ingested, 1);
         let _ = fs::remove_dir_all(&base);
     }
 

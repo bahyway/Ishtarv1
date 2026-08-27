@@ -30,33 +30,33 @@ impl MaturityLevel {
     pub fn fuzzy_score(self) -> f32 {
         match self {
             MaturityLevel::NotApplicable => 1.0, // excluded — counts as neutral
-            MaturityLevel::NotStarted    => 0.0,
-            MaturityLevel::Planned       => 0.2,
-            MaturityLevel::InProgress    => 0.5,
-            MaturityLevel::Implemented   => 0.8,
-            MaturityLevel::Verified      => 1.0,
+            MaturityLevel::NotStarted => 0.0,
+            MaturityLevel::Planned => 0.2,
+            MaturityLevel::InProgress => 0.5,
+            MaturityLevel::Implemented => 0.8,
+            MaturityLevel::Verified => 1.0,
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
             MaturityLevel::NotApplicable => "N/A",
-            MaturityLevel::NotStarted    => "Not Started",
-            MaturityLevel::Planned       => "Planned",
-            MaturityLevel::InProgress    => "In Progress",
-            MaturityLevel::Implemented   => "Implemented",
-            MaturityLevel::Verified      => "Verified",
+            MaturityLevel::NotStarted => "Not Started",
+            MaturityLevel::Planned => "Planned",
+            MaturityLevel::InProgress => "In Progress",
+            MaturityLevel::Implemented => "Implemented",
+            MaturityLevel::Verified => "Verified",
         }
     }
 
     pub fn css_class(self) -> &'static str {
         match self {
             MaturityLevel::NotApplicable => "na",
-            MaturityLevel::NotStarted    => "not-started",
-            MaturityLevel::Planned       => "planned",
-            MaturityLevel::InProgress    => "in-progress",
-            MaturityLevel::Implemented   => "implemented",
-            MaturityLevel::Verified      => "verified",
+            MaturityLevel::NotStarted => "not-started",
+            MaturityLevel::Planned => "planned",
+            MaturityLevel::InProgress => "in-progress",
+            MaturityLevel::Implemented => "implemented",
+            MaturityLevel::Verified => "verified",
         }
     }
 
@@ -75,11 +75,11 @@ impl MaturityLevel {
     pub fn as_u8(self) -> u8 {
         match self {
             MaturityLevel::NotApplicable => 0,
-            MaturityLevel::NotStarted    => 1,
-            MaturityLevel::Planned       => 2,
-            MaturityLevel::InProgress    => 3,
-            MaturityLevel::Implemented   => 4,
-            MaturityLevel::Verified      => 5,
+            MaturityLevel::NotStarted => 1,
+            MaturityLevel::Planned => 2,
+            MaturityLevel::InProgress => 3,
+            MaturityLevel::Implemented => 4,
+            MaturityLevel::Verified => 5,
         }
     }
 }
@@ -105,10 +105,10 @@ pub enum AppTopology {
 impl AppTopology {
     pub fn as_str(self) -> &'static str {
         match self {
-            AppTopology::NajafEngine   => "NajafEngine",
-            AppTopology::WpdPipeline   => "WPD Pipeline",
-            AppTopology::WebGateway    => "Web Gateway",
-            AppTopology::EnkiDb        => "EnkiDB Core",
+            AppTopology::NajafEngine => "NajafEngine",
+            AppTopology::WpdPipeline => "WPD Pipeline",
+            AppTopology::WebGateway => "Web Gateway",
+            AppTopology::EnkiDb => "EnkiDB Core",
             AppTopology::EnterpriseAll => "BahyWay Enterprise (All)",
         }
     }
@@ -122,15 +122,15 @@ impl AppTopology {
 /// through the SLA GUI.
 #[derive(Debug, Clone)]
 pub struct SlaProfile {
-    pub name:             &'static str,
-    pub topology:         AppTopology,
+    pub name: &'static str,
+    pub topology: AppTopology,
     /// IDs of requirements selected for this profile.
-    pub selected_ids:     Vec<u16>,
+    pub selected_ids: Vec<u16>,
     /// Target B11 score (0–240) for this profile.
-    pub target_b11:       u8,
+    pub target_b11: u8,
     /// Domain-level weight overrides (domain → weight 0–240).
     /// Empty = use domain's default weight.
-    pub domain_weights:   Vec<(ComplianceDomain, u8)>,
+    pub domain_weights: Vec<(ComplianceDomain, u8)>,
 }
 
 impl SlaProfile {
@@ -138,83 +138,77 @@ impl SlaProfile {
     pub fn for_topology(topology: AppTopology) -> Self {
         match topology {
             AppTopology::NajafEngine => Self {
-                name:           "NajafEngine Compliance Profile",
+                name: "NajafEngine Compliance Profile",
                 topology,
-                selected_ids:   vec![
+                selected_ids: vec![
                     // GDPR — all mandatory
                     1001, 1002, 1003, 1004, 1005, 1006, 1007,
                     // Encryption — all mandatory
-                    2001, 2002, 2003, 2004,
-                    // Key management
-                    2102,
-                    // Network
-                    3001, 3002, 3003, 3004, 3005,
-                    // Operational
-                    4001, 4002, 4003,
-                    // NajafEngine-specific — all mandatory
-                    5001, 5002, 5003, 5004,
-                    // Governance
+                    2001, 2002, 2003, 2004, // Key management
+                    2102, // Network
+                    3001, 3002, 3003, 3004, 3005, // Operational
+                    4001, 4002, 4003, // NajafEngine-specific — all mandatory
+                    5001, 5002, 5003, 5004, // Governance
                     7001,
                 ],
-                target_b11:     200, // GEM threshold — 83%
+                target_b11: 200, // GEM threshold — 83%
                 domain_weights: vec![
-                    (ComplianceDomain::GdprPrivacy,  240),
+                    (ComplianceDomain::GdprPrivacy, 240),
                     (ComplianceDomain::NajafPrivacy, 240),
                 ],
             },
 
             AppTopology::WpdPipeline => Self {
-                name:           "WPD Pipeline Compliance Profile",
+                name: "WPD Pipeline Compliance Profile",
                 topology,
-                selected_ids:   vec![
-                    2002, 2003,          // volume + key encryption
-                    3003, 3004, 3005,    // TLS, network isolation
-                    4001, 4002,          // IR plan, pen test
-                    6001, 6002, 6003,    // WPD-specific
-                    7001,                // threat model
+                selected_ids: vec![
+                    2002, 2003, // volume + key encryption
+                    3003, 3004, 3005, // TLS, network isolation
+                    4001, 4002, // IR plan, pen test
+                    6001, 6002, 6003, // WPD-specific
+                    7001, // threat model
                 ],
-                target_b11:     180,
-                domain_weights: vec![
-                    (ComplianceDomain::WpdInfrastructure, 240),
-                ],
+                target_b11: 180,
+                domain_weights: vec![(ComplianceDomain::WpdInfrastructure, 240)],
             },
 
             AppTopology::WebGateway => Self {
-                name:           "Web Gateway Compliance Profile",
+                name: "Web Gateway Compliance Profile",
                 topology,
-                selected_ids:   vec![
-                    1007,                // privacy notice
-                    3001, 3002, 3003,   // hepta-sec-web, rate limiting, TLS
-                    4001, 4004,          // IR plan, disclosure policy
-                    7001,                // threat model
+                selected_ids: vec![
+                    1007, // privacy notice
+                    3001, 3002, 3003, // hepta-sec-web, rate limiting, TLS
+                    4001, 4004, // IR plan, disclosure policy
+                    7001, // threat model
                 ],
-                target_b11:     192,
-                domain_weights: vec![
-                    (ComplianceDomain::NetworkSecurity, 240),
-                ],
+                target_b11: 192,
+                domain_weights: vec![(ComplianceDomain::NetworkSecurity, 240)],
             },
 
             AppTopology::EnkiDb => Self {
-                name:           "EnkiDB Core Compliance Profile",
+                name: "EnkiDB Core Compliance Profile",
                 topology,
-                selected_ids:   vec![
+                selected_ids: vec![
                     2001, 2002, 2003, 2004, // encryption
-                    2101, 2102,              // key management
-                    3004, 3005,              // network isolation
-                    4001, 4002, 4003,        // operational
+                    2101, 2102, // key management
+                    3004, 3005, // network isolation
+                    4001, 4002, 4003, // operational
                 ],
-                target_b11:     192,
+                target_b11: 192,
                 domain_weights: vec![
                     (ComplianceDomain::EncryptionAtRest, 240),
-                    (ComplianceDomain::KeyManagement,    220),
+                    (ComplianceDomain::KeyManagement, 220),
                 ],
             },
 
             AppTopology::EnterpriseAll => Self {
-                name:           "BahyWay Enterprise Full Compliance",
+                name: "BahyWay Enterprise Full Compliance",
                 topology,
-                selected_ids:   crate::requirements::ALL_REQUIREMENTS.iter().map(|r| r.id).collect(),
-                target_b11:     180, // 75% — realistic for phased rollout
+                selected_ids: crate::requirements::ALL_REQUIREMENTS
+                    .iter()
+                    .map(|r| r.id)
+                    .collect(),
+                target_b11: 180, // 75% — realistic for phased rollout
                 domain_weights: vec![],
             },
         }
@@ -239,7 +233,8 @@ impl SlaProfile {
 
     /// Domain weight, using override if set, or domain default.
     pub fn domain_weight(&self, domain: ComplianceDomain) -> u8 {
-        self.domain_weights.iter()
+        self.domain_weights
+            .iter()
             .find(|(d, _)| *d == domain)
             .map(|(_, w)| *w)
             .unwrap_or_else(|| domain.weight())

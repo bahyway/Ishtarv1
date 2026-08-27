@@ -8,13 +8,13 @@
 //!   5. Rebuild derived indexes if their recorded position exceeds the frontier
 //!   6. Resume normal operation
 
-pub mod procedure;
 pub mod objective;
+pub mod procedure;
 
-pub use procedure::{RecoveryProcedure, RecoveryOutcome};
 pub use objective::RecoveryObjective;
+pub use procedure::{RecoveryOutcome, RecoveryProcedure};
 
 pub mod prelude {
-    pub use super::procedure::{RecoveryProcedure, RecoveryOutcome};
     pub use super::objective::RecoveryObjective;
+    pub use super::procedure::{RecoveryOutcome, RecoveryProcedure};
 }

@@ -30,13 +30,15 @@
 //!
 //! ## Control protocol
 //! Plain length-prefixed text frames (same convention as every other
-//! *-write-server` in this workspace) -- no JSON, no HTTP:
-//!   - `STATS` -> `OK:STATS:tick=<t>:sdb_pending=<n>:sdb_promoted=<n>:sdb_quarantined=<n>:odb_active=<n>:qdb_total=<n>`
-//!   - `SWEEP` -> force a ValidationSweep + drain right now (regardless of
-//!                cadence), responds `OK:SWEPT:promoted=<n>:quarantined=<n>:odb_moved=<n>:qdb_moved=<n>`
-//!   - `FLUSH` -> force-materialize all three Journals now, responds
-//!                `OK:FLUSHED:sdb=<n>:odb=<n>:qdb=<n>`
-//!   - anything else -> `ERR:<message>`
+//! *-write-server in this workspace) -- no JSON, no HTTP:
+//! ```text
+//!   - STATS -> OK:STATS:tick=<t>:sdb_pending=<n>:sdb_promoted=<n>:sdb_quarantined=<n>:odb_active=<n>:qdb_total=<n>
+//!   - SWEEP -> force a ValidationSweep + drain right now (regardless of
+//!              cadence), responds OK:SWEPT:promoted=<n>:quarantined=<n>:odb_moved=<n>:qdb_moved=<n>
+//!   - FLUSH -> force-materialize all three Journals now, responds
+//!              OK:FLUSHED:sdb=<n>:odb=<n>:qdb=<n>
+//!   - anything else -> ERR:<message>
+//! ```
 //!
 //! ## Background loop
 //! A daemon thread polls the landing zone every `POLL_SECS` (default 5),
@@ -88,14 +90,22 @@ fn tribe_id() -> u16 {
         .unwrap_or(0x7300)
 }
 fn poll_secs() -> u64 {
-    env::var("POLL_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(5)
+    env::var("POLL_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(5)
 }
 fn sweep_interval_ticks() -> u64 {
-    env::var("SWEEP_INTERVAL_TICKS").ok().and_then(|s| s.parse().ok())
+    env::var("SWEEP_INTERVAL_TICKS")
+        .ok()
+        .and_then(|s| s.parse().ok())
         .unwrap_or(enkisdb::DEFAULT_SWEEP_INTERVAL_TICKS)
 }
 fn materialize_every_secs() -> u64 {
-    env::var("MATERIALIZE_EVERY_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(30)
+    env::var("MATERIALIZE_EVERY_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30)
 }
 
 struct SharedState {
@@ -114,15 +124,35 @@ struct SharedState {
 
 impl SharedState {
     fn sweep_and_drain(&mut self) -> (usize, usize, usize, usize) {
-        let result = self.sweep.run(&mut self.sdb_store, &mut self.sdb_journal, &self.minter, self.tribe, self.tick);
-        let odb_moved = self.odb_store.drain_from_sdb(&self.sdb_store, &mut self.odb_journal, &self.minter, self.tick);
+        let result = self.sweep.run(
+            &mut self.sdb_store,
+            &mut self.sdb_journal,
+            &self.minter,
+            self.tribe,
+            self.tick,
+        );
+        let odb_moved = self.odb_store.drain_from_sdb(
+            &self.sdb_store,
+            &mut self.odb_journal,
+            &self.minter,
+            self.tick,
+        );
         let qdb_moved = self.qdb_store.drain_from_sdb(
-            &self.sdb_store, EventCause::QuarantineMove, &mut self.qdb_journal, &self.minter, self.tick,
+            &self.sdb_store,
+            EventCause::QuarantineMove,
+            &mut self.qdb_journal,
+            &self.minter,
+            self.tick,
         );
         (result.promoted, result.quarantined, odb_moved, qdb_moved)
     }
 
-    fn materialize_all(&self, sdb_dir: &Path, odb_dir: &Path, qdb_dir: &Path) -> io::Result<(usize, usize, usize)> {
+    fn materialize_all(
+        &self,
+        sdb_dir: &Path,
+        odb_dir: &Path,
+        qdb_dir: &Path,
+    ) -> io::Result<(usize, usize, usize)> {
         let sdb = materialize_fresh(&self.sdb_journal, sdb_dir)?;
         let odb = materialize_fresh(&self.odb_journal, odb_dir)?;
         let qdb = materialize_fresh(&self.qdb_journal, qdb_dir)?;
@@ -164,7 +194,11 @@ fn main() {
     eprintln!("  sdb_data_dir = {}", sdb_dir.display());
     eprintln!("  odb_data_dir = {}", odb_dir.display());
     eprintln!("  qdb_data_dir = {}", qdb_dir.display());
-    eprintln!("  tribe = {:#06x}  poll_secs = {poll_secs}  sweep_interval_ticks = {}", tribe.as_u16(), sweep_interval_ticks());
+    eprintln!(
+        "  tribe = {:#06x}  poll_secs = {poll_secs}  sweep_interval_ticks = {}",
+        tribe.as_u16(),
+        sweep_interval_ticks()
+    );
 
     std::thread::scope(|scope| {
         // ── Background daemon: poll landing zone, sweep, materialize ──
@@ -225,7 +259,10 @@ fn main() {
         for stream in listener.incoming() {
             match stream {
                 Ok(s) => {
-                    let peer = s.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "?".into());
+                    let peer = s
+                        .peer_addr()
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|_| "?".into());
                     let state_ref = &state;
                     let sdb_dir = sdb_dir.clone();
                     let odb_dir = odb_dir.clone();
@@ -277,11 +314,17 @@ fn handle(
                 Err(e) => send(&mut stream, &format!("ERR:materialize: {e}")),
             }
         }
-        _ => send(&mut stream, "ERR:unrecognized request -- use STATS, SWEEP, or FLUSH"),
+        _ => send(
+            &mut stream,
+            "ERR:unrecognized request -- use STATS, SWEEP, or FLUSH",
+        ),
     }
 }
 
-fn materialize_fresh(journal: &Journal, data_dir: &Path) -> io::Result<enkidb_readnode::MaterializeStats> {
+fn materialize_fresh(
+    journal: &Journal,
+    data_dir: &Path,
+) -> io::Result<enkidb_readnode::MaterializeStats> {
     let current = data_dir.join("current");
     let _ = fs::remove_dir_all(&current);
     fs::create_dir_all(&current)?;
@@ -302,7 +345,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

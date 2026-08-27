@@ -23,7 +23,7 @@ pub fn attr_hash(attribute: &str) -> u32 {
 
 /// Convert a Particle into an EavTriple for the Journal.
 pub fn particle_to_eav_triple(p: &Particle) -> EavTriple {
-    let hash  = attr_hash(&p.attribute);
+    let hash = attr_hash(&p.attribute);
     let bytes = codec_encode(&p.value);
     EavTriple::new(hash, bytes)
 }

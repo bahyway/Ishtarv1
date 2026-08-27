@@ -4,7 +4,7 @@
 //! It is sealed by a FreezeResult KAKI and can be serialized to .akk-sim format
 //! for offline replay in the Dubsar IDE.
 
-use crate::arc::{RiksuArc, ArcState};
+use crate::arc::{ArcState, RiksuArc};
 use crate::topology::RiksuTopology;
 use shedu_engine::FreezeResult;
 
@@ -24,10 +24,10 @@ pub struct FrozenTopology {
 impl FrozenTopology {
     /// Crystallize a live topology using a freeze result.
     pub fn from_topology(topo: &RiksuTopology, freeze_result: FreezeResult) -> Self {
-        let harmony_at_freeze     = topo.harmony_score();
+        let harmony_at_freeze = topo.harmony_score();
         let active_arcs_at_freeze = topo.active_arc_count();
         Self {
-            arcs:                 topo.arcs.clone(),
+            arcs: topo.arcs.clone(),
             freeze_result,
             harmony_at_freeze,
             active_arcs_at_freeze,
@@ -40,20 +40,38 @@ impl FrozenTopology {
     ///   simulation <name> { frozen_at: <ms>  reason: "<reason>"  arc ... }
     pub fn to_akk_sim_source(&self) -> String {
         let mut out = String::with_capacity(512);
-        let name = format!("freeze_node{}_{}", self.freeze_result.node_id,
-                           self.freeze_result.timestamp_ms);
+        let name = format!(
+            "freeze_node{}_{}",
+            self.freeze_result.node_id, self.freeze_result.timestamp_ms
+        );
         out.push_str(&format!("simulation {} {{\n", name));
-        out.push_str(&format!("  frozen_at_ms: {}\n", self.freeze_result.timestamp_ms));
-        out.push_str(&format!("  reason: \"{}\"\n", self.freeze_result.reason.label()));
+        out.push_str(&format!(
+            "  frozen_at_ms: {}\n",
+            self.freeze_result.timestamp_ms
+        ));
+        out.push_str(&format!(
+            "  reason: \"{}\"\n",
+            self.freeze_result.reason.label()
+        ));
         out.push_str(&format!("  node_id: {}\n", self.freeze_result.node_id));
-        out.push_str(&format!("  b11_at_freeze: {}\n", self.freeze_result.b11_at_freeze));
-        out.push_str(&format!("  harmony_at_freeze: {:.4}\n", self.harmony_at_freeze));
+        out.push_str(&format!(
+            "  b11_at_freeze: {}\n",
+            self.freeze_result.b11_at_freeze
+        ));
+        out.push_str(&format!(
+            "  harmony_at_freeze: {:.4}\n",
+            self.harmony_at_freeze
+        ));
         out.push_str(&format!("  active_arcs: {}\n", self.active_arcs_at_freeze));
         out.push_str(&format!("  total_arcs: {}\n\n", self.arcs.len()));
         for arc in &self.arcs {
             out.push_str(&format!(
                 "  arc tribe_{} <-> tribe_{} strength={:.4} state={} opacity={:.4}\n",
-                arc.tribe_a, arc.tribe_b, arc.strength, arc.state.label(), arc.opacity()
+                arc.tribe_a,
+                arc.tribe_b,
+                arc.strength,
+                arc.state.label(),
+                arc.opacity()
             ));
         }
         out.push_str("}\n");
@@ -77,7 +95,7 @@ impl FrozenTopology {
 mod tests {
     use super::*;
     use crate::topology::RiksuTopology;
-    use shedu_engine::{HardwareMetrics, NodeHealth, FreezeReason, trigger_quantum_freeze};
+    use shedu_engine::{trigger_quantum_freeze, FreezeReason, HardwareMetrics, NodeHealth};
 
     fn make_freeze() -> FreezeResult {
         let h = NodeHealth::from_metrics(0, HardwareMetrics::simulated_critical(5_000));
@@ -95,8 +113,8 @@ mod tests {
     #[test]
     fn from_topology_preserves_harmony() {
         let kakis = vec![make_kaki(1, 2), make_kaki(2, 3)];
-        let topo  = RiksuTopology::from_cross_tribe_kakis(&kakis);
-        let h     = topo.harmony_score();
+        let topo = RiksuTopology::from_cross_tribe_kakis(&kakis);
+        let h = topo.harmony_score();
         let frozen = FrozenTopology::from_topology(&topo, make_freeze());
         assert!((frozen.harmony_at_freeze - h).abs() < 1e-5);
     }
@@ -104,9 +122,9 @@ mod tests {
     #[test]
     fn akk_sim_contains_required_fields() {
         let kakis = vec![make_kaki(1, 2)];
-        let topo  = RiksuTopology::from_cross_tribe_kakis(&kakis);
+        let topo = RiksuTopology::from_cross_tribe_kakis(&kakis);
         let frozen = FrozenTopology::from_topology(&topo, make_freeze());
-        let src   = frozen.to_akk_sim_source();
+        let src = frozen.to_akk_sim_source();
         assert!(src.contains("simulation freeze_node"));
         assert!(src.contains("frozen_at_ms:"));
         assert!(src.contains("reason:"));
@@ -116,9 +134,9 @@ mod tests {
     #[test]
     fn akk_sim_is_valid_text() {
         let kakis = vec![make_kaki(3, 7), make_kaki(1, 5)];
-        let topo  = RiksuTopology::from_cross_tribe_kakis(&kakis);
+        let topo = RiksuTopology::from_cross_tribe_kakis(&kakis);
         let frozen = FrozenTopology::from_topology(&topo, make_freeze());
-        let src   = frozen.to_akk_sim_source();
+        let src = frozen.to_akk_sim_source();
         assert!(src.starts_with("simulation "));
         assert!(src.ends_with("}\n"));
     }
@@ -129,12 +147,16 @@ mod tests {
         let mut topo = RiksuTopology::from_cross_tribe_kakis(&kakis);
         topo.apply_node_dead(2);
         let frozen = FrozenTopology::from_topology(&topo, make_freeze());
-        assert_eq!(frozen.visible_arcs().count(), 0, "all arcs severed after node 2 dies");
+        assert_eq!(
+            frozen.visible_arcs().count(),
+            0,
+            "all arcs severed after node 2 dies"
+        );
     }
 
     #[test]
     fn stakeholder_message_non_empty() {
-        let topo   = RiksuTopology::new();
+        let topo = RiksuTopology::new();
         let frozen = FrozenTopology::from_topology(&topo, make_freeze());
         assert!(!frozen.stakeholder_message().is_empty());
     }

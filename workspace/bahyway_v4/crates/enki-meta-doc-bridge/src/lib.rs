@@ -76,8 +76,11 @@ mod tests {
             let minter = KakiMinter::new(TribeId::from_u16(tribe));
             let identity = minter.identity(KakiRole::Zikru);
             let target = IdentityKaki::try_from_kaki(identity).unwrap();
-            let event = enkidb_kaki::EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
-            journal.append(JournalEntry::new(event, target, epoch, vec![])).unwrap();
+            let event =
+                enkidb_kaki::EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
+            journal
+                .append(JournalEntry::new(event, target, epoch, vec![]))
+                .unwrap();
             let _ = i;
         }
         journal
@@ -88,14 +91,21 @@ mod tests {
         let journal = journal_with_entries(&[(1, 1), (1, 2), (2, 1), (3, 1)]);
         let found = linked_particles(&journal, TribeId::from_u16(1));
         assert!(found.iter().all(|k| k.tribe_id() == TribeId::from_u16(1)));
-        assert_eq!(found.len(), 2, "the two tribe-1 particles must both be found, distinctly");
+        assert_eq!(
+            found.len(),
+            2,
+            "the two tribe-1 particles must both be found, distinctly"
+        );
     }
 
     #[test]
     fn returns_empty_when_no_entry_shares_the_tribe() {
         let journal = journal_with_entries(&[(1, 1), (2, 1)]);
         let found = linked_particles(&journal, TribeId::from_u16(999));
-        assert!(found.is_empty(), "an honest empty result -- no fabricated link");
+        assert!(
+            found.is_empty(),
+            "an honest empty result -- no fabricated link"
+        );
     }
 
     #[test]

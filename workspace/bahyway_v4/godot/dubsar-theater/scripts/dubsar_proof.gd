@@ -2,11 +2,11 @@ extends Control
 
 # ── Sovereign connection targets ─────────────────────────────────────
 const ENGINES = [
-	{"id":"EnkiDB",  "glyph":"𒆳", "host":"192.168.122.107", "port":7001, "desc":"Core CQRS sovereign store"},
-	{"id":"EnkiDW",  "glyph":"𒀭", "host":"192.168.122.107", "port":7002, "desc":"Data warehouse / ETL"},
-	{"id":"EnkiSDB", "glyph":"𒌓", "host":"192.168.122.107", "port":7003, "desc":"Staging database"},
-	{"id":"EnkiODB", "glyph":"𒌋", "host":"192.168.122.107", "port":7004, "desc":"Operation database"},
-	{"id":"EnkiQDB", "glyph":"𒁾", "host":"192.168.122.107", "port":7005, "desc":"Quarantine database"},
+	{"id":"EnkiDB",  "glyph":"𒆳", "host":"192.168.122.112", "port":7001, "desc":"Core CQRS sovereign store"},
+	{"id":"EnkiDW",  "glyph":"𒀭", "host":"192.168.122.112", "port":7002, "desc":"Data warehouse / ETL"},
+	{"id":"EnkiSDB", "glyph":"𒌓", "host":"192.168.122.112", "port":7003, "desc":"Staging database"},
+	{"id":"EnkiODB", "glyph":"𒌋", "host":"192.168.122.112", "port":7004, "desc":"Operation database"},
+	{"id":"EnkiQDB", "glyph":"𒁾", "host":"192.168.122.112", "port":7005, "desc":"Quarantine database"},
 ]
 
 # Display labels for the attributes this screen's default query projects.
@@ -144,7 +144,7 @@ func _show_wizard() -> void:
 	hl.add_theme_color_override("font_color", C_TEXT)
 	host_row.add_child(hl)
 	var host_field = LineEdit.new()
-	host_field.text = "192.168.122.107"
+	host_field.text = "192.168.122.112"
 	host_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	host_field.add_theme_font_size_override("font_size", 13)
 	host_row.add_child(host_field)
@@ -271,7 +271,7 @@ func _build_ui():
 	lv.add_child(_lbl("𒁾 DubSar IDE v4.0", 16, C_GOLD))
 	lv.add_child(HSeparator.new())
 	lv.add_child(_lbl("EnkiDB Connector", 11, C_DIM))
-	lv.add_child(_lbl("Read node: 192.168.122.107", 11, C_TEAL))
+	lv.add_child(_lbl("Read node: 192.168.122.112", 11, C_TEAL))
 	lv.add_child(_lbl("Engine: HeptaScript v1.0 W5H2", 10, C_DIM))
 
 	lbl_entries = _lbl("Entries: —", 11, C_TEXT)
@@ -541,7 +541,7 @@ func _populate_grid():
 	grid_container.add_child(HSeparator.new())
 	var eng_names = ", ".join(connected_engines.map(func(e): return e["id"]))
 	grid_container.add_child(_lbl(
-		"%d rows  |  [%s]  |  192.168.122.107" % [query_rows.size(), eng_names],
+		"%d rows  |  [%s]  |  192.168.122.112" % [query_rows.size(), eng_names],
 		10, C_DIM))
 
 func _set_view(mode: String):

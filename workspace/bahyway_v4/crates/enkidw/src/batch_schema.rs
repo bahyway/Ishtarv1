@@ -13,23 +13,23 @@ use crate::kaki_generator::RawRecord;
 #[derive(Debug, Clone)]
 pub struct BatchSchema {
     /// Base name of the batch (zip filename without extension).
-    pub batch_name:      String,
+    pub batch_name: String,
     /// Unix timestamp (seconds) when the batch was staged.
-    pub timestamp:       u64,
+    pub timestamp: u64,
     /// Full schema identifier: `{batch_name}_{timestamp}`.
-    pub schema_name:     String,
+    pub schema_name: String,
     /// EnkiDB table descriptor name: `tb_{batch_name}`.
-    pub table_name:      String,
+    pub table_name: String,
     /// FNV-1a hash of batch_name — used as the Entity KAKI seed.
-    pub entity_seed:     u32,
+    pub entity_seed: u32,
     /// Columns always non-empty in every record.
     pub mandatory_attrs: Vec<String>,
     /// Columns that have at least one empty value.
-    pub optional_attrs:  Vec<String>,
+    pub optional_attrs: Vec<String>,
     /// Total column count from headers.
-    pub total_columns:   usize,
+    pub total_columns: usize,
     /// Total record count (data rows, not counting header).
-    pub total_records:   usize,
+    pub total_records: usize,
 }
 
 impl BatchSchema {
@@ -45,18 +45,22 @@ impl BatchSchema {
         let total_records = records.len();
 
         let mut mandatory = Vec::new();
-        let mut optional  = Vec::new();
+        let mut optional = Vec::new();
 
         for (i, header) in headers.iter().enumerate() {
-            let always_present = !records.is_empty() && records.iter().all(|r| {
-                r.values.get(i).map(|v| !v.is_empty()).unwrap_or(false)
-            });
-            if always_present { mandatory.push(header.trim().to_string()); }
-            else              { optional.push(header.trim().to_string()); }
+            let always_present = !records.is_empty()
+                && records
+                    .iter()
+                    .all(|r| r.values.get(i).map(|v| !v.is_empty()).unwrap_or(false));
+            if always_present {
+                mandatory.push(header.trim().to_string());
+            } else {
+                optional.push(header.trim().to_string());
+            }
         }
 
         let schema_name = format!("{}_{}", batch_name, timestamp);
-        let table_name  = format!("tb_{}", batch_name);
+        let table_name = format!("tb_{}", batch_name);
         let entity_seed = fnv1a_32(batch_name.as_bytes());
 
         BatchSchema {
@@ -66,7 +70,7 @@ impl BatchSchema {
             table_name,
             entity_seed,
             mandatory_attrs: mandatory,
-            optional_attrs:  optional,
+            optional_attrs: optional,
             total_columns,
             total_records,
         }
@@ -110,13 +114,13 @@ mod tests {
         vec![
             RawRecord {
                 headers: vec!["id".into(), "name".into(), "nickname".into()],
-                values:  vec![b"1".to_vec(), b"Ali".to_vec(), vec![]],
-                seq:     1,
+                values: vec![b"1".to_vec(), b"Ali".to_vec(), vec![]],
+                seq: 1,
             },
             RawRecord {
                 headers: vec!["id".into(), "name".into(), "nickname".into()],
-                values:  vec![b"2".to_vec(), b"Fatima".to_vec(), b"Fatma".to_vec()],
-                seq:     2,
+                values: vec![b"2".to_vec(), b"Fatima".to_vec(), b"Fatma".to_vec()],
+                seq: 2,
             },
         ]
     }
@@ -124,7 +128,7 @@ mod tests {
     #[test]
     fn mandatory_vs_optional() {
         let records = make_records();
-        let schema  = BatchSchema::infer("najaf_batch_001", 1_000_000, &records);
+        let schema = BatchSchema::infer("najaf_batch_001", 1_000_000, &records);
         assert!(schema.mandatory_attrs.contains(&"id".to_string()));
         assert!(schema.mandatory_attrs.contains(&"name".to_string()));
         // "nickname" is empty in row 1 → optional
@@ -135,14 +139,14 @@ mod tests {
     fn schema_name_and_table_name() {
         let schema = BatchSchema::infer("najaf_batch_001", 1_700_000, &[]);
         assert_eq!(schema.schema_name, "najaf_batch_001_1700000");
-        assert_eq!(schema.table_name,  "tb_najaf_batch_001");
+        assert_eq!(schema.table_name, "tb_najaf_batch_001");
     }
 
     #[test]
     fn descriptor_contains_key_fields() {
         let records = make_records();
-        let schema  = BatchSchema::infer("test_batch", 999, &records);
-        let desc    = schema.to_descriptor();
+        let schema = BatchSchema::infer("test_batch", 999, &records);
+        let desc = schema.to_descriptor();
         assert!(desc.contains("schema_name"));
         assert!(desc.contains("tb_test_batch"));
         assert!(desc.contains("[mandatory_attributes]"));

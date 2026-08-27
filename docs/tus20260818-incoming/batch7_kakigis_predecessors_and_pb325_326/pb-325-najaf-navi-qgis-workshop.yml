@@ -1,0 +1,128 @@
+---
+# ============================================================================
+# PB-325 — Najaf Navigation Workshop (QGIS, outside-the-walls)
+# BahyWay.Ecosystem v4.0 — ḪendursagaEngine (candidate name) / NaviEngine
+# ----------------------------------------------------------------------------
+# LAW OF THIS TABLET:
+#   * QGIS is a DESIGN-TIME WORKSHOP tool only (same placement law as Z3
+#     and the Najaf Blender workshop). It is NEVER a runtime service and
+#     NEVER ships inside any sovereign binary.
+#   * All exports leave the workshop ONLY via the susa_outbox directory,
+#     to be ingested SUSA gateway -> EnkiSDB -> full gate chain -> EnkiODB.
+#     No bypass of Nergal/Mummu. Ever.
+#   * Runtime routing (narrow-road A*/CH with width-penalty cost) is
+#     pure Rust inside the engine crate — not QGIS, not Python plugins.
+#
+# TARGET: Fedora bare-metal host (workshop runs beside DubSar Visualizer,
+#         natively on Vulkan — no VDI). Adjust `hosts:` if you decide the
+#         workshop belongs in a dedicated KVM workshop VM instead.
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-325-najaf-navi-qgis-workshop.yml
+# ============================================================================
+
+- name: "PB-325 | Najaf narrow-road navigation workshop (QGIS, design-time)"
+  hosts: localhost
+  connection: local
+  become: true
+
+  vars:
+    workshop_root: /opt/bahyway/workshop/najaf_navi
+    workshop_user: "{{ ansible_user_id }}"
+    workshop_dirs:
+      - "{{ workshop_root }}"
+      - "{{ workshop_root }}/imports"          # raw OSM extracts, survey scans
+      - "{{ workshop_root }}/projects"         # .qgz project files
+      - "{{ workshop_root }}/styles"           # QML styles (narrow-road symbology)
+      - "{{ workshop_root }}/exports"          # working GeoPackage/GeoJSON
+      - "{{ workshop_root }}/susa_outbox"      # ONLY lawful exit toward SUSA
+      - "{{ workshop_root }}/nuzi_provenance"  # export manifests / lineage notes
+
+  tasks:
+
+    # ------------------------------------------------------------------
+    # 1. Install the workshop tools (dnf, Fedora native)
+    # ------------------------------------------------------------------
+    - name: "1.1 | Install QGIS and geospatial toolchain"
+      ansible.builtin.dnf:
+        name:
+          - qgis                # the workshop itself
+          - qgis-python        # processing toolbox / model builder
+          - gdal               # ogr2ogr conversion at export time
+          - gdal-python-tools
+          - osmium-tool        # slicing OSM PBF extracts (Najaf bbox)
+          - spatialite-tools   # inspecting GeoPackage tablets from CLI
+        state: present
+
+    # ------------------------------------------------------------------
+    # 2. Raise the workshop directories
+    # ------------------------------------------------------------------
+    - name: "2.1 | Create workshop directory structure"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ workshop_user }}"
+        group: "{{ workshop_user }}"
+        mode: "0750"
+      loop: "{{ workshop_dirs }}"
+
+    # ------------------------------------------------------------------
+    # 3. Seal the boundary law into the workshop itself
+    # ------------------------------------------------------------------
+    - name: "3.1 | Write the workshop boundary-law tablet (README)"
+      ansible.builtin.copy:
+        dest: "{{ workshop_root }}/BOUNDARY_LAW.md"
+        owner: "{{ workshop_user }}"
+        group: "{{ workshop_user }}"
+        mode: "0640"
+        content: |
+          # Najaf Navigation Workshop — Boundary Law (PB-325)
+
+          QGIS here is a workshop-outside-the-walls, design-time only.
+          Placement law identical to Z3: never a runtime service, never
+          inside a shipped sovereign binary.
+
+          ## Narrow-road attribute schema (minimum, per segment)
+          - width_m        : real, measured/estimated carriageway width
+          - oneway         : {0,1,-1}
+          - max_clearance_m: real (arches, gates, overhangs in old city)
+          - surface        : sealed enum (Simtu Facet candidate)
+          - turn_radius_ok : boolean per junction approach
+          - narrow_class   : derived: width_m thresholds (sealed at ingest,
+                             lives in EAV Mandatory Attributes — NEVER in KAKI bytes)
+
+          ## The only exit
+          exports/ -> susa_outbox/ -> SUSA gateway -> EnkiSDB
+                   -> full gate chain -> EnkiODB
+          No file leaves by any other road. Nergal/Mummu are never bypassed.
+
+          ## Provenance
+          Every export drops a manifest in nuzi_provenance/ naming the
+          source extract, editor, date, and QGIS project file.
+
+    # ------------------------------------------------------------------
+    # 4. Verify the tools answer when called
+    # ------------------------------------------------------------------
+    - name: "4.1 | Verify QGIS installed"
+      ansible.builtin.command: qgis --version
+      register: qgis_version
+      changed_when: false
+
+    - name: "4.2 | Verify GDAL/ogr2ogr installed"
+      ansible.builtin.command: ogr2ogr --version
+      register: ogr_version
+      changed_when: false
+
+    - name: "4.3 | Verify osmium installed"
+      ansible.builtin.command: osmium --version
+      register: osmium_version
+      changed_when: false
+
+    - name: "4.4 | Report the workshop is standing"
+      ansible.builtin.debug:
+        msg:
+          - "QGIS:   {{ qgis_version.stdout | default('?') }}"
+          - "GDAL:   {{ ogr_version.stdout  | default('?') }}"
+          - "Osmium: {{ osmium_version.stdout_lines[0] | default('?') }}"
+          - "Workshop root: {{ workshop_root }}"
+          - "Boundary law sealed at {{ workshop_root }}/BOUNDARY_LAW.md"

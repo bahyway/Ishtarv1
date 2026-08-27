@@ -1,0 +1,76 @@
+---
+# PB-372 · Provision the NAS as Landing Zone + Archive
+# Two tiers: LANDING (hot, NVMe, churns) and ARCHIVE (cold, HDD parity, immutable-ish).
+# Runs against a NAS exposing NFS/SMB, or against TrueNAS/UGOS with ZFS datasets.
+- name: PB-372 provision landing zone and archive on the NAS
+  hosts: girsu
+  vars:
+    nas_host: "nas.local"
+    nas_export: "/mnt/tank"
+    mount_landing: "{{ ansible_env.HOME }}/bahyway/landing_zone"
+    mount_archive: "{{ ansible_env.HOME }}/bahyway/archive"
+    zfs_pool: tank
+    retention_days_landing: 45
+  tasks:
+    - name: Ensure mount points
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0750"}
+      loop: ["{{ mount_landing }}", "{{ mount_archive }}"]
+
+    - name: Mount NAS landing (hot tier)
+      ansible.posix.mount:
+        src: "{{ nas_host }}:{{ nas_export }}/landing"
+        path: "{{ mount_landing }}"
+        fstype: nfs
+        opts: "rw,hard,noatime,vers=4.1"
+        state: mounted
+
+    - name: Mount NAS archive (cold tier)
+      ansible.posix.mount:
+        src: "{{ nas_host }}:{{ nas_export }}/archive"
+        path: "{{ mount_archive }}"
+        fstype: nfs
+        opts: "rw,hard,noatime,vers=4.1"
+        state: mounted
+
+    - name: Dataset policy note (apply on the NAS itself if it runs ZFS)
+      ansible.builtin.copy:
+        dest: "{{ mount_archive }}/DATASET_POLICY.md"
+        mode: "0640"
+        content: |
+          # BahyWay landing zone policy
+          landing : recordsize=1M  compression=off   # SAFE zips are already compressed
+          archive : recordsize=1M  compression=zstd  # only helps the derived/ tier
+          derived : recordsize=128K compression=zstd-3
+          snapshots: archive hourly:0 daily:14 weekly:8 monthly:12
+          scrub    : monthly
+          rule     : raw/ is never edited in place. Corrections land in derived/ with their own receipts.
+          3-2-1    : NAS is copy 1. Copy 2 = external USB rotated offline. Copy 3 = CDSE itself
+                     (raw Sentinel products are re-fetchable; do NOT pay to archive what Copernicus already archives).
+
+    - name: Sweep landing older than retention into archive
+      ansible.builtin.shell: |
+        find "{{ mount_landing }}/raw" -name '*.zip' -mtime +{{ retention_days_landing }} -print0 |
+          xargs -0 -r -I{} mv {} "{{ mount_archive }}/"
+      changed_when: false
+
+    - name: Gate N1 · archive is writable and survives a round trip
+      ansible.builtin.shell: |
+        t="{{ mount_archive }}/.probe"; head -c 1M /dev/urandom > "$t"
+        a=$(sha256sum "$t" | cut -d' ' -f1); sync; b=$(sha256sum "$t" | cut -d' ' -f1)
+        rm -f "$t"; [ "$a" = "$b" ] && echo "N1 green"
+      changed_when: false
+
+    - name: Gate N2 · 10GbE link actually negotiated (else the NAS is a bottleneck, not a landing zone)
+      ansible.builtin.shell: "ethtool $(ip route get {{ nas_host }} | grep -oP 'dev \\K\\S+') | grep -i 'speed'"
+      register: link
+      changed_when: false
+      failed_when: false
+
+    - name: Report link speed
+      ansible.builtin.debug: {msg: "{{ link.stdout | default('ethtool unavailable') }}"}
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-372 landing zone + archive provisioned on {{ nas_host }}"

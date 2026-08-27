@@ -1,0 +1,222 @@
+---
+# ============================================================================
+# PB-327 — HeptaSpaceMap workshop tooling + SilaEngine Šala prototype
+# BahyWay.Ecosystem v4.0 — SilaEngine (sūqu qaṭnu navigation)
+# ----------------------------------------------------------------------------
+# LAW OF THIS TABLET:
+#   * THE HEPTAGON LAW: regular heptagons cannot tile the Euclidean plane
+#     (Euler); the perfect {7,3} tiling lives only in hyperbolic space.
+#     HeptaSpaceMap therefore uses the Truth-vs-Glyph split:
+#       TRUTH  = Voronoi nearest-orbit membership (particle law)
+#       GLYPH  = 7-vertex simplified cell; its seven edges are the seven
+#                GATES to neighbours; the gate graph is the shortcut net;
+#                the final leg is the suqu qatnu (narrow path).
+#     The unreachable perfect tiling is acknowledged as a Fadam Floor.
+#   * QGIS + Python Processing script are DESIGN-TIME ONLY (PB-325 walls).
+#     Nothing here enters a shipped sovereign binary. Runtime SilaEngine
+#     is pure Rust; production visualization is egui/WGPU on the host.
+#   * The HTML file deployed here is a Šala PROTOTYPE ONLY (GL-VIZ-001),
+#     implementing the four canonical Nasaru interactions.
+#   * Exports leave ONLY via susa_outbox -> SUSA -> EnkiSDB -> gate chain
+#     -> EnkiODB. Nergal/Mummu are never bypassed.
+#
+# FILE LAYOUT EXPECTED BESIDE THIS PLAYBOOK:
+#   files/shala_silaengine_heptaspacemap.html
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-327-heptaspacemap-silaengine.yml
+# ============================================================================
+
+- name: "PB-327 | HeptaSpaceMap QGIS tooling + SilaEngine Šala prototype"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    workshop_root: /opt/bahyway/workshop/najaf_navi
+    qgis_scripts_dir: "{{ ansible_env.HOME }}/.local/share/QGIS/QGIS3/profiles/default/processing/scripts"
+    shala_dir: "{{ workshop_root }}/shala"
+
+  tasks:
+
+    # ------------------------------------------------------------------
+    # 1. Preconditions — the workshop must already stand (PB-325)
+    # ------------------------------------------------------------------
+    - name: "1.1 | Assert PB-325 workshop exists"
+      ansible.builtin.stat:
+        path: "{{ workshop_root }}"
+      register: ws
+
+    - name: "1.2 | Halt if workshop missing"
+      ansible.builtin.assert:
+        that: ws.stat.exists
+        fail_msg: "REFUSED: run PB-325 first — the Najaf workshop does not stand."
+
+    # ------------------------------------------------------------------
+    # 2. Raise directories
+    # ------------------------------------------------------------------
+    - name: "2.1 | Create QGIS processing scripts dir and Šala dir"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0750"
+      loop:
+        - "{{ qgis_scripts_dir }}"
+        - "{{ shala_dir }}"
+
+    # ------------------------------------------------------------------
+    # 3. Install the HeptaSpaceMap QGIS Processing script (design-time)
+    # ------------------------------------------------------------------
+    - name: "3.1 | Write hepta_space_map.py Processing script"
+      ansible.builtin.copy:
+        dest: "{{ qgis_scripts_dir }}/hepta_space_map.py"
+        mode: "0640"
+        content: |
+          # ==================================================================
+          # HeptaSpaceMap — QGIS Processing script (PB-327, design-time only)
+          # Truth = Voronoi membership; Glyph = 7-vertex cell (seven gates).
+          # Outputs: hepta_cells (polygons) + hepta_gates (neighbour lines).
+          # ==================================================================
+          from qgis.core import (
+              QgsProcessing, QgsProcessingAlgorithm,
+              QgsProcessingParameterFeatureSource,
+              QgsProcessingParameterFeatureSink,
+              QgsProcessingParameterNumber,
+              QgsField, QgsFields, QgsFeature, QgsGeometry,
+              QgsWkbTypes, QgsFeatureSink, QgsPointXY,
+              QgsProcessingUtils)
+          from qgis.PyQt.QtCore import QVariant
+          import processing
+
+          class HeptaSpaceMap(QgsProcessingAlgorithm):
+              SEEDS = 'SEEDS'
+              BOUNDARY = 'BOUNDARY'
+              CELLS = 'CELLS'
+              GATES = 'GATES'
+
+              def initAlgorithm(self, config=None):
+                  self.addParameter(QgsProcessingParameterFeatureSource(
+                      self.SEEDS, 'Destination seeds (points)',
+                      [QgsProcessing.TypeVectorPoint]))
+                  self.addParameter(QgsProcessingParameterFeatureSource(
+                      self.BOUNDARY, 'Area boundary (polygon)',
+                      [QgsProcessing.TypeVectorPolygon]))
+                  self.addParameter(QgsProcessingParameterFeatureSink(
+                      self.CELLS, 'Hepta cells'))
+                  self.addParameter(QgsProcessingParameterFeatureSink(
+                      self.GATES, 'Hepta gates (shortcut graph)'))
+
+              def to_seven_vertices(self, geom):
+                  """Simplify a polygon glyph toward exactly 7 outer vertices.
+                  Truth stays Voronoi; this is the glyph layer only."""
+                  ring = geom.asPolygon()[0] if geom.asPolygon() else []
+                  n = len(ring) - 1
+                  tol = 0.0
+                  step = geom.length() / 200.0 if geom.length() else 1.0
+                  g = QgsGeometry(geom)
+                  while n > 7 and tol < geom.length():
+                      tol += step
+                      g = geom.simplify(tol)
+                      poly = g.asPolygon()
+                      if not poly:
+                          break
+                      n = len(poly[0]) - 1
+                  return g if not g.isEmpty() else geom
+
+              def processAlgorithm(self, parameters, context, feedback):
+                  seeds = self.parameterAsSource(parameters, self.SEEDS, context)
+                  boundary = self.parameterAsSource(parameters, self.BOUNDARY, context)
+
+                  # -- TRUTH LAYER: Voronoi over the seeds, clipped to boundary
+                  vor = processing.run('qgis:voronoipolygons', {
+                      'INPUT': parameters[self.SEEDS],
+                      'BUFFER': 10,
+                      'OUTPUT': 'memory:'}, context=context,
+                      feedback=feedback)['OUTPUT']
+                  clipped = processing.run('native:clip', {
+                      'INPUT': vor,
+                      'OVERLAY': parameters[self.BOUNDARY],
+                      'OUTPUT': 'memory:'}, context=context,
+                      feedback=feedback)['OUTPUT']
+
+                  cell_fields = QgsFields()
+                  cell_fields.append(QgsField('hepta_id', QVariant.String))
+                  cell_fields.append(QgsField('n_gates', QVariant.Int))
+                  (cells_sink, cells_id) = self.parameterAsSink(
+                      parameters, self.CELLS, context, cell_fields,
+                      QgsWkbTypes.Polygon, clipped.sourceCrs())
+
+                  gate_fields = QgsFields()
+                  gate_fields.append(QgsField('from_id', QVariant.String))
+                  gate_fields.append(QgsField('to_id', QVariant.String))
+                  (gates_sink, gates_id) = self.parameterAsSink(
+                      parameters, self.GATES, context, gate_fields,
+                      QgsWkbTypes.LineString, clipped.sourceCrs())
+
+                  glyphs = []
+                  for i, f in enumerate(clipped.getFeatures()):
+                      g7 = self.to_seven_vertices(f.geometry())
+                      hid = 'SILA-%04d' % i
+                      glyphs.append((hid, g7))
+
+                  # -- GLYPH LAYER out + gate graph (shared-boundary neighbours)
+                  for hid, g in glyphs:
+                      nf = QgsFeature(cell_fields)
+                      npoly = g.asPolygon()
+                      nverts = (len(npoly[0]) - 1) if npoly else 0
+                      nf.setAttributes([hid, nverts])
+                      nf.setGeometry(g)
+                      cells_sink.addFeature(nf, QgsFeatureSink.FastInsert)
+
+                  for a in range(len(glyphs)):
+                      for b in range(a + 1, len(glyphs)):
+                          ha, ga = glyphs[a]
+                          hb, gb = glyphs[b]
+                          if ga.touches(gb) or ga.intersects(gb):
+                              gf = QgsFeature(gate_fields)
+                              gf.setAttributes([ha, hb])
+                              gf.setGeometry(QgsGeometry.fromPolylineXY([
+                                  ga.centroid().asPoint(),
+                                  gb.centroid().asPoint()]))
+                              gates_sink.addFeature(gf, QgsFeatureSink.FastInsert)
+
+                  feedback.pushInfo('HeptaSpaceMap: %d cells sealed. '
+                                    'Fadam Floor acknowledged: perfect {7,3} '
+                                    'tiling is hyperbolic; glyphs approach it.'
+                                    % len(glyphs))
+                  return {self.CELLS: cells_id, self.GATES: gates_id}
+
+              def name(self): return 'heptaspacemap'
+              def displayName(self): return 'HeptaSpaceMap (Truth/Glyph, PB-327)'
+              def group(self): return 'BahyWay Workshop'
+              def groupId(self): return 'bahyway'
+              def createInstance(self): return HeptaSpaceMap()
+
+    # ------------------------------------------------------------------
+    # 4. Deploy the Šala prototype (GL-VIZ-001 grammar)
+    # ------------------------------------------------------------------
+    - name: "4.1 | Copy Šala SilaEngine HeptaSpaceMap prototype"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/shala_silaengine_heptaspacemap.html"
+        dest: "{{ shala_dir }}/shala_silaengine_heptaspacemap.html"
+        mode: "0640"
+
+    # ------------------------------------------------------------------
+    # 5. Provenance + report
+    # ------------------------------------------------------------------
+    - name: "5.1 | Leave a NUZI provenance note"
+      ansible.builtin.copy:
+        dest: "{{ workshop_root }}/nuzi_provenance/pb-327-note.md"
+        mode: "0640"
+        content: |
+          PB-327 installed hepta_space_map.py (QGIS Processing, design-time)
+          and deployed shala_silaengine_heptaspacemap.html (Šala prototype,
+          GL-VIZ-001). Truth = Voronoi orbit membership; Glyph = 7-gate cell;
+          final leg = suqu qatnu. Perfect {7,3} tiling = Fadam Floor.
+
+    - name: "5.2 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "QGIS script: {{ qgis_scripts_dir }}/hepta_space_map.py"
+          - "Šala prototype: {{ shala_dir }}/shala_silaengine_heptaspacemap.html"
+          - "Open QGIS -> Processing Toolbox -> Scripts -> BahyWay Workshop."

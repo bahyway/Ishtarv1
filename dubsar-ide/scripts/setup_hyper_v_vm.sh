@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# DubSar IDE Setup — EriduOSv4Dev (Hyper-V VM, Fedora 39)
+# DubSar IDE Setup — UrOSv4Dev (Hyper-V VM, Fedora 39)
 # Run this inside the VM after SSH login.
 # ============================================================
 set -euo pipefail
@@ -89,7 +89,7 @@ info "Running demo (10 steps, saves PNGs to /tmp)..."
 
 info ""
 info "╔══════════════════════════════════════════════════╗"
-info "║  DubSar IDE setup complete on EriduOSv4Dev!     ║"
+info "║  DubSar IDE setup complete on UrOSv4Dev!     ║"
 info "╠══════════════════════════════════════════════════╣"
 info "║  1. Open VSCodium: codium .                      ║"
 info "║  2. Open notebook: dubsar-ide/notebooks/         ║"

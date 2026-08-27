@@ -1,9 +1,12 @@
-use crate::{format_kaki, parse_kaki, KakiInspection, output::format::OutputFormat};
+use crate::{format_kaki, output::format::OutputFormat, parse_kaki, KakiInspection};
 
 pub fn inspect_kaki(kaki_str: &str, format: OutputFormat) {
     let raw = match parse_kaki(kaki_str) {
-        Ok(b)  => b,
-        Err(e) => { eprintln!("error: {e}"); return; }
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return;
+        }
     };
     let k = KakiInspection::from_bytes(raw);
 
@@ -30,23 +33,41 @@ pub fn inspect_kaki(kaki_str: &str, format: OutputFormat) {
             println!("𒌋 B0–B6     : {}", hex_slice(&k.b0_b6));
             println!("𒌋 B7 Seq    : {}", k.b7);
             println!("𒌋 B8–B9     : {} (AkkadiSeal)", hex_slice(&k.b8_b9));
-            println!("𒌋 B10 Domain: 0x{:02X} — {}", k.b10, k.particle_kind.label());
-            println!("𒌋 B11 Quality: {} → {} (brightness {:.3})",
-                k.b11, k.quality_tier.label(), k.brightness);
+            println!(
+                "𒌋 B10 Domain: 0x{:02X} — {}",
+                k.b10,
+                k.particle_kind.label()
+            );
+            println!(
+                "𒌋 B11 Quality: {} → {} (brightness {:.3})",
+                k.b11,
+                k.quality_tier.label(),
+                k.brightness
+            );
             println!("𒌋 B12 Hijri : {}", k.b12);
             println!("𒌋 B13–B15   : {} (Ghost)", hex_slice(&k.b13_b15));
         }
         OutputFormat::Table => {
-            println!("{:<16} {}", "FIELD", "VALUE");
+            println!("{:<16} VALUE", "FIELD");
             println!("{}", "─".repeat(52));
-            println!("{:<16} {}", "Display",   k.display);
-            println!("{:<16} {}", "B0–B6",     hex_slice(&k.b0_b6));
-            println!("{:<16} {}", "B7 Seq",    k.b7);
-            println!("{:<16} {} (AkkadiSeal)", "B8–B9",  hex_slice(&k.b8_b9));
-            println!("{:<16} 0x{:02X} — {}", "B10 Domain", k.b10, k.particle_kind.label());
-            println!("{:<16} {} → {} (brightness {:.3})",
-                "B11 Quality", k.b11, k.quality_tier.label(), k.brightness);
-            println!("{:<16} {}", "B12 Hijri",  k.b12);
+            println!("{:<16} {}", "Display", k.display);
+            println!("{:<16} {}", "B0–B6", hex_slice(&k.b0_b6));
+            println!("{:<16} {}", "B7 Seq", k.b7);
+            println!("{:<16} {} (AkkadiSeal)", "B8–B9", hex_slice(&k.b8_b9));
+            println!(
+                "{:<16} 0x{:02X} — {}",
+                "B10 Domain",
+                k.b10,
+                k.particle_kind.label()
+            );
+            println!(
+                "{:<16} {} → {} (brightness {:.3})",
+                "B11 Quality",
+                k.b11,
+                k.quality_tier.label(),
+                k.brightness
+            );
+            println!("{:<16} {}", "B12 Hijri", k.b12);
             println!("{:<16} {} (Ghost)", "B13–B15", hex_slice(&k.b13_b15));
         }
     }
@@ -56,12 +77,12 @@ pub fn generate_kaki(domain_byte: u8, quality: u8, format: OutputFormat) {
     // Deterministic demo generation — sovereign B0–B6 via pseudo-BLAKE3 placeholder
     let mut raw = [0u8; 16];
     // B0–B6: fill with domain+quality derived pattern (real impl uses kaki-core)
-    for i in 0..7usize {
-        raw[i] = domain_byte.wrapping_add(i as u8).wrapping_mul(quality);
+    for (i, r) in raw.iter_mut().enumerate().take(7) {
+        *r = domain_byte.wrapping_add(i as u8).wrapping_mul(quality);
     }
-    raw[7]  = 0x00; // seq
-    raw[8]  = 0xA4; // AkkadiSeal stub
-    raw[9]  = 0x2C;
+    raw[7] = 0x00; // seq
+    raw[8] = 0xA4; // AkkadiSeal stub
+    raw[9] = 0x2C;
     raw[10] = domain_byte;
     raw[11] = quality;
     raw[12] = 0x18; // HijriPeriod stub
@@ -72,12 +93,18 @@ pub fn generate_kaki(domain_byte: u8, quality: u8, format: OutputFormat) {
     let display = format_kaki(&raw);
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::json!({"kaki": display, "domain": format!("0x{domain_byte:02X}"), "quality": quality}));
+            println!(
+                "{}",
+                serde_json::json!({"kaki": display, "domain": format!("0x{domain_byte:02X}"), "quality": quality})
+            );
         }
         _ => println!("{display}"),
     }
 }
 
 fn hex_slice(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02X}")).collect::<Vec<_>>().join(" ")
+    b.iter()
+        .map(|x| format!("{x:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }

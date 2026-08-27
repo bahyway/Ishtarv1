@@ -30,18 +30,23 @@ pub struct DueJob {
 /// A job registered with the scheduler.
 #[derive(Debug, Clone)]
 pub struct ScheduledJob {
-    pub name:           String,
+    pub name: String,
     /// Minimum ticks between executions.
     pub interval_ticks: u64,
     /// Semantic kind — used by the runtime dispatcher.
-    pub kind:           JobKind,
+    pub kind: JobKind,
     /// Tick count at last execution. 0 = never run.
-    last_run:           u64,
+    last_run: u64,
 }
 
 impl ScheduledJob {
     pub fn new(name: impl Into<String>, interval_ticks: u64) -> Self {
-        ScheduledJob { name: name.into(), interval_ticks, kind: JobKind::Generic, last_run: 0 }
+        ScheduledJob {
+            name: name.into(),
+            interval_ticks,
+            kind: JobKind::Generic,
+            last_run: 0,
+        }
     }
 
     pub fn with_kind(mut self, kind: JobKind) -> Self {
@@ -60,13 +65,16 @@ impl ScheduledJob {
 
 /// The scheduler — advances a logical tick counter and fires due jobs.
 pub struct EriduScheduler {
-    jobs:    Vec<ScheduledJob>,
+    jobs: Vec<ScheduledJob>,
     current: u64,
 }
 
 impl EriduScheduler {
     pub fn new() -> Self {
-        EriduScheduler { jobs: Vec::new(), current: 0 }
+        EriduScheduler {
+            jobs: Vec::new(),
+            current: 0,
+        }
     }
 
     /// Register a new job.
@@ -86,7 +94,10 @@ impl EriduScheduler {
         let mut due = Vec::new();
         for job in &mut self.jobs {
             if job.is_due(current) {
-                due.push(DueJob { name: job.name.clone(), kind: job.kind.clone() });
+                due.push(DueJob {
+                    name: job.name.clone(),
+                    kind: job.kind.clone(),
+                });
                 job.mark_run(current);
             }
         }
@@ -98,7 +109,7 @@ impl EriduScheduler {
     pub fn register_validation_sweep(&mut self, interval_ticks: u64) {
         self.register(
             ScheduledJob::new(VALIDATION_SWEEP_JOB, interval_ticks)
-                .with_kind(JobKind::ValidationSweep)
+                .with_kind(JobKind::ValidationSweep),
         );
     }
 
@@ -114,12 +125,18 @@ impl EriduScheduler {
         }
     }
 
-    pub fn current_tick(&self) -> u64  { self.current }
-    pub fn job_count(&self)    -> usize { self.jobs.len() }
+    pub fn current_tick(&self) -> u64 {
+        self.current
+    }
+    pub fn job_count(&self) -> usize {
+        self.jobs.len()
+    }
 }
 
 impl Default for EriduScheduler {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -131,8 +148,10 @@ mod tests {
         let mut s = EriduScheduler::new();
         s.register(ScheduledJob::new("snapshot", 10));
         let due = s.tick(1);
-        assert!(due.contains(&"snapshot".to_string()),
-            "job should fire immediately on first tick (last_run=0)");
+        assert!(
+            due.contains(&"snapshot".to_string()),
+            "job should fire immediately on first tick (last_run=0)"
+        );
     }
 
     #[test]
@@ -141,7 +160,10 @@ mod tests {
         s.register(ScheduledJob::new("snapshot", 10));
         s.tick(1); // first run at tick 1
         let due2 = s.tick(9); // now at tick 10 — interval since last_run=1 is 9 < 10
-        assert!(due2.is_empty(), "not yet due at tick 10 (last_run=1, need 10 ticks)");
+        assert!(
+            due2.is_empty(),
+            "not yet due at tick 10 (last_run=1, need 10 ticks)"
+        );
         let due3 = s.tick(1); // tick 11: 11-1=10 >= 10 — due
         assert!(due3.contains(&"snapshot".to_string()));
     }
@@ -187,7 +209,10 @@ mod tests {
 
         // advance 899 more ticks → total 900, interval since last_run=1 is 899 < 900
         let mid = s.tick_typed(899);
-        assert!(mid.is_empty(), "should not fire at tick 900 (899 ticks since last)");
+        assert!(
+            mid.is_empty(),
+            "should not fire at tick 900 (899 ticks since last)"
+        );
 
         // one more tick → 900 ticks since last_run
         let next = s.tick_typed(1);
@@ -223,8 +248,8 @@ mod tests {
         s2.register(ScheduledJob::new("job", 5));
 
         for n in [1u64, 2, 3, 4, 5, 1, 5] {
-            let plain  = s1.tick(n);
-            let typed  = s2.tick_typed(n);
+            let plain = s1.tick(n);
+            let typed = s2.tick_typed(n);
             let names: Vec<String> = typed.into_iter().map(|d| d.name).collect();
             assert_eq!(plain, names, "tick and tick_typed must agree at n={n}");
         }

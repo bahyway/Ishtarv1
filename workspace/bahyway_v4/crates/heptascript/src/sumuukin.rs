@@ -29,16 +29,21 @@ const IO_TIMEOUT: Duration = Duration::from_secs(30);
 fn dispatch_query(host: &str, port: u16, query_text: &str) -> Result<usize, String> {
     let addr = format!("{host}:{port}");
     let mut stream = TcpStream::connect_timeout(
-        &addr.parse().map_err(|e| format!("bad address {addr}: {e}"))?,
+        &addr
+            .parse()
+            .map_err(|e| format!("bad address {addr}: {e}"))?,
         CONNECT_TIMEOUT,
-    ).map_err(|e| format!("connect {addr}: {e}"))?;
+    )
+    .map_err(|e| format!("connect {addr}: {e}"))?;
     stream.set_read_timeout(Some(IO_TIMEOUT)).ok();
     stream.set_write_timeout(Some(IO_TIMEOUT)).ok();
 
     let body = query_text.as_bytes();
-    stream.write_all(&(body.len() as u32).to_le_bytes())
+    stream
+        .write_all(&(body.len() as u32).to_le_bytes())
         .map_err(|e| format!("write len to {addr}: {e}"))?;
-    stream.write_all(body)
+    stream
+        .write_all(body)
         .map_err(|e| format!("write query to {addr}: {e}"))?;
 
     let mut frames = 0usize;
@@ -65,8 +70,9 @@ fn dispatch_query(host: &str, port: u16, query_text: &str) -> Result<usize, Stri
 fn read_exact_or(stream: &mut TcpStream, buf: &mut [u8], addr: &str) -> Result<(), String> {
     match stream.read_exact(buf) {
         Ok(()) => Ok(()),
-        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof =>
-            Err(format!("{addr} closed connection early")),
+        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+            Err(format!("{addr} closed connection early"))
+        }
         Err(e) => Err(format!("read from {addr}: {e}")),
     }
 }
@@ -75,9 +81,9 @@ fn read_exact_or(stream: &mut TcpStream, buf: &mut [u8], addr: &str) -> Result<(
 #[derive(Debug, Clone)]
 pub struct RoutingTarget {
     pub session_id: String,
-    pub host:       String,
-    pub port:       u16,
-    pub tribe_id:   u32,
+    pub host: String,
+    pub port: u16,
+    pub tribe_id: u32,
 }
 
 /// ŠUMU-UKIN context: holds resolved session targets and a fan-out policy.
@@ -100,8 +106,8 @@ pub enum FanOutPolicy {
 #[derive(Debug)]
 pub struct FanOutResult {
     pub targets_contacted: usize,
-    pub targets_failed:    usize,
-    pub errors:            Vec<String>,
+    pub targets_failed: usize,
+    pub errors: Vec<String>,
 }
 
 impl SumuUkinContext {
@@ -116,7 +122,8 @@ impl SumuUkinContext {
         if query.tribes.is_empty() {
             return self.targets.iter().collect();
         }
-        self.targets.iter()
+        self.targets
+            .iter()
             .filter(|t| query.tribes.contains(&t.tribe_id.to_string()))
             .collect()
     }
@@ -126,18 +133,33 @@ impl SumuUkinContext {
     /// so the client forwards text, not the client-side AST. Returns a
     /// FanOutResult summarising real success/failures over real TCP
     /// dispatch (see module docs — this is no longer a stub).
-    pub fn route(&self, query: &HeptaQuery, query_text: &str, policy: FanOutPolicy) -> FanOutResult {
+    pub fn route(
+        &self,
+        query: &HeptaQuery,
+        query_text: &str,
+        policy: FanOutPolicy,
+    ) -> FanOutResult {
         let targets = self.resolve(query);
         match policy {
-            FanOutPolicy::FirstOnly => {
-                match targets.first() {
-                    None => FanOutResult { targets_contacted: 0, targets_failed: 0, errors: Vec::new() },
-                    Some(t) => match dispatch_query(&t.host, t.port, query_text) {
-                        Ok(_frames) => FanOutResult { targets_contacted: 1, targets_failed: 0, errors: Vec::new() },
-                        Err(e) => FanOutResult { targets_contacted: 0, targets_failed: 1, errors: vec![e] },
+            FanOutPolicy::FirstOnly => match targets.first() {
+                None => FanOutResult {
+                    targets_contacted: 0,
+                    targets_failed: 0,
+                    errors: Vec::new(),
+                },
+                Some(t) => match dispatch_query(&t.host, t.port, query_text) {
+                    Ok(_frames) => FanOutResult {
+                        targets_contacted: 1,
+                        targets_failed: 0,
+                        errors: Vec::new(),
                     },
-                }
-            }
+                    Err(e) => FanOutResult {
+                        targets_contacted: 0,
+                        targets_failed: 1,
+                        errors: vec![e],
+                    },
+                },
+            },
             FanOutPolicy::AllSerial => {
                 let mut contacted = 0;
                 let mut failed = 0;
@@ -145,18 +167,29 @@ impl SumuUkinContext {
                 for t in &targets {
                     match dispatch_query(&t.host, t.port, query_text) {
                         Ok(_) => contacted += 1,
-                        Err(e) => { failed += 1; errors.push(e); }
+                        Err(e) => {
+                            failed += 1;
+                            errors.push(e);
+                        }
                     }
                 }
-                FanOutResult { targets_contacted: contacted, targets_failed: failed, errors }
+                FanOutResult {
+                    targets_contacted: contacted,
+                    targets_failed: failed,
+                    errors,
+                }
             }
             FanOutPolicy::AllParallel => {
-                let owned: Vec<(String, u16)> = targets.iter().map(|t| (t.host.clone(), t.port)).collect();
+                let owned: Vec<(String, u16)> =
+                    targets.iter().map(|t| (t.host.clone(), t.port)).collect();
                 let query_owned = query_text.to_string();
-                let handles: Vec<_> = owned.into_iter().map(|(host, port)| {
-                    let q = query_owned.clone();
-                    std::thread::spawn(move || dispatch_query(&host, port, &q))
-                }).collect();
+                let handles: Vec<_> = owned
+                    .into_iter()
+                    .map(|(host, port)| {
+                        let q = query_owned.clone();
+                        std::thread::spawn(move || dispatch_query(&host, port, &q))
+                    })
+                    .collect();
 
                 let mut contacted = 0;
                 let mut failed = 0;
@@ -164,16 +197,28 @@ impl SumuUkinContext {
                 for h in handles {
                     match h.join() {
                         Ok(Ok(_)) => contacted += 1,
-                        Ok(Err(e)) => { failed += 1; errors.push(e); }
-                        Err(_) => { failed += 1; errors.push("dispatch thread panicked".to_string()); }
+                        Ok(Err(e)) => {
+                            failed += 1;
+                            errors.push(e);
+                        }
+                        Err(_) => {
+                            failed += 1;
+                            errors.push("dispatch thread panicked".to_string());
+                        }
                     }
                 }
-                FanOutResult { targets_contacted: contacted, targets_failed: failed, errors }
+                FanOutResult {
+                    targets_contacted: contacted,
+                    targets_failed: failed,
+                    errors,
+                }
             }
         }
     }
 
-    pub fn target_count(&self) -> usize { self.targets.len() }
+    pub fn target_count(&self) -> usize {
+        self.targets.len()
+    }
 }
 
 #[cfg(test)]
@@ -184,9 +229,24 @@ mod tests {
 
     fn make_targets() -> Vec<RoutingTarget> {
         vec![
-            RoutingTarget { session_id: "s1".into(), host: "10.0.0.1".into(), port: 7001, tribe_id: 1 },
-            RoutingTarget { session_id: "s2".into(), host: "10.0.0.2".into(), port: 7002, tribe_id: 2 },
-            RoutingTarget { session_id: "s3".into(), host: "10.0.0.3".into(), port: 7003, tribe_id: 3 },
+            RoutingTarget {
+                session_id: "s1".into(),
+                host: "10.0.0.1".into(),
+                port: 7001,
+                tribe_id: 1,
+            },
+            RoutingTarget {
+                session_id: "s2".into(),
+                host: "10.0.0.2".into(),
+                port: 7002,
+                tribe_id: 2,
+            },
+            RoutingTarget {
+                session_id: "s3".into(),
+                host: "10.0.0.3".into(),
+                port: 7003,
+                tribe_id: 3,
+            },
         ]
     }
 
@@ -220,10 +280,14 @@ mod tests {
         std::thread::spawn(move || {
             if let Ok((mut stream, _)) = listener.accept() {
                 let mut len_buf = [0u8; 4];
-                if stream.read_exact(&mut len_buf).is_err() { return; }
+                if stream.read_exact(&mut len_buf).is_err() {
+                    return;
+                }
                 let qlen = u32::from_le_bytes(len_buf) as usize;
                 let mut qbuf = vec![0u8; qlen];
-                if stream.read_exact(&mut qbuf).is_err() { return; }
+                if stream.read_exact(&mut qbuf).is_err() {
+                    return;
+                }
 
                 for _ in 0..frame_count {
                     let bytes = payload.as_bytes();
@@ -239,9 +303,12 @@ mod tests {
     #[test]
     fn first_only_policy_contacts_one_real_server() {
         let port = spawn_mock_server(2, "[]");
-        let ctx = SumuUkinContext::new(vec![
-            RoutingTarget { session_id: "s1".into(), host: "127.0.0.1".into(), port, tribe_id: 1 },
-        ]);
+        let ctx = SumuUkinContext::new(vec![RoutingTarget {
+            session_id: "s1".into(),
+            host: "127.0.0.1".into(),
+            port,
+            tribe_id: 1,
+        }]);
         let mut q = parse_query("WHO Tribes.E").expect("parse");
         q.tribes = vec![];
         let result = ctx.route(&q, "WHO Tribes.E", FanOutPolicy::FirstOnly);
@@ -255,9 +322,24 @@ mod tests {
         let p2 = spawn_mock_server(1, "[]");
         let p3 = spawn_mock_server(1, "[]");
         let ctx = SumuUkinContext::new(vec![
-            RoutingTarget { session_id: "s1".into(), host: "127.0.0.1".into(), port: p1, tribe_id: 1 },
-            RoutingTarget { session_id: "s2".into(), host: "127.0.0.1".into(), port: p2, tribe_id: 2 },
-            RoutingTarget { session_id: "s3".into(), host: "127.0.0.1".into(), port: p3, tribe_id: 3 },
+            RoutingTarget {
+                session_id: "s1".into(),
+                host: "127.0.0.1".into(),
+                port: p1,
+                tribe_id: 1,
+            },
+            RoutingTarget {
+                session_id: "s2".into(),
+                host: "127.0.0.1".into(),
+                port: p2,
+                tribe_id: 2,
+            },
+            RoutingTarget {
+                session_id: "s3".into(),
+                host: "127.0.0.1".into(),
+                port: p3,
+                tribe_id: 3,
+            },
         ]);
         let mut q = parse_query("WHO Tribes.E").expect("parse");
         q.tribes = vec![];
@@ -271,8 +353,18 @@ mod tests {
         let p1 = spawn_mock_server(1, "[]");
         let p2 = spawn_mock_server(1, "[]");
         let ctx = SumuUkinContext::new(vec![
-            RoutingTarget { session_id: "s1".into(), host: "127.0.0.1".into(), port: p1, tribe_id: 1 },
-            RoutingTarget { session_id: "s2".into(), host: "127.0.0.1".into(), port: p2, tribe_id: 2 },
+            RoutingTarget {
+                session_id: "s1".into(),
+                host: "127.0.0.1".into(),
+                port: p1,
+                tribe_id: 1,
+            },
+            RoutingTarget {
+                session_id: "s2".into(),
+                host: "127.0.0.1".into(),
+                port: p2,
+                tribe_id: 2,
+            },
         ]);
         let mut q = parse_query("WHO Tribes.E").expect("parse");
         q.tribes = vec![];
@@ -290,9 +382,12 @@ mod tests {
         let port = listener.local_addr().expect("local_addr").port();
         drop(listener);
 
-        let ctx = SumuUkinContext::new(vec![
-            RoutingTarget { session_id: "dead".into(), host: "127.0.0.1".into(), port, tribe_id: 9 },
-        ]);
+        let ctx = SumuUkinContext::new(vec![RoutingTarget {
+            session_id: "dead".into(),
+            host: "127.0.0.1".into(),
+            port,
+            tribe_id: 9,
+        }]);
         let mut q = parse_query("WHO Tribes.E").expect("parse");
         q.tribes = vec![];
         let result = ctx.route(&q, "WHO Tribes.E", FanOutPolicy::FirstOnly);

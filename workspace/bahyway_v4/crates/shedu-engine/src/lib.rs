@@ -21,25 +21,21 @@
 
 #![forbid(unsafe_code)]
 
+pub mod freeze;
 pub mod hardware;
 pub mod node_health;
 pub mod telemetry;
-pub mod freeze;
 
+pub use freeze::{should_freeze, trigger_quantum_freeze, FreezeReason, FreezeResult};
 pub use hardware::{
-    HardwareMetrics,
-    GPU_TEMP_WARN, GPU_TEMP_CRITICAL,
-    VRAM_WARN_PCT, VRAM_CRITICAL_PCT,
-    CPU_WARN_PCT, CPU_CRITICAL_PCT,
-    NET_LATENCY_WARN_MS, NET_LATENCY_CRITICAL_MS,
+    HardwareMetrics, CPU_CRITICAL_PCT, CPU_WARN_PCT, GPU_TEMP_CRITICAL, GPU_TEMP_WARN,
+    NET_LATENCY_CRITICAL_MS, NET_LATENCY_WARN_MS, VRAM_CRITICAL_PCT, VRAM_WARN_PCT,
 };
 pub use node_health::{
-    NodeHealth, compute_d7_integrity,
-    D7_W_GPU, D7_W_VRAM, D7_W_CPU, D7_W_NET,
-    NODE_DEAD_B11, NODE_FUZZY_B11,
+    compute_d7_integrity, NodeHealth, D7_W_CPU, D7_W_GPU, D7_W_NET, D7_W_VRAM, NODE_DEAD_B11,
+    NODE_FUZZY_B11,
 };
 pub use telemetry::{TelemetryEvent, TelemetryFeed};
-pub use freeze::{FreezeReason, FreezeResult, trigger_quantum_freeze, should_freeze};
 
 /// Assess all nodes in the cluster and return any that require a freeze.
 ///
@@ -47,13 +43,14 @@ pub use freeze::{FreezeReason, FreezeResult, trigger_quantum_freeze, should_free
 ///
 /// Returns a list of `(NodeHealth, FreezeReason)` for all nodes that should freeze.
 pub fn assess_cluster(node_healths: &[NodeHealth]) -> Vec<(&NodeHealth, FreezeReason)> {
-    let total_nodes = node_healths.len();
-    let alive: Vec<&NodeHealth> = node_healths.iter()
+    let alive: Vec<&NodeHealth> = node_healths
+        .iter()
         .filter(|h| !h.is_imminent_failure())
         .collect();
     let is_last = alive.len() <= 1;
 
-    node_healths.iter()
+    node_healths
+        .iter()
         .filter_map(|h| {
             let last = is_last && alive.first().map(|a| a.node_id) == Some(h.node_id);
             should_freeze(h, last).map(|r| (h, r))
@@ -65,10 +62,12 @@ pub fn assess_cluster(node_healths: &[NodeHealth]) -> Vec<(&NodeHealth, FreezeRe
 ///
 /// Returns 1.0 for a perfectly uniform cluster, lower for high variance.
 pub fn cluster_harmony(node_healths: &[NodeHealth]) -> f32 {
-    if node_healths.is_empty() { return 0.0; }
-    let mean = node_healths.iter().map(|h| h.b11 as f32).sum::<f32>()
-        / node_healths.len() as f32;
-    let variance = node_healths.iter()
+    if node_healths.is_empty() {
+        return 0.0;
+    }
+    let mean = node_healths.iter().map(|h| h.b11 as f32).sum::<f32>() / node_healths.len() as f32;
+    let variance = node_healths
+        .iter()
         .map(|h| (h.b11 as f32 - mean).powi(2))
         .sum::<f32>()
         / node_healths.len() as f32;
@@ -106,7 +105,10 @@ mod tests {
     fn cluster_harmony_uniform_is_high() {
         let cluster = vec![healthy_node(0), healthy_node(1), healthy_node(2)];
         let h = cluster_harmony(&cluster);
-        assert!(h > 0.9, "uniform healthy cluster should have harmony > 0.9, got {h}");
+        assert!(
+            h > 0.9,
+            "uniform healthy cluster should have harmony > 0.9, got {h}"
+        );
     }
 
     #[test]
@@ -123,7 +125,7 @@ mod tests {
 
     #[test]
     fn full_pipeline_healthy_to_freeze() {
-        let m     = HardwareMetrics::simulated_critical(9_000);
+        let m = HardwareMetrics::simulated_critical(9_000);
         let health = NodeHealth::from_metrics(0, m.clone());
         let mut feed = TelemetryFeed::new();
         feed.ingest(0, &m);

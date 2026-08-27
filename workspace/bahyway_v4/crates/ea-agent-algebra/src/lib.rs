@@ -11,15 +11,15 @@
 //!   - Quadratic & polynomial solver (exact sovereign arithmetic)
 #![forbid(unsafe_code)]
 
-pub mod pauli;
-pub mod jordan;
 pub mod harmony;
-pub mod solver;
-pub mod matrix;
 pub mod jnf;
+pub mod jordan;
+pub mod matrix;
+pub mod pauli;
+pub mod solver;
 
-pub use pauli::{PauliChecker, PauliResult, PauliViolation};
-pub use jordan::{JordanAnalyzer, JordanResult, StabilityState};
 pub use harmony::{HarmonyEngine, HarmonyResult};
-pub use solver::{AlgebraSolver, SolverResult, Equation};
-pub use matrix::{SovereignMatrix, Eigenvalue};
+pub use jordan::{JordanAnalyzer, JordanResult, StabilityState};
+pub use matrix::{Eigenvalue, SovereignMatrix};
+pub use pauli::{PauliChecker, PauliResult, PauliViolation};
+pub use solver::{AlgebraSolver, Equation, SolverResult};

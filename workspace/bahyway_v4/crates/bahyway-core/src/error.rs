@@ -30,26 +30,32 @@ pub enum BahywayError {
 impl fmt::Display for BahywayError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BahywayError::ChecksumMismatch { expected, actual } =>
-                write!(f, "KAKI checksum mismatch: expected {expected:#06x}, got {actual:#06x}"),
-            BahywayError::InvalidKakiType(b) =>
-                write!(f, "Invalid KAKI type byte: {b:#04x}"),
-            BahywayError::InvalidKakiRole(b) =>
-                write!(f, "Invalid KAKI role byte: {b:#04x}"),
-            BahywayError::KakiMutationForbidden =>
-                write!(f, "Attempted mutation of an immutable KAKI — Rule I"),
-            BahywayError::KakiReassignmentForbidden =>
-                write!(f, "Attempted reassignment of KAKI — Rule II"),
-            BahywayError::UpdateForbidden =>
-                write!(f, "UPDATE operations do not exist; append a new Event-Kaki instead"),
-            BahywayError::DeleteForbidden =>
-                write!(f, "DELETE operations do not exist; decay is a state transition to DEAD"),
-            BahywayError::BlockMagicMismatch(got) =>
-                write!(f, "Block magic mismatch — expected b\"ENKIv4.0\", got {got:?}"),
-            BahywayError::Io(e) =>
-                write!(f, "I/O error: {e}"),
-            BahywayError::Internal(s) =>
-                write!(f, "Internal error: {s}"),
+            BahywayError::ChecksumMismatch { expected, actual } => write!(
+                f,
+                "KAKI checksum mismatch: expected {expected:#06x}, got {actual:#06x}"
+            ),
+            BahywayError::InvalidKakiType(b) => write!(f, "Invalid KAKI type byte: {b:#04x}"),
+            BahywayError::InvalidKakiRole(b) => write!(f, "Invalid KAKI role byte: {b:#04x}"),
+            BahywayError::KakiMutationForbidden => {
+                write!(f, "Attempted mutation of an immutable KAKI — Rule I")
+            }
+            BahywayError::KakiReassignmentForbidden => {
+                write!(f, "Attempted reassignment of KAKI — Rule II")
+            }
+            BahywayError::UpdateForbidden => write!(
+                f,
+                "UPDATE operations do not exist; append a new Event-Kaki instead"
+            ),
+            BahywayError::DeleteForbidden => write!(
+                f,
+                "DELETE operations do not exist; decay is a state transition to DEAD"
+            ),
+            BahywayError::BlockMagicMismatch(got) => write!(
+                f,
+                "Block magic mismatch — expected b\"ENKIv4.0\", got {got:?}"
+            ),
+            BahywayError::Io(e) => write!(f, "I/O error: {e}"),
+            BahywayError::Internal(s) => write!(f, "Internal error: {s}"),
         }
     }
 }

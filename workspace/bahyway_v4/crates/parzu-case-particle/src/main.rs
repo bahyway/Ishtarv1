@@ -1,0 +1,144 @@
+//! Reads Ṣibittu .case files → emits EnkiQDB particle records +
+//! StoryEngine journal entries. Metadata only; payload stays sealed.
+
+use serde::{Deserialize, Serialize};
+use std::{fs, path::Path};
+
+/// KAKI v4.0 canonical (locked). role 0x03 = PARZU.
+fn mint_kaki(sha_hex: &str, ts_days: u16) -> [u8; 16] {
+    let mut k = [0u8; 16];
+    // uuid_hash from first 8 hex of sha256
+    let h = u32::from_str_radix(&sha_hex[0..8], 16).unwrap_or(0);
+    k[0..4].copy_from_slice(&h.to_be_bytes());
+    k[4] = 0x51; k[5] = 0x44;              // tribe "QD" (EnkiQDB quarantine)
+    k[6] = 0x02;                            // Event
+    k[7] = 0x03;                            // PARZU role
+    // k[8..11] reserved zeroed
+    k[12..14].copy_from_slice(&ts_days.to_be_bytes());
+    let crc = crc16_ccitt(&k[0..14]);
+    k[14..16].copy_from_slice(&crc.to_be_bytes());
+    k
+}
+fn crc16_ccitt(b: &[u8]) -> u16 {
+    let mut c: u16 = 0xFFFF;
+    for &x in b { c ^= (x as u16) << 8;
+        for _ in 0..8 { c = if c & 0x8000 != 0 { (c<<1)^0x1021 } else { c<<1 }; } }
+    c
+}
+
+#[derive(Default, Debug)]
+struct Case { case:String, sha256:String, file:String, verdict:String,
+              scanner:String, jailed:String, status:String,
+              released_by:String, destroyed_by:String, reason:String }
+
+fn parse_case(text:&str) -> Case {
+    let mut c = Case::default();
+    for line in text.lines() {
+        if let Some((k,v)) = line.split_once('=') {
+            let v = v.to_string();
+            match k { "case"=>c.case=v,"sha256"=>c.sha256=v,"file"=>c.file=v,
+              "verdict"=>c.verdict=v,"scanner"=>c.scanner=v,"jailed"=>c.jailed=v,
+              "status"=>c.status=v,"released_by"=>c.released_by=v,
+              "destroyed_by"=>c.destroyed_by=v,"reason"=>c.reason=v,_=>{} }
+        }
+    }
+    c
+}
+
+#[derive(Serialize)]
+struct JournalEntry { seq:u32, event:String, detail:String, ts:String }
+
+/// The StoryEngine journal — the case's life as a told sequence.
+fn journal(c:&Case) -> Vec<JournalEntry> {
+    let mut j = Vec::new(); let mut n = 0u32;
+    let mut push=|e:&str,d:String,t:&str,n:&mut u32|{*n+=1;
+        j.push(JournalEntry{seq:*n,event:e.into(),detail:d,ts:t.into()})};
+    push("ARRIVED", format!("file {} reached the Bābu gate", c.file), &c.jailed, &mut n);
+    push("SCANNED", format!("Nergal AV rendered verdict: {}", c.verdict), &c.jailed, &mut n);
+    push("SEIZED",  "yanked from the admittance flow in-flight".into(), &c.jailed, &mut n);
+    push("NEUTRALIZED", "wrapped zstd+AES-256; wrap verified to sha256".into(), &c.jailed, &mut n);
+    push("SHREDDED", "original destroyed after verified wrap".into(), &c.jailed, &mut n);
+    push("DETAINED", format!("committed to Ṣibittu as {} (prune-exempt)", c.case), &c.jailed, &mut n);
+    match c.status.as_str() {
+        "RELEASED"  => push("RELEASED",  format!("Steward {} released — MUST rescan at B-2 ({})", c.released_by, c.reason), &c.jailed, &mut n),
+        "DESTROYED" => push("DESTROYED", format!("Steward {} destroyed — tombstone kept ({})", c.destroyed_by, c.reason), &c.jailed, &mut n),
+        _ => push("OPEN", "case open; awaiting Steward decision".into(), &c.jailed, &mut n),
+    }
+    j
+}
+
+#[derive(Serialize)]
+struct Particle {
+    kaki_hex:String, tribe:&'static str, kaki_role:&'static str,
+    // EAV Mandatory Attributes — METADATA ONLY, never the payload
+    eav: serde_json::Value,
+    journal: Vec<JournalEntry>,
+    // HeptaScript hint (informational): how this particle is queried
+    heptascript_example:&'static str,
+}
+
+fn to_particle(c:&Case) -> Particle {
+    let ts_days = 20000u16; // placeholder day index; real minting uses event date
+    let kaki = mint_kaki(&format!("{:0<8}", &c.sha256.chars().take(8).collect::<String>()), ts_days);
+    let hex = kaki.iter().enumerate()
+        .map(|(i,b)| format!("{:02X}{}", b, if i%2==1 {" "} else {""})).collect::<String>();
+    Particle {
+        kaki_hex: hex.trim_end().into(),
+        tribe: "EnkiQDB.Quarantine.PARZU",
+        kaki_role: "0x03 PARZU",
+        eav: serde_json::json!({
+            "case_id": c.case, "sha256": c.sha256, "source_file": c.file,
+            "verdict": c.verdict, "scanner": c.scanner, "state": "DEAD",
+            "quarantine": true, "prune_exempt": c.status=="OPEN",
+            "status": c.status,
+            "payload_access": "SEALED — never queryable (wrap stays in Ṣibittu holding)",
+            "jail_path": format!("/vault/sibittu/holding/{}.jailed", c.sha256)
+        }),
+        journal: journal(c),
+        heptascript_example:
+            "ORBIT particles WHERE tribe = \"EnkiQDB.Quarantine.PARZU\" \
+             SCOPE PARTICLE PRESENT case_id, verdict, status \
+             PROVE status IS \"OPEN\" WITNESS open_cases → StoryEngine",
+    }
+}
+
+fn main() {
+    let dir = std::env::var("PARZU_CASES_DIR").unwrap_or_else(|_| "cases".into());
+    let mut out = Vec::new();
+    if let Ok(rd) = fs::read_dir(&dir) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|s|s.to_str()) == Some("case") {
+                if let Ok(t) = fs::read_to_string(&p) {
+                    out.push(to_particle(&parse_case(&t)));
+                }
+            }
+        }
+    }
+    // Emit newline-delimited JSON for EnkiQDB ingest
+    let path = "enkiqdb_parzu_particles.jsonl";
+    let body: String = out.iter()
+        .map(|p| serde_json::to_string(p).unwrap()).collect::<Vec<_>>().join("\n");
+    fs::write(path, body).unwrap();
+    println!("minted {} PARZU case particles → {}", out.len(), path);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn sample()->Case{ let mut c=Case::default();
+        c.case="PARZU-20260112-ab12cd34".into(); c.sha256="ab12cd34ef56".into();
+        c.file="eicar_trigger.txt".into(); c.verdict="EICAR-TEST-SIGNATURE".into();
+        c.scanner="nergal-v4".into(); c.jailed="2026-01-12T09:00:00Z".into();
+        c.status="OPEN".into(); c }
+    #[test] fn kaki_role_is_parzu(){
+        let k=mint_kaki("ab12cd34",20000); assert_eq!(k[7],0x03); assert_eq!(k[4],0x51);}
+    #[test] fn journal_has_full_arc(){
+        let j=journal(&sample());
+        let ev:Vec<&str>=j.iter().map(|e|e.event.as_str()).collect();
+        assert!(ev.contains(&"ARRIVED")&&ev.contains(&"DETAINED")&&ev.contains(&"OPEN"));}
+    #[test] fn payload_never_exposed(){
+        let p=to_particle(&sample());
+        let s=serde_json::to_string(&p).unwrap();
+        assert!(s.contains("SEALED")); assert!(!s.contains("holding\":\"<bytes"));}
+}

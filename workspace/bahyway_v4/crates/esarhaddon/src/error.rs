@@ -19,9 +19,13 @@ impl core::fmt::Display for EsarhaddonError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::MissingEavField(field) => write!(f, "ESARHADDON: missing EAV field '{field}'"),
-            Self::InsufficientSensorData => write!(f, "ESARHADDON: insufficient sensor data for SMI"),
+            Self::InsufficientSensorData => {
+                write!(f, "ESARHADDON: insufficient sensor data for SMI")
+            }
             Self::InvalidHeptaCell(id) => write!(f, "ESARHADDON: invalid HeptaMap cell {id}"),
-            Self::InsufficientSignalSources => write!(f, "ESARHADDON: signal fusion requires ≥2 sources"),
+            Self::InsufficientSignalSources => {
+                write!(f, "ESARHADDON: signal fusion requires ≥2 sources")
+            }
             Self::InvalidConcentration(v) => write!(f, "ESARHADDON: invalid gas concentration {v}"),
         }
     }

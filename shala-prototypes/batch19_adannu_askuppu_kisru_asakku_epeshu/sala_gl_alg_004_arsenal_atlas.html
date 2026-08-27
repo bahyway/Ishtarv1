@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · GL-ALG-004 · the Arsenal Atlas — eight kiṣru, one algebra</title>
+<style>
+  :root{--basalt:#14120f;--tablet:#1f1b16;--gold:#c9a227;--lapis:#2e5d8c;
+    --copper:#b0642f;--alarm:#c23b2a;--bone:#e8e0cf;--tablet-edge:#3a332a;
+    --dim:#8f8672;--green:#7fbf5f;--violet:#a58cc0;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--basalt);color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden;}
+  #crumbs{padding:8px 16px 0;font-size:12px;color:var(--dim);letter-spacing:.08em;}
+  #crumbs b{color:var(--gold);font-weight:normal;}
+  #lede{padding:2px 16px 6px;font-size:12.5px;}
+  #banner{background:var(--alarm);color:var(--bone);text-align:center;
+    font-size:10.5px;letter-spacing:.28em;padding:3px 0;font-family:monospace;}
+  #grid{display:grid;grid-template-columns:1fr 340px;gap:10px;
+    padding:8px 16px 14px;height:calc(100% - 78px);}
+  .panel{background:var(--tablet);border:1px solid var(--tablet-edge);
+    border-radius:6px;position:relative;overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block;}
+  #cv{width:100%;height:100%;}
+  #status{position:absolute;top:8px;left:12px;right:12px;z-index:5;
+    font-family:monospace;font-size:10.5px;color:var(--gold);
+    background:rgba(20,18,15,.78);padding:5px 9px;border-radius:4px;
+    border:1px solid var(--tablet-edge);}
+  #ctx{position:absolute;z-index:20;display:none;min-width:220px;
+    background:var(--tablet);border:1px solid var(--gold);border-radius:6px;
+    box-shadow:0 6px 24px rgba(0,0,0,.6);font-size:12px;overflow:hidden;}
+  #ctx .hd{padding:7px 12px;font-family:monospace;font-size:10px;
+    color:var(--gold);border-bottom:1px solid var(--tablet-edge);}
+  #ctx .it{padding:8px 12px;cursor:pointer;}
+  #ctx .it:hover{background:rgba(201,162,39,.12);color:var(--gold);}
+  #lawtags{position:absolute;bottom:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:5;}
+  .lawtag{font-family:monospace;font-size:10px;color:var(--basalt);
+    background:var(--gold);padding:2px 7px;border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis);color:var(--bone);}
+  #side{display:flex;flex-direction:column;overflow:hidden;}
+  #side h2{font-size:11px;letter-spacing:.2em;color:var(--gold);
+    padding:7px 12px 4px;border-bottom:1px solid var(--tablet-edge);flex:none;}
+  #story{flex:1 1 44%;overflow-y:auto;padding:6px 12px;font-size:11px;
+    line-height:1.45;border-bottom:1px solid var(--tablet-edge);}
+  #story .ev{margin-bottom:5px;border-left:2px solid var(--lapis);padding-left:7px;}
+  #story .ev .e{color:var(--gold);font-family:monospace;font-size:9px;}
+  #story .empty{color:var(--dim);font-style:italic;}
+  #journal{flex:1;overflow-y:auto;padding:7px 12px;font-size:11px;line-height:1.45;}
+  .entry{margin-bottom:7px;border-left:2px solid var(--copper);padding-left:7px;}
+  .entry .t{color:var(--dim);font-family:monospace;font-size:9px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Kiṣru Court ▸ <b>the Arsenal Atlas — eight kiṣru, one algebra, no calculus alone</b></div>
+<div id="lede">The Arsenal on parade: <b>44 named faces of the 55</b> (the full census lives in Borsippa), mustered into the <b>eight kiṣru</b> of GL-ALG-004 around the municipal nucleus — the Civil BigRing of the algebra itself. Faint gold ties mark officers serving several formations. Full Naṣāru suite, as decreed: <b>click</b> any calculus for its story; <b>right-click</b> for its rites; the Šurinnu stele <b>isolates a kiṣru</b> or <b>lands you from space</b> on its camp; <b>B</b> = bird-flight over the whole army. Every kiṣru cell shows LIVE (filled) — the day all eight drilled green.</div>
+<div id="banner">GL-ALG-004 — EIGHT KIṢRU · SHARED MEMBERS, INDEPENDENT WITNESSES · DRILL OR DORMANT · NO CALCULUS FIGHTS ALONE</div>
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="status">…</div>
+    <div id="ctx"></div>
+    <div id="lawtags">
+      <span class="lawtag">GL-ALG-004 · KIṢRU</span>
+      <span class="lawtag lapis">NAṢĀRU DEFAULT</span>
+      <span class="lawtag lapis">ŠURINNU COMMANDS</span>
+      <span class="lawtag">55 STRONG</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>CALCULUS STORY — STORYENGINE</h2>
+    <div id="story"><div class="empty">click a member of the Arsenal</div></div>
+    <h2>COURT JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============================================================================
+   BahyWay Šala House Standard — NAṢĀRU INSTRUMENTS (ŠALA-STD-001, N2–N4)
+   Camera + selection machinery every court imports by default.
+   Usage:
+     var cam=NasaruCamera({yaw:0.6,pitch:0.35,z:1});
+     cam.bindPointer(stageEl,{onClick:function(mx,my){...}});   // N2 drag/zoom/guard
+     cam.project(x,y,z,cv)                    -> {x,y,f}
+     cam.landOn({yaw,pitch,z})                // N3: depart to space, descend on target
+     cam.toggleBird()                         // N4: gliding flight above the membrane
+     cam.tick(nowMs)                          // each frame before projecting
+     NasaruBounce(selT,nowMs)                 -> vertical offset 0..1 (decaying |sin|)
+   Any pointer input interrupts bird-flight and landing, returning control.
+   ========================================================================== */
+function NasaruCamera(init){
+  var cam={yaw:init.yaw||0.6,pitch:init.pitch||0.35,z:init.z||1,
+    px:init.px||0,py:init.py||0};
+  var landing=null,bird=false,birdT=0,drag=null,dragMoved=false,dragDist=0;
+  function tick(now){
+    if(landing){
+      var ph=landing.t<0.35?'up':'down';
+      landing.t=Math.min(1,landing.t+0.016);
+      var e=landing.t<0.35?landing.t/0.35:(landing.t-0.35)/0.65;
+      e=e*e*(3-2*e);
+      if(landing.t<0.35){ /* depart to space */
+        cam.z=landing.z0+(landing.zSpace-landing.z0)*e;
+        cam.yaw=landing.yaw0+(landing.tgt.yaw-landing.yaw0)*e*0.4;
+        cam.pitch=landing.p0+(0.9-landing.p0)*e*0.5;
+      }else{ /* descend onto the address */
+        cam.z=landing.zSpace+(landing.tgt.z-landing.zSpace)*e;
+        cam.yaw=cam.yaw+(landing.tgt.yaw-cam.yaw)*0.10;
+        cam.pitch=cam.pitch+(landing.tgt.pitch-cam.pitch)*0.10;
+      }
+      if(landing.t>=1){landing=null;}
+    }else if(bird){
+      birdT+=0.016;
+      cam.yaw+=0.0035;                                  /* slow circuit */
+      cam.pitch=0.72+0.16*Math.sin(birdT*0.5);          /* wingbeat breathing */
+      cam.z=cam.z+( (1.35+0.25*Math.sin(birdT*0.23)) - cam.z )*0.02;
+    }
+  }
+  function interrupt(){landing=null;bird=false;}
+  function landOn(tgt){
+    interrupt();
+    landing={tgt:tgt,t:0,z0:cam.z,yaw0:cam.yaw,p0:cam.pitch,
+      zSpace:Math.max(0.42,Math.min(0.6,cam.z*0.4))};}
+  function toggleBird(){bird=!bird;if(bird)landing=null;return bird;}
+  function project(x,y,z,cv){
+    var cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+    var cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+    var X=x*cy+z*sy,Z=-x*sy+z*cy;
+    var Y=y*cp-Z*sp,Z2=y*sp+Z*cp;
+    var S=Math.min(cv.width,cv.height)*0.5*cam.z;
+    var f=2.6/(2.6+Z2);
+    return {x:cv.width*0.42+X*S*f+cam.px,y:cv.height*0.50-Y*S*f+cam.py,f:f};}
+  function bindPointer(stage,opts){
+    opts=opts||{};
+    stage.addEventListener('wheel',function(e){e.preventDefault();interrupt();
+      cam.z=Math.min(8,Math.max(0.4,cam.z*(e.deltaY<0?1.12:0.89)));
+      if(opts.onWheel)opts.onWheel();},{passive:false});
+    stage.addEventListener('mousedown',function(e){if(e.button!==0)return;
+      interrupt();drag={x:e.clientX,y:e.clientY};dragMoved=false;dragDist=0;});
+    window.addEventListener('mouseup',function(){drag=null;});
+    stage.addEventListener('mousemove',function(e){
+      if(!drag)return;
+      var dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      dragDist+=Math.abs(dx)+Math.abs(dy);if(dragDist>9)dragMoved=true;
+      cam.yaw+=dx*0.005;
+      cam.pitch=Math.max(-0.9,Math.min(1.35,cam.pitch+dy*0.005));
+      drag={x:e.clientX,y:e.clientY};});
+    stage.addEventListener('click',function(e){
+      if(dragMoved)return;
+      var r=stage.getBoundingClientRect();
+      if(opts.onClick)opts.onClick(e.clientX-r.left,e.clientY-r.top);});
+  }
+  return {cam:cam,tick:tick,project:project,landOn:landOn,
+    toggleBird:toggleBird,interrupt:interrupt,bindPointer:bindPointer,
+    get landing(){return !!landing;},get bird(){return bird;},
+    get dragMoved(){return dragMoved;}};
+}
+function NasaruBounce(selT,now){
+  var bt=(now-selT)/1000;
+  return Math.abs(Math.sin(bt*6))*Math.exp(-bt*0.3);}
+if(typeof module!=='undefined')module.exports={NasaruCamera:NasaruCamera,NasaruBounce:NasaruBounce};
+
+/* ============================================================================
+   BahyWay Šala House Standard — the ŠURINNU LEGEND (GL-VIZ-002 candidate)
+   ----------------------------------------------------------------------------
+   A bordered stele of numbered rows and state-cells, replacing prose legends.
+   NAME: shurinnu — the divine EMBLEM-STANDARDS carved in registers upon a
+   kudurru stone. The Kudurru (sealed earlier in KAKIGIS) is the stone in the
+   field — the beacon landmarks of Najaf; the Shurinnu are the emblems in its
+   registers — this panel. One name, one meaning, and the two hold the exact
+   relation their namesakes held.
+   Grammar (emblems in registers, never paragraphs):
+     - GROUPS  = column bands (TRIBES | ORBITS | EVENTS ...), label rotated.
+     - ROWS    = one citizen-class per row, numbered on the left.
+     - CELLS   = squares per group column:
+         state 0 = HOLLOW  (declared, inactive)
+         state 1 = FILLED  (present/active)          — in the row's colour
+         state 2 = PULSING (firing NOW)              — alarm rhythm
+       frac (0..1) optionally part-fills a cell (counts as fill height).
+     - CLICK   = the legend is a CONTROLLER: select/filter/fly, never décor.
+     - HOVER/SELECT gloss = ONE line, drawn in the stele footer.
+   Usage:
+     var K = SurinnuLegend(ctx, spec);   // spec: see below
+     K.draw(nowMs);                      // each frame
+     var hit = K.hitTest(mx,my);         // {gi,ri} | null  → act on it
+   Spec:
+     { x,y, cell:13, title:'ŠĒTU COURT',
+       groups:[ {label:'TRIBES', rows:[
+                   {id:'RIB', label:'ALLEY·RIBBON', color:'#6ea0cd',
+                    state:1, frac:1, gloss:'26×~5 cells · PASSABLE map'}, ...]},
+                {label:'EVENTS', rows:[...]} ],
+       footer: '' }                      // set to gloss on hover/click
+   ========================================================================== */
+function SurinnuLegend(g,spec){
+  var CS=spec.cell||13,GAP=3,ROWH=CS+GAP;
+  function groupX(gi){var x=spec.x+26;for(var q=0;q<gi;q++)x+=CS+18;return x;}
+  function rowsMax(){var m=0;spec.groups.forEach(function(G){m=Math.max(m,G.rows.length);});return m;}
+  function panelW(){return 26+spec.groups.length*(CS+18)+34;}
+  function panelH(){return 34+rowsMax()*ROWH+26;}
+  function draw(now){
+    var t=now/1000,X=spec.x,Y=spec.y,W=panelW(),H=panelH();
+    g.fillStyle='rgba(20,18,15,0.88)';g.fillRect(X,Y,W,H);
+    g.strokeStyle='#c9a227';g.lineWidth=1.2;g.strokeRect(X,Y,W,H);
+    g.fillStyle='#c9a227';g.font='9.5px monospace';g.textAlign='left';
+    g.fillText(spec.title||'ŠURINNU',X+8,Y+13);
+    var mr=rowsMax();
+    for(var r=0;r<mr;r++){
+      g.fillStyle='rgba(143,134,114,0.85)';g.font='8.5px monospace';g.textAlign='right';
+      g.fillText(String(r+1),X+20,Y+30+r*ROWH+CS-3);}
+    spec.groups.forEach(function(G,gi){
+      var gx=groupX(gi);
+      g.save();g.translate(gx+CS+9,Y+30+((G.rows.length*ROWH))/2);
+      g.rotate(Math.PI/2);
+      g.fillStyle='rgba(143,134,114,0.9)';g.font='8.5px monospace';g.textAlign='center';
+      g.fillText(G.label,0,0);g.restore();
+      G.rows.forEach(function(R,ri){
+        var cy=Y+30+ri*ROWH,col=R.color||'#e8e0cf';
+        g.strokeStyle=col;g.lineWidth=1.3;
+        g.strokeRect(gx,cy,CS,CS);
+        var f=(R.state>=1)?(R.frac==null?1:Math.max(0,Math.min(1,R.frac))):0;
+        if(R.state===2){var pl=0.45+0.55*Math.abs(Math.sin(t*4));
+          g.globalAlpha=pl;f=1;}
+        if(f>0){g.fillStyle=col;
+          g.fillRect(gx+1.5,cy+1.5+(CS-3)*(1-f),CS-3,(CS-3)*f);}
+        g.globalAlpha=1;
+        if(R.sel){g.strokeStyle='#e8e0cf';g.lineWidth=1.6;
+          g.strokeRect(gx-2.5,cy-2.5,CS+5,CS+5);}
+      });});
+    g.fillStyle='rgba(232,224,207,0.85)';g.font='8.5px monospace';g.textAlign='left';
+    g.fillText((spec.footer||'').slice(0,Math.floor((W-14)/5.1)),X+8,Y+H-9);}
+  function hitTest(mx,my){
+    for(var gi=0;gi<spec.groups.length;gi++){
+      var gx=groupX(gi);
+      for(var ri=0;ri<spec.groups[gi].rows.length;ri++){
+        var cy=spec.y+30+ri*ROWH;
+        if(mx>=gx-2&&mx<=gx+CS+2&&my>=cy-2&&my<=cy+CS+2)return {gi:gi,ri:ri};}}
+    return null;}
+  return {draw:draw,hitTest:hitTest,panelW:panelW,panelH:panelH,spec:spec};
+}
+if(typeof module!=='undefined')module.exports=SurinnuLegend;
+
+window.onerror=function(m,s,l){var e=document.getElementById('status');
+  if(e)e.textContent='RUNTIME FAULT: '+m+' (line '+l+')';return false;};
+var D={"K": [{"id": "K1\u00b7M\u00db", "name": "WATER GRID", "col": "#2e5d8c"}, {"id": "K2\u00b7D\u016aRI", "name": "STRUCTURES", "col": "#b0642f"}, {"id": "K3\u00b7\u1e2aARR\u0100NI", "name": "THE WAYS", "col": "#7fbf5f"}, {"id": "K4\u00b7\u0160AM\u0160I", "name": "SUN FIELDS", "col": "#c9a227"}, {"id": "K5\u00b7\u1e62ALMI", "name": "IMAGE\u2192CITIZEN", "col": "#c4586e"}, {"id": "K6\u00b7NAN\u0160E", "name": "SPECTRAL EYE", "col": "#6ea0cd"}, {"id": "K7\u00b7KIDINNI", "name": "PROTECTED PEOPLE", "col": "#a58cc0"}, {"id": "K8\u00b7\u1e6cUPPI", "name": "TABLET SPINE", "col": "#e8e0cf"}], "M": [{"n": "Tirku (55)", "p": 0, "a": [], "g": "the stroke witness: interior transient names the wound; residual confesses wrong physics"}, {"n": "Enbilulu", "p": 0, "a": [], "g": "junction calculus: the \u22640.10 m localization gate \u2014 digging becomes lawful"}, {"n": "WPD Witnesses", "p": 0, "a": [], "g": "King-plot \u03ba, Minimum Night Flow, PC-drift: the three early hydraulic eyes"}, {"n": "K\u012bnu Network A5", "p": 0, "a": [1], "g": "PS/DS radar network: estimation may pool, verdicts may not"}, {"n": "Two Witnesses of Place", "p": 0, "a": [1], "g": "GL-NIM-002: two independent channels at one hepta-address convict"}, {"n": "B\u0101r\u00fbtu (NIM-003)", "p": 0, "a": [1], "g": "pipe-wall organ & Ninety-Day prophecy: dating the rupture to come"}, {"n": "Palgu (HSI-002)", "p": 0, "a": [], "g": "buried-network recovery: punctuation \u2192 hypothesis \u2192 radar \u2192 register ladder"}, {"n": "Pulu\u1e2btu (RU-001)", "p": 0, "a": [1, 3, 6], "g": "the unified risk unit Pu: MAX-composition, never average"}, {"n": "Kan\u012bku (REL-001)", "p": 0, "a": [2, 7], "g": "the gate of receipts: no seal, no road"}, {"n": "Askuppu (54)", "p": 1, "a": [0, 3], "g": "the MP threshold stone + guard band: collectivity provably above chance"}, {"n": "Adannu (TPL-001)", "p": 1, "a": [3, 5], "g": "template = place \u00d7 conditions: time as lineage, never a timeless scene"}, {"n": "\u0160\u012bbu (AGE-001)", "p": 1, "a": [], "g": "the aging composite: four stochastic witnesses, two-epoch trigger"}, {"n": "Simmu/K\u012bnu Witness", "p": 1, "a": [], "g": "HSI-001-A4: the wound law and its radar confirmation"}, {"n": "\u1e6c\u0113mu (ISR-002-A2)", "p": 1, "a": [6], "g": "arrangement witness: coherent band vs scatter \u2014 pattern as testimony"}, {"n": "HeptaSpaceMap (MAP-001)", "p": 2, "a": [], "g": "{7,3} hyperbolic charts: gapless, border-witnessed, sovereign ground"}, {"n": "\u0160\u0113tu (LAT-002)", "p": 2, "a": [0, 3, 4], "g": "the net over the city: one address (structure,u,v[,d*]) for every service"}, {"n": "Kulla (LAT-001)", "p": 2, "a": [], "g": "the named lattice: every node and strut a KAKI"}, {"n": "Kudurru Beacons", "p": 2, "a": [], "g": "the boundary stones of KAKIGIS: routes narrated by saints and scholars"}, {"n": "\u1e2aarr\u0101nu Routing", "p": 2, "a": [], "g": "navigation as facet walk; narrowness becomes arithmetic"}, {"n": "Pal\u0101\u1e2bu Veil", "p": 2, "a": [6], "g": "reverence law: no aerial traversal over the graves"}, {"n": "P\u0101\u1e6du Quantization", "p": 2, "a": [7], "g": "declared cell sizes: the grain of every chart, sealed before casting"}, {"n": "SafaaHarmony (CLR-001)", "p": 3, "a": [0, 1, 5], "g": "\u0635\u0641\u0627\u0621: root \u00d7 shed \u00d7 luminance \u2014 colour as verdict, metamers refused"}, {"n": "\u0160urinnu Standard", "p": 3, "a": [7], "g": "emblems in registers, never paragraphs; the legend that commands"}, {"n": "\u1e62almu SfM (PHO-001)", "p": 4, "a": [], "g": "photos \u2192 citizens by sovereign geometry; neural depth refused"}, {"n": "Tangle Combing", "p": 4, "a": [], "g": "curve-continuity tribes: the knot combed, not cut"}, {"n": "HSI-003 Fusion Door", "p": 4, "a": [5], "g": "Napharu \u00a711: photogrammetry \u00d7 spectra \u2014 reserved and waiting"}, {"n": "Nanshe HSI-001+A1..A5", "p": 5, "a": [], "g": "the spectral court: masks as views, tribes by homogeneity, rupture ceilings"}, {"n": "Nalbanu Molds", "p": 5, "a": [], "g": "deterministic brick-casting; K now derived through the Askuppu stone"}, {"n": "ONTOGRAPH Forge", "p": 5, "a": [], "g": "real cubes dissolved into sealed molds: 32\u00d7 compression, judged not trusted"}, {"n": "\u0160\u0113du Rehearsals (SIM-001)", "p": 5, "a": [6], "g": "simulated citizens declared as such: rehearsal without deceit"}, {"n": "Saadoun Calculus", "p": 6, "a": [], "g": "the family lineage law: descent as mathematics"}, {"n": "Alaa Doctrine", "p": 6, "a": [], "g": "the three seas: memory, loss, and continuity in one shape"}, {"n": "Civil Protection + Refuge", "p": 6, "a": [], "g": "ALG-001-A2: the Refuge Directive; Never-Averaged as shield"}, {"n": "Kittu Notifications", "p": 6, "a": [], "g": "the god of truth delivers the message: alerts as sealed acts"}, {"n": "Unnamed Particle", "p": 6, "a": [2], "g": "the missing held prune-exempt: absence with a name and a place"}, {"n": "Napharu Theorem (ALG-002)", "p": 7, "a": [], "g": "the apex: every judgment a threshold-crossing, twice-witnessed, floored, never averaged"}, {"n": "Never-Averaged Axiom", "p": 7, "a": [6], "g": "no verdict by averaging particles, populations, or time"}, {"n": "Fadam Floor \u03b5", "p": 7, "a": [], "g": "below the humility constant the lawful verdict is WITHHELD"}, {"n": "Triality Condition", "p": 7, "a": [], "g": "stage, deficit, thresholds: two determine the third"}, {"n": "Transparency \u03c4/\u0398", "p": 7, "a": [], "g": "the deficit that judges the observer; the covenant template"}, {"n": "\u1e2aubullu Gloss", "p": 7, "a": [], "g": "every sealing carries plain words; foreign theorems named honestly"}, {"n": "Na\u1e63\u0101ru Suite (STD-001)", "p": 7, "a": [], "g": "the watcher's instruments, default in every court"}, {"n": "RU Ledger", "p": 7, "a": [0, 1], "g": "declared floors, scored verdicts: falsifiability as furniture"}, {"n": "CSR-08 Discipline", "p": 7, "a": [], "g": "running the playbook is the confirmation act: consent as execution"}]};
+var cv=document.getElementById('cv');
+var g=cv.getContext('2d');
+var stage=document.getElementById('stage'),statusEl=document.getElementById('status');
+function fit(){cv.width=stage.clientWidth;cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit);fit();
+var jEl=document.getElementById('journal'),sEl=document.getElementById('story');
+var canDOM=!!document.createElement;
+function journal(t){if(!canDOM)return;
+  var d=document.createElement('div');d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;jEl.prepend(d);}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+var rnd=mulberry32(0x4B495352); /* KISR */
+/* camps on a ring; members clustered at their primary camp */
+var NK=D.K.length;
+var camps=D.K.map(function(k,ki){var a=ki/NK*2*Math.PI-Math.PI/2;
+  return {a:a,x:Math.cos(a)*0.62,z:Math.sin(a)*0.62,y:0};});
+var P=D.M.map(function(m,mi){
+  var c=camps[m.p];
+  var r=0.07+0.11*rnd(),a2=rnd()*2*Math.PI;
+  return {x:c.x+Math.cos(a2)*r,y:0.05*(rnd()-0.5)+0.06*Math.sin(mi),z:c.z+Math.sin(a2)*r};});
+var NAV=NasaruCamera({yaw:0.5,pitch:0.62,z:1});
+var sel=-1,selT=0,maxi=-1,filterK=null;
+function tellMember(i2){
+  var m=D.M[i2],k=D.K[m.p];
+  var evs=[{e:'MEMBER OF THE ARSENAL',t:'<b>'+m.n+'</b> — '+m.g},
+   {e:'FORMATION',t:'Primary kiṣru: <b>'+k.id+' '+k.name+'</b>'+(m.a.length?(' · also serves: '+m.a.map(function(q){return D.K[q].id;}).join(', ')+' (Joint-Operations: shared member, independent witnesses)'):' · single formation')},
+   {e:'NAPHARU STANDING',t:'A corollary of the apex theorem: deficit, thresholds, two witnesses, Fadam floor — a section of one structure, not a free invention.'},
+   {e:'LIVENESS',t:'Its kiṣru drilled green today (see muster ledger) — undrilled beyond interval, the Šurinnu cell would hollow to DORMANT.'}];
+  if(canDOM)sEl.innerHTML=evs.map(function(x){return '<div class="ev"><div class="e">'+x.e+'</div>'+x.t+'</div>';}).join('');
+  journal('WITNESS <b>'+m.n+'</b> ('+k.id+') — story told.');
+  return evs.length;}
+/* Surinnu: kisru (isolate) + events (land on camps) */
+var spec={x:0,y:0,cell:12,title:'ARSENAL · ŠURINNU',footer:'',groups:[
+ {label:'KIṢRU',rows:D.K.map(function(k,ki){
+    var n=D.M.filter(function(m){return m.p===ki;}).length;
+    return {id:'K:'+ki,label:k.id+' '+k.name,color:k.col,state:1,
+      frac:0.4+0.6*n/9,gloss:k.id+' '+k.name+' — '+n+' primary members · click to isolate'};})},
+ {label:'LAND',rows:D.K.map(function(k,ki){
+    return {id:'L:'+ki,label:'⇩ '+k.id,color:k.col,state:1,frac:1,
+      gloss:'landing-from-space on the '+k.name+' camp'};})},
+ {label:'MUSTER',rows:[
+   {id:'M:live',label:'ALL DRILLED · LIVE',color:'#7fbf5f',state:2,gloss:'muster ledger: eight of eight green today'},
+   {id:'M:dorm',label:'DORMANT',color:'#8f8672',state:0,gloss:'empty — no formation sleeps tonight'}]}]};
+var K2=SurinnuLegend(g,spec);
+function applyLegend(h){
+  var R=spec.groups[h.gi].rows[h.ri];
+  if(R.id.slice(0,2)==='K:'){var ki=+R.id.slice(2);
+    filterK=(filterK===ki)?null:ki;
+    spec.groups[0].rows.forEach(function(r2,q){r2.sel=(filterK===q);});
+    journal(filterK!=null?('ŠURINNU → isolate <b>'+D.K[ki].id+' '+D.K[ki].name+'</b>; the other formations fall to ghost.'):'ŠURINNU → release; the whole army returns.');return true;}
+  if(R.id.slice(0,2)==='L:'){var ki2=+R.id.slice(2);
+    var a=camps[ki2].a;
+    NAV.landOn({yaw:Math.PI/2-a,pitch:0.5,z:2.0});
+    journal('ŠURINNU → <b>LANDING-FROM-SPACE</b> on the '+D.K[ki2].id+' camp — high orbit, then the descent.');return true;}
+  if(R.id==='M:live'){journal('THE MUSTER: eight kiṣru, eight green drills — the Liveness Clause satisfied on the day of sealing.');return true;}
+  if(R.state===0){journal('DORMANT stands hollow — and hollow is the goal: <i>even absence is one glance now.</i>');return true;}
+  return false;}
+/* rites menu */
+var ctxEl=document.getElementById('ctx'),ctxT=-1;
+function hideCtx(){if(canDOM)ctxEl.style.display='none';ctxT=-1;}
+function showCtx(mx,my,i2){if(!canDOM)return;ctxT=i2;
+  var m=D.M[i2];
+  ctxEl.innerHTML='<div class="hd">'+m.n+' · '+D.K[m.p].id+' — RITES</div>'
+   +'<div class="it" data-a="story">📖 Tell its story</div>'
+   +'<div class="it" data-a="max">⊕ Maximize</div>'
+   +'<div class="it" data-a="land">⇩ Land on its camp</div>'
+   +'<div class="it" data-a="close">✕ Close</div>';
+  ctxEl.style.left=Math.min(mx,cv.width-240)+'px';
+  ctxEl.style.top=Math.min(my,cv.height-150)+'px';
+  ctxEl.style.display='block';}
+if(canDOM)ctxEl.addEventListener('click',function(ev){
+  var it=ev.target.closest('.it');if(!it)return;
+  var a=it.getAttribute('data-a'),i2=ctxT;hideCtx();
+  if(a==='story'&&i2>=0){sel=i2;selT=performance.now();tellMember(i2);}
+  if(a==='max'&&i2>=0){sel=i2;selT=performance.now();maxi=(maxi===i2?-1:i2);}
+  if(a==='land'&&i2>=0){var aa=camps[D.M[i2].p].a;
+    NAV.landOn({yaw:Math.PI/2-aa,pitch:0.5,z:2.0});
+    journal('⇩ landing on '+D.K[D.M[i2].p].id+' — the camp of '+D.M[i2].n+'.');}});
+stage.addEventListener('contextmenu',function(ev){ev.preventDefault();
+  var r=cv.getBoundingClientRect(),mx=ev.clientX-r.left,my=ev.clientY-r.top;
+  var hit=pick(mx,my);
+  if(hit>=0){sel=hit;selT=performance.now();showCtx(mx,my,hit);}else hideCtx();});
+function pj(i2,now){
+  var p=P[i2];var y=p.y-(sel===i2?NasaruBounce(selT,now)*0.06:0);
+  return NAV.project(p.x,y,p.z,cv);}
+function pick(mx,my){var best=-1,bd=12*12,now=performance.now();
+  for(var i2=0;i2<P.length;i2++){var p=pj(i2,now);
+    var d=(p.x-mx)*(p.x-mx)+(p.y-my)*(p.y-my);
+    if(d<bd){bd=d;best=i2;}}
+  return best;}
+NAV.bindPointer(stage,{onClick:function(mx,my){hideCtx();
+  var h=K2.hitTest(mx,my);
+  if(h){applyLegend(h);return;}
+  var best=pick(mx,my);
+  if(best>=0){sel=best;selT=performance.now();tellMember(best);}}});
+window.addEventListener('keydown',function(e2){
+  if(e2.key==='b'||e2.key==='B'){var on=NAV.toggleBird();
+    journal(on?'🕊 BIRD-FLIGHT over the army — any touch returns the controls.':'🕊 the bird lands.');}
+  if(e2.key==='Escape'){hideCtx();maxi=-1;}});
+function frame(now){
+  var tt=now/1000;
+  NAV.tick(now);
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle='#14120f';g.fillRect(0,0,cv.width,cv.height);
+  /* the ring */
+  g.beginPath();
+  for(var q=0;q<=100;q++){var a=q/100*2*Math.PI;
+    var p=NAV.project(Math.cos(a)*0.62,0,Math.sin(a)*0.62,cv);
+    q?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y);}
+  g.strokeStyle='rgba(143,134,114,0.3)';g.lineWidth=1;g.stroke();
+  /* nucleus */
+  var pc=NAV.project(0,0,0,cv);
+  var gr=g.createRadialGradient(pc.x,pc.y,2,pc.x,pc.y,26*pc.f);
+  gr.addColorStop(0,'rgba(232,224,207,0.9)');gr.addColorStop(0.5,'rgba(201,162,39,0.35)');
+  gr.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=gr;g.beginPath();g.arc(pc.x,pc.y,26*pc.f,0,2*Math.PI);g.fill();
+  g.fillStyle='rgba(232,224,207,0.85)';g.font='9px monospace';g.textAlign='center';
+  g.fillText('NAPHARU — one algebra',pc.x,pc.y-30*pc.f);
+  /* camp labels */
+  D.K.forEach(function(k,ki){var c=camps[ki];
+    var p=NAV.project(c.x*1.28,0.02,c.z*1.28,cv);
+    var ghost=filterK!=null&&filterK!==ki;
+    g.fillStyle=ghost?'rgba(143,134,114,0.25)':k.col;
+    g.font='9.5px monospace';g.textAlign='center';
+    g.fillText(k.id+' · '+k.name,p.x,p.y);});
+  /* joint-operation ties */
+  D.M.forEach(function(m,mi){
+    if(filterK!=null&&m.p!==filterK&&m.a.indexOf(filterK)<0)return;
+    m.a.forEach(function(ka){
+      var p1=pj(mi,now),c=camps[ka];
+      var p2=NAV.project(c.x,0,c.z,cv);
+      g.strokeStyle='rgba(201,162,39,0.14)';g.lineWidth=0.7;
+      g.beginPath();g.moveTo(p1.x,p1.y);g.lineTo(p2.x,p2.y);g.stroke();});});
+  /* members */
+  for(var i2=0;i2<P.length;i2++){
+    var m=D.M[i2];
+    var ghost=filterK!=null&&m.p!==filterK&&m.a.indexOf(filterK)<0;
+    var p=pj(i2,now);
+    var sib=sel>=0&&D.M[sel].p===m.p&&sel!==i2;
+    var rad=(sel===i2?5:(maxi===i2?8:2.8))*p.f*Math.sqrt(NAV.cam.z);
+    g.beginPath();g.arc(p.x,p.y,rad,0,2*Math.PI);
+    var al=ghost?0.10:0.9;
+    if(sib)al=0.65+0.35*Math.sin(tt*5);
+    g.globalAlpha=al*(0.45+0.55*Math.max(0,Math.min(1,(p.f-0.4)*1.6)));
+    g.fillStyle=D.K[m.p].col;g.fill();g.globalAlpha=1;
+    if(sel===i2||maxi===i2){g.strokeStyle='#e8e0cf';g.lineWidth=1.3;g.stroke();}
+    if((maxi===i2)||(!ghost&&NAV.cam.z>1.6)){
+      g.fillStyle='rgba(232,224,207,'+(maxi===i2?0.95:0.55)+')';
+      g.font='8px monospace';g.textAlign='center';
+      g.fillText(m.n,p.x,p.y-rad-4);}}
+  spec.x=cv.width-K2.panelW()-14;spec.y=14;
+  K2.draw(now);
+  statusEl.textContent='ARSENAL ATLAS · '+D.M.length+' named of 55 · '
+    +(filterK!=null?('isolated '+D.K[filterK].id):'eight kiṣru')
+    +' · '+(NAV.bird?'🕊 BIRD-FLIGHT':(NAV.landing?'LANDING…':'B=bird · stele lands/isolates'))
+    +' · click=story · right-click=rites · drag rotate · scroll zoom';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('THE ARSENAL ATLAS OPENS. Fifty-five calculi, eight kiṣru, one nucleus: the Napharu. What was a list this morning is an army tonight — water, structures, ways, sun, images, spectra, people, and the tablet spine that binds them. Click any soldier for its story; isolate any regiment from the stele; press B and fly over the whole formation. <i>No calculus fights alone.</i>');
+</script>
+</body>
+</html>

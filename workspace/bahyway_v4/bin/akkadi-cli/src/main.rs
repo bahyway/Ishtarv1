@@ -3,7 +3,7 @@ use std::str::FromStr;
 use akkadi_cli::{
     commands::{
         compare::sovereign_vs_legacy,
-        kaki::{inspect_kaki, generate_kaki},
+        kaki::{generate_kaki, inspect_kaki},
         pipeline::pipeline_stats,
         status::system_status,
         tribe::{list_tribes, show_tribe},
@@ -41,10 +41,12 @@ fn main() {
                     inspect_kaki(kaki_str, fmt);
                 }
                 "--generate" => {
-                    let domain = args.get(3)
+                    let domain = args
+                        .get(3)
                         .and_then(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).ok())
                         .unwrap_or(0x00);
-                    let quality = args.get(4)
+                    let quality = args
+                        .get(4)
                         .and_then(|s| s.parse::<u8>().ok())
                         .unwrap_or(200);
                     let fmt = flag_format(&args, format);
@@ -81,7 +83,10 @@ fn main() {
 
         "notebook" => {
             if let Some(pos) = args.iter().position(|a| a == "--run") {
-                let path = args.get(pos + 1).map(String::as_str).unwrap_or("cells.akknb");
+                let path = args
+                    .get(pos + 1)
+                    .map(String::as_str)
+                    .unwrap_or("cells.akknb");
                 run_notebook(path, cfg);
             } else if args.iter().any(|a| a == "--new") {
                 new_notebook(cfg);
@@ -96,8 +101,12 @@ fn main() {
                 eprintln!("debug-capture: --query \"<QUERY:...|SEARCH:...>\" is required");
                 return;
             }
-            let issue = flag_value(&args, "--issue").unwrap_or("(no issue description given)").to_string();
-            let title = flag_value(&args, "--title").unwrap_or("Client Debug Session").to_string();
+            let issue = flag_value(&args, "--issue")
+                .unwrap_or("(no issue description given)")
+                .to_string();
+            let title = flag_value(&args, "--title")
+                .unwrap_or("Client Debug Session")
+                .to_string();
             let out = flag_value(&args, "--out").map(String::from);
             let mut cfg = cfg;
             if let Some(target) = flag_value(&args, "--target") {
@@ -133,7 +142,10 @@ fn run_notebook(path: &str, cfg: AkkadiConfig) {
     let p = std::path::Path::new(path);
     let mut nb = match AkkadiNotebook::load(p) {
         Ok(nb) => nb,
-        Err(e) => { eprintln!("cannot load notebook: {e}"); return; }
+        Err(e) => {
+            eprintln!("cannot load notebook: {e}");
+            return;
+        }
     };
     render_notebook_header(&nb.title, &nb.author, &nb.version);
     let kernel = AkkadiKernel::new(cfg);
@@ -145,12 +157,15 @@ fn run_notebook(path: &str, cfg: AkkadiConfig) {
 
 fn new_notebook(cfg: AkkadiConfig) {
     let mut nb = AkkadiNotebook::new("Sovereign Notebook", "bahyway");
-    nb.add_cell(NotebookCell::new(CellKind::Markdown, "# Sovereign Analysis"));
+    nb.add_cell(NotebookCell::new(
+        CellKind::Markdown,
+        "# Sovereign Analysis",
+    ));
     nb.add_cell(NotebookCell::new(CellKind::PipelineStatus, ""));
     let path = cfg.sovereign_workspace.join("new_notebook.akknb");
     match nb.save(&path) {
-        Ok(())  => println!("created {}", path.display()),
-        Err(e)  => eprintln!("error: {e}"),
+        Ok(()) => println!("created {}", path.display()),
+        Err(e) => eprintln!("error: {e}"),
     }
 }
 
@@ -164,11 +179,18 @@ fn new_notebook(cfg: AkkadiConfig) {
 /// the exact request, and the round-trip time.
 fn debug_capture(title: &str, issue: &str, query: &str, out: Option<String>, cfg: AkkadiConfig) {
     let mut nb = AkkadiNotebook::new(title, "bahyway");
-    nb.add_cell(NotebookCell::new(CellKind::Markdown, format!("# {title}\n\n**Issue reported:** {issue}")));
+    nb.add_cell(NotebookCell::new(
+        CellKind::Markdown,
+        format!("# {title}\n\n**Issue reported:** {issue}"),
+    ));
 
     let target = format!("{}:{}", cfg.enkiddb_read_host, cfg.enkiddb_read_port);
     let mut query_cell = NotebookCell::new(CellKind::EnkiddbQuery, query);
-    let elapsed_ms = match akkadi_cli::notebook::enkiddb_client::send_query(&cfg.enkiddb_read_host, cfg.enkiddb_read_port, query) {
+    let elapsed_ms = match akkadi_cli::notebook::enkiddb_client::send_query(
+        &cfg.enkiddb_read_host,
+        cfg.enkiddb_read_port,
+        query,
+    ) {
         Ok(resp) => {
             query_cell.output = Some(resp.response);
             query_cell.state = CellState::Done;
@@ -183,18 +205,20 @@ fn debug_capture(title: &str, issue: &str, query: &str, out: Option<String>, cfg
     let failed = query_cell.state == CellState::Error;
     nb.add_cell(query_cell);
 
-    let default_name = format!(
-        "debug_{}.akknb",
-        chrono::Utc::now().format("%Y%m%d_%H%M%S")
-    );
-    let out_path = out.map(std::path::PathBuf::from).unwrap_or_else(|| cfg.sovereign_workspace.join(&default_name));
+    let default_name = format!("debug_{}.akknb", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    let out_path = out
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| cfg.sovereign_workspace.join(&default_name));
     if let Some(parent) = out_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
 
     match nb.save(&out_path) {
         Ok(()) => println!("notebook written: {}", out_path.display()),
-        Err(e) => { eprintln!("error writing notebook: {e}"); return; }
+        Err(e) => {
+            eprintln!("error writing notebook: {e}");
+            return;
+        }
     }
 
     let manifest = ReproManifest {
@@ -205,7 +229,10 @@ fn debug_capture(title: &str, issue: &str, query: &str, out: Option<String>, cfg
         captured_at: chrono::Utc::now().to_rfc3339(),
         elapsed_ms,
         dataset_generation: None,
-        notebook_file: out_path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(),
+        notebook_file: out_path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default(),
     };
     let manifest_path = out_path.with_extension("repro.json");
     match manifest.save(&manifest_path) {
@@ -228,7 +255,10 @@ fn flag_format(args: &[String], default: OutputFormat) -> OutputFormat {
 }
 
 fn flag_value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
-    args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).map(String::as_str)
+    args.iter()
+        .position(|a| a == flag)
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str)
 }
 
 fn print_usage() {

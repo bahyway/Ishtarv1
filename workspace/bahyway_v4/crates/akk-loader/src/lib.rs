@@ -53,9 +53,9 @@ pub enum AkkLoadError {
 impl core::fmt::Display for AkkLoadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::ParseError(msg)     => write!(f, "AKK parse error: {msg}"),
+            Self::ParseError(msg) => write!(f, "AKK parse error: {msg}"),
             Self::ParticleNotFound(n) => write!(f, "PARTICLE '{n}' not found in .akk source"),
-            Self::IoError(msg)        => write!(f, "IO error: {msg}"),
+            Self::IoError(msg) => write!(f, "IO error: {msg}"),
         }
     }
 }
@@ -67,8 +67,7 @@ impl core::fmt::Display for AkkLoadError {
 /// ATTR_STATE is always the first required field. Any explicit `state` field in
 /// the PARTICLE body is silently skipped to avoid duplication.
 pub fn load_first_particle(source: &str) -> Result<Template, AkkLoadError> {
-    let prog = PmpvdParser::parse_source(source)
-        .map_err(AkkLoadError::ParseError)?;
+    let prog = PmpvdParser::parse_source(source).map_err(AkkLoadError::ParseError)?;
 
     for node in &prog.nodes {
         if let AkkNodeKind::Particle(p) = &node.kind {
@@ -80,8 +79,7 @@ pub fn load_first_particle(source: &str) -> Result<Template, AkkLoadError> {
 
 /// Parse the `PARTICLE` named `particle_name` in `source` into a `Template`.
 pub fn load_particle(source: &str, particle_name: &str) -> Result<Template, AkkLoadError> {
-    let prog = PmpvdParser::parse_source(source)
-        .map_err(AkkLoadError::ParseError)?;
+    let prog = PmpvdParser::parse_source(source).map_err(AkkLoadError::ParseError)?;
 
     for node in &prog.nodes {
         if let AkkNodeKind::Particle(p) = &node.kind {
@@ -98,9 +96,8 @@ pub fn load_particle(source: &str, particle_name: &str) -> Result<Template, AkkL
 /// bee-watchdog looks for `shard/profiles/{batch_name}.template.akk` — if present
 /// this function replaces `build_template_from_schema()` for that batch.
 pub fn load_akk_file(path: &std::path::Path) -> Result<Template, AkkLoadError> {
-    let source = std::fs::read_to_string(path).map_err(|e| {
-        AkkLoadError::IoError(format!("cannot read {}: {e}", path.display()))
-    })?;
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| AkkLoadError::IoError(format!("cannot read {}: {e}", path.display())))?;
     load_first_particle(&source)
 }
 
@@ -113,22 +110,21 @@ pub fn load_akk_file(path: &std::path::Path) -> Result<Template, AkkLoadError> {
 /// `contains`) to select the right template per entry type.
 #[derive(Debug, Clone)]
 pub struct AkkPipeline {
-    pub name:    String,
+    pub name: String,
     pub version: Option<String>,
     /// Ordered stage names — each maps to `{stage}.template.akk`.
-    pub stages:  Vec<String>,
+    pub stages: Vec<String>,
 }
 
 /// Parse the first `PIPELINE` declaration from `.akk` source.
 pub fn load_pipeline(source: &str) -> Result<AkkPipeline, AkkLoadError> {
-    let prog = PmpvdParser::parse_source(source)
-        .map_err(AkkLoadError::ParseError)?;
+    let prog = PmpvdParser::parse_source(source).map_err(AkkLoadError::ParseError)?;
     for node in &prog.nodes {
         if let AkkNodeKind::Pipeline(p) = &node.kind {
             return Ok(AkkPipeline {
-                name:    p.name.clone(),
+                name: p.name.clone(),
                 version: p.version.clone(),
-                stages:  p.stages.clone(),
+                stages: p.stages.clone(),
             });
         }
     }
@@ -137,9 +133,8 @@ pub fn load_pipeline(source: &str) -> Result<AkkPipeline, AkkLoadError> {
 
 /// Read a `.akk` file and parse its first `PIPELINE` declaration.
 pub fn load_pipeline_file(path: &std::path::Path) -> Result<AkkPipeline, AkkLoadError> {
-    let source = std::fs::read_to_string(path).map_err(|e| {
-        AkkLoadError::IoError(format!("cannot read {}: {e}", path.display()))
-    })?;
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| AkkLoadError::IoError(format!("cannot read {}: {e}", path.display())))?;
     load_pipeline(&source)
 }
 
@@ -156,9 +151,13 @@ fn particle_to_template(p: &aaol::ParticleDecl) -> Template {
             continue; // already injected as ATTR_STATE above
         }
         let attr_hash = fnv1a_str(&f.name);
-        let required  = field_is_required(&f.field_type, &f.constraints);
-        let label     = leak_string(f.name.clone());
-        fields.push(FieldSpec { attr_hash, label, required });
+        let required = field_is_required(&f.field_type, &f.constraints);
+        let label = leak_string(f.name.clone());
+        fields.push(FieldSpec {
+            attr_hash,
+            label,
+            required,
+        });
     }
 
     let name = leak_string(p.name.clone());
@@ -173,8 +172,9 @@ fn particle_to_template(p: &aaol::ParticleDecl) -> Template {
 /// - Everything else → optional
 fn field_is_required(ft: &FieldType, constraints: &[QualityConstraint]) -> bool {
     match ft {
-        FieldType::Kaki   => true,
-        FieldType::Text   => constraints.iter()
+        FieldType::Kaki => true,
+        FieldType::Text => constraints
+            .iter()
             .any(|c| c.dimension == "completeness" && c.threshold >= 1.0),
         FieldType::Custom(_) => false,
     }
@@ -241,8 +241,10 @@ mod tests {
         "#;
         let tmpl = load_particle(src, "Target").unwrap();
         assert!(tmpl.fields.iter().any(|f| f.label == "id" && f.required));
-        assert!(!tmpl.fields.iter().any(|f| f.label == "name"),
-            "Other's fields must not appear in Target template");
+        assert!(
+            !tmpl.fields.iter().any(|f| f.label == "name"),
+            "Other's fields must not appear in Target template"
+        );
     }
 
     #[test]
@@ -261,7 +263,9 @@ mod tests {
             }
         "#;
         let tmpl = load_first_particle(src).unwrap();
-        let state_count = tmpl.fields.iter()
+        let state_count = tmpl
+            .fields
+            .iter()
             .filter(|f| f.attr_hash == ATTR_STATE)
             .count();
         assert_eq!(state_count, 1, "ATTR_STATE must appear exactly once");
@@ -297,13 +301,19 @@ mod tests {
         let pl = load_pipeline(src).unwrap();
         assert_eq!(pl.name, "AutomationPillar");
         assert_eq!(pl.version.as_deref(), Some("v4"));
-        assert_eq!(pl.stages, ["AutomationTask", "AutomationSchedule", "AutomationLog"]);
+        assert_eq!(
+            pl.stages,
+            ["AutomationTask", "AutomationSchedule", "AutomationLog"]
+        );
     }
 
     #[test]
     fn pipeline_not_found_error() {
         let src = r#" PARTICLE A { x: TEXT } "#;
-        assert!(matches!(load_pipeline(src), Err(AkkLoadError::ParticleNotFound(_))));
+        assert!(matches!(
+            load_pipeline(src),
+            Err(AkkLoadError::ParticleNotFound(_))
+        ));
     }
 
     #[test]

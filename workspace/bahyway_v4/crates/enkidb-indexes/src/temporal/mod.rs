@@ -32,7 +32,9 @@ pub struct TemporalIndex {
 
 impl TemporalIndex {
     pub fn new() -> Self {
-        TemporalIndex { buckets: vec![Vec::new(); BUCKET_COUNT] }
+        TemporalIndex {
+            buckets: vec![Vec::new(); BUCKET_COUNT],
+        }
     }
 
     pub fn insert(&mut self, timestamp: u16, uuid_hash: u32) {
@@ -53,7 +55,11 @@ impl TemporalIndex {
     }
 }
 
-impl Default for TemporalIndex { fn default() -> Self { Self::new() } }
+impl Default for TemporalIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {

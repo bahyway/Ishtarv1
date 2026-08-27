@@ -1,0 +1,125 @@
+---
+# ============================================================================
+# PB-DATA-002 — Witness & seal walled ISAR archives + NINURTA-SIM-001
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series
+# Purpose    : Real complex radar data for the ISAR chain lives behind
+#              registration walls (SDMS/MSTAR, ScienceDB Pol-ISARSpaceTarget,
+#              RCShip). Those walls are crossed by the human hand — lawfully,
+#              with your own accounts. This playbook does what automation may
+#              do: WITNESS the manually fetched archives, JUDGE their
+#              integrity, and SEAL them with Kaniku receipts beside the
+#              NINURTA-SIM-001 synthetic ground truth, ready for ingest.
+# Discipline : CSR-08 (running this playbook IS the confirmation act)
+# Host       : Fedora bare-metal HOST (Ansible control node; no VDIs)
+# Doctrine   : Append-only. A missing walled archive is reported, never
+#              fatal — the harvest may proceed in stages. NINURTA-SIM-001
+#              is MANDATORY: ground truth is the first witness of the chain,
+#              and its inner manifest checksums must agree.
+#
+# HUMAN PRE-ACTS (your accounts, your hands):
+#   - MSTAR complex chips : register at SDMS, download, place in {{ inbox }}
+#   - Pol-ISARSpaceTarget : ScienceDB (scidb.cn), download, place in {{ inbox }}
+#   - RCShip-1.0          : per its portal, download, place in {{ inbox }}
+#   - NINURTA-SIM-001_isar_phase_histories.zip : from the Sala delivery,
+#     place in {{ inbox }}
+# ============================================================================
+
+- name: "PB-DATA-002 :: Witness and seal ISAR archives (append-only, staged)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    inbox: "/opt/bahyway/v4/data/inbox"
+    shelf: "/opt/bahyway/v4/data/isar"
+    ledger_path: "/opt/bahyway/v4/data/LEDGER-DATA.tsv"
+    mandatory:
+      - "NINURTA-SIM-001_isar_phase_histories.zip"
+    walled:
+      - "MSTAR_complex_chips.zip"
+      - "Pol-ISARSpaceTarget-1.0.zip"
+      - "RCShip-1.0.zip"
+
+  tasks:
+
+    - name: "WITNESS :: inbox and shelf exist"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ inbox }}", "{{ shelf }}"]
+
+    - name: "WITNESS :: which archives stand in the inbox"
+      ansible.builtin.stat:
+        path: "{{ inbox }}/{{ item }}"
+      loop: "{{ mandatory + walled }}"
+      register: seen
+
+    - name: "JUDGE :: mandatory ground truth must be present"
+      ansible.builtin.assert:
+        that: (seen.results | selectattr('item','in',mandatory) | map(attribute='stat.exists') | list) is all
+        fail_msg: "REFUSED — NINURTA-SIM-001 is absent. The chain is proven on ground truth before any real archive; place the zip in {{ inbox }}."
+
+    - name: "JUDGE :: verify NINURTA inner manifest checksums (unzip -t + sha256)"
+      ansible.builtin.shell: |
+        set -e
+        tmp=$(mktemp -d)
+        unzip -qq -o "{{ inbox }}/NINURTA-SIM-001_isar_phase_histories.zip" -d "$tmp"
+        cd "$tmp"/NINURTA-SIM-001
+        python3 - <<'PY'
+        import json, hashlib, sys
+        m = json.load(open("manifest.json"))
+        for f in m["files"]:
+            h = hashlib.sha256(open(f["bin"],'rb').read()).hexdigest()
+            assert h == f["sha256_bin"], f"checksum broken: {f['bin']}"
+        print("NINURTA manifest: all", len(m["files"]), "phase histories intact")
+        PY
+        rm -rf "$tmp"
+      changed_when: false
+
+    - name: "MOVE :: seal present archives onto the shelf (append-only)"
+      ansible.builtin.copy:
+        src: "{{ inbox }}/{{ item.item }}"
+        dest: "{{ shelf }}/{{ item.item }}"
+        mode: "0444"
+        force: false
+        remote_src: true
+      loop: "{{ seen.results }}"
+      loop_control: {label: "{{ item.item }}"}
+      when: item.stat.exists
+
+    - name: "MOVE :: compute SHA-256 Kaniku receipts for sealed archives"
+      ansible.builtin.stat:
+        path: "{{ shelf }}/{{ item.item }}"
+        checksum_algorithm: sha256
+      loop: "{{ seen.results }}"
+      loop_control: {label: "{{ item.item }}"}
+      when: item.stat.exists
+      register: receipts
+
+    - name: "STAGE :: ensure the data ledger exists (header on first creation)"
+      ansible.builtin.copy:
+        dest: "{{ ledger_path }}"
+        content: "archive\tharvested_utc\tsha256\tsource\tstatus\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: append receipts to the ledger"
+      ansible.builtin.lineinfile:
+        path: "{{ ledger_path }}"
+        line: "{{ item.stat.path | basename }}\t{{ ansible_date_time.iso8601 }}\t{{ item.stat.checksum }}\t{{ 'NINURTA-SIM' if 'NINURTA' in item.stat.path else 'walled-manual' }}\tSEALED-AWAITING-S0"
+        insertafter: EOF
+      loop: "{{ receipts.results | default([]) }}"
+      loop_control: {label: "{{ item.stat.path | basename }}"}
+      when: item.stat is defined
+
+    - name: "STAGE :: report the absent walled archives (staged harvest, not failure)"
+      ansible.builtin.debug:
+        msg: "ABSENT (harvest later, human hand): {{ seen.results | rejectattr('stat.exists') | map(attribute='item') | list }}"
+
+    - name: "STAGE :: proclaim"
+      ansible.builtin.debug:
+        msg:
+          - "SEALED on {{ shelf }} — ground truth verified, walled archives staged as they arrive."
+          - "Ingest order decree :: NINURTA first (prove the chain), EGMS second (Nimrud's sky witness), MSTAR/RCShip third (real phase noise vs. Apsu autofocus)."

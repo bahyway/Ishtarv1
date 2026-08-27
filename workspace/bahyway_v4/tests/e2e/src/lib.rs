@@ -8,49 +8,61 @@
 
 #[cfg(test)]
 mod pipeline {
+    use adad_gate::{AdadGate, ArrivalRecord};
     use bahyway_core::{ParticleState, TribeId};
     use enkidb_engine::EnkiDb;
-    use adad_gate::{AdadGate, ArrivalRecord};
     use enkidb_kaki::KakiRole;
-    use musaru_security::check_sovereignty;
-    use vgca_validation::validate;
-    use permanent_storage::PermanentStore;
-    use template_library::{civil_registry_template, operational_template, sensor_stream_template};
-    use template_library::{ATTR_QUALITY, ATTR_FRESHNESS};
-    use story_engine::projection::{encode_state, ATTR_STATE};
     use enkidb_query::query;
+    use musaru_security::check_sovereignty;
+    use permanent_storage::PermanentStore;
+    use story_engine::projection::{encode_state, ATTR_STATE};
+    use template_library::{civil_registry_template, operational_template, sensor_stream_template};
+    use template_library::{ATTR_FRESHNESS, ATTR_QUALITY};
+    use vgca_validation::validate;
 
-    fn tribe(n: u16) -> TribeId { TribeId::from_u16(n) }
+    fn tribe(n: u16) -> TribeId {
+        TribeId::from_u16(n)
+    }
 
     fn ingest_one(
-        gate:    &AdadGate,
-        store:   &mut PermanentStore,
-        epoch:   u32,
-        state:   ParticleState,
-        extra:   Vec<(u32, Vec<u8>)>,
+        gate: &AdadGate,
+        store: &mut PermanentStore,
+        epoch: u32,
+        state: ParticleState,
+        extra: Vec<(u32, Vec<u8>)>,
     ) -> bool {
         let mut attrs = vec![(ATTR_STATE, encode_state(state).to_vec())];
         attrs.extend(extra);
 
-        let record = ArrivalRecord { attrs, epoch, role: KakiRole::Zikru };
+        let record = ArrivalRecord {
+            attrs,
+            epoch,
+            role: KakiRole::Zikru,
+        };
         let gr = gate.ingest(record).expect("gate.ingest failed");
 
         let sec = check_sovereignty(gate.tribe_id(), &gr.particle);
-        if !sec.is_approved() { return false; }
+        if !sec.is_approved() {
+            return false;
+        }
 
         let tmpl = civil_registry_template();
         let vr = validate(&tmpl, &gr.eav);
-        if !vr.is_valid() { return false; }
+        if !vr.is_valid() {
+            return false;
+        }
 
-        store.commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav).is_ok()
+        store
+            .commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav)
+            .is_ok()
     }
 
     // ── Test 1: single record round-trips through the full pipeline ──────────
 
     #[test]
     fn single_record_full_pipeline() {
-        let tid   = tribe(0x0001);
-        let gate  = AdadGate::new(tid);
+        let tid = tribe(0x0001);
+        let gate = AdadGate::new(tid);
         let mut db = EnkiDb::new(tid);
 
         {
@@ -65,14 +77,21 @@ mod pipeline {
 
     #[test]
     fn multiple_records_accumulate() {
-        let tid   = tribe(0x0002);
-        let gate  = AdadGate::new(tid);
+        let tid = tribe(0x0002);
+        let gate = AdadGate::new(tid);
         let mut db = EnkiDb::new(tid);
 
         {
             let mut store = PermanentStore::new(&mut db);
-            for (ep, st) in [(1, ParticleState::Golden), (2, ParticleState::Fuzzy), (3, ParticleState::Dead)] {
-                assert!(ingest_one(&gate, &mut store, ep, st, vec![]), "epoch {ep} failed");
+            for (ep, st) in [
+                (1, ParticleState::Golden),
+                (2, ParticleState::Fuzzy),
+                (3, ParticleState::Dead),
+            ] {
+                assert!(
+                    ingest_one(&gate, &mut store, ep, st, vec![]),
+                    "epoch {ep} failed"
+                );
             }
             assert_eq!(store.stats().events_committed, 3);
         }
@@ -82,19 +101,22 @@ mod pipeline {
 
     #[test]
     fn sovereignty_rejects_tribe_mismatch() {
-        let gate_tribe   = tribe(0x0010);
-        let wrong_tribe  = tribe(0x0099);
-        let gate         = AdadGate::new(gate_tribe);
+        let gate_tribe = tribe(0x0010);
+        let wrong_tribe = tribe(0x0099);
+        let gate = AdadGate::new(gate_tribe);
 
         let record = ArrivalRecord {
             attrs: vec![(ATTR_STATE, encode_state(ParticleState::Golden).to_vec())],
             epoch: 1,
-            role:  KakiRole::Zikru,
+            role: KakiRole::Zikru,
         };
         let gr = gate.ingest(record).expect("gate.ingest failed");
 
         let sec = check_sovereignty(wrong_tribe, &gr.particle);
-        assert!(!sec.is_approved(), "sovereignty check must reject tribe mismatch");
+        assert!(
+            !sec.is_approved(),
+            "sovereignty check must reject tribe mismatch"
+        );
     }
 
     // ── Test 4: VGCA rejects records missing required fields ─────────────────
@@ -103,43 +125,58 @@ mod pipeline {
     fn vgca_rejects_missing_required_fields() {
         use enkidb_journal::entry::EavTriple;
         // operational template requires state+quality+freshness
-        let tmpl  = operational_template();
+        let tmpl = operational_template();
         // provide only state — quality and freshness are missing
-        let eav = vec![EavTriple::new(ATTR_STATE, encode_state(ParticleState::Fuzzy).to_vec())];
+        let eav = vec![EavTriple::new(
+            ATTR_STATE,
+            encode_state(ParticleState::Fuzzy).to_vec(),
+        )];
 
         let vr = validate(&tmpl, &eav);
-        assert!(!vr.is_valid(), "must reject when quality and freshness are absent");
-        assert!(vr.missing_required.contains(&ATTR_QUALITY), "quality must be flagged");
-        assert!(vr.missing_required.contains(&ATTR_FRESHNESS), "freshness must be flagged");
+        assert!(
+            !vr.is_valid(),
+            "must reject when quality and freshness are absent"
+        );
+        assert!(
+            vr.missing_required.contains(&ATTR_QUALITY),
+            "quality must be flagged"
+        );
+        assert!(
+            vr.missing_required.contains(&ATTR_FRESHNESS),
+            "freshness must be flagged"
+        );
     }
 
     // ── Test 5: HeptaScript query returns committed particles ────────────────
 
     #[test]
     fn heptascript_query_finds_committed_particles() {
-        let tid   = tribe(0x0003);
-        let gate  = AdadGate::new(tid);
+        let tid = tribe(0x0003);
+        let gate = AdadGate::new(tid);
         let mut db = EnkiDb::new(tid);
 
         {
             let mut store = PermanentStore::new(&mut db);
             ingest_one(&gate, &mut store, 1, ParticleState::Golden, vec![]);
             ingest_one(&gate, &mut store, 2, ParticleState::Golden, vec![]);
-            ingest_one(&gate, &mut store, 3, ParticleState::Dead,   vec![]);
+            ingest_one(&gate, &mut store, 3, ParticleState::Dead, vec![]);
         }
 
-        let result = query(&db, "WHO Citizens.E\nWHY LANE = gold")
-            .expect("HeptaScript query failed");
+        let result =
+            query(&db, "WHO Citizens.E\nWHY LANE = gold").expect("HeptaScript query failed");
 
-        assert!(result.evaluated > 0, "query must evaluate committed particles");
+        assert!(
+            result.evaluated > 0,
+            "query must evaluate committed particles"
+        );
     }
 
     // ── Test 6: story-engine project reflects latest state ───────────────────
 
     #[test]
     fn story_engine_projects_latest_state() {
-        let tid   = tribe(0x0004);
-        let gate  = AdadGate::new(tid);
+        let tid = tribe(0x0004);
+        let gate = AdadGate::new(tid);
         let mut db = EnkiDb::new(tid);
 
         let p_id;
@@ -148,7 +185,7 @@ mod pipeline {
             let record = ArrivalRecord {
                 attrs: vec![(ATTR_STATE, encode_state(ParticleState::Golden).to_vec())],
                 epoch: 1,
-                role:  KakiRole::Zikru,
+                role: KakiRole::Zikru,
             };
             let gr = gate.ingest(record).unwrap();
             p_id = gr.particle.clone();
@@ -161,12 +198,17 @@ mod pipeline {
             assert!(vr.is_valid());
 
             let mut store = PermanentStore::new(&mut db);
-            store.commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav).unwrap();
+            store
+                .commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav)
+                .unwrap();
         }
 
         let projected = db.project(&p_id);
         // Projection must contain at least the ATTR_STATE entry
-        assert!(!projected.attributes.is_empty(), "project() must return non-empty EAV");
+        assert!(
+            !projected.attributes.is_empty(),
+            "project() must return non-empty EAV"
+        );
     }
 
     // ── Test 7: sensor.stream template allows optional color_rgb ─────────────
@@ -177,19 +219,22 @@ mod pipeline {
         let tmpl = sensor_stream_template();
 
         let eav = vec![
-            EavTriple::new(ATTR_STATE,     encode_state(ParticleState::Fuzzy).to_vec()),
+            EavTriple::new(ATTR_STATE, encode_state(ParticleState::Fuzzy).to_vec()),
             EavTriple::new(ATTR_FRESHNESS, vec![0xFF, 0xFF]),
         ];
 
         let vr = validate(&tmpl, &eav);
-        assert!(vr.is_valid(), "sensor.stream must accept records without optional color_rgb");
+        assert!(
+            vr.is_valid(),
+            "sensor.stream must accept records without optional color_rgb"
+        );
     }
 }
 
 #[cfg(test)]
 mod languages {
-    use aaol::{tokenize as aaol_lex};
     use aaol::ast::Parser as AaolParser;
+    use aaol::tokenize as aaol_lex;
     use heptascript::{parse_query, tokenize as hepta_lex};
 
     // ── AAOL ─────────────────────────────────────────────────────────────────
@@ -222,38 +267,52 @@ mod languages {
 
     #[test]
     fn heptascript_parses_golden_query() {
-        let plan = parse_query("WHO Citizens.E\nWHERE E[state] = \"Golden\"").expect("parse failed");
+        let plan =
+            parse_query("WHO Citizens.E\nWHERE E[state] = \"Golden\"").expect("parse failed");
         assert_eq!(plan.r#where.len(), 1);
         assert!(plan.when.is_none());
     }
     #[test]
     fn heptascript_parses_time_travel_query() {
-        let plan = parse_query("WHO Citizens.E\nWHEN AT EPOCH 42\nWHERE E[state] = \"Dead\"").expect("parse failed");
+        let plan = parse_query("WHO Citizens.E\nWHEN AT EPOCH 42\nWHERE E[state] = \"Dead\"")
+            .expect("parse failed");
         assert!(plan.when.is_some());
     }
     #[test]
     fn heptascript_parses_compound_condition() {
-        let plan = parse_query("WHO Citizens.E\nWHERE E[state] = \"Golden\"\nAND E[quality] > 0.8").expect("parse failed");
+        let plan = parse_query("WHO Citizens.E\nWHERE E[state] = \"Golden\"\nAND E[quality] > 0.8")
+            .expect("parse failed");
         assert_eq!(plan.r#where.len(), 2);
     }
     #[test]
     fn heptascript_tokenizer_is_case_insensitive() {
         let t1 = hepta_lex("WHO Citizens.E WHERE E[state] = \"Golden\"").expect("upper failed");
         let t2 = hepta_lex("who citizens.e where e[state] = \"golden\"").expect("lower failed");
-        assert_eq!(t1.len(), t2.len(), "keyword case must not affect token count");
+        assert_eq!(
+            t1.len(),
+            t2.len(),
+            "keyword case must not affect token count"
+        );
     }
 }
 
 #[cfg(test)]
 mod runtime {
-    use eridu_runtime::{Task, TaskResult, EriduRuntime};
-    use eridu_supervisor::EriduSupervisor;
+    use eridu_runtime::{EriduRuntime, Task, TaskResult};
     use eridu_scheduler::ScheduledJob;
+    use eridu_supervisor::EriduSupervisor;
 
-    struct CounterTask { pub count: u32 }
+    struct CounterTask {
+        pub count: u32,
+    }
     impl Task for CounterTask {
-        fn name(&self) -> &str { "counter" }
-        fn run(&mut self) -> TaskResult { self.count += 1; TaskResult::Ok }
+        fn name(&self) -> &str {
+            "counter"
+        }
+        fn run(&mut self) -> TaskResult {
+            self.count += 1;
+            TaskResult::Ok
+        }
     }
 
     #[test]
@@ -286,12 +345,18 @@ mod runtime {
         // Ticks 2-5: should NOT fire (4 advances of 1)
         for _ in 0..4 {
             let due2 = sup.tick(1, |_| Box::new(CounterTask { count: 0 }) as Box<dyn Task>);
-            assert!(due2.is_empty(), "heartbeat must not fire before interval elapses");
+            assert!(
+                due2.is_empty(),
+                "heartbeat must not fire before interval elapses"
+            );
         }
 
         // Tick 6 (1 more advance): fires again (current=6, 6-1=5 >= interval=5)
         let due6 = sup.tick(1, |_| Box::new(CounterTask { count: 0 }) as Box<dyn Task>);
-        assert!(!due6.is_empty(), "heartbeat must fire again after interval ticks");
+        assert!(
+            !due6.is_empty(),
+            "heartbeat must fire again after interval ticks"
+        );
     }
 
     #[test]
@@ -315,15 +380,17 @@ mod runtime {
 #[cfg(test)]
 mod five_tier_pipeline {
     use bahyway_core::TribeId;
-    use enkidb_kaki::KakiRole;
-    use enkisdb::sdb_store::{SdbStatus, StagedParticle};
-    use enkidw::build_store_zip;
-    use eridu_runtime::SchedulerLoop;
     use diagnosis_engine::DiagnosisEngine;
+    use enkidb_kaki::KakiRole;
+    use enkidw::build_store_zip;
+    use enkisdb::sdb_store::{SdbStatus, StagedParticle};
+    use eridu_runtime::SchedulerLoop;
     use std::fs;
     use std::path::PathBuf;
 
-    fn tid() -> TribeId { TribeId::from_u16(0x0001) }
+    fn tid() -> TribeId {
+        TribeId::from_u16(0x0001)
+    }
 
     fn tmp_dir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("e2e_5tier_{}", tag));
@@ -337,16 +404,15 @@ mod five_tier_pipeline {
     }
 
     fn stage_particle(lp: &mut SchedulerLoop, malware: bool) {
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(
-            lp.minter.identity(KakiRole::Zikru)
-        ).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(lp.minter.identity(KakiRole::Zikru)).unwrap();
         lp.sdb.stage(StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     tid().as_u16(),
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    if malware { [255, 0, 0] } else { [80, 200, 120] },
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: tid().as_u16(),
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: if malware { [255, 0, 0] } else { [80, 200, 120] },
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: malware,
         });
@@ -364,7 +430,7 @@ mod five_tier_pipeline {
         let outcome = lp.tick(1); // sweep fires on first tick (last_run=0)
 
         assert!(outcome.sweep_ran);
-        assert_eq!(outcome.promoted,    3);
+        assert_eq!(outcome.promoted, 3);
         assert_eq!(outcome.quarantined, 0);
         assert_eq!(lp.odb.stats().active_count, 3);
         assert_eq!(lp.qdb.len(), 0);
@@ -377,20 +443,20 @@ mod five_tier_pipeline {
         let mut lp = make_loop();
         stage_particle(&mut lp, false); // valid
         stage_particle(&mut lp, false); // valid
-        stage_particle(&mut lp, true);  // malware → BlackBox → Storage Sector
+        stage_particle(&mut lp, true); // malware → BlackBox → Storage Sector
 
         lp.tick(1);
 
         assert_eq!(lp.odb.stats().active_count, 2);
-        assert_eq!(lp.qdb.len(),                0);
-        assert_eq!(lp.storage_sector.len(),     1);
+        assert_eq!(lp.qdb.len(), 0);
+        assert_eq!(lp.storage_sector.len(), 1);
     }
 
     // ── Test 3: ZIP via SdbPipeline → staged → sweep → ODB ──────────────────
 
     #[test]
     fn zip_pipeline_full_flow() {
-        let base   = tmp_dir("zip_flow");
+        let base = tmp_dir("zip_flow");
         let mut lp = make_loop();
 
         // Build a clean ZIP with a TSV inside
@@ -421,7 +487,7 @@ mod five_tier_pipeline {
 
     #[test]
     fn malware_zip_routed_to_storage_sector() {
-        let base   = tmp_dir("malware_zip");
+        let base = tmp_dir("malware_zip");
         let mut lp = make_loop();
 
         // Embed EICAR signature in ZIP payload
@@ -453,15 +519,18 @@ mod five_tier_pipeline {
         let mut lp = make_loop();
         stage_particle(&mut lp, false);
 
-        lp.tick(1);  // first sweep: 1 promoted, 1 drained to ODB
+        lp.tick(1); // first sweep: 1 promoted, 1 drained to ODB
         let odb_after_first = lp.odb.stats().active_count;
 
         // Stage one more particle before second sweep
         stage_particle(&mut lp, false);
         lp.tick(10); // second sweep fires (interval=10)
 
-        assert_eq!(lp.odb.stats().active_count, odb_after_first + 1,
-            "second sweep must only promote the new particle, not re-ingest the first");
+        assert_eq!(
+            lp.odb.stats().active_count,
+            odb_after_first + 1,
+            "second sweep must only promote the new particle, not re-ingest the first"
+        );
     }
 
     // ── Test 6: Journal contains all expected EventCauses ────────────────────
@@ -470,33 +539,35 @@ mod five_tier_pipeline {
     fn journal_audit_trail_complete() {
         let mut lp = make_loop();
         stage_particle(&mut lp, false); // valid
-        stage_particle(&mut lp, true);  // malware
+        stage_particle(&mut lp, true); // malware
 
         lp.tick(1);
 
         // Expect: 2× SdbValidation(Pass/Fail) from sweep + 1× SdbValidationPass from ODB ingest + 1× StorageSectorMove
         let count = lp.journal.entry_count();
-        assert!(count >= 3, "expected at least 3 journal entries, got {count}");
+        assert!(
+            count >= 3,
+            "expected at least 3 journal entries, got {count}"
+        );
     }
 
     // ── Test 7: DiagnosisEngine scans ODB particles in Journal ───────────────
 
     #[test]
     fn diagnosis_engine_detects_drift_after_promotion() {
-        let mut lp  = make_loop();
+        let mut lp = make_loop();
 
         // Stage a particle with color very far from the tribe root
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(
-            lp.minter.identity(KakiRole::Zikru)
-        ).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(lp.minter.identity(KakiRole::Zikru)).unwrap();
         // color_rgb = [0,0,0] vs root = [128,200,255] → large drift → Critical
         lp.sdb.stage(StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     tid().as_u16(),
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [0, 0, 0],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: tid().as_u16(),
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [0, 0, 0],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: false,
         });
@@ -508,8 +579,10 @@ mod five_tier_pipeline {
         eng.set_tribe_root_color(tid().as_u16(), [128, 200, 255]);
         let res = eng.run(&mut lp.journal, &lp.minter, tid(), 0);
 
-        assert!(res.critical_events > 0,
-            "expected at least one critical event for highly drifted particle");
+        assert!(
+            res.critical_events > 0,
+            "expected at least one critical event for highly drifted particle"
+        );
     }
 
     // ── Test 8: fuzzy (tribe-mismatch, non-malware) particle → BlackBox →
@@ -526,16 +599,15 @@ mod five_tier_pipeline {
         // it (sovereignty check fails) but malware_flag stays false, so this is
         // the "fuzzy/unknown" case, not a confirmed-harmful one.
         let foreign_minter = enkidb_kaki::KakiMinter::new(TribeId::from_u16(0x0002));
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(
-            foreign_minter.identity(KakiRole::Zikru)
-        ).unwrap();
+        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(foreign_minter.identity(KakiRole::Zikru))
+            .unwrap();
         lp.sdb.stage(StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     0x0002,
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [90, 90, 90],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: 0x0002,
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [90, 90, 90],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: false,
         });
@@ -552,7 +624,7 @@ mod five_tier_pipeline {
         assert_eq!(queue.pull_from_qdb(&lp.qdb), 1);
 
         // Steward resolves it clean: a fresh Pending particle re-enters EnkiSDB.
-        let tick    = lp.current_tick();
+        let tick = lp.current_tick();
         let new_idx = queue
             .resolve_clean(0, &mut lp.sdb, &mut lp.journal, &lp.minter, tick)
             .expect("resolve_clean should requeue into SDB");
@@ -574,16 +646,15 @@ mod five_tier_pipeline {
         let mut lp = make_loop();
 
         let foreign_minter = enkidb_kaki::KakiMinter::new(TribeId::from_u16(0x0002));
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(
-            foreign_minter.identity(KakiRole::Zikru)
-        ).unwrap();
+        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(foreign_minter.identity(KakiRole::Zikru))
+            .unwrap();
         lp.sdb.stage(StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     0x0002,
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [90, 90, 90],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: 0x0002,
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [90, 90, 90],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: false,
         });
@@ -606,4 +677,3 @@ mod five_tier_pipeline {
         assert_eq!(lp.qdb.len(), 1);
     }
 }
-

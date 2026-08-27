@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · PB-216 · The Deploy Key Gate</title>
+<style>
+  :root{
+    --basalt:#14120f; --tablet:#1f1b16; --gold:#c9a227; --lapis:#2e5d8c;
+    --copper:#b0642f; --alarm:#c23b2a; --bone:#e8e0cf;
+    --tablet-edge:#3a332a; --dim:#8f8672; --green:#7fbf5f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--basalt); color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif; overflow:hidden;}
+  #crumbs{padding:10px 16px 0; font-size:12px; color:var(--dim); letter-spacing:.08em;}
+  #crumbs b{color:var(--gold); font-weight:normal;}
+  #lede{padding:2px 16px 8px; font-size:14.5px;}
+  #banner{background:var(--alarm); color:var(--bone); text-align:center;
+    font-size:11px; letter-spacing:.35em; padding:3px 0; font-family:monospace;}
+  #grid{display:grid; grid-template-columns:1fr 320px; gap:10px;
+    padding:10px 16px 16px; height:calc(100% - 92px);}
+  .panel{background:var(--tablet); border:1px solid var(--tablet-edge);
+    border-radius:6px; position:relative; overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block; width:100%; height:100%;}
+  #deck{position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:5;}
+  #deck button{width:34px; height:34px; background:var(--basalt); color:var(--gold);
+    border:1px solid var(--tablet-edge); border-radius:4px; font-size:16px; cursor:pointer;}
+  #deck button.on{border-color:var(--gold);}
+  #acts{position:absolute; bottom:44px; left:10px; display:flex; gap:6px; z-index:5;}
+  #acts button{background:var(--basalt); color:var(--copper); font-family:inherit;
+    border:1px solid var(--copper); border-radius:4px; padding:6px 12px;
+    font-size:12px; letter-spacing:.06em; cursor:pointer;}
+  #acts button:hover{color:var(--gold); border-color:var(--gold);}
+  #lawtags{position:absolute; bottom:10px; left:10px; display:flex; gap:6px;
+    flex-wrap:wrap; z-index:5;}
+  .lawtag{font-family:monospace; font-size:10px; color:var(--basalt);
+    background:var(--gold); padding:2px 7px; border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis); color:var(--bone);}
+  #side{display:flex; flex-direction:column;}
+  #side h2{font-size:12px; letter-spacing:.25em; color:var(--gold);
+    padding:10px 12px 6px; border-bottom:1px solid var(--tablet-edge);}
+  #journal{flex:1; overflow-y:auto; padding:10px 12px; font-size:12.5px; line-height:1.5;}
+  .entry{margin-bottom:10px; border-left:2px solid var(--copper); padding-left:8px;}
+  .entry .t{color:var(--dim); font-family:monospace; font-size:10px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Ops Court ▸ <b>PB-216 · The Deploy Key Gate</b></div>
+<div id="lede">Two node Tribes stand before the GitHub gate. A node whose deploy key is unregistered is refused <i>here</i> — before PB-208/212/213 — not mid-deploy at task 0.31. The stakeholder's one-minute act opens the gate.</div>
+<div id="banner">ŠALA REHEARSAL ONLY — RUN PB-216 BEFORE ANY DEPLOY PLAYBOOK — SOVEREIGN RENDER IS EGUI/WGPU</div>
+
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="deck">
+      <button id="bHome" title="Reset camera">⌖</button>
+      <button id="bPan"  title="Pan mode">✛</button>
+      <button id="bOrb"  title="Orbit mode" class="on">⟳</button>
+    </div>
+    <div id="acts">
+      <button id="aRun">RUN PB-216 (test the gate)</button>
+      <button id="aReg">STAKEHOLDER ACT: register key on GitHub</button>
+    </div>
+    <div id="lawtags">
+      <span class="lawtag">PB-216</span>
+      <span class="lawtag lapis">GATES PB-208/212/213</span>
+      <span class="lawtag lapis">GL-VIZ-001 NASARU</span>
+      <span class="lawtag">CSR-08</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>STORYENGINE JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+const rnd=mulberry32(0x50423231); /* "PB21" */
+
+const cv=document.getElementById('cv'), g=cv.getContext('2d');
+const stage=document.getElementById('stage');
+function fit(){cv.width=stage.clientWidth; cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit); fit();
+
+const cam0={yaw:-0.4, pitch:0.5, zoom:1.0, px:0, py:0};
+let cam={...cam0}, mode='orbit', drag=null;
+document.getElementById('bHome').onclick=()=>{cam={...cam0};};
+const bPan=document.getElementById('bPan'), bOrb=document.getElementById('bOrb');
+bPan.onclick=()=>{mode='pan'; bPan.classList.add('on'); bOrb.classList.remove('on');};
+bOrb.onclick=()=>{mode='orbit'; bOrb.classList.add('on'); bPan.classList.remove('on');};
+stage.addEventListener('wheel',e=>{e.preventDefault();
+  cam.zoom=Math.min(3,Math.max(.4,cam.zoom*(e.deltaY<0?1.08:0.92)));},{passive:false});
+stage.addEventListener('mousedown',e=>{if(e.button!==0)return; drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mousemove',e=>{if(!drag)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY};
+  if(mode==='orbit'){cam.yaw+=dx*.005; cam.pitch=Math.min(1.25,Math.max(-.15,cam.pitch+dy*.005));}
+  else{cam.px+=dx; cam.py+=dy;}});
+window.addEventListener('mouseup',()=>drag=null);
+
+function proj(p){
+  const cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  let x=p.x*cy-p.z*sy, z=p.x*sy+p.z*cy, y=p.y;
+  let y2=y*cp-z*sp, z2=y*sp+z*cp;
+  const d=5.0, s=(cv.height*0.36)*cam.zoom*(d/(d+z2));
+  return {x:cv.width/2+cam.px+x*s, y:cv.height*0.52+cam.py-y2*s, z:z2, s:s};
+}
+const jEl=document.getElementById('journal');
+function journal(t){const d=document.createElement('div'); d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;
+  jEl.prepend(d);}
+
+/* nodes: write registered; read NOT yet registered — the rehearsal's lesson */
+const NODES=[
+  {id:'uruk-node-write', x:-1.6, z:-0.5, registered:true,  open:false, bounce:0},
+  {id:'uruk-node-read',  x:-1.6, z: 0.7, registered:false, open:false, bounce:0},
+];
+let gateGlow=0;
+document.getElementById('aRun').onclick=()=>{
+  NODES.forEach(n=>{
+    n.bounce=1;
+    if(n.registered){n.open=true;
+      journal('✅ <b>GATE: OPEN</b> — '+n.id+' authenticated: git ls-remote answered. Deploy playbooks are lawful here.');}
+    else{n.open=false; gateGlow=1;
+      journal('⛔ <b style="color:var(--alarm)">GATE: SEALED</b> — '+n.id+': GitHub refused the key. The playbook printed the exact public key and the five-step human act. <i>Nothing deployed, nothing mutated — the gate held before task 0.31 could fail late.</i>');}
+  });
+  if(NODES.every(n=>n.open))
+    journal('<b style="color:var(--gold)">ALL GATES OPEN.</b> Lawful order proclaimed: PB-208 (ingest) → PB-212 (CQRS deploy) → PB-213 (flush/sync/verify).');
+};
+document.getElementById('aReg').onclick=()=>{
+  const n=NODES.find(n=>!n.registered);
+  if(!n){journal('All keys already stand at github.com/bahyway/EnkiDB/settings/keys — nothing to register.'); return;}
+  n.registered=true; n.bounce=1;
+  journal('🔑 STAKEHOLDER ACT — the public key of <b>'+n.id+'</b> is pasted at settings/keys as READ-ONLY, title "'+n.id+'". One minute, once. Now re-run PB-216.');
+};
+
+let t0=performance.now();
+function frame(now){
+  const t=(now-t0)/1000;
+  g.fillStyle='#14120f'; g.fillRect(0,0,cv.width,cv.height);
+  /* curved membrane */
+  for(let j=0;j<=7;j++){
+    g.beginPath();
+    for(let i=0;i<=32;i++){
+      const u=(i/32-0.5)*5.6, v=(j/7-0.5)*3.0;
+      const p={x:u, y:-1.0+0.05*Math.sin(t*0.5+u*1.4+v)-0.07*(u*u/8+v*v/4), z:v};
+      const q=proj(p); i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);
+    }
+    g.strokeStyle='rgba(46,93,140,0.14)'; g.lineWidth=1; g.stroke();
+  }
+  /* the GitHub gate arch at x=0 */
+  g.beginPath();
+  for(let k=0;k<=32;k++){
+    const a=Math.PI*(k/32);
+    const q=proj({x:0, y:Math.sin(a)*0.85-0.15, z:Math.cos(a)*0.9});
+    k?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);
+  }
+  g.strokeStyle=gateGlow>0?'rgba(194,59,42,'+(0.5+0.5*Math.sin(t*5)).toFixed(2)+')':'rgba(201,162,39,0.9)';
+  g.lineWidth=3; g.stroke();
+  if(gateGlow>0)gateGlow=Math.max(0,gateGlow-0.003);
+  const lbl=proj({x:0,y:0.9,z:0});
+  g.fillStyle='#e8e0cf'; g.font='11px monospace'; g.textAlign='center';
+  g.fillText('github.com/bahyway/EnkiDB — DEPLOY KEY GATE', lbl.x, lbl.y);
+  /* deploy road beyond the gate */
+  ['PB-208','PB-212','PB-213'].forEach((s,i)=>{
+    const q=proj({x:0.9+i*0.75, y:-0.35, z:0.1});
+    g.strokeStyle='#c9a227'; g.lineWidth=1.4; g.strokeRect(q.x-24,q.y-10,48,20);
+    g.fillStyle='rgba(232,224,207,.85)'; g.font='9px monospace'; g.fillText(s,q.x,q.y+3);
+  });
+  /* nodes */
+  NODES.forEach(n=>{
+    const bx=n.open? 0.45 : n.x; /* passed nodes stand just beyond the gate */
+    const q=proj({x:bx, y:-0.3+(n.bounce>0?Math.sin(n.bounce*Math.PI)*0.25:0), z:n.z});
+    g.beginPath(); g.arc(q.x,q.y,8,0,Math.PI*2);
+    if(n.open){g.fillStyle='#7fbf5f'; g.fill();}
+    else if(n.registered){g.fillStyle='#c9a227'; g.fill();}
+    else{g.strokeStyle='#c23b2a'; g.setLineDash([3,3]); g.lineWidth=1.6; g.stroke(); g.setLineDash([]);}
+    g.fillStyle='rgba(232,224,207,.85)'; g.font='10px monospace'; g.textAlign='center';
+    g.fillText(n.id, q.x, q.y-13);
+    g.fillStyle=n.open?'#7fbf5f':(n.registered?'#c9a227':'#c23b2a');
+    g.fillText(n.open?'OPEN':(n.registered?'key ready — run PB-216':'key UNREGISTERED'), q.x, q.y+20);
+    if(n.bounce>0)n.bounce=Math.max(0,n.bounce-0.02);
+  });
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('OPS COURT opens. uruk-node-write already holds a registered key; uruk-node-read does not. Press RUN PB-216 and watch the gate refuse early — then perform the stakeholder act and run again.');
+</script>
+</body>
+</html>

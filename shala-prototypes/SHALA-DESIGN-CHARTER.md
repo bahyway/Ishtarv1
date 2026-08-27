@@ -13,6 +13,25 @@ sealed in pure Rust. Its look must match the sovereign identity of the ecosystem
 Mesopotamian, inscribed, dark, deliberate. **Never** default-bootstrap, never flat
 utility-orange, never unstyled navy.
 
+### 1a. Šala's second purpose — rehearsal is teaching
+
+A prototype built to make an abstract mechanism visible and interactive to
+someone who does not yet understand it is, by construction, *also* a teaching
+artifact — rehearsal and pedagogy are the same act aimed at different
+audiences (verifying the design vs. learning it). This does not loosen rule
+5: production truth still renders on DubSar egui/WGPU/Theater, never HTML.
+What it means is that the Šala library, kept and indexed rather than
+discarded after each rehearsal, is a *latent curriculum* — the Hub
+(`shala_hub_index.html`) is the first artifact built explicitly for that
+second purpose: a 7-act cinematic argument that teaches the ecosystem's
+laws (living particles, proof-before-existence, append-only truth,
+one-cause-one-ticket, drift-seen-by-topology, APSU) by showing them, before
+gating into the library itself. See `batch9_eridu_scaffold/04_BahyWayAcademy.md`
+for the full reasoning (Client 1 = BahyWay; every lesson still carries a
+maturity marker — verified/designed/hypothesis — so nothing taught is a
+lie) and `playbook_559_shala_hub_observatory_learning_tool.yml` for how the
+Hub is registered as the library's front door.
+
 ## 2. Surfaces — locked charcoal charter (from `theme.rs`, do not invent)
 
 | Token          | Hex       | Use                          |

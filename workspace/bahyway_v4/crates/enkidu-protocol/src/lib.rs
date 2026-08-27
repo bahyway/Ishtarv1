@@ -18,10 +18,10 @@
 //!                               ◄──[RESULT_STREAM frames]──
 //! ```
 
-pub mod ring;
-pub mod pool;
 pub mod frame;
+pub mod pool;
+pub mod ring;
 
-pub use ring::SpscRing;
+pub use frame::{EnkiFrame, FrameCodec, FrameKind};
 pub use pool::BufferPool;
-pub use frame::{EnkiFrame, FrameKind, FrameCodec};
+pub use ring::SpscRing;

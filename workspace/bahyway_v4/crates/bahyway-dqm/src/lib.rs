@@ -49,18 +49,16 @@ pub mod merkle;
 pub mod report;
 pub mod rules;
 
+pub use algorithms::{
+    jaro, jaro_winkler, levenshtein, levenshtein_similarity, slice_stats, soundex_str, sounds_like,
+    RunningStats,
+};
 pub use dimensions::{DimensionScore, DqmDimension, DqmSla};
 pub use merkle::MerkleTree;
 pub use report::{DqmBatchReport, DqmReport};
 pub use rules::{
-    rule_contains_char, rule_digits_only, rule_min_length, rule_not_empty,
-    rule_numeric_range, Rule, RuleEngine, RuleVerdict,
-};
-pub use algorithms::{
-    levenshtein, levenshtein_similarity,
-    jaro, jaro_winkler,
-    soundex_str, sounds_like,
-    RunningStats, slice_stats,
+    rule_contains_char, rule_digits_only, rule_min_length, rule_not_empty, rule_numeric_range,
+    Rule, RuleEngine, RuleVerdict,
 };
 
 /// The central DQM assessment engine.
@@ -74,10 +72,16 @@ pub struct DqmEngine {
 }
 
 impl DqmEngine {
-    pub fn new(sla: DqmSla) -> Self { DqmEngine { sla } }
+    pub fn new(sla: DqmSla) -> Self {
+        DqmEngine { sla }
+    }
 
-    pub fn set_sla(&mut self, sla: DqmSla) { self.sla = sla; }
-    pub fn sla(&self) -> &DqmSla { &self.sla }
+    pub fn set_sla(&mut self, sla: DqmSla) {
+        self.sla = sla;
+    }
+    pub fn sla(&self) -> &DqmSla {
+        &self.sla
+    }
 
     /// Score a single record across all 6 dimensions.
     ///
@@ -94,7 +98,7 @@ impl DqmEngine {
         rule_engine: &RuleEngine,
         required_field_count: usize,
         current_epoch: u32,
-        record_epoch:  u32,
+        record_epoch: u32,
         freshness_window: u32,
     ) -> DqmReport {
         let scores = [
@@ -146,7 +150,8 @@ impl DqmEngine {
     /// (used as a cross-field conflict marker in BahyWay pipelines).
     /// In production: supply cross-field rules via the RuleEngine.
     fn score_consistency(&self, record: &[(u32, Vec<u8>)]) -> DimensionScore {
-        let conflict_fields = record.iter()
+        let conflict_fields = record
+            .iter()
             .filter(|(_, v)| v.first() == Some(&0xFF))
             .count();
         let score = if record.is_empty() {
@@ -169,7 +174,7 @@ impl DqmEngine {
     fn score_timeliness(
         &self,
         current_epoch: u32,
-        record_epoch:  u32,
+        record_epoch: u32,
         freshness_window: u32,
     ) -> DimensionScore {
         if freshness_window == 0 {
@@ -204,12 +209,10 @@ pub fn uniqueness_score_from_similarity(best_match_similarity: f32) -> Dimension
 
 pub mod prelude {
     pub use crate::{
-        DqmEngine, DqmSla, DqmDimension, DimensionScore,
-        DqmReport, DqmBatchReport, MerkleTree, RuleEngine,
-        rule_not_empty, rule_contains_char, rule_numeric_range,
-        rule_digits_only, rule_min_length, RuleVerdict,
-        levenshtein_similarity, jaro_winkler, sounds_like,
-        RunningStats, uniqueness_score_from_similarity,
+        jaro_winkler, levenshtein_similarity, rule_contains_char, rule_digits_only,
+        rule_min_length, rule_not_empty, rule_numeric_range, sounds_like,
+        uniqueness_score_from_similarity, DimensionScore, DqmBatchReport, DqmDimension, DqmEngine,
+        DqmReport, DqmSla, MerkleTree, RuleEngine, RuleVerdict, RunningStats,
     };
 }
 
@@ -230,7 +233,12 @@ mod tests {
         let mut e = RuleEngine::new();
         e.add_rule(rule_not_empty("id", 0x01));
         e.add_rule(rule_not_empty("amount", 0x02));
-        e.add_rule(rule_numeric_range("amount_positive", 0x02, 0.0, 1_000_000.0));
+        e.add_rule(rule_numeric_range(
+            "amount_positive",
+            0x02,
+            0.0,
+            1_000_000.0,
+        ));
         e
     }
 
@@ -239,14 +247,18 @@ mod tests {
         let engine = DqmEngine::new(DqmSla::enterprise());
         let report = engine.assess_record(&erp_record(), &default_rules(), 3, 50, 49, 10);
         // Completeness: 4/3 → capped 1.0; Validity: 3/3 = 1.0; Timeliness: 1-1/10=0.9
-        assert!(report.sla_compliant, "clean ERP record should pass SLA: {}", report.summary());
+        assert!(
+            report.sla_compliant,
+            "clean ERP record should pass SLA: {}",
+            report.summary()
+        );
     }
 
     #[test]
     fn timeliness_degrades_with_lag() {
         let engine = DqmEngine::new(DqmSla::enterprise());
-        let fresh  = engine.assess_record(&erp_record(), &default_rules(), 3, 50, 50, 10);
-        let stale  = engine.assess_record(&erp_record(), &default_rules(), 3, 50, 40, 10);
+        let fresh = engine.assess_record(&erp_record(), &default_rules(), 3, 50, 50, 10);
+        let stale = engine.assess_record(&erp_record(), &default_rules(), 3, 50, 40, 10);
         assert!(
             fresh.score_for(DqmDimension::Timeliness) > stale.score_for(DqmDimension::Timeliness)
         );
@@ -280,7 +292,7 @@ mod tests {
     fn conflict_marker_reduces_consistency() {
         let record = vec![
             (0x01u32, b"ok".to_vec()),
-            (0x02u32, vec![0xFF, b'x']),  // conflict marker
+            (0x02u32, vec![0xFF, b'x']), // conflict marker
         ];
         let engine = DqmEngine::new(DqmSla::enterprise());
         let report = engine.assess_record(&record, &RuleEngine::new(), 2, 1, 1, 10);

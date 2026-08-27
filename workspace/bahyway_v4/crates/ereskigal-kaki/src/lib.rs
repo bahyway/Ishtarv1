@@ -26,10 +26,10 @@ impl EreskigalParticleClass {
     }
     pub fn kaki_role(&self) -> u8 {
         match self {
-            EreskigalParticleClass::SettlementSite => 0x01,  // KISHIB
-            EreskigalParticleClass::ServiceEvent => 0x02,    // ZIKRU
-            EreskigalParticleClass::NeedsSignal => 0x03,     // PARZU
-            EreskigalParticleClass::ExternalReport => 0x03,  // PARZU
+            EreskigalParticleClass::SettlementSite => 0x01, // KISHIB
+            EreskigalParticleClass::ServiceEvent => 0x02,   // ZIKRU
+            EreskigalParticleClass::NeedsSignal => 0x03,    // PARZU
+            EreskigalParticleClass::ExternalReport => 0x03, // PARZU
         }
     }
 }

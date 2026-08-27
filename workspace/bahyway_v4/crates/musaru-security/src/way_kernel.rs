@@ -39,8 +39,12 @@ pub const PRESSURE_WINDOW_SECS: u32 = 60;
 pub struct CapabilityId(pub [u8; 16]);
 
 impl CapabilityId {
-    pub fn new(bytes: [u8; 16]) -> Self { Self(bytes) }
-    pub fn bytes(&self) -> &[u8; 16] { &self.0 }
+    pub fn new(bytes: [u8; 16]) -> Self {
+        Self(bytes)
+    }
+    pub fn bytes(&self) -> &[u8; 16] {
+        &self.0
+    }
 }
 
 /// Atomic authority unit — bearer of an action over a scope (§2.1).
@@ -66,7 +70,9 @@ impl Capability {
     /// Formula (C4): `trust_at = (1 − decay)^(hops)`.
     /// At origin (hops = 0) this is 1.0 (C3).
     pub fn trust_at_hops(&self, hops: u32) -> f32 {
-        if hops == 0 { return 1.0; }
+        if hops == 0 {
+            return 1.0;
+        }
         (1.0 - self.decay).powi(hops as i32)
     }
 }
@@ -76,8 +82,12 @@ impl Capability {
 pub struct Action(pub String);
 
 impl Action {
-    pub fn new(s: impl Into<String>) -> Self { Self(s.into()) }
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn new(s: impl Into<String>) -> Self {
+        Self(s.into())
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// Orbit or Tribe scope for a capability.
@@ -94,12 +104,22 @@ pub enum Scope {
 pub struct PropagationPath(pub Vec<[u8; 16]>);
 
 impl PropagationPath {
-    pub fn new() -> Self { Self(Vec::new()) }
-    pub fn with_orbits(orbits: Vec<[u8; 16]>) -> Self { Self(orbits) }
-    pub fn len(&self) -> usize { self.0.len() }
-    pub fn is_empty(&self) -> bool { self.0.is_empty() }
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+    pub fn with_orbits(orbits: Vec<[u8; 16]>) -> Self {
+        Self(orbits)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
     /// Number of hops = len - 1 (hops between adjacent orbits, not the count of orbits).
-    pub fn hops(&self) -> u32 { self.0.len().saturating_sub(1) as u32 }
+    pub fn hops(&self) -> u32 {
+        self.0.len().saturating_sub(1) as u32
+    }
 }
 
 // ── ValidationResult (§1.2) ───────────────────────────────────────────────────
@@ -116,7 +136,9 @@ pub enum ValidationResult {
 }
 
 impl ValidationResult {
-    pub fn is_continuous(&self) -> bool { *self == ValidationResult::Continuous }
+    pub fn is_continuous(&self) -> bool {
+        *self == ValidationResult::Continuous
+    }
 }
 
 // ── TrustState (§3) ───────────────────────────────────────────────────────────
@@ -145,7 +167,10 @@ pub enum TrustState {
 impl TrustState {
     /// Returns `true` if this TrustState permits outbound propagation.
     pub fn allows_propagation(self) -> bool {
-        !matches!(self, TrustState::Quarantined | TrustState::Isolated | TrustState::Observational)
+        !matches!(
+            self,
+            TrustState::Quarantined | TrustState::Isolated | TrustState::Observational
+        )
     }
 
     /// Returns `true` if this is a terminal state (requires out-of-band admin recovery).
@@ -155,14 +180,14 @@ impl TrustState {
 
     pub fn as_str(self) -> &'static str {
         match self {
-            TrustState::Sealed        => "SEALED",
-            TrustState::Bounded       => "BOUNDED",
-            TrustState::Isolated      => "ISOLATED",
+            TrustState::Sealed => "SEALED",
+            TrustState::Bounded => "BOUNDED",
+            TrustState::Isolated => "ISOLATED",
             TrustState::Observational => "OBSERVATIONAL",
-            TrustState::Adaptive      => "ADAPTIVE",
-            TrustState::Entangled     => "ENTANGLED",
-            TrustState::Transient     => "TRANSIENT",
-            TrustState::Quarantined   => "QUARANTINED",
+            TrustState::Adaptive => "ADAPTIVE",
+            TrustState::Entangled => "ENTANGLED",
+            TrustState::Transient => "TRANSIENT",
+            TrustState::Quarantined => "QUARANTINED",
         }
     }
 }
@@ -179,13 +204,13 @@ impl core::fmt::Display for TrustState {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SealState {
     /// Default state for new orbits — mutations and capability grants permitted.
-    Mutable   = 0,
+    Mutable = 0,
     /// One step below sealed — write access requires explicit capability.
-    Guarded   = 1,
+    Guarded = 1,
     /// Member set, capability set, and trust state frozen. Only `unseal` can exit.
-    Sealed    = 2,
+    Sealed = 2,
     /// Terminal — cannot be unsealed by any algebra operation (TS4).
-    Frozen    = 3,
+    Frozen = 3,
 }
 
 impl SealState {
@@ -195,7 +220,9 @@ impl SealState {
     }
 
     /// Returns `true` when no further progression is possible (Frozen is terminal).
-    pub fn is_terminal(self) -> bool { self == SealState::Frozen }
+    pub fn is_terminal(self) -> bool {
+        self == SealState::Frozen
+    }
 
     /// Validate a requested SealState transition.  Returns `Ok(target)` if
     /// the transition is legal, or `Err(SecurityError::IllegalTrustTransition)` if not.
@@ -205,21 +232,21 @@ impl SealState {
     pub fn guard_transition(self) -> Result<SealState, SecurityError> {
         match self {
             SealState::Mutable => Ok(SealState::Guarded),
-            _                  => Err(SecurityError::IllegalTrustTransition),
+            _ => Err(SecurityError::IllegalTrustTransition),
         }
     }
 
     pub fn seal_transition(self) -> Result<SealState, SecurityError> {
         match self {
             SealState::Guarded => Ok(SealState::Sealed),
-            _                  => Err(SecurityError::IllegalTrustTransition),
+            _ => Err(SecurityError::IllegalTrustTransition),
         }
     }
 
     pub fn freeze_transition(self) -> Result<SealState, SecurityError> {
         match self {
             SealState::Sealed => Ok(SealState::Frozen),
-            _                 => Err(SecurityError::IllegalTrustTransition),
+            _ => Err(SecurityError::IllegalTrustTransition),
         }
     }
 
@@ -228,16 +255,16 @@ impl SealState {
         match self {
             SealState::Sealed => Ok(SealState::Guarded),
             SealState::Frozen => Err(SecurityError::OrbitSealed), // TS4: frozen is terminal
-            _                 => Err(SecurityError::IllegalTrustTransition),
+            _ => Err(SecurityError::IllegalTrustTransition),
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            SealState::Mutable  => "MUTABLE",
-            SealState::Guarded  => "GUARDED",
-            SealState::Sealed   => "SEALED",
-            SealState::Frozen   => "FROZEN",
+            SealState::Mutable => "MUTABLE",
+            SealState::Guarded => "GUARDED",
+            SealState::Sealed => "SEALED",
+            SealState::Frozen => "FROZEN",
         }
     }
 }
@@ -287,10 +314,10 @@ pub enum PropagationError {
 impl core::fmt::Display for SecurityError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            SecurityError::CapabilityMissing       => write!(f, "W1: capability missing"),
-            SecurityError::OrbitSealed             => write!(f, "W6: orbit sealed/frozen"),
-            SecurityError::IllegalTrustTransition  => write!(f, "W5: illegal trust transition"),
-            SecurityError::EvidenceRequired        => write!(f, "W6/TS2: evidence event required"),
+            SecurityError::CapabilityMissing => write!(f, "W1: capability missing"),
+            SecurityError::OrbitSealed => write!(f, "W6: orbit sealed/frozen"),
+            SecurityError::IllegalTrustTransition => write!(f, "W5: illegal trust transition"),
+            SecurityError::EvidenceRequired => write!(f, "W6/TS2: evidence event required"),
         }
     }
 }
@@ -298,14 +325,16 @@ impl core::fmt::Display for SecurityError {
 impl core::fmt::Display for PropagationError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            PropagationError::CapabilityMissing               => write!(f, "W1: capability missing"),
-            PropagationError::DenyDeclared                    => write!(f, "P5: deny declared"),
-            PropagationError::RadiusExceeded                  => write!(f, "W2: radius exceeded"),
-            PropagationError::TrustDecayBelowFloor            => write!(f, "W2: trust below τ_min"),
-            PropagationError::SemanticAffinityBelowThreshold  => write!(f, "W4: affinity below α_cross"),
-            PropagationError::OrbitSealed                     => write!(f, "W6: orbit sealed"),
-            PropagationError::PressureExceeded                => write!(f, "runtime: pressure exceeded"),
-            PropagationError::ValidationFailed(r)             => write!(f, "W7: validation failed — {r}"),
+            PropagationError::CapabilityMissing => write!(f, "W1: capability missing"),
+            PropagationError::DenyDeclared => write!(f, "P5: deny declared"),
+            PropagationError::RadiusExceeded => write!(f, "W2: radius exceeded"),
+            PropagationError::TrustDecayBelowFloor => write!(f, "W2: trust below τ_min"),
+            PropagationError::SemanticAffinityBelowThreshold => {
+                write!(f, "W4: affinity below α_cross")
+            }
+            PropagationError::OrbitSealed => write!(f, "W6: orbit sealed"),
+            PropagationError::PressureExceeded => write!(f, "runtime: pressure exceeded"),
+            PropagationError::ValidationFailed(r) => write!(f, "W7: validation failed — {r}"),
         }
     }
 }
@@ -317,7 +346,9 @@ impl core::fmt::Display for PropagationError {
 /// `trust_at = (1 − decay)^hops`
 /// At origin (hops = 0) returns 1.0 (C3).
 pub fn trust_at(decay: f32, hops: u32) -> f32 {
-    if hops == 0 { return 1.0; }
+    if hops == 0 {
+        return 1.0;
+    }
     (1.0_f32 - decay.clamp(0.0, 1.0)).powi(hops as i32)
 }
 
@@ -330,9 +361,13 @@ pub fn trust_at(decay: f32, hops: u32) -> f32 {
 /// Default stability gate: `EPSILON_UNSTABLE = 1.20`.
 pub fn orbit_entropy_from_counts(white: usize, black: usize, gray: usize) -> f32 {
     let total = (white + black + gray) as f32;
-    if total == 0.0 { return 0.0; }
+    if total == 0.0 {
+        return 0.0;
+    }
     let entropy_term = |count: usize| -> f32 {
-        if count == 0 { return 0.0; }
+        if count == 0 {
+            return 0.0;
+        }
         let p = count as f32 / total;
         -p * p.log2()
     };
@@ -343,7 +378,7 @@ pub fn orbit_entropy_from_counts(white: usize, black: usize, gray: usize) -> f32
 pub fn orbit_entropy_from_lanes(lanes: &[Lane]) -> f32 {
     let white = lanes.iter().filter(|&&l| l == Lane::White).count();
     let black = lanes.iter().filter(|&&l| l == Lane::Black).count();
-    let gray  = lanes.iter().filter(|&&l| l == Lane::Gray).count();
+    let gray = lanes.iter().filter(|&&l| l == Lane::Gray).count();
     orbit_entropy_from_counts(white, black, gray)
 }
 
@@ -451,7 +486,7 @@ mod tests {
     #[test]
     fn orbit_entropy_from_lanes_matches_counts() {
         let lanes = vec![Lane::White, Lane::White, Lane::Black, Lane::Gray];
-        let e_lanes  = orbit_entropy_from_lanes(&lanes);
+        let e_lanes = orbit_entropy_from_lanes(&lanes);
         let e_counts = orbit_entropy_from_counts(2, 1, 1);
         assert!((e_lanes - e_counts).abs() < 1e-6);
     }
@@ -555,7 +590,10 @@ mod tests {
             decay: 0.0,
             requires_validation: false,
         };
-        assert_eq!(check_radius_and_trust(&cap, 3, 3), Err(PropagationError::RadiusExceeded));
+        assert_eq!(
+            check_radius_and_trust(&cap, 3, 3),
+            Err(PropagationError::RadiusExceeded)
+        );
     }
 
     #[test]
@@ -565,11 +603,14 @@ mod tests {
             action: Action::new("read"),
             scope: Scope::Tribe(1),
             radius: u32::MAX,
-            decay: 0.5,  // heavy decay
+            decay: 0.5, // heavy decay
             requires_validation: false,
         };
         // After 10 hops with 50% decay, trust = 0.5^10 ≈ 0.001 < 0.10
-        assert_eq!(check_radius_and_trust(&cap, 10, 10), Err(PropagationError::TrustDecayBelowFloor));
+        assert_eq!(
+            check_radius_and_trust(&cap, 10, 10),
+            Err(PropagationError::TrustDecayBelowFloor)
+        );
     }
 
     // ── Validator trait ───────────────────────────────────────────────────────
@@ -581,7 +622,9 @@ mod tests {
             cid: CapabilityId::new([0; 16]),
             action: Action::new("test"),
             scope: Scope::Tribe(1),
-            radius: 5, decay: 0.0, requires_validation: true,
+            radius: 5,
+            decay: 0.0,
+            requires_validation: true,
         };
         let path = PropagationPath::new();
         assert_eq!(v.validate(&cap, &path), ValidationResult::Continuous);
@@ -594,7 +637,9 @@ mod tests {
             cid: CapabilityId::new([0; 16]),
             action: Action::new("test"),
             scope: Scope::Tribe(1),
-            radius: 5, decay: 0.0, requires_validation: true,
+            radius: 5,
+            decay: 0.0,
+            requires_validation: true,
         };
         let path = PropagationPath::new();
         let result = v.validate(&cap, &path);
@@ -607,15 +652,21 @@ mod tests {
     fn security_error_display() {
         assert!(SecurityError::CapabilityMissing.to_string().contains("W1"));
         assert!(SecurityError::OrbitSealed.to_string().contains("W6"));
-        assert!(SecurityError::IllegalTrustTransition.to_string().contains("W5"));
+        assert!(SecurityError::IllegalTrustTransition
+            .to_string()
+            .contains("W5"));
         assert!(SecurityError::EvidenceRequired.to_string().contains("W6"));
     }
 
     #[test]
     fn propagation_error_display() {
         assert!(PropagationError::RadiusExceeded.to_string().contains("W2"));
-        assert!(PropagationError::SemanticAffinityBelowThreshold.to_string().contains("W4"));
-        assert!(PropagationError::ValidationFailed("x".into()).to_string().contains("W7"));
+        assert!(PropagationError::SemanticAffinityBelowThreshold
+            .to_string()
+            .contains("W4"));
+        assert!(PropagationError::ValidationFailed("x".into())
+            .to_string()
+            .contains("W7"));
     }
 
     // ── Constants ─────────────────────────────────────────────────────────────
@@ -650,15 +701,15 @@ mod tests {
 #[repr(u8)]
 pub enum WayPipelineStage {
     /// Stage 1: `.way` source file parsed into an abstract syntax tree.
-    Way            = 1,
+    Way = 1,
     /// Stage 2: AST produced from `.way` source.
-    Ast            = 2,
+    Ast = 2,
     /// Stage 3: Security Topology IR — normalized, platform-independent representation.
-    Stir           = 3,
+    Stir = 3,
     /// Stage 4: STIR lowered to an Orbit Security Graph (capability adjacency).
     OrbitSecurityGraph = 4,
     /// Stage 5: Capability Planner resolves propagation paths and decay.
-    CapabilityPlanner  = 5,
+    CapabilityPlanner = 5,
     /// Stage 6: Runtime Enforcement configuration emitted to Lamassu.
     RuntimeEnforcement = 6,
 }
@@ -666,11 +717,11 @@ pub enum WayPipelineStage {
 impl WayPipelineStage {
     pub fn as_str(self) -> &'static str {
         match self {
-            WayPipelineStage::Way                => ".way",
-            WayPipelineStage::Ast                => "AST",
-            WayPipelineStage::Stir               => "STIR",
+            WayPipelineStage::Way => ".way",
+            WayPipelineStage::Ast => "AST",
+            WayPipelineStage::Stir => "STIR",
             WayPipelineStage::OrbitSecurityGraph => "OrbitSecurityGraph",
-            WayPipelineStage::CapabilityPlanner  => "CapabilityPlanner",
+            WayPipelineStage::CapabilityPlanner => "CapabilityPlanner",
             WayPipelineStage::RuntimeEnforcement => "RuntimeEnforcement",
         }
     }
@@ -719,13 +770,19 @@ mod stir_tests {
     #[test]
     fn runtime_enforcement_is_last() {
         let stages = WayPipelineStage::all();
-        assert_eq!(*stages.last().unwrap(), WayPipelineStage::RuntimeEnforcement);
+        assert_eq!(
+            *stages.last().unwrap(),
+            WayPipelineStage::RuntimeEnforcement
+        );
     }
 
     #[test]
     fn display_correct() {
-        assert_eq!(WayPipelineStage::Way.to_string(),  ".way");
+        assert_eq!(WayPipelineStage::Way.to_string(), ".way");
         assert_eq!(WayPipelineStage::Stir.to_string(), "STIR");
-        assert_eq!(WayPipelineStage::RuntimeEnforcement.to_string(), "RuntimeEnforcement");
+        assert_eq!(
+            WayPipelineStage::RuntimeEnforcement.to_string(),
+            "RuntimeEnforcement"
+        );
     }
 }

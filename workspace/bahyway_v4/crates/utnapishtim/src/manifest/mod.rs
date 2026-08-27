@@ -32,7 +32,8 @@ pub fn generate_manifest(topo: &ClientTopology, output_dir: &str) -> String {
          threejs_viewer     = dubsar_viewer_{}.html\n\
          godot_project      = dubsar_pdm_{}\n\
          manifest           = manifest.akk\n",
-        topo.client_name, topo.client_id,
+        topo.client_name,
+        topo.client_id,
         topo.sealed_at,
         topo.client_id,
         topo.client_name,

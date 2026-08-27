@@ -56,7 +56,10 @@ pub fn mint_new_crates(
         .map(|r| r.path)
         .collect();
 
-    let new_crates: Vec<_> = scanned.into_iter().filter(|c| !already.contains(&c.path)).collect();
+    let new_crates: Vec<_> = scanned
+        .into_iter()
+        .filter(|c| !already.contains(&c.path))
+        .collect();
     if new_crates.is_empty() {
         return log;
     }
@@ -68,7 +71,11 @@ pub fn mint_new_crates(
     if let Some(p) = registry_path.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    let mut registry_file = std::fs::OpenOptions::new().create(true).append(true).open(registry_path).ok();
+    let mut registry_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(registry_path)
+        .ok();
 
     for (i, artifact) in new_crates.iter().enumerate() {
         let kaki = write_node.ingest_artifact(artifact, i as u32 + 1);
@@ -121,7 +128,10 @@ mod tests {
         let enkimdb_root = dir.join("enkimdb_data");
 
         let log = mint_new_crates(&dir, &registry, &enkimdb_root);
-        assert!(log.iter().any(|l| l.contains("scratch_crate")), "expected a mint log line, got: {log:?}");
+        assert!(
+            log.iter().any(|l| l.contains("scratch_crate")),
+            "expected a mint log line, got: {log:?}"
+        );
 
         let registry_text = std::fs::read_to_string(&registry).unwrap();
         assert!(registry_text.contains("scratch_crate"));
@@ -137,6 +147,9 @@ mod tests {
         assert!(!first.is_empty(), "first run must mint the new crate");
 
         let second = mint_new_crates(&dir, &registry, &enkimdb_root);
-        assert!(second.is_empty(), "second run must find nothing new to mint: {second:?}");
+        assert!(
+            second.is_empty(),
+            "second run must find nothing new to mint: {second:?}"
+        );
     }
 }

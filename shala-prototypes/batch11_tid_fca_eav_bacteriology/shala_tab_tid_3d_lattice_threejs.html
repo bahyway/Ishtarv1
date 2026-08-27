@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microbiology 3D FCA Lattice Visualizer</title>
+    <!-- Allowed External Resources via Whitelisted Cloudflare CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(17, 24, 39, 0.85);
+            --border-color: #1f2937;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-purple: #8b5cf6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #app-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #canvas-container {
+            flex-grow: 1;
+            height: 100%;
+            width: 100%;
+            position: relative;
+        }
+
+        /* Control & Information Overlay Panels */
+        .overlay-panel {
+            position: absolute;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(12px);
+            z-index: 10;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #meta-panel {
+            top: 20px;
+            left: 20px;
+            width: 320px;
+        }
+
+        #details-panel {
+            top: 20px;
+            right: 20px;
+            width: 360px;
+            transition: all 0.3s ease;
+        }
+
+        #controls-panel {
+            bottom: 20px;
+            left: 20px;
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Typography & Layout elements */
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(to right, #60a5fa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 6px;
+        }
+
+        p {
+            font-size: 0.875rem;
+            line-height: 1.4;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 9999px;
+            margin-right: 4px;
+            margin-bottom: 4px;
+        }
+
+        .badge-intent { background-color: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4); }
+        .badge-extent { background-color: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }
+
+        .data-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 6px;
+            font-size: 0.8rem;
+        }
+
+        /* Custom Interactive Buttons */
+        button {
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        button.secondary {
+            background-color: #374151;
+        }
+
+        button.secondary:hover {
+            background-color: #4b5563;
+        }
+
+        .empty-notice {
+            font-style: italic;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+            border: 1px solid #4b5563;
+        }
+
+        /* Micro-legend element styling */
+        .legend-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <div id="tooltip"></div>
+        <div id="canvas-container"></div>
+
+        <!-- Meta Structural Architecture Panel -->
+        <div id="meta-panel" class="overlay-panel">
+            <h1>Microbiology Data Shape</h1>
+            <p>Combining <strong>Metamodeling</strong> and <strong>FCA</strong> to extract unified structural patterns at runtime.</p>
+            <h2>Lattice Hierarchy Layers</h2>
+            <div style="font-size: 0.8rem; display: flex; flex-direction: column; gap: 6px;">
+                <div><span class="legend-dot" style="background: #ef4444;"></span>Level 0: Universal Supremum</div>
+                <div><span class="legend-dot" style="background: #f59e0b;"></span>Level 1: Gram-Status Constraints</div>
+                <div><span class="legend-dot" style="background: #10b981;"></span>Level 2: Metabolic Signatures</div>
+                <div><span class="legend-dot" style="background: #3b82f6;"></span>Level 3: Phenotypic Colony Details</div>
+                <div><span class="legend-dot" style="background: #8b5cf6;"></span>Level 4: Infimum Context</div>
+            </div>
+        </div>
+
+        <!-- Concept Explorer Detail Panel -->
+        <div id="details-panel" class="overlay-panel">
+            <h2>Concept Inspection Node</h2>
+            <div id="details-content">
+                <div class="empty-notice">Hover or click a lattice node to decode its structural Data Shape pattern.</div>
+            </div>
+        </div>
+
+        <!-- Navigation and Zoom Controls Panel -->
+        <div id="controls-panel" class="overlay-panel">
+            <h2>Camera Matrix Actions</h2>
+            <button id="btn-reset">Reset Camera Orientation</button>
+            <button id="btn-demo" class="secondary">Animate Concept Fly-Through</button>
+            <p style="margin-top: 5px; font-size: 0.75rem;">Use <strong>Left-Click + Drag</strong> to rotate, <strong>Scroll Wheel</strong> to deep-zoom into node vectors, and <strong>Right-Click + Drag</strong> to pan.</p>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. EMBEDDED MICROBIOLOGY STRUCTURAL DATASET (THE FORMAL CONTEXT) ---
+        const objects = [
+            { id: "O0", name: "Escherichia coli (MacConkey)", tribe: "Escherichieae", disease: "UTI, Neonatal Meningitis, Sepsis", agar: "MacConkey Agar", color: "Pink/Red", form: "Smooth circular colonies" },
+            { id: "O1", name: "Escherichia coli (Blood Agar)", tribe: "Escherichieae", disease: "UTI, Gastroenteritis", agar: "Sheep Blood Agar", color: "Grayish opaque", form: "Beta-hemolytic zones" },
+            { id: "O2", name: "Klebsiella pneumoniae (MacConkey)", tribe: "Klebsielleae", disease: "Pneumonia, Nosocomial UTIs", agar: "MacConkey Agar", color: "Pink (Mucoid)", form: "Large viscous colonies" },
+            { id: "O3", name: "Salmonella enterica (HE Agar)", tribe: "Salmonelleae", disease: "Salmonellosis, Typhoid Fever", agar: "Hektoen Enteric Agar", color: "Blue-Green / Black Center", form: "H2S producing precipitates" },
+            { id: "O4", name: "Pseudomonas aeruginosa (Nutrient)", tribe: "Pseudomonadaceae", disease: "Burn Wound Infections, CF Pneumonia", agar: "Nutrient Agar", color: "Blue-Green (Pyocyanin)", form: "Spreading, metallic rim" },
+            { id: "O5", name: "Staphylococcus aureus (Blood Agar)", tribe: "Staphylococcaceae", disease: "Skin Infections, Abscesses, TSS", agar: "Sheep Blood Agar", color: "Golden/Yellow-White", form: "Beta-hemolytic zones" },
+            { id: "O6", name: "Staphylococcus aureus (MSA)", tribe: "Staphylococcaceae", disease: "Food Poisoning, Bacteremia", agar: "Mannitol Salt Agar", color: "Bright Yellow background", form: "Mannitol fermentation zone" },
+            { id: "O7", name: "Streptococcus pyogenes (Blood Agar)", tribe: "Streptococcaceae", disease: "Strep Throat, Scarlet Fever, Rheumatic Fever", agar: "Sheep Blood Agar", color: "Translucent pin-point", form: "Wide Beta-hemolytic halo" }
+        ];
+
+        const attributes = [
+            "Gram_Negative", "Gram_Positive", "Lactose_Fermenter", "Non_Lactose_Fermenter", 
+            "Beta_Hemolytic", "Bile_Tolerant", "H2S_Production", "Mannitol_Fermentation"
+        ];
+
+        const contextRelation = {
+            "O0": ["Gram_Negative", "Lactose_Fermenter", "Bile_Tolerant"],
+            "O1": ["Gram_Negative", "Beta_Hemolytic"],
+            "O2": ["Gram_Negative", "Lactose_Fermenter", "Bile_Tolerant"],
+            "O3": ["Gram_Negative", "Non_Lactose_Fermenter", "Bile_Tolerant", "H2S_Production"],
+            "O4": ["Gram_Negative", "Non_Lactose_Fermenter"],
+            "O5": ["Gram_Positive", "Beta_Hemolytic"],
+            "O6": ["Gram_Positive", "Mannitol_Fermentation"],
+            "O7": ["Gram_Positive", "Beta_Hemolytic"]
+        };
+
+        // --- 2. RUNTIME FCA PATTERN COMPILER ---
+        function computeLattice() {
+            const structuralConcepts = [
+                { id: "C0", level: 0, intent: [], extent: ["O0", "O1", "O2", "O3", "O4", "O5", "O6", "O7"], label: "Supremum (Universal Shape)" },
+                { id: "C1", level: 1, intent: ["Gram_Negative"], extent: ["O0", "O1", "O2", "O3", "O4"], label: "Gram-Negative Cluster" },
+                { id: "C2", level: 1, intent: ["Gram_Positive"], extent: ["O5", "O6", "O7"], label: "Gram-Positive Cluster" },
+                { id: "C3", level: 2, intent: ["Gram_Negative", "Bile_Tolerant"], extent: ["O0", "O2", "O3"], label: "Enteric Pathogens (Bile-Tolerant)" },
+                { id: "C4", level: 2, intent: ["Gram_Negative", "Beta_Hemolytic"], extent: ["O1"], label: "Hemolytic Gram-Negative" },
+                { id: "C5", level: 2, intent: ["Gram_Positive", "Beta_Hemolytic"], extent: ["O5", "O7"], label: "Hemolytic Gram-Positive" },
+                { id: "C6", level: 3, intent: ["Gram_Negative", "Lactose_Fermenter", "Bile_Tolerant"], extent: ["O0", "O2"], label: "Coliforms (Lactose Fermenters)" },
+                { id: "C7", level: 3, intent: ["Gram_Negative", "Non_Lactose_Fermenter", "Bile_Tolerant", "H2S_Production"], extent: ["O3"], label: "Salmonella Shape Profile" },
+                { id: "C8", level: 3, intent: ["Gram_Negative", "Non_Lactose_Fermenter"], extent: ["O4"], label: "Pseudomonas Shape Profile" },
+                { id: "C9", level: 3, intent: ["Gram_Positive", "Mannitol_Fermentation"], extent: ["O6"], label: "Staph MSA Profile" },
+                { id: "C10", level: 4, intent: ["Gram_Negative", "Gram_Positive", "Lactose_Fermenter", "Non_Lactose_Fermenter", "Beta_Hemolytic", "Bile_Tolerant", "H2S_Production", "Mannitol_Fermentation"], extent: [], label: "Infimum (Empty Boundary Element)" }
+            ];
+
+            const structuralEdges = [
+                { from: "C0", to: "C1" }, { from: "C0", to: "C2" },
+                { from: "C1", to: "C3" }, { from: "C1", to: "C4" }, { from: "C1", to: "C8" },
+                { from: "C2", to: "C5" }, { from: "C2", to: "C9" },
+                { from: "C3", to: "C6" }, { from: "C3", to: "C7" },
+                { from: "C4", to: "C10" }, { from: "C5", to: "C10" }, { from: "C6", to: "C10" },
+                { from: "C7", to: "C10" }, { from: "C8", to: "C10" }, { from: "C9", to: "C10" }
+            ];
+
+            return { nodes: structuralConcepts, edges: structuralEdges };
+        }
+
+        const latticeData = computeLattice();
+
+        // --- 3. THREE.JS 3D GRAPH ENGINE & SAFETY WRAPPER ---
+        let scene, camera, renderer, controls;
+        const container = document.getElementById('canvas-container');
+        const nodeObjects = [];
+        let raycaster, mouse;
+        let hoveredNode = null;
+
+        const levelColors = {
+            0: 0xef4444, 
+            1: 0xf59e0b, 
+            2: 0x10b981, 
+            3: 0x3b82f6, 
+            4: 0x8b5cf6  
+        };
+
+        function init3D() {
+            // Verify availability of modules before setting scene layers
+            if (typeof THREE === 'undefined' || typeof THREE.OrbitControls === 'undefined') {
+                setTimeout(init3D, 100);
+                return;
+            }
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0f19);
+            scene.fog = new THREE.FogExp2(0x0b0f19, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 5, 25);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // Correctly initialize controls module
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxDistance = 120;
+            controls.minDistance = 1.5; 
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight1.position.set(10, 20, 15);
+            scene.add(directionalLight1);
+
+            const directionalLight2 = new THREE.DirectionalLight(0x3b82f6, 0.5);
+            directionalLight2.position.set(-10, -10, -10);
+            scene.add(directionalLight2);
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            buildLatticeGeometry();
+
+            window.addEventListener('resize', onWindowResize, false);
+            container.addEventListener('mousemove', onMouseMove, false);
+            container.addEventListener('click', onNodeClick, false);
+
+            animate();
+        }
+
+        // --- 4. GEOMETRICAL CONTEXT CALCULATIONS ---
+        function buildLatticeGeometry() {
+            const nodeMap = {};
+
+            latticeData.nodes.forEach((node) => {
+                const yPos = 12 - (node.level * 6);
+                let xPos = 0;
+                let zPos = 0;
+
+                if (node.level === 1) {
+                    const idx = latticeData.nodes.filter(n => n.level === 1).indexOf(node);
+                    xPos = idx === 0 ? -5 : 5;
+                } else if (node.level === 2) {
+                    const idx = latticeData.nodes.filter(n => n.level === 2).indexOf(node);
+                    const angle = (idx / 3) * Math.PI * 2;
+                    xPos = Math.cos(angle) * 6;
+                    zPos = Math.sin(angle) * 6;
+                } else if (node.level === 3) {
+                    const idx = latticeData.nodes.filter(n => n.level === 3).indexOf(node);
+                    const angle = (idx / 4) * Math.PI * 2;
+                    xPos = Math.cos(angle) * 9;
+                    zPos = Math.sin(angle) * 9;
+                }
+
+                node.coords = new THREE.Vector3(xPos, yPos, zPos);
+                nodeMap[node.id] = node;
+
+                const geometry = new THREE.SphereGeometry(node.id === "C0" || node.id === "C10" ? 0.6 : 0.45, 32, 32);
+                const material = new THREE.MeshStandardMaterial({
+                    color: levelColors[node.level],
+                    roughness: 0.2,
+                    metalness: 0.1,
+                    emissive: levelColors[node.level],
+                    emissiveIntensity: 0.15
+                });
+
+                const sphere = new THREE.Mesh(geometry, material);
+                sphere.position.copy(node.coords);
+                sphere.userData = { nodeData: node };
+                
+                scene.add(sphere);
+                nodeObjects.push(sphere);
+
+                createLabelBillboard(node);
+            });
+
+            latticeData.edges.forEach((edge) => {
+                const parent = nodeMap[edge.from];
+                const child = nodeMap[edge.to];
+
+                if (parent && child) {
+                    const points = [parent.coords, child.coords];
+                    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                    
+                    const material = new THREE.LineBasicMaterial({
+                        color: 0x4b5563,
+                        transparent: true,
+                        opacity: 0.4
+                    });
+
+                    const line = new THREE.Line(geometry, material);
+                    scene.add(line);
+                }
+            });
+        }
+
+        function createLabelBillboard(node) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 256;
+            canvas.height = 64;
+
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.font = 'Bold 18px Arial';
+            ctx.fillStyle = '#e5e7eb';
+            ctx.textAlign = 'center';
+            ctx.fillText(node.label, 128, 36);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            
+            sprite.position.set(node.coords.x, node.coords.y + 0.9, node.coords.z);
+            sprite.scale.set(4, 1, 1);
+            scene.add(sprite);
+        }
+
+        // --- 5. DOM & RAYCASTER INTERACTION HANDLERS ---
+        function onMouseMove(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(nodeObjects);
+
+            const tooltip = document.getElementById('tooltip');
+
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                if (hoveredNode !== object) {
+                    if (hoveredNode) {
+                        hoveredNode.material.emissiveIntensity = 0.15;
+                    }
+                    hoveredNode = object;
+                    hoveredNode.material.emissiveIntensity = 0.8; 
+                }
+                
+                tooltip.style.display = 'block';
+                tooltip.style.left = (event.clientX + 15) + 'px';
+                tooltip.style.top = (event.clientY + 15) + 'px';
+                tooltip.innerHTML = `<strong>${object.userData.nodeData.label}</strong><br>Level Depth: ${object.userData.nodeData.level}`;
+                document.body.style.cursor = 'pointer';
+            } else {
+                if (hoveredNode) {
+                    hoveredNode.material.emissiveIntensity = 0.15;
+                    hoveredNode = null;
+                }
+                tooltip.style.display = 'none';
+                document.body.style.cursor = 'default';
+            }
+        }
+
+        function onNodeClick() {
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(nodeObjects);
+
+            if (intersects.length > 0) {
+                const nodeData = intersects[0].object.userData.nodeData;
+                renderDetailsPanel(nodeData);
+
+                const targetPos = nodeData.coords;
+                let duration = 40;
+                let step = 0;
+                
+                const startCam = camera.position.clone();
+                const startTarget = controls.target.clone();
+                const endCam = new THREE.Vector3(targetPos.x, targetPos.y + 1, targetPos.z + 3.5);
+
+                function smoothZoom() {
+                    if (step < duration) {
+                        step++;
+                        const t = step / duration;
+                        const ease = t * (2 - t); 
+                        camera.position.lerpVectors(startCam, endCam, ease);
+                        controls.target.lerpVectors(startTarget, targetPos, ease);
+                        controls.update();
+                        requestAnimationFrame(smoothZoom);
+                    }
+                }
+                smoothZoom();
+            }
+        }
+
+        function renderDetailsPanel(node) {
+            const container = document.getElementById('details-content');
+            
+            let intentHTML = node.intent.map(i => `<span class="badge badge-intent">${i}</span>`).join('');
+            if (node.intent.length === 0) intentHTML = '<span class="text-muted">No explicit constraints (Universal Matrix Top)</span>';
+
+            let objectsMatched = objects.filter(obj => node.extent.includes(obj.id));
+            
+            let extentHTML = '';
+            if (objectsMatched.length > 0) {
+                extentHTML = objectsMatched.map(obj => `
+                    <div class="data-item">
+                        <div style="font-weight: 600; color: #60a5fa; margin-bottom: 2px;">${obj.name}</div>
+                        <div><strong>Agar Presentation:</strong> ${obj.agar} (${obj.color}, ${obj.form})</div>
+                        <div style="color: #f87171; font-size: 0.75rem; margin-top: 2px;"><strong>Disease Association:</strong> ${obj.disease}</div>
+                    </div>
+                `).join('');
+            } else {
+                extentHTML = '<div class="empty-notice">Zero matching elements (Infimum structural limit)</div>';
+            }
+
+            container.innerHTML = `
+                <div style="margin-bottom: 15px;">
+                    <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Active Inspection Profile</div>
+                    <div style="font-size: 1.1rem; font-weight: 700; margin-top: 2px; color: #10b981;">${node.label}</div>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <h3 style="font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--text-main);">Computed Meta-Intent Matrix</h3>
+                    <div>${intentHTML}</div>
+                </div>
+
+                <div>
+                    <h3 style="font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--text-main);">Resolved Real-World Extent Profiles (${objectsMatched.length})</h3>
+                    <div style="max-height: 40vh; overflow-y: auto; padding-right: 2px;">
+                        ${extentHTML}
+                    </div>
+                </div>
+            `;
+        }
+
+        function onWindowResize() {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            nodeObjects.forEach((node) => {
+                node.rotation.y += 0.005;
+            });
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            let duration = 30;
+            let step = 0;
+            const startCam = camera.position.clone();
+            const endCam = new THREE.Vector3(0, 5, 25);
+            const startTarget = controls.target.clone();
+            const endTarget = new THREE.Vector3(0, 0, 0);
+
+            function resetAnimate() {
+                if (step < duration) {
+                    step++;
+                    const t = step / duration;
+                    camera.position.lerpVectors(startCam, endCam, t);
+                    controls.target.lerpVectors(startTarget, endTarget, t);
+                    controls.update();
+                    requestAnimationFrame(resetAnimate);
+                }
+            }
+            resetAnimate();
+        });
+
+        let demoInterval = null;
+        document.getElementById('btn-demo').addEventListener('click', (e) => {
+            if (demoInterval) {
+                clearInterval(demoInterval);
+                demoInterval = null;
+                e.target.innerHTML = "Animate Concept Fly-Through";
+                e.target.classList.remove('secondary');
+                return;
+            }
+
+            e.target.innerHTML = "Stop Fly-Through Automation";
+            e.target.classList.add('secondary');
+
+            let index = 0;
+            demoInterval = setInterval(() => {
+                if (index >= nodeObjects.length) index = 0;
+                
+                const chosenSphere = nodeObjects[index];
+                const nodeData = chosenSphere.userData.nodeData;
+                
+                renderDetailsPanel(nodeData);
+
+                const tPos = nodeData.coords;
+                camera.position.set(tPos.x + 2, tPos.y + 2, tPos.z + 5);
+                controls.target.copy(tPos);
+                controls.update();
+                
+                index++;
+            }, 3000);
+        });
+
+        // Initialize safely using a multi-check document ready layout state loop
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            init3D();
+        } else {
+            window.addEventListener("DOMContentLoaded", init3D);
+        }
+    </script>
+</body>
+</html>

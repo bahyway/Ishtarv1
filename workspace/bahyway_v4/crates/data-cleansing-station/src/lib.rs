@@ -32,16 +32,19 @@
 pub mod cleanse;
 
 pub use cleanse::{
-    // New VGCA-powered API
-    VgcaCleansingStation,
+    // Legacy shim
+    cleanse,
     CleansingReport,
+    CleansingReportLegacy,
+    DqFinding,
     FieldVgcaResult,
     OrbitDensitySnapshot,
     ParticleLane,
-    DqFinding,
+    // New VGCA-powered API
+    VgcaCleansingStation,
+    ACTIVE_B11,
+    FUZZY_B11,
     // Sovereign lane thresholds
-    GEM_B11, TRIBE_B11, ACTIVE_B11, FUZZY_B11,
-    // Legacy shim
-    cleanse,
-    CleansingReportLegacy,
+    GEM_B11,
+    TRIBE_B11,
 };

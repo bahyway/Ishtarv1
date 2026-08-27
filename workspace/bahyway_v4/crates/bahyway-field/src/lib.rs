@@ -59,19 +59,27 @@ pub struct RealField(pub f64);
 
 impl Add for RealField {
     type Output = Self;
-    fn add(self, rhs: Self) -> Self { RealField(self.0 + rhs.0) }
+    fn add(self, rhs: Self) -> Self {
+        RealField(self.0 + rhs.0)
+    }
 }
 impl Sub for RealField {
     type Output = Self;
-    fn sub(self, rhs: Self) -> Self { RealField(self.0 - rhs.0) }
+    fn sub(self, rhs: Self) -> Self {
+        RealField(self.0 - rhs.0)
+    }
 }
 impl Mul for RealField {
     type Output = Self;
-    fn mul(self, rhs: Self) -> Self { RealField(self.0 * rhs.0) }
+    fn mul(self, rhs: Self) -> Self {
+        RealField(self.0 * rhs.0)
+    }
 }
 impl Neg for RealField {
     type Output = Self;
-    fn neg(self) -> Self { RealField(-self.0) }
+    fn neg(self) -> Self {
+        RealField(-self.0)
+    }
 }
 
 impl Field for RealField {
@@ -79,7 +87,11 @@ impl Field for RealField {
     const ONE: Self = RealField(1.0);
 
     fn inverse(&self) -> Option<Self> {
-        if self.0 == 0.0 { None } else { Some(RealField(1.0 / self.0)) }
+        if self.0 == 0.0 {
+            None
+        } else {
+            Some(RealField(1.0 / self.0))
+        }
     }
 }
 
@@ -95,30 +107,42 @@ pub struct Zmod240(pub u16);
 const MODULUS: u16 = 240;
 
 impl Zmod240 {
-    pub fn new(v: u16) -> Self { Zmod240(v % MODULUS) }
+    pub fn new(v: u16) -> Self {
+        Zmod240(v % MODULUS)
+    }
 }
 
 impl Add for Zmod240 {
     type Output = Self;
-    fn add(self, rhs: Self) -> Self { Zmod240((self.0 + rhs.0) % MODULUS) }
+    fn add(self, rhs: Self) -> Self {
+        Zmod240((self.0 + rhs.0) % MODULUS)
+    }
 }
 impl Sub for Zmod240 {
     type Output = Self;
-    fn sub(self, rhs: Self) -> Self { Zmod240((self.0 + MODULUS - rhs.0) % MODULUS) }
+    fn sub(self, rhs: Self) -> Self {
+        Zmod240((self.0 + MODULUS - rhs.0) % MODULUS)
+    }
 }
 impl Mul for Zmod240 {
     type Output = Self;
-    fn mul(self, rhs: Self) -> Self { Zmod240(((self.0 as u32 * rhs.0 as u32) % MODULUS as u32) as u16) }
+    fn mul(self, rhs: Self) -> Self {
+        Zmod240(((self.0 as u32 * rhs.0 as u32) % MODULUS as u32) as u16)
+    }
 }
 impl Neg for Zmod240 {
     type Output = Self;
-    fn neg(self) -> Self { Zmod240((MODULUS - self.0) % MODULUS) }
+    fn neg(self) -> Self {
+        Zmod240((MODULUS - self.0) % MODULUS)
+    }
 }
 
 /// Extended Euclidean algorithm over i64, returns (gcd, x) such that
 /// a*x ≡ gcd (mod m) is derivable; used only to check invertibility.
 fn egcd(a: i64, b: i64) -> (i64, i64, i64) {
-    if b == 0 { (a, 1, 0) } else {
+    if b == 0 {
+        (a, 1, 0)
+    } else {
         let (g, x1, y1) = egcd(b, a % b);
         (g, y1, x1 - (a / b) * y1)
     }

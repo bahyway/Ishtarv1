@@ -51,13 +51,20 @@ pub fn detect_gap(observed: &[u8], baseline: &[u8]) -> GapDetectionResult {
     let base_sigma = std_dev(baseline, base_mean);
 
     // Avoid division by zero when baseline has zero variance (all identical).
-    let effective_sigma = if base_sigma < f64::EPSILON { 1.0 / QUALITY_DIVISOR } else { base_sigma };
+    let effective_sigma = if base_sigma < f64::EPSILON {
+        1.0 / QUALITY_DIVISOR
+    } else {
+        base_sigma
+    };
 
     let delta = base_mean - obs_mean; // positive = observed is lower
     let sigma_distance = delta / effective_sigma;
 
     if sigma_distance > GAP_SIGMA_THRESHOLD {
-        GapDetectionResult::SpectralGap { delta, sigma: sigma_distance }
+        GapDetectionResult::SpectralGap {
+            delta,
+            sigma: sigma_distance,
+        }
     } else {
         GapDetectionResult::Healthy
     }
@@ -87,7 +94,10 @@ mod tests {
     fn test_healthy_when_spectra_match() {
         let baseline = [200u8, 210, 195, 205];
         let observed = [198u8, 212, 193, 207];
-        assert_eq!(detect_gap(&observed, &baseline), GapDetectionResult::Healthy);
+        assert_eq!(
+            detect_gap(&observed, &baseline),
+            GapDetectionResult::Healthy
+        );
     }
 
     #[test]
@@ -128,6 +138,9 @@ mod tests {
         // Observed is better than baseline — not a gap
         let baseline = [100u8; 5];
         let observed = [200u8; 5];
-        assert_eq!(detect_gap(&observed, &baseline), GapDetectionResult::Healthy);
+        assert_eq!(
+            detect_gap(&observed, &baseline),
+            GapDetectionResult::Healthy
+        );
     }
 }

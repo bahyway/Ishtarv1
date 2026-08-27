@@ -618,17 +618,17 @@ MODRS
     # LAYER 10: RUNTIME / OS
     # ════════════════════════════════════════════════════════════════════
     say "Layer 10 — Runtime / OS"
-    mk_lib "eridu-runtime"    "EriduOS runtime daemon" \
+    mk_lib "eridu-runtime"    "UrOS runtime daemon" \
         'bahyway-core   = { path = "../bahyway-core" }' \
         'enkidb-engine  = { path = "../enkidb-engine" }' \
         'tokio          = { workspace = true }'
 
-    mk_lib "eridu-scheduler"  "EriduOS job scheduling" \
+    mk_lib "eridu-scheduler"  "UrOS job scheduling" \
         'bahyway-core   = { path = "../bahyway-core" }' \
         'eridu-runtime  = { path = "../eridu-runtime" }' \
         'tokio          = { workspace = true }'
 
-    mk_lib "eridu-supervisor" "EriduOS system supervisor / process management" \
+    mk_lib "eridu-supervisor" "UrOS system supervisor / process management" \
         'bahyway-core     = { path = "../bahyway-core" }' \
         'eridu-runtime    = { path = "../eridu-runtime" }' \
         'eridu-scheduler  = { path = "../eridu-scheduler" }' \

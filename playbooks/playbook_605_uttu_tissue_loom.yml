@@ -1,0 +1,389 @@
+---
+# =============================================================================
+# PB-605 — UTTU TISSUE LOOM: PHANTOM → CONDENSING → RECOVERED → TISSUE
+# BahyWay.Ecosystem v4.+ · extends the Gula agent (requires PB-602..359)
+# CSR-08: running this playbook is Bahaa's confirmation act.
+#
+# Doctrine sealed into code:
+#   A pattern is not finished when it is recovered; it is finished when it
+#   becomes TISSUE — woven into the membrane, rigidity carried as ribs,
+#   meaning expressed as new curvature of the manifold itself.
+#
+# Delivers:
+#   1. tissue.rs — maturation ladder driven ONLY by independent engine
+#      confirmations (1st: CONDENSING · 2nd: RECOVERED, two-witness rule ·
+#      3rd: TISSUE, four Bārûtu rib channels woven per GL-NIM-003)
+#   2. The UTILITY GATE — only Tissue may claim UTILITY-WITNESSED.
+#      A phantom cannot carry a train. Concrete services only:
+#      Transit passages · LeakPinpoint (σ_d ≤ 0.10 m Cramér–Rao gate) ·
+#      LoadHeld vault cycles. Refusals name their law.
+#   3. lib.rs v4 — tissue module registered
+#   4. COMPILE + RUNTIME gates re-run — both blocking
+#
+# The name Uttu (the weaver) enters the naming queue pending Bahaa's seal.
+# =============================================================================
+- name: "PB-605 · Uttu tissue loom — maturation ladder + utility gate"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    gula_crate_dir: "{{ repo_root }}/engines/gula"
+    naru_dir: "{{ repo_root }}/naru"
+
+  tasks:
+    - name: "Preflight · PB-604 must have run (apsu module exists)"
+      ansible.builtin.stat:
+        path: "{{ gula_crate_dir }}/src/apsu.rs"
+      register: apsu_stat
+
+    - name: "Preflight · refuse if the mirror is absent"
+      ansible.builtin.assert:
+        that: apsu_stat.stat.exists
+        fail_msg: "apsu.rs not found — run PB-602, PB-603, PB-604 first. Playbooks are ordered acts."
+
+    - name: "Preflight · cargo must exist on the host"
+      ansible.builtin.command: cargo --version
+      register: cargo_check
+      changed_when: false
+
+    - name: "Write src/lib.rs (PB-605 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! GULA — the grammar-minting agent (candidate name, pending CSR-08 seal).
+          //! Governed by GL-LSN-001 (Lišānu Law) under GL-ALG-002 (Unified Algebra).
+          //!
+          //! The arc: WITNESS → JUDGE → MOVE → STAGE (Nimrud discipline, GL-STK-001).
+          //! The agent heals the corpus from its own flesh: wounds (three-gloss
+          //! collisions) become grafts (dialect candidates), staged in URUK only.
+          //! Sealing to KISH is Bahaa's act alone — no code path here writes to kish/.
+          //!
+          //! Zero external dependencies. std only. No Z3, no solvers, no ML.
+
+          pub mod apsu;
+          pub mod arc;
+          pub mod court;
+          pub mod graft;
+          pub mod harvest;
+          pub mod naru;
+          pub mod tissue;
+          pub mod uruk;
+          pub mod wound;
+          pub mod zaqiqu;
+
+          /// The canonical structural signature of a pattern family, decomposed on the
+          /// three faces of the GL-ALG-002 triality.
+          #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+          pub struct Signature {
+              pub particle_face: String,
+              pub orbit_face: String,
+              pub tribe_face: String,
+          }
+
+          impl Signature {
+              pub fn new(particle: &str, orbit: &str, tribe: &str) -> Self {
+                  Self {
+                      particle_face: normalize(particle),
+                      orbit_face: normalize(orbit),
+                      tribe_face: normalize(tribe),
+                  }
+              }
+
+              /// Canonical key: the shape as one string. Two patterns share a key
+              /// iff they share the same deep structure on all three faces.
+              pub fn key(&self) -> String {
+                  format!(
+                      "P[{}]|O[{}]|T[{}]",
+                      self.particle_face, self.orbit_face, self.tribe_face
+                  )
+              }
+          }
+
+          fn normalize(s: &str) -> String {
+              s.trim().to_lowercase().split_whitespace().collect::<Vec<_>>().join("-")
+          }
+
+          /// One engine's testimony: "I hold this pattern shape, and I gloss it thus."
+          #[derive(Debug, Clone)]
+          pub struct PatternWitness {
+              pub engine: String,
+              pub signature: Signature,
+              pub hubullu_gloss: String,
+          }
+
+          /// Verdict vocabulary of GL-LSN-001 §6.2. SEALED-KISH is intentionally
+          /// absent: the agent cannot pronounce it.
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum Verdict {
+              Observed,
+              Triggered,
+              Minted,
+              RejectedForeign(String),
+              RejectedTumor(String),
+              StagedUruk(String),
+              /// A phantom pattern predicted from the lattice's negative space
+              /// (zaqiqu). Prune-exempt; a prediction, never a dialect.
+              PhantomPredicted(String),
+              /// A live testimony matched a phantom's signature — prophecy fulfilled.
+              PhantomRecovered(String),
+          }
+
+          impl Verdict {
+              pub fn as_str(&self) -> &'static str {
+                  match self {
+                      Verdict::Observed => "OBSERVED",
+                      Verdict::Triggered => "TRIGGERED",
+                      Verdict::Minted => "MINTED",
+                      Verdict::RejectedForeign(_) => "REJECTED-FOREIGN",
+                      Verdict::RejectedTumor(_) => "REJECTED-TUMOR",
+                      Verdict::StagedUruk(_) => "STAGED-URUK",
+                      Verdict::PhantomPredicted(_) => "PHANTOM-PREDICTED",
+                      Verdict::PhantomRecovered(_) => "PHANTOM-RECOVERED",
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn signature_key_is_canonical() {
+                  let a = Signature::new("  Leak  Event ", "decay ORBIT", "pipe tribe");
+                  let b = Signature::new("leak event", "Decay Orbit", "Pipe   Tribe");
+                  assert_eq!(a.key(), b.key());
+              }
+          }
+    - name: "Write src/tissue.rs (PB-605 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/tissue.rs"
+        mode: "0644"
+        content: |
+          //! UTTU — the tissue loom (candidate name, pending CSR-08 seal).
+          //! A pattern is not finished when it is recovered; it is finished when it
+          //! becomes TISSUE — woven into the membrane's fabric, its rigidity carried
+          //! as ribs, its meaning expressed as new curvature of the manifold itself.
+          //!
+          //! Maturation ladder (rigidity grows ONLY by independent engine
+          //! confirmation — never by time, never by assertion):
+          //!
+          //!   PHANTOM      rigidity 0.00   predicted, translucent, swaying
+          //!   CONDENSING   1st engine      edges harden, sway stops
+          //!   RECOVERED    2nd engine      two-witness rule — solid flesh
+          //!   TISSUE       3rd engine      woven into the membrane; four Bārûtu
+          //!                                rib channels (GL-NIM-003) come alive
+          //!
+          //! UTILITY GATE: only Tissue-stage patterns may claim UTILITY-WITNESSED.
+          //! A phantom cannot carry a train. Recovery is existence; tissue is service.
+
+          use std::collections::BTreeSet;
+
+          pub const RIGIDITY_PER_ENGINE: f64 = 0.34;
+          pub const TISSUE_RIBS: usize = 4; // GL-NIM-003 — four surface channels
+          pub const WPD_SIGMA_GATE_M: f64 = 0.10; // WPDEngine Cramér–Rao gate
+
+          #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+          pub enum MaturationStage {
+              Phantom,
+              Condensing,
+              Recovered,
+              Tissue,
+          }
+
+          impl MaturationStage {
+              pub fn as_str(&self) -> &'static str {
+                  match self {
+                      MaturationStage::Phantom => "PHANTOM",
+                      MaturationStage::Condensing => "CONDENSING",
+                      MaturationStage::Recovered => "RECOVERED",
+                      MaturationStage::Tissue => "TISSUE",
+                  }
+              }
+          }
+
+          #[derive(Debug, Clone)]
+          pub struct TissueRecord {
+              pub pattern_key: String,
+              pub confirming_engines: BTreeSet<String>,
+              pub rigidity: f64,
+              pub stage: MaturationStage,
+              /// Bārûtu rib channels woven — zero until Tissue.
+              pub ribs: usize,
+          }
+
+          impl TissueRecord {
+              pub fn phantom(pattern_key: &str) -> Self {
+                  Self {
+                      pattern_key: pattern_key.to_string(),
+                      confirming_engines: BTreeSet::new(),
+                      rigidity: 0.0,
+                      stage: MaturationStage::Phantom,
+                      ribs: 0,
+                  }
+              }
+
+              /// One engine's confirmation. Repeat confirmations by the SAME engine
+              /// add nothing: rigidity is independence, not enthusiasm.
+              pub fn confirm(&mut self, engine: &str) -> MaturationStage {
+                  let fresh = self.confirming_engines.insert(engine.trim().to_lowercase());
+                  if fresh {
+                      self.rigidity = (self.rigidity + RIGIDITY_PER_ENGINE).min(1.02);
+                  }
+                  self.stage = match self.confirming_engines.len() {
+                      0 => MaturationStage::Phantom,
+                      1 => MaturationStage::Condensing,
+                      2 => MaturationStage::Recovered,
+                      _ => MaturationStage::Tissue,
+                  };
+                  self.ribs = if self.stage == MaturationStage::Tissue { TISSUE_RIBS } else { 0 };
+                  self.stage
+              }
+          }
+
+          /// Utility claims a Tissue-stage pattern may witness. Each is a concrete,
+          /// measurable service — never an assertion.
+          #[derive(Debug, Clone)]
+          pub enum UtilityKind {
+              /// Transport service through the woven vault.
+              Transit { passages: u64 },
+              /// WPDEngine leak localization on a rib; sigma must clear the gate.
+              LeakPinpoint { sigma_m: f64, rib: usize },
+              /// Structural service: load cycles absorbed by the vault curvature.
+              LoadHeld { cycles: u64 },
+          }
+
+          /// The utility gate. Refusals name their law.
+          pub fn witness_utility(record: &TissueRecord, kind: &UtilityKind) -> Result<String, String> {
+              if record.stage != MaturationStage::Tissue {
+                  return Err(format!(
+                      "UTILITY REFUSED · {} is {} — a phantom cannot carry a train; \
+                       tissue admission requires three independent engines",
+                      record.pattern_key,
+                      record.stage.as_str()
+                  ));
+              }
+              match kind {
+                  UtilityKind::Transit { passages } => Ok(format!(
+                      "UTILITY-WITNESSED · {} · transit service: {} passages through the woven vault",
+                      record.pattern_key, passages
+                  )),
+                  UtilityKind::LeakPinpoint { sigma_m, rib } => {
+                      if *rib == 0 || *rib > record.ribs {
+                          return Err(format!(
+                              "UTILITY REFUSED · rib {} does not exist ({} Bārûtu channels woven)",
+                              rib, record.ribs
+                          ));
+                      }
+                      if *sigma_m > WPD_SIGMA_GATE_M {
+                          Err(format!(
+                              "UTILITY REFUSED · σ_d = {:.2} m exceeds the WPDEngine Cramér–Rao \
+                               gate ({:.2} m) — a vague pinpoint is not a pinpoint",
+                              sigma_m, WPD_SIGMA_GATE_M
+                          ))
+                      } else {
+                          Ok(format!(
+                              "UTILITY-WITNESSED · {} · leak localized on rib {} at σ_d = {:.2} m — \
+                               within the Cramér–Rao gate",
+                              record.pattern_key, rib, sigma_m
+                          ))
+                      }
+                  }
+                  UtilityKind::LoadHeld { cycles } => Ok(format!(
+                      "UTILITY-WITNESSED · {} · vault curvature absorbed {} load cycles — \
+                       the pattern IS the structure",
+                      record.pattern_key, cycles
+                  )),
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn ladder_climbs_only_on_independent_engines() {
+                  let mut r = TissueRecord::phantom("rupture-limit-pipe");
+                  assert_eq!(r.stage, MaturationStage::Phantom);
+                  assert_eq!(r.confirm("nanshe"), MaturationStage::Condensing);
+                  // same engine again: enthusiasm adds nothing
+                  assert_eq!(r.confirm("nanshe"), MaturationStage::Condensing);
+                  assert!((r.rigidity - RIGIDITY_PER_ENGINE).abs() < 1e-9);
+                  assert_eq!(r.confirm("wpdengine"), MaturationStage::Recovered);
+                  assert_eq!(r.ribs, 0, "no ribs before tissue");
+                  assert_eq!(r.confirm("igigi"), MaturationStage::Tissue);
+                  assert_eq!(r.ribs, TISSUE_RIBS, "four Bārûtu channels at tissue");
+                  assert!(r.rigidity >= 1.0);
+              }
+
+              #[test]
+              fn a_phantom_cannot_carry_a_train() {
+                  let mut r = TissueRecord::phantom("k");
+                  r.confirm("nanshe");
+                  r.confirm("wpdengine"); // Recovered, not Tissue
+                  let v = witness_utility(&r, &UtilityKind::Transit { passages: 1 });
+                  assert!(v.is_err());
+                  assert!(v.unwrap_err().contains("cannot carry a train"));
+              }
+
+              #[test]
+              fn leak_pinpoint_respects_the_cramer_rao_gate() {
+                  let mut r = TissueRecord::phantom("k");
+                  for e in ["nanshe", "wpdengine", "igigi"] {
+                      r.confirm(e);
+                  }
+                  assert!(witness_utility(&r, &UtilityKind::LeakPinpoint { sigma_m: 0.28, rib: 3 }).is_err());
+                  assert!(witness_utility(&r, &UtilityKind::LeakPinpoint { sigma_m: 0.08, rib: 3 }).is_ok());
+                  assert!(
+                      witness_utility(&r, &UtilityKind::LeakPinpoint { sigma_m: 0.08, rib: 9 }).is_err(),
+                      "a rib that was never woven cannot testify"
+                  );
+              }
+
+              #[test]
+              fn tissue_witnesses_transit_and_load() {
+                  let mut r = TissueRecord::phantom("k");
+                  for e in ["a", "b", "c"] {
+                      r.confirm(e);
+                  }
+                  assert!(witness_utility(&r, &UtilityKind::Transit { passages: 144 }).is_ok());
+                  assert!(witness_utility(&r, &UtilityKind::LoadHeld { cycles: 12 }).is_ok());
+              }
+          }
+
+    - name: "GATE · COMPILE (cargo build) — blocking"
+      ansible.builtin.command: cargo build
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: compile_gate
+      changed_when: true
+
+    - name: "GATE · RUNTIME (cargo test) — blocking"
+      ansible.builtin.command: cargo test
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: runtime_gate
+      changed_when: false
+
+    - name: "NĀRU · record the act"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/playbook_acts.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-605","act":"uttu-tissue-loom","law":"GL-LSN-001",
+          "doctrine":"recovery is existence; tissue is service",
+          "ladder":["PHANTOM","CONDENSING","RECOVERED","TISSUE"],
+          "utility_gate":"a phantom cannot carry a train",
+          "gates":{"compile":"green","runtime":"green"},
+          "naming_queue":["Uttu"]}
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "PB-605 complete. Both gates green."
+          - "Patterns now mature: phantom mist condenses, recovers, and is"
+          - "woven as tissue into the membrane — four Bārûtu ribs, new"
+          - "curvature, and a utility gate that refuses every claim made"
+          - "before the weave is real."

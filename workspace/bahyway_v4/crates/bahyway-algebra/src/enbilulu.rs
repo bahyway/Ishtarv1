@@ -54,7 +54,13 @@ pub struct EnbiFactors {
 
 impl EnbiFactors {
     fn as_weighted_array(&self) -> [f32; 5] {
-        [self.factor_1, self.factor_2, self.factor_3, self.baru_residual, self.factor_5]
+        [
+            self.factor_1,
+            self.factor_2,
+            self.factor_3,
+            self.baru_residual,
+            self.factor_5,
+        ]
     }
 }
 
@@ -62,7 +68,8 @@ impl EnbiFactors {
 /// weight order: [factor_1, factor_2, factor_3, baru_residual, factor_5]
 ///             = [0.20,     0.20,     0.15,     0.30,          0.15]
 pub fn phi_enbi(f: &EnbiFactors) -> f32 {
-    PHI_ENBI_WEIGHTS.iter()
+    PHI_ENBI_WEIGHTS
+        .iter()
         .zip(f.as_weighted_array().iter())
         .map(|(w, v)| w * v)
         .sum()
@@ -80,10 +87,15 @@ pub enum TiamatBand {
 
 impl TiamatBand {
     pub fn from_phi(phi: f32) -> Self {
-        if phi < 40.0 { TiamatBand::Stable }
-        else if phi < 60.0 { TiamatBand::Watch }
-        else if phi < 80.0 { TiamatBand::Serious }
-        else { TiamatBand::Erra }
+        if phi < 40.0 {
+            TiamatBand::Stable
+        } else if phi < 60.0 {
+            TiamatBand::Watch
+        } else if phi < 80.0 {
+            TiamatBand::Serious
+        } else {
+            TiamatBand::Erra
+        }
     }
 
     /// Bridges into the real alert-engine's AlertSeverity so Milu
@@ -92,10 +104,10 @@ impl TiamatBand {
     /// alert at all.
     pub fn to_alert_severity(self) -> Option<AlertSeverity> {
         match self {
-            TiamatBand::Stable  => None,
-            TiamatBand::Watch   => Some(AlertSeverity::Watch),
+            TiamatBand::Stable => None,
+            TiamatBand::Watch => Some(AlertSeverity::Watch),
             TiamatBand::Serious => Some(AlertSeverity::Warning),
-            TiamatBand::Erra    => Some(AlertSeverity::Critical),
+            TiamatBand::Erra => Some(AlertSeverity::Critical),
         }
     }
 }
@@ -106,8 +118,12 @@ impl TiamatBand {
 /// zero or negative (never crosses under current conditions -- a loud
 /// "no horizon" rather than a misleading infinite number).
 pub fn enbi_horizon_weeks(phi_now: f32, phi_rate_per_week: f32) -> Option<f32> {
-    if phi_now >= 80.0 { return Some(0.0); }
-    if phi_rate_per_week <= 0.0 { return None; }
+    if phi_now >= 80.0 {
+        return Some(0.0);
+    }
+    if phi_rate_per_week <= 0.0 {
+        return None;
+    }
     Some(((80.0 - phi_now) / phi_rate_per_week).max(0.0))
 }
 
@@ -156,11 +172,31 @@ pub struct TertuFingerprint {
 }
 
 pub const TERTU_TABLE: &[TertuFingerprint] = &[
-    TertuFingerprint { dominant_factor_index: 0, mechanism: FailureMechanism::Corrosion,    cause: RootCause::MaterialAge },
-    TertuFingerprint { dominant_factor_index: 1, mechanism: FailureMechanism::JointFailure, cause: RootCause::SoilMovement },
-    TertuFingerprint { dominant_factor_index: 2, mechanism: FailureMechanism::Overpressure, cause: RootCause::HydraulicSurge },
-    TertuFingerprint { dominant_factor_index: 3, mechanism: FailureMechanism::Subsidence,   cause: RootCause::SoilMovement },
-    TertuFingerprint { dominant_factor_index: 4, mechanism: FailureMechanism::JointFailure, cause: RootCause::ExternalLoad },
+    TertuFingerprint {
+        dominant_factor_index: 0,
+        mechanism: FailureMechanism::Corrosion,
+        cause: RootCause::MaterialAge,
+    },
+    TertuFingerprint {
+        dominant_factor_index: 1,
+        mechanism: FailureMechanism::JointFailure,
+        cause: RootCause::SoilMovement,
+    },
+    TertuFingerprint {
+        dominant_factor_index: 2,
+        mechanism: FailureMechanism::Overpressure,
+        cause: RootCause::HydraulicSurge,
+    },
+    TertuFingerprint {
+        dominant_factor_index: 3,
+        mechanism: FailureMechanism::Subsidence,
+        cause: RootCause::SoilMovement,
+    },
+    TertuFingerprint {
+        dominant_factor_index: 4,
+        mechanism: FailureMechanism::JointFailure,
+        cause: RootCause::ExternalLoad,
+    },
 ];
 
 /// Diagnoses the dominant factor (by raw magnitude, not weighted
@@ -168,13 +204,15 @@ pub const TERTU_TABLE: &[TertuFingerprint] = &[
 /// score asks "how wrong overall") and looks it up in TERTU_TABLE.
 pub fn diagnose(f: &EnbiFactors) -> (FailureMechanism, RootCause) {
     let vals = f.as_weighted_array();
-    let dominant = vals.iter()
+    let dominant = vals
+        .iter()
         .enumerate()
         .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(i, _)| i)
         .unwrap_or(0);
 
-    TERTU_TABLE.iter()
+    TERTU_TABLE
+        .iter()
         .find(|e| e.dominant_factor_index == dominant)
         .map(|e| (e.mechanism, e.cause))
         .unwrap_or((FailureMechanism::Unknown, RootCause::Unknown))
@@ -196,8 +234,9 @@ pub fn narrate(
         "Element {element}, failing by mechanism {mechanism:?}, from cause {cause:?}, crossing ERRA in {t_weeks:.1} weeks"
     );
     match expansion {
-        Some((name, t_prime)) =>
-            format!("{base} — and if expansion {name} proceeds, T shrinks to {t_prime:.1} weeks."),
+        Some((name, t_prime)) => {
+            format!("{base} — and if expansion {name} proceeds, T shrinks to {t_prime:.1} weeks.")
+        }
         None => format!("{base}."),
     }
 }
@@ -207,11 +246,23 @@ mod tests {
     use super::*;
 
     fn stable_factors() -> EnbiFactors {
-        EnbiFactors { factor_1: 10.0, factor_2: 10.0, factor_3: 10.0, baru_residual: 10.0, factor_5: 10.0 }
+        EnbiFactors {
+            factor_1: 10.0,
+            factor_2: 10.0,
+            factor_3: 10.0,
+            baru_residual: 10.0,
+            factor_5: 10.0,
+        }
     }
 
     fn erra_factors() -> EnbiFactors {
-        EnbiFactors { factor_1: 90.0, factor_2: 90.0, factor_3: 90.0, baru_residual: 90.0, factor_5: 90.0 }
+        EnbiFactors {
+            factor_1: 90.0,
+            factor_2: 90.0,
+            factor_3: 90.0,
+            baru_residual: 90.0,
+            factor_5: 90.0,
+        }
     }
 
     #[test]
@@ -224,7 +275,13 @@ mod tests {
     fn phi_enbi_uniform_inputs_equals_input_value() {
         // When all five factors are equal, the weighted sum (weights
         // summing to 1.0) must equal that shared value exactly.
-        let f = EnbiFactors { factor_1: 42.0, factor_2: 42.0, factor_3: 42.0, baru_residual: 42.0, factor_5: 42.0 };
+        let f = EnbiFactors {
+            factor_1: 42.0,
+            factor_2: 42.0,
+            factor_3: 42.0,
+            baru_residual: 42.0,
+            factor_5: 42.0,
+        };
         assert!((phi_enbi(&f) - 42.0).abs() < 1e-4);
     }
 
@@ -264,7 +321,10 @@ mod tests {
 
     #[test]
     fn erra_band_maps_to_critical_alert() {
-        assert_eq!(TiamatBand::Erra.to_alert_severity(), Some(AlertSeverity::Critical));
+        assert_eq!(
+            TiamatBand::Erra.to_alert_severity(),
+            Some(AlertSeverity::Critical)
+        );
     }
 
     #[test]
@@ -294,7 +354,13 @@ mod tests {
 
     #[test]
     fn diagnose_picks_dominant_factor() {
-        let f = EnbiFactors { factor_1: 5.0, factor_2: 5.0, factor_3: 5.0, baru_residual: 95.0, factor_5: 5.0 };
+        let f = EnbiFactors {
+            factor_1: 5.0,
+            factor_2: 5.0,
+            factor_3: 5.0,
+            baru_residual: 95.0,
+            factor_5: 5.0,
+        };
         let (mechanism, cause) = diagnose(&f);
         assert_eq!(mechanism, FailureMechanism::Subsidence);
         assert_eq!(cause, RootCause::SoilMovement);
@@ -302,7 +368,13 @@ mod tests {
 
     #[test]
     fn narrate_produces_the_compass_sentence_with_expansion() {
-        let s = narrate("J-4471", FailureMechanism::Corrosion, RootCause::MaterialAge, 6.0, Some(("X-Karrada-2", 14.0)));
+        let s = narrate(
+            "J-4471",
+            FailureMechanism::Corrosion,
+            RootCause::MaterialAge,
+            6.0,
+            Some(("X-Karrada-2", 14.0)),
+        );
         assert_eq!(
             s,
             "Element J-4471, failing by mechanism Corrosion, from cause MaterialAge, crossing ERRA in 6.0 weeks — and if expansion X-Karrada-2 proceeds, T shrinks to 14.0 weeks."
@@ -311,7 +383,13 @@ mod tests {
 
     #[test]
     fn narrate_without_expansion_ends_with_period() {
-        let s = narrate("J-100", FailureMechanism::JointFailure, RootCause::ExternalLoad, 2.0, None);
+        let s = narrate(
+            "J-100",
+            FailureMechanism::JointFailure,
+            RootCause::ExternalLoad,
+            2.0,
+            None,
+        );
         assert_eq!(
             s,
             "Element J-100, failing by mechanism JointFailure, from cause ExternalLoad, crossing ERRA in 2.0 weeks."

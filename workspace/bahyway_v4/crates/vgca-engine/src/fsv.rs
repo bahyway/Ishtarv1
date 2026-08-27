@@ -19,17 +19,17 @@
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FeatureScoreVector {
     /// D1 — normalised character count (max 100 chars → 1.0)
-    pub char_count_norm:      f64,
+    pub char_count_norm: f64,
     /// D2 — fraction of ASCII digit characters
-    pub digit_density:        f64,
+    pub digit_density: f64,
     /// D3 — fraction of Arabic Unicode characters
-    pub arabic_density:       f64,
+    pub arabic_density: f64,
     /// D4 — fraction of ASCII alphabetic characters
-    pub latin_density:        f64,
+    pub latin_density: f64,
     /// D5 — fraction of ASCII punctuation characters
-    pub punct_density:        f64,
+    pub punct_density: f64,
     /// D6 — normalised whitespace-token count (max 20 tokens → 1.0)
-    pub word_count_norm:      f64,
+    pub word_count_norm: f64,
     /// D7 — Shannon entropy normalised to [0,1] (max ~5 bits/char)
     pub shannon_entropy_norm: f64,
 }
@@ -37,28 +37,47 @@ pub struct FeatureScoreVector {
 impl FeatureScoreVector {
     /// All-zero FSV — represents an empty or null field.
     pub fn zero() -> Self {
-        Self { char_count_norm: 0.0, digit_density: 0.0, arabic_density: 0.0,
-               latin_density: 0.0, punct_density: 0.0, word_count_norm: 0.0,
-               shannon_entropy_norm: 0.0 }
+        Self {
+            char_count_norm: 0.0,
+            digit_density: 0.0,
+            arabic_density: 0.0,
+            latin_density: 0.0,
+            punct_density: 0.0,
+            word_count_norm: 0.0,
+            shannon_entropy_norm: 0.0,
+        }
     }
 
     /// Perfect FSV — all dimensions = 1.0 (used for tribe ideal point).
     pub fn perfect() -> Self {
-        Self { char_count_norm: 1.0, digit_density: 1.0, arabic_density: 1.0,
-               latin_density: 1.0, punct_density: 1.0, word_count_norm: 1.0,
-               shannon_entropy_norm: 1.0 }
+        Self {
+            char_count_norm: 1.0,
+            digit_density: 1.0,
+            arabic_density: 1.0,
+            latin_density: 1.0,
+            punct_density: 1.0,
+            word_count_norm: 1.0,
+            shannon_entropy_norm: 1.0,
+        }
     }
 
     /// Return dimensions as a `[f64; 7]` array (D1..D7 order).
     pub fn as_array(&self) -> [f64; 7] {
-        [self.char_count_norm, self.digit_density, self.arabic_density,
-         self.latin_density, self.punct_density, self.word_count_norm,
-         self.shannon_entropy_norm]
+        [
+            self.char_count_norm,
+            self.digit_density,
+            self.arabic_density,
+            self.latin_density,
+            self.punct_density,
+            self.word_count_norm,
+            self.shannon_entropy_norm,
+        ]
     }
 
     /// Euclidean distance to another FSV in 7D space.
     pub fn distance(&self, other: &Self) -> f64 {
-        self.as_array().iter()
+        self.as_array()
+            .iter()
             .zip(other.as_array().iter())
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f64>()
@@ -93,7 +112,9 @@ pub fn is_arabic_char(c: char) -> bool {
 /// Returns 0.0 for an empty slice.
 pub fn shannon_entropy(chars: &[char]) -> f64 {
     let n = chars.len();
-    if n == 0 { return 0.0; }
+    if n == 0 {
+        return 0.0;
+    }
 
     // Character frequency table — use a fixed 256-entry array for ASCII
     // and a small Vec for supplementary Unicode.
@@ -143,11 +164,11 @@ pub fn compute_fsv(text: &str) -> FeatureScoreVector {
     }
 
     let total_f = total as f64;
-    let digits  = chars.iter().filter(|&&c| c.is_ascii_digit()).count() as f64;
-    let arabic  = chars.iter().filter(|&&c| is_arabic_char(c)).count() as f64;
-    let latin   = chars.iter().filter(|&&c| c.is_ascii_alphabetic()).count() as f64;
-    let punct   = chars.iter().filter(|&&c| c.is_ascii_punctuation()).count() as f64;
-    let words   = text.split_whitespace().count() as f64;
+    let digits = chars.iter().filter(|&&c| c.is_ascii_digit()).count() as f64;
+    let arabic = chars.iter().filter(|&&c| is_arabic_char(c)).count() as f64;
+    let latin = chars.iter().filter(|&&c| c.is_ascii_alphabetic()).count() as f64;
+    let punct = chars.iter().filter(|&&c| c.is_ascii_punctuation()).count() as f64;
+    let words = text.split_whitespace().count() as f64;
     let entropy = shannon_entropy(&chars);
 
     // Normalisation caps:
@@ -155,12 +176,12 @@ pub fn compute_fsv(text: &str) -> FeatureScoreVector {
     //   word_count: 20 words → 1.0    (typical address ≤ 10 words)
     //   entropy:    5.0 bits → 1.0    (natural language max ≈ 4.5 bits)
     FeatureScoreVector {
-        char_count_norm:      (total_f / 100.0).min(1.0),
-        digit_density:        digits  / total_f,
-        arabic_density:       arabic  / total_f,
-        latin_density:        latin   / total_f,
-        punct_density:        punct   / total_f,
-        word_count_norm:      (words  / 20.0).min(1.0),
+        char_count_norm: (total_f / 100.0).min(1.0),
+        digit_density: digits / total_f,
+        arabic_density: arabic / total_f,
+        latin_density: latin / total_f,
+        punct_density: punct / total_f,
+        word_count_norm: (words / 20.0).min(1.0),
         shannon_entropy_norm: (entropy / 5.0).min(1.0),
     }
 }
@@ -189,7 +210,11 @@ mod tests {
     fn arabic_name_gives_high_arabic_density() {
         let text = "محمد أحمد علي";
         let fsv = compute_fsv(text);
-        assert!(fsv.arabic_density > 0.5, "arabic_density={}", fsv.arabic_density);
+        assert!(
+            fsv.arabic_density > 0.5,
+            "arabic_density={}",
+            fsv.arabic_density
+        );
         assert_eq!(fsv.digit_density, 0.0);
     }
 
@@ -197,7 +222,11 @@ mod tests {
     fn latin_text_gives_zero_arabic_density() {
         let fsv = compute_fsv("Hello World");
         assert_eq!(fsv.arabic_density, 0.0);
-        assert!(fsv.latin_density > 0.7, "latin_density={}", fsv.latin_density);
+        assert!(
+            fsv.latin_density > 0.7,
+            "latin_density={}",
+            fsv.latin_density
+        );
     }
 
     #[test]
@@ -205,7 +234,10 @@ mod tests {
         for text in ["", "abc", "123", "محمد", "Hello World", "a.b,c;d!"] {
             let fsv = compute_fsv(text);
             for (i, &d) in fsv.as_array().iter().enumerate() {
-                assert!(d >= 0.0 && d <= 1.0, "dim[{i}]={d} out of [0,1] for '{text}'");
+                assert!(
+                    d >= 0.0 && d <= 1.0,
+                    "dim[{i}]={d} out of [0,1] for '{text}'"
+                );
             }
         }
     }
@@ -214,7 +246,11 @@ mod tests {
     fn entropy_zero_for_single_char_repeated() {
         // "aaaaaaa" — all same char → p=1 → H=0
         let fsv = compute_fsv("aaaaaaa");
-        assert!(fsv.shannon_entropy_norm < 0.01, "entropy={}", fsv.shannon_entropy_norm);
+        assert!(
+            fsv.shannon_entropy_norm < 0.01,
+            "entropy={}",
+            fsv.shannon_entropy_norm
+        );
     }
 
     #[test]

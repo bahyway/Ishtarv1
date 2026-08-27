@@ -22,13 +22,13 @@ pub struct LevelResult {
     /// Whether a problem was detected at this level.
     pub has_problem: bool,
     /// Short title for the detected problem (empty if no problem).
-    pub problem_title:  String,
+    pub problem_title: String,
     /// Full description of the problem.
     pub problem_detail: String,
     /// Example SQL exhibiting the problem (empty if no problem).
     pub problem_sql: String,
     /// Short title for the recommended solution.
-    pub solution_title:  String,
+    pub solution_title: String,
     /// Full description of the fix.
     pub solution_detail: String,
     /// Example SQL after the fix is applied.
@@ -46,28 +46,30 @@ pub struct LevelResult {
 impl LevelResult {
     /// Create a passing (no-problem) result for a level.
     pub fn passing(
-        level:          JourneyLevelId,
+        level: JourneyLevelId,
         solution_title: impl Into<String>,
-        detail:         impl Into<String>,
-        color:          ColorId,
-        akkadi_rule:    impl Into<String>,
+        detail: impl Into<String>,
+        color: ColorId,
+        akkadi_rule: impl Into<String>,
     ) -> Self {
         let detail_str = detail.into();
         LevelResult {
             level,
-            has_problem:    false,
-            problem_title:  String::new(),
+            has_problem: false,
+            problem_title: String::new(),
             problem_detail: String::new(),
-            problem_sql:    String::new(),
+            problem_sql: String::new(),
             solution_title: solution_title.into(),
             solution_detail: detail_str.clone(),
-            solution_sql:   String::new(),
-            color_before:   color,
-            color_after:    color,
-            akkadi_rule:    akkadi_rule.into(),
+            solution_sql: String::new(),
+            color_before: color,
+            color_after: color,
+            akkadi_rule: akkadi_rule.into(),
             storyway_entry: format!(
                 "Level {} {} — PASS: {}",
-                level.number(), level.akkadian_name(), detail_str
+                level.number(),
+                level.akkadian_name(),
+                detail_str
             ),
         }
     }
@@ -75,34 +77,37 @@ impl LevelResult {
     /// Create a failing (problem detected) result for a level.
     #[allow(clippy::too_many_arguments)]
     pub fn failing(
-        level:          JourneyLevelId,
-        problem_title:  impl Into<String>,
+        level: JourneyLevelId,
+        problem_title: impl Into<String>,
         problem_detail: impl Into<String>,
-        problem_sql:    impl Into<String>,
+        problem_sql: impl Into<String>,
         solution_title: impl Into<String>,
         solution_detail: impl Into<String>,
-        solution_sql:   impl Into<String>,
-        color_before:   ColorId,
-        color_after:    ColorId,
-        akkadi_rule:    impl Into<String>,
+        solution_sql: impl Into<String>,
+        color_before: ColorId,
+        color_after: ColorId,
+        akkadi_rule: impl Into<String>,
     ) -> Self {
         let prob = problem_detail.into();
-        let sol  = solution_detail.into();
+        let sol = solution_detail.into();
         LevelResult {
             level,
-            has_problem:    true,
-            problem_title:  problem_title.into(),
+            has_problem: true,
+            problem_title: problem_title.into(),
             problem_detail: prob.clone(),
-            problem_sql:    problem_sql.into(),
+            problem_sql: problem_sql.into(),
             solution_title: solution_title.into(),
             solution_detail: sol.clone(),
-            solution_sql:   solution_sql.into(),
+            solution_sql: solution_sql.into(),
             color_before,
             color_after,
-            akkadi_rule:    akkadi_rule.into(),
+            akkadi_rule: akkadi_rule.into(),
             storyway_entry: format!(
                 "Level {} {} — PROBLEM: {} | FIX: {}",
-                level.number(), level.akkadian_name(), prob, sol
+                level.number(),
+                level.akkadian_name(),
+                prob,
+                sol
             ),
         }
     }
@@ -110,7 +115,7 @@ impl LevelResult {
     /// Alignment gain from color_before → color_after (0.0–1.0).
     pub fn alignment_gain(&self) -> f32 {
         let before = self.color_before.health_score();
-        let after  = self.color_after.health_score();
+        let after = self.color_after.health_score();
         (after - before).max(0.0)
     }
 }
@@ -137,16 +142,24 @@ pub struct AnalysisJourney {
 impl AnalysisJourney {
     /// Build from a completed set of level results.
     pub fn from_results(query_id: impl Into<String>, levels: Vec<LevelResult>) -> Self {
-        assert_eq!(levels.len(), 7, "AnalysisJourney requires exactly 7 LevelResults");
+        assert_eq!(
+            levels.len(),
+            7,
+            "AnalysisJourney requires exactly 7 LevelResults"
+        );
 
-        let query_id       = query_id.into();
-        let problem_count  = levels.iter().filter(|l| l.has_problem).count();
-        let alignment_gain = levels.iter().map(|l| l.alignment_gain()).sum::<f32>().min(1.0);
+        let query_id = query_id.into();
+        let problem_count = levels.iter().filter(|l| l.has_problem).count();
+        let alignment_gain = levels
+            .iter()
+            .map(|l| l.alignment_gain())
+            .sum::<f32>()
+            .min(1.0);
 
         // Final color: merge worst across all color_before entries
-        let final_color_id = levels.iter().fold(ColorId::healthy(), |acc, l| {
-            acc.merge_worst(l.color_before)
-        });
+        let final_color_id = levels
+            .iter()
+            .fold(ColorId::healthy(), |acc, l| acc.merge_worst(l.color_before));
 
         let full_narrative = build_narrative(&query_id, &levels, problem_count);
 
@@ -162,7 +175,9 @@ impl AnalysisJourney {
 
     /// Returns true when any level detected a critical problem.
     pub fn has_critical_problem(&self) -> bool {
-        self.levels.iter().any(|l| l.has_problem && l.color_before.red > 180)
+        self.levels
+            .iter()
+            .any(|l| l.has_problem && l.color_before.red > 180)
     }
 
     /// Get the result for a specific level.
@@ -173,7 +188,10 @@ impl AnalysisJourney {
 
 fn build_narrative(query_id: &str, levels: &[LevelResult], problem_count: usize) -> String {
     let mut parts = vec![
-        format!("Journey Analysis: {} | {} problem(s) detected", query_id, problem_count),
+        format!(
+            "Journey Analysis: {} | {} problem(s) detected",
+            query_id, problem_count
+        ),
         String::new(),
     ];
     for l in levels {
@@ -190,17 +208,25 @@ mod tests {
 
     fn passing_result(level: JourneyLevelId) -> LevelResult {
         LevelResult::passing(
-            level, "All good", "No issues detected",
-            ColorId::healthy(), "none",
+            level,
+            "All good",
+            "No issues detected",
+            ColorId::healthy(),
+            "none",
         )
     }
 
     fn failing_result(level: JourneyLevelId) -> LevelResult {
         LevelResult::failing(
             level,
-            "Problem title", "Problem detail", "-- bad sql",
-            "Solution title", "Solution detail", "-- good sql",
-            ColorId::critical(), ColorId::healthy(),
+            "Problem title",
+            "Problem detail",
+            "-- bad sql",
+            "Solution title",
+            "Solution detail",
+            "-- good sql",
+            ColorId::critical(),
+            ColorId::healthy(),
             "test_rule",
         )
     }

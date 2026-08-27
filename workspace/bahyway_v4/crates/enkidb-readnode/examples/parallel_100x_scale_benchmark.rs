@@ -41,7 +41,10 @@ const STATIONS: &[&str] = &[
 
 fn main() {
     let mut args = env::args().skip(1);
-    let n: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(10_000_000);
+    let n: usize = args
+        .next()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10_000_000);
     let concurrency: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(100);
 
     let base = env::temp_dir().join("enkidb_readnode_parallel_100x_benchmark");
@@ -51,8 +54,12 @@ fn main() {
     let eav_base = base.join("eav");
 
     println!("=== enkidb-readnode PARALLEL scale benchmark: N={n} particles, CONCURRENCY={concurrency} ===");
-    println!("aggregate workload if this succeeds: {} x {} = {} particle-scans",
-        concurrency, n, concurrency as u128 * n as u128);
+    println!(
+        "aggregate workload if this succeeds: {} x {} = {} particle-scans",
+        concurrency,
+        n,
+        concurrency as u128 * n as u128
+    );
 
     // ── Generate + materialize ONE real corpus ──────────────────────────
     let t0 = Instant::now();
@@ -61,7 +68,8 @@ fn main() {
     let mut jnl = Journal::new(64);
     for i in 0..n {
         let e = IdentityKaki::try_from_kaki(m.mint_identity(i as u32, KakiRole::Zikru)).unwrap();
-        let ek = EventKaki::try_from_kaki(m.mint_event((i as u32) ^ 0xFFFF_FFFF, KakiRole::Zikru)).unwrap();
+        let ek = EventKaki::try_from_kaki(m.mint_event((i as u32) ^ 0xFFFF_FFFF, KakiRole::Zikru))
+            .unwrap();
         let station = STATIONS[i % STATIONS.len()];
         let mut eav = vec![EavTriple::new(
             bahyway_crc::crc16("station".as_bytes()) as u32,
@@ -73,7 +81,13 @@ fn main() {
                 codec::encode(&AkkValue::Text(format!("needle-{i}"))),
             ));
         }
-        jnl.append(enkidb_journal::entry::JournalEntry::new(ek, e.clone(), 1, eav)).unwrap();
+        jnl.append(enkidb_journal::entry::JournalEntry::new(
+            ek,
+            e.clone(),
+            1,
+            eav,
+        ))
+        .unwrap();
     }
     let gen_elapsed = t0.elapsed();
     println!("generate {n} particles into Journal:  {gen_elapsed:?}");
@@ -81,13 +95,19 @@ fn main() {
     let t1 = Instant::now();
     let stats = materialize(&jnl, &entities_base, &eav_base).unwrap();
     let materialize_elapsed = t1.elapsed();
-    println!("materialize {} entities, {} distinct EAV keys:  {materialize_elapsed:?}", stats.entities, stats.distinct_eav_keys);
+    println!(
+        "materialize {} entities, {} distinct EAV keys:  {materialize_elapsed:?}",
+        stats.entities, stats.distinct_eav_keys
+    );
     drop(jnl);
 
     let t2 = Instant::now();
     let crn = Arc::new(CachedReadNode::open(&entities_base, &eav_base).unwrap());
     let open_elapsed = t2.elapsed();
-    println!("CachedReadNode::open (full in-memory load):  {open_elapsed:?}  (entity_count={})", crn.entity_count());
+    println!(
+        "CachedReadNode::open (full in-memory load):  {open_elapsed:?}  (entity_count={})",
+        crn.entity_count()
+    );
 
     // ── Fire CONCURRENCY real threads, each a genuinely independent
     // HeptaScript query against the SAME resident 10M-particle corpus.
@@ -121,7 +141,8 @@ fn main() {
         }));
     }
 
-    let mut per_query: Vec<(usize, usize, std::time::Duration)> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+    let mut per_query: Vec<(usize, usize, std::time::Duration)> =
+        handles.into_iter().map(|h| h.join().unwrap()).collect();
     let wall_elapsed = t3.elapsed();
     per_query.sort_by_key(|(_, _, d)| *d);
 

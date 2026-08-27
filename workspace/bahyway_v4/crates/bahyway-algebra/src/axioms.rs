@@ -31,11 +31,7 @@ pub const PA13_THETA_MAX: f64 = 1.0;
 /// θ(p) = |Δhepta| / Δt  where |Δhepta| is the 7D Euclidean displacement.
 ///
 /// Returns `None` if Δt is zero (stationary particle — momentum undefined).
-pub fn trajectory_momentum(
-    pos_t0: &HeptaPoint,
-    pos_t1: &HeptaPoint,
-    delta_t: f64,
-) -> Option<f64> {
+pub fn trajectory_momentum(pos_t0: &HeptaPoint, pos_t1: &HeptaPoint, delta_t: f64) -> Option<f64> {
     if delta_t.abs() < f64::EPSILON {
         return None;
     }

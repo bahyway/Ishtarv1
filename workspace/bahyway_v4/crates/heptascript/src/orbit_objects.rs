@@ -71,13 +71,28 @@ impl OrbitObject {
         // are legitimate W5H2 clause words, so we key on SQL-specific
         // constructs (SELECT..., FROM <table>, JOIN..ON, INSERT INTO).
         let upper = body.to_ascii_uppercase();
-        for kw in ["SELECT ", "INSERT INTO", "UPDATE ", "DELETE FROM",
-                   " FROM ", " JOIN ", " INNER JOIN", " LEFT JOIN"] {
+        for kw in [
+            "SELECT ",
+            "INSERT INTO",
+            "UPDATE ",
+            "DELETE FROM",
+            " FROM ",
+            " JOIN ",
+            " INNER JOIN",
+            " LEFT JOIN",
+        ] {
             if upper.contains(kw) {
-                return Err(format!("SQL construct '{}' forbidden in orbit object body", kw.trim()));
+                return Err(format!(
+                    "SQL construct '{}' forbidden in orbit object body",
+                    kw.trim()
+                ));
             }
         }
-        Ok(OrbitObject { kind, name: name.to_string(), w5h2_body: body.to_string() })
+        Ok(OrbitObject {
+            kind,
+            name: name.to_string(),
+            w5h2_body: body.to_string(),
+        })
     }
 }
 

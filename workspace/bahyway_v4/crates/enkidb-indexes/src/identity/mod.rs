@@ -1,20 +1,23 @@
 //! Index 1 — Identity Index: D1 uuid_hash → file_offset (§9.3)
 //! O(1) point lookup for "fetch this particle".
 
-use std::collections::HashMap;
 use bahyway_core::TribeId;
+use std::collections::HashMap;
 
 type FileOffset = u64;
 
 /// Identity index: uuid_hash → storage file offset.
 pub struct IdentityIndex {
     tribe_id: TribeId,
-    map:      HashMap<u32, FileOffset>,
+    map: HashMap<u32, FileOffset>,
 }
 
 impl IdentityIndex {
     pub fn new(tribe_id: TribeId) -> Self {
-        IdentityIndex { tribe_id, map: HashMap::new() }
+        IdentityIndex {
+            tribe_id,
+            map: HashMap::new(),
+        }
     }
 
     /// Insert (uuid_hash, file_offset).  Rejects duplicate uuid_hash (Rule II).
@@ -30,9 +33,15 @@ impl IdentityIndex {
         self.map.get(&uuid_hash).copied()
     }
 
-    pub fn tribe_id(&self) -> TribeId { self.tribe_id }
-    pub fn len(&self)      -> usize   { self.map.len() }
-    pub fn is_empty(&self) -> bool    { self.map.is_empty() }
+    pub fn tribe_id(&self) -> TribeId {
+        self.tribe_id
+    }
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
 }
 
 #[cfg(test)]

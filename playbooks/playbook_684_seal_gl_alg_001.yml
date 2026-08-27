@@ -1,0 +1,89 @@
+---
+# PB-684 · Seal GL-ALG-001 · Tablet of the Algebra Register
+# CSR-08: running this playbook IS the confirmation of the seal.
+# Mirrors playbook_681/682/683's structure exactly (G0 no-reseal, G1 section-count
+# check against this tablet's real §-numbering, G2 anti-SQL using the already-fixed
+# regex, G3 unamendable-clause check tailored to this tablet's own text, Ed25519
+# sign + Kaniku receipt via the already-fixed sha256 lookup).
+- name: PB-684 seal GL-ALG-001
+  hosts: girsu
+  gather_facts: true
+  vars:
+    bahyway_provides: ["law:GL-ALG-001"]
+    bahyway_requires: ["law:GL-UNT-001", "law:GL-FLD-001", "law:GL-LYF-001", "law:GL-SEG-001", "law:GL-AGT-001", "law:GL-BND-001", "law:GL-IMM-001", "law:GL-KRN-001"]
+    law_root: "{{ ansible_env.HOME }}/bahyway/laws"
+    tablet: GL-ALG-001_algebra_register.md
+    tablet_id: GL-ALG-001
+    seal_key: "{{ ansible_env.HOME }}/bahyway/keys/akkadian_seal_ed25519"
+  tasks:
+    - name: Ensure law and seal directories
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0750"}
+      loop: ["{{ law_root }}", "{{ law_root }}/sealed", "{{ law_root }}/receipts"]
+
+    - name: Refuse to re-seal an already sealed tablet
+      ansible.builtin.stat: {path: "{{ law_root }}/sealed/{{ tablet }}"}
+      register: existing
+    - name: Gate G0 · no silent overwrite of a sealed tablet
+      ansible.builtin.assert:
+        that: not existing.stat.exists
+        fail_msg: "{{ tablet_id }} is already sealed. Amendments require GL-ALG-001-A1 and a fresh CSR-08 rite."
+        success_msg: "G0 green - tablet not yet sealed"
+
+    - name: Place the tablet
+      ansible.builtin.copy: {src: "{{ tablet }}", dest: "{{ law_root }}/sealed/{{ tablet }}", mode: "0440"}
+
+    - name: Gate G1 · all eighteen sections present (§0..§17)
+      ansible.builtin.shell: |
+        set -e
+        for i in $(seq 0 17); do
+          grep -q "## §$i" "{{ law_root }}/sealed/{{ tablet }}" || { echo "missing §$i"; exit 1; }
+        done
+        echo "G1 green - eighteen sections (§0..§17)"
+      changed_when: false
+
+    - name: Gate G2 · no SQL syntax anywhere in the tablet
+      ansible.builtin.shell: |
+        ! grep -Eiq 'SELECT +[A-Za-z*].{0,200}\bFROM\b|INNER JOIN|LEFT JOIN|EXISTS *\(' "{{ law_root }}/sealed/{{ tablet }}"
+      changed_when: false
+
+    - name: Gate G3 · the six unamendable clauses are named
+      ansible.builtin.shell: |
+        grep -q "§7, §9's absence clause, §11, §13, §14 and §15 may not be amended" "{{ law_root }}/sealed/{{ tablet }}"
+        echo "G3 green - tolerance not equivalence, ANTI-SQL names an absence, weakness stated plainly, prior art checked as duplication is checked, no claim without a proof, priority is a date"
+      changed_when: false
+
+    - name: Compute Ed25519 AkkadianSeal
+      ansible.builtin.shell: |
+        openssl pkeyutl -sign -rawin -inkey "{{ seal_key }}" \
+          -in "{{ law_root }}/sealed/{{ tablet }}" | base64 -w0
+      register: seal
+      changed_when: true
+      no_log: false
+
+    - name: Write the Kanīku receipt
+      ansible.builtin.copy:
+        dest: "{{ law_root }}/receipts/{{ tablet_id }}.kaniku.yml"
+        mode: "0440"
+        content: |
+          tablet: {{ tablet_id }}
+          file: {{ tablet }}
+          sha256: "{{ (lookup('pipe', 'sha256sum ' + law_root + '/sealed/' + tablet)).split()[0] }}"
+          seal_ed25519: "{{ seal.stdout }}"
+          sealed_on: "{{ ansible_date_time.iso8601 }}"
+          sealed_by: "DUB.SAR"
+          rite: CSR-08
+          governs: [algebra:register, claim:gate]
+          unamendable: ["§7 near-similarity is a tolerance not an equivalence", "§9 ANTI-SQL names an absence", "§11 weakness is stated plainly", "§13 prior art is checked as duplication is checked", "§14 no claim without a proof", "§15 priority is a date, not a declaration"]
+
+    - name: Register in the law registry
+      ansible.builtin.lineinfile:
+        path: "{{ law_root }}/REGISTRY.log"
+        create: true
+        mode: "0640"
+        line: "{{ ansible_date_time.iso8601 }} SEALED {{ tablet_id }} sha256={{ (lookup('pipe', 'sha256sum ' + law_root + '/sealed/' + tablet)).split()[0] }}"
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-684 {{ tablet_id }} SEALED - priority is a date, not a declaration"

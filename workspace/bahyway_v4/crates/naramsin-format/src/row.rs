@@ -26,10 +26,18 @@ pub struct Field {
 
 impl Field {
     pub fn present(name: &'static str, value: impl Into<String>) -> Self {
-        Self { name, value: value.into(), is_null: false }
+        Self {
+            name,
+            value: value.into(),
+            is_null: false,
+        }
     }
 
     pub fn null(name: &'static str) -> Self {
-        Self { name, value: String::new(), is_null: true }
+        Self {
+            name,
+            value: String::new(),
+            is_null: true,
+        }
     }
 }

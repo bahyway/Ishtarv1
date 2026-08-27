@@ -16,7 +16,7 @@
 //!     durable EnkiODB write path is not implemented here).
 //!   - Host collector reads /proc directly (std only -- no sysinfo crate).
 //!   - Engine metrics arrive over a minimal TCP line protocol:
-//!       metric_name value unix_millis\n
+//!     metric_name value unix_millis\n
 //!   - UI: eframe/egui native window, the SAME version dubsar-visualizer
 //!     already uses (0.29) -- one sovereign GUI stack, not two.
 

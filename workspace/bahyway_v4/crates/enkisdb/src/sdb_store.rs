@@ -21,17 +21,17 @@ pub enum SdbStatus {
 #[derive(Debug, Clone)]
 pub struct StagedParticle {
     /// Raw 16-byte KAKI identity bytes.
-    pub kaki_bytes:   [u8; 16],
+    pub kaki_bytes: [u8; 16],
     /// Tribe the particle belongs to.
-    pub tribe_id:     u16,
+    pub tribe_id: u16,
     /// Epoch at time of arrival.
-    pub epoch:        u32,
+    pub epoch: u32,
     /// EAV triples parsed from the source row.
-    pub eav:          Vec<EavTriple>,
+    pub eav: Vec<EavTriple>,
     /// Mandatory Color_ID(RGB) captured at ingest time.
-    pub color_rgb:    [u8; 3],
+    pub color_rgb: [u8; 3],
     /// Current lifecycle status.
-    pub status:       SdbStatus,
+    pub status: SdbStatus,
     /// Tick counter value when this particle arrived.
     pub arrived_tick: u64,
     /// Set true if the pre-extraction Musarû byte scan raised a flag.
@@ -41,8 +41,8 @@ pub struct StagedParticle {
 /// Aggregate counts across the store.
 #[derive(Debug, Default, Clone)]
 pub struct SdbStats {
-    pub total_staged:      usize,
-    pub total_promoted:    usize,
+    pub total_staged: usize,
+    pub total_promoted: usize,
     pub total_quarantined: usize,
 }
 
@@ -56,12 +56,15 @@ impl SdbStats {
 /// In-memory staging store.  One per database tribe.
 pub struct SdbStore {
     particles: Vec<StagedParticle>,
-    stats:     SdbStats,
+    stats: SdbStats,
 }
 
 impl SdbStore {
     pub fn new() -> Self {
-        SdbStore { particles: Vec::new(), stats: SdbStats::default() }
+        SdbStore {
+            particles: Vec::new(),
+            stats: SdbStats::default(),
+        }
     }
 
     /// Stage a new particle.  Returns its store index.
@@ -103,15 +106,27 @@ impl SdbStore {
             .collect()
     }
 
-    pub fn get(&self, idx: usize)     -> Option<&StagedParticle>     { self.particles.get(idx) }
-    pub fn all(&self)                 -> &[StagedParticle]           { &self.particles }
-    pub fn stats(&self)               -> &SdbStats                   { &self.stats }
-    pub fn len(&self)                 -> usize                       { self.particles.len() }
-    pub fn is_empty(&self)            -> bool                        { self.particles.is_empty() }
+    pub fn get(&self, idx: usize) -> Option<&StagedParticle> {
+        self.particles.get(idx)
+    }
+    pub fn all(&self) -> &[StagedParticle] {
+        &self.particles
+    }
+    pub fn stats(&self) -> &SdbStats {
+        &self.stats
+    }
+    pub fn len(&self) -> usize {
+        self.particles.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.particles.is_empty()
+    }
 }
 
 impl Default for SdbStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -120,12 +135,12 @@ mod tests {
 
     fn make_particle(tick: u64, malware: bool) -> StagedParticle {
         StagedParticle {
-            kaki_bytes:   [0u8; 16],
-            tribe_id:     1,
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [128, 200, 255],
-            status:       SdbStatus::Pending,
+            kaki_bytes: [0u8; 16],
+            tribe_id: 1,
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [128, 200, 255],
+            status: SdbStatus::Pending,
             arrived_tick: tick,
             malware_flag: malware,
         }

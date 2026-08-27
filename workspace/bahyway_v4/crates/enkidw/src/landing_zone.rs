@@ -10,21 +10,27 @@ use std::path::{Path, PathBuf};
 /// File categories understood by the ETL pipeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LandingFileKind {
-    Zip,    // .zip — sovereign archive for bulk records
-    Way,    // .way — BahyWay security declaration
-    Csv,    // .csv — comma-separated records
-    Tsv,    // .tsv — tab-separated records
+    Zip, // .zip — sovereign archive for bulk records
+    Way, // .way — BahyWay security declaration
+    Csv, // .csv — comma-separated records
+    Tsv, // .tsv — tab-separated records
     Other,
 }
 
 impl LandingFileKind {
     pub fn detect(name: &str) -> Self {
         let lower = name.to_lowercase();
-        if      lower.ends_with(".zip") { LandingFileKind::Zip }
-        else if lower.ends_with(".way") { LandingFileKind::Way }
-        else if lower.ends_with(".csv") { LandingFileKind::Csv }
-        else if lower.ends_with(".tsv") { LandingFileKind::Tsv }
-        else                            { LandingFileKind::Other }
+        if lower.ends_with(".zip") {
+            LandingFileKind::Zip
+        } else if lower.ends_with(".way") {
+            LandingFileKind::Way
+        } else if lower.ends_with(".csv") {
+            LandingFileKind::Csv
+        } else if lower.ends_with(".tsv") {
+            LandingFileKind::Tsv
+        } else {
+            LandingFileKind::Other
+        }
     }
 }
 
@@ -51,25 +57,32 @@ impl LandingZone {
     pub fn new(path: impl AsRef<Path>) -> std::io::Result<Self> {
         let path = path.as_ref().to_path_buf();
         fs::create_dir_all(&path)?;
-        Ok(LandingZone { path, seen: BTreeSet::new() })
+        Ok(LandingZone {
+            path,
+            seen: BTreeSet::new(),
+        })
     }
 
     /// Returns all files in the directory not yet returned by a prior `poll()`.
     pub fn poll(&mut self) -> Vec<LandingFile> {
         let mut new_files = Vec::new();
         let entries = match fs::read_dir(&self.path) {
-            Ok(e)  => e,
+            Ok(e) => e,
             Err(_) => return new_files,
         };
         let mut candidates: Vec<LandingFile> = entries
             .flatten()
             .filter(|e| e.path().is_file())
             .filter_map(|e| {
-                let p    = e.path();
+                let p = e.path();
                 let name = p.file_name()?.to_string_lossy().to_string();
                 let size = e.metadata().map(|m| m.len()).unwrap_or(0);
                 let kind = LandingFileKind::detect(&name);
-                Some(LandingFile { path: p, kind, size })
+                Some(LandingFile {
+                    path: p,
+                    kind,
+                    size,
+                })
             })
             .collect();
 
@@ -77,7 +90,9 @@ impl LandingZone {
         candidates.sort_by(|a, b| a.path.file_name().cmp(&b.path.file_name()));
 
         for f in candidates {
-            let name = f.path.file_name()
+            let name = f
+                .path
+                .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
@@ -104,15 +119,21 @@ impl LandingZone {
     pub fn archive(&self, lf: &LandingFile) -> std::io::Result<PathBuf> {
         let archived_dir = self.path.join("Archived");
         fs::create_dir_all(&archived_dir)?;
-        let file_name = lf.path.file_name()
+        let file_name = lf
+            .path
+            .file_name()
             .unwrap_or_else(|| std::ffi::OsStr::new("source"));
         let dest = archived_dir.join(file_name);
         fs::rename(&lf.path, &dest)?;
         Ok(dest)
     }
 
-    pub fn path(&self)       -> &Path  { &self.path }
-    pub fn seen_count(&self) -> usize  { self.seen.len() }
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+    pub fn seen_count(&self) -> usize {
+        self.seen.len()
+    }
 }
 
 #[cfg(test)]
@@ -159,7 +180,10 @@ mod tests {
         let dest = lz.archive(&found[0]).unwrap();
         assert!(dest.exists());
         assert!(dest.starts_with(dir.join("Archived")));
-        assert!(!dir.join("a.zip").exists(), "original must be moved, not copied");
+        assert!(
+            !dir.join("a.zip").exists(),
+            "original must be moved, not copied"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -178,7 +202,10 @@ mod tests {
         }
         let mut lz2 = LandingZone::new(&dir).unwrap();
         let found2 = lz2.poll();
-        assert!(found2.is_empty(), "archived file must not resurface as a new file after restart");
+        assert!(
+            found2.is_empty(),
+            "archived file must not resurface as a new file after restart"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -187,6 +214,9 @@ mod tests {
         assert_eq!(LandingFileKind::detect("data.ZIP"), LandingFileKind::Zip);
         assert_eq!(LandingFileKind::detect("najaf.way"), LandingFileKind::Way);
         assert_eq!(LandingFileKind::detect("records.tsv"), LandingFileKind::Tsv);
-        assert_eq!(LandingFileKind::detect("unknown.bin"), LandingFileKind::Other);
+        assert_eq!(
+            LandingFileKind::detect("unknown.bin"),
+            LandingFileKind::Other
+        );
     }
 }

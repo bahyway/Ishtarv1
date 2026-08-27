@@ -41,15 +41,17 @@ pub const GENESIS_DIGEST: [u8; 32] = [0u8; 32];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReplEventKind {
-    ParticleInsert  = 0,
-    ParticleUpdate  = 1,
-    ParticleDelete  = 2,
+    ParticleInsert = 0,
+    ParticleUpdate = 1,
+    ParticleDelete = 2,
     /// Periodic full-state snapshot marker — delta contains a checkpoint token.
-    Checkpoint      = 3,
+    Checkpoint = 3,
 }
 
 impl ReplEventKind {
-    pub fn as_u8(self) -> u8 { self as u8 }
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
 
     pub fn from_u8(v: u8) -> ReplicationResult<Self> {
         match v {
@@ -67,40 +69,45 @@ impl ReplEventKind {
 /// One sovereign replication event — KANĀKU-sealed and chain-hashed.
 #[derive(Debug, Clone)]
 pub struct KakiSealedEvent {
-    pub seq:                  u64,
-    pub epoch:                u32,
-    pub write_pod_kaki_hash:  u32,
+    pub seq: u64,
+    pub epoch: u32,
+    pub write_pod_kaki_hash: u32,
     /// SHA3-256 of the previous event's full frame bytes (up to but not
     /// including that event's own `digest` field).
     /// First event uses `GENESIS_DIGEST` (all zeros).
-    pub prev_digest:          [u8; 32],
+    pub prev_digest: [u8; 32],
     /// FNV-1a of delta bytes — fast corruption check before Ed25519.
-    pub payload_fnv:          u32,
-    pub event_kind:           ReplEventKind,
-    pub delta:                Vec<u8>,
+    pub payload_fnv: u32,
+    pub event_kind: ReplEventKind,
+    pub delta: Vec<u8>,
     /// Ed25519 signature over `canonical_bytes()`.  Zero before sealing.
-    pub seal:                 [u8; 64],
+    pub seal: [u8; 64],
     /// SHA3-256 of the full frame up to (not including) this field.
     /// Zero before finalisation.
-    pub digest:               [u8; 32],
+    pub digest: [u8; 32],
 }
 
 impl KakiSealedEvent {
     /// Construct an unsigned, undigested event.  Call `emitter.emit()` instead
     /// of this directly — it sets `seal` and `digest`.
     pub fn new(
-        seq:                 u64,
-        epoch:               u32,
+        seq: u64,
+        epoch: u32,
         write_pod_kaki_hash: u32,
-        prev_digest:         [u8; 32],
-        event_kind:          ReplEventKind,
-        delta:               Vec<u8>,
+        prev_digest: [u8; 32],
+        event_kind: ReplEventKind,
+        delta: Vec<u8>,
     ) -> Self {
         let payload_fnv = fnv1a_u32(&delta);
         KakiSealedEvent {
-            seq, epoch, write_pod_kaki_hash, prev_digest,
-            payload_fnv, event_kind, delta,
-            seal:   [0u8; 64],
+            seq,
+            epoch,
+            write_pod_kaki_hash,
+            prev_digest,
+            payload_fnv,
+            event_kind,
+            delta,
+            seal: [0u8; 64],
             digest: [0u8; 32],
         }
     }
@@ -108,7 +115,9 @@ impl KakiSealedEvent {
     /// Canonical bytes — what the Ed25519 KANĀKU seal is computed over.
     /// Domain-separated, deterministic, no seal/digest fields included.
     pub fn canonical_bytes(&self) -> Vec<u8> {
-        let mut v = Vec::with_capacity(REPL_DOMAIN.len() + 4 + 8+4+4+32+4+1+4 + self.delta.len());
+        let mut v = Vec::with_capacity(
+            REPL_DOMAIN.len() + 4 + 8 + 4 + 4 + 32 + 4 + 1 + 4 + self.delta.len(),
+        );
         push_bytes_lp(&mut v, REPL_DOMAIN);
         v.extend_from_slice(&self.seq.to_le_bytes());
         v.extend_from_slice(&self.epoch.to_le_bytes());
@@ -156,7 +165,7 @@ impl KakiSealedEvent {
         if frame.len() < 8 {
             return Err(ReplicationError::InvalidFrame);
         }
-        if &frame[0..4] != &FRAME_MAGIC {
+        if frame[0..4] != FRAME_MAGIC {
             return Err(ReplicationError::InvalidFrame);
         }
         let frame_len = u32::from_le_bytes(frame[4..8].try_into().unwrap()) as usize;
@@ -169,15 +178,16 @@ impl KakiSealedEvent {
         }
 
         // Last 32 bytes = stored digest
-        let stored_digest: [u8; 32] = body_with_digest[body_with_digest.len()-32..]
-            .try_into().map_err(|_| ReplicationError::InvalidFrame)?;
+        let stored_digest: [u8; 32] = body_with_digest[body_with_digest.len() - 32..]
+            .try_into()
+            .map_err(|_| ReplicationError::InvalidFrame)?;
 
         // Verify digest = SHA3-256(magic || frame_len_bytes || body_without_digest)
         let pre_digest_len = 4 + 4 + (body_with_digest.len() - 32);
         let mut pre_digest = Vec::with_capacity(pre_digest_len);
         pre_digest.extend_from_slice(&FRAME_MAGIC);
         pre_digest.extend_from_slice(&(frame_len as u32).to_le_bytes());
-        pre_digest.extend_from_slice(&body_with_digest[..body_with_digest.len()-32]);
+        pre_digest.extend_from_slice(&body_with_digest[..body_with_digest.len() - 32]);
         let computed: [u8; 32] = Sha3_256::digest(&pre_digest).into();
 
         use subtle::ConstantTimeEq;
@@ -186,29 +196,35 @@ impl KakiSealedEvent {
         }
 
         // Parse fields from body (without the trailing digest)
-        let body = &body_with_digest[..body_with_digest.len()-32];
+        let body = &body_with_digest[..body_with_digest.len() - 32];
         let mut pos = 0usize;
 
         macro_rules! read_fixed {
             ($n:expr) => {{
-                if pos + $n > body.len() { return Err(ReplicationError::InvalidFrame); }
-                let s = &body[pos..pos+$n];
+                if pos + $n > body.len() {
+                    return Err(ReplicationError::InvalidFrame);
+                }
+                let s = &body[pos..pos + $n];
                 pos += $n;
                 #[allow(unused_assignments)]
-                { let _ = pos; }
+                {
+                    let _ = pos;
+                }
                 s
             }};
         }
 
-        let seq   = u64::from_le_bytes(read_fixed!(8).try_into().unwrap());
+        let seq = u64::from_le_bytes(read_fixed!(8).try_into().unwrap());
         let epoch = u32::from_le_bytes(read_fixed!(4).try_into().unwrap());
         let write_pod_kaki_hash = u32::from_le_bytes(read_fixed!(4).try_into().unwrap());
         let prev_digest: [u8; 32] = read_fixed!(32).try_into().unwrap();
         let payload_fnv = u32::from_le_bytes(read_fixed!(4).try_into().unwrap());
         let event_kind = ReplEventKind::from_u8(read_fixed!(1)[0])?;
-        let delta_len  = u32::from_le_bytes(read_fixed!(4).try_into().unwrap()) as usize;
-        let delta      = read_fixed!(delta_len).to_vec();
-        let seal: [u8; 64] = read_fixed!(64).try_into().map_err(|_| ReplicationError::InvalidFrame)?;
+        let delta_len = u32::from_le_bytes(read_fixed!(4).try_into().unwrap()) as usize;
+        let delta = read_fixed!(delta_len).to_vec();
+        let seal: [u8; 64] = read_fixed!(64)
+            .try_into()
+            .map_err(|_| ReplicationError::InvalidFrame)?;
 
         // Verify payload_fnv
         let expected_fnv = fnv1a_u32(&delta);
@@ -217,8 +233,14 @@ impl KakiSealedEvent {
         }
 
         Ok(KakiSealedEvent {
-            seq, epoch, write_pod_kaki_hash, prev_digest,
-            payload_fnv, event_kind, delta, seal,
+            seq,
+            epoch,
+            write_pod_kaki_hash,
+            prev_digest,
+            payload_fnv,
+            event_kind,
+            delta,
+            seal,
             digest: stored_digest,
         })
     }
@@ -234,7 +256,7 @@ impl KakiSealedEvent {
 
 pub(crate) fn fnv1a_u32(data: &[u8]) -> u32 {
     const OFFSET: u32 = 2_166_136_261;
-    const PRIME:  u32 = 16_777_619;
+    const PRIME: u32 = 16_777_619;
     let mut h = OFFSET;
     for b in data {
         h ^= *b as u32;
@@ -255,13 +277,24 @@ mod tests {
     use super::*;
 
     fn sample_event(seq: u64, prev: [u8; 32]) -> KakiSealedEvent {
-        KakiSealedEvent::new(seq, 100_000, 0xAAAA_0001, prev, ReplEventKind::ParticleInsert, b"test-delta".to_vec())
+        KakiSealedEvent::new(
+            seq,
+            100_000,
+            0xAAAA_0001,
+            prev,
+            ReplEventKind::ParticleInsert,
+            b"test-delta".to_vec(),
+        )
     }
 
     #[test]
     fn event_kind_roundtrip() {
-        for kind in [ReplEventKind::ParticleInsert, ReplEventKind::ParticleUpdate,
-                     ReplEventKind::ParticleDelete, ReplEventKind::Checkpoint] {
+        for kind in [
+            ReplEventKind::ParticleInsert,
+            ReplEventKind::ParticleUpdate,
+            ReplEventKind::ParticleDelete,
+            ReplEventKind::Checkpoint,
+        ] {
             assert_eq!(ReplEventKind::from_u8(kind.as_u8()).unwrap(), kind);
         }
     }
@@ -280,7 +313,7 @@ mod tests {
         assert!(frame.starts_with(&FRAME_MAGIC));
 
         let parsed = KakiSealedEvent::from_frame(&frame).unwrap();
-        assert_eq!(parsed.seq,   ev.seq);
+        assert_eq!(parsed.seq, ev.seq);
         assert_eq!(parsed.epoch, ev.epoch);
         assert_eq!(parsed.delta, ev.delta);
         assert_eq!(parsed.prev_digest, ev.prev_digest);
@@ -291,9 +324,12 @@ mod tests {
         let ev = sample_event(1, GENESIS_DIGEST);
         let mut frame = ev.to_frame();
         // Flip a byte in the delta region
-        let delta_pos = 4 + 4 + 8+4+4+32+4+1+4; // past fixed fields
+        let delta_pos = 4 + 4 + 8 + 4 + 4 + 32 + 4 + 1 + 4; // past fixed fields
         frame[delta_pos] ^= 0xFF;
-        assert!(matches!(KakiSealedEvent::from_frame(&frame), Err(ReplicationError::DigestMismatch)));
+        assert!(matches!(
+            KakiSealedEvent::from_frame(&frame),
+            Err(ReplicationError::DigestMismatch)
+        ));
     }
 
     #[test]
@@ -301,7 +337,10 @@ mod tests {
         let ev = sample_event(1, GENESIS_DIGEST);
         let mut frame = ev.to_frame();
         frame[0] = 0x00;
-        assert!(matches!(KakiSealedEvent::from_frame(&frame), Err(ReplicationError::InvalidFrame)));
+        assert!(matches!(
+            KakiSealedEvent::from_frame(&frame),
+            Err(ReplicationError::InvalidFrame)
+        ));
     }
 
     #[test]

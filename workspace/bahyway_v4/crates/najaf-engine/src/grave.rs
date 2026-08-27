@@ -11,7 +11,7 @@
 //! 240=confirmed, 150=probable, 60=speculative, 0=unidentified.
 
 use bahyway_core::TribeId;
-use enkidb_kaki::{KakiMinter, KakiRole, Kaki};
+use enkidb_kaki::{Kaki, KakiMinter, KakiRole};
 use navi_engine::NaviCoord;
 
 use crate::sector::NajafSector;
@@ -82,7 +82,7 @@ pub enum DiscoverySource {
 // ── GraveParticle ─────────────────────────────────────────────────────────────
 
 pub struct GraveParticle {
-    pub id:    GraveId,
+    pub id: GraveId,
     pub coord: NaviCoord,
     pub sector: NajafSector,
     pub tribe: TribeId,
@@ -90,7 +90,7 @@ pub struct GraveParticle {
     pub epoch: u32,
     pub state: GraveState,
     /// Immutable sovereign 16-byte identity — never reassigned.
-    pub kaki:  Kaki,
+    pub kaki: Kaki,
 
     // ── Discovery extensions ──────────────────────────────────────────────────
     /// Physical condition assessed by AI imagery analysis.
@@ -112,25 +112,29 @@ pub struct GraveParticle {
 impl GraveParticle {
     /// Register a new grave. Mints a KAKI automatically.
     pub fn new(
-        id:     GraveId,
-        coord:  NaviCoord,
+        id: GraveId,
+        coord: NaviCoord,
         sector: NajafSector,
-        tribe:  TribeId,
-        epoch:  u32,
+        tribe: TribeId,
+        epoch: u32,
     ) -> Self {
         let minter = KakiMinter::new(tribe);
-        let kaki   = minter.mint_identity(id, KakiRole::Zikru);
+        let kaki = minter.mint_identity(id, KakiRole::Zikru);
         GraveParticle {
-            id, coord, sector, tribe, epoch,
-            state:               GraveState::Occupied,
+            id,
+            coord,
+            sector,
+            tribe,
+            epoch,
+            state: GraveState::Occupied,
             kaki,
-            condition:           GraveCondition::Unknown,
+            condition: GraveCondition::Unknown,
             identity_confidence: 0,
             civil_registry_kaki: None,
-            image_tile_kaki:     None,
-            discovery_source:    DiscoverySource::Manual,
-            owner_name_arabic:   None,
-            death_hijri_year:    None,
+            image_tile_kaki: None,
+            discovery_source: DiscoverySource::Manual,
+            owner_name_arabic: None,
+            death_hijri_year: None,
         }
     }
 
@@ -176,13 +180,25 @@ impl GraveParticle {
         self
     }
 
-    pub fn is_accessible(&self) -> bool { self.state.is_accessible() }
-    pub fn is_identified(&self) -> bool { self.identity_confidence > 0 }
+    pub fn is_accessible(&self) -> bool {
+        self.state.is_accessible()
+    }
+    pub fn is_identified(&self) -> bool {
+        self.identity_confidence > 0
+    }
 
-    pub fn seal(&mut self)    { self.state = GraveState::Sealed; }
-    pub fn release(&mut self) { self.state = GraveState::Available; }
-    pub fn occupy(&mut self)  { self.state = GraveState::Occupied; }
-    pub fn reserve(&mut self) { self.state = GraveState::Reserved; }
+    pub fn seal(&mut self) {
+        self.state = GraveState::Sealed;
+    }
+    pub fn release(&mut self) {
+        self.state = GraveState::Available;
+    }
+    pub fn occupy(&mut self) {
+        self.state = GraveState::Occupied;
+    }
+    pub fn reserve(&mut self) {
+        self.state = GraveState::Reserved;
+    }
 
     /// Intrinsic routing cost — sacred weight of the zone.
     pub fn intrinsic_cost(&self) -> f32 {
@@ -193,11 +209,15 @@ impl GraveParticle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use navi_engine::NaviCoord;
     use bahyway_core::TribeId;
+    use navi_engine::NaviCoord;
 
-    fn coord() -> NaviCoord { NaviCoord::new(31.995, 44.320, 0.0) }
-    fn tribe() -> TribeId   { TribeId::from_u16(0x0001) }
+    fn coord() -> NaviCoord {
+        NaviCoord::new(31.995, 44.320, 0.0)
+    }
+    fn tribe() -> TribeId {
+        TribeId::from_u16(0x0001)
+    }
 
     fn grave(id: GraveId, sector: NajafSector) -> GraveParticle {
         GraveParticle::new(id, coord(), sector, tribe(), 1400)
@@ -353,8 +373,7 @@ mod tests {
 
     #[test]
     fn satellite_discovery_source() {
-        let g = grave(26, NajafSector::Entrance)
-            .with_discovery_source(DiscoverySource::Satellite);
+        let g = grave(26, NajafSector::Entrance).with_discovery_source(DiscoverySource::Satellite);
         assert_eq!(g.discovery_source, DiscoverySource::Satellite);
     }
 

@@ -1,0 +1,61 @@
+---
+# PB-368 · Promote the sealed-rite Šala tabs and stamp them SEALED
+- name: PB-368 promote Sala tabs PB-353..PB-360 and PB-370
+  hosts: girsu
+  vars:
+    sala: "{{ ansible_env.HOME }}/bahyway/sala/tabs"
+    tabs:
+      - sala_bigring_relief_ru_mlu_v1.html
+      - sala_bigring_relief_ru_mlu_v2.html
+      - sala_biomechatronic_federation_v1.html
+      - sala_federation_human_robot_v1.html
+      - sala_wave_field_membrane_v1.html
+      - sala_wave_field_membrane_v2.html
+      - sala_wave_field_membrane_v3.html
+      - sala_wave_field_membrane_v4.html
+      - sala_kaniku_seal_court_v1.html
+  tasks:
+    - name: Ensure tabs directory
+      ansible.builtin.file: {path: "{{ sala }}", state: directory, mode: "0755"}
+
+    - name: Place tabs
+      ansible.builtin.copy: {src: "{{ item }}", dest: "{{ sala }}/{{ item }}", mode: "0644"}
+      loop: "{{ tabs }}"
+
+    - name: Stamp the three tablets as SEALED inside every tab
+      ansible.builtin.replace:
+        path: "{{ sala }}/{{ item }}"
+        regexp: '(GL-(?:UNT|FED|FLD)-001)</b> draft|(GL-(?:UNT|FED|FLD)-001) draft'
+        replace: '\1\2 SEALED'
+      loop: "{{ tabs }}"
+
+    - name: Rewrite the draft banner in the law tablets shown on each tab
+      ansible.builtin.replace:
+        path: "{{ sala }}/{{ item }}"
+        regexp: '\(draft, unsealed\)'
+        replace: '(SEALED 2026-08-24 · CSR-08)'
+      loop: "{{ tabs }}"
+
+    - name: Gate S1 · every tab still parses after stamping
+      ansible.builtin.shell: |
+        node -e "const h=require('fs').readFileSync('{{ sala }}/{{ item }}','utf8');
+                 new Function(h.split('<script>')[1].split('</script>')[0]);console.log('ok');"
+      loop: "{{ tabs }}"
+      changed_when: false
+
+    - name: Build the Šala house index
+      ansible.builtin.copy:
+        dest: "{{ sala }}/index.html"
+        mode: "0644"
+        content: |
+          <!doctype html><meta charset="utf-8"><title>Šala House · sealed rite 2026-08-24</title>
+          <style>body{background:#122738;color:#fff;font:14px "Iowan Old Style",Georgia,serif;padding:24px}
+          a{color:#ffc600}h1{font-size:20px}li{margin:4px 0;font-family:"IBM Plex Mono",monospace;font-size:13px}</style>
+          <h1>Šala House · GL-UNT-001 · GL-FED-001 · GL-FLD-001 — SEALED</h1>
+          <ul>{% for t in tabs %}<li><a href="{{ t }}">{{ t }}</a></li>{% endfor %}</ul>
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-368 nine Sala tabs promoted and stamped SEALED"

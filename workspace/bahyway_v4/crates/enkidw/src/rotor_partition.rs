@@ -23,7 +23,9 @@ pub fn partition(samples: &[(usize, f64)], band_rad: f64) -> Vec<RotorPartition>
     for (idx, angle) in samples {
         let sec = sector_for(*angle, band_rad);
         let entry = map.entry(sec).or_insert(RotorPartition {
-            sector: sec, member_indices: Vec::new(), accumulated_angle: 0.0,
+            sector: sec,
+            member_indices: Vec::new(),
+            accumulated_angle: 0.0,
         });
         entry.member_indices.push(*idx);
         entry.accumulated_angle += *angle;
@@ -61,9 +63,17 @@ mod tests {
 
     #[test]
     fn snapshot_triggered_by_accumulation() {
-        let p = RotorPartition { sector: 0, member_indices: vec![0,1,2], accumulated_angle: 1.2 };
+        let p = RotorPartition {
+            sector: 0,
+            member_indices: vec![0, 1, 2],
+            accumulated_angle: 1.2,
+        };
         assert!(needs_snapshot(&p, 1.0));
-        let q = RotorPartition { sector: 0, member_indices: vec![0], accumulated_angle: 0.3 };
+        let q = RotorPartition {
+            sector: 0,
+            member_indices: vec![0],
+            accumulated_angle: 0.3,
+        };
         assert!(!needs_snapshot(&q, 1.0));
     }
 

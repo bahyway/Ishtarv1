@@ -44,7 +44,7 @@ class_name DocumentExplorer
 const SumuUkinClient = preload("res://scripts/sumuukin_client.gd")
 const DubSarTheme = preload("res://scripts/dubsar_theme.gd")
 
-const HOST := "192.168.122.107"
+const HOST := "192.168.122.112"
 const PORT := 7102  # enkiddb-read-server (Tigris)
 const TREE_LIMIT := 200
 

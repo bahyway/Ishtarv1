@@ -15,7 +15,7 @@
 //!
 //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust
 
-use crate::domain::{HeptaVector, TribeIdealPoint, HeptaScore};
+use crate::domain::{HeptaScore, HeptaVector, TribeIdealPoint};
 
 /// Quality outputs from all BeeMDM pipeline stations.
 ///
@@ -24,17 +24,17 @@ use crate::domain::{HeptaVector, TribeIdealPoint, HeptaScore};
 #[derive(Debug, Clone, Default)]
 pub struct StationScores {
     // S0 VaultGate
-    pub timeliness_score:   Option<f32>,
+    pub timeliness_score: Option<f32>,
     // S1 KAKI Issuance
     pub completeness_score: Option<f32>,
-    pub validity_score:     Option<f32>,
+    pub validity_score: Option<f32>,
     // S2 CompareWay
-    pub consistency_score:  Option<f32>,
-    pub uniqueness_score:   Option<f32>,
+    pub consistency_score: Option<f32>,
+    pub uniqueness_score: Option<f32>,
     // S3 CleansingWay
-    pub accuracy_score:     Option<f32>,
+    pub accuracy_score: Option<f32>,
     // S7 EnkiWay
-    pub integrity_score:    Option<f32>,
+    pub integrity_score: Option<f32>,
 }
 
 impl StationScores {
@@ -54,20 +54,17 @@ impl StationScores {
 ///
 /// Missing station scores use a conservative default of 0.5 — not assuming
 /// quality when unverified.
-pub fn score_from_station_outputs(
-    stations: &StationScores,
-    tribe:    &TribeIdealPoint,
-) -> HeptaScore {
+pub fn score_from_station_outputs(stations: &StationScores, tribe: &TribeIdealPoint) -> HeptaScore {
     const DEFAULT_UNSCORED: f32 = 0.5;
 
     let hepta = HeptaVector::new(
-        stations.accuracy_score    .unwrap_or(DEFAULT_UNSCORED),
+        stations.accuracy_score.unwrap_or(DEFAULT_UNSCORED),
         stations.completeness_score.unwrap_or(DEFAULT_UNSCORED),
-        stations.consistency_score .unwrap_or(DEFAULT_UNSCORED),
-        stations.validity_score    .unwrap_or(DEFAULT_UNSCORED),
-        stations.uniqueness_score  .unwrap_or(DEFAULT_UNSCORED),
-        stations.timeliness_score  .unwrap_or(DEFAULT_UNSCORED),
-        stations.integrity_score   .unwrap_or(DEFAULT_UNSCORED),
+        stations.consistency_score.unwrap_or(DEFAULT_UNSCORED),
+        stations.validity_score.unwrap_or(DEFAULT_UNSCORED),
+        stations.uniqueness_score.unwrap_or(DEFAULT_UNSCORED),
+        stations.timeliness_score.unwrap_or(DEFAULT_UNSCORED),
+        stations.integrity_score.unwrap_or(DEFAULT_UNSCORED),
     );
 
     hepta.score(tribe)
@@ -81,13 +78,13 @@ mod tests {
 
     fn all_stations(q: f32) -> StationScores {
         StationScores {
-            accuracy_score:     Some(q),
+            accuracy_score: Some(q),
             completeness_score: Some(q),
-            consistency_score:  Some(q),
-            validity_score:     Some(q),
-            uniqueness_score:   Some(q),
-            timeliness_score:   Some(q),
-            integrity_score:    Some(q),
+            consistency_score: Some(q),
+            validity_score: Some(q),
+            uniqueness_score: Some(q),
+            timeliness_score: Some(q),
+            integrity_score: Some(q),
         }
     }
 
@@ -104,16 +101,23 @@ mod tests {
         // Dead is unreachable: T=[1;7], Σwᵢ=1 → H_min=0.5 → B11_min=120
         let tribe = TribeIdealPoint::sovereign_arabic_mdm();
         let score = score_from_station_outputs(&all_stations(0.1), &tribe);
-        assert_eq!(score.lane, crate::domain::QualityLane::Active,
-            "poor → Active, got B11={}", score.b11);
+        assert_eq!(
+            score.lane,
+            crate::domain::QualityLane::Active,
+            "poor → Active, got B11={}",
+            score.b11
+        );
     }
 
     #[test]
     fn missing_stations_give_mid_range_b11() {
         let tribe = TribeIdealPoint::sovereign_arabic_mdm();
         let score = score_from_station_outputs(&StationScores::default(), &tribe);
-        assert!(score.b11 > 0 && score.b11 < 200,
-            "all-default B11={} should be mid-range", score.b11);
+        assert!(
+            score.b11 > 0 && score.b11 < 200,
+            "all-default B11={} should be mid-range",
+            score.b11
+        );
     }
 
     #[test]

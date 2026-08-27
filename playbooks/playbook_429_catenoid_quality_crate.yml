@@ -4,21 +4,62 @@
 - name: "PB-429 · scaffold geoengine-catenoid: minimal-surface health + Lie generator fit + exp(−tX) healing"
   hosts: uruk
   tasks:
+    - name: ensure Forge workspace root
+      ansible.builtin.file: { path: "{{ playbook_dir }}/../workspace/bahyway_v4", state: directory, mode: "0755" }
+      check_mode: false
     - name: cargo new
       ansible.builtin.command:
         cmd: "cargo new --lib geoengine-catenoid"
-        creates: /home/bfadam/Forge/bahyway_v4/geoengine-catenoid/Cargo.toml
+        creates: "{{ playbook_dir }}/../workspace/bahyway_v4/crates/geoengine-catenoid/Cargo.toml"
+        chdir: "{{ playbook_dir }}/../workspace/bahyway_v4/crates"
+    # 2026-08-24, found live: lib.rs below declares `pub mod surface;
+    # pub mod generators; pub mod flow;` but nothing ever created those
+    # three files -- same class of gap as PB-428's verdicts/fusion/
+    # persistence, found via the same `cargo fmt --all` failure. Stub
+    # files added, same DRAFT-stub style as PB-420's contract.rs.
+    - name: "src/surface.rs stub"
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/../workspace/bahyway_v4/crates/geoengine-catenoid/src/surface.rs"
+        content: |
+          //! r(z) = c·cosh(z/c) minimal-surface health (DRAFT stub -- signatures only)
+          pub struct CatenoidSurface {
+              pub c: f64,
+          }
+
+    - name: "src/generators.rs stub"
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/../workspace/bahyway_v4/crates/geoengine-catenoid/src/generators.rs"
+        content: |
+          //! Lie generator fit X = aB + bD + cZ + dR (DRAFT stub -- signatures only)
+          pub struct Generators {
+              pub a: f64,
+              pub b: f64,
+              pub c: f64,
+              pub d: f64,
+          }
+
+    - name: "src/flow.rs stub"
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/../workspace/bahyway_v4/crates/geoengine-catenoid/src/flow.rs"
+        content: |
+          //! exp(-tX) healing flow (DRAFT stub -- signatures only)
+          pub struct Flow {
+              pub t: f64,
+          }
+
     - name: module map
       ansible.builtin.copy:
-        dest: /home/bfadam/Forge/bahyway_v4/geoengine-catenoid/src/lib.rs
+        dest: "{{ playbook_dir }}/../workspace/bahyway_v4/crates/geoengine-catenoid/src/lib.rs"
         content: |
           //! Catenoid Court mathematics · geometry authority: GeoEngine (design-time Z3 only, never runtime)
           //! Health: values on r(z)=c·cosh(z/c), H≈0 (GL-ORG-001 as geometry)
           //! Diagnosis: least-squares fit X = aB + bD + cZ + dR against NĀRU-sealed coordinates
           //! Cure: flow exp(−tX) — four parameters heal thousands (minimal servicing)
-          pub mod surface; pub mod generators; pub mod flow;
+          pub mod flow;
+          pub mod generators;
+          pub mod surface;
     - name: journal (NARU discipline)
       ansible.builtin.lineinfile:
-        path: /home/bfadam/Forge/bahyway_v4/NARU.journal
+        path: "{{ playbook_dir }}/../workspace/bahyway_v4/NARU.journal"
         line: "{{ ansible_date_time.iso8601 }} · PB-429 · geoengine-catenoid scaffolded"
         create: yes

@@ -94,13 +94,21 @@ pub fn list_cataloged_playbooks(registry_path: &Path) -> Vec<CatalogedPlaybook> 
         .filter_map(|l| serde_json::from_str::<RegistryLine>(l).ok())
         .map(|r| {
             let path = PathBuf::from(&r.first_seen_path);
-            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
             let full_text = std::fs::read_to_string(&path).unwrap_or_default();
             let title = DocumentParser::parse_playbook_header(&full_text)
                 .map(|s| s.title)
                 .filter(|t| !t.trim().is_empty())
                 .unwrap_or(stem);
-            CatalogedPlaybook { kaki_hex: r.kaki_hex, title, source_path: r.first_seen_path, full_text }
+            CatalogedPlaybook {
+                kaki_hex: r.kaki_hex,
+                title,
+                source_path: r.first_seen_path,
+                full_text,
+            }
         })
         .collect()
 }
@@ -148,7 +156,10 @@ pub(crate) fn guess_pb_number(file_stem: &str) -> Option<u32> {
 /// never conformed to that shape in the first place.
 fn is_playbook_candidate(path: &Path) -> bool {
     matches!(
-        path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .as_deref(),
         Some("yml") | Some("yaml")
     )
 }
@@ -165,9 +176,13 @@ fn walk_playbook_files(root: &Path, max_depth: u32) -> Vec<PathBuf> {
 }
 
 fn walk_inner(dir: &Path, depth_left: u32, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.filter_map(|e| e.ok()) {
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         if file_type.is_symlink() {
             continue;
         }
@@ -222,7 +237,11 @@ pub fn catalog_playbooks(
     if let Some(p) = registry_path.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    let mut registry_file = std::fs::OpenOptions::new().create(true).append(true).open(registry_path).ok();
+    let mut registry_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(registry_path)
+        .ok();
 
     let mut location_kakis: HashMap<String, IdentityKaki> = HashMap::new();
     // Rehydrate identities already minted in a PREVIOUS run so this run's
@@ -262,12 +281,19 @@ pub fn catalog_playbooks(
         });
 
         for file in walk_playbook_files(&loc.root, 8) {
-            let Ok(bytes) = std::fs::read(&file) else { continue };
+            let Ok(bytes) = std::fs::read(&file) else {
+                continue;
+            };
             let hash = sha256_hex(&bytes);
-            let stem = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let stem = file
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
             let pb_number = guess_pb_number(&stem);
 
-            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+            let Ok(text) = std::fs::read_to_string(&file) else {
+                continue;
+            };
             // Scanned and parsed for EVERY file, known-hash or not.
             //
             // FIXED: `enkidb-readnode::Generation` is a complete,
@@ -290,11 +316,19 @@ pub fn catalog_playbooks(
             // every materialized generation stays self-sufficient.
             let scan = enkiddb::scan_document(text.as_bytes());
             if !scan.clean {
-                log.push(format!("⚠ skipped {} ({}): {}", file.display(), loc.name, scan.detail));
+                log.push(format!(
+                    "⚠ skipped {} ({}): {}",
+                    file.display(),
+                    loc.name,
+                    scan.detail
+                ));
                 continue;
             }
-            let mut structure = DocumentParser::parse_playbook_header(&text)
-                .unwrap_or_else(|| DocumentStructure { title: stem.clone(), ..Default::default() });
+            let mut structure =
+                DocumentParser::parse_playbook_header(&text).unwrap_or_else(|| DocumentStructure {
+                    title: stem.clone(),
+                    ..Default::default()
+                });
             if structure.title.trim().is_empty() {
                 structure.title = stem.clone();
             }
@@ -312,11 +346,20 @@ pub fn catalog_playbooks(
 
             let doc_kaki = if let Some(existing) = hash_kakis.get(&hash) {
                 let existing = *existing;
-                write_node.reingest_document_categorized(existing, &structure, epoch, "playbook-record-candidate");
+                write_node.reingest_document_categorized(
+                    existing,
+                    &structure,
+                    epoch,
+                    "playbook-record-candidate",
+                );
                 epoch += 1;
                 existing
             } else {
-                let kaki = write_node.ingest_document_categorized(&structure, epoch, "playbook-record-candidate");
+                let (kaki, _particle_count) = write_node.ingest_document_categorized(
+                    &structure,
+                    epoch,
+                    "playbook-record-candidate",
+                );
                 epoch += 1;
                 minted_this_run += 1;
 
@@ -333,7 +376,11 @@ pub fn catalog_playbooks(
                     }
                 }
                 hash_kakis.insert(hash.clone(), kaki);
-                log.push(format!("𒁾 catalogued {} ({}) → {kaki}", file.display(), loc.name));
+                log.push(format!(
+                    "𒁾 catalogued {} ({}) → {kaki}",
+                    file.display(),
+                    loc.name
+                ));
                 kaki
             };
 
@@ -374,7 +421,9 @@ pub fn catalog_playbooks(
                             &doc_title,
                             *first_kaki,
                             first_title,
-                            &format!("same-PB-number-as (unreconciled): PB-{n}, first seen {first_desc}"),
+                            &format!(
+                                "same-PB-number-as (unreconciled): PB-{n}, first seen {first_desc}"
+                            ),
                             epoch,
                         );
                         epoch += 1;
@@ -385,8 +434,14 @@ pub fn catalog_playbooks(
                     }
                     Some(_) => {}
                     None => {
-                        number_first_seen
-                            .insert(n, (doc_kaki, doc_title.clone(), format!("{} ({})", file.display(), loc.name)));
+                        number_first_seen.insert(
+                            n,
+                            (
+                                doc_kaki,
+                                doc_title.clone(),
+                                format!("{} ({})", file.display(), loc.name),
+                            ),
+                        );
                     }
                 }
             }
@@ -403,7 +458,9 @@ pub fn catalog_playbooks(
             Err(e) => log.push(format!("⚠ EnkiDDB materialize failed: {e}")),
         }
     }
-    log.push(format!("✓ {minted_this_run} new unique playbook(s) catalogued this run"));
+    log.push(format!(
+        "✓ {minted_this_run} new unique playbook(s) catalogued this run"
+    ));
     log
 }
 
@@ -433,9 +490,16 @@ mod tests {
         let registry = dir.join("chronicle/pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
 
-        let locations = vec![CatalogLocation { name: "test-loc".into(), root: dir.clone() }];
+        let locations = vec![CatalogLocation {
+            name: "test-loc".into(),
+            root: dir.clone(),
+        }];
         let log = catalog_playbooks(&locations, &registry, &enkiddb_root);
-        assert!(log.iter().any(|l| l.contains("catalogued") && l.contains("playbook_910_scratch")), "log: {log:?}");
+        assert!(
+            log.iter()
+                .any(|l| l.contains("catalogued") && l.contains("playbook_910_scratch")),
+            "log: {log:?}"
+        );
     }
 
     #[test]
@@ -451,13 +515,26 @@ mod tests {
         let enkiddb_root = dir.join("enkiddb_data");
 
         let locations = vec![
-            CatalogLocation { name: "loc-a".into(), root: loc_a },
-            CatalogLocation { name: "loc-b".into(), root: loc_b },
+            CatalogLocation {
+                name: "loc-a".into(),
+                root: loc_a,
+            },
+            CatalogLocation {
+                name: "loc-b".into(),
+                root: loc_b,
+            },
         ];
         let log = catalog_playbooks(&locations, &registry, &enkiddb_root);
         let minted_count = log.iter().filter(|l| l.contains("𒁾 catalogued")).count();
-        assert_eq!(minted_count, 1, "identical content in two locations must mint exactly once: {log:?}");
-        assert!(log.iter().any(|l| l.contains("found-in:loc-a") || l.contains("loc-a")), "log: {log:?}");
+        assert_eq!(
+            minted_count, 1,
+            "identical content in two locations must mint exactly once: {log:?}"
+        );
+        assert!(
+            log.iter()
+                .any(|l| l.contains("found-in:loc-a") || l.contains("loc-a")),
+            "log: {log:?}"
+        );
     }
 
     #[test]
@@ -468,16 +545,29 @@ mod tests {
         std::fs::create_dir_all(&loc_a).unwrap();
         std::fs::create_dir_all(&loc_b).unwrap();
         write_pb(&loc_a, "playbook_912_scratch.yml", "the FIRST version");
-        write_pb(&loc_b, "playbook_912_scratch.yml", "a COMPLETELY DIFFERENT version");
+        write_pb(
+            &loc_b,
+            "playbook_912_scratch.yml",
+            "a COMPLETELY DIFFERENT version",
+        );
         let registry = dir.join("chronicle/pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
 
         let locations = vec![
-            CatalogLocation { name: "loc-a".into(), root: loc_a },
-            CatalogLocation { name: "loc-b".into(), root: loc_b },
+            CatalogLocation {
+                name: "loc-a".into(),
+                root: loc_a,
+            },
+            CatalogLocation {
+                name: "loc-b".into(),
+                root: loc_b,
+            },
         ];
         let log = catalog_playbooks(&locations, &registry, &enkiddb_root);
-        assert!(log.iter().any(|l| l.contains("collision: PB-912")), "log: {log:?}");
+        assert!(
+            log.iter().any(|l| l.contains("collision: PB-912")),
+            "log: {log:?}"
+        );
     }
 
     #[test]
@@ -486,9 +576,16 @@ mod tests {
         let registry = dir.join("chronicle/pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
 
-        let locations = vec![CatalogLocation { name: "missing-drive".into(), root: dir.join("does_not_exist") }];
+        let locations = vec![CatalogLocation {
+            name: "missing-drive".into(),
+            root: dir.join("does_not_exist"),
+        }];
         let log = catalog_playbooks(&locations, &registry, &enkiddb_root);
-        assert!(log.iter().any(|l| l.contains("not reachable") && l.contains("missing-drive")), "log: {log:?}");
+        assert!(
+            log.iter()
+                .any(|l| l.contains("not reachable") && l.contains("missing-drive")),
+            "log: {log:?}"
+        );
     }
 
     // Real end-to-end regression test for the exact bug a live user hit:
@@ -509,9 +606,16 @@ mod tests {
         let registry = dir.join("chronicle/pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
 
-        let locations = vec![CatalogLocation { name: "multi-loc".into(), root: dir.clone() }];
+        let locations = vec![CatalogLocation {
+            name: "multi-loc".into(),
+            root: dir.clone(),
+        }];
         let log = catalog_playbooks(&locations, &registry, &enkiddb_root);
-        assert_eq!(log.iter().filter(|l| l.contains("𒁾 catalogued")).count(), 3, "log: {log:?}");
+        assert_eq!(
+            log.iter().filter(|l| l.contains("𒁾 catalogued")).count(),
+            3,
+            "log: {log:?}"
+        );
 
         let tigris_root = enkiddb_root.join("tigris");
         let generation_dir = std::fs::read_dir(&tigris_root)
@@ -521,7 +625,8 @@ mod tests {
             .expect("catalog_playbooks must materialize exactly one generation")
             .path();
         let mut read_node =
-            enkiddb::ReadNode::open(generation_dir.join("entities"), generation_dir.join("eav")).unwrap();
+            enkiddb::ReadNode::open(generation_dir.join("entities"), generation_dir.join("eav"))
+                .unwrap();
 
         // NOTE: no "QUERY:" prefix here -- that's a wire-protocol tag
         // enkiddb-read-server strips before ever calling parse_query (see
@@ -535,10 +640,15 @@ mod tests {
             .matched
             .iter()
             .filter_map(|m| {
-                m.projected.iter().find(|(k, _)| k == "link.description").and_then(|(_, v)| match v {
-                    akkvalue::AkkValue::Text(s) if s.starts_with("contains:") => Some(s.as_str()),
-                    _ => None,
-                })
+                m.projected
+                    .iter()
+                    .find(|(k, _)| k == "link.description")
+                    .and_then(|(_, v)| match v {
+                        akkvalue::AkkValue::Text(s) if s.starts_with("contains:") => {
+                            Some(s.as_str())
+                        }
+                        _ => None,
+                    })
             })
             .collect();
         assert_eq!(
@@ -566,16 +676,30 @@ mod tests {
     #[test]
     fn a_second_run_still_produces_a_self_sufficient_generation_for_first_run_content() {
         let dir = scratch_dir("two_run_completeness");
-        write_pb(&dir, "playbook_930_scratch.yml", "unchanged across both runs");
+        write_pb(
+            &dir,
+            "playbook_930_scratch.yml",
+            "unchanged across both runs",
+        );
         let registry = dir.join("chronicle/pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        let locations = vec![CatalogLocation { name: "stable-loc".into(), root: dir.clone() }];
+        let locations = vec![CatalogLocation {
+            name: "stable-loc".into(),
+            root: dir.clone(),
+        }];
 
         let first = catalog_playbooks(&locations, &registry, &enkiddb_root);
-        assert_eq!(first.iter().filter(|l| l.contains("𒁾 catalogued")).count(), 1, "log: {first:?}");
+        assert_eq!(
+            first.iter().filter(|l| l.contains("𒁾 catalogued")).count(),
+            1,
+            "log: {first:?}"
+        );
 
         let second = catalog_playbooks(&locations, &registry, &enkiddb_root);
-        assert!(!second.iter().any(|l| l.contains("𒁾 catalogued")), "second run must mint nothing new: {second:?}");
+        assert!(
+            !second.iter().any(|l| l.contains("𒁾 catalogued")),
+            "second run must mint nothing new: {second:?}"
+        );
 
         let tigris_root = enkiddb_root.join("tigris");
         let mut generation_names: Vec<String> = std::fs::read_dir(&tigris_root)
@@ -585,10 +709,15 @@ mod tests {
             .filter_map(|e| e.file_name().into_string().ok())
             .collect();
         generation_names.sort();
-        assert_eq!(generation_names.len(), 2, "each run must materialize its own generation: {generation_names:?}");
+        assert_eq!(
+            generation_names.len(),
+            2,
+            "each run must materialize its own generation: {generation_names:?}"
+        );
         let latest_dir = tigris_root.join(generation_names.last().unwrap());
 
-        let mut read_node = enkiddb::ReadNode::open(latest_dir.join("entities"), latest_dir.join("eav")).unwrap();
+        let mut read_node =
+            enkiddb::ReadNode::open(latest_dir.join("entities"), latest_dir.join("eav")).unwrap();
         // NOTE: `write_pb`'s fixture content always parses to the same
         // title, "PB-910 -- Scratch test playbook" (its first non-
         // separator header line -- see
@@ -609,13 +738,19 @@ mod tests {
         write_pb(&dir, "playbook_913_scratch.yml", "stable reason");
         let registry = dir.join("chronicle/pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        let locations = vec![CatalogLocation { name: "test-loc".into(), root: dir.clone() }];
+        let locations = vec![CatalogLocation {
+            name: "test-loc".into(),
+            root: dir.clone(),
+        }];
 
         let first = catalog_playbooks(&locations, &registry, &enkiddb_root);
         assert!(first.iter().any(|l| l.contains("𒁾 catalogued")));
 
         let second = catalog_playbooks(&locations, &registry, &enkiddb_root);
-        assert!(!second.iter().any(|l| l.contains("𒁾 catalogued")), "second run must mint nothing new: {second:?}");
+        assert!(
+            !second.iter().any(|l| l.contains("𒁾 catalogued")),
+            "second run must mint nothing new: {second:?}"
+        );
     }
 
     /// The bug `anu_governor_web::playbook_why_text` exists to work around:
@@ -637,7 +772,8 @@ mod tests {
     /// bytes, matched against the parent's own kaki in Rust (HeptaScript's
     /// WHERE clause has no KakiPk-literal comparison at all).
     #[test]
-    fn the_real_why_text_survives_via_section_link_target_matching_despite_body_paragraph_collapsing() {
+    fn the_real_why_text_survives_via_section_link_target_matching_despite_body_paragraph_collapsing(
+    ) {
         let dir = scratch_dir("why_text");
         let loc = dir.join("loc");
         std::fs::create_dir_all(&loc).unwrap();
@@ -649,10 +785,20 @@ mod tests {
 
         let registry = dir.join("pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        catalog_playbooks(&[CatalogLocation { name: "loc".into(), root: loc }], &registry, &enkiddb_root);
+        catalog_playbooks(
+            &[CatalogLocation {
+                name: "loc".into(),
+                root: loc,
+            }],
+            &registry,
+            &enkiddb_root,
+        );
 
         let catalogued = list_cataloged_playbooks(&registry);
-        let pb = catalogued.iter().find(|p| p.source_path.contains("920")).unwrap();
+        let pb = catalogued
+            .iter()
+            .find(|p| p.source_path.contains("920"))
+            .unwrap();
         let parent_bytes: [u8; 16] = hex::decode(&pb.kaki_hex).unwrap().try_into().unwrap();
 
         let tigris_root = enkiddb_root.join("tigris");
@@ -663,12 +809,16 @@ mod tests {
             .collect();
         gens.sort();
         let latest = tigris_root.join(gens.last().unwrap());
-        let mut read_node = enkiddb::ReadNode::open(latest.join("entities"), latest.join("eav")).unwrap();
+        let mut read_node =
+            enkiddb::ReadNode::open(latest.join("entities"), latest.join("eav")).unwrap();
 
         // The parent entity's own `body.paragraph` really does collapse to
         // the catalog's bookkeeping marker -- proving the bug is real, not
         // hypothetical.
-        let parent_q = format!("WHO T.E\nWHAT E[body.paragraph]\nWHERE E[meta.title] = \"{}\"", pb.title);
+        let parent_q = format!(
+            "WHO T.E\nWHAT E[body.paragraph]\nWHERE E[meta.title] = \"{}\"",
+            pb.title
+        );
         let parent_r = read_node.query(&parent_q).unwrap();
         let saw_marker = parent_r.matched.iter().any(|m| {
             m.projected.iter().any(|(k, v)| {
@@ -676,12 +826,16 @@ mod tests {
                     && matches!(v, akkvalue::AkkValue::Text(s) if s.starts_with("[playbook-catalog]"))
             })
         });
-        assert!(saw_marker, "the parent's body.paragraph must collapse to the catalog marker: {parent_r:?}");
+        assert!(
+            saw_marker,
+            "the parent's body.paragraph must collapse to the catalog marker: {parent_r:?}"
+        );
 
         // Every real child section is recoverable by matching its
         // link.target bytes against the parent -- not collapsed, not
         // shadowed.
-        let section_q = "WHO T.E\nWHAT E[link.target, body.text]\nWHERE E[link.description] = \"section-of\"";
+        let section_q =
+            "WHO T.E\nWHAT E[link.target, body.text]\nWHERE E[link.description] = \"section-of\"";
         let section_r = read_node.query(section_q).unwrap();
         let mut found_text = String::new();
         for m in &section_r.matched {
@@ -701,7 +855,13 @@ mod tests {
                 }
             }
         }
-        assert!(found_text.contains("real geodesy math the ecosystem needs"), "found_text: {found_text}");
-        assert!(found_text.contains("UTM<->WGS84 conversion"), "found_text: {found_text}");
+        assert!(
+            found_text.contains("real geodesy math the ecosystem needs"),
+            "found_text: {found_text}"
+        );
+        assert!(
+            found_text.contains("UTM<->WGS84 conversion"),
+            "found_text: {found_text}"
+        );
     }
 }

@@ -39,22 +39,30 @@ pub enum ChatTemplate {
 impl ChatTemplate {
     pub fn from_model_name(name: &str) -> Self {
         let lower = name.to_lowercase();
-        if lower.contains("deepseek")  { Self::DeepSeek }
-        else if lower.contains("qwen") { Self::Qwen2 }
-        else if lower.contains("llama-3") || lower.contains("llama3") { Self::LLaMA3 }
-        else { Self::Generic }
+        if lower.contains("deepseek") {
+            Self::DeepSeek
+        } else if lower.contains("qwen") {
+            Self::Qwen2
+        } else if lower.contains("llama-3") || lower.contains("llama3") {
+            Self::LLaMA3
+        } else {
+            Self::Generic
+        }
     }
 }
 
 /// Builds formatted prompts for different model chat templates.
 pub struct PromptBuilder {
     template: ChatTemplate,
-    system:   String,
+    system: String,
 }
 
 impl PromptBuilder {
     pub fn new(template: ChatTemplate, system: &str) -> Self {
-        Self { template, system: system.to_string() }
+        Self {
+            template,
+            system: system.to_string(),
+        }
     }
 
     /// Build a default TamuzAI prompt builder.
@@ -67,9 +75,9 @@ impl PromptBuilder {
     pub fn build(&self, history: &[(&str, &str)], new_user_msg: &str) -> String {
         match self.template {
             ChatTemplate::DeepSeek => self.build_deepseek(history, new_user_msg),
-            ChatTemplate::Qwen2    => self.build_qwen2(history, new_user_msg),
-            ChatTemplate::LLaMA3   => self.build_llama3(history, new_user_msg),
-            ChatTemplate::Generic  => self.build_generic(history, new_user_msg),
+            ChatTemplate::Qwen2 => self.build_qwen2(history, new_user_msg),
+            ChatTemplate::LLaMA3 => self.build_llama3(history, new_user_msg),
+            ChatTemplate::Generic => self.build_generic(history, new_user_msg),
         }
     }
 
@@ -97,10 +105,7 @@ impl PromptBuilder {
     }
 
     fn build_qwen2(&self, history: &[(&str, &str)], new_user: &str) -> String {
-        let mut prompt = format!(
-            "<|im_start|>system\n{}\n<|im_end|>\n",
-            self.system
-        );
+        let mut prompt = format!("<|im_start|>system\n{}\n<|im_end|>\n", self.system);
         for (role, content) in history {
             prompt.push_str(&format!("<|im_start|>{role}\n{content}\n<|im_end|>\n"));
         }
@@ -131,7 +136,11 @@ impl PromptBuilder {
     fn build_generic(&self, history: &[(&str, &str)], new_user: &str) -> String {
         let mut prompt = format!("System: {}\n\n", self.system);
         for (role, content) in history {
-            let r = if *role == "user" { "Human" } else { "Assistant" };
+            let r = if *role == "user" {
+                "Human"
+            } else {
+                "Assistant"
+            };
             prompt.push_str(&format!("{r}: {content}\n"));
         }
         prompt.push_str(&format!("Human: {new_user}\nAssistant: "));
@@ -145,12 +154,18 @@ mod tests {
 
     #[test]
     fn deepseek_template_detected() {
-        assert_eq!(ChatTemplate::from_model_name("deepseek-coder-6.7b"), ChatTemplate::DeepSeek);
+        assert_eq!(
+            ChatTemplate::from_model_name("deepseek-coder-6.7b"),
+            ChatTemplate::DeepSeek
+        );
     }
 
     #[test]
     fn qwen_template_detected() {
-        assert_eq!(ChatTemplate::from_model_name("Qwen2.5-Coder-7B"), ChatTemplate::Qwen2);
+        assert_eq!(
+            ChatTemplate::from_model_name("Qwen2.5-Coder-7B"),
+            ChatTemplate::Qwen2
+        );
     }
 
     #[test]

@@ -31,22 +31,32 @@ impl FieldChange {
         matches!(
             self,
             FieldChange::Removed
-            | FieldChange::TypeChanged { .. }
-            | FieldChange::MandatoryChanged { was: false, now: true }
-            | FieldChange::LengthChanged { from: _, to: Some(_) } // shrinkage
+                | FieldChange::TypeChanged { .. }
+                | FieldChange::MandatoryChanged {
+                    was: false,
+                    now: true
+                }
+                | FieldChange::LengthChanged {
+                    from: _,
+                    to: Some(_)
+                } // shrinkage
         )
     }
 
     pub fn description(&self) -> String {
         match self {
-            FieldChange::Added                          => "field added".to_string(),
-            FieldChange::Removed                        => "field removed (breaking)".to_string(),
-            FieldChange::TypeChanged { from, to }       => format!("type {} → {} (breaking)", from.as_str(), to.as_str()),
-            FieldChange::LengthChanged { from, to }     => format!("max_length {:?} → {:?}", from, to),
-            FieldChange::PositionChanged { from, to }   => format!("position {from} → {to}"),
-            FieldChange::MandatoryChanged { was, now }  => format!("mandatory {was} → {now}{}",
-                if !was && *now { " (breaking)" } else { "" }),
-            FieldChange::NullableChanged { was, now }   => format!("nullable {was} → {now}"),
+            FieldChange::Added => "field added".to_string(),
+            FieldChange::Removed => "field removed (breaking)".to_string(),
+            FieldChange::TypeChanged { from, to } => {
+                format!("type {} → {} (breaking)", from.as_str(), to.as_str())
+            }
+            FieldChange::LengthChanged { from, to } => format!("max_length {:?} → {:?}", from, to),
+            FieldChange::PositionChanged { from, to } => format!("position {from} → {to}"),
+            FieldChange::MandatoryChanged { was, now } => format!(
+                "mandatory {was} → {now}{}",
+                if !was && *now { " (breaking)" } else { "" }
+            ),
+            FieldChange::NullableChanged { was, now } => format!("nullable {was} → {now}"),
         }
     }
 }
@@ -55,8 +65,8 @@ impl FieldChange {
 #[derive(Debug, Clone)]
 pub struct FieldDiff {
     pub field_name: String,
-    pub attr_hash:  u32,
-    pub changes:    Vec<FieldChange>,
+    pub attr_hash: u32,
+    pub changes: Vec<FieldChange>,
 }
 
 impl FieldDiff {
@@ -82,17 +92,29 @@ mod tests {
 
     #[test]
     fn type_change_is_breaking() {
-        assert!(FieldChange::TypeChanged { from: FieldType::Text, to: FieldType::Integer }.is_breaking());
+        assert!(FieldChange::TypeChanged {
+            from: FieldType::Text,
+            to: FieldType::Integer
+        }
+        .is_breaking());
     }
 
     #[test]
     fn mandatory_false_to_true_is_breaking() {
-        assert!(FieldChange::MandatoryChanged { was: false, now: true }.is_breaking());
+        assert!(FieldChange::MandatoryChanged {
+            was: false,
+            now: true
+        }
+        .is_breaking());
     }
 
     #[test]
     fn mandatory_true_to_false_is_not_breaking() {
-        assert!(!FieldChange::MandatoryChanged { was: true, now: false }.is_breaking());
+        assert!(!FieldChange::MandatoryChanged {
+            was: true,
+            now: false
+        }
+        .is_breaking());
     }
 
     #[test]
@@ -109,8 +131,11 @@ mod tests {
     fn field_diff_has_breaking_detects_any() {
         let diff = FieldDiff {
             field_name: "x".to_string(),
-            attr_hash:  0,
-            changes:    vec![FieldChange::PositionChanged { from: 1, to: 2 }, FieldChange::Removed],
+            attr_hash: 0,
+            changes: vec![
+                FieldChange::PositionChanged { from: 1, to: 2 },
+                FieldChange::Removed,
+            ],
         };
         assert!(diff.has_breaking_change());
     }
@@ -119,8 +144,8 @@ mod tests {
     fn field_diff_all_soft() {
         let diff = FieldDiff {
             field_name: "x".to_string(),
-            attr_hash:  0,
-            changes:    vec![FieldChange::PositionChanged { from: 1, to: 3 }],
+            attr_hash: 0,
+            changes: vec![FieldChange::PositionChanged { from: 1, to: 3 }],
         };
         assert!(!diff.has_breaking_change());
     }

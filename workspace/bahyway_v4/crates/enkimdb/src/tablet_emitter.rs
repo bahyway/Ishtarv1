@@ -34,12 +34,32 @@ impl<'a> TabletEmitter<'a> {
         let kind = profile.kind.as_str();
 
         let mut particles = vec![
-            Particle::base(kaki, leaked_attr(kind, "path"), AkkValue::Text(profile.path.clone()), now),
-            Particle::base(kaki, leaked_attr(kind, "bytes"), AkkValue::Int(profile.bytes as i64), now),
-            Particle::base(kaki, leaked_attr(kind, "sha256"), AkkValue::Text(profile.sha256.clone()), now),
+            Particle::base(
+                kaki,
+                leaked_attr(kind, "path"),
+                AkkValue::Text(profile.path.clone()),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                leaked_attr(kind, "bytes"),
+                AkkValue::Int(profile.bytes as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                leaked_attr(kind, "sha256"),
+                AkkValue::Text(profile.sha256.clone()),
+                now,
+            ),
         ];
         for (attr, value) in &profile.extra {
-            particles.push(Particle::base(kaki, (*attr).to_string(), value.clone(), now));
+            particles.push(Particle::base(
+                kaki,
+                (*attr).to_string(),
+                value.clone(),
+                now,
+            ));
         }
 
         (kaki, particles)
@@ -123,7 +143,11 @@ mod tests {
     fn no_extra_fields_for_a_kind_with_no_parser() {
         let m = minter();
         let (_, particles) = TabletEmitter::new(&m).emit(&way_profile());
-        assert_eq!(particles.len(), 3, "way.path/bytes/sha256 only -- no fabricated extras");
+        assert_eq!(
+            particles.len(),
+            3,
+            "way.path/bytes/sha256 only -- no fabricated extras"
+        );
     }
 
     #[test]

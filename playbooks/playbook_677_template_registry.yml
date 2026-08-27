@@ -1,0 +1,156 @@
+---
+# PB-412 · Template registry · a visual pattern becomes a particle in EnkiMDB·7006
+# GL-AGT-001 §6 (duplication refused) · §7 (a template is a particle) · GL-STW-001 §3 (the Golden crossing)
+- name: PB-412 mint a visual pattern as a template, or refuse it as a duplicate
+  hosts: girsu
+  vars:
+    bahyway_provides: ["tribe:mdb.template", "rite:template_mint"]
+    bahyway_requires: ["law:GL-AGT-001", "law:GL-STW-001", "law:EN-MDB-001"]
+    mdb_port: 7006
+    reg: "{{ ansible_env.HOME }}/bahyway/templates"
+    candidate: "{{ tpl | default('') }}"          # -e tpl=/path/to/pattern.json
+    near_threshold: 0.90
+  tasks:
+    - name: Ensure the registry
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0750"}
+      loop: ["{{ reg }}", "{{ reg }}/canonical", "{{ reg }}/receipts"]
+
+    - name: Gate T0 · a candidate was named
+      ansible.builtin.assert:
+        that:
+          - candidate | length > 0
+        fail_msg: "pass -e tpl=/path/to/pattern.json"
+
+    - name: Canonicalise — identity is the pattern, never its cosmetics (§6)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, hashlib, pathlib
+        src = json.load(open("{{ candidate }}"))
+        COSMETIC = {"colour","color","size","label","labels","speed","camera","tone","alpha","font","caption"}
+        def canon(o):
+            if isinstance(o, dict):
+                return {k: canon(v) for k, v in sorted(o.items()) if k not in COSMETIC}
+            if isinstance(o, list):
+                return [canon(v) for v in o]
+            if isinstance(o, float):
+                return round(o, 6)          # a pattern is not distinguished by float noise
+            return o
+        c = canon(src)
+        blob = json.dumps(c, sort_keys=True, separators=(",", ":")).encode()
+        digest = hashlib.blake2b(blob, digest_size=32).hexdigest()
+        sig = {"mode": c.get("mode"), "units": sorted(c.get("units", [])),
+               "strata": sorted(c.get("strata", [])), "b0": c.get("b0"), "b1": c.get("b1")}
+        out = {"canonical": c, "digest": digest, "signature": sig,
+               "engine": src.get("engine"), "name": src.get("name")}
+        pathlib.Path("{{ reg }}/canonical/_candidate.json").write_text(json.dumps(out, indent=2))
+        print("digest", digest)
+        print("signature", json.dumps(sig))
+        PY
+      register: canon
+      changed_when: false
+
+    - name: Gate T1 · EXACT duplicate — refuse the mint and return the existing KAKI (MEASURED)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib, sys
+        cand = json.load(open("{{ reg }}/canonical/_candidate.json"))
+        for f in pathlib.Path("{{ reg }}/canonical").glob("tpl_*.json"):
+            t = json.load(open(f))
+            if t["digest"] == cand["digest"]:
+                print("DUPLICATE - this pattern already exists")
+                print("existing KAKI:", t.get("kaki"), "· engine:", t.get("engine"), "· name:", t.get("name"))
+                print("no new template is minted; use the existing particle (GL-AGT-001 §6)")
+                sys.exit(2)
+        print("T1 green - no exact duplicate in the registry")
+        PY
+      register: t1
+      changed_when: false
+      failed_when: t1.rc not in [0, 2]
+
+    - name: Stop here when the pattern already exists
+      ansible.builtin.meta: end_play
+      when: t1.rc == 2
+
+    - name: Gate T2 · NEAR duplicate — the watcher may raise it, never resolve it (DERIVED)
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib
+        cand = json.load(open("{{ reg }}/canonical/_candidate.json"))
+        cs = cand["signature"]
+        def sim(a, b):
+            score, total = 0, 0
+            for k in ("mode", "b0", "b1"):
+                total += 1; score += 1 if a.get(k) == b.get(k) else 0
+            for k in ("units", "strata"):
+                total += 1
+                A, B = set(a.get(k) or []), set(b.get(k) or [])
+                score += (len(A & B) / len(A | B)) if (A | B) else 1
+            return score / total
+        near = []
+        for f in pathlib.Path("{{ reg }}/canonical").glob("tpl_*.json"):
+            t = json.load(open(f))
+            s = sim(cs, t["signature"])
+            if s >= {{ near_threshold }}:
+                near.append((round(s, 3), t.get("kaki"), t.get("engine"), t.get("name")))
+        for n in sorted(near, reverse=True):
+            print("NEAR", n[0], n[1], n[2], n[3])
+        print(f"{len(near)} candidate duplicate(s) - DERIVED, so a steward disposes of them, not the watcher")
+        json.dump(near, open("{{ reg }}/_near.json", "w"))
+        PY
+      register: t2
+      changed_when: false
+
+    - name: Present the near-duplicates to the steward rather than deciding
+      ansible.builtin.debug:
+        msg: >
+          {{ t2.stdout_lines }}
+          - a near duplicate is DERIVED. The watcher raises it; a steward decides whether it is
+          the same pattern wearing different parameters (GL-AGT-001 §6).
+
+    - name: Gate T3 · the Golden crossing needs two witnesses and a sealed clause (GL-STW-001 §3)
+      ansible.builtin.assert:
+        that:
+          - (witnesses | default([]) | length) >= 2
+          - (clause | default('')) | length > 0
+        fail_msg: >
+          EnkiMDB·7006 is in the Golden Store. Minting a template crosses the line:
+          pass -e '{"witnesses":["steward:a","steward:b"],"clause":"GL-AGT-001 §7"}'
+
+    - name: Mint the template as a particle with a KAKI v4.0 identity (§7)
+      ansible.builtin.command: >
+        bahyway-enkidb orbit --db EnkiMDB --port {{ mdb_port }}
+        --tribe mdb.template --kaki-type TEMPLATE
+        --from {{ reg }}/canonical/_candidate.json
+        --witnesses "{{ (witnesses | default([])) | join(',') }}" --clause "{{ clause | default('') }}"
+        --seal-required
+      register: mint
+      changed_when: "'ORBITED' in mint.stdout | default('')"
+
+    - name: File the canonical form under its new KAKI
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib, re
+        cand = json.load(open("{{ reg }}/canonical/_candidate.json"))
+        out = """{{ mint.stdout | default('') }}"""
+        m = re.search(r"KAKI\s+([0-9a-f·]+)", out)
+        cand["kaki"] = m.group(1) if m else "UNKNOWN"
+        cand["superseded_by"] = None
+        cand["cites_prior"] = {{ cites | default('null') | to_json }}
+        p = pathlib.Path("{{ reg }}/canonical") / ("tpl_" + cand["digest"][:16] + ".json")
+        p.write_text(json.dumps(cand, indent=2))
+        print("filed", p.name, "as", cand["kaki"])
+        PY
+      changed_when: true
+
+    - name: Gate T4 · the new template is reachable from HeptaScript (§7)
+      ansible.builtin.command: >
+        bahyway-enkidb present --db EnkiMDB --port {{ mdb_port }}
+        --tribe mdb.template --where "digest = {{ (canon.stdout_lines[0] | default('digest x')).split(' ')[1] }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-412 template minted in EnkiMDB.7006 as a particle - exact duplication refused, near duplicates raised to a steward"

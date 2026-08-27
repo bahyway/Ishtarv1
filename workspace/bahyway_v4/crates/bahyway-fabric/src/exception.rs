@@ -33,14 +33,14 @@ pub enum ExceptionKind {
 /// visible in Dubsar, and routable to any configured exception handler.
 #[derive(Debug, Clone)]
 pub struct FabricException {
-    pub kind:       ExceptionKind,
-    pub source_id:  Option<SourceId>,
-    pub stage:      &'static str,
-    pub message:    String,
+    pub kind: ExceptionKind,
+    pub source_id: Option<SourceId>,
+    pub stage: &'static str,
+    pub message: String,
     /// The raw record that triggered this exception (may be empty on extraction errors).
-    pub payload:    Vec<(u32, Vec<u8>)>,
+    pub payload: Vec<(u32, Vec<u8>)>,
     /// Monotonic epoch at the time of the exception.
-    pub epoch:      u32,
+    pub epoch: u32,
 }
 
 impl FabricException {
@@ -94,11 +94,7 @@ impl FabricException {
         }
     }
 
-    pub fn delivery_failure(
-        stage: &'static str,
-        message: impl Into<String>,
-        epoch: u32,
-    ) -> Self {
+    pub fn delivery_failure(stage: &'static str, message: impl Into<String>, epoch: u32) -> Self {
         FabricException {
             kind: ExceptionKind::DeliveryFailure,
             source_id: None,
@@ -109,11 +105,7 @@ impl FabricException {
         }
     }
 
-    pub fn extraction_error(
-        source_id: SourceId,
-        message: impl Into<String>,
-        epoch: u32,
-    ) -> Self {
+    pub fn extraction_error(source_id: SourceId, message: impl Into<String>, epoch: u32) -> Self {
         FabricException {
             kind: ExceptionKind::ExtractionError,
             source_id: Some(source_id),
@@ -127,7 +119,11 @@ impl FabricException {
 
 impl std::fmt::Display for FabricException {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{:?}] stage={} epoch={} — {}", self.kind, self.stage, self.epoch, self.message)
+        write!(
+            f,
+            "[{:?}] stage={} epoch={} — {}",
+            self.kind, self.stage, self.epoch, self.message
+        )
     }
 }
 
@@ -139,7 +135,10 @@ mod tests {
     #[test]
     fn schema_violation_has_correct_kind() {
         let ex = FabricException::schema_violation(
-            SourceId("erp.test"), "validation", "field X unknown", 1
+            SourceId("erp.test"),
+            "validation",
+            "field X unknown",
+            1,
         );
         assert_eq!(ex.kind, ExceptionKind::SchemaViolation);
         assert_eq!(ex.epoch, 1);
@@ -147,9 +146,7 @@ mod tests {
 
     #[test]
     fn quality_rejection_encodes_b11() {
-        let ex = FabricException::quality_rejection(
-            SourceId("crm.test"), 55, 60, vec![], 7
-        );
+        let ex = FabricException::quality_rejection(SourceId("crm.test"), 55, 60, vec![], 7);
         assert!(ex.message.contains("B11=55"));
         assert!(ex.message.contains("60"));
     }

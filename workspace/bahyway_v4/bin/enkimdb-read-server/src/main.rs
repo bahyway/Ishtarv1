@@ -59,7 +59,10 @@ fn data_dir() -> PathBuf {
     PathBuf::from(env::var("DATA_DIR").unwrap_or_else(|_| "/data".to_string()))
 }
 fn reload_secs() -> u64 {
-    env::var("RELOAD_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(30)
+    env::var("RELOAD_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30)
 }
 
 struct Live {
@@ -81,12 +84,16 @@ fn main() {
 
     let data_dir = data_dir();
     let reload_secs = reload_secs();
-    let state: Arc<RwLock<Option<Arc<Live>>>> = Arc::new(RwLock::new(try_load(&data_dir).map(Arc::new)));
+    let state: Arc<RwLock<Option<Arc<Live>>>> =
+        Arc::new(RwLock::new(try_load(&data_dir).map(Arc::new)));
 
     {
         let ready = state.read().unwrap().is_some();
         eprintln!("  data_dir = {}", data_dir.display());
-        eprintln!("  initial state: {}", if ready { "loaded" } else { "not ready yet" });
+        eprintln!(
+            "  initial state: {}",
+            if ready { "loaded" } else { "not ready yet" }
+        );
     }
 
     {
@@ -113,7 +120,10 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(s) => {
-                let peer = s.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "?".into());
+                let peer = s
+                    .peer_addr()
+                    .map(|a| a.to_string())
+                    .unwrap_or_else(|_| "?".into());
                 let state = Arc::clone(&state);
                 thread::spawn(move || {
                     if let Err(e) = handle(s, &state) {
@@ -133,7 +143,10 @@ fn handle(mut stream: TcpStream, state: &RwLock<Option<Arc<Live>>>) -> io::Resul
     let src = read_frame(&mut stream)?;
     let live = state.read().unwrap_or_else(|e| e.into_inner()).clone();
     let Some(live) = live else {
-        return send_error(&mut stream, "not ready -- Data Files not synced from the Write Node yet");
+        return send_error(
+            &mut stream,
+            "not ready -- Data Files not synced from the Write Node yet",
+        );
     };
 
     if let Some(query) = src.strip_prefix("QUERY:") {
@@ -167,7 +180,10 @@ fn handle(mut stream: TcpStream, state: &RwLock<Option<Arc<Live>>>) -> io::Resul
         };
     }
 
-    send_error(&mut stream, "unrecognized request -- use QUERY:<heptascript> or TRIBES:<heptascript>")
+    send_error(
+        &mut stream,
+        "unrecognized request -- use QUERY:<heptascript> or TRIBES:<heptascript>",
+    )
 }
 
 // ── Binary encoding -- identical layout to enkidb-read-server's own ──
@@ -335,7 +351,6 @@ fn encode_gravity_key(buf: &mut Vec<u8>, key: &heptascript::GravityKey) {
     }
 }
 
-
 fn encode_short_string(buf: &mut Vec<u8>, s: &str) {
     let bytes = &s.as_bytes()[..s.len().min(255)];
     buf.push(bytes.len() as u8);
@@ -357,7 +372,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

@@ -27,18 +27,18 @@ impl IoJoinType {
     pub fn viscosity(self) -> f32 {
         match self {
             IoJoinType::NestedLoop => 0.8,
-            IoJoinType::HashJoin   => 0.1,
-            IoJoinType::MergeJoin  => 0.15,
-            IoJoinType::CrossJoin  => 1.0,
+            IoJoinType::HashJoin => 0.1,
+            IoJoinType::MergeJoin => 0.15,
+            IoJoinType::CrossJoin => 1.0,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
             IoJoinType::NestedLoop => "NestedLoop",
-            IoJoinType::HashJoin   => "HashJoin",
-            IoJoinType::MergeJoin  => "MergeJoin",
-            IoJoinType::CrossJoin  => "CrossJoin",
+            IoJoinType::HashJoin => "HashJoin",
+            IoJoinType::MergeJoin => "MergeJoin",
+            IoJoinType::CrossJoin => "CrossJoin",
         }
     }
 }
@@ -48,13 +48,13 @@ impl IoJoinType {
 /// Physical cost metrics for one join operation.
 #[derive(Debug, Clone)]
 pub struct JoinCostMetrics {
-    pub join_type:      IoJoinType,
-    pub outer_rows:     u64,
-    pub inner_rows:     u64,
-    pub logical_reads:  u64,
+    pub join_type: IoJoinType,
+    pub outer_rows: u64,
+    pub inner_rows: u64,
+    pub logical_reads: u64,
     pub physical_reads: u64,
     pub cpu_operations: u64,
-    pub execution_ms:   f32,
+    pub execution_ms: f32,
 }
 
 impl JoinCostMetrics {
@@ -63,35 +63,37 @@ impl JoinCostMetrics {
         let (logical, physical, cpu, ms) = match join_type {
             IoJoinType::NestedLoop => {
                 // O(n²) — each outer row probes full inner
-                let ops   = outer_rows.saturating_mul(inner_rows);
+                let ops = outer_rows.saturating_mul(inner_rows);
                 let reads = (outer_rows * 100 + inner_rows * outer_rows / 10).min(1_000_000);
                 (reads, reads / 10, ops, ops as f32 / 500_000.0 * 1000.0)
             }
             IoJoinType::HashJoin => {
                 // O(n+m) — build + probe once
-                let ops   = outer_rows + inner_rows;
+                let ops = outer_rows + inner_rows;
                 let reads = (outer_rows + inner_rows) * 2;
                 (reads, 0, ops, ops as f32 / 5_000_000.0 * 1000.0)
             }
             IoJoinType::MergeJoin => {
                 // O(n+m) when sorted, O(n log n) if sort needed
-                let ops   = outer_rows + inner_rows;
+                let ops = outer_rows + inner_rows;
                 let reads = (outer_rows + inner_rows) * 3;
                 (reads, 0, ops, ops as f32 / 4_000_000.0 * 1000.0)
             }
             IoJoinType::CrossJoin => {
                 // O(n×m) — pure cartesian product
-                let ops   = outer_rows.saturating_mul(inner_rows);
+                let ops = outer_rows.saturating_mul(inner_rows);
                 let reads = ops;
                 (reads, reads, ops, ops as f32 / 100_000.0 * 1000.0)
             }
         };
         JoinCostMetrics {
-            join_type, outer_rows, inner_rows,
-            logical_reads:  logical,
+            join_type,
+            outer_rows,
+            inner_rows,
+            logical_reads: logical,
             physical_reads: physical,
             cpu_operations: cpu,
-            execution_ms:   ms.min(99_999.0),
+            execution_ms: ms.min(99_999.0),
         }
     }
 
@@ -111,7 +113,7 @@ impl JoinCostMetrics {
 #[derive(Debug, Clone)]
 pub struct IoAnalysis {
     /// Current (legacy) join cost metrics
-    pub legacy_cost:    JoinCostMetrics,
+    pub legacy_cost: JoinCostMetrics,
     /// Optimal (sovereign) join cost metrics
     pub sovereign_cost: JoinCostMetrics,
     /// The recommended join type
@@ -134,20 +136,19 @@ pub struct IoAnalyser;
 
 impl IoAnalyser {
     pub fn analyse(
-        legacy_join:  IoJoinType,
-        outer_rows:   u64,
-        inner_rows:   u64,
+        legacy_join: IoJoinType,
+        outer_rows: u64,
+        inner_rows: u64,
         estimated_rows_when_plan_compiled: u64,
     ) -> IoAnalysis {
         let legacy_cost = JoinCostMetrics::compute(legacy_join, outer_rows, inner_rows);
 
         let recommended_join = recommend_join(outer_rows, inner_rows);
-        let sovereign_cost   = JoinCostMetrics::compute(recommended_join, outer_rows, inner_rows);
+        let sovereign_cost = JoinCostMetrics::compute(recommended_join, outer_rows, inner_rows);
 
         let speedup_factor = sovereign_cost.speedup_vs(&legacy_cost);
         let read_reduction_pct = if legacy_cost.logical_reads > 0 {
-            (1.0 - sovereign_cost.logical_reads as f32
-                / legacy_cost.logical_reads as f32) * 100.0
+            (1.0 - sovereign_cost.logical_reads as f32 / legacy_cost.logical_reads as f32) * 100.0
         } else {
             0.0
         };
@@ -157,12 +158,15 @@ impl IoAnalyser {
                 "Optimizer estimated {} row(s) from statistics. \
                  Nested Loop is optimal for tiny outer inputs. \
                  But actual rows were {} — making this O({} × {}) = {:.0} operations.",
-                estimated_rows_when_plan_compiled, outer_rows,
-                outer_rows, inner_rows,
+                estimated_rows_when_plan_compiled,
+                outer_rows,
+                outer_rows,
+                inner_rows,
                 outer_rows as f64 * inner_rows as f64
             ),
             IoJoinType::CrossJoin => "CROSS JOIN has no join condition — \
-                accidental cartesian product.".into(),
+                accidental cartesian product."
+                .into(),
             _ => "Join type may be suboptimal for this data volume.".into(),
         };
 
@@ -171,26 +175,31 @@ impl IoAnalyser {
                 "Hash Join reads each table ONCE: {} + {} = {} rows. \
                  Builds a hash table on smaller input, probes once per outer row. \
                  Logical reads: {} vs {} — {:.0}× reduction.",
-                outer_rows, inner_rows, outer_rows + inner_rows,
-                sovereign_cost.logical_reads, legacy_cost.logical_reads,
+                outer_rows,
+                inner_rows,
+                outer_rows + inner_rows,
+                sovereign_cost.logical_reads,
+                legacy_cost.logical_reads,
                 speedup_factor
             ),
             IoJoinType::MergeJoin => "Merge Join on sorted inputs is O(n+m) \
-                with minimal memory overhead.".into(),
+                with minimal memory overhead."
+                .into(),
             _ => "Recommended join reduces IO for this data volume.".into(),
         };
 
         let akkadi_rule = match (legacy_join, recommended_join) {
             (IoJoinType::NestedLoop, IoJoinType::HashJoin) => "loop_to_hash",
-            (IoJoinType::CrossJoin, _)                     => "cross_join_elim",
-            _                                              => "join_reorder",
-        }.to_string();
+            (IoJoinType::CrossJoin, _) => "cross_join_elim",
+            _ => "join_reorder",
+        }
+        .to_string();
 
         // ColorID: viscosity
         let viscosity = legacy_join.viscosity();
-        let red   = (viscosity * 220.0) as u8;
+        let red = (viscosity * 220.0) as u8;
         let green = ((1.0 - viscosity) * 200.0 + 30.0) as u8;
-        let blue  = ((1.0 - viscosity) * 200.0 + 30.0) as u8;
+        let blue = ((1.0 - viscosity) * 200.0 + 30.0) as u8;
 
         IoAnalysis {
             legacy_cost,
@@ -199,7 +208,7 @@ impl IoAnalyser {
             speedup_factor,
             read_reduction_pct,
             why_legacy_was_chosen: why_legacy,
-            why_sovereign_wins:    why_sovereign,
+            why_sovereign_wins: why_sovereign,
             akkadi_rule,
             color_contribution: ColorId::new(red, green, blue),
         }
@@ -222,11 +231,11 @@ impl IoAnalyser {
 fn recommend_join(outer: u64, inner: u64) -> IoJoinType {
     let total = outer + inner;
     if outer < 100 {
-        IoJoinType::NestedLoop  // tiny outer — nested loop is fine
+        IoJoinType::NestedLoop // tiny outer — nested loop is fine
     } else if total > 10_000 {
-        IoJoinType::HashJoin    // large inputs — hash join
+        IoJoinType::HashJoin // large inputs — hash join
     } else {
-        IoJoinType::MergeJoin   // medium — merge join if sorted
+        IoJoinType::MergeJoin // medium — merge join if sorted
     }
 }
 
@@ -247,8 +256,8 @@ mod tests {
 
     #[test]
     fn hash_join_far_fewer_reads_than_nested_loop() {
-        let nl   = JoinCostMetrics::compute(IoJoinType::NestedLoop, 6069, 6069);
-        let hash = JoinCostMetrics::compute(IoJoinType::HashJoin,   6069, 6069);
+        let nl = JoinCostMetrics::compute(IoJoinType::NestedLoop, 6069, 6069);
+        let hash = JoinCostMetrics::compute(IoJoinType::HashJoin, 6069, 6069);
         assert!(
             hash.logical_reads < nl.logical_reads / 10,
             "hash join reads should be >10× fewer than nested loop"

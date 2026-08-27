@@ -4,9 +4,9 @@
 //! Every lifecycle state change emits a NaruduEvent.  Consumers subscribe
 //! to the event stream to react to pattern changes (NARUDU-001).
 
-use enkidb_kaki::Kaki;
 use crate::nash::NashState;
 use crate::tier::PatternRecord;
+use enkidb_kaki::Kaki;
 
 /// The five NARUDU-PATTERN event kinds.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,11 +26,11 @@ pub enum NaruduEventKind {
 impl NaruduEventKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            NaruduEventKind::Published          => "Published",
-            NaruduEventKind::NashShift          => "NashShift",
-            NaruduEventKind::Deprecated         => "Deprecated",
+            NaruduEventKind::Published => "Published",
+            NaruduEventKind::NashShift => "NashShift",
+            NaruduEventKind::Deprecated => "Deprecated",
             NaruduEventKind::SimulationComplete => "SimulationComplete",
-            NaruduEventKind::StewardDecision    => "StewardDecision",
+            NaruduEventKind::StewardDecision => "StewardDecision",
         }
     }
 }
@@ -60,30 +60,30 @@ impl NaruduEvent {
     pub fn published(record: &PatternRecord) -> Self {
         Self {
             pattern_kaki: record.pattern_kaki,
-            kind:         NaruduEventKind::Published,
-            orbital:      record.orbital_published,
+            kind: NaruduEventKind::Published,
+            orbital: record.orbital_published,
             nash_snapshot: None,
-            detail:       "pattern-kaki minted and registered",
+            detail: "pattern-kaki minted and registered",
         }
     }
 
     pub fn nash_shift(pattern_kaki: Kaki, nash: NashState, orbital: u64) -> Self {
         Self {
             pattern_kaki,
-            kind:         NaruduEventKind::NashShift,
+            kind: NaruduEventKind::NashShift,
             orbital,
             nash_snapshot: Some(nash),
-            detail:       "Nash equilibrium score changed",
+            detail: "Nash equilibrium score changed",
         }
     }
 
     pub fn deprecated(pattern_kaki: Kaki, orbital: u64, reason: &'static str) -> Self {
         Self {
             pattern_kaki,
-            kind:         NaruduEventKind::Deprecated,
+            kind: NaruduEventKind::Deprecated,
             orbital,
             nash_snapshot: None,
-            detail:       reason,
+            detail: reason,
         }
     }
 }
@@ -95,7 +95,11 @@ mod tests {
 
     fn sample_record() -> PatternRecord {
         let k = derive_pattern_kaki(
-            PatternType::CrowdFlow, FixedCoord7D::zero(), [0u8; 32], 8_500, 10,
+            PatternType::CrowdFlow,
+            FixedCoord7D::zero(),
+            [0u8; 32],
+            8_500,
+            10,
         );
         PatternRecord {
             pattern_kaki: k,
@@ -122,7 +126,12 @@ mod tests {
     #[test]
     fn nash_shift_captures_state() {
         let rec = sample_record();
-        let nash = NashState { equilibrium_score: 0.70, anarchy_score: 1.2, deviation_count: 15, computed_at_orbital: 50 };
+        let nash = NashState {
+            equilibrium_score: 0.70,
+            anarchy_score: 1.2,
+            deviation_count: 15,
+            computed_at_orbital: 50,
+        };
         let ev = NaruduEvent::nash_shift(rec.pattern_kaki, nash, 50);
         assert_eq!(ev.kind, NaruduEventKind::NashShift);
         assert!(ev.nash_snapshot.is_some());

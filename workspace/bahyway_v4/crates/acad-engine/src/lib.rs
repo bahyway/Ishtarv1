@@ -4,13 +4,33 @@
 pub mod render;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Sector { Apsu, Adad, Shedu, Mummu, Enkidu, Dubsar, Enlil }
+pub enum Sector {
+    Apsu,
+    Adad,
+    Shedu,
+    Mummu,
+    Enkidu,
+    Dubsar,
+    Enlil,
+}
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Category { Engine, Structure, Era, Artifact, Pattern, Calculus, Law }
+pub enum Category {
+    Engine,
+    Structure,
+    Era,
+    Artifact,
+    Pattern,
+    Calculus,
+    Law,
+}
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub enum SiteDomain { Bahyway, Heptascript, Beemdm }
+pub enum SiteDomain {
+    Bahyway,
+    Heptascript,
+    Beemdm,
+}
 
 impl SiteDomain {
     pub fn host(self) -> &'static str {
@@ -68,15 +88,19 @@ impl Lecture {
             _ => {}
         }
         for d in &self.declared_domains {
-            if !t.contains(d) { t.push(*d); }
+            if !t.contains(d) {
+                t.push(*d);
+            }
         }
         t
     }
 
     pub fn path(&self) -> String {
-        format!("{:?}/{:?}/{}/{}.html",
-            self.sector, self.category, self.era, self.kaki_hex)
-            .to_lowercase()
+        format!(
+            "{:?}/{:?}/{}/{}.html",
+            self.sector, self.category, self.era, self.kaki_hex
+        )
+        .to_lowercase()
     }
 
     /// Canonical URL -- one scholarly identity across faces.

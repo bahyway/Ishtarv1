@@ -3,13 +3,20 @@
 # NVMe zones: OS/IDEs | Forge subvolume (snapshotted) | VM storage (nodatacow +
 # LVM pool for raw data disks). Place data by what kind of truth it holds.
 - name: PB-319 | Host storage layout
-  hosts: host_forge
+  hosts: uruk
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
   tasks:
     - name: Forge as Btrfs subvolume (idempotent)
       ansible.builtin.command: btrfs subvolume create {{ forge_subvol }}
       args: { creates: "{{ forge_subvol }}" }
 
+    # 2026-08-23, found live: these copy tasks get simulated (not really
+    # written) under --check, so "enable" below -- a real systemd module
+    # call regardless of check mode -- correctly can't find a unit file
+    # check mode never actually wrote. check_mode: false on both so
+    # PB-609's check-then-live gate can ever reach this playbook's live phase.
     - name: Forge snapshot timer (daily, keep 14)
       ansible.builtin.copy:
         dest: /etc/systemd/system/forge-snap.service
@@ -17,6 +24,7 @@
           [Service]
           Type=oneshot
           ExecStart=/bin/sh -c 'btrfs subvolume snapshot -r {{ forge_subvol }} {{ forge_subvol }}_snaps/$(date +%%F) && ls -1d {{ forge_subvol }}_snaps/* | head -n -14 | xargs -r btrfs subvolume delete'
+      check_mode: false
     - ansible.builtin.copy:
         dest: /etc/systemd/system/forge-snap.timer
         content: |
@@ -26,6 +34,7 @@
           [Install]
           WantedBy=timers.target
       name: timer
+      check_mode: false
     - ansible.builtin.file: { path: "{{ forge_subvol }}_snaps", state: directory }
       name: snaps dir
     - ansible.builtin.systemd: { name: forge-snap.timer, enabled: true, state: started, daemon_reload: true }
@@ -37,10 +46,60 @@
       name: chattr +C (applies to NEW files only — recreate existing images!)
       failed_when: false
 
+    # 2026-08-24, Architect's decision (see host_pv's own comment in
+    # inventories/uruk/group_vars/all.yml): no free NVMe partition exists
+    # for bahyvg, so it's backed by a preallocated file inside the
+    # existing Btrfs free space instead of a raw partition -- these three
+    # tasks build and attach that, safely and idempotently (none of them
+    # touch the live root/home partition). The confirm_pv gate stays on
+    # just the vgcreate step below, unchanged from its original doctrine.
+    # check_mode: false on all three of these (same reason as forge-snap
+    # above): a --check dry-run must leave a REAL directory + REAL backing
+    # file behind so the copy/systemd tasks that follow (also forced real
+    # for the same reason) have something real to attach to, otherwise
+    # --check itself fails and PB-609 never reaches this playbook's live
+    # phase at all.
+    - name: "Ensure {{ bahyway_root }} exists (for the bahyvg backing file)"
+      ansible.builtin.file: { path: "{{ bahyway_root }}", state: directory, mode: "0755" }
+      check_mode: false
+
+    - name: "Preallocate the bahyvg backing file ({{ bahyvg_size }}, idempotent)"
+      ansible.builtin.command: fallocate -l {{ bahyvg_size }} {{ bahyvg_backing_file }}
+      args: { creates: "{{ bahyvg_backing_file }}" }
+      check_mode: false
+
+    - name: "Restrict bahyvg backing file permissions"
+      ansible.builtin.file: { path: "{{ bahyvg_backing_file }}", mode: "0600" }
+      check_mode: false
+
+    - name: "Install bahyvg-loop.service (attaches {{ bahyvg_backing_file }} to {{ host_pv }} at every boot, before LVM scans for PVs)"
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/bahyvg-loop.service
+        content: |
+          [Unit]
+          Description=Attach bahyvg loop device (BahyWay.Ecosystem v4.0 VM storage backing file)
+          DefaultDependencies=no
+          After=home.mount local-fs.target
+          Before=lvm2-activation-early.service lvm2-activation.service
+          Requires=home.mount
+
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/usr/sbin/losetup {{ host_pv }} {{ bahyvg_backing_file }}
+          ExecStop=/usr/sbin/losetup -d {{ host_pv }}
+
+          [Install]
+          WantedBy=local-fs.target
+      check_mode: false
+
+    - name: "Enable + start bahyvg-loop.service now (attaches {{ host_pv }} immediately, not just on next boot)"
+      ansible.builtin.systemd: { name: bahyvg-loop.service, enabled: true, state: started, daemon_reload: true }
+
     - name: SAFETY | LVM pool for raw VM data disks — explicit confirm
       ansible.builtin.assert:
         that: confirm_pv | default(false) | bool
-        fail_msg: "Run with -e confirm_pv=true only after verifying host_pv={{ host_pv }} is FREE."
+        fail_msg: "Run with -e confirm_pv=true only after verifying host_pv={{ host_pv }} is FREE (run `losetup -a` first -- it should be freshly attached to bahyvg_backing_file with nothing on it yet)."
     - name: Create VG for VM data disks
       ansible.builtin.command: vgcreate {{ host_vg }} {{ host_pv }}
       args: { creates: "/dev/{{ host_vg }}" }

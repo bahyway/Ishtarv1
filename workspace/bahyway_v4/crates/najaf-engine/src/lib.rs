@@ -12,24 +12,26 @@
 //! Zero external dependencies.
 
 pub mod error;
-pub mod sector;
 pub mod grave;
+pub mod guide;
 pub mod identity;
 pub mod search;
+pub mod sector;
 pub mod seed;
-pub mod guide;
 pub mod topology;
 
 pub use error::{NajafError, NajafResult};
-pub use sector::NajafSector;
-pub use grave::{GraveCondition, DiscoverySource, GraveId, GraveParticle, GraveState, QUALITY_DIVISOR};
+pub use grave::{
+    DiscoverySource, GraveCondition, GraveId, GraveParticle, GraveState, QUALITY_DIVISOR,
+};
+pub use guide::{PilgrimGuide, PilgrimRoute, BLESSED_COST_THRESHOLD};
 pub use identity::{IdentityCandidate, InscriptionMatcher};
 pub use search::GraveRegistry;
+pub use sector::NajafSector;
 pub use seed::{cemetery_nav_graph, cemetery_nav_map, seven_grave_registry};
-pub use guide::{BLESSED_COST_THRESHOLD, PilgrimGuide, PilgrimRoute};
 pub use topology::{
-    SimplicialComplex, SimplexEdge, StackOrder, DiscoveryEntry,
-    is_particle_in_complex, resolve_stack, reconstruct_ghost, infer_pipeline,
+    infer_pipeline, is_particle_in_complex, reconstruct_ghost, resolve_stack, DiscoveryEntry,
+    SimplexEdge, SimplicialComplex, StackOrder,
 };
 
 // Re-export NaviEngine types needed by consumers of NajafEngine.
@@ -38,9 +40,9 @@ pub use navi_engine::{NaviCoord, NaviGraph, SensorEvent, SensorFeed};
 // ── Crate constants ───────────────────────────────────────────────────────────
 
 pub const NAJAF_ENGINE_VERSION: &str = "4.0.0";
-pub const NAJAF_SECTORS:        usize = 7;
-pub const WADI_AL_SALAM_LAT:    f32   = 31.995;
-pub const WADI_AL_SALAM_LON:    f32   = 44.320;
+pub const NAJAF_SECTORS: usize = 7;
+pub const WADI_AL_SALAM_LAT: f32 = 31.995;
+pub const WADI_AL_SALAM_LON: f32 = 44.320;
 
 #[cfg(test)]
 mod tests {
@@ -48,10 +50,14 @@ mod tests {
     use navi_engine::SensorEvent;
 
     #[test]
-    fn version_is_4_0_0() { assert_eq!(NAJAF_ENGINE_VERSION, "4.0.0"); }
+    fn version_is_4_0_0() {
+        assert_eq!(NAJAF_ENGINE_VERSION, "4.0.0");
+    }
 
     #[test]
-    fn sectors_constant_is_7() { assert_eq!(NAJAF_SECTORS, 7); }
+    fn sectors_constant_is_7() {
+        assert_eq!(NAJAF_SECTORS, 7);
+    }
 
     #[test]
     fn wadi_coordinates_in_najaf_area() {
@@ -62,8 +68,8 @@ mod tests {
 
     #[test]
     fn full_pipeline_entrance_to_anbiya() {
-        let g    = cemetery_nav_graph();
-        let r    = seven_grave_registry();
+        let g = cemetery_nav_graph();
+        let r = seven_grave_registry();
         let guide = PilgrimGuide::new(&g, &r);
         // Grave 107 = Anbiya sector
         let route = guide.guide_to_grave(1, 107).expect("entrance → Anbiya");
@@ -74,7 +80,7 @@ mod tests {
     #[test]
     fn sensor_disruption_reroutes() {
         let mut g = cemetery_nav_graph();
-        let r     = seven_grave_registry();
+        let r = seven_grave_registry();
         // Block node 3 (NorthEast/Awliya route) — must reroute
         SensorFeed::apply(&mut g, SensorEvent::RoadClosure { node_id: 3 }).unwrap();
         let guide = PilgrimGuide::new(&g, &r);

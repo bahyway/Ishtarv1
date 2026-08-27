@@ -1,9 +1,9 @@
 //! ea_commands.rs — EaAgent quick commands for instant math results.
 #![forbid(unsafe_code)]
 
-use ea_agent_algebra::AlgebraSolver;
-use ea_agent_core::{HeptaVector, constants::HEPTA_WEIGHTS};
 use ea_agent_algebra::solver::Equation;
+use ea_agent_algebra::AlgebraSolver;
+use ea_agent_core::{constants::HEPTA_WEIGHTS, HeptaVector};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EaCommand {
@@ -28,24 +28,26 @@ pub enum EaCommand {
 
 pub fn parse_ea_command(msg: &str) -> Option<EaCommand> {
     let msg = msg.trim();
-    if !msg.starts_with('!') { return None; }
+    if !msg.starts_with('!') {
+        return None;
+    }
     let parts: Vec<&str> = msg[1..].splitn(2, ' ').collect();
     let cmd = parts[0].to_lowercase();
     let arg = parts.get(1).map(|s| s.trim().to_string());
 
     Some(match cmd.as_str() {
-        "pauli"   => EaCommand::Pauli,
-        "jordan"  => EaCommand::Jordan,
+        "pauli" => EaCommand::Pauli,
+        "jordan" => EaCommand::Jordan,
         "harmony" => EaCommand::Harmony,
-        "solve"   => EaCommand::Solve(arg.unwrap_or_default()),
-        "b11"     => EaCommand::B11(arg.unwrap_or_default()),
-        "hepta"   => EaCommand::Hepta,
-        "laws"    => EaCommand::Laws,
-        "help"    => EaCommand::Help,
-        "status"  => EaCommand::Status,
-        "clear"   => EaCommand::Clear,
+        "solve" => EaCommand::Solve(arg.unwrap_or_default()),
+        "b11" => EaCommand::B11(arg.unwrap_or_default()),
+        "hepta" => EaCommand::Hepta,
+        "laws" => EaCommand::Laws,
+        "help" => EaCommand::Help,
+        "status" => EaCommand::Status,
+        "clear" => EaCommand::Clear,
         "enkiddb" => EaCommand::Enkiddb(arg.unwrap_or_default()),
-        other     => EaCommand::Unknown(other.to_string()),
+        other => EaCommand::Unknown(other.to_string()),
     })
 }
 
@@ -90,24 +92,41 @@ fn solve_expression(expr: &str) -> String {
     format!("𒂗𒆠 EaAgent cannot parse: \"{expr}\"\n\nSupported forms:\n  !solve ax + b      (linear)\n  !solve ax^2+bx+c   (quadratic)\n  !solve ax^3+bx^2+cx+d (cubic)\n\nFor complex expressions, ask EaAgent in natural language.")
 }
 
-fn try_parse_linear(expr: &str, solver: &AlgebraSolver) -> Option<ea_agent_algebra::solver::SolverResult> {
+fn try_parse_linear(
+    expr: &str,
+    solver: &AlgebraSolver,
+) -> Option<ea_agent_algebra::solver::SolverResult> {
     // Simple: "2x+4" or "x-3"
     let expr = expr.replace("=0", "").replace('=', "");
-    if expr.contains("x^2") || expr.contains("x^3") { return None; }
-    if !expr.contains('x') { return None; }
+    if expr.contains("x^2") || expr.contains("x^3") {
+        return None;
+    }
+    if !expr.contains('x') {
+        return None;
+    }
 
     // Extract coefficient of x and constant
     let (a, b) = parse_linear_coeffs(&expr)?;
     Some(solver.solve(&Equation::Linear { a, b }))
 }
 
-fn try_parse_quadratic(expr: &str, solver: &AlgebraSolver) -> Option<ea_agent_algebra::solver::SolverResult> {
-    if !expr.contains("x^2") && !expr.contains("x²") { return None; }
-    if expr.contains("x^3") { return None; }
+fn try_parse_quadratic(
+    expr: &str,
+    solver: &AlgebraSolver,
+) -> Option<ea_agent_algebra::solver::SolverResult> {
+    if !expr.contains("x^2") && !expr.contains("x²") {
+        return None;
+    }
+    if expr.contains("x^3") {
+        return None;
+    }
 
     // Try standard form ax^2+bx+c
-    let expr = expr.replace("=0", "").replace('=', "")
-        .replace("x²", "x^2").replace("x2", "x^2");
+    let expr = expr
+        .replace("=0", "")
+        .replace('=', "")
+        .replace("x²", "x^2")
+        .replace("x2", "x^2");
 
     // Simple parser for common forms
     let (a, b, c) = parse_quadratic_coeffs(&expr)?;
@@ -121,11 +140,15 @@ fn parse_linear_coeffs(expr: &str) -> Option<(f64, f64)> {
         let a_str = &expr[..pos];
         let a = match a_str {
             "" | "+" => 1.0,
-            "-"      => -1.0,
-            s        => s.parse::<f64>().ok()?,
+            "-" => -1.0,
+            s => s.parse::<f64>().ok()?,
         };
-        let rest = &expr[pos+1..];
-        let b = if rest.is_empty() { 0.0 } else { rest.parse::<f64>().ok()? };
+        let rest = &expr[pos + 1..];
+        let b = if rest.is_empty() {
+            0.0
+        } else {
+            rest.parse::<f64>().ok()?
+        };
         Some((a, b))
     } else {
         None
@@ -139,23 +162,29 @@ fn parse_quadratic_coeffs(expr: &str) -> Option<(f64, f64, f64)> {
     let a_str = &expr[..x2_pos];
     let a = match a_str.trim_matches('+') {
         "" | "+" => 1.0,
-        "-"      => -1.0,
-        s        => s.parse::<f64>().ok()?,
+        "-" => -1.0,
+        s => s.parse::<f64>().ok()?,
     };
 
-    let rest = &expr[x2_pos+3..];
-    if rest.is_empty() { return Some((a, 0.0, 0.0)); }
+    let rest = &expr[x2_pos + 3..];
+    if rest.is_empty() {
+        return Some((a, 0.0, 0.0));
+    }
 
     // Look for x term and constant
     if let Some(xpos) = rest.find('x') {
         let b_str = &rest[..xpos];
         let b = match b_str.trim_matches('+') {
             "" | "+" => 1.0,
-            "-"      => -1.0,
-            s        => s.parse::<f64>().ok()?,
+            "-" => -1.0,
+            s => s.parse::<f64>().ok()?,
         };
-        let c_str = &rest[xpos+1..];
-        let c = if c_str.is_empty() { 0.0 } else { c_str.parse::<f64>().ok()? };
+        let c_str = &rest[xpos + 1..];
+        let c = if c_str.is_empty() {
+            0.0
+        } else {
+            c_str.parse::<f64>().ok()?
+        };
         Some((a, b, c))
     } else {
         let c = rest.parse::<f64>().ok()?;
@@ -166,17 +195,29 @@ fn parse_quadratic_coeffs(expr: &str) -> Option<(f64, f64, f64)> {
 fn format_solver_result(expr: &str, r: &ea_agent_algebra::solver::SolverResult) -> String {
     let mut out = format!("𒂗𒆠 EaAgent solves: {expr}\n\n");
     out.push_str("Chain of Thought (Logos):\n");
-    for step in &r.steps { out.push_str(&format!("  {step}\n")); }
+    for step in &r.steps {
+        out.push_str(&format!("  {step}\n"));
+    }
     out.push_str(&format!("\nLaTeX: {}\n", r.latex));
     if !r.roots.is_empty() {
         out.push_str("\nRoots: ");
-        out.push_str(&r.roots.iter().map(|x| format!("x={x:.6}")).collect::<Vec<_>>().join(", "));
+        out.push_str(
+            &r.roots
+                .iter()
+                .map(|x| format!("x={x:.6}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
     }
     if !r.complex.is_empty() {
         out.push_str("\nComplex roots: ");
-        out.push_str(&r.complex.iter()
-            .map(|(r, i)| format!("{r:.4}+{i:.4}i"))
-            .collect::<Vec<_>>().join(", "));
+        out.push_str(
+            &r.complex
+                .iter()
+                .map(|(r, i)| format!("{r:.4}+{i:.4}i"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
     }
     out
 }
@@ -185,11 +226,15 @@ fn compute_b11(vals: &str) -> String {
     if vals.is_empty() {
         return "Usage: !b11 <7 values>\nExample: !b11 0.9 0.8 0.7 0.85 0.75 0.6 0.95".to_string();
     }
-    let nums: Vec<f64> = vals.split_whitespace()
+    let nums: Vec<f64> = vals
+        .split_whitespace()
         .filter_map(|s| s.parse::<f64>().ok())
         .collect();
     if nums.len() != 7 {
-        return format!("Need exactly 7 values (D1..D7), got {}.\nExample: !b11 0.9 0.8 0.7 0.85 0.75 0.6 0.95", nums.len());
+        return format!(
+            "Need exactly 7 values (D1..D7), got {}.\nExample: !b11 0.9 0.8 0.7 0.85 0.75 0.6 0.95",
+            nums.len()
+        );
     }
     let mut d = [0.0f64; 7];
     d.copy_from_slice(&nums);
@@ -200,17 +245,24 @@ fn compute_b11(vals: &str) -> String {
         200..=255 => "● GEM (Golden Record)",
         140..=199 => "● TRIBE",
         100..=139 => "● ACTIVE",
-        60..=99   => "● FUZZY",
-        _         => "● DEAD",
+        60..=99 => "● FUZZY",
+        _ => "● DEAD",
     };
 
-    let mut out = format!("𒂗𒆠 H(P) Computation\n\n");
+    let mut out = "𒂗𒆠 H(P) Computation\n\n".to_string();
     out.push_str("H(P) = 1 / (1 + √ Σᵢwᵢ(Pᵢ−Tᵢ)²)\n\n");
     for (i, (di, wi)) in d.iter().zip(HEPTA_WEIGHTS.iter()).enumerate() {
-        out.push_str(&format!("  D{}: {:.4} × w={:.2} → contribution={:.6}\n",
-            i+1, di, wi, wi * (di - 1.0).powi(2)));
+        out.push_str(&format!(
+            "  D{}: {:.4} × w={:.2} → contribution={:.6}\n",
+            i + 1,
+            di,
+            wi,
+            wi * (di - 1.0).powi(2)
+        ));
     }
-    out.push_str(&format!("\nH(P) = {q:.6}\nB11  = round({q:.6} × 240) = {b11}\nLane = {lane}\n"));
+    out.push_str(&format!(
+        "\nH(P) = {q:.6}\nB11  = round({q:.6} × 240) = {b11}\nLane = {lane}\n"
+    ));
     out
 }
 
@@ -354,8 +406,10 @@ mod tests {
     }
     #[test]
     fn parse_solve_command() {
-        assert_eq!(parse_ea_command("!solve x^2-5x+6"),
-            Some(EaCommand::Solve("x^2-5x+6".into())));
+        assert_eq!(
+            parse_ea_command("!solve x^2-5x+6"),
+            Some(EaCommand::Solve("x^2-5x+6".into()))
+        );
     }
     #[test]
     fn parse_b11_command() {

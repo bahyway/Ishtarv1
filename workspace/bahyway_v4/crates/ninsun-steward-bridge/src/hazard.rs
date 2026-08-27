@@ -36,7 +36,10 @@ pub enum HazardDomain {
 /// Parses a RefineProposal's tribe_id string (e.g. "8192" or "0x2001")
 /// against the reserved hazard ranges.
 pub fn classify_hazard(tribe_id: &str) -> HazardDomain {
-    let parsed = if let Some(hex) = tribe_id.strip_prefix("0x").or_else(|| tribe_id.strip_prefix("0X")) {
+    let parsed = if let Some(hex) = tribe_id
+        .strip_prefix("0x")
+        .or_else(|| tribe_id.strip_prefix("0X"))
+    {
         u16::from_str_radix(hex, 16).ok()
     } else {
         tribe_id.parse::<u16>().ok()
@@ -66,7 +69,10 @@ pub struct UrgencyKey {
 
 impl UrgencyKey {
     pub fn ordinary(confidence: f64) -> Self {
-        UrgencyKey { urgency_rank: 0, confidence }
+        UrgencyKey {
+            urgency_rank: 0,
+            confidence,
+        }
     }
 
     pub fn from_smi(smi: &Smi, confidence: f64) -> Self {
@@ -76,15 +82,17 @@ impl UrgencyKey {
             SmiState::Dead => 3,
             SmiState::DeadCritical => 4,
         };
-        UrgencyKey { urgency_rank, confidence }
+        UrgencyKey {
+            urgency_rank,
+            confidence,
+        }
     }
 }
 
 impl PartialOrd for UrgencyKey {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.urgency_rank.cmp(&other.urgency_rank) {
-            std::cmp::Ordering::Equal =>
-                self.confidence.partial_cmp(&other.confidence),
+            std::cmp::Ordering::Equal => self.confidence.partial_cmp(&other.confidence),
             ord => Some(ord),
         }
     }
@@ -116,10 +124,12 @@ mod tests {
         assert_eq!(smi.state, SmiState::DeadCritical);
         let hazard_low_conf = UrgencyKey::from_smi(&smi, 0.1);
 
-        assert!(hazard_low_conf > ordinary_high_conf,
+        assert!(
+            hazard_low_conf > ordinary_high_conf,
             "a DeadCritical structural case at 0.1 confidence must outrank \
              an ordinary case at 0.99 confidence -- priority is prediction, \
-             not confidence");
+             not confidence"
+        );
     }
 
     #[test]

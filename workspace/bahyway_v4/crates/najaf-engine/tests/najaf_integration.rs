@@ -4,12 +4,11 @@
 //! Tests cover: full pilgrimage scan, sensor disruption, sovereignty, KAKI
 //! identity, epoch-based filtering, and Wadi al-Salam geographic accuracy.
 
+use bahyway_core::TribeId;
 use najaf_engine::{
-    cemetery_nav_graph, seven_grave_registry,
-    GraveRegistry, NajafSector, PilgrimGuide,
+    cemetery_nav_graph, seven_grave_registry, GraveRegistry, NajafSector, PilgrimGuide,
     SensorEvent, SensorFeed,
 };
-use bahyway_core::TribeId;
 use navi_engine::haversine_m;
 
 fn guide_setup() -> (navi_engine::NaviGraph, GraveRegistry) {
@@ -21,10 +20,13 @@ fn guide_setup() -> (navi_engine::NaviGraph, GraveRegistry) {
 #[test]
 fn all_seven_graves_reachable_from_entrance() {
     let (g, r) = guide_setup();
-    let guide  = PilgrimGuide::new(&g, &r);
+    let guide = PilgrimGuide::new(&g, &r);
     let routes = guide.full_pilgrimage_scan(1);
     assert_eq!(routes.len(), 7, "all 7 graves must be reachable");
-    assert!(routes.iter().all(|r| r.is_valid()), "all routes must be valid");
+    assert!(
+        routes.iter().all(|r| r.is_valid()),
+        "all routes must be valid"
+    );
 }
 
 // ── Scenario 2: Sector-by-sector routing ─────────────────────────────────────
@@ -32,11 +34,15 @@ fn all_seven_graves_reachable_from_entrance() {
 #[test]
 fn each_sector_routes_individually() {
     let (g, r) = guide_setup();
-    let guide  = PilgrimGuide::new(&g, &r);
+    let guide = PilgrimGuide::new(&g, &r);
     for &sector in NajafSector::all().iter() {
-        let routes = guide.guide_to_sector(1, sector)
+        let routes = guide
+            .guide_to_sector(1, sector)
             .unwrap_or_else(|e| panic!("sector {sector:?} failed: {e}"));
-        assert!(!routes.is_empty(), "sector {sector:?} must produce at least one route");
+        assert!(
+            !routes.is_empty(),
+            "sector {sector:?} must produce at least one route"
+        );
         assert!(routes.iter().all(|r| r.is_valid()));
     }
 }
@@ -46,7 +52,7 @@ fn each_sector_routes_individually() {
 #[test]
 fn elevated_zones_have_lower_sacred_cost() {
     let (g, r) = guide_setup();
-    let guide  = PilgrimGuide::new(&g, &r);
+    let guide = PilgrimGuide::new(&g, &r);
 
     // Martyrs (0.85) vs Believers (1.00) — both one spoke from entrance
     let shuhadaa = guide.guide_to_grave(1, 102).unwrap();
@@ -54,7 +60,8 @@ fn elevated_zones_have_lower_sacred_cost() {
     assert!(
         shuhadaa.total_cost <= momineen.total_cost,
         "Shuhadaa sacred cost {:.1} must be ≤ Momineen {:.1}",
-        shuhadaa.total_cost, momineen.total_cost
+        shuhadaa.total_cost,
+        momineen.total_cost
     );
 }
 
@@ -69,17 +76,22 @@ fn road_closure_on_spoke_node_forces_alternate() {
     // Other sectors must still route
     let route = guide.guide_to_grave(1, 102).expect("Shuhadaa unaffected");
     assert!(route.is_valid());
-    assert!(!route.waypoints.contains(&3), "closed node 3 must not appear");
+    assert!(
+        !route.waypoints.contains(&3),
+        "closed node 3 must not appear"
+    );
 }
 
 #[test]
 fn road_closure_then_reopen_restores_routing() {
     let (mut g, r) = guide_setup();
     SensorFeed::apply(&mut g, SensorEvent::RoadClosure { node_id: 2 }).unwrap();
-    SensorFeed::apply(&mut g, SensorEvent::RoadOpen    { node_id: 2 }).unwrap();
+    SensorFeed::apply(&mut g, SensorEvent::RoadOpen { node_id: 2 }).unwrap();
     assert!(g.node(2).unwrap().is_passable());
     let guide = PilgrimGuide::new(&g, &r);
-    let route = guide.guide_to_grave(1, 102).expect("must route after reopen");
+    let route = guide
+        .guide_to_grave(1, 102)
+        .expect("must route after reopen");
     assert!(route.is_valid());
 }
 
@@ -99,7 +111,9 @@ fn reserved_grave_is_guidable() {
     let (g, mut r) = guide_setup();
     r.get_mut(106).unwrap().reserve();
     let guide = PilgrimGuide::new(&g, &r);
-    let route = guide.guide_to_grave(1, 106).expect("reserved grave must route");
+    let route = guide
+        .guide_to_grave(1, 106)
+        .expect("reserved grave must route");
     assert!(route.is_valid());
 }
 
@@ -108,9 +122,11 @@ fn reserved_grave_is_guidable() {
 #[test]
 fn nearest_accessible_finds_route_from_coord() {
     let (g, r) = guide_setup();
-    let guide  = PilgrimGuide::new(&g, &r);
-    let coord  = navi_engine::NaviCoord::new(32.003, 44.333, 0.0); // near Awliya
-    let route  = guide.nearest_accessible(1, &coord).expect("must find nearest");
+    let guide = PilgrimGuide::new(&g, &r);
+    let coord = navi_engine::NaviCoord::new(32.003, 44.333, 0.0); // near Awliya
+    let route = guide
+        .nearest_accessible(1, &coord)
+        .expect("must find nearest");
     assert!(route.is_valid());
 }
 
@@ -121,7 +137,9 @@ fn nearest_accessible_skips_sealed_graves() {
     r.get_mut(103).unwrap().seal();
     let guide = PilgrimGuide::new(&g, &r);
     let coord = navi_engine::NaviCoord::new(32.003, 44.333, 0.0);
-    let route = guide.nearest_accessible(1, &coord).expect("must skip sealed and find next");
+    let route = guide
+        .nearest_accessible(1, &coord)
+        .expect("must skip sealed and find next");
     assert!(route.is_valid());
     assert_ne!(route.grave_id, 103, "sealed grave must not be returned");
 }
@@ -171,7 +189,10 @@ fn haversine_entrance_to_shuhadaa_distance() {
     // Shuhadaa: 32.005°N, 44.320°E
     let d = haversine_m(31.995, 44.320, 32.005, 44.320);
     // ~1.1 km north-south
-    assert!(d > 900.0 && d < 1_300.0, "N-S distance should be ~1.1km, got {d}");
+    assert!(
+        d > 900.0 && d < 1_300.0,
+        "N-S distance should be ~1.1km, got {d}"
+    );
 }
 
 #[test]
@@ -180,7 +201,10 @@ fn haversine_entrance_to_anbiya_distance() {
     // Anbiya:   32.003°N, 44.307°E
     let d = haversine_m(31.995, 44.320, 32.003, 44.307);
     // NW diagonal — ~1.3 km
-    assert!(d > 800.0 && d < 1_800.0, "diagonal distance should be ~1.3km, got {d}");
+    assert!(
+        d > 800.0 && d < 1_800.0,
+        "diagonal distance should be ~1.3km, got {d}"
+    );
 }
 
 // ── Scenario 10: Sovereignty — tribe alert ───────────────────────────────────
@@ -192,9 +216,12 @@ fn sovereign_alert_on_own_tribe_blocks_all_nodes() {
     SensorFeed::apply(&mut g, SensorEvent::SovereignAlert { tribe }).unwrap();
     // All NaviGraph nodes are now restricted
     for id in 1u32..=7 {
-        assert!(!g.node(id).unwrap().is_passable(), "node {id} must be restricted");
+        assert!(
+            !g.node(id).unwrap().is_passable(),
+            "node {id} must be restricted"
+        );
     }
-    let guide  = PilgrimGuide::new(&g, &r);
+    let guide = PilgrimGuide::new(&g, &r);
     // Routing to any grave must fail (no passable nodes)
     let result = guide.guide_to_grave(1, 102);
     assert!(result.is_err(), "sovereign alert must block routing");
@@ -206,7 +233,7 @@ fn sovereign_alert_on_other_tribe_leaves_routing_intact() {
     let other = TribeId::from_u16(0x0099);
     SensorFeed::apply(&mut g, SensorEvent::SovereignAlert { tribe: other }).unwrap();
     // All nodes remain passable (they are tribe 0x0001, not 0x0099)
-    let guide  = PilgrimGuide::new(&g, &r);
+    let guide = PilgrimGuide::new(&g, &r);
     let routes = guide.full_pilgrimage_scan(1);
     assert_eq!(routes.len(), 7);
 }
@@ -216,25 +243,31 @@ fn sovereign_alert_on_other_tribe_leaves_routing_intact() {
 #[test]
 fn every_route_starts_at_entrance_node() {
     let (g, r) = guide_setup();
-    let guide  = PilgrimGuide::new(&g, &r);
+    let guide = PilgrimGuide::new(&g, &r);
     for grave_id in 101u32..=107 {
         let route = guide.guide_to_grave(1, grave_id).unwrap();
-        assert_eq!(*route.waypoints.first().unwrap(), 1,
-            "grave {grave_id} route must start at entrance node 1");
+        assert_eq!(
+            *route.waypoints.first().unwrap(),
+            1,
+            "grave {grave_id} route must start at entrance node 1"
+        );
     }
 }
 
 #[test]
 fn every_route_ends_at_sector_node() {
     let (g, r) = guide_setup();
-    let guide  = PilgrimGuide::new(&g, &r);
+    let guide = PilgrimGuide::new(&g, &r);
     for grave_id in 101u32..=107 {
         let route = guide.guide_to_grave(1, grave_id).unwrap();
-        let grave  = r.get(grave_id).unwrap();
+        let grave = r.get(grave_id).unwrap();
         let expected_dest = grave.sector.fixture_node_id();
         // For the Entrance grave (trivial route, 1 waypoint), first == last.
-        assert_eq!(*route.waypoints.last().unwrap(), expected_dest,
-            "grave {grave_id} route must end at sector node {expected_dest}");
+        assert_eq!(
+            *route.waypoints.last().unwrap(),
+            expected_dest,
+            "grave {grave_id} route must end at sector node {expected_dest}"
+        );
     }
 }
 
@@ -246,7 +279,10 @@ fn available_grave_is_not_a_pilgrimage_destination() {
     r.get_mut(107).unwrap().release(); // Available
     let guide = PilgrimGuide::new(&g, &r);
     let result = guide.guide_to_grave(1, 107);
-    assert!(result.is_err(), "Available grave is not a pilgrimage destination");
+    assert!(
+        result.is_err(),
+        "Available grave is not a pilgrimage destination"
+    );
 }
 
 // ── Scenario 13: Full scan after partial sealing ─────────────────────────────
@@ -256,7 +292,7 @@ fn partial_sealing_reduces_scan_count() {
     let (g, mut r) = guide_setup();
     r.get_mut(103).unwrap().seal();
     r.get_mut(106).unwrap().seal();
-    let guide  = PilgrimGuide::new(&g, &r);
+    let guide = PilgrimGuide::new(&g, &r);
     let routes = guide.full_pilgrimage_scan(1);
     assert_eq!(routes.len(), 5, "only 5 accessible graves remain");
 }

@@ -40,13 +40,16 @@ impl BloomFilter {
     /// Create a new filter with `n_bits` capacity (must be a multiple of 64).
     /// `k` is the number of hash functions (2–8 recommended).
     pub fn new(n_bits: usize, k: usize) -> Self {
-        assert!(n_bits > 0 && n_bits % 64 == 0, "n_bits must be a positive multiple of 64");
-        assert!(k >= 1 && k <= 16, "k must be in [1, 16]");
+        assert!(
+            n_bits > 0 && n_bits.is_multiple_of(64),
+            "n_bits must be a positive multiple of 64"
+        );
+        assert!((1..=16).contains(&k), "k must be in [1, 16]");
         BloomFilter {
-            bits:   vec![0u64; n_bits / 64],
+            bits: vec![0u64; n_bits / 64],
             n_bits,
             k,
-            count:  0,
+            count: 0,
         }
     }
 
@@ -128,13 +131,13 @@ impl BloomFilter {
     }
 
     fn set_bit(&mut self, bit: usize) {
-        let word  = bit / 64;
+        let word = bit / 64;
         let shift = bit % 64;
         self.bits[word] |= 1u64 << shift;
     }
 
     fn get_bit(&self, bit: usize) -> bool {
-        let word  = bit / 64;
+        let word = bit / 64;
         let shift = bit % 64;
         (self.bits[word] >> shift) & 1 == 1
     }
@@ -167,7 +170,10 @@ mod tests {
             f.insert(&kaki(seed));
         }
         for seed in 0..50u8 {
-            assert!(f.possibly_contains(&kaki(seed)), "seed {seed} must be found");
+            assert!(
+                f.possibly_contains(&kaki(seed)),
+                "seed {seed} must be found"
+            );
         }
     }
 
@@ -207,21 +213,32 @@ mod tests {
         let b3 = f.hash_bit(&kaki(7), 3);
         // Very likely all different (could theoretically collide but won't for these values)
         let unique: std::collections::BTreeSet<_> = [b0, b1, b2, b3].iter().copied().collect();
-        assert_eq!(unique.len(), 4, "hash seeds should produce distinct bit positions");
+        assert_eq!(
+            unique.len(),
+            4,
+            "hash seeds should produce distinct bit positions"
+        );
     }
 
     #[test]
     fn test_false_positive_rate_acceptable_for_small_set() {
         // Insert 100 KAKIs, check 100 unknown ones — expect very few false positives
         let mut f = BloomFilter::default_8k();
-        for i in 0..100u8 { f.insert(&kaki(i)); }
+        for i in 0..100u8 {
+            f.insert(&kaki(i));
+        }
 
         let mut fp_count = 0usize;
         for i in 100..200u8 {
-            if f.possibly_contains(&kaki(i)) { fp_count += 1; }
+            if f.possibly_contains(&kaki(i)) {
+                fp_count += 1;
+            }
         }
         // With 8k bits, k=4, 100 items: FP rate should be < 1%
-        assert!(fp_count < 5, "false positive count {fp_count} out of 100 is too high");
+        assert!(
+            fp_count < 5,
+            "false positive count {fp_count} out of 100 is too high"
+        );
     }
 
     #[test]

@@ -35,7 +35,7 @@ fn combine(left: u64, right: u64) -> u64 {
 /// Leaves are the last level.
 #[derive(Debug, Clone)]
 pub struct MerkleTree {
-    nodes:      Vec<u64>,
+    nodes: Vec<u64>,
     leaf_count: usize,
 }
 
@@ -44,7 +44,10 @@ impl MerkleTree {
     /// Each block is hashed with FNV-1a before insertion.
     pub fn from_blocks(blocks: &[&[u8]]) -> Self {
         if blocks.is_empty() {
-            return MerkleTree { nodes: vec![0], leaf_count: 0 };
+            return MerkleTree {
+                nodes: vec![0],
+                leaf_count: 0,
+            };
         }
         let leaves: Vec<u64> = blocks.iter().map(|b| fnv1a(b)).collect();
         Self::from_leaf_hashes(&leaves)
@@ -53,7 +56,10 @@ impl MerkleTree {
     /// Build a Merkle tree from pre-computed leaf hashes (e.g. pipeline hop hashes).
     pub fn from_leaf_hashes(hashes: &[u64]) -> Self {
         if hashes.is_empty() {
-            return MerkleTree { nodes: vec![0], leaf_count: 0 };
+            return MerkleTree {
+                nodes: vec![0],
+                leaf_count: 0,
+            };
         }
 
         // Pad to next power of two for a complete binary tree
@@ -93,13 +99,17 @@ impl MerkleTree {
     }
 
     /// Number of original (un-padded) leaves.
-    pub fn leaf_count(&self) -> usize { self.leaf_count }
+    pub fn leaf_count(&self) -> usize {
+        self.leaf_count
+    }
 
     /// Merkle proof path for leaf at index `i`.
     /// Returns sibling hashes from leaf level to root.
     /// The verifier can recompute the root from the leaf hash + this proof.
     pub fn proof(&self, leaf_index: usize) -> Option<Vec<u64>> {
-        if leaf_index >= self.leaf_count { return None; }
+        if leaf_index >= self.leaf_count {
+            return None;
+        }
         let padded = next_power_of_two(self.leaf_count.max(1));
         let leaf_start = padded - 1;
         let mut pos = leaf_start + leaf_index;
@@ -121,9 +131,9 @@ impl MerkleTree {
     /// at an odd `leaf_index` sits at an even tree position (right child).
     pub fn verify(leaf_hash: u64, leaf_index: usize, proof: &[u64], root: u64) -> bool {
         let mut current = leaf_hash;
-        let mut index   = leaf_index;
+        let mut index = leaf_index;
         for &sibling in proof {
-            current = if index % 2 == 0 {
+            current = if index.is_multiple_of(2) {
                 // even leaf_index → odd tree pos → LEFT child
                 combine(current, sibling)
             } else {
@@ -137,9 +147,13 @@ impl MerkleTree {
 }
 
 fn next_power_of_two(n: usize) -> usize {
-    if n <= 1 { return 1; }
+    if n <= 1 {
+        return 1;
+    }
     let mut p = 1;
-    while p < n { p <<= 1; }
+    while p < n {
+        p <<= 1;
+    }
     p
 }
 
@@ -193,8 +207,8 @@ mod tests {
     #[test]
     fn tampered_leaf_fails_verification() {
         let hashes = vec![10u64, 20, 30, 40];
-        let tree   = MerkleTree::from_leaf_hashes(&hashes);
-        let proof  = tree.proof(0).unwrap();
+        let tree = MerkleTree::from_leaf_hashes(&hashes);
+        let proof = tree.proof(0).unwrap();
         // Use a wrong hash for leaf 0
         assert!(!MerkleTree::verify(999, 0, &proof, tree.root()));
     }

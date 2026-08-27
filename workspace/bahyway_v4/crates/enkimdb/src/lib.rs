@@ -42,14 +42,14 @@ pub use emitter::ArtifactEmitter;
 pub use passport_record::PassportRecordSpec;
 pub use pattern::PatternProfile;
 pub use pattern_emitter::PatternEmitter;
-pub use pb::{scan_pbs, PbProfile};
+pub use pb::{append_untriaged_rows, scan_pbs, update_triage_status, PbProfile};
 pub use pb_emitter::PbEmitter;
-pub use registry_emitter::RegistryEmitter;
-pub use run_record::AnuGovernorRunRecordSpec;
 pub use readnode::{
     list_versions, materialize_now, materialize_version, CachedReadNode, CachedReadNodeError,
     Generation, ReadNode, ReadNodeError, SOVEREIGN_NAME,
 };
+pub use registry_emitter::RegistryEmitter;
+pub use run_record::AnuGovernorRunRecordSpec;
 pub use scan::{scan_crates, scan_playbooks};
 pub use tablet::{profile_tablet, TabletKind, TabletProfile};
 pub use tablet_emitter::TabletEmitter;

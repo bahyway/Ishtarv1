@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Šala · Cartographer · OntoGraph + HyperGraph · PB-381</title>
+<style>
+:root{--bg:#122738;--panel:#193549;--line:#1f4662;--ink:#fff;--dim:#7fa3bd;--gold:#ffc600;--lapis:#0088ff;--green:#3ad900;--violet:#fb94ff;--alarm:#ff628c;--hi:#ffee80;
+--mono:"IBM Plex Mono","JetBrains Mono",ui-monospace,Menlo,monospace;--serif:"Iowan Old Style",Palatino,Georgia,serif}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--serif)}
+.crumbs{font:11px var(--mono);color:var(--dim);letter-spacing:.08em;padding:10px 16px 0;text-transform:uppercase}.crumbs b{color:var(--gold)}
+header{padding:6px 16px 10px;border-bottom:1px solid var(--line)}h1{font:600 21px/1.15 var(--serif);margin:4px 0 6px}h1 .cune{color:var(--gold);margin-left:8px;font-weight:400}
+.lede{max-width:82ch;margin:0}.lede em{color:var(--hi);font-style:normal}.lede code{font:12px var(--mono);color:var(--hi)}
+.banner{background:var(--gold);color:var(--bg);font:600 12px var(--mono);letter-spacing:.14em;text-align:center;padding:5px 8px}
+.honesty{background:var(--panel);border-bottom:1px solid var(--line);font:12px var(--mono);color:var(--hi);padding:6px 16px}
+.grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.9fr);gap:12px;padding:12px 16px}@media(max-width:980px){.grid{grid-template-columns:1fr}}
+.tablet{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}.tablet h2{font:600 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin:0 0 8px}
+.stack{display:grid;gap:12px;align-content:start}
+.stagewrap{position:relative}canvas#stage{width:100%;height:600px;display:block;background:radial-gradient(ellipse at 50% 50%,#163046 0%,#0e1f2e 68%,#0b1824 100%);border:1px solid var(--line);border-radius:4px;cursor:crosshair;touch-action:none}
+.deck{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font:12px var(--mono)}
+button,.deck select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:5px 9px;font:12px var(--mono);cursor:pointer}
+button:hover{border-color:var(--gold);color:var(--hi)}button[aria-pressed=true]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+.deck label{display:flex;align-items:center;gap:6px;color:var(--dim)}.deck input[type=range]{width:110px;accent-color:var(--gold)}.deck .val{color:var(--hi);min-width:3ch;display:inline-block}
+.verdict{font:12px var(--mono);color:var(--dim);margin:6px 0 0;padding-top:6px;border-top:1px dashed var(--line)}.verdict b{color:var(--hi)}.verdict .ok{color:var(--green)}.verdict .bad{color:var(--alarm)}.verdict .wait{color:var(--violet)}
+.lawtag{display:inline-block;font:10px var(--mono);color:var(--bg);background:var(--dim);border-radius:3px;padding:1px 5px;margin:2px 4px 0 0}.lawtag.gold{background:var(--gold)}
+.rites{position:absolute;display:none;z-index:9;background:var(--panel);border:1px solid var(--gold);border-radius:6px;padding:6px;min-width:250px;box-shadow:0 8px 24px #0008}
+.rites h3{font:600 11px var(--mono);letter-spacing:.1em;color:var(--gold);margin:2px 4px 6px;text-transform:uppercase}.rites button{display:block;width:100%;text-align:left;margin:2px 0}.rites .kaki{font:10px var(--mono);color:var(--violet);margin:0 4px 6px}
+#story{font:12px/1.5 var(--mono);min-height:120px}#story .kaki{color:var(--violet)}#story .ev{padding:3px 0;border-bottom:1px solid var(--line)}#story .ev b{color:var(--gold)}#story .empty{color:var(--dim)}#story .rel{margin-top:6px;padding-top:5px;border-top:1px dashed var(--line)}#story .rel i{font-style:normal;color:var(--dim)}
+#journal{font:11px/1.5 var(--mono);color:var(--dim);max-height:150px;overflow:auto;white-space:pre-wrap}#journal .t{color:var(--hi)}
+.gates{font:12px var(--mono);display:grid;gap:4px}.gates span{display:flex;justify-content:space-between;gap:8px}.gates .ok{color:var(--green)}.gates .bad{color:var(--alarm)}.gates .wait{color:var(--dim)}
+table.t{width:100%;border-collapse:collapse;font:11px var(--mono)}table.t td,table.t th{border-bottom:1px solid var(--line);padding:3px 4px;text-align:left}table.t th{color:var(--gold)}table.t tr:hover{background:#1f4662;cursor:pointer}
+pre.boot{font:11px/1.5 var(--mono);color:var(--hi);background:#0e1f2e;border:1px solid var(--line);border-radius:4px;padding:8px;margin:0;max-height:220px;overflow:auto;white-space:pre}
+#fault{display:none;background:var(--alarm);color:var(--bg);font:12px var(--mono);padding:6px 16px}
+footer{font:11px var(--mono);color:var(--dim);padding:8px 16px 20px;border-top:1px solid var(--line)}:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="crumbs">BahyWay.Ecosystem v4.0 · Šala House · PB-380 cartographer · GL-FLD-001 §10 shape-not-row · <b>PB-381</b></div>
+<header>
+  <h1>Cartographer — the dependency graph was never hidden, only the errors inside it <span class="cune">𒁾</span></h1>
+  <p class="lede">Every edge here comes from static text: <code>Cargo.toml</code> for crates, <code>import_playbook</code> and the declared <code>bahyway_requires</code> / <code>bahyway_provides</code> contract for playbooks. Nothing is compiled and nothing is run. Nodes sit on <em>concentric layers</em> — layer 1 is buildable now, layer <em>n</em> only after every ring inside it. A relation binding three or more nodes at once (a playbook, the crates it builds, the services it leaves behind) is drawn as a <em>filled simplex</em>, not three lines. Gold marks the <em>critical path</em>: the longest chain, which is the true depth of the estate and the floor on how many rounds a rebuild can take. Violet marks an <em>undeclared</em> edge — inferred from text rather than declared, and therefore <code>DERIVED</code>, not <code>MEASURED</code>.</p>
+</header>
+<div class="banner">STATIC SURVEY · COMPILES NOTHING · RUNS NOTHING · LOAD YOUR OWN ontograph.json</div>
+<div class="honesty" id="honesty">Honesty: the graph shown is a seeded stand-in for a 194-crate workspace plus today's playbook estate. Drop your real <b>ontograph.json</b> (from PB-380) on the stage to replace it — everything below is then computed from your own files.</div>
+<div id="fault"></div>
+
+<div class="grid">
+  <div class="stack">
+    <div class="tablet stagewrap">
+      <h2>Stage · layers as rings · hyperedges as simplices · critical path in gold</h2>
+      <canvas id="stage" width="1240" height="720" tabindex="0" aria-label="dependency graph stage"></canvas>
+      <div class="rites" id="rites" role="menu"></div>
+      <div class="deck" id="deck">
+        <button data-view="crate" aria-pressed="true">crates</button>
+        <button data-view="playbook">playbooks</button>
+        <button id="freeze">❄ freeze</button>
+        <button id="hyper" aria-pressed="true">△ hyperedges</button>
+        <button id="crit" aria-pressed="true">⟶ critical path</button>
+        <label>layer cut <input id="cut" type="range" min="1" max="9" step="1" value="9"><span class="val" id="cutV">all</span></label>
+        <label>labels <input id="lab" type="range" min="0" max="2" step="1" value="1"><span class="val" id="labV">hover</span></label>
+        <button id="load">⬆ load ontograph.json</button><input type="file" id="file" accept=".json" style="display:none">
+      </div>
+      <p class="verdict" id="verdictStage">graph · <b>—</b></p>
+      <div><span class="lawtag gold">static text only</span><span class="lawtag gold">layer = buildable set</span><span class="lawtag gold">undeclared = DERIVED</span><span class="lawtag">GL-FLD-001 §10</span><span class="lawtag">PB-380</span></div>
+    </div>
+    <div class="tablet">
+      <h2>BOOTSTRAP template · the client-side regeneration order</h2>
+      <pre class="boot" id="boot"></pre>
+      <p class="verdict" id="verdictBoot">—</p>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="tablet"><h2>Layer census</h2><canvas id="bars" width="600" height="150" style="width:100%;height:150px;display:block;background:#0e1f2e;border:1px solid var(--line);border-radius:4px"></canvas><p class="verdict" id="verdictBars">—</p></div>
+    <div class="tablet"><h2>Undeclared edges · inferred, not contracted</h2><table class="t" id="und"></table><p class="verdict" id="verdictUnd">—</p></div>
+    <div class="tablet" id="storyTab"><h2>StoryEngine · biography of the caught node</h2><div id="story"><div class="empty">Nothing caught. Click a node; right-click for the sovereign rites.</div></div></div>
+    <div class="tablet"><h2>Gates</h2><div class="gates">
+      <span>COMPILE · parsed <i class="wait" id="gC">waiting</i></span>
+      <span>RUNTIME · click / contextmenu / wheel <i class="wait" id="gR">waiting</i></span>
+      <span>ACYCLIC · a cycle cannot be regenerated <i class="wait" id="gA">waiting</i></span>
+      <span>CONTRACT · every node declares <i class="wait" id="gD">waiting</i></span></div></div>
+    <div class="tablet"><h2>Court journal</h2><div id="journal"></div></div>
+  </div>
+</div>
+<footer>PB-381 · sala_cartographer_v1.html · Cobalt2 · deterministic · DUB.SAR 𒁾</footer>
+
+<script>
+(function(){"use strict";
+const $=id=>document.getElementById(id);
+const fault=$('fault');window.onerror=(m,s,l)=>{fault.style.display='block';fault.textContent='FAULT · '+m+' @'+l;journal('FAULT '+m);};
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const J=$('journal');function journal(s){const t=new Date().toISOString().slice(11,19);J.innerHTML+='<span class="t">'+t+'</span> '+s+'\n';J.scrollTop=J.scrollHeight;}
+const C={line:'#1f4662',ink:'#fff',dim:'#7fa3bd',gold:'#ffc600',lapis:'#0088ff',green:'#3ad900',violet:'#fb94ff',alarm:'#ff628c',hi:'#ffee80'};
+
+/* ---------- seeded stand-in estate ---------- */
+function seedGraph(){
+  const r=mulberry32(3600);const nodes=[],edges=[],hyper=[];
+  const fam=['kaki','enlil','nuzi','enkidb','marduk','nanshe','lamassu','igigi','tiamat','kittu','susa','masku','gula','sila','nergal'];
+  const N=194;const names=[];
+  for(let i=0;i<N;i++){const f=fam[Math.floor(r()*fam.length)];names.push(f+'-'+['core','api','engine','store','codec','proto','cli','bridge','math','io'][Math.floor(r()*10)]+'-'+i);}
+  names.forEach((n,i)=>nodes.push({id:n,kind:'crate',fam:n.split('-')[0]}));
+  // layered by construction: a crate depends on 0..3 earlier crates, with family affinity
+  for(let i=0;i<N;i++){const k=Math.floor(r()*3.4);
+    for(let j=0;j<k;j++){let t=Math.floor(r()*i);if(r()<0.55){const same=names.slice(0,i).filter(x=>x.startsWith(names[i].split('-')[0]));if(same.length)t=names.indexOf(same[Math.floor(r()*same.length)]);}
+      if(t>=0&&t<i)edges.push({from:names[i],to:names[t],rel:'depends_on',domain:'crate',declared:true});}}
+  // playbooks
+  const PB=[['PB-361','seal GL-UNT-001',[]],['PB-362','seal GL-FED-001',['PB-361']],['PB-363','seal GL-FLD-001',['PB-361']],
+    ['PB-364','ORBIT units',['PB-361']],['PB-365','FACTOR/LEAF',['PB-364']],['PB-366','ENLIL kernel',['PB-363']],
+    ['PB-367','account emitter',['PB-366']],['PB-368','promote tabs',['PB-362','PB-363']],['PB-369','master rite',['PB-368','PB-367','PB-365']],
+    ['PB-371','CDSE arsenal',[]],['PB-372','landing zone',['PB-371']],['PB-374','private cloud access',[]],
+    ['PB-375','private cloud services',['PB-374','PB-372']],['PB-376','Nergal AV posture',['PB-374']],
+    ['PB-378','Sala run bridge',['PB-374','PB-371']],['PB-380','cartographer',[]]];
+  PB.forEach(([id,t,deps])=>{nodes.push({id,kind:'playbook',fam:'pb',title:t});
+    deps.forEach(d=>edges.push({from:id,to:d,rel:'after',domain:'playbook',declared:!['PB-372','PB-375'].includes(id)}));});
+  hyper.push({id:'H-PB-366',members:['PB-366','enlil-core-3','kaki-core-0','service:enlil-field'],rel:'playbook_binds'});
+  hyper.push({id:'H-PB-367',members:['PB-367','marduk-engine-31','service:account-emitter'],rel:'playbook_binds'});
+  hyper.push({id:'H-PB-375',members:['PB-375','service:files','service:arsenal','mount:archive'],rel:'playbook_binds'});
+  return {nodes,edges,hyper};}
+let G=seedGraph();
+
+/* ---------- graph maths ---------- */
+let VIEW='crate',layersArr=[],depth={},crit=[],cycles=[];
+function sub(){const ns=G.nodes.filter(n=>n.kind===VIEW);const ids=new Set(ns.map(n=>n.id));
+  const es=G.edges.filter(e=>ids.has(e.from)&&ids.has(e.to));return {ns,ids,es};}
+function compute(){const {ns,ids,es}=sub();
+  const pre={};ns.forEach(n=>pre[n.id]=new Set());
+  es.forEach(e=>pre[e.from].add(e.to));
+  const indeg={};ns.forEach(n=>indeg[n.id]=pre[n.id].size);
+  const rev={};ns.forEach(n=>rev[n.id]=[]);es.forEach(e=>rev[e.to].push(e.from));
+  let q=ns.filter(n=>indeg[n.id]===0).map(n=>n.id).sort();layersArr=[];const seen=new Set();
+  while(q.length){layersArr.push(q.slice());q.forEach(x=>seen.add(x));const nx=[];
+    q.forEach(n=>rev[n].forEach(m=>{if(--indeg[m]===0)nx.push(m);}));q=nx.sort();}
+  cycles=ns.map(n=>n.id).filter(x=>!seen.has(x));
+  depth={};layersArr.forEach((L,i)=>L.forEach(n=>depth[n]=i+1));
+  // critical path = longest chain
+  let end=null,best=0;for(const n of ns){if((depth[n.id]||0)>best){best=depth[n.id];end=n.id;}}
+  crit=[];if(end){let cur=end;crit.push(cur);
+    while(true){const ps=[...pre[cur]].filter(p=>depth[p]);if(!ps.length)break;
+      ps.sort((a,b)=>depth[b]-depth[a]);cur=ps[0];crit.push(cur);}crit.reverse();}
+  place();buildBoot();drawBars();drawUnd();
+  gate('gA',cycles.length===0,cycles.length?'red · '+cycles.length+' in cycles':'green · acyclic');
+  const undeclared=G.edges.filter(e=>e.declared===false).length;
+  gate('gD',undeclared===0,undeclared?'red · '+undeclared+' inferred, not declared':'green · all declared');
+  $('cut').max=Math.max(1,layersArr.length);$('cut').value=layersArr.length;$('cutV').textContent='all';
+  setVerdict();}
+const POS={};
+function place(){const {ns}=sub();const byLayer={};ns.forEach(n=>{const d=depth[n.id]||layersArr.length+1;(byLayer[d]=byLayer[d]||[]).push(n);});
+  Object.keys(byLayer).forEach(d=>{const L=byLayer[d];L.sort((a,b)=>a.fam<b.fam?-1:1);
+    const R=0.28+ (+d)/(layersArr.length+1)*1.5;
+    L.forEach((n,i)=>{const th=i/L.length*Math.PI*2+(+d)*0.35;POS[n.id]={x:Math.cos(th)*R,y:Math.sin(th)*R,layer:+d,ang:th,r:R};});});}
+
+/* ---------- camera ---------- */
+const cv=$('stage'),ctx=cv.getContext('2d');
+const cam={yaw:0.0,pitch:1.22,dist:4.1,tx:0,ty:0,tz:0,auto:false,fov:1.02};
+const camT={yaw:0.0,pitch:1.22,dist:4.1,tx:0,ty:0,tz:0};const lerp=(a,b,k)=>a+(b-a)*k;
+let time=0,FROZEN=false;
+function z(n){return (depth[n]||1)*0.055;}
+function project(p){const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  let x=p[0]-cam.tx,y=p[1]-cam.ty,zz=p[2]-cam.tz;let x1=x*cy-y*sy,y1=x*sy+y*cy;let y2=y1*cp-zz*sp,z2=y1*sp+zz*cp;
+  const d=cam.dist-y2;if(d<0.05)return null;const f=cv.height/(2*Math.tan(cam.fov/2))/d;return [cv.width/2+x1*f,cv.height/2-z2*f,d];}
+function halo(t,x,y,s,col){ctx.font='600 '+s+'px '+getComputedStyle(document.documentElement).getPropertyValue('--mono');ctx.lineWidth=4;ctx.strokeStyle='#0b1824';ctx.lineJoin='round';ctx.strokeText(t,x,y);ctx.fillStyle=col;ctx.fillText(t,x,y);}
+const FAMCOL={};function famCol(f){if(!FAMCOL[f]){const r=mulberry32(f.split('').reduce((a,c)=>a+c.charCodeAt(0),7));
+  const pal=[C.gold,C.lapis,C.green,C.violet,C.hi,'#66d9ff','#ff8fb0','#9ad0ff','#5db4ff','#ffd84d'];FAMCOL[f]=pal[Math.floor(r()*pal.length)];}return FAMCOL[f];}
+
+/* ---------- state ---------- */
+let caught=null,hover=null,projected=[],CUT=99,SHOWH=true,SHOWC=true,LAB=1,isolate=null;
+function visible(n){const d=depth[n.id]||99;if(d>CUT)return false;if(isolate&&!isolate.has(n.id))return false;return true;}
+function draw(){const W=cv.width,H=cv.height;ctx.clearRect(0,0,W,H);ctx.lineWidth=1;
+  const {ns,ids,es}=sub();
+  // layer rings
+  for(let d=1;d<=layersArr.length;d++){if(d>CUT)continue;const R=0.28+d/(layersArr.length+1)*1.5;
+    ctx.beginPath();for(let a=0;a<=64;a++){const th=a/64*Math.PI*2;const p=project([Math.cos(th)*R,Math.sin(th)*R,d*0.055]);if(!p)continue;a?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]);}
+    ctx.strokeStyle=C.line;ctx.globalAlpha=.55;ctx.stroke();ctx.globalAlpha=1;
+    const lp=project([Math.cos(0.25)*R,Math.sin(0.25)*R,d*0.055]);if(lp)halo('layer '+d+' · '+(layersArr[d-1]||[]).length,lp[0]+6,lp[1]-4,10,C.dim);}
+  // hyperedges as filled simplices
+  if(SHOWH)for(const h of G.hyper){const pts=h.members.map(m=>POS[m]).filter(Boolean);
+    if(pts.length<3)continue;const pr=pts.map(p=>project([p.x,p.y,z(Object.keys(POS).find(k=>POS[k]===p))||0.05])).filter(Boolean);
+    if(pr.length<3)continue;ctx.beginPath();pr.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();
+    ctx.fillStyle=C.violet;ctx.globalAlpha=.12;ctx.fill();ctx.strokeStyle=C.violet;ctx.globalAlpha=.35;ctx.stroke();ctx.globalAlpha=1;}
+  // edges
+  for(const e of es){const a=POS[e.from],b=POS[e.to];if(!a||!b)continue;
+    const na={id:e.from},nb={id:e.to};if(!visible(na)||!visible(nb))continue;
+    const pa=project([a.x,a.y,z(e.from)]),pb=project([b.x,b.y,z(e.to)]);if(!pa||!pb)continue;
+    const onCrit=SHOWC&&crit.includes(e.from)&&crit.includes(e.to)&&Math.abs((depth[e.from]||0)-(depth[e.to]||0))===1;
+    const lit=caught&&(e.from===caught.id||e.to===caught.id);
+    ctx.beginPath();ctx.moveTo(pa[0],pa[1]);ctx.lineTo(pb[0],pb[1]);
+    ctx.strokeStyle=e.declared===false?C.violet:(onCrit?C.gold:(lit?C.hi:C.line));
+    ctx.globalAlpha=onCrit?.95:(lit?.85:(e.declared===false?.8:.28));ctx.lineWidth=onCrit?2.2:(lit?1.6:1);ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}
+  // nodes
+  projected=[];
+  const list=ns.filter(visible).map(n=>({n,p:project([POS[n.id].x,POS[n.id].y,z(n.id)])})).filter(o=>o.p).sort((a,b)=>b.p[2]-a.p[2]);
+  for(const o of list){const n=o.n,p=o.p;const onCrit=crit.includes(n.id);
+    const s=Math.max(2.2,(n.kind==='playbook'?5.5:3.6)/(p[2]*0.42));
+    ctx.beginPath();ctx.arc(p[0],p[1],s+(n===caught?3:0),0,7);ctx.fillStyle=onCrit&&SHOWC?C.gold:famCol(n.fam);ctx.fill();
+    if(onCrit&&SHOWC){ctx.strokeStyle=C.hi;ctx.lineWidth=1.4;ctx.stroke();ctx.lineWidth=1;}
+    if(n===hover&&n!==caught){ctx.strokeStyle=C.ink;ctx.stroke();}
+    if(n===caught){const pr=8+8*(.5+.5*Math.sin(time*7));ctx.beginPath();ctx.arc(p[0],p[1],pr,0,7);ctx.strokeStyle=C.hi;ctx.globalAlpha=1-(pr-8)/16;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}
+    projected.push({n,x:p[0],y:p[1]});
+    if(LAB===2||(LAB===1&&(n===hover||n===caught))||n.kind==='playbook'&&LAB>=1)halo(n.id,p[0]+s+3,p[1]+3,10,n===caught?C.hi:famCol(n.fam));}
+  halo(VIEW.toUpperCase()+' graph · '+sub().ns.length+' nodes · '+layersArr.length+' layers · critical depth '+crit.length,14,22,12,C.gold);
+  if(FROZEN)halo('❄ COURT IN SESSION · Esc releases',14,42,12,C.hi);
+  halo('violet = inferred, not declared · gold = critical path · filled triangle = hyperedge',14,H-16,11,C.dim);}
+
+/* ---------- panels ---------- */
+function buildBoot(){const lines=['# BOOTSTRAP · '+VIEW+' layers · generated by PB-380','# a layer may run in parallel; layers must run in order.'];
+  layersArr.forEach((L,i)=>{lines.push('# ---- layer '+(i+1)+' · '+L.length+' node(s) ----');
+    L.slice(0,VIEW==='playbook'?99:8).forEach(n=>lines.push(VIEW==='playbook'?('- import_playbook: '+n+'_*.yml'):('  - '+n)));
+    if(VIEW==='crate'&&L.length>8)lines.push('  … '+(L.length-8)+' more');});
+  $('boot').textContent=lines.join('\n');
+  $('verdictBoot').innerHTML='template · <b>'+layersArr.length+'</b> layers · the longest chain is <b>'+crit.length+'</b> deep — that is the floor on how many rounds any rebuild can take, and it is knowable before the first compile';}
+const bc=$('bars').getContext('2d');
+function drawBars(){const W=600,H=150;bc.clearRect(0,0,W,H);bc.fillStyle='#0e1f2e';bc.fillRect(0,0,W,H);
+  const mx=Math.max(1,...layersArr.map(L=>L.length));const w=Math.max(4,(W-24)/Math.max(1,layersArr.length)-3);
+  layersArr.forEach((L,i)=>{const x=14+i*(w+3),h=L.length/mx*(H-40);bc.fillStyle=i+1<=CUT?C.gold:C.dim;bc.globalAlpha=i+1<=CUT?.9:.35;bc.fillRect(x,H-24-h,w,h);bc.globalAlpha=1;
+    if(layersArr.length<=14){bc.fillStyle=C.hi;bc.font='9px monospace';bc.fillText(i+1,x+w/2-3,H-10);}});
+  bc.fillStyle=C.gold;bc.font='600 10px monospace';bc.fillText('nodes per layer · widest layer builds most in parallel',6,13);
+  const wide=layersArr.reduce((a,L,i)=>L.length>(layersArr[a]||[]).length?i:a,0);
+  $('verdictBars').innerHTML='census · widest is <b>layer '+(wide+1)+'</b> with '+ (layersArr[wide]||[]).length +' nodes · layer 1 has <b>'+((layersArr[0]||[]).length)+'</b> that can build immediately with no prerequisites';}
+function drawUnd(){const u=G.edges.filter(e=>e.declared===false);
+  $('und').innerHTML='<tr><th>node</th><th>needs</th><th>class</th></tr>'+
+    (u.length?u.map(e=>'<tr data-n="'+e.from+'"><td>'+e.from+'</td><td>'+e.to+'</td><td style="color:'+C.violet+'">DERIVED</td></tr>').join('')
+     :'<tr><td colspan="3" style="color:'+C.dim+'">every edge is declared — the order is MEASURED</td></tr>');
+  $('und').querySelectorAll('tr[data-n]').forEach(tr=>tr.onclick=()=>{const n=G.nodes.find(x=>x.id===tr.dataset.n);if(n){VIEW=n.kind;compute();catchIt(n);}});
+  $('verdictUnd').innerHTML=u.length?'contract · <span class="bad">'+u.length+' edge(s) inferred from text</span> — declare <code>bahyway_requires</code> and the order stops being a guess':'contract · <span class="ok">no inferred edges</span>';}
+function setVerdict(){$('verdictStage').innerHTML='graph · <b>'+sub().ns.length+'</b> nodes · <b>'+sub().es.length+'</b> edges · <b>'+layersArr.length+'</b> layers · critical depth <b>'+crit.length+'</b>'+(cycles.length?' · <span class="bad">'+cycles.length+' in cycles</span>':' · <span class="ok">acyclic</span>')+(caught?' · held: <b>'+caught.id+'</b>':'');}
+
+/* ---------- story ---------- */
+const story=$('story');
+function renderStory(){if(!caught){story.innerHTML='<div class="empty">Nothing caught. Click a node; right-click for the sovereign rites.</div>';return}
+  const n=caught;const {es}=sub();
+  const pre=es.filter(e=>e.from===n.id).map(e=>e.to);
+  const post=es.filter(e=>e.to===n.id).map(e=>e.from);
+  const blocked=new Set();const stack=[...post];while(stack.length){const x=stack.pop();if(blocked.has(x))continue;blocked.add(x);es.filter(e=>e.to===x).forEach(e=>stack.push(e.from));}
+  let h='<div class="kaki">'+n.kind.toUpperCase()+' · '+n.id+'</div>';
+  h+='<div class="ev"><b>LAYER</b> '+(depth[n.id]||'?')+' of '+layersArr.length+' · '+(depth[n.id]===1?'buildable now, no prerequisites':'reachable only after '+(depth[n.id]-1)+' layer(s)')+'</div>';
+  h+='<div class="ev"><b>ON CRITICAL PATH</b> '+(crit.includes(n.id)?'yes — it sets the floor on rebuild rounds':'no')+'</div>';
+  if(n.title)h+='<div class="ev"><b>DOES</b> '+n.title+'</div>';
+  h+='<div class="rel"><i>needs</i> '+pre.length+' node(s)'+(pre.length?': '+pre.slice(0,6).join(', ')+(pre.length>6?' …':''):'')
+   +'<br><i>needed by</i> '+post.length+' directly'
+   +'<br><i>blocks</i> '+blocked.size+' node(s) transitively — this is what a broken '+n.id+' actually costs'
+   +'<br><i>contract</i> '+(G.edges.some(e=>e.from===n.id&&e.declared===false)?'<span style="color:'+C.violet+'">has inferred edges — declare bahyway_requires</span>':'declared')+'</div>';
+  story.innerHTML=h;}
+
+/* ---------- interaction ---------- */
+function toCv(e){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height];}
+function nearest(x,y){let best=null,bd=22*cv.width/cv.getBoundingClientRect().width;for(const o of projected){const d=Math.hypot(o.x-x,o.y-y);if(d<bd){bd=d;best=o.n;}}return best;}
+function freeze(on){FROZEN=on;if(on)cam.auto=false;const b=$('freeze');b.setAttribute('aria-pressed',on?'true':'false');b.textContent=on?'❄ frozen':'❄ freeze';}
+function catchIt(n){caught=n;freeze(true);renderStory();setVerdict();journal('catch · '+n.id+' · layer '+(depth[n.id]||'?'));}
+let drag=null,moved=false;
+cv.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,yaw:cam.yaw,pitch:cam.pitch};moved=false;cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{const [x,y]=toCv(e);hover=nearest(x,y);if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!moved&&Math.hypot(dx,dy)<9)return;moved=true;cam.auto=false;camT.yaw=drag.yaw+dx*.008;camT.pitch=Math.max(.2,Math.min(1.55,drag.pitch+dy*.006));});
+cv.addEventListener('pointerup',e=>{if(drag&&!moved){const [x,y]=toCv(e);const n=nearest(x,y);n?catchIt(n):(caught=null,isolate=null,freeze(false),renderStory(),setVerdict());}drag=null;});
+cv.addEventListener('click',e=>{if(e.isTrusted)return;const [x,y]=toCv(e);const n=nearest(x,y);if(n)catchIt(n);runtime.click=true;});
+cv.addEventListener('wheel',e=>{e.preventDefault();cam.auto=false;camT.dist=Math.max(1.2,Math.min(9,camT.dist*(e.deltaY>0?1.1:.9)));if(!e.isTrusted)runtime.wheel=true;},{passive:false});
+cv.addEventListener('dblclick',()=>{Object.assign(camT,{yaw:0,pitch:1.22,dist:4.1,tx:0,ty:0,tz:0});});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){caught=null;isolate=null;freeze(false);renderStory();setVerdict();hideRites();journal('release');}});
+const rites=$('rites');
+cv.addEventListener('contextmenu',e=>{e.preventDefault();const [x,y]=toCv(e);const n=nearest(x,y);const r=cv.getBoundingClientRect();
+  rites.style.left=(e.clientX-r.left+8)+'px';rites.style.top=(e.clientY-r.top+8)+'px';let h='<h3>Sovereign rites</h3>';
+  if(n)h+='<div class="kaki">'+n.id+' · layer '+(depth[n.id]||'?')+'</div>'
+    +'<button data-r="story">📖 StoryEngine · open its account</button>'
+    +'<button data-r="cone">isolate its cone (what it blocks)</button>'
+    +'<button data-r="pre">isolate its prerequisites</button>'
+    +'<button data-r="cut">cut the stage at its layer</button>';
+  else h+='<div class="kaki">field · nothing within reach</div><button data-r="all">show everything</button><button data-r="freeze">'+(FROZEN?'▶ resume':'❄ freeze')+'</button>';
+  rites.innerHTML=h;rites.style.display='block';rites.querySelectorAll('button').forEach(b=>b.onclick=()=>{rite(b.dataset.r,n);hideRites();});
+  if(!e.isTrusted)runtime.ctx=true;journal('rites · menu opened');});
+function hideRites(){rites.style.display='none';}
+document.addEventListener('pointerdown',e=>{if(!rites.contains(e.target))hideRites();});
+function cone(id,dir){const {es}=sub();const out=new Set([id]);const st=[id];
+  while(st.length){const x=st.pop();es.forEach(e=>{const a=dir==='post'?e.to:e.from,b=dir==='post'?e.from:e.to;
+    if(a===x&&!out.has(b)){out.add(b);st.push(b);}});}return out;}
+function rite(r,n){switch(r){
+  case 'story':if(n)catchIt(n);$('storyTab').scrollIntoView({behavior:reduced?'auto':'smooth',block:'center'});break;
+  case 'cone':isolate=cone(n.id,'post');catchIt(n);journal('isolate · '+n.id+' blocks '+(isolate.size-1)+' node(s)');break;
+  case 'pre':isolate=cone(n.id,'pre');catchIt(n);journal('isolate · '+n.id+' needs '+(isolate.size-1)+' node(s)');break;
+  case 'cut':CUT=depth[n.id]||99;$('cut').value=CUT;$('cutV').textContent=CUT;drawBars();break;
+  case 'all':isolate=null;CUT=99;$('cut').value=$('cut').max;$('cutV').textContent='all';drawBars();break;
+  case 'freeze':freeze(!FROZEN);break;}
+  setVerdict();}
+document.querySelectorAll('#deck button[data-view]').forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;
+  document.querySelectorAll('#deck button[data-view]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view===VIEW));
+  caught=null;isolate=null;compute();renderStory();journal('view · '+VIEW+' graph');});
+$('freeze').onclick=()=>{freeze(!FROZEN);journal('court '+(FROZEN?'frozen':'resumed'));};
+$('hyper').onclick=()=>{SHOWH=!SHOWH;$('hyper').setAttribute('aria-pressed',SHOWH?'true':'false');};
+$('crit').onclick=()=>{SHOWC=!SHOWC;$('crit').setAttribute('aria-pressed',SHOWC?'true':'false');};
+$('cut').oninput=e=>{CUT=+e.target.value;$('cutV').textContent=(CUT>=layersArr.length?'all':CUT);drawBars();};
+$('lab').oninput=e=>{LAB=+e.target.value;$('labV').textContent=['off','hover','all'][LAB];};
+$('load').onclick=()=>$('file').click();
+$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  try{const j=JSON.parse(await f.text());
+    if(!j.nodes||!j.edges)throw new Error('not an ontograph.json (needs nodes and edges)');
+    G={nodes:j.nodes.map(n=>({id:n.id,kind:n.kind||'crate',fam:(n.id||'').split(/[-_]/)[0],title:n.title||n.file})),
+       edges:j.edges.map(e2=>({from:e2.from,to:e2.to,rel:e2.rel,domain:e2.domain,declared:e2.declared!==false})),
+       hyper:(j.hyperedges||[]).map(h=>({id:h.id,members:h.members,rel:h.rel}))};
+    caught=null;isolate=null;compute();renderStory();
+    $('honesty').innerHTML='Honesty: showing <b>'+f.name+'</b> — your own graph, computed from your files by PB-380. Nothing here was compiled or executed.';
+    journal('loaded · '+f.name+' · '+G.nodes.length+' nodes, '+G.edges.length+' edges');
+  }catch(err){journal('load failed · '+err.message);fault.style.display='block';fault.textContent='LOAD · '+err.message;}};
+
+/* ---------- gates / loop ---------- */
+const runtime={click:false,ctx:false,wheel:false};
+function gate(id,ok,t){const e=$(id);e.className=ok?'ok':'bad';e.textContent=t;}
+function runtimeGate(){const r=cv.getBoundingClientRect();const o=projected[0];
+  const cx=o?r.left+o.x*r.width/cv.width:r.left+r.width/2,cy=o?r.top+o.y*r.height/cv.height:r.top+r.height/2;
+  cv.dispatchEvent(new MouseEvent('click',{clientX:cx,clientY:cy,bubbles:true}));
+  cv.dispatchEvent(new MouseEvent('contextmenu',{clientX:cx,clientY:cy,bubbles:true,cancelable:true}));hideRites();
+  cv.dispatchEvent(new WheelEvent('wheel',{deltaY:-1,clientX:cx,clientY:cy,bubbles:true,cancelable:true}));camT.dist=4.1;
+  caught=null;isolate=null;freeze(false);renderStory();
+  const ok=runtime.click&&runtime.ctx&&runtime.wheel;gate('gR',ok,ok?'green · click ✓ contextmenu ✓ wheel ✓':'red · '+JSON.stringify(runtime));journal('RUNTIME gate · '+(ok?'green':'red'));}
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;if(!reduced)time+=dt;
+  const k=reduced?1:.09;for(const key of ['yaw','pitch','dist','tx','ty','tz'])cam[key]=lerp(cam[key],camT[key],k);
+  draw();requestAnimationFrame(frame);}
+compute();renderStory();gate('gC',true,'green · '+G.nodes.length+' nodes seeded');
+draw();requestAnimationFrame(frame);setTimeout(runtimeGate,650);
+journal('COMPILE gate · green · static survey · no crate compiled, no playbook run');
+journal('hint · switch to the playbook view: PB-372 and PB-375 draw violet because their edges were INFERRED from text, not declared. That is the whole lesson — declare bahyway_requires and the rebuild order stops being a discovery.');
+})();
+</script>
+</body>
+</html>

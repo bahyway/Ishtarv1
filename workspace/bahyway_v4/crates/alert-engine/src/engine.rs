@@ -1,13 +1,13 @@
 //! AlertEngine — scans the ColorID Spatial Index and emits Alerts.
 
-use enkidb_indexes::colorid::ColorIdIndex;
 use crate::alert::{Alert, AlertSeverity, DriftCause};
+use enkidb_indexes::colorid::ColorIdIndex;
 
 pub struct AlertEngine {
     /// Threshold above which a particle is considered a Watch-level drifter.
-    pub watch_threshold:    f32,
+    pub watch_threshold: f32,
     /// Threshold above which a particle is considered a Warning-level drifter.
-    pub warning_threshold:  f32,
+    pub warning_threshold: f32,
     /// Threshold above which a particle is considered Critical.
     pub critical_threshold: f32,
 }
@@ -15,8 +15,8 @@ pub struct AlertEngine {
 impl Default for AlertEngine {
     fn default() -> Self {
         AlertEngine {
-            watch_threshold:    50.0,
-            warning_threshold:  150.0,
+            watch_threshold: 50.0,
+            warning_threshold: 150.0,
             critical_threshold: 300.0,
         }
     }
@@ -25,8 +25,8 @@ impl Default for AlertEngine {
 impl AlertEngine {
     pub fn new(watch: f32, warning: f32, critical: f32) -> Self {
         AlertEngine {
-            watch_threshold:    watch,
-            warning_threshold:  warning,
+            watch_threshold: watch,
+            warning_threshold: warning,
             critical_threshold: critical,
         }
     }
@@ -51,7 +51,11 @@ impl AlertEngine {
             .collect::<Vec<_>>();
 
         // Sort by drift_distance descending (most critical first)
-        alerts.sort_by(|a, b| b.drift_distance.partial_cmp(&a.drift_distance).unwrap_or(std::cmp::Ordering::Equal));
+        alerts.sort_by(|a, b| {
+            b.drift_distance
+                .partial_cmp(&a.drift_distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         alerts
     }
 }
@@ -65,8 +69,8 @@ mod tests {
     fn no_alerts_for_healthy_particles() {
         let mut idx = ColorIdIndex::new();
         idx.upsert(0x0001, ColorIdPoint::new(255, 255, 255, 0.0));
-        let engine  = AlertEngine::default();
-        let alerts  = engine.scan(&idx);
+        let engine = AlertEngine::default();
+        let alerts = engine.scan(&idx);
         assert!(alerts.is_empty());
     }
 
@@ -86,7 +90,7 @@ mod tests {
     fn sorted_by_drift_descending() {
         let mut idx = ColorIdIndex::new();
         idx.upsert(0x0001, ColorIdPoint::new(100, 100, 100, 200.0)); // moderate
-        idx.upsert(0x0002, ColorIdPoint::new(0,   0,   0,   400.0)); // severe
+        idx.upsert(0x0002, ColorIdPoint::new(0, 0, 0, 400.0)); // severe
         let engine = AlertEngine::default();
         let alerts = engine.scan(&idx);
         assert!(alerts.len() >= 2);

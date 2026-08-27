@@ -13,8 +13,8 @@ use crate::index::{IndexRecord, INDEX_RECORD_SIZE};
 use crate::record::decode_particle;
 
 pub struct DataFileReader {
-    data_file:    File,
-    idx_file:     File,
+    data_file: File,
+    idx_file: File,
     record_count: u64,
 }
 
@@ -27,7 +27,11 @@ impl DataFileReader {
         let idx_file = File::open(base.with_extension("idx"))?;
         let idx_len = idx_file.metadata()?.len();
         let record_count = idx_len / INDEX_RECORD_SIZE as u64;
-        Ok(DataFileReader { data_file, idx_file, record_count })
+        Ok(DataFileReader {
+            data_file,
+            idx_file,
+            record_count,
+        })
     }
 
     /// Number of indexed particles (index_file_size / 28), no data read.
@@ -102,7 +106,8 @@ impl DataFileReader {
 
     fn read_index_record(&mut self, i: u64) -> io::Result<IndexRecord> {
         let mut buf = [0u8; INDEX_RECORD_SIZE];
-        self.idx_file.seek(SeekFrom::Start(i * INDEX_RECORD_SIZE as u64))?;
+        self.idx_file
+            .seek(SeekFrom::Start(i * INDEX_RECORD_SIZE as u64))?;
         self.idx_file.read_exact(&mut buf)?;
         Ok(IndexRecord::from_bytes(&buf))
     }
@@ -111,7 +116,8 @@ impl DataFileReader {
         let mut buf = vec![0u8; record.len as usize];
         self.data_file.seek(SeekFrom::Start(record.offset))?;
         self.data_file.read_exact(&mut buf)?;
-        decode_particle(&buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("{e:?}")))
+        decode_particle(&buf)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("{e:?}")))
     }
 
     /// Read every `(key, raw_bytes)` pair in this Data File in one bulk
@@ -139,7 +145,12 @@ impl DataFileReader {
             let end = start + record.len as usize;
             let bytes = data_buf
                 .get(start..end)
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "index record points past end of data file"))?
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "index record points past end of data file",
+                    )
+                })?
                 .to_vec();
             out.push((record.kaki, bytes));
         }
@@ -173,7 +184,13 @@ mod tests {
         for i in 0..n {
             let e = IdentityKaki::try_from_kaki(m.mint_identity(i, KakiRole::Zikru)).unwrap();
             kakis.push(*e.bytes());
-            w.append(&Particle::base(e, "score", AkkValue::Int(i as i64), i as u64)).unwrap();
+            w.append(&Particle::base(
+                e,
+                "score",
+                AkkValue::Int(i as i64),
+                i as u64,
+            ))
+            .unwrap();
         }
         w.sync().unwrap();
         w.compact_index().unwrap();

@@ -3,14 +3,17 @@
 # Clone by playbook, never by image: an image proves a machine once existed;
 # a playbook proves it can exist again. Asserts both streams define themselves.
 - name: PB-315 | Validate Uruk and Kish inventories
-  hosts: host_forge
+  hosts: uruk
   gather_facts: false
   vars:
     required_vars: [bahyway_stream, bahyway_root, kaki_runs, enkidb_ports,
                     ledger_dir, vault_pool, vault_datasets, signing_key]
   tasks:
+    # 2026-08-23: fixed real bug found live -- a bare relative path here
+    # resolves against this playbook's own directory (playbooks/), not the
+    # repo root, so this always failed to find the file regardless of cwd.
     - name: Load both inventories' group_vars
-      ansible.builtin.include_vars: { file: "inventories/{{ item }}/group_vars/all.yml", name: "gv_{{ item }}" }
+      ansible.builtin.include_vars: { file: "{{ playbook_dir }}/../inventories/{{ item }}/group_vars/all.yml", name: "gv_{{ item }}" }
       loop: [uruk, kish]
 
     - name: Assert required variables present in both streams
@@ -26,7 +29,7 @@
 
     - name: Forbid image-derived hosts (marker written only by playbooks)
       ansible.builtin.shell: |
-        for h in 192.168.122.101 192.168.122.107; do
+        for h in 192.168.122.111 192.168.122.112; do
           ssh root@$h 'test -f /etc/bahyway_built_by_playbook' || {
             echo "$h lacks playbook marker — image-derived host suspected"; exit 1; }
         done
@@ -35,6 +38,7 @@
 
     - name: Run-KAKI
       ansible.builtin.shell: |
+        mkdir -p /var/lib/bahyway/kaki
         PREV=$(tail -n1 {{ hostvars[inventory_hostname].kaki_runs | default('/var/lib/bahyway/kaki/pb_runs.jsonl') }} 2>/dev/null | sha256sum | cut -d' ' -f1)
         echo "{\"pb\":\"PB-315\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"streams-self-defined\"}" >> /var/lib/bahyway/kaki/pb_runs.jsonl
       become: true

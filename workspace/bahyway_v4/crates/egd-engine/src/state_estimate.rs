@@ -112,7 +112,12 @@ fn gauss_solve(a: &mut [Vec<Phasor>], b: &mut [Phasor]) -> Result<Vec<Phasor>, S
     let n = b.len();
     for col in 0..n {
         let pivot_row = (col..n)
-            .max_by(|&r1, &r2| a[r1][col].magnitude().partial_cmp(&a[r2][col].magnitude()).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|&r1, &r2| {
+                a[r1][col]
+                    .magnitude()
+                    .partial_cmp(&a[r2][col].magnitude())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .unwrap();
         if a[pivot_row][col].magnitude() < 1e-9 {
             return Err(StateEstimateError::SingularSystem);
@@ -121,8 +126,8 @@ fn gauss_solve(a: &mut [Vec<Phasor>], b: &mut [Phasor]) -> Result<Vec<Phasor>, S
         b.swap(col, pivot_row);
 
         let pivot = a[col][col];
-        for k in col..n {
-            a[col][k] = a[col][k].div(pivot);
+        for cell in &mut a[col][col..n] {
+            *cell = cell.div(pivot);
         }
         b[col] = b[col].div(pivot);
 
@@ -134,6 +139,12 @@ fn gauss_solve(a: &mut [Vec<Phasor>], b: &mut [Phasor]) -> Result<Vec<Phasor>, S
             if factor.magnitude() < 1e-15 {
                 continue;
             }
+            // k reads a[col][k] (the pivot row) while writing a[row][k] (a
+            // different row) -- same class as riemannian.rs's tensor-
+            // contraction loops fixed earlier: two different rows of the
+            // same Vec<Vec<_>> can't both be borrowed through one safe
+            // iterator, so the explicit index is kept.
+            #[allow(clippy::needless_range_loop)]
             for k in col..n {
                 a[row][k] = a[row][k].sub(factor.mul(a[col][k]));
             }
@@ -161,10 +172,21 @@ mod tests {
 
         let net = Network {
             nodes: vec![
-                Node { id: 0, injection: Phasor::zero().sub(i_line) },
-                Node { id: 1, injection: i_line },
+                Node {
+                    id: 0,
+                    injection: Phasor::zero().sub(i_line),
+                },
+                Node {
+                    id: 1,
+                    injection: i_line,
+                },
             ],
-            edges: vec![Edge { from: 0, to: 1, coeff: y, in_service: true }],
+            edges: vec![Edge {
+                from: 0,
+                to: 1,
+                coeff: y,
+                in_service: true,
+            }],
         };
 
         // Only node 0's voltage is "measured"; node 1's is unknown.
@@ -182,25 +204,51 @@ mod tests {
         // already-tested KCL residual sweep must show zero residual
         // everywhere -- self-consistency, not a hand-derived answer.
         let y = Phasor::new(8.0, -3.0);
-        let v_true = vec![Phasor::new(1.0, 0.0), Phasor::new(0.97, -0.01), Phasor::new(0.94, -0.02)];
+        let v_true = vec![
+            Phasor::new(1.0, 0.0),
+            Phasor::new(0.97, -0.01),
+            Phasor::new(0.94, -0.02),
+        ];
         let i01 = y.mul(v_true[0].sub(v_true[1]));
         let i12 = y.mul(v_true[1].sub(v_true[2]));
 
         let net = Network {
             nodes: vec![
-                Node { id: 0, injection: Phasor::zero().sub(i01) },
-                Node { id: 1, injection: i01.sub(i12) },
-                Node { id: 2, injection: i12 },
+                Node {
+                    id: 0,
+                    injection: Phasor::zero().sub(i01),
+                },
+                Node {
+                    id: 1,
+                    injection: i01.sub(i12),
+                },
+                Node {
+                    id: 2,
+                    injection: i12,
+                },
             ],
             edges: vec![
-                Edge { from: 0, to: 1, coeff: y, in_service: true },
-                Edge { from: 1, to: 2, coeff: y, in_service: true },
+                Edge {
+                    from: 0,
+                    to: 1,
+                    coeff: y,
+                    in_service: true,
+                },
+                Edge {
+                    from: 1,
+                    to: 2,
+                    coeff: y,
+                    in_service: true,
+                },
             ],
         };
 
         let estimated = solve_voltages(&net, &[(0, v_true[0])]).unwrap();
         let r = residuals(&net, &estimated, &Gibil).unwrap();
-        assert!(r.iter().all(|kappa| *kappa < 1e-6), "residuals should vanish for a correctly estimated state: {r:?}");
+        assert!(
+            r.iter().all(|kappa| *kappa < 1e-6),
+            "residuals should vanish for a correctly estimated state: {r:?}"
+        );
     }
 
     #[test]
@@ -210,10 +258,21 @@ mod tests {
         let y = Phasor::new(5.0, -1.0);
         let net = Network {
             nodes: vec![
-                Node { id: 0, injection: Phasor::zero() },
-                Node { id: 1, injection: Phasor::new(1.0, 0.0) },
+                Node {
+                    id: 0,
+                    injection: Phasor::zero(),
+                },
+                Node {
+                    id: 1,
+                    injection: Phasor::new(1.0, 0.0),
+                },
             ],
-            edges: vec![Edge { from: 0, to: 0, coeff: y, in_service: false }],
+            edges: vec![Edge {
+                from: 0,
+                to: 0,
+                coeff: y,
+                in_service: false,
+            }],
         };
         let err = solve_voltages(&net, &[(0, Phasor::new(1.0, 0.0))]).unwrap_err();
         assert_eq!(err, StateEstimateError::SingularSystem);
@@ -222,7 +281,10 @@ mod tests {
     #[test]
     fn every_voltage_known_returns_immediately() {
         let net = Network::<Phasor> {
-            nodes: vec![Node { id: 0, injection: Phasor::zero() }],
+            nodes: vec![Node {
+                id: 0,
+                injection: Phasor::zero(),
+            }],
             edges: vec![],
         };
         let v = solve_voltages(&net, &[(0, Phasor::new(1.0, 0.0))]).unwrap();

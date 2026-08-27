@@ -14,14 +14,14 @@
 //! ## Explicit Non-Goals (until a sovereign module has a justified requirement)
 //! - NetCDF, Parquet, Shapefile, Excel binary
 
-pub mod row;
 pub mod csv;
-pub mod json;
-pub mod xml;
 pub mod error;
+pub mod json;
+pub mod row;
+pub mod xml;
 
 pub use error::FormatError;
-pub use row::{Row, Field};
+pub use row::{Field, Row};
 
 /// File format variants supported by NARAMSIN Stage 1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,9 +38,9 @@ impl FileFormat {
     /// Human-readable name for audit logging.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Csv  => "csv",
+            Self::Csv => "csv",
             Self::Json => "json",
-            Self::Xml  => "xml",
+            Self::Xml => "xml",
         }
     }
 }

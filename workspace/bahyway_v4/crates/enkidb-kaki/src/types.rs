@@ -12,14 +12,14 @@ use bahyway_core::BahywayError;
 #[repr(u8)]
 pub enum KakiType {
     /// 0x01 — Birth certificate of a sovereign particle.
-    Identity   = 0x01,
+    Identity = 0x01,
     /// 0x02 — Immutable record of a state-transition or operational event.
-    Event      = 0x02,
+    Event = 0x02,
     /// 0x03 — Persistent linkage between anchor particles across tribes.
     CrossTribe = 0x03,
     /// 0x04 — Emergent pattern structure derived from GA clustering (NISABA).
     /// Deterministic: same inputs → same KAKI. Never minted randomly.
-    Pattern    = 0x04,
+    Pattern = 0x04,
 }
 
 impl KakiType {
@@ -35,17 +35,19 @@ impl KakiType {
 
     pub fn as_str(self) -> &'static str {
         match self {
-            KakiType::Identity   => "Identity",
-            KakiType::Event      => "Event",
+            KakiType::Identity => "Identity",
+            KakiType::Event => "Event",
             KakiType::CrossTribe => "CrossTribe",
-            KakiType::Pattern    => "Pattern",
+            KakiType::Pattern => "Pattern",
         }
     }
 
     /// Returns true only for pattern-kakis — used by NISABA to guard the
     /// deterministic derivation path against misuse.
     #[inline]
-    pub fn is_pattern(self) -> bool { matches!(self, KakiType::Pattern) }
+    pub fn is_pattern(self) -> bool {
+        matches!(self, KakiType::Pattern)
+    }
 }
 
 impl core::fmt::Display for KakiType {
@@ -61,9 +63,9 @@ pub enum KakiRole {
     /// 0x01 — External file / blob / source artifact seal (Akkadian: kishib).
     Kishib = 0x01,
     /// 0x02 — Record or entity in a tribe domain (Akkadian: zikru).
-    Zikru  = 0x02,
+    Zikru = 0x02,
     /// 0x03 — Logic, template, axiom, or rule (Akkadian: parṣu).
-    Parzu  = 0x03,
+    Parzu = 0x03,
 }
 
 impl KakiRole {
@@ -79,8 +81,8 @@ impl KakiRole {
     pub fn as_str(self) -> &'static str {
         match self {
             KakiRole::Kishib => "KISHIB",
-            KakiRole::Zikru  => "ZIKRU",
-            KakiRole::Parzu  => "PARZU",
+            KakiRole::Zikru => "ZIKRU",
+            KakiRole::Parzu => "PARZU",
         }
     }
 }

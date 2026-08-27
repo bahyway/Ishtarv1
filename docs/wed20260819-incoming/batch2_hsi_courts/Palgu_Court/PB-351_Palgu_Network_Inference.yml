@@ -1,0 +1,292 @@
+---
+# ============================================================
+#  PB-351 — Palgu: Hidden-Network Inference Core (GL-HSI-002)
+#  BahyWay.Ecosystem v4.0 — Phase 2 of Nanshe
+#
+#  Run from the Fedora bare-metal HOST:
+#    ansible-playbook -i inventory PB-351_Palgu_Network_Inference.yml
+#  Running this playbook is the CSR-08 confirmation point —
+#  including the name Palgu and the BookCourt_003 clause.
+#
+#  GATE: requires nanshe crate (PB-346+). Pure Rust, no deps.
+#  NOTE: production persistence belongs to LamassuEngine; this crate
+#  carries the sovereign minimal core so Palgu law tests run in-repo,
+#  with a marked seam for the Lamassu handoff.
+# ============================================================
+- name: PB-351 palgu network inference core
+  hosts: bahyway_host
+  gather_facts: false
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    crate_dir: "{{ v4_root }}/engines/nanshe"
+    tablets_dir: "{{ v4_root }}/tablets"
+    shala_dir: "{{ v4_root }}/shala"
+
+  tasks:
+    - name: GATE · nanshe crate must exist
+      ansible.builtin.stat:
+        path: "{{ crate_dir }}/Cargo.toml"
+      register: crate
+
+    - name: GATE · refuse if absent
+      ansible.builtin.fail:
+        msg: "COMPLETION LAW REFUSAL: nanshe crate absent — run PB-346 first."
+      when: not crate.stat.exists
+
+    - name: Deposit charter tablet
+      ansible.builtin.copy:
+        src: "GL-HSI-002_Palgu_Court.md"
+        dest: "{{ tablets_dir }}/GL-HSI-002_Palgu_Court.md"
+        mode: "0644"
+
+    - name: Deposit Šala tab (standing habit — one PB, one tab)
+      ansible.builtin.copy:
+        src: "shala_palgu_court.html"
+        dest: "{{ shala_dir }}/shala_palgu_court.html"
+        mode: "0644"
+
+    - name: Register module in lib.rs
+      ansible.builtin.lineinfile:
+        path: "{{ crate_dir }}/src/lib.rs"
+        line: "pub mod palgu;"
+
+    - name: src/palgu.rs — filtration, loops, skeleton, grammar
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/palgu.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-002 — Palgu: the buried-channel finder.
+          //! Minimal sovereign persistence core (LAMASSU SEAM: production
+          //! homology hands off to LamassuEngine; identical contracts).
+          //! Deterministic throughout: fixed orders, index tie-breaking.
+
+          #[derive(Clone, Copy, Debug, PartialEq)]
+          pub struct Pt { pub x: f64, pub y: f64 }
+          fn d2(a: Pt, b: Pt) -> f64 { (a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y) }
+
+          /* ── union-find (deterministic) ── */
+          pub struct Uf { p: Vec<usize>, n_comp: usize }
+          impl Uf {
+              pub fn new(n: usize) -> Self { Uf { p: (0..n).collect(), n_comp: n } }
+              pub fn find(&mut self, i: usize) -> usize {
+                  if self.p[i] != i { let r = self.find(self.p[i]); self.p[i] = r; }
+                  self.p[i]
+              }
+              /// returns true if a merge happened (edge is a tree edge)
+              pub fn union(&mut self, a: usize, b: usize) -> bool {
+                  let (ra, rb) = (self.find(a), self.find(b));
+                  if ra == rb { return false; }
+                  let (lo, hi) = if ra < rb { (ra, rb) } else { (rb, ra) };
+                  self.p[hi] = lo; self.n_comp -= 1; true
+              }
+              pub fn components(&self) -> usize { self.n_comp }
+          }
+
+          /// All pairs sorted by distance (deterministic ties by indices).
+          pub fn sorted_pairs(pts: &[Pt]) -> Vec<(f64, usize, usize)> {
+              let mut e = Vec::new();
+              for i in 0..pts.len() { for j in i+1..pts.len() {
+                  e.push((d2(pts[i], pts[j]).sqrt(), i, j)); } }
+              e.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap()
+                  .then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+              e
+          }
+
+          /// 0D persistence: each merge kills the younger component; since all
+          /// points are born at 0, death = merge radius. Returns death radii
+          /// sorted ascending (n-1 of them) — component lifetimes (L-HSI-26).
+          pub fn deaths_0d(pts: &[Pt]) -> Vec<f64> {
+              let mut uf = Uf::new(pts.len());
+              let mut deaths = Vec::new();
+              for (d, i, j) in sorted_pairs(pts) {
+                  if uf.union(i, j) { deaths.push(d); }
+              }
+              deaths
+          }
+
+          /// beta_0 at radius eps.
+          pub fn beta0(pts: &[Pt], eps: f64) -> usize {
+              let mut uf = Uf::new(pts.len());
+              for (d, i, j) in sorted_pairs(pts) {
+                  if d > eps { break; } uf.union(i, j);
+              }
+              uf.components()
+          }
+
+          /// beta_1 proxy at radius eps on the kNN-restricted graph:
+          /// E - V + C over edges that are within eps AND mutual-4NN.
+          /// (LAMASSU SEAM: true H1 with triangle filling lives there.)
+          pub fn beta1_knn(pts: &[Pt], eps: f64, k: usize) -> usize {
+              let n = pts.len();
+              let mut nbrs: Vec<Vec<usize>> = Vec::with_capacity(n);
+              for i in 0..n {
+                  let mut ds: Vec<(f64, usize)> = (0..n).filter(|&j| j != i)
+                      .map(|j| (d2(pts[i], pts[j]).sqrt(), j)).collect();
+                  ds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap()
+                      .then(a.1.cmp(&b.1)));
+                  nbrs.push(ds.into_iter().take(k).map(|(_, j)| j).collect());
+              }
+              let mut uf = Uf::new(n);
+              let mut e = 0usize;
+              for i in 0..n { for &j in &nbrs[i] { if j > i
+                  && nbrs[j].contains(&i)
+                  && d2(pts[i], pts[j]).sqrt() <= eps {
+                      e += 1; uf.union(i, j); } } }
+              let c = uf.components();
+              (e + c).saturating_sub(n)
+          }
+
+          /* ── grammar ── */
+          #[derive(Clone, Debug, PartialEq)]
+          pub enum EdgeVerdict {
+              Segment { on_ring: bool },
+              RefusedOrphan { citation: &'static str },
+              RefusedGradient { citation: &'static str },
+          }
+
+          #[derive(Clone, Debug)]
+          pub struct CandEdge {
+              pub a: usize, pub b: usize,
+              pub evidence: u32,      // supporting anomaly points
+              pub lifetime: f64,      // persistence lifetime (provenance)
+              pub grade_ok: bool,     // hydraulic feasibility (from DEM)
+          }
+
+          /// Anchor + Gradient laws; refusals are RECORDS, never deletions
+          /// (L-HSI-29). `anchored` marks nodes with a path to a fixed anchor
+          /// in the candidate graph (computed by the caller via Uf against
+          /// anchor node ids). `ring_edges` from beta1 cycles.
+          pub fn judge_edge(e: &CandEdge, anchored: bool,
+                            on_ring: bool) -> EdgeVerdict {
+              if !anchored {
+                  return EdgeVerdict::RefusedOrphan {
+                      citation: "GL-HSI-002 §2 Anchor Law: no path to a known \
+                                 fixed anchor — refused, recorded, not deleted" };
+              }
+              if !e.grade_ok {
+                  return EdgeVerdict::RefusedGradient {
+                      citation: "GL-HSI-002 §2 Gradient Law: hydraulically \
+                                 infeasible against the elevation model" };
+              }
+              EdgeVerdict::Segment { on_ring }
+          }
+
+          /// OntoGraph export line (deterministic, provenance-carrying,
+          /// L-HSI-30). No serde: sovereign fixed-format text.
+          pub fn export_edge(e: &CandEdge, v: &EdgeVerdict) -> String {
+              let verdict = match v {
+                  EdgeVerdict::Segment { on_ring: true } => "PALGU-RING",
+                  EdgeVerdict::Segment { on_ring: false } => "PALGU-SEGMENT",
+                  EdgeVerdict::RefusedOrphan { .. } => "REFUSED-ORPHAN",
+                  EdgeVerdict::RefusedGradient { .. } => "REFUSED-GRADIENT",
+              };
+              format!("EDGE {}-{} | evidence={} | lifetime={:.3} | {}",
+                      e.a, e.b, e.evidence, e.lifetime, verdict)
+          }
+
+    - name: tests/palgu_law_tests.rs — L-HSI-26..30
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/palgu_law_tests.rs"
+        mode: "0644"
+        content: |
+          use nanshe::palgu::*;
+
+          fn lcg(s: &mut u64) -> f64 {
+              *s = s.wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+              ((*s >> 33) as f64) / (1u64 << 31) as f64
+          }
+          /// sealed synthetic city: two segments + one loop + noise
+          fn city() -> (Vec<Pt>, usize) {
+              let mut pts = Vec::new();
+              // segment A: dense line, spacing 0.05
+              for i in 0..20 { pts.push(Pt { x: i as f64 * 0.05, y: 0.0 }); }
+              // loop: square ring, spacing 0.05
+              for i in 0..12 { pts.push(Pt { x: 2.0 + i as f64 * 0.05, y: 1.0 }); }
+              for i in 0..12 { pts.push(Pt { x: 2.0 + i as f64 * 0.05, y: 1.6 }); }
+              for i in 1..12 { pts.push(Pt { x: 2.0, y: 1.0 + i as f64 * 0.05 }); }
+              for i in 1..12 { pts.push(Pt { x: 2.55, y: 1.0 + i as f64 * 0.05 }); }
+              let structural = pts.len();
+              // sparse noise, far-scattered
+              let mut s = 351u64;
+              for _ in 0..15 {
+                  pts.push(Pt { x: lcg(&mut s) * 6.0, y: 3.0 + lcg(&mut s) * 3.0 });
+              }
+              (pts, structural)
+          }
+
+          #[test]
+          fn l_hsi_26_lifetimes_deterministic_and_separated() {
+              let (pts, _) = city();
+              let a = deaths_0d(&pts);
+              let b = deaths_0d(&pts);
+              assert_eq!(a, b);                              // bit-stable
+              // structural merges die early (<=0.08); noise merges late (>0.4)
+              let early = a.iter().filter(|&&d| d <= 0.08).count();
+              let late = a.iter().filter(|&&d| d >= 0.4).count();
+              assert!(early >= 50, "dense structure merges early: {}", early);
+              assert!(late >= 8, "noise lives long alone: {}", late);
+          }
+
+          #[test]
+          fn l_hsi_27_loop_counted_on_plateau_none_on_noise() {
+              let (pts, structural) = city();
+              let core = &pts[..structural];
+              // plateau: spacing 0.05 < eps < ring width 0.55
+              assert!(beta1_knn(core, 0.10, 4) >= 1, "ring must register");
+              assert_eq!(beta1_knn(core, 0.03, 4), 0, "below spacing: no loop");
+              let noise: Vec<Pt> = pts[structural..].to_vec();
+              assert_eq!(beta1_knn(&noise, 0.10, 4), 0, "noise closes nothing");
+          }
+
+          #[test]
+          fn l_hsi_28_skeleton_recall_on_plateau() {
+              let (pts, structural) = city();
+              let core = &pts[..structural];
+              // at plateau eps the structure is one or two components (A + ring),
+              // never fragmented: recall proxy = components <= 2
+              assert!(beta0(core, 0.10) <= 2, "structure coheres at plateau");
+              assert!(beta0(core, 0.02) > 20, "below spacing it fragments");
+          }
+
+          #[test]
+          fn l_hsi_29_anchor_law_refuses_orphans_as_records() {
+              let truth = CandEdge { a: 0, b: 1, evidence: 20,
+                  lifetime: 0.5, grade_ok: true };
+              let decoy = CandEdge { a: 7, b: 8, evidence: 4,
+                  lifetime: 0.05, grade_ok: true };
+              let steep = CandEdge { a: 2, b: 3, evidence: 15,
+                  lifetime: 0.4, grade_ok: false };
+              assert_eq!(judge_edge(&truth, true, false),
+                         EdgeVerdict::Segment { on_ring: false });
+              match judge_edge(&decoy, false, false) {
+                  EdgeVerdict::RefusedOrphan { citation } =>
+                      assert!(citation.contains("Anchor Law")),
+                  v => panic!("orphan must be refused, got {:?}", v) }
+              match judge_edge(&steep, true, false) {
+                  EdgeVerdict::RefusedGradient { .. } => {}
+                  v => panic!("infeasible must be refused, got {:?}", v) }
+          }
+
+          #[test]
+          fn l_hsi_30_export_deterministic_with_provenance() {
+              let e = CandEdge { a: 3, b: 9, evidence: 17,
+                  lifetime: 0.312, grade_ok: true };
+              let v = judge_edge(&e, true, true);
+              let line = export_edge(&e, &v);
+              assert_eq!(line, export_edge(&e, &v));         // bit-stable
+              assert!(line.contains("evidence=17"));
+              assert!(line.contains("lifetime=0.312"));
+              assert!(line.contains("PALGU-RING"));
+          }
+
+    - name: Build and run law tests (release)
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ crate_dir }}"
+      register: law_tests
+      changed_when: false
+
+    - name: Announce
+      ansible.builtin.debug:
+        msg: "Palgu core sealed. Law tests: {{ 'GREEN' if law_tests.rc == 0 else 'RED' }}. GL-HSI-002 + BookCourt_003 await CSR-08."

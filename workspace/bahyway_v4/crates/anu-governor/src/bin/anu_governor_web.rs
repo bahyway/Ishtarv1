@@ -17,9 +17,6 @@
 //! amount of machinery for the *protocol* — the *security* underneath it
 //! is not hand-waved.
 
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use bahyway_core::hepta_gate::HeptaGate;
-use serde_json::{json, Value};
 use anu_governor::docpulse::{self, DocPulseCfg};
 use anu_governor::domain_review;
 use anu_governor::gate_review;
@@ -28,6 +25,9 @@ use anu_governor::pb_dependency_review;
 use anu_governor::resource_check::{self, ResourceCheckResult, Thresholds};
 use anu_governor::web_auth::{self, AuthedIdentity, LoginDefender, SessionStore};
 use anu_governor::{config::Config, report, runner, web_tls};
+use bahyway_core::hepta_gate::HeptaGate;
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream};
@@ -156,7 +156,10 @@ impl ServerState {
             ));
         }
         if !result.green {
-            return Err(format!("last resource check is RED: {}", result.warnings.join("; ")));
+            return Err(format!(
+                "last resource check is RED: {}",
+                result.warnings.join("; ")
+            ));
         }
         Ok(())
     }
@@ -273,12 +276,20 @@ impl ServerState {
     fn load_config(&mut self) {
         match Config::load(std::path::Path::new(&self.cfg_path)) {
             Ok(cfg) => {
-                self.params = cfg.parameters.iter().map(|p| (p.key.clone(), p.value.clone())).collect();
+                self.params = cfg
+                    .parameters
+                    .iter()
+                    .map(|p| (p.key.clone(), p.value.clone()))
+                    .collect();
                 self.statuses = vec![PbStatus::Pending; cfg.run.playbooks.len()];
                 self.status_line = format!(
                     "config ✓ {} playbooks resolved{}",
                     cfg.run.playbooks.len(),
-                    if cfg.run.simulate { " · SIMULATE mode" } else { "" }
+                    if cfg.run.simulate {
+                        " · SIMULATE mode"
+                    } else {
+                        ""
+                    }
                 );
                 self.cfg = Some(cfg);
             }
@@ -382,26 +393,52 @@ impl ServerState {
             RunPhase::Finished => ("finished", None),
             RunPhase::Aborted => ("aborted", None),
         };
-        let playbooks: Vec<&String> = self.cfg.as_ref().map(|c| c.run.playbooks.iter().collect()).unwrap_or_default();
+        let playbooks: Vec<&String> = self
+            .cfg
+            .as_ref()
+            .map(|c| c.run.playbooks.iter().collect())
+            .unwrap_or_default();
         let ok = self.statuses.iter().filter(|s| **s == PbStatus::Ok).count();
-        let warnings = self.statuses.iter().filter(|s| **s == PbStatus::Warned).count();
-        let errors = self.statuses.iter().filter(|s| **s == PbStatus::Failed).count();
-        let done = self.statuses.iter().filter(|s| !matches!(s, PbStatus::Pending | PbStatus::Running)).count();
+        let warnings = self
+            .statuses
+            .iter()
+            .filter(|s| **s == PbStatus::Warned)
+            .count();
+        let errors = self
+            .statuses
+            .iter()
+            .filter(|s| **s == PbStatus::Failed)
+            .count();
+        let done = self
+            .statuses
+            .iter()
+            .filter(|s| !matches!(s, PbStatus::Pending | PbStatus::Running))
+            .count();
 
-        let events: Vec<Value> = self.events.iter().map(|ev| {
-            let remedy = self.cfg.as_ref().and_then(|c| c.find_remedy(&ev.message)).map(|r| json!({
-                "id": r.id, "diagnosis": r.diagnosis, "solution": r.solution,
-            }));
-            json!({
-                "pb_index": ev.pb_index,
-                "playbook": ev.playbook,
-                "task": ev.task,
-                "error_type": ev.error_type,
-                "message": ev.message,
-                "severity": ev.severity.to_string(),
-                "remedy": remedy,
+        let events: Vec<Value> = self
+            .events
+            .iter()
+            .map(|ev| {
+                let remedy = self
+                    .cfg
+                    .as_ref()
+                    .and_then(|c| c.find_remedy(&ev.message))
+                    .map(|r| {
+                        json!({
+                            "id": r.id, "diagnosis": r.diagnosis, "solution": r.solution,
+                        })
+                    });
+                json!({
+                    "pb_index": ev.pb_index,
+                    "playbook": ev.playbook,
+                    "task": ev.task,
+                    "error_type": ev.error_type,
+                    "message": ev.message,
+                    "severity": ev.severity.to_string(),
+                    "remedy": remedy,
+                })
             })
-        }).collect();
+            .collect();
 
         json!({
             "cfg_path": self.cfg_path,
@@ -431,7 +468,10 @@ struct AppCtx {
 }
 
 fn main() -> anyhow::Result<()> {
-    let port: u16 = std::env::var("ANU_GOVERNOR_WEB_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8763);
+    let port: u16 = std::env::var("ANU_GOVERNOR_WEB_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8763);
     // Loopback by default -- deliberate. A network-reachable governor for
     // real infrastructure with no auth in front of it is not a "resize
     // problem", it's an open door; auth now stands in front of it, but
@@ -439,13 +479,16 @@ fn main() -> anyhow::Result<()> {
     // only network posture that needs zero configuration to be correct).
     // Set ANU_GOVERNOR_WEB_BIND=0.0.0.0 (or a specific LAN address)
     // explicitly to serve beyond this host.
-    let bind: String = std::env::var("ANU_GOVERNOR_WEB_BIND").unwrap_or_else(|_| "127.0.0.1".into());
+    let bind: String =
+        std::env::var("ANU_GOVERNOR_WEB_BIND").unwrap_or_else(|_| "127.0.0.1".into());
     let addr = format!("{bind}:{port}");
     let listener = TcpListener::bind(&addr)?;
 
     let repo_root = std::path::Path::new(".");
-    let tls_config =
-        web_tls::load_or_generate_config(&repo_root.join("secrets/anu_governor_web_cert.pem"), &repo_root.join("secrets/anu_governor_web_key.pem"))?;
+    let tls_config = web_tls::load_or_generate_config(
+        &repo_root.join("secrets/anu_governor_web_cert.pem"),
+        &repo_root.join("secrets/anu_governor_web_key.pem"),
+    )?;
 
     let ctx = Arc::new(AppCtx {
         state: Arc::new(Mutex::new(ServerState::new())),
@@ -469,7 +512,9 @@ fn main() -> anyhow::Result<()> {
             Ok(s) => s,
             Err(_) => continue,
         };
-        let Ok(peer_addr) = stream.peer_addr() else { continue };
+        let Ok(peer_addr) = stream.peer_addr() else {
+            continue;
+        };
         let tls_config = Arc::clone(&tls_config);
         let ctx = Arc::clone(&ctx);
         std::thread::spawn(move || {
@@ -523,7 +568,15 @@ fn handle_connection(mut stream: TlsStream, peer_ip: IpAddr, ctx: &AppCtx) -> st
     let (path_only, query) = path.split_once('?').unwrap_or((&path, ""));
     let session_cookie = cookie_header.as_deref().and_then(extract_session_cookie);
 
-    let (status, content_type, headers, resp_body) = route(&method, path_only, query, &body, peer_ip, session_cookie, ctx);
+    let (status, content_type, headers, resp_body) = route(
+        &method,
+        path_only,
+        query,
+        &body,
+        peer_ip,
+        session_cookie,
+        ctx,
+    );
     write_response(&mut stream, status, content_type, &headers, &resp_body)
 }
 
@@ -568,19 +621,37 @@ fn write_response(
 type Resp = (u16, &'static str, Vec<(String, String)>, Vec<u8>);
 
 fn json_ok(v: Value) -> Resp {
-    (200, "application/json; charset=utf-8", vec![], serde_json::to_vec(&v).unwrap_or_default())
+    (
+        200,
+        "application/json; charset=utf-8",
+        vec![],
+        serde_json::to_vec(&v).unwrap_or_default(),
+    )
 }
 
 fn json_resp(status: u16, v: Value) -> Resp {
-    (status, "application/json; charset=utf-8", vec![], serde_json::to_vec(&v).unwrap_or_default())
+    (
+        status,
+        "application/json; charset=utf-8",
+        vec![],
+        serde_json::to_vec(&v).unwrap_or_default(),
+    )
 }
 
 fn text(status: u16, msg: impl Into<String>) -> Resp {
-    (status, "text/plain; charset=utf-8", vec![], msg.into().into_bytes())
+    (
+        status,
+        "text/plain; charset=utf-8",
+        vec![],
+        msg.into().into_bytes(),
+    )
 }
 
 fn unauthorized() -> Resp {
-    json_resp(401, json!({"error": "not authenticated — log in with a Sargon vault + passphrase"}))
+    json_resp(
+        401,
+        json!({"error": "not authenticated — log in with a Sargon vault + passphrase"}),
+    )
 }
 
 fn forbidden(msg: &str) -> Resp {
@@ -589,7 +660,10 @@ fn forbidden(msg: &str) -> Resp {
 
 fn too_many_requests(retry_after: Duration) -> Resp {
     let secs = retry_after.as_secs().max(1);
-    let mut resp = json_resp(429, json!({"error": format!("too many failed login attempts — try again in {secs}s")}));
+    let mut resp = json_resp(
+        429,
+        json!({"error": format!("too many failed login attempts — try again in {secs}s")}),
+    );
     resp.2.push(("Retry-After".into(), secs.to_string()));
     resp
 }
@@ -599,7 +673,10 @@ fn session_cookie_header(value: &str) -> (String, String) {
 }
 
 fn clear_cookie_header() -> (String, String) {
-    ("Set-Cookie".into(), format!("{SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0"))
+    (
+        "Set-Cookie".into(),
+        format!("{SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0"),
+    )
 }
 
 fn identity_json(id: &AuthedIdentity) -> Value {
@@ -657,13 +734,20 @@ fn url_decode(s: &str) -> String {
 fn export_report(format: &str, state: &Arc<Mutex<ServerState>>) -> Resp {
     let report_path = { state.lock().unwrap().report_path.clone() };
     let Some(path) = report_path else {
-        return text(400, "no report generated yet — click \"Generate final report\" first");
+        return text(
+            400,
+            "no report generated yet — click \"Generate final report\" first",
+        );
     };
     let md = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) => return text(500, format!("cannot read report: {e}")),
     };
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("anu_governor_report").to_string();
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("anu_governor_report")
+        .to_string();
 
     match format {
         "md" => (
@@ -683,7 +767,12 @@ fn export_report(format: &str, state: &Arc<Mutex<ServerState>>) -> Resp {
         }
         "docx" => {
             let tmp = std::env::temp_dir().join(format!("{stem}_{}.docx", std::process::id()));
-            match std::process::Command::new("pandoc").arg(&path).arg("-o").arg(&tmp).output() {
+            match std::process::Command::new("pandoc")
+                .arg(&path)
+                .arg("-o")
+                .arg(&tmp)
+                .output()
+            {
                 Ok(o) if o.status.success() => match std::fs::read(&tmp) {
                     Ok(bytes) => {
                         let _ = std::fs::remove_file(&tmp);
@@ -694,9 +783,15 @@ fn export_report(format: &str, state: &Arc<Mutex<ServerState>>) -> Resp {
                             bytes,
                         )
                     }
-                    Err(e) => text(500, format!("pandoc ran but its output was unreadable: {e}")),
+                    Err(e) => text(
+                        500,
+                        format!("pandoc ran but its output was unreadable: {e}"),
+                    ),
                 },
-                Ok(o) => text(501, format!("pandoc failed: {}", String::from_utf8_lossy(&o.stderr))),
+                Ok(o) => text(
+                    501,
+                    format!("pandoc failed: {}", String::from_utf8_lossy(&o.stderr)),
+                ),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => text(
                     501,
                     "Word export needs pandoc, which isn't installed on this host. \
@@ -724,19 +819,27 @@ fn export_report(format: &str, state: &Arc<Mutex<ServerState>>) -> Resp {
 // `DATA_DIR` already uses.
 
 fn pb_catalog_registry_path() -> PathBuf {
-    std::env::var("PB_CATALOG_REGISTRY").map(PathBuf::from).unwrap_or_else(|_| home_dir().join("Forge/pb_catalog_registry.jsonl"))
+    std::env::var("PB_CATALOG_REGISTRY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| home_dir().join("Forge/pb_catalog_registry.jsonl"))
 }
 
 fn gate_registry_path() -> PathBuf {
-    std::env::var("PB_GATE_REGISTRY").map(PathBuf::from).unwrap_or_else(|_| home_dir().join("Forge/pb_gate_registry.jsonl"))
+    std::env::var("PB_GATE_REGISTRY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| home_dir().join("Forge/pb_gate_registry.jsonl"))
 }
 
 fn enkiddb_output_root() -> PathBuf {
-    std::env::var("PB_CATALOG_ENKIDDB_ROOT").map(PathBuf::from).unwrap_or_else(|_| home_dir().join("Forge/enkiddb_local"))
+    std::env::var("PB_CATALOG_ENKIDDB_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| home_dir().join("Forge/enkiddb_local"))
 }
 
 fn home_dir() -> PathBuf {
-    std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."))
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
 }
 
 /// Opens the `current` generation -- the same symlink
@@ -770,15 +873,21 @@ fn gate_count(read_node: &mut enkiddb::ReadNode, gate_name: &str) -> Option<usiz
 }
 
 fn gates_summary_json() -> Value {
-    let total_playbooks =
-        std::fs::read_to_string(pb_catalog_registry_path()).unwrap_or_default().lines().filter(|l| !l.trim().is_empty()).count();
+    let total_playbooks = std::fs::read_to_string(pb_catalog_registry_path())
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .count();
 
     let mut read_node = open_current_read_node();
     let mut classified = 0usize;
     let gates: Vec<Value> = HeptaGate::all()
         .into_iter()
         .map(|gate| {
-            let count = read_node.as_mut().and_then(|rn| gate_count(rn, gate.akkadian_name())).unwrap_or(0);
+            let count = read_node
+                .as_mut()
+                .and_then(|rn| gate_count(rn, gate.akkadian_name()))
+                .unwrap_or(0);
             classified += count;
             gate_json(gate, count)
         })
@@ -789,7 +898,8 @@ fn gates_summary_json() -> Value {
     // (re)published yet, and makes "0 approved so far" visibly distinct
     // from "current isn't published" (see `current_published` below)
     // rather than both silently looking like an empty dashboard.
-    let approved_dependency_count = pb_dependency_review::approved_pairs(&dependency_registry_path()).len();
+    let approved_dependency_count =
+        pb_dependency_review::approved_pairs(&dependency_registry_path()).len();
 
     json!({
         "gates": gates,
@@ -814,7 +924,12 @@ fn adjacent_gate_json(read_node: &mut enkiddb::ReadNode, gate: HeptaGate) -> Opt
 
 fn gate_playbooks_resp(gate_name: &str) -> Resp {
     let Some(gate) = HeptaGate::from_akkadian_name(gate_name) else {
-        return text(400, format!("unknown gate '{gate_name}' -- expected one of the 7 real HeptaGate Akkadian names"));
+        return text(
+            400,
+            format!(
+                "unknown gate '{gate_name}' -- expected one of the 7 real HeptaGate Akkadian names"
+            ),
+        );
     };
     let Some(mut read_node) = open_current_read_node() else {
         return json_ok(json!({
@@ -834,17 +949,26 @@ fn gate_playbooks_resp(gate_name: &str) -> Resp {
             .matched
             .iter()
             .filter_map(|m| {
-                m.projected.iter().find(|(k, _)| k == "meta.title").and_then(|(_, v)| match v {
-                    akkvalue::AkkValue::Text(s) => Some(s.clone()),
-                    _ => None,
-                })
+                m.projected
+                    .iter()
+                    .find(|(k, _)| k == "meta.title")
+                    .and_then(|(_, v)| match v {
+                        akkvalue::AkkValue::Text(s) => Some(s.clone()),
+                        _ => None,
+                    })
             })
             .collect(),
         Err(_) => vec![],
     };
 
-    let lower_num = gate.gate_number().checked_sub(1).and_then(HeptaGate::from_gate_number);
-    let upper_num = gate.gate_number().checked_add(1).and_then(HeptaGate::from_gate_number);
+    let lower_num = gate
+        .gate_number()
+        .checked_sub(1)
+        .and_then(HeptaGate::from_gate_number);
+    let upper_num = gate
+        .gate_number()
+        .checked_add(1)
+        .and_then(HeptaGate::from_gate_number);
     let lower = lower_num.and_then(|g| adjacent_gate_json(&mut read_node, g));
     let upper = upper_num.and_then(|g| adjacent_gate_json(&mut read_node, g));
 
@@ -866,7 +990,11 @@ fn gate_playbooks_resp(gate_name: &str) -> Resp {
 /// exactly like every other `/api/*` handler in this file.
 fn promote_current(root: &Path, generation: &enkiddb::Generation) -> std::io::Result<()> {
     let current = root.join("current");
-    let target = generation.entities_path.parent().expect("entities_path always has a parent directory").to_path_buf();
+    let target = generation
+        .entities_path
+        .parent()
+        .expect("entities_path always has a parent directory")
+        .to_path_buf();
     if current.symlink_metadata().is_ok() {
         std::fs::remove_file(&current).or_else(|_| std::fs::remove_dir_all(&current))?;
     }
@@ -878,7 +1006,11 @@ fn promote_current(root: &Path, generation: &enkiddb::Generation) -> std::io::Re
 /// server's own env-resolved registry paths -- see that module's doc
 /// comment for why every `approve_*` handler needs this instead of an
 /// empty `WriteNode::new()`.
-fn rebuild_full_write_node() -> (enkiddb::WriteNode, u32, HashMap<String, (enkidb_kaki::IdentityKaki, String)>) {
+fn rebuild_full_write_node() -> (
+    enkiddb::WriteNode,
+    u32,
+    HashMap<String, (enkidb_kaki::IdentityKaki, String)>,
+) {
     anu_governor::pb_catalog_rebuild::rebuild_full_write_node(
         &pb_catalog_registry_path(),
         &gate_registry_path(),
@@ -903,7 +1035,12 @@ fn materialize_and_promote(
     let root = enkiddb_output_root();
     let generation = match enkiddb::materialize_version(write_node, &root, &stamp) {
         Ok((generation, _stats)) => generation,
-        Err(e) => return json_resp(500, json!({ "ok": false, "log": log, "error": format!("materialize failed: {e}") })),
+        Err(e) => {
+            return json_resp(
+                500,
+                json!({ "ok": false, "log": log, "error": format!("materialize failed: {e}") }),
+            )
+        }
     };
     if let Err(e) = promote_current(&root, &generation) {
         return json_resp(
@@ -919,14 +1056,20 @@ fn materialize_and_promote(
 
 fn refresh_current_resp() -> Resp {
     let (write_node, _epoch, by_kaki_hex) = rebuild_full_write_node();
-    let log = vec![format!("𒁾 republished current from {} catalogued playbook(s), all approved tags/edges replayed", by_kaki_hex.len())];
+    let log = vec![format!(
+        "𒁾 republished current from {} catalogued playbook(s), all approved tags/edges replayed",
+        by_kaki_hex.len()
+    )];
     materialize_and_promote(&write_node, log, serde_json::Map::new)
 }
 
 fn approve_gates(body: &[u8]) -> Resp {
     let approvals_req: Vec<Value> = match serde_json::from_slice(body) {
         Ok(v) => v,
-        Err(_) => return text(400, "malformed request body -- expected a JSON array of {pb_kaki_hex, gate_akkadian_name}"),
+        Err(_) => return text(
+            400,
+            "malformed request body -- expected a JSON array of {pb_kaki_hex, gate_akkadian_name}",
+        ),
     };
     if approvals_req.is_empty() {
         return text(400, "no approvals in request body");
@@ -950,7 +1093,12 @@ fn approve_gates(body: &[u8]) -> Resp {
     }
 
     let (mut write_node, epoch, _by_kaki_hex) = rebuild_full_write_node();
-    let log = gate_review::apply_gate_approvals(&mut write_node, &approvals, &gate_registry_path(), epoch);
+    let log = gate_review::apply_gate_approvals(
+        &mut write_node,
+        &approvals,
+        &gate_registry_path(),
+        epoch,
+    );
 
     materialize_and_promote(&write_node, log, || {
         let mut extra = serde_json::Map::new();
@@ -962,7 +1110,9 @@ fn approve_gates(body: &[u8]) -> Resp {
 // ── Shala4: domains within a gate ──────────────────────────────────────
 
 fn domain_registry_path() -> PathBuf {
-    std::env::var("PB_DOMAIN_REGISTRY").map(PathBuf::from).unwrap_or_else(|_| home_dir().join("Forge/pb_domain_registry.jsonl"))
+    std::env::var("PB_DOMAIN_REGISTRY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| home_dir().join("Forge/pb_domain_registry.jsonl"))
 }
 
 fn domain_json(gate: HeptaGate, domain_name: &str, playbook_count: usize) -> Value {
@@ -978,10 +1128,16 @@ fn domain_json(gate: HeptaGate, domain_name: &str, playbook_count: usize) -> Val
 /// second AND condition over that same candidate set (heptascript's
 /// engine evaluates every WHERE condition, not just the indexed first
 /// one -- see `heptascript::engine::eval_where`).
-fn domain_count(read_node: &mut enkiddb::ReadNode, gate: HeptaGate, domain_name: &str) -> Option<usize> {
+fn domain_count(
+    read_node: &mut enkiddb::ReadNode,
+    gate: HeptaGate,
+    domain_name: &str,
+) -> Option<usize> {
     let d = domain_name.replace('"', "\\\"");
     let g = gate.akkadian_name().replace('"', "\\\"");
-    let query = format!("WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.domain] = \"{d}\" AND E[meta.gate] = \"{g}\"");
+    let query = format!(
+        "WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.domain] = \"{d}\" AND E[meta.gate] = \"{g}\""
+    );
     read_node.query(&query).ok().map(|r| r.matched.len())
 }
 
@@ -990,7 +1146,10 @@ fn gate_domains_summary_resp(gate_name: &str) -> Resp {
         return text(400, format!("unknown gate '{gate_name}'"));
     };
     let Some(domains) = domain_review::domains_for_gate(gate.akkadian_name()) else {
-        return text(500, format!("no domain taxonomy defined for gate '{gate_name}'"));
+        return text(
+            500,
+            format!("no domain taxonomy defined for gate '{gate_name}'"),
+        );
     };
     let Some(mut read_node) = open_current_read_node() else {
         return json_ok(json!({
@@ -1033,32 +1192,43 @@ fn domain_playbooks_resp(gate_name: &str, domain_name: &str) -> Resp {
     };
     let d = domain_name.replace('"', "\\\"");
     let g = gate.akkadian_name().replace('"', "\\\"");
-    let query = format!("WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.domain] = \"{d}\" AND E[meta.gate] = \"{g}\"");
+    let query = format!(
+        "WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.domain] = \"{d}\" AND E[meta.gate] = \"{g}\""
+    );
     let playbooks: Vec<Value> = match read_node.query(&query) {
         Ok(r) => r
             .matched
             .iter()
             .filter_map(|m| {
-                m.projected.iter().find(|(k, _)| k == "meta.title").and_then(|(_, v)| match v {
-                    akkvalue::AkkValue::Text(title) => Some(json!({
-                        "title": title,
-                        "kaki_hex": hex::encode(m.entity.bytes()),
-                    })),
-                    _ => None,
-                })
+                m.projected
+                    .iter()
+                    .find(|(k, _)| k == "meta.title")
+                    .and_then(|(_, v)| match v {
+                        akkvalue::AkkValue::Text(title) => Some(json!({
+                            "title": title,
+                            "kaki_hex": hex::encode(m.entity.bytes()),
+                        })),
+                        _ => None,
+                    })
             })
             .collect(),
         Err(_) => vec![],
     };
-    json_ok(json!({ "gate_akkadian_name": gate.akkadian_name(), "domain_name": domain_name, "playbooks": playbooks }))
+    json_ok(
+        json!({ "gate_akkadian_name": gate.akkadian_name(), "domain_name": domain_name, "playbooks": playbooks }),
+    )
 }
 
 fn scan_domain_suggestions_resp(gate_name: &str) -> Resp {
     if HeptaGate::from_akkadian_name(gate_name).is_none() {
         return text(400, format!("unknown gate '{gate_name}'"));
     }
-    let suggestions =
-        domain_review::scan_domain_suggestions(&pb_catalog_registry_path(), &gate_registry_path(), &domain_registry_path(), gate_name);
+    let suggestions = domain_review::scan_domain_suggestions(
+        &pb_catalog_registry_path(),
+        &gate_registry_path(),
+        &domain_registry_path(),
+        gate_name,
+    );
     json_ok(json!({ "suggestions": suggestions }))
 }
 
@@ -1067,12 +1237,20 @@ fn approve_domains(gate_name: &str, body: &[u8]) -> Resp {
         return text(400, format!("unknown gate '{gate_name}'"));
     };
     let Some(valid_domains) = domain_review::domains_for_gate(gate.akkadian_name()) else {
-        return text(500, format!("no domain taxonomy defined for gate '{gate_name}'"));
+        return text(
+            500,
+            format!("no domain taxonomy defined for gate '{gate_name}'"),
+        );
     };
 
     let approvals_req: Vec<Value> = match serde_json::from_slice(body) {
         Ok(v) => v,
-        Err(_) => return text(400, "malformed request body -- expected a JSON array of {pb_kaki_hex, domain_name}"),
+        Err(_) => {
+            return text(
+                400,
+                "malformed request body -- expected a JSON array of {pb_kaki_hex, domain_name}",
+            )
+        }
     };
     if approvals_req.is_empty() {
         return text(400, "no approvals in request body");
@@ -1087,16 +1265,28 @@ fn approve_domains(gate_name: &str, body: &[u8]) -> Resp {
             return text(400, "each approval needs domain_name");
         };
         if !valid_domains.iter().any(|d| *d == domain_name) {
-            return text(400, format!("'{domain_name}' is not one of {gate_name}'s 7 domain names"));
+            return text(
+                400,
+                format!("'{domain_name}' is not one of {gate_name}'s 7 domain names"),
+            );
         }
         let Some(kaki) = gate_review::parse_kaki_hex(kaki_hex) else {
             return text(400, format!("malformed pb_kaki_hex '{kaki_hex}'"));
         };
-        approvals.push((kaki, gate.akkadian_name().to_string(), domain_name.to_string()));
+        approvals.push((
+            kaki,
+            gate.akkadian_name().to_string(),
+            domain_name.to_string(),
+        ));
     }
 
     let (mut write_node, epoch, _by_kaki_hex) = rebuild_full_write_node();
-    let log = domain_review::apply_domain_approvals(&mut write_node, &approvals, &domain_registry_path(), epoch);
+    let log = domain_review::apply_domain_approvals(
+        &mut write_node,
+        &approvals,
+        &domain_registry_path(),
+        epoch,
+    );
 
     materialize_and_promote(&write_node, log, serde_json::Map::new)
 }
@@ -1152,8 +1342,18 @@ fn playbook_detail_resp(title: &str) -> Resp {
             for (k, v) in &m.projected {
                 attrs.insert(k.clone(), akk_value_to_json(v));
             }
-            let depends_on = linked_titles(&mut read_node, "link.source_title", title, "link.target_title");
-            let depended_on_by = linked_titles(&mut read_node, "link.target_title", title, "link.source_title");
+            let depends_on = linked_titles(
+                &mut read_node,
+                "link.source_title",
+                title,
+                "link.target_title",
+            );
+            let depended_on_by = linked_titles(
+                &mut read_node,
+                "link.target_title",
+                title,
+                "link.source_title",
+            );
             let kaki_hex = hex::encode(m.entity.bytes());
             let story = playbook_story_json(&kaki_hex);
             let why = playbook_why_text(&mut read_node, m.entity);
@@ -1194,7 +1394,10 @@ fn playbook_detail_resp(title: &str) -> Resp {
 /// every section belonging to this specific playbook, regardless of how
 /// many W5H2 headers it has. `meta.section_order` puts them back in the
 /// document's own original order.
-fn playbook_why_text(read_node: &mut enkiddb::ReadNode, parent_kaki: enkidb_kaki::IdentityKaki) -> Option<String> {
+fn playbook_why_text(
+    read_node: &mut enkiddb::ReadNode,
+    parent_kaki: enkidb_kaki::IdentityKaki,
+) -> Option<String> {
     let parent_bytes = *parent_kaki.bytes();
     let query = "WHO T.E\nWHAT E[link.target, body.text, meta.section_order]\nWHERE E[link.description] = \"section-of\"";
     let r = read_node.query(query).ok()?;
@@ -1249,7 +1452,12 @@ fn playbook_why_text(read_node: &mut enkiddb::ReadNode, parent_kaki: enkidb_kaki
 /// `pb_dependency_review::apply_dependency_approvals`) -- `match_attr`/
 /// `want_attr` swap to walk the edge forward (depends-on) or backward
 /// (depended-on-by) without two copies of this query.
-fn linked_titles(read_node: &mut enkiddb::ReadNode, match_attr: &str, title: &str, want_attr: &str) -> Vec<String> {
+fn linked_titles(
+    read_node: &mut enkiddb::ReadNode,
+    match_attr: &str,
+    title: &str,
+    want_attr: &str,
+) -> Vec<String> {
     let escaped = title.replace('"', "\\\"");
     let query = format!(
         "WHO T.E\nWHAT E[{want_attr}]\nWHERE E[{match_attr}] = \"{escaped}\" AND E[link.description] = \"depends-on\""
@@ -1259,10 +1467,13 @@ fn linked_titles(read_node: &mut enkiddb::ReadNode, match_attr: &str, title: &st
             .matched
             .iter()
             .filter_map(|m| {
-                m.projected.iter().find(|(k, _)| k == want_attr).and_then(|(_, v)| match v {
-                    akkvalue::AkkValue::Text(s) => Some(s.clone()),
-                    _ => None,
-                })
+                m.projected
+                    .iter()
+                    .find(|(k, _)| k == want_attr)
+                    .and_then(|(_, v)| match v {
+                        akkvalue::AkkValue::Text(s) => Some(s.clone()),
+                        _ => None,
+                    })
             })
             .collect(),
         Err(_) => vec![],
@@ -1276,17 +1487,20 @@ fn dependency_registry_path() -> PathBuf {
 }
 
 fn scan_dependency_suggestions_resp() -> Resp {
-    let suggestions =
-        pb_dependency_review::scan_dependency_suggestions(&pb_catalog_registry_path(), &dependency_registry_path());
+    let suggestions = pb_dependency_review::scan_dependency_suggestions(
+        &pb_catalog_registry_path(),
+        &dependency_registry_path(),
+    );
     json_ok(json!({ "suggestions": suggestions }))
 }
 
 fn approve_dependencies(body: &[u8]) -> Resp {
     let approvals_req: Vec<Value> = match serde_json::from_slice(body) {
         Ok(v) => v,
-        Err(_) => {
-            return text(400, "malformed request body -- expected a JSON array of {source_kaki_hex, target_kaki_hex}")
-        }
+        Err(_) => return text(
+            400,
+            "malformed request body -- expected a JSON array of {source_kaki_hex, target_kaki_hex}",
+        ),
     };
     if approvals_req.is_empty() {
         return text(400, "no approvals in request body");
@@ -1312,12 +1526,21 @@ fn approve_dependencies(body: &[u8]) -> Resp {
         let Some(target_kaki) = gate_review::parse_kaki_hex(target_hex) else {
             return text(400, format!("malformed target_kaki_hex '{target_hex}'"));
         };
-        approvals.push((source_kaki, source_title.to_string(), target_kaki, target_title.to_string()));
+        approvals.push((
+            source_kaki,
+            source_title.to_string(),
+            target_kaki,
+            target_title.to_string(),
+        ));
     }
 
     let (mut write_node, epoch, _by_kaki_hex) = rebuild_full_write_node();
-    let log =
-        pb_dependency_review::apply_dependency_approvals(&mut write_node, &approvals, &dependency_registry_path(), epoch);
+    let log = pb_dependency_review::apply_dependency_approvals(
+        &mut write_node,
+        &approvals,
+        &dependency_registry_path(),
+        epoch,
+    );
 
     materialize_and_promote(&write_node, log, serde_json::Map::new)
 }
@@ -1397,9 +1620,13 @@ fn auth_requirement(method: &str, path: &str) -> AuthReq {
         // Static assets only -- same tier as app.css/app.js. The real gate
         // is on the /api/gates/* data underneath them, not on the script
         // files themselves.
-        ("GET", "/gate_orbits.js") | ("GET", "/vendor/three.module.js") | ("GET", "/vendor/OrbitControls.js") => AuthReq::Public,
+        ("GET", "/gate_orbits.js")
+        | ("GET", "/vendor/three.module.js")
+        | ("GET", "/vendor/OrbitControls.js") => AuthReq::Public,
         ("POST", "/api/login") => AuthReq::Public,
-        ("GET", "/api/state") | ("GET", "/api/session") | ("GET", "/api/report/export") => AuthReq::AnyPassport,
+        ("GET", "/api/state") | ("GET", "/api/session") | ("GET", "/api/report/export") => {
+            AuthReq::AnyPassport
+        }
         ("POST", "/api/logout") => AuthReq::AnyPassport,
         // FIXED 2026-08-02 (Architect's own instruction): Tab 1 (Box
         // Resources) is now Public -- ANY stakeholder, signed in or not,
@@ -1423,7 +1650,9 @@ fn auth_requirement(method: &str, path: &str) -> AuthReq {
         // `/api/` rule below.
         ("GET", "/api/gates/summary") => AuthReq::Public,
         ("GET", p) if p.starts_with("/api/gates/") && p.ends_with("/playbooks") => AuthReq::Public,
-        ("GET", p) if p.starts_with("/api/gates/") && p.ends_with("/domains/summary") => AuthReq::Public,
+        ("GET", p) if p.starts_with("/api/gates/") && p.ends_with("/domains/summary") => {
+            AuthReq::Public
+        }
         ("GET", "/api/playbook_detail") => AuthReq::Public,
         ("GET", "/api/playbooks/search") => AuthReq::Public,
         _ if path.starts_with("/api/") => AuthReq::Architect,
@@ -1431,7 +1660,15 @@ fn auth_requirement(method: &str, path: &str) -> AuthReq {
     }
 }
 
-fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, cookie: Option<String>, ctx: &AppCtx) -> Resp {
+fn route(
+    method: &str,
+    path: &str,
+    query: &str,
+    body: &[u8],
+    peer_ip: IpAddr,
+    cookie: Option<String>,
+    ctx: &AppCtx,
+) -> Resp {
     let identity = cookie.as_deref().and_then(|c| ctx.sessions.verify(c));
 
     match auth_requirement(method, path) {
@@ -1449,16 +1686,54 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
     }
 
     match (method, path) {
-        ("GET", "/") => (200, "text/html; charset=utf-8", vec![], INDEX_HTML.as_bytes().to_vec()),
-        ("GET", "/app.css") => (200, "text/css; charset=utf-8", vec![], APP_CSS.as_bytes().to_vec()),
-        ("GET", "/app.js") => (200, "application/javascript; charset=utf-8", vec![], APP_JS.as_bytes().to_vec()),
-        ("GET", "/login") => (200, "text/html; charset=utf-8", vec![], LOGIN_HTML.as_bytes().to_vec()),
-        ("GET", "/login.js") => (200, "application/javascript; charset=utf-8", vec![], LOGIN_JS.as_bytes().to_vec()),
-        ("GET", "/gate_orbits.js") => (200, "application/javascript; charset=utf-8", vec![], GATE_ORBITS_JS.as_bytes().to_vec()),
-        ("GET", "/vendor/three.module.js") => (200, "application/javascript; charset=utf-8", vec![], VENDOR_THREE_JS.as_bytes().to_vec()),
-        ("GET", "/vendor/OrbitControls.js") => {
-            (200, "application/javascript; charset=utf-8", vec![], VENDOR_ORBIT_CONTROLS_JS.as_bytes().to_vec())
-        }
+        ("GET", "/") => (
+            200,
+            "text/html; charset=utf-8",
+            vec![],
+            INDEX_HTML.as_bytes().to_vec(),
+        ),
+        ("GET", "/app.css") => (
+            200,
+            "text/css; charset=utf-8",
+            vec![],
+            APP_CSS.as_bytes().to_vec(),
+        ),
+        ("GET", "/app.js") => (
+            200,
+            "application/javascript; charset=utf-8",
+            vec![],
+            APP_JS.as_bytes().to_vec(),
+        ),
+        ("GET", "/login") => (
+            200,
+            "text/html; charset=utf-8",
+            vec![],
+            LOGIN_HTML.as_bytes().to_vec(),
+        ),
+        ("GET", "/login.js") => (
+            200,
+            "application/javascript; charset=utf-8",
+            vec![],
+            LOGIN_JS.as_bytes().to_vec(),
+        ),
+        ("GET", "/gate_orbits.js") => (
+            200,
+            "application/javascript; charset=utf-8",
+            vec![],
+            GATE_ORBITS_JS.as_bytes().to_vec(),
+        ),
+        ("GET", "/vendor/three.module.js") => (
+            200,
+            "application/javascript; charset=utf-8",
+            vec![],
+            VENDOR_THREE_JS.as_bytes().to_vec(),
+        ),
+        ("GET", "/vendor/OrbitControls.js") => (
+            200,
+            "application/javascript; charset=utf-8",
+            vec![],
+            VENDOR_ORBIT_CONTROLS_JS.as_bytes().to_vec(),
+        ),
 
         ("POST", "/api/login") => {
             if let Err(remaining) = ctx.defender.check(peer_ip) {
@@ -1469,7 +1744,11 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
                 Err(_) => return text(400, "malformed request body"),
             };
             let vault_b64 = req.get("vault_b64").and_then(|v| v.as_str()).unwrap_or("");
-            let vault_path = req.get("vault_path").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let vault_path = req
+                .get("vault_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             let passphrase = req.get("passphrase").and_then(|v| v.as_str()).unwrap_or("");
             // FIXED 2026-08-02: the browser's native file picker can fail to
             // open at all on some desktops (xdg-desktop-portal/Flatpak
@@ -1488,7 +1767,10 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
                     Ok(b) => b,
                     Err(e) => {
                         ctx.defender.record_failure(peer_ip);
-                        return text(400, format!("could not read vault_path '{vault_path}': {e}"));
+                        return text(
+                            400,
+                            format!("could not read vault_path '{vault_path}': {e}"),
+                        );
                     }
                 }
             } else {
@@ -1496,7 +1778,10 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
                     Ok(b) => b,
                     Err(_) => {
                         ctx.defender.record_failure(peer_ip);
-                        return text(400, "vault file was not valid base64 — did the browser upload finish?");
+                        return text(
+                            400,
+                            "vault file was not valid base64 — did the browser upload finish?",
+                        );
                     }
                 }
             };
@@ -1505,7 +1790,12 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
                     ctx.defender.record_success(peer_ip);
                     let summary = identity_json(&id);
                     let cookie_val = ctx.sessions.mint(id);
-                    (200, "application/json; charset=utf-8", vec![session_cookie_header(&cookie_val)], serde_json::to_vec(&summary).unwrap())
+                    (
+                        200,
+                        "application/json; charset=utf-8",
+                        vec![session_cookie_header(&cookie_val)],
+                        serde_json::to_vec(&summary).unwrap(),
+                    )
                 }
                 Err(e) => {
                     ctx.defender.record_failure(peer_ip);
@@ -1517,9 +1807,16 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
             if let Some(c) = &cookie {
                 ctx.sessions.revoke(c);
             }
-            (200, "application/json; charset=utf-8", vec![clear_cookie_header()], b"{}".to_vec())
+            (
+                200,
+                "application/json; charset=utf-8",
+                vec![clear_cookie_header()],
+                b"{}".to_vec(),
+            )
         }
-        ("GET", "/api/session") => json_ok(identity_json(&identity.expect("AuthReq::AnyPassport already checked"))),
+        ("GET", "/api/session") => json_ok(identity_json(
+            &identity.expect("AuthReq::AnyPassport already checked"),
+        )),
 
         ("GET", "/api/report/export") => {
             let format = query_param(query, "format").unwrap_or_else(|| "md".to_string());
@@ -1542,8 +1839,16 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
         ("POST", "/api/params/add") => {
             let req: Value = serde_json::from_slice(body).unwrap_or(json!({}));
             let mut st = ctx.state.lock().unwrap();
-            let key = req.get("key").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let value = req.get("value").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let key = req
+                .get("key")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let value = req
+                .get("value")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if !key.is_empty() {
                 st.params.push((key, value));
             }
@@ -1563,9 +1868,16 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
         ("POST", "/api/run") => {
             let mut st = ctx.state.lock().unwrap();
             if let Err(reason) = st.resource_check_permits_start() {
-                return forbidden(&format!("Tab 1 resource check does not permit starting a run: {reason}"));
+                return forbidden(&format!(
+                    "Tab 1 resource check does not permit starting a run: {reason}"
+                ));
             }
-            if st.cfg.is_some() && matches!(st.phase, RunPhase::Idle | RunPhase::Finished | RunPhase::Aborted) {
+            if st.cfg.is_some()
+                && matches!(
+                    st.phase,
+                    RunPhase::Idle | RunPhase::Finished | RunPhase::Aborted
+                )
+            {
                 st.start_run();
             }
             json_ok(st.to_json())
@@ -1597,7 +1909,8 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
                 if let Some(ev) = st.events.get(sel).cloned() {
                     match runner::generate_fix(&cfg, &ev) {
                         Ok(p) => {
-                            st.log.push(format!("𒁾 generated fix playbook: {}", p.display()));
+                            st.log
+                                .push(format!("𒁾 generated fix playbook: {}", p.display()));
                             st.fixes.push(p);
                             if let Some(t) = &st.ctl_tx {
                                 let _ = t.send(Ctl::Retry);
@@ -1614,9 +1927,10 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
             let mut st = ctx.state.lock().unwrap();
             if let Some(pb_index) = req.get("pb_index").and_then(|v| v.as_u64()) {
                 let pb_index = pb_index as usize;
-                if let (Some(cfg), Some(ev)) =
-                    (st.cfg.clone(), st.events.iter().find(|e| e.pb_index == pb_index).cloned())
-                {
+                if let (Some(cfg), Some(ev)) = (
+                    st.cfg.clone(),
+                    st.events.iter().find(|e| e.pb_index == pb_index).cloned(),
+                ) {
                     match runner::generate_fix(&cfg, &ev) {
                         Ok(p) => {
                             st.log.push(format!("𒁾 fix written: {}", p.display()));
@@ -1652,21 +1966,41 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
         ("POST", "/api/docpulse/start") => {
             let mut st = ctx.state.lock().unwrap();
             if let Err(reason) = st.resource_check_permits_start() {
-                return forbidden(&format!("Tab 1 resource check does not permit starting a pulse: {reason}"));
+                return forbidden(&format!(
+                    "Tab 1 resource check does not permit starting a pulse: {reason}"
+                ));
             }
-            if !matches!(st.dp_phase, RunPhase::Idle | RunPhase::Finished | RunPhase::Aborted) {
+            if !matches!(
+                st.dp_phase,
+                RunPhase::Idle | RunPhase::Finished | RunPhase::Aborted
+            ) {
                 return forbidden("a pulse is already running or halted -- abort it first");
             }
             let req: Value = match serde_json::from_slice(body) {
                 Ok(v) => v,
                 Err(_) => return text(400, "malformed request body"),
             };
-            let s = |k: &str| req.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let docs_tribe = req.get("docs_tribe").and_then(|v| v.as_str()).unwrap_or("docs");
+            let s = |k: &str| {
+                req.get(k)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string()
+            };
+            let docs_tribe = req
+                .get("docs_tribe")
+                .and_then(|v| v.as_str())
+                .unwrap_or("docs");
             let docs_tribe_id = match docs_tribe {
                 "docs" => enkiddb::DOCS_TRIBE_ID,
                 "architect_docs" => enkiddb::ARCHITECT_DOCS_TRIBE_ID,
-                other => return text(400, &format!("unknown docs_tribe '{other}' -- expected \"docs\" or \"architect_docs\"")),
+                other => {
+                    return text(
+                        400,
+                        &format!(
+                        "unknown docs_tribe '{other}' -- expected \"docs\" or \"architect_docs\""
+                    ),
+                    )
+                }
             };
             let cfg = DocPulseCfg {
                 repo_path: s("repo"),
@@ -1676,16 +2010,26 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
                 ingest_manifest_dir: s("ingest_manifest_dir"),
                 chronicle_dir: {
                     let c = s("chronicle_dir");
-                    if c.is_empty() { "hala_chronicle".into() } else { c }
+                    if c.is_empty() {
+                        "hala_chronicle".into()
+                    } else {
+                        c
+                    }
                 },
                 enkiddb_output_root: s("enkiddb_root"),
                 official_repo_path: s("official_repo"),
                 official_repo_subdir: s("official_repo_subdir"),
                 official_repo_branch: s("official_repo_branch"),
-                auto_push_to_official_repo: req.get("push_to_official_repo").and_then(|v| v.as_bool()).unwrap_or(false),
+                auto_push_to_official_repo: req
+                    .get("push_to_official_repo")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
                 docs_tribe_id,
             };
-            if cfg.repo_path.is_empty() || cfg.archive_dir.is_empty() || cfg.enkiddb_output_root.is_empty() {
+            if cfg.repo_path.is_empty()
+                || cfg.archive_dir.is_empty()
+                || cfg.enkiddb_output_root.is_empty()
+            {
                 return text(400, "repo, archive, and enkiddb_root are all required");
             }
             st.start_docpulse(cfg);
@@ -1726,39 +2070,67 @@ fn route(method: &str, path: &str, query: &str, body: &[u8], peer_ip: IpAddr, co
         // /playbooks" shape) -- this one specifically excludes it via
         // `!p.contains("/domains/")` so match order can't silently pick
         // the wrong arm as new gate/domains/* routes are added.
-        ("GET", p) if p.starts_with("/api/gates/") && p.ends_with("/playbooks") && !p.contains("/domains/") => {
-            let name = p.trim_start_matches("/api/gates/").trim_end_matches("/playbooks");
+        ("GET", p)
+            if p.starts_with("/api/gates/")
+                && p.ends_with("/playbooks")
+                && !p.contains("/domains/") =>
+        {
+            let name = p
+                .trim_start_matches("/api/gates/")
+                .trim_end_matches("/playbooks");
             gate_playbooks_resp(&url_decode(name))
         }
 
         ("POST", "/api/gates/scan_suggestions") => {
-            let suggestions = gate_review::scan_gate_suggestions(&pb_catalog_registry_path(), &gate_registry_path());
+            let suggestions = gate_review::scan_gate_suggestions(
+                &pb_catalog_registry_path(),
+                &gate_registry_path(),
+            );
             json_ok(json!({ "suggestions": suggestions }))
         }
 
         // ── Shala4: domains within a gate ─────────────────────────────
         ("GET", p) if p.starts_with("/api/gates/") && p.ends_with("/domains/summary") => {
-            let gate = p.trim_start_matches("/api/gates/").trim_end_matches("/domains/summary");
+            let gate = p
+                .trim_start_matches("/api/gates/")
+                .trim_end_matches("/domains/summary");
             gate_domains_summary_resp(&url_decode(gate))
         }
-        ("GET", p) if p.starts_with("/api/gates/") && p.contains("/domains/") && p.ends_with("/playbooks") => {
-            let rest = p.trim_start_matches("/api/gates/").trim_end_matches("/playbooks");
+        ("GET", p)
+            if p.starts_with("/api/gates/")
+                && p.contains("/domains/")
+                && p.ends_with("/playbooks") =>
+        {
+            let rest = p
+                .trim_start_matches("/api/gates/")
+                .trim_end_matches("/playbooks");
             match rest.split_once("/domains/") {
-                Some((gate, domain)) => domain_playbooks_resp(&url_decode(gate), &url_decode(domain)),
+                Some((gate, domain)) => {
+                    domain_playbooks_resp(&url_decode(gate), &url_decode(domain))
+                }
                 None => text(404, "not found"),
             }
         }
         ("POST", p) if p.starts_with("/api/gates/") && p.ends_with("/domains/scan_suggestions") => {
-            let gate = p.trim_start_matches("/api/gates/").trim_end_matches("/domains/scan_suggestions");
+            let gate = p
+                .trim_start_matches("/api/gates/")
+                .trim_end_matches("/domains/scan_suggestions");
             scan_domain_suggestions_resp(&url_decode(gate))
         }
         ("POST", p) if p.starts_with("/api/gates/") && p.ends_with("/domains/approve") => {
-            let gate = p.trim_start_matches("/api/gates/").trim_end_matches("/domains/approve").to_string();
+            let gate = p
+                .trim_start_matches("/api/gates/")
+                .trim_end_matches("/domains/approve")
+                .to_string();
             approve_domains(&url_decode(&gate), body)
         }
 
-        ("GET", "/api/playbook_detail") => playbook_detail_resp(&query_param(query, "title").unwrap_or_default()),
-        ("GET", "/api/playbooks/search") => search_playbooks_resp(&query_param(query, "q").unwrap_or_default()),
+        ("GET", "/api/playbook_detail") => {
+            playbook_detail_resp(&query_param(query, "title").unwrap_or_default())
+        }
+        ("GET", "/api/playbooks/search") => {
+            search_playbooks_resp(&query_param(query, "q").unwrap_or_default())
+        }
         ("POST", "/api/dependencies/scan_suggestions") => scan_dependency_suggestions_resp(),
         ("POST", "/api/dependencies/approve") => approve_dependencies(body),
         ("POST", "/api/refresh_current") => refresh_current_resp(),

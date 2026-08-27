@@ -29,9 +29,11 @@ const SCALE: [f64; DIMENSIONS] = [1e6, 1e6, 1e6, 1e3, 1e3, 1e3, 1e3];
 /// FNV-1a 64-bit (same constants as surrogate.rs and enkidb-kaki).
 fn fnv1a_28(bytes: &[u8; 28]) -> u64 {
     const OFFSET: u64 = 14_695_981_039_346_656_037;
-    const PRIME:  u64 = 1_099_511_628_211;
+    const PRIME: u64 = 1_099_511_628_211;
     let mut h = OFFSET;
-    for &b in bytes.iter() { h = (h ^ b as u64).wrapping_mul(PRIME); }
+    for &b in bytes.iter() {
+        h = (h ^ b as u64).wrapping_mul(PRIME);
+    }
     h
 }
 
@@ -55,8 +57,8 @@ fn quantize(pos: &[f64; DIMENSIONS]) -> [u32; DIMENSIONS] {
 /// A zone bucket: sorted zone hash → dense list of surrogate IDs.
 #[derive(Clone, Debug)]
 pub struct ZoneBucket {
-    pub zone_hash:    u64,
-    pub surrogates:   Vec<u32>,
+    pub zone_hash: u64,
+    pub surrogates: Vec<u32>,
 }
 
 /// E7 neighbour offsets — precomputed unit-step lattice vectors.
@@ -99,8 +101,8 @@ fn e7_neighbour_offsets() -> Vec<[i32; DIMENSIONS]> {
         let signs_iter = (0..)
             .map(|n: u64| {
                 let mut v = [0i32; DIMENSIONS];
-                for d in 0..DIMENSIONS {
-                    v[d] = if (n >> d) & 1 == 0 { 1 } else { -1 };
+                for (d, vd) in v.iter_mut().enumerate() {
+                    *vd = if (n >> d) & 1 == 0 { 1 } else { -1 };
                 }
                 v
             })
@@ -145,7 +147,10 @@ impl HeptaShellIndex {
             .into_iter()
             .map(|(h, mut s)| {
                 s.sort_unstable();
-                ZoneBucket { zone_hash: h, surrogates: s }
+                ZoneBucket {
+                    zone_hash: h,
+                    surrogates: s,
+                }
             })
             .collect();
         zone_table.sort_by_key(|b| b.zone_hash);
@@ -215,8 +220,12 @@ impl HeptaShellIndex {
             .map(|idx| &self.zone_table[idx])
     }
 
-    pub fn zone_count(&self) -> usize { self.zone_table.len() }
-    pub fn is_empty(&self)   -> bool  { self.zone_table.is_empty() }
+    pub fn zone_count(&self) -> usize {
+        self.zone_table.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.zone_table.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -224,10 +233,12 @@ mod tests {
     use super::*;
 
     fn make_entries(n: usize) -> Vec<([f64; DIMENSIONS], u32)> {
-        (0..n).map(|i| {
-            let v = i as f64 * 0.1;
-            ([v, v, v, v, v, v, v], i as u32)
-        }).collect()
+        (0..n)
+            .map(|i| {
+                let v = i as f64 * 0.1;
+                ([v, v, v, v, v, v, v], i as u32)
+            })
+            .collect()
     }
 
     #[test]
@@ -248,8 +259,12 @@ mod tests {
     #[test]
     fn neighbour_offsets_count() {
         let offsets = e7_neighbour_offsets();
-        assert_eq!(offsets.len(), E7_KISSING_NUMBER,
-            "must have exactly {} E7 neighbour offsets", E7_KISSING_NUMBER);
+        assert_eq!(
+            offsets.len(),
+            E7_KISSING_NUMBER,
+            "must have exactly {} E7 neighbour offsets",
+            E7_KISSING_NUMBER
+        );
     }
 
     #[test]

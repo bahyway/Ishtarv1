@@ -34,15 +34,15 @@
 
 #![forbid(unsafe_code)]
 
-pub mod lane_color;
-pub mod file_walker;
-pub mod collection;
 pub mod analyzer;
+pub mod collection;
+pub mod file_walker;
 pub mod lane_classifier;
+pub mod lane_color;
 
 // Flat re-exports — the sovereign public surface
-pub use lane_color::LaneColor;
-pub use file_walker::{FileRecord, ScanSummary, walk_folder, walk_folder_async};
-pub use collection::{Collection, CollectionSet, build_collections};
-pub use analyzer::{AnalysisReport, DeadEvidence, DeadReason, analyze_scan};
+pub use analyzer::{analyze_scan, AnalysisReport, DeadEvidence, DeadReason};
+pub use collection::{build_collections, Collection, CollectionSet};
+pub use file_walker::{walk_folder, walk_folder_async, FileRecord, ScanSummary};
 pub use lane_classifier::{classify_collection, classify_file};
+pub use lane_color::LaneColor;

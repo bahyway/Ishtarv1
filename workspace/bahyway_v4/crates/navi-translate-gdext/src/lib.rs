@@ -44,9 +44,7 @@
 
 use adapa_recall::{Document, RecallIndex};
 use godot::prelude::*;
-use navi_engine::{
-    haversine_m, ATTR_NAME, ATTR_NAME_ARABIC, AttrValue, EavAttr, EavStore,
-};
+use navi_engine::{haversine_m, AttrValue, EavAttr, EavStore, ATTR_NAME, ATTR_NAME_ARABIC};
 
 type VDict = Dictionary<GString, Variant>;
 
@@ -89,7 +87,10 @@ impl NaviTranslateBridge {
     fn validate_place(&self, name: GString, name_arabic: GString) -> VDict {
         let mut out = VDict::new();
         let mut eav = EavStore::new();
-        eav.set(EavAttr::required(ATTR_NAME, AttrValue::Text(name.to_string())));
+        eav.set(EavAttr::required(
+            ATTR_NAME,
+            AttrValue::Text(name.to_string()),
+        ));
         eav.set(EavAttr::required(
             ATTR_NAME_ARABIC,
             AttrValue::Text(name_arabic.to_string()),
@@ -171,7 +172,7 @@ impl NaviTranslateBridge {
         for v in places.iter_shared() {
             if let Some((name, name_arabic, plat, plon)) = place_from_variant(&v) {
                 let d = haversine_m(lat as f32, lon as f32, plat as f32, plon as f32) as f64;
-                if best.as_ref().map_or(true, |(_, _, _, _, bd)| d < *bd) {
+                if best.as_ref().is_none_or(|(_, _, _, _, bd)| d < *bd) {
                     best = Some((name, name_arabic, plat, plon, d));
                 }
             }

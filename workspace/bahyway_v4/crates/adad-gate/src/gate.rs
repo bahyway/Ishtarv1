@@ -4,8 +4,8 @@
 //! are created here. The gate assigns tribe sovereignty (PA-15) at birth.
 
 use bahyway_core::{Result, TribeId};
-use enkidb_kaki::{IdentityKaki, EventKaki, KakiRole, mint::KakiMinter};
 use enkidb_journal::entry::EavTriple;
+use enkidb_kaki::{mint::KakiMinter, EventKaki, IdentityKaki, KakiRole};
 
 /// Raw incoming record — (attr_hash, value) pairs supplied by the caller.
 pub struct ArrivalRecord {
@@ -18,22 +18,25 @@ pub struct ArrivalRecord {
 
 /// What the gate produces after minting KAKIs for a single arrival.
 pub struct GateResult {
-    pub particle:   IdentityKaki,
+    pub particle: IdentityKaki,
     pub event_kaki: EventKaki,
-    pub epoch:      u32,
-    pub eav:        Vec<EavTriple>,
+    pub epoch: u32,
+    pub eav: Vec<EavTriple>,
 }
 
 /// The Adad Gate — owns the KakiMinter, sole KAKI creator.
 pub struct AdadGate {
     tribe_id: TribeId,
-    minter:   KakiMinter,
+    minter: KakiMinter,
 }
 
 impl AdadGate {
     /// Construct the gate for a tribe. One gate per tribe (sovereignty).
     pub fn new(tribe_id: TribeId) -> Self {
-        AdadGate { tribe_id, minter: KakiMinter::new(tribe_id) }
+        AdadGate {
+            tribe_id,
+            minter: KakiMinter::new(tribe_id),
+        }
     }
 
     pub fn tribe_id(&self) -> TribeId {
@@ -42,13 +45,19 @@ impl AdadGate {
 
     /// Ingest one arrival: mint an IdentityKaki + EventKaki and wrap EAV.
     pub fn ingest(&self, record: ArrivalRecord) -> Result<GateResult> {
-        let particle   = IdentityKaki::try_from_kaki(self.minter.identity(record.role))?;
+        let particle = IdentityKaki::try_from_kaki(self.minter.identity(record.role))?;
         let event_kaki = EventKaki::try_from_kaki(self.minter.event(record.role))?;
-        let eav: Vec<EavTriple> = record.attrs
+        let eav: Vec<EavTriple> = record
+            .attrs
             .into_iter()
             .map(|(attr, val)| EavTriple::new(attr, val))
             .collect();
-        Ok(GateResult { particle, event_kaki, epoch: record.epoch, eav })
+        Ok(GateResult {
+            particle,
+            event_kaki,
+            epoch: record.epoch,
+            eav,
+        })
     }
 }
 
@@ -63,7 +72,7 @@ mod tests {
         let record = ArrivalRecord {
             attrs: vec![(0x1A4B, b"Golden".to_vec())],
             epoch: 42,
-            role:  KakiRole::Zikru,
+            role: KakiRole::Zikru,
         };
         let result = gate.ingest(record).unwrap();
         assert_eq!(result.epoch, 42);
@@ -83,7 +92,11 @@ mod tests {
     #[test]
     fn ingest_empty_attrs() {
         let gate = AdadGate::new(TribeId::from_u16(0x0002));
-        let record = ArrivalRecord { attrs: vec![], epoch: 1, role: KakiRole::Kishib };
+        let record = ArrivalRecord {
+            attrs: vec![],
+            epoch: 1,
+            role: KakiRole::Kishib,
+        };
         let result = gate.ingest(record).unwrap();
         assert!(result.eav.is_empty());
     }

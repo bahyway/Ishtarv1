@@ -150,7 +150,13 @@ impl HeptaGate {
 
 impl core::fmt::Display for HeptaGate {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "G{} {} ({})", self.gate_number(), self.akkadian_name(), self.sector())
+        write!(
+            f,
+            "G{} {} ({})",
+            self.gate_number(),
+            self.akkadian_name(),
+            self.sector()
+        )
     }
 }
 
@@ -196,8 +202,14 @@ mod tests {
 
     #[test]
     fn round_trip_akkadian_name_case_insensitive() {
-        assert_eq!(HeptaGate::from_akkadian_name("shedu"), Some(HeptaGate::Shedu));
-        assert_eq!(HeptaGate::from_akkadian_name("ENLIL"), Some(HeptaGate::Enlil));
+        assert_eq!(
+            HeptaGate::from_akkadian_name("shedu"),
+            Some(HeptaGate::Shedu)
+        );
+        assert_eq!(
+            HeptaGate::from_akkadian_name("ENLIL"),
+            Some(HeptaGate::Enlil)
+        );
         assert_eq!(HeptaGate::from_akkadian_name("nope"), None);
     }
 

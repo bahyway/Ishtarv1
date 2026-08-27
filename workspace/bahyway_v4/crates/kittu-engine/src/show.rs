@@ -12,7 +12,8 @@ pub fn write_show_alert(alert: &AlertEvent, show_dir: &str) -> Result<(), KittuE
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| KittuError::Io(e.to_string()))?;
     }
-    let json = serde_json::to_string_pretty(alert).map_err(|e| KittuError::Serialise(e.to_string()))?;
+    let json =
+        serde_json::to_string_pretty(alert).map_err(|e| KittuError::Serialise(e.to_string()))?;
     fs::write(&path, json).map_err(|e| KittuError::Io(e.to_string()))?;
     eprintln!("Kittu ShoWEngine: alert written -> {}", path.display());
     Ok(())
@@ -37,10 +38,7 @@ mod tests {
 
     #[test]
     fn writes_json_file_with_expected_name() {
-        let tmp = std::env::temp_dir().join(format!(
-            "kittu_show_test_{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("kittu_show_test_{}", std::process::id()));
         write_show_alert(&sample_alert(), tmp.to_str().unwrap()).unwrap();
         let expected = tmp.join("alert_CRITICAL_01234567.json");
         assert!(expected.exists());

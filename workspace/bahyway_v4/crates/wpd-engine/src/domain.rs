@@ -3,16 +3,16 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum PipelineType {
-    Water  = 0,
-    Oil    = 1,
+    Water = 0,
+    Oil = 1,
     Sewage = 2,
 }
 
 impl PipelineType {
     pub fn name(self) -> &'static str {
         match self {
-            PipelineType::Water  => "Water",
-            PipelineType::Oil    => "Oil",
+            PipelineType::Water => "Water",
+            PipelineType::Oil => "Oil",
             PipelineType::Sewage => "Sewage",
         }
     }
@@ -39,20 +39,20 @@ impl PipeMaterial {
     pub fn defect_susceptibility(self) -> f32 {
         match self {
             PipeMaterial::AsbestosCement => 0.90,
-            PipeMaterial::CastIron       => 0.65,
-            PipeMaterial::DuctileIron    => 0.35,
-            PipeMaterial::Plastic        => 0.15,
-            PipeMaterial::Unknown        => 0.70,
+            PipeMaterial::CastIron => 0.65,
+            PipeMaterial::DuctileIron => 0.35,
+            PipeMaterial::Plastic => 0.15,
+            PipeMaterial::Unknown => 0.70,
         }
     }
 
     pub fn name(self) -> &'static str {
         match self {
             PipeMaterial::AsbestosCement => "Asbestos Cement",
-            PipeMaterial::CastIron       => "Cast Iron",
-            PipeMaterial::DuctileIron    => "Ductile Iron",
-            PipeMaterial::Plastic        => "Plastic",
-            PipeMaterial::Unknown        => "Unknown",
+            PipeMaterial::CastIron => "Cast Iron",
+            PipeMaterial::DuctileIron => "Ductile Iron",
+            PipeMaterial::Plastic => "Plastic",
+            PipeMaterial::Unknown => "Unknown",
         }
     }
 }
@@ -63,10 +63,10 @@ impl PipeMaterial {
 #[repr(u8)]
 pub enum DefectSeverity {
     Negligible = 0,
-    Minor      = 1,
-    Moderate   = 2,
-    Severe     = 3,
-    Critical   = 4,
+    Minor = 1,
+    Moderate = 2,
+    Severe = 3,
+    Critical = 4,
 }
 
 impl DefectSeverity {
@@ -88,10 +88,10 @@ impl DefectSeverity {
     pub fn name(self) -> &'static str {
         match self {
             DefectSeverity::Negligible => "Negligible",
-            DefectSeverity::Minor      => "Minor",
-            DefectSeverity::Moderate   => "Moderate",
-            DefectSeverity::Severe     => "Severe",
-            DefectSeverity::Critical   => "Critical",
+            DefectSeverity::Minor => "Minor",
+            DefectSeverity::Moderate => "Moderate",
+            DefectSeverity::Severe => "Severe",
+            DefectSeverity::Critical => "Critical",
         }
     }
 }
@@ -110,10 +110,14 @@ mod tests {
 
     #[test]
     fn susceptibility_ordering() {
-        assert!(PipeMaterial::AsbestosCement.defect_susceptibility()
-            > PipeMaterial::DuctileIron.defect_susceptibility());
-        assert!(PipeMaterial::DuctileIron.defect_susceptibility()
-            > PipeMaterial::Plastic.defect_susceptibility());
+        assert!(
+            PipeMaterial::AsbestosCement.defect_susceptibility()
+                > PipeMaterial::DuctileIron.defect_susceptibility()
+        );
+        assert!(
+            PipeMaterial::DuctileIron.defect_susceptibility()
+                > PipeMaterial::Plastic.defect_susceptibility()
+        );
     }
 
     #[test]

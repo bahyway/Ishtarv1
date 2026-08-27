@@ -76,6 +76,9 @@ mod tests {
     fn tradition_tags_are_distinct() {
         assert_eq!(SignTradition::MesZL.tag(), 0x10);
         assert_eq!(SignTradition::IbnWahshiyya.tag(), 0x11);
-        assert_ne!(SignTradition::MesZL.tag(), SignTradition::IbnWahshiyya.tag());
+        assert_ne!(
+            SignTradition::MesZL.tag(),
+            SignTradition::IbnWahshiyya.tag()
+        );
     }
 }

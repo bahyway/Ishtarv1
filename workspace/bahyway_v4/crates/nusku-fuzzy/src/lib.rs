@@ -16,4 +16,4 @@ pub mod rules;
 pub use defuzz::centroid_defuzz;
 pub use engine::{FuzzyEngine, FuzzyState, FuzzyVerdict};
 pub use membership::{LinguisticVar, MembershipFn};
-pub use rules::{Antecedent, Connective, Consequent, FuzzyRule, nusku_rule_base};
+pub use rules::{nusku_rule_base, Antecedent, Connective, Consequent, FuzzyRule};

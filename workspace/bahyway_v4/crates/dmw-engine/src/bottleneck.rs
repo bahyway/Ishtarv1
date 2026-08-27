@@ -30,9 +30,9 @@ pub enum Severity {
 impl Severity {
     pub fn label(&self) -> &'static str {
         match self {
-            Severity::Low      => "Low",
-            Severity::Medium   => "Medium",
-            Severity::High     => "High",
+            Severity::Low => "Low",
+            Severity::Medium => "Medium",
+            Severity::High => "High",
             Severity::Critical => "Critical",
         }
     }
@@ -50,7 +50,11 @@ pub enum BottleneckKind {
     /// Full table scan with no index path.
     UnsargablePredicate { table: String },
     /// Optimizer's row estimate diverges >10× from actual rows returned.
-    StaleStatistics { estimated: u32, actual: u32, ratio: f32 },
+    StaleStatistics {
+        estimated: u32,
+        actual: u32,
+        ratio: f32,
+    },
     /// Blocking Sort operator without an ORDER BY–supporting index.
     ExcessiveSort,
     /// EagerSpool materialises the entire inner set — plan instability signal.
@@ -63,13 +67,15 @@ impl BottleneckKind {
     pub fn title(&self) -> String {
         match self {
             BottleneckKind::NestedLoopOnLargeSet { .. } => "Nested Loop on Large Set".into(),
-            BottleneckKind::CartesianProduct             => "Cartesian Product".into(),
-            BottleneckKind::KeyLookupBottleneck { .. }   => "Key Lookup Bottleneck".into(),
-            BottleneckKind::UnsargablePredicate { .. }   => "Unsargable Predicate / Table Scan".into(),
-            BottleneckKind::StaleStatistics { .. }       => "Stale Statistics".into(),
-            BottleneckKind::ExcessiveSort                => "Excessive Sort".into(),
-            BottleneckKind::SpoolRecompute               => "Spool Recompute".into(),
-            BottleneckKind::DeadlockRisk { .. }          => "Deadlock Risk — Chained Outer Joins".into(),
+            BottleneckKind::CartesianProduct => "Cartesian Product".into(),
+            BottleneckKind::KeyLookupBottleneck { .. } => "Key Lookup Bottleneck".into(),
+            BottleneckKind::UnsargablePredicate { .. } => {
+                "Unsargable Predicate / Table Scan".into()
+            }
+            BottleneckKind::StaleStatistics { .. } => "Stale Statistics".into(),
+            BottleneckKind::ExcessiveSort => "Excessive Sort".into(),
+            BottleneckKind::SpoolRecompute => "Spool Recompute".into(),
+            BottleneckKind::DeadlockRisk { .. } => "Deadlock Risk — Chained Outer Joins".into(),
         }
     }
 
@@ -96,16 +102,26 @@ impl BottleneckKind {
 
     pub fn default_severity(&self) -> Severity {
         match self {
-            BottleneckKind::CartesianProduct                     => Severity::Critical,
-            BottleneckKind::DeadlockRisk { .. }                  => Severity::Critical,
-            BottleneckKind::NestedLoopOnLargeSet { inner_rows }  =>
-                if *inner_rows > 10_000 { Severity::Critical } else { Severity::High },
-            BottleneckKind::StaleStatistics { ratio, .. }        =>
-                if *ratio > 100.0 { Severity::Critical } else { Severity::High },
-            BottleneckKind::KeyLookupBottleneck { .. }           => Severity::High,
-            BottleneckKind::UnsargablePredicate { .. }           => Severity::High,
-            BottleneckKind::ExcessiveSort                        => Severity::Medium,
-            BottleneckKind::SpoolRecompute                       => Severity::Medium,
+            BottleneckKind::CartesianProduct => Severity::Critical,
+            BottleneckKind::DeadlockRisk { .. } => Severity::Critical,
+            BottleneckKind::NestedLoopOnLargeSet { inner_rows } => {
+                if *inner_rows > 10_000 {
+                    Severity::Critical
+                } else {
+                    Severity::High
+                }
+            }
+            BottleneckKind::StaleStatistics { ratio, .. } => {
+                if *ratio > 100.0 {
+                    Severity::Critical
+                } else {
+                    Severity::High
+                }
+            }
+            BottleneckKind::KeyLookupBottleneck { .. } => Severity::High,
+            BottleneckKind::UnsargablePredicate { .. } => Severity::High,
+            BottleneckKind::ExcessiveSort => Severity::Medium,
+            BottleneckKind::SpoolRecompute => Severity::Medium,
         }
     }
 }
@@ -113,23 +129,34 @@ impl BottleneckKind {
 /// A single detected bottleneck with its location in the plan tree.
 #[derive(Debug, Clone)]
 pub struct Bottleneck {
-    pub kind:            BottleneckKind,
-    pub severity:        Severity,
+    pub kind: BottleneckKind,
+    pub severity: Severity,
     /// Cost share attributed to this bottleneck (0–100 %).
     pub cost_impact_pct: f32,
     /// Breadcrumb path in the plan tree (e.g. "root/HashMatch/NestedLoop").
-    pub operator_path:   String,
+    pub operator_path: String,
 }
 
 impl Bottleneck {
     pub fn new(kind: BottleneckKind, cost_impact_pct: f32, path: impl Into<String>) -> Self {
         let severity = kind.default_severity();
-        Bottleneck { kind, severity, cost_impact_pct, operator_path: path.into() }
+        Bottleneck {
+            kind,
+            severity,
+            cost_impact_pct,
+            operator_path: path.into(),
+        }
     }
 
-    pub fn title(&self)       -> String { self.kind.title() }
-    pub fn description(&self) -> String { self.kind.description() }
-    pub fn is_critical(&self) -> bool   { self.severity == Severity::Critical }
+    pub fn title(&self) -> String {
+        self.kind.title()
+    }
+    pub fn description(&self) -> String {
+        self.kind.description()
+    }
+    pub fn is_critical(&self) -> bool {
+        self.severity == Severity::Critical
+    }
 }
 
 /// Stateless detector — call `detect(plan)` to get all bottlenecks.
@@ -141,10 +168,15 @@ impl BottleneckDetector {
 
         // 1. Nested Loop on large inner set
         let mut nl_nodes: Vec<&PlanNode> = Vec::new();
-        plan.root.collect_where(&|n| n.op.is_nested_loop(), &mut nl_nodes);
+        plan.root
+            .collect_where(&|n| n.op.is_nested_loop(), &mut nl_nodes);
         for node in &nl_nodes {
             // The inner (second) child is the repeated side
-            let inner_rows = node.children.get(1).map(|c| c.estimated_rows).unwrap_or(node.estimated_rows);
+            let inner_rows = node
+                .children
+                .get(1)
+                .map(|c| c.estimated_rows)
+                .unwrap_or(node.estimated_rows);
             if inner_rows >= NESTED_LOOP_LARGE_ROWS {
                 out.push(Bottleneck::new(
                     BottleneckKind::NestedLoopOnLargeSet { inner_rows },
@@ -163,7 +195,9 @@ impl BottleneckDetector {
                 kls.iter().map(|n| n.cost_pct).sum()
             };
             out.push(Bottleneck::new(
-                BottleneckKind::KeyLookupBottleneck { lookup_count: kl_count },
+                BottleneckKind::KeyLookupBottleneck {
+                    lookup_count: kl_count,
+                },
                 cost,
                 "root/KeyLookup",
             ));
@@ -171,11 +205,14 @@ impl BottleneckDetector {
 
         // 3. Table scans (unsargable predicate proxy)
         let mut ts_nodes: Vec<&PlanNode> = Vec::new();
-        plan.root.collect_where(&|n| n.op.is_table_scan(), &mut ts_nodes);
+        plan.root
+            .collect_where(&|n| n.op.is_table_scan(), &mut ts_nodes);
         for node in &ts_nodes {
             if let OpKind::TableScan { name } = &node.op {
                 out.push(Bottleneck::new(
-                    BottleneckKind::UnsargablePredicate { table: name.clone() },
+                    BottleneckKind::UnsargablePredicate {
+                        table: name.clone(),
+                    },
                     node.cost_pct,
                     format!("root/TableScan[{name}]"),
                 ));
@@ -184,13 +221,13 @@ impl BottleneckDetector {
 
         // 4. Stale statistics (cardinality mismatch)
         if let Some(ratio) = plan.cardinality_ratio() {
-            if ratio > STALE_STATS_RATIO || ratio < 1.0 / STALE_STATS_RATIO {
+            if !(1.0 / STALE_STATS_RATIO..=STALE_STATS_RATIO).contains(&ratio) {
                 let eff_ratio = if ratio < 1.0 { 1.0 / ratio } else { ratio };
                 out.push(Bottleneck::new(
                     BottleneckKind::StaleStatistics {
                         estimated: plan.root.estimated_rows,
-                        actual:    plan.actual_rows,
-                        ratio:     eff_ratio,
+                        actual: plan.actual_rows,
+                        ratio: eff_ratio,
                     },
                     5.0,
                     "root",
@@ -202,20 +239,32 @@ impl BottleneckDetector {
         if plan.has_sorts() {
             let sort_cost: f32 = {
                 let mut sorts = Vec::new();
-                plan.root.collect_where(&|n| matches!(n.op, OpKind::Sort { .. }), &mut sorts);
+                plan.root
+                    .collect_where(&|n| matches!(n.op, OpKind::Sort { .. }), &mut sorts);
                 sorts.iter().map(|n| n.cost_pct).sum()
             };
-            out.push(Bottleneck::new(BottleneckKind::ExcessiveSort, sort_cost, "root/Sort"));
+            out.push(Bottleneck::new(
+                BottleneckKind::ExcessiveSort,
+                sort_cost,
+                "root/Sort",
+            ));
         }
 
         // 6. Spool recompute
         if plan.has_spools() {
             let spool_cost: f32 = {
                 let mut spools = Vec::new();
-                plan.root.collect_where(&|n| matches!(n.op, OpKind::Spool { is_eager: true }), &mut spools);
+                plan.root.collect_where(
+                    &|n| matches!(n.op, OpKind::Spool { is_eager: true }),
+                    &mut spools,
+                );
                 spools.iter().map(|n| n.cost_pct).sum()
             };
-            out.push(Bottleneck::new(BottleneckKind::SpoolRecompute, spool_cost, "root/EagerSpool"));
+            out.push(Bottleneck::new(
+                BottleneckKind::SpoolRecompute,
+                spool_cost,
+                "root/EagerSpool",
+            ));
         }
 
         // 7. Deadlock risk — ≥3 chained LeftOuter joins (concurrent-write hazard)
@@ -227,15 +276,22 @@ impl BottleneckDetector {
         };
         if left_outer_count >= 2 {
             out.push(Bottleneck::new(
-                BottleneckKind::DeadlockRisk { join_count: left_outer_count },
+                BottleneckKind::DeadlockRisk {
+                    join_count: left_outer_count,
+                },
                 left_outer_count as f32 * 5.0,
                 "root/ChainedOuterJoins",
             ));
         }
 
         // Sort by severity descending, then cost_impact descending
-        out.sort_by(|a, b| b.severity.cmp(&a.severity)
-            .then(b.cost_impact_pct.partial_cmp(&a.cost_impact_pct).unwrap_or(std::cmp::Ordering::Equal)));
+        out.sort_by(|a, b| {
+            b.severity.cmp(&a.severity).then(
+                b.cost_impact_pct
+                    .partial_cmp(&a.cost_impact_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+        });
         out
     }
 
@@ -244,11 +300,18 @@ impl BottleneckDetector {
     }
 
     pub fn high_or_above_count(bottlenecks: &[Bottleneck]) -> usize {
-        bottlenecks.iter().filter(|b| b.severity >= Severity::High).count()
+        bottlenecks
+            .iter()
+            .filter(|b| b.severity >= Severity::High)
+            .count()
     }
 
     pub fn total_cost_impact(bottlenecks: &[Bottleneck]) -> f32 {
-        bottlenecks.iter().map(|b| b.cost_impact_pct).sum::<f32>().min(100.0)
+        bottlenecks
+            .iter()
+            .map(|b| b.cost_impact_pct)
+            .sum::<f32>()
+            .min(100.0)
     }
 }
 
@@ -257,46 +320,66 @@ mod tests {
     use super::*;
     use crate::plan::{sales_order_plan, simple_nested_loop_plan};
 
-    #[test] fn sales_order_detects_deadlock_risk() {
+    #[test]
+    fn sales_order_detects_deadlock_risk() {
         let plan = sales_order_plan();
-        let bns  = BottleneckDetector::detect(&plan);
-        assert!(bns.iter().any(|b| matches!(b.kind, BottleneckKind::DeadlockRisk { .. })),
-            "Two chained LeftOuter joins must trigger DeadlockRisk");
+        let bns = BottleneckDetector::detect(&plan);
+        assert!(
+            bns.iter()
+                .any(|b| matches!(b.kind, BottleneckKind::DeadlockRisk { .. })),
+            "Two chained LeftOuter joins must trigger DeadlockRisk"
+        );
     }
-    #[test] fn sales_order_no_nested_loop_bottleneck() {
+    #[test]
+    fn sales_order_no_nested_loop_bottleneck() {
         let plan = sales_order_plan();
-        let bns  = BottleneckDetector::detect(&plan);
-        assert!(!bns.iter().any(|b| matches!(b.kind, BottleneckKind::NestedLoopOnLargeSet { .. })));
+        let bns = BottleneckDetector::detect(&plan);
+        assert!(!bns
+            .iter()
+            .any(|b| matches!(b.kind, BottleneckKind::NestedLoopOnLargeSet { .. })));
     }
-    #[test] fn simple_plan_nested_loop_detected() {
+    #[test]
+    fn simple_plan_nested_loop_detected() {
         let plan = simple_nested_loop_plan();
-        let bns  = BottleneckDetector::detect(&plan);
-        assert!(bns.iter().any(|b| matches!(b.kind, BottleneckKind::NestedLoopOnLargeSet { .. })));
+        let bns = BottleneckDetector::detect(&plan);
+        assert!(bns
+            .iter()
+            .any(|b| matches!(b.kind, BottleneckKind::NestedLoopOnLargeSet { .. })));
     }
-    #[test] fn simple_plan_table_scan_detected() {
+    #[test]
+    fn simple_plan_table_scan_detected() {
         let plan = simple_nested_loop_plan();
-        let bns  = BottleneckDetector::detect(&plan);
-        assert!(bns.iter().any(|b| matches!(b.kind, BottleneckKind::UnsargablePredicate { .. })));
+        let bns = BottleneckDetector::detect(&plan);
+        assert!(bns
+            .iter()
+            .any(|b| matches!(b.kind, BottleneckKind::UnsargablePredicate { .. })));
     }
-    #[test] fn bottleneck_list_sorted_critical_first() {
+    #[test]
+    fn bottleneck_list_sorted_critical_first() {
         let plan = simple_nested_loop_plan();
-        let bns  = BottleneckDetector::detect(&plan);
+        let bns = BottleneckDetector::detect(&plan);
         if bns.len() > 1 {
             assert!(bns[0].severity >= bns[1].severity);
         }
     }
-    #[test] fn severity_ordering() {
+    #[test]
+    fn severity_ordering() {
         assert!(Severity::Critical > Severity::High);
-        assert!(Severity::High     > Severity::Medium);
-        assert!(Severity::Medium   > Severity::Low);
+        assert!(Severity::High > Severity::Medium);
+        assert!(Severity::Medium > Severity::Low);
     }
-    #[test] fn bottleneck_title_non_empty() {
+    #[test]
+    fn bottleneck_title_non_empty() {
         let kinds = vec![
             BottleneckKind::NestedLoopOnLargeSet { inner_rows: 5000 },
             BottleneckKind::CartesianProduct,
             BottleneckKind::KeyLookupBottleneck { lookup_count: 3 },
             BottleneckKind::UnsargablePredicate { table: "T".into() },
-            BottleneckKind::StaleStatistics { estimated: 100, actual: 5000, ratio: 50.0 },
+            BottleneckKind::StaleStatistics {
+                estimated: 100,
+                actual: 5000,
+                ratio: 50.0,
+            },
             BottleneckKind::ExcessiveSort,
             BottleneckKind::SpoolRecompute,
             BottleneckKind::DeadlockRisk { join_count: 3 },
@@ -306,27 +389,35 @@ mod tests {
             assert!(!k.description().is_empty());
         }
     }
-    #[test] fn critical_count_counts_correctly() {
+    #[test]
+    fn critical_count_counts_correctly() {
         let plan = simple_nested_loop_plan();
-        let bns  = BottleneckDetector::detect(&plan);
-        let cc   = BottleneckDetector::critical_count(&bns);
+        let bns = BottleneckDetector::detect(&plan);
+        let cc = BottleneckDetector::critical_count(&bns);
         let actual_critical = bns.iter().filter(|b| b.is_critical()).count();
         assert_eq!(cc, actual_critical);
     }
-    #[test] fn total_cost_impact_capped_at_100() {
-        let bns: Vec<Bottleneck> = (0..10).map(|i| Bottleneck::new(
-            BottleneckKind::ExcessiveSort, 15.0, format!("root/Sort{i}"),
-        )).collect();
+    #[test]
+    fn total_cost_impact_capped_at_100() {
+        let bns: Vec<Bottleneck> = (0..10)
+            .map(|i| Bottleneck::new(BottleneckKind::ExcessiveSort, 15.0, format!("root/Sort{i}")))
+            .collect();
         assert!(BottleneckDetector::total_cost_impact(&bns) <= 100.0);
     }
-    #[test] fn deadlock_risk_severity_is_critical() {
+    #[test]
+    fn deadlock_risk_severity_is_critical() {
         let k = BottleneckKind::DeadlockRisk { join_count: 3 };
         assert_eq!(k.default_severity(), Severity::Critical);
     }
-    #[test] fn cartesian_product_severity_is_critical() {
-        assert_eq!(BottleneckKind::CartesianProduct.default_severity(), Severity::Critical);
+    #[test]
+    fn cartesian_product_severity_is_critical() {
+        assert_eq!(
+            BottleneckKind::CartesianProduct.default_severity(),
+            Severity::Critical
+        );
     }
-    #[test] fn nested_loop_very_large_is_critical() {
+    #[test]
+    fn nested_loop_very_large_is_critical() {
         let k = BottleneckKind::NestedLoopOnLargeSet { inner_rows: 50_000 };
         assert_eq!(k.default_severity(), Severity::Critical);
     }

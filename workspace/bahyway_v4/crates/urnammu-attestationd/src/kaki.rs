@@ -72,10 +72,8 @@ mod tests {
 
     #[test]
     fn emits_kaki_and_writes_log_line() {
-        let tmp = std::env::temp_dir().join(format!(
-            "urnammu_kaki_test_{}.log",
-            pseudo_random_suffix()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("urnammu_kaki_test_{}.log", pseudo_random_suffix()));
         let event = AttestationEvent {
             result: true,
             pcr_banks: "sha256:0,4,7".to_string(),

@@ -1,4 +1,4 @@
-use utnapishtim::{ClientTopology, generator::UtnapishtimGenerator};
+use utnapishtim::{generator::UtnapishtimGenerator, ClientTopology};
 
 fn main() {
     let topo = ClientTopology {
@@ -17,7 +17,13 @@ fn main() {
     assert!(html.contains("Najaf Cemetery"));
     assert!(html.contains("<!DOCTYPE html>"));
 
-    for f in ["project.godot", "orbital_manager.gd", "particle_node.gd", "tribe_config.gd", "enkidb_connector.gd"] {
+    for f in [
+        "project.godot",
+        "orbital_manager.gd",
+        "particle_node.gd",
+        "tribe_config.gd",
+        "enkidb_connector.gd",
+    ] {
         let p = result.godot_dir.join(f);
         let content = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("missing {f}: {e}"));
         assert!(!content.is_empty(), "{f} is empty");

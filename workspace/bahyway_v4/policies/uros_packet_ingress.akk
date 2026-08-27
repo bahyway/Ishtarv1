@@ -1,0 +1,154 @@
+-- UrOS Packet Ingress Protocol
+-- Governs all packets entering the UrOS sovereign runtime.
+-- Enforces the KAKI Dead Axiom at the OS boundary: packets without a
+-- valid KAKI do not exist in the system — they are Dead before arrival.
+--
+-- Maps to: eridu-runtime, hepta-sec-sentinel::HeptaSecSentinel
+-- Architecture: UrOS sits below EnkiDB; all inter-process messages
+-- are KAKI-tagged before they enter the scheduler queue.
+
+NAMESPACE bahyway.eridu.ingress.v4
+
+IMPORT bahyway.enki_way.v4    AS ENKI
+IMPORT bahyway.kaki_way.v4    AS KAKI
+IMPORT bahyway.heptasec.v4    AS SEC
+IMPORT bahyway.kupru.v4       AS KUPRU
+IMPORT bahyway.enkidb.v4      AS DB
+
+-- ── Constants ──────────────────────────────────────────────────────────────
+
+CONSTANT MAX_PACKET_BYTES     := 4_194_304   -- 4 MiB max inter-process message
+CONSTANT MAX_QUEUE_DEPTH      := 10_000      -- scheduler queue depth limit
+CONSTANT IPC_RATE_LIMIT_PPS   := 1_000       -- inter-process messages per second
+CONSTANT HEARTBEAT_INTERVAL   := 30          -- seconds between KAKI liveness checks
+
+-- ── Roles ──────────────────────────────────────────────────────────────────
+
+ROLE KernelKaki      { SCOPE: kernel   REQUIRE: passport.b11 == 240  TRIBE: sovereign }
+ROLE ServiceKaki     { SCOPE: service  REQUIRE: passport.valid }
+ROLE SchedulerKaki   { SCOPE: schedule REQUIRE: passport.b11 >= 200 }
+ROLE IngestKaki      { SCOPE: ingest   REQUIRE: passport.scope == "db:write" }
+
+-- ── Dead Axiom enforcement ─────────────────────────────────────────────────
+
+POLICY eridu_dead_axiom
+    -- IPC messages without a source KAKI tag are rejected at the boundary.
+    -- No IPC message ever reaches the scheduler without passing this gate.
+    WHEN  packet.src_kaki_hash IS ABSENT
+    DENY  packet.enqueue
+    ALARM "ERIDU_DEAD_AXIOM" severity=CRITICAL sensor=packet.origin_pid
+
+POLICY eridu_invalid_kaki
+    -- CRC-16/CCITT checksum of κ[0..14] must pass.
+    WHEN  packet.kaki_checksum IS INVALID
+    DENY  packet.enqueue
+    ALARM "ERIDU_INVALID_KAKI_CRC" severity=CRITICAL sensor=packet.src_kaki_hash
+
+-- ── Trust-based routing ────────────────────────────────────────────────────
+
+POLICY eridu_block_revoked
+    WHEN  packet.kaki_state == KAKI.REVOKED
+    DENY  packet.enqueue
+    ALARM "ERIDU_REVOKED_KAKI" severity=HIGH sensor=packet.src_kaki_hash
+
+POLICY eridu_block_dead_b11
+    WHEN  packet.kaki_b11 < 59
+    DENY  packet.enqueue
+    ALARM "ERIDU_DEAD_B11" severity=HIGH sensor=packet.src_kaki_hash
+
+POLICY eridu_quarantine_unknown
+    -- Unknown KAKIs are held in the ingest queue for steward scoring.
+    -- They are not denied — they may be new legitimate service instances.
+    WHEN  packet.kaki_state == KAKI.UNKNOWN
+    ALLOW packet.enqueue -> SEC.ingest_quarantine
+    ALARM "ERIDU_UNKNOWN_KAKI" severity=LOW sensor=packet.src_kaki_hash
+
+POLICY eridu_rate_limit_ipc
+    WHEN  packet.rate_pps > IPC_RATE_LIMIT_PPS
+    DENY  packet.enqueue
+    ALARM "ERIDU_IPC_RATE_EXCEEDED" severity=MEDIUM sensor=packet.src_kaki_hash
+
+POLICY eridu_oversized_packet
+    WHEN  packet.size_bytes > MAX_PACKET_BYTES
+    DENY  packet.enqueue
+    ALARM "ERIDU_OVERSIZED_PACKET" severity=MEDIUM sensor=packet.src_kaki_hash
+
+POLICY eridu_queue_overflow_guard
+    -- Protect the scheduler queue from deliberate flooding.
+    WHEN  scheduler.queue_depth >= MAX_QUEUE_DEPTH
+    AND   packet.kaki_b11 < 200
+    DENY  packet.enqueue
+    ALARM "ERIDU_QUEUE_OVERFLOW" severity=HIGH sensor=packet.src_kaki_hash
+
+POLICY eridu_permit_kernel
+    WHEN  packet.kaki_state == KAKI.GOLDEN
+    AND   packet.kaki_role  == KernelKaki
+    ALLOW packet.enqueue -> scheduler.priority_queue
+
+POLICY eridu_permit_service
+    WHEN  packet.kaki_state  IN [KAKI.ACTIVE, KAKI.GOLDEN]
+    AND   packet.kaki_role   == ServiceKaki
+    ALLOW packet.enqueue -> scheduler.normal_queue
+
+POLICY eridu_default_deny
+    DENY  packet.enqueue
+    ALARM "ERIDU_DEFAULT_DENY" severity=LOW sensor=packet.src_kaki_hash
+
+-- ── Heartbeat / liveness protocol ─────────────────────────────────────────
+
+PROTOCOL eridu_kaki_liveness
+    -- Every KAKI registered in UrOS must emit a heartbeat packet every
+    -- HEARTBEAT_INTERVAL seconds.  Missing heartbeats decay the B11 score.
+
+    OBSERVE kaki.heartbeat INTERVAL HEARTBEAT_INTERVAL SECONDS
+    FOR EACH kaki IN eridu.registered_kakis {
+        WHEN  kaki.last_heartbeat_age > HEARTBEAT_INTERVAL * 3
+        THEN  SEC.decay_b11(kaki.hash, amount=10)
+              ALARM "ERIDU_KAKI_LIVENESS_FAIL" severity=LOW sensor=kaki.hash
+    }
+
+-- ── DB write guard ─────────────────────────────────────────────────────────
+
+PROTOCOL eridu_db_write_guard
+    -- Any KAKI attempting to write to EnkiDB must have the "db:write" passport scope.
+    -- This maps to the CQRS Write Pod restriction.
+
+    GUARD check_write_passport {
+        REQUIRE: packet.kaki_role == IngestKaki
+        REQUIRE: packet.passport.scope CONTAINS "db:write"
+        REQUIRE: packet.passport.valid == true
+        ON FAIL: DENY  packet.forward -> DB.write_pod
+                 ALARM "ERIDU_WRITE_PASSPORT_DENIED" severity=HIGH
+    }
+
+    ALLOW packet.forward -> DB.write_pod
+
+-- ── Firewall rules ─────────────────────────────────────────────────────────
+
+FIREWALL eridu_ingress_rules {
+    PRIORITY 1: eridu_dead_axiom
+    PRIORITY 1: eridu_invalid_kaki
+    PRIORITY 2: eridu_block_revoked
+    PRIORITY 2: eridu_block_dead_b11
+    PRIORITY 3: eridu_rate_limit_ipc
+    PRIORITY 3: eridu_oversized_packet
+    PRIORITY 3: eridu_queue_overflow_guard
+    PRIORITY 4: eridu_quarantine_unknown
+    PRIORITY 5: eridu_permit_kernel
+    PRIORITY 5: eridu_permit_service
+    PRIORITY 9: eridu_default_deny
+}
+
+-- ── Alarm routing ──────────────────────────────────────────────────────────
+
+ALARM "ERIDU_DEAD_AXIOM"            severity=CRITICAL  route=SEC.audit_log
+ALARM "ERIDU_INVALID_KAKI_CRC"      severity=CRITICAL  route=SEC.audit_log
+ALARM "ERIDU_REVOKED_KAKI"          severity=HIGH      route=SEC.audit_log
+ALARM "ERIDU_DEAD_B11"              severity=HIGH      route=SEC.audit_log
+ALARM "ERIDU_UNKNOWN_KAKI"          severity=LOW       route=SEC.ingest_queue
+ALARM "ERIDU_IPC_RATE_EXCEEDED"     severity=MEDIUM    route=SEC.audit_log
+ALARM "ERIDU_OVERSIZED_PACKET"      severity=MEDIUM    route=SEC.audit_log
+ALARM "ERIDU_QUEUE_OVERFLOW"        severity=HIGH      route=SEC.audit_log
+ALARM "ERIDU_KAKI_LIVENESS_FAIL"    severity=LOW       route=SEC.audit_log
+ALARM "ERIDU_WRITE_PASSPORT_DENIED" severity=HIGH      route=SEC.audit_log
+ALARM "ERIDU_DEFAULT_DENY"          severity=LOW       route=SEC.audit_log

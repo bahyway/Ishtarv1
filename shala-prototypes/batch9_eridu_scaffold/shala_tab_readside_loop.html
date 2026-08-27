@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ŠALA — the read-side loop (rehearsal)</title>
+<!-- ════════════════════════════════════════════════════════════════
+     ŠALA TAB — THE READ-SIDE LOOP (moment-of-GOLDEN + query-into-being)
+     BahyWay.Ecosystem v4.0 · rehearsal only (Way-of-Work rule 5)
+     Three sub-views, one loop:
+       A · AT GOLDEN — a sealed shape fires TWO processes at once:
+             Process 1  Template  → EnkiMDB (7006)  [deterministic]
+             Process 2  Pattern   → OntoGraph        [proposed, gated]
+       B · UNIFY — the Pattern reaches OntoGraph and either UNIFIES with
+             a matching pattern or PROPOSES a merge that only AUTHORITY
+             may confirm (a wrong merge would corrupt the ontology).
+       C · QUERY INTO EXISTENCE — HeptaScript assembles a document on the
+             fly from the Template schema + the OntoGraph Pattern content.
+             Authored content renders SOLID; inferred renders DASHED with
+             ε. Honesty is INHERITED from the stores, not added by hand.
+     Figures illustrative. SPLICE between SHALA-SPLICE-BEGIN / END.
+     ════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022; --bg-deep:#18191B;
+  --bg-hover:#383A3E; --bg-selected:#404349; --stroke:#3D3F43;
+  --gold:#D6A44C; --teal:#4FB8A8; --orange:#D98E3E; --crimson:#C34A3F;
+  --purple:#9B7FC7; --pale:#C9CDD4; --blue:#6FA8DC;
+  --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+  --serif:"Iowan Old Style",Palatino,Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:"Inter","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:baseline;gap:16px;padding:14px 22px 0;border-bottom:1px solid var(--stroke)}
+header h1{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:.24em;color:var(--gold)}
+header .sub{font-size:12px;color:var(--dim)}
+.subtabs{display:flex;gap:2px;margin-left:auto}
+.subtab{padding:8px 15px;font-size:12.5px;color:var(--muted);background:var(--bg-panel);border:1px solid var(--stroke);border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer}
+.subtab.on{background:var(--bg-selected);color:var(--gold);border-color:var(--gold)}
+.view{display:none;padding:16px 22px}
+.view.on{display:block}
+.intro{font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:14px;border-left:3px solid var(--purple);padding-left:12px}
+.bar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+button{background:var(--bg-widget);color:var(--ink);border:1px solid var(--stroke);border-radius:6px;padding:8px 13px;font-size:12.5px;cursor:pointer}
+button:hover{background:var(--bg-hover)}
+button.gold{border-color:var(--gold);color:var(--gold)}
+button.teal{border-color:var(--teal);color:var(--teal)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.stat{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+canvas{display:block;width:100%;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:8px}
+#log{margin-top:10px;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:6px;padding:8px;height:80px;overflow-y:auto;font-family:var(--mono);font-size:9.5px;color:var(--muted);line-height:1.6}
+#log .ok{color:var(--teal)} #log .no{color:var(--crimson)} #log .inf{color:var(--orange)} #log .seal{color:var(--gold)}
+/* view C */
+.qgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:16px}
+.qeditor{background:var(--bg-deep);border:1px solid var(--stroke);border-radius:8px;padding:13px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--pale)}
+.qeditor .kw{color:var(--gold)} .qeditor .fn{color:var(--teal)} .qeditor .str{color:var(--orange)} .qeditor .cm{color:var(--dim)}
+.qsrc{display:flex;gap:10px;margin:12px 0;font-family:var(--mono);font-size:10px}
+.qsrc .box{flex:1;background:var(--bg-widget);border:1px solid var(--stroke);border-radius:7px;padding:9px}
+.qsrc .box.mdb{border-color:var(--gold)} .qsrc .box.onto{border-color:var(--purple)}
+.qsrc .box h5{font-size:10px;margin-bottom:5px}
+.qsrc .box.mdb h5{color:var(--gold)} .qsrc .box.onto h5{color:var(--purple)}
+.qsrc .row{color:var(--muted);padding:1px 0}
+.qsrc .row.inf{color:var(--orange)}
+/* generated doc */
+.gendoc{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:8px;overflow:hidden;min-height:360px}
+.gendoc .crumbs{font-family:var(--mono);font-size:10px;color:var(--dim);padding:9px 16px;border-bottom:1px solid var(--stroke);background:var(--bg-widget)}
+.gendoc .gbody{padding:16px 20px}
+.gendoc .placeholder{color:var(--dim);font-family:var(--serif);font-style:italic;text-align:center;padding:50px 20px;line-height:1.7}
+.gendoc h1{font-family:var(--serif);font-size:22px;color:var(--ink);font-weight:500;margin-bottom:4px}
+.gendoc .gsub{font-size:11px;color:var(--muted);margin-bottom:14px}
+.field{padding:8px 10px;margin-bottom:7px;border-radius:6px;background:var(--bg-widget);opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s}
+.field.in{opacity:1;transform:none}
+.field.authored{border-left:3px solid var(--teal)}
+.field.inferred{border-left:3px dashed var(--orange)}
+.field .fl{font-family:var(--mono);font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.field .fv{font-size:13px;color:var(--pale);margin-top:2px}
+.field .prov{font-family:var(--mono);font-size:9px;margin-top:4px}
+.field.authored .prov{color:var(--teal)}
+.field.inferred .prov{color:var(--orange)}
+footer{padding:10px 22px;font-family:var(--serif);font-style:italic;font-size:12px;color:var(--dim);text-align:center}
+@media(max-width:960px){.qgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Š A L A</h1><span class="sub">the read-side loop — GOLDEN reproduces, HeptaScript regenerates</span>
+  <nav class="subtabs">
+    <span class="subtab on" data-v="A">A · at GOLDEN</span>
+    <span class="subtab" data-v="B">B · unify</span>
+    <span class="subtab" data-v="C">C · query into existence</span>
+  </nav>
+</header>
+
+<!-- ══ SHALA-SPLICE-BEGIN ══ -->
+<!-- ============ VIEW A : AT GOLDEN — two processes fire ============ -->
+<section class="view on" data-v="A">
+  <div class="intro">The instant a shape is sealed GOLDEN, <b style="color:var(--gold)">two processes</b> fire at once.
+    <b style="color:var(--gold)">Process 1</b> mints the concrete shape as a <b>Template</b> → EnkiMDB (deterministic; a proven shape simply <i>is</i> reusable).
+    <b style="color:var(--purple)">Process 2</b> extracts the abstract <b>Pattern</b> → OntoGraph (proposed; unification is authority-gated in view B).</div>
+  <div class="bar">
+    <button class="gold" id="sealBtn">✦ Seal the shape GOLDEN</button>
+    <button id="resetA">↺ reset</button>
+    <span class="stat" id="statA">a proven shape waits at the gate</span>
+  </div>
+  <canvas id="cvA" height="380"></canvas>
+  <div id="log"></div>
+</section>
+
+<!-- ============ VIEW B : UNIFY — authority-gated ============ -->
+<section class="view" data-v="B">
+  <div class="intro">The Pattern reaches OntoGraph. If it matches an existing kind it <b style="color:var(--teal)">unifies</b> — the ontology gets sharper, not bigger. But unification is an <b style="color:var(--orange)">inference</b>: a wrong merge corrupts the ontology. So a proposed merge is dashed, ε-bearing, and only <b>authority</b> may confirm it.</div>
+  <div class="bar">
+    <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">authority:</span>
+    <select id="roleB" style="background:var(--bg-panel);color:var(--ink);border:1px solid var(--stroke);border-radius:6px;padding:5px 9px;font-family:var(--mono);font-size:11px">
+      <option value="architect">Architect — may confirm merges</option>
+      <option value="steward">Steward — may confirm in own tribe</option>
+      <option value="viewer">Viewer — cannot confirm</option>
+    </select>
+    <button class="teal" id="arriveBtn">▸ new Pattern arrives</button>
+    <span class="stat" id="statB">OntoGraph holds 3 known kinds</span>
+  </div>
+  <canvas id="cvB" height="380"></canvas>
+  <div id="logB" style="margin-top:10px;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:6px;padding:8px;height:74px;overflow-y:auto;font-family:var(--mono);font-size:9.5px;color:var(--muted);line-height:1.6"></div>
+</section>
+
+<!-- ============ VIEW C : QUERY INTO EXISTENCE ============ -->
+<section class="view" data-v="C">
+  <div class="intro">A document is not stored — it is <b style="color:var(--gold)">queried into existence</b>. HeptaScript assembles it on the fly from the Template <b>schema</b> (EnkiMDB) and the Pattern <b>content</b> (OntoGraph). Authored content renders solid; inferred renders dashed with ε. <b>Honesty is inherited from the stores, not added by hand.</b></div>
+  <div class="bar">
+    <button class="gold" id="runQ">▶ Run the HeptaScript query</button>
+    <button id="resetC">↺ reset</button>
+    <span class="stat" id="statC">the document does not exist until you ask for it</span>
+  </div>
+  <div class="qgrid">
+    <div>
+      <div class="qeditor" id="qeditor"></div>
+      <div class="qsrc">
+        <div class="box mdb"><h5>◆ EnkiMDB — Template (schema)</h5>
+          <div class="row">title · client · contact</div>
+          <div class="row">payment_term · address</div>
+          <div class="row" style="color:var(--teal)">all authored · proven</div>
+        </div>
+        <div class="box onto"><h5>⬡ OntoGraph — Pattern (content)</h5>
+          <div class="row">kind: contract-onboarding</div>
+          <div class="row">client→term (authored)</div>
+          <div class="row inf">client→risk (inferred ~0.72)</div>
+        </div>
+      </div>
+    </div>
+    <div class="gendoc" id="gendoc">
+      <div class="crumbs">EnkiDDB · generated view · <b style="color:var(--gold)">HeptaScript</b></div>
+      <div class="gbody"><div class="placeholder" id="ph">No document here yet.<br>It is not a file — it is a <b>query result</b>.<br><br>Run the query to generate it on the fly.</div>
+        <div id="genContent"></div>
+      </div>
+    </div>
+  </div>
+  <div id="logC" style="margin-top:10px;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:6px;padding:8px;height:70px;overflow-y:auto;font-family:var(--mono);font-size:9.5px;color:var(--muted);line-height:1.6"></div>
+</section>
+<!-- ══ SHALA-SPLICE-END ══ -->
+
+<footer>Rehearsal only. GOLDEN reproduces into a Template (EnkiMDB, deterministic) and a Pattern (OntoGraph, authority-gated). Documents are queried into existence by HeptaScript from both stores, inheriting authored/inferred honesty by construction (GL-DB-001). Figures illustrative. — inscribed for DUB.SAR 𒁾</footer>
+
+<script>
+"use strict";
+/* ── sub-tab switching ── */
+document.querySelectorAll('.subtab').forEach(t=>t.addEventListener('click',()=>{
+  const v=t.dataset.v;
+  document.querySelectorAll('.subtab').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
+  document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
+}));
+function mklog(id){const el=document.getElementById(id);
+  return (m,c)=>{const d=document.createElement('div');if(c)d.className=c;d.textContent=m;el.appendChild(d);el.scrollTop=el.scrollHeight;};}
+
+/* ═══════════ VIEW A ═══════════ */
+const logA=mklog('log');
+const cvA=document.getElementById('cvA'),ctxA=cvA.getContext('2d');
+let DPR=Math.min(2,devicePixelRatio||1);
+function sizeA(){const w=cvA.clientWidth;cvA.width=w*DPR;cvA.height=380*DPR;cvA.style.height='380px';return w;}
+let WA=sizeA();addEventListener('resize',()=>{WA=sizeA();});
+let aState='idle', aT=0;       // idle → sealing → split → done
+let tmplP=0, pattP=0;          // travel progress 0..1
+function drawA(){
+  ctxA.setTransform(DPR,0,0,DPR,0,0);
+  ctxA.fillStyle='#18191B';ctxA.fillRect(0,0,WA,380);
+  const cx=WA/2, cy=170;
+  // the shape (center)
+  const sealed = aState!=='idle';
+  ctxA.beginPath();ctxA.arc(cx,cy,26,0,6.2832);
+  ctxA.fillStyle=sealed?'rgba(214,164,76,.9)':'rgba(214,164,76,.35)';
+  ctxA.fill();
+  ctxA.fillStyle='#151515';ctxA.font='10px monospace';ctxA.textAlign='center';
+  ctxA.fillText('SHAPE',cx,cy-2);ctxA.fillText(sealed?'GOLDEN':'proven',cx,cy+10);
+  // stores
+  const mdbX=WA*0.16, mdbY=60, ontoX=WA*0.84, ontoY=60;
+  function store(x,y,label,sub,col){
+    ctxA.strokeStyle=col;ctxA.lineWidth=1.5;ctxA.strokeRect(x-70,y-24,140,48);
+    ctxA.fillStyle=col;ctxA.font='11px monospace';ctxA.textAlign='center';
+    ctxA.fillText(label,x,y-4);ctxA.font='9px monospace';ctxA.fillStyle='#9A9C9F';
+    ctxA.fillText(sub,x,y+11);
+  }
+  store(mdbX,mdbY,'EnkiMDB','Templates (7006)','#D6A44C');
+  store(ontoX,ontoY,'OntoGraph','Patterns','#9B7FC7');
+  // travelling particles
+  ctxA.textAlign='left';
+  if(tmplP>0){const x=cx+(mdbX-cx)*tmplP, y=cy+(mdbY-cy)*tmplP;
+    ctxA.beginPath();ctxA.arc(x,y,7,0,6.2832);ctxA.fillStyle='#D6A44C';ctxA.fill();
+    ctxA.fillStyle='#D6A44C';ctxA.font='9px monospace';ctxA.textAlign='center';
+    ctxA.fillText('Template',x,y-11);ctxA.textAlign='left';}
+  if(pattP>0){const x=cx+(ontoX-cx)*pattP, y=cy+(ontoY-cy)*pattP;
+    ctxA.beginPath();ctxA.arc(x,y,7,0,6.2832);ctxA.fillStyle='#9B7FC7';ctxA.fill();
+    ctxA.fillStyle='#9B7FC7';ctxA.font='9px monospace';ctxA.textAlign='center';
+    ctxA.fillText('Pattern',x,y-11);ctxA.textAlign='left';}
+  // process labels
+  if(aState==='done'){
+    ctxA.fillStyle='#4FB8A8';ctxA.font='10px monospace';ctxA.textAlign='center';
+    ctxA.fillText('Process 1 · deterministic',mdbX,mdbY+42);
+    ctxA.fillStyle='#D98E3E';
+    ctxA.fillText('Process 2 · proposed (gated)',ontoX,ontoY+42);
+    ctxA.textAlign='left';
+  }
+  // animate travel
+  if(aState==='split'){
+    tmplP=Math.min(1,tmplP+0.02); pattP=Math.min(1,pattP+0.02);
+    if(tmplP>=1&&pattP>=1){aState='done';
+      logA('✦ Process 1 — Template sealed in EnkiMDB (7006). Reusable, proven, deterministic.','seal');
+      logA('⬡ Process 2 — Pattern proposed to OntoGraph. Unification awaits authority (view B).','inf');
+      document.getElementById('statA').textContent='GOLDEN — two processes fired: Template stored, Pattern proposed';
+    }
+  }
+  requestAnimationFrame(drawA);
+}
+requestAnimationFrame(drawA);
+document.getElementById('sealBtn').addEventListener('click',()=>{
+  if(aState!=='idle')return;
+  aState='sealing';logA('▶ sealing shape GOLDEN…','seal');
+  setTimeout(()=>{aState='split';tmplP=0.001;pattP=0.001;
+    logA('shape sealed — two processes fire simultaneously.','ok');},500);
+});
+document.getElementById('resetA').addEventListener('click',()=>{aState='idle';tmplP=0;pattP=0;
+  document.getElementById('statA').textContent='a proven shape waits at the gate';});
+
+/* ═══════════ VIEW B ═══════════ */
+const logB=mklog('logB');
+const cvB=document.getElementById('cvB'),ctxB=cvB.getContext('2d');
+function sizeB(){const w=cvB.clientWidth;cvB.width=w*DPR;cvB.height=380*DPR;cvB.style.height='380px';return w;}
+let WB=sizeB();addEventListener('resize',()=>{WB=sizeB();});
+// existing known kinds in OntoGraph
+let kinds=[
+ {id:'contract',nm:'contract-onboarding',x:.30,y:.4,strength:8},
+ {id:'invoice',nm:'invoice',x:.62,y:.28,strength:5},
+ {id:'report',nm:'report',x:.70,y:.66,strength:3},
+];
+let incoming=null; // {nm,x,y,match,conf,state}
+const AUTHB={architect:true,steward:true,viewer:false};
+function roleB(){return document.getElementById('roleB').value;}
+function drawB(){
+  ctxB.setTransform(DPR,0,0,DPR,0,0);
+  ctxB.fillStyle='#18191B';ctxB.fillRect(0,0,WB,380);
+  // known kinds
+  kinds.forEach(k=>{const x=k.x*WB,y=k.y*380;
+    ctxB.beginPath();ctxB.arc(x,y,10+k.strength,0,6.2832);
+    ctxB.fillStyle='rgba(155,127,199,.25)';ctxB.fill();
+    ctxB.beginPath();ctxB.arc(x,y,8,0,6.2832);ctxB.fillStyle='#9B7FC7';ctxB.fill();
+    ctxB.fillStyle='#C9CDD4';ctxB.font='10px monospace';ctxB.textAlign='center';
+    ctxB.fillText(k.nm,x,y-14-k.strength);
+    ctxB.fillStyle='#6E7074';ctxB.font='8px monospace';
+    ctxB.fillText('strength '+k.strength,x,y+22+k.strength);
+  });
+  // incoming pattern + proposed merge edge
+  if(incoming){const x=incoming.x*WB,y=incoming.y*380;
+    const match=kinds.find(k=>k.id===incoming.match);
+    if(match){const mx=match.x*WB,my=match.y*380;
+      ctxB.beginPath();ctxB.moveTo(x,y);ctxB.lineTo(mx,my);
+      if(incoming.state==='unified'){ctxB.setLineDash([]);ctxB.strokeStyle='rgba(79,184,168,.8)';ctxB.lineWidth=2.2;}
+      else{ctxB.setLineDash([5,5]);ctxB.strokeStyle='rgba(217,142,62,.7)';ctxB.lineWidth=1.5;}
+      ctxB.stroke();ctxB.setLineDash([]);
+      const midx=(x+mx)/2,midy=(y+my)/2;
+      ctxB.fillStyle=incoming.state==='unified'?'#4FB8A8':'#D98E3E';ctxB.font='9px monospace';ctxB.textAlign='center';
+      ctxB.fillText(incoming.state==='unified'?'unified':'merge? ~'+incoming.conf,midx,midy-4);
+    }
+    ctxB.beginPath();ctxB.arc(x,y,9,0,6.2832);
+    ctxB.setLineDash(incoming.state==='unified'?[]:[3,3]);
+    ctxB.fillStyle=incoming.state==='unified'?'#4FB8A8':'rgba(217,142,62,.3)';ctxB.fill();
+    ctxB.strokeStyle=incoming.state==='unified'?'#4FB8A8':'#D98E3E';ctxB.lineWidth=1.6;ctxB.stroke();ctxB.setLineDash([]);
+    ctxB.fillStyle='#C9CDD4';ctxB.font='10px monospace';ctxB.textAlign='center';
+    ctxB.fillText(incoming.nm,x,y-14);
+  }
+  ctxB.textAlign='left';
+  requestAnimationFrame(drawB);
+}
+requestAnimationFrame(drawB);
+document.getElementById('arriveBtn').addEventListener('click',()=>{
+  // a new contract-onboarding pattern arrives, matching the existing 'contract'
+  incoming={nm:'contract (new)',x:.36,y:.72,match:'contract',conf:0.86,state:'proposed'};
+  logB('▸ new Pattern arrived — looks like "contract-onboarding" (~0.86). Proposed merge is DASHED until authority confirms.','inf');
+  document.getElementById('statB').textContent='proposed merge — needs authority to confirm';
+  // clicking the incoming node confirms (if authorized)
+});
+cvB.addEventListener('click',()=>{
+  if(!incoming||incoming.state==='unified')return;
+  if(!AUTHB[roleB()]){logB('✗ '+roleB()+' cannot confirm merge — ontology protected from corruption.','no');return;}
+  incoming.state='unified';
+  const m=kinds.find(k=>k.id===incoming.match);if(m)m.strength+=2;
+  logB('✓ '+roleB()+' confirmed — Pattern UNIFIED into "contract-onboarding". The kind grew sharper (strength +2), not more numerous.','ok');
+  document.getElementById('statB').textContent='unified — ontology sharpened, not enlarged';
+});
+document.getElementById('roleB').addEventListener('change',()=>{
+  logB('authority: '+roleB()+(AUTHB[roleB()]?' — may confirm merges':' — read-only'),AUTHB[roleB()]?'ok':'no');
+});
+
+/* ═══════════ VIEW C ═══════════ */
+const logC=mklog('logC');
+document.getElementById('qeditor').innerHTML=
+  '<span class="cm">// HeptaScript — Anti-SQL · assemble a document from the ontology</span><br>'
+ +'<span class="kw">PRESENT</span> document <span class="fn">contract-onboarding</span><br>'
+ +'&nbsp;&nbsp;<span class="kw">FROM</span> Template <span class="fn">EnkiMDB</span>.schema<br>'
+ +'&nbsp;&nbsp;<span class="kw">WITH</span> Pattern <span class="fn">OntoGraph</span>.content<br>'
+ +'&nbsp;&nbsp;<span class="kw">WITNESS</span> authored <span class="kw">AS</span> solid,<br>'
+ +'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inferred <span class="kw">AS</span> dashed(<span class="fn">ε</span>)<br>'
+ +'<span class="kw">PROVE</span> provenance <span class="kw">PER</span> field;';
+// the fields the query will assemble, each with source + trust
+const FIELDS=[
+ {fl:'title',fv:'Contract — Acme Corp onboarding',cls:'authored',prov:'Template schema · authored'},
+ {fl:'client',fv:'Acme Corp',cls:'authored',prov:'Pattern content · authored · proven'},
+ {fl:'contact',fv:'Dana Reed · billing@acme.io',cls:'authored',prov:'Pattern content · authored'},
+ {fl:'payment_term',fv:'Net-30',cls:'authored',prov:'Template schema · authored (retyped in PDM)'},
+ {fl:'risk_flag',fv:'elevated (late-payment signal)',cls:'inferred',prov:'Pattern content · inferred ~0.72 · ε ±0.28 · PROPOSED'},
+];
+function resetC(){document.getElementById('genContent').innerHTML='';
+  document.getElementById('ph').style.display='block';
+  document.getElementById('statC').textContent='the document does not exist until you ask for it';}
+document.getElementById('resetC').addEventListener('click',resetC);
+document.getElementById('runQ').addEventListener('click',()=>{
+  document.getElementById('ph').style.display='none';
+  const box=document.getElementById('genContent');
+  box.innerHTML='<h1>Contract — Acme Corp</h1><div class="gsub">generated on the fly · EnkiDDB view · not stored</div>';
+  logC('▶ HeptaScript running — querying Template schema + Pattern content…','seal');
+  FIELDS.forEach((f,i)=>{
+    const d=document.createElement('div');d.className='field '+f.cls;
+    d.innerHTML='<div class="fl">'+f.fl+'</div><div class="fv">'+f.fv+'</div><div class="prov">'
+      +(f.cls==='authored'?'✓ ':'~ ')+f.prov+'</div>';
+    box.appendChild(d);
+    setTimeout(()=>{d.classList.add('in');
+      logC((f.cls==='authored'?'✓ ':'~ ')+f.fl+' — '+(f.cls==='authored'?'authored (solid)':'inferred (dashed, ε) — honesty inherited from the store'),
+        f.cls==='authored'?'ok':'inf');
+    },250+i*450);
+  });
+  setTimeout(()=>{
+    document.getElementById('statC').textContent='document generated — authored solid, inferred dashed, honesty inherited not added';
+    logC('✦ document assembled. No field hand-marked: each carries the trust of the store it came from (GL-DB-001).','seal');
+  },250+FIELDS.length*450);
+});
+/* boot logs */
+logA('view A — press Seal to fire the two GOLDEN processes.','inf');
+logB('view B — a new Pattern will seek to unify; only authority confirms the merge. Try as Viewer.','inf');
+logC('view C — the document is a query result, not a file. Run the query to generate it.','inf');
+</script>
+</body>
+</html>

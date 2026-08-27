@@ -13,24 +13,26 @@
 //! pipeline — no artifact is invented or hand-typed by this server.
 //!
 //! ## Protocol
+//! ```text
 //! One request frame in, one response frame out, per connection:
-//!   - `SCAN_CRATES:<workspace_root>`   -> scan `<root>/crates/*/Cargo.toml`,
+//!   - SCAN_CRATES:<workspace_root>     -> scan <root>/crates/*/Cargo.toml,
 //!                                         ingest each, respond
-//!                                         `OK:INGESTED:<count>`
-//!   - `SCAN_PLAYBOOKS:<repo_root>`     -> scan `<root>/playbooks/*.yml`,
+//!                                         OK:INGESTED:<count>
+//!   - SCAN_PLAYBOOKS:<repo_root>       -> scan <root>/playbooks/*.yml,
 //!                                         ingest each, respond
-//!                                         `OK:INGESTED:<count>`
-//!   - `FLUSH`                          -> force-materialize now, respond
-//!                                         `OK:FLUSHED:<entity_count>`
-//!   - `INGEST_RUN_RECORD:<json>`       -> parse `<json>` as a real
-//!                                         `enkimdb::AnuGovernorRunRecordSpec`,
+//!                                         OK:INGESTED:<count>
+//!   - FLUSH                            -> force-materialize now, respond
+//!                                         OK:FLUSHED:<entity_count>
+//!   - INGEST_RUN_RECORD:<json>         -> parse <json> as a real
+//!                                         enkimdb::AnuGovernorRunRecordSpec,
 //!                                         ingest it (role=Zikru,
-//!                                         `anu_governor_run.*` namespace),
-//!                                         respond `OK:INGESTED:1`
+//!                                         anu_governor_run.* namespace),
+//!                                         respond OK:INGESTED:1
 //!                                         (2026-07-29, the run-confirmation
 //!                                         registry -- see that type's own
 //!                                         doc comment for why)
-//!   - anything else malformed         -> `ERR:<message>`
+//!   - anything else malformed          -> ERR:<message>
+//! ```
 //!
 //! `<workspace_root>`/`<repo_root>` are paths inside this container — the
 //! Architect's Podman run command must bind-mount the real checkout (e.g.
@@ -79,7 +81,10 @@ fn tribe_id() -> u16 {
         .unwrap_or(enkimdb::ARTIFACT_TRIBE_ID)
 }
 fn flush_every() -> u32 {
-    env::var("FLUSH_EVERY").ok().and_then(|s| s.parse().ok()).unwrap_or(10)
+    env::var("FLUSH_EVERY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10)
 }
 
 struct SharedState {
@@ -114,7 +119,10 @@ fn main() {
         for stream in listener.incoming() {
             match stream {
                 Ok(s) => {
-                    let peer = s.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "?".into());
+                    let peer = s
+                        .peer_addr()
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|_| "?".into());
                     request_count.fetch_add(1, Ordering::Relaxed);
                     let state_ref = &state;
                     let data_dir_ref = &data_dir;
@@ -130,7 +138,12 @@ fn main() {
     });
 }
 
-fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path, flush_every: u32) -> io::Result<()> {
+fn handle(
+    mut stream: TcpStream,
+    state: &Mutex<SharedState>,
+    data_dir: &Path,
+    flush_every: u32,
+) -> io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT)))?;
     stream.set_write_timeout(Some(Duration::from_secs(WRITE_TIMEOUT)))?;
 
@@ -180,13 +193,14 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path, fl
                 let kaki = st.write_node.ingest_anu_governor_run_record(&spec, epoch);
                 st.since_flush += 1;
                 let should_flush = st.since_flush >= flush_every;
-                if should_flush {
-                    if materialize_fresh(&st.write_node, data_dir).is_ok() {
-                        st.since_flush = 0;
-                    }
+                if should_flush && materialize_fresh(&st.write_node, data_dir).is_ok() {
+                    st.since_flush = 0;
                 }
                 let hex: String = kaki.bytes().iter().map(|b| format!("{b:02x}")).collect();
-                eprintln!("[ingest] run_record run_id={} outcome={} epoch={epoch} kaki={hex}", spec.run_id, spec.outcome);
+                eprintln!(
+                    "[ingest] run_record run_id={} outcome={} epoch={epoch} kaki={hex}",
+                    spec.run_id, spec.outcome
+                );
                 send(&mut stream, "OK:INGESTED:1")
             }
             Err(e) => send(&mut stream, &format!("ERR:malformed run record json: {e}")),
@@ -209,7 +223,11 @@ fn ingest_all(
         let kaki = st.write_node.ingest_artifact(profile, epoch);
         st.since_flush += 1;
         let hex: String = kaki.bytes().iter().map(|b| format!("{b:02x}")).collect();
-        eprintln!("[ingest] kind={} name={} epoch={epoch} kaki={hex}", profile.kind.as_str(), profile.name);
+        eprintln!(
+            "[ingest] kind={} name={} epoch={epoch} kaki={hex}",
+            profile.kind.as_str(),
+            profile.name
+        );
     }
 
     let should_flush = st.since_flush >= flush_every;
@@ -226,7 +244,10 @@ fn ingest_all(
     profiles.len()
 }
 
-fn materialize_fresh(write_node: &WriteNode, data_dir: &Path) -> io::Result<readnode::MaterializeStats> {
+fn materialize_fresh(
+    write_node: &WriteNode,
+    data_dir: &Path,
+) -> io::Result<readnode::MaterializeStats> {
     let current = data_dir.join("current");
     let _ = fs::remove_dir_all(&current);
     fs::create_dir_all(&current)?;
@@ -247,7 +268,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

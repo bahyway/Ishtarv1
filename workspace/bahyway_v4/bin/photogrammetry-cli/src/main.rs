@@ -59,21 +59,32 @@ fn cmd_parse(args: &[String]) -> Result<(), String> {
 
 fn cmd_detect_voids(args: &[String]) -> Result<(), String> {
     if args.len() < 3 {
-        return Err("detect-voids: usage: detect-voids <file> <voxel_size> <max_epsilon>".to_string());
+        return Err(
+            "detect-voids: usage: detect-voids <file> <voxel_size> <max_epsilon>".to_string(),
+        );
     }
     let cloud = parse_point_cloud_file(&PathBuf::from(&args[0])).map_err(|e| e.to_string())?;
-    let voxel_size: f64 = args[1].parse().map_err(|_| "voxel_size must be a number".to_string())?;
-    let max_epsilon: f64 = args[2].parse().map_err(|_| "max_epsilon must be a number".to_string())?;
+    let voxel_size: f64 = args[1]
+        .parse()
+        .map_err(|_| "voxel_size must be a number".to_string())?;
+    let max_epsilon: f64 = args[2]
+        .parse()
+        .map_err(|_| "max_epsilon must be a number".to_string())?;
     let report = detect_voids(&cloud, voxel_size, max_epsilon);
     println!("{}", void_report_json(&report));
     Ok(())
 }
 
 fn cmd_run_sfm(args: &[String]) -> Result<(), String> {
-    let sep = args.iter().position(|a| a == "--").ok_or("run-sfm: missing '--' before the engine command")?;
+    let sep = args
+        .iter()
+        .position(|a| a == "--")
+        .ok_or("run-sfm: missing '--' before the engine command")?;
     let (positional, engine) = args.split_at(sep);
     let engine = &engine[1..]; // drop the "--" itself
-    let (engine_cmd, engine_args) = engine.split_first().ok_or("run-sfm: no engine command given after '--'")?;
+    let (engine_cmd, engine_args) = engine
+        .split_first()
+        .ok_or("run-sfm: no engine command given after '--'")?;
 
     if positional.len() < 2 {
         return Err("run-sfm: usage: run-sfm <photos_dir> <output_point_cloud_path> [<voxel_size> <max_epsilon>] -- <command> [args...]".to_string());
@@ -82,8 +93,12 @@ fn cmd_run_sfm(args: &[String]) -> Result<(), String> {
     let output_point_cloud_path = PathBuf::from(&positional[1]);
     let voxel_and_epsilon: Option<(f64, f64)> = if positional.len() >= 4 {
         Some((
-            positional[2].parse().map_err(|_| "voxel_size must be a number".to_string())?,
-            positional[3].parse().map_err(|_| "max_epsilon must be a number".to_string())?,
+            positional[2]
+                .parse()
+                .map_err(|_| "voxel_size must be a number".to_string())?,
+            positional[3]
+                .parse()
+                .map_err(|_| "max_epsilon must be a number".to_string())?,
         ))
     } else {
         None

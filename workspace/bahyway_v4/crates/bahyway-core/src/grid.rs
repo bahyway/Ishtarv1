@@ -227,7 +227,13 @@ impl CellHealthSnapshot {
             CellColor::RedPls => HealthAlert::Critical,
             CellColor::Collapse => HealthAlert::Collapsed,
         };
-        CellHealthSnapshot { cell, avg_health, critical_count, color, alert }
+        CellHealthSnapshot {
+            cell,
+            avg_health,
+            critical_count,
+            color,
+            alert,
+        }
     }
 }
 
@@ -293,7 +299,11 @@ mod tests {
 
     #[test]
     fn test_cell_byte_constraints_round_trip() {
-        let cell = GridCell { x: 7, y: 42, z: 255 };
+        let cell = GridCell {
+            x: 7,
+            y: 42,
+            z: 255,
+        };
         let c = cell_byte_constraints(cell);
         assert_eq!(c.byte4, 7);
         assert_eq!(c.byte5, 42);
@@ -302,7 +312,11 @@ mod tests {
 
     #[test]
     fn test_kaki_byte_constraints_matches() {
-        let cell = GridCell { x: 10, y: 20, z: 30 };
+        let cell = GridCell {
+            x: 10,
+            y: 20,
+            z: 30,
+        };
         let c = cell_byte_constraints(cell);
 
         let mut kaki_match = [0u8; 16];

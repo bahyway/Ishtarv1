@@ -1,0 +1,64 @@
+---
+# PB-375 · Private cloud services on the NAS · files, ingest, EnkiDB, backup
+# Everything binds to 127.0.0.1 or the tailnet interface. Nothing binds 0.0.0.0.
+- name: PB-375 stand up the private cloud services
+  hosts: nas
+  become: true
+  vars:
+    bind: "{{ tailscale_ip | default('100.64.0.1') }}"
+    data: /volume1/bahyway
+  tasks:
+    - name: Dataset layout
+      ansible.builtin.file: {path: "{{ data }}/{{ item }}", state: directory, mode: "0750"}
+      loop: [landing_zone/raw, landing_zone/receipts, derived, archive, sala/tabs, laws, docker]
+
+    - name: File access (WebDAV/sync) bound to the tailnet only
+      community.docker.docker_container:
+        name: files
+        image: nextcloud:stable
+        restart_policy: unless-stopped
+        ports: ["{{ bind }}:8443:80"]
+        volumes: ["{{ data }}/derived:/var/www/html/data/derived:ro", "{{ data }}/docker/nextcloud:/var/www/html"]
+        env: {TRUSTED_PROXIES: "100.64.0.0/10"}
+
+    - name: CDSE ingest worker (PB-371 on a schedule)
+      community.docker.docker_container:
+        name: arsenal
+        image: python:3.12-slim
+        restart_policy: unless-stopped
+        volumes: ["{{ data }}/landing_zone:/lz"]
+        env:
+          CDSE_USER: "{{ lookup('env','CDSE_USER') }}"
+          CDSE_PASS: "{{ lookup('env','CDSE_PASS') }}"
+        command: ["sleep", "infinity"]
+
+    - name: Weekly ingest timer
+      ansible.builtin.cron:
+        name: bahyway-arsenal
+        weekday: "1"
+        hour: "3"
+        minute: "20"
+        job: "docker exec arsenal python3 /lz/arsenal.py --wkt \"$AOI\" --start $(date -d '-7 days' +\\%F) --end $(date +\\%F) --out /lz/raw >> /volume1/bahyway/sala/court_journal.log 2>&1"
+
+    - name: Gate S1 · nothing binds 0.0.0.0
+      ansible.builtin.shell: |
+        ! ss -ltn | awk '{print $4}' | grep -qE '^0\.0\.0\.0:|^\*:'
+      changed_when: false
+
+    - name: Gate S2 · off-site copy exists and is younger than 8 days (3-2-1 copy 2)
+      ansible.builtin.shell: |
+        newest=$(find {{ data }}/archive/.offsite_stamp -mtime -8 2>/dev/null | wc -l)
+        [ "$newest" -ge 1 ] || { echo "no recent off-site copy - derived data is NOT re-fetchable"; exit 1; }
+      changed_when: false
+      failed_when: false
+      register: s2
+
+    - name: Report 3-2-1 state
+      ansible.builtin.debug:
+        msg: "{{ 'copy 2 fresh' if s2.rc == 0 else 'WARNING - derived tier has no fresh off-site copy' }}"
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ data }}/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-375 private cloud services up - tailnet-bound, weekly ingest armed"

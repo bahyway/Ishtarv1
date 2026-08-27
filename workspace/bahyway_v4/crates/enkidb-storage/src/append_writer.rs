@@ -9,16 +9,16 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
-use bahyway_core::Result;
 use crate::durability::FsyncPolicy;
+use bahyway_core::Result;
 
 pub const COMMIT_MARKER: u8 = 0xCA;
 
 /// Append-only sequential writer with fsync-per-commit or batched durability.
 pub struct AppendWriter {
-    inner:  BufWriter<File>,
+    inner: BufWriter<File>,
     policy: FsyncPolicy,
-    path:   std::path::PathBuf,
+    path: std::path::PathBuf,
 }
 
 impl AppendWriter {
@@ -29,9 +29,9 @@ impl AppendWriter {
             .append(true)
             .open(path.as_ref())?;
         Ok(AppendWriter {
-            inner:  BufWriter::new(file),
+            inner: BufWriter::new(file),
             policy,
-            path:   path.as_ref().to_path_buf(),
+            path: path.as_ref().to_path_buf(),
         })
     }
 
@@ -69,12 +69,12 @@ impl AppendWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use crate::durability::FsyncPolicy;
+    use std::fs;
 
     #[test]
     fn append_and_commit_marker() {
-        let dir  = std::env::temp_dir();
+        let dir = std::env::temp_dir();
         let path = dir.join("enkidb_append_test.bin");
         let _cleanup = Cleanup(path.clone());
 
@@ -90,6 +90,8 @@ mod tests {
 
     struct Cleanup(std::path::PathBuf);
     impl Drop for Cleanup {
-        fn drop(&mut self) { let _ = fs::remove_file(&self.0); }
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
     }
 }

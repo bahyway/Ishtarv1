@@ -13,7 +13,7 @@ to call `KakiFirewall` or `PolicyEngine` directly.
 
 **Phases:**
 - Phase 1 (current) — in-process library.
-- Phase 2 — standalone EriduOS service with NajafEngine topology feed.
+- Phase 2 — standalone UrOS service with NajafEngine topology feed.
 - Phase 3 — kernel-level WPDEngine packet inspection on bare metal.
 
 ---

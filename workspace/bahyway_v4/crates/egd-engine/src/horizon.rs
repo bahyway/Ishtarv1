@@ -33,8 +33,9 @@ mod tests {
     #[test]
     fn degrading_asset_enters_window() {
         // kappa rising 0.01/day, now at 0.5, threshold 1.0
-        let h: Vec<trend_core::Sample> =
-            (0..60).map(|i| (-(60 - i) as f64, 0.5 - (60 - i) as f64 * 0.01)).collect();
+        let h: Vec<trend_core::Sample> = (0..60)
+            .map(|i| (-(60 - i) as f64, 0.5 - (60 - i) as f64 * 0.01))
+            .collect();
         match tier(&h, 1.0) {
             Tier::Horizon(d) => assert!((d - 50.0).abs() < 2.0),
             t => panic!("expected Horizon, got {:?}", t),

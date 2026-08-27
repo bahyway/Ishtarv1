@@ -43,9 +43,9 @@ pub enum JournalTier {
 impl JournalTier {
     pub fn as_str(self) -> &'static str {
         match self {
-            JournalTier::Wal   => "WAL",
+            JournalTier::Wal => "WAL",
             JournalTier::Story => "STORY",
-            JournalTier::Enki  => "ENKI",
+            JournalTier::Enki => "ENKI",
         }
     }
 }
@@ -59,16 +59,18 @@ impl core::fmt::Display for JournalTier {
 impl core::fmt::Display for JournalError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            JournalError::A3Violation { sequence } =>
-                write!(f, "A3: Gray lane at seq {sequence} has no Evidence"),
-            JournalError::TornWrite { tier } =>
-                write!(f, "A4: torn write — {tier} tier failed after WAL"),
-            JournalError::StorageFull { tier } =>
-                write!(f, "storage full on {tier} tier"),
-            JournalError::OutOfOrder { expected, got } =>
-                write!(f, "A2: out-of-order event (expected seq {expected}, got {got})"),
-            JournalError::Internal =>
-                write!(f, "internal journal error"),
+            JournalError::A3Violation { sequence } => {
+                write!(f, "A3: Gray lane at seq {sequence} has no Evidence")
+            }
+            JournalError::TornWrite { tier } => {
+                write!(f, "A4: torn write — {tier} tier failed after WAL")
+            }
+            JournalError::StorageFull { tier } => write!(f, "storage full on {tier} tier"),
+            JournalError::OutOfOrder { expected, got } => write!(
+                f,
+                "A2: out-of-order event (expected seq {expected}, got {got})"
+            ),
+            JournalError::Internal => write!(f, "internal journal error"),
         }
     }
 }
@@ -97,14 +99,20 @@ pub struct NoopTransaction {
 }
 
 impl NoopTransaction {
-    pub fn new() -> Self { Self { should_fail: false } }
+    pub fn new() -> Self {
+        Self { should_fail: false }
+    }
 
     /// Returns a transaction that always fails on commit (for negative tests).
-    pub fn failing() -> Self { Self { should_fail: true } }
+    pub fn failing() -> Self {
+        Self { should_fail: true }
+    }
 }
 
 impl Default for NoopTransaction {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JournalTransaction for NoopTransaction {
@@ -152,23 +160,28 @@ mod tests {
 
     #[test]
     fn journal_error_display_torn_write() {
-        let e = JournalError::TornWrite { tier: JournalTier::Story };
+        let e = JournalError::TornWrite {
+            tier: JournalTier::Story,
+        };
         assert!(e.to_string().contains("A4"));
         assert!(e.to_string().contains("STORY"));
     }
 
     #[test]
     fn journal_error_display_out_of_order() {
-        let e = JournalError::OutOfOrder { expected: 3, got: 5 };
+        let e = JournalError::OutOfOrder {
+            expected: 3,
+            got: 5,
+        };
         assert!(e.to_string().contains("A2"));
         assert!(e.to_string().contains("expected seq 3"));
     }
 
     #[test]
     fn journal_tier_display() {
-        assert_eq!(JournalTier::Wal.to_string(),   "WAL");
+        assert_eq!(JournalTier::Wal.to_string(), "WAL");
         assert_eq!(JournalTier::Story.to_string(), "STORY");
-        assert_eq!(JournalTier::Enki.to_string(),  "ENKI");
+        assert_eq!(JournalTier::Enki.to_string(), "ENKI");
     }
 
     #[test]

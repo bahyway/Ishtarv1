@@ -1,0 +1,432 @@
+---
+# ============================================================================
+# PB-330 — SilaEngine crate scaffold (pure Rust, sovereign)
+# BahyWay.Ecosystem v4.0 — exact grave discovery in Wadi-us-Salaam
+# ----------------------------------------------------------------------------
+# LAW OF THIS TABLET:
+#   * ONE GRAVE = ONE LEAF CELL = ONE HEPTA-ADDRESS = ONE KAKI.
+#     7-ary subdivision of the {7,3} court: depth 9 => 7^9 ~ 40M leaves,
+#     capacity for 6M+ graves with no sharing and no merging (GL-GEO-002:
+#     no pentagon defects, no fixed-resolution collapse).
+#   * The hepta-address lives in EAV Mandatory Attributes — NEVER inside
+#     the locked KAKI byte layout.
+#   * Truth space = UTM 38N (PB-328 Geodesy Gate). Disk = index space.
+#   * All ingest arrives SUSA -> EnkiSDB -> gate chain -> EnkiODB.
+#   * Dependencies: free/open crates only (rstar, fst). Z3 nowhere near
+#     this crate — runtime is pure Rust.
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-330-silaengine-crate-scaffold.yml
+# ============================================================================
+
+- name: "PB-330 | Scaffold SilaEngine crate + exactness test gate"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    sila_root: /opt/bahyway/src/silaengine
+
+  tasks:
+
+    - name: "1.1 | Create crate directory tree"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0750"
+      loop:
+        - "{{ sila_root }}"
+        - "{{ sila_root }}/src"
+        - "{{ sila_root }}/tests"
+
+    - name: "2.1 | Cargo.toml (free crates only)"
+      ansible.builtin.copy:
+        dest: "{{ sila_root }}/Cargo.toml"
+        mode: "0640"
+        content: |
+          [package]
+          name = "silaengine"
+          version = "0.1.0"
+          edition = "2021"
+          description = "SilaEngine — sovereign narrow-road navigation; exact grave discovery (BahyWay v4.0)"
+
+          [dependencies]
+          rstar = "0.12"                        # R-tree spatial index (MIT/Apache)
+          fst = { version = "0.4", features = ["levenshtein"] }  # name FST
+
+          [profile.release]
+          lto = true
+          codegen-units = 1
+
+    - name: "3.1 | src/lib.rs"
+      ansible.builtin.copy:
+        dest: "{{ sila_root }}/src/lib.rs"
+        mode: "0640"
+        content: |
+          //! SilaEngine — "the street" (Akkadian gloss per GL-NAM-002).
+          //! Exact grave discovery: one grave = one {7,3} leaf cell
+          //! = one hepta-address = one KAKI. Truth space: UTM 38N.
+          pub mod hepta_address;
+          pub mod grave_index;
+          pub mod resolver;
+          pub mod suqu;
+
+    - name: "3.2 | src/hepta_address.rs — 7-ary addressing"
+      ansible.builtin.copy:
+        dest: "{{ sila_root }}/src/hepta_address.rs"
+        mode: "0640"
+        content: |
+          //! Hepta-address: a base-7 path of gate crossings from the central
+          //! cell of the {7,3} court. Depth 9 -> 7^9 = 40_353_607 leaves.
+          //! Packed into u64: [depth:4 bits][digits: 3 bits each, msb-first].
+          //! Stored ONLY as an EAV Mandatory Attribute — never in KAKI bytes.
+
+          pub const MAX_DEPTH: u8 = 16;
+
+          #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+          pub struct HeptaAddr(pub u64);
+
+          impl HeptaAddr {
+              pub fn root() -> Self { HeptaAddr(0) }
+
+              pub fn depth(&self) -> u8 { (self.0 >> 60) as u8 }
+
+              pub fn encode(digits: &[u8]) -> Option<Self> {
+                  if digits.len() > MAX_DEPTH as usize { return None; }
+                  let mut v: u64 = (digits.len() as u64) << 60;
+                  for (i, d) in digits.iter().enumerate() {
+                      if *d >= 7 { return None; }              // gates are 0..=6
+                      v |= (*d as u64) << (57 - 3 * i as u64);
+                  }
+                  Some(HeptaAddr(v))
+              }
+
+              pub fn digits(&self) -> Vec<u8> {
+                  let n = self.depth() as usize;
+                  (0..n).map(|i| ((self.0 >> (57 - 3 * i as u64)) & 0b111) as u8)
+                        .collect()
+              }
+
+              pub fn parent(&self) -> Option<Self> {
+                  let n = self.depth();
+                  if n == 0 { return None; }
+                  let mut d = self.digits();
+                  d.pop();
+                  Self::encode(&d)
+              }
+
+              pub fn child(&self, gate: u8) -> Option<Self> {
+                  let mut d = self.digits();
+                  d.push(gate);
+                  Self::encode(&d)
+              }
+
+              /// Leaf capacity at a given depth: 7^depth.
+              pub fn capacity(depth: u8) -> u64 { 7u64.pow(depth as u32) }
+
+              /// {7,3} ring population r_k (exponential court growth,
+              /// ratio -> phi^2 ~ 2.618): r_1=7, r_{k+1}=3 r_k - r_{k-1}.
+              pub fn ring_population(k: u32) -> u64 {
+                  match k {
+                      0 => 1, 1 => 7,
+                      _ => {
+                          let (mut a, mut b) = (1u64, 7u64);
+                          for _ in 2..=k { let c = 3 * b - a; a = b; b = c; }
+                          b
+                      }
+                  }
+              }
+          }
+
+    - name: "3.3 | src/grave_index.rs — R-tree + address map"
+      ansible.builtin.copy:
+        dest: "{{ sila_root }}/src/grave_index.rs"
+        mode: "0640"
+        content: |
+          //! Grave index: exact (hepta-address -> grave) and spatial
+          //! (UTM 38N nearest / within) over 6M+ particles.
+          use crate::hepta_address::HeptaAddr;
+          use rstar::primitives::GeomWithData;
+          use rstar::RTree;
+          use std::collections::HashMap;
+
+          /// Minimal grave particle view. KAKI is the 16-byte key (locked
+          /// layout); plot/name/etc live in EAV — here only what the index
+          /// needs at runtime.
+          #[derive(Clone, Debug)]
+          pub struct Grave {
+              pub kaki: [u8; 16],
+              pub utm_e: f64,     // EPSG:32638 easting  (PB-328 Geodesy Gate)
+              pub utm_n: f64,     // EPSG:32638 northing
+              pub addr: HeptaAddr,
+              pub plot: String,   // e.g. "NJF-80211"
+          }
+
+          type Node = GeomWithData<[f64; 2], u32>; // payload = index into store
+
+          pub struct GraveIndex {
+              store: Vec<Grave>,
+              by_addr: HashMap<HeptaAddr, u32>,
+              tree: RTree<Node>,
+          }
+
+          impl GraveIndex {
+              /// Bulk build. Refuses duplicate addresses: the law is
+              /// one grave = one leaf cell, with no sharing.
+              pub fn build(graves: Vec<Grave>) -> Result<Self, String> {
+                  let mut by_addr = HashMap::with_capacity(graves.len());
+                  let mut nodes = Vec::with_capacity(graves.len());
+                  for (i, g) in graves.iter().enumerate() {
+                      if by_addr.insert(g.addr, i as u32).is_some() {
+                          return Err(format!(
+                              "EXACTNESS VIOLATION: address collision at {:?} \
+                               — two graves share one cell; deepen the tree.",
+                              g.addr));
+                      }
+                      nodes.push(Node::new([g.utm_e, g.utm_n], i as u32));
+                  }
+                  Ok(Self { store: graves, by_addr,
+                            tree: RTree::bulk_load(nodes) })
+              }
+
+              /// EXACT discovery: nine gate digits -> the grave. O(1).
+              pub fn exact(&self, addr: HeptaAddr) -> Option<&Grave> {
+                  self.by_addr.get(&addr).map(|&i| &self.store[i as usize])
+              }
+
+              /// Nearest plot to a truth-space point (UTM metres).
+              pub fn nearest(&self, e: f64, n: f64) -> Option<&Grave> {
+                  self.tree.nearest_neighbor(&[e, n])
+                      .map(|nd| &self.store[nd.data as usize])
+              }
+
+              /// All plots within a radius (metres) — the resolver's
+              /// distance-band candidate stage.
+              pub fn within(&self, e: f64, n: f64, r_m: f64) -> Vec<&Grave> {
+                  self.tree.locate_within_distance([e, n], r_m * r_m)
+                      .map(|nd| &self.store[nd.data as usize]).collect()
+              }
+
+              pub fn len(&self) -> usize { self.store.len() }
+              pub fn is_empty(&self) -> bool { self.store.is_empty() }
+          }
+
+    - name: "3.4 | src/resolver.rs — anchor/bearing/name resolver"
+      ansible.builtin.copy:
+        dest: "{{ sila_root }}/src/resolver.rs"
+        mode: "0640"
+        content: |
+          //! "near the golden shrine, a bit to the west" ->
+          //!   anchor(shrine) -> bearing(west) -> distance band -> candidates.
+          //! Name search over millions of deceased-name keys via FST with
+          //! Levenshtein tolerance. All advisory ranking is explainable;
+          //! final selection is the person's, per sovereignty discipline.
+          use crate::grave_index::{Grave, GraveIndex};
+          use fst::automaton::Levenshtein;
+          use fst::{IntoStreamer, Map, MapBuilder, Streamer};
+
+          pub struct Anchor { pub name: &'static str, pub e: f64, pub n: f64 }
+
+          /// Compass bearing -> unit vector in UTM (east, north).
+          pub fn bearing(word: &str) -> Option<(f64, f64)> {
+              match word {
+                  "north" => Some((0.0, 1.0)),  "south" => Some((0.0, -1.0)),
+                  "east"  => Some((1.0, 0.0)),  "west"  => Some((-1.0, 0.0)),
+                  _ => None,
+              }
+          }
+
+          /// Candidate stage: anchor + bearing + band -> plots in the cone.
+          pub fn candidates<'a>(idx: &'a GraveIndex, a: &Anchor,
+                                dir: (f64, f64), band_m: (f64, f64))
+                                -> Vec<&'a Grave> {
+              idx.within(a.e, a.n, band_m.1).into_iter().filter(|g| {
+                  let (dx, dy) = (g.utm_e - a.e, g.utm_n - a.n);
+                  let d = (dx * dx + dy * dy).sqrt();
+                  if d < band_m.0 { return false; }
+                  // within ~60 degrees of the stated bearing
+                  d > 0.0 && (dx * dir.0 + dy * dir.1) / d > 0.5
+              }).collect()
+          }
+
+          /// Build the name FST (keys MUST be inserted sorted).
+          pub fn build_name_map(sorted_pairs: &[(String, u64)])
+                                -> fst::Result<Map<Vec<u8>>> {
+              let mut b = MapBuilder::memory();
+              for (k, v) in sorted_pairs { b.insert(k, *v)?; }
+              Map::new(b.into_inner()?)
+          }
+
+          /// Fuzzy deceased-name lookup (edit distance <= dist).
+          pub fn name_search(map: &Map<Vec<u8>>, query: &str, dist: u32)
+                             -> Vec<(String, u64)> {
+              let Ok(aut) = Levenshtein::new(query, dist) else { return vec![]; };
+              let mut out = Vec::new();
+              let mut stream = map.search(aut).into_stream();
+              while let Some((k, v)) = stream.next() {
+                  out.push((String::from_utf8_lossy(k).into_owned(), v));
+              }
+              out
+          }
+
+    - name: "3.5 | src/suqu.rs — narrow-road final leg (width-penalised A*)"
+      ansible.builtin.copy:
+        dest: "{{ sila_root }}/src/suqu.rs"
+        mode: "0640"
+        content: |
+          //! suqu qatnu — the narrow street. Width-penalised A* over the
+          //! narrow-road graph exported by the QGIS workshop (PB-325/327),
+          //! ingested through SUSA -> EnkiSDB -> gates -> EnkiODB.
+          use std::cmp::Ordering;
+          use std::collections::BinaryHeap;
+
+          pub struct RoadNode { pub e: f64, pub n: f64 }
+          pub struct RoadEdge {
+              pub a: u32, pub b: u32,
+              pub len_m: f64,
+              pub width_m: f64,      // from workshop digitisation
+              pub oneway: i8,        // 0 both, 1 a->b, -1 b->a
+          }
+
+          pub struct RoadGraph {
+              pub nodes: Vec<RoadNode>,
+              pub adj: Vec<Vec<(u32, f64)>>, // node -> (neighbour, cost)
+          }
+
+          impl RoadGraph {
+              /// Cost law: narrow streets are not penalised for BEING
+              /// narrow when the traveller fits — width penalty applies
+              /// only below the vehicle/procession width.
+              pub fn build(n: usize, edges: &[RoadEdge], need_width_m: f64)
+                           -> Self {
+                  let mut adj = vec![Vec::new(); n];
+                  for e in edges {
+                      let penalty = if e.width_m >= need_width_m { 1.0 }
+                                    else { 1.0 + (need_width_m - e.width_m) * 4.0 };
+                      let cost = e.len_m * penalty;
+                      if e.oneway >= 0 { adj[e.a as usize].push((e.b, cost)); }
+                      if e.oneway <= 0 { adj[e.b as usize].push((e.a, cost)); }
+                  }
+                  // nodes vector supplied separately by ingest; placeholder here
+                  Self { nodes: Vec::with_capacity(n), adj }
+              }
+
+              pub fn astar(&self, start: u32, goal: u32,
+                           h: impl Fn(u32) -> f64) -> Option<Vec<u32>> {
+                  #[derive(PartialEq)]
+                  struct S(f64, u32);
+                  impl Eq for S {}
+                  impl Ord for S {
+                      fn cmp(&self, o: &Self) -> Ordering {
+                          o.0.partial_cmp(&self.0).unwrap_or(Ordering::Equal)
+                      }
+                  }
+                  impl PartialOrd for S {
+                      fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+                          Some(self.cmp(o))
+                      }
+                  }
+                  let n = self.adj.len();
+                  let mut dist = vec![f64::INFINITY; n];
+                  let mut prev = vec![u32::MAX; n];
+                  let mut pq = BinaryHeap::new();
+                  dist[start as usize] = 0.0;
+                  pq.push(S(h(start), start));
+                  while let Some(S(_, u)) = pq.pop() {
+                      if u == goal {
+                          let mut path = vec![u];
+                          let mut c = u;
+                          while prev[c as usize] != u32::MAX {
+                              c = prev[c as usize]; path.push(c);
+                          }
+                          path.reverse();
+                          return Some(path);
+                      }
+                      for &(v, w) in &self.adj[u as usize] {
+                          let nd = dist[u as usize] + w;
+                          if nd < dist[v as usize] {
+                              dist[v as usize] = nd;
+                              prev[v as usize] = u;
+                              pq.push(S(nd + h(v), v));
+                          }
+                      }
+                  }
+                  None
+              }
+          }
+
+    - name: "3.6 | tests/exactness.rs — the law, tested"
+      ansible.builtin.copy:
+        dest: "{{ sila_root }}/tests/exactness.rs"
+        mode: "0640"
+        content: |
+          //! EXACTNESS GATE: one grave = one cell. Round-trips a synthetic
+          //! Wadi-us-Salaam of 500_000 graves (CI-scale; the same code path
+          //! is what carries 6M+). Depth 9 leaves = 7^9 = 40_353_607.
+          use silaengine::grave_index::{Grave, GraveIndex};
+          use silaengine::hepta_address::HeptaAddr;
+
+          fn synth(n: u64) -> Vec<Grave> {
+              (0..n).map(|i| {
+                  // deterministic distinct 9-digit base-7 path per grave
+                  let mut digits = [0u8; 9];
+                  let mut v = i;
+                  for d in digits.iter_mut() { *d = (v % 7) as u8; v /= 7; }
+                  let addr = HeptaAddr::encode(&digits).unwrap();
+                  let mut kaki = [0u8; 16];
+                  kaki[..8].copy_from_slice(&i.to_le_bytes());
+                  Grave {
+                      kaki,
+                      utm_e: 438_000.0 + (i % 3000) as f64 * 1.7,
+                      utm_n: 3_522_000.0 + (i / 3000) as f64 * 1.7,
+                      addr,
+                      plot: format!("NJF-{:06}", i),
+                  }
+              }).collect()
+          }
+
+          #[test]
+          fn capacity_covers_six_million() {
+              assert!(HeptaAddr::capacity(9) > 6_000_000);
+              // exponential court growth sanity: rings grow ~ phi^2
+              assert!(HeptaAddr::ring_population(10)
+                      > 2 * HeptaAddr::ring_population(9));
+          }
+
+          #[test]
+          fn one_grave_one_cell_round_trip() {
+              let n = 500_000u64;
+              let idx = GraveIndex::build(synth(n)).expect("no collisions");
+              assert_eq!(idx.len(), n as usize);
+              // EXACT: every address returns exactly its own grave
+              for i in [0u64, 1, 6, 49, 4_999, 123_456, n - 1] {
+                  let mut digits = [0u8; 9];
+                  let mut v = i;
+                  for d in digits.iter_mut() { *d = (v % 7) as u8; v /= 7; }
+                  let addr = HeptaAddr::encode(&digits).unwrap();
+                  let g = idx.exact(addr).expect("grave must exist");
+                  assert_eq!(g.plot, format!("NJF-{:06}", i));
+              }
+          }
+
+          #[test]
+          fn collision_is_refused() {
+              let mut graves = synth(10);
+              graves[9].addr = graves[0].addr; // force a shared cell
+              assert!(GraveIndex::build(graves).is_err(),
+                      "sharing a cell must be an EXACTNESS VIOLATION");
+          }
+
+    - name: "4.1 | TEST GATE — cargo test (the tablet proves itself)"
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ sila_root }}"
+      register: gate
+      changed_when: false
+
+    - name: "4.2 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "SilaEngine crate scaffolded at {{ sila_root }}"
+          - "Exactness gate: {{ 'PASSED' if gate.rc == 0 else 'FAILED' }}"
+          - "Law tested: one grave = one {7,3} leaf = one address = one KAKI."

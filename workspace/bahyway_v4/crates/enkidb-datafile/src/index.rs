@@ -8,9 +8,9 @@ pub const INDEX_RECORD_SIZE: usize = 28;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IndexRecord {
-    pub kaki:   [u8; 16],
+    pub kaki: [u8; 16],
     pub offset: u64,
-    pub len:    u32,
+    pub len: u32,
 }
 
 impl IndexRecord {
@@ -37,7 +37,11 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let r = IndexRecord { kaki: [7u8; 16], offset: 123_456_789, len: 42 };
+        let r = IndexRecord {
+            kaki: [7u8; 16],
+            offset: 123_456_789,
+            len: 42,
+        };
         let bytes = r.to_bytes();
         assert_eq!(bytes.len(), INDEX_RECORD_SIZE);
         let back = IndexRecord::from_bytes(&bytes);

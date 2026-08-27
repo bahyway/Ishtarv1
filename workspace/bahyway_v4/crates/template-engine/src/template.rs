@@ -10,14 +10,18 @@ pub struct FieldSpec {
     /// Attribute hash constant (matches `story_engine::projection::ATTR_*`).
     pub attr_hash: u32,
     /// Human-readable label used by DubSar IDE / HeptaScript.
-    pub label:     &'static str,
+    pub label: &'static str,
     /// If true, absence of this field is flagged as a data quality issue.
-    pub required:  bool,
+    pub required: bool,
 }
 
 impl FieldSpec {
     pub const fn new(attr_hash: u32, label: &'static str, required: bool) -> Self {
-        FieldSpec { attr_hash, label, required }
+        FieldSpec {
+            attr_hash,
+            label,
+            required,
+        }
     }
 }
 
@@ -67,20 +71,16 @@ pub enum TemplateOrigin {
 #[derive(Debug, Clone)]
 pub struct Template {
     /// Unique short name (ASCII, ≤64 chars).
-    pub name:    &'static str,
+    pub name: &'static str,
     /// Free-text description of the particle class this template covers.
-    pub desc:    &'static str,
-    pub origin:  TemplateOrigin,
-    pub fields:  Vec<FieldSpec>,
+    pub desc: &'static str,
+    pub origin: TemplateOrigin,
+    pub fields: Vec<FieldSpec>,
 }
 
 impl Template {
     /// Construct a Default template from a static field slice.
-    pub fn default_template(
-        name:   &'static str,
-        desc:   &'static str,
-        fields: &[FieldSpec],
-    ) -> Self {
+    pub fn default_template(name: &'static str, desc: &'static str, fields: &[FieldSpec]) -> Self {
         Template {
             name,
             desc,
@@ -91,7 +91,12 @@ impl Template {
 
     /// Construct a Stakeholder template at runtime.
     pub fn stakeholder(name: &'static str, desc: &'static str, fields: Vec<FieldSpec>) -> Self {
-        Template { name, desc, origin: TemplateOrigin::Stakeholder, fields }
+        Template {
+            name,
+            desc,
+            origin: TemplateOrigin::Stakeholder,
+            fields,
+        }
     }
 
     /// Returns every FieldSpec whose `required` flag is set.
@@ -109,7 +114,8 @@ impl Template {
 ///
 /// Returns the list of missing required attr_hashes (empty = valid).
 pub fn validate_required(template: &Template, present: &[u32]) -> Vec<u32> {
-    template.required_fields()
+    template
+        .required_fields()
         .filter(|f| !present.contains(&f.attr_hash))
         .map(|f| f.attr_hash)
         .collect()
@@ -119,13 +125,14 @@ pub fn validate_required(template: &Template, present: &[u32]) -> Vec<u32> {
 mod tests {
     use super::*;
 
-    const F_STATE:   FieldSpec = FieldSpec::new(0x1A4B, "state",   true);
+    const F_STATE: FieldSpec = FieldSpec::new(0x1A4B, "state", true);
     const F_QUALITY: FieldSpec = FieldSpec::new(0x2C5E, "quality", false);
 
     #[test]
     fn required_fields_filter() {
         let t = Template::default_template(
-            "particle.basic", "Basic particle class",
+            "particle.basic",
+            "Basic particle class",
             &[F_STATE, F_QUALITY],
         );
         let req: Vec<_> = t.required_fields().collect();
@@ -135,10 +142,7 @@ mod tests {
 
     #[test]
     fn validate_missing_required() {
-        let t = Template::default_template(
-            "particle.basic", "Basic",
-            &[F_STATE, F_QUALITY],
-        );
+        let t = Template::default_template("particle.basic", "Basic", &[F_STATE, F_QUALITY]);
         // state is missing — should be flagged
         let missing = validate_required(&t, &[0x2C5E]);
         assert_eq!(missing, vec![0x1A4B]);
@@ -146,20 +150,14 @@ mod tests {
 
     #[test]
     fn validate_all_present() {
-        let t = Template::default_template(
-            "particle.basic", "Basic",
-            &[F_STATE, F_QUALITY],
-        );
+        let t = Template::default_template("particle.basic", "Basic", &[F_STATE, F_QUALITY]);
         let missing = validate_required(&t, &[0x1A4B, 0x2C5E]);
         assert!(missing.is_empty());
     }
 
     #[test]
     fn contains_attr() {
-        let t = Template::default_template(
-            "particle.basic", "Basic",
-            &[F_STATE],
-        );
+        let t = Template::default_template("particle.basic", "Basic", &[F_STATE]);
         assert!(t.contains_attr(0x1A4B));
         assert!(!t.contains_attr(0x9999));
     }

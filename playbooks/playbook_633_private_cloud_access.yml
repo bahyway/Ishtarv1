@@ -1,0 +1,145 @@
+---
+# PB-374 · Private cloud access · overlay network, no open ports, vendor relay off
+# Doctrine: the NAS is never published to the internet. Reachability is granted per-device, not per-port.
+# Law: GL-UNT-001 §3 (the disclosure boundary travels with the data) · SUSA is the only outward gate.
+#
+# "Private cloud" here means PRIVATE self-hosted NAS, not a public cloud
+# provider -- this ecosystem has no AWS/Azure/GCP/SaaS dependency anywhere.
+# Confirmed with the Architect (2026-08-26): the plan is a 200TB NAS,
+# eventually hosting the whole ecosystem at home, reachable remotely only
+# through this playbook's own Tailscale overlay (never a port forward, never
+# a vendor relay). Until that NAS exists, nas_dedicated=false runs the same
+# overlay directly on the current bare-metal host instead -- see PB-632 for
+# the interim 250GB Archive Storage Sector standing in for NAS capacity.
+- name: PB-374 make the NAS reachable from outside without exposing it
+  hosts: nas
+  become: true
+  vars:
+    # See PB-632 for the shared nas_dedicated rationale: no dedicated NAS is
+    # purchased yet and none is required to run this playbook, only more
+    # effective/suitable once one exists. False runs the same Tailscale
+    # overlay directly on the current bare-metal box instead.
+    nas_dedicated: "{{ (lookup('env','NAS_DEDICATED') | default('false', true)) | bool }}"
+    nas_data_root: "{{ '/volume1/bahyway' if nas_dedicated else (ansible_env.HOME + '/bahyway') }}"
+    tailnet_tag: "tag:bahyway"
+    allowed_services: [5443, 7001, 7002, 7003, 7004, 7005, 7006, 7007]   # UGOS UI + EnkiDB ports
+    lan_cidr: "192.168.1.0/24"
+  tasks:
+    - name: Gate P0 · refuse to proceed if any NAS port is forwarded on the router
+      ansible.builtin.debug:
+        msg: >
+          MANUAL CHECK REQUIRED - open the router and confirm there is NO port-forward and NO UPnP
+          mapping pointing at this host. Overlay access replaces port forwarding; running both is worse
+          than either. Abort this playbook if a forward exists.
+
+    - name: Turn OFF the vendor remote-access relay and discovery (sovereignty)
+      ansible.builtin.debug:
+        msg: >
+          MANUAL in UGOS Pro - Control Panel > Network > Cloud Connect - OFF (this relay routes your
+          traffic through the vendor's servers). Uncheck Enable WebFind. Control Panel > General -
+          usage analytics OFF. Then continue; the overlay below replaces all of it.
+      when: nas_dedicated
+
+    - name: No dedicated NAS OS on this host -- nothing vendor-side to turn off
+      ansible.builtin.debug:
+        msg: >-
+          nas_dedicated=false: this is plain Fedora, not UGOS Pro, so there is no vendor Cloud Connect
+          relay or WebFind discovery running here to disable. Once a real NAS exists, re-run with
+          -e nas_dedicated=true and do the UGOS Pro step above on it.
+      when: not nas_dedicated
+
+    # community.docker.docker_container below is UGOS's own supported container
+    # runtime on a real NAS -- it is NOT this ecosystem's general choice, which
+    # is Podman (both CQRS node VMs run their EnkiDB containers under Podman,
+    # 7 per node, no Docker anywhere). So the current-hardware fallback path
+    # uses containers.podman.podman_container instead of Docker, matching that
+    # convention, rather than pulling in a container runtime used nowhere else
+    # on this box.
+    - name: Tailscale via Docker (UGOS Pro's own supported container runtime)
+      community.docker.docker_container:
+        name: tailscale
+        image: tailscale/tailscale:latest
+        network_mode: host
+        privileged: true
+        restart_policy: unless-stopped
+        devices: ["/dev/net/tun:/dev/net/tun"]
+        capabilities: [NET_ADMIN, SYS_MODULE]
+        env:
+          TS_AUTHKEY: "{{ lookup('env','TS_AUTHKEY') }}"
+          TS_STATE_DIR: "/var/lib/tailscale"
+          TS_EXTRA_ARGS: "--advertise-tags={{ tailnet_tag }} --advertise-routes={{ lan_cidr }} --ssh"
+          TS_ACCEPT_DNS: "true"
+        volumes:
+          - "{{ nas_data_root }}/docker/tailscale:/var/lib/tailscale"
+      when: nas_dedicated
+
+    - name: Tailscale via Podman (current hardware -- matches the CQRS nodes' runtime)
+      containers.podman.podman_container:
+        name: tailscale
+        image: tailscale/tailscale:latest
+        network_mode: host
+        privileged: true
+        restart_policy: unless-stopped
+        device: ["/dev/net/tun:/dev/net/tun"]
+        capabilities: [NET_ADMIN, SYS_MODULE]
+        env:
+          TS_AUTHKEY: "{{ lookup('env','TS_AUTHKEY') }}"
+          TS_STATE_DIR: "/var/lib/tailscale"
+          TS_EXTRA_ARGS: "--advertise-tags={{ tailnet_tag }} --advertise-routes={{ lan_cidr }} --ssh"
+          TS_ACCEPT_DNS: "true"
+        volumes:
+          - "{{ nas_data_root }}/podman/tailscale:/var/lib/tailscale"
+      when: not nas_dedicated
+      # nas_data_root already resolves to .../bahyway (either /volume1/bahyway
+      # on real NAS hardware, or $HOME/bahyway on the current box).
+
+    - name: Host firewall (UGOS Pro) · deny everything from the physical LAN interface except LAN itself
+      ansible.builtin.debug:
+        msg: >
+          MANUAL in UGOS Pro firewall - allow {{ allowed_services | join(', ') }} from {{ lan_cidr }}
+          and from 100.64.0.0/10 (the tailnet) ONLY. Deny all other sources. SMB, NFS, SSH and the
+          management UI must never answer a public address.
+      when: nas_dedicated
+
+    - name: Host firewall (plain Linux) · same allow-list via firewalld/ufw
+      ansible.builtin.debug:
+        msg: >-
+          nas_dedicated=false: no UGOS Pro firewall UI on this host -- apply the same allow-list
+          ({{ allowed_services | join(', ') }} from {{ lan_cidr }} and 100.64.0.0/10 only, deny
+          everything else) with this box's own firewalld/ufw instead. Not automated here because
+          which one is installed, and the existing rule set, is host-specific -- MANUAL CHECK REQUIRED.
+      when: not nas_dedicated
+
+    - name: Gate P1 · the NAS answers on the tailnet
+      ansible.builtin.command: tailscale status --json
+      register: ts
+      changed_when: false
+      failed_when: "'Self' not in ts.stdout"
+
+    - name: Gate P2 · the NAS does NOT answer on its public address
+      ansible.builtin.shell: |
+        pub=$(curl -s https://api.ipify.org)
+        for p in {{ allowed_services | join(' ') }} 22 445 2049; do
+          timeout 3 bash -c "</dev/tcp/$pub/$p" 2>/dev/null && { echo "EXPOSED on $p"; exit 1; }
+        done
+        echo "P2 green - no service answers on $pub"
+      changed_when: false
+
+    - name: Gate P3 · 2FA enforced on every admin account (UGOS Pro)
+      ansible.builtin.debug:
+        msg: "MANUAL - UGOS Pro > Control Panel > Users: 2FA required for every account with admin rights."
+      when: nas_dedicated
+
+    - name: Gate P3 · admin access hardened on this host (plain Linux)
+      ansible.builtin.debug:
+        msg: >-
+          nas_dedicated=false: no UGOS Pro user panel here -- MANUAL CHECK REQUIRED instead that
+          this host's admin/sudo access is SSH-key-only (no password auth) and root SSH login is
+          disabled, the equivalent of UGOS's 2FA requirement.
+      when: not nas_dedicated
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ nas_data_root }}/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-374 private cloud access - overlay up, vendor relay off, no public ports"

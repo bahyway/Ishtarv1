@@ -27,7 +27,10 @@ pub struct CMat7 {
 
 impl CMat7 {
     pub fn zero() -> Self {
-        CMat7 { re: [[0.0; 7]; 7], im: [[0.0; 7]; 7] }
+        CMat7 {
+            re: [[0.0; 7]; 7],
+            im: [[0.0; 7]; 7],
+        }
     }
 
     /// Trace (real part) — for Casimir / normalization checks.
@@ -39,8 +42,12 @@ impl CMat7 {
     pub fn is_hermitian(&self, eps: f64) -> bool {
         for i in 0..7 {
             for j in 0..7 {
-                if (self.re[i][j] - self.re[j][i]).abs() > eps { return false; }
-                if (self.im[i][j] + self.im[j][i]).abs() > eps { return false; }
+                if (self.re[i][j] - self.re[j][i]).abs() > eps {
+                    return false;
+                }
+                if (self.im[i][j] + self.im[j][i]).abs() > eps {
+                    return false;
+                }
             }
         }
         true
@@ -48,8 +55,7 @@ impl CMat7 {
 
     /// Is this matrix traceless? (SU(N) generators have trace 0.)
     pub fn is_traceless(&self, eps: f64) -> bool {
-        self.trace_re().abs() < eps
-            && (0..7).map(|i| self.im[i][i]).sum::<f64>().abs() < eps
+        self.trace_re().abs() < eps && (0..7).map(|i| self.im[i][i]).sum::<f64>().abs() < eps
     }
 }
 
@@ -85,7 +91,9 @@ pub fn generate_su7_generators() -> Vec<CMat7> {
     for k in 1..7 {
         let mut m = CMat7::zero();
         let norm = (2.0 / (k as f64 * (k as f64 + 1.0))).sqrt();
-        for d in 0..k { m.re[d][d] = norm; }
+        for d in 0..k {
+            m.re[d][d] = norm;
+        }
         m.re[k][k] = -(k as f64) * norm;
         gens.push(m);
     }
@@ -140,7 +148,9 @@ mod tests {
     #[test]
     fn family_partition_21_21_6() {
         let gens = generate_su7_generators();
-        let mut rev = 0; let mut irr = 0; let mut shell = 0;
+        let mut rev = 0;
+        let mut irr = 0;
+        let mut shell = 0;
         for i in 0..gens.len() {
             match family_of(i) {
                 TransitionFamily::Reversible => rev += 1,
@@ -169,7 +179,9 @@ mod tests {
         for a in 0..cartan.len() {
             for b in (a + 1)..cartan.len() {
                 let mut tr = 0.0;
-                for i in 0..7 { tr += cartan[a].re[i][i] * cartan[b].re[i][i]; }
+                for i in 0..7 {
+                    tr += cartan[a].re[i][i] * cartan[b].re[i][i];
+                }
                 assert!(tr.abs() < 1e-12, "Cartan generators must be orthogonal");
             }
         }

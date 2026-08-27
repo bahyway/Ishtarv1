@@ -1,0 +1,639 @@
+---
+# =============================================================================
+# PB-603 — HARVEST ACCELERATOR + ZAQĪQU PHANTOM DETECTOR
+# BahyWay.Ecosystem v4.+ · extends the Gula agent (requires PB-602 first)
+# CSR-08: running this playbook is Bahaa's confirmation act.
+#
+# Delivers:
+#   1. harvest.rs — retrospective mining of sealed Ḫubullu glosses (laws/
+#      is a pre-existing witness archive; archaeological first, sentinel after)
+#   2. zaqiqu.rs — phantom patterns: Mendeleev lattice gaps + VOID-HINT
+#      (cycle rank E−V+C; β₁ adjudication remains LamassuEngine's seal)
+#      + recovery under the generalized Unnamed Particle doctrine
+#   3. lib.rs v2 — PHANTOM-PREDICTED / PHANTOM-RECOVERED verdicts
+#   4. naru.rs v2 — phantom details journaled (no silent close)
+#   5. COMPILE + RUNTIME gates re-run — both blocking
+#
+# Doctrine of this playbook: speed the witnesses, never the verdict.
+# Trigger thresholds (GL-LSN-001 §1) are untouched. Zaqīqu and the name
+# Zaqīqu itself enter the naming queue pending Bahaa's seal (NL-001).
+# =============================================================================
+- name: "PB-603 · Harvest accelerator + Zaqīqu phantom detector"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    gula_crate_dir: "{{ repo_root }}/engines/gula"
+    naru_dir: "{{ repo_root }}/naru"
+
+  tasks:
+    # -------------------------------------------------------------- preflight
+    - name: "Preflight · PB-602 must have run (crate exists)"
+      ansible.builtin.stat:
+        path: "{{ gula_crate_dir }}/Cargo.toml"
+      register: crate_stat
+
+    - name: "Preflight · refuse if the scaffold is absent"
+      ansible.builtin.assert:
+        that: crate_stat.stat.exists
+        fail_msg: "Gula crate not found — run PB-602 first. Playbooks are ordered acts."
+
+    - name: "Preflight · cargo must exist on the host"
+      ansible.builtin.command: cargo --version
+      register: cargo_check
+      changed_when: false
+
+    # ----------------------------------------------------------- crate source
+    - name: "Write src/lib.rs (PB-603 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! GULA — the grammar-minting agent (candidate name, pending CSR-08 seal).
+          //! Governed by GL-LSN-001 (Lišānu Law) under GL-ALG-002 (Unified Algebra).
+          //!
+          //! The arc: WITNESS → JUDGE → MOVE → STAGE (Nimrud discipline, GL-STK-001).
+          //! The agent heals the corpus from its own flesh: wounds (three-gloss
+          //! collisions) become grafts (dialect candidates), staged in URUK only.
+          //! Sealing to KISH is Bahaa's act alone — no code path here writes to kish/.
+          //!
+          //! Zero external dependencies. std only. No Z3, no solvers, no ML.
+
+          pub mod arc;
+          pub mod court;
+          pub mod graft;
+          pub mod harvest;
+          pub mod naru;
+          pub mod uruk;
+          pub mod wound;
+          pub mod zaqiqu;
+
+          /// The canonical structural signature of a pattern family, decomposed on the
+          /// three faces of the GL-ALG-002 triality.
+          #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+          pub struct Signature {
+              pub particle_face: String,
+              pub orbit_face: String,
+              pub tribe_face: String,
+          }
+
+          impl Signature {
+              pub fn new(particle: &str, orbit: &str, tribe: &str) -> Self {
+                  Self {
+                      particle_face: normalize(particle),
+                      orbit_face: normalize(orbit),
+                      tribe_face: normalize(tribe),
+                  }
+              }
+
+              /// Canonical key: the shape as one string. Two patterns share a key
+              /// iff they share the same deep structure on all three faces.
+              pub fn key(&self) -> String {
+                  format!(
+                      "P[{}]|O[{}]|T[{}]",
+                      self.particle_face, self.orbit_face, self.tribe_face
+                  )
+              }
+          }
+
+          fn normalize(s: &str) -> String {
+              s.trim().to_lowercase().split_whitespace().collect::<Vec<_>>().join("-")
+          }
+
+          /// One engine's testimony: "I hold this pattern shape, and I gloss it thus."
+          #[derive(Debug, Clone)]
+          pub struct PatternWitness {
+              pub engine: String,
+              pub signature: Signature,
+              pub hubullu_gloss: String,
+          }
+
+          /// Verdict vocabulary of GL-LSN-001 §6.2. SEALED-KISH is intentionally
+          /// absent: the agent cannot pronounce it.
+          #[derive(Debug, Clone, PartialEq, Eq)]
+          pub enum Verdict {
+              Observed,
+              Triggered,
+              Minted,
+              RejectedForeign(String),
+              RejectedTumor(String),
+              StagedUruk(String),
+              /// A phantom pattern predicted from the lattice's negative space
+              /// (zaqiqu). Prune-exempt; a prediction, never a dialect.
+              PhantomPredicted(String),
+              /// A live testimony matched a phantom's signature — prophecy fulfilled.
+              PhantomRecovered(String),
+          }
+
+          impl Verdict {
+              pub fn as_str(&self) -> &'static str {
+                  match self {
+                      Verdict::Observed => "OBSERVED",
+                      Verdict::Triggered => "TRIGGERED",
+                      Verdict::Minted => "MINTED",
+                      Verdict::RejectedForeign(_) => "REJECTED-FOREIGN",
+                      Verdict::RejectedTumor(_) => "REJECTED-TUMOR",
+                      Verdict::StagedUruk(_) => "STAGED-URUK",
+                      Verdict::PhantomPredicted(_) => "PHANTOM-PREDICTED",
+                      Verdict::PhantomRecovered(_) => "PHANTOM-RECOVERED",
+                  }
+              }
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn signature_key_is_canonical() {
+                  let a = Signature::new("  Leak  Event ", "decay ORBIT", "pipe tribe");
+                  let b = Signature::new("leak event", "Decay Orbit", "Pipe   Tribe");
+                  assert_eq!(a.key(), b.key());
+              }
+          }
+    - name: "Write src/naru.rs (PB-603 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/naru.rs"
+        mode: "0644"
+        content: |
+          //! GL-LSN-001 §7 — The NĀRU journal. Append-only JSON Lines.
+          //! No silent close: every wound receives a verdict line naming its
+          //! witnesses, its signature, and its cause.
+
+          use crate::Verdict;
+          use std::fs::OpenOptions;
+          use std::io::Write;
+          use std::path::Path;
+          use std::time::{SystemTime, UNIX_EPOCH};
+
+          #[derive(Debug, Clone)]
+          pub struct JournalEntry {
+              pub verdict: Verdict,
+              pub signature_key: String,
+              pub witnesses: Vec<String>,
+              pub cause: String,
+          }
+
+          impl JournalEntry {
+              pub fn to_json_line(&self) -> String {
+                  let ts = SystemTime::now()
+                      .duration_since(UNIX_EPOCH)
+                      .map(|d| d.as_secs())
+                      .unwrap_or(0);
+                  let witnesses = self
+                      .witnesses
+                      .iter()
+                      .map(|w| format!("\"{}\"", esc(w)))
+                      .collect::<Vec<_>>()
+                      .join(",");
+                  let detail = match &self.verdict {
+                      Verdict::RejectedForeign(c)
+                      | Verdict::RejectedTumor(c)
+                      | Verdict::StagedUruk(c)
+                      | Verdict::PhantomPredicted(c)
+                      | Verdict::PhantomRecovered(c) => c.clone(),
+                      _ => String::new(),
+                  };
+                  format!(
+                      "{{\"ts\":{},\"verdict\":\"{}\",\"signature\":\"{}\",\"witnesses\":[{}],\"cause\":\"{}\",\"detail\":\"{}\"}}",
+                      ts,
+                      self.verdict.as_str(),
+                      esc(&self.signature_key),
+                      witnesses,
+                      esc(&self.cause),
+                      esc(&detail)
+                  )
+              }
+          }
+
+          /// Minimal JSON string escaping (quotes, backslash, control chars).
+          fn esc(s: &str) -> String {
+              let mut out = String::with_capacity(s.len());
+              for c in s.chars() {
+                  match c {
+                      '"' => out.push_str("\\\""),
+                      '\\' => out.push_str("\\\\"),
+                      '\n' => out.push_str("\\n"),
+                      '\r' => out.push_str("\\r"),
+                      '\t' => out.push_str("\\t"),
+                      c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+                      c => out.push(c),
+                  }
+              }
+              out
+          }
+
+          pub fn append(journal_path: &Path, entry: &JournalEntry) -> std::io::Result<()> {
+              if let Some(parent) = journal_path.parent() {
+                  std::fs::create_dir_all(parent)?;
+              }
+              let mut f = OpenOptions::new().create(true).append(true).open(journal_path)?;
+              writeln!(f, "{}", entry.to_json_line())
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn json_line_escapes_and_is_wellformed() {
+                  let e = JournalEntry {
+                      verdict: Verdict::RejectedForeign("tissue \"SELECT\"\nline".into()),
+                      signature_key: "P[a]|O[b]|T[c]".into(),
+                      witnesses: vec!["nanshe".into(), "karanu".into()],
+                      cause: "immune clause".into(),
+                  };
+                  let line = e.to_json_line();
+                  assert!(line.starts_with('{') && line.ends_with('}'));
+                  assert!(line.contains("\\\"SELECT\\\""));
+                  assert!(line.contains("\\n"));
+                  assert!(!line.contains('\n'));
+              }
+
+              #[test]
+              fn append_is_append_only() {
+                  let dir = std::env::temp_dir().join("gula_naru_test");
+                  let path = dir.join("naru.jsonl");
+                  let _ = std::fs::remove_file(&path);
+                  let e = JournalEntry {
+                      verdict: Verdict::Observed,
+                      signature_key: "k".into(),
+                      witnesses: vec![],
+                      cause: "witnessed".into(),
+                  };
+                  append(&path, &e).unwrap();
+                  append(&path, &e).unwrap();
+                  let text = std::fs::read_to_string(&path).unwrap();
+                  assert_eq!(text.lines().count(), 2);
+              }
+          }
+    - name: "Write src/harvest.rs (PB-603 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/harvest.rs"
+        mode: "0644"
+        content: |
+          //! HARVEST MODE — the accelerant (PB-603).
+          //! GL-NAM-002 made Ḫubullu glosses mandatory at sealing, so the sealed
+          //! corpus is a pre-existing witness archive. Harvest replays it through
+          //! the wound registry in seconds: archaeological first, sentinel after.
+          //!
+          //! Speed the witnesses, never the verdict: trigger thresholds (§1) are
+          //! untouched. Harvest accelerates ARRIVAL of testimony only.
+          //!
+          //! Machine-readable witness line convention (one per gloss, in tablets):
+          //!   ḪUBULLU:: engine=<name> particle=<p> orbit=<o> tribe=<t> gloss="..."
+          //! ASCII form `HUBULLU::` is accepted equally.
+
+          use crate::{PatternWitness, Signature};
+          use std::fs;
+          use std::io;
+          use std::path::Path;
+
+          /// Scan every `*.md` tablet in a directory for witness lines.
+          pub fn harvest_dir(dir: &Path) -> io::Result<Vec<PatternWitness>> {
+              let mut out = Vec::new();
+              if !dir.exists() {
+                  return Ok(out);
+              }
+              let mut paths: Vec<_> = fs::read_dir(dir)?
+                  .filter_map(|e| e.ok().map(|e| e.path()))
+                  .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("md"))
+                  .collect();
+              paths.sort(); // deterministic harvest order
+              for path in paths {
+                  let text = fs::read_to_string(&path)?;
+                  out.extend(harvest_text(&text));
+              }
+              Ok(out)
+          }
+
+          /// Extract witness lines from one tablet's text.
+          pub fn harvest_text(text: &str) -> Vec<PatternWitness> {
+              text.lines().filter_map(parse_line).collect()
+          }
+
+          fn parse_line(line: &str) -> Option<PatternWitness> {
+              let l = line.trim();
+              let rest = l
+                  .strip_prefix("ḪUBULLU::")
+                  .or_else(|| l.strip_prefix("HUBULLU::"))?;
+              let gstart = rest.find("gloss=\"")?;
+              let after = &rest[gstart + 7..];
+              let gend = after.find('"')?;
+              let gloss = after[..gend].to_string();
+              let head = &rest[..gstart];
+              let (mut engine, mut p, mut o, mut t) = (None, None, None, None);
+              for tok in head.split_whitespace() {
+                  if let Some(v) = tok.strip_prefix("engine=") {
+                      engine = Some(v);
+                  } else if let Some(v) = tok.strip_prefix("particle=") {
+                      p = Some(v);
+                  } else if let Some(v) = tok.strip_prefix("orbit=") {
+                      o = Some(v);
+                  } else if let Some(v) = tok.strip_prefix("tribe=") {
+                      t = Some(v);
+                  }
+              }
+              Some(PatternWitness {
+                  engine: engine?.to_string(),
+                  signature: Signature::new(p?, o?, t?),
+                  hubullu_gloss: gloss,
+              })
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              const TABLET: &str = r#"
+          # GL-TEST-001 — Some Sealed Tablet
+          Ordinary prose the harvester must ignore.
+          ḪUBULLU:: engine=wpdengine particle=leak-onset orbit=night-flow tribe=pipe gloss="the first breath of a hidden loss"
+          More prose.
+          HUBULLU:: engine=nanshe particle=Leak Onset orbit=Night Flow tribe=Pipe gloss="earliest visible onset"
+          HUBULLU:: engine=broken particle=x orbit=y gloss="missing tribe field, must be skipped"
+          "#;
+
+              #[test]
+              fn harvests_witness_lines_and_skips_noise() {
+                  let ws = harvest_text(TABLET);
+                  assert_eq!(ws.len(), 2, "two well-formed lines; malformed line skipped");
+                  assert_eq!(ws[0].engine, "wpdengine");
+                  // normalization makes the two testimonies collide on one signature:
+                  assert_eq!(ws[0].signature.key(), ws[1].signature.key());
+              }
+
+              #[test]
+              fn harvest_dir_is_deterministic_and_tolerant_of_absence(){
+                  let dir = std::env::temp_dir().join("gula_harvest_test");
+                  let _ = std::fs::remove_dir_all(&dir);
+                  assert!(harvest_dir(&dir).unwrap().is_empty(), "absent dir harvests empty, no error");
+                  std::fs::create_dir_all(&dir).unwrap();
+                  std::fs::write(dir.join("b_tablet.md"), TABLET).unwrap();
+                  std::fs::write(dir.join("a_tablet.md"), TABLET).unwrap();
+                  let ws = harvest_dir(&dir).unwrap();
+                  assert_eq!(ws.len(), 4);
+              }
+          }
+    - name: "Write src/zaqiqu.rs (PB-603 revision)"
+      ansible.builtin.copy:
+        dest: "{{ gula_crate_dir }}/src/zaqiqu.rs"
+        mode: "0644"
+        content: |
+          //! ZAQĪQU — phantom patterns (candidate name, pending CSR-08 seal).
+          //! The dream-phantom that visits before the real thing arrives.
+          //! Complement, never collision, with Eṭemmu (EN-DDB-004):
+          //!   eṭemmu is the ghost of what WAS; zaqīqu is the phantom of what IS NOT YET.
+          //!
+          //! Two detection mechanisms:
+          //!   1. Mendeleev gaps — unoccupied lattice cells surrounded by occupied
+          //!      neighbors (cells differing in exactly one face). Existence in the
+          //!      algebra precedes existence in the corpus.
+          //!   2. VOID-HINT — cycle rank (E − V + C) of the shared-face adjacency
+          //!      graph. A cycle of existing patterns enclosing a hole means the
+          //!      system organizes around an absence. Void is Sacred (ṬUPŠARRU).
+          //!      Full homology adjudication belongs to LamassuEngine, the sealed
+          //!      TDA sentinel — this module emits HINTS only, never verdicts of β₁.
+          //!
+          //! Governance: the Unnamed Particle doctrine, generalized. A phantom
+          //! receives a placeholder identity at prediction, held PRUNE-EXEMPT,
+          //! and is RECOVERED when a real engine witnesses it in the flesh.
+          //! Phantoms are predictions, not dialects: they are journaled, never
+          //! staged to uruk/, and never sealed by anyone but Bahaa.
+
+          use crate::{PatternWitness, Signature};
+          use std::collections::BTreeSet;
+
+          /// Default "surrounded" criterion: a gap needs at least this many occupied
+          /// one-face neighbors before it may be called a phantom (Mendeleev rule).
+          pub const MIN_SUPPORT: usize = 2;
+
+          #[derive(Debug, Clone)]
+          pub struct ZaqiquCandidate {
+              /// The predicted signature — a position no particle occupies.
+              pub signature: Signature,
+              /// Occupied neighbor signatures that surround the gap.
+              pub support: Vec<String>,
+              /// Placeholder identity, prune-exempt until recovery.
+              pub phantom_id: String,
+          }
+
+          /// Mechanism 1 — Mendeleev gaps over the occupied face lattice.
+          /// Occupied signatures are deduplicated first (Hepta uniqueness discipline).
+          pub fn detect_phantoms(occupied: &[Signature], min_support: usize) -> Vec<ZaqiquCandidate> {
+              let mut uniq: Vec<Signature> = Vec::new();
+              let mut seen = BTreeSet::new();
+              for s in occupied {
+                  if seen.insert(s.key()) {
+                      uniq.push(s.clone());
+                  }
+              }
+              let ps: BTreeSet<&String> = uniq.iter().map(|s| &s.particle_face).collect();
+              let os: BTreeSet<&String> = uniq.iter().map(|s| &s.orbit_face).collect();
+              let ts: BTreeSet<&String> = uniq.iter().map(|s| &s.tribe_face).collect();
+              let occ: BTreeSet<String> = uniq.iter().map(|s| s.key()).collect();
+
+              let mut out = Vec::new();
+              for p in &ps {
+                  for o in &os {
+                      for t in &ts {
+                          let cand = Signature {
+                              particle_face: (*p).clone(),
+                              orbit_face: (*o).clone(),
+                              tribe_face: (*t).clone(),
+                          };
+                          let key = cand.key();
+                          if occ.contains(&key) {
+                              continue;
+                          }
+                          let mut support: Vec<String> = uniq
+                              .iter()
+                              .filter(|s| shared_faces(s, &cand) == 2)
+                              .map(|s| s.key())
+                              .collect();
+                          support.sort();
+                          support.dedup();
+                          if support.len() >= min_support {
+                              out.push(ZaqiquCandidate {
+                                  phantom_id: format!("ZAQIQU-{}", key),
+                                  signature: cand,
+                                  support,
+                              });
+                          }
+                      }
+                  }
+              }
+              out
+          }
+
+          fn shared_faces(a: &Signature, b: &Signature) -> u8 {
+              (a.particle_face == b.particle_face) as u8
+                  + (a.orbit_face == b.orbit_face) as u8
+                  + (a.tribe_face == b.tribe_face) as u8
+          }
+
+          /// Mechanism 2 — VOID-HINT: cycle rank E − V + C of the adjacency graph
+          /// (edges join signatures sharing exactly two faces). Non-zero rank means
+          /// at least one cycle of patterns encloses an absence. LamassuEngine owns
+          /// the final β₁ verdict; this is the hint that summons it.
+          pub fn void_hint(occupied: &[Signature]) -> usize {
+              let mut uniq: Vec<&Signature> = Vec::new();
+              let mut seen = BTreeSet::new();
+              for s in occupied {
+                  if seen.insert(s.key()) {
+                      uniq.push(s);
+                  }
+              }
+              let n = uniq.len();
+              if n == 0 {
+                  return 0;
+              }
+              let mut parent: Vec<usize> = (0..n).collect();
+              fn find(parent: &mut [usize], mut i: usize) -> usize {
+                  while parent[i] != i {
+                      parent[i] = parent[parent[i]];
+                      i = parent[i];
+                  }
+                  i
+              }
+              let mut edges = 0usize;
+              for i in 0..n {
+                  for j in (i + 1)..n {
+                      if shared_faces(uniq[i], uniq[j]) == 2 {
+                          edges += 1;
+                          let (ri, rj) = (find(&mut parent, i), find(&mut parent, j));
+                          if ri != rj {
+                              parent[ri] = rj;
+                          }
+                      }
+                  }
+              }
+              let comps: BTreeSet<usize> = (0..n).map(|i| find(&mut parent, i)).collect();
+              (edges + comps.len()).saturating_sub(n)
+          }
+
+          /// Recovery — the Unnamed Particle doctrine fulfilled: a live testimony
+          /// matching a phantom's signature recovers it. Returns the recovered
+          /// phantom (removed from the prune-exempt hold) or None.
+          pub fn recover(
+              phantoms: &mut Vec<ZaqiquCandidate>,
+              witness: &PatternWitness,
+          ) -> Option<ZaqiquCandidate> {
+              let key = witness.signature.key();
+              let idx = phantoms.iter().position(|z| z.signature.key() == key)?;
+              Some(phantoms.remove(idx))
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              fn sig(p: &str, o: &str, t: &str) -> Signature {
+                  Signature::new(p, o, t)
+              }
+
+              #[test]
+              fn mendeleev_gap_is_predicted() {
+                  // Occupied: (a,x,1),(b,x,1),(a,y,1) — the gap (b,y,1) has two
+                  // one-face neighbors → phantom. Cells with less support are not.
+                  let occ = vec![sig("a", "x", "1"), sig("b", "x", "1"), sig("a", "y", "1")];
+                  let ph = detect_phantoms(&occ, MIN_SUPPORT);
+                  assert!(ph.iter().any(|z| z.signature.key() == sig("b", "y", "1").key()));
+                  for z in &ph {
+                      assert!(z.support.len() >= MIN_SUPPORT);
+                      assert!(z.phantom_id.starts_with("ZAQIQU-"));
+                  }
+              }
+
+              #[test]
+              fn occupied_cells_are_never_phantoms() {
+                  let occ = vec![sig("a", "x", "1"), sig("b", "x", "1")];
+                  let ph = detect_phantoms(&occ, 1);
+                  assert!(ph.iter().all(|z| z.signature.key() != sig("a", "x", "1").key()));
+              }
+
+              #[test]
+              fn void_hint_sees_the_enclosed_absence() {
+                  // Four signatures forming a 4-cycle in the shared-face graph:
+                  // (a,x,1)-(b,x,1)-(b,y,1)-(a,y,1)-(a,x,1) → cycle rank 1.
+                  let cycle = vec![
+                      sig("a", "x", "1"),
+                      sig("b", "x", "1"),
+                      sig("b", "y", "1"),
+                      sig("a", "y", "1"),
+                  ];
+                  assert_eq!(void_hint(&cycle), 1, "one cycle encloses one absence");
+                  // A path (no cycle) hints nothing:
+                  let path = vec![sig("a", "x", "1"), sig("b", "x", "1"), sig("b", "y", "1")];
+                  assert_eq!(void_hint(&path), 0);
+                  assert_eq!(void_hint(&[]), 0);
+              }
+
+              #[test]
+              fn phantom_recovery_fulfills_the_prophecy() {
+                  let occ = vec![sig("a", "x", "1"), sig("b", "x", "1"), sig("a", "y", "1")];
+                  let mut ph = detect_phantoms(&occ, MIN_SUPPORT);
+                  let before = ph.len();
+                  assert!(before >= 1);
+                  let w = PatternWitness {
+                      engine: "nanshe".into(),
+                      signature: sig("b", "y", "1"),
+                      hubullu_gloss: "the phantom made flesh".into(),
+                  };
+                  let rec = recover(&mut ph, &w);
+                  assert!(rec.is_some(), "matching testimony recovers the phantom");
+                  assert_eq!(ph.len(), before - 1);
+                  assert!(recover(&mut ph, &w).is_none(), "a phantom recovers only once");
+              }
+          }
+
+    # ------------------------------------------------------------ gate: COMPILE
+    - name: "GATE · COMPILE (cargo build) — blocking"
+      ansible.builtin.command: cargo build
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: compile_gate
+      changed_when: true
+
+    # ------------------------------------------------------------ gate: RUNTIME
+    - name: "GATE · RUNTIME (cargo test) — blocking"
+      ansible.builtin.command: cargo test
+      args:
+        chdir: "{{ gula_crate_dir }}"
+      register: runtime_gate
+      changed_when: false
+
+    # ------------------------------------------- first harvest (dry witness)
+    - name: "First harvest · count witness lines already in laws/ (read-only)"
+      ansible.builtin.shell: >-
+        grep -rhc 'ḪUBULLU::\|HUBULLU::' "{{ repo_root }}/docs/09_observatory" 2>/dev/null
+        | awk '{s+=$1} END {print s+0}'
+      register: harvest_count
+      changed_when: false
+
+    - name: "First harvest · report"
+      ansible.builtin.debug:
+        msg: "Witness lines already sealed and waiting in laws/: {{ harvest_count.stdout }} (tablets predating the convention harvest as zero until annotated)"
+
+    # ---------------------------------------------------------------- journal
+    - name: "NĀRU · record the act"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/playbook_acts.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-603","act":"harvest+zaqiqu","law":"GL-LSN-001",
+          "doctrine":"speed the witnesses, never the verdict",
+          "gates":{"compile":"green","runtime":"green"},
+          "naming_queue":["Zaqiqu"],
+          "note":"phantoms prune-exempt; beta-1 adjudication reserved to LamassuEngine"}
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "PB-603 complete. Both gates green."
+          - "Harvest mode armed: laws/ is now a witness archive."
+          - "Phantoms will be predicted from the lattice's negative space,"
+          - "held prune-exempt, and recovered when testimony makes them flesh."
+          - "The name Zaqīqu awaits your word."

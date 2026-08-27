@@ -48,7 +48,11 @@ impl WriteNode {
     /// `shard_count` matches `Journal::new`'s own partitioning parameter —
     /// see `enkidb-journal` for what it controls.
     pub fn new(minter: KakiMinter, shard_count: u16) -> Self {
-        WriteNode { journal: Journal::new(shard_count), minter, concept_graph: ConceptGraph::new() }
+        WriteNode {
+            journal: Journal::new(shard_count),
+            minter,
+            concept_graph: ConceptGraph::new(),
+        }
     }
 
     /// Ingest one parsed document: mint its Identity-Kaki, emit its
@@ -80,7 +84,13 @@ impl WriteNode {
     /// history. Does not journal or validate `new` itself -- `new` must
     /// already exist (this only records the relationship between two
     /// already-real identities).
-    pub fn supersede_document(&mut self, old: IdentityKaki, new: IdentityKaki, reason: &str, epoch: u32) {
+    pub fn supersede_document(
+        &mut self,
+        old: IdentityKaki,
+        new: IdentityKaki,
+        reason: &str,
+        epoch: u32,
+    ) {
         let emitter = DocumentEmitter::new(&self.minter);
         let particles = emitter.emit_supersession(old, new, reason);
 
@@ -143,7 +153,8 @@ impl WriteNode {
         let edge_kaki = IdentityKaki::try_from_kaki(self.minter.identity(KakiRole::Zikru))
             .expect("KakiMinter::identity always mints kaki_type=Identity");
         let emitter = DocumentEmitter::new(&self.minter);
-        let mut particles: Vec<Particle> = emitter.emit_link(edge_kaki, target, description).to_vec();
+        let mut particles: Vec<Particle> =
+            emitter.emit_link(edge_kaki, target, description).to_vec();
         particles.push(Particle::base(
             edge_kaki,
             DocOrbit::Link.attr("source"),
@@ -196,11 +207,22 @@ impl WriteNode {
     /// location, so a location becomes a real, navigable graph node in
     /// Graph Explorer rather than a plain string attribute).
     pub fn mint_marker(&mut self, title: &str, collection: &str, epoch: u32) -> IdentityKaki {
-        let structure = DocumentStructure { title: title.to_string(), ..Default::default() };
+        let structure = DocumentStructure {
+            title: title.to_string(),
+            ..Default::default()
+        };
         let emitter = DocumentEmitter::new(&self.minter);
         let (doc_kaki, mut particles) = emitter.emit_document(&structure);
         particles.push(emitter.emit_collection(doc_kaki, collection));
-        Self::journal_document_and_sections(&mut self.journal, &emitter, doc_kaki, particles, &structure, epoch)
+        Self::journal_document_and_sections(
+            &mut self.journal,
+            &emitter,
+            doc_kaki,
+            particles,
+            &structure,
+            epoch,
+        )
+        .0
     }
 
     /// Tag an already-minted document with its current `bahyway_core::
@@ -213,7 +235,7 @@ impl WriteNode {
     /// last-write-wins (`heptascript::engine::apply_entry_to_map`) is the
     /// desired semantics, not a bug to work around.
     pub fn tag_gate(&mut self, doc: IdentityKaki, gate_akkadian_name: &str, epoch: u32) {
-        let particles = vec![Particle::base(
+        let particles = [Particle::base(
             doc,
             DocOrbit::Meta.attr("gate"),
             AkkValue::Text(gate_akkadian_name.to_string()),
@@ -236,7 +258,7 @@ impl WriteNode {
     /// ecosystem-wide concept like `HeptaGate` -- this method only ever
     /// writes whatever domain name string it's given.
     pub fn tag_domain(&mut self, doc: IdentityKaki, domain_name: &str, epoch: u32) {
-        let particles = vec![Particle::base(
+        let particles = [Particle::base(
             doc,
             DocOrbit::Meta.attr("domain"),
             AkkValue::Text(domain_name.to_string()),
@@ -259,17 +281,27 @@ impl WriteNode {
     /// full untouched text), linked back to the parent document. Every
     /// section is journaled as its own entry, so `enkiddb::rag::RagIndex`
     /// can scan the Journal directly without a separate section registry.
-    /// Returns the parent document's Identity-Kaki.
+    /// Returns the parent document's Identity-Kaki plus the real total
+    /// particle (EAV triple) count journaled for it (document + every
+    /// section) -- the server's single-document wire command surfaces this
+    /// so a caller can report actual EAV volume, not a file count.
     pub fn ingest_document_categorized(
         &mut self,
         structure: &DocumentStructure,
         epoch: u32,
         collection: &str,
-    ) -> IdentityKaki {
+    ) -> (IdentityKaki, usize) {
         let emitter = DocumentEmitter::new(&self.minter);
         let (doc_kaki, mut particles) = emitter.emit_document(structure);
         particles.push(emitter.emit_collection(doc_kaki, collection));
-        Self::journal_document_and_sections(&mut self.journal, &emitter, doc_kaki, particles, structure, epoch)
+        Self::journal_document_and_sections(
+            &mut self.journal,
+            &emitter,
+            doc_kaki,
+            particles,
+            structure,
+            epoch,
+        )
     }
 
     /// Re-journal a document's FULL particle set (title/headers/body/code/
@@ -293,7 +325,15 @@ impl WriteNode {
         let emitter = DocumentEmitter::new(&self.minter);
         let mut particles = emitter.emit_document_for(doc_kaki, structure);
         particles.push(emitter.emit_collection(doc_kaki, collection));
-        Self::journal_document_and_sections(&mut self.journal, &emitter, doc_kaki, particles, structure, epoch)
+        Self::journal_document_and_sections(
+            &mut self.journal,
+            &emitter,
+            doc_kaki,
+            particles,
+            structure,
+            epoch,
+        )
+        .0
     }
 
     /// Ingest a document exactly as `ingest_document_categorized` does,
@@ -315,12 +355,22 @@ impl WriteNode {
         let emitter = DocumentEmitter::new(&self.minter);
         let (doc_kaki, mut particles) = emitter.emit_document(structure);
         particles.push(emitter.emit_collection(doc_kaki, collection));
-        let doc_kaki =
-            Self::journal_document_and_sections(&mut self.journal, &emitter, doc_kaki, particles, structure, epoch);
+        let (doc_kaki, _doc_and_section_particle_count) = Self::journal_document_and_sections(
+            &mut self.journal,
+            &emitter,
+            doc_kaki,
+            particles,
+            structure,
+            epoch,
+        );
 
         let mentions = registry.scan_mentions(&document_full_text(structure));
-        for (mention_kaki, mention_particles) in emitter.emit_concept_mentions(doc_kaki, &mentions) {
-            let eav = mention_particles.iter().map(particle_to_eav_triple).collect();
+        for (mention_kaki, mention_particles) in emitter.emit_concept_mentions(doc_kaki, &mentions)
+        {
+            let eav = mention_particles
+                .iter()
+                .map(particle_to_eav_triple)
+                .collect();
             let event = EventKaki::try_from_kaki(self.minter.event(KakiRole::Zikru))
                 .expect("KakiMinter::event always mints kaki_type=Event");
             self.journal
@@ -328,7 +378,8 @@ impl WriteNode {
                 .expect("append to an in-memory Journal is infallible in this shard config");
         }
 
-        self.concept_graph.record_document(doc_kaki, &structure.title, collection, &mentions);
+        self.concept_graph
+            .record_document(doc_kaki, &structure.title, collection, &mentions);
         doc_kaki
     }
 
@@ -352,12 +403,19 @@ impl WriteNode {
     /// [`WriteNode::ingest_directory_categorized`]. Adds a `meta.source_path`
     /// particle (matching `ingest::ingest_directory`'s convention) so every
     /// journaled document stays traceable to the file it came from.
-    pub fn ingest_document_from_path(&mut self, path: &Path, epoch: u32) -> Result<IdentityKaki, IngestError> {
+    pub fn ingest_document_from_path(
+        &mut self,
+        path: &Path,
+        epoch: u32,
+    ) -> Result<IdentityKaki, IngestError> {
         let text = fs::read_to_string(path)?;
 
         let scan = crate::security::scan_document(text.as_bytes());
         if !scan.clean {
-            return Err(IngestError::SecurityRejected { path: path.to_path_buf(), detail: scan.detail.to_string() });
+            return Err(IngestError::SecurityRejected {
+                path: path.to_path_buf(),
+                detail: scan.detail.to_string(),
+            });
         }
 
         let structure = DocumentParser::parse_markdown(&text);
@@ -373,7 +431,15 @@ impl WriteNode {
             now_secs(),
         ));
 
-        Ok(Self::journal_document_and_sections(&mut self.journal, &emitter, doc_kaki, particles, &structure, epoch))
+        Ok(Self::journal_document_and_sections(
+            &mut self.journal,
+            &emitter,
+            doc_kaki,
+            particles,
+            &structure,
+            epoch,
+        )
+        .0)
     }
 
     /// Walk `root` for every `.md` file (recursively, same walk
@@ -422,7 +488,10 @@ impl WriteNode {
         for path in &paths {
             let check = check_authorship(path, allowlist);
             if !check.authorized {
-                return Err(IngestError::UnauthorizedCreator { path: path.clone(), author: check.author });
+                return Err(IngestError::UnauthorizedCreator {
+                    path: path.clone(),
+                    author: check.author,
+                });
             }
         }
 
@@ -490,18 +559,24 @@ impl WriteNode {
         let emitter = DocumentEmitter::new(&self.minter);
         for (doc_kaki, text) in texts {
             for referenced_path in discover_referenced_paths(text) {
-                let Some(stem) = Path::new(&referenced_path).file_stem().and_then(|s| s.to_str()) else {
+                let Some(stem) = Path::new(&referenced_path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                else {
                     continue;
                 };
-                let Some(&target_kaki) = by_stem.get(stem) else { continue };
+                let Some(&target_kaki) = by_stem.get(stem) else {
+                    continue;
+                };
                 if target_kaki == *doc_kaki {
                     continue;
                 }
 
                 let edge_kaki = IdentityKaki::try_from_kaki(self.minter.identity(KakiRole::Zikru))
                     .expect("KakiMinter::identity always mints kaki_type=Identity");
-                let mut particles: Vec<Particle> =
-                    emitter.emit_link(edge_kaki, target_kaki, "depends-on").to_vec();
+                let mut particles: Vec<Particle> = emitter
+                    .emit_link(edge_kaki, target_kaki, "depends-on")
+                    .to_vec();
                 particles.push(Particle::base(
                     edge_kaki,
                     DocOrbit::Link.attr("source"),
@@ -531,6 +606,13 @@ impl WriteNode {
     /// self`) so callers can hold `emitter`'s immutable borrow of
     /// `self.minter` alive across the call while mutating `self.journal`
     /// -- a disjoint-field borrow the compiler can't see through `&mut self`.
+    ///
+    /// Returns the document's Identity-Kaki plus the REAL total particle
+    /// (EAV triple) count journaled for it -- the parent document's own
+    /// particles plus every section's, not a file/document count. This is
+    /// what lets a caller report actual EAV volume instead of assuming
+    /// "1 file = 1 particle" (that assumption undercounts real ingestion
+    /// by 1-2 orders of magnitude once a document's sections are counted).
     fn journal_document_and_sections(
         journal: &mut Journal,
         emitter: &DocumentEmitter,
@@ -538,7 +620,8 @@ impl WriteNode {
         particles: Vec<Particle>,
         structure: &DocumentStructure,
         epoch: u32,
-    ) -> IdentityKaki {
+    ) -> (IdentityKaki, usize) {
+        let mut particle_count = particles.len();
         let doc_eav = particles.iter().map(particle_to_eav_triple).collect();
         let doc_event = EventKaki::try_from_kaki(emitter.minter().event(KakiRole::Zikru))
             .expect("KakiMinter::event always mints kaki_type=Event");
@@ -546,16 +629,27 @@ impl WriteNode {
             .append(JournalEntry::new(doc_event, doc_kaki, epoch, doc_eav))
             .expect("append to an in-memory Journal is infallible in this shard config");
 
-        for (section_kaki, section_particles) in emitter.emit_sections(doc_kaki, &structure.title, structure) {
-            let section_eav = section_particles.iter().map(particle_to_eav_triple).collect();
+        for (section_kaki, section_particles) in
+            emitter.emit_sections(doc_kaki, &structure.title, structure)
+        {
+            particle_count += section_particles.len();
+            let section_eav = section_particles
+                .iter()
+                .map(particle_to_eav_triple)
+                .collect();
             let section_event = EventKaki::try_from_kaki(emitter.minter().event(KakiRole::Zikru))
                 .expect("KakiMinter::event always mints kaki_type=Event");
             journal
-                .append(JournalEntry::new(section_event, section_kaki, epoch, section_eav))
+                .append(JournalEntry::new(
+                    section_event,
+                    section_kaki,
+                    epoch,
+                    section_eav,
+                ))
                 .expect("append to an in-memory Journal is infallible in this shard config");
         }
 
-        doc_kaki
+        (doc_kaki, particle_count)
     }
 
     /// The underlying Journal — read-only access, for materializing into
@@ -615,29 +709,44 @@ mod tests {
     #[test]
     fn ingest_document_with_concepts_populates_the_exposure_preview() {
         let mut wn = write_node();
-        let registry = ConceptRegistry::new().with_known_gates().extend_crates(["enkiddb".to_string()]);
+        let registry = ConceptRegistry::new()
+            .with_known_gates()
+            .extend_crates(["enkiddb".to_string()]);
 
         // G1=APSU and G7=ENLIL per the sealed bahyway_core::hepta_gate::
         // HeptaGate ruling (GATE-1, 2026-06-18/07-07).
         let g1_doc = DocumentParser::parse_markdown(
             "# Gate G1 Runbook\n\nThe Apsu gate is the identity/security intake, handled by enkiddb.\n",
         );
-        let g7_doc = DocumentParser::parse_markdown("# Gate G7 Runbook\n\nThe Enlil gate governs SLA sign-off.\n");
-        let unrelated = DocumentParser::parse_markdown("# Glossary\n\nJust background text, no gates here.\n");
+        let g7_doc = DocumentParser::parse_markdown(
+            "# Gate G7 Runbook\n\nThe Enlil gate governs SLA sign-off.\n",
+        );
+        let unrelated =
+            DocumentParser::parse_markdown("# Glossary\n\nJust background text, no gates here.\n");
 
         wn.ingest_document_with_concepts(&g1_doc, 1, "gates", &registry);
         wn.ingest_document_with_concepts(&g7_doc, 2, "gates", &registry);
         wn.ingest_document_with_concepts(&unrelated, 3, "glossary", &registry);
 
-        assert_eq!(wn.known_collections(), vec!["gates".to_string(), "glossary".to_string()]);
+        assert_eq!(
+            wn.known_collections(),
+            vec!["gates".to_string(), "glossary".to_string()]
+        );
 
         let report = wn.exposure_preview("gates");
         assert_eq!(report.document_count, 2);
-        let names: Vec<&str> = report.revealed_concepts.iter().map(|c| c.name.as_str()).collect();
+        let names: Vec<&str> = report
+            .revealed_concepts
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
         assert!(names.contains(&"APSU"));
         assert!(names.contains(&"ENLIL"));
         assert!(names.contains(&"enkiddb"));
-        assert!(report.revealed_concepts.iter().any(|c| c.kind == ConceptKind::Gate));
+        assert!(report
+            .revealed_concepts
+            .iter()
+            .any(|c| c.kind == ConceptKind::Gate));
         assert!(report.narrate().contains("2 document"));
     }
 
@@ -652,7 +761,11 @@ mod tests {
         // Document entry + 1 section entry + 1 concept-mention entity = 3.
         assert_eq!(wn.document_count(), 3);
         let doc_history = wn.journal().read_particle_history(&doc_kaki);
-        assert_eq!(doc_history.len(), 1, "the parent document itself is still one entry");
+        assert_eq!(
+            doc_history.len(),
+            1,
+            "the parent document itself is still one entry"
+        );
     }
 
     #[test]
@@ -664,7 +777,10 @@ mod tests {
         assert_eq!(wn.document_count(), 1);
         let history = wn.journal().read_particle_history(&kaki);
         assert_eq!(history.len(), 1);
-        assert!(!history[0].eav.is_empty(), "the journaled entry must carry the document's EAV triples");
+        assert!(
+            !history[0].eav.is_empty(),
+            "the journaled entry must carry the document's EAV triples"
+        );
     }
 
     #[test]
@@ -674,9 +790,18 @@ mod tests {
         let v45 = DocumentParser::parse_markdown("# v4.5\n");
         let kaki_v44 = wn.ingest_document(&v44, 1);
         let kaki_v45 = wn.ingest_document(&v45, 2);
-        assert_eq!(wn.document_count(), 2, "two real documents, no supersession yet");
+        assert_eq!(
+            wn.document_count(),
+            2,
+            "two real documents, no supersession yet"
+        );
 
-        wn.supersede_document(kaki_v44, kaki_v45, "v4.5 adds the KAKI-minting stage v4.4 lacked", 3);
+        wn.supersede_document(
+            kaki_v44,
+            kaki_v45,
+            "v4.5 adds the KAKI-minting stage v4.4 lacked",
+            3,
+        );
 
         // Supersession is an APPEND on the OLD identity, not a new mint --
         // document_count (distinct entries) grows to 3 (v4.4's own BIRTH
@@ -685,7 +810,11 @@ mod tests {
         // shows two entries under the SAME identity.
         assert_eq!(wn.document_count(), 3);
         let v44_history = wn.journal().read_particle_history(&kaki_v44);
-        assert_eq!(v44_history.len(), 2, "v4.4's own identity now has a BIRTH entry and a SUPERSEDED entry");
+        assert_eq!(
+            v44_history.len(),
+            2,
+            "v4.4's own identity now has a BIRTH entry and a SUPERSEDED entry"
+        );
 
         let has_superseded_event = v44_history.iter().flat_map(|e| e.eav.iter()).any(|t| {
             t.attr_hash == enkidb_ingest::bridge::attr_hash("hist.event")
@@ -694,7 +823,10 @@ mod tests {
                     AkkValue::Text(ref s) if s == "SUPERSEDED"
                 )
         });
-        assert!(has_superseded_event, "the new entry must carry hist.event = SUPERSEDED");
+        assert!(
+            has_superseded_event,
+            "the new entry must carry hist.event = SUPERSEDED"
+        );
 
         let has_reason = v44_history.iter().flat_map(|e| e.eav.iter()).any(|t| {
             t.attr_hash == enkidb_ingest::bridge::attr_hash("hist.reason")
@@ -703,7 +835,10 @@ mod tests {
                     AkkValue::Text(ref s) if s == "v4.5 adds the KAKI-minting stage v4.4 lacked"
                 )
         });
-        assert!(has_reason, "the WHY must be queryable, not just the fact that a supersession happened");
+        assert!(
+            has_reason,
+            "the WHY must be queryable, not just the fact that a supersession happened"
+        );
 
         let has_link_to_new = v44_history.iter().flat_map(|e| e.eav.iter()).any(|t| {
             t.attr_hash == enkidb_ingest::bridge::attr_hash("hist.superseded_by")
@@ -712,7 +847,10 @@ mod tests {
                     AkkValue::KakiPk(bytes) if bytes == *kaki_v45.bytes()
                 )
         });
-        assert!(has_link_to_new, "must link forward to the NEW document's identity");
+        assert!(
+            has_link_to_new,
+            "must link forward to the NEW document's identity"
+        );
     }
 
     #[test]
@@ -724,7 +862,11 @@ mod tests {
         wn.tag_gate(kaki, "ADAD", 2);
 
         let history = wn.journal().read_particle_history(&kaki);
-        assert_eq!(history.len(), 2, "BIRTH entry plus the new gate-tag entry, same identity");
+        assert_eq!(
+            history.len(),
+            2,
+            "BIRTH entry plus the new gate-tag entry, same identity"
+        );
         let has_gate_tag = history.iter().flat_map(|e| e.eav.iter()).any(|t| {
             t.attr_hash == enkidb_ingest::bridge::attr_hash("meta.gate")
                 && matches!(
@@ -732,7 +874,10 @@ mod tests {
                     AkkValue::Text(ref s) if s == "ADAD"
                 )
         });
-        assert!(has_gate_tag, "meta.gate must carry the gate's Akkadian name as plain Text");
+        assert!(
+            has_gate_tag,
+            "meta.gate must carry the gate's Akkadian name as plain Text"
+        );
     }
 
     #[test]
@@ -744,7 +889,11 @@ mod tests {
         wn.tag_domain(kaki, "Extraction", 2);
 
         let history = wn.journal().read_particle_history(&kaki);
-        assert_eq!(history.len(), 2, "BIRTH entry plus the new domain-tag entry, same identity");
+        assert_eq!(
+            history.len(),
+            2,
+            "BIRTH entry plus the new domain-tag entry, same identity"
+        );
         let has_domain_tag = history.iter().flat_map(|e| e.eav.iter()).any(|t| {
             t.attr_hash == enkidb_ingest::bridge::attr_hash("meta.domain")
                 && matches!(
@@ -752,17 +901,24 @@ mod tests {
                     AkkValue::Text(ref s) if s == "Extraction"
                 )
         });
-        assert!(has_domain_tag, "meta.domain must carry the domain name as plain Text");
+        assert!(
+            has_domain_tag,
+            "meta.domain must carry the domain name as plain Text"
+        );
     }
 
     #[test]
     fn reingest_document_categorized_journals_the_same_content_under_the_same_identity() {
         let mut wn = write_node();
         let doc = DocumentParser::parse_markdown("# Stable Title\n\nSame body every time.\n");
-        let kaki = wn.ingest_document_categorized(&doc, 1, "playbook-record-candidate");
+        let (kaki, _particle_count) =
+            wn.ingest_document_categorized(&doc, 1, "playbook-record-candidate");
 
         let kaki2 = wn.reingest_document_categorized(kaki, &doc, 2, "playbook-record-candidate");
-        assert_eq!(kaki, kaki2, "must reuse the SAME identity, never mint a new one");
+        assert_eq!(
+            kaki, kaki2,
+            "must reuse the SAME identity, never mint a new one"
+        );
 
         // Two BIRTH-shaped entries now exist under the one identity (epoch
         // 1 and epoch 2), each independently carrying the real title --
@@ -777,12 +933,16 @@ mod tests {
                         AkkValue::Text(ref s) if s == "Stable Title"
                     )
             });
-            assert!(has_title, "every re-journaled entry must carry the real title, not just a bare append");
+            assert!(
+                has_title,
+                "every re-journaled entry must carry the real title, not just a bare append"
+            );
         }
     }
 
     #[test]
-    fn mint_link_edge_gives_each_edge_its_own_entity_so_multiple_edges_from_one_source_all_survive() {
+    fn mint_link_edge_gives_each_edge_its_own_entity_so_multiple_edges_from_one_source_all_survive()
+    {
         let mut wn = write_node();
         let location = DocumentParser::parse_markdown("# Location\n");
         let loc_kaki = wn.ingest_document(&location, 1);
@@ -811,7 +971,11 @@ mod tests {
                     })
             })
             .collect();
-        assert_eq!(target_titles.len(), 2, "both edges must survive as distinct entities: {target_titles:?}");
+        assert_eq!(
+            target_titles.len(),
+            2,
+            "both edges must survive as distinct entities: {target_titles:?}"
+        );
         assert!(target_titles.contains(&"PB A".to_string()));
         assert!(target_titles.contains(&"PB B".to_string()));
     }
@@ -860,9 +1024,9 @@ mod tests {
         let doc = DocumentParser::parse_markdown("# Title\n\nBody text.\n");
         let kaki = wn.ingest_document(&doc, 5);
 
-        let history = wn.journal().read_particle_history(
-            &IdentityKaki::try_from_kaki(*kaki.kaki()).unwrap(),
-        );
+        let history = wn
+            .journal()
+            .read_particle_history(&IdentityKaki::try_from_kaki(*kaki.kaki()).unwrap());
         assert_eq!(history[0].epoch, 5);
         // meta.title + body.paragraph + body.order + hist.event = 4 triples
         assert_eq!(history[0].eav.len(), 4);
@@ -874,7 +1038,7 @@ mod tests {
         let doc = DocumentParser::parse_markdown(
             "# Guide\n\n## Alpha\n\nAlpha body text here.\n\n## Beta\n\nBeta body text here.\n",
         );
-        let parent = wn.ingest_document_categorized(&doc, 1, "component");
+        let (parent, particle_count) = wn.ingest_document_categorized(&doc, 1, "component");
 
         // Parent entry carries the meta.collection triple.
         let parent_history = wn.journal().read_particle_history(&parent);
@@ -884,6 +1048,18 @@ mod tests {
         // Two sections (Alpha, Beta) were also journaled as their own
         // entries -- three entries total (parent + 2 sections).
         assert_eq!(wn.journal().entry_count(), 3);
+
+        // particle_count is the REAL sum of every EAV triple journaled for
+        // this document -- parent's + both sections', not an entry count.
+        // The journal is fresh for this test (write_node()), so summing
+        // every entry's EAV triples covers exactly this one ingest call.
+        let real_total: usize = wn.journal().all_entries().map(|e| e.eav.len()).sum();
+        assert_eq!(
+            particle_count, real_total,
+            "reported particle_count must equal the real sum of EAV triples \
+             across the parent + every section entry"
+        );
+        assert!(real_total > 0);
     }
 
     #[test]
@@ -892,14 +1068,17 @@ mod tests {
 
         let mut wn = write_node();
         let doc = DocumentParser::parse_markdown("# Guide\n\n## Only Section\n\nSome body text.\n");
-        let parent = wn.ingest_document_categorized(&doc, 1, "component");
+        let (parent, _particle_count) = wn.ingest_document_categorized(&doc, 1, "component");
 
         let summary_hash = attr_hash("body.summary");
         let text_hash = attr_hash("body.text");
 
         // The parent entry has neither -- those are section-only triples.
         let parent_history = wn.journal().read_particle_history(&parent);
-        assert!(!parent_history[0].eav.iter().any(|t| t.attr_hash == summary_hash));
+        assert!(!parent_history[0]
+            .eav
+            .iter()
+            .any(|t| t.attr_hash == summary_hash));
 
         // Some other journal entry (the section) carries both, and its
         // body.text contains the original paragraph verbatim.
@@ -908,7 +1087,11 @@ mod tests {
             .all_entries()
             .find(|e| e.eav.iter().any(|t| t.attr_hash == text_hash))
             .expect("a section entry must carry body.text");
-        let text_triple = section_entry.eav.iter().find(|t| t.attr_hash == text_hash).unwrap();
+        let text_triple = section_entry
+            .eav
+            .iter()
+            .find(|t| t.attr_hash == text_hash)
+            .unwrap();
         match eav_triple_to_value(text_triple) {
             akkvalue::AkkValue::Text(t) => assert!(t.contains("Some body text.")),
             _ => panic!("expected Text value"),
@@ -933,8 +1116,14 @@ mod tests {
 
         let history = wn.journal().read_particle_history(&kaki);
         assert_eq!(history.len(), 1);
-        assert!(history[0].eav.iter().any(|t| t.attr_hash == enkidb_ingest::bridge::attr_hash("meta.source_path")));
-        assert!(history[0].eav.iter().any(|t| t.attr_hash == enkidb_ingest::bridge::attr_hash("meta.collection")));
+        assert!(history[0]
+            .eav
+            .iter()
+            .any(|t| t.attr_hash == enkidb_ingest::bridge::attr_hash("meta.source_path")));
+        assert!(history[0]
+            .eav
+            .iter()
+            .any(|t| t.attr_hash == enkidb_ingest::bridge::attr_hash("meta.collection")));
         // parent + one section (Usage)
         assert_eq!(wn.journal().entry_count(), 2);
     }
@@ -956,7 +1145,11 @@ mod tests {
     fn ingest_directory_categorized_journals_every_markdown_file_found() {
         let dir = scratch_dir("directory");
         std::fs::create_dir_all(dir.join("docs/components")).unwrap();
-        std::fs::write(dir.join("docs/components/alpha.md"), "# Alpha\n\n## One\n\nBody.\n").unwrap();
+        std::fs::write(
+            dir.join("docs/components/alpha.md"),
+            "# Alpha\n\n## One\n\nBody.\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("root.md"), "# Root\n\nJust a paragraph.\n").unwrap();
         std::fs::write(dir.join("ignore.txt"), "not markdown").unwrap();
 
@@ -969,7 +1162,12 @@ mod tests {
     }
 
     fn git(dir: &std::path::Path, args: &[&str]) {
-        let status = std::process::Command::new("git").arg("-C").arg(dir).args(args).status().unwrap();
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .status()
+            .unwrap();
         assert!(status.success(), "git {args:?} failed");
     }
 
@@ -994,7 +1192,9 @@ mod tests {
 
         let mut wn = write_node();
         let allow = crate::authorship::TeamAllowlist::seed();
-        let kakis = wn.ingest_directory_categorized_checked(&dir, 1, &allow).unwrap();
+        let kakis = wn
+            .ingest_directory_categorized_checked(&dir, 1, &allow)
+            .unwrap();
 
         assert_eq!(kakis.len(), 1, "one file -> one document identity");
         // parent + 1 preamble section (no headers in "Body."), matching
@@ -1011,7 +1211,9 @@ mod tests {
 
         let mut wn = write_node();
         let allow = crate::authorship::TeamAllowlist::seed();
-        let err = wn.ingest_directory_categorized_checked(&dir, 1, &allow).unwrap_err();
+        let err = wn
+            .ingest_directory_categorized_checked(&dir, 1, &allow)
+            .unwrap_err();
 
         match err {
             IngestError::UnauthorizedCreator { author, .. } => {
@@ -1019,7 +1221,11 @@ mod tests {
             }
             _ => panic!("expected UnauthorizedCreator"),
         }
-        assert_eq!(wn.document_count(), 0, "nothing journaled -- the whole batch is gated, not just the bad file");
+        assert_eq!(
+            wn.document_count(),
+            0,
+            "nothing journaled -- the whole batch is gated, not just the bad file"
+        );
     }
 
     #[test]
@@ -1035,12 +1241,18 @@ mod tests {
         // a real ingestable document AND a valid discover_referenced_paths
         // match, proving the two features compose without inventing a
         // second file-type ingest path just for this test.
-        std::fs::write(dir.join("deploy.sh.md"), "# Deploy Script Notes\n\nRun steps here.\n").unwrap();
+        std::fs::write(
+            dir.join("deploy.sh.md"),
+            "# Deploy Script Notes\n\nRun steps here.\n",
+        )
+        .unwrap();
         git_commit_all(&dir);
 
         let mut wn = write_node();
         let allow = crate::authorship::TeamAllowlist::seed();
-        let kakis = wn.ingest_directory_categorized_checked(&dir, 1, &allow).unwrap();
+        let kakis = wn
+            .ingest_directory_categorized_checked(&dir, 1, &allow)
+            .unwrap();
         assert_eq!(kakis.len(), 2);
 
         // guide.md's own preamble section also mints a "section-of" link
@@ -1056,18 +1268,27 @@ mod tests {
                     )
             })
         });
-        assert!(has_depends_on_link, "a depends-on link entry must be journaled");
+        assert!(
+            has_depends_on_link,
+            "a depends-on link entry must be journaled"
+        );
     }
 
     #[test]
     fn ingest_directory_categorized_checked_skips_an_unresolvable_reference_silently() {
         let dir = git_scratch_dir("checked_links_unresolved", "bahaa.fadam@gmail.com");
-        std::fs::write(dir.join("guide.md"), "# Guide\n\nSee `nonexistent.py` for the script.\n").unwrap();
+        std::fs::write(
+            dir.join("guide.md"),
+            "# Guide\n\nSee `nonexistent.py` for the script.\n",
+        )
+        .unwrap();
         git_commit_all(&dir);
 
         let mut wn = write_node();
         let allow = crate::authorship::TeamAllowlist::seed();
-        let kakis = wn.ingest_directory_categorized_checked(&dir, 1, &allow).unwrap();
+        let kakis = wn
+            .ingest_directory_categorized_checked(&dir, 1, &allow)
+            .unwrap();
 
         assert_eq!(kakis.len(), 1);
         // guide.md's own preamble section still mints its own "section-of"
@@ -1082,6 +1303,9 @@ mod tests {
                     )
             })
         });
-        assert!(!has_depends_on_link, "a reference to a file that wasn't ingested must not produce a depends-on link");
+        assert!(
+            !has_depends_on_link,
+            "a reference to a file that wasn't ingested must not produce a depends-on link"
+        );
     }
 }

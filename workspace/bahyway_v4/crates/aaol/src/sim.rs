@@ -23,65 +23,92 @@
 #[derive(Debug, Clone)]
 pub struct SimParticle {
     pub tribe_id: u16,
-    pub b11:      u8,
-    pub ring:     SimRing,
-    pub x:        f32,
-    pub y:        f32,
-    pub z:        f32,
+    pub b11: u8,
+    pub ring: SimRing,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 /// Orbital ring in the simulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SimRing { Inner, Mid, Outer }
+pub enum SimRing {
+    Inner,
+    Mid,
+    Outer,
+}
 
 impl SimRing {
     pub fn label(self) -> &'static str {
-        match self { Self::Inner => "INNER", Self::Mid => "MID", Self::Outer => "OUTER" }
+        match self {
+            Self::Inner => "INNER",
+            Self::Mid => "MID",
+            Self::Outer => "OUTER",
+        }
     }
 
     pub fn from_b11(b11: u8) -> Self {
-        if      b11 >= 200 { Self::Inner }
-        else if b11 >= 100 { Self::Mid }
-        else               { Self::Outer }
+        if b11 >= 200 {
+            Self::Inner
+        } else if b11 >= 100 {
+            Self::Mid
+        } else {
+            Self::Outer
+        }
     }
 }
 
 /// An arc snapshot within a .akk-sim file.
 #[derive(Debug, Clone)]
 pub struct SimArc {
-    pub tribe_a:  u16,
-    pub tribe_b:  u16,
+    pub tribe_a: u16,
+    pub tribe_b: u16,
     pub strength: f32,
-    pub state:    String,
-    pub opacity:  f32,
+    pub state: String,
+    pub opacity: f32,
 }
 
 /// A complete crystalline simulation program.
 #[derive(Debug, Clone)]
 pub struct SimulationProgram {
-    pub name:          String,
-    pub frozen_at_ms:  u64,
-    pub reason:        String,
-    pub node_id:       u8,
+    pub name: String,
+    pub frozen_at_ms: u64,
+    pub reason: String,
+    pub node_id: u8,
     pub b11_at_freeze: u8,
-    pub harmony:       f32,
-    pub particles:     Vec<SimParticle>,
-    pub arcs:          Vec<SimArc>,
+    pub harmony: f32,
+    pub particles: Vec<SimParticle>,
+    pub arcs: Vec<SimArc>,
 }
 
 impl SimulationProgram {
     /// Create an empty simulation (no particles, no arcs).
-    pub fn new(name: impl Into<String>, frozen_at_ms: u64, reason: impl Into<String>,
-               node_id: u8, b11_at_freeze: u8, harmony: f32) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        frozen_at_ms: u64,
+        reason: impl Into<String>,
+        node_id: u8,
+        b11_at_freeze: u8,
+        harmony: f32,
+    ) -> Self {
         Self {
-            name: name.into(), frozen_at_ms, reason: reason.into(),
-            node_id, b11_at_freeze, harmony,
-            particles: Vec::new(), arcs: Vec::new(),
+            name: name.into(),
+            frozen_at_ms,
+            reason: reason.into(),
+            node_id,
+            b11_at_freeze,
+            harmony,
+            particles: Vec::new(),
+            arcs: Vec::new(),
         }
     }
 
-    pub fn add_particle(&mut self, p: SimParticle) { self.particles.push(p); }
-    pub fn add_arc(&mut self, a: SimArc)           { self.arcs.push(a); }
+    pub fn add_particle(&mut self, p: SimParticle) {
+        self.particles.push(p);
+    }
+    pub fn add_arc(&mut self, a: SimArc) {
+        self.arcs.push(a);
+    }
 
     /// Serialize to .akk-sim source text.
     pub fn to_source(&self) -> String {
@@ -95,10 +122,17 @@ impl SimulationProgram {
         for p in &self.particles {
             s.push_str(&format!(
                 "  particle {} {{ b11: {}  ring: {}  x: {:.4}  y: {:.4}  z: {:.4} }}\n",
-                p.tribe_id, p.b11, p.ring.label(), p.x, p.y, p.z
+                p.tribe_id,
+                p.b11,
+                p.ring.label(),
+                p.x,
+                p.y,
+                p.z
             ));
         }
-        if !self.particles.is_empty() { s.push('\n'); }
+        if !self.particles.is_empty() {
+            s.push('\n');
+        }
         for a in &self.arcs {
             s.push_str(&format!(
                 "  arc tribe_{} <-> tribe_{} {{ strength: {:.4}  state: {}  opacity: {:.4} }}\n",
@@ -113,18 +147,21 @@ impl SimulationProgram {
     ///
     /// Returns `Err(String)` if the required header fields are missing.
     pub fn parse_header(src: &str) -> Result<SimulationProgram, String> {
-        let mut name        = None::<String>;
-        let mut frozen_at   = None::<u64>;
-        let mut reason      = None::<String>;
-        let mut node_id     = None::<u8>;
-        let mut b11_freeze  = None::<u8>;
-        let mut harmony     = None::<f32>;
+        let mut name = None::<String>;
+        let mut frozen_at = None::<u64>;
+        let mut reason = None::<String>;
+        let mut node_id = None::<u8>;
+        let mut b11_freeze = None::<u8>;
+        let mut harmony = None::<f32>;
 
         for line in src.lines() {
             let line = line.trim();
             if line.starts_with("simulation ") && line.ends_with('{') {
-                let n = line.strip_prefix("simulation ").unwrap()
-                            .trim_end_matches('{').trim();
+                let n = line
+                    .strip_prefix("simulation ")
+                    .unwrap()
+                    .trim_end_matches('{')
+                    .trim();
                 name = Some(n.to_string());
             } else if let Some(v) = line.strip_prefix("frozen_at_ms:") {
                 frozen_at = v.trim().parse().ok();
@@ -157,13 +194,23 @@ mod tests {
     use super::*;
 
     fn make_sim() -> SimulationProgram {
-        let mut sim = SimulationProgram::new(
-            "freeze_node0_9000", 9_000, "LAST_NODE_FAILING", 0, 45, 0.72
-        );
-        sim.add_particle(SimParticle { tribe_id: 1, b11: 210, ring: SimRing::Inner,
-                                       x: 1.0, y: 0.0, z: 0.1 });
-        sim.add_arc(SimArc { tribe_a: 1, tribe_b: 2, strength: 0.8,
-                             state: "FROZEN".into(), opacity: 0.64 });
+        let mut sim =
+            SimulationProgram::new("freeze_node0_9000", 9_000, "LAST_NODE_FAILING", 0, 45, 0.72);
+        sim.add_particle(SimParticle {
+            tribe_id: 1,
+            b11: 210,
+            ring: SimRing::Inner,
+            x: 1.0,
+            y: 0.0,
+            z: 0.1,
+        });
+        sim.add_arc(SimArc {
+            tribe_a: 1,
+            tribe_b: 2,
+            strength: 0.8,
+            state: "FROZEN".into(),
+            opacity: 0.64,
+        });
         sim
     }
 
@@ -204,7 +251,7 @@ mod tests {
     fn sim_ring_from_b11() {
         assert_eq!(SimRing::from_b11(240), SimRing::Inner);
         assert_eq!(SimRing::from_b11(150), SimRing::Mid);
-        assert_eq!(SimRing::from_b11(50),  SimRing::Outer);
+        assert_eq!(SimRing::from_b11(50), SimRing::Outer);
     }
 
     #[test]

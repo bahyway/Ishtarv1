@@ -13,21 +13,40 @@ impl Phasor {
         Self { re, im }
     }
     pub fn from_polar(mag: f64, angle_rad: f64) -> Self {
-        Self { re: mag * angle_rad.cos(), im: mag * angle_rad.sin() }
+        Self {
+            re: mag * angle_rad.cos(),
+            im: mag * angle_rad.sin(),
+        }
     }
+    // Named to match this crate's own dot-call convention throughout
+    // (state_estimate.rs etc. chain .mul()/.div() extensively) rather
+    // than std::ops::Mul/Div, which would require renaming every call
+    // site or accepting an inherent method that permanently shadows
+    // the trait's -- a real API decision, not a mechanical lint fix.
+    #[allow(clippy::should_implement_trait)]
     pub fn mul(self, o: Self) -> Self {
-        Self { re: self.re * o.re - self.im * o.im, im: self.re * o.im + self.im * o.re }
+        Self {
+            re: self.re * o.re - self.im * o.im,
+            im: self.re * o.im + self.im * o.re,
+        }
     }
     /// Complex division. Like f64 division, yields NaN/Inf components
     /// for a zero divisor rather than panicking -- callers that need
     /// to reject a near-zero divisor (e.g. a Gaussian-elimination
     /// pivot) must check `o.magnitude()` themselves before calling.
+    #[allow(clippy::should_implement_trait)] // same reasoning as mul() above
     pub fn div(self, o: Self) -> Self {
         let d = o.re * o.re + o.im * o.im;
-        Self { re: (self.re * o.re + self.im * o.im) / d, im: (self.im * o.re - self.re * o.im) / d }
+        Self {
+            re: (self.re * o.re + self.im * o.im) / d,
+            im: (self.im * o.re - self.re * o.im) / d,
+        }
     }
     pub fn conj(self) -> Self {
-        Self { re: self.re, im: -self.im }
+        Self {
+            re: self.re,
+            im: -self.im,
+        }
     }
     pub fn angle(self) -> f64 {
         self.im.atan2(self.re)
@@ -39,10 +58,16 @@ impl Quantity for Phasor {
         Self::default()
     }
     fn add(self, o: Self) -> Self {
-        Self { re: self.re + o.re, im: self.im + o.im }
+        Self {
+            re: self.re + o.re,
+            im: self.im + o.im,
+        }
     }
     fn sub(self, o: Self) -> Self {
-        Self { re: self.re - o.re, im: self.im - o.im }
+        Self {
+            re: self.re - o.re,
+            im: self.im - o.im,
+        }
     }
     fn magnitude(self) -> f64 {
         (self.re * self.re + self.im * self.im).sqrt()

@@ -69,12 +69,26 @@
     # below were updated to match so this playbook stays re-runnable; the
     # header above describing what PB-555 originally did is left as
     # written, since it's an accurate historical record of that rename.
+    # 2026-08-23, found live: this grep originally flagged EVERY mention of
+    # "Uruinimgina", including comment annotations this file's own header
+    # requires under the Concordance Doctrine ("sealed history is never
+    # rewritten, only annotated") -- correct and permanent, not a rename
+    # gap. A phrase-based exclusion ("(was Uruinimgina)") missed a second,
+    # differently-worded annotation ("prior name \"Uruinimgina\" -- see
+    # docs/..."), found live on the very next run. Fixed properly this
+    # time: exclude by COMMENT SYNTAX (// or <!--), not by exact wording --
+    # that's what the doctrine actually requires (history lives in
+    # comments, in whatever words), so any future annotation phrasing is
+    # covered too. Also caught one genuine leftover in index.html's
+    # user-facing text ("an Uruinimgina pulse"), fixed separately to
+    # "a Hala pulse".
     - name: "VERIFY | no stray 'Uruinimgina' left in the renamed Rust/JS/HTML surface"
       ansible.builtin.shell: >-
         grep -rn "Uruinimgina" {{ ws }}/crates/anu-governor/src/app.rs
         {{ ws }}/crates/anu-governor/src/lib.rs
         {{ ws }}/crates/anu-governor/src/bin/web_assets/index.html
         {{ ws }}/crates/anu-governor/src/bin/web_assets/app.js
+        | grep -vE ':[0-9]+:[[:space:]]*(//|<!--)'
         || true
       register: stray_check
       changed_when: false

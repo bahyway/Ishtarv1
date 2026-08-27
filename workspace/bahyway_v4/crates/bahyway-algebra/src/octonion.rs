@@ -15,7 +15,9 @@
 
 use core::ops::{Add, Mul, Neg, Sub};
 
-pub trait CayleyDickson: Copy + Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Neg<Output = Self> + PartialEq {
+pub trait CayleyDickson:
+    Copy + Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Neg<Output = Self> + PartialEq
+{
     const ZERO: Self;
     const ONE: Self;
     fn conj(self) -> Self;
@@ -26,8 +28,12 @@ pub trait CayleyDickson: Copy + Add<Output = Self> + Sub<Output = Self> + Mul<Ou
 impl CayleyDickson for f64 {
     const ZERO: Self = 0.0;
     const ONE: Self = 1.0;
-    fn conj(self) -> Self { self } // reals are self-conjugate
-    fn leaf_norm2(self) -> f64 { self * self }
+    fn conj(self) -> Self {
+        self
+    } // reals are self-conjugate
+    fn leaf_norm2(self) -> f64 {
+        self * self
+    }
 }
 
 /// A Cayley-Dickson doubling of `T`: pairs (a, b) representing a + b*e,
@@ -39,20 +45,37 @@ pub struct CD<T> {
 }
 
 impl<T: CayleyDickson> CD<T> {
-    pub fn new(a: T, b: T) -> Self { CD { a, b } }
+    pub fn new(a: T, b: T) -> Self {
+        CD { a, b }
+    }
 }
 
 impl<T: CayleyDickson> Add for CD<T> {
     type Output = Self;
-    fn add(self, rhs: Self) -> Self { CD { a: self.a + rhs.a, b: self.b + rhs.b } }
+    fn add(self, rhs: Self) -> Self {
+        CD {
+            a: self.a + rhs.a,
+            b: self.b + rhs.b,
+        }
+    }
 }
 impl<T: CayleyDickson> Sub for CD<T> {
     type Output = Self;
-    fn sub(self, rhs: Self) -> Self { CD { a: self.a - rhs.a, b: self.b - rhs.b } }
+    fn sub(self, rhs: Self) -> Self {
+        CD {
+            a: self.a - rhs.a,
+            b: self.b - rhs.b,
+        }
+    }
 }
 impl<T: CayleyDickson> Neg for CD<T> {
     type Output = Self;
-    fn neg(self) -> Self { CD { a: -self.a, b: -self.b } }
+    fn neg(self) -> Self {
+        CD {
+            a: -self.a,
+            b: -self.b,
+        }
+    }
 }
 impl<T: CayleyDickson> Mul for CD<T> {
     type Output = Self;
@@ -67,10 +90,23 @@ impl<T: CayleyDickson> Mul for CD<T> {
     }
 }
 impl<T: CayleyDickson> CayleyDickson for CD<T> {
-    const ZERO: Self = CD { a: T::ZERO, b: T::ZERO };
-    const ONE: Self = CD { a: T::ONE, b: T::ZERO };
-    fn conj(self) -> Self { CD { a: self.a.conj(), b: -self.b } }
-    fn leaf_norm2(self) -> f64 { self.a.leaf_norm2() + self.b.leaf_norm2() }
+    const ZERO: Self = CD {
+        a: T::ZERO,
+        b: T::ZERO,
+    };
+    const ONE: Self = CD {
+        a: T::ONE,
+        b: T::ZERO,
+    };
+    fn conj(self) -> Self {
+        CD {
+            a: self.a.conj(),
+            b: -self.b,
+        }
+    }
+    fn leaf_norm2(self) -> f64 {
+        self.a.leaf_norm2() + self.b.leaf_norm2()
+    }
 }
 
 pub type Complex = CD<f64>;
@@ -90,26 +126,36 @@ impl Octonion {
 
     pub fn from_leaves(l: [f64; 8]) -> Self {
         CD {
-            a: CD { a: CD { a: l[0], b: l[1] }, b: CD { a: l[2], b: l[3] } },
-            b: CD { a: CD { a: l[4], b: l[5] }, b: CD { a: l[6], b: l[7] } },
+            a: CD {
+                a: CD { a: l[0], b: l[1] },
+                b: CD { a: l[2], b: l[3] },
+            },
+            b: CD {
+                a: CD { a: l[4], b: l[5] },
+                b: CD { a: l[6], b: l[7] },
+            },
         }
     }
 
     pub fn to_leaves(self) -> [f64; 8] {
         [
-            self.a.a.a, self.a.a.b, self.a.b.a, self.a.b.b,
-            self.b.a.a, self.b.a.b, self.b.b.a, self.b.b.b,
+            self.a.a.a, self.a.a.b, self.a.b.a, self.a.b.b, self.b.a.a, self.b.a.b, self.b.b.a,
+            self.b.b.b,
         ]
     }
 
-    pub fn norm(self) -> f64 { self.leaf_norm2().sqrt() }
+    pub fn norm(self) -> f64 {
+        self.leaf_norm2().sqrt()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn approx(a: f64, b: f64) -> bool { (a - b).abs() < 1e-9 }
+    fn approx(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-9
+    }
 
     #[test]
     fn imaginary_units_square_to_minus_one() {
@@ -117,7 +163,10 @@ mod tests {
             let e = Octonion::basis(i);
             let sq = e * e;
             let leaves = sq.to_leaves();
-            assert!(approx(leaves[0], -1.0), "e{i}^2 real part should be -1, got {leaves:?}");
+            assert!(
+                approx(leaves[0], -1.0),
+                "e{i}^2 real part should be -1, got {leaves:?}"
+            );
             for (k, &v) in leaves.iter().enumerate().skip(1) {
                 assert!(approx(v, 0.0), "e{i}^2 should be purely real, leaf {k}={v}");
             }
@@ -133,8 +182,12 @@ mod tests {
         let x = Octonion::from_leaves([1.0, 2.0, -1.0, 0.5, 3.0, -2.0, 0.0, 1.0]);
         let y = Octonion::from_leaves([0.0, 1.0, 2.0, -1.0, 1.0, 1.0, -1.0, 2.0]);
         let xy = x * y;
-        assert!(approx(xy.norm(), x.norm() * y.norm()),
-            "|xy|={} != |x||y|={}", xy.norm(), x.norm() * y.norm());
+        assert!(
+            approx(xy.norm(), x.norm() * y.norm()),
+            "|xy|={} != |x||y|={}",
+            xy.norm(),
+            x.norm() * y.norm()
+        );
     }
 
     #[test]
@@ -146,8 +199,11 @@ mod tests {
         let e4 = Octonion::basis(4);
         let lhs = (e1 * e2) * e4;
         let rhs = e1 * (e2 * e4);
-        assert_ne!(lhs.to_leaves(), rhs.to_leaves(),
-            "expected associativity to fail for octonions at (e1,e2,e4)");
+        assert_ne!(
+            lhs.to_leaves(),
+            rhs.to_leaves(),
+            "expected associativity to fail for octonions at (e1,e2,e4)"
+        );
     }
 
     #[test]

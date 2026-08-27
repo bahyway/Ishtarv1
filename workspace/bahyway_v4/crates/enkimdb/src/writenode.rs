@@ -34,7 +34,10 @@ pub struct WriteNode {
 
 impl WriteNode {
     pub fn new(minter: KakiMinter, shard_count: u16) -> Self {
-        WriteNode { journal: Journal::new(shard_count), minter }
+        WriteNode {
+            journal: Journal::new(shard_count),
+            minter,
+        }
     }
 
     /// Ingest one artifact profile: mint its Identity-Kaki, emit its
@@ -251,7 +254,11 @@ impl WriteNode {
     /// `spec` carries only non-secret metadata (see
     /// `PassportRecordSpec`'s own doc comment) — never the passport's
     /// seal or any key material.
-    pub fn ingest_passport_record(&mut self, spec: &PassportRecordSpec, epoch: u32) -> IdentityKaki {
+    pub fn ingest_passport_record(
+        &mut self,
+        spec: &PassportRecordSpec,
+        epoch: u32,
+    ) -> IdentityKaki {
         let emitter = RegistryEmitter::new(&self.minter);
         let (record_kaki, particles) = emitter.emit_passport_record(spec);
 
@@ -282,7 +289,11 @@ impl WriteNode {
     /// Ingest one AnuGovernor run's confirmation record — mints its own
     /// Identity-Kaki (role=Zikru), journals it under
     /// `EventCause::AnuGovernorRunRecorded`.
-    pub fn ingest_anu_governor_run_record(&mut self, spec: &AnuGovernorRunRecordSpec, epoch: u32) -> IdentityKaki {
+    pub fn ingest_anu_governor_run_record(
+        &mut self,
+        spec: &AnuGovernorRunRecordSpec,
+        epoch: u32,
+    ) -> IdentityKaki {
         let emitter = RegistryEmitter::new(&self.minter);
         let (record_kaki, particles) = emitter.emit_anu_governor_run(spec);
 
@@ -359,7 +370,9 @@ mod tests {
         use nisaba::cluster::GaCluster;
         use nisaba::discovery::NisabaDiscovery;
         let cluster = GaCluster::new(
-            FixedCoord7D { d: [1_000, 2_000, 500, 1, 2, 3, 0] },
+            FixedCoord7D {
+                d: [1_000, 2_000, 500, 1, 2, 3, 0],
+            },
             vec![],
             0.9,
             0.9,
@@ -377,7 +390,10 @@ mod tests {
         let history = wn.journal().read_particle_history(&kaki);
         assert_eq!(history.len(), 1);
         assert!(!history[0].eav.is_empty());
-        assert_eq!(history[0].event_cause(), Some(EventCause::PatternRegistered));
+        assert_eq!(
+            history[0].event_cause(),
+            Some(EventCause::PatternRegistered)
+        );
     }
 
     #[test]
@@ -461,7 +477,10 @@ mod tests {
 
         let history = wn.journal().read_particle_history(&kaki);
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0].event_cause(), Some(EventCause::AnuGovernorRunRecorded));
+        assert_eq!(
+            history[0].event_cause(),
+            Some(EventCause::AnuGovernorRunRecorded)
+        );
         // 10 base fields + 3 operator_* + 3 os_* + 1 event_cause triple = 17.
         assert_eq!(history[0].eav.len(), 17);
     }

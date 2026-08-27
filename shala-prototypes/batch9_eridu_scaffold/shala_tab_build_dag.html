@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ŠALA — build-DAG scheduler (rehearsal)</title>
+<!-- ════════════════════════════════════════════════════════════════
+     ŠALA TAB — BUILD-DAG SCHEDULER (Eridu)
+     BahyWay.Ecosystem v4.0 · rehearsal only (Way-of-Work rule 5)
+     The documentation build DAG, animated by the REAL algorithm:
+       · Kahn topological validation (acyclic — else rejected)
+       · pattern-presence readiness (a task runs only when its required
+         OntoGraph patterns already exist)
+       · bounded-N parallel waves (independent tasks run together)
+       · STAGE GATE — Application/service docs are held until every
+         Foundational + Ontology task (the OntoGraph builders) completes
+       · append-only hash-chained sealed log + honest-ordering proof
+     Foundational (roots) → Ontology → Application (leaves, gated).
+     A downstream app-doc PHYSICALLY CANNOT run before the OntoGraph it
+     queries exists → dogfooding honest by construction. Figures illustrative.
+     ════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022; --bg-deep:#121315;
+  --bg-hover:#383A3E; --bg-selected:#404349; --stroke:#3D3F43;
+  --gold:#D6A44C; --teal:#4FB8A8; --orange:#D98E3E; --crimson:#C34A3F;
+  --purple:#9B7FC7; --pale:#C9CDD4; --grey:#8A8D92;
+  --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+  --serif:"Iowan Old Style",Palatino,Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:"Inter","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:baseline;gap:16px;padding:14px 22px;border-bottom:1px solid var(--stroke)}
+header h1{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:.24em;color:var(--gold)}
+header .sub{font-size:12px;color:var(--dim)}
+.wrap{padding:16px 22px;max-width:1240px;margin:0 auto;width:100%}
+.bar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+button{background:var(--bg-widget);color:var(--ink);border:1px solid var(--stroke);border-radius:6px;padding:8px 13px;font-size:12.5px;cursor:pointer}
+button:hover{background:var(--bg-hover)}
+button.gold{border-color:var(--gold);color:var(--gold)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.stat{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+select{background:var(--bg-panel);color:var(--ink);border:1px solid var(--stroke);border-radius:6px;padding:6px 9px;font-family:var(--mono);font-size:11px}
+.scene{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px}
+canvas{display:block;width:100%;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:8px}
+.sidepanel{display:flex;flex-direction:column;gap:12px}
+.legend{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:8px;padding:11px 12px;font-size:11px;color:var(--muted);line-height:1.9}
+.legend .row{display:flex;align-items:center;gap:7px}
+.legend .sw{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+.log{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:8px;overflow:hidden;flex:1;display:flex;flex-direction:column;min-height:180px}
+.log .lh{padding:8px 12px;border-bottom:1px solid var(--stroke);background:var(--bg-widget);font-family:var(--serif);font-size:12.5px;color:var(--gold)}
+.log .lb{padding:9px 12px;flex:1;overflow-y:auto;font-family:var(--mono);font-size:9.5px;line-height:1.8;color:var(--muted)}
+.log .lb .e{color:var(--pale)} .log .lb .f{color:var(--gold)} .log .lb .o{color:var(--purple)} .log .lb .a{color:var(--teal)}
+.proof{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:8px;padding:11px 12px;font-size:11px;line-height:1.6}
+.proof.ok{border-color:var(--teal)} .proof .p1{color:var(--teal);font-family:var(--serif);font-style:italic}
+.proof .dim{font-family:var(--mono);font-size:9px;color:var(--dim)}
+footer{padding:10px 22px;font-family:var(--serif);font-style:italic;font-size:12px;color:var(--dim);text-align:center}
+@media(max-width:1000px){.scene{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>Š A L A</h1><span class="sub">Eridu build-DAG — topological, stage-gated, sealed</span></header>
+<div class="wrap">
+  <div class="bar">
+    <button class="gold" id="runBtn">▶ Run the scheduler</button>
+    <button id="stepBtn">⏭ step one wave</button>
+    <button id="resetBtn">↺ reset</button>
+    <label style="font-family:var(--mono);font-size:11px;color:var(--muted)">workers:
+      <select id="workers"><option>2</option><option selected>3</option><option>4</option></select></label>
+    <span class="stat" id="stat">acyclic DAG · press Run to schedule</span>
+  </div>
+
+  <div class="scene">
+    <canvas id="cv" height="470"></canvas>
+    <div class="sidepanel">
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:var(--purple)"></span>Foundational / Ontology (build OntoGraph)</div>
+        <div class="row"><span class="sw" style="background:var(--teal)"></span>Application (generated FROM OntoGraph)</div>
+        <div class="row"><span class="sw" style="background:var(--gold)"></span>running now (this wave)</div>
+        <div class="row"><span class="sw" style="background:var(--grey)"></span>pending / blocked</div>
+        <div class="row"><span class="sw" style="background:#2e6b5f;border:1px solid var(--teal)"></span>done · sealed</div>
+        <div style="margin-top:6px;font-size:10px;color:var(--dim)">the red bar is the STAGE GATE — app-docs wait behind it until the OntoGraph is built</div>
+      </div>
+      <div class="log"><div class="lh">◆ sealed append-only log</div><div class="lb" id="logb"><span style="color:var(--dim)">press Run…</span></div></div>
+      <div class="proof" id="proof"><span class="dim">honest-ordering proof appears when the run completes</span></div>
+    </div>
+  </div>
+</div>
+<footer>Rehearsal only. The animation runs the real algorithm: Kahn topo-validation, pattern-readiness, bounded-N parallel waves, and the stage gate holding app-docs until the OntoGraph is built. A downstream doc cannot run before its inputs exist → dogfooding honest by construction. Sealed with a hash chain (Ed25519/CSR-08 in production). Figures illustrative. — inscribed for DUB.SAR 𒁾</footer>
+
+<script>
+"use strict";
+/* ── the real task DAG (same as the Rust/Python scheduler) ── */
+const STAGE={F:'Foundational',O:'Ontology',A:'Application'};
+const TASKS=[
+ {id:'F1',name:'define-tribes',      st:'F',req:[],                                     prod:['tribe-model']},
+ {id:'F2',name:'define-kaki-spec',   st:'F',req:[],                                     prod:['kaki-spec']},
+ {id:'F3',name:'define-law-catalog', st:'F',req:[],                                     prod:['law-catalog']},
+ {id:'F4',name:'define-relations',   st:'F',req:['tribe-model'],                        prod:['relation-model']},
+ {id:'O1',name:'ontograph-core',     st:'O',req:['tribe-model','relation-model','kaki-spec'], prod:['ontograph-core']},
+ {id:'O2',name:'pattern-index',      st:'O',req:['ontograph-core','law-catalog'],       prod:['pattern-index']},
+ {id:'A1',name:'app-schema-doc',     st:'A',req:['ontograph-core','pattern-index'],     prod:['app-schema-doc']},
+ {id:'A2',name:'service-doc',        st:'A',req:['ontograph-core'],                     prod:['service-doc']},
+ {id:'A3',name:'api-doc',            st:'A',req:['app-schema-doc'],                      prod:['api-doc']},
+];
+const byId={};TASKS.forEach(t=>byId[t.id]=t);
+const producer={};TASKS.forEach(t=>t.prod.forEach(p=>producer[p]=t.id));
+const ontoIds=TASKS.filter(t=>t.st!=='A').map(t=>t.id);
+
+/* edges a->b if b requires a pattern a produces */
+const EDGES=[];
+TASKS.forEach(t=>t.req.forEach(p=>{const a=producer[p];if(a)EDGES.push([a,t.id]);}));
+
+/* longest-path depth (for x layout) via topological relaxation */
+function computeDepth(){
+  const depth={};TASKS.forEach(t=>depth[t.id]=0);
+  // Kahn order
+  const indeg={};TASKS.forEach(t=>indeg[t.id]=0);
+  EDGES.forEach(([a,b])=>indeg[b]++);
+  let q=TASKS.filter(t=>indeg[t.id]===0).map(t=>t.id),order=[],qi=0;
+  const adj={};TASKS.forEach(t=>adj[t.id]=[]);EDGES.forEach(([a,b])=>adj[a].push(b));
+  while(qi<q.length){const n=q[qi++];order.push(n);adj[n].forEach(m=>{if(--indeg[m]===0)q.push(m);});}
+  order.forEach(n=>adj[n].forEach(m=>{depth[m]=Math.max(depth[m],depth[n]+1);}));
+  return {depth,acyclic:order.length===TASKS.length};
+}
+const {depth,acyclic}=computeDepth();
+/* application docs pushed to sit AFTER the gate depth (visual honesty) */
+const gateDepth=Math.max(...ontoIds.map(id=>depth[id]))+1;
+TASKS.forEach(t=>{if(t.st==='A')t.dx=Math.max(depth[t.id],gateDepth);else t.dx=depth[t.id];});
+const maxDepth=Math.max(...TASKS.map(t=>t.dx));
+
+/* layout: x by depth, y spread within depth */
+function layout(W,H){
+  const byDepth={};TASKS.forEach(t=>{(byDepth[t.dx]=byDepth[t.dx]||[]).push(t);});
+  Object.keys(byDepth).forEach(d=>{const col=byDepth[d];col.forEach((t,i)=>{
+    t.x=(0.08+ (t.dx/(maxDepth+0.4))*0.82)*W;
+    t.y=(0.16+ (col.length===1?0.34:(i/(col.length-1))*0.68))*H;
+  });});
+}
+
+/* ── the real scheduler → produce ordered waves ── */
+function schedule(N){
+  let produced=new Set(),completed=new Set(),started=new Set();
+  const waves=[];
+  let guard=0;
+  while(completed.size<TASKS.length && guard++<50){
+    const ready=[];
+    for(const t of TASKS){
+      if(started.has(t.id))continue;
+      if(!t.req.every(r=>produced.has(r)))continue;
+      if(t.st==='A' && !ontoIds.every(o=>completed.has(o)))continue; // STAGE GATE
+      ready.push(t.id);
+    }
+    if(!ready.length)break;
+    const batch=ready.slice(0,N);            // bounded parallelism
+    batch.forEach(id=>started.add(id));
+    // complete this wave
+    batch.forEach(id=>{completed.add(id);byId[id].prod.forEach(p=>produced.add(p));});
+    waves.push(batch);
+  }
+  return waves;
+}
+
+/* ── canvas ── */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let DPR=Math.min(2,devicePixelRatio||1),W,H=470;
+function size(){W=cv.clientWidth;cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';layout(W,H);}
+size();addEventListener('resize',size);
+
+let waves=[],curWave=-1,running=false,tAcc=0,state={},logEntries=[],prevHash='GENESIS';
+function resetState(){waves=[];curWave=-1;running=false;state={};logEntries=[];prevHash='GENESIS';
+  TASKS.forEach(t=>state[t.id]='pending');
+  document.getElementById('logb').innerHTML='<span style="color:var(--dim)">press Run…</span>';
+  document.getElementById('proof').innerHTML='<span class="dim">honest-ordering proof appears when the run completes</span>';
+  document.getElementById('proof').classList.remove('ok');
+  document.getElementById('stat').textContent='acyclic DAG · press Run to schedule';}
+resetState();
+
+function fnv(seq,id,prev){let h=0xcbf29ce4|0,s=seq+id+prev;
+  // simple 32-bit fnv-ish for display
+  let hh=2166136261>>>0;for(let i=0;i<s.length;i++){hh^=s.charCodeAt(i);hh=Math.imul(hh,16777619)>>>0;}
+  return ('00000000'+hh.toString(16)).slice(-8);}
+
+function applyWave(w){
+  // mark previous running as done
+  Object.keys(state).forEach(id=>{if(state[id]==='running')state[id]='done';});
+  // seal completed
+  waves[w].forEach(id=>{
+    const seq=logEntries.length+1,h=fnv(seq,id,prevHash);
+    logEntries.push({seq,id,st:byId[id].st,prev:prevHash,hash:h});prevHash=h;
+  });
+  // set this wave running
+  waves[w].forEach(id=>state[id]='running');
+  renderLog();
+  const stq=byId[waves[w][0]].st;
+  document.getElementById('stat').textContent='wave '+(w+1)+'/'+waves.length+' — running '+waves[w].join(', ')
+    +(stq==='A'?' (stage gate lifted — OntoGraph built)':'');
+}
+function finish(){
+  Object.keys(state).forEach(id=>{if(state[id]==='running')state[id]='done';});
+  renderLog();
+  // proof
+  const seqOf={};logEntries.forEach(e=>seqOf[e.id]=e.seq);
+  const lastOnto=Math.max(...ontoIds.map(o=>seqOf[o]));
+  const firstApp=Math.min(...TASKS.filter(t=>t.st==='A').map(t=>seqOf[t.id]));
+  const ok=lastOnto<firstApp;
+  const pr=document.getElementById('proof');pr.classList.toggle('ok',ok);
+  pr.innerHTML='<div class="p1">'+(ok?'Honest by construction.':'ordering breached')+'</div>'
+    +'<div class="dim" style="margin-top:5px">OntoGraph sealed by seq '+lastOnto+' · first app-doc at seq '+firstApp
+    +'<br>→ no app-doc generated before its OntoGraph inputs existed</div>';
+  document.getElementById('stat').textContent='complete — '+logEntries.length+' tasks sealed · chain valid';
+}
+function renderLog(){
+  const el=document.getElementById('logb');
+  el.innerHTML=logEntries.map(e=>{const c=e.st==='F'?'f':e.st==='O'?'o':'a';
+    return '<div><span class="e">#'+e.seq+'</span> <span class="'+c+'">'+e.id+'</span> ['+STAGE[e.st].slice(0,4)+'] '+e.hash+'</div>';}).join('')
+    || '<span style="color:var(--dim)">press Run…</span>';
+  el.scrollTop=el.scrollHeight;
+}
+
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#121315';ctx.fillRect(0,0,W,H);
+  // stage gate barrier (between onto and app depth)
+  const gateX=(0.08+((gateDepth-0.5)/(maxDepth+0.4))*0.82)*W;
+  const gateOpen = curWave>=0 && ontoIds.every(o=>state[o]==='done');
+  ctx.strokeStyle=gateOpen?'rgba(79,184,168,.5)':'rgba(195,74,63,.6)';
+  ctx.lineWidth=2;ctx.setLineDash([6,6]);ctx.beginPath();ctx.moveTo(gateX,20);ctx.lineTo(gateX,H-14);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=gateOpen?'#4FB8A8':'#C34A3F';ctx.font='9px monospace';ctx.textAlign='center';
+  ctx.fillText(gateOpen?'GATE OPEN':'STAGE GATE',gateX,14);
+  // stage labels
+  ctx.fillStyle='#6E7074';ctx.font='10px monospace';ctx.textAlign='left';
+  ctx.fillText('build the OntoGraph →',18,H-4);
+  ctx.textAlign='right';ctx.fillText('← generated from OntoGraph',W-14,H-4);ctx.textAlign='left';
+  // edges
+  EDGES.forEach(([a,b])=>{const A=byId[a],B=byId[b];
+    const active=state[a]==='done';
+    ctx.strokeStyle=active?'rgba(79,184,168,.4)':'rgba(90,92,96,.35)';ctx.lineWidth=active?1.6:1;
+    ctx.beginPath();ctx.moveTo(A.x,A.y);
+    const mx=(A.x+B.x)/2;ctx.bezierCurveTo(mx,A.y,mx,B.y,B.x-13,B.y);ctx.stroke();
+    // arrowhead
+    const ang=Math.atan2(B.y-B.y,1);ctx.fillStyle=active?'rgba(79,184,168,.6)':'rgba(90,92,96,.5)';
+    ctx.beginPath();ctx.moveTo(B.x-13,B.y);ctx.lineTo(B.x-19,B.y-4);ctx.lineTo(B.x-19,B.y+4);ctx.fill();
+  });
+  // nodes
+  TASKS.forEach(t=>{
+    const s=state[t.id];
+    let fill,stroke;
+    if(s==='running'){fill='#D6A44C';stroke='#D6A44C';}
+    else if(s==='done'){fill='#2e6b5f';stroke='#4FB8A8';}
+    else{ // pending: colour by stage but dim
+      const base=t.st==='A'?[79,184,168]:[155,127,199];
+      fill='rgba('+base[0]+','+base[1]+','+base[2]+',.18)';stroke='rgba('+base[0]+','+base[1]+','+base[2]+',.5)';
+    }
+    // pulse when running
+    let r=17;if(s==='running'){r=17+2*Math.sin(tAcc*0.15);}
+    ctx.beginPath();ctx.arc(t.x,t.y,r,0,6.2832);ctx.fillStyle=fill;ctx.fill();
+    ctx.lineWidth=1.5;ctx.strokeStyle=stroke;ctx.stroke();
+    ctx.fillStyle=s==='pending'?'#9A9C9F':'#151515';ctx.font='bold 10px monospace';ctx.textAlign='center';
+    ctx.fillText(t.id,t.x,t.y+3);
+    ctx.fillStyle='#9A9C9F';ctx.font='8px monospace';ctx.fillText(t.name,t.x,t.y+r+10);
+  });
+  ctx.textAlign='left';
+  // advance
+  if(running){tAcc++;
+    if(tAcc-tLast>78){tLast=tAcc;curWave++;
+      if(curWave<waves.length){applyWave(curWave);}
+      else{running=false;finish();}
+    }
+  }
+  requestAnimationFrame(draw);
+}
+let tLast=0;
+requestAnimationFrame(draw);
+
+function startRun(){
+  resetState();
+  if(!acyclic){document.getElementById('stat').textContent='DAG REJECTED — cycle detected';return;}
+  const N=+document.getElementById('workers').value;
+  waves=schedule(N);running=true;curWave=-1;tAcc=0;tLast=0;
+  document.getElementById('stat').textContent='scheduling with '+N+' workers…';
+}
+document.getElementById('runBtn').addEventListener('click',startRun);
+document.getElementById('resetBtn').addEventListener('click',resetState);
+document.getElementById('stepBtn').addEventListener('click',()=>{
+  if(!waves.length){const N=+document.getElementById('workers').value;waves=schedule(N);curWave=-1;
+    TASKS.forEach(t=>state[t.id]='pending');logEntries=[];prevHash='GENESIS';}
+  running=false;curWave++;
+  if(curWave<waves.length)applyWave(curWave);
+  else{curWave=waves.length-1;finish();}
+});
+</script>
+</body>
+</html>

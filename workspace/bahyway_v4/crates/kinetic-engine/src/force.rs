@@ -63,12 +63,12 @@ impl HeptaDimension {
     /// Position in the sovereign ME..URU order (0..=6).
     pub fn index(&self) -> usize {
         match self {
-            HeptaDimension::ME  => 0,
-            HeptaDimension::GU  => 1,
+            HeptaDimension::ME => 0,
+            HeptaDimension::GU => 1,
             HeptaDimension::SAG => 2,
-            HeptaDimension::A   => 3,
+            HeptaDimension::A => 3,
             HeptaDimension::IZI => 4,
-            HeptaDimension::UD  => 5,
+            HeptaDimension::UD => 5,
             HeptaDimension::URU => 6,
         }
     }
@@ -76,12 +76,12 @@ impl HeptaDimension {
     /// Canonical Sumerian sign name (ME, GU, SAG, A, IZI, UD, URU).
     pub fn name(&self) -> &'static str {
         match self {
-            HeptaDimension::ME  => "ME",
-            HeptaDimension::GU  => "GU",
+            HeptaDimension::ME => "ME",
+            HeptaDimension::GU => "GU",
             HeptaDimension::SAG => "SAG",
-            HeptaDimension::A   => "A",
+            HeptaDimension::A => "A",
             HeptaDimension::IZI => "IZI",
-            HeptaDimension::UD  => "UD",
+            HeptaDimension::UD => "UD",
             HeptaDimension::URU => "URU",
         }
     }
@@ -125,7 +125,7 @@ impl PhysicalForce {
     pub fn new(gray_rot_pct: f64, io_friction: f64) -> Self {
         Self {
             gray_rot_pct: gray_rot_pct.clamp(0.0, 1.0),
-            io_friction:  io_friction.clamp(0.0, 1.0),
+            io_friction: io_friction.clamp(0.0, 1.0),
         }
     }
 
@@ -143,12 +143,12 @@ impl PhysicalForce {
 impl ForceGenerator for PhysicalForce {
     fn generate(&self, _position: &Vec7D) -> Vec7D {
         Vec7D {
-            me:  0.0,
-            gu:  0.0,
+            me: 0.0,
+            gu: 0.0,
             sag: 0.0,
-            a:   -self.io_friction,
+            a: -self.io_friction,
             izi: 0.0,
-            ud:  0.0,
+            ud: 0.0,
             uru: -self.gray_rot_pct,
         }
     }
@@ -175,7 +175,7 @@ pub struct MemoryForce {
 impl MemoryForce {
     pub fn new(staleness: f64, plan_drift: f64) -> Self {
         Self {
-            staleness:  staleness.clamp(0.0, 1.0),
+            staleness: staleness.clamp(0.0, 1.0),
             plan_drift: plan_drift.clamp(0.0, 1.0),
         }
     }
@@ -189,12 +189,12 @@ impl MemoryForce {
 impl ForceGenerator for MemoryForce {
     fn generate(&self, _position: &Vec7D) -> Vec7D {
         Vec7D {
-            me:  0.0,
-            gu:  -self.staleness,
+            me: 0.0,
+            gu: -self.staleness,
             sag: 0.0,
-            a:   0.0,
+            a: 0.0,
             izi: 0.0,
-            ud:  -self.plan_drift,
+            ud: -self.plan_drift,
             uru: 0.0,
         }
     }
@@ -227,8 +227,8 @@ impl LearningForce {
     pub fn new(oracle_improvement: f64, sargability_gain: f64, cpu_reduction: f64) -> Self {
         Self {
             oracle_improvement: oracle_improvement.clamp(0.0, 1.0),
-            sargability_gain:   sargability_gain.clamp(0.0, 1.0),
-            cpu_reduction:      cpu_reduction.clamp(0.0, 1.0),
+            sargability_gain: sargability_gain.clamp(0.0, 1.0),
+            cpu_reduction: cpu_reduction.clamp(0.0, 1.0),
         }
     }
 
@@ -246,12 +246,12 @@ impl LearningForce {
 impl ForceGenerator for LearningForce {
     fn generate(&self, _position: &Vec7D) -> Vec7D {
         Vec7D {
-            me:  self.oracle_improvement,
-            gu:  0.0,
+            me: self.oracle_improvement,
+            gu: 0.0,
             sag: self.sargability_gain,
-            a:   0.0,
+            a: 0.0,
             izi: self.cpu_reduction,
-            ud:  0.0,
+            ud: 0.0,
             uru: 0.0,
         }
     }
@@ -266,7 +266,7 @@ impl ForceGenerator for LearningForce {
 /// A constant force that applies a fixed `Vec7D` regardless of particle position.
 /// Useful for testing and for simple uniform field interactions.
 pub struct ConstantForce {
-    pub force:     Vec7D,
+    pub force: Vec7D,
     pub dimension: HeptaDimension,
 }
 
@@ -308,15 +308,15 @@ mod tests {
         let f = PhysicalForce::new(0.38, 0.0);
         let force = f.generate(&Vec7D::ZERO);
         assert!(approx(force.uru, -0.38), "uru force={}", force.uru);
-        assert!(approx(force.a,   0.0));
-        assert!(approx(force.me,  0.0));
+        assert!(approx(force.a, 0.0));
+        assert!(approx(force.me, 0.0));
     }
 
     #[test]
     fn physical_force_io_friction_acts_on_a_dimension() {
         let f = PhysicalForce::new(0.0, 0.95);
         let force = f.generate(&Vec7D::ZERO);
-        assert!(approx(force.a,   -0.95), "a force={}", force.a);
+        assert!(approx(force.a, -0.95), "a force={}", force.a);
         assert!(approx(force.uru, 0.0));
     }
 
@@ -324,12 +324,15 @@ mod tests {
     fn physical_force_clamps_inputs_to_unit_range() {
         let f = PhysicalForce::new(2.0, -1.0);
         assert!(approx(f.gray_rot_pct, 1.0));
-        assert!(approx(f.io_friction,  0.0));
+        assert!(approx(f.io_friction, 0.0));
     }
 
     #[test]
     fn physical_force_primary_dimension_is_uru() {
-        assert_eq!(PhysicalForce::healthy().primary_dimension(), HeptaDimension::URU);
+        assert_eq!(
+            PhysicalForce::healthy().primary_dimension(),
+            HeptaDimension::URU
+        );
     }
 
     #[test]
@@ -357,7 +360,10 @@ mod tests {
 
     #[test]
     fn memory_force_primary_dimension_is_gu() {
-        assert_eq!(MemoryForce::healthy().primary_dimension(), HeptaDimension::GU);
+        assert_eq!(
+            MemoryForce::healthy().primary_dimension(),
+            HeptaDimension::GU
+        );
     }
 
     #[test]
@@ -401,7 +407,10 @@ mod tests {
 
     #[test]
     fn learning_force_primary_dimension_is_me() {
-        assert_eq!(LearningForce::none().primary_dimension(), HeptaDimension::ME);
+        assert_eq!(
+            LearningForce::none().primary_dimension(),
+            HeptaDimension::ME
+        );
     }
 
     #[test]

@@ -35,7 +35,11 @@ pub fn simulate_exclusion(
         })
         .map(|(_, n)| n.id)
         .collect();
-    Ok(if unserved.is_empty() { Verdict::Proven } else { Verdict::Refused(unserved) })
+    Ok(if unserved.is_empty() {
+        Verdict::Proven
+    } else {
+        Verdict::Refused(unserved)
+    })
 }
 
 /// N-1 contingency analysis (enterprise APM territory, ETAP/PowerFactory):
@@ -58,7 +62,12 @@ pub fn n_minus_1_sweep(
         .iter()
         .enumerate()
         .filter(|(_, e)| e.in_service)
-        .map(|(i, _)| Ok(ContingencyResult { edge_idx: i, verdict: simulate_exclusion(net, phi, i, tol)? }))
+        .map(|(i, _)| {
+            Ok(ContingencyResult {
+                edge_idx: i,
+                verdict: simulate_exclusion(net, phi, i, tol)?,
+            })
+        })
         .collect()
 }
 
@@ -71,18 +80,41 @@ mod tests {
     /// both downstream nodes; losing edge (1,2) strands only node 2.
     fn radial_feeder() -> (Network<Phasor>, Vec<Phasor>) {
         let y = Phasor::new(10.0, -5.0);
-        let v = vec![Phasor::new(1.0, 0.0), Phasor::new(0.97, -0.01), Phasor::new(0.94, -0.02)];
+        let v = vec![
+            Phasor::new(1.0, 0.0),
+            Phasor::new(0.97, -0.01),
+            Phasor::new(0.94, -0.02),
+        ];
         let i01 = y.mul(v[0].sub(v[1]));
         let i12 = y.mul(v[1].sub(v[2]));
         let net = Network {
             nodes: vec![
-                Node { id: 0, injection: Phasor::zero().sub(i01) },
-                Node { id: 1, injection: i01.sub(i12) },
-                Node { id: 2, injection: i12 },
+                Node {
+                    id: 0,
+                    injection: Phasor::zero().sub(i01),
+                },
+                Node {
+                    id: 1,
+                    injection: i01.sub(i12),
+                },
+                Node {
+                    id: 2,
+                    injection: i12,
+                },
             ],
             edges: vec![
-                Edge { from: 0, to: 1, coeff: y, in_service: true },
-                Edge { from: 1, to: 2, coeff: y, in_service: true },
+                Edge {
+                    from: 0,
+                    to: 1,
+                    coeff: y,
+                    in_service: true,
+                },
+                Edge {
+                    from: 1,
+                    to: 2,
+                    coeff: y,
+                    in_service: true,
+                },
             ],
         };
         (net, v)
@@ -109,7 +141,10 @@ mod tests {
             Verdict::Refused(nodes) => nodes.len(),
             Verdict::Proven => 0,
         };
-        assert!(upstream >= downstream, "losing the feeder head should strand at least as many customers");
+        assert!(
+            upstream >= downstream,
+            "losing the feeder head should strand at least as many customers"
+        );
     }
 
     #[test]

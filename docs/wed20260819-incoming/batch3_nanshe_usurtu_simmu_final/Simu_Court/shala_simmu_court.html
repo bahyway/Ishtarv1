@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · The Simmu Court — Two Bells, One Timeline (GL-HSI-001-A4)</title>
+<style>
+  :root{
+    --basalt:#0b0e13; --tablet:#141922; --line:#232b38;
+    --gold:#d9a441; --gold-dim:#8a6a2c; --lapis:#4d7fb8; --copper:#4fae8a;
+    --alarm:#d4553f; --maroon:#7a2230; --ash:#8b93a3; --bone:#e8e2d4;
+    --fuzzy:#c88b3a;
+    --mono:"Iosevka","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--basalt);color:var(--ash);font:15px/1.65 var(--serif)}
+  ::selection{background:var(--gold-dim);color:var(--basalt)}
+  header{border-bottom:1px solid var(--line);padding:30px 5vw 22px;text-align:center;
+    background:radial-gradient(1100px 300px at 50% -50%, rgba(122,34,48,.12), transparent 65%)}
+  .crumbs{font-family:var(--mono);font-size:11.5px;letter-spacing:.35em;color:var(--gold-dim)}
+  h1{font-size:clamp(24px,3.2vw,38px);color:var(--bone);font-weight:600;margin:10px 0 8px}
+  .lede{max-width:84ch;margin:0 auto;color:var(--ash)}
+  .lede b{color:var(--gold);font-weight:600}
+  .lede i{color:var(--bone)}
+  .rehearsal{margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--basalt);
+      background:var(--gold);display:inline-block;padding:4px 12px;border-radius:2px;letter-spacing:.05em}
+  main{padding:24px 4vw 70px;max-width:1460px;margin:0 auto}
+  .stage{display:grid;grid-template-columns:1fr 400px;gap:16px}
+  .panel{background:var(--tablet);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      border-bottom:1px solid var(--line);padding:10px 14px;font-family:var(--mono);font-size:12px}
+  .bar .tag{color:var(--gold)}
+  canvas{display:block;width:100%;height:auto;background:#0d1119;touch-action:none;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  input[type=range]{accent-color:var(--gold);vertical-align:middle}
+  #scrub{width:280px}
+  output{color:var(--bone);min-width:40px;display:inline-block}
+  .cam{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11px;padding:4px 9px;cursor:pointer;border-radius:2px}
+  .cam.on,.cam:hover{border-color:var(--gold);color:var(--gold)}
+  .camdeck{display:flex;gap:6px;margin-left:auto}
+  .act{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11.5px;padding:6px 12px;cursor:pointer;border-radius:2px}
+  .act:hover{color:var(--bone);border-color:var(--ash)}
+  .act.on{border-color:var(--copper);color:var(--copper)}
+  .act.gold{border-color:var(--gold-dim);color:var(--gold)}
+  .side{display:flex;flex-direction:column;gap:16px}
+  .side h3{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.12em;
+      padding:10px 14px;border-bottom:1px solid var(--line)}
+  .verdict{font-family:var(--mono);font-size:12px;padding:10px 14px;border-top:1px solid var(--line);min-height:40px}
+  .verdict .ok{color:var(--copper)} .verdict .bad{color:var(--alarm)}
+  .verdict .gold{color:var(--gold)} .verdict .fz{color:var(--fuzzy)} .verdict .lp{color:var(--lapis)}
+  .gauge{font-family:var(--mono);font-size:11.5px;padding:10px 14px;line-height:1.95;border-top:1px solid var(--line)}
+  .gauge .k{color:var(--lapis)} .gauge .ok{color:var(--copper)} .gauge .sh{color:var(--gold)}
+  .lawtag{font-family:var(--mono);font-size:10.5px;color:var(--lapis);padding:0 14px 12px}
+  #naru{max-height:170px;overflow-y:auto;font-family:var(--mono);font-size:11.5px;padding:8px 14px}
+  #naru .e{border-top:1px dotted var(--line);padding:4px 0}
+  #naru .w{color:var(--gold)}
+  #ctx{display:none;position:fixed;z-index:50;background:#0d1119;
+    border:1px solid var(--ash);border-radius:2px;min-width:240px;overflow:hidden;
+    font-family:var(--mono);font-size:12px}
+  #ctx .h{padding:6px 12px;color:var(--lapis);background:var(--tablet);border-bottom:1px solid var(--line);font-size:10.5px}
+  #ctx .i{padding:8px 12px;cursor:pointer;color:var(--ash)}
+  #ctx .i:hover{background:var(--tablet);color:var(--bone)}
+  @media(max-width:1020px){.stage{grid-template-columns:1fr}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crumbs">Š A L A&nbsp;&nbsp;H U B&nbsp;&nbsp;·&nbsp;&nbsp;M E M B R A N E&nbsp;&nbsp;C O U R T S&nbsp;&nbsp;·&nbsp;&nbsp;T H E&nbsp;&nbsp;S I M M U&nbsp;&nbsp;C O U R T</div>
+  <h1>TWO BELLS, ONE TIMELINE 𒌆</h1>
+  <p class="lede">SCADA rings when hydraulic power <b>P = Q·Δp</b> finally declines — because in SCADA
+    <i>the wall is not data</i>. Here the Essential Concept is applied literally: <b>the membrane is particles</b>.
+    Sediment adheres and a <b>simmu</b> — the wound-growth, the tumor — accretes on Wall-tribe particles and
+    deforms the space around it. Fluid particles near it are <b>kīnu</b> — steadfast: dimensions 1–5 and 7
+    unchanged, only <b>OrbitalPosition</b> shifted. <i>The particle did not change; the space did.</i>
+    A coherent kīnu chorus plus wall accretion rings the <b>BahyWay bell at birth</b> — and the copper line shows
+    how many epochs later SCADA finally wakes. The gold span between the bells is the product.</p>
+  <div class="rehearsal">ŠALA REHEARSAL ONLY — PRODUCTION SURFACE IS DUBSAR egui/WGPU (WoW rule 4–5)</div>
+</header>
+
+<main>
+<div class="stage">
+
+  <!-- ═══ STAGE ═══ -->
+  <div class="panel">
+    <div class="bar">
+      <span class="tag">TUBE · the wall as particles</span>
+      <label>timeline <input type="range" id="scrub" min="0" max="80" value="0" step="0.1"></label>
+      <output id="scrubOut">0.0</output>
+      <span class="camdeck">
+        <button class="cam" id="birdBtn">⌖</button>
+        <button class="cam" id="gndBtn">✛</button>
+        <button class="cam" id="talBtn">⟳</button>
+      </span>
+    </div>
+    <div class="bar">
+      <button class="act on" id="runBtn">◈ BREATHE</button>
+      <button class="act gold" id="bellBtn">⇥ BAHYWAY BELL</button>
+      <button class="act" id="scadaBtn">⇥ SCADA BELL</button>
+      <button class="act" id="replayBtn">⟲ REPLAY</button>
+      <span style="margin-left:auto" id="clock"></span>
+    </div>
+    <canvas id="cv" width="1020" height="600" aria-label="Tube whose wall is particles; a simmu grows and deflects steadfast fluid particles"></canvas>
+    <div class="verdict" id="stageVerdict"></div>
+    <div class="lawtag">GL-HSI-001-A4 §1 — what is data can be witnessed; what has a birth can be caught at birth · GL-VIZ-001 — click: bounce + story · right-click: court menu</div>
+  </div>
+
+  <!-- ═══ FLAT INSTRUMENTS ═══ -->
+  <div class="side">
+    <div class="panel">
+      <h3>THE TWO BELLS — P_hyd vs KĪNU CHORUS</h3>
+      <canvas id="bcv" width="400" height="230" aria-label="Hydraulic power declining late versus kinu coherence rising at birth; two bell markers with the lead time shaded"></canvas>
+      <div class="verdict" id="bVerdict"></div>
+      <div class="lawtag">§5 — the SCADA Lag Theorem · the gold span is the product · L-HSI-24</div>
+    </div>
+    <div class="panel">
+      <h3>THE KĪNU WITNESS — SEVEN DIMENSIONS</h3>
+      <div class="gauge" id="gauge"></div>
+      <div class="verdict" id="kVerdict"></div>
+      <div class="lawtag">§3 — dims 1–5,7 unchanged · dim 6 shifted ⇒ the space moved · Nabû kinship: curvature = systemic cause · L-HSI-22/23</div>
+    </div>
+    <div class="panel">
+      <h3>NĀRU · STORYENGINE JOURNAL</h3>
+      <div id="naru"></div>
+    </div>
+  </div>
+
+</div>
+</main>
+<div id="ctx"></div>
+
+<script>
+"use strict";
+const REDUCED=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rng=mulberry32(350);
+
+/* ═══ sealed model (mirror membrane.rs / kinu.rs / scada.rs) ═══ */
+const N_EP=81, T0=6, P0=100, DELTA_S=0.07, THETA=0.75;
+const SIMMU={s:0.44,th:1.05};
+function mass(t){return t>T0?0.003*(t-T0)*(t-T0):0}
+function blockage(t){return Math.min(0.5,0.00003*Math.max(0,t-T0)**2)}
+function phyd(t){const f=blockage(t);return P0*(1-f)*(1-f)*(1+0.3*f)}
+function coh(t){return Math.max(0,Math.min(1,(mass(t)-0.05)*30))}
+/* bells */
+let T_BELL=null;for(let t=0;t<N_EP-1;t++)
+  if(coh(t)>=THETA&&coh(t+1)>=THETA){T_BELL=t;break}
+let T_SCADA=null;for(let t=0;t<N_EP;t++)
+  if(phyd(t)<(1-DELTA_S)*P0){T_SCADA=t;break}
+if(T_SCADA===null)T_SCADA=N_EP-1;
+
+/* ═══ geometry ═══ */
+const L=760, RAD=175, NS=44, NT=40;
+function geoST(a,b){const du=(a.s-b.s);let dv=Math.abs(a.th-b.th)%(2*Math.PI);
+  if(dv>Math.PI)dv=2*Math.PI-dv;return Math.hypot(du,dv*0.28)}
+function defm(s,th,t){const g=geoST({s,th},SIMMU);
+  return mass(t)*Math.exp(-(g*g)/(2*0.06*0.06))}
+/* wall particles (every other lattice vertex) */
+const WALL=[];
+for(let i=0;i<=NS;i+=2)for(let j=0;j<NT;j+=2)
+  WALL.push({s:i/NS,th:j/NT*2*Math.PI,b:0,bv:0,born:true,wall:true});
+/* fluid particles: advect along s, th fixed; steadfast identity */
+const FLUID=[];
+for(let k=0;k<26;k++)FLUID.push({k,th:0.4+rng()*2.0,phase:rng(),
+  speed:0.09+rng()*0.05,b:0,bv:0,born:true,wall:false});
+function fluidState(p,t){
+  const s=(p.phase+p.speed*t*0.14)%1;
+  const d=defm(s,p.th,t);
+  /* lawful position vs actual: deformation pushes axially away + inward */
+  const push=Math.min(0.10,d*0.05);
+  const sAct=s+push*Math.sign(s-SIMMU.s||1);
+  const dentAct=60+d*10;      /* deeper into lumen near the tumor */
+  return{sLaw:s,sAct,dent:60,dentAct,d,shifted:push>0.02}}
+const NONP={id:"NON-P",born:false};
+
+/* ═══ NĀRU ═══ */
+const naru=document.getElementById("naru");
+function J(w,t){const d=document.createElement("div");d.className="e";
+  d.innerHTML=`<span class="w">${w}</span> — ${t}`;naru.prepend(d);
+  while(naru.children.length>24)naru.lastChild.remove()}
+J("COURT",`The Simmu Court convenes. Wall particleized (${WALL.length} Wall-tribe KAKIs). Simmu seeded at J-2; birth ahead.`);
+let told={bell:false,scada:false,birth:false};
+
+/* ═══ camera (Abūbu die) ═══ */
+const cv=document.getElementById("cv"),ctx=cv.getContext("2d");
+const CAM={yaw:0.7,pitch:0.42,zoom:1};let tal=false;
+function pt3(s,th,dent){
+  const r=RAD-dent;
+  const x=(s-0.5)*L, y=Math.cos(th)*r, z=Math.sin(th)*r;
+  const cy=Math.cos(CAM.yaw),sy=Math.sin(CAM.yaw);
+  let X=x*cy+z*sy, Z=-x*sy+z*cy, Y=y;
+  const cp=Math.cos(CAM.pitch),sp=Math.sin(CAM.pitch);
+  const Y2=Y*cp-Z*sp, Z2=Y*sp+Z*cp;
+  const f=1500,den=Math.max(140,f-Z2*CAM.zoom);
+  const pers=Math.min(9,f/den);
+  return{x:510+X*0.62*CAM.zoom*pers,y:320+Y2*0.62*CAM.zoom*pers,z:Z2,pers}}
+
+let VIEW=0, RUN=!REDUCED, SEL=null, PICKS=[];
+function draw(){
+  ctx.clearRect(0,0,1020,600);
+  const t=VIEW;
+  /* faint wall wireframe */
+  ctx.strokeStyle="rgba(139,147,163,.10)";ctx.lineWidth=0.6;
+  for(let i=0;i<=NS;i+=2){ctx.beginPath();
+    for(let j=0;j<=NT;j++){const p=pt3(i/NS,j/NT*2*Math.PI,defm(i/NS,j/NT*2*Math.PI,t)*10);
+      j===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)}ctx.stroke()}
+  /* the wall as particles */
+  PICKS=[];
+  WALL.forEach(w=>{
+    w.bv+=1.1;w.b=Math.max(0,w.b-w.bv*.28);if(w.b===0&&w.bv>0)w.bv=0;if(w.bv<0)w.b-=w.bv;
+    const d=defm(w.s,w.th,t);
+    const p=pt3(w.s,w.th,d*10+w.b);
+    const front=p.z>-30;
+    const m=Math.min(1,d/1.6);
+    ctx.globalAlpha=front?0.9:0.18;
+    ctx.fillStyle=m>0.55?"#7a2230":m>0.25?"#d4553f":m>0.06?"#c88b3a":"#8b93a3";
+    const sz=Math.max(0.8,(1.5+m*4.5)*p.pers*Math.max(.7,CAM.zoom*.9));
+    ctx.beginPath();ctx.arc(p.x,p.y,sz,0,7);ctx.fill();
+    PICKS.push({x:p.x,y:p.y,r:sz+4,g:w})});
+  ctx.globalAlpha=1;
+  /* simmu label */
+  const sp0=pt3(SIMMU.s,SIMMU.th,mass(t)*10+16);
+  if(mass(t)>0.05){ctx.fillStyle="#d4553f";ctx.font="12px monospace";
+    ctx.fillText(`𒌆 SIMMU · mass ${mass(t).toFixed(2)}`,sp0.x+10,sp0.y-8)}
+  /* fluid particles */
+  FLUID.forEach(p=>{
+    p.bv+=1.1;p.b=Math.max(0,p.b-p.bv*.28);if(p.b===0&&p.bv>0)p.bv=0;if(p.bv<0)p.b-=p.bv;
+    const st=fluidState(p,t);
+    const q=pt3(st.sAct,p.th,st.dentAct+p.b);
+    const front=q.z>-30;
+    /* ghost: the lawful position, when shifted */
+    if(st.shifted){const gq=pt3(st.sLaw,p.th,st.dent);
+      ctx.globalAlpha=front?0.35:0.1;
+      ctx.strokeStyle="#d9a441";ctx.setLineDash([2,3]);
+      ctx.beginPath();ctx.moveTo(gq.x,gq.y);ctx.lineTo(q.x,q.y);ctx.stroke();ctx.setLineDash([]);
+      ctx.beginPath();ctx.arc(gq.x,gq.y,2.4*gq.pers,0,7);
+      ctx.strokeStyle="rgba(217,164,65,.6)";ctx.stroke()}
+    ctx.globalAlpha=front?0.95:0.2;
+    ctx.fillStyle=st.shifted?"#d9a441":"#4d7fb8";
+    const sz=Math.max(1.2,2.8*q.pers*Math.max(.7,CAM.zoom*.9));
+    ctx.beginPath();ctx.arc(q.x,q.y,sz,0,7);ctx.fill();
+    if(SEL===p.k){ctx.strokeStyle="#e8e2d4";ctx.lineWidth=1.6;
+      ctx.beginPath();ctx.arc(q.x,q.y,sz+3,0,7);ctx.stroke();ctx.lineWidth=1}
+    ctx.globalAlpha=1;
+    PICKS.push({x:q.x,y:q.y,r:sz+4,g:p})});
+  /* refused non-particle */
+  const nq=pt3(0.95,4.6,-60);
+  ctx.globalAlpha=.5;ctx.fillStyle="#5a5348";
+  ctx.beginPath();ctx.arc(nq.x,nq.y,4.5,0,7);ctx.fill();ctx.globalAlpha=1;
+  ctx.strokeStyle="#8a6a2c";ctx.beginPath();
+  ctx.moveTo(nq.x-4,nq.y-4);ctx.lineTo(nq.x+4,nq.y+4);
+  ctx.moveTo(nq.x+4,nq.y-4);ctx.lineTo(nq.x-4,nq.y+4);ctx.stroke();
+  ctx.fillStyle="#8b93a3";ctx.font="11px monospace";ctx.fillText("NON-P",nq.x+8,nq.y+3);
+  PICKS.push({x:nq.x,y:nq.y,r:10,g:NONP});
+  ctx.fillStyle="#4d7fb8";ctx.font="12px monospace";
+  ctx.fillText(`cam yaw ${(CAM.yaw%6.283).toFixed(2)} · pitch ${CAM.pitch.toFixed(2)} · ×${CAM.zoom.toFixed(1)}`,16,22);
+  /* stage verdict */
+  const sv=document.getElementById("stageVerdict");
+  if(t<T0)sv.innerHTML=`<span class="ok">Clean corridor.</span> Wall particles at rest · fluid steadfast · the malady is not yet born`;
+  else if(t<T_BELL)sv.innerHTML=`<span class="fz">Adhesion.</span> Simmu accreting (mass ${mass(t).toFixed(2)}) · witnesses beginning to shift — chorus not yet coherent`;
+  else if(t<T_SCADA)sv.innerHTML=`<span class="gold">BAHYWAY BELL RUNG at ep ${T_BELL}.</span> Kīnu chorus + wall accretion agree · SCADA still sleeps — its wall is not data`;
+  else sv.innerHTML=`<span class="bad">SCADA finally rings at ep ${T_SCADA}.</span> Hydraulic power crossed −${(DELTA_S*100)|0}% · BahyWay has known for ${T_SCADA-T_BELL} epochs`;
+}
+
+/* ═══ the two bells instrument ═══ */
+const bcv=document.getElementById("bcv"),bx=bcv.getContext("2d");
+function drawB(){
+  bx.fillStyle="#0d1119";bx.fillRect(0,0,400,230);
+  const x0=40,y0=196,w=346,h=152;
+  const X=t=>x0+w*t/(N_EP-1);
+  /* lead-time gold span */
+  bx.fillStyle="rgba(217,164,65,.10)";
+  bx.fillRect(X(T_BELL),y0-h,X(T_SCADA)-X(T_BELL),h);
+  bx.strokeStyle="#232b38";bx.beginPath();
+  bx.moveTo(x0,y0-h);bx.lineTo(x0,y0);bx.lineTo(x0+w,y0);bx.stroke();
+  /* P_hyd (copper), normalized 0..1 on same axis */
+  bx.strokeStyle="#4fae8a";bx.lineWidth=1.8;bx.beginPath();
+  for(let t=0;t<N_EP;t++){const Y=y0-h*(phyd(t)/P0);
+    t===0?bx.moveTo(X(t),Y):bx.lineTo(X(t),Y)}bx.stroke();
+  /* SCADA threshold */
+  const Ys=y0-h*(1-DELTA_S);
+  bx.strokeStyle="rgba(79,174,138,.45)";bx.setLineDash([3,4]);
+  bx.beginPath();bx.moveTo(x0,Ys);bx.lineTo(x0+w,Ys);bx.stroke();bx.setLineDash([]);
+  /* kinu coherence (gold) */
+  bx.strokeStyle="#d9a441";bx.beginPath();
+  for(let t=0;t<N_EP;t++){const Y=y0-h*coh(t);
+    t===0?bx.moveTo(X(t),Y):bx.lineTo(X(t),Y)}bx.stroke();bx.lineWidth=1;
+  const Yth=y0-h*THETA;
+  bx.strokeStyle="rgba(217,164,65,.45)";bx.setLineDash([3,4]);
+  bx.beginPath();bx.moveTo(x0,Yth);bx.lineTo(x0+w,Yth);bx.stroke();bx.setLineDash([]);
+  /* bells */
+  bx.fillStyle="#d9a441";bx.font="10.5px monospace";
+  bx.beginPath();bx.moveTo(X(T_BELL),y0-h+4);bx.lineTo(X(T_BELL)-5,y0-h+14);
+  bx.lineTo(X(T_BELL)+5,y0-h+14);bx.closePath();bx.fill();
+  bx.fillText("𒀭 BAHYWAY ep "+T_BELL,X(T_BELL)-28,y0-h+26);
+  bx.fillStyle="#4fae8a";
+  bx.beginPath();bx.moveTo(X(T_SCADA),y0-h+4);bx.lineTo(X(T_SCADA)-5,y0-h+14);
+  bx.lineTo(X(T_SCADA)+5,y0-h+14);bx.closePath();bx.fill();
+  bx.fillText("SCADA ep "+T_SCADA,X(T_SCADA)-30,y0-h+40);
+  /* now cursor */
+  bx.strokeStyle="rgba(232,226,212,.7)";bx.beginPath();
+  bx.moveTo(X(VIEW),y0-h);bx.lineTo(X(VIEW),y0);bx.stroke();
+  bx.fillStyle="#8b93a3";bx.fillText("epoch →",x0+w-50,y0+16);
+  bx.fillStyle="#4fae8a";bx.fillText("P_hyd / P₀",x0+4,y0-h+12);
+  bx.fillStyle="#d9a441";bx.fillText("kīnu coherence",x0+4,Yth-6);
+  document.getElementById("bVerdict").innerHTML=
+   `<span class="gold">ΔT = ${T_SCADA-T_BELL} epochs</span> between the bells — the months SCADA sleeps
+    while the wall, being particles, already testified · lag > 0 <span class="ok">(L-HSI-24 ✓)</span>`;
+}
+
+/* ═══ kīnu gauge ═══ */
+function drawK(){
+  const g=document.getElementById("gauge"),v=document.getElementById("kVerdict");
+  if(SEL===null){g.innerHTML=`select a fluid particle on the stage to open its seven dimensions`;
+    v.innerHTML=`<span class="lp">The witness stand is empty.</span>`;return}
+  const p=FLUID[SEL],st=fluidState(p,VIEW);
+  const dpos=Math.abs(st.sAct-st.sLaw)*100;
+  g.innerHTML=
+   `<span class="k">1 uuid_hash</span> <span class="ok">unchanged ✓</span> ·
+    <span class="k">2 tribe_id</span> <span class="ok">unchanged ✓</span><br>
+    <span class="k">3 timestamp</span> <span class="ok">lineage intact ✓</span> ·
+    <span class="k">4 checksum</span> <span class="ok">unchanged ✓</span><br>
+    <span class="k">5 EAV</span> <span class="ok">unchanged ✓</span> ·
+    <span class="k">7 ColourID</span> <span class="ok">unchanged ✓</span><br>
+    <span class="k">6 OrbitalPosition</span> ${st.shifted
+      ?`<span class="sh">SHIFTED · Δ=${dpos.toFixed(1)} PU·10⁻²</span>`
+      :`<span class="ok">at law ✓</span>`}<br>
+    <span class="k">chorus</span> k=${FLUID.filter(f=>fluidState(f,VIEW).shifted).length} ·
+    <span class="k">coherence</span> ${(coh(VIEW)*100).toFixed(0)}% (θ=${THETA*100}%)`;
+  v.innerHTML=st.shifted
+   ?`<span class="gold">P${p.k} is a kīnu witness:</span> it did not change — <i>the space did</i>. Its ghost marks the lawful path`
+   :`<span class="ok">P${p.k} keeps its position.</span> Far from the wound, the space is still flat`;
+}
+
+/* ═══ loop ═══ */
+let last=null;
+function frame(now){
+  if(last===null)last=now;
+  const dt=Math.min(0.08,(now-last)/1000);last=now;
+  if(RUN&&!REDUCED){VIEW=Math.min(80,VIEW+dt*4.5);
+    document.getElementById("scrub").value=VIEW}
+  if(tal)CAM.yaw+=0.006;
+  document.getElementById("scrubOut").textContent=VIEW.toFixed(1);
+  document.getElementById("clock").textContent=
+    `epoch ${VIEW.toFixed(1)} / 80 · simmu birth ~${T0} · 𒀭 bell ${T_BELL} · SCADA ${T_SCADA}`;
+  if(VIEW>=T0&&!told.birth){told.birth=true;
+    J("SIMMU",`BIRTH — adhesion crossed the floor at ep ${T0}. Event KAKI minted; the malady has a birthday.`)}
+  if(VIEW>=T_BELL&&!told.bell){told.bell=true;
+    J("NANSHE",`𒀭 BAHYWAY BELL at ep ${T_BELL} — kīnu chorus coherent ×2 epochs + wall accretion: SIMMU-CONFIRMED. Nisaba declares, Kittu delivers.`)}
+  if(VIEW>=T_SCADA&&!told.scada){told.scada=true;
+    J("SCADA",`the commercial bell finally rings at ep ${T_SCADA} — hydraulic power below ${(100-DELTA_S*100)|0}%. ${T_SCADA-T_BELL} epochs behind the ledger.`)}
+  draw();drawB();drawK();
+  requestAnimationFrame(frame)}
+
+/* ═══ controls ═══ */
+document.getElementById("scrub").addEventListener("input",e=>{
+  VIEW=+e.target.value;RUN=false;
+  if(VIEW<T0)told.birth=false; if(VIEW<T_BELL)told.bell=false; if(VIEW<T_SCADA)told.scada=false;
+  const rb=document.getElementById("runBtn");
+  rb.classList.remove("on");rb.textContent="‖ HELD"});
+document.getElementById("runBtn").onclick=e=>{RUN=!RUN;
+  e.target.classList.toggle("on",RUN);e.target.textContent=RUN?"◈ BREATHE":"‖ HELD"};
+document.getElementById("bellBtn").onclick=()=>{VIEW=T_BELL;RUN=false;
+  document.getElementById("scrub").value=VIEW;
+  document.getElementById("runBtn").classList.remove("on");
+  document.getElementById("runBtn").textContent="‖ HELD"};
+document.getElementById("scadaBtn").onclick=()=>{VIEW=T_SCADA;RUN=false;
+  document.getElementById("scrub").value=VIEW;
+  document.getElementById("runBtn").classList.remove("on");
+  document.getElementById("runBtn").textContent="‖ HELD"};
+document.getElementById("replayBtn").onclick=()=>{VIEW=0;RUN=true;
+  told={bell:false,scada:false,birth:false};
+  document.getElementById("scrub").value=0;
+  const rb=document.getElementById("runBtn");
+  rb.classList.add("on");rb.textContent="◈ BREATHE";
+  J("COURT","⟲ replay — the ledger runs again; both bells will ring where they always ring.")};
+
+/* camera (Abūbu die) */
+cv.addEventListener("wheel",e=>{e.preventDefault();stopTal();
+  CAM.zoom=Math.min(6,Math.max(0.6,CAM.zoom*Math.exp(-e.deltaY*0.0014)))},{passive:false});
+let drag=null,moved=0;
+const pxy=e=>{const r=cv.getBoundingClientRect();
+  return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}};
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);
+  drag=pxy(e);moved=0;cv.classList.add("dragging")});
+cv.addEventListener("pointermove",e=>{if(!drag)return;const p=pxy(e);
+  moved+=Math.abs(p.x-drag.x)+Math.abs(p.y-drag.y);
+  CAM.yaw+=(p.x-drag.x)*0.005;
+  CAM.pitch=Math.min(1.45,Math.max(-0.2,CAM.pitch+(p.y-drag.y)*0.004));
+  drag=p;if(moved>3)stopTal()});
+cv.addEventListener("pointerup",e=>{if(drag&&moved<3){const p=pxy(e);pick(p.x,p.y)}
+  drag=null;cv.classList.remove("dragging")});
+cv.addEventListener("pointercancel",()=>{drag=null;cv.classList.remove("dragging")});
+cv.addEventListener("dblclick",()=>{stopTal();CAM.yaw=0.7;CAM.pitch=0.42;CAM.zoom=1});
+function stopTal(){if(tal){tal=false;document.getElementById("talBtn").classList.remove("on")}}
+document.getElementById("birdBtn").onclick=()=>{stopTal();CAM.yaw=0;CAM.pitch=1.35;CAM.zoom=0.85};
+document.getElementById("gndBtn").onclick=()=>{stopTal();CAM.yaw=-0.25;CAM.pitch=0.10;CAM.zoom=2.6};
+document.getElementById("talBtn").onclick=e=>{
+  if(REDUCED){CAM.pitch=0.5;CAM.zoom=1.6;return}
+  tal=!tal;e.target.classList.toggle("on",tal)};
+
+/* ═══ NASARU: bounce + birth-status menu ═══ */
+function pick(mx,my){for(const q of PICKS){
+  if(Math.hypot(mx-q.x,my-q.y)<q.r+3){const g=q.g;
+    if(g===NONP){J("NON-P","refused non-particle: no bounce, no story — only a Refusal Record.");return}
+    g.bv=-7;
+    if(g.wall){const m=defm(g.s,g.th,VIEW)/1.6;
+      J("WALL",`wall particle bounced — accretion ${m>0.06?"present: part of the simmu body":"none: healthy membrane"} (raw mass in EAV, never a verdict).`)}
+    else{SEL=g.k;const st=fluidState(g,VIEW);
+      J(`P${g.k}`,st.shifted
+        ?"bounced — a kīnu witness: steadfast in six dimensions, displaced in the seventh's stead: OrbitalPosition. The space moved."
+        :"bounced — flowing at law, far from the wound.")}
+    return}}}
+const ctxM=document.getElementById("ctx");
+cv.addEventListener("contextmenu",e=>{e.preventDefault();
+  const r=cv.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
+  for(const q of PICKS){if(Math.hypot(mx-q.x,my-q.y)<q.r+3){const g=q.g;
+    ctxM.style.display="block";ctxM.style.left=e.clientX+"px";ctxM.style.top=e.clientY+"px";
+    ctxM.innerHTML=g===NONP
+     ?`<div class="h">NON-P · refused non-particle</div>
+       <div class="i" data-a="r">Show Refusal Record</div>`
+     :`<div class="h">${g.wall?"Wall particle":"P"+g.k} · born (KAKI minted)</div>
+       <div class="i" data-a="j">Open StoryEngine journal</div>
+       <div class="i" data-a="c">Add to cohort</div>`;
+    ctxM.querySelectorAll(".i").forEach(it=>it.onclick=()=>{ctxM.style.display="none";
+      if(it.dataset.a==="r")J("REFUSAL","NON-P: refused at the SUSA gate. Never born — no KAKI, no wall, no story.");
+      if(it.dataset.a==="j"){if(!g.wall){SEL=g.k}
+        J("NĀRU",g.wall?"wall journal: minted at calibration; mass series in EAV; simmu membership is a WITNESS-time judgment.":`P${g.k} journal opened — identity dimensions steadfast; position under the court's watch.`)}
+      if(it.dataset.a==="c")J("COHORT",`${g.wall?"wall particle":"P"+g.k} added to the simmu cohort.`)});
+    return}}
+  ctxM.style.display="none"});
+addEventListener("click",()=>ctxM.style.display="none");
+
+/* boot */
+if(REDUCED){RUN=false;const rb=document.getElementById("runBtn");
+  rb.classList.remove("on");rb.textContent="‖ HELD"}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

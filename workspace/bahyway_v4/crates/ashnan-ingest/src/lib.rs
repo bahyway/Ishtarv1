@@ -7,8 +7,8 @@
 //! actually implemented in `naramsin-bridge`.
 #![forbid(unsafe_code)]
 
-use naramsin_bridge::process;
 use naramsin_audit::DestinationModule;
+use naramsin_bridge::process;
 use std::time::Instant;
 use uuid::Uuid;
 

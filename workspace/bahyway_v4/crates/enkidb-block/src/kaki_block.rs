@@ -15,7 +15,9 @@ pub struct KakiNucleusBlock {
 
 impl KakiNucleusBlock {
     pub fn new(capacity: usize) -> Self {
-        KakiNucleusBlock { slots: vec![[0u8; 16]; capacity] }
+        KakiNucleusBlock {
+            slots: vec![[0u8; 16]; capacity],
+        }
     }
 
     /// Write a KAKI into the given slot (overwrite only allowed for zero slots).

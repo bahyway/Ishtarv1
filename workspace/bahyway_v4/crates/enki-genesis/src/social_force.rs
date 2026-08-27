@@ -7,25 +7,25 @@
 /// Simulation parameters (GEN-PARAMS-001, canonical values).
 #[derive(Clone, Debug)]
 pub struct SocialForceParams {
-    pub attraction_coeff:    f64,  // 2.0 — goal attraction strength
-    pub repulsion_coeff:     f64,  // 5.0 — inter-agent repulsion
+    pub attraction_coeff: f64,     // 2.0 — goal attraction strength
+    pub repulsion_coeff: f64,      // 5.0 — inter-agent repulsion
     pub wall_repulsion_coeff: f64, // 10.0 — wall repulsion
-    pub neighbor_radius:     f64,  // 2.0m — interaction radius
-    pub wall_radius:         f64,  // 1.0m — wall influence radius
-    pub time_step:           f64,  // 0.01s
-    pub damping:             f64,  // 0.95 — velocity damping per step
+    pub neighbor_radius: f64,      // 2.0m — interaction radius
+    pub wall_radius: f64,          // 1.0m — wall influence radius
+    pub time_step: f64,            // 0.01s
+    pub damping: f64,              // 0.95 — velocity damping per step
 }
 
 impl Default for SocialForceParams {
     fn default() -> Self {
         Self {
-            attraction_coeff:    2.0,
-            repulsion_coeff:     5.0,
+            attraction_coeff: 2.0,
+            repulsion_coeff: 5.0,
             wall_repulsion_coeff: 10.0,
-            neighbor_radius:     2.0,
-            wall_radius:         1.0,
-            time_step:           0.01,
-            damping:             0.95,
+            neighbor_radius: 2.0,
+            wall_radius: 1.0,
+            time_step: 0.01,
+            damping: 0.95,
         }
     }
 }
@@ -43,21 +43,18 @@ pub struct Agent2D {
 
 impl Agent2D {
     pub fn new(pos: [f64; 2], goal: [f64; 2]) -> Self {
-        Self { pos, vel: [0.0, 0.0], goal }
+        Self {
+            pos,
+            vel: [0.0, 0.0],
+            goal,
+        }
     }
-
-
 }
 
 /// Advance all agents one time step using the Social Force model.
 ///
 /// Wall is modelled as a rectangle [0, width] × [0, height].
-pub fn step(
-    agents: &mut Vec<Agent2D>,
-    params: &SocialForceParams,
-    room_width: f64,
-    room_height: f64,
-) {
+pub fn step(agents: &mut [Agent2D], params: &SocialForceParams, room_width: f64, room_height: f64) {
     let n = agents.len();
     // Compute forces before applying (read positions, then write velocities)
     let mut forces: Vec<[f64; 2]> = vec![[0.0, 0.0]; n];
@@ -74,9 +71,11 @@ pub fn step(
         forces[i][1] += params.attraction_coeff * dy_g / d_g;
 
         // 2. Inter-agent repulsion
-        for j in 0..n {
-            if i == j { continue; }
-            let pos_j = agents[j].pos;
+        for (j, agent_j) in agents.iter().enumerate().take(n) {
+            if i == j {
+                continue;
+            }
+            let pos_j = agent_j.pos;
             let dx = pos_i[0] - pos_j[0];
             let dy = pos_i[1] - pos_j[1];
             let d = (dx * dx + dy * dy).sqrt().max(1e-6);
@@ -94,7 +93,8 @@ pub fn step(
         }
         // Right wall (x=room_width)
         if pos_i[0] > room_width - params.wall_radius {
-            forces[i][0] -= params.wall_repulsion_coeff * (params.wall_radius - (room_width - pos_i[0]));
+            forces[i][0] -=
+                params.wall_repulsion_coeff * (params.wall_radius - (room_width - pos_i[0]));
         }
         // Bottom wall (y=0)
         if pos_i[1] < params.wall_radius {
@@ -102,7 +102,8 @@ pub fn step(
         }
         // Top wall (y=room_height)
         if pos_i[1] > room_height - params.wall_radius {
-            forces[i][1] -= params.wall_repulsion_coeff * (params.wall_radius - (room_height - pos_i[1]));
+            forces[i][1] -=
+                params.wall_repulsion_coeff * (params.wall_radius - (room_height - pos_i[1]));
         }
     }
 
@@ -130,7 +131,10 @@ mod tests {
         for _ in 0..50 {
             step(&mut agents, &params, 10.0, 10.0);
         }
-        assert!(agents[0].pos[0] > x_start, "agent should move toward goal (positive x)");
+        assert!(
+            agents[0].pos[0] > x_start,
+            "agent should move toward goal (positive x)"
+        );
     }
 
     #[test]

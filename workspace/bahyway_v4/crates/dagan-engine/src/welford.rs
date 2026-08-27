@@ -14,7 +14,11 @@ pub struct WelfordStats {
 
 impl Default for WelfordStats {
     fn default() -> Self {
-        WelfordStats { count: 0, mean: [0.0; D], m2: [0.0; D] }
+        WelfordStats {
+            count: 0,
+            mean: [0.0; D],
+            m2: [0.0; D],
+        }
     }
 }
 
@@ -27,10 +31,10 @@ impl WelfordStats {
     pub fn update(&mut self, x: &[f64; D]) {
         self.count += 1;
         let n = self.count as f64;
-        for i in 0..D {
-            let delta = x[i] - self.mean[i];
-            self.mean[i] += delta / n;
-            let delta2 = x[i] - self.mean[i];
+        for (i, mean_i) in self.mean.iter_mut().enumerate() {
+            let delta = x[i] - *mean_i;
+            *mean_i += delta / n;
+            let delta2 = x[i] - *mean_i;
             self.m2[i] += delta * delta2;
         }
     }
@@ -42,8 +46,8 @@ impl WelfordStats {
             return out;
         }
         let denom = (self.count - 1) as f64;
-        for i in 0..D {
-            out[i] = self.m2[i] / denom;
+        for (i, out_i) in out.iter_mut().enumerate() {
+            *out_i = self.m2[i] / denom;
         }
         out
     }

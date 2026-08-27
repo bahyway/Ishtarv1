@@ -31,7 +31,10 @@ pub struct Journal {
 
 impl Journal {
     pub fn new(shard_count: u16) -> Self {
-        Journal { partitions: HashMap::new(), shard_count }
+        Journal {
+            partitions: HashMap::new(),
+            shard_count,
+        }
     }
 
     /// Append an entry.  Entry is immutable once inserted (no mutation path exists).
@@ -52,13 +55,10 @@ impl Journal {
     /// side (see `enkidb_readnode::materialize`, which groups the whole
     /// journal by target in one local pass instead of calling this in a
     /// loop).
-    pub fn read_particle_history<'a>(
-        &'a self,
-        target: &IdentityKaki,
-    ) -> Vec<&'a JournalEntry> {
-        let tribe_id   = target.tribe_id();
-        let uuid_hash  = target.uuid_hash();
-        let shard      = (uuid_hash % self.shard_count as u32) as u16;
+    pub fn read_particle_history<'a>(&'a self, target: &IdentityKaki) -> Vec<&'a JournalEntry> {
+        let tribe_id = target.tribe_id();
+        let uuid_hash = target.uuid_hash();
+        let shard = (uuid_hash % self.shard_count as u32) as u16;
 
         // Scan all epochs for this shard — in production, epoch-partitioned files
         // are located by the index; here we scan the in-memory map.
@@ -102,7 +102,7 @@ impl Journal {
             for e in entries {
                 let bytes = *e.target_kaki.bytes();
                 if seen.insert(bytes) {
-                    out.push(e.target_kaki.clone());
+                    out.push(e.target_kaki);
                 }
             }
         }
@@ -138,7 +138,7 @@ impl Journal {
                     break 'outer;
                 }
                 seen.insert(bytes);
-                out.push(e.target_kaki.clone());
+                out.push(e.target_kaki);
             }
         }
         (out, truncated)
@@ -148,21 +148,23 @@ impl Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_kaki::{EventKaki, IdentityKaki, KakiRole, mint::KakiMinter};
-    use bahyway_core::TribeId;
     use crate::entry::EavTriple;
+    use bahyway_core::TribeId;
+    use enkidb_kaki::{mint::KakiMinter, EventKaki, IdentityKaki, KakiRole};
 
     fn make_entries(minter: &KakiMinter, target: &IdentityKaki, n: usize) -> Vec<JournalEntry> {
-        (0..n).map(|i| {
-            let ek  = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
-            let eav = vec![EavTriple::new(0x0001, format!("event_{}", i).into_bytes())];
-            JournalEntry::new(ek, target.clone(), i as u32, eav)
-        }).collect()
+        (0..n)
+            .map(|i| {
+                let ek = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
+                let eav = vec![EavTriple::new(0x0001, format!("event_{}", i).into_bytes())];
+                JournalEntry::new(ek, target.clone(), i as u32, eav)
+            })
+            .collect()
     }
 
     #[test]
     fn append_and_read_back() {
-        let m      = KakiMinter::new(TribeId::from_u16(0x0001));
+        let m = KakiMinter::new(TribeId::from_u16(0x0001));
         let target = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
         let mut jnl = Journal::new(64);
 
@@ -177,13 +179,17 @@ mod tests {
 
     #[test]
     fn different_particles_dont_mix() {
-        let m  = KakiMinter::new(TribeId::from_u16(0x0002));
+        let m = KakiMinter::new(TribeId::from_u16(0x0002));
         let t1 = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
         let t2 = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
         let mut jnl = Journal::new(64);
 
-        for e in make_entries(&m, &t1, 3) { jnl.append(e).unwrap(); }
-        for e in make_entries(&m, &t2, 2) { jnl.append(e).unwrap(); }
+        for e in make_entries(&m, &t1, 3) {
+            jnl.append(e).unwrap();
+        }
+        for e in make_entries(&m, &t2, 2) {
+            jnl.append(e).unwrap();
+        }
 
         assert_eq!(jnl.read_particle_history(&t1).len(), 3);
         assert_eq!(jnl.read_particle_history(&t2).len(), 2);
@@ -203,16 +209,25 @@ mod tests {
 
         let (capped, truncated) = jnl.all_particles_capped(3);
         assert_eq!(capped.len(), 3);
-        assert!(truncated, "10 real particles, capped at 3 -- must report truncation");
+        assert!(
+            truncated,
+            "10 real particles, capped at 3 -- must report truncation"
+        );
 
         let (all, not_truncated) = jnl.all_particles_capped(100);
         assert_eq!(all.len(), 10);
-        assert!(!not_truncated, "cap above the real count must not report truncation");
+        assert!(
+            !not_truncated,
+            "cap above the real count must not report truncation"
+        );
 
         let mut full = jnl.all_particles();
         let mut capped_full = all;
         full.sort_by_key(|k| *k.bytes());
         capped_full.sort_by_key(|k| *k.bytes());
-        assert_eq!(full, capped_full, "capped(above real count) must agree with all_particles()");
+        assert_eq!(
+            full, capped_full,
+            "capped(above real count) must agree with all_particles()"
+        );
     }
 }

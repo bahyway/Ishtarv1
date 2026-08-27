@@ -12,11 +12,11 @@ use crate::inflate::inflate;
 /// Extracted text and metadata from an Epub document.
 #[derive(Debug, Default, Clone)]
 pub struct EpubExtract {
-    pub title:     Option<String>,
-    pub author:    Option<String>,
-    pub isbn:      Option<String>,
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub isbn: Option<String>,
     pub publisher: Option<String>,
-    pub chapters:  Vec<String>,   // One entry per content XHTML file
+    pub chapters: Vec<String>, // One entry per content XHTML file
     pub full_text: String,
 }
 
@@ -66,7 +66,7 @@ fn read_zip_entries(data: &[u8]) -> Vec<ZipEntry> {
     let mut pos = 0;
 
     while pos + 30 <= data.len() {
-        if &data[pos..pos + 4] != &LFH_SIG {
+        if data[pos..pos + 4] != LFH_SIG {
             pos += 1;
             continue;
         }
@@ -87,28 +87,42 @@ fn read_zip_entries(data: &[u8]) -> Vec<ZipEntry> {
         //   [m]  extra field
         //   [k]  file data
 
-        let method       = u16::from_le_bytes([data[pos+6],  data[pos+7]]);
-        let comp_size    = u32::from_le_bytes([data[pos+18], data[pos+19], data[pos+20], data[pos+21]]);
-        let fname_len    = u16::from_le_bytes([data[pos+26], data[pos+27]]) as usize;
-        let extra_len    = u16::from_le_bytes([data[pos+28], data[pos+29]]) as usize;
+        let method = u16::from_le_bytes([data[pos + 6], data[pos + 7]]);
+        let comp_size = u32::from_le_bytes([
+            data[pos + 18],
+            data[pos + 19],
+            data[pos + 20],
+            data[pos + 21],
+        ]);
+        let fname_len = u16::from_le_bytes([data[pos + 26], data[pos + 27]]) as usize;
+        let extra_len = u16::from_le_bytes([data[pos + 28], data[pos + 29]]) as usize;
 
-        let name_start   = pos + 30;
-        let data_start   = name_start + fname_len + extra_len;
-        let data_end     = data_start + comp_size as usize;
+        let name_start = pos + 30;
+        let data_start = name_start + fname_len + extra_len;
+        let data_end = data_start + comp_size as usize;
 
-        if data_end > data.len() { pos += 4; continue; }
+        if data_end > data.len() {
+            pos += 4;
+            continue;
+        }
 
-        let name_bytes   = &data[name_start..name_start + fname_len];
-        let name         = String::from_utf8_lossy(name_bytes).into_owned();
-        let file_data    = &data[data_start..data_end];
+        let name_bytes = &data[name_start..name_start + fname_len];
+        let name = String::from_utf8_lossy(name_bytes).into_owned();
+        let file_data = &data[data_start..data_end];
 
         let decoded = match method {
-            0 => file_data.to_vec(),                // STORED
+            0 => file_data.to_vec(),                     // STORED
             8 => inflate(file_data).unwrap_or_default(), // DEFLATED
-            _ => { pos = data_end; continue; }      // Unsupported method: skip
+            _ => {
+                pos = data_end;
+                continue;
+            } // Unsupported method: skip
         };
 
-        entries.push(ZipEntry { name, data: decoded });
+        entries.push(ZipEntry {
+            name,
+            data: decoded,
+        });
         pos = data_end;
     }
 
@@ -123,8 +137,8 @@ fn parse_opf(xml: &str, out: &mut EpubExtract) {
         out.title = extract_xml_text(xml, "dc:title");
     }
     if out.author.is_none() {
-        out.author = extract_xml_text(xml, "dc:creator")
-            .or_else(|| extract_xml_text(xml, "dc:author"));
+        out.author =
+            extract_xml_text(xml, "dc:creator").or_else(|| extract_xml_text(xml, "dc:author"));
     }
     if out.publisher.is_none() {
         out.publisher = extract_xml_text(xml, "dc:publisher");
@@ -136,13 +150,17 @@ fn parse_opf(xml: &str, out: &mut EpubExtract) {
 }
 
 fn extract_xml_text(xml: &str, tag: &str) -> Option<String> {
-    let open  = format!("<{}", tag);
+    let open = format!("<{}", tag);
     let close = format!("</{}>", tag);
     let start = xml.find(&open)?;
-    let gt    = xml[start..].find('>')? + start;
-    let end   = xml[gt..].find(&close)? + gt;
-    let text  = xml[gt + 1..end].trim().to_string();
-    if text.is_empty() { None } else { Some(text) }
+    let gt = xml[start..].find('>')? + start;
+    let end = xml[gt..].find(&close)? + gt;
+    let text = xml[gt + 1..end].trim().to_string();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
 }
 
 fn find_isbn_identifier(xml: &str) -> Option<String> {
@@ -154,10 +172,13 @@ fn find_isbn_identifier(xml: &str) -> Option<String> {
         let chunk = &xml[abs_pos..abs_pos.saturating_add(256).min(xml.len())];
         if chunk.to_ascii_lowercase().contains("isbn") {
             if let Some(text) = extract_xml_text(chunk, "dc:identifier") {
-                let cleaned: String = text.chars()
+                let cleaned: String = text
+                    .chars()
                     .filter(|c| c.is_ascii_digit() || *c == 'X')
                     .collect();
-                if cleaned.len() >= 10 { return Some(cleaned); }
+                if cleaned.len() >= 10 {
+                    return Some(cleaned);
+                }
             }
         }
         search = abs_pos + 14;
@@ -175,7 +196,9 @@ fn strip_html(html: &str) -> String {
 
     while let Some((_, c)) = chars.next() {
         match c {
-            '<' => { in_tag = true; }
+            '<' => {
+                in_tag = true;
+            }
             '>' => {
                 in_tag = false;
                 out.push(' ');
@@ -190,8 +213,13 @@ fn strip_html(html: &str) -> String {
                     let tail = &remainder[semi + 1..];
                     for tc in tail.chars() {
                         match tc {
-                            '<' => { in_tag = true; }
-                            '>' => { in_tag = false; out.push(' '); }
+                            '<' => {
+                                in_tag = true;
+                            }
+                            '>' => {
+                                in_tag = false;
+                                out.push(' ');
+                            }
                             c if !in_tag => out.push(c),
                             _ => {}
                         }
@@ -199,8 +227,11 @@ fn strip_html(html: &str) -> String {
                 }
             }
             c if !in_tag => {
-                if c == '\n' || c == '\r' || c == '\t' { out.push(' '); }
-                else { out.push(c); }
+                if c == '\n' || c == '\r' || c == '\t' {
+                    out.push(' ');
+                } else {
+                    out.push(c);
+                }
             }
             _ => {}
         }
@@ -211,7 +242,9 @@ fn strip_html(html: &str) -> String {
     let mut prev_space = false;
     for c in out.chars() {
         if c == ' ' {
-            if !prev_space { result.push(' '); }
+            if !prev_space {
+                result.push(' ');
+            }
             prev_space = true;
         } else {
             result.push(c);
@@ -222,12 +255,24 @@ fn strip_html(html: &str) -> String {
 }
 
 fn decode_entity(s: &str) -> (&'static str, &str) {
-    if s.starts_with("amp;")  { return ("&",  &s[4..]); }
-    if s.starts_with("lt;")   { return ("<",  &s[3..]); }
-    if s.starts_with("gt;")   { return (">",  &s[3..]); }
-    if s.starts_with("quot;") { return ("\"", &s[5..]); }
-    if s.starts_with("nbsp;") { return (" ",  &s[5..]); }
-    if s.starts_with("apos;") { return ("'",  &s[5..]); }
+    if let Some(rest) = s.strip_prefix("amp;") {
+        return ("&", rest);
+    }
+    if let Some(rest) = s.strip_prefix("lt;") {
+        return ("<", rest);
+    }
+    if let Some(rest) = s.strip_prefix("gt;") {
+        return (">", rest);
+    }
+    if let Some(rest) = s.strip_prefix("quot;") {
+        return ("\"", rest);
+    }
+    if let Some(rest) = s.strip_prefix("nbsp;") {
+        return (" ", rest);
+    }
+    if let Some(rest) = s.strip_prefix("apos;") {
+        return ("'", rest);
+    }
     ("&", s)
 }
 
@@ -290,8 +335,8 @@ mod tests {
         zip.extend_from_slice(&[0x00, 0x00]); // mod date
         zip.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // crc32
         let len = content.len() as u32;
-        zip.extend_from_slice(&len.to_le_bytes());   // compressed size
-        zip.extend_from_slice(&len.to_le_bytes());   // uncompressed size
+        zip.extend_from_slice(&len.to_le_bytes()); // compressed size
+        zip.extend_from_slice(&len.to_le_bytes()); // uncompressed size
         zip.extend_from_slice(&(fname.len() as u16).to_le_bytes()); // fname len
         zip.extend_from_slice(&[0x00, 0x00]); // extra len
         zip.extend_from_slice(fname);

@@ -57,7 +57,10 @@ pub struct UtmZone {
 /// The zone is auto-selected from `lon_deg` (the standard UTM convention).
 pub fn latlon_to_utm(lat_deg: f64, lon_deg: f64) -> (f64, f64, UtmZone) {
     let zone_number = zone_number_for_lon(lon_deg);
-    let zone = UtmZone { zone_number, northern_hemisphere: lat_deg >= 0.0 };
+    let zone = UtmZone {
+        zone_number,
+        northern_hemisphere: lat_deg >= 0.0,
+    };
     let (e, n) = latlon_to_utm_zone(lat_deg, lon_deg, zone);
     (e, n, zone)
 }
@@ -113,7 +116,11 @@ pub fn utm_to_latlon(easting: f64, northing: f64, zone: UtmZone) -> (f64, f64) {
     let e1 = (1.0 - (1.0 - e2).sqrt()) / (1.0 + (1.0 - e2).sqrt());
 
     let x = easting - 500_000.0;
-    let y = if zone.northern_hemisphere { northing } else { northing - 10_000_000.0 };
+    let y = if zone.northern_hemisphere {
+        northing
+    } else {
+        northing - 10_000_000.0
+    };
 
     let m = y / K0;
     let e4 = e2 * e2;
@@ -143,7 +150,9 @@ pub fn utm_to_latlon(easting: f64, northing: f64, zone: UtmZone) -> (f64, f64) {
         - (n1 * tan_phi1 / r1)
             * (d * d / 2.0
                 - (5.0 + 3.0 * t1 + 10.0 * c1 - 4.0 * c1 * c1 - 9.0 * e_prime2) * d.powi(4) / 24.0
-                + (61.0 + 90.0 * t1 + 298.0 * c1 + 45.0 * t1 * t1 - 252.0 * e_prime2 - 3.0 * c1 * c1)
+                + (61.0 + 90.0 * t1 + 298.0 * c1 + 45.0 * t1 * t1
+                    - 252.0 * e_prime2
+                    - 3.0 * c1 * c1)
                     * d.powi(6)
                     / 720.0);
 
@@ -217,7 +226,10 @@ mod tests {
         // hemisphere, no false-northing offset needed).
         let (e, n, zone) = latlon_to_utm(31.995, 44.320);
         assert!(zone.northern_hemisphere);
-        assert!((e - 500_000.0).abs() < 400_000.0, "easting {e} implausible for a point near its zone's central meridian");
+        assert!(
+            (e - 500_000.0).abs() < 400_000.0,
+            "easting {e} implausible for a point near its zone's central meridian"
+        );
         assert!(n > 0.0 && n < 10_000_000.0);
     }
 }

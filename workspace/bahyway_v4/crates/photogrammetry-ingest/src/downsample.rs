@@ -46,7 +46,11 @@ mod tests {
         let points = vec![[0.0, 0.0, 0.0], [0.1, 0.1, 0.1], [0.2, 0.0, 0.0]];
         let out = voxel_downsample(&points, 1.0);
         assert_eq!(out.len(), 1, "all three points fall in the same unit voxel");
-        let expected = [(0.0 + 0.1 + 0.2) / 3.0, (0.0 + 0.1 + 0.0) / 3.0, (0.0 + 0.1 + 0.0) / 3.0];
+        let expected = [
+            (0.0 + 0.1 + 0.2) / 3.0,
+            (0.0 + 0.1 + 0.0) / 3.0,
+            (0.0 + 0.1 + 0.0) / 3.0,
+        ];
         for i in 0..3 {
             assert!((out[0][i] - expected[i]).abs() < 1e-9);
         }
@@ -85,6 +89,10 @@ mod tests {
         }
         assert_eq!(points.len(), 1000);
         let out = voxel_downsample(&points, 1.0);
-        assert!(out.len() <= 8, "a 1x1x1 cube should collapse to a small handful of unit voxels, got {}", out.len());
+        assert!(
+            out.len() <= 8,
+            "a 1x1x1 cube should collapse to a small handful of unit voxels, got {}",
+            out.len()
+        );
     }
 }

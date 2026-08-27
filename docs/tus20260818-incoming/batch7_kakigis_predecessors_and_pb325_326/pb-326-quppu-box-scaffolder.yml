@@ -1,0 +1,255 @@
+---
+# ============================================================================
+# PB-326 — Quppu Box Scaffolder (per-Enterprise-App OTA chest)
+# BahyWay.Ecosystem v4.0
+# ----------------------------------------------------------------------------
+# LAW OF THIS TABLET:
+#   * Every Enterprise Application receives ONE root folder: <App>.Box
+#     (Akkadian pairing per GL-NAM-002: quppu — "the sealed chest").
+#   * The Box holds EVERYTHING its playbooks need: environment parameters
+#     (box.env + box_vars.yml), init.yaml, Jinja2 templates, rules,
+#     inventory, and the free-of-charge tools manifest.
+#   * The Box serves OTA ONLY (Ontwikkeling / Test / Acceptatie).
+#     PRODUCTIE IS CONSTITUTIONALLY EXCLUDED — enforced three ways:
+#       1. The Box inventory contains NO production group.
+#       2. init.yaml opens with an assert that halts on any non-OTA env.
+#       3. rules/production_refusal.yml documents the refusal in law.
+#   * Only free-of-charge tools may be listed in tools.yml.
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-326-quppu-box-scaffolder.yml -e app_name=SilaEngine
+# ============================================================================
+
+- name: "PB-326 | Scaffold a Quppu Box for an Enterprise Application (OTA only)"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    app_name: "SilaEngine"                      # override with -e app_name=...
+    boxes_root: "/opt/bahyway/boxes"
+    box_root: "{{ boxes_root }}/{{ app_name }}.Box"
+    ota_envs: ["ontwikkeling", "test", "acceptatie"]
+    default_env: "ontwikkeling"
+
+  tasks:
+
+    # ------------------------------------------------------------------
+    # 1. Raise the chest
+    # ------------------------------------------------------------------
+    - name: "1.1 | Create Box directory structure"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0750"
+      loop:
+        - "{{ box_root }}"
+        - "{{ box_root }}/playbooks"
+        - "{{ box_root }}/templates"        # Jinja2 (.j2) tablets
+        - "{{ box_root }}/rules"
+        - "{{ box_root }}/inventory"
+        - "{{ box_root }}/files"
+        - "{{ box_root }}/nuzi_provenance"  # lineage notes for this Box
+
+    # ------------------------------------------------------------------
+    # 2. Environment parameters — the .env of the Box
+    #    box.env      -> dotenv style (shell / tooling consumption)
+    #    box_vars.yml -> Ansible-native, included by every playbook
+    # ------------------------------------------------------------------
+    - name: "2.1 | Write box.env (dotenv-style environment parameters)"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/box.env"
+        mode: "0640"
+        force: false          # never clobber a Box already in use
+        content: |
+          # {{ app_name }}.Box — environment parameters (OTA only)
+          BOX_APP={{ app_name }}
+          BOX_ENV={{ default_env }}          # ontwikkeling | test | acceptatie
+          BOX_ROOT={{ box_root }}
+          # -- app-specific parameters below this line --
+
+    - name: "2.2 | Write box_vars.yml (Ansible-native parameters)"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/box_vars.yml"
+        mode: "0640"
+        force: false
+        content: |
+          ---
+          # {{ app_name }}.Box — Ansible variables (single source of truth)
+          box_app: "{{ app_name }}"
+          box_env: "{{ default_env }}"       # ontwikkeling | test | acceptatie
+          box_root: "{{ box_root }}"
+          box_allowed_envs: {{ ota_envs | to_json }}
+          # -- app-specific vars below this line --
+
+    # ------------------------------------------------------------------
+    # 3. Inventory — OTA groups only; production does not exist here
+    # ------------------------------------------------------------------
+    - name: "3.1 | Write OTA inventory"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/inventory/ota.yml"
+        mode: "0640"
+        force: false
+        content: |
+          ---
+          # {{ app_name }}.Box inventory — OTA ONLY.
+          # There is NO production group in this file, by law (PB-326).
+          all:
+            children:
+              ontwikkeling:
+                hosts: {}
+                  # dev-vm-01: { ansible_host: 192.168.122.xx }
+              test:
+                hosts: {}
+              acceptatie:
+                hosts: {}
+
+    - name: "3.2 | Pin ansible.cfg to the Box inventory"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/ansible.cfg"
+        mode: "0640"
+        force: false
+        content: |
+          [defaults]
+          inventory = ./inventory/ota.yml
+          roles_path = ./roles
+          stdout_callback = yaml
+
+    # ------------------------------------------------------------------
+    # 4. The rules tablet — production refusal in readable law
+    # ------------------------------------------------------------------
+    - name: "4.1 | Write production refusal rule"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/rules/production_refusal.yml"
+        mode: "0640"
+        force: false
+        content: |
+          ---
+          # RULE PB-326-R1 — Production Refusal (constitutional)
+          rule_id: "PB-326-R1"
+          statement: >
+            This Box serves Ontwikkeling, Test and Acceptatie only.
+            Any invocation where box_env is not one of the allowed
+            environments MUST halt before the first change is made.
+          allowed_envs: {{ ota_envs | to_json }}
+          enforcement:
+            - "inventory/ota.yml contains no production group"
+            - "init.yaml gate task: assert box_env in box_allowed_envs"
+            - "this tablet documents the law for the reader"
+
+    # ------------------------------------------------------------------
+    # 5. init.yaml — the Box bootstrap, opening with the OTA gate
+    # ------------------------------------------------------------------
+    - name: "5.1 | Write init.yaml"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/init.yaml"
+        mode: "0640"
+        force: false
+        content: |
+          ---
+          # {{ app_name }}.Box — init (bootstrap the OTA environment)
+          # RUN:  cd {{ box_root }} && ansible-playbook init.yaml
+          - name: "{{ app_name }}.Box | init OTA environment"
+            hosts: localhost
+            connection: local
+            vars_files:
+              - box_vars.yml
+
+            pre_tasks:
+              # ---- THE GATE (PB-326-R1): halts on any non-OTA env ----
+              - name: "GATE | Refuse anything outside OTA"
+                ansible.builtin.assert:
+                  that:
+                    - box_env in box_allowed_envs
+                  fail_msg: >-
+                    REFUSED (PB-326-R1): box_env='{{ '{{ box_env }}' }}' is not an
+                    OTA environment. This Box never touches Productie.
+                  success_msg: "Gate passed: {{ '{{ box_env }}' }} is lawful OTA."
+
+            tasks:
+              - name: "Load free-of-charge tools manifest"
+                ansible.builtin.include_vars:
+                  file: tools.yml
+                  name: toolbox
+
+              - name: "Install free-of-charge tools (dnf)"
+                ansible.builtin.dnf:
+                  name: "{{ '{{ toolbox.dnf_packages }}' }}"
+                  state: present
+                become: true
+                when: toolbox.dnf_packages | length > 0
+
+              - name: "Install free-of-charge Rust crates (cargo install)"
+                ansible.builtin.command: "cargo install {{ '{{ item }}' }}"
+                loop: "{{ '{{ toolbox.cargo_tools }}' }}"
+                register: cargo_out
+                changed_when: "'Installing' in cargo_out.stdout | default('')"
+                failed_when: false
+                when: toolbox.cargo_tools | length > 0
+
+              - name: "Render app templates from templates/*.j2"
+                ansible.builtin.debug:
+                  msg: "Add ansible.builtin.template tasks here per app."
+
+    # ------------------------------------------------------------------
+    # 6. tools.yml — the free-of-charge manifest (edit per app)
+    # ------------------------------------------------------------------
+    - name: "6.1 | Write tools.yml manifest"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/tools.yml"
+        mode: "0640"
+        force: false
+        content: |
+          ---
+          # {{ app_name }}.Box — free-of-charge tools manifest.
+          # LAW: only gratis / open-source tools may appear here.
+          dnf_packages: []
+            # - gdal
+            # - osmium-tool
+          cargo_tools: []
+            # - just
+            # - cargo-audit
+
+    # ------------------------------------------------------------------
+    # 7. Example Jinja2 tablet + the Box law
+    # ------------------------------------------------------------------
+    - name: "7.1 | Write example Jinja2 template"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/templates/example_config.toml.j2"
+        mode: "0640"
+        force: false
+        content: |
+          # Rendered by {{ app_name }}.Box for env: {{ '{{ box_env }}' }}
+          [app]
+          name = "{{ '{{ box_app }}' }}"
+          environment = "{{ '{{ box_env }}' }}"
+
+    - name: "7.2 | Seal BOX_LAW.md"
+      ansible.builtin.copy:
+        dest: "{{ box_root }}/BOX_LAW.md"
+        mode: "0640"
+        force: false
+        content: |
+          # {{ app_name }}.Box — Law of the Chest (PB-326)
+
+          Akkadian pairing (GL-NAM-002): **quppu** — "the sealed chest:
+          per-app OTA environment box."
+
+          1. This Box is the single source of environment truth for
+             {{ app_name }} playbooks: box.env / box_vars.yml.
+          2. OTA only (Ontwikkeling, Test, Acceptatie). Productie is
+             constitutionally excluded — no production group exists in
+             inventory/, and init.yaml's gate halts on any non-OTA env.
+          3. Only free-of-charge tools may enter tools.yml.
+          4. Every structural change to this Box leaves a note in
+             nuzi_provenance/.
+
+    # ------------------------------------------------------------------
+    # 8. Report
+    # ------------------------------------------------------------------
+    - name: "8.1 | Report the chest is sealed"
+      ansible.builtin.debug:
+        msg:
+          - "Quppu Box raised: {{ box_root }}"
+          - "Environments: {{ ota_envs | join(', ') }} — Productie excluded by law"
+          - "Next: edit tools.yml, add OTA hosts to inventory/ota.yml, run init.yaml"

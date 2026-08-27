@@ -4,16 +4,26 @@
 pub mod beam;
 pub mod vgca;
 
-pub use beam::{ValidationResult, validate, validate_with_types};
+pub use beam::{validate, validate_with_types, ValidationResult};
 pub use vgca::{
-    // VGCA-Σ
-    FieldSignatureVector, GeometricFit, VgcaTextResult,
-    vgca_score, geometric_fit,
-    CLEAN_THRESHOLD, SUSPECT_THRESHOLD, SIGMA_MULTIPLIER,
+    geometric_fit,
+    infer_column_type,
+    vgca_delta,
+    vgca_score,
     // VGCA-Δ
-    BlockFeatureVector, VgcaBlockResult, vgca_delta, DELTA_FRAG,
+    BlockFeatureVector,
     // VGCA-Λ
-    ColumnGeometryDescriptor, InferredColumnType, infer_column_type,
+    ColumnGeometryDescriptor,
     // CorruptionClass (ADR-008 §4.4)
     CorruptionClass,
+    // VGCA-Σ
+    FieldSignatureVector,
+    GeometricFit,
+    InferredColumnType,
+    VgcaBlockResult,
+    VgcaTextResult,
+    CLEAN_THRESHOLD,
+    DELTA_FRAG,
+    SIGMA_MULTIPLIER,
+    SUSPECT_THRESHOLD,
 };

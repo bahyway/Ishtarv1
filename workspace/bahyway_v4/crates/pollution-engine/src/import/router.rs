@@ -23,9 +23,9 @@ impl std::fmt::Display for PayloadFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::JsonArray => write!(f, "JSON-Array"),
-            Self::NdJson    => write!(f, "NDJSON"),
-            Self::Csv       => write!(f, "CSV"),
-            Self::Tsv       => write!(f, "TSV"),
+            Self::NdJson => write!(f, "NDJSON"),
+            Self::Csv => write!(f, "CSV"),
+            Self::Tsv => write!(f, "TSV"),
         }
     }
 }
@@ -64,23 +64,23 @@ impl SourceHint {
 
     pub fn suggested_domain_hint(&self) -> Option<&'static str> {
         match self {
-            Self::OpenAq       => Some("AIR"),
+            Self::OpenAq => Some("AIR"),
             Self::EeaWaterbase => Some("WATER"),
             Self::NoaaIncident => Some("OIL"),
-            Self::NoaaAdios    => Some("OIL"),
-            Self::OpenMeteo    => Some("AIR"),
-            Self::Unknown(_)   => None,
+            Self::NoaaAdios => Some("OIL"),
+            Self::OpenMeteo => Some("AIR"),
+            Self::Unknown(_) => None,
         }
     }
 
     pub fn adapter_name(&self) -> &'static str {
         match self {
-            Self::OpenAq       => "openaq",
+            Self::OpenAq => "openaq",
             Self::EeaWaterbase => "eea_waterbase",
             Self::NoaaIncident => "noaa_incident",
-            Self::NoaaAdios    => "noaa_adios",
-            Self::OpenMeteo    => "open_meteo",
-            Self::Unknown(_)   => "generic",
+            Self::NoaaAdios => "noaa_adios",
+            Self::OpenMeteo => "open_meteo",
+            Self::Unknown(_) => "generic",
         }
     }
 }
@@ -91,11 +91,11 @@ impl SourceHint {
 
 #[derive(Debug, Clone)]
 pub struct ImportPayload {
-    pub format:      PayloadFormat,
-    pub source:      SourceHint,
+    pub format: PayloadFormat,
+    pub source: SourceHint,
     pub field_names: Vec<String>,
-    pub rows:        Vec<HashMap<String, String>>,
-    pub source_url:  String,
+    pub rows: Vec<HashMap<String, String>>,
+    pub source_url: String,
 }
 
 impl ImportPayload {
@@ -106,7 +106,8 @@ impl ImportPayload {
 
     pub fn sample_values(&self, field: &str, n: usize) -> Vec<String> {
         let lower = field.to_lowercase();
-        self.rows.iter()
+        self.rows
+            .iter()
             .filter_map(|row| row.get(&lower).cloned())
             .filter(|v| !v.is_empty())
             .take(n)
@@ -115,17 +116,18 @@ impl ImportPayload {
 
     pub fn parse_f64(row: &HashMap<String, String>, field: &str) -> Option<f64> {
         row.get(&field.to_lowercase())
-           .and_then(|v| v.trim().parse::<f64>().ok())
+            .and_then(|v| v.trim().parse::<f64>().ok())
     }
 
     pub fn parse_bool(row: &HashMap<String, String>, field: &str) -> Option<bool> {
-        row.get(&field.to_lowercase()).map(|v| {
-            matches!(v.to_lowercase().trim(), "true" | "1" | "yes" | "t")
-        })
+        row.get(&field.to_lowercase())
+            .map(|v| matches!(v.to_lowercase().trim(), "true" | "1" | "yes" | "t"))
     }
 
     pub fn get_str<'a>(row: &'a HashMap<String, String>, field: &str) -> &'a str {
-        row.get(&field.to_lowercase()).map(|s| s.as_str()).unwrap_or("")
+        row.get(&field.to_lowercase())
+            .map(|s| s.as_str())
+            .unwrap_or("")
     }
 }
 
@@ -148,9 +150,9 @@ impl ImportRouter {
 
         let rows = match &format {
             PayloadFormat::JsonArray => self.parse_json_array(trimmed)?,
-            PayloadFormat::NdJson    => self.parse_ndjson(trimmed)?,
-            PayloadFormat::Csv       => self.parse_dsv(trimmed, b',')?,
-            PayloadFormat::Tsv       => self.parse_dsv(trimmed, b'\t')?,
+            PayloadFormat::NdJson => self.parse_ndjson(trimmed)?,
+            PayloadFormat::Csv => self.parse_dsv(trimmed, b',')?,
+            PayloadFormat::Tsv => self.parse_dsv(trimmed, b'\t')?,
         };
 
         if rows.is_empty() {
@@ -166,18 +168,28 @@ impl ImportRouter {
         let mut field_names: Vec<String> = field_set.into_iter().collect();
         field_names.sort();
 
-        Ok(ImportPayload { format, source, field_names, rows, source_url: source_url.to_string() })
+        Ok(ImportPayload {
+            format,
+            source,
+            field_names,
+            rows,
+            source_url: source_url.to_string(),
+        })
     }
 
     fn detect_format(&self, raw: &str) -> PayloadFormat {
         match raw.chars().next().unwrap_or(' ') {
             '[' => PayloadFormat::JsonArray,
             '{' => PayloadFormat::NdJson,
-            _   => {
+            _ => {
                 let first_line = raw.lines().next().unwrap_or("");
-                let tabs   = first_line.chars().filter(|&c| c == '\t').count();
+                let tabs = first_line.chars().filter(|&c| c == '\t').count();
                 let commas = first_line.chars().filter(|&c| c == ',').count();
-                if tabs > commas { PayloadFormat::Tsv } else { PayloadFormat::Csv }
+                if tabs > commas {
+                    PayloadFormat::Tsv
+                } else {
+                    PayloadFormat::Csv
+                }
             }
         }
     }
@@ -191,10 +203,10 @@ impl ImportRouter {
             JsonValue::Array(arr) => arr,
             JsonValue::Object(ref obj) => {
                 for key in &["results", "data", "measurements", "locations"] {
-                    if let Some(v) = obj.iter().find(|(k, _)| k == key).map(|(_, v)| v) {
-                        if let JsonValue::Array(arr) = v {
-                            return Ok(arr.iter().map(|v| flatten_json(v, "")).collect());
-                        }
+                    if let Some(JsonValue::Array(arr)) =
+                        obj.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+                    {
+                        return Ok(arr.iter().map(|v| flatten_json(v, "")).collect());
                     }
                 }
                 vec![value]
@@ -207,20 +219,25 @@ impl ImportRouter {
 
     fn parse_ndjson(&self, raw: &str) -> Result<Vec<HashMap<String, String>>, ImportError> {
         raw.lines()
-           .filter(|l| !l.trim().is_empty())
-           .enumerate()
-           .map(|(i, line)| {
-               let v = parse_json(line).map_err(|e| ImportError::CsvParseError {
-                   row: i, reason: e.to_string(),
-               })?;
-               Ok(flatten_json(&v, ""))
-           })
-           .collect()
+            .filter(|l| !l.trim().is_empty())
+            .enumerate()
+            .map(|(i, line)| {
+                let v = parse_json(line).map_err(|e| ImportError::CsvParseError {
+                    row: i,
+                    reason: e.to_string(),
+                })?;
+                Ok(flatten_json(&v, ""))
+            })
+            .collect()
     }
 
     // ── DSV (CSV / TSV) parser ────────────────────────────────
 
-    fn parse_dsv(&self, raw: &str, delimiter: u8) -> Result<Vec<HashMap<String, String>>, ImportError> {
+    fn parse_dsv(
+        &self,
+        raw: &str,
+        delimiter: u8,
+    ) -> Result<Vec<HashMap<String, String>>, ImportError> {
         let delim = delimiter as char;
         let mut lines = raw.lines().filter(|l| !l.trim().is_empty());
 
@@ -264,8 +281,7 @@ enum JsonValue {
 
 fn parse_json(input: &str) -> Result<JsonValue, ImportError> {
     let bytes = input.as_bytes();
-    let (val, _) = parse_value(bytes, 0)
-        .map_err(|e| ImportError::JsonParseError(e))?;
+    let (val, _) = parse_value(bytes, 0).map_err(ImportError::JsonParseError)?;
     Ok(val)
 }
 
@@ -286,21 +302,21 @@ fn parse_value(bytes: &[u8], pos: usize) -> Result<(JsonValue, usize), String> {
         Some(b'[') => parse_array(bytes, pos),
         Some(b'{') => parse_object(bytes, pos),
         Some(b't') => {
-            if bytes.get(pos..pos+4) == Some(b"true") {
+            if bytes.get(pos..pos + 4) == Some(b"true") {
                 Ok((JsonValue::Bool(true), pos + 4))
             } else {
                 Err(format!("expected 'true' at pos {pos}"))
             }
         }
         Some(b'f') => {
-            if bytes.get(pos..pos+5) == Some(b"false") {
+            if bytes.get(pos..pos + 5) == Some(b"false") {
                 Ok((JsonValue::Bool(false), pos + 5))
             } else {
                 Err(format!("expected 'false' at pos {pos}"))
             }
         }
         Some(b'n') => {
-            if bytes.get(pos..pos+4) == Some(b"null") {
+            if bytes.get(pos..pos + 4) == Some(b"null") {
                 Ok((JsonValue::Null, pos + 4))
             } else {
                 Err(format!("expected 'null' at pos {pos}"))
@@ -308,7 +324,7 @@ fn parse_value(bytes: &[u8], pos: usize) -> Result<(JsonValue, usize), String> {
         }
         Some(b'-') | Some(b'0'..=b'9') => parse_number(bytes, pos),
         Some(c) => Err(format!("unexpected char '{}' at pos {pos}", *c as char)),
-        None    => Err("unexpected end of input".into()),
+        None => Err("unexpected end of input".into()),
     }
 }
 
@@ -319,45 +335,83 @@ fn parse_string(bytes: &[u8], pos: usize) -> Result<(String, usize), String> {
 
     while i < bytes.len() {
         match bytes[i] {
-            b'"' => { i += 1; return Ok((s, i)); }
+            b'"' => {
+                i += 1;
+                return Ok((s, i));
+            }
             b'\\' => {
                 i += 1;
                 match bytes.get(i) {
-                    Some(b'"')  => { s.push('"');  i += 1; }
-                    Some(b'\\') => { s.push('\\'); i += 1; }
-                    Some(b'/')  => { s.push('/');  i += 1; }
-                    Some(b'n')  => { s.push('\n'); i += 1; }
-                    Some(b'r')  => { s.push('\r'); i += 1; }
-                    Some(b't')  => { s.push('\t'); i += 1; }
-                    Some(b'b')  => { s.push('\x08'); i += 1; }
-                    Some(b'f')  => { s.push('\x0C'); i += 1; }
-                    Some(b'u')  => {
+                    Some(b'"') => {
+                        s.push('"');
+                        i += 1;
+                    }
+                    Some(b'\\') => {
+                        s.push('\\');
+                        i += 1;
+                    }
+                    Some(b'/') => {
+                        s.push('/');
+                        i += 1;
+                    }
+                    Some(b'n') => {
+                        s.push('\n');
+                        i += 1;
+                    }
+                    Some(b'r') => {
+                        s.push('\r');
+                        i += 1;
+                    }
+                    Some(b't') => {
+                        s.push('\t');
+                        i += 1;
+                    }
+                    Some(b'b') => {
+                        s.push('\x08');
+                        i += 1;
+                    }
+                    Some(b'f') => {
+                        s.push('\x0C');
+                        i += 1;
+                    }
+                    Some(b'u') => {
                         i += 1;
                         if i + 4 > bytes.len() {
                             return Err("truncated unicode escape".into());
                         }
-                        let hex = std::str::from_utf8(&bytes[i..i+4])
+                        let hex = std::str::from_utf8(&bytes[i..i + 4])
                             .map_err(|_| "invalid unicode escape")?;
                         let code = u32::from_str_radix(hex, 16)
                             .map_err(|_| format!("invalid hex in \\u{}", hex))?;
                         s.push(char::from_u32(code).unwrap_or('\u{FFFD}'));
                         i += 4;
                     }
-                    Some(c) => { s.push(*c as char); i += 1; }
+                    Some(c) => {
+                        s.push(*c as char);
+                        i += 1;
+                    }
                     None => return Err("truncated escape".into()),
                 }
             }
-            b if b < 0x80 => { s.push(b as char); i += 1; }
+            b if b < 0x80 => {
+                s.push(b as char);
+                i += 1;
+            }
             _ => {
                 // Multi-byte UTF-8
                 let b0 = bytes[i];
-                let extra = if b0 >= 0xF0 { 3 } else if b0 >= 0xE0 { 2 } else { 1 };
+                let extra = if b0 >= 0xF0 {
+                    3
+                } else if b0 >= 0xE0 {
+                    2
+                } else {
+                    1
+                };
                 if i + extra >= bytes.len() {
                     return Err("truncated UTF-8".into());
                 }
-                let chunk = &bytes[i..=i+extra];
-                let ch = std::str::from_utf8(chunk)
-                    .map_err(|_| "invalid UTF-8 in string")?;
+                let chunk = &bytes[i..=i + extra];
+                let ch = std::str::from_utf8(chunk).map_err(|_| "invalid UTF-8 in string")?;
                 s.push_str(ch);
                 i += extra + 1;
             }
@@ -380,10 +434,15 @@ fn parse_array(bytes: &[u8], pos: usize) -> Result<(JsonValue, usize), String> {
         arr.push(val);
         i = skip_ws(bytes, next);
         match bytes.get(i) {
-            Some(b']') => { i += 1; break; }
-            Some(b',') => { i = skip_ws(bytes, i + 1); }
-            Some(c)    => return Err(format!("expected ',' or ']', got '{}' at {i}", *c as char)),
-            None       => return Err("unterminated array".into()),
+            Some(b']') => {
+                i += 1;
+                break;
+            }
+            Some(b',') => {
+                i = skip_ws(bytes, i + 1);
+            }
+            Some(c) => return Err(format!("expected ',' or ']', got '{}' at {i}", *c as char)),
+            None => return Err("unterminated array".into()),
         }
     }
     Ok((JsonValue::Array(arr), i))
@@ -413,10 +472,15 @@ fn parse_object(bytes: &[u8], pos: usize) -> Result<(JsonValue, usize), String> 
         obj.push((key, val));
         i = skip_ws(bytes, next);
         match bytes.get(i) {
-            Some(b'}') => { i += 1; break; }
-            Some(b',') => { i = skip_ws(bytes, i + 1); }
-            Some(c)    => return Err(format!("expected ',' or '}}', got '{}' at {i}", *c as char)),
-            None       => return Err("unterminated object".into()),
+            Some(b'}') => {
+                i += 1;
+                break;
+            }
+            Some(b',') => {
+                i = skip_ws(bytes, i + 1);
+            }
+            Some(c) => return Err(format!("expected ',' or '}}', got '{}' at {i}", *c as char)),
+            None => return Err("unterminated object".into()),
         }
     }
     Ok((JsonValue::Object(obj), i))
@@ -425,20 +489,30 @@ fn parse_object(bytes: &[u8], pos: usize) -> Result<(JsonValue, usize), String> 
 fn parse_number(bytes: &[u8], pos: usize) -> Result<(JsonValue, usize), String> {
     let start = pos;
     let mut i = pos;
-    if bytes.get(i) == Some(&b'-') { i += 1; }
-    while matches!(bytes.get(i), Some(b'0'..=b'9')) { i += 1; }
+    if bytes.get(i) == Some(&b'-') {
+        i += 1;
+    }
+    while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+        i += 1;
+    }
     if bytes.get(i) == Some(&b'.') {
         i += 1;
-        while matches!(bytes.get(i), Some(b'0'..=b'9')) { i += 1; }
+        while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+            i += 1;
+        }
     }
     if matches!(bytes.get(i), Some(b'e') | Some(b'E')) {
         i += 1;
-        if matches!(bytes.get(i), Some(b'+') | Some(b'-')) { i += 1; }
-        while matches!(bytes.get(i), Some(b'0'..=b'9')) { i += 1; }
+        if matches!(bytes.get(i), Some(b'+') | Some(b'-')) {
+            i += 1;
+        }
+        while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+            i += 1;
+        }
     }
-    let num_str = std::str::from_utf8(&bytes[start..i])
-        .map_err(|_| "invalid number bytes")?;
-    let n = num_str.parse::<f64>()
+    let num_str = std::str::from_utf8(&bytes[start..i]).map_err(|_| "invalid number bytes")?;
+    let n = num_str
+        .parse::<f64>()
         .map_err(|e| format!("invalid number '{}': {}", num_str, e))?;
     Ok((JsonValue::Number(n), i))
 }
@@ -482,8 +556,8 @@ fn flatten_json(value: &JsonValue, prefix: &str) -> HashMap<String, String> {
 
 fn json_to_str(v: &JsonValue) -> String {
     match v {
-        JsonValue::Null      => String::new(),
-        JsonValue::Bool(b)   => b.to_string(),
+        JsonValue::Null => String::new(),
+        JsonValue::Bool(b) => b.to_string(),
         JsonValue::Number(n) => {
             if n.fract() == 0.0 && n.abs() < 1e15 {
                 format!("{}", *n as i64)
@@ -491,8 +565,8 @@ fn json_to_str(v: &JsonValue) -> String {
                 format!("{}", n)
             }
         }
-        JsonValue::Str(s)    => s.clone(),
-        JsonValue::Array(a)  => a.iter().map(json_to_str).collect::<Vec<_>>().join(","),
+        JsonValue::Str(s) => s.clone(),
+        JsonValue::Array(a) => a.iter().map(json_to_str).collect::<Vec<_>>().join(","),
         JsonValue::Object(_) => "[object]".to_string(),
     }
 }

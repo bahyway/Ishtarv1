@@ -1,0 +1,146 @@
+---
+# ============================================================================
+# PB-PHO-001 — From Real Photos to Citizens (the Salmu harvest)
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series
+# Purpose    : Turn ORDINARY PHOTOGRAPHS (a phone walked around a pole, a
+#              street, a facade) into a sovereign 3D point cloud of KAKI
+#              citizens — the real-world door for the Cable-Tangle Court and
+#              the GL-HSI-003 fusion reserved by Napharu §11.
+# Method     : Structure-from-Motion + Multi-View Stereo via COLMAP —
+#              CLASSICAL PROJECTIVE GEOMETRY: deterministic given inputs and
+#              seeds, no learned model in the reconstruction path.
+#              Register of every point: DERIVED.
+# Doctrine   : SOVEREIGNTY CLAUSE — monocular "AI depth" from a single photo
+#              is a learned guess; it is REFUSED as evidence. If ever used
+#              for sketching, its points are SIMULATED and may never ground
+#              a verdict. This playbook never invokes it.
+# Field rite : 25–60 photos, one subject, full circle where possible,
+#              consecutive frames overlapping ~70%, fixed focal length
+#              (no zoom), fixed exposure if the phone allows. Shade beats
+#              harsh sun; avoid moving objects crossing the subject.
+# Discipline : CSR-08. Append-only shelf; sha256 receipts; no receipt, no
+#              road.
+# ============================================================================
+
+- name: "PB-PHO-001 :: Photos -> sovereign point cloud -> citizens"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    shelf: "/opt/bahyway/v4/data/salmu"
+    photos_in: "{{ shelf }}/photos_in"        # put the phone photos here
+    work: "{{ shelf }}/work"
+    outputs: "{{ shelf }}/out"
+    ledger_path: "/opt/bahyway/v4/data/LEDGER-DATA.tsv"
+    scene_name: "cable_tangle_001"
+
+  tasks:
+
+    - name: "WITNESS :: directories exist"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ photos_in }}", "{{ work }}", "{{ outputs }}"]
+
+    - name: "WITNESS :: count the photographs"
+      ansible.builtin.find:
+        paths: "{{ photos_in }}"
+        patterns: "*.jpg,*.JPG,*.jpeg,*.png"
+      register: photos
+
+    - name: "JUDGE :: refuse a starved reconstruction"
+      ansible.builtin.assert:
+        that: photos.files | length >= 20
+        fail_msg: "REFUSED — {{ photos.files | length }} photos found; the rite asks >= 20 overlapping views. Walk the circle again."
+
+    - name: "WITNESS :: COLMAP present"
+      ansible.builtin.command: colmap -h
+      register: colmap_ok
+      changed_when: false
+      failed_when: false
+
+    - name: "JUDGE :: refuse without the geometer"
+      ansible.builtin.assert:
+        that: colmap_ok.rc == 0
+        fail_msg: "REFUSED — colmap not found. Fedora: sudo dnf install colmap (or build from source). The geometry must be sovereign and inspectable."
+
+    - name: "MOVE :: receipt every photograph BEFORE reconstruction (evidence first)"
+      ansible.builtin.shell: |
+        cd "{{ photos_in }}" && sha256sum * > "{{ outputs }}/{{ scene_name }}_photos.kaniku"
+      changed_when: true
+
+    - name: "MOVE :: Structure-from-Motion + dense reconstruction (deterministic geometry)"
+      ansible.builtin.shell: |
+        colmap automatic_reconstructor \
+          --workspace_path "{{ work }}" \
+          --image_path "{{ photos_in }}" \
+          --dense 1 \
+          --quality high
+      changed_when: true
+
+    - name: "WITNESS :: the fused cloud exists"
+      ansible.builtin.find:
+        paths: "{{ work }}"
+        patterns: "fused.ply"
+        recurse: true
+      register: ply
+
+    - name: "JUDGE :: refuse an empty womb"
+      ansible.builtin.assert:
+        that: ply.files | length > 0
+        fail_msg: "REFUSED — no fused.ply produced; the views did not agree. Re-shoot with more overlap."
+
+    - name: "MOVE :: mint the citizens — PLY -> particle TSV (KAKI, xyz, rgb, register)"
+      ansible.builtin.shell: |
+        python3 - << 'PY'
+        import struct, hashlib, glob
+        src=sorted(glob.glob("{{ work }}/**/fused.ply", recursive=True))[0]
+        out="{{ outputs }}/{{ scene_name }}_particles.tsv"
+        with open(src,'rb') as f:
+            header=b''
+            while True:
+                line=f.readline(); header+=line
+                if line.strip()==b'end_header': break
+            n=int([l for l in header.decode().splitlines() if l.startswith('element vertex')][0].split()[-1])
+            # fused.ply: x y z nx ny nz r g b  (float32 x6, uchar x3)
+            rec=struct.Struct('<ffffffBBB')
+            with open(out,'w') as o:
+                o.write("kaki\tx\ty\tz\tr\tg\tb\tregister\tsource\n")
+                for i in range(n):
+                    x,y,z,nx,ny,nz,r,g,b=rec.unpack(f.read(rec.size))
+                    kaki='K'+hashlib.sha256(f"{i}:{x:.6f}:{y:.6f}:{z:.6f}".encode()).hexdigest()[:8].upper()
+                    o.write(f"{kaki}\t{x:.6f}\t{y:.6f}\t{z:.6f}\t{r}\t{g}\t{b}\tDERIVED\tSfM-COLMAP\n")
+        print("minted", n, "citizens ->", out)
+        PY
+      register: mint
+      changed_when: true
+
+    - name: "MOVE :: seal the cloud and the citizens"
+      ansible.builtin.shell: |
+        cd "{{ outputs }}" && sha256sum {{ scene_name }}_particles.tsv >> "{{ scene_name }}_photos.kaniku"
+      changed_when: true
+
+    - name: "STAGE :: ensure data ledger exists"
+      ansible.builtin.copy:
+        dest: "{{ ledger_path }}"
+        content: "archive\tharvested_utc\tsha256\tsource\tstatus\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: append the seal"
+      ansible.builtin.shell: |
+        H=$(sha256sum "{{ outputs }}/{{ scene_name }}_particles.tsv" | cut -d' ' -f1)
+        echo -e "{{ scene_name }}_particles.tsv\t$(date -u +%FT%TZ)\t$H\tSfM-COLMAP-sovereign\tCITIZENS-MINTED" >> "{{ ledger_path }}"
+      changed_when: true
+
+    - name: "STAGE :: proclaim, and name the road onward"
+      ansible.builtin.debug:
+        msg:
+          - "MINTED :: {{ mint.stdout }}"
+          - "REGISTER :: every point DERIVED — classical geometry, replayable; neural depth refused by doctrine."
+          - "NEXT :: comb the tangle — deterministic curve-tracing assigns cable Tribes (the Salmu Court's act ③, offline twin)."
+          - "THEN :: Belonging (source generator) + Integrity (documented/INFORMAL) — the offer of registration, not surveillance."
+          - "DOOR :: this cloud is the geometric half of GL-HSI-003 (Napharu §11): fuse with SafaaHarmony spectra when the sensor arrives."

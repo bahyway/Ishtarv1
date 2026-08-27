@@ -1,0 +1,117 @@
+---
+# ============================================================================
+# PB-337 — KAKIGIS SERVE fix (HTTP service + four-file preflight)
+# BahyWay.Ecosystem v4.0 — KAKIGISv4.0
+# ----------------------------------------------------------------------------
+# CORRECTION SEALED BY THIS TABLET:
+#   * Root cause of the blank page: the app was opened as a lone HTML over
+#     file:// outside its deployed home. Leaflet (vendor/leaflet.js) was
+#     absent -> "L is not defined" -> script death -> blank court. And
+#     file:// blocks fetch() of data/yard.geojson regardless.
+#   * LAW: KAKIGIS is FOUR files served over HTTP from ONE home:
+#       /opt/bahyway/kakigis/index.html
+#       /opt/bahyway/kakigis/vendor/leaflet.js
+#       /opt/bahyway/kakigis/vendor/leaflet.css
+#       /opt/bahyway/kakigis/data/yard.geojson
+#     Opening index.html directly via file:// is a refusable act.
+#   * This tablet: (1) asserts all four files exist (halts with the exact
+#     missing file if not), (2) installs a systemd USER service serving
+#     http://127.0.0.1:8090 bound to loopback only, (3) enables + starts it.
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-337-kakigis-serve.yml
+# THEN OPEN (bookmark this, never the file path):
+#   http://127.0.0.1:8090
+# ============================================================================
+
+- name: "PB-337 | Serve KAKIGIS over HTTP as a sealed service"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    kakigis_root: /opt/bahyway/kakigis
+    required_files:
+      - "{{ kakigis_root }}/index.html"
+      - "{{ kakigis_root }}/vendor/leaflet.js"
+      - "{{ kakigis_root }}/vendor/leaflet.css"
+      - "{{ kakigis_root }}/data/yard.geojson"
+
+  tasks:
+
+    - name: "1.1 | PREFLIGHT — stat all four required files"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ required_files }}"
+      register: ff
+
+    - name: "1.2 | Halt naming exactly what is missing"
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: >-
+          REFUSED: {{ item.invocation.module_args.path }} is missing.
+          Run PB-336 first (vendors Leaflet + deploys index) and PB-335
+          (produces the REAL yard GeoJSON) before serving.
+      loop: "{{ ff.results }}"
+      loop_control:
+        label: "{{ item.invocation.module_args.path }}"
+
+    - name: "2.1 | Ensure systemd user dir"
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.config/systemd/user"
+        state: directory
+        mode: "0750"
+
+    - name: "2.2 | Install kakigis.service (loopback only, port 8090)"
+      ansible.builtin.copy:
+        dest: "{{ ansible_env.HOME }}/.config/systemd/user/kakigis.service"
+        mode: "0640"
+        content: |
+          [Unit]
+          Description=KAKIGIS v4.0 — sovereign Leaflet GIS (BahyWay)
+          After=network.target
+
+          [Service]
+          WorkingDirectory={{ kakigis_root }}
+          ExecStart=/usr/bin/python3 -m http.server 8090 --bind 127.0.0.1
+          Restart=on-failure
+
+          [Install]
+          WantedBy=default.target
+
+    - name: "2.3 | Enable + start the service"
+      ansible.builtin.systemd_service:
+        name: kakigis
+        scope: user
+        daemon_reload: true
+        enabled: true
+        state: restarted
+
+    - name: "3.1 | Verify the court answers over HTTP"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:8090/index.html"
+        return_content: false
+        status_code: 200
+      register: probe
+      retries: 3
+      delay: 1
+      until: probe.status == 200
+
+    - name: "4.1 | NUZI provenance note"
+      ansible.builtin.copy:
+        dest: "/opt/bahyway/workshop/najaf_navi/nuzi_provenance/pb-337-note.md"
+        mode: "0640"
+        content: |
+          PB-337 KAKIGIS SERVE. Root cause of blank court diagnosed:
+          lone index.html opened via file:// outside /opt/bahyway/kakigis
+          -> Leaflet absent -> L undefined -> script death; file:// also
+          blocks fetch of data/yard.geojson.
+          Sealed: four-file preflight assert + systemd user service
+          kakigis.service on http://127.0.0.1:8090 (loopback only).
+          Opening the file path directly is a refusable act.
+
+    - name: "5.1 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "KAKIGIS serving: http://127.0.0.1:8090 (verified HTTP 200)"
+          - "Bookmark the URL. Never open the file path again."

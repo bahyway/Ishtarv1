@@ -1,0 +1,84 @@
+---
+# PB-364 · Register PU / OU / RU / MLU as UNIT particles in EnkiODB·7002
+# GL-UNT-001 §1 §2 · KAKI v4.0 byte layout untouched; kaki_type=UNIT, all quality in EAV.
+- name: PB-364 register the four units
+  hosts: girsu
+  vars:
+    odb_port: 7002
+    onto_root: "{{ ansible_env.HOME }}/bahyway/onto"
+  tasks:
+    - name: Ensure ontology directory
+      ansible.builtin.file: {path: "{{ onto_root }}", state: directory, mode: "0750"}
+
+    - name: Write the unit tablet
+      ansible.builtin.copy:
+        dest: "{{ onto_root }}/units_v4.yml"
+        mode: "0640"
+        content: |
+          # kaki_type = 0x55 (UNIT). Seven mandatory EAV facets per Simtu Facet Law (EN-DDB-002).
+          units:
+            - symbol: PU
+              name: whitened orbit-radius sigma
+              scope: tribe
+              dimensionless: true
+              tablet: GL-UNT-001
+              section: "§0"
+            - symbol: OU
+              name: healthy girth G0
+              scope: tribe
+              dimensionless: false
+              tablet: GL-UNT-001
+              section: "§0"
+            - symbol: RU
+              name: Radius Unit - radial density peak spacing from the heart
+              scope: tribe
+              dimensionless: true
+              integer_part: layer
+              fraction_part: seat_in_layer
+              render: contour
+              tablet: GL-UNT-001
+              section: "§1"
+            - symbol: MLU
+              name: Membrane Layer Unit - one factor-leaf crossing
+              scope: ecosystem
+              dimensionless: true
+              edge_meaning: piercing_count
+              deep_leak_at: 2
+              render: shell
+              tablet: GL-UNT-001
+              section: "§2"
+
+    # FIXED 2026-08-26 (found live via PB-626's own internal re-import of
+    # this playbook): `bahyway-enkidb orbit` is a real, deliberately
+    # append-only KAKI-minting store with no dedup -- running this
+    # playbook twice used to silently double-register the four units
+    # (8 particles instead of 4), failing the very next gate. Same "no
+    # silent overwrite" philosophy every seal playbook in this corpus
+    # already applies to its own tablet -- skip the ORBIT, not the gate,
+    # when the units are already there.
+    - name: Check if the units are already registered
+      ansible.builtin.command: >
+        bahyway-enkidb present --db EnkiODB --port {{ odb_port }} --kaki-type UNIT --count
+      register: existing_count
+      changed_when: false
+
+    - name: ORBIT the units into EnkiODB (skipped if already registered)
+      ansible.builtin.command: >
+        bahyway-enkidb orbit --db EnkiODB --port {{ odb_port }}
+        --kaki-type UNIT --from {{ onto_root }}/units_v4.yml --seal-required
+      register: orbit
+      changed_when: "'ORBITED' in orbit.stdout"
+      when: (existing_count.stdout | trim | int) == 0
+
+    - name: Gate · four units present and addressable
+      ansible.builtin.command: >
+        bahyway-enkidb present --db EnkiODB --port {{ odb_port }} --kaki-type UNIT --count
+      register: cnt
+      changed_when: false
+      failed_when: cnt.stdout | trim | int != 4
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-364 units PU/OU/RU/MLU ORBITed into EnkiODB.7002"

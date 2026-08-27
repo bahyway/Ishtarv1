@@ -14,50 +14,46 @@ pub mod tier;
 pub mod tribe;
 
 pub use akkadian::{
-    CRATE_NABU, CRATE_ZAKARU, CRATE_LAMASSU, CRATE_ISHTAR, CRATE_ISDU,
-    CRATE_EBBERU, CRATE_KAKKABU, CRATE_TEMU, CRATE_SHEDU, CRATE_QUPPU,
-    CRATE_KUPRU, CRATE_HEPTASCRIPT, CRATE_WAY,
-    EXT_AKK, EXT_HEPTA, EXT_WAY, EXT_AKKNB, ECOSYSTEM_CRATES,
+    CRATE_EBBERU, CRATE_HEPTASCRIPT, CRATE_ISDU, CRATE_ISHTAR, CRATE_KAKKABU, CRATE_KUPRU,
+    CRATE_LAMASSU, CRATE_NABU, CRATE_QUPPU, CRATE_SHEDU, CRATE_TEMU, CRATE_WAY, CRATE_ZAKARU,
+    ECOSYSTEM_CRATES, EXT_AKK, EXT_AKKNB, EXT_HEPTA, EXT_WAY,
 };
 pub use death_legacy::{
     DeathDisposition, DeathState, InheritanceChannel, LegacyResidue, LegacySettlement, Resolution,
 };
 pub use error::{BahywayError, Result};
-pub use event::{Event, EventKind, A3Violation, validate_a3};
+pub use event::{validate_a3, A3Violation, Event, EventKind};
 pub use grid::{
-    GridCell, project, canonical_grid, QUALITY_DIVISOR,
-    CellColor, cell_color, CRITICAL_B11_THRESHOLD,
-    GLASS_HEALTH_THRESHOLD, AMBER_HEALTH_THRESHOLD, COLLAPSE_HEALTH_THRESHOLD,
-    KakiByteConstraints, cell_byte_constraints,
-    GridOccupancySnapshot, CellHealthSnapshot, HealthAlert,
+    canonical_grid, cell_byte_constraints, cell_color, project, CellColor, CellHealthSnapshot,
+    GridCell, GridOccupancySnapshot, HealthAlert, KakiByteConstraints, AMBER_HEALTH_THRESHOLD,
+    COLLAPSE_HEALTH_THRESHOLD, CRITICAL_B11_THRESHOLD, GLASS_HEALTH_THRESHOLD, QUALITY_DIVISOR,
 };
 pub use hepta_gate::HeptaGate;
-pub use journal_tx::{JournalTransaction, JournalError, JournalTier, NoopTransaction};
-pub use lane::{Lane, compose_lanes};
+pub use journal_tx::{JournalError, JournalTier, JournalTransaction, NoopTransaction};
+pub use lane::{compose_lanes, Lane};
 pub use mandatory_attrs::{
-    MandatoryAttr, ATTR_STATE, ATTR_COLOR_RGB, ATTR_USERNAME, ATTR_FRESHNESS,
-    ATTR_VELOCITY, ATTR_SYSTEMUSER, ATTR_USERGROUP,
+    MandatoryAttr, ATTR_COLOR_RGB, ATTR_FRESHNESS, ATTR_STATE, ATTR_SYSTEMUSER, ATTR_USERGROUP,
+    ATTR_USERNAME, ATTR_VELOCITY,
 };
-pub use particle_state::{ParticleState, LinkState, compose_link_state};
-pub use tier::{EnkiTier, tier_for_particle, HOT_TO_WARM_HOURS, WARM_TO_COLD_HOURS};
+pub use particle_state::{compose_link_state, LinkState, ParticleState};
+pub use tier::{tier_for_particle, EnkiTier, HOT_TO_WARM_HOURS, WARM_TO_COLD_HOURS};
 pub use tribe::TribeId;
 
 /// Convenience re-exports for crates that `use bahyway_core::prelude::*`.
 pub mod prelude {
     pub use super::akkadian::{
-        CRATE_NABU, CRATE_ZAKARU, CRATE_LAMASSU, EXT_AKK, EXT_HEPTA, EXT_WAY, EXT_AKKNB,
+        CRATE_LAMASSU, CRATE_NABU, CRATE_ZAKARU, EXT_AKK, EXT_AKKNB, EXT_HEPTA, EXT_WAY,
     };
     pub use super::error::{BahywayError, Result};
-    pub use super::event::{Event, EventKind, validate_a3};
+    pub use super::event::{validate_a3, Event, EventKind};
     pub use super::grid::{
-        GridCell, project, canonical_grid, QUALITY_DIVISOR,
-        CellColor, cell_color, KakiByteConstraints, cell_byte_constraints,
-        GridOccupancySnapshot, CellHealthSnapshot, HealthAlert,
+        canonical_grid, cell_byte_constraints, cell_color, project, CellColor, CellHealthSnapshot,
+        GridCell, GridOccupancySnapshot, HealthAlert, KakiByteConstraints, QUALITY_DIVISOR,
     };
     pub use super::hepta_gate::HeptaGate;
-    pub use super::journal_tx::{JournalTransaction, JournalError, JournalTier, NoopTransaction};
-    pub use super::lane::{Lane, compose_lanes};
-    pub use super::particle_state::{ParticleState, LinkState, compose_link_state};
-    pub use super::tier::{EnkiTier, tier_for_particle};
+    pub use super::journal_tx::{JournalError, JournalTier, JournalTransaction, NoopTransaction};
+    pub use super::lane::{compose_lanes, Lane};
+    pub use super::particle_state::{compose_link_state, LinkState, ParticleState};
+    pub use super::tier::{tier_for_particle, EnkiTier};
     pub use super::tribe::TribeId;
 }

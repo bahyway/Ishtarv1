@@ -1,0 +1,517 @@
+---
+# ============================================================
+#  PB-346 — Nanshe Engine Scaffold (Hyperspectral Analyzing Engine)
+#  BahyWay.Ecosystem v4.0 — Law GL-HSI-001 (DRAFT, CSR-08 pending)
+#
+#  Run from the Fedora bare-metal HOST:
+#    ansible-playbook -i inventory PB-346_Nanshe_Hyperspectral_Scaffold.yml
+#  Running this playbook is the CSR-08 confirmation point —
+#  including confirmation of the name Nanshe and law GL-HSI-001.
+#
+#  GATE: refuses to run unless CLOSURE-WPD-001 exists (PB-345 CONCORD).
+#
+#  Sovereignty: pure Rust, zero foreign runtime, no serde/JSON in the
+#  hot path, no BLAS — deterministic Jacobi eigensolver on symmetric
+#  covariance (reproducible-truth clause, L-HSI-3). Z3 nowhere near
+#  this crate (design-time only, per sealed law).
+#
+#  Law tests: L-HSI-1..L-HSI-6 per GL-HSI-001 §8.
+# ============================================================
+- name: PB-346 Nanshe hyperspectral engine scaffold
+  hosts: bahyway_host
+  gather_facts: false
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    crate_dir: "{{ v4_root }}/engines/nanshe"
+    tablets_dir: "{{ v4_root }}/tablets"
+    closure_tablet: "{{ tablets_dir }}/CLOSURE-WPD-001_Legacy_Ledger.md"
+
+  tasks:
+    - name: GATE · legacy ledger must be closed (PB-345)
+      ansible.builtin.stat:
+        path: "{{ closure_tablet }}"
+      register: closure
+
+    - name: GATE · refuse if ledger open
+      ansible.builtin.fail:
+        msg: >-
+          COMPLETION LAW REFUSAL: CLOSURE-WPD-001 not found.
+          Run PB-345 to green; the Nanshe court is gated behind CONCORD.
+      when: not closure.stat.exists
+
+    - name: Ensure directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ crate_dir }}/src"
+        - "{{ crate_dir }}/tests"
+        - "{{ tablets_dir }}"
+
+    - name: Deposit law tablet
+      ansible.builtin.copy:
+        src: "GL-HSI-001_Nanshe_Hyperspectral_Court.md"
+        dest: "{{ tablets_dir }}/GL-HSI-001_Nanshe_Hyperspectral_Court.md"
+        mode: "0644"
+
+    - name: Cargo.toml
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name = "nanshe"
+          version = "0.1.0"
+          edition = "2021"
+          description = "Nanshe — the hidden-sign reader: hyperspectral leak prophecy (GL-HSI-001)"
+          license = "LicenseRef-BahyWay-Sovereign"
+          [dependencies]
+          # sovereign: none. Deterministic linear algebra lives in-crate.
+
+    - name: src/lib.rs
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! Nanshe — hyperspectral analyzing engine (GL-HSI-001, DRAFT).
+          //! Pure Rust. Deterministic. Verdicts require two witnesses.
+          pub mod subspace;
+          pub mod witness;
+          pub mod horizon;
+          pub mod particle;
+          pub mod verdict;
+
+    - name: src/subspace.rs — incremental covariance + deterministic Jacobi
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/subspace.rs"
+        mode: "0644"
+        content: |
+          //! Healthy subspace P: incremental covariance over healthy epochs,
+          //! deterministic cyclic-Jacobi eigensolver, top-7 Hepta shadow.
+          //! Labiru clause: the subspace carries an epoch; judgments cite it.
+
+          pub const HEPTA: usize = 7;
+
+          /// Rank-one incremental covariance accumulator (Welford-style),
+          /// KISPU-batch friendly: fold() per spectrum, finalize() at seal.
+          pub struct CovAccum {
+              pub dim: usize,
+              pub n: u64,
+              mean: Vec<f64>,
+              m2: Vec<f64>, // dim x dim, row-major, sum of outer products of deltas
+          }
+
+          impl CovAccum {
+              pub fn new(dim: usize) -> Self {
+                  Self { dim, n: 0, mean: vec![0.0; dim], m2: vec![0.0; dim * dim] }
+              }
+              pub fn fold(&mut self, x: &[f64]) {
+                  assert_eq!(x.len(), self.dim);
+                  self.n += 1;
+                  let nf = self.n as f64;
+                  let mut delta = vec![0.0; self.dim];
+                  for i in 0..self.dim {
+                      delta[i] = x[i] - self.mean[i];
+                      self.mean[i] += delta[i] / nf;
+                  }
+                  for i in 0..self.dim {
+                      let d2i = x[i] - self.mean[i]; // post-update delta
+                      for j in 0..self.dim {
+                          self.m2[i * self.dim + j] += d2i * delta[j];
+                      }
+                  }
+              }
+              pub fn covariance(&self) -> Vec<f64> {
+                  let denom = if self.n > 1 { (self.n - 1) as f64 } else { 1.0 };
+                  // symmetrize exactly (floating asymmetry from update order)
+                  let d = self.dim;
+                  let mut c = vec![0.0; d * d];
+                  for i in 0..d {
+                      for j in 0..d {
+                          c[i * d + j] =
+                              0.5 * (self.m2[i * d + j] + self.m2[j * d + i]) / denom;
+                      }
+                  }
+                  c
+              }
+              pub fn mean(&self) -> &[f64] { &self.mean }
+          }
+
+          /// The sealed healthy subspace: top-k eigenpairs + epoch citation.
+          pub struct Subspace {
+              pub dim: usize,
+              pub k: usize,
+              pub epoch: u16,                 // KAKI kappa[12..13] citation
+              pub mean: Vec<f64>,
+              pub eigvals: Vec<f64>,          // descending, length k
+              pub components: Vec<Vec<f64>>,  // k rows of length dim
+          }
+
+          impl Subspace {
+              /// Deterministic estimation: cyclic Jacobi, fixed sweep order,
+              /// fixed sweep count -> identical input bits, identical output bits.
+              pub fn estimate(acc: &CovAccum, k: usize, epoch: u16) -> Self {
+                  let d = acc.dim;
+                  let mut a = acc.covariance();
+                  let mut v = identity(d);
+                  const SWEEPS: usize = 30; // fixed: determinism over adaptivity
+                  for _ in 0..SWEEPS {
+                      for p in 0..d - 1 {
+                          for q in p + 1..d {
+                              jacobi_rotate(&mut a, &mut v, d, p, q);
+                          }
+                      }
+                  }
+                  // eigenvalues on diagonal; sort descending, ties by index (stable)
+                  let mut order: Vec<usize> = (0..d).collect();
+                  order.sort_by(|&i, &j| {
+                      a[j * d + j].partial_cmp(&a[i * d + i]).unwrap()
+                          .then(i.cmp(&j))
+                  });
+                  let kk = k.min(d);
+                  let mut eigvals = Vec::with_capacity(kk);
+                  let mut components = Vec::with_capacity(kk);
+                  for &idx in order.iter().take(kk) {
+                      eigvals.push(a[idx * d + idx]);
+                      let mut col: Vec<f64> = (0..d).map(|r| v[r * d + idx]).collect();
+                      // sign convention: largest-magnitude entry positive (determinism)
+                      let m = col.iter().cloned().fold((0usize, 0.0f64), |acc2, _| acc2);
+                      let _ = m;
+                      let (mi, _) = col.iter().enumerate()
+                          .max_by(|x, y| x.1.abs().partial_cmp(&y.1.abs()).unwrap())
+                          .unwrap();
+                      if col[mi] < 0.0 { for e in col.iter_mut() { *e = -*e; } }
+                      components.push(col);
+                  }
+                  Self { dim: d, k: kk, epoch, mean: acc.mean().to_vec(), eigvals, components }
+              }
+
+              /// Hepta shadow: project centered spectrum onto top-k components.
+              pub fn shadow(&self, x: &[f64]) -> Vec<f64> {
+                  self.components.iter().map(|c| {
+                      c.iter().zip(x).zip(&self.mean)
+                          .map(|((ci, xi), mi)| ci * (xi - mi)).sum()
+                  }).collect()
+              }
+
+              /// Reconstruction from shadow (for the Q residual).
+              pub fn reconstruct(&self, shadow: &[f64]) -> Vec<f64> {
+                  let mut r = self.mean.clone();
+                  for (s, c) in shadow.iter().zip(&self.components) {
+                      for (ri, ci) in r.iter_mut().zip(c) { *ri += s * ci; }
+                  }
+                  r
+              }
+          }
+
+          fn identity(d: usize) -> Vec<f64> {
+              let mut m = vec![0.0; d * d];
+              for i in 0..d { m[i * d + i] = 1.0; }
+              m
+          }
+
+          fn jacobi_rotate(a: &mut [f64], v: &mut [f64], d: usize, p: usize, q: usize) {
+              let apq = a[p * d + q];
+              if apq.abs() < 1e-300 { return; }
+              let theta = (a[q * d + q] - a[p * d + p]) / (2.0 * apq);
+              let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+              let c = 1.0 / (t * t + 1.0).sqrt();
+              let s = t * c;
+              for i in 0..d {
+                  let aip = a[i * d + p];
+                  let aiq = a[i * d + q];
+                  a[i * d + p] = c * aip - s * aiq;
+                  a[i * d + q] = s * aip + c * aiq;
+              }
+              for j in 0..d {
+                  let apj = a[p * d + j];
+                  let aqj = a[q * d + j];
+                  a[p * d + j] = c * apj - s * aqj;
+                  a[q * d + j] = s * apj + c * aqj;
+              }
+              for i in 0..d {
+                  let vip = v[i * d + p];
+                  let viq = v[i * d + q];
+                  v[i * d + p] = c * vip - s * viq;
+                  v[i * d + q] = s * vip + c * viq;
+              }
+          }
+
+    - name: src/witness.rs — the two witnesses
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/witness.rs"
+        mode: "0644"
+        content: |
+          //! T-squared and Q: two independent geometric witnesses (GL-HSI-001 §4).
+          use crate::subspace::Subspace;
+
+          pub struct WitnessReport {
+              pub t2: f64,
+              pub q: f64,
+              pub subspace_epoch: u16, // L-HSI-6: judgment cites the epoch
+          }
+
+          pub fn witness(sub: &Subspace, x: &[f64]) -> WitnessReport {
+              let shadow = sub.shadow(x);
+              // T2: sum over components of score^2 / eigenvalue
+              let t2 = shadow.iter().zip(&sub.eigvals)
+                  .map(|(s, l)| if *l > 1e-12 { s * s / l } else { 0.0 })
+                  .sum();
+              // Q (SPE): squared orthogonal residual
+              let recon = sub.reconstruct(&shadow);
+              let q = x.iter().zip(&recon).map(|(a, b)| (a - b) * (a - b)).sum();
+              WitnessReport { t2, q, subspace_epoch: sub.epoch }
+          }
+
+          /// Control limits sealed at subspace estimation (empirical quantile
+          /// over the healthy corpus — never a magic constant).
+          pub struct ControlLimits { pub t2_limit: f64, pub q_limit: f64 }
+
+    - name: src/horizon.rs — T_leak from acceleration, never weather
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/horizon.rs"
+        mode: "0644"
+        content: |
+          //! Igigi horizon: ramp fit on Q trajectory; alarm on acceleration.
+          //! T_leak = epochs until Q crosses its limit, from a least-squares
+          //! quadratic on the last W epochs. Finite only if slope AND curvature
+          //! are positive-sustained (weather moves Q; leaks accelerate it).
+
+          pub struct Horizon { pub t_leak_epochs: Option<f64>, pub slope: f64, pub accel: f64 }
+
+          pub fn fit(q_series: &[f64], q_limit: f64) -> Horizon {
+              let n = q_series.len();
+              if n < 3 { return Horizon { t_leak_epochs: None, slope: 0.0, accel: 0.0 }; }
+              // least-squares quadratic q(t) = a t^2 + b t + c over t = 0..n-1
+              let (mut s0, mut s1, mut s2, mut s3, mut s4) = (0.0, 0.0, 0.0, 0.0, 0.0);
+              let (mut sy, mut sty, mut st2y) = (0.0, 0.0, 0.0);
+              for (i, &y) in q_series.iter().enumerate() {
+                  let t = i as f64;
+                  s0 += 1.0; s1 += t; s2 += t * t; s3 += t * t * t; s4 += t * t * t * t;
+                  sy += y; sty += t * y; st2y += t * t * y;
+              }
+              let m = [[s4, s3, s2], [s3, s2, s1], [s2, s1, s0]];
+              let r = [st2y, sty, sy];
+              let sol = solve3(m, r);
+              let (a, b, _c) = (sol[0], sol[1], sol[2]);
+              let t_now = (n - 1) as f64;
+              let slope = 2.0 * a * t_now + b;
+              let accel = 2.0 * a;
+              // Igigi clause: horizon only when ramping AND accelerating
+              if slope <= 0.0 || accel <= 0.0 {
+                  return Horizon { t_leak_epochs: None, slope, accel };
+              }
+              // solve a t^2 + b t + c = q_limit for t > t_now
+              let c2 = sol[2] - q_limit;
+              let disc = b * b - 4.0 * a * c2;
+              let t_leak = if disc >= 0.0 {
+                  let t_cross = (-b + disc.sqrt()) / (2.0 * a);
+                  if t_cross > t_now { Some(t_cross - t_now) } else { Some(0.0) }
+              } else { None };
+              Horizon { t_leak_epochs: t_leak, slope, accel }
+          }
+
+          fn solve3(m: [[f64; 3]; 3], r: [f64; 3]) -> [f64; 3] {
+              let det = |m: &[[f64; 3]; 3]| {
+                  m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+                      - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                      + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+              };
+              let d = det(&m);
+              if d.abs() < 1e-12 { return [0.0, 0.0, 0.0]; }
+              let mut out = [0.0; 3];
+              for col in 0..3 {
+                  let mut mc = m;
+                  for row in 0..3 { mc[row][col] = r[row]; }
+                  out[col] = det(&mc) / d;
+              }
+              out
+          }
+
+    - name: src/particle.rs — KAKIv4.0 minting at birth
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/particle.rs"
+        mode: "0644"
+        content: |
+          //! HSI-region particle: born with a Hepta shadow and a KAKIv4.0.
+          //! Canonical byte layout (LOCKED): [0..3] uuid_hash, [4..5] tribe_id,
+          //! [6] kaki_type, [7] kaki_role, [8..11] reserved, [12..13] timestamp,
+          //! [14..15] CRC-16/CCITT.
+
+          pub const KAKI_TYPE_HSI_REGION: u8 = 0x51; // registry: pending CSR-08
+          pub const TRIBE_WATER: u16 = 0x0101;
+          pub const TRIBE_GAS: u16 = 0x0102;
+          pub const TRIBE_OIL: u16 = 0x0103;
+          pub const TRIBE_HYDRAULIC: u16 = 0x0104;
+
+          pub struct HsiParticle {
+              pub kaki: [u8; 16],
+              pub shadow: [f64; 7],
+          }
+
+          pub fn mint(region_seal: u32, tribe: u16, role: u8, epoch: u16,
+                      shadow: [f64; 7]) -> HsiParticle {
+              let mut k = [0u8; 16];
+              k[0..4].copy_from_slice(&region_seal.to_be_bytes());
+              k[4..6].copy_from_slice(&tribe.to_be_bytes());
+              k[6] = KAKI_TYPE_HSI_REGION;
+              k[7] = role;
+              // k[8..12] reserved = 0
+              k[12..14].copy_from_slice(&epoch.to_be_bytes());
+              let crc = crc16_ccitt(&k[0..14]);
+              k[14..16].copy_from_slice(&crc.to_be_bytes());
+              HsiParticle { kaki: k, shadow }
+          }
+
+          pub fn crc16_ccitt(data: &[u8]) -> u16 {
+              let mut crc: u16 = 0xFFFF;
+              for &b in data {
+                  crc ^= (b as u16) << 8;
+                  for _ in 0..8 {
+                      crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
+                  }
+              }
+              crc
+          }
+
+    - name: src/verdict.rs — the two-witness court
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/verdict.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001 §4 and §6: no verdict on one witness; age/drift alone
+          //! never quarantines; corrupt spectra go to EnkiQDB, never to OMEN.
+          use crate::witness::{WitnessReport, ControlLimits};
+          use crate::horizon::Horizon;
+
+          #[derive(Debug, PartialEq)]
+          pub enum Verdict {
+              NansheOmen { t_leak_epochs: f64, subspace_epoch: u16 },
+              EnkiQdbQuarantine { subspace_epoch: u16 },
+              NuziArchive { subspace_epoch: u16 },
+              NoVerdict, // weather
+          }
+
+          pub fn judge(now: &WitnessReport, prev: Option<&WitnessReport>,
+                       limits: &ControlLimits, horizon: &Horizon,
+                       spectrum_corrupt: bool) -> Verdict {
+              if spectrum_corrupt {
+                  // L-HSI-5: corruption is evidence, never prophecy
+                  return Verdict::EnkiQdbQuarantine { subspace_epoch: now.subspace_epoch };
+              }
+              let t2_now = now.t2 > limits.t2_limit;
+              let q_now = now.q > limits.q_limit;
+              let sustained = |f: fn(&WitnessReport, &ControlLimits) -> bool| {
+                  prev.map(|p| f(p, limits)).unwrap_or(false)
+              };
+              let two_witnesses = (t2_now && q_now)
+                  || (t2_now && sustained(|w, l| w.t2 > l.t2_limit))
+                  || (q_now && sustained(|w, l| w.q > l.q_limit));
+              if !two_witnesses {
+                  return Verdict::NoVerdict; // L-HSI-1: weather clause
+              }
+              match horizon.t_leak_epochs {
+                  Some(t) if horizon.accel > 0.0 => Verdict::NansheOmen {
+                      t_leak_epochs: t, subspace_epoch: now.subspace_epoch },
+                  _ => Verdict::NoVerdict, // excursion without acceleration: watch, not bell
+              }
+          }
+
+    - name: tests/law_tests.rs — L-HSI-1..6
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/law_tests.rs"
+        mode: "0644"
+        content: |
+          use nanshe::subspace::{CovAccum, Subspace};
+          use nanshe::witness::{witness, ControlLimits};
+          use nanshe::horizon::fit;
+          use nanshe::verdict::{judge, Verdict};
+          use nanshe::particle::{mint, TRIBE_WATER, crc16_ccitt};
+
+          fn healthy_subspace(dim: usize) -> Subspace {
+              let mut acc = CovAccum::new(dim);
+              let mut seed: u64 = 0x9E3779B97F4A7C15;
+              for _ in 0..500 {
+                  let x: Vec<f64> = (0..dim).map(|i| {
+                      seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                      ((seed >> 33) as f64 / (1u64 << 31) as f64) + (i as f64) * 0.01
+                  }).collect();
+                  acc.fold(&x);
+              }
+              Subspace::estimate(&acc, 7, 42)
+          }
+
+          #[test]
+          fn l_hsi_1_single_witness_never_fires() {
+              let sub = healthy_subspace(24);
+              let limits = ControlLimits { t2_limit: 1e-9, q_limit: 1e9 }; // T2 trips, Q cannot
+              let x = vec![5.0; 24];
+              let w = witness(&sub, &x);
+              let h = fit(&[0.1, 0.2, 0.4], 1e9);
+              assert_eq!(judge(&w, None, &limits, &h, false), Verdict::NoVerdict);
+          }
+
+          #[test]
+          fn l_hsi_2_two_witness_ramp_yields_finite_horizon() {
+              let sub = healthy_subspace(24);
+              let limits = ControlLimits { t2_limit: 1e-9, q_limit: 1e-9 };
+              let x = vec![50.0; 24];
+              let w = witness(&sub, &x);
+              let q_ramp: Vec<f64> = (0..8).map(|t| 0.5 * (t as f64) * (t as f64)).collect();
+              let h = fit(&q_ramp, 100.0);
+              match judge(&w, None, &limits, &h, false) {
+                  Verdict::NansheOmen { t_leak_epochs, subspace_epoch } => {
+                      assert!(t_leak_epochs.is_finite());
+                      assert_eq!(subspace_epoch, 42);
+                  }
+                  v => panic!("expected NANSHE-OMEN, got {:?}", v),
+              }
+          }
+
+          #[test]
+          fn l_hsi_3_deterministic_subspace() {
+              let a = healthy_subspace(16);
+              let b = healthy_subspace(16);
+              for (ca, cb) in a.components.iter().zip(&b.components) {
+                  assert_eq!(ca, cb); // bit-identical
+              }
+          }
+
+          #[test]
+          fn l_hsi_4_hepta_shadow_unique() {
+              let sub = healthy_subspace(16);
+              let s1 = sub.shadow(&vec![1.0; 16]);
+              let s2 = sub.shadow(&vec![1.0001; 16]);
+              assert_eq!(s1.len(), 7);
+              assert_ne!(s1, s2);
+          }
+
+          #[test]
+          fn l_hsi_5_corrupt_goes_to_quarantine_never_omen() {
+              let sub = healthy_subspace(16);
+              let limits = ControlLimits { t2_limit: 1e-9, q_limit: 1e-9 };
+              let w = witness(&sub, &vec![999.0; 16]);
+              let h = fit(&[0.0, 1.0, 4.0, 9.0], 5.0);
+              assert_eq!(judge(&w, None, &limits, &h, true),
+                         Verdict::EnkiQdbQuarantine { subspace_epoch: 42 });
+          }
+
+          #[test]
+          fn l_hsi_6_kaki_mint_and_crc() {
+              let p = mint(0xDEADBEEF, TRIBE_WATER, 0x01, 42, [0.0; 7]);
+              assert_eq!(&p.kaki[0..4], &0xDEADBEEFu32.to_be_bytes());
+              let crc = u16::from_be_bytes([p.kaki[14], p.kaki[15]]);
+              assert_eq!(crc, crc16_ccitt(&p.kaki[0..14]));
+          }
+
+    - name: Build and run law tests (release)
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ crate_dir }}"
+      register: law_tests
+      changed_when: false
+
+    - name: Announce
+      ansible.builtin.debug:
+        msg: "Nanshe scaffold sealed. Law tests: {{ 'GREEN' if law_tests.rc == 0 else 'RED' }}. GL-HSI-001 awaits CSR-08."

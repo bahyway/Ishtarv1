@@ -2,11 +2,26 @@
 # PB-506 · backpressure_ladder · DRAFT (BahyWay.Ecosystem v4.0 finalization suite)
 # Running this playbook is the Architect's CSR-08 confirmation. Nothing is law until run.
 - name: "PB-506 · the ladder: shed at the gates by covenant order — NEVER at the store"
-  hosts: enkidb-node-write
+  hosts: uruk
   tasks:
+    # 2026-08-23, found live: was hosts: uruk-node-write -- this task only writes
+    # into the shared Forge workspace ({{ playbook_dir }}/../workspace/bahyway_v4) and
+    # NARU.journal on the control node uruk (ansible_connection=local); it never
+    # touches the write node's live services. Targeting uruk-node-write meant this
+    # ran over SSH as a different user on a different machine, writing (or failing
+    # to write) into an unrelated filesystem -- so the journal line PB-530/PB-437's
+    # chain gate checks for never landed where the gate actually looks. Traced from
+    # PB-530's short count (4/15) and PB-437's (6/10), both explained exactly by
+    # counting how many playbooks in their range were mis-targeted this way.
+    # 2026-08-23, found live: same missing-parent-directory gap as PB-434
+    # (gates/G1-G7.decree) -- nothing creates bahyway_v4/gates/ before this
+    # copy writes into it. Fixed the same way.
+    - name: ensure gates dir
+      ansible.builtin.file: { path: "{{ playbook_dir }}/../workspace/bahyway_v4/gates", state: directory, mode: "0755" }
+      check_mode: false
     - name: ladder decree
       ansible.builtin.copy:
-        dest: /home/bfadam/Forge/bahyway_v4/gates/LADDER.decree
+        dest: "{{ playbook_dir }}/../workspace/bahyway_v4/gates/LADDER.decree"
         content: |
           BACKPRESSURE LADDER · engages when headroom < 3× the ENLIL law
           Rung 1: defer non-covenant batch ingest at G1
@@ -15,6 +30,6 @@
           NEVER: throttle, lock, or shed at EnkiDB/EnkiDW — the golden house does not tremble.
     - name: journal (NARU discipline)
       ansible.builtin.lineinfile:
-        path: /home/bfadam/Forge/bahyway_v4/NARU.journal
+        path: "{{ playbook_dir }}/../workspace/bahyway_v4/NARU.journal"
         line: "{{ ansible_date_time.iso8601 }} · PB-506 · ladder decreed"
         create: yes

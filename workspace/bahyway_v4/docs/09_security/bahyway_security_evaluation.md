@@ -20,7 +20,7 @@ list ordered by severity.
 - **Sensitive personal data** — Arabic names, death years, tribe affiliations,
   family trees (`FamilyLineage`, `GraveParticle`)
 - **Data flow pipelines** — replication between Write Pod and Read Pod
-- **Web sessions** — HeptaScript website, DubSar IDE, EriduOS notebooks
+- **Web sessions** — HeptaScript website, DubSar IDE, UrOS notebooks
 - **Infrastructure records** — WPD pipeline data (pressure, leak candidates)
 
 ---

@@ -35,18 +35,18 @@ impl NullSemantics {
     /// Pass `None` for row-absent, `Some(&value)` for present-or-explicit-null.
     pub fn from_option(v: Option<&akkvalue::AkkValue>) -> Self {
         match v {
-            None                                             => Self::RowAbsent,
-            Some(val) if val.is_null()                       => Self::ExplicitNull,
-            Some(_)                                          => Self::Present,
+            None => Self::RowAbsent,
+            Some(val) if val.is_null() => Self::ExplicitNull,
+            Some(_) => Self::Present,
         }
     }
 
     /// HeptaScript query hint string for this null kind.
     pub fn query_form(&self) -> &'static str {
         match self {
-            Self::RowAbsent     => "NOT EXISTS",
-            Self::ExplicitNull  => "IS NULL",
-            Self::Present       => "IS NOT NULL",
+            Self::RowAbsent => "NOT EXISTS",
+            Self::ExplicitNull => "IS NULL",
+            Self::Present => "IS NOT NULL",
         }
     }
 }

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · GL-SIM-001 · Šēdu v2 — the Guardian and the Becoming</title>
+<style>
+  :root{--basalt:#14120f;--tablet:#1f1b16;--gold:#c9a227;--lapis:#2e5d8c;
+    --copper:#b0642f;--alarm:#c23b2a;--bone:#e8e0cf;--tablet-edge:#3a332a;
+    --dim:#8f8672;--green:#7fbf5f;--violet:#a58cc0;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--basalt);color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden;}
+  #crumbs{padding:10px 16px 0;font-size:12px;color:var(--dim);letter-spacing:.08em;}
+  #crumbs b{color:var(--gold);font-weight:normal;}
+  #lede{padding:2px 16px 8px;font-size:13.5px;}
+  #banner{background:var(--alarm);color:var(--bone);text-align:center;
+    font-size:11px;letter-spacing:.35em;padding:3px 0;font-family:monospace;}
+  #grid{display:grid;grid-template-columns:1fr 330px;gap:10px;
+    padding:10px 16px 16px;height:calc(100% - 86px);}
+  .panel{background:var(--tablet);border:1px solid var(--tablet-edge);
+    border-radius:6px;position:relative;overflow:hidden;}
+  #stage{cursor:grab;} #stage.pick{cursor:pointer;} #stage:active{cursor:grabbing;}
+  canvas{display:block;width:100%;height:100%;}
+  #status{position:absolute;top:8px;left:12px;right:12px;z-index:5;
+    font-family:monospace;font-size:11.5px;color:var(--gold);
+    background:rgba(20,18,15,.78);padding:5px 9px;border-radius:4px;
+    border:1px solid var(--tablet-edge);}
+  #deck{position:absolute;top:44px;right:10px;z-index:5;}
+  #deck button{width:34px;height:34px;background:var(--basalt);color:var(--gold);
+    border:1px solid var(--tablet-edge);border-radius:4px;font-size:16px;cursor:pointer;}
+  #lawtags{position:absolute;bottom:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:5;}
+  .lawtag{font-family:monospace;font-size:10px;color:var(--basalt);
+    background:var(--gold);padding:2px 7px;border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis);color:var(--bone);}
+  #side{display:flex;flex-direction:column;}
+  #side h2{font-size:12px;letter-spacing:.25em;color:var(--gold);
+    padding:9px 12px 5px;border-bottom:1px solid var(--tablet-edge);}
+  #story{max-height:50%;overflow-y:auto;padding:8px 12px;font-size:12px;line-height:1.45;
+    border-bottom:1px solid var(--tablet-edge);}
+  #story .ev{margin-bottom:7px;border-left:2px solid var(--lapis);padding-left:8px;}
+  #story .ev .e{color:var(--gold);font-family:monospace;font-size:10px;}
+  #story .empty{color:var(--dim);font-style:italic;padding:6px 0;}
+  #journal{flex:1;overflow-y:auto;padding:10px 12px;font-size:12px;line-height:1.45;}
+  .entry{margin-bottom:9px;border-left:2px solid var(--copper);padding-left:8px;}
+  .entry .t{color:var(--dim);font-family:monospace;font-size:10px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Šēdu Court ▸ <b>GL-SIM-001 · v2 — the Guardian and the Becoming</b></div>
+<div id="lede"><i>"The proposed is a decree; the built is a realization."</i> The Court now judges THREE risk classes: <b>the cascade</b> (reach, organs, ground), <b>the BECOMING</b> — twelve seeded as-built realizations drawn from the witnessed ground, tilted ghosts in red where the structure would become other than proposed — and <b>the TOWNSCAPE</b>: the street Tribe's own arrangement law (Ṭēmu), which can refuse a tower that is perfectly safe and permanently unpleasant. Click pad A, B, or C.</div>
+<div id="banner">ŠALA REHEARSAL — THE COURT JUDGES THE DISTRIBUTION, NOT THE WISH — ALL FIGURES SIMULATED</div>
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="status">…</div>
+    <div id="deck"><button id="bHome" title="Reset camera">⌖</button></div>
+    <div id="lawtags">
+      <span class="lawtag">GL-SIM-001</span>
+      <span class="lawtag lapis">PB-SIM-001</span>
+      <span class="lawtag">BECOMING · 12 REALIZATIONS</span>
+      <span class="lawtag lapis">TOWNSCAPE · ṬĒMU LAW</span>
+      <span class="lawtag lapis">PER-PARTICLE VERDICTS</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>VERDICT CERTIFICATE — ŠĒDU COURT</h2>
+    <div id="story"><div class="empty">place the ghost tower on a candidate pad — the Court will judge cascade, becoming, and townscape</div></div>
+    <h2>COURT JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+<script>
+"use strict";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+const rnd=mulberry32(0x53454456);
+const cv=document.getElementById('cv');
+const g=cv.getContext('2d');
+const stage=document.getElementById('stage'),statusEl=document.getElementById('status');
+function fit(){cv.width=stage.clientWidth;cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit);fit();
+const jEl=document.getElementById('journal'),sEl=document.getElementById('story');
+function journal(t){const d=document.createElement('div');d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;jEl.prepend(d);}
+/* ---- witnessed street ---- */
+const SCHOOL={x:-0.85,z:-0.42,w:0.42,d:0.26,h:0.16,name:'SCHOOL (protected particle)'};
+const DWELL=[{x:0.15,z:-0.52,w:0.28,d:0.2,h:0.16},{x:0.62,z:-0.50,w:0.30,d:0.2,h:0.16},{x:1.05,z:-0.45,w:0.24,d:0.2,h:0.16}];
+const MAIN={z:0.34,weakA:-0.15,weakB:0.35};
+const EGMS=[];for(let i=0;i<14;i++)EGMS.push({x:-1.15+i*0.18,z:0.05+(rnd()-0.5)*0.1,
+  vel:(i>=9? -3.4-rnd()*1.5 : -0.4-rnd()*0.6)});
+const PADS=[{id:'A',x:-0.72,z:0.02},{id:'B',x:0.10,z:0.14},{id:'C',x:0.62,z:-0.10}];
+const REACH=0.42,VIBR=0.30,TOWER_H=0.42,AMBIENT_H=0.16;
+const TILT_LIMIT=0.10;        /* declared as-built lean limit (rad, SIMULATED) */
+const BECOME_FLOOR=0.25;      /* declared max P(undesirable realization) */
+const TOWN_DIST=0.55;         /* residential frontage influence distance */
+let placed=null,real=[],hover=null,drag=null,dragMoved=false;
+const cam0={yaw:-0.25,pitch:0.85,zoom:1.0};let cam={...cam0};
+document.getElementById('bHome').onclick=()=>{cam={...cam0};};
+stage.addEventListener('wheel',e=>{e.preventDefault();
+  cam.zoom=Math.min(3,Math.max(.5,cam.zoom*(e.deltaY<0?1.1:0.9)));},{passive:false});
+stage.addEventListener('mousedown',e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY};dragMoved=false;});
+window.addEventListener('mouseup',()=>drag=null);
+let mouse={x:-1,y:-1};
+stage.addEventListener('mousemove',e=>{
+  const r=cv.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;
+  if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+    if(Math.abs(dx)+Math.abs(dy)>3)dragMoved=true;
+    drag={x:e.clientX,y:e.clientY};
+    cam.yaw+=dx*.004;cam.pitch=Math.min(1.35,Math.max(0.25,cam.pitch+dy*.004));}
+});
+function proj(p){
+  const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  let x=p.x*cy-p.z*sy,z=p.x*sy+p.z*cy,y=(p.y||0)-0.05;
+  let yy=y*cp-z*sp,zz=y*sp+z*cp;
+  const d=4.2,s=(cv.height*0.42)*cam.zoom*(d/(d+zz));
+  return {x:cv.width/2+x*s,y:cv.height*0.55-yy*s,z:zz,s:s};
+}
+function dist2d(a,b){return Math.hypot(a.x-b.x,a.z-b.z);}
+/* ---- BECOMING: seeded realizations from the witnessed ground ---- */
+function becoming(p){
+  /* local ground gradient from EGMS: differential settlement -> lean bias */
+  let wE=0,wW=0,cE=0,cW=0;
+  EGMS.forEach(e=>{const d=Math.hypot(e.x-p.x,e.z-p.z);if(d<0.34){
+    if(e.x>p.x){wE+=e.vel;cE++;}else{wW+=e.vel;cW++;}}});
+  const vE=cE?wE/cE:0,vW=cW?wW/cW:0;
+  const bias=(vW-vE)*0.02;                 /* mm/yr differential -> lean rad (SIMULATED model) */
+  const R=mulberry32(0x42454300 + p.id.charCodeAt(0));
+  const out=[];let und=0;
+  for(let k=0;k<12;k++){
+    const lean=bias*(0.7+0.6*R())+(R()-0.5)*0.05;   /* construction tolerance */
+    const dir=R()*Math.PI*2;
+    const bad=Math.abs(lean)>TILT_LIMIT;
+    if(bad)und++;
+    out.push({lean:lean,dir:dir,bad:bad});
+  }
+  return {reals:out,p:und/12,bias:bias};
+}
+/* ---- judgment: cascade + becoming + townscape ---- */
+function judge(p){
+  const out={id:p.id,checks:[],verdict:'ADMITTED'};
+  const prot=[{...SCHOOL,tag:SCHOOL.name},...DWELL.map((d,i)=>({...d,tag:'dwelling '+(i+1)}))];
+  prot.forEach(pr=>{
+    const d=dist2d(p,pr),inside=d<REACH;
+    out.checks.push({name:'reach vs '+pr.tag,val:d.toFixed(2),floor:REACH.toFixed(2),
+      bad:inside,note:inside?'INSIDE declared reach — one protected particle refuses the site (§6)':'clear'});
+    if(inside)out.verdict='REFUSED';});
+  const wx=Math.min(Math.max(p.x,MAIN.weakA),MAIN.weakB);
+  const dm=Math.hypot(p.x-wx,p.z-MAIN.z),near=dm<VIBR;
+  out.checks.push({name:'vibration vs weak main segment',val:dm.toFixed(2),floor:VIBR.toFixed(2),
+    bad:false,note:near?'SHELL-CROSS shifts ~day 210 → ~day 140 (Bārûtu re-run) — CONDITIONED: protective works + monthly cadence':'no organ perturbed'});
+  if(near&&out.verdict!=='REFUSED')out.verdict='CONDITIONED';
+  let vel=0,c=0;EGMS.forEach(e=>{if(Math.hypot(e.x-p.x,e.z-p.z)<0.30){vel+=e.vel;c++;}});
+  const v=c?vel/c:0,badG=v<-2.5;
+  out.checks.push({name:'EGMS ground trend at pad',val:v.toFixed(1)+' mm/yr',floor:'-2.5 mm/yr',
+    bad:badG,note:badG?'witnessed subsidence contradicts the foundation covenant — REFUSED by the ground itself':'ground steady'});
+  if(badG)out.verdict='REFUSED';
+  /* --- NEW: the BECOMING --- */
+  const bec=becoming(p);out.bec=bec;
+  const badB=bec.p>BECOME_FLOOR;
+  out.checks.push({name:'BECOMING · P(as-built ≠ proposed)',
+    val:(bec.p*100).toFixed(0)+'% undesirable realizations',floor:(BECOME_FLOOR*100).toFixed(0)+'%',
+    bad:badB,note:badB?
+      'differential settlement ('+bec.bias.toFixed(3)+' rad/yr bias) makes leaning, deviant realizations too likely — the wish is fine, the DISTRIBUTION is refused (§5, Kulla fingerprint forward in time)':
+      'realization envelope tight — the built will resemble the decree'});
+  if(badB&&out.verdict!=='REFUSED')out.verdict='REFUSED';
+  /* --- NEW: the TOWNSCAPE --- */
+  const dFront=Math.min(dist2d(p,SCHOOL),...DWELL.map(d=>dist2d(p,d)));
+  const townBreach=dFront<TOWN_DIST && TOWER_H>2*AMBIENT_H;
+  out.checks.push({name:'TOWNSCAPE · street Tribe arrangement law (Ṭēmu)',
+    val:'h='+TOWER_H.toFixed(2)+' vs ambient '+AMBIENT_H.toFixed(2)+', frontage dist '+dFront.toFixed(2),
+    floor:'≤2× ambient within '+TOWN_DIST.toFixed(2),
+    bad:false,note:townBreach?
+      'the tower breaks the skyline rhythm of the residential frontage — physically safe, permanently UNPLEASANT: CONDITIONED (setback / screening / redesign) by the street\'s own pattern law':
+      'the street\'s arrangement law is respected'});
+  if(townBreach&&out.verdict==='ADMITTED')out.verdict='CONDITIONED';
+  out.town=townBreach;
+  return out;
+}
+function certify(o){
+  const col=o.verdict==='REFUSED'?'var(--alarm)':o.verdict==='CONDITIONED'?'var(--gold)':'var(--green)';
+  let h='<div class="ev"><div class="e">SITE '+o.id+' · VERDICT</div><b style="color:'+col+'">'+o.verdict+'</b> — three risk classes judged: cascade, becoming, townscape. Every figure CLASS: SIMULATED (§3).</div>';
+  o.checks.forEach(c=>{h+='<div class="ev"><div class="e">'+c.name+' · '+c.val+' (floor '+c.floor+')</div>'+c.note+'</div>';});
+  if(o.verdict!=='REFUSED')h+='<div class="ev"><div class="e">THRESHOLD GATE (§8) + LEDGER (§9)</div>On installation the production citizen inherits this certificate as pre-birth nasab, and every prophecy here — including the becoming envelope — is scored against later witness epochs.</div>';
+  sEl.innerHTML=h;
+}
+stage.addEventListener('click',function(){
+  if(dragMoved)return;
+  if(hover!==null){placed=PADS[hover];
+    const o=judge(placed);real=o.bec.reals;certify(o);
+    const col=o.verdict==='REFUSED'?'var(--alarm)':o.verdict==='CONDITIONED'?'var(--gold)':'var(--green)';
+    journal('SITE '+placed.id+' → <b style="color:'+col+'">'+o.verdict+'</b>. Twelve as-built realizations drawn from the witnessed ground: '+(o.bec.p*100).toFixed(0)+'% would become other than proposed'+(o.town?'; and the street Tribe\'s pattern law objects to the skyline breach':'')+'. <i>The court judges the distribution, not the wish.</i>');
+  }
+});
+let t0=performance.now();
+function frame(now){
+  const t=now/1000;
+  if(!drag)cam.yaw+=0.0008;
+  g.fillStyle='#14120f';g.fillRect(0,0,cv.width,cv.height);
+  for(let j=0;j<=8;j++){g.beginPath();
+    for(let i=0;i<=36;i++){const x=-1.4+i/36*2.8,z=-0.75+j/8*1.5;
+      const q=proj({x:x,z:z,y:0.015*Math.sin(t*0.6+i*0.4+j)});
+      i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);}
+    g.strokeStyle='rgba(46,93,140,0.15)';g.lineWidth=1;g.stroke();}
+  const sq=[[-1.4,-0.12],[1.4,-0.12],[1.4,0.12],[-1.4,0.12]].map(p=>proj({x:p[0],z:p[1]}));
+  g.beginPath();sq.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.closePath();
+  g.fillStyle='rgba(58,51,42,0.55)';g.fill();
+  const m1=proj({x:-1.4,z:MAIN.z}),m2=proj({x:1.4,z:MAIN.z});
+  g.strokeStyle='#2e5d8c';g.lineWidth=2.4;
+  g.beginPath();g.moveTo(m1.x,m1.y);g.lineTo(m2.x,m2.y);g.stroke();
+  const w1=proj({x:MAIN.weakA,z:MAIN.z}),w2=proj({x:MAIN.weakB,z:MAIN.z});
+  g.strokeStyle='rgba(201,162,39,'+(0.5+0.4*Math.sin(t*3)).toFixed(2)+')';g.lineWidth=3.4;
+  g.beginPath();g.moveTo(w1.x,w1.y);g.lineTo(w2.x,w2.y);g.stroke();
+  g.fillStyle='#c9a227';g.font='9px monospace';g.textAlign='center';
+  g.fillText('BĀRÛTU: weak segment · SHELL-CROSS ~day 210',(w1.x+w2.x)/2,(w1.y+w2.y)/2-10);
+  EGMS.forEach(e=>{const q=proj({x:e.x,z:e.z});
+    g.fillStyle=e.vel<-2.5?'#c23b2a':'#7fbf5f';
+    g.beginPath();g.arc(q.x,q.y,2.4,0,2*Math.PI);g.fill();});
+  function box(b,col,label){
+    const c=[[b.x-b.w/2,b.z-b.d/2],[b.x+b.w/2,b.z-b.d/2],[b.x+b.w/2,b.z+b.d/2],[b.x-b.w/2,b.z+b.d/2]];
+    const base=c.map(p=>proj({x:p[0],z:p[1]})),top=c.map(p=>proj({x:p[0],z:p[1],y:b.h}));
+    g.beginPath();base.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.closePath();
+    g.fillStyle='rgba(31,27,22,0.9)';g.fill();g.strokeStyle=col;g.lineWidth=1.4;g.stroke();
+    for(let i=0;i<4;i++){g.beginPath();g.moveTo(base[i].x,base[i].y);g.lineTo(top[i].x,top[i].y);g.stroke();}
+    g.beginPath();top.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.closePath();g.stroke();
+    g.fillStyle=col;g.font='9px monospace';g.textAlign='center';
+    g.fillText(label,top[0].x+(top[2].x-top[0].x)/2,Math.min(top[0].y,top[2].y)-6);
+  }
+  box(SCHOOL,'#a58cc0','SCHOOL');
+  DWELL.forEach(d=>box(d,'#8f8672','dwelling'));
+  /* townscape covenant line: ambient skyline over the frontage */
+  const t1=proj({x:-1.15,z:-0.48,y:2*AMBIENT_H}),t2=proj({x:1.25,z:-0.48,y:2*AMBIENT_H});
+  g.strokeStyle='rgba(165,140,192,0.5)';g.setLineDash([6,4]);g.lineWidth=1;
+  g.beginPath();g.moveTo(t1.x,t1.y);g.lineTo(t2.x,t2.y);g.stroke();g.setLineDash([]);
+  g.fillStyle='rgba(165,140,192,0.8)';g.font='9px monospace';g.textAlign='left';
+  g.fillText('townscape covenant: ≤2× ambient height (Ṭēmu street law)',t1.x,t1.y-6);
+  hover=null;
+  PADS.forEach((p,pi)=>{
+    const q=proj({x:p.x,z:p.z});
+    const near=Math.hypot(q.x-mouse.x,q.y-mouse.y)<20;
+    if(near)hover=pi;
+    g.strokeStyle=near?'#e8e0cf':'#c9a227';g.setLineDash([4,3]);g.lineWidth=near?2:1.2;
+    g.strokeRect(q.x-14,q.y-9,28,18);g.setLineDash([]);
+    g.fillStyle=near?'#e8e0cf':'#c9a227';g.font='10px monospace';g.textAlign='center';
+    g.fillText('SITE '+p.id+(near?' — click to place':''),q.x,q.y-14);
+  });
+  stage.classList.toggle('pick',hover!==null&&!drag);
+  if(placed){
+    const q=proj({x:placed.x,z:placed.z});
+    g.beginPath();
+    for(let k=0;k<=48;k++){const a=k/48*2*Math.PI;
+      const c=proj({x:placed.x+Math.cos(a)*REACH,z:placed.z+Math.sin(a)*REACH});
+      k?g.lineTo(c.x,c.y):g.moveTo(c.x,c.y);}
+    g.strokeStyle='rgba(194,59,42,0.7)';g.setLineDash([5,4]);g.lineWidth=1.6;g.stroke();g.setLineDash([]);
+    /* THE BECOMING: twelve realizations */
+    real.forEach((r,k)=>{
+      const dx=Math.sin(r.lean)*Math.cos(r.dir)*TOWER_H;
+      const dz=Math.sin(r.lean)*Math.sin(r.dir)*TOWER_H;
+      const top=proj({x:placed.x+dx,z:placed.z+dz,y:TOWER_H});
+      const a=r.bad?0.55:0.22;
+      g.strokeStyle=r.bad?'rgba(194,59,42,'+a+')':'rgba(232,224,207,'+a+')';
+      g.lineWidth=r.bad?1.8:1;
+      g.beginPath();g.moveTo(q.x-9,q.y);g.lineTo(top.x,top.y);g.lineTo(q.x+9,q.y);g.stroke();
+    });
+    /* the proposed decree, gold */
+    const top=proj({x:placed.x,z:placed.z,y:TOWER_H});
+    const ghost=0.65+0.25*Math.sin(t*2);
+    g.strokeStyle='rgba(201,162,39,'+ghost.toFixed(2)+')';g.lineWidth=2.2;
+    g.beginPath();g.moveTo(q.x-10,q.y);g.lineTo(top.x,top.y);g.lineTo(q.x+10,q.y);g.stroke();
+    g.beginPath();g.moveTo(q.x-6,q.y-(q.y-top.y)*0.45);g.lineTo(q.x+6,q.y-(q.y-top.y)*0.45);g.stroke();
+    g.fillStyle='rgba(201,162,39,0.9)';g.font='9px monospace';g.textAlign='center';
+    g.fillText('the DECREE (proposed)',top.x,top.y-18);
+    g.fillStyle='rgba(232,224,207,0.75)';
+    g.fillText('the BECOMING: 12 realizations · red = would become other than proposed',top.x,top.y-8);
+  }
+  statusEl.textContent='ŠĒDU v2 · three risk classes: CASCADE + BECOMING + TOWNSCAPE · '+(placed?('SITE '+placed.id+' judged — certificate at right'):'click a pad to place the ghost tower')+' · tilt limit '+TILT_LIMIT+' rad · becoming floor '+(BECOME_FLOOR*100)+'% · all SIMULATED';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('ŠĒDU COURT v2 opens. The court no longer judges only what the tower does to the street — it judges what the street does to the tower (the BECOMING: twelve seeded as-built realizations drawn from the witnessed ground) and what the tower does to the street\'s own pattern (the TOWNSCAPE: the Ṭēmu arrangement law of the frontage, dashed violet). A site can now be refused because what would actually get built is not what was proposed — try SITE C on the sinking ground.');
+</script>
+</body>
+</html>

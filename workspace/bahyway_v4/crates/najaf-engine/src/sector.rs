@@ -44,13 +44,13 @@ impl NajafSector {
 
     pub fn index(self) -> u8 {
         match self {
-            NajafSector::Entrance  => 0,
+            NajafSector::Entrance => 0,
             NajafSector::Shuhadaa => 1,
-            NajafSector::Awliya   => 2,
-            NajafSector::Huffaz   => 3,
+            NajafSector::Awliya => 2,
+            NajafSector::Huffaz => 3,
             NajafSector::Momineen => 4,
-            NajafSector::Ulamaa   => 5,
-            NajafSector::Anbiya   => 6,
+            NajafSector::Ulamaa => 5,
+            NajafSector::Anbiya => 6,
         }
     }
 
@@ -61,23 +61,23 @@ impl NajafSector {
 
     pub fn to_hepta(self) -> HeptaSector {
         match self {
-            NajafSector::Entrance  => HeptaSector::Centre,
+            NajafSector::Entrance => HeptaSector::Centre,
             NajafSector::Shuhadaa => HeptaSector::North,
-            NajafSector::Awliya   => HeptaSector::NorthEast,
-            NajafSector::Huffaz   => HeptaSector::SouthEast,
+            NajafSector::Awliya => HeptaSector::NorthEast,
+            NajafSector::Huffaz => HeptaSector::SouthEast,
             NajafSector::Momineen => HeptaSector::South,
-            NajafSector::Ulamaa   => HeptaSector::SouthWest,
-            NajafSector::Anbiya   => HeptaSector::NorthWest,
+            NajafSector::Ulamaa => HeptaSector::SouthWest,
+            NajafSector::Anbiya => HeptaSector::NorthWest,
         }
     }
 
     pub fn from_hepta(h: HeptaSector) -> Self {
         match h {
-            HeptaSector::Centre    => NajafSector::Entrance,
-            HeptaSector::North     => NajafSector::Shuhadaa,
+            HeptaSector::Centre => NajafSector::Entrance,
+            HeptaSector::North => NajafSector::Shuhadaa,
             HeptaSector::NorthEast => NajafSector::Awliya,
             HeptaSector::SouthEast => NajafSector::Huffaz,
-            HeptaSector::South     => NajafSector::Momineen,
+            HeptaSector::South => NajafSector::Momineen,
             HeptaSector::SouthWest => NajafSector::Ulamaa,
             HeptaSector::NorthWest => NajafSector::Anbiya,
         }
@@ -87,44 +87,48 @@ impl NajafSector {
     /// Entrance is neutral (1.0); martyrs and prophets receive reductions.
     pub fn sacred_weight(self) -> f32 {
         match self {
-            NajafSector::Entrance  => 1.00,
+            NajafSector::Entrance => 1.00,
             NajafSector::Shuhadaa => 0.85,
-            NajafSector::Awliya   => 0.90,
-            NajafSector::Huffaz   => 0.95,
+            NajafSector::Awliya => 0.90,
+            NajafSector::Huffaz => 0.95,
             NajafSector::Momineen => 1.00,
-            NajafSector::Ulamaa   => 0.92,
-            NajafSector::Anbiya   => 0.88,
+            NajafSector::Ulamaa => 0.92,
+            NajafSector::Anbiya => 0.88,
         }
     }
 
     pub fn arabic_name(self) -> &'static str {
         match self {
-            NajafSector::Entrance  => "المدخل",
+            NajafSector::Entrance => "المدخل",
             NajafSector::Shuhadaa => "الشهداء",
-            NajafSector::Awliya   => "الأولياء",
-            NajafSector::Huffaz   => "الحفّاظ",
+            NajafSector::Awliya => "الأولياء",
+            NajafSector::Huffaz => "الحفّاظ",
             NajafSector::Momineen => "المؤمنين",
-            NajafSector::Ulamaa   => "العلماء",
-            NajafSector::Anbiya   => "الأنبياء",
+            NajafSector::Ulamaa => "العلماء",
+            NajafSector::Anbiya => "الأنبياء",
         }
     }
 
     pub fn english_name(self) -> &'static str {
         match self {
-            NajafSector::Entrance  => "Entrance",
+            NajafSector::Entrance => "Entrance",
             NajafSector::Shuhadaa => "Martyrs",
-            NajafSector::Awliya   => "Saints",
-            NajafSector::Huffaz   => "Memorisers",
+            NajafSector::Awliya => "Saints",
+            NajafSector::Huffaz => "Memorisers",
             NajafSector::Momineen => "Believers",
-            NajafSector::Ulamaa   => "Scholars",
-            NajafSector::Anbiya   => "Prophets",
+            NajafSector::Ulamaa => "Scholars",
+            NajafSector::Anbiya => "Prophets",
         }
     }
 
     pub fn all() -> [NajafSector; 7] {
         [
-            NajafSector::Entrance,  NajafSector::Shuhadaa, NajafSector::Awliya,
-            NajafSector::Huffaz,    NajafSector::Momineen, NajafSector::Ulamaa,
+            NajafSector::Entrance,
+            NajafSector::Shuhadaa,
+            NajafSector::Awliya,
+            NajafSector::Huffaz,
+            NajafSector::Momineen,
+            NajafSector::Ulamaa,
             NajafSector::Anbiya,
         ]
     }
@@ -168,8 +172,8 @@ mod tests {
     fn elevated_zones_below_one() {
         // Martyrs, Saints, Prophets get pilgrimage priority < 1.0
         assert!(NajafSector::Shuhadaa.sacred_weight() < 1.0);
-        assert!(NajafSector::Awliya.sacred_weight()   < 1.0);
-        assert!(NajafSector::Anbiya.sacred_weight()   < 1.0);
+        assert!(NajafSector::Awliya.sacred_weight() < 1.0);
+        assert!(NajafSector::Anbiya.sacred_weight() < 1.0);
     }
 
     #[test]

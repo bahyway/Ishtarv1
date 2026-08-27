@@ -12,8 +12,8 @@
 
 pub mod qdb_store;
 
-pub use qdb_store::{QdbStore, QuarantineRecord, QdbReport};
+pub use qdb_store::{QdbReport, QdbStore, QuarantineRecord};
 
 pub mod prelude {
-    pub use super::qdb_store::{QdbStore, QuarantineRecord, QdbReport};
+    pub use super::qdb_store::{QdbReport, QdbStore, QuarantineRecord};
 }

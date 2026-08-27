@@ -20,13 +20,13 @@
 //! source still has it) — this module cannot recover data QDB never
 //! stored.
 
-use enkidb_kaki::{EventKaki, IdentityKaki, KakiMinter, KakiRole, Kaki};
 use enkidb_journal::entry::EavTriple;
-use enkidb_journal::{Journal, JournalEntry, EventCause};
+use enkidb_journal::{EventCause, Journal, JournalEntry};
+use enkidb_kaki::{EventKaki, IdentityKaki, Kaki, KakiMinter, KakiRole};
 use enkiodb::OdbStore;
 use enkiqdb::{QdbStore, QuarantineRecord};
+use enkisdb::sdb_store::{SdbStatus, StagedParticle};
 use enkisdb::SdbStore;
-use enkisdb::sdb_store::{StagedParticle, SdbStatus};
 use storage_sector::StorageSector;
 
 /// One case pulled from EnkiQDB awaiting a Steward decision.
@@ -34,22 +34,25 @@ use storage_sector::StorageSector;
 pub struct StewardCase {
     /// Index of the source record inside `QdbStore` (audit reference only —
     /// the record itself is never mutated or removed).
-    pub qdb_index:  usize,
+    pub qdb_index: usize,
     pub kaki_bytes: [u8; 16],
-    pub tribe_id:   u16,
-    pub epoch:      u32,
-    pub color_rgb:  [u8; 3],
+    pub tribe_id: u16,
+    pub epoch: u32,
+    pub color_rgb: [u8; 3],
 }
 
 /// The Steward's EnkiQDB review backlog.
 pub struct QuarantineReviewQueue {
-    cases:          Vec<StewardCase>,
+    cases: Vec<StewardCase>,
     next_qdb_index: usize,
 }
 
 impl QuarantineReviewQueue {
     pub fn new() -> Self {
-        QuarantineReviewQueue { cases: Vec::new(), next_qdb_index: 0 }
+        QuarantineReviewQueue {
+            cases: Vec::new(),
+            next_qdb_index: 0,
+        }
     }
 
     /// Pull any EnkiQDB records not yet enqueued for review.  Only records
@@ -63,11 +66,11 @@ impl QuarantineReviewQueue {
             let rec: &QuarantineRecord = &all[self.next_qdb_index];
             if rec.quarantine_cause == EventCause::BlackBoxRoutedFuzzy {
                 self.cases.push(StewardCase {
-                    qdb_index:  self.next_qdb_index,
+                    qdb_index: self.next_qdb_index,
                     kaki_bytes: rec.kaki_bytes,
-                    tribe_id:   rec.tribe_id,
-                    epoch:      rec.epoch,
-                    color_rgb:  rec.color_rgb,
+                    tribe_id: rec.tribe_id,
+                    epoch: rec.epoch,
+                    color_rgb: rec.color_rgb,
                 });
                 pulled += 1;
             }
@@ -76,31 +79,39 @@ impl QuarantineReviewQueue {
         pulled
     }
 
-    pub fn cases(&self)   -> &[StewardCase] { &self.cases }
-    pub fn len(&self)     -> usize           { self.cases.len() }
-    pub fn is_empty(&self) -> bool           { self.cases.is_empty() }
+    pub fn cases(&self) -> &[StewardCase] {
+        &self.cases
+    }
+    pub fn len(&self) -> usize {
+        self.cases.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.cases.is_empty()
+    }
 
     /// Steward resolves the case at `case_pos` (index into `cases()`) as
     /// clean: requeue a fresh Pending particle back into EnkiSDB for
     /// another pass through the pipeline.  Returns the new EnkiSDB index.
     pub fn resolve_clean(
         &mut self,
-        case_pos:     usize,
-        sdb:          &mut SdbStore,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        case_pos: usize,
+        sdb: &mut SdbStore,
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> Option<usize> {
-        if case_pos >= self.cases.len() { return None; }
+        if case_pos >= self.cases.len() {
+            return None;
+        }
         let case = self.cases.remove(case_pos);
 
         let idx = sdb.stage(StagedParticle {
-            kaki_bytes:   case.kaki_bytes,
-            tribe_id:     case.tribe_id,
-            epoch:        case.epoch,
-            eav:          Vec::new(),
-            color_rgb:    case.color_rgb,
-            status:       SdbStatus::Pending,
+            kaki_bytes: case.kaki_bytes,
+            tribe_id: case.tribe_id,
+            epoch: case.epoch,
+            eav: Vec::new(),
+            color_rgb: case.color_rgb,
+            status: SdbStatus::Pending,
             arrived_tick: current_tick,
             malware_flag: false,
         });
@@ -114,22 +125,24 @@ impl QuarantineReviewQueue {
     /// pipeline.  Returns the new Storage Sector index.
     pub fn resolve_confirmed_harmful(
         &mut self,
-        case_pos:       usize,
+        case_pos: usize,
         storage_sector: &mut StorageSector,
-        journal:        &mut Journal,
-        minter:         &KakiMinter,
-        current_tick:   u64,
+        journal: &mut Journal,
+        minter: &KakiMinter,
+        current_tick: u64,
     ) -> Option<usize> {
-        if case_pos >= self.cases.len() { return None; }
+        if case_pos >= self.cases.len() {
+            return None;
+        }
         let case = self.cases.remove(case_pos);
 
         let particle = StagedParticle {
-            kaki_bytes:   case.kaki_bytes,
-            tribe_id:     case.tribe_id,
-            epoch:        case.epoch,
-            eav:          Vec::new(),
-            color_rgb:    case.color_rgb,
-            status:       SdbStatus::Quarantined,
+            kaki_bytes: case.kaki_bytes,
+            tribe_id: case.tribe_id,
+            epoch: case.epoch,
+            eav: Vec::new(),
+            color_rgb: case.color_rgb,
+            status: SdbStatus::Quarantined,
             arrived_tick: current_tick,
             malware_flag: true,
         };
@@ -143,14 +156,16 @@ impl QuarantineReviewQueue {
     /// `Vec::new()` if none is available. Returns the new EnkiODB index.
     pub fn resolve_promote_to_odb(
         &mut self,
-        case_pos:     usize,
-        eav:          Vec<EavTriple>,
-        odb:          &mut OdbStore,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        case_pos: usize,
+        eav: Vec<EavTriple>,
+        odb: &mut OdbStore,
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> Option<usize> {
-        if case_pos >= self.cases.len() { return None; }
+        if case_pos >= self.cases.len() {
+            return None;
+        }
         let case = self.cases.remove(case_pos);
 
         odb.ingest_from_steward_promotion(
@@ -167,7 +182,9 @@ impl QuarantineReviewQueue {
 }
 
 impl Default for QuarantineReviewQueue {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn journal_requeue(case: &StewardCase, journal: &mut Journal, minter: &KakiMinter) {
@@ -182,7 +199,8 @@ fn journal_requeue(case: &StewardCase, journal: &mut Journal, minter: &KakiMinte
 }
 
 fn reconstruct_identity(bytes: &[u8; 16]) -> Option<IdentityKaki> {
-    Kaki::from_bytes(*bytes).ok()
+    Kaki::from_bytes(*bytes)
+        .ok()
         .and_then(|k| IdentityKaki::try_from_kaki(k).ok())
 }
 
@@ -198,14 +216,15 @@ mod tests {
     }
 
     fn make_fuzzy_staged(minter: &KakiMinter) -> StagedParticle {
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     1,
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [100, 100, 100],
-            status:       SdbStatus::Quarantined,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: 1,
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [100, 100, 100],
+            status: SdbStatus::Quarantined,
             arrived_tick: 0,
             malware_flag: false,
         }
@@ -217,8 +236,20 @@ mod tests {
         let mut qdb = QdbStore::new();
         let mut jnl = Journal::new(64);
 
-        qdb.accept(&make_fuzzy_staged(&minter), EventCause::BlackBoxRoutedFuzzy, &mut jnl, &minter, 0);
-        qdb.accept(&make_fuzzy_staged(&minter), EventCause::SdbValidationFail,   &mut jnl, &minter, 0);
+        qdb.accept(
+            &make_fuzzy_staged(&minter),
+            EventCause::BlackBoxRoutedFuzzy,
+            &mut jnl,
+            &minter,
+            0,
+        );
+        qdb.accept(
+            &make_fuzzy_staged(&minter),
+            EventCause::SdbValidationFail,
+            &mut jnl,
+            &minter,
+            0,
+        );
 
         let mut queue = QuarantineReviewQueue::new();
         let pulled = queue.pull_from_qdb(&qdb);
@@ -232,13 +263,25 @@ mod tests {
         let minter = make_minter();
         let mut qdb = QdbStore::new();
         let mut jnl = Journal::new(64);
-        qdb.accept(&make_fuzzy_staged(&minter), EventCause::BlackBoxRoutedFuzzy, &mut jnl, &minter, 0);
+        qdb.accept(
+            &make_fuzzy_staged(&minter),
+            EventCause::BlackBoxRoutedFuzzy,
+            &mut jnl,
+            &minter,
+            0,
+        );
 
         let mut queue = QuarantineReviewQueue::new();
         assert_eq!(queue.pull_from_qdb(&qdb), 1);
         assert_eq!(queue.pull_from_qdb(&qdb), 0); // no new records since last pull
 
-        qdb.accept(&make_fuzzy_staged(&minter), EventCause::BlackBoxRoutedFuzzy, &mut jnl, &minter, 1);
+        qdb.accept(
+            &make_fuzzy_staged(&minter),
+            EventCause::BlackBoxRoutedFuzzy,
+            &mut jnl,
+            &minter,
+            1,
+        );
         assert_eq!(queue.pull_from_qdb(&qdb), 1);
         assert_eq!(queue.len(), 2);
     }
@@ -250,11 +293,19 @@ mod tests {
         let mut sdb = SdbStore::new();
         let mut jnl = Journal::new(64);
 
-        qdb.accept(&make_fuzzy_staged(&minter), EventCause::BlackBoxRoutedFuzzy, &mut jnl, &minter, 0);
+        qdb.accept(
+            &make_fuzzy_staged(&minter),
+            EventCause::BlackBoxRoutedFuzzy,
+            &mut jnl,
+            &minter,
+            0,
+        );
 
         let mut queue = QuarantineReviewQueue::new();
         queue.pull_from_qdb(&qdb);
-        let new_idx = queue.resolve_clean(0, &mut sdb, &mut jnl, &minter, 1000).unwrap();
+        let new_idx = queue
+            .resolve_clean(0, &mut sdb, &mut jnl, &minter, 1000)
+            .unwrap();
 
         assert_eq!(queue.len(), 0); // case consumed
         assert_eq!(sdb.get(new_idx).unwrap().status, SdbStatus::Pending);
@@ -270,11 +321,19 @@ mod tests {
         let mut odb = OdbStore::new();
         let mut jnl = Journal::new(64);
 
-        qdb.accept(&make_fuzzy_staged(&minter), EventCause::BlackBoxRoutedFuzzy, &mut jnl, &minter, 0);
+        qdb.accept(
+            &make_fuzzy_staged(&minter),
+            EventCause::BlackBoxRoutedFuzzy,
+            &mut jnl,
+            &minter,
+            0,
+        );
 
         let mut queue = QuarantineReviewQueue::new();
         queue.pull_from_qdb(&qdb);
-        let new_idx = queue.resolve_promote_to_odb(0, Vec::new(), &mut odb, &mut jnl, &minter, 1000).unwrap();
+        let new_idx = queue
+            .resolve_promote_to_odb(0, Vec::new(), &mut odb, &mut jnl, &minter, 1000)
+            .unwrap();
 
         assert_eq!(queue.len(), 0); // case consumed
         assert_eq!(odb.all()[new_idx].status, OdbStatus::Active);
@@ -290,7 +349,9 @@ mod tests {
         let mut jnl = Journal::new(64);
         let mut queue = QuarantineReviewQueue::new();
 
-        assert!(queue.resolve_promote_to_odb(0, Vec::new(), &mut odb, &mut jnl, &minter, 1000).is_none());
+        assert!(queue
+            .resolve_promote_to_odb(0, Vec::new(), &mut odb, &mut jnl, &minter, 1000)
+            .is_none());
     }
 
     #[test]
@@ -300,11 +361,19 @@ mod tests {
         let mut sector = StorageSector::new();
         let mut jnl = Journal::new(64);
 
-        qdb.accept(&make_fuzzy_staged(&minter), EventCause::BlackBoxRoutedFuzzy, &mut jnl, &minter, 0);
+        qdb.accept(
+            &make_fuzzy_staged(&minter),
+            EventCause::BlackBoxRoutedFuzzy,
+            &mut jnl,
+            &minter,
+            0,
+        );
 
         let mut queue = QuarantineReviewQueue::new();
         queue.pull_from_qdb(&qdb);
-        let sealed_idx = queue.resolve_confirmed_harmful(0, &mut sector, &mut jnl, &minter, 1000).unwrap();
+        let sealed_idx = queue
+            .resolve_confirmed_harmful(0, &mut sector, &mut jnl, &minter, 1000)
+            .unwrap();
 
         assert_eq!(queue.len(), 0);
         assert_eq!(sector.len(), 1);

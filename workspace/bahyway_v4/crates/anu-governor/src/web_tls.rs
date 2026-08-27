@@ -37,14 +37,20 @@ pub fn load_or_generate_config(cert_path: &Path, key_path: &Path) -> Result<Arc<
 }
 
 fn generate_self_signed(cert_path: &Path, key_path: &Path) -> Result<()> {
-    let sans = vec!["localhost".to_string(), "127.0.0.1".to_string(), "::1".to_string()];
-    let cert_key = rcgen::generate_simple_self_signed(sans).context("could not generate self-signed certificate")?;
+    let sans = vec![
+        "localhost".to_string(),
+        "127.0.0.1".to_string(),
+        "::1".to_string(),
+    ];
+    let cert_key = rcgen::generate_simple_self_signed(sans)
+        .context("could not generate self-signed certificate")?;
 
     if let Some(parent) = cert_path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).context("cannot create secrets directory")?;
     }
     std::fs::write(cert_path, cert_key.cert.pem()).context("cannot write certificate PEM")?;
-    std::fs::write(key_path, cert_key.key_pair.serialize_pem()).context("cannot write private key PEM")?;
+    std::fs::write(key_path, cert_key.key_pair.serialize_pem())
+        .context("cannot write private key PEM")?;
     harden_permissions(key_path)?;
     Ok(())
 }
@@ -52,7 +58,9 @@ fn generate_self_signed(cert_path: &Path, key_path: &Path) -> Result<()> {
 #[cfg(unix)]
 fn harden_permissions(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let mut perms = std::fs::metadata(path).context("cannot stat freshly-written TLS key")?.permissions();
+    let mut perms = std::fs::metadata(path)
+        .context("cannot stat freshly-written TLS key")?
+        .permissions();
     perms.set_mode(0o600);
     std::fs::set_permissions(path, perms).context("cannot restrict TLS key permissions")?;
     Ok(())
@@ -63,12 +71,16 @@ fn harden_permissions(_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn load_pem(cert_path: &Path, key_path: &Path) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
+fn load_pem(
+    cert_path: &Path,
+    key_path: &Path,
+) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
     let cert_bytes = std::fs::read(cert_path).context("cannot read TLS certificate")?;
     let key_bytes = std::fs::read(key_path).context("cannot read TLS private key")?;
 
-    let chain: Vec<CertificateDer<'static>> =
-        rustls_pemfile::certs(&mut cert_bytes.as_slice()).collect::<Result<_, _>>().context("malformed certificate PEM")?;
+    let chain: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut cert_bytes.as_slice())
+        .collect::<Result<_, _>>()
+        .context("malformed certificate PEM")?;
     if chain.is_empty() {
         anyhow::bail!("certificate file contains no PEM certificate blocks");
     }
@@ -89,16 +101,21 @@ mod tests {
         let cert = dir.join("cert.pem");
         let key = dir.join("key.pem");
 
-        let config1 = load_or_generate_config(&cert, &key).expect("first call must generate a fresh cert");
+        let config1 =
+            load_or_generate_config(&cert, &key).expect("first call must generate a fresh cert");
         assert!(cert.exists() && key.exists());
 
         // Second call must load the SAME cert/key from disk rather than
         // silently regenerating (which would invalidate any cert an
         // Architect has already told their browser to trust).
         let cert_bytes_before = std::fs::read(&cert).unwrap();
-        let config2 = load_or_generate_config(&cert, &key).expect("second call must reuse the existing cert");
+        let config2 =
+            load_or_generate_config(&cert, &key).expect("second call must reuse the existing cert");
         let cert_bytes_after = std::fs::read(&cert).unwrap();
-        assert_eq!(cert_bytes_before, cert_bytes_after, "an existing certificate must not be regenerated");
+        assert_eq!(
+            cert_bytes_before, cert_bytes_after,
+            "an existing certificate must not be regenerated"
+        );
         assert!(Arc::ptr_eq(&config1, &config1)); // sanity: Arc is usable
         let _ = config2;
 

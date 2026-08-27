@@ -1,0 +1,293 @@
+---
+# ============================================================================
+# PB-364 :: THE PALÛ CROSSING — one reign closes, the next opens
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series · law GL-PAL-001 (PROPOSED)
+# Coordinator: IsimudEngine — the two-faced sukkal. This playbook is his rite.
+# Movements  : WITNESS → JUDGE → SEAL → HERALD → OPEN
+#
+# WHAT THIS DOES
+#   1. WITNESS — assembles the Completion Stele from six evidence probes
+#      (C-1..C-6), each line stamped MEASURED/DERIVED or marked RED.
+#   2. JUDGE   — refuses the crossing (blocking assert) if any line is RED
+#      or carries only ESTIMATED/ADVISED evidence. Refusal over silence.
+#   3. SEAL    — writes the palû-boundary record into ALL SEVEN journals
+#      (7001–7007) in one witnessed sequence; verifies seven-fold presence
+#      (L-PAL-1) or voids the crossing.
+#   4. HERALD  — mints the completion certificate as a NĀRU record and
+#      writes the announcement stub that links it (L-PAL-5). Nisaba's
+#      commemorative tablet is generated as a text stele.
+#   5. OPEN    — stamps the new era stratum: era registry appended,
+#      Kīma Labīrīšu confrontation list emitted for every registered
+#      component (colophons assigned by the Labīru rite, not here).
+#
+# HONESTY
+#   Probes C-1/C-2/C-6 call YOUR gate artifacts; where an artifact is
+#   absent the line is RED and the crossing REFUSES. Nothing is simulated.
+#
+# RUN (from bare-metal Fedora HOST — running this is Bahaa's CSR-08 word):
+#   ansible-playbook PB-364_palu_crossing.yml \
+#     -e closing_palu=Gudea -e closing_version=4.0 \
+#     -e opening_palu=Zagesi -e opening_version=4.1
+# ============================================================================
+
+- name: "PB-364 :: The Palû Crossing (Isimud's rite, GL-PAL-001)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    closing_palu: "Gudea"
+    closing_version: "4.0"
+    opening_palu: "Zagesi"
+    opening_version: "4.1"
+    # Default fixed 2026-08-26: see playbook_646's identical fix -- the source
+    # session's ~/BahyWay.Ecosystem-v4.0 default doesn't exist in this repo.
+    # BAHYWAY_ROOT env var still overrides. Even with the corrected root,
+    # this playbook still needs seven real journal files under
+    # {{ bahyway_root }}/journals/ to seal the crossing -- expect it to keep
+    # refusing (correctly) until those exist.
+    bahyway_root: "{{ lookup('env','BAHYWAY_ROOT') | default(playbook_dir + '/..', true) }}"
+    palu_dir: "{{ bahyway_root }}/palu"
+    naru_dir: "{{ bahyway_root }}/naru"
+    stele_file: "{{ palu_dir }}/COMPLETION-STELE-{{ closing_version }}.tsv"
+    boundary_master: "{{ palu_dir }}/PALU-STELE-{{ closing_version }}-to-{{ opening_version }}.md"
+    era_registry: "{{ palu_dir }}/ERA-REGISTRY.tsv"
+    herald_file: "{{ palu_dir }}/HERALD-{{ opening_version }}.md"
+    tupsarru_file: "{{ palu_dir }}/NISABA-TUPSARRU-{{ closing_version }}.txt"
+    # ---- evidence artifact paths (override with -e to your real ledgers) ----
+    gates_ledger: "{{ bahyway_root }}/gates/DEPLOYMENT-GATES.tsv"          # C-1
+    phase1_ledger: "{{ bahyway_root }}/gates/TESTING-PHASE1-ABCDEF.tsv"    # C-2
+    arsenal_report: "{{ bahyway_root }}/reports/ARSENAL-INVENTORY-001.md"  # C-3
+    # FIXED 2026-08-27 (found live): this pointed at {{ bahyway_root }}/laws,
+    # which holds only GX-COMMENCEMENT-001.md (the Five Refusals tablet,
+    # C-5's own evidence) -- it never scanned the real tablet corpus.
+    # Every DRAFT tablet this crossing actually cares about lives in
+    # docs/09_observatory (confirmed: PB-647's own C-4 probe found and this
+    # session sealed all 17 real DRAFT tablets there). C-4 was reading
+    # PASS on an almost-empty directory, not on the real registry --
+    # a false-vacuous pass, the same failure class as the pipefail/dash
+    # bug already fixed in this probe once before.
+    tablet_registry: "{{ bahyway_root }}/docs/09_observatory"              # C-4
+    refusals_tablet: "{{ bahyway_root }}/laws/GX-COMMENCEMENT-001.md"      # C-5
+    # C-6: seven journal probe files (one per database) — override as list
+    journal_files:
+      - "{{ bahyway_root }}/journals/enkisdb-7001.journal"
+      - "{{ bahyway_root }}/journals/enkiodb-7002.journal"
+      - "{{ bahyway_root }}/journals/enkiqdb-7003.journal"
+      - "{{ bahyway_root }}/journals/enkidb-7004.journal"
+      - "{{ bahyway_root }}/journals/enkidw-7005.journal"
+      - "{{ bahyway_root }}/journals/enkimdb-7006.journal"
+      - "{{ bahyway_root }}/journals/enkiddb-7007.journal"
+
+  tasks:
+
+    # ================================================== MOVEMENT I — WITNESS
+    - name: "WITNESS :: raise the palû chamber"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ palu_dir }}", "{{ naru_dir }}"]
+
+    - name: "WITNESS :: probe C-1 deployment gates ledger"
+      ansible.builtin.stat: { path: "{{ gates_ledger }}" }
+      register: c1
+
+    - name: "WITNESS :: probe C-2 Phase-1 A–F ledger"
+      ansible.builtin.stat: { path: "{{ phase1_ledger }}" }
+      register: c2
+
+    - name: "WITNESS :: probe C-3 arsenal census report"
+      ansible.builtin.stat: { path: "{{ arsenal_report }}" }
+      register: c3
+
+    - name: "WITNESS :: probe C-3 census closure (no UNKNOWN members)"
+      ansible.builtin.shell: "! grep -qi 'UNKNOWN' '{{ arsenal_report }}'"
+      register: c3_closed
+      changed_when: false
+      failed_when: false
+      when: c3.stat.exists
+
+    - name: "WITNESS :: probe C-4 lingering DRAFT tablets without DEFERRED mark"
+      # FIXED 2026-08-27 (found live): `set -o pipefail` is a bash-ism;
+      # this system's default /bin/sh (dash) aborts the whole script at
+      # that line with "Illegal option", leaving c4_open.stdout empty --
+      # which `int('')` in the stele template below silently reads as 0,
+      # a FALSE PASS regardless of how many real DRAFT tablets exist.
+      # Pinning /bin/bash is the real fix, not a tolerance for the error.
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep -rl 'Status.*DRAFT' '{{ tablet_registry }}' 2>/dev/null \
+          | xargs -r grep -L 'DEFERRED' | wc -l
+      args: {executable: /bin/bash}
+      register: c4_open
+      changed_when: false
+      failed_when: false
+
+    - name: "WITNESS :: probe C-5 the Five Refusals tablet"
+      ansible.builtin.stat: { path: "{{ refusals_tablet }}" }
+      register: c5
+
+    - name: "WITNESS :: probe C-6 seven journals present"
+      ansible.builtin.stat: { path: "{{ item }}" }
+      loop: "{{ journal_files }}"
+      register: c6
+
+    - name: "WITNESS :: mint the Completion Stele"
+      ansible.builtin.copy:
+        dest: "{{ stele_file }}"
+        mode: "0644"
+        content: |
+          line	requirement	stamp	verdict	witness
+          C-1	deployment gates green incl. 1B/1s	{{ 'MEASURED' if c1.stat.exists else 'RED' }}	{{ 'PASS' if c1.stat.exists else 'RED' }}	{{ gates_ledger }}
+          C-2	TESTING_PHASE1 A-F passed	{{ 'MEASURED' if c2.stat.exists else 'RED' }}	{{ 'PASS' if c2.stat.exists else 'RED' }}	{{ phase1_ledger }}
+          C-3	arsenal census closed	{{ 'DERIVED' if (c3.stat.exists and (c3_closed.rc | default(1)) == 0) else 'RED' }}	{{ 'PASS' if (c3.stat.exists and (c3_closed.rc | default(1)) == 0) else 'RED' }}	{{ arsenal_report }}
+          C-4	all DRAFT sealed or DEFERRED	{{ 'DERIVED' if (c4_open.stdout | default('1') | trim | int) == 0 else 'RED' }}	{{ 'PASS' if (c4_open.stdout | default('1') | trim | int) == 0 else 'RED' }}	{{ tablet_registry }}
+          C-5	Five Refusals affirmed	{{ 'MEASURED' if c5.stat.exists else 'RED' }}	{{ 'PASS' if c5.stat.exists else 'RED' }}	{{ refusals_tablet }}
+          C-6	seven journals healthy	{{ 'MEASURED' if (c6.results | selectattr('stat.exists') | list | length) == 7 else 'RED' }}	{{ 'PASS' if (c6.results | selectattr('stat.exists') | list | length) == 7 else 'RED' }}	{{ journal_files | length }} probed, {{ c6.results | selectattr('stat.exists') | list | length }} present
+
+    # ==================================================== MOVEMENT II — JUDGE
+    # FIXED 2026-08-27 (found live assembling real evidence for this rite):
+    # a bare `grep -c 'RED'` substring-matches this stele's own ordinary
+    # vocabulary -- "MEASURED" and "DEFERRED" both contain "RED" -- so
+    # every real stele that stamps any line MEASURED (the honest, correct
+    # stamp for real evidence) or names DEFERRED in a requirement's own
+    # text false-triggers a red count, meaning the crossing could never
+    # pass no matter how clean the real evidence was. The verdict column
+    # is always exactly PASS or RED, tab-bounded on both sides -- matching
+    # that literal field, not any substring of the line, is the real fix.
+    - name: "JUDGE :: Isimud reads the stele"
+      ansible.builtin.shell: "grep -cP '\\tRED(\\t|$)' '{{ stele_file }}' || true"
+      register: reds
+      changed_when: false
+
+    - name: "JUDGE :: refuse the crossing if any line is red (L-PAL-2, blocking)"
+      ansible.builtin.assert:
+        that: (reds.stdout | trim | int) == 0
+        fail_msg: >-
+          THE CROSSING IS REFUSED — {{ reds.stdout | trim }} red line(s) on the
+          Completion Stele ({{ stele_file }}). An era announced incomplete
+          poisons every stele that follows. Re-witness the failing lines and
+          return. Nothing is simulated; the refusal is the record.
+        success_msg: "JUDGMENT PASS — the stele is clean; the reign may close."
+
+    # ===================================================== MOVEMENT III — SEAL
+    - name: "SEAL :: fix the boundary epoch T_palû"
+      ansible.builtin.set_fact:
+        t_palu: "{{ ansible_date_time.iso8601 }}"
+
+    - name: "SEAL :: write the boundary record into all seven journals"
+      ansible.builtin.lineinfile:
+        path: "{{ item }}"
+        create: true
+        mode: "0644"
+        line: >-
+          PALU-BOUNDARY	closing={{ closing_palu }}/{{ closing_version }}	opening={{ opening_palu }}/{{ opening_version }}	t_palu={{ t_palu }}	law=GL-PAL-001
+      loop: "{{ journal_files }}"
+      register: sealing
+
+    - name: "SEAL :: verify seven-fold presence (L-PAL-1) or void the crossing"
+      # FIXED 2026-08-27 (found live) -- same bash-ism as C-4's probe above.
+      ansible.builtin.shell: |
+        set -o pipefail
+        n=0
+        for f in {{ journal_files | join(' ') }}; do
+          grep -q "t_palu={{ t_palu }}" "$f" && n=$((n+1))
+        done
+        echo $n
+      args: {executable: /bin/bash}
+      register: sevenfold
+      changed_when: false
+
+    - name: "SEAL :: the seven-fold gate (blocking)"
+      ansible.builtin.assert:
+        that: (sevenfold.stdout | trim | int) == 7
+        fail_msg: >-
+          THE CROSSING IS VOID — boundary present in only
+          {{ sevenfold.stdout | trim }}/7 journals (L-PAL-1). A partial seal
+          is no seal. The void is journaled; re-run when all seven answer.
+        success_msg: "SEVEN-FOLD SEAL COMPLETE — all journals carry T_palû."
+
+    - name: "SEAL :: strike the master Palû Stele (record of record, EnkiMDB home)"
+      ansible.builtin.copy:
+        dest: "{{ boundary_master }}"
+        mode: "0644"
+        content: |
+          # PALÛ STELE — the reign of {{ closing_palu }} ({{ closing_version }}) closes; {{ opening_palu }} ({{ opening_version }}) opens
+          law: GL-PAL-001 · coordinator: IsimudEngine · seal: CSR-08 (this run)
+          t_palu: {{ t_palu }}
+          completion_stele: {{ stele_file }}
+          journals_sealed: 7/7
+          decree: from T_palû forward, era="{{ closing_palu }}" is an immutable
+          PHYSICS-predicable fact on every particle of the closed reign.
+          The registry does not reset — it stratifies.
+
+    # =================================================== MOVEMENT IV — HERALD
+    - name: "HERALD :: mint the completion certificate into NĀRU (L-PAL-5)"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/palu_certificates.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-364","act":"palu-crossing","law":"GL-PAL-001",
+          "closing":"{{ closing_palu }}/{{ closing_version }}",
+          "opening":"{{ opening_palu }}/{{ opening_version }}",
+          "t_palu":"{{ t_palu }}","stele":"{{ stele_file }}",
+          "journals":"7/7","coordinator":"IsimudEngine"}
+
+    - name: "HERALD :: write the announcement stub that links its proof"
+      ansible.builtin.copy:
+        dest: "{{ herald_file }}"
+        mode: "0644"
+        content: |
+          # BahyWay.Ecosystem — the {{ opening_palu }} reign (v{{ opening_version }}) is open
+          The {{ closing_palu }} reign (v{{ closing_version }}) is complete and sealed
+          at {{ t_palu }} across all seven sovereign databases.
+          Proof: NĀRU certificate in palu_certificates.jsonl (this line's twin),
+          Completion Stele {{ stele_file }}, master Palû Stele {{ boundary_master }}.
+          No era speaks without its proof — GL-PAL-001 §6.
+
+    - name: "HERALD :: Nisaba's commemorative ṬUPŠARRU tablet (her sealed duty, nothing more)"
+      ansible.builtin.copy:
+        dest: "{{ tupsarru_file }}"
+        mode: "0644"
+        content: |
+          𒁾  In the reign of {{ closing_palu }} the foundations were laid;
+              seven waters were gathered, the arsenal was counted,
+              and the gates held. The tablet is struck; the reign is sealed.
+              Now {{ opening_palu }} rises upon the stratum of {{ closing_palu }} —
+              lineage, never mutation.        — Nisaba, at É-DUBBA Stage 7
+
+    # ===================================================== MOVEMENT V — OPEN
+    - name: "OPEN :: append the new stratum to the era registry (L-PAL-3, append-only)"
+      ansible.builtin.lineinfile:
+        path: "{{ era_registry }}"
+        create: true
+        mode: "0644"
+        line: "{{ opening_palu }}\t{{ opening_version }}\t{{ t_palu }}\tOPEN\tparent={{ closing_palu }}"
+
+    - name: "OPEN :: emit the Kīma Labīrīšu confrontation list for the new reign"
+      # FIXED 2026-08-27 (found live) -- same bash-ism as C-4's probe above.
+      ansible.builtin.shell: |
+        set -o pipefail
+        {
+          echo "# KIMA-LABIRISU CONFRONTATION LIST — every component crossing into {{ opening_palu }}"
+          echo "# colophons (CONCORD / LAWFUL EVOLUTION / SILENT DRIFT) are assigned by the Labiru rite, not here"
+          find "{{ bahyway_root }}/crates" "{{ bahyway_root }}/engines" \
+               -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort
+        } > "{{ palu_dir }}/LABIRU-LIST-{{ opening_version }}.txt"
+        wc -l < "{{ palu_dir }}/LABIRU-LIST-{{ opening_version }}.txt"
+      args: {executable: /bin/bash}
+      register: labiru
+      changed_when: true
+      failed_when: false
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "THE CROSSING IS COMPLETE. {{ closing_palu }}/{{ closing_version }} sealed at {{ t_palu }};"
+          - "{{ opening_palu }}/{{ opening_version }} is OPEN as a new stratum — lineage, never mutation."
+          - "Herald: {{ herald_file }} · Palû Stele: {{ boundary_master }}"
+          - "Confrontation list: {{ labiru.stdout | default('0') | trim }} components await Kīma Labīrīšu."
+          - "Šala rehearsal: sala_palu_crossing.html"

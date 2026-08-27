@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · the Kārum Data Port — live test shipments for the BeeMDM chain</title>
+<style>
+  :root{--basalt:#14120f;--tablet:#1f1b16;--gold:#c9a227;--lapis:#2e5d8c;
+    --copper:#b0642f;--alarm:#c23b2a;--bone:#e8e0cf;--tablet-edge:#3a332a;
+    --dim:#8f8672;--green:#7fbf5f;--violet:#a58cc0;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--basalt);color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden;}
+  #crumbs{padding:8px 16px 0;font-size:12px;color:var(--dim);letter-spacing:.08em;}
+  #crumbs b{color:var(--gold);font-weight:normal;}
+  #lede{padding:2px 16px 6px;font-size:12.5px;}
+  #banner{background:var(--alarm);color:var(--bone);text-align:center;
+    font-size:10.5px;letter-spacing:.28em;padding:3px 0;font-family:monospace;}
+  #grid{display:grid;grid-template-columns:1fr 380px;gap:10px;
+    padding:8px 16px 14px;height:calc(100% - 78px);}
+  .panel{background:var(--tablet);border:1px solid var(--tablet-edge);
+    border-radius:6px;position:relative;overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block;}
+  #cv{width:100%;height:100%;}
+  #status{position:absolute;top:8px;left:12px;right:12px;z-index:5;
+    font-family:monospace;font-size:10.5px;color:var(--gold);
+    background:rgba(20,18,15,.78);padding:5px 9px;border-radius:4px;
+    border:1px solid var(--tablet-edge);}
+  #lawtags{position:absolute;bottom:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:5;}
+  .lawtag{font-family:monospace;font-size:10px;color:var(--basalt);
+    background:var(--gold);padding:2px 7px;border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis);color:var(--bone);}
+  #side{display:flex;flex-direction:column;overflow:hidden;}
+  #side h2{font-size:11px;letter-spacing:.2em;color:var(--gold);
+    padding:7px 12px 4px;border-bottom:1px solid var(--tablet-edge);flex:none;}
+  #searchRow{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--tablet-edge);flex:none;}
+  #q{flex:1;background:var(--basalt);color:var(--bone);border:1px solid var(--tablet-edge);
+    border-radius:4px;padding:6px 9px;font-family:inherit;font-size:12px;}
+  #ghBtn{background:var(--basalt);color:var(--copper);border:1px solid var(--copper);
+    border-radius:4px;padding:6px 10px;font-size:11px;cursor:pointer;font-family:inherit;}
+  #ghBtn:hover{color:var(--gold);border-color:var(--gold);}
+  #catalog{flex:1 1 40%;overflow-y:auto;border-bottom:1px solid var(--tablet-edge);}
+  .ship{padding:6px 12px;border-left:3px solid transparent;cursor:pointer;font-size:11.5px;}
+  .ship:hover{background:rgba(201,162,39,.07);}
+  .ship.sel{background:rgba(201,162,39,.13);border-left-color:var(--gold);}
+  .ship .top{display:flex;gap:6px;align-items:center;}
+  .ship .nm{flex:1;}
+  .ship .tag{font-family:monospace;font-size:8.5px;color:var(--basalt);
+    background:var(--dim);padding:1px 5px;border-radius:2px;}
+  .ship .tag.api{background:var(--lapis);color:var(--bone);}
+  .ship .tag.direct{background:var(--copper);color:var(--bone);}
+  .ship .gl{color:var(--dim);font-size:10.5px;margin-top:2px;}
+  .ship .actions{margin-top:4px;display:none;gap:6px;}
+  .ship.sel .actions{display:flex;}
+  .ship button{background:var(--basalt);color:var(--green);border:1px solid var(--green);
+    border-radius:3px;padding:3px 8px;font-size:10.5px;cursor:pointer;font-family:inherit;}
+  .ship button:hover{background:var(--green);color:var(--basalt);}
+  .ship a.berth{color:var(--copper);border:1px solid var(--copper);border-radius:3px;
+    padding:3px 8px;font-size:10.5px;text-decoration:none;}
+  .ship a.berth:hover{color:var(--gold);border-color:var(--gold);}
+  #manifest{flex:0 0 auto;max-height:26%;overflow-y:auto;border-bottom:1px solid var(--tablet-edge);
+    font-family:monospace;font-size:9.5px;}
+  #manifest table{width:100%;border-collapse:collapse;}
+  #manifest td,#manifest th{padding:3px 8px;text-align:left;border-bottom:1px solid rgba(58,51,42,.5);}
+  #manifest th{color:var(--gold);font-weight:normal;}
+  #manifest .sha{color:var(--dim);}
+  #mActions{padding:6px 12px;border-bottom:1px solid var(--tablet-edge);flex:none;}
+  #mActions button{background:var(--basalt);color:var(--gold);border:1px solid var(--gold);
+    border-radius:3px;padding:4px 10px;font-size:10.5px;cursor:pointer;font-family:inherit;}
+  #journal{flex:1;overflow-y:auto;padding:7px 12px;font-size:11px;line-height:1.45;}
+  .entry{margin-bottom:7px;border-left:2px solid var(--copper);padding-left:7px;}
+  .entry .t{color:var(--dim);font-family:monospace;font-size:9px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ <b>the Kārum Data Port — where test shipments berth, are receipted, and sail the BeeMDM chain to GOLDEN</b></div>
+<div id="lede">The kārum was the Assyrian trading quay: no crate entered the city unreceipted. So here: the <b>catalog</b> lists public endpoints (LIVE feeds, vectors, repos — each tagged with register and kiṣru); the search box filters it, and <b>⌕ GITHUB</b> searches repositories live. Select a shipment: <b>FETCH → GZIP → RECEIPT</b> pulls the data in-browser, compresses it (.json.gz via CompressionStream), computes its <b>sha-256 Kanīku</b>, downloads the sealed crate, and enters it in the <b>intake manifest</b> — the exact ledger BeeMDM's first station reads. Direct berths (large/binary sources) download natively, receipted on your host by PB-DATA-005's rite. On the membrane: endpoints moored at the quay, and every fetched shipment <b>sails the six stations</b> to the GOLDEN shelf. Full Naṣāru: click ships for stories · C cinema follows a sailing shipment · B bird · stele isolates registers. <i>Honesty: some seas refuse browsers (CORS) — a refused shipment is journaled, never faked.</i></div>
+<div id="banner">THE KĀRUM LAW — NO CRATE UNRECEIPTED · FETCH → GZIP → SHA-256 → MANIFEST → BEEMDM → GOLDEN · REFUSED SEAS ARE JOURNALED, NEVER FAKED</div>
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="status">…</div>
+    <div id="lawtags">
+      <span class="lawtag">KĀRUM · DATA PORT</span>
+      <span class="lawtag lapis">KANĪKU IN-BROWSER</span>
+      <span class="lawtag lapis">BEEMDM INTAKE</span>
+      <span class="lawtag">NAṢĀRU DEFAULT</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>SEARCH THE SEAS</h2>
+    <div id="searchRow">
+      <input id="q" placeholder="filter catalog… or type repo terms and press ⌕"/>
+      <button id="ghBtn">⌕ GITHUB</button>
+    </div>
+    <h2>CATALOG — SHIPMENTS AT ANCHOR</h2>
+    <div id="catalog"></div>
+    <h2>INTAKE MANIFEST — KANĪKU LEDGER</h2>
+    <div id="mActions"><button id="dlMan">⤓ DOWNLOAD MANIFEST (.tsv)</button></div>
+    <div id="manifest"><table><thead><tr><th>shipment</th><th>bytes→gz</th><th>sha-256 (Kanīku)</th></tr></thead><tbody id="mBody"></tbody></table></div>
+    <h2>COURT JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============================================================================
+   BahyWay Šala House Standard — NAṢĀRU INSTRUMENTS (ŠALA-STD-001, N2–N4)
+   Camera + selection machinery every court imports by default.
+   Usage:
+     var cam=NasaruCamera({yaw:0.6,pitch:0.35,z:1});
+     cam.bindPointer(stageEl,{onClick:function(mx,my){...}});   // N2 drag/zoom/guard
+     cam.project(x,y,z,cv)                    -> {x,y,f}
+     cam.landOn({yaw,pitch,z})                // N3: depart to space, descend on target
+     cam.toggleBird()                         // N4: gliding flight above the membrane
+     cam.tick(nowMs)                          // each frame before projecting
+     NasaruBounce(selT,nowMs)                 -> vertical offset 0..1 (decaying |sin|)
+   Any pointer input interrupts bird-flight and landing, returning control.
+   ========================================================================== */
+function NasaruCamera(init){
+  var cam={yaw:init.yaw||0.6,pitch:init.pitch||0.35,z:init.z||1,
+    px:init.px||0,py:init.py||0,cx:0,cy:0,cz:0};   /* cx,cy,cz: look-at center (N9) */
+  var landing=null,bird=false,birdT=0,drag=null,dragMoved=false,dragDist=0;
+  function tick(now){
+    if(landing){
+      var ph=landing.t<0.35?'up':'down';
+      landing.t=Math.min(1,landing.t+0.016);
+      var e=landing.t<0.35?landing.t/0.35:(landing.t-0.35)/0.65;
+      e=e*e*(3-2*e);
+      if(landing.t<0.35){ /* depart to space */
+        cam.z=landing.z0+(landing.zSpace-landing.z0)*e;
+        cam.yaw=landing.yaw0+(landing.tgt.yaw-landing.yaw0)*e*0.4;
+        cam.pitch=landing.p0+(0.9-landing.p0)*e*0.5;
+      }else{ /* descend onto the address */
+        cam.z=landing.zSpace+(landing.tgt.z-landing.zSpace)*e;
+        cam.yaw=cam.yaw+(landing.tgt.yaw-cam.yaw)*0.10;
+        cam.pitch=cam.pitch+(landing.tgt.pitch-cam.pitch)*0.10;
+      }
+      if(landing.t>=1){landing=null;}
+    }else if(bird){
+      birdT+=0.016;
+      cam.yaw+=0.0035;                                  /* slow circuit */
+      cam.pitch=0.72+0.16*Math.sin(birdT*0.5);          /* wingbeat breathing */
+      cam.z=cam.z+( (1.35+0.25*Math.sin(birdT*0.23)) - cam.z )*0.02;
+    }
+  }
+  function interrupt(){landing=null;bird=false;}
+  function landOn(tgt){
+    interrupt();
+    landing={tgt:tgt,t:0,z0:cam.z,yaw0:cam.yaw,p0:cam.pitch,
+      zSpace:Math.max(0.42,Math.min(0.6,cam.z*0.4))};}
+  function toggleBird(){bird=!bird;if(bird)landing=null;return bird;}
+  function project(x,y,z,cv){
+    x-=cam.cx; y-=cam.cy; z-=cam.cz;
+    var cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+    var cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+    var X=x*cy+z*sy,Z=-x*sy+z*cy;
+    var Y=y*cp-Z*sp,Z2=y*sp+Z*cp;
+    var S=Math.min(cv.width,cv.height)*0.5*cam.z;
+    var f=2.6/(2.6+Z2);
+    return {x:cv.width*0.42+X*S*f+cam.px,y:cv.height*0.50-Y*S*f+cam.py,f:f};}
+  function bindPointer(stage,opts){
+    opts=opts||{};
+    stage.addEventListener('wheel',function(e){e.preventDefault();interrupt();
+      cam.z=Math.min(8,Math.max(0.4,cam.z*(e.deltaY<0?1.12:0.89)));
+      if(opts.onWheel)opts.onWheel();},{passive:false});
+    stage.addEventListener('mousedown',function(e){if(e.button!==0)return;
+      interrupt();drag={x:e.clientX,y:e.clientY};dragMoved=false;dragDist=0;});
+    window.addEventListener('mouseup',function(){drag=null;});
+    stage.addEventListener('mousemove',function(e){
+      if(!drag)return;
+      var dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      dragDist+=Math.abs(dx)+Math.abs(dy);if(dragDist>9)dragMoved=true;
+      cam.yaw+=dx*0.005;
+      cam.pitch=Math.max(-0.9,Math.min(1.35,cam.pitch+dy*0.005));
+      drag={x:e.clientX,y:e.clientY};});
+    stage.addEventListener('click',function(e){
+      if(dragMoved)return;
+      var r=stage.getBoundingClientRect();
+      if(opts.onClick)opts.onClick(e.clientX-r.left,e.clientY-r.top);});
+  }
+  return {cam:cam,tick:tick,project:project,landOn:landOn,
+    toggleBird:toggleBird,interrupt:interrupt,bindPointer:bindPointer,
+    get landing(){return !!landing;},get bird(){return bird;},
+    get dragMoved(){return dragMoved;}};
+}
+/* ---- N9 · CINEMATIC CAMERA (SALA-STD-001-A1) --------------------------------
+   Look-at tracking in the membrane. Modes:
+     'off'        — manual control
+     'wavefront'  — dolly with a propagating front (target = front position)
+     'follow'     — damped chase of a particle/structure centroid
+     'crane'      — hold target, slow rise-and-fall sweep
+     'orbit'      — circle the target while tracking it
+   Usage: var CIN=NasaruCinema(NAV);
+          CIN.setMode('wavefront'); CIN.cycle();
+          CIN.tick(now, target);               // target={x,y,z}; call AFTER NAV.tick
+   Any user drag/wheel should set CIN.setMode('off') — the human outranks
+   the director. Landing-from-space outranks the cinema.
+   MEMBRANE MOTION DOCTRINE: dynamics are rendered as deformation of the
+   membrane surface, particles RIDING it — never dots in empty space. */
+function NasaruCinema(NAVOBJ){
+  var mode='off',t0=0,MODES=['off','wavefront','follow','crane','orbit'];
+  function setMode(m){mode=m;t0=0;}
+  function cycle(){var i=(MODES.indexOf(mode)+1)%MODES.length;mode=MODES[i];t0=0;return mode;}
+  function tick(now,target){
+    if(mode==='off'||!target||NAVOBJ.landing)return;
+    var cam=NAVOBJ.cam; t0+=0.016;
+    var k=0.08;
+    cam.cx+=(target.x-cam.cx)*k;
+    cam.cy+=((target.y||0)-cam.cy)*k;
+    cam.cz+=((target.z||0)-cam.cz)*k;
+    if(mode==='wavefront'){
+      cam.pitch+=(0.44-cam.pitch)*0.04;
+      cam.z+=(2.2-cam.z)*0.03;
+      cam.yaw+=Math.sin(t0*0.35)*0.0009;            /* gentle handheld drift */
+    }else if(mode==='follow'){
+      cam.pitch+=(0.55-cam.pitch)*0.04;
+      cam.z+=(2.6-cam.z)*0.03;
+    }else if(mode==='crane'){
+      cam.pitch+=((0.95+0.30*Math.sin(t0*0.4))-cam.pitch)*0.05;
+      cam.z+=((1.6+0.35*Math.sin(t0*0.27))-cam.z)*0.03;
+    }else if(mode==='orbit'){
+      cam.yaw+=0.005;
+      cam.pitch+=(0.5-cam.pitch)*0.03;
+      cam.z+=(2.0-cam.z)*0.03;
+    }
+  }
+  return {get mode(){return mode;},setMode:setMode,cycle:cycle,tick:tick,MODES:MODES};
+}
+function NasaruBounce(selT,now){
+  var bt=(now-selT)/1000;
+  return Math.abs(Math.sin(bt*6))*Math.exp(-bt*0.3);}
+if(typeof module!=='undefined')module.exports={NasaruCamera:NasaruCamera,NasaruBounce:NasaruBounce,NasaruCinema:NasaruCinema};
+
+/* ============================================================================
+   BahyWay Šala House Standard — the ŠURINNU LEGEND (GL-VIZ-002 candidate)
+   ----------------------------------------------------------------------------
+   A bordered stele of numbered rows and state-cells, replacing prose legends.
+   NAME: shurinnu — the divine EMBLEM-STANDARDS carved in registers upon a
+   kudurru stone. The Kudurru (sealed earlier in KAKIGIS) is the stone in the
+   field — the beacon landmarks of Najaf; the Shurinnu are the emblems in its
+   registers — this panel. One name, one meaning, and the two hold the exact
+   relation their namesakes held.
+   Grammar (emblems in registers, never paragraphs):
+     - GROUPS  = column bands (TRIBES | ORBITS | EVENTS ...), label rotated.
+     - ROWS    = one citizen-class per row, numbered on the left.
+     - CELLS   = squares per group column:
+         state 0 = HOLLOW  (declared, inactive)
+         state 1 = FILLED  (present/active)          — in the row's colour
+         state 2 = PULSING (firing NOW)              — alarm rhythm
+       frac (0..1) optionally part-fills a cell (counts as fill height).
+     - CLICK   = the legend is a CONTROLLER: select/filter/fly, never décor.
+     - HOVER/SELECT gloss = ONE line, drawn in the stele footer.
+   Usage:
+     var K = SurinnuLegend(ctx, spec);   // spec: see below
+     K.draw(nowMs);                      // each frame
+     var hit = K.hitTest(mx,my);         // {gi,ri} | null  → act on it
+   Spec:
+     { x,y, cell:13, title:'ŠĒTU COURT',
+       groups:[ {label:'TRIBES', rows:[
+                   {id:'RIB', label:'ALLEY·RIBBON', color:'#6ea0cd',
+                    state:1, frac:1, gloss:'26×~5 cells · PASSABLE map'}, ...]},
+                {label:'EVENTS', rows:[...]} ],
+       footer: '' }                      // set to gloss on hover/click
+   ========================================================================== */
+function SurinnuLegend(g,spec){
+  var CS=spec.cell||13,GAP=3,ROWH=CS+GAP;
+  function groupX(gi){var x=spec.x+26;for(var q=0;q<gi;q++)x+=CS+18;return x;}
+  function rowsMax(){var m=0;spec.groups.forEach(function(G){m=Math.max(m,G.rows.length);});return m;}
+  function panelW(){return 26+spec.groups.length*(CS+18)+34;}
+  function panelH(){return 34+rowsMax()*ROWH+26;}
+  function draw(now){
+    var t=now/1000,X=spec.x,Y=spec.y,W=panelW(),H=panelH();
+    g.fillStyle='rgba(20,18,15,0.88)';g.fillRect(X,Y,W,H);
+    g.strokeStyle='#c9a227';g.lineWidth=1.2;g.strokeRect(X,Y,W,H);
+    g.fillStyle='#c9a227';g.font='9.5px monospace';g.textAlign='left';
+    g.fillText(spec.title||'ŠURINNU',X+8,Y+13);
+    var mr=rowsMax();
+    for(var r=0;r<mr;r++){
+      g.fillStyle='rgba(143,134,114,0.85)';g.font='8.5px monospace';g.textAlign='right';
+      g.fillText(String(r+1),X+20,Y+30+r*ROWH+CS-3);}
+    spec.groups.forEach(function(G,gi){
+      var gx=groupX(gi);
+      g.save();g.translate(gx+CS+9,Y+30+((G.rows.length*ROWH))/2);
+      g.rotate(Math.PI/2);
+      g.fillStyle='rgba(143,134,114,0.9)';g.font='8.5px monospace';g.textAlign='center';
+      g.fillText(G.label,0,0);g.restore();
+      G.rows.forEach(function(R,ri){
+        var cy=Y+30+ri*ROWH,col=R.color||'#e8e0cf';
+        g.strokeStyle=col;g.lineWidth=1.3;
+        g.strokeRect(gx,cy,CS,CS);
+        var f=(R.state>=1)?(R.frac==null?1:Math.max(0,Math.min(1,R.frac))):0;
+        if(R.state===2){var pl=0.45+0.55*Math.abs(Math.sin(t*4));
+          g.globalAlpha=pl;f=1;}
+        if(f>0){g.fillStyle=col;
+          g.fillRect(gx+1.5,cy+1.5+(CS-3)*(1-f),CS-3,(CS-3)*f);}
+        g.globalAlpha=1;
+        if(R.sel){g.strokeStyle='#e8e0cf';g.lineWidth=1.6;
+          g.strokeRect(gx-2.5,cy-2.5,CS+5,CS+5);}
+      });});
+    g.fillStyle='rgba(232,224,207,0.85)';g.font='8.5px monospace';g.textAlign='left';
+    g.fillText((spec.footer||'').slice(0,Math.floor((W-14)/5.1)),X+8,Y+H-9);}
+  function hitTest(mx,my){
+    for(var gi=0;gi<spec.groups.length;gi++){
+      var gx=groupX(gi);
+      for(var ri=0;ri<spec.groups[gi].rows.length;ri++){
+        var cy=spec.y+30+ri*ROWH;
+        if(mx>=gx-2&&mx<=gx+CS+2&&my>=cy-2&&my<=cy+CS+2)return {gi:gi,ri:ri};}}
+    return null;}
+  return {draw:draw,hitTest:hitTest,panelW:panelW,panelH:panelH,spec:spec};
+}
+if(typeof module!=='undefined')module.exports=SurinnuLegend;
+
+window.onerror=function(m,s,l){var e=document.getElementById('status');
+  if(e)e.textContent='RUNTIME FAULT: '+m+' (line '+l+')';return false;};
+var D={"C": [{"id": "usgs_eq", "n": "USGS Earthquakes \u00b7 last 24h", "kind": "api", "reg": "LIVE-FEED", "k": "K2", "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson", "g": "live global seismicity as GeoJSON \u2014 a moving world for structure-witness rehearsals"}, {"id": "meteo_najaf", "n": "Open-Meteo \u00b7 Najaf sky & sun", "kind": "api", "reg": "LIVE-FEED", "k": "K4", "url": "https://api.open-meteo.com/v1/forecast?latitude=31.996&longitude=44.314&hourly=temperature_2m,shortwave_radiation,relative_humidity_2m&forecast_days=2", "g": "live irradiance and heat over Najaf \u2014 the Sun Fields' rehearsal feed, no key needed"}, {"id": "overpass_wadi", "n": "Overpass \u00b7 Wadi al-Salam boundary", "kind": "api", "reg": "VECTOR", "k": "K3", "url": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%3Bway%28325851897%29%3Bout%20geom%3B", "g": "the cemetery's own OSM boundary (way 325851897) fetched live \u2014 KAKIGIS's anchor stone"}, {"id": "eonet", "n": "NASA EONET \u00b7 natural events", "kind": "api", "reg": "LIVE-FEED", "k": "K7", "url": "https://eonet.gsfc.nasa.gov/api/v3/events?limit=60", "g": "wildfires, storms, floods worldwide \u2014 civil-protection rehearsal stream"}, {"id": "hdx_iraq", "n": "HDX CKAN \u00b7 Iraq packages", "kind": "api", "reg": "MANIFEST", "k": "K7", "url": "https://data.humdata.org/api/3/action/package_search?q=groups:irq&rows=50", "g": "the UN humanitarian shelf's Iraq manifest \u2014 boundaries, settlements, indicators"}, {"id": "restc", "n": "REST Countries \u00b7 Iraq record", "kind": "api", "reg": "REFERENCE", "k": "K8", "url": "https://restcountries.com/v3.1/alpha/irq", "g": "a tiny sealed reference citizen \u2014 perfect first shipment for chain smoke-tests"}, {"id": "geofabrik", "n": "Geofabrik \u00b7 iraq-latest.osm.pbf", "kind": "direct", "reg": "VECTOR", "k": "K3", "url": "https://download.geofabrik.de/asia/iraq-latest.osm.pbf", "g": "the whole Iraqi OSM skeleton (~85 MB, already compressed) \u2014 direct berth, no fetch"}, {"id": "dem_najaf", "n": "Copernicus GLO-30 \u00b7 Najaf tile", "kind": "direct", "reg": "MEASURED-DEM", "k": "K1", "url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N31_00_E044_00_DEM/Copernicus_DSM_COG_10_N31_00_E044_00_DEM.tif", "g": "elevation truth under the Wadi \u2014 direct S3 berth"}, {"id": "gh_lidar", "n": "GitHub \u00b7 Awesome-3D-LiDAR-Datasets", "kind": "direct", "reg": "REPO", "k": "K5", "url": "https://codeload.github.com/minwoo0611/Awesome-3D-LiDAR-Datasets/zip/refs/heads/main", "g": "the LiDAR dataset catalog as a zip shipment \u2014 direct berth from codeload"}], "S": [["QUAY", "the shipment arrives", "#6ea0cd"], ["KAN\u012aKU", "sha-256 receipt sealed", "#c9a227"], ["EnkiSDB\u00b77001", "staging store", "#7fbf5f"], ["PASHIRU", "EAV attribution", "#a58cc0"], ["NALBANU", "molds cast", "#b0642f"], ["GOLDEN", "test citizens", "#e8e0cf"]]};
+var cv=document.getElementById('cv');
+var g=cv.getContext('2d');
+var stage=document.getElementById('stage'),statusEl=document.getElementById('status');
+function fit(){cv.width=stage.clientWidth;cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit);fit();
+var jEl=document.getElementById('journal');
+var canDOM=!!document.createElement;
+function journal(t){if(!canDOM)return;
+  var d=document.createElement('div');d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;jEl.prepend(d);}
+/* ---------------- shipment pipeline (pure, testable) ---------------- */
+async function sha256hex(buf){
+  var h=await crypto.subtle.digest('SHA-256',buf);
+  return Array.from(new Uint8Array(h)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');}
+async function gzipBytes(bytes){
+  if(typeof CompressionStream==='undefined')return null;
+  var cs=new CompressionStream('gzip');
+  var stream=new Blob([bytes]).stream().pipeThrough(cs);
+  var out=await new Response(stream).arrayBuffer();
+  return new Uint8Array(out);}
+async function processShipment(name,bytes){
+  var gz=await gzipBytes(bytes);
+  var sealed=gz||bytes;
+  var sha=await sha256hex(sealed.buffer?sealed.buffer:sealed);
+  return {name:name,rawBytes:bytes.byteLength||bytes.length,
+    gzBytes:sealed.byteLength||sealed.length,sha:sha,gz:!!gz,payload:sealed};}
+var MANIFEST=[];
+function manifestRow(rec,srcUrl){
+  MANIFEST.push({name:rec.name,raw:rec.rawBytes,gz:rec.gzBytes,sha:rec.sha,
+    url:srcUrl,utc:new Date().toISOString()});
+  if(!canDOM)return;
+  var tr=document.createElement('tr');
+  tr.innerHTML='<td>'+rec.name+'</td><td>'+rec.rawBytes+'→'+rec.gzBytes
+    +'</td><td class="sha">'+rec.sha.slice(0,16)+'…</td>';
+  document.getElementById('mBody').prepend(tr);}
+function manifestTSV(){
+  var out='shipment\trawBytes\tgzBytes\tsha256\tsourceUrl\tsealed_utc\n';
+  MANIFEST.forEach(function(m){out+=[m.name,m.raw,m.gz,m.sha,m.url,m.utc].join('\t')+'\n';});
+  return out;}
+function saveBlob(bytes,fname,mime){
+  if(!canDOM||typeof URL==='undefined'||!URL.createObjectURL)return;
+  var b=new Blob([bytes],{type:mime||'application/octet-stream'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fname;
+  a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},4000);}
+/* ---------------- fetch acts ---------------- */
+var SHIPS=D.C.map(function(c){return Object.assign({state:'anchor',prog:0},c);});
+async function fetchShipment(idx){
+  var S=SHIPS[idx];
+  if(S.kind!=='api'){journal('Direct berth: the browser downloads <b>'+S.n+'</b> natively; PB-DATA-005 receipts it on your host.');return;}
+  S.state='sailing';S.prog=0;sel={k:'ship',i:idx};selT=performance.now();
+  journal('⚓ <b>'+S.n+'</b> casts off — fetching from the open sea…');
+  try{
+    var r=await fetch(S.url);
+    if(!r.ok)throw new Error('harbor answered '+r.status);
+    var buf=new Uint8Array(await r.arrayBuffer());
+    S.prog=0.34;
+    var rec=await processShipment(S.id,buf);
+    S.prog=0.67;
+    manifestRow(rec,S.url);
+    saveBlob(rec.payload,S.id+(rec.gz?'.json.gz':'.json'),'application/gzip');
+    S.state='golden';S.prog=1;
+    journal('𒁾 <b>'+S.n+'</b> RECEIPTED: '+rec.rawBytes+' bytes → '+rec.gzBytes+' sealed'
+      +(rec.gz?' (gzip)':' (uncompressed — CompressionStream absent)')
+      +' · Kanīku <span style="font-family:monospace">'+rec.sha.slice(0,16)+'…</span> · the crate downloads; the manifest grows; BeeMDM\u2019s first station will read this exact ledger.');
+  }catch(err){
+    S.state='refused';S.prog=0;
+    journal('<b style="color:var(--alarm)">✕ REFUSED BY THE SEA</b> — <b>'+S.n+'</b>: '+err.message
+      +'. Some harbors refuse browsers (CORS); the shipment is journaled, never faked. Take the PB-DATA road for this one.');
+  }}
+/* ---------------- GitHub live search ---------------- */
+function ghSearchUrl(q){return 'https://api.github.com/search/repositories?q='
+  +encodeURIComponent(q)+'&sort=stars&order=desc&per_page=5';}
+async function ghSearch(q){
+  if(!q){journal('Give the sea a name first — type search terms, then ⌕.');return;}
+  journal('⌕ searching GitHub for <b>'+q+'</b>…');
+  try{
+    var r=await fetch(ghSearchUrl(q));
+    if(!r.ok)throw new Error('GitHub answered '+r.status);
+    var j=await r.json();
+    (j.items||[]).slice(0,5).forEach(function(it){
+      SHIPS.push({id:'gh_'+it.name,n:'GitHub · '+it.full_name,kind:'direct',
+        reg:'REPO',k:'K5',state:'anchor',prog:0,
+        url:'https://codeload.github.com/'+it.full_name+'/zip/refs/heads/'+(it.default_branch||'main'),
+        g:(it.description||'no description')+' · ★'+it.stargazers_count});});
+    buildCatalog(document.getElementById('q').value);
+    journal((j.items||[]).length?('⌕ '+Math.min(5,j.items.length)+' repos moored at the quay — zipball berths ready.'):'⌕ the sea returned empty.');
+  }catch(err){journal('<b style="color:var(--alarm)">✕ the GitHub sea refused:</b> '+err.message);}}
+/* ---------------- catalog DOM ---------------- */
+var selShip=-1;
+function buildCatalog(filter){
+  if(!canDOM)return;
+  var el=document.getElementById('catalog');el.innerHTML='';
+  SHIPS.forEach(function(S,i){
+    if(filter&&(S.n+' '+S.g+' '+S.reg+' '+S.k).toLowerCase().indexOf(filter.toLowerCase())<0)return;
+    var d=document.createElement('div');d.className='ship'+(selShip===i?' sel':'');
+    d.innerHTML='<div class="top"><span class="nm">'+S.n+'</span>'
+      +'<span class="tag '+S.kind+'">'+S.kind.toUpperCase()+'</span>'
+      +'<span class="tag">'+S.reg+'</span><span class="tag">'+S.k+'</span></div>'
+      +'<div class="gl">'+S.g+'</div>'
+      +'<div class="actions">'
+      +(S.kind==='api'?'<button data-f="'+i+'">⚓ FETCH → GZIP → RECEIPT</button>'
+        :'<a class="berth" href="'+S.url+'" download>⤓ DIRECT BERTH</a>')
+      +'</div>';
+    d.addEventListener('click',function(ev){
+      if(ev.target.getAttribute&&ev.target.getAttribute('data-f')!=null){
+        fetchShipment(+ev.target.getAttribute('data-f'));return;}
+      if(ev.target.classList&&ev.target.classList.contains('berth')){
+        journal('⤓ direct berth opened for <b>'+S.n+'</b> — receipt it on your host (PB-DATA-005 rite).');return;}
+      selShip=i;sel={k:'ship',i:i};selT=performance.now();tellShip(i);buildCatalog(filter);});
+    el.appendChild(d);});}
+if(canDOM){
+  document.getElementById('q').addEventListener('input',function(){buildCatalog(this.value);});
+  document.getElementById('ghBtn').addEventListener('click',function(){ghSearch(document.getElementById('q').value);});
+  document.getElementById('dlMan').addEventListener('click',function(){
+    saveBlob(new TextEncoder().encode(manifestTSV()),'KANIKU-INTAKE-MANIFEST.tsv','text/tab-separated-values');
+    journal('⤓ the intake manifest sails to your disk — BeeMDM\u2019s first station reads this ledger.');});}
+/* ---------------- membrane scene: quay + stations ---------------- */
+var NAV=NasaruCamera({yaw:0.35,pitch:0.55,z:1.05});
+var CIN=NasaruCinema(NAV);
+var sel={k:null,i:-1},selT=0;
+var NS=D.S.length;
+function shipPos3(i){
+  var n=SHIPS.length,a=(i/Math.max(1,n-1)-0.5)*1.6;
+  return {x:-0.62+0.10*Math.sin(i*2.1),y:0.02+0.04*Math.sin(i*1.3),z:(a)*0.55};}
+function stationPos3(si){
+  return {x:-0.25+si*0.20,y:0.02+0.05*Math.sin(si*1.7),z:0.62-si*0.04};}
+function sailPos3(S,i){
+  var p=S.prog*(NS-1),si=Math.min(NS-2,Math.floor(p)),f=p-si;
+  var a=si<0?shipPos3(i):stationPos3(si),b=stationPos3(si+1);
+  if(S.prog<=0.01){a=shipPos3(i);b=stationPos3(0);f=0;}
+  return {x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f+0.05*Math.sin(f*Math.PI),z:a.z+(b.z-a.z)*f};}
+function tellShip(i){
+  var S=SHIPS[i];
+  journal('WITNESS <b>'+S.n+'</b> — register '+S.reg+' · kiṣru '+S.k+' · '+S.g
+    +(S.state==='golden'?' · <b style="color:var(--gold)">already sailed to GOLDEN this session.</b>'
+     :S.state==='refused'?' · <b style="color:var(--alarm)">refused by its sea (CORS) — journaled honestly.</b>':''));
+  return 3;}
+NAV.bindPointer(stage,{onClick:function(mx,my){
+  var best=-1,bd=13*13,now=performance.now();
+  for(var i=0;i<SHIPS.length;i++){
+    var w=SHIPS[i].state==='sailing'?sailPos3(SHIPS[i],i):shipPos3(i);
+    var p=NAV.project(w.x,w.y,w.z,cv);
+    var d2=(p.x-mx)*(p.x-mx)+(p.y-my)*(p.y-my);
+    if(d2<bd){bd=d2;best=i;}}
+  if(best>=0){selShip=best;sel={k:'ship',i:best};selT=now;tellShip(best);
+    buildCatalog(canDOM?document.getElementById('q').value:'');}},
+  onWheel:function(){CIN.setMode('off');}});
+stage.addEventListener('mousedown',function(){if(CIN.mode!=='off')CIN.setMode('off');});
+window.addEventListener('keydown',function(e2){
+  if(e2.key==='b'||e2.key==='B'){CIN.setMode('off');
+    journal(NAV.toggleBird()?'🕊 BIRD over the port.':'🕊 landed.');}
+  if(e2.key==='c'||e2.key==='C')journal('🎥 CAMERA → '+CIN.cycle().toUpperCase());});
+function frame(now){
+  var tt=now/1000;
+  NAV.tick(now);
+  var ct=null;
+  var sailing=SHIPS.findIndex(function(S){return S.state==='sailing';});
+  if(sailing>=0)ct=sailPos3(SHIPS[sailing],sailing);
+  else if(sel.k==='ship'&&SHIPS[sel.i])ct=shipPos3(sel.i);
+  CIN.tick(now,ct);
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle='#14120f';g.fillRect(0,0,cv.width,cv.height);
+  /* the water: gentle membrane weave */
+  for(var r=0;r<7;r++){
+    g.beginPath();
+    for(var q2=0;q2<=60;q2++){var x=-0.95+q2/60*1.9;
+      var y=-0.16+0.012*Math.sin(x*6+tt*1.2+r)+r*0.004;
+      var p=NAV.project(x,y,-0.4+r*0.13,cv);
+      q2?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y);}
+    g.strokeStyle='rgba(46,93,140,'+(0.16+0.03*r)+')';g.lineWidth=0.8;g.stroke();}
+  /* stations chain */
+  for(var si=0;si<NS;si++){
+    var sp=stationPos3(si);
+    var pp=NAV.project(sp.x,sp.y,sp.z,cv);
+    if(si>0){var pv=stationPos3(si-1),p0=NAV.project(pv.x,pv.y,pv.z,cv);
+      g.strokeStyle='rgba(201,162,39,0.3)';g.lineWidth=1;
+      g.beginPath();g.moveTo(p0.x,p0.y);g.lineTo(pp.x,pp.y);g.stroke();}
+    g.beginPath();g.arc(pp.x,pp.y,(si===NS-1?7:5)*pp.f,0,2*Math.PI);
+    g.fillStyle=D.S[si][2];g.fill();
+    g.fillStyle='rgba(232,224,207,0.85)';g.font='8.5px monospace';g.textAlign='center';
+    g.fillText(D.S[si][0],pp.x,pp.y-10*pp.f-3);
+    g.fillStyle='rgba(143,134,114,0.7)';g.font='7.5px monospace';
+    g.fillText(D.S[si][1],pp.x,pp.y+13*pp.f+3);}
+  /* ships */
+  for(var i=0;i<SHIPS.length;i++){var S=SHIPS[i];
+    var w=S.state==='sailing'?sailPos3(S,i):shipPos3(i);
+    var y2=w.y+(sel.k==='ship'&&sel.i===i?NasaruBounce(selT,now)*0.05:0);
+    var p3=NAV.project(w.x,y2,w.z,cv);
+    var col=S.state==='golden'?'#c9a227':S.state==='refused'?'#c23b2a'
+      :S.kind==='api'?'#6ea0cd':'#b0642f';
+    var rad=(sel.k==='ship'&&sel.i===i?5.5:3.6)*p3.f*Math.sqrt(NAV.cam.z);
+    g.beginPath();g.arc(p3.x,p3.y,rad,0,2*Math.PI);
+    g.fillStyle=col;g.fill();
+    if(S.state==='golden'){g.strokeStyle='rgba(232,224,207,0.8)';g.lineWidth=1;
+      g.beginPath();g.arc(p3.x,p3.y,rad+2.5,0,2*Math.PI);g.stroke();}
+    if(sel.k==='ship'&&sel.i===i){g.strokeStyle='#e8e0cf';g.lineWidth=1.3;
+      g.beginPath();g.arc(p3.x,p3.y,rad+2,0,2*Math.PI);g.stroke();
+      g.fillStyle='rgba(232,224,207,0.85)';g.font='8px monospace';g.textAlign='center';
+      g.fillText(S.n.slice(0,26),p3.x,p3.y-rad-6);}}
+  var qp=NAV.project(-0.62,0.16,0,cv);
+  g.fillStyle='rgba(110,160,205,0.85)';g.font='10px monospace';g.textAlign='center';
+  g.fillText('THE QUAY — shipments at anchor',qp.x,qp.y);
+  statusEl.textContent='KĀRUM PORT · '+SHIPS.length+' shipments · manifest '+MANIFEST.length
+    +' sealed · 🎥 '+CIN.mode.toUpperCase()+' · click ships · C cinema · B bird · drag rotate · scroll zoom';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('THE KĀRUM OPENS. Nine shipments at anchor — live seismic seas, the Najaf sun, the Wadi\u2019s own boundary stone, the humanitarian shelf, direct berths for the heavy crates — and the GitHub sea one ⌕ away. Fetch any API shipment and watch it sail the six stations to GOLDEN, gzipped and receipted in your browser. <b>No crate enters the city unreceipted.</b>');
+</script>
+</body>
+</html>

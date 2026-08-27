@@ -53,61 +53,76 @@
 //! HOW_MUCH LIMIT 1000
 //! ```
 
-pub mod token;
-pub mod query;
-pub mod parser;
 pub mod engine;
 pub mod indexed;
 pub mod modular_index;
 pub mod operations;
 pub mod orbit_objects;
+pub mod parser;
+pub mod query;
 pub mod sumuukin;
+pub mod token;
 
-pub use token::tokenize;
-pub use operations::Operation;
-pub use query::{
-    // Sovereign Operation verb (alias of operations::Operation)
-    QueryVerb,
-    // v1
-    HeptaQuery, WhoClause, EntityBinding,
-    WhatClause, Projection,
-    WhereCondition, ConditionTest,
-    WhenClause, EpochRef,
-    WhyCondition, LaneValue,
-    HowClause, SortDir,
-    HowMuchClause,
-    Op, HeptaValue, Combinator,
-    // v2.0
-    NodeClause, DbTarget,
-    AcrossClause,
-    TierClause, StorageTier,
-    StateClause, LifecycleState,
-    NashClause,
-    PatternCondition, PatternKind,
-    LineageClause,
-    GateClause, GateTarget,
-    SatamuClause,
-    OrbitalClause,
-    // v2.1 (Anti-SQL aggregate clauses)
-    MeasureClause, GravityClause, GravityMode,
-};
-pub use parser::{parse_query, ParseError};
 pub use engine::{
-    execute, execute_over, execute_over_histories, orbital_range_from_query,
-    QueryResult, QueryPlan, MatchedEntity, EpochSnapshot,
-    MeasureValue, GravityKey, GravityGroup, GravityResult,
+    execute, execute_over, execute_over_histories, orbital_range_from_query, EpochSnapshot,
+    GravityGroup, GravityKey, GravityResult, MatchedEntity, MeasureValue, QueryPlan, QueryResult,
 };
 pub use indexed::{
-    build_indexes, execute_indexed, nairu_range_from_when, spatial_center_from_where,
-    HeptaIndexes, SPATIAL_ATTRS,
+    build_indexes, execute_indexed, nairu_range_from_when, spatial_center_from_where, HeptaIndexes,
+    SPATIAL_ATTRS,
 };
+pub use operations::Operation;
+pub use parser::{parse_query, ParseError};
+pub use query::{
+    AcrossClause,
+    Combinator,
+    ConditionTest,
+    DbTarget,
+    EntityBinding,
+    EpochRef,
+    GateClause,
+    GateTarget,
+    GravityClause,
+    GravityMode,
+    // v1
+    HeptaQuery,
+    HeptaValue,
+    HowClause,
+    HowMuchClause,
+    LaneValue,
+    LifecycleState,
+    LineageClause,
+    // v2.1 (Anti-SQL aggregate clauses)
+    MeasureClause,
+    NashClause,
+    // v2.0
+    NodeClause,
+    Op,
+    OrbitalClause,
+    PatternCondition,
+    PatternKind,
+    Projection,
+    // Sovereign Operation verb (alias of operations::Operation)
+    QueryVerb,
+    SatamuClause,
+    SortDir,
+    StateClause,
+    StorageTier,
+    TierClause,
+    WhatClause,
+    WhenClause,
+    WhereCondition,
+    WhoClause,
+    WhyCondition,
+};
+pub use token::tokenize;
 // Production execution hints (ANCHOR / FILTER_ORDER) — not re-exported
 // above with the rest of `query`'s v2.0/v2.1 clause types because they
 // were added later; re-exported here so `AnchorStrategy` (which
 // `enkidb_readnode::cached::CachedReadNode` matches on directly) doesn't
 // need the full `heptascript::query::` path.
-pub use query::{AnchorStrategy, FilterStage};
 pub use modular_index::{
-    ModularNaviIndex, ResonanceScorerNc2, E2FourierWeights,
-    BUCKET_STEP, MAX_BUCKETS, chord_weight, weight_chord,
+    chord_weight, weight_chord, E2FourierWeights, ModularNaviIndex, ResonanceScorerNc2,
+    BUCKET_STEP, MAX_BUCKETS,
 };
+pub use query::{AnchorStrategy, FilterStage};

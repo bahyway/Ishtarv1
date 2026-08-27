@@ -3,8 +3,10 @@
 # A backup that has never been restored is a ghost backup: it passes every
 # payday and fails every muster. Restore = the seal's liveness (its eta).
 - name: PB-314 | Backup muster (restore drill)
-  hosts: vault_librarian
+  hosts: uruk-node-vault
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
   tasks:
     - name: Select seals — newest and oldest retained (per tier)
       ansible.builtin.shell: |
@@ -45,5 +47,6 @@
 
     - name: Run-KAKI (muster-KAKI with measured RTO)
       ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
         PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
         echo "{\"pb\":\"PB-314\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"tier-mustered\",\"detail\":\"see muster.log\"}" >> {{ kaki_runs }}

@@ -16,50 +16,50 @@ pub enum EventKind {
 impl EventKind {
     pub fn label(self) -> &'static str {
         match self {
-            EventKind::Ingestion    => "Ingestion",
-            EventKind::Validation   => "Validation",
-            EventKind::Promotion    => "Promotion",
+            EventKind::Ingestion => "Ingestion",
+            EventKind::Validation => "Validation",
+            EventKind::Promotion => "Promotion",
             EventKind::EpochAdvance => "Epoch+",
-            EventKind::DriftAlert   => "Drift Alert",
+            EventKind::DriftAlert => "Drift Alert",
             EventKind::StatusChange => "Status",
-            EventKind::Quarantine   => "Quarantine",
-            EventKind::Archive      => "Archive",
+            EventKind::Quarantine => "Quarantine",
+            EventKind::Archive => "Archive",
         }
     }
 
     pub fn icon(self) -> &'static str {
         match self {
-            EventKind::Ingestion    => "↓",
-            EventKind::Validation   => "✓",
-            EventKind::Promotion    => "▲",
+            EventKind::Ingestion => "↓",
+            EventKind::Validation => "✓",
+            EventKind::Promotion => "▲",
             EventKind::EpochAdvance => "⊕",
-            EventKind::DriftAlert   => "⚡",
+            EventKind::DriftAlert => "⚡",
             EventKind::StatusChange => "↻",
-            EventKind::Quarantine   => "⛔",
-            EventKind::Archive      => "☁",
+            EventKind::Quarantine => "⛔",
+            EventKind::Archive => "☁",
         }
     }
 
     // Hex color for canvas drawing (not a CSS var — must be a literal for canvas fillStyle)
     pub fn hex_color(self) -> &'static str {
         match self {
-            EventKind::Ingestion    => "#8be9fd",
-            EventKind::Validation   => "#50fa7b",
-            EventKind::Promotion    => "#bd93f9",
+            EventKind::Ingestion => "#8be9fd",
+            EventKind::Validation => "#50fa7b",
+            EventKind::Promotion => "#bd93f9",
             EventKind::EpochAdvance => "#f1fa8c",
-            EventKind::DriftAlert   => "#ffb86c",
+            EventKind::DriftAlert => "#ffb86c",
             EventKind::StatusChange => "#cdd6f4",
-            EventKind::Quarantine   => "#ff5555",
-            EventKind::Archive      => "#6c7086",
+            EventKind::Quarantine => "#ff5555",
+            EventKind::Archive => "#6c7086",
         }
     }
 }
 
 pub struct StoryEvent {
-    pub kind:   EventKind,
-    pub tick:   u32,
+    pub kind: EventKind,
+    pub tick: u32,
     pub detail: &'static str,
-    pub state:  &'static str,   // particle state after this event
+    pub state: &'static str, // particle state after this event
 }
 
 // One story per particle — same index order as PARTICLES in tribes.rs (0..15)
@@ -202,24 +202,36 @@ pub const STORIES: &[&[StoryEvent]] = &[
 // ── Runtime state ────────────────────────────────────────────────────────────
 
 pub struct StoryEngineState {
-    pub particle_idx:  Option<usize>,
+    pub particle_idx: Option<usize>,
     pub selected_node: Option<usize>,
-    pub pan_x:         f64,
+    pub pan_x: f64,
 }
 
 impl StoryEngineState {
     pub fn new() -> Self {
-        StoryEngineState { particle_idx: None, selected_node: None, pan_x: 0.0 }
+        StoryEngineState {
+            particle_idx: None,
+            selected_node: None,
+            pan_x: 0.0,
+        }
     }
+}
 
+impl Default for StoryEngineState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StoryEngineState {
     pub fn open(&mut self, pi: usize) {
-        self.particle_idx  = Some(pi);
+        self.particle_idx = Some(pi);
         self.selected_node = None;
-        self.pan_x         = 0.0;
+        self.pan_x = 0.0;
     }
 
     pub fn close(&mut self) {
-        self.particle_idx  = None;
+        self.particle_idx = None;
         self.selected_node = None;
     }
 
@@ -254,12 +266,18 @@ pub fn hit_node(n: usize, cx: f64, cy: f64, pan_x: f64) -> Option<usize> {
 /// Returns event indices considered root causes for "Dead" or "Fuzzy" particles.
 /// Highlights DriftAlert, Quarantine and StatusChange events that led to the state.
 pub fn causal_events(status: &str, events: &[StoryEvent]) -> Vec<usize> {
-    if status != "Dead" && status != "Fuzzy" { return vec![]; }
-    events.iter().enumerate()
-        .filter(|(_, ev)| matches!(
-            ev.kind,
-            EventKind::DriftAlert | EventKind::Quarantine | EventKind::StatusChange
-        ))
+    if status != "Dead" && status != "Fuzzy" {
+        return vec![];
+    }
+    events
+        .iter()
+        .enumerate()
+        .filter(|(_, ev)| {
+            matches!(
+                ev.kind,
+                EventKind::DriftAlert | EventKind::Quarantine | EventKind::StatusChange
+            )
+        })
         .map(|(i, _)| i)
         .collect()
 }
@@ -268,31 +286,32 @@ pub fn causal_events(status: &str, events: &[StoryEvent]) -> Vec<usize> {
 
 pub struct ParticleOverride {
     pub status: String,
-    pub ptype:  String,   // label string, e.g. "Zikru"
-    pub note:   String,
+    pub ptype: String, // label string, e.g. "Zikru"
+    pub note: String,
 }
 
 pub struct StewardState {
-    pub target:      Option<usize>,
-    pub overrides:   Vec<Option<ParticleOverride>>,
+    pub target: Option<usize>,
+    pub overrides: Vec<Option<ParticleOverride>>,
     pub edit_status: String,
-    pub edit_ptype:  String,
-    pub edit_note:   String,
+    pub edit_ptype: String,
+    pub edit_note: String,
 }
 
 impl StewardState {
     pub fn new(n: usize) -> Self {
         StewardState {
-            target:      None,
-            overrides:   (0..n).map(|_| None).collect(),
+            target: None,
+            overrides: (0..n).map(|_| None).collect(),
             edit_status: String::new(),
-            edit_ptype:  String::new(),
-            edit_note:   String::new(),
+            edit_ptype: String::new(),
+            edit_note: String::new(),
         }
     }
 
     pub fn effective_status<'a>(&'a self, pi: usize, original: &'a str) -> &'a str {
-        self.overrides.get(pi)
+        self.overrides
+            .get(pi)
             .and_then(|o| o.as_ref())
             .map(|o| o.status.as_str())
             .filter(|s| !s.is_empty())
@@ -300,7 +319,8 @@ impl StewardState {
     }
 
     pub fn effective_ptype<'a>(&'a self, pi: usize, original: &'a str) -> &'a str {
-        self.overrides.get(pi)
+        self.overrides
+            .get(pi)
             .and_then(|o| o.as_ref())
             .map(|o| o.ptype.as_str())
             .filter(|s| !s.is_empty())

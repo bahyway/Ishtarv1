@@ -16,17 +16,19 @@ use crate::LaneColor;
 /// Returns the dominant lane color and the ratio of dead files.
 pub fn classify_collection(col: &Collection, report: &AnalysisReport) -> (LaneColor, f32) {
     let dead_in_col = report.problems_in(&col.path) as f32;
-    let total       = col.file_count as f32;
-    if total == 0.0 { return (LaneColor::Fuzzy, 0.0); }
+    let total = col.file_count as f32;
+    if total == 0.0 {
+        return (LaneColor::Fuzzy, 0.0);
+    }
 
     let dead_ratio = dead_in_col / total;
 
     let lane = if dead_ratio >= 0.60 {
-        LaneColor::Dead          // > 60% problems — collection collapsed
+        LaneColor::Dead // > 60% problems — collection collapsed
     } else if dead_ratio >= 0.30 {
-        LaneColor::Critical      // 30-59% problems — critical state
+        LaneColor::Critical // 30-59% problems — critical state
     } else if dead_ratio >= 0.10 {
-        LaneColor::Fuzzy         // 10-29% problems — needs attention
+        LaneColor::Fuzzy // 10-29% problems — needs attention
     } else if col.avg_age_days < 30.0 && dead_ratio < 0.02 {
         if is_gem_folder_name(&col.name) {
             LaneColor::Gem
@@ -34,7 +36,7 @@ pub fn classify_collection(col: &Collection, report: &AnalysisReport) -> (LaneCo
             LaneColor::Active
         }
     } else {
-        LaneColor::Active        // healthy working collection
+        LaneColor::Active // healthy working collection
     };
 
     (lane, dead_ratio)
@@ -42,37 +44,50 @@ pub fn classify_collection(col: &Collection, report: &AnalysisReport) -> (LaneCo
 
 /// Classify a single file. Returns Dead ONLY if evidence exists.
 pub fn classify_file(file: &FileRecord, report: &AnalysisReport) -> LaneColor {
-    if file.is_zero { return LaneColor::Dead; }
+    if file.is_zero {
+        return LaneColor::Dead;
+    }
 
     let has_evidence = report.dead_evidence.iter().any(|e| e.path == file.path);
-    if has_evidence { return LaneColor::Dead; }
+    if has_evidence {
+        return LaneColor::Dead;
+    }
 
     if file.age_days() < 90.0 {
         LaneColor::Active
     } else if file.age_days() < 365.0 {
         LaneColor::Fuzzy
     } else {
-        LaneColor::Sec  // old but healthy — archived
+        LaneColor::Sec // old but healthy — archived
     }
 }
 
 /// Heuristic: is this folder name likely to contain golden records?
 fn is_gem_folder_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    matches!(lower.as_str(),
-        "contracts" | "invoices" | "masters" | "originals" |
-        "gold" | "golden" | "gem" | "publish" | "released" |
-        "final" | "production")
-    || lower.contains("contract")
-    || lower.contains("invoice")
-    || lower.contains("master")
+    matches!(
+        lower.as_str(),
+        "contracts"
+            | "invoices"
+            | "masters"
+            | "originals"
+            | "gold"
+            | "golden"
+            | "gem"
+            | "publish"
+            | "released"
+            | "final"
+            | "production"
+    ) || lower.contains("contract")
+        || lower.contains("invoice")
+        || lower.contains("master")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::file_walker::FileRecord;
     use crate::analyzer::{AnalysisReport, DeadEvidence, DeadReason};
+    use crate::file_walker::FileRecord;
     use std::path::PathBuf;
 
     fn empty_report() -> AnalysisReport {
@@ -106,7 +121,7 @@ mod tests {
 
     #[test]
     fn empty_collection_classifies_as_fuzzy() {
-        let col    = make_collection("empty", 0, 0.0);
+        let col = make_collection("empty", 0, 0.0);
         let report = empty_report();
         let (lane, ratio) = classify_collection(&col, &report);
         assert_eq!(lane, LaneColor::Fuzzy);
@@ -115,7 +130,7 @@ mod tests {
 
     #[test]
     fn collection_with_no_problems_classifies_active() {
-        let col    = make_collection("docs", 100, 200.0);
+        let col = make_collection("docs", 100, 200.0);
         let report = empty_report();
         let (lane, _) = classify_collection(&col, &report);
         assert_eq!(lane, LaneColor::Active);
@@ -123,10 +138,14 @@ mod tests {
 
     #[test]
     fn gem_folder_name_classifies_gem_when_recent() {
-        let col    = make_collection("contracts", 50, 5.0); // recent, few days old
+        let col = make_collection("contracts", 50, 5.0); // recent, few days old
         let report = empty_report();
         let (lane, _) = classify_collection(&col, &report);
-        assert_eq!(lane, LaneColor::Gem, "contracts folder < 30 days old with no problems → Gem");
+        assert_eq!(
+            lane,
+            LaneColor::Gem,
+            "contracts folder < 30 days old with no problems → Gem"
+        );
     }
 
     #[test]
@@ -162,7 +181,7 @@ mod tests {
 
     #[test]
     fn zero_byte_file_classifies_dead() {
-        let file   = make_file("empty.txt", 0, true);
+        let file = make_file("empty.txt", 0, true);
         let report = empty_report();
         assert_eq!(classify_file(&file, &report), LaneColor::Dead);
     }
@@ -180,7 +199,7 @@ mod tests {
 
     #[test]
     fn healthy_recent_file_classifies_active() {
-        let file   = make_file("new.txt", 100, false);
+        let file = make_file("new.txt", 100, false);
         let report = empty_report();
         // age_days() = 0.0 (modified = None → returns 0.0) → Active
         assert_eq!(classify_file(&file, &report), LaneColor::Active);

@@ -1,0 +1,44 @@
+# =============================================================================
+# enkidb-read-server — EnkiDB (core 7001 EAV particle store) Read Node
+# container image.
+#
+# Build (from the repo root):
+#   podman build -t enkidb-read-server:latest \
+#     -f deploy/podman/Containerfile.enkidb-read-server \
+#     workspace/bahyway_v4
+#
+# Run:
+#   podman run -d --name enkidb-read \
+#     -p 7001:7001 \
+#     -v enkidb-read-data:/data:Z \
+#     -e RELOAD_SECS=30 \
+#     --restart=always \
+#     enkidb-read-server:latest
+#
+# Lifecycle (no systemd anywhere -- plain Podman commands):
+#   podman stop enkidb-read
+#   podman start enkidb-read
+#   podman logs -f enkidb-read
+#
+# Data path: this container never writes -- it only opens
+# /data/current/{entities,eav} read-only and reloads on a timer. Getting
+# the Write Node's materialized state into that path is a separate step;
+# see scripts/enkidb-sync-data.sh.
+#
+# `:Z` on the volume mount is required on Fedora/SELinux-enforcing hosts.
+# =============================================================================
+FROM docker.io/library/rust:1-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p enkidb-read-server
+
+FROM registry.fedoraproject.org/fedora-minimal:latest
+RUN microdnf install -y shadow-utils && microdnf clean all \
+    && useradd --system --home-dir /data --create-home enkidb
+COPY --from=builder /build/target/release/enkidb-read-server /usr/local/bin/enkidb-read-server
+USER enkidb
+WORKDIR /data
+ENV BIND_ADDR=0.0.0.0:7001
+ENV DATA_DIR=/data
+EXPOSE 7001
+ENTRYPOINT ["/usr/local/bin/enkidb-read-server"]

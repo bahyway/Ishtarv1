@@ -19,7 +19,10 @@ impl MarkovChain {
         for row in &p {
             assert_eq!(row.len(), n, "transition matrix must be square");
             let sum: f64 = row.iter().sum();
-            assert!((sum - 1.0).abs() < 1e-9, "each row must sum to 1.0, got {sum}");
+            assert!(
+                (sum - 1.0).abs() < 1e-9,
+                "each row must sum to 1.0, got {sum}"
+            );
         }
         MarkovChain { p, n }
     }
@@ -32,14 +35,16 @@ impl MarkovChain {
 
         for _ in 0..max_iter {
             let mut next = vec![0.0; n];
-            for j in 0..n {
-                for i in 0..n {
-                    next[j] += pi[i] * self.p[i][j];
+            for (j, next_j) in next.iter_mut().enumerate() {
+                for (i, &pi_i) in pi.iter().enumerate() {
+                    *next_j += pi_i * self.p[i][j];
                 }
             }
             let delta: f64 = next.iter().zip(pi.iter()).map(|(a, b)| (a - b).abs()).sum();
             pi = next;
-            if delta < tol { break; }
+            if delta < tol {
+                break;
+            }
         }
         pi
     }
@@ -48,21 +53,28 @@ impl MarkovChain {
     fn invert(m: &[Vec<f64>]) -> Vec<Vec<f64>> {
         let n = m.len();
         let mut a: Vec<Vec<f64>> = m.to_vec();
-        let mut inv: Vec<Vec<f64>> = (0..n).map(|i| {
-            (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect()
-        }).collect();
+        let mut inv: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
+            .collect();
 
         for col in 0..n {
             let mut pivot = col;
             for r in (col + 1)..n {
-                if a[r][col].abs() > a[pivot][col].abs() { pivot = r; }
+                if a[r][col].abs() > a[pivot][col].abs() {
+                    pivot = r;
+                }
             }
             a.swap(col, pivot);
             inv.swap(col, pivot);
             let d = a[col][col];
-            for j in 0..n { a[col][j] /= d; inv[col][j] /= d; }
+            for j in 0..n {
+                a[col][j] /= d;
+                inv[col][j] /= d;
+            }
             for r in 0..n {
-                if r == col { continue; }
+                if r == col {
+                    continue;
+                }
                 let factor = a[r][col];
                 for j in 0..n {
                     a[r][j] -= factor * a[col][j];
@@ -83,10 +95,10 @@ impl MarkovChain {
         let n = self.n;
         // A = I - P + 1·pi^T
         let mut a = vec![vec![0.0; n]; n];
-        for i in 0..n {
+        for (i, row) in a.iter_mut().enumerate() {
             for j in 0..n {
                 let identity = if i == j { 1.0 } else { 0.0 };
-                a[i][j] = identity - self.p[i][j] + pi[j];
+                row[j] = identity - self.p[i][j] + pi[j];
             }
         }
         let z = Self::invert(&a);
@@ -111,15 +123,16 @@ mod tests {
 
     #[test]
     fn steady_state_satisfies_balance_equation() {
-        let chain = MarkovChain::new(vec![
-            vec![0.9, 0.1],
-            vec![0.2, 0.8],
-        ]);
+        let chain = MarkovChain::new(vec![vec![0.9, 0.1], vec![0.2, 0.8]]);
         let pi = chain.steady_state(1e-12, 10_000);
         // pi P = pi
         for j in 0..2 {
             let sum: f64 = (0..2).map(|i| pi[i] * chain.p[i][j]).sum();
-            assert!((sum - pi[j]).abs() < 1e-9, "balance equation failed at {j}: {sum} vs {pi_j}", pi_j = pi[j]);
+            assert!(
+                (sum - pi[j]).abs() < 1e-9,
+                "balance equation failed at {j}: {sum} vs {pi_j}",
+                pi_j = pi[j]
+            );
         }
         let total: f64 = pi.iter().sum();
         assert!((total - 1.0).abs() < 1e-9);
@@ -131,15 +144,22 @@ mod tests {
         // pi = [b/(a+b), a/(a+b)]  (standard closed-form result)
         let a = 0.3;
         let b = 0.4;
-        let chain = MarkovChain::new(vec![
-            vec![1.0 - a, a],
-            vec![b, 1.0 - b],
-        ]);
+        let chain = MarkovChain::new(vec![vec![1.0 - a, a], vec![b, 1.0 - b]]);
         let pi = chain.steady_state(1e-14, 10_000);
         let expected_0 = b / (a + b);
         let expected_1 = a / (a + b);
-        assert!((pi[0] - expected_0).abs() < 1e-6, "pi[0]={} expected {}", pi[0], expected_0);
-        assert!((pi[1] - expected_1).abs() < 1e-6, "pi[1]={} expected {}", pi[1], expected_1);
+        assert!(
+            (pi[0] - expected_0).abs() < 1e-6,
+            "pi[0]={} expected {}",
+            pi[0],
+            expected_0
+        );
+        assert!(
+            (pi[1] - expected_1).abs() < 1e-6,
+            "pi[1]={} expected {}",
+            pi[1],
+            expected_1
+        );
     }
 
     #[test]
@@ -149,14 +169,21 @@ mod tests {
         // special, independently-checkable property of 2-state chains.
         let a = 0.3;
         let b = 0.4;
-        let chain = MarkovChain::new(vec![
-            vec![1.0 - a, a],
-            vec![b, 1.0 - b],
-        ]);
+        let chain = MarkovChain::new(vec![vec![1.0 - a, a], vec![b, 1.0 - b]]);
         let pi = chain.steady_state(1e-14, 10_000);
         let m = chain.mean_first_passage_time(&pi);
-        assert!((m[0][1] - 1.0 / a).abs() < 1e-6, "m_12={} expected {}", m[0][1], 1.0 / a);
-        assert!((m[1][0] - 1.0 / b).abs() < 1e-6, "m_21={} expected {}", m[1][0], 1.0 / b);
+        assert!(
+            (m[0][1] - 1.0 / a).abs() < 1e-6,
+            "m_12={} expected {}",
+            m[0][1],
+            1.0 / a
+        );
+        assert!(
+            (m[1][0] - 1.0 / b).abs() < 1e-6,
+            "m_21={} expected {}",
+            m[1][0],
+            1.0 / b
+        );
     }
 
     #[test]

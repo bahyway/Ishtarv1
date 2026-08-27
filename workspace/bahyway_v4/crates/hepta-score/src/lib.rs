@@ -50,17 +50,17 @@ pub const DEAD_CEILING: f32 = 0.588;
 pub mod domain;
 pub mod equation;
 pub mod errors;
+pub mod harmony;
 pub mod pipeline_bridge;
 pub mod scorer;
 pub mod weights;
-pub mod harmony;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
 pub use domain::{HeptaDimension, HeptaScore, HeptaVector, QualityLane, TribeIdealPoint};
 pub use equation::hepta_health_score;
 pub use errors::HeptaError;
+pub use harmony::{dead_fraction, gem_fraction, harmony_coefficient, mean_b11};
 pub use pipeline_bridge::{score_from_station_outputs, StationScores};
 pub use scorer::{BatchScoringResult, HeptaScorer, ScoredParticle};
 pub use weights::{WeightProfile, EQUAL_WEIGHTS, SOVEREIGN_ARABIC_MDM_WEIGHTS};
-pub use harmony::{harmony_coefficient, mean_b11, gem_fraction, dead_fraction};

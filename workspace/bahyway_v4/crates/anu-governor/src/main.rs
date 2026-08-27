@@ -47,10 +47,15 @@ fn main() -> anyhow::Result<()> {
     use anu_governor::model::*;
     use std::path::Path;
 
-    let cfg_path = std::env::args().nth(1).unwrap_or_else(|| "anu-governor.toml".into());
+    let cfg_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "anu-governor.toml".into());
     let cfg = config::Config::load(Path::new(&cfg_path))?;
-    let params: Vec<(String, String)> =
-        cfg.parameters.iter().map(|p| (p.key.clone(), p.value.clone())).collect();
+    let params: Vec<(String, String)> = cfg
+        .parameters
+        .iter()
+        .map(|p| (p.key.clone(), p.value.clone()))
+        .collect();
 
     let (tx, rx) = crossbeam_channel::unbounded();
     let (ctl_tx, ctl_rx) = crossbeam_channel::unbounded();

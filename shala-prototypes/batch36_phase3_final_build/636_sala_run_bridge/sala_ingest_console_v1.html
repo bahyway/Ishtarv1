@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Šala · Ingest Console · compose → run → visualise · PB-379</title>
+<style>
+:root{--bg:#122738;--panel:#193549;--line:#1f4662;--ink:#fff;--dim:#7fa3bd;--gold:#ffc600;--lapis:#0088ff;--green:#3ad900;--violet:#fb94ff;--alarm:#ff628c;--hi:#ffee80;
+--mono:"IBM Plex Mono","JetBrains Mono",ui-monospace,Menlo,monospace;--serif:"Iowan Old Style",Palatino,Georgia,serif}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--serif)}
+.crumbs{font:11px var(--mono);color:var(--dim);letter-spacing:.08em;padding:10px 16px 0;text-transform:uppercase}.crumbs b{color:var(--gold)}
+header{padding:6px 16px 10px;border-bottom:1px solid var(--line)}h1{font:600 21px/1.15 var(--serif);margin:4px 0 6px}h1 .cune{color:var(--gold);margin-left:8px;font-weight:400}
+.lede{max-width:82ch;margin:0}.lede em{color:var(--hi);font-style:normal}.lede code{font:12px var(--mono);color:var(--hi)}
+.banner{background:var(--gold);color:var(--bg);font:600 12px var(--mono);letter-spacing:.14em;text-align:center;padding:5px 8px}
+.honesty{background:var(--panel);border-bottom:1px solid var(--line);font:12px var(--mono);color:var(--hi);padding:6px 16px}
+.stagerow{display:flex;gap:6px;padding:10px 16px 0;font:11px var(--mono);flex-wrap:wrap}
+.stagerow .st{padding:4px 10px;border:1px solid var(--line);border-radius:999px;color:var(--dim)}
+.stagerow .st[data-on=true]{border-color:var(--gold);color:var(--bg);background:var(--gold);font-weight:600}
+.grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.9fr);gap:12px;padding:12px 16px}@media(max-width:980px){.grid{grid-template-columns:1fr}}
+.tablet{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}.tablet h2{font:600 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin:0 0 8px}
+.stack{display:grid;gap:12px;align-content:start}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font:12px var(--mono)}@media(max-width:620px){.form{grid-template-columns:1fr}}
+.form label{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;color:var(--dim)}
+.form input[type=range]{width:100%;accent-color:var(--gold)}.form .val{color:var(--hi);min-width:8ch;text-align:right}
+.form select,.form input[type=text],.form input[type=date]{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font:12px var(--mono);width:100%}
+button{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 11px;font:12px var(--mono);cursor:pointer}
+button:hover{border-color:var(--gold);color:var(--hi)}button[aria-pressed=true]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+button.go{background:var(--gold);color:var(--bg);border-color:var(--gold);font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+pre.cmd{font:11px/1.5 var(--mono);color:var(--hi);background:#0e1f2e;border:1px solid var(--line);border-radius:4px;padding:8px;margin:8px 0 0;white-space:pre-wrap;overflow-x:auto}
+pre.cmd .op{color:var(--gold);font-weight:600}pre.cmd .c{color:var(--dim)}
+.verdict{font:12px var(--mono);color:var(--dim);margin:8px 0 0;padding-top:6px;border-top:1px dashed var(--line)}.verdict b{color:var(--hi)}.verdict .ok{color:var(--green)}.verdict .bad{color:var(--alarm)}.verdict .wait{color:var(--violet)}
+.lawtag{display:inline-block;font:10px var(--mono);color:var(--bg);background:var(--dim);border-radius:3px;padding:1px 5px;margin:2px 4px 0 0}.lawtag.gold{background:var(--gold)}
+canvas#stage{width:100%;height:520px;display:block;background:radial-gradient(ellipse at 50% 55%,#163046 0%,#0e1f2e 70%,#0b1824 100%);border:1px solid var(--line);border-radius:4px;cursor:crosshair;touch-action:none}
+.stagewrap{position:relative}
+.rites{position:absolute;display:none;z-index:9;background:var(--panel);border:1px solid var(--gold);border-radius:6px;padding:6px;min-width:240px;box-shadow:0 8px 24px #0008}
+.rites h3{font:600 11px var(--mono);letter-spacing:.1em;color:var(--gold);margin:2px 4px 6px;text-transform:uppercase}.rites button{display:block;width:100%;text-align:left;margin:2px 0}.rites .kaki{font:10px var(--mono);color:var(--violet);margin:0 4px 6px}
+.deck{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font:12px var(--mono)}
+.deck label{display:flex;align-items:center;gap:6px;color:var(--dim)}.deck input[type=range]{width:110px;accent-color:var(--gold)}.deck .val{color:var(--hi);min-width:3ch;display:inline-block}
+#runlog,#journal{font:11px/1.5 var(--mono);color:var(--dim);max-height:190px;overflow:auto;white-space:pre-wrap;background:#0e1f2e;border:1px solid var(--line);border-radius:4px;padding:6px}
+#runlog .ok{color:var(--green)}#runlog .bad{color:var(--alarm)}#runlog .hi{color:var(--hi)}
+#journal .t{color:var(--hi)}
+table.t{width:100%;border-collapse:collapse;font:11px var(--mono)}table.t td,table.t th{border-bottom:1px solid var(--line);padding:3px 4px;text-align:left}table.t th{color:var(--gold)}table.t tr:hover{background:#1f4662;cursor:pointer}
+#story{font:12px/1.5 var(--mono);min-height:110px}#story .kaki{color:var(--violet)}#story .ev{padding:3px 0;border-bottom:1px solid var(--line)}#story .ev b{color:var(--gold)}#story .empty{color:var(--dim)}#story .rel{margin-top:6px;padding-top:5px;border-top:1px dashed var(--line)}#story .rel i{font-style:normal;color:var(--dim)}
+.gates{font:12px var(--mono);display:grid;gap:4px}.gates span{display:flex;justify-content:space-between;gap:8px}.gates .ok{color:var(--green)}.gates .bad{color:var(--alarm)}.gates .wait{color:var(--dim)}
+#fault{display:none;background:var(--alarm);color:var(--bg);font:12px var(--mono);padding:6px 16px}
+footer{font:11px var(--mono);color:var(--dim);padding:8px 16px 20px;border-top:1px solid var(--line)}:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="crumbs">BahyWay.Ecosystem v4.0 · Šala House · PB-371 arsenal · PB-378 bridge · GL-FLD-001 SEALED · GL-UNT-001 SEALED · <b>PB-379</b></div>
+<header>
+  <h1>Ingest Console — compose the download, run it, watch the membrane form <span class="cune">𒁾</span></h1>
+  <p class="lede">One prototype, three stages. <em>Compose</em> an AOI, a window and a collection, and the console writes the exact <code>PB-371</code> invocation — the tab never invents its own downloader. <em>Run</em> hands that invocation to the <em>Šala Run Bridge</em> (PB-378), which executes only whitelisted playbooks, binds the tailnet alone, and streams its journal back; if no bridge answers, the console says so plainly and continues in <em>rehearsal</em>. <em>Visualise</em> then scatter-adds the ingested segments into the <code>(MLU, θ, RU)</code> grid and the membrane appears in this same page — amplitude is density, lit nodes are crowds, and descent returns sovereign KAKIs.</p>
+</header>
+<div class="banner">ŠALA CONSOLE · THE TAB PROPOSES · THE BRIDGE EXECUTES · ONLY WHITELISTED PLAYBOOKS</div>
+<div class="honesty" id="honesty">Honesty: checking for a bridge… Until one answers, every run is a <b>REHEARSAL</b> — the field below is generated deterministically from your AOI and dates, not from downloaded pixels, and it is labelled as such on the stage.</div>
+<div id="fault"></div>
+
+<div class="stagerow">
+  <span class="st" id="st1" data-on="true">1 · COMPOSE</span>
+  <span class="st" id="st2">2 · RUN</span>
+  <span class="st" id="st3">3 · VISUALISE</span>
+</div>
+
+<div class="grid">
+  <div class="stack">
+    <div class="tablet">
+      <h2>1 · Compose · the PB-371 invocation</h2>
+      <div class="form">
+        <label>target
+          <select id="aoi">
+            <option value="pipe">Water pipeline reach · Amsterdam W</option>
+            <option value="najaf">Wadi al-Salam · Najaf (KAKIGIS)</option>
+            <option value="tigris">Tigris contamination reach (NANSHE)</option>
+            <option value="custom">custom WKT…</option>
+          </select></label>
+        <label>collection
+          <select id="coll">
+            <option value="SENTINEL-2">SENTINEL-2 · L2A optical</option>
+            <option value="SENTINEL-1">SENTINEL-1 · SAR GRD</option>
+            <option value="SENTINEL-3">SENTINEL-3 · OLCI</option>
+          </select></label>
+        <label style="grid-column:1/-1">WKT <input type="text" id="wkt" value="POLYGON((4.72 52.28,5.02 52.28,5.02 52.43,4.72 52.43,4.72 52.28))"></label>
+        <label>start <input type="date" id="start" value="2026-06-01"></label>
+        <label>end <input type="date" id="end" value="2026-08-24"></label>
+        <label>max cloud % <input id="cloud" type="range" min="0" max="80" step="5" value="30"><span class="val" id="cloudV">30</span></label>
+        <label>limit <input id="limit" type="range" min="1" max="40" step="1" value="12"><span class="val" id="limitV">12</span></label>
+      </div>
+      <pre class="cmd" id="cmd"></pre>
+      <div class="deck">
+        <button id="copy">⧉ copy the command</button>
+        <button id="dry">◌ dry-run (estimate only)</button>
+        <button class="go" id="run">▶ RUN PB-371 via the bridge</button>
+        <span id="bridgeState" style="color:var(--dim)">bridge: checking…</span>
+      </div>
+      <p class="verdict" id="verdictCompose">estimate · <b>—</b></p>
+      <div><span class="lawtag gold">tab proposes, bridge executes</span><span class="lawtag gold">whitelist only</span><span class="lawtag">GL-SEC-002 §7</span><span class="lawtag">Copernicus · free and open, attribution required</span></div>
+    </div>
+
+    <div class="tablet stagewrap">
+      <h2>3 · Visualise · wave-field membrane over the ingested scene</h2>
+      <canvas id="stage" width="1240" height="700" tabindex="0" aria-label="ingested field stage"></canvas>
+      <div class="rites" id="rites" role="menu"></div>
+      <div class="deck" id="deck">
+        <button data-cam="home" aria-pressed="true">⌖ home</button><button data-cam="bird">✈ bird</button><button data-cam="land">⬇ land</button><button data-cam="orbit">⟳ orbit</button>
+        <button id="freeze">❄ freeze</button><button id="relbtn" aria-pressed="true">⤫ relations</button>
+        <label>leaf
+          <select id="leaf">
+            <option value="ndwi">NDWI · water</option>
+            <option value="ndvi">NDVI · vegetation</option>
+            <option value="nbr">NBR · burn</option>
+            <option value="ph_band">PH band · structural</option>
+          </select></label>
+        <label>scene <input id="scene" type="range" min="0" max="0" step="1" value="0"><span class="val" id="scV">–</span></label>
+        <label>hot ≥ <input id="hot" type="range" min="0.15" max="0.9" step="0.05" value="0.4"><span class="val" id="hV">0.40</span></label>
+      </div>
+      <p class="verdict" id="verdictStage">stage · <b>no scene ingested yet</b></p>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="tablet"><h2>2 · Run · bridge journal</h2><div id="runlog">idle.</div>
+      <p class="verdict" id="verdictRun">run · <b>—</b></p></div>
+    <div class="tablet"><h2>Arsenal · landed archives</h2><table class="t" id="arsenal"></table><p class="verdict" id="verdictArs">—</p></div>
+    <div class="tablet" id="storyTab"><h2>StoryEngine · biography of the caught segment</h2><div id="story"><div class="empty">Nothing caught. Click a lit node on the membrane to descend, then click a citizen.</div></div></div>
+    <div class="tablet"><h2>Gates</h2><div class="gates">
+      <span>COMPILE · parsed <i class="wait" id="gC">waiting</i></span>
+      <span>RUNTIME · click / contextmenu / wheel <i class="wait" id="gR">waiting</i></span>
+      <span>BRIDGE · whitelisted, tailnet-bound <i class="wait" id="gB">waiting</i></span>
+      <span>CONSERVATION · Σ field = N scattered <i class="wait" id="gU">waiting</i></span></div></div>
+    <div class="tablet"><h2>Court journal</h2><div id="journal"></div></div>
+  </div>
+</div>
+<footer>PB-379 · sala_ingest_console_v1.html · Cobalt2 · deterministic · DUB.SAR 𒁾</footer>
+
+<script>
+(function(){"use strict";
+const $=id=>document.getElementById(id);
+const fault=$('fault');window.onerror=(m,s,l)=>{fault.style.display='block';fault.textContent='FAULT · '+m+' @'+l;journal('FAULT '+m);};
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const J=$('journal');function journal(s){const t=new Date().toISOString().slice(11,19);J.innerHTML+='<span class="t">'+t+'</span> '+s+'\n';J.scrollTop=J.scrollHeight;}
+const C={bg:'#122738',line:'#1f4662',ink:'#fff',dim:'#7fa3bd',gold:'#ffc600',lapis:'#0088ff',green:'#3ad900',violet:'#fb94ff',alarm:'#ff628c',hi:'#ffee80'};
+const LEAF=['#ff628c','#ff8fb0','#ffb3c8','#ffffff','#9ad0ff','#5db4ff','#0088ff'];
+const AOIS={pipe:'POLYGON((4.72 52.28,5.02 52.28,5.02 52.43,4.72 52.43,4.72 52.28))',
+            najaf:'POLYGON((44.26 31.96,44.40 31.96,44.40 32.06,44.26 32.06,44.26 31.96))',
+            tigris:'POLYGON((44.30 33.25,44.52 33.25,44.52 33.42,44.30 33.42,44.30 33.25))'};
+const GBPER={'SENTINEL-2':1.0,'SENTINEL-1':2.4,'SENTINEL-3':0.6};
+
+/* ---------- stage flags ---------- */
+function stage(n){['st1','st2','st3'].forEach((id,i)=>$(id).dataset.on=(i===n-1)?'true':'false');}
+
+/* ---------- 1 · compose ---------- */
+function form(){return{aoi:$('aoi').value,coll:$('coll').value,wkt:$('wkt').value.trim(),
+  start:$('start').value,end:$('end').value,cloud:+$('cloud').value,limit:+$('limit').value};}
+function renderCmd(){const f=form();
+  $('cloudV').textContent=f.cloud;$('limitV').textContent=f.limit;
+  $('cmd').innerHTML='<span class="c"># the tab never downloads. it composes the sealed playbook call.</span>\n'
+   +'<span class="op">ansible-playbook</span> PB-371_cdse_arsenal_fetch.yml \\\n'
+   +'  -e collection='+f.coll+' \\\n'
+   +'  -e wkt="'+f.wkt+'" \\\n'
+   +'  -e start='+f.start+' -e end='+f.end+' \\\n'
+   +'  -e cloud='+f.cloud+' -e limit='+f.limit;
+  const est=f.limit*(GBPER[f.coll]||1);
+  $('verdictCompose').innerHTML='estimate · up to <b>'+f.limit+'</b> products ≈ <b>'+est.toFixed(1)+' GB</b> · PB-371 refuses to land unless free space is at least twice the estimate';}
+['aoi','coll','wkt','start','end','cloud','limit'].forEach(id=>$(id).addEventListener('input',()=>{
+  if(id==='aoi'&&AOIS[$('aoi').value])$('wkt').value=AOIS[$('aoi').value];renderCmd();}));
+$('aoi').addEventListener('change',()=>{if(AOIS[$('aoi').value])$('wkt').value=AOIS[$('aoi').value];renderCmd();journal('AOI · '+$('aoi').value);});
+$('copy').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText($('cmd').textContent.replace(/^#.*\n/,''));journal('command copied');};
+
+/* ---------- 2 · run via the bridge (graceful rehearsal) ---------- */
+const BRIDGE=(localStorage&&localStorage.getItem&&null)||'http://100.64.0.1:7377';
+let bridgeOk=false,TOKEN=null;
+function log(s,cls){const el=$('runlog');if(el.textContent==='idle.')el.textContent='';el.innerHTML+=(cls?'<span class="'+cls+'">'+s+'</span>':s)+'\n';el.scrollTop=el.scrollHeight;}
+async function probeBridge(){
+  try{const r=await fetch(BRIDGE+'/health',{mode:'cors'});const j=await r.json();
+    bridgeOk=!!j.ok;$('bridgeState').textContent='bridge: '+(bridgeOk?'ready · whitelist '+j.allowed.length:'unhealthy');
+    $('bridgeState').style.color=bridgeOk?C.green:C.alarm;
+    gate('gB',bridgeOk,bridgeOk?'green · whitelist '+j.allowed.join(', '):'red · unhealthy');
+    $('honesty').innerHTML='Honesty: bridge reachable — runs execute PB-371 on the host. The membrane below is still built from the <b>manifest</b> the run returns, not from raw pixels; band statistics come from the derived tier.';
+  }catch(e){bridgeOk=false;$('bridgeState').textContent='bridge: none · rehearsal mode';$('bridgeState').style.color=C.violet;
+    gate('gB',false,'absent · rehearsal (run PB-378 to install)');
+    $('honesty').innerHTML='Honesty: no Šala Run Bridge answered, so every run here is a <b>REHEARSAL</b>. Nothing is downloaded; the membrane is generated deterministically from your AOI and dates and is labelled REHEARSAL on the stage. Install the bridge with PB-378 to run for real.';}}
+async function doRun(dry){
+  stage(2);const f=form();$('run').disabled=true;$('dry').disabled=true;
+  log((dry?'DRY-RUN':'RUN')+' PB-371 · '+f.coll+' · '+f.start+'..'+f.end+' · cloud<'+f.cloud+' · limit '+f.limit,'hi');
+  if(bridgeOk){
+    try{
+      const r=await fetch(BRIDGE+'/run',{method:'POST',headers:{'content-type':'application/json','X-Bridge-Token':TOKEN||''},
+        body:JSON.stringify({playbook:'PB-371_cdse_arsenal_fetch.yml',extra:{collection:f.coll,wkt:f.wkt,start:f.start,end:f.end,cloud:f.cloud,limit:f.limit,dry_run:dry?1:0}})});
+      if(r.status===403){log('REFUSED by the bridge — playbook not in the whitelist','bad');finishRun(false,dry);return;}
+      const {run}=await r.json();log('accepted · run '+run,'ok');
+      const jr=await fetch(BRIDGE+'/journal?run='+run,{headers:{'X-Bridge-Token':TOKEN||''}});
+      const rd=jr.body.getReader(),dec=new TextDecoder();let buf='';
+      while(true){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
+        const lines=buf.split('\n');buf=lines.pop();
+        for(const L of lines){if(!L.trim())continue;const o=JSON.parse(L);
+          if(o.line)log(o.line);if(o.done)log('rc='+o.rc,o.rc===0?'ok':'bad');}}
+      finishRun(true,dry);return;
+    }catch(e){log('bridge error · '+e.message+' — falling back to rehearsal','bad');}
+  }
+  // rehearsal: deterministic, honest, no network
+  const seed=hash(f.wkt+f.start+f.end+f.coll);const r=mulberry32(seed);
+  const n=Math.max(1,Math.round(f.limit*(0.55+0.4*r())));
+  const steps=['catalogue · querying OData','catalogue · '+n+' products match','estimated landing size · '+(n*(GBPER[f.coll]||1)).toFixed(1)+' GB',
+    'gate L1 · free space ≥ 2× estimate','landing…'];
+  for(const s of steps){await sleep(reduced?0:260);log(s);}
+  ARCH.length=0;
+  for(let i=0;i<n;i++){await sleep(reduced?0:180);
+    const d=new Date(new Date(f.start).getTime()+r()*(new Date(f.end)-new Date(f.start)));
+    const nm=f.coll.replace('SENTINEL-','S')+'_MSIL2A_'+d.toISOString().slice(0,10).replace(/-/g,'')+'T'+String(100000+Math.floor(r()*899999)).slice(0,6);
+    const gb=(GBPER[f.coll]||1)*(0.8+0.4*r());
+    ARCH.push({name:nm,gb,cloud:Math.round(r()*f.cloud),date:d.toISOString().slice(0,10),kaki:kakiHex(seed+i)});
+    log('  · landed '+nm+' '+gb.toFixed(2)+' GB');drawArsenal();}
+  log('gate L2 · '+n+' archives, '+n+' receipts','ok');
+  log('gate L3 · all sha256 verify','ok');
+  log('REHEARSAL — nothing was downloaded; install PB-378 for a real run','bad');
+  finishRun(true,dry);}
+function finishRun(ok,dry){$('run').disabled=false;$('dry').disabled=false;
+  $('verdictRun').innerHTML='run · '+(ok?'<span class="ok">complete</span>':'<span class="bad">refused</span>')+' · '+ARCH.length+' archive(s) · '+(bridgeOk?'executed on the host':'<span class="wait">REHEARSAL</span>');
+  if(ok&&!dry&&ARCH.length){buildScene();stage(3);}else stage(1);}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function kakiHex(seed){let s='';const r=mulberry32(seed);for(let b=0;b<16;b++){s+=('0'+Math.floor(r()*256).toString(16)).slice(-2);if(b%4===3&&b<15)s+='·';}return s;}
+$('run').onclick=()=>doRun(false);$('dry').onclick=()=>doRun(true);
+const ARCH=[];
+function drawArsenal(){const t=$('arsenal');
+  t.innerHTML='<tr><th>KAKI</th><th>archive</th><th>date</th><th>cloud</th><th>GB</th></tr>'+
+   (ARCH.length?ARCH.map((a,i)=>'<tr data-a="'+i+'"><td style="color:'+C.violet+'">'+a.kaki.slice(0,10)+'</td><td>'+a.name+'</td><td>'+a.date+'</td><td>'+a.cloud+'%</td><td>'+a.gb.toFixed(2)+'</td></tr>').join('')
+   :'<tr><td colspan="5" style="color:'+C.dim+'">nothing landed yet</td></tr>');
+  t.querySelectorAll('tr[data-a]').forEach(tr=>tr.onclick=()=>{const i=+tr.dataset.a;$('scene').value=i;SCENE=i;$('scV').textContent=i+1;buildField();journal('scene · '+ARCH[i].name);});
+  $('verdictArs').innerHTML=ARCH.length?'arsenal · <b>'+ARCH.length+'</b> archives · <b>'+ARCH.reduce((s,a)=>s+a.gb,0).toFixed(1)+' GB</b> · every one carries a KAKI and a verified sha256 (PB-371 gates L2/L3)':'arsenal · nothing landed yet';}
+drawArsenal();
+
+/* ---------- 3 · field ---------- */
+const NM=7,NA=48,NR=22,NSEG=42000;let SCENE=0,LEAFID='ndwi',HOT=0.4,field=null,peak=1,segTotal=0;
+const idx=(m,a,r)=>(m*NA+a)*NR+r;
+function segGen(seedBase,leaf){ // deterministic segment generator; regenerable for descent (Masku §5)
+  return function(cb){const r=mulberry32(seedBase);
+    for(let i=0;i<NSEG;i++){
+      const ring=1+Math.floor(r()*4),ru=ring+(r()-0.5)*0.5,th=r()*Math.PI*2;
+      const w=0.45+0.55*Math.cos(5*th-1.1*ru);if(r()>w)continue;
+      let base=(r()+r()+r()-1.5)*1.5+(ring-2.5)*0.4;
+      if(leaf==='ndwi')base+=1.6*Math.exp(-Math.pow(ru-2.6,2)/0.25)*Math.cos(3*th+0.7); // a wet lineament
+      if(leaf==='nbr') base-=1.4*Math.exp(-Math.pow(ru-3.4,2)/0.3);
+      if(leaf==='ph_band')base+=0.9*Math.sin(6*th);
+      const m=Math.max(-3,Math.min(3,Math.round(base)));
+      cb(i,m,th,ru);}};}
+function buildScene(){SCENE=0;$('scene').max=Math.max(0,ARCH.length-1);$('scene').value=0;$('scV').textContent='1';buildField();}
+function buildField(){const a=ARCH[SCENE];if(!a){field=null;return;}
+  const t0=performance.now();field=new Float32Array(NM*NA*NR);segTotal=0;
+  segGen(hash(a.name+LEAFID),LEAFID)((i,m,th,ru)=>{
+    const ai=Math.floor(((th/(Math.PI*2))%1)*NA),ri=Math.min(NR-1,Math.floor(ru/5*NR));
+    field[idx(m+3,ai,ri)]++;segTotal++;});
+  peak=1;for(let k=0;k<field.length;k++)peak=Math.max(peak,field[k]);
+  let sum=0;for(let k=0;k<field.length;k++)sum+=field[k];
+  gate('gU',Math.abs(sum-segTotal)<1,Math.abs(sum-segTotal)<1?'green · Σ='+sum.toFixed(0)+' = N':'red · Σ≠N');
+  journal('ENLIL pass · '+segTotal.toLocaleString()+' segments scattered in '+(performance.now()-t0).toFixed(0)+' ms · '+a.name);
+  setStageVerdict();}
+function descend(m,a,r){const arch=ARCH[SCENE];const out=[];
+  segGen(hash(arch.name+LEAFID),LEAFID)((i,mm,th,ru)=>{
+    if(out.length>=40)return;
+    const ai=Math.floor(((th/(Math.PI*2))%1)*NA),ri=Math.min(NR-1,Math.floor(ru/5*NR));
+    if(mm+3===m&&ai===a&&ri===r)out.push({i,m:mm,th,ru,kaki:kakiHex(hash(arch.name)+i),
+      events:[{at:0,k:'BIRTH',s:'segment scattered into bin (MLU '+mm+', θ'+ai+', '+ru.toFixed(2)+' RU) from '+arch.name}]});});
+  return out;}
+
+/* ---------- geometry / camera ---------- */
+let time=0,wtime=0,FROZEN=false,RELATIONS=true;
+const R0=.55,R1=1.7,SHELLZ=.12;
+function fAt(m,a,r){return field?field[idx(m,a,r)]:0;}
+function pos(m,a,r){const th=a/NA*Math.PI*2+(reduced?0:wtime*.05);const rad=R0+(r/(NR-1))*(R1-R0);
+  return [Math.cos(th)*rad,Math.sin(th)*rad,(m-3)*SHELLZ+fAt(m,a,r)/peak*.32];}
+const cv=$('stage'),ctx=cv.getContext('2d');
+const cam={yaw:.7,pitch:1.0,dist:4.3,tx:0,ty:0,tz:0,mode:'home',auto:false,fov:1.05};
+const camT={yaw:.7,pitch:1.0,dist:4.3,tx:0,ty:0,tz:0};const lerp=(a,b,k)=>a+(b-a)*k;
+function project(p){const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  let x=p[0]-cam.tx,y=p[1]-cam.ty,z=p[2]-cam.tz;let x1=x*cy-y*sy,y1=x*sy+y*cy;let y2=y1*cp-z*sp,z2=y1*sp+z*cp;
+  const d=cam.dist-y2;if(d<.05)return null;const f=cv.height/(2*Math.tan(cam.fov/2))/d;return [cv.width/2+x1*f,cv.height/2-z2*f,d];}
+function halo(t,x,y,s,col){ctx.font='600 '+s+'px '+getComputedStyle(document.documentElement).getPropertyValue('--mono');ctx.lineWidth=4;ctx.strokeStyle='#0b1824';ctx.lineJoin='round';ctx.strokeText(t,x,y);ctx.fillStyle=col;ctx.fillText(t,x,y);}
+let caught=null,hover=null,selBin=null,descended=[],projected=[];
+function draw(){const W=cv.width,H=cv.height;ctx.clearRect(0,0,W,H);ctx.lineWidth=1;
+  if(!field){halo('no scene ingested — compose above, then RUN',W/2-170,H/2,13,C.dim);return;}
+  for(let m=0;m<NM;m++){
+    for(let a=0;a<NA;a+=2){ctx.beginPath();let f=true;for(let r=0;r<NR;r++){const p=project(pos(m,a,r));if(!p){f=true;continue}f?(ctx.moveTo(p[0],p[1]),f=false):ctx.lineTo(p[0],p[1]);}
+      ctx.strokeStyle=LEAF[m];ctx.globalAlpha=.3;ctx.stroke();ctx.globalAlpha=1;}
+    for(let r=0;r<NR;r+=3){ctx.beginPath();let f=true;for(let a=0;a<=NA;a++){const p=project(pos(m,a%NA,r));if(!p){f=true;continue}f?(ctx.moveTo(p[0],p[1]),f=false):ctx.lineTo(p[0],p[1]);}
+      ctx.strokeStyle=LEAF[m];ctx.globalAlpha=.16;ctx.stroke();ctx.globalAlpha=1;}
+    const hot=[];for(let a=0;a<NA;a++)for(let r=0;r<NR;r++){const v=fAt(m,a,r);if(v>peak*HOT)hot.push({a,r,v});}
+    hot.sort((x,y)=>x.v-y.v);
+    for(const b of hot){const p=project(pos(m,b.a,b.r));if(!p)continue;const fr=b.v/peak,s=1.6+5.4*fr;
+      ctx.globalAlpha=.16*fr;ctx.beginPath();ctx.arc(p[0],p[1],s*2.5,0,7);ctx.fillStyle=LEAF[m];ctx.fill();
+      ctx.globalAlpha=.6+.4*fr;ctx.beginPath();ctx.arc(p[0],p[1],s,0,7);ctx.fillStyle=LEAF[m];ctx.fill();ctx.globalAlpha=1;
+      if(hover&&hover.m===m&&hover.a===b.a&&hover.r===b.r){ctx.strokeStyle=C.ink;ctx.beginPath();ctx.arc(p[0],p[1],s+4,0,7);ctx.stroke();halo(b.v.toFixed(0)+' segments',p[0]+s+6,p[1]+3,10,C.ink);}}
+    const lp=project(pos(m,3,NR-1));if(lp)halo('MLU '+(m-3>0?'+':'')+(m-3),lp[0]+6,lp[1]-4,10,LEAF[m]);}
+  if(selBin){const p=project(pos(selBin.m,selBin.a,selBin.r));if(p){ctx.beginPath();ctx.arc(p[0],p[1],9,0,7);ctx.strokeStyle=C.gold;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;halo('bin · '+descended.length+' citizens',p[0]+12,p[1]-10,11,C.gold);}}
+  projected=[];
+  for(const c of descended){const th=c.th+(reduced?0:wtime*.05),rad=R0+(Math.min(NR-1,c.ru/5*NR)/(NR-1))*(R1-R0);
+    const b=(c===caught&&!reduced)?.05+.03*Math.sin(time*7):0;
+    const p=project([Math.cos(th)*rad,Math.sin(th)*rad,c.m*SHELLZ+.34+b]);if(!p)continue;
+    ctx.beginPath();ctx.arc(p[0],p[1],c===caught?5.5:3,0,7);ctx.fillStyle=c===caught?C.hi:C.gold;ctx.fill();
+    projected.push({c,x:p[0],y:p[1]});
+    if(c===caught){const pr=6+7*(.5+.5*Math.sin(time*7));ctx.beginPath();ctx.arc(p[0],p[1],pr,0,7);ctx.strokeStyle=C.hi;ctx.globalAlpha=1-(pr-6)/14;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+      halo('HELD · '+c.kaki.slice(0,9),p[0]+10,p[1]-12,11,C.hi);}}
+  if(caught&&RELATIONS){const b=binOf(caught);const cp=project(pos(b.m,b.a,b.r));
+    if(cp){ctx.beginPath();let f=true;for(let m=0;m<NM;m++){const p=project(pos(m,b.a,b.r));if(!p){f=true;continue}f?(ctx.moveTo(p[0],p[1]),f=false):ctx.lineTo(p[0],p[1]);}
+      ctx.strokeStyle=C.violet;ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;
+      ctx.beginPath();f=true;for(let a=0;a<=NA;a++){const p=project(pos(b.m,a%NA,b.r));if(!p){f=true;continue}f?(ctx.moveTo(p[0],p[1]),f=false):ctx.lineTo(p[0],p[1]);}
+      ctx.strokeStyle=C.gold;ctx.globalAlpha=.75;ctx.stroke();ctx.globalAlpha=1;
+      ctx.beginPath();f=true;for(let r=0;r<NR;r++){const p=project(pos(b.m,b.a,r));if(!p){f=true;continue}f?(ctx.moveTo(p[0],p[1]),f=false):ctx.lineTo(p[0],p[1]);}
+      ctx.strokeStyle=C.lapis;ctx.globalAlpha=.75;ctx.stroke();ctx.globalAlpha=1;
+      halo('column ⟂ 7 shells · RU ring · θ spoke',cp[0]+10,cp[1]+26,10,C.dim);}}
+  const a=ARCH[SCENE];
+  halo((bridgeOk?'':'REHEARSAL · ')+(a?a.name:'')+' · leaf '+LEAFID.toUpperCase()+' · amplitude = density · peak bin '+peak.toFixed(0),14,H-16,12,bridgeOk?C.gold:C.violet);
+  halo('N9 · '+cam.mode.toUpperCase()+(cam.auto?' · ṭāluku':''),14,22,11,C.dim);
+  if(FROZEN)halo('❄ COURT IN SESSION · Esc releases',14,42,12,C.hi);}
+function binOf(c){const a=((Math.floor((((c.th/(Math.PI*2))%1)+1)%1*NA))%NA+NA)%NA;return {m:c.m+3,a,r:Math.min(NR-1,Math.floor(c.ru/5*NR))};}
+function setStageVerdict(){const a=ARCH[SCENE];
+  $('verdictStage').innerHTML=field?'stage · <b>'+(a?a.name:'')+'</b> · '+segTotal.toLocaleString()+' segments in '+(NM*NA*NR).toLocaleString()+' bins · leaf <b>'+LEAFID.toUpperCase()+'</b>'+(bridgeOk?'':' · <span class="wait">REHEARSAL — generated from AOI and dates, not pixels</span>'):'stage · <b>no scene ingested yet</b>';}
+
+/* ---------- interaction ---------- */
+function toCv(e){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height];}
+function nearestBin(x,y){if(!field)return null;let best=null,bd=28*cv.width/cv.getBoundingClientRect().width;
+  for(let m=0;m<NM;m++)for(let a=0;a<NA;a++)for(let r=0;r<NR;r++){if(fAt(m,a,r)<=peak*HOT)continue;
+    const p=project(pos(m,a,r));if(!p)continue;const d=Math.hypot(p[0]-x,p[1]-y);if(d<bd){bd=d;best={m,a,r};}}return best;}
+function nearestPt(x,y){let best=null,bd=24*cv.width/cv.getBoundingClientRect().width;
+  for(const o of projected){const d=Math.hypot(o.x-x,o.y-y);if(d<bd){bd=d;best=o.c;}}return best;}
+function freeze(on){FROZEN=on;if(on)cam.auto=false;const b=$('freeze');b.setAttribute('aria-pressed',on?'true':'false');b.textContent=on?'❄ frozen':'❄ freeze';}
+let drag=null,moved=false;
+cv.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,yaw:cam.yaw,pitch:cam.pitch};moved=false;cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{const [x,y]=toCv(e);hover=nearestBin(x,y);if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!moved&&Math.hypot(dx,dy)<9)return;moved=true;cam.auto=false;camT.yaw=drag.yaw+dx*.008;camT.pitch=Math.max(.15,Math.min(1.5,drag.pitch+dy*.006));});
+cv.addEventListener('pointerup',e=>{if(drag&&!moved){const [x,y]=toCv(e);pick(x,y);}drag=null;});
+cv.addEventListener('click',e=>{if(e.isTrusted)return;const [x,y]=toCv(e);pick(x,y);runtime.click=true;});
+function pick(x,y){const p=nearestPt(x,y);
+  if(p){caught=p;freeze(true);p.events.push({at:1,k:'ṢABĀTU',s:'caught · court frozen, relation web lit'});renderStory();journal('catch · '+p.kaki.slice(0,9));return;}
+  const b=nearestBin(x,y);if(b){selBin=b;descended=descend(b.m,b.a,b.r);freeze(true);
+    journal('descent · bin (MLU '+(b.m-3)+', θ'+b.a+', r'+b.r+') · '+fAt(b.m,b.a,b.r).toFixed(0)+' segments → '+descended.length+' KAKIs recovered');}
+  else{caught=null;selBin=null;descended=[];freeze(false);renderStory();}}
+cv.addEventListener('wheel',e=>{e.preventDefault();cam.auto=false;camT.dist=Math.max(1.1,Math.min(8,camT.dist*(e.deltaY>0?1.1:.9)));if(!e.isTrusted)runtime.wheel=true;},{passive:false});
+cv.addEventListener('dblclick',()=>setCam('home'));
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){caught=null;selBin=null;descended=[];freeze(false);renderStory();hideRites();journal('release · court resumes');}});
+const rites=$('rites');
+cv.addEventListener('contextmenu',e=>{e.preventDefault();const [x,y]=toCv(e);const p=nearestPt(x,y),b=nearestBin(x,y);const r=cv.getBoundingClientRect();
+  rites.style.left=(e.clientX-r.left+8)+'px';rites.style.top=(e.clientY-r.top+8)+'px';let h='<h3>Sovereign rites</h3>';
+  if(p)h+='<div class="kaki">'+p.kaki.slice(0,19)+'</div><button data-r="story">📖 StoryEngine · open its biography</button><button data-r="rel">⤫ relations · '+(RELATIONS?'hide':'show')+'</button><button data-r="land">⬇ land on it</button>';
+  else if(b)h+='<div class="kaki">bin · MLU '+(b.m-3)+' · θ'+b.a+' · r'+b.r+' · '+fAt(b.m,b.a,b.r).toFixed(0)+' segments</div><button data-r="descend">descend · recover KAKIs (Masku §5)</button>';
+  else h+='<div class="kaki">membrane · nothing within reach</div><button data-r="home">⌖ home orbit</button><button data-r="freeze">'+(FROZEN?'▶ resume':'❄ freeze')+'</button>';
+  rites.innerHTML=h;rites.style.display='block';rites.querySelectorAll('button').forEach(bt=>bt.onclick=()=>{rite(bt.dataset.r,b,p);hideRites();});
+  if(!e.isTrusted)runtime.ctx=true;journal('rites · menu opened');});
+function hideRites(){rites.style.display='none';}
+document.addEventListener('pointerdown',e=>{if(!rites.contains(e.target))hideRites();});
+function rite(r,b,p){switch(r){
+  case 'descend':selBin=b;descended=descend(b.m,b.a,b.r);freeze(true);journal('descent · '+descended.length+' KAKIs recovered');break;
+  case 'story':if(p){caught=p;freeze(true);renderStory();}$('storyTab').scrollIntoView({behavior:reduced?'auto':'smooth',block:'center'});break;
+  case 'rel':RELATIONS=!RELATIONS;$('relbtn').setAttribute('aria-pressed',RELATIONS?'true':'false');renderStory();break;
+  case 'land':if(p){caught=p;freeze(true);renderStory();}setCam('land');break;
+  case 'home':setCam('home');break;case 'freeze':freeze(!FROZEN);break;}}
+function setCam(m){cam.mode=m;cam.auto=false;document.querySelectorAll('#deck button[data-cam]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.cam===m));
+  if(m==='home')Object.assign(camT,{yaw:.7,pitch:1.0,dist:4.3,tx:0,ty:0,tz:0});
+  if(m==='orbit'){freeze(false);cam.auto=true;camT.dist=3.8;camT.pitch=.85;}
+  if(m==='bird'){birdT=0;camT.dist=1.7;camT.pitch=.5;}
+  if(m==='land'){const c=caught||descended[0];if(c){const th=c.th,rad=R0+(Math.min(NR-1,c.ru/5*NR)/(NR-1))*(R1-R0);Object.assign(camT,{tx:Math.cos(th)*rad,ty:Math.sin(th)*rad,tz:c.m*SHELLZ+.3,dist:1.2,pitch:.6});}}
+  journal('N9 · '+m);}
+document.querySelectorAll('#deck button[data-cam]').forEach(b=>b.onclick=()=>setCam(b.dataset.cam));let birdT=0;
+$('freeze').onclick=()=>{freeze(!FROZEN);journal('court '+(FROZEN?'frozen':'resumed'));};
+$('relbtn').onclick=()=>rite('rel');
+$('leaf').onchange=e=>{LEAFID=e.target.value;selBin=null;descended=[];caught=null;buildField();renderStory();journal('leaf · '+LEAFID);};
+$('scene').oninput=e=>{SCENE=+e.target.value;$('scV').textContent=SCENE+1;selBin=null;descended=[];caught=null;buildField();renderStory();};
+$('hot').oninput=e=>{HOT=+e.target.value;$('hV').textContent=HOT.toFixed(2);};
+
+/* ---------- story ---------- */
+const story=$('story');
+function renderStory(){if(!caught){story.innerHTML='<div class="empty">Nothing caught. Click a lit node on the membrane to descend, then click a citizen.</div>';return}
+  const c=caught,b=binOf(c),a=ARCH[SCENE];
+  let colTot=0,shells=[];for(let m=0;m<NM;m++){const v=fAt(m,b.a,b.r);colTot+=v;if(v>0)shells.push(m-3);}
+  let ring=0;for(let x=0;x<NA;x++)ring+=fAt(b.m,x,b.r);
+  let h='<div class="kaki">KAKI '+c.kaki+'</div><div>'+(a?a.name:'')+' · '+c.ru.toFixed(2)+' RU · MLU '+c.m+' · θ '+(c.th*57.3).toFixed(0)+'° · leaf '+LEAFID.toUpperCase()+'</div>';
+  c.events.forEach(e=>h+='<div class="ev"><b>'+e.k+'</b> t+'+e.at+' · '+e.s+'</div>');
+  h+='<div class="rel"><i>siblings</i> '+Math.max(0,descended.length-1)+' share its bin<br><i>column</i> '+colTot.toFixed(0)+' segments across shells '+shells.map(s=>(s>0?'+':'')+s).join(', ')+(shells.length>2?' — layer is not acting alone':' — layer acts alone')+'<br><i>RU ring</i> '+ring.toFixed(0)+' on its contour<br><i>provenance</i> '+(bridgeOk?'landed by PB-371, receipt verified':'<span style="color:'+C.violet+'">REHEARSAL — no archive behind this citizen</span>')+'</div>';
+  story.innerHTML=h;}
+
+/* ---------- gates / loop ---------- */
+const runtime={click:false,ctx:false,wheel:false};
+function gate(id,ok,t){const e=$(id);e.className=ok?'ok':'bad';e.textContent=t;}
+gate('gC',true,'green · console + field');
+function runtimeGate(){const r=cv.getBoundingClientRect();const cx=r.left+r.width*.5,cy=r.top+r.height*.5;
+  cv.dispatchEvent(new MouseEvent('click',{clientX:cx,clientY:cy,bubbles:true}));
+  cv.dispatchEvent(new MouseEvent('contextmenu',{clientX:cx,clientY:cy,bubbles:true,cancelable:true}));hideRites();
+  cv.dispatchEvent(new WheelEvent('wheel',{deltaY:-1,clientX:cx,clientY:cy,bubbles:true,cancelable:true}));camT.dist=4.3;
+  caught=null;selBin=null;descended=[];freeze(false);renderStory();
+  const ok=runtime.click&&runtime.ctx&&runtime.wheel;gate('gR',ok,ok?'green · click ✓ contextmenu ✓ wheel ✓':'red · '+JSON.stringify(runtime));journal('RUNTIME gate · '+(ok?'green':'red'));}
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;if(!reduced)time+=dt;if(!reduced&&!FROZEN)wtime+=dt;
+  if(cam.auto)camT.yaw+=dt*.2;
+  if(cam.mode==='bird'){birdT+=dt*.16;camT.tx=Math.cos(birdT)*1.1;camT.ty=Math.sin(birdT)*1.1;camT.tz=.12;camT.yaw=-birdT+Math.PI/2;}
+  const k=reduced?1:.08;for(const key of ['yaw','pitch','dist','tx','ty','tz'])cam[key]=lerp(cam[key],camT[key],k);
+  draw();requestAnimationFrame(frame);}
+renderCmd();renderStory();stage(1);draw();requestAnimationFrame(frame);setTimeout(runtimeGate,650);probeBridge();
+journal('COMPILE gate · green · console ready · compose → run → visualise in one page');
+journal('hint · with no bridge the RUN is a rehearsal and says so on the stage; install PB-378 on Girsu and this same button executes PB-371 for real.');
+})();
+</script>
+</body>
+</html>

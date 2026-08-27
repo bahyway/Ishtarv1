@@ -1,0 +1,93 @@
+---
+# PB-383 · Runtime Witness · the second witness for dependencies
+# The static survey (PB-380) reads what is written. This one records what actually happened.
+# Two witnesses agreeing = a MEASURED edge (GL-AGE-001 applied to dependencies, not to particles).
+- name: PB-383 witness the real preconditions of every playbook
+  hosts: localhost
+  connection: local
+  vars:
+    bahyway_provides: ["artifact:observed_edges.json"]
+    bahyway_requires: ["artifact:BOOTSTRAP.yml"]
+    carto: "{{ ansible_env.HOME }}/bahyway/carto"
+    lab: "{{ ansible_env.HOME }}/bahyway/lab"          # a clean, throwaway target
+  tasks:
+    - name: Ensure lab and output
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0750"}
+      loop: ["{{ lab }}", "{{ carto }}/witness"]
+
+    - name: Read the static template
+      ansible.builtin.slurp: {src: "{{ carto }}/BOOTSTRAP.yml"}
+      register: boot
+
+    - name: Rehearse each playbook ALONE against a clean lab, and record what it demands
+      # --check --diff so nothing is really changed; failures here are the point, not a problem.
+      ansible.builtin.shell: |
+        set +e
+        out="{{ carto }}/witness/$(basename {{ item }} .yml).log"
+        ansible-playbook "{{ item }}" --check --diff -i "{{ lab }}/inventory" > "$out" 2>&1
+        echo "rc=$? $(basename {{ item }})"
+      loop: "{{ lookup('fileglob', ansible_env.HOME + '/Forge/EnkiDB/playbooks/PB-*.yml', wantlist=True) }}"
+      register: solo
+      changed_when: false
+
+    - name: Derive observed prerequisites from the solo failures
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, pathlib, re
+        w = pathlib.Path("{{ carto }}/witness")
+        obs = []
+        # a playbook that fails alone but not after its layer has run is depending on something
+        pats = [(r"Could not find or access '([^']+)'", "path:{}"),
+                (r"non-zero return code[\s\S]{0,200}?(bahyway-[a-z\-]+)", "binary:{}"),
+                (r"Connection refused[\s\S]{0,80}?:(\d{4,5})", "port:{}"),
+                (r"Could not find the requested service ([A-Za-z0-9_.\-]+)", "service:{}"),
+                (r"device or resource busy|not mounted", "mount:?")]
+        for log in sorted(w.glob("*.log")):
+            txt = log.read_text(errors="ignore")
+            pid = re.match(r"(PB-\d+)", log.stem)
+            pid = pid.group(1) if pid else log.stem
+            for rx, fmt in pats:
+                for m in re.finditer(rx, txt):
+                    res = fmt.format(*m.groups()) if m.groups() else fmt
+                    obs.append({"playbook": pid, "needs": res, "witness": "runtime", "class": "MEASURED"})
+        out = {"observed_edges": obs,
+               "rule": "an edge seen by BOTH the static survey and this rehearsal is MEASURED; "
+                       "seen by only one, it is DERIVED and must be declared before it is trusted"}
+        pathlib.Path("{{ carto }}/observed_edges.json").write_text(json.dumps(out, indent=2))
+        print(len(obs), "observed prerequisites")
+        PY
+      register: derive
+      changed_when: true
+
+    - name: Compare the two witnesses
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, yaml, pathlib
+        boot = yaml.safe_load(open("{{ carto }}/BOOTSTRAP.yml"))
+        obs  = json.load(open("{{ carto }}/observed_edges.json"))["observed_edges"]
+        static_pairs = set()
+        for layer_i, layer in enumerate(boot["playbook_layers"]):
+            for pid in layer:
+                static_pairs.add(pid)
+        only_runtime = [o for o in obs if o["needs"].startswith(("path:", "service:", "port:", "mount:"))]
+        print("STATIC layers:", len(boot["playbook_layers"]))
+        print("RUNTIME-only prerequisites found:", len(only_runtime))
+        for o in only_runtime[:20]:
+            print("  ·", o["playbook"], "needs", o["needs"], "- UNKNOWN to the static survey; declare it")
+        PY
+      register: compare
+      changed_when: false
+
+    - name: The finding
+      ansible.builtin.debug:
+        msg: >
+          {{ compare.stdout_lines }}
+          - every line above is a dependency no static reader could have found.
+          Write each into bahyway_requires and re-run PB-380: the order becomes MEASURED,
+          and the client-side regeneration stops being a discovery.
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-383 runtime witness - second witness recorded, static/runtime compared"

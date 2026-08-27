@@ -9,7 +9,7 @@ use template_engine::Template;
 #[derive(Debug, Clone)]
 pub struct SchemaDiff {
     /// Attr hashes present in both templates.
-    pub common:  Vec<u32>,
+    pub common: Vec<u32>,
     /// Attr hashes in template A but not B (template A has extra fields).
     pub only_in_a: Vec<u32>,
     /// Attr hashes in template B but not A (template B has extra fields).
@@ -22,7 +22,9 @@ impl SchemaDiff {
         self.only_in_a.is_empty() && self.only_in_b.is_empty()
     }
 
-    pub fn common_count(&self)    -> usize { self.common.len()    }
+    pub fn common_count(&self) -> usize {
+        self.common.len()
+    }
     pub fn divergence_count(&self) -> usize {
         self.only_in_a.len() + self.only_in_b.len()
     }
@@ -33,16 +35,20 @@ pub fn compare(a: &Template, b: &Template) -> SchemaDiff {
     let attrs_a: std::collections::HashSet<u32> = a.fields.iter().map(|f| f.attr_hash).collect();
     let attrs_b: std::collections::HashSet<u32> = b.fields.iter().map(|f| f.attr_hash).collect();
 
-    let mut common:   Vec<u32> = attrs_a.intersection(&attrs_b).copied().collect();
-    let mut only_a:   Vec<u32> = attrs_a.difference(&attrs_b).copied().collect();
-    let mut only_b:   Vec<u32> = attrs_b.difference(&attrs_a).copied().collect();
+    let mut common: Vec<u32> = attrs_a.intersection(&attrs_b).copied().collect();
+    let mut only_a: Vec<u32> = attrs_a.difference(&attrs_b).copied().collect();
+    let mut only_b: Vec<u32> = attrs_b.difference(&attrs_a).copied().collect();
 
     // Sort for determinism
     common.sort();
     only_a.sort();
     only_b.sort();
 
-    SchemaDiff { common, only_in_a: only_a, only_in_b: only_b }
+    SchemaDiff {
+        common,
+        only_in_a: only_a,
+        only_in_b: only_b,
+    }
 }
 
 #[cfg(test)]
@@ -95,7 +101,7 @@ mod tests {
             FieldSpec::new(0x1111, "a", true),
         ]);
         let diff = compare(&a, &b);
-        assert_eq!(diff.common,   vec![0x1111]);
+        assert_eq!(diff.common, vec![0x1111]);
         assert_eq!(diff.only_in_a, vec![0x3333]);
         assert_eq!(diff.only_in_b, vec![0x2222]);
     }

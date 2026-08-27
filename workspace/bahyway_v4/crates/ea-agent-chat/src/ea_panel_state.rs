@@ -5,75 +5,101 @@ use crate::ea_model_loader::EaModelStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EaMessageKind {
-    User, Agent, System, Math, Error,
+    User,
+    Agent,
+    System,
+    Math,
+    Error,
 }
 
 impl EaMessageKind {
     pub fn prefix(self) -> &'static str {
         match self {
-            Self::User   => "You",
-            Self::Agent  => "𒂗𒆠 EaAgent",
+            Self::User => "You",
+            Self::Agent => "𒂗𒆠 EaAgent",
             Self::System => "⚙ System",
-            Self::Math   => "∑ Exact",
-            Self::Error  => "⚠ Error",
+            Self::Math => "∑ Exact",
+            Self::Error => "⚠ Error",
         }
     }
     pub fn color_rgb(self) -> [u8; 3] {
         match self {
-            Self::User   => [100, 180, 255],
-            Self::Agent  => [0,   200, 255],  // cyan — math god color
+            Self::User => [100, 180, 255],
+            Self::Agent => [0, 200, 255], // cyan — math god color
             Self::System => [150, 150, 150],
-            Self::Math   => [0,   255, 136],  // green — exact result
-            Self::Error  => [255, 80,  80],
+            Self::Math => [0, 255, 136], // green — exact result
+            Self::Error => [255, 80, 80],
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct EaMessage {
-    pub kind:    EaMessageKind,
+    pub kind: EaMessageKind,
     pub content: String,
-    pub epoch:   u64,
+    pub epoch: u64,
 }
 
 impl EaMessage {
     pub fn user(content: &str, epoch: u64) -> Self {
-        Self { kind: EaMessageKind::User, content: content.to_string(), epoch }
+        Self {
+            kind: EaMessageKind::User,
+            content: content.to_string(),
+            epoch,
+        }
     }
     pub fn agent(content: &str, epoch: u64) -> Self {
-        Self { kind: EaMessageKind::Agent, content: content.to_string(), epoch }
+        Self {
+            kind: EaMessageKind::Agent,
+            content: content.to_string(),
+            epoch,
+        }
     }
     pub fn system(content: &str) -> Self {
-        Self { kind: EaMessageKind::System, content: content.to_string(), epoch: 0 }
+        Self {
+            kind: EaMessageKind::System,
+            content: content.to_string(),
+            epoch: 0,
+        }
     }
     pub fn math(content: &str) -> Self {
-        Self { kind: EaMessageKind::Math, content: content.to_string(), epoch: 0 }
+        Self {
+            kind: EaMessageKind::Math,
+            content: content.to_string(),
+            epoch: 0,
+        }
     }
     pub fn error(content: &str) -> Self {
-        Self { kind: EaMessageKind::Error, content: content.to_string(), epoch: 0 }
+        Self {
+            kind: EaMessageKind::Error,
+            content: content.to_string(),
+            epoch: 0,
+        }
     }
 }
 
 pub struct EaPanelState {
-    pub messages:     Vec<EaMessage>,
-    pub input:        String,
+    pub messages: Vec<EaMessage>,
+    pub input: String,
     pub model_status: EaModelStatus,
-    pub is_thinking:  bool,
-    epoch:            u64,
+    pub is_thinking: bool,
+    epoch: u64,
 }
 
 impl EaPanelState {
     pub fn new() -> Self {
         let mut s = Self {
-            messages: Vec::new(), input: String::new(),
+            messages: Vec::new(),
+            input: String::new(),
             model_status: EaModelStatus::NotFound,
-            is_thinking: false, epoch: 0,
+            is_thinking: false,
+            epoch: 0,
         };
         s.messages.push(EaMessage::system(
             "𒂗𒆠 EaAgent — God of Wisdom & Mathematics\n\
              Sovereign algebraic engine: Pauli · Jordan · Harmony · Exact Solver\n\
              Type !help for commands or ask any algebra question.\n\
-             Model: DeepSeek-Math-7B (load ~/models/ to enable full AI)"
+             Model: DeepSeek-Math-7B (load ~/models/ to enable full AI)",
         ));
         s
     }
@@ -97,7 +123,8 @@ impl EaPanelState {
     }
     pub fn clear(&mut self) {
         self.messages.clear();
-        self.messages.push(EaMessage::system("Conversation cleared. 𒂗𒆠"));
+        self.messages
+            .push(EaMessage::system("Conversation cleared. 𒂗𒆠"));
     }
     pub fn take_input(&mut self) -> String {
         let s = self.input.clone();
@@ -106,7 +133,11 @@ impl EaPanelState {
     }
 }
 
-impl Default for EaPanelState { fn default() -> Self { Self::new() } }
+impl Default for EaPanelState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {

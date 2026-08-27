@@ -189,7 +189,7 @@ func _render_engine(engine_name: String) -> void:
 	title_row.add_child(btn_refresh)
 
 	var host_lbl = Label.new()
-	host_lbl.text = "%s:%s" % [cfg.get("host", "192.168.122.107"), cfg.get("port", "?")]
+	host_lbl.text = "%s:%s" % [cfg.get("host", "192.168.122.112"), cfg.get("port", "?")]
 	host_lbl.add_theme_font_size_override("font_size", DubSarTheme.SIZE_LABEL)
 	host_lbl.add_theme_color_override("font_color", DubSarTheme.TEXT_FAINT)
 	_content_root.add_child(host_lbl)
@@ -298,7 +298,7 @@ func _refresh_current() -> void:
 	_busy = true
 	var engine_name = _current_engine
 	var cfg: Dictionary = EnkiEngines.TABLE[engine_name]
-	var target = {"engine": engine_name, "host": cfg.get("host", "192.168.122.107"), "port": int(cfg.get("port", "0"))}
+	var target = {"engine": engine_name, "host": cfg.get("host", "192.168.122.112"), "port": int(cfg.get("port", "0"))}
 
 	_render_engine(engine_name)  # show the disabled "…" refresh button immediately
 

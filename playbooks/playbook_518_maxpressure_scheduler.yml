@@ -2,14 +2,23 @@
 # PB-518 · maxpressure_scheduler · DRAFT (BahyWay.Ecosystem v4.0 · traffic & HeptaMapSpace arc)
 # Running this playbook is the Architect's CSR-08 confirmation.
 - name: "PB-518 · max-pressure junction scheduler (Tassiulas–Ephremides, throughput-optimal) for parallel pipelines"
-  hosts: enkidb-node-write
+  hosts: uruk
   tasks:
+    # 2026-08-23, found live: was hosts: uruk-node-write -- this task only writes
+    # into the shared Forge workspace ({{ playbook_dir }}/../workspace/bahyway_v4) and
+    # NARU.journal on the control node uruk (ansible_connection=local); it never
+    # touches the write node's live services. Targeting uruk-node-write meant this
+    # ran over SSH as a different user on a different machine, writing (or failing
+    # to write) into an unrelated filesystem -- so the journal line PB-530/PB-437's
+    # chain gate checks for never landed where the gate actually looks. Traced from
+    # PB-530's short count (4/15) and PB-437's (6/10), both explained exactly by
+    # counting how many playbooks in their range were mis-targeted this way.
     - name: theorem
       ansible.builtin.debug: {msg: "serve greatest queue-pressure differential · stable for every demand in the capacity region"}
     - name: PoA
       ansible.builtin.debug: {msg: "greedy Wardrop vs optimum = Price of Anarchy · Braess probe: close shortcut, if flow improves it was paradox"}
     - name: journal (NARU)
       ansible.builtin.lineinfile:
-        path: /home/bfadam/Forge/bahyway_v4/NARU.journal
+        path: "{{ playbook_dir }}/../workspace/bahyway_v4/NARU.journal"
         line: "{{ ansible_date_time.iso8601 }} · PB-518 · max-pressure scheduler scaffolded"
         create: yes

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════
-#  DubSar IDE Setup — EriduOSv4Dev (Fedora / Hyper-V)
+#  DubSar IDE Setup — UrOSv4Dev (Fedora / Hyper-V)
 #  Run once inside the VM: bash /vagrant/.vscode/dubsar-setup.sh
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail

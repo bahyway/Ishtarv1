@@ -3,34 +3,34 @@
 //! Contains the seven mandatory universal EAV attributes plus any
 //! tribe-specific attributes accumulated from the event stream (§4.2).
 
-use std::collections::HashMap;
 use bahyway_core::ParticleState;
 use enkidb_kaki::IdentityKaki;
+use std::collections::HashMap;
 
 /// The projected current state of a particle at a given query time.
 /// Computed by the StoryEngine — never stored as a mutable row.
 #[derive(Debug, Clone)]
 pub struct ProjectedState {
-    pub particle:     IdentityKaki,
+    pub particle: IdentityKaki,
     /// Events replayed to produce this projection.
-    pub events_seen:  usize,
+    pub events_seen: usize,
     /// Whether a snapshot was used (true = snapshot-accelerated).
     pub from_snapshot: bool,
     /// The seven mandatory EAV attributes (§4.2) + tribe-specific attrs.
     /// Key = attr_hash (u32), Value = latest active value bytes.
-    pub attributes:   HashMap<u32, Vec<u8>>,
+    pub attributes: HashMap<u32, Vec<u8>>,
     /// Projected particle state (derived from the `state` mandatory EAV attr).
-    pub state:        ParticleState,
+    pub state: ParticleState,
 }
 
 impl ProjectedState {
     pub fn new(particle: IdentityKaki) -> Self {
         ProjectedState {
             particle,
-            events_seen:   0,
+            events_seen: 0,
             from_snapshot: false,
-            attributes:    HashMap::new(),
-            state:         ParticleState::Fuzzy, // default until first Event-Kaki sets it
+            attributes: HashMap::new(),
+            state: ParticleState::Fuzzy, // default until first Event-Kaki sets it
         }
     }
 

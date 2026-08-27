@@ -9,8 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct VectorId([u8; 16]);
 
 // Module-level counter for uniqueness within a process.
-static COUNTER: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(1);
+static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 impl VectorId {
     /// Generate a new unique VectorId — pure std, no third-party deps.
@@ -23,7 +22,7 @@ impl VectorId {
 
         // Build 16 bytes from two u64s mixed with the counter
         let high = nanos ^ cnt.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-        let low  = cnt  ^ nanos.wrapping_mul(0x6C62_272E_07BB_0142);
+        let low = cnt ^ nanos.wrapping_mul(0x6C62_272E_07BB_0142);
 
         let mut bytes = [0u8; 16];
         bytes[0..8].copy_from_slice(&high.to_be_bytes());

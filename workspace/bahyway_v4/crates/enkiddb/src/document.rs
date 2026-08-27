@@ -62,7 +62,11 @@ impl DocumentStructure {
         code_blocks.sort_by_key(|c| c.order);
 
         let mut sections: Vec<Section> = Vec::new();
-        let mut current = Section { header: None, body: Vec::new(), code_blocks: Vec::new() };
+        let mut current = Section {
+            header: None,
+            body: Vec::new(),
+            code_blocks: Vec::new(),
+        };
         let (mut hi, mut bi, mut ci) = (0, 0, 0);
 
         loop {
@@ -75,7 +79,11 @@ impl DocumentStructure {
             if next_h == Some(min_order) {
                 sections.push(std::mem::replace(
                     &mut current,
-                    Section { header: Some(headers[hi].clone()), body: Vec::new(), code_blocks: Vec::new() },
+                    Section {
+                        header: Some(headers[hi].clone()),
+                        body: Vec::new(),
+                        code_blocks: Vec::new(),
+                    },
                 ));
                 hi += 1;
             } else if next_b == Some(min_order) {
@@ -104,11 +112,20 @@ mod tests {
     use super::*;
 
     fn header(text: &str, order: i64) -> Header {
-        Header { level: 2, text: text.to_string(), anchor: text.to_lowercase(), order }
+        Header {
+            level: 2,
+            text: text.to_string(),
+            anchor: text.to_lowercase(),
+            order,
+        }
     }
 
     fn para(text: &str, order: i64) -> BodyElement {
-        BodyElement { element_type: BodyType::Paragraph, content: text.to_string(), order }
+        BodyElement {
+            element_type: BodyType::Paragraph,
+            content: text.to_string(),
+            order,
+        }
     }
 
     #[test]
@@ -147,7 +164,11 @@ mod tests {
             title: "T".to_string(),
             headers: vec![header("A", 0), header("B", 3)],
             body: vec![para("a1", 1), para("a2", 2), para("b1", 4)],
-            code_blocks: vec![CodeBlock { code: "fn f() {}\n".to_string(), language: "rust".to_string(), order: 5 }],
+            code_blocks: vec![CodeBlock {
+                code: "fn f() {}\n".to_string(),
+                language: "rust".to_string(),
+                order: 5,
+            }],
         };
         let sections = doc.sections();
         assert_eq!(sections.len(), 2);

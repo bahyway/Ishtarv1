@@ -3,8 +3,10 @@
 # Projections move; the ledger never does. The rebuilt node must be EQUAL,
 # not similar — Gate G4 replay determinism exercised in anger.
 - name: PB-312 | Read-node rebuild rite
-  hosts: read_node
+  hosts: uruk-node-read
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
   tasks:
     - name: Record pre-rite projection checksums (if node still alive)
       ansible.builtin.shell: |
@@ -12,23 +14,74 @@
           > /tmp/projections.pre || true
       changed_when: false
 
+    # 2026-08-24, found live: "Could not find the requested service
+    # enkidb-read: host" -- ansible.builtin.systemd expects a systemd unit,
+    # but PB-221 (the playbook that actually builds+deploys enkidb-read)
+    # runs it as a raw Podman container (`podman run -d --name enkidb-read`),
+    # never a systemd unit. Managing it via the systemd module was always
+    # going to fail regardless of whether the container exists. Fixed to
+    # manage it the same way PB-221 does.
     - name: Stop read services
-      ansible.builtin.systemd: { name: "enkidb-read", state: stopped }
+      ansible.builtin.command: podman stop enkidb-read
       failed_when: false
+      changed_when: false
 
     - name: Wipe projections (expendable by doctrine)
       ansible.builtin.file: { path: "{{ projections_dir }}", state: absent }
     - ansible.builtin.file: { path: "{{ projections_dir }}", state: directory, mode: "0750" }
       name: Recreate projections dir
 
+    # 2026-08-23, found live: "object of type 'dict' has no attribute
+    # 'write_node'" -- groups['write_node'] doesn't exist. `write_node` was
+    # the group name in the never-landed staged inventory
+    # (docs/phase2-incoming/.../inventories/uruk/hosts.yml, not actually
+    # used by any real run); the real inventory (ansible/inventory.ini)
+    # names the write node's group enkidb_write.
+    #
+    # 2026-08-24, found live: rc=2, empty stdout/stderr ("Error executing
+    # command.") -- two stacked bugs here. First, real: the trailing
+    # "# TODO native tool" note used to sit on the same physical line as
+    # --until-watermark, *inside* the `>` folded scalar -- `#` is not a
+    # YAML comment marker inside a block scalar, it's literal command
+    # text, so the actual argv ansible.builtin.command built was
+    # `... --until-watermark # TODO native tool` (four bogus positional
+    # args). Moved the note up here as a real YAML comment. Second, the
+    # deeper one: /usr/local/bin/enkidb-replay is not a script or a
+    # `bin/` crate anywhere in this repo -- it genuinely is the "TODO
+    # native tool" the note always said it was, same class of gap as
+    # PB-426's hepta-run. Added an explicit existence check so this fails
+    # with guidance instead of a garbled command line.
+    - name: "Check enkidb-replay exists (still a TODO native tool, not yet built anywhere in this repo)"
+      ansible.builtin.stat:
+        path: /usr/local/bin/enkidb-replay
+      register: enkidb_replay_bin
+
+    - name: "Fail with guidance if enkidb-replay was never built"
+      ansible.builtin.fail:
+        msg: "/usr/local/bin/enkidb-replay doesn't exist on {{ inventory_hostname }} -- it's a TODO native tool, never implemented anywhere in this repo. Build/install it (or point this task at whatever real replay mechanism exists today) before PB-312 can replay projections."
+      when: not enkidb_replay_bin.stat.exists
+
     - name: Replay projections from the ledger (deterministic)
       ansible.builtin.command: >
-        /usr/local/bin/enkidb-replay --from {{ hostvars[groups['write_node'][0]].ansible_host | default('192.168.122.101') }}
-        --to {{ projections_dir }} --until-watermark        # TODO native tool
+        /usr/local/bin/enkidb-replay --from {{ hostvars[groups['enkidb_write'][0]].ansible_host | default('192.168.122.101') }}
+        --to {{ projections_dir }} --until-watermark
       register: replay
 
+    - name: "Check enkidb-read container exists (PB-221 deploys it via Podman, not systemd)"
+      ansible.builtin.command: podman container exists enkidb-read
+      register: enkidb_read_exists
+      failed_when: false
+      changed_when: false
+
+    - name: "Fail with guidance if enkidb-read was never deployed"
+      ansible.builtin.fail:
+        msg: "enkidb-read container doesn't exist on {{ inventory_hostname }} -- run playbook_221_enkidb_core_deploy_and_scale_sweep.yml (hosts: enkidb_read) first to build+deploy it, then re-run PB-312."
+      when: enkidb_read_exists.rc != 0
+
     - name: Start read services
-      ansible.builtin.systemd: { name: "enkidb-read", state: started }
+      ansible.builtin.command: podman start enkidb-read
+      register: start_read
+      changed_when: start_read.rc == 0
 
     - name: GATE | checksum EQUALITY (when a pre-image exists)
       ansible.builtin.shell: |
@@ -39,5 +92,6 @@
 
     - name: Run-KAKI
       ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
         PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
         echo "{\"pb\":\"PB-312\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"equality\"}" >> {{ kaki_runs }}

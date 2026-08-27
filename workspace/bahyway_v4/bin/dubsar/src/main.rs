@@ -19,57 +19,61 @@
 //!   .status                   Session statistics
 //!   .quit / .exit             Exit
 
-mod naba;
 mod dashboard;
+mod naba;
 
 use std::env;
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
-use bahyway_core::{ParticleState, TribeId};
-use enkidb_query::query;
-use enkidb_persist::PersistedDb;
-use enkidb_storage::FsyncPolicy;
 use adad_gate::{AdadGate, ArrivalRecord};
-use enkidb_kaki::KakiRole;
-use musaru_security::check_sovereignty;
-use vgca_validation::validate;
-use template_library::{civil_registry_template, load_defaults};
-use story_engine::projection::{encode_state, ATTR_STATE};
-use score_engine::color_id::ColorRgb;
+use bahyway_core::{ParticleState, TribeId};
 use dubsar_ide::DubSarIde;
 use dubsar_visualizer::render;
+use enkidb_kaki::KakiRole;
+use enkidb_persist::PersistedDb;
+use enkidb_query::query;
+use enkidb_storage::FsyncPolicy;
+use musaru_security::check_sovereignty;
+use score_engine::color_id::ColorRgb;
+use story_engine::projection::{encode_state, ATTR_STATE};
+use template_library::{civil_registry_template, load_defaults};
+use vgca_validation::validate;
 
 // ── ANSI palette ─────────────────────────────────────────────────────────────
 
-const RST:  &str = "\x1b[0m";
+const RST: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
-const DIM:  &str = "\x1b[2m";
-const YLW:  &str = "\x1b[0;33m";
-const CYN:  &str = "\x1b[0;36m";
+const DIM: &str = "\x1b[2m";
+const YLW: &str = "\x1b[0;33m";
+const CYN: &str = "\x1b[0;36m";
 const BRED: &str = "\x1b[1;31m";
 const BGRN: &str = "\x1b[1;32m";
 const BYLW: &str = "\x1b[1;33m";
 const BCYN: &str = "\x1b[1;36m";
 const BWHT: &str = "\x1b[1;37m";
 
-fn fg(r: u8, g: u8, b: u8) -> String { format!("\x1b[38;2;{r};{g};{b}m") }
-fn bg(r: u8, g: u8, b: u8) -> String { format!("\x1b[48;2;{r};{g};{b}m") }
+fn fg(r: u8, g: u8, b: u8) -> String {
+    format!("\x1b[38;2;{r};{g};{b}m")
+}
+fn bg(r: u8, g: u8, b: u8) -> String {
+    format!("\x1b[48;2;{r};{g};{b}m")
+}
 
 fn state_rgb(s: ParticleState) -> (u8, u8, u8) {
     match s {
         ParticleState::Golden => (0xFF, 0xFF, 0x40),
-        ParticleState::Fuzzy  => (0xFF, 0xA5, 0x00),
-        ParticleState::Dead   => (0x80, 0x80, 0x80),
+        ParticleState::Fuzzy => (0xFF, 0xA5, 0x00),
+        ParticleState::Dead => (0x80, 0x80, 0x80),
     }
 }
 
 fn fmt_state(s: ParticleState) -> String {
     let (c, sym, name) = match s {
         ParticleState::Golden => (BYLW, "●", "GOLDEN "),
-        ParticleState::Fuzzy  => (YLW,  "◐", "FUZZY  "),
-        ParticleState::Dead   => (DIM,  "○", "DEAD   "),
+        ParticleState::Fuzzy => (YLW, "◐", "FUZZY  "),
+        ParticleState::Dead => (DIM, "○", "DEAD   "),
     };
     format!("{BOLD}{c}{sym} {name}{RST}")
 }
@@ -77,62 +81,82 @@ fn fmt_state(s: ParticleState) -> String {
 // ── File buffer ───────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug)]
-enum FileKind { Akk, Hepta, Other }
+enum FileKind {
+    Akk,
+    Hepta,
+    Other,
+}
 
 #[derive(Clone)]
 struct FileBuffer {
-    path:    String,
+    path: String,
     content: String,
-    kind:    FileKind,
+    kind: FileKind,
 }
 
 impl FileBuffer {
     fn load(path: &str) -> Result<Self, String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Cannot read '{path}': {e}"))?;
-        let kind = if path.ends_with(".akk")   { FileKind::Akk }
-                   else if path.ends_with(".hepta") { FileKind::Hepta }
-                   else { FileKind::Other };
-        Ok(FileBuffer { path: path.to_string(), content, kind })
+        let content = fs::read_to_string(path).map_err(|e| format!("Cannot read '{path}': {e}"))?;
+        let kind = if path.ends_with(".akk") {
+            FileKind::Akk
+        } else if path.ends_with(".hepta") {
+            FileKind::Hepta
+        } else {
+            FileKind::Other
+        };
+        Ok(FileBuffer {
+            path: path.to_string(),
+            content,
+            kind,
+        })
     }
 
     fn kind_label(&self) -> &'static str {
-        match self.kind { FileKind::Akk => "AAOL (.akk)", FileKind::Hepta => "HeptaScript (.hepta)", FileKind::Other => "text" }
+        match self.kind {
+            FileKind::Akk => "AAOL (.akk)",
+            FileKind::Hepta => "HeptaScript (.hepta)",
+            FileKind::Other => "text",
+        }
     }
 }
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
 #[derive(Default)]
-struct Stats { ingested: usize, queries: usize, checks: usize, errors: usize }
+struct Stats {
+    ingested: usize,
+    queries: usize,
+    checks: usize,
+    errors: usize,
+}
 
 struct Session {
-    pdb:      PersistedDb,
-    gate:     AdadGate,
-    ide:      DubSarIde,
-    stats:    Stats,
-    buf:      Option<FileBuffer>,
-    tribe:    u16,
-    epoch:    u32,
+    pdb: PersistedDb,
+    gate: AdadGate,
+    ide: DubSarIde,
+    stats: Stats,
+    buf: Option<FileBuffer>,
+    tribe: u16,
+    epoch: u32,
     data_dir: String,
 }
 
 impl Session {
     fn new(tribe_id: u16, data_dir: &str) -> Result<Self, String> {
-        let tid     = TribeId::from_u16(tribe_id);
-        let dir     = PathBuf::from(data_dir);
-        let pdb     = PersistedDb::open(&dir, tid, FsyncPolicy::PerCommit)
+        let tid = TribeId::from_u16(tribe_id);
+        let dir = PathBuf::from(data_dir);
+        let pdb = PersistedDb::open(&dir, tid, FsyncPolicy::PerCommit)
             .map_err(|e| format!("Cannot open database at '{data_dir}': {e}"))?;
         let mut ide = DubSarIde::new();
         load_defaults(&mut ide.registry);
         Ok(Session {
             pdb,
-            gate:     AdadGate::new(tid),
+            gate: AdadGate::new(tid),
             ide,
-            stats:    Stats::default(),
-            buf:      None,
-            tribe:    tribe_id,
-            epoch:    0,
+            stats: Stats::default(),
+            buf: None,
+            tribe: tribe_id,
+            epoch: 0,
             data_dir: data_dir.to_string(),
         })
     }
@@ -144,20 +168,26 @@ impl Session {
         let record = ArrivalRecord {
             attrs: vec![(ATTR_STATE, encode_state(state).to_vec())],
             epoch: ep,
-            role:  KakiRole::Zikru,
+            role: KakiRole::Zikru,
         };
-        let gr  = self.gate.ingest(record).map_err(|e| e.to_string())?;
+        let gr = self.gate.ingest(record).map_err(|e| e.to_string())?;
         let sec = check_sovereignty(self.gate.tribe_id(), &gr.particle);
         if !sec.is_approved() {
             return Err(format!("sovereignty rejected: {sec:?}"));
         }
         let tmpl = civil_registry_template();
-        let vr   = validate(&tmpl, &gr.eav);
+        let vr = validate(&tmpl, &gr.eav);
         if !vr.is_valid() {
-            return Err(format!("missing required fields: {:?}", vr.missing_required));
+            return Err(format!(
+                "missing required fields: {:?}",
+                vr.missing_required
+            ));
         }
-        self.pdb.register_particle(&gr.particle).map_err(|e| e.to_string())?;
-        self.pdb.commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav)
+        self.pdb
+            .register_particle(&gr.particle)
+            .map_err(|e| e.to_string())?;
+        self.pdb
+            .commit(gr.event_kaki, gr.particle, gr.epoch, gr.eav)
             .map_err(|e| e.to_string())?;
         self.stats.ingested += 1;
         Ok(ep)
@@ -170,11 +200,12 @@ fn drift_bar(r: u8, g: u8, b: u8) -> String {
     let dr = 255u32.saturating_sub(r as u32) as f32;
     let dg = 255u32.saturating_sub(g as u32) as f32;
     let db = 255u32.saturating_sub(b as u32) as f32;
-    let dist   = (dr*dr + dg*dg + db*db).sqrt();
-    let max_d  = (3.0f32 * 255.0f32 * 255.0f32).sqrt();
+    let dist = (dr * dr + dg * dg + db * db).sqrt();
+    let max_d = (3.0f32 * 255.0f32 * 255.0f32).sqrt();
     let health = 1.0 - (dist / max_d);
     let filled = (health * 8.0).round() as usize;
-    format!("{}{}{DIM}{}{RST}",
+    format!(
+        "{}{}{DIM}{}{RST}",
         fg(r, g, b),
         "█".repeat(filled.min(8)),
         "░".repeat(8usize.saturating_sub(filled)),
@@ -193,23 +224,47 @@ fn do_help() {
     println!("  {BCYN}Command           Description{RST}");
     println!("  {DIM}{}{RST}", "─".repeat(54));
     let rows = [
-        (".naba",                   "Summon NABA — Sovereign Hologram Agent (live metrics)"),
-        (".demo",                   "Load 5 sample particles (Golden×2, Fuzzy×2, Dead×1)"),
-        (".ingest <state>",         "Add a particle  Golden | Fuzzy | Dead"),
-        (".particles",              "List all particles with ColorID visualization"),
-        (".query <hepta>",          "Run an inline HeptaScript query"),
-        (".open <file>",            "Load a .akk or .hepta file into the buffer"),
-        (".check",                  "Syntax-check the loaded buffer"),
-        (".run",                    "Execute the loaded .hepta buffer as a query"),
-        (".templates",              "List registered templates with field counts"),
-        (".fields <template>",      "Show field-completion hints for a template"),
-        (".color <r> <g> <b>",      "Preview a ColorID (three bytes 0-255)"),
-        (".dama",                   "Show all 11 DAMA knowledge areas with term counts"),
-        (".dama <code>",            "Look up a DAMA term (e.g. .dama DQ.FRESHNESS)"),
-        (".dama search <keyword>",  "Search the DAMA dictionary (e.g. .dama search golden)"),
-        (".dashboard",              "Generate showway.html — self-contained HTML dashboard"),
-        (".status",                 "Session statistics"),
-        (".quit / .exit",           "Exit DubSar IDE"),
+        (
+            ".naba",
+            "Summon NABA — Sovereign Hologram Agent (live metrics)",
+        ),
+        (
+            ".demo",
+            "Load 5 sample particles (Golden×2, Fuzzy×2, Dead×1)",
+        ),
+        (".ingest <state>", "Add a particle  Golden | Fuzzy | Dead"),
+        (
+            ".particles",
+            "List all particles with ColorID visualization",
+        ),
+        (".query <hepta>", "Run an inline HeptaScript query"),
+        (".open <file>", "Load a .akk or .hepta file into the buffer"),
+        (".check", "Syntax-check the loaded buffer"),
+        (".run", "Execute the loaded .hepta buffer as a query"),
+        (".templates", "List registered templates with field counts"),
+        (
+            ".fields <template>",
+            "Show field-completion hints for a template",
+        ),
+        (
+            ".color <r> <g> <b>",
+            "Preview a ColorID (three bytes 0-255)",
+        ),
+        (".dama", "Show all 11 DAMA knowledge areas with term counts"),
+        (
+            ".dama <code>",
+            "Look up a DAMA term (e.g. .dama DQ.FRESHNESS)",
+        ),
+        (
+            ".dama search <keyword>",
+            "Search the DAMA dictionary (e.g. .dama search golden)",
+        ),
+        (
+            ".dashboard",
+            "Generate showway.html — self-contained HTML dashboard",
+        ),
+        (".status", "Session statistics"),
+        (".quit / .exit", "Exit DubSar IDE"),
     ];
     for (cmd, desc) in rows {
         println!("  {BCYN}{cmd:<26}{RST}{DIM}{desc}{RST}");
@@ -221,18 +276,22 @@ fn do_demo(s: &mut Session) {
     let items = [
         (ParticleState::Golden, "Ali_Karim"),
         (ParticleState::Golden, "Fatima_Zahra"),
-        (ParticleState::Fuzzy,  "Hassan_Mahdi"),
-        (ParticleState::Fuzzy,  "Zainab_Nasir"),
-        (ParticleState::Dead,   "Omar_Jawad"),
+        (ParticleState::Fuzzy, "Hassan_Mahdi"),
+        (ParticleState::Fuzzy, "Zainab_Nasir"),
+        (ParticleState::Dead, "Omar_Jawad"),
     ];
     let mut ok = 0usize;
     for (state, name) in items {
         match s.add_particle(state) {
-            Ok(ep)  => {
-                println!("  {BGRN}+{RST} ep={ep:>2}  {:<14} {}", name, fmt_state(state));
+            Ok(ep) => {
+                println!(
+                    "  {BGRN}+{RST} ep={ep:>2}  {:<14} {}",
+                    name,
+                    fmt_state(state)
+                );
                 ok += 1;
             }
-            Err(e)  => println!("  {BRED}✗{RST} {name}: {e}"),
+            Err(e) => println!("  {BRED}✗{RST} {name}: {e}"),
         }
     }
     println!("  {DIM}── {ok} demo particles loaded ──{RST}");
@@ -241,16 +300,16 @@ fn do_demo(s: &mut Session) {
 fn do_ingest(s: &mut Session, arg: &str) {
     let state = match arg.to_lowercase().as_str() {
         "golden" => ParticleState::Golden,
-        "fuzzy"  => ParticleState::Fuzzy,
-        "dead"   => ParticleState::Dead,
-        other    => {
+        "fuzzy" => ParticleState::Fuzzy,
+        "dead" => ParticleState::Dead,
+        other => {
             println!("  {BRED}Unknown state '{other}' — use Golden / Fuzzy / Dead{RST}");
             return;
         }
     };
     match s.add_particle(state) {
-        Ok(ep)  => println!("  {BGRN}✓{RST} epoch={ep}  {}", fmt_state(state)),
-        Err(e)  => println!("  {BRED}✗ {e}{RST}"),
+        Ok(ep) => println!("  {BGRN}✓{RST} epoch={ep}  {}", fmt_state(state)),
+        Err(e) => println!("  {BRED}✗ {e}{RST}"),
     }
 }
 
@@ -264,14 +323,17 @@ fn do_particles(s: &mut Session) {
     println!("  {BOLD}{DIM}  uuid_hash    state         ep   colorid  drift{RST}");
     println!("  {DIM}{}{RST}", "─".repeat(56));
     for p in &particles {
-        let proj   = s.pdb.db().project(p);
-        let state  = proj.state;
-        let evs    = proj.events_seen;
+        let proj = s.pdb.db().project(p);
+        let state = proj.state;
+        let evs = proj.events_seen;
         let (r, g, b) = state_rgb(state);
         let swatch = format!("{}{}{RST}", bg(r, g, b), "  ");
-        let bar    = drift_bar(r, g, b);
-        println!("  {swatch} {DIM}{:#010x}{RST}  {}  ev={evs:<2}  {bar}",
-            p.uuid_hash(), fmt_state(state));
+        let bar = drift_bar(r, g, b);
+        println!(
+            "  {swatch} {DIM}{:#010x}{RST}  {}  ev={evs:<2}  {bar}",
+            p.uuid_hash(),
+            fmt_state(state)
+        );
     }
     println!("  {DIM}{}{RST}", "─".repeat(56));
     println!("  {BGRN}{}{RST}{DIM} particle(s){RST}", particles.len());
@@ -282,12 +344,21 @@ fn do_query(s: &mut Session, src: &str) {
     s.stats.queries += 1;
     match query(s.pdb.db(), src) {
         Ok(res) => {
-            let pct = if res.evaluated > 0 { res.matched.len() * 100 / res.evaluated } else { 0 };
-            println!("  {BGRN}matched={}{RST}  evaluated={}  selectivity={pct}%",
-                res.matched.len(), res.evaluated);
+            let pct = (res.matched.len() * 100)
+                .checked_div(res.evaluated)
+                .unwrap_or(0);
+            println!(
+                "  {BGRN}matched={}{RST}  evaluated={}  selectivity={pct}%",
+                res.matched.len(),
+                res.evaluated
+            );
             for p in &res.matched {
                 let state = s.pdb.db().project(&p.entity).state;
-                println!("    {CYN}→{RST} {:#010x}  {}", p.entity.uuid_hash(), fmt_state(state));
+                println!(
+                    "    {CYN}→{RST} {:#010x}  {}",
+                    p.entity.uuid_hash(),
+                    fmt_state(state)
+                );
             }
         }
         Err(e) => {
@@ -300,12 +371,20 @@ fn do_query(s: &mut Session, src: &str) {
 fn do_open(s: &mut Session, path: &str) {
     match FileBuffer::load(path) {
         Ok(buf) => {
-            println!("  {BGRN}✓{RST} {BOLD}{}{RST}  [{CYN}{}{RST}]  {} bytes",
-                buf.path, buf.kind_label(), buf.content.len());
+            println!(
+                "  {BGRN}✓{RST} {BOLD}{}{RST}  [{CYN}{}{RST}]  {} bytes",
+                buf.path,
+                buf.kind_label(),
+                buf.content.len()
+            );
             println!();
             for (i, line) in buf.content.lines().enumerate() {
-                let n   = i + 1;
-                let col = match buf.kind { FileKind::Akk => CYN, FileKind::Hepta => BYLW, _ => RST };
+                let n = i + 1;
+                let col = match buf.kind {
+                    FileKind::Akk => CYN,
+                    FileKind::Hepta => BYLW,
+                    _ => RST,
+                };
                 println!("  {DIM}{n:>3}{RST}  {DIM}│{RST}  {col}{line}{RST}");
             }
             println!();
@@ -319,12 +398,18 @@ fn do_check(s: &mut Session) {
     s.stats.checks += 1;
     let (content, kind) = match s.buf.as_ref() {
         Some(b) => (b.content.clone(), b.kind.clone()),
-        None    => { println!("  {DIM}No file loaded — use .open <file>{RST}"); return; }
+        None => {
+            println!("  {DIM}No file loaded — use .open <file>{RST}");
+            return;
+        }
     };
     let diags = match kind {
-        FileKind::Akk   => s.ide.check_aaol(&content),
+        FileKind::Akk => s.ide.check_aaol(&content),
         FileKind::Hepta => s.ide.check_hepta(&content),
-        FileKind::Other => { println!("  {DIM}Unknown file type — use .akk or .hepta extension{RST}"); return; }
+        FileKind::Other => {
+            println!("  {DIM}Unknown file type — use .akk or .hepta extension{RST}");
+            return;
+        }
     };
     if diags.is_empty() {
         println!("  {BGRN}✓{RST} No diagnostics — file is valid");
@@ -332,7 +417,11 @@ fn do_check(s: &mut Session) {
         s.stats.errors += diags.len();
         println!("  {BYLW}⚠{RST} {BOLD}{}{RST} diagnostic(s):", diags.len());
         for d in &diags {
-            let icon = if d.is_error { format!("{BRED}✗{RST}") } else { format!("{BYLW}⚠{RST}") };
+            let icon = if d.is_error {
+                format!("{BRED}✗{RST}")
+            } else {
+                format!("{BYLW}⚠{RST}")
+            };
             println!("    {icon} {}", d.message);
         }
     }
@@ -341,8 +430,14 @@ fn do_check(s: &mut Session) {
 fn do_run(s: &mut Session) {
     let content = match s.buf.as_ref() {
         Some(b) if matches!(b.kind, FileKind::Hepta) => b.content.clone(),
-        Some(_) => { println!("  {DIM}Loaded file is not a .hepta query{RST}"); return; }
-        None    => { println!("  {DIM}No file loaded — use .open <file.hepta>{RST}"); return; }
+        Some(_) => {
+            println!("  {DIM}Loaded file is not a .hepta query{RST}");
+            return;
+        }
+        None => {
+            println!("  {DIM}No file loaded — use .open <file.hepta>{RST}");
+            return;
+        }
     };
     do_query(s, &content);
 }
@@ -380,11 +475,15 @@ fn do_color(args: &str) {
     let r = parts[0].parse::<u8>().unwrap_or(0);
     let g = parts[1].parse::<u8>().unwrap_or(0);
     let b = parts[2].parse::<u8>().unwrap_or(0);
-    let rgb  = ColorRgb::new(r, g, b);
+    let rgb = ColorRgb::new(r, g, b);
     let disp = render(&rgb);
     println!();
-    println!("  {}{}  ColorID  {}  rgb({r},{g},{b})",
-        bg(r, g, b), BWHT, RST);
+    println!(
+        "  {}{}  ColorID  {}  rgb({r},{g},{b})",
+        bg(r, g, b),
+        BWHT,
+        RST
+    );
     println!("  {}{BOLD}label  :{RST}  {}", disp.ansi_fg, disp.label);
     println!("  {}{BOLD}drift  :{RST}  {:.2}", disp.ansi_fg, disp.drift);
     println!("  {}{BOLD}bar    :{RST}  {}", disp.ansi_fg, disp.drift_bar);
@@ -392,7 +491,7 @@ fn do_color(args: &str) {
 }
 
 fn do_dama(arg: &str) {
-    use damadmbok_dictionary::{KnowledgeArea, lookup, search, by_area, ALIGNMENTS};
+    use damadmbok_dictionary::{by_area, lookup, search, KnowledgeArea, ALIGNMENTS};
 
     let arg = arg.trim();
 
@@ -403,9 +502,10 @@ fn do_dama(arg: &str) {
         println!("  {DIM}{}{RST}", "─".repeat(62));
         for ka in KnowledgeArea::all() {
             let terms: Vec<_> = by_area(*ka).collect();
-            let aligns: Vec<_> = ALIGNMENTS.iter().filter(|a| {
-                a.dama_code.starts_with(ka.code())
-            }).collect();
+            let aligns: Vec<_> = ALIGNMENTS
+                .iter()
+                .filter(|a| a.dama_code.starts_with(ka.code()))
+                .collect();
             println!("  {BCYN}Ch.{:<2}{RST}  {BYLW}{:<4}{RST}  {BWHT}{:<42}{RST}  {DIM}{:>3} terms  {:>2} aligned{RST}",
                 ka.chapter_number(), ka.code(), ka.label(),
                 terms.len(), aligns.len());
@@ -414,7 +514,9 @@ fn do_dama(arg: &str) {
         let total_terms = damadmbok_dictionary::DICTIONARY.len();
         let total_aligns = ALIGNMENTS.len();
         println!("  {DIM}Dictionary: {BGRN}{total_terms}{RST}{DIM} terms  ·  Alignments: {BGRN}{total_aligns}{RST}{DIM} BahyWay components{RST}");
-        println!("  {DIM}Usage: {BCYN}.dama <CODE>{RST}{DIM}  or  {BCYN}.dama search <keyword>{RST}");
+        println!(
+            "  {DIM}Usage: {BCYN}.dama <CODE>{RST}{DIM}  or  {BCYN}.dama search <keyword>{RST}"
+        );
         println!();
         return;
     }
@@ -444,10 +546,16 @@ fn do_dama(arg: &str) {
             println!("  {BCYN}{BOLD}{}{RST}", t.code);
             println!("  {BWHT}{}{RST}", t.label);
             println!("  {DIM}Area   :{RST}  {CYN}{}{RST}", t.area.label());
-            println!("  {DIM}Chapter:{RST}  {DIM}{}{RST}", t.area.chapter_number());
+            println!(
+                "  {DIM}Chapter:{RST}  {DIM}{}{RST}",
+                t.area.chapter_number()
+            );
             println!("  {DIM}Def    :{RST}  {}", t.definition);
             // Show BahyWay alignments for this code
-            let aligns: Vec<_> = ALIGNMENTS.iter().filter(|a| a.dama_code == t.code).collect();
+            let aligns: Vec<_> = ALIGNMENTS
+                .iter()
+                .filter(|a| a.dama_code == t.code)
+                .collect();
             if !aligns.is_empty() {
                 println!("  {DIM}{}{RST}", "─".repeat(54));
                 println!("  {BYLW}BahyWay Implementation:{RST}");
@@ -469,29 +577,22 @@ fn do_dashboard(s: &Session) {
     let particles_raw = s.pdb.db().journal().all_particles();
     let mut rows: Vec<dashboard::ParticleRow> = Vec::new();
     for p in &particles_raw {
-        let proj  = s.pdb.db().project(p);
+        let proj = s.pdb.db().project(p);
         let state = match proj.state {
             ParticleState::Golden => "GOLDEN",
-            ParticleState::Fuzzy  => "FUZZY",
-            ParticleState::Dead   => "DEAD",
+            ParticleState::Fuzzy => "FUZZY",
+            ParticleState::Dead => "DEAD",
         };
         rows.push(dashboard::ParticleRow {
             uuid_hash: p.uuid_hash(),
             state,
-            epoch:     s.epoch.min(255) as u32,
-            events:    proj.events_seen,
+            epoch: s.epoch.min(255),
+            events: proj.events_seen,
         });
     }
 
     let m = naba::NabaMetrics::gather(&s.pdb, s.tribe, s.epoch);
-    let html = dashboard::generate_dashboard(
-        s.tribe,
-        m.golden,
-        m.fuzzy,
-        m.dead,
-        m.epoch,
-        &rows,
-    );
+    let html = dashboard::generate_dashboard(s.tribe, m.golden, m.fuzzy, m.dead, m.epoch, &rows);
 
     let path = format!("{}/showway.html", s.data_dir);
     match std::fs::write(&path, html) {
@@ -506,9 +607,9 @@ fn do_dashboard(s: &Session) {
 }
 
 fn do_status(s: &Session) {
-    let count    = s.pdb.db().journal().all_particles().len();
+    let count = s.pdb.db().journal().all_particles().len();
     let replayed = s.pdb.stats().entries_replayed;
-    let written  = s.pdb.stats().entries_written;
+    let written = s.pdb.stats().entries_written;
     println!();
     println!("  {BOLD}Session{RST}");
     println!("  {DIM}tribe       :{RST}  {BCYN}{:#06x}{RST}", s.tribe);
@@ -521,8 +622,12 @@ fn do_status(s: &Session) {
     println!("  {DIM}checks      :{RST}  {}", s.stats.checks);
     println!("  {DIM}errors      :{RST}  {BRED}{}{RST}", s.stats.errors);
     match &s.buf {
-        Some(b) => println!("  {DIM}buffer      :{RST}  {BYLW}{}{RST}  [{}]", b.path, b.kind_label()),
-        None    => println!("  {DIM}buffer      :{RST}  {DIM}(empty){RST}"),
+        Some(b) => println!(
+            "  {DIM}buffer      :{RST}  {BYLW}{}{RST}  [{}]",
+            b.path,
+            b.kind_label()
+        ),
+        None => println!("  {DIM}buffer      :{RST}  {DIM}(empty){RST}"),
     }
     println!();
 }
@@ -563,13 +668,15 @@ fn main() {
     let mut i = 1;
     while i < args.len() {
         if args[i] == "--tribe" && i + 1 < args.len() {
-            let hex = args[i+1].trim_start_matches("0x");
+            let hex = args[i + 1].trim_start_matches("0x");
             tribe_id = u16::from_str_radix(hex, 16).unwrap_or(0x0001);
             i += 2;
         } else if args[i] == "--data-dir" && i + 1 < args.len() {
-            data_dir = args[i+1].clone();
+            data_dir = args[i + 1].clone();
             i += 2;
-        } else { i += 1; }
+        } else {
+            i += 1;
+        }
     }
 
     let mut s = Session::new(tribe_id, &data_dir).unwrap_or_else(|e| {
@@ -582,30 +689,48 @@ fn main() {
     prompt(s.tribe);
 
     for line in stdin.lock().lines() {
-        let line = match line { Ok(l) => l, Err(_) => break };
-        let t    = line.trim();
-        if t.is_empty() { prompt(s.tribe); continue; }
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        let t = line.trim();
+        if t.is_empty() {
+            prompt(s.tribe);
+            continue;
+        }
 
-        if      let Some(a) = t.strip_prefix(".query ")   { do_query(&mut s, a); }
-        else if let Some(a) = t.strip_prefix(".ingest ")  { do_ingest(&mut s, a); }
-        else if let Some(a) = t.strip_prefix(".open ")    { do_open(&mut s, a); }
-        else if let Some(a) = t.strip_prefix(".fields ")  { do_fields(&s, a); }
-        else if let Some(a) = t.strip_prefix(".color ")   { do_color(a); }
-        else if let Some(a) = t.strip_prefix(".dama ")    { do_dama(a); }
-        else {
+        if let Some(a) = t.strip_prefix(".query ") {
+            do_query(&mut s, a);
+        } else if let Some(a) = t.strip_prefix(".ingest ") {
+            do_ingest(&mut s, a);
+        } else if let Some(a) = t.strip_prefix(".open ") {
+            do_open(&mut s, a);
+        } else if let Some(a) = t.strip_prefix(".fields ") {
+            do_fields(&s, a);
+        } else if let Some(a) = t.strip_prefix(".color ") {
+            do_color(a);
+        } else if let Some(a) = t.strip_prefix(".dama ") {
+            do_dama(a);
+        } else {
             match t {
-                ".naba"        => do_naba(&s),
-                ".help"        => do_help(),
-                ".demo"        => { do_demo(&mut s); naba::naba_hint(&naba::NabaMetrics::gather(&s.pdb, s.tribe, s.epoch)); }
-                ".particles"   => do_particles(&mut s),
-                ".check"       => do_check(&mut s),
-                ".run"         => do_run(&mut s),
-                ".templates"   => do_templates(&s),
-                ".dama"        => do_dama(""),
-                ".dashboard"   => do_dashboard(&s),
-                ".status"      => do_status(&s),
-                ".quit"|".exit"=> { println!("  {BCYN}𒁾  DubSar signing off.{RST}"); break; }
-                _              => println!("  {DIM}Unknown command. Type .help{RST}"),
+                ".naba" => do_naba(&s),
+                ".help" => do_help(),
+                ".demo" => {
+                    do_demo(&mut s);
+                    naba::naba_hint(&naba::NabaMetrics::gather(&s.pdb, s.tribe, s.epoch));
+                }
+                ".particles" => do_particles(&mut s),
+                ".check" => do_check(&mut s),
+                ".run" => do_run(&mut s),
+                ".templates" => do_templates(&s),
+                ".dama" => do_dama(""),
+                ".dashboard" => do_dashboard(&s),
+                ".status" => do_status(&s),
+                ".quit" | ".exit" => {
+                    println!("  {BCYN}𒁾  DubSar signing off.{RST}");
+                    break;
+                }
+                _ => println!("  {DIM}Unknown command. Type .help{RST}"),
             }
         }
 

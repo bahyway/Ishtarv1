@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · The Tube Court — The Ceiling of the Membrane (GL-HSI-001-A2)</title>
+<style>
+  :root{
+    --basalt:#0b0e13; --tablet:#141922; --line:#232b38;
+    --gold:#d9a441; --gold-dim:#8a6a2c; --lapis:#4d7fb8; --copper:#4fae8a;
+    --alarm:#d4553f; --maroon:#7a2230; --ash:#8b93a3; --bone:#e8e2d4;
+    --fuzzy:#c88b3a;
+    --mono:"Iosevka","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--basalt);color:var(--ash);font:15px/1.65 var(--serif)}
+  ::selection{background:var(--gold-dim);color:var(--basalt)}
+  header{border-bottom:1px solid var(--line);padding:30px 5vw 22px;text-align:center;
+    background:radial-gradient(1100px 300px at 50% -50%, rgba(212,85,63,.10), transparent 65%)}
+  .crumbs{font-family:var(--mono);font-size:11.5px;letter-spacing:.35em;color:var(--gold-dim)}
+  h1{font-size:clamp(24px,3.2vw,38px);color:var(--bone);font-weight:600;margin:10px 0 8px}
+  .lede{max-width:84ch;margin:0 auto;color:var(--ash)}
+  .lede b{color:var(--gold);font-weight:600}
+  .lede i{color:var(--bone)}
+  .rehearsal{margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--basalt);
+      background:var(--gold);display:inline-block;padding:4px 12px;border-radius:2px;letter-spacing:.05em}
+  main{padding:24px 4vw 70px;max-width:1460px;margin:0 auto}
+  .stage{display:grid;grid-template-columns:1fr 400px;gap:16px}
+  .panel{background:var(--tablet);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      border-bottom:1px solid var(--line);padding:10px 14px;font-family:var(--mono);font-size:12px}
+  .bar .tag{color:var(--gold)}
+  canvas{display:block;width:100%;height:auto;background:#0d1119;touch-action:none;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  input[type=range]{accent-color:var(--gold);width:96px;vertical-align:middle}
+  output{color:var(--bone);min-width:40px;display:inline-block}
+  .cam{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11px;padding:4px 9px;cursor:pointer;border-radius:2px}
+  .cam.on,.cam:hover{border-color:var(--gold);color:var(--gold)}
+  .camdeck{display:flex;gap:6px;margin-left:auto}
+  .act{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11.5px;padding:6px 12px;cursor:pointer;border-radius:2px}
+  .act:hover{color:var(--bone);border-color:var(--ash)}
+  .act.on{border-color:var(--copper);color:var(--copper)}
+  .act.gold{border-color:var(--gold-dim);color:var(--gold)}
+  .act.dark{border-color:#333;color:#888}
+  .act.dark.on{border-color:var(--bone);color:var(--bone)}
+  .side{display:flex;flex-direction:column;gap:16px}
+  .side h3{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.12em;
+      padding:10px 14px;border-bottom:1px solid var(--line)}
+  .verdict{font-family:var(--mono);font-size:12px;padding:10px 14px;border-top:1px solid var(--line);min-height:40px}
+  .verdict .ok{color:var(--copper)} .verdict .bad{color:var(--alarm)}
+  .verdict .gold{color:var(--gold)} .verdict .fz{color:var(--fuzzy)} .verdict .lp{color:var(--lapis)}
+  .gauge{font-family:var(--mono);font-size:12px;padding:12px 14px;line-height:2.0;border-top:1px solid var(--line)}
+  .gauge b{color:var(--gold)} .gauge .k{color:var(--lapis)}
+  .badge{padding:1px 10px;border-radius:2px;font-weight:600}
+  .badge.el{background:#4fae8a22;color:var(--copper);border:1px solid var(--copper)}
+  .badge.pl{background:#c88b3a22;color:var(--fuzzy);border:1px solid var(--fuzzy)}
+  .badge.ru{background:#d4553f22;color:var(--alarm);border:1px solid var(--alarm)}
+  .lawtag{font-family:var(--mono);font-size:10.5px;color:var(--lapis);padding:0 14px 12px}
+  #naru{max-height:170px;overflow-y:auto;font-family:var(--mono);font-size:11.5px;padding:8px 14px}
+  #naru .e{border-top:1px dotted var(--line);padding:5px 0}
+  #naru .w{color:var(--gold)}
+  #ctx{display:none;position:fixed;z-index:50;background:#0d1119;
+    border:1px solid var(--ash);border-radius:2px;min-width:230px;overflow:hidden;
+    font-family:var(--mono);font-size:12px}
+  #ctx .h{padding:6px 12px;color:var(--lapis);background:var(--tablet);border-bottom:1px solid var(--line);font-size:10.5px}
+  #ctx .i{padding:8px 12px;cursor:pointer;color:var(--ash)}
+  #ctx .i:hover{background:var(--tablet);color:var(--bone)}
+  @media(max-width:1020px){.stage{grid-template-columns:1fr}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crumbs">Š A L A&nbsp;&nbsp;H U B&nbsp;&nbsp;·&nbsp;&nbsp;M E M B R A N E&nbsp;&nbsp;C O U R T S&nbsp;&nbsp;·&nbsp;&nbsp;T H E&nbsp;&nbsp;T U B E&nbsp;&nbsp;C O U R T</div>
+  <h1>THE CEILING OF THE MEMBRANE 𒀀𒌇 𒀭𒀏</h1>
+  <p class="lede">The membrane cannot widen forever — <b>the tube says where it ends</b>. Widening orbits
+    (the Nanshe girth <b>G</b>, measured in <b>PU</b> — the particle's own sigma — and <b>OU</b> — multiples of the
+    lawful width) press the inner wall toward the ceiling <b>G_max = G₀ + η·R_tube</b>. One number joins the two
+    courts: the strain <b>S = (G−G₀)/(G_max−G₀)</b>. Below ε_y the wall breathes (<i>elastic</i>); past ε_y the set
+    is permanent (<i>plastic — drift</i>); at <b>S = 1</b> the Abūbu clause fires — the wall opens, particles spill
+    unobserved, and every witness is demoted to FUZZY and impounded in <b>EnkiQDB</b>. Set <b>η = 0</b> and meet
+    the <b>Brittle Decree</b>: the membrane that cannot stretch does not negotiate.</p>
+  <div class="rehearsal">ŠALA REHEARSAL ONLY — PRODUCTION SURFACE IS DUBSAR egui/WGPU (WoW rule 4–5)</div>
+</header>
+
+<main>
+<div class="stage">
+
+  <!-- ═══ STAGE ═══ -->
+  <div class="panel">
+    <div class="bar">
+      <span class="tag">TUBE · J2 corridor wall</span>
+      <label>η <input type="range" id="eta" min="0" max="1" value="0.45" step="0.05"></label><output id="etaOut">0.45</output>
+      <label>R_tube <input type="range" id="rt" min="10" max="80" value="40" step="2"></label><output id="rtOut">40</output>
+      <label>aging a <input type="range" id="ag" min="0" max="1.2" value="0.5" step="0.05"></label><output id="agOut">0.50</output>
+      <label>τ <input type="range" id="tau" min="2" max="30" value="12" step="1"></label><output id="tauOut">12</output>
+      <span class="camdeck">
+        <button class="cam" id="birdBtn">⌖</button>
+        <button class="cam" id="gndBtn">✛</button>
+        <button class="cam" id="talBtn">⟳</button>
+      </span>
+    </div>
+    <div class="bar">
+      <button class="act on" id="runBtn">◈ BREATHE</button>
+      <button class="act" id="stepBtn">STEP</button>
+      <button class="act on" id="qwBtn">Q witness: PRESENT</button>
+      <button class="act dark" id="brBtn">BRITTLE η=0</button>
+      <button class="act gold" id="madanuBtn">𒁾 MADANU REPAIR</button>
+      <button class="act" id="replayBtn">⟲ REPLAY</button>
+      <span style="margin-left:auto" id="clock">t = 0.0</span>
+    </div>
+    <canvas id="cv" width="1020" height="600" aria-label="Tube wall denting under widening orbits toward the rupture ceiling"></canvas>
+    <div class="verdict" id="stageVerdict"></div>
+    <div class="lawtag">GL-HSI-001-A2 §5 — the tube is the stakeholder stage · GL-VIZ-001 — left-click J-2: bounce + NĀRU · right-click: court menu by birth-status</div>
+  </div>
+
+  <!-- ═══ FLAT INSTRUMENTS ═══ -->
+  <div class="side">
+    <div class="panel">
+      <h3>S(t) vs 1 — THE STRAIN HORIZON</h3>
+      <canvas id="hcv" width="400" height="210" aria-label="Strain trajectory against rupture at one, with T_rupt marker and tau window"></canvas>
+      <div class="verdict" id="hVerdict"></div>
+      <div class="lawtag">GL-HSI-001-A2 §3–4 · T_rupt joins the countdown grammar · GL-DST-001 — the chart never bends</div>
+    </div>
+    <div class="panel">
+      <h3>THE UNITS — PU · OU · R_tube</h3>
+      <div class="gauge" id="gauge"></div>
+      <div class="lawtag">§1 — 1 PU = one whitened orbit sigma · 1 OU = G₀ · calibration NUZI-sealed, epoch cited (L-HSI-11)</div>
+    </div>
+    <div class="panel">
+      <h3>THE WITNESSES</h3>
+      <div class="verdict" id="qVerdict"></div>
+      <div class="lawtag">§3 — at S ≥ 1 the Abūbu clause fires: censored sample · FUZZY · EnkiQDB · 7003 · release by 𒁾 Madanu decree only</div>
+    </div>
+    <div class="panel">
+      <h3>NĀRU · STORYENGINE JOURNAL</h3>
+      <div id="naru"></div>
+    </div>
+  </div>
+
+</div>
+</main>
+<div id="ctx"></div>
+
+<script>
+"use strict";
+const REDUCED=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rng=mulberry32(348);
+const g=()=>(rng()+rng()+rng()-1.5)/1.5;
+
+/* ═══ calculus (mirror nanshe::units + nanshe::rupture) ═══ */
+const G0=6.0, EPS_Y=0.6, SIG=26;
+let ETA=0.45, RT=40, AG=0.5, TAU=12, QW=true;
+let T=0, RUN=!REDUCED, RUPTURED=false, QUAR=false, ETA_HELD=null, RANG=false;
+let S_SERIES=[];
+function gNow(){return G0+AG*0.045*T*T}
+function gMax(){return G0+ETA*RT}
+function strain(){const span=gMax()-G0;
+  if(span<=0)return gNow()>G0+1e-9?Infinity:0;
+  return Math.max(0,(gNow()-G0)/span)}
+function regime(s){return s>=1?"RUPTURE":s>=EPS_Y?"PLASTIC":"ELASTIC"}
+function dilationProven(){return AG>0&&T>2.5&&QW}
+function tRupt(){ /* analytic: G quadratic in t */
+  if(ETA===0)return dilationProven()?0:null;
+  if(AG<=0)return null;
+  const tc=Math.sqrt((gMax()-G0)/(AG*0.045));
+  return Math.max(0,tc-T)}
+
+/* ═══ wall geometry (Abūbu die, faithful) ═══ */
+const L=760, RAD=175, NS=44, NT=40;
+const JOINT={s:0.42,th:1.05};
+let PARTS=[];
+function targetCount(){return Math.round(Math.min(3,strain())*90)+14}
+function partSpread(){return 0.09*(1+Math.min(2.5,strain())*1.6)}
+function syncParticles(){
+  const want=RUPTURED?PARTS.length:targetCount();
+  while(PARTS.length<want)
+    PARTS.push({s:JOINT.s+g()*partSpread(), th:JOINT.th+g()*0.6*(1+strain()),
+                m:1+rng()*8, spilled:false});
+  while(PARTS.length>want&&!RUPTURED)PARTS.pop()}
+function geo(a,b){const du=(a.s-b.s)*L;let dv=Math.abs(a.th-b.th)%(2*Math.PI);
+  if(dv>Math.PI)dv=2*Math.PI-dv;return Math.hypot(du,RAD*dv)}
+let DENT=null;
+function computeDent(){
+  const amp=Math.min(2.2,strain())*0.9;
+  DENT=[...Array(NS+1)].map((_,i)=>[...Array(NT+1)].map((_,j)=>{
+    const p={s:i/NS,th:j/NT*2*Math.PI};let d=0;
+    PARTS.forEach(a=>{if(a.spilled)return;
+      const gd=geo(p,a);d+=a.m*Math.exp(-(gd*gd)/(2*SIG*SIG))});
+    return Math.min(70,amp*d)}))}
+function torn(i,j){if(!RUPTURED)return false;
+  const p={s:i/NS,th:j/NT*2*Math.PI};return geo(p,JOINT)<34}
+
+/* ═══ camera (Abūbu die) ═══ */
+const cv=document.getElementById("cv"),ctx=cv.getContext("2d");
+const CAM={yaw:0.7,pitch:0.42,zoom:1};let tal=false;
+function pt3(s,th,dent){
+  const r=RAD-dent;
+  const x=(s-0.5)*L, y=Math.cos(th)*r, z=Math.sin(th)*r;
+  const cy=Math.cos(CAM.yaw),sy=Math.sin(CAM.yaw);
+  let X=x*cy+z*sy, Z=-x*sy+z*cy, Y=y;
+  const cp=Math.cos(CAM.pitch),sp=Math.sin(CAM.pitch);
+  const Y2=Y*cp-Z*sp, Z2=Y*sp+Z*cp;
+  const f=1500,den=Math.max(140,f-Z2*CAM.zoom);
+  const pers=Math.min(9,f/den);
+  return{x:510+X*0.62*CAM.zoom*pers,y:320+Y2*0.62*CAM.zoom*pers,z:Z2,pers}}
+const band=m=>m>7?"#7a2230":m>5.2?"#d4553f":m>3.5?"#c88b3a":"#4d7fb8";
+
+/* ═══ NĀRU ═══ */
+const naru=document.getElementById("naru");
+function J(w,t){const d=document.createElement("div");d.className="e";
+  d.innerHTML=`<span class="w">${w}</span> — ${t}`;naru.prepend(d);
+  while(naru.children.length>24)naru.lastChild.remove()}
+J("COURT","The Tube Court convenes. Calibration NUZI-sealed: G₀=6 PU, epoch 42 cited. The ceiling stands at G_max.");
+
+/* ═══ stage draw (Abūbu die) ═══ */
+let PICKS=[];
+function draw(){
+  ctx.clearRect(0,0,1020,600);
+  const s=strain(), reg=regime(s);
+  const quads=[];
+  for(let i=0;i<NS;i++)for(let j=0;j<NT;j++){
+    if(torn(i,j))continue;
+    const p=[pt3(i/NS,j/NT*2*Math.PI,DENT[i][j]),
+             pt3((i+1)/NS,j/NT*2*Math.PI,DENT[i+1][j]),
+             pt3((i+1)/NS,(j+1)/NT*2*Math.PI,DENT[i+1][j+1]),
+             pt3(i/NS,(j+1)/NT*2*Math.PI,DENT[i][j+1])];
+    const z=(p[0].z+p[1].z+p[2].z+p[3].z)/4;
+    const dent=(DENT[i][j]+DENT[i+1][j]+DENT[i+1][j+1]+DENT[i][j+1])/4;
+    quads.push({p,z,dent,i,j})}
+  quads.sort((a,b)=>a.z-b.z);
+  quads.forEach(q=>{
+    const front=q.z>0, d=q.dent/70;
+    const tint=reg==="RUPTURE"?[212,85,63]:reg==="PLASTIC"?[200,139,58]:[77,127,184];
+    const rC=217*(1-d)+tint[0]*d, gC=164*(1-d)+tint[1]*d, bC=65*(1-d)+tint[2]*d;
+    ctx.beginPath();ctx.moveTo(q.p[0].x,q.p[0].y);
+    for(let k=1;k<4;k++)ctx.lineTo(q.p[k].x,q.p[k].y);ctx.closePath();
+    ctx.fillStyle=`rgba(${rC|0},${gC|0},${bC|0},${front?0.055+d*0.34:0.03+d*0.10})`;ctx.fill();
+    const rim=RUPTURED&&(torn(q.i+1,q.j)||torn(q.i,q.j+1)||torn(q.i-1,q.j)||torn(q.i,q.j-1));
+    ctx.strokeStyle=rim?"rgba(212,85,63,.9)":front?`rgba(139,147,163,${0.16+d*0.25})`:"rgba(139,147,163,0.05)";
+    ctx.lineWidth=rim?1.8:0.7;ctx.stroke()});
+  PARTS.forEach(a=>{
+    if(a.spilled){
+      const q=pt3(a.s,a.th,-Math.min(a.fall||0,240));
+      ctx.globalAlpha=Math.max(0,1-(a.fall||0)/220);
+      ctx.fillStyle=band(a.m);
+      ctx.beginPath();ctx.arc(q.x,q.y,Math.max(0.2,3.4*q.pers),0,7);ctx.fill();ctx.globalAlpha=1;return}
+    const gi=Math.min(NS,Math.round(a.s*NS));
+    const gj=(((Math.round(a.th/(2*Math.PI)*NT))%NT)+NT)%NT;
+    const q=pt3(a.s,a.th,(DENT[gi]&&DENT[gi][gj]||0)+2);
+    const front=q.z>-30;
+    ctx.globalAlpha=front?0.95:0.15;
+    ctx.fillStyle=band(a.m);
+    ctx.beginPath();ctx.arc(q.x,q.y,Math.max(0.2,3.2*q.pers*Math.max(.7,CAM.zoom*.9)),0,7);ctx.fill()});
+  ctx.globalAlpha=1;
+  /* J-2 joint marker (born) + refused NON-P */
+  PICKS=[];
+  const j0=pt3(JOINT.s,JOINT.th,30);
+  ctx.fillStyle=RUPTURED?"#d4553f":"#d9a441";ctx.font="12px monospace";
+  ctx.fillText(RUPTURED?"◆ ABŪBU — the wall is open":"◆ J-2",j0.x+10,j0.y-8);
+  ctx.beginPath();ctx.arc(j0.x,j0.y,6,0,7);ctx.fill();
+  PICKS.push({x:j0.x,y:j0.y,r:12,g:{id:"J-2",born:true,
+    lore:"the aging joint — widening orbits press the wall toward G_max; the tube sets the ceiling"}});
+  const n0=pt3(0.95,4.6,-60);
+  ctx.globalAlpha=.55;ctx.fillStyle="#5a5348";
+  ctx.beginPath();ctx.arc(n0.x,n0.y,5,0,7);ctx.fill();ctx.globalAlpha=1;
+  ctx.strokeStyle="#8a6a2c";ctx.beginPath();
+  ctx.moveTo(n0.x-4,n0.y-4);ctx.lineTo(n0.x+4,n0.y+4);
+  ctx.moveTo(n0.x+4,n0.y-4);ctx.lineTo(n0.x-4,n0.y+4);ctx.stroke();
+  ctx.fillStyle="#8b93a3";ctx.font="11px monospace";ctx.fillText("NON-P",n0.x+8,n0.y+3);
+  PICKS.push({x:n0.x,y:n0.y,r:11,g:{id:"NON-P",born:false,
+    lore:"specular-glare pixel refused at the SUSA gate — never born, no KAKI, no story"}});
+  if(ETA===0){ctx.fillStyle="#e8e2d4";
+    ctx.fillText("BRITTLE DECREE — the membrane cannot stretch; proven dilation is an immediate omen",250,560)}
+  ctx.fillStyle="#4d7fb8";
+  ctx.fillText(`cam yaw ${(CAM.yaw%6.283).toFixed(2)} · pitch ${CAM.pitch.toFixed(2)} · ×${CAM.zoom.toFixed(1)}`,16,22);
+}
+
+/* ═══ strain horizon instrument ═══ */
+const hcv=document.getElementById("hcv"),hx=hcv.getContext("2d");
+function drawH(){
+  hx.fillStyle="#0d1119";hx.fillRect(0,0,400,210);
+  const x0=44,y0=178,w=340,h=136,tmax=Math.max(30,T+TAU+6);
+  const smaxv=1.35;
+  hx.strokeStyle="#232b38";hx.beginPath();
+  hx.moveTo(x0,y0-h);hx.lineTo(x0,y0);hx.lineTo(x0+w,y0);hx.stroke();
+  const Xnow=x0+w*Math.min(T,tmax)/tmax, Xtau=x0+w*Math.min(T+TAU,tmax)/tmax;
+  hx.fillStyle="rgba(77,127,184,.10)";hx.fillRect(Xnow,y0-h,Math.max(0,Xtau-Xnow),h);
+  const Y1=y0-h*1/smaxv;
+  hx.strokeStyle="rgba(212,85,63,.8)";hx.setLineDash([5,4]);
+  hx.beginPath();hx.moveTo(x0,Y1);hx.lineTo(x0+w,Y1);hx.stroke();hx.setLineDash([]);
+  hx.fillStyle="#d4553f";hx.font="10.5px monospace";hx.fillText("S = 1 · rupture",x0+w-88,Y1-4);
+  const Ye=y0-h*EPS_Y/smaxv;
+  hx.strokeStyle="rgba(200,139,58,.5)";hx.setLineDash([2,4]);
+  hx.beginPath();hx.moveTo(x0,Ye);hx.lineTo(x0+w,Ye);hx.stroke();hx.setLineDash([]);
+  hx.fillStyle="#c88b3a";hx.fillText("ε_y",x0+w-24,Ye-4);
+  /* projected strain from calculus (quadratic in t) */
+  if(ETA>0&&AG>0){hx.strokeStyle="rgba(217,164,65,.6)";hx.beginPath();
+    for(let t=0;t<=tmax;t+=.4){const gv=G0+AG*0.045*t*t;
+      const sv=Math.min(smaxv,(gv-G0)/(gMax()-G0));
+      const X=x0+w*t/tmax,Y=y0-h*Math.max(sv,0)/smaxv;
+      t===0?hx.moveTo(X,Y):hx.lineTo(X,Y)}hx.stroke()}
+  const tr=tRupt();
+  if(tr!==null&&isFinite(tr)){const X=x0+w*Math.min(T+tr,tmax)/tmax;
+    hx.strokeStyle="#d4553f";hx.beginPath();hx.moveTo(X,y0-h);hx.lineTo(X,y0);hx.stroke();
+    hx.fillStyle="#d9a441";hx.fillText("T_rupt",X+3,y0-h+12)}
+  hx.strokeStyle="#4d7fb8";hx.lineWidth=1.6;hx.beginPath();
+  S_SERIES.forEach((p,i)=>{const X=x0+w*p.t/tmax,Y=y0-h*Math.min(p.s,smaxv)/smaxv;
+    i===0?hx.moveTo(X,Y):hx.lineTo(X,Y)});hx.stroke();hx.lineWidth=1;
+  hx.fillStyle="#8b93a3";hx.font="10.5px monospace";
+  hx.fillText("S",x0-16,y0-h+6);hx.fillText("t →",x0+w-24,y0+16);
+  hx.fillStyle="#4d7fb8";hx.fillText("lapis window = horizon τ",x0+6,y0-h+14);
+  const v=document.getElementById("hVerdict");
+  if(RUPTURED)v.innerHTML=`<span class="bad">S reached 1 — the ceiling was met.</span> The court's business passes to Madanu`;
+  else if(!dilationProven())v.innerHTML=`<span class="ok">Weather:</span> ${QW?"no sustained proven dilation yet":"second witness ABSENT — girth alone never convicts (A1 §3)"}`;
+  else if(ETA===0)v.innerHTML=`<span class="bad">BRITTLE DECREE — T_rupt = 0</span> · proven dilation on a membrane that cannot stretch`;
+  else if(tr===null)v.innerHTML=`<span class="ok">No horizon:</span> the ramp lacks the Igigi condition`;
+  else v.innerHTML=tr<=TAU
+    ?`<span class="bad">ALARM — T_rupt = ${tr.toFixed(1)} ≤ τ = ${TAU}</span> · the ceiling inside the horizon`
+    :`<span class="gold">Watch:</span> T_rupt = ${tr.toFixed(1)} beyond τ = ${TAU} · the ceiling named, not yet near`;
+}
+
+/* ═══ units gauge & witnesses ═══ */
+function drawG(){
+  const s=strain(), reg=regime(Math.min(s,9)), gv=gNow(), gm=gMax();
+  const cls=reg==="RUPTURE"?"ru":reg==="PLASTIC"?"pl":"el";
+  document.getElementById("gauge").innerHTML=
+   `<span class="k">G</span> ${gv.toFixed(2)} PU = ${(gv/G0).toFixed(2)} OU ·
+    <span class="k">G₀</span> ${G0.toFixed(1)} PU ≡ 1 OU<br>
+    <span class="k">G_max</span> ${isFinite(gm)&&ETA>0?gm.toFixed(2)+" PU = "+(gm/G0).toFixed(2)+" OU":G0.toFixed(1)+" PU (BRITTLE)"} ·
+    <span class="k">R_tube</span> ${RT} PU · <span class="k">η</span> ${ETA.toFixed(2)}<br>
+    <span class="k">S</span> ${isFinite(s)?s.toFixed(2):"∞"} · regime <span class="badge ${cls}">${reg}</span> ·
+    <span class="k">epoch cited</span> <b>42</b>`;
+  const q=document.getElementById("qVerdict");
+  if(QUAR)q.innerHTML=
+    `<span class="fz">WITNESSES QUARANTINED.</span> The wall opened at J-2 — the sample is censored ·
+     all verdicts demoted to <span class="fz">FUZZY</span> · routed to <span class="bad">EnkiQDB · 7003</span> ·
+     NĀRU-witnessed · release by 𒁾 MADANU REPAIR only`;
+  else q.innerHTML=
+    `<span class="ok">Witnesses stand.</span> Two-witness state: ${dilationProven()
+      ?"<span class='fz'>DILATION PROVEN</span> (sustained + Q present)"
+      :"weather"} · K-verdicts remain admissible`;
+  const sv=document.getElementById("stageVerdict");
+  if(RUPTURED)sv.innerHTML=`<span class="bad">ABŪBU EVENT at t=${T.toFixed(1)} — S reached 1.</span> The membrane met its ceiling; particles spill unobserved · <span class="fz">statistics impounded</span>`;
+  else if(ETA===0)sv.innerHTML=`<span class="ok">Brittle Decree active.</span> G_max = G₀ — the wall will refuse or break, never stretch`;
+  else sv.innerHTML=`the orbits widen: G=${gv.toFixed(2)} PU of ${gm.toFixed(2)} · the wall is ${
+    reg==="ELASTIC"?"<span class='ok'>elastic — the spring restores</span>"
+    :reg==="PLASTIC"?"<span class='gold'>plastic — the set is permanent (drift)</span>"
+    :"<span class='bad'>at the ceiling</span>"}`;
+}
+
+/* ═══ loop ═══ */
+function step(dt){
+  if(RUPTURED){
+    PARTS.forEach(a=>{if(!a.spilled&&geo(a,JOINT)<34){a.spilled=true;a.fall=0}
+      if(a.spilled)a.fall=Math.min(260,(a.fall||0)+dt*60)});
+    PARTS=PARTS.filter(a=>!(a.spilled&&a.fall>=240));
+    T+=dt;computeDent();return}
+  T+=dt;
+  syncParticles();computeDent();
+  const s=strain();
+  if(S_SERIES.length===0||T-S_SERIES[S_SERIES.length-1].t>0.5)
+    S_SERIES.push({t:T,s:Math.min(s,1.35)});
+  const tr=tRupt();
+  if(dilationProven()&&tr!==null&&!RANG){RANG=true;
+    J("NANSHE",`OMEN — proven dilation with the ceiling named: T_rupt ${tr.toFixed(1)}. Signed Alert KAKI → Nisaba declares, Kittu delivers.`)}
+  if(s>=1&&!RUPTURED){RUPTURED=true;QUAR=true;
+    J("ABŪBU",`S reached 1 at t=${T.toFixed(1)} — the wall opens at J-2. Witnesses to FUZZY, impounded in EnkiQDB.`)}
+}
+let last=null;
+function frame(now){
+  if(last===null)last=now;
+  const dt=Math.min(0.08,(now-last)/1000)*2.2;last=now;
+  if(RUN)step(dt);
+  if(tal)CAM.yaw+=0.006;
+  document.getElementById("clock").textContent="t = "+T.toFixed(1);
+  draw();drawH();drawG();
+  requestAnimationFrame(frame)}
+
+/* ═══ controls ═══ */
+const bind=(id,out,fn,fx)=>{document.getElementById(id).addEventListener("input",e=>{
+  const v=+e.target.value;document.getElementById(out).textContent=fx?String(v):v.toFixed(2);fn(v)})};
+bind("eta","etaOut",v=>{ETA=v;if(v>0)document.getElementById("brBtn").classList.remove("on")});
+bind("rt","rtOut",v=>RT=v,true);
+bind("ag","agOut",v=>AG=v);
+bind("tau","tauOut",v=>TAU=v,true);
+document.getElementById("runBtn").onclick=e=>{RUN=!RUN;
+  e.target.classList.toggle("on",RUN);e.target.textContent=RUN?"◈ BREATHE":"‖ HELD"};
+document.getElementById("stepBtn").onclick=()=>{if(!RUN)step(0.5)};
+document.getElementById("qwBtn").onclick=e=>{QW=!QW;
+  e.target.classList.toggle("on",QW);
+  e.target.textContent=QW?"Q witness: PRESENT":"Q witness: ABSENT";
+  J("WITNESS",QW?"second witness restored.":"second witness withdrawn — girth alone can never convict.")};
+document.getElementById("brBtn").onclick=e=>{
+  const on=!e.target.classList.contains("on");
+  e.target.classList.toggle("on",on);
+  if(on){ETA_HELD=ETA;ETA=0;document.getElementById("eta").value=0;
+    document.getElementById("etaOut").textContent="0.00";
+    J("DECREE","Brittle Decree — η=0. The ceiling drops to the floor; the membrane will not negotiate.")}
+  else{ETA=ETA_HELD??0.45;document.getElementById("eta").value=ETA;
+    document.getElementById("etaOut").textContent=ETA.toFixed(2)}};
+document.getElementById("madanuBtn").onclick=()=>{
+  AG=Math.min(AG,0.25);document.getElementById("ag").value=AG;
+  document.getElementById("agOut").textContent=AG.toFixed(2);
+  T=0;S_SERIES=[];RUPTURED=false;QUAR=false;RANG=false;PARTS=[];computeDent();
+  J("MADANU",`𒁾 decree: membrane relined (G→G₀), aging shed to a=${AG.toFixed(2)}, breach closed · witnesses released from EnkiQDB with history intact.`);
+  document.getElementById("stageVerdict").innerHTML=
+   `<span class="gold">𒁾 MADANU DECREE:</span> relined to G₀ · aging shed · witnesses released with their history intact`};
+document.getElementById("replayBtn").onclick=()=>{
+  T=0;S_SERIES=[];RUPTURED=false;QUAR=false;RANG=false;PARTS=[];computeDent();
+  RUN=true;const rb=document.getElementById("runBtn");
+  rb.classList.add("on");rb.textContent="◈ BREATHE";
+  J("COURT","⟲ replay — t=0 · same η, R_tube, a, τ — press the membrane toward its ceiling again.")};
+
+/* camera (Abūbu die) */
+cv.addEventListener("wheel",e=>{e.preventDefault();stopTal();
+  CAM.zoom=Math.min(6,Math.max(0.6,CAM.zoom*Math.exp(-e.deltaY*0.0014)))},{passive:false});
+let drag=null,moved=0;
+const px=e=>{const r=cv.getBoundingClientRect();
+  return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}};
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);
+  drag=px(e);moved=0;cv.classList.add("dragging")});
+cv.addEventListener("pointermove",e=>{if(!drag)return;const p=px(e);
+  moved+=Math.abs(p.x-drag.x)+Math.abs(p.y-drag.y);
+  CAM.yaw+=(p.x-drag.x)*0.005;
+  CAM.pitch=Math.min(1.45,Math.max(-0.2,CAM.pitch+(p.y-drag.y)*0.004));
+  drag=p;if(moved>3)stopTal()});
+cv.addEventListener("pointerup",e=>{if(drag&&moved<3){const p=px(e);pick(p.x,p.y)}
+  drag=null;cv.classList.remove("dragging")});
+cv.addEventListener("pointercancel",()=>{drag=null;cv.classList.remove("dragging")});
+cv.addEventListener("dblclick",()=>{stopTal();CAM.yaw=0.7;CAM.pitch=0.42;CAM.zoom=1});
+function stopTal(){if(tal){tal=false;document.getElementById("talBtn").classList.remove("on")}}
+document.getElementById("birdBtn").onclick=()=>{stopTal();CAM.yaw=0;CAM.pitch=1.35;CAM.zoom=0.85};
+document.getElementById("gndBtn").onclick=()=>{stopTal();CAM.yaw=-0.25;CAM.pitch=0.10;CAM.zoom=2.6};
+document.getElementById("talBtn").onclick=e=>{
+  if(REDUCED){CAM.pitch=0.5;CAM.zoom=1.6;return}
+  tal=!tal;e.target.classList.toggle("on",tal)};
+
+/* ═══ NASARU: bounce + birth-status menu ═══ */
+function pick(mx,my){for(const p of PICKS){
+  if(Math.hypot(mx-p.x,my-p.y)<p.r+4){const g=p.g;
+    if(g.born)J(g.id,`bounced — ${g.lore}.`);
+    else J(g.id,`refused non-particle: no bounce, no story — only a Refusal Record.`);
+    return}}}
+const ctxM=document.getElementById("ctx");
+cv.addEventListener("contextmenu",e=>{e.preventDefault();
+  const r=cv.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
+  for(const p of PICKS){if(Math.hypot(mx-p.x,my-p.y)<p.r+4){const g=p.g;
+    ctxM.style.display="block";ctxM.style.left=e.clientX+"px";ctxM.style.top=e.clientY+"px";
+    ctxM.innerHTML=g.born
+     ?`<div class="h">${g.id} · born (KAKI minted)</div>
+       <div class="i" data-a="j">Open StoryEngine journal</div>
+       <div class="i" data-a="c">Add to cohort</div>`
+     :`<div class="h">${g.id} · refused non-particle</div>
+       <div class="i" data-a="r">Show Refusal Record</div>`;
+    ctxM.querySelectorAll(".i").forEach(it=>it.onclick=()=>{ctxM.style.display="none";
+      if(it.dataset.a==="j")J(g.id,`journal: ${g.lore}.`);
+      if(it.dataset.a==="c")J("COHORT",`${g.id} added to the ceiling cohort.`);
+      if(it.dataset.a==="r")J("REFUSAL",`${g.id}: refused at the SUSA gate. Never born — no KAKI, no orbit, no journal.`)});
+    return}}
+  ctxM.style.display="none"});
+addEventListener("click",()=>ctxM.style.display="none");
+
+/* boot */
+if(REDUCED){RUN=false;const rb=document.getElementById("runBtn");
+  rb.classList.remove("on");rb.textContent="‖ HELD"}
+computeDent();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

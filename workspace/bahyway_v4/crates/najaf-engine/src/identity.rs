@@ -19,9 +19,9 @@ use crate::grave::GraveId;
 #[derive(Debug, Clone)]
 pub struct IdentityCandidate {
     /// Grave whose registered name matched the inscription.
-    pub grave_id:     GraveId,
+    pub grave_id: GraveId,
     /// Confidence on the QUALITY_DIVISOR=240 scale.
-    pub confidence:   u8,
+    pub confidence: u8,
     /// The registered name that produced the match.
     pub matched_name: String,
 }
@@ -56,9 +56,9 @@ fn normalize(text: &str) -> String {
 }
 
 struct Entry {
-    grave_id:    GraveId,
-    name:        String,
-    name_hash:   u32,
+    grave_id: GraveId,
+    name: String,
+    name_hash: u32,
     word_hashes: Vec<u32>,
 }
 
@@ -69,7 +69,9 @@ pub struct InscriptionMatcher {
 
 impl InscriptionMatcher {
     pub fn new() -> Self {
-        InscriptionMatcher { entries: Vec::new() }
+        InscriptionMatcher {
+            entries: Vec::new(),
+        }
     }
 
     /// Register a grave's known Arabic name for later inscription matching.
@@ -78,7 +80,12 @@ impl InscriptionMatcher {
         let name_hash = fnv1a(&name);
         let words: Vec<&str> = name.split(' ').filter(|w| !w.is_empty()).collect();
         let word_hashes = words.iter().map(|w| fnv1a(w)).collect();
-        self.entries.push(Entry { grave_id, name, name_hash, word_hashes });
+        self.entries.push(Entry {
+            grave_id,
+            name,
+            name_hash,
+            word_hashes,
+        });
     }
 
     /// Match an inscription against all registered names.
@@ -92,39 +99,45 @@ impl InscriptionMatcher {
         let query_word_hashes: Vec<u32> = query_words.iter().map(|w| fnv1a(w)).collect();
         let query_first_hash = query_word_hashes.first().copied().unwrap_or(0);
 
-        let mut results: Vec<IdentityCandidate> = self.entries.iter().filter_map(|e| {
-            let confidence = if e.name_hash == query_hash {
-                // Exact normalized match
-                240u8
-            } else if !e.word_hashes.is_empty()
-                && e.word_hashes.len() == query_word_hashes.len()
-                && e.word_hashes.iter().all(|h| query_word_hashes.contains(h))
-            {
-                // All words present, possibly reordered
-                200
-            } else if !e.word_hashes.is_empty()
-                && query_first_hash != 0
-                && e.word_hashes[0] == query_first_hash
-            {
-                // First word (given name) matches
-                150
-            } else {
-                return None;
-            };
-            Some(IdentityCandidate {
-                grave_id:     e.grave_id,
-                confidence,
-                matched_name: e.name.clone(),
+        let mut results: Vec<IdentityCandidate> = self
+            .entries
+            .iter()
+            .filter_map(|e| {
+                let confidence = if e.name_hash == query_hash {
+                    // Exact normalized match
+                    240u8
+                } else if !e.word_hashes.is_empty()
+                    && e.word_hashes.len() == query_word_hashes.len()
+                    && e.word_hashes.iter().all(|h| query_word_hashes.contains(h))
+                {
+                    // All words present, possibly reordered
+                    200
+                } else if !e.word_hashes.is_empty()
+                    && query_first_hash != 0
+                    && e.word_hashes[0] == query_first_hash
+                {
+                    // First word (given name) matches
+                    150
+                } else {
+                    return None;
+                };
+                Some(IdentityCandidate {
+                    grave_id: e.grave_id,
+                    confidence,
+                    matched_name: e.name.clone(),
+                })
             })
-        }).collect();
+            .collect();
 
-        results.sort_by(|a, b| b.confidence.cmp(&a.confidence));
+        results.sort_by_key(|r| std::cmp::Reverse(r.confidence));
         results
     }
 }
 
 impl Default for InscriptionMatcher {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

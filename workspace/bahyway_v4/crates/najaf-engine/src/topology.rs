@@ -35,7 +35,10 @@ impl SimplicialComplex {
     /// Create a new simplicial complex.
     pub fn new(vertices: Vec<Coord7D>) -> Self {
         let dimension = vertices.len().saturating_sub(1);
-        Self { vertices, dimension }
+        Self {
+            vertices,
+            dimension,
+        }
     }
 }
 
@@ -50,7 +53,7 @@ pub struct StackOrder {
 #[derive(Clone, Debug)]
 pub struct SimplexEdge {
     pub from: IdentityKaki,
-    pub to:   IdentityKaki,
+    pub to: IdentityKaki,
     /// Estimated channel width (in metres for WPD, normalised for other domains).
     pub width: f32,
 }
@@ -59,7 +62,7 @@ pub struct SimplexEdge {
 #[derive(Clone, Debug)]
 pub struct DiscoveryEntry {
     pub anchor: IdentityKaki,
-    pub coord:  Coord7D,
+    pub coord: Coord7D,
     pub edge_count: usize,
 }
 
@@ -74,12 +77,11 @@ pub struct DiscoveryEntry {
 /// sum = 1).  This is the GPU-parallel "HPS Score" inner check.
 ///
 /// O(k²) where k = number of vertices (k ≤ 8 for a 7-simplex).
-pub fn is_particle_in_complex(
-    particle_coord: &Coord7D,
-    complex: &SimplicialComplex,
-) -> bool {
+pub fn is_particle_in_complex(particle_coord: &Coord7D, complex: &SimplicialComplex) -> bool {
     let k = complex.vertices.len();
-    if k == 0 { return false; }
+    if k == 0 {
+        return false;
+    }
 
     // For a single vertex: only if the particle IS the vertex
     if k == 1 {
@@ -88,7 +90,7 @@ pub fn is_particle_in_complex(
 
     match calculate_barycentric_7d(particle_coord, &complex.vertices) {
         Some(weights) => weights.iter().all(|&w| w >= -1e-9),
-        None          => false, // degenerate simplex
+        None => false, // degenerate simplex
     }
 }
 
@@ -98,21 +100,27 @@ pub fn is_particle_in_complex(
 /// Implements the generalised algorithm for arbitrary dimension.
 fn calculate_barycentric_7d(p: &Coord7D, vertices: &[Coord7D]) -> Option<Vec<f64>> {
     let k = vertices.len();
-    if k < 2 { return None; }
+    if k < 2 {
+        return None;
+    }
 
     // Build the (k-1) × 7 edge matrix: eᵢ = vᵢ₊₁ - v₀
     let v0 = &vertices[0];
     let edges: Vec<[f64; 7]> = (1..k)
         .map(|i| {
             let mut e = [0.0f64; 7];
-            for j in 0..7 { e[j] = vertices[i][j] - v0[j]; }
+            for j in 0..7 {
+                e[j] = vertices[i][j] - v0[j];
+            }
             e
         })
         .collect();
 
     // p - v0
     let mut rhs = [0.0f64; 7];
-    for j in 0..7 { rhs[j] = p[j] - v0[j]; }
+    for j in 0..7 {
+        rhs[j] = p[j] - v0[j];
+    }
 
     // Solve for the (k-1) barycentric weights using least-squares projection
     // (Gram matrix G = E·Eᵀ, then weights = G⁻¹·(E·rhs))
@@ -169,7 +177,13 @@ pub fn resolve_stack(particles: &[IdentityKaki]) -> Vec<(IdentityKaki, StackOrde
         .into_iter()
         .enumerate()
         .map(|(depth, (ik, epoch))| {
-            (ik, StackOrder { depth: depth as u32, epoch })
+            (
+                ik,
+                StackOrder {
+                    depth: depth as u32,
+                    epoch,
+                },
+            )
         })
         .collect()
 }
@@ -190,10 +204,10 @@ pub fn resolve_stack(particles: &[IdentityKaki]) -> Vec<(IdentityKaki, StackOrde
 ///     surrounding alleyway anchor particles.
 ///
 /// Returns `None` if `neighbours` is empty.
-pub fn reconstruct_ghost(
-    neighbours: &[Coord7D],
-) -> Option<Coord7D> {
-    if neighbours.is_empty() { return None; }
+pub fn reconstruct_ghost(neighbours: &[Coord7D]) -> Option<Coord7D> {
+    if neighbours.is_empty() {
+        return None;
+    }
 
     let n = neighbours.len() as f64;
     let mut centroid = [0.0f64; 7];
@@ -222,10 +236,7 @@ pub fn reconstruct_ghost(
 ///
 /// Returns a vec of `DiscoveryEntry` — one per anchor, recording the inferred
 /// pipeline topology.  These become JournalEntry stubs in the caller.
-pub fn infer_pipeline(
-    anchors:   &[IdentityKaki],
-    alleyways: &[SimplexEdge],
-) -> Vec<DiscoveryEntry> {
+pub fn infer_pipeline(anchors: &[IdentityKaki], alleyways: &[SimplexEdge]) -> Vec<DiscoveryEntry> {
     anchors
         .iter()
         .map(|anchor| {
@@ -243,7 +254,7 @@ pub fn infer_pipeline(
             }
 
             // Divergence-free check: #in_edges should equal #out_edges for interior nodes
-            let in_edges  = alleyways.iter().filter(|e| &e.to   == anchor).count();
+            let in_edges = alleyways.iter().filter(|e| &e.to == anchor).count();
             let out_edges = alleyways.iter().filter(|e| &e.from == anchor).count();
             let _ = (in_edges as i32 - out_edges as i32).abs(); // divergence residual
 
@@ -285,10 +296,19 @@ fn gaussian_eliminate(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
         mat.swap(col, pivot);
 
         let diag = mat[col][col];
-        if diag.abs() < 1e-12 { return None; }
+        if diag.abs() < 1e-12 {
+            return None;
+        }
 
         for row in (col + 1)..n {
             let factor = mat[row][col] / diag;
+            // c reads mat[col][c] (the pivot row) while writing mat[row][c]
+            // (a different row) at the same column -- classic Gaussian
+            // elimination row reduction. Two different rows of the same
+            // Vec<Vec<f64>> can't both be borrowed through a single safe
+            // iterator, so the explicit index is kept (same class as the
+            // multi-row loops in riemannian.rs/jnf.rs fixed earlier).
+            #[allow(clippy::needless_range_loop)]
             for c in col..=n {
                 let val = mat[col][c] * factor;
                 mat[row][c] -= val;
@@ -314,7 +334,7 @@ fn gaussian_eliminate(a: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
 mod tests {
     use super::*;
     use bahyway_core::TribeId;
-    use enkidb_kaki::{KakiMinter, KakiRole, IdentityKaki as IK};
+    use enkidb_kaki::{IdentityKaki as IK, KakiMinter, KakiRole};
 
     fn make_kaki(seed: u32) -> IdentityKaki {
         let m = KakiMinter::new(TribeId::from_u16(0x0001));
@@ -341,7 +361,7 @@ mod tests {
         let v1: Coord7D = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let v2: Coord7D = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let c = SimplicialComplex::new(vec![v0, v1, v2]);
-        let centroid: Coord7D = [1.0/3.0, 1.0/3.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let centroid: Coord7D = [1.0 / 3.0, 1.0 / 3.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         assert!(is_particle_in_complex(&centroid, &c));
     }
 
@@ -377,7 +397,9 @@ mod tests {
         let b: Coord7D = [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let ghost = reconstruct_ghost(&[a, b]).unwrap();
         assert!((ghost[0] - 1.0).abs() < 1e-9);
-        for i in 1..7 { assert!(ghost[i].abs() < 1e-9); }
+        for i in 1..7 {
+            assert!(ghost[i].abs() < 1e-9);
+        }
     }
 
     #[test]
@@ -391,9 +413,21 @@ mod tests {
     fn infer_pipeline_returns_one_entry_per_anchor() {
         let anchors: Vec<IdentityKaki> = (0..4).map(|i| make_kaki(i * 111)).collect();
         let edges = vec![
-            SimplexEdge { from: anchors[0], to: anchors[1], width: 1.0 },
-            SimplexEdge { from: anchors[1], to: anchors[2], width: 1.0 },
-            SimplexEdge { from: anchors[2], to: anchors[3], width: 1.0 },
+            SimplexEdge {
+                from: anchors[0],
+                to: anchors[1],
+                width: 1.0,
+            },
+            SimplexEdge {
+                from: anchors[1],
+                to: anchors[2],
+                width: 1.0,
+            },
+            SimplexEdge {
+                from: anchors[2],
+                to: anchors[3],
+                width: 1.0,
+            },
         ];
         let entries = infer_pipeline(&anchors, &edges);
         assert_eq!(entries.len(), 4);
@@ -402,9 +436,11 @@ mod tests {
     #[test]
     fn anchor_with_edges_has_positive_edge_count() {
         let anchors: Vec<IdentityKaki> = (0..2).map(|i| make_kaki(i * 777)).collect();
-        let edges = vec![
-            SimplexEdge { from: anchors[0], to: anchors[1], width: 2.5 },
-        ];
+        let edges = vec![SimplexEdge {
+            from: anchors[0],
+            to: anchors[1],
+            width: 2.5,
+        }];
         let entries = infer_pipeline(&anchors, &edges);
         assert_eq!(entries[0].edge_count, 1);
         assert_eq!(entries[1].edge_count, 1);

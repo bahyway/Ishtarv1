@@ -46,8 +46,12 @@ impl SovereignHash for Sha3Digest512 {
         use sha3::{Digest, Sha3_512};
         Sha3_512::digest(data).to_vec()
     }
-    fn output_len(&self) -> usize { 64 }
-    fn algorithm(&self) -> HashAlgorithm { HashAlgorithm::SovereignDigest512 }
+    fn output_len(&self) -> usize {
+        64
+    }
+    fn algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::SovereignDigest512
+    }
     fn keyed_digest(&self, key: &[u8], data: &[u8]) -> KupruResult<Vec<u8>> {
         use hmac::{Hmac, Mac};
         use sha3::Sha3_512;
@@ -64,8 +68,12 @@ impl SovereignHash for Sha3Digest256 {
         use sha3::{Digest, Sha3_256};
         Sha3_256::digest(data).to_vec()
     }
-    fn output_len(&self) -> usize { 32 }
-    fn algorithm(&self) -> HashAlgorithm { HashAlgorithm::SovereignDigest256 }
+    fn output_len(&self) -> usize {
+        32
+    }
+    fn algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::SovereignDigest256
+    }
     fn keyed_digest(&self, key: &[u8], data: &[u8]) -> KupruResult<Vec<u8>> {
         use hmac::{Hmac, Mac};
         use sha3::Sha3_256;

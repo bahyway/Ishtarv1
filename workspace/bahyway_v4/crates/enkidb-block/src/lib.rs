@@ -12,7 +12,7 @@ pub mod orbit_chunk;
 
 pub use header::BlockHeader;
 pub use kaki_block::KakiNucleusBlock;
-pub use orbit_chunk::{OrbitChunkHeader, OrbitChunk};
+pub use orbit_chunk::{OrbitChunk, OrbitChunkHeader};
 
 /// 64 MB — the canonical block size from §9.3.
 pub const BLOCK_SIZE_BYTES: u32 = 64 * 1024 * 1024;

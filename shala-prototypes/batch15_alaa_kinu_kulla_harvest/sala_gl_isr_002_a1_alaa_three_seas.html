@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · GL-ISR-002-A1 · The Alaa Doctrine — Court of Three Seas</title>
+<style>
+  :root{
+    --basalt:#14120f; --tablet:#1f1b16; --gold:#c9a227; --lapis:#2e5d8c;
+    --copper:#b0642f; --alarm:#c23b2a; --bone:#e8e0cf;
+    --tablet-edge:#3a332a; --dim:#8f8672; --green:#7fbf5f; --violet:#a58cc0;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--basalt); color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif; overflow:hidden;}
+  #crumbs{padding:10px 16px 0; font-size:12px; color:var(--dim); letter-spacing:.08em;}
+  #crumbs b{color:var(--gold); font-weight:normal;}
+  #lede{padding:2px 16px 8px; font-size:14.5px;}
+  #banner{background:var(--alarm); color:var(--bone); text-align:center;
+    font-size:11px; letter-spacing:.35em; padding:3px 0; font-family:monospace;}
+  #grid{display:grid; grid-template-columns:1fr 320px; gap:10px;
+    padding:10px 16px 16px; height:calc(100% - 92px);}
+  .panel{background:var(--tablet); border:1px solid var(--tablet-edge);
+    border-radius:6px; position:relative; overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block; width:100%; height:100%;}
+  #deck{position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:5;}
+  #deck button{width:34px; height:34px; background:var(--basalt); color:var(--gold);
+    border:1px solid var(--tablet-edge); border-radius:4px; font-size:16px; cursor:pointer;}
+  #acts{position:absolute; bottom:44px; left:10px; display:flex; gap:6px; flex-wrap:wrap; z-index:5;}
+  #acts button{background:var(--basalt); color:var(--copper); font-family:inherit;
+    border:1px solid var(--copper); border-radius:4px; padding:6px 11px;
+    font-size:12px; cursor:pointer;}
+  #acts button:hover{color:var(--gold); border-color:var(--gold);}
+  #acts button.done{color:var(--green); border-color:var(--green);}
+  #acts button#aAlaa{border-color:var(--gold); color:var(--gold);}
+  #lawtags{position:absolute; bottom:10px; left:10px; display:flex; gap:6px;
+    flex-wrap:wrap; z-index:5;}
+  .lawtag{font-family:monospace; font-size:10px; color:var(--basalt);
+    background:var(--gold); padding:2px 7px; border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis); color:var(--bone);}
+  #side{display:flex; flex-direction:column;}
+  #side h2{font-size:12px; letter-spacing:.25em; color:var(--gold);
+    padding:10px 12px 6px; border-bottom:1px solid var(--tablet-edge);}
+  #journal{flex:1; overflow-y:auto; padding:10px 12px; font-size:12.5px; line-height:1.5;}
+  .entry{margin-bottom:10px; border-left:2px solid var(--copper); padding-left:8px;}
+  .entry .t{color:var(--dim); font-family:monospace; font-size:10px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Alaa Court ▸ <b>GL-ISR-002-A1 · علاء — The Court of Three Seas</b></div>
+<div id="lede"><i>"The wave changes; the law does not."</i> Three seas, one law: the ocean troubles the ship, the heartbeat troubles the tissue, the traffic troubles the ground — and in each, the hidden form is carved by its own asymmetric answer.</div>
+<div id="banner">ŠALA REHEARSAL ONLY — THE NOISE IS READ, NEVER SIMULATED — SOVEREIGN RENDER IS EGUI/WGPU</div>
+
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="deck">
+      <button id="bHome" title="Reset view">⌖</button>
+      <button id="bZi" title="Zoom in">＋</button>
+      <button id="bZo" title="Zoom out">－</button>
+    </div>
+    <div id="acts">
+      <button id="aSky">Ⅰ · LET THE SEA TESTIFY</button>
+      <button id="aBody">Ⅱ · LET THE HEART TESTIFY</button>
+      <button id="aGnd">Ⅲ · LET THE TRAFFIC TESTIFY</button>
+      <button id="aAlaa">⟰ PROCLAIM علاء</button>
+    </div>
+    <div id="lawtags">
+      <span class="lawtag">GL-ISR-002-A1</span>
+      <span class="lawtag lapis">PB-ISR-003</span>
+      <span class="lawtag lapis">BODY COURT · NANSHE+ŠĪBU</span>
+      <span class="lawtag lapis">GROUND COURT · PALGU+ENBILULU+NIMRUD</span>
+      <span class="lawtag">CLINICIAN CLAUSE</span>
+      <span class="lawtag">DIGNITY CLAUSE</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>STORYENGINE JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+const rnd=mulberry32(0x414C4141); /* "ALAA" */
+
+const cv=document.getElementById('cv'), g=cv.getContext('2d');
+const stage=document.getElementById('stage');
+function fit(){cv.width=stage.clientWidth; cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit); fit();
+
+/* view: pan+zoom with gentle living sway (curved space, never flat) */
+let view={x:0,y:0,z:1}, drag=null;
+document.getElementById('bHome').onclick=()=>view={x:0,y:0,z:1};
+document.getElementById('bZi').onclick=()=>view.z=Math.min(2.4,view.z*1.15);
+document.getElementById('bZo').onclick=()=>view.z=Math.max(.5,view.z/1.15);
+stage.addEventListener('wheel',e=>{e.preventDefault();
+  view.z=Math.min(2.4,Math.max(.5,view.z*(e.deltaY<0?1.08:0.92)));},{passive:false});
+stage.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mousemove',e=>{if(!drag)return;
+  view.x+=e.clientX-drag.x; view.y+=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mouseup',()=>drag=null);
+
+const jEl=document.getElementById('journal');
+function journal(t){const d=document.createElement('div'); d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;
+  jEl.prepend(d);}
+
+const st={sky:false,body:false,gnd:false,alaa:false,skyC:0,bodyC:0,gndC:0};
+const bS=document.getElementById('aSky'), bB=document.getElementById('aBody'),
+      bG=document.getElementById('aGnd'), bA=document.getElementById('aAlaa');
+bS.onclick=()=>{if(st.sky)return; st.sky=true; bS.classList.add('done');
+  journal('Ⅰ — SKY. The ocean\'s multi-frequency swell breaks the ship\'s symmetric spin; harmonic, visibility, and amplitude witnesses agree; the hull membrane carves in green, the unseen stern honestly dashed. Medium admitted by GL-ISR-002 itself.');};
+bB.onclick=()=>{if(st.body)return; st.body=true; bB.classList.add('done');
+  journal('Ⅱ — BODY COURT (Nanshe + Šību). No source is fired: the heartbeat itself is the sea. The stiff inclusion answers the pulse asymmetrically; its membrane carves in violet with stiffness in EAV, and Nanshe\'s Event KAKIs stand ready to narrate its life. <b>Clinician Clause:</b> this is a witness report with floors attached — a physician\'s judgment is a mandatory station, never optional. Below the floor: WITHHELD.');};
+bG.onclick=()=>{if(st.gnd)return; st.gnd=true; bG.classList.add('done');
+  journal('Ⅲ — GROUND COURT (Palgu + Enbilulu + Nimrud). The traffic\'s tremor is read, never simulated — ambient-noise interferometry practiced under law. The buried void answers asymmetrically; its membrane carves in copper, the never-witnessed floor dashed. <b>Dignity Clause:</b> in post-conflict ground the lost are Unnamed Surfaces — held honestly, guessed never; the court serves the families first.');};
+bA.onclick=()=>{
+  if(!(st.sky&&st.body&&st.gnd)){journal('The height is proclaimed only over all three seas — let each testify first.'); return;}
+  if(st.alaa)return; st.alaa=true;
+  journal('⟰ <b style="color:var(--gold)">علاء — THE HEIGHT IS PROCLAIMED.</b> One quadruple template, three declared media, one invariant honesty: WITHHELD-FLAT, Unnamed Surface, never-averaged — in every sea without exception. From one tablet the same law watches ships, finds tumors in the living, and seeks the lost beneath the earth. <i>The wave changes; the law does not.</i> 𒁾 سعدون · علاء');};
+
+/* helpers */
+function W(){return cv.width;} function H(){return cv.height;}
+function sway(t,k){return Math.sin(t*0.4+k)*4;}
+function scene(t,i){ /* returns scene rect */
+  const w=W()/3, x0=i*w;
+  return {x:x0+18, y:60, w:w-36, h:H()-140};
+}
+function lattice(cx,cy,rx,ry,prog,col,unStart,unEnd,t){
+  /* carve an elliptical membrane lattice; angular sector [unStart,unEnd] stays UNNAMED */
+  const NR=4, NA=18;
+  for(let ir=1;ir<=NR;ir++){
+    const fr=ir/NR;
+    for(let ia=0;ia<NA;ia++){
+      const a0=ia/NA*2*Math.PI, a1=(ia+1)/NA*2*Math.PI;
+      const un=(a0>unStart&&a0<unEnd);
+      const reveal=(ia/NA+ (ir-1))/NR;
+      if(!un && reveal>prog) continue;
+      g.beginPath();
+      g.ellipse(cx,cy,rx*fr,ry*fr, 0, a0, a1);
+      if(un){g.strokeStyle='rgba(194,59,42,0.6)'; g.setLineDash([3,3]);
+        g.lineWidth=1; g.stroke(); g.setLineDash([]);}
+      else{g.strokeStyle=col; g.globalAlpha=0.5; g.lineWidth=1; g.stroke(); g.globalAlpha=1;}
+    }
+  }
+}
+function label(x,y,txt,col){g.fillStyle=col||'rgba(232,224,207,.7)';
+  g.font='10px monospace'; g.textAlign='center'; g.fillText(txt,x,y);}
+
+let t0=performance.now();
+function frame(now){
+  const t=now/1000;
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle='#14120f'; g.fillRect(0,0,W(),H());
+  g.setTransform(view.z,0,0,view.z,view.x+W()*(1-view.z)/2,view.y+H()*(1-view.z)/2);
+
+  /* ============ SCENE I : SKY ============ */
+  {const s=scene(t,0), cx=s.x+s.w/2, cy=s.y+s.h*0.45+sway(t,0);
+   label(cx,s.y-6,'Ⅰ · SKY — the ocean is the sea','#c9a227');
+   /* swell */
+   for(let j=0;j<5;j++){
+     g.beginPath();
+     for(let i=0;i<=40;i++){
+       const px=s.x+i/40*s.w;
+       const amp=st.sky? (7+3*Math.sin(j)) : 3;
+       const py=cy+40+j*16+amp*Math.sin(t*(st.sky?1.5:0.7)+i*0.5+j*1.3);
+       i?g.lineTo(px,py):g.moveTo(px,py);
+     }
+     g.strokeStyle='rgba(46,93,140,0.35)'; g.lineWidth=1; g.stroke();
+   }
+   /* ship hull */
+   const roll=st.sky?0.12*Math.sin(t*1.5):0;
+   g.save(); g.translate(cx,cy+18); g.rotate(roll);
+   g.beginPath(); g.ellipse(0,0,70,20,0,0,2*Math.PI);
+   g.strokeStyle='#c9a227'; g.lineWidth=1.4; g.stroke();
+   for(let k=0;k<8;k++){const a=rnd; }
+   g.restore();
+   if(st.sky){st.skyC=Math.min(1,st.skyC+0.004);
+     g.save(); g.translate(cx,cy+18); g.rotate(roll);
+     lattice(0,0,74,24,st.skyC,'#7fbf5f', -0.5, 0.5, t); g.restore();
+     if(st.skyC>0.3)label(cx+80,cy-14,'UNNAMED','#c23b2a');}
+  }
+  /* ============ SCENE II : BODY ============ */
+  {const s=scene(t,1), cx=s.x+s.w/2, cy=s.y+s.h*0.45+sway(t,2);
+   label(cx,s.y-6,'Ⅱ · BODY — the heartbeat is the sea','#a58cc0');
+   /* torso */
+   g.beginPath(); g.ellipse(cx,cy+20,60,95,0,0,2*Math.PI);
+   g.strokeStyle='rgba(232,224,207,0.5)'; g.lineWidth=1.4; g.stroke();
+   /* heart + pulse rings */
+   const beat=Math.pow(Math.max(0,Math.sin(t*3.2)),6);
+   g.beginPath(); g.arc(cx-14,cy-18,5+3*beat,0,2*Math.PI);
+   g.fillStyle='#c23b2a'; g.fill();
+   for(let r=0;r<3;r++){
+     const rr=((t*40+r*30)%(st.body?95:55));
+     g.beginPath(); g.arc(cx-14,cy-18,rr,0,2*Math.PI);
+     g.strokeStyle='rgba(194,59,42,'+(0.3*(1-rr/95)).toFixed(2)+')'; g.lineWidth=1; g.stroke();
+   }
+   /* lesion */
+   g.beginPath(); g.ellipse(cx+16,cy+42,12,9,0.5,0,2*Math.PI);
+   g.fillStyle=st.body?'rgba(165,140,192,0.35)':'rgba(143,134,114,0.2)'; g.fill();
+   g.strokeStyle=st.body?'#a58cc0':'rgba(143,134,114,0.5)'; g.lineWidth=1; g.stroke();
+   if(st.body){st.bodyC=Math.min(1,st.bodyC+0.004);
+     lattice(cx+16,cy+42,26,20,st.bodyC,'#a58cc0', 3.6, 4.7, t);
+     if(st.bodyC>0.3)label(cx+16,cy+80,'stiffness → EAV · below floor: WITHHELD','#a58cc0');}
+  }
+  /* ============ SCENE III : GROUND ============ */
+  {const s=scene(t,2), cx=s.x+s.w/2, cy=s.y+s.h*0.35+sway(t,4);
+   label(cx,s.y-6,'Ⅲ · GROUND — the traffic is the sea','#b0642f');
+   /* street */
+   g.beginPath(); g.moveTo(s.x,cy); g.lineTo(s.x+s.w,cy);
+   g.strokeStyle='rgba(232,224,207,0.6)'; g.lineWidth=2; g.stroke();
+   /* traffic dots + ripples */
+   for(let k=0;k<3;k++){
+     const px=s.x+((t*50+k*130)%(s.w));
+     g.fillStyle='#e8e0cf'; g.fillRect(px-5,cy-8,10,6);
+     if(st.gnd){for(let r=1;r<=2;r++){
+       const rr=((t*35+k*40+r*25)%80);
+       g.beginPath(); g.arc(px,cy,rr,0,Math.PI);
+       g.strokeStyle='rgba(46,93,140,'+(0.35*(1-rr/80)).toFixed(2)+')'; g.lineWidth=1; g.stroke();}}
+   }
+   /* soil hatch */
+   for(let j=1;j<6;j++){
+     g.beginPath();
+     for(let i=0;i<=30;i++){
+       const px=s.x+i/30*s.w;
+       const py=cy+j*22+3*Math.sin(t*0.5+i*0.6+j);
+       i?g.lineTo(px,py):g.moveTo(px,py);
+     }
+     g.strokeStyle='rgba(176,100,47,0.22)'; g.lineWidth=1; g.stroke();
+   }
+   /* buried void */
+   g.beginPath(); g.ellipse(cx+10,cy+72,26,15,0,0,2*Math.PI);
+   g.fillStyle='rgba(20,18,15,0.9)'; g.fill();
+   g.strokeStyle=st.gnd?'#b0642f':'rgba(143,134,114,0.5)'; g.lineWidth=1; g.stroke();
+   if(st.gnd){st.gndC=Math.min(1,st.gndC+0.004);
+     lattice(cx+10,cy+72,42,26,st.gndC,'#b0642f', 1.2, 2.1, t);
+     if(st.gndC>0.3)label(cx+10,cy+120,'UNNAMED below — held honestly, guessed never','#c23b2a');}
+  }
+  /* ============ THE HEIGHT ============ */
+  if(st.alaa){
+    g.beginPath();
+    g.moveTo(W()*0.12,H()*0.16);
+    g.quadraticCurveTo(W()*0.5,H()*0.02,W()*0.88,H()*0.16);
+    g.strokeStyle='rgba(201,162,39,'+(0.6+0.3*Math.sin(t*2)).toFixed(2)+')';
+    g.lineWidth=2; g.stroke();
+    g.fillStyle='#c9a227'; g.font='16px Georgia'; g.textAlign='center';
+    g.fillText('علاء — the law above the seas', W()*0.5, H()*0.09);
+    g.font='10px monospace';
+    g.fillText('one quadruple template · per-medium floors · invariant honesty', W()*0.5, H()*0.125);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('THE COURT OF THREE SEAS opens. A ship on calm water, a body at rest, a street above a hidden void. Let each sea testify in any order — the height is proclaimed only over all three. <i>The noise is read, never simulated.</i>');
+</script>
+</body>
+</html>

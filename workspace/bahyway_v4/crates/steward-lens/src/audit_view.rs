@@ -22,13 +22,16 @@ pub struct AuditView {
 
 impl AuditView {
     pub fn new(snapshot_orbital: u64) -> Self {
-        Self { snapshot_orbital, ..Default::default() }
+        Self {
+            snapshot_orbital,
+            ..Default::default()
+        }
     }
 
     /// Ingest a new alert into the view.
     pub fn push(&mut self, alert: StewardAlert) {
         let sev = alert.severity;
-        if self.peak_severity.map_or(true, |p| sev > p) {
+        if self.peak_severity.is_none_or(|p| sev > p) {
             self.peak_severity = Some(sev);
         }
         if alert.requires_satamu {
@@ -49,7 +52,10 @@ impl AuditView {
 
     /// Count of actionable (KAKKAB+) alerts.
     pub fn actionable_count(&self) -> usize {
-        self.alerts.iter().filter(|a| a.severity.is_actionable()).count()
+        self.alerts
+            .iter()
+            .filter(|a| a.severity.is_actionable())
+            .count()
     }
 }
 

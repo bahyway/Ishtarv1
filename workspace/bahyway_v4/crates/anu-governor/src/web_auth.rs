@@ -93,8 +93,13 @@ impl std::fmt::Display for LoginError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MalformedVault(m) => write!(f, "malformed vault file: {m}"),
-            Self::WrongPassphraseOrCorrupted => write!(f, "wrong passphrase, or the vault file is corrupted"),
-            Self::NoValidPassport => write!(f, "vault opened, but no passport inside it has a valid, unexpired seal"),
+            Self::WrongPassphraseOrCorrupted => {
+                write!(f, "wrong passphrase, or the vault file is corrupted")
+            }
+            Self::NoValidPassport => write!(
+                f,
+                "vault opened, but no passport inside it has a valid, unexpired seal"
+            ),
         }
     }
 }
@@ -105,9 +110,14 @@ impl std::fmt::Display for LoginError {
 /// (privilege 7) entry in the same vault as a gardener (privilege 1) entry
 /// logs the Architect in, because that's what's cryptographically proven,
 /// not because of a UI label.
-pub fn open_vault_and_authenticate(vault_bytes: &[u8], passphrase: &[u8]) -> Result<AuthedIdentity, LoginError> {
+pub fn open_vault_and_authenticate(
+    vault_bytes: &[u8],
+    passphrase: &[u8],
+) -> Result<AuthedIdentity, LoginError> {
     if vault_bytes.len() < SALT_LEN + 1 + 12 + 16 {
-        return Err(LoginError::MalformedVault("file too short to contain a salt + sealed blob".into()));
+        return Err(LoginError::MalformedVault(
+            "file too short to contain a salt + sealed blob".into(),
+        ));
     }
     let (salt_bytes, sealed) = vault_bytes.split_at(SALT_LEN);
     let mut salt = [0u8; SALT_LEN];
@@ -116,16 +126,23 @@ pub fn open_vault_and_authenticate(vault_bytes: &[u8], passphrase: &[u8]) -> Res
     let root = AkkadianRoot::from_phrase(VAULT_ROOT_PHRASE)
         .map_err(|e| LoginError::MalformedVault(e.to_string()))?;
     let kdf = SargonKdf::with_salt(root, salt);
-    let key = kdf.derive_key(passphrase).map_err(|e| LoginError::MalformedVault(e.to_string()))?;
-    let cipher = AkkadianCipher::from_key_bytes(&key).map_err(|e| LoginError::MalformedVault(e.to_string()))?;
-    let plaintext = cipher.open(sealed, VAULT_AAD).map_err(|_| LoginError::WrongPassphraseOrCorrupted)?;
+    let key = kdf
+        .derive_key(passphrase)
+        .map_err(|e| LoginError::MalformedVault(e.to_string()))?;
+    let cipher = AkkadianCipher::from_key_bytes(&key)
+        .map_err(|e| LoginError::MalformedVault(e.to_string()))?;
+    let plaintext = cipher
+        .open(sealed, VAULT_AAD)
+        .map_err(|_| LoginError::WrongPassphraseOrCorrupted)?;
 
-    let entries: Vec<VaultEntry> =
-        serde_json::from_slice(&plaintext).map_err(|e| LoginError::MalformedVault(format!("not a valid vault entry list: {e}")))?;
+    let entries: Vec<VaultEntry> = serde_json::from_slice(&plaintext)
+        .map_err(|e| LoginError::MalformedVault(format!("not a valid vault entry list: {e}")))?;
 
     let mut best: Option<AuthedIdentity> = None;
     for entry in &entries {
-        let Ok(passport) = serde_json::from_str::<SargonPassport>(&entry.passport_json) else { continue };
+        let Ok(passport) = serde_json::from_str::<SargonPassport>(&entry.passport_json) else {
+            continue;
+        };
         if passport.verify_seal().is_err() {
             continue;
         }
@@ -144,7 +161,10 @@ pub fn open_vault_and_authenticate(vault_bytes: &[u8], passphrase: &[u8]) -> Res
 }
 
 fn unix_now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 struct Session {
@@ -173,7 +193,10 @@ impl SessionStore {
         use rand::RngCore;
         let mut key = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut key);
-        Self { signing_key: key, sessions: Mutex::new(HashMap::new()) }
+        Self {
+            signing_key: key,
+            sessions: Mutex::new(HashMap::new()),
+        }
     }
 
     fn sign(&self, id_hex: &str) -> String {
@@ -193,10 +216,18 @@ impl SessionStore {
         let id_hex = hex::encode(id);
         let mac_hex = self.sign(&id_hex);
 
-        let ttl_capped_expiry = unix_now().saturating_add(SESSION_TTL_SECS).min(identity.passport_expires_at);
+        let ttl_capped_expiry = unix_now()
+            .saturating_add(SESSION_TTL_SECS)
+            .min(identity.passport_expires_at);
         let mut sessions = self.sessions.lock().unwrap();
         prune_expired(&mut sessions);
-        sessions.insert(id_hex.clone(), Session { identity, expires_at_unix: ttl_capped_expiry });
+        sessions.insert(
+            id_hex.clone(),
+            Session {
+                identity,
+                expires_at_unix: ttl_capped_expiry,
+            },
+        );
         format!("{id_hex}.{mac_hex}")
     }
 
@@ -258,7 +289,9 @@ pub struct LoginDefender {
 
 impl LoginDefender {
     pub fn new() -> Self {
-        Self { attempts: Mutex::new(HashMap::new()) }
+        Self {
+            attempts: Mutex::new(HashMap::new()),
+        }
     }
 
     /// `Ok(())` if this IP may attempt a login right now; `Err(remaining)`
@@ -279,8 +312,12 @@ impl LoginDefender {
     pub fn record_failure(&self, ip: IpAddr) {
         let now = Instant::now();
         let mut attempts = self.attempts.lock().unwrap();
-        let rec = attempts.entry(ip).or_insert_with(|| AttemptRecord { failures: vec![], locked_until: None });
-        rec.failures.retain(|t| now.duration_since(*t) < FAILURE_WINDOW);
+        let rec = attempts.entry(ip).or_insert_with(|| AttemptRecord {
+            failures: vec![],
+            locked_until: None,
+        });
+        rec.failures
+            .retain(|t| now.duration_since(*t) < FAILURE_WINDOW);
         rec.failures.push(now);
         if rec.failures.len() as u32 >= FAILURE_THRESHOLD {
             rec.locked_until = Some(now + LOCKOUT_DURATION);
@@ -338,21 +375,32 @@ mod tests {
             realm: realm.into(),
             mudu_score: 5,
         };
-        let istar = if privilege_level >= 7 { IshtarLayer::architect(realm) } else { IshtarLayer::gardener(realm) };
+        let istar = if privilege_level >= 7 {
+            IshtarLayer::architect(realm)
+        } else {
+            IshtarLayer::gardener(realm)
+        };
         SargonPassport::issue(naru, istar, [1u8; 16], &keypair, &[0x42u8; 32]).unwrap()
     }
 
     #[test]
     fn real_vault_round_trip_with_correct_passphrase_authenticates() {
-        let vault = build_vault(b"correct horse battery staple", &[(issue(1, "bahyway"), "gardener")]);
-        let identity = open_vault_and_authenticate(&vault, b"correct horse battery staple").unwrap();
+        let vault = build_vault(
+            b"correct horse battery staple",
+            &[(issue(1, "bahyway"), "gardener")],
+        );
+        let identity =
+            open_vault_and_authenticate(&vault, b"correct horse battery staple").unwrap();
         assert_eq!(identity.privilege_level, 1);
         assert!(!identity.is_architect());
     }
 
     #[test]
     fn wrong_passphrase_is_rejected() {
-        let vault = build_vault(b"correct horse battery staple", &[(issue(1, "bahyway"), "gardener")]);
+        let vault = build_vault(
+            b"correct horse battery staple",
+            &[(issue(1, "bahyway"), "gardener")],
+        );
         let err = open_vault_and_authenticate(&vault, b"guess").unwrap_err();
         assert!(matches!(err, LoginError::WrongPassphraseOrCorrupted));
     }
@@ -361,7 +409,10 @@ mod tests {
     fn vault_with_an_architect_passport_authenticates_as_architect() {
         let vault = build_vault(
             b"my-vault-pass",
-            &[(issue(1, "bahyway"), "gardener"), (issue(7, "bahyway"), "architect")],
+            &[
+                (issue(1, "bahyway"), "gardener"),
+                (issue(7, "bahyway"), "architect"),
+            ],
         );
         let identity = open_vault_and_authenticate(&vault, b"my-vault-pass").unwrap();
         assert_eq!(identity.privilege_level, 7);
@@ -401,7 +452,9 @@ mod tests {
             passport_expires_at: unix_now() + 3600,
         };
         let cookie = store.mint(identity);
-        let verified = store.verify(&cookie).expect("freshly minted session must verify");
+        let verified = store
+            .verify(&cookie)
+            .expect("freshly minted session must verify");
         assert_eq!(verified.privilege_level, 7);
     }
 
@@ -418,7 +471,10 @@ mod tests {
         let cookie = store.mint(identity);
         let (id, _mac) = cookie.split_once('.').unwrap();
         let forged = format!("{id}.{}", "0".repeat(64));
-        assert!(store.verify(&forged).is_none(), "a forged HMAC must not verify");
+        assert!(
+            store.verify(&forged).is_none(),
+            "a forged HMAC must not verify"
+        );
     }
 
     #[test]
@@ -453,7 +509,10 @@ mod tests {
             let sessions = store.sessions.lock().unwrap();
             let (id, _) = cookie.split_once('.').unwrap();
             let s = sessions.get(id).unwrap();
-            assert!(s.expires_at_unix <= unix_now() + 5, "session must not outlive the passport it came from");
+            assert!(
+                s.expires_at_unix <= unix_now() + 5,
+                "session must not outlive the passport it came from"
+            );
         }
     }
 
@@ -462,10 +521,16 @@ mod tests {
         let defender = LoginDefender::new();
         let ip: IpAddr = "127.0.0.1".parse().unwrap();
         for _ in 0..FAILURE_THRESHOLD {
-            assert!(defender.check(ip).is_ok(), "must not be locked before the threshold");
+            assert!(
+                defender.check(ip).is_ok(),
+                "must not be locked before the threshold"
+            );
             defender.record_failure(ip);
         }
-        assert!(defender.check(ip).is_err(), "must be locked out at the threshold");
+        assert!(
+            defender.check(ip).is_err(),
+            "must be locked out at the threshold"
+        );
 
         // A distinct IP is never affected by another IP's failures.
         let other: IpAddr = "10.0.0.5".parse().unwrap();
@@ -474,6 +539,9 @@ mod tests {
         // record_success clears the lockout entirely (e.g. an operator
         // manually resets after confirming the real Architect).
         defender.record_success(ip);
-        assert!(defender.check(ip).is_ok(), "record_success must clear the lockout");
+        assert!(
+            defender.check(ip).is_ok(),
+            "record_success must clear the lockout"
+        );
     }
 }

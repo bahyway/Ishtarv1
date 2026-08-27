@@ -10,12 +10,12 @@
 
   vars:
     forge:    "/home/bahyway/Forge/bahyway_v4"
-    eridu_rs: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/eridu_layout.rs"
+    eridu_rs: "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/uros_layout.rs"
     app_rs:   "/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/app.rs"
 
   tasks:
 
-    - name: "Backup eridu_layout.rs"
+    - name: "Backup uros_layout.rs"
       ansible.builtin.copy:
         src:        "{{ eridu_rs }}"
         dest:       "{{ eridu_rs }}.bak16"
@@ -23,13 +23,13 @@
         mode:       "0644"
 
     # Use Python to do precise surgical edits on the Rust source
-    - name: "Fix eridu_layout.rs with Python script"
+    - name: "Fix uros_layout.rs with Python script"
       ansible.builtin.shell:
         cmd: |
           python3 << 'PYEOF'
           import re
 
-          with open('/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/eridu_layout.rs', 'r') as f:
+          with open('/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/uros_layout.rs', 'r') as f:
               src = f.read()
 
           # FIX 1: Remove extra params from draw() signature
@@ -120,10 +120,10 @@
               )
               print("FIX 2: particles::draw call patched via regex")
 
-          with open('/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/eridu_layout.rs', 'w') as f:
+          with open('/home/bahyway/Forge/bahyway_v4/crates/dubsar-visualizer/src/panels/uros_layout.rs', 'w') as f:
               f.write(src)
 
-          print("eridu_layout.rs written successfully")
+          print("uros_layout.rs written successfully")
           print(f"File size: {len(src)} chars")
           PYEOF
       register: py_result
@@ -134,7 +134,7 @@
         msg: "{{ py_result.stdout_lines }}"
 
     # Fix app.rs: restore simple 5-param call
-    - name: "Fix app.rs EriduOS match arm"
+    - name: "Fix app.rs UrOS match arm"
       ansible.builtin.shell:
         cmd: |
           python3 << 'PYEOF'
@@ -144,7 +144,7 @@
           # Remove the journal/identities/snapshots from the call if present
           import re
           src = re.sub(
-              r'(ActivePanel::EriduOS => crate::panels::eridu_layout::draw\(\s*ui, &mut self\.eridu, &self\.bus,\s*&self\.particles, self\.tick,)\s*&self\.journal, &self\.identities, &self\.snapshots,(\s*\),)',
+              r'(ActivePanel::UrOS => crate::panels::uros_layout::draw\(\s*ui, &mut self\.eridu, &self\.bus,\s*&self\.particles, self\.tick,)\s*&self\.journal, &self\.identities, &self\.snapshots,(\s*\),)',
               r'\1\2',
               src
           )
@@ -156,7 +156,7 @@
       register: py_app
       changed_when: true
 
-    - name: "Verify no journal in eridu_layout call sites"
+    - name: "Verify no journal in uros_layout call sites"
       ansible.builtin.command:
         cmd: grep -n "journal\|identities\|snapshots" "{{ eridu_rs }}"
       register: grep_check

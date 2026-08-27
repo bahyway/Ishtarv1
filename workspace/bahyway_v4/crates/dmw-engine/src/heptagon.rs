@@ -30,19 +30,19 @@ use crate::journey::{JourneyLevelId, SevenLevelJourney};
 #[derive(Debug, Clone, Copy)]
 pub struct HeptaWeights {
     /// ME  — Intent: business priority (0=background, 1=mission-critical).
-    pub intent:     f32,
+    pub intent: f32,
     /// GU  — Mass: normalised row volume (0=tiny, 1=large set).
-    pub mass:       f32,
+    pub mass: f32,
     /// SAG — Gravity: predicate selectivity (0=full scan, 1=point seek).
-    pub gravity:    f32,
+    pub gravity: f32,
     /// A   — Viscosity: IO friction from join complexity (0=smooth, 1=stuck).
-    pub viscosity:  f32,
+    pub viscosity: f32,
     /// IZI — Heat: CPU row-by-row pressure (0=idle, 1=row-by-row overload).
-    pub heat:       f32,
+    pub heat: f32,
     /// UD  — Volatility: plan cache decay rate (0=stable, 1=fully volatile).
     pub volatility: f32,
     /// URU — Strength: index alignment / tribe cohesion (0=no index, 1=perfect).
-    pub strength:   f32,
+    pub strength: f32,
 }
 
 impl HeptaWeights {
@@ -51,13 +51,13 @@ impl HeptaWeights {
     /// Friction dimensions (A, IZI, UD) are inverted so 0 = optimal throughout.
     pub fn from_journey(journey: &SevenLevelJourney) -> Self {
         HeptaWeights {
-            intent:     journey.level_score(JourneyLevelId::ME),
-            mass:       journey.level_score(JourneyLevelId::GU),
-            gravity:    journey.level_score(JourneyLevelId::SAG),
-            viscosity:  1.0 - journey.level_score(JourneyLevelId::A),
-            heat:       1.0 - journey.level_score(JourneyLevelId::IZI),
+            intent: journey.level_score(JourneyLevelId::ME),
+            mass: journey.level_score(JourneyLevelId::GU),
+            gravity: journey.level_score(JourneyLevelId::SAG),
+            viscosity: 1.0 - journey.level_score(JourneyLevelId::A),
+            heat: 1.0 - journey.level_score(JourneyLevelId::IZI),
             volatility: 1.0 - journey.level_score(JourneyLevelId::UD),
-            strength:   journey.level_score(JourneyLevelId::URU),
+            strength: journey.level_score(JourneyLevelId::URU),
         }
     }
 
@@ -69,13 +69,13 @@ impl HeptaWeights {
     /// Gravity, viscosity-complement, and strength are double-weighted
     /// because they dominate real-world query execution time.
     pub fn alignment_score(&self) -> f32 {
-        let weighted = self.intent               * 1.0
-            + self.mass                          * 0.8
-            + self.gravity                       * 2.0
-            + (1.0 - self.viscosity).max(0.0)   * 2.0
-            + (1.0 - self.heat).max(0.0)         * 1.0
-            + (1.0 - self.volatility).max(0.0)   * 0.8
-            + self.strength                      * 2.0;
+        let weighted = self.intent * 1.0
+            + self.mass * 0.8
+            + self.gravity * 2.0
+            + (1.0 - self.viscosity).max(0.0) * 2.0
+            + (1.0 - self.heat).max(0.0) * 1.0
+            + (1.0 - self.volatility).max(0.0) * 0.8
+            + self.strength * 2.0;
         (weighted / 9.6).clamp(0.0, 1.0)
     }
 
@@ -87,15 +87,16 @@ impl HeptaWeights {
     /// Returns the dominant performance leak dimension — the worst scorer.
     pub fn dominant_leak(&self) -> HeptaDimension {
         let scores = [
-            (self.intent,                   HeptaDimension::Intent),
-            (self.mass,                     HeptaDimension::Mass),
-            (self.gravity,                  HeptaDimension::Gravity),
-            (1.0 - self.viscosity,          HeptaDimension::Viscosity),
-            (1.0 - self.heat,               HeptaDimension::Heat),
-            (1.0 - self.volatility,         HeptaDimension::Volatility),
-            (self.strength,                 HeptaDimension::Strength),
+            (self.intent, HeptaDimension::Intent),
+            (self.mass, HeptaDimension::Mass),
+            (self.gravity, HeptaDimension::Gravity),
+            (1.0 - self.viscosity, HeptaDimension::Viscosity),
+            (1.0 - self.heat, HeptaDimension::Heat),
+            (1.0 - self.volatility, HeptaDimension::Volatility),
+            (self.strength, HeptaDimension::Strength),
         ];
-        scores.iter()
+        scores
+            .iter()
             .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(_, d)| *d)
             .unwrap_or(HeptaDimension::Viscosity)
@@ -104,23 +105,30 @@ impl HeptaWeights {
     /// Returns all 7 (dimension, score) pairs ordered by the 7-gate sequence.
     pub fn all_scores(&self) -> [(HeptaDimension, f32); 7] {
         [
-            (HeptaDimension::Intent,    self.intent),
-            (HeptaDimension::Mass,      self.mass),
-            (HeptaDimension::Gravity,   self.gravity),
+            (HeptaDimension::Intent, self.intent),
+            (HeptaDimension::Mass, self.mass),
+            (HeptaDimension::Gravity, self.gravity),
             (HeptaDimension::Viscosity, 1.0 - self.viscosity),
-            (HeptaDimension::Heat,      1.0 - self.heat),
-            (HeptaDimension::Volatility,1.0 - self.volatility),
-            (HeptaDimension::Strength,  self.strength),
+            (HeptaDimension::Heat, 1.0 - self.heat),
+            (HeptaDimension::Volatility, 1.0 - self.volatility),
+            (HeptaDimension::Strength, self.strength),
         ]
     }
 }
 
 impl std::fmt::Display for HeptaWeights {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,
+        write!(
+            f,
             "ME:{:.2} GU:{:.2} SAG:{:.2} A:{:.2} IZI:{:.2} UD:{:.2} URU:{:.2}",
-            self.intent, self.mass, self.gravity,
-            self.viscosity, self.heat, self.volatility, self.strength)
+            self.intent,
+            self.mass,
+            self.gravity,
+            self.viscosity,
+            self.heat,
+            self.volatility,
+            self.strength
+        )
     }
 }
 
@@ -141,13 +149,13 @@ pub enum HeptaDimension {
 impl HeptaDimension {
     pub fn label(self) -> &'static str {
         match self {
-            HeptaDimension::Intent     => "ME (Intent)",
-            HeptaDimension::Mass       => "GU (Mass)",
-            HeptaDimension::Gravity    => "SAG (Gravity)",
-            HeptaDimension::Viscosity  => "A (Viscosity)",
-            HeptaDimension::Heat       => "IZI (Heat)",
+            HeptaDimension::Intent => "ME (Intent)",
+            HeptaDimension::Mass => "GU (Mass)",
+            HeptaDimension::Gravity => "SAG (Gravity)",
+            HeptaDimension::Viscosity => "A (Viscosity)",
+            HeptaDimension::Heat => "IZI (Heat)",
             HeptaDimension::Volatility => "UD (Volatility)",
-            HeptaDimension::Strength   => "URU (Strength)",
+            HeptaDimension::Strength => "URU (Strength)",
         }
     }
 }
@@ -165,31 +173,44 @@ mod tests {
     use super::*;
     use crate::bottleneck::BottleneckDetector;
     use crate::journey::SevenLevelJourney;
-    use crate::plan::{sales_order_plan, simple_nested_loop_plan, OpKind, PlanNode, QueryPlan, ScanType};
+    use crate::plan::{
+        sales_order_plan, simple_nested_loop_plan, OpKind, PlanNode, QueryPlan, ScanType,
+    };
 
     fn weights_for(plan: &QueryPlan) -> HeptaWeights {
         let bns = BottleneckDetector::detect(plan);
-        let j   = SevenLevelJourney::analyze(plan, &bns);
+        let j = SevenLevelJourney::analyze(plan, &bns);
         HeptaWeights::from_journey(&j)
     }
 
     #[test]
     fn perfect_plan_high_alignment() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         let w = weights_for(&plan);
-        assert!(w.alignment_score() > 0.80,
-            "perfect plan alignment={:.2}", w.alignment_score());
+        assert!(
+            w.alignment_score() > 0.80,
+            "perfect plan alignment={:.2}",
+            w.alignment_score()
+        );
     }
 
     #[test]
     fn nested_loop_plan_lower_alignment() {
         let w = weights_for(&simple_nested_loop_plan());
-        assert!(w.alignment_score() < 0.75,
-            "nested loop plan alignment={:.2}", w.alignment_score());
+        assert!(
+            w.alignment_score() < 0.75,
+            "nested loop plan alignment={:.2}",
+            w.alignment_score()
+        );
     }
 
     #[test]
@@ -202,10 +223,14 @@ mod tests {
     #[test]
     fn viscosity_inverted_from_join_level() {
         let w_good = weights_for(&sales_order_plan());
-        let w_bad  = weights_for(&simple_nested_loop_plan());
+        let w_bad = weights_for(&simple_nested_loop_plan());
         // SalesOrder uses HashMatch → lower viscosity than NestedLoop plan
-        assert!(w_bad.viscosity > w_good.viscosity,
-            "bad={:.2} good={:.2}", w_bad.viscosity, w_good.viscosity);
+        assert!(
+            w_bad.viscosity > w_good.viscosity,
+            "bad={:.2} good={:.2}",
+            w_bad.viscosity,
+            w_good.viscosity
+        );
     }
 
     #[test]
@@ -231,8 +256,7 @@ mod tests {
     fn all_scores_values_in_range() {
         let w = weights_for(&simple_nested_loop_plan());
         for (dim, score) in w.all_scores() {
-            assert!(score >= 0.0 && score <= 1.0,
-                "{:?} score={score}", dim);
+            assert!(score >= 0.0 && score <= 1.0, "{:?} score={score}", dim);
         }
     }
 
@@ -248,17 +272,28 @@ mod tests {
     #[test]
     fn dimension_labels_non_empty() {
         for d in [
-            HeptaDimension::Intent, HeptaDimension::Mass, HeptaDimension::Gravity,
-            HeptaDimension::Viscosity, HeptaDimension::Heat, HeptaDimension::Volatility,
+            HeptaDimension::Intent,
+            HeptaDimension::Mass,
+            HeptaDimension::Gravity,
+            HeptaDimension::Viscosity,
+            HeptaDimension::Heat,
+            HeptaDimension::Volatility,
             HeptaDimension::Strength,
-        ] { assert!(!d.label().is_empty()); }
+        ] {
+            assert!(!d.label().is_empty());
+        }
     }
 
     #[test]
     fn is_gray_rot_false_for_perfect_plan() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         assert!(!weights_for(&plan).is_gray_rot());

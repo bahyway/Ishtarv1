@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Abūbu Court — GL-STK-001 · The Nimrud Stack ⟷ Enūma Eliš</title>
+<style>
+  :root{
+    --field:#0A0D14; --membrane:#24406E; --gold:#D9A93B; --gold-hi:#F0C75E;
+    --lapis:#5B85D6; --lapis-dim:#33518B; --emerald:#37B37E; --crimson:#C05050;
+    --clay:#D8CBB8; --crystal:#E8ECF4; --ink:#0E1320;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:var(--field);
+    font-family:Palatino,"Book Antiqua",Georgia,serif;color:var(--clay)}
+  canvas{display:block;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+
+  /* ── Abūbu die (court header) ─────────────────────────────── */
+  #die{position:absolute;top:18px;left:22px;pointer-events:none;max-width:46ch}
+  #die .tab{font-size:11px;letter-spacing:.35em;color:var(--gold);
+    text-transform:uppercase}
+  #die h1{font-size:21px;font-weight:600;color:var(--crystal);
+    letter-spacing:.02em;margin:.25em 0 .2em}
+  #die .seal{font-size:12px;color:#8fa0c0;font-style:italic}
+  #die .seal b{color:var(--gold-hi);font-style:normal;font-weight:600}
+
+  /* ── StoryEngine journal ──────────────────────────────────── */
+  #journal{position:absolute;top:18px;right:18px;width:min(330px,42vw);
+    max-height:calc(100vh - 140px);display:flex;flex-direction:column;
+    background:rgba(14,19,32,.82);border:1px solid #22314F;border-radius:6px;
+    backdrop-filter:blur(3px)}
+  #journal header{padding:9px 12px;border-bottom:1px solid #22314F;
+    font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--lapis)}
+  #journal header small{display:block;letter-spacing:.05em;text-transform:none;
+    color:#6d7c99;margin-top:3px;font-size:11px}
+  #entries{overflow-y:auto;padding:8px 12px 12px;
+    font:12px/1.55 ui-monospace,Consolas,Menlo,monospace}
+  #entries .e{margin-bottom:9px;border-left:2px solid var(--lapis-dim);
+    padding-left:8px;word-wrap:break-word}
+  #entries .e.gold{border-color:var(--gold)}
+  #entries .e.emerald{border-color:var(--emerald)}
+  #entries .e.crimson{border-color:var(--crimson);color:#d9a3a3}
+  #entries .t{color:#67779a;margin-right:.5em}
+
+  /* ── Legend ───────────────────────────────────────────────── */
+  #legend{position:absolute;left:22px;bottom:18px;font-size:12px;
+    line-height:1.9;pointer-events:none}
+  #legend .k{display:inline-block;width:10px;height:10px;border-radius:50%;
+    margin-right:7px;vertical-align:-1px}
+  #legend .own,#legend .adapt,#legend .build{display:inline-block;
+    font:10px ui-monospace,monospace;letter-spacing:.12em;border:1px solid;
+    border-radius:3px;padding:1px 6px;margin-right:6px}
+  #legend .own{color:var(--emerald);border-color:var(--emerald)}
+  #legend .adapt{color:var(--gold);border-color:var(--gold)}
+  #legend .build{color:var(--lapis);border-color:var(--lapis)}
+  #legend .hint{color:#6d7c99;font-style:italic;margin-top:4px}
+
+  /* ── Context menu (right-click) ───────────────────────────── */
+  #menu{position:absolute;display:none;min-width:230px;z-index:10;
+    background:var(--ink);border:1px solid #2A3A5E;border-radius:5px;
+    box-shadow:0 8px 28px rgba(0,0,0,.55);font-size:13px;overflow:hidden}
+  #menu .head{padding:8px 12px;border-bottom:1px solid #22314F;
+    color:var(--crystal);letter-spacing:.05em}
+  #menu .item{padding:8px 12px;cursor:pointer;color:var(--clay)}
+  #menu .item:hover{background:#182338;color:var(--crystal)}
+  #menu .refusal{padding:10px 12px;color:var(--crimson);
+    font:12px/1.5 ui-monospace,monospace;cursor:default}
+  #menu .refusal b{letter-spacing:.2em}
+
+  @media (max-width:720px){
+    #journal{width:calc(100vw - 36px);top:auto;bottom:18px;max-height:34vh}
+    #legend{bottom:calc(34vh + 34px)}
+    #die h1{font-size:17px}
+  }
+  @media (prefers-reduced-motion:reduce){ /* honored in JS via mReduce */ }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="die">
+  <div class="tab">Abūbu Court · Šala prototype</div>
+  <h1>GL-STK-001 — The Nimrud Stack ⟷ Enūma Eliš</h1>
+  <div class="seal">Two arcs, one graph. <b>Awaiting CSR-08</b> · delivery PB-353 ·
+    the lens of Kalḫu focuses scattered witnesses to one point on the ground.</div>
+</div>
+
+<div id="journal">
+  <header>StoryEngine Journal
+    <small>append-only · left-click a station to depose it</small></header>
+  <div id="entries"></div>
+</div>
+
+<div id="legend">
+  <div><span class="k" style="background:var(--gold)"></span>Enūma Eliš — creation arc (writes)</div>
+  <div><span class="k" style="background:var(--lapis)"></span>Nimrud Stack — judgment arc (reads)</div>
+  <div><span class="k" style="background:var(--emerald)"></span>OntoGraph — the shared spine</div>
+  <div><span class="k" style="background:var(--crimson)"></span>Unborn / refused — refusal record only</div>
+  <div><span class="own">OWN</span><span class="adapt">ADAPT</span><span class="build">BUILD</span></div>
+  <div class="hint">drag to turn the membrane · scroll to zoom · right-click for the record</div>
+</div>
+
+<div id="menu"></div>
+
+<script>
+"use strict";
+/* Šala court · NASARU style · Curved-Space Decree: the field is a breathing
+   spherical cap, never a flat plane. Four canonical interactions:
+   1 scroll-zoom · 2 moving 3D membrane · 3 left-click bounce + StoryEngine
+   journal · 4 right-click context menu discriminated by birth-status. */
+
+const cv = document.getElementById('c'), cx = cv.getContext('2d');
+const menu = document.getElementById('menu'), entries = document.getElementById('entries');
+const mReduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let W, H, DPR;
+function fit(){ DPR = Math.min(devicePixelRatio||1, 2);
+  W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR;
+  cv.style.width = W+'px'; cv.style.height = H+'px'; cx.setTransform(DPR,0,0,DPR,0,0); }
+addEventListener('resize', fit); fit();
+
+/* ── Membrane geometry: spherical cap z = f(r), breathing ───── */
+const CAP = 2.6; // curvature radius
+const capZ = r => CAP - Math.sqrt(Math.max(CAP*CAP - r*r, 0));
+let t = 0, rotY = -0.35, rotX = 0.94, zoom = 1, drag = null;
+
+function surf(px, py, phase){
+  const r = Math.hypot(px, py);
+  let z = -capZ(r);
+  if(!mReduce) z += 0.035*Math.sin(t*0.9 + phase);   // the breath
+  return [px, py, z];
+}
+function project(p){
+  let [x,y,z] = p;
+  const cy=Math.cos(rotY), sy=Math.sin(rotY);
+  [x,z] = [x*cy - z*sy, x*sy + z*cy];
+  const cxr=Math.cos(rotX), sxr=Math.sin(rotX);
+  [y,z] = [y*cxr - z*sxr, y*sxr + z*cxr];
+  const d = 3.6, s = (d/(d - z)) * Math.min(W,H) * 0.36 * zoom;
+  return [W*0.46 + x*s, H*0.52 + y*s, s, z];
+}
+
+/* ── Stations ───────────────────────────────────────────────── */
+const A = deg => deg*Math.PI/180;
+const onArc = (deg, rad) => [rad*Math.cos(A(deg)), rad*Math.sin(A(deg))];
+function N(id, name, arc, deg, rad, standing, carrier, story, clause){
+  const [px,py] = onArc(deg, rad);
+  return {id, name, arc, px, py, standing, carrier, story, clause,
+          born:true, bv:0, bo:0, phase:Math.random()*6.28};
+}
+const gold = [
+  N('detect','DETECT','ee', 217, .66, 'BUILD', 'Sparse detector',
+    'Finds candidate keypoints in the formless — never raw pixel-count as points; ≤N keypoints by the detector bound.',
+    'GL-EE-001 detector bound: the line that keeps the cosmic name inside the billion-particle law.'),
+  N('cohere','COHERE','ee', 195, .70, 'OWN', 'LamassuEngine · alpha/Rips',
+    'Persistence on the sparse points — a coherent novel structure has a β₀/β₁ signature that persists; noise does not.',
+    'Two-filtration seam, points side: alpha preferred in 2D since its β₁ is not an ε-artifact.'),
+  N('rectify','RECTIFY','ee', 173, .71, 'OWN', 'DubSar PDM IDE',
+    'The human station. A stakeholder rectifies the un-shaped candidate; the machine proposes, it never decides.',
+    'Un-patterns route to PDM; the authority group accepts; only then a template is minted. Sovereignty applied to the ontology itself.'),
+  N('measure','MEASURE','ee', 151, .70, 'ADAPT', 'LamassuEngine · cubical PH',
+    'Cubical persistence re-pointed from the E7 lattice to the rectified grid — persistence-lifetime separates a grave from a building.',
+    'Two-filtration seam, grid side: the quiet breakthrough — an ADAPT, not a BUILD.'),
+  N('birth','BIRTH','ee', 129, .66, 'OWN', 'Ṣīt Birth Gate · GL-TPL-001',
+    'The threshold where pixels become Particles. What coheres into no pattern is refused into the outer ledger, honestly.',
+    'The gate stays a gate: no force-minting from a lone weird structure. Refusal is a lawful verdict.'),
+];
+const relate = N('relate','RELATE','ee', 107, .48, 'OWN', 'Enūma Eliš → OntoGraph',
+    'The creation arc\'s terminus: born templates land in the one shared graph.',
+    'C3 — write side of the spine. Creation feeds judgment; judgment never creates.');
+const lapis = [
+  N('witness','WITNESS','nim', -37, .66, 'BUILD', 'Observation Court · SUSA-fed',
+    'SAR moisture, closure phase Φ′ (wrapped interferograms only — deformation and atmosphere annihilate), conservation residual r(S).',
+    'C4 frozen constants · C5 no self-minted negatives · two-witness / two-epoch trigger, mirroring Šību.'),
+  N('judge','JUDGE','nim', -13, .70, 'OWN', 'Enbilulu (WPDEngine)',
+    'ODR localization under the Cramér–Rao gate, σ_d ≤ 0.10 m. The only member that points at the ground.',
+    'C7 — PCA never localizes; its loadings testify in the Kanīku receipt: axes, weights, epochs.'),
+  N('move','MOVE','nim', 11, .70, 'OWN', 'SilaEngine · Ḫarrānu',
+    'Routes the repair crew through the sūqu qaṭnu on the street graph — four mobility profiles, last mile only.',
+    'Detection court → localization court → routing engine. Sila\'s hands stay clean of judgment.'),
+  N('stage','STAGE','nim', 35, .66, 'OWN', 'Sovereign GIS shell (sibling box)',
+    'Displays verdict, σ_d circle, and route. The Najaf box\'s AI-free single-purpose seal remains untouched.',
+    'Šala tabs are prototypes only; production is egui/WGPU on the bare-metal host.'),
+];
+const onto = {id:'onto', name:'ONTOGRAPH', arc:'spine', px:0, py:-0.02,
+  standing:'OWN', carrier:'Adapa + OntoGraph (sage register)',
+  story:'One graph, two readers: Enūma Eliš writes at RELATE; the Nimrud judge reads for verdict reasoning. Adapa names and orders, and never claims the Apsu of completeness — the Fadam Floor, restated in myth.',
+  clause:'C3 — the single meeting point of the two arcs. The Nimrud lens ring marks it.',
+  born:true, bv:0, bo:0, phase:1.7};
+const refused = [
+  {id:'svm', name:'TRAINED CLASSIFIER', px:-.42, py:.94,
+   reason:'REFUSED — an interpretable learned model is still a learned model. A fitted hyperplane is a rule nobody wrote. AI-free seal holds; the threshold decree with witnesses replaces it.'},
+  {id:'enkido', name:'ENKIDO', px:0, py:1.0,
+   reason:'WITHDRAWN — phonetic collision with the Enki-prefixed family (the Kakka knife). Enkidu returns to the epic, beloved and unemployed.'},
+  {id:'nebu', name:'NEBUCHADNEZZAR', px:.42, py:.94,
+   reason:'RETURNED — kings name eras only. He waits in the era queue for the Canon; a name is never double-spent across layers.'},
+].map(o => ({...o, born:false, bv:0, bo:0, phase:Math.random()*6.28}));
+const stations = [...gold, relate, ...lapis, onto, ...refused];
+
+/* ── Journal ────────────────────────────────────────────────── */
+function stamp(){ const d=new Date();
+  return d.toTimeString().slice(0,8); }
+function depose(cls, text){
+  const e = document.createElement('div'); e.className = 'e '+cls;
+  e.innerHTML = '<span class="t">'+stamp()+'</span>'+text;
+  entries.prepend(e); }
+depose('emerald','⟡ Court convened. Two arcs seated; the lens is set over OntoGraph. Awaiting CSR-08.');
+
+/* ── Draw ───────────────────────────────────────────────────── */
+function nodeColor(n){ return n.arc==='ee' ? '--gold' : n.arc==='nim' ? '--lapis'
+  : n.arc==='spine' ? '--emerald' : '--crimson'; }
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function drawChain(list, color, closeTo){
+  cx.strokeStyle = color; cx.lineWidth = 1.4; cx.beginPath();
+  const pts = list.map(n => project(surf(n.px, n.py, n.phase)));
+  pts.forEach((p,i)=> i ? cx.lineTo(p[0],p[1]) : cx.moveTo(p[0],p[1]));
+  if(closeTo){ const q = project(surf(closeTo.px, closeTo.py, closeTo.phase));
+    cx.lineTo(q[0], q[1]); }
+  cx.globalAlpha = .75; cx.stroke(); cx.globalAlpha = 1;
+}
+function frame(){
+  t += 1/60;
+  if(!mReduce && !drag) rotY += 0.0011;           // the slow turning of the court
+  cx.fillStyle = css('--field'); cx.fillRect(0,0,W,H);
+
+  // membrane dots (curved cap, breathing)
+  cx.fillStyle = css('--membrane');
+  for(let i=-9;i<=9;i++) for(let j=-9;j<=9;j++){
+    const px=i/9*1.02, py=j/9*1.02; if(px*px+py*py>1.06) continue;
+    const [sx,sy,s,z] = project(surf(px,py,(i*7+j)*0.37));
+    cx.globalAlpha = 0.28 + 0.22*(z+0.6);
+    cx.beginPath(); cx.arc(sx,sy, Math.max(s*0.006,0.7), 0, 6.29); cx.fill();
+  }
+  cx.globalAlpha = 1;
+
+  drawChain([...gold, relate], css('--gold'), onto);          // creation arc → spine
+  drawChain(lapis, css('--lapis'));                            // judgment arc
+  // judge ↔ spine : the receipt (dashed emerald)
+  const j = project(surf(lapis[1].px, lapis[1].py, lapis[1].phase));
+  const o = project(surf(onto.px, onto.py, onto.phase));
+  cx.setLineDash([5,5]); cx.strokeStyle = css('--emerald'); cx.globalAlpha=.7;
+  cx.beginPath(); cx.moveTo(j[0],j[1]); cx.lineTo(o[0],o[1]); cx.stroke();
+  cx.setLineDash([]); cx.globalAlpha = 1;
+
+  // stations
+  for(const n of stations){
+    n.bo += n.bv; n.bv = (n.bv - n.bo*0.22) * 0.86;           // bounce spring
+    const under = n.born ? 0 : 0.16;                           // the unborn float beneath
+    const [sx,sy,s] = project([...surf(n.px,n.py,n.phase).slice(0,2),
+                               surf(n.px,n.py,n.phase)[2] + under - n.bo]);
+    n.sx = sx; n.sy = sy; n.sr = Math.max(s*(n.arc==='spine'?0.030:0.021), 5);
+    const col = css(nodeColor(n));
+    if(n.arc==='spine'){                                       // the Nimrud lens ring
+      cx.strokeStyle = css('--crystal'); cx.globalAlpha=.55;
+      cx.beginPath(); cx.arc(sx,sy,n.sr*1.9 + 2*Math.sin(t*0.8),0,6.29); cx.stroke();
+      cx.globalAlpha=1;
+    }
+    cx.fillStyle = col; cx.beginPath(); cx.arc(sx,sy,n.sr,0,6.29); cx.fill();
+    if(!n.born){ cx.strokeStyle = css('--field'); cx.lineWidth=1.5;
+      cx.beginPath(); cx.moveTo(sx-n.sr*.5,sy); cx.lineTo(sx+n.sr*.5,sy); cx.stroke(); }
+    cx.fillStyle = n.born ? css('--crystal') : '#a97878';
+    cx.font = (n.arc==='spine' ? '600 13px ' : '11px ')+'Palatino,Georgia,serif';
+    cx.textAlign='center';
+    cx.fillText(n.name, sx, sy - n.sr - 7);
+    if(n.standing){ cx.fillStyle = col; cx.font='9px ui-monospace,monospace';
+      cx.fillText(n.standing, sx, sy + n.sr + 12); }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ── Interactions ───────────────────────────────────────────── */
+function hit(x,y){ let best=null, bd=1e9;
+  for(const n of stations){ const d=Math.hypot(x-n.sx,y-n.sy);
+    if(d < Math.max(n.sr+8,14) && d < bd){ best=n; bd=d; } }
+  return best; }
+
+cv.addEventListener('wheel', e => { e.preventDefault();               // ① scroll-zoom
+  zoom = Math.min(2.4, Math.max(.55, zoom * (e.deltaY<0 ? 1.07 : 0.93))); },
+  {passive:false});
+
+cv.addEventListener('pointerdown', e => {                              // ② drag = turn
+  drag = {x:e.clientX, y:e.clientY}; cv.classList.add('dragging'); hideMenu(); });
+addEventListener('pointermove', e => { if(!drag) return;
+  rotY += (e.clientX-drag.x)*0.005; rotX += (e.clientY-drag.y)*0.004;
+  rotX = Math.min(1.45, Math.max(0.25, rotX)); drag = {x:e.clientX, y:e.clientY}; });
+addEventListener('pointerup', e => {
+  if(drag && Math.hypot(e.clientX-drag.x, e.clientY-drag.y) < 4){     // ③ left-click
+    const n = hit(e.clientX, e.clientY);
+    if(n){ n.bv = 0.10;
+      if(n.born){
+        const cls = n.arc==='ee'?'gold':n.arc==='spine'?'emerald':'';
+        depose(cls, '⟡ <b>'+n.name+'</b> — '+n.story+
+          ' <i>['+(n.standing||'')+' · '+n.carrier+']</i>');
+      } else {
+        depose('crimson','⊘ <b>'+n.name+'</b> — refusal record only. '+n.reason);
+      }
+    }
+  }
+  drag = null; cv.classList.remove('dragging'); });
+
+cv.addEventListener('contextmenu', e => {                              // ④ right-click
+  e.preventDefault(); const n = hit(e.clientX, e.clientY);
+  if(!n){ hideMenu(); return; }
+  menu.innerHTML = '';
+  if(n.born){
+    menu.innerHTML = '<div class="head">'+n.name+' · '+(n.standing||'')+'</div>';
+    const items = [
+      ['Read story',  () => depose(n.arc==='ee'?'gold':n.arc==='spine'?'emerald':'',
+        '⟡ <b>'+n.name+'</b> — '+n.story)],
+      ['Carrier',     () => depose('', '⟡ <b>'+n.name+'</b> carrier: '+n.carrier)],
+      ['Clause',      () => depose('emerald','§ <b>'+n.name+'</b> — '+n.clause)],
+    ];
+    for(const [label,fn] of items){
+      const d = document.createElement('div'); d.className='item'; d.textContent=label;
+      d.onclick = () => { fn(); hideMenu(); }; menu.appendChild(d); }
+  } else {
+    menu.innerHTML = '<div class="head" style="color:var(--crimson)">'+n.name+'</div>'+
+      '<div class="refusal"><b>REFUSAL RECORD</b><br>'+n.reason+
+      '<br><br><i>The unborn receive only their refusal. Nothing more is owed.</i></div>';
+  }
+  menu.style.left = Math.min(e.clientX, W-260)+'px';
+  menu.style.top  = Math.min(e.clientY, H-160)+'px';
+  menu.style.display = 'block';
+});
+function hideMenu(){ menu.style.display='none'; }
+addEventListener('keydown', e => { if(e.key==='Escape') hideMenu(); });
+</script>
+</body>
+</html>

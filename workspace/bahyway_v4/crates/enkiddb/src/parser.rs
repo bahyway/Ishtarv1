@@ -27,22 +27,22 @@ impl DocumentParser {
                 continue;
             }
 
-            if line.starts_with("## ") {
+            if let Some(stripped) = line.strip_prefix("## ") {
                 structure.headers.push(Header {
                     level: 2,
-                    text: line[3..].trim().to_string(),
-                    anchor: Self::make_anchor(&line[3..]),
+                    text: stripped.trim().to_string(),
+                    anchor: Self::make_anchor(stripped),
                     order: order_counter,
                 });
                 order_counter += 1;
                 i += 1;
                 continue;
             }
-            if line.starts_with("### ") {
+            if let Some(stripped) = line.strip_prefix("### ") {
                 structure.headers.push(Header {
                     level: 3,
-                    text: line[4..].trim().to_string(),
-                    anchor: Self::make_anchor(&line[4..]),
+                    text: stripped.trim().to_string(),
+                    anchor: Self::make_anchor(stripped),
                     order: order_counter,
                 });
                 order_counter += 1;
@@ -50,8 +50,8 @@ impl DocumentParser {
                 continue;
             }
 
-            if line.starts_with("```") {
-                let language = line[3..].trim().to_string();
+            if let Some(stripped) = line.strip_prefix("```") {
+                let language = stripped.trim().to_string();
                 let mut code = String::new();
                 i += 1;
                 while i < lines.len() && !lines[i].starts_with("```") {
@@ -114,7 +114,10 @@ impl DocumentParser {
         let (prefix, rest) = (s[..colon].trim(), s[colon + 1..].trim());
         let word_count = prefix.split_whitespace().count();
         let has_alpha = prefix.chars().any(|c| c.is_alphabetic());
-        let all_upper = prefix.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase());
+        let all_upper = prefix
+            .chars()
+            .filter(|c| c.is_alphabetic())
+            .all(|c| c.is_uppercase());
         (word_count >= 2 && has_alpha && all_upper).then_some((prefix, rest))
     }
 
@@ -144,7 +147,12 @@ impl DocumentParser {
         for line in yaml_text.lines() {
             let trimmed = line.trim_start();
             if trimmed.starts_with('#') {
-                header_lines.push(trimmed.trim_start_matches('#').strip_prefix(' ').unwrap_or(trimmed.trim_start_matches('#')));
+                header_lines.push(
+                    trimmed
+                        .trim_start_matches('#')
+                        .strip_prefix(' ')
+                        .unwrap_or(trimmed.trim_start_matches('#')),
+                );
             } else if trimmed.is_empty() && !header_lines.is_empty() {
                 header_lines.push("");
             } else {
@@ -157,21 +165,25 @@ impl DocumentParser {
 
         let is_separator = |s: &str| !s.is_empty() && s.chars().all(|c| c == '=' || c == '-');
 
-        let mut structure = DocumentStructure { title: "Untitled".to_string(), ..Default::default() };
+        let mut structure = DocumentStructure {
+            title: "Untitled".to_string(),
+            ..Default::default()
+        };
         let mut order_counter: i64 = 0;
         let mut paragraph_buf: Vec<&str> = Vec::new();
 
-        let flush_paragraph = |structure: &mut DocumentStructure, order_counter: &mut i64, buf: &mut Vec<&str>| {
-            if !buf.is_empty() {
-                structure.body.push(BodyElement {
-                    element_type: BodyType::Paragraph,
-                    content: buf.join(" "),
-                    order: *order_counter,
-                });
-                *order_counter += 1;
-                buf.clear();
-            }
-        };
+        let flush_paragraph =
+            |structure: &mut DocumentStructure, order_counter: &mut i64, buf: &mut Vec<&str>| {
+                if !buf.is_empty() {
+                    structure.body.push(BodyElement {
+                        element_type: BodyType::Paragraph,
+                        content: buf.join(" "),
+                        order: *order_counter,
+                    });
+                    *order_counter += 1;
+                    buf.clear();
+                }
+            };
 
         for raw in &header_lines {
             let line = raw.trim_end();
@@ -271,9 +283,22 @@ mod tests {
   hosts: localhost
 ";
         let doc = DocumentParser::parse_playbook_header(yaml).expect("real leading comment block");
-        assert_eq!(doc.title, "PB-999 -- Example playbook title. BahyWay.Ecosystem v4.0 -- 2026-07-30");
-        assert!(doc.headers.iter().any(|h| h.text == "WHY THIS EXISTS"), "headers: {:?}", doc.headers);
-        assert!(doc.headers.iter().any(|h| h.text == "THIS PLAYBOOK DELIBERATELY DOES NOT"), "headers: {:?}", doc.headers);
+        assert_eq!(
+            doc.title,
+            "PB-999 -- Example playbook title. BahyWay.Ecosystem v4.0 -- 2026-07-30"
+        );
+        assert!(
+            doc.headers.iter().any(|h| h.text == "WHY THIS EXISTS"),
+            "headers: {:?}",
+            doc.headers
+        );
+        assert!(
+            doc.headers
+                .iter()
+                .any(|h| h.text == "THIS PLAYBOOK DELIBERATELY DOES NOT"),
+            "headers: {:?}",
+            doc.headers
+        );
         assert!(doc.body.iter().any(|b| b.content.contains("a real reason")));
     }
 
@@ -286,12 +311,27 @@ mod tests {
     #[test]
     fn playbook_header_parses_this_repos_own_real_pb_269_file() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
             .join("playbooks/playbook_269_retire_eriduous_vdi_confirm_baremetal_control_node.yml");
-        let text = std::fs::read_to_string(&path).expect("PB-269 should exist in this real repo checkout");
-        let doc = DocumentParser::parse_playbook_header(&text).expect("PB-269 has a real leading comment header");
+        let text =
+            std::fs::read_to_string(&path).expect("PB-269 should exist in this real repo checkout");
+        let doc = DocumentParser::parse_playbook_header(&text)
+            .expect("PB-269 has a real leading comment header");
         assert!(doc.title.contains("PB-269"), "title: {:?}", doc.title);
-        assert!(doc.headers.iter().any(|h| h.text.contains("WHY THIS EXISTS")), "headers: {:?}", doc.headers);
+        assert!(
+            doc.headers
+                .iter()
+                .any(|h| h.text.contains("WHY THIS EXISTS")),
+            "headers: {:?}",
+            doc.headers
+        );
         assert!(!doc.body.is_empty());
     }
 }

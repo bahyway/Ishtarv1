@@ -15,7 +15,7 @@ use crate::field::HeptaAxis;
 /// A 7-sector manifold bin: axis index + angular position in the heptagon.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HeptaBin {
-    pub axis:  HeptaAxis,
+    pub axis: HeptaAxis,
     /// Normalised position within the sector [0.0, 1.0].
     pub phase: f64,
 }

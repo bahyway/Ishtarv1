@@ -50,7 +50,7 @@ impl EnkiTier {
     /// Akkadian mythological name for this tier.
     pub fn akkadian_name(&self) -> &'static str {
         match self {
-            EnkiTier::Memory    => "APSU",
+            EnkiTier::Memory => "APSU",
             EnkiTier::Streaming => "ZAKARU",
             EnkiTier::Warehouse => "ABZU",
         }
@@ -59,7 +59,7 @@ impl EnkiTier {
     /// Human-readable description of this tier's sovereign role.
     pub fn sovereign_role(&self) -> &'static str {
         match self {
-            EnkiTier::Memory    => "Current State of the Universe",
+            EnkiTier::Memory => "Current State of the Universe",
             EnkiTier::Streaming => "Immutable Memory — Audit Trail",
             EnkiTier::Warehouse => "Deep Knowledge — OLAP and Forensics",
         }
@@ -68,7 +68,7 @@ impl EnkiTier {
     /// Thermal designation matching industry data-lake terminology.
     pub fn thermal_label(&self) -> &'static str {
         match self {
-            EnkiTier::Memory    => "Hot",
+            EnkiTier::Memory => "Hot",
             EnkiTier::Streaming => "Warm",
             EnkiTier::Warehouse => "Cold",
         }
@@ -89,9 +89,9 @@ impl EnkiTier {
 ///
 /// # Arguments
 /// * `is_sealed`              — `true` if the particle has become a Golden Record
-///                              (sealed by a Data Steward; no further mutations).
+///   (sealed by a Data Steward; no further mutations).
 /// * `hours_since_last_event` — hours elapsed since the most recent Event-KAKI
-///                              was appended to this particle's orbit.
+///   was appended to this particle's orbit.
 ///
 /// # Returns
 /// * `Memory`    — particle is active and recent (not yet sealed, < `HOT_TO_WARM_HOURS` hours).
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_thermal_labels() {
-        assert_eq!(EnkiTier::Memory.thermal_label(),    "Hot");
+        assert_eq!(EnkiTier::Memory.thermal_label(), "Hot");
         assert_eq!(EnkiTier::Streaming.thermal_label(), "Warm");
         assert_eq!(EnkiTier::Warehouse.thermal_label(), "Cold");
     }
@@ -155,20 +155,29 @@ mod tests {
 
     #[test]
     fn test_warm_window_particle() {
-        assert_eq!(tier_for_particle(false, HOT_TO_WARM_HOURS), EnkiTier::Streaming);
-        assert_eq!(tier_for_particle(false, WARM_TO_COLD_HOURS - 1), EnkiTier::Streaming);
+        assert_eq!(
+            tier_for_particle(false, HOT_TO_WARM_HOURS),
+            EnkiTier::Streaming
+        );
+        assert_eq!(
+            tier_for_particle(false, WARM_TO_COLD_HOURS - 1),
+            EnkiTier::Streaming
+        );
     }
 
     #[test]
     fn test_cold_particle_at_threshold() {
-        assert_eq!(tier_for_particle(false, WARM_TO_COLD_HOURS), EnkiTier::Warehouse);
+        assert_eq!(
+            tier_for_particle(false, WARM_TO_COLD_HOURS),
+            EnkiTier::Warehouse
+        );
         assert_eq!(tier_for_particle(false, 720), EnkiTier::Warehouse); // 30 days
     }
 
     #[test]
     fn test_sealed_particle_always_warehouse() {
-        assert_eq!(tier_for_particle(true, 0),   EnkiTier::Warehouse);
-        assert_eq!(tier_for_particle(true, 1),   EnkiTier::Warehouse);
+        assert_eq!(tier_for_particle(true, 0), EnkiTier::Warehouse);
+        assert_eq!(tier_for_particle(true, 1), EnkiTier::Warehouse);
         assert_eq!(tier_for_particle(true, 999), EnkiTier::Warehouse);
     }
 

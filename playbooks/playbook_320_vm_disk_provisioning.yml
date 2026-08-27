@@ -3,44 +3,257 @@
 # The ledger disk: raw LV, cache=none, io=native — an acknowledged KAKI must
 # exist on metal, not in host RAM (L-7 wall condition, L-8 Link 2).
 # The projections disk: thin, writeback, deliberately faithless (L-2).
+#
+# PREREQUISITE THIS PLAYBOOK CANNOT SATISFY ON ITS OWN (2026-08-23, found
+# live): "Create raw LVs" needs the {{ host_vg }} (bahyvg) volume group to
+# already exist. Only PB-319 creates that VG, and PB-319 gates the create
+# behind an explicit `-e confirm_pv=true` (its own "SAFETY | LVM pool...
+# explicit confirm" assert) precisely because vgcreate on the wrong PV is
+# destructive and host-specific — the Architect must verify host_pv is
+# genuinely free first. PB-609's unattended walk deliberately never passes
+# that flag, so it cannot create the VG either; this is intentional,
+# CSR-08-class human-gated behavior (same class as PB-313/557), not a bug.
+# One-time fix: `ansible-playbook playbook_319... -e confirm_pv=true` after
+# verifying host_pv, THEN re-run PB-320 (and PB-311, same gap).
 - name: PB-320 | VM disk provisioning
-  hosts: host_forge
+  hosts: uruk
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
   vars:
+    # Renamed 2026-08-15 (Architect request) to match the node names
+    # playbook_265 actually creates (see its own -e node_write_name=/
+    # node_read_name=/node_vault_name= overrides) -- was enki-write/
+    # enki-read/vault-lib. Override here (not per-attribute) if a given
+    # environment used different names.
+    vm_write_name: uruk-node-write
+    vm_read_name:  uruk-node-read
+    vm_vault_name: uruk-node-vault
     disks:
-      - { vm: enki-write, lv: enkidb_ledger, size: 60G, target: vdb, cache: none,      io: native }
-      - { vm: enki-read,  lv: enki_projections, size: 40G, target: vdb, cache: writeback, io: threads }
-      - { vm: vault-lib,  lv: vault_hot,     size: 40G, target: vdb, cache: none,      io: native }
+      - { vm: "{{ vm_write_name }}", lv: enkidb_ledger,    size: 60G, target: vdb, cache: none,      io: native }
+      - { vm: "{{ vm_read_name }}",  lv: enki_projections, size: 40G, target: vdb, cache: writeback, io: threads }
+      - { vm: "{{ vm_vault_name }}", lv: vault_hot,        size: 40G, target: vdb, cache: none,      io: native }
   tasks:
     - name: Create raw LVs
       ansible.builtin.command: lvcreate -L {{ item.size }} -n {{ item.lv }} {{ host_vg }}
       args: { creates: "/dev/{{ host_vg }}/{{ item.lv }}" }
       loop: "{{ disks }}"
 
-    - name: VMs must be shut off before attach
-      ansible.builtin.shell: virsh domstate {{ item.vm }} | grep -q 'shut off'
+    # 2026-08-24, found live: rc=1 on every VM once the guest plays below
+    # started booting them back up on a prior run -- "must be shut off"
+    # was enforced unconditionally on every rerun, but a VM whose disk is
+    # already attached legitimately gets booted back up by this same
+    # playbook's own "Boot the VMs back up" task further down. Any
+    # second run of this idempotent playbook was guaranteed to fail this
+    # check. Fixed: only enforce shut-off (and only attempt attach) for
+    # disks not already attached, checked via virsh domblklist.
+    - name: "Check which disks are already attached (idempotency guard)"
+      ansible.builtin.command: virsh domblklist {{ item.vm }}
       loop: "{{ disks }}"
+      loop_control: { label: "{{ item.vm }}" }
+      register: domblklist
       changed_when: false
 
-    - name: Attach with per-role cache policy (persistent)
+    - name: VMs must be shut off before attach (only for disks not yet attached)
+      ansible.builtin.shell: virsh domstate {{ item.item.vm }} | grep -q 'shut off'
+      loop: "{{ domblklist.results }}"
+      loop_control: { label: "{{ item.item.vm }}" }
+      when: item.item.target not in item.stdout
+      changed_when: false
+
+    - name: Attach with per-role cache policy (persistent, only for disks not yet attached)
       ansible.builtin.command: >
-        virsh attach-disk {{ item.vm }} /dev/{{ host_vg }}/{{ item.lv }} {{ item.target }}
-        --persistent --cache {{ item.cache }} --io {{ item.io }} --subdriver raw
-      loop: "{{ disks }}"
+        virsh attach-disk {{ item.item.vm }} /dev/{{ host_vg }}/{{ item.item.lv }} {{ item.item.target }}
+        --persistent --cache {{ item.item.cache }} --io {{ item.item.io }} --subdriver raw
+      loop: "{{ domblklist.results }}"
+      loop_control: { label: "{{ item.item.vm }}" }
+      when: item.item.target not in item.stdout
       register: att
       failed_when: att.rc != 0 and 'already' not in att.stderr
 
+    # 2026-08-24, found live (rc=1, empty stdout/stderr): libvirt's domain
+    # XML puts <driver ... cache='none' io='native'/> BEFORE <source
+    # dev='.../enkidb_ledger'/>, not after -- `grep -A3` only shows lines
+    # AFTER the match, so it could never see the driver line regardless
+    # of whether cache/io were actually set correctly. Fixed to -B3
+    # (driver is exactly 1 line before source; 3 gives margin). Also
+    # added set -e: a multi-line shell: script without it only reports
+    # the LAST command's exit code, so if the cache check had silently
+    # failed while the io check passed, this gate would have wrongly
+    # reported success.
     - name: GATE | ledger disk policy verified in domain XML
       ansible.builtin.shell: |
-        virsh dumpxml enki-write | grep -A3 enkidb_ledger | grep -q "cache='none'"
-        virsh dumpxml enki-write | grep -A3 enkidb_ledger | grep -q "io='native'"
+        set -e
+        virsh dumpxml {{ vm_write_name }} | grep -B3 enkidb_ledger | grep -q "cache='none'"
+        virsh dumpxml {{ vm_write_name }} | grep -B3 enkidb_ledger | grep -q "io='native'"
       changed_when: false
 
-    - name: Mark guests as playbook-built (via first boot)
-      ansible.builtin.debug:
-        msg: "On first guest boot: mkfs.xfs the ledger disk, mount, touch /etc/bahyway_built_by_playbook (guest-side role, next revision)."
+    # 2026-08-24, Architect's question: "why can't this be automated?" --
+    # it can; it was only left manual because mkfs.xfs is destructive if
+    # ever re-run against a disk that already holds real data. The guest
+    # plays below (PB-320b/c) guard that with a blkid check first, then
+    # a mountpoint check before the actual mount, then an idempotent
+    # lineinfile fstab entry (ansible.builtin.mount lives in the
+    # ansible.posix collection, not core -- this repo only uses
+    # ansible.builtin throughout, so stuck to builtin-only modules
+    # rather than add a collection dependency). uruk-node-vault gets the
+    # identical treatment below as PB-320d (was deferred pending a mount-
+    # path decision; resolved 2026-08-24, see PB-320d's own comment).
+    - name: "Boot the VMs back up now that their disks are attached (guest plays below need them reachable over SSH)"
+      ansible.builtin.command: virsh start {{ item.vm }}
+      loop: "{{ disks }}"
+      register: vm_start
+      failed_when: vm_start.rc != 0 and 'already active' not in vm_start.stderr
+      changed_when: vm_start.rc == 0
 
     - name: Run-KAKI
       ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
         PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
         echo "{\"pb\":\"PB-320\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"gate\":\"cache-policies-verified\"}" >> {{ kaki_runs }}
+
+- name: "PB-320b | Format + mount the ledger disk on uruk-node-write"
+  hosts: enkidb_write
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
+  tasks:
+    - name: "Wait for SSH to come back up after the virsh start above"
+      ansible.builtin.wait_for_connection:
+        timeout: 120
+
+    - name: "Check if /dev/vdb already has a filesystem (never re-format a disk that might hold real data)"
+      ansible.builtin.command: blkid -o value -s TYPE /dev/vdb
+      register: vdb_fstype
+      failed_when: false
+      changed_when: false
+
+    - name: "Format the ledger disk as XFS (only when blkid found nothing on it)"
+      ansible.builtin.command: mkfs.xfs /dev/vdb
+      when: vdb_fstype.rc != 0
+
+    - name: "Ensure {{ ledger_dir }} exists"
+      ansible.builtin.file: { path: "{{ ledger_dir }}", state: directory, mode: "0750" }
+
+    - name: "Check if /dev/vdb is already mounted at {{ ledger_dir }}"
+      ansible.builtin.command: mountpoint -q {{ ledger_dir }}
+      register: ledger_mounted
+      failed_when: false
+      changed_when: false
+
+    - name: "Mount /dev/vdb at {{ ledger_dir }}"
+      ansible.builtin.command: mount /dev/vdb {{ ledger_dir }}
+      when: ledger_mounted.rc != 0
+
+    - name: "Persist the mount in /etc/fstab (idempotent -- never duplicates the line)"
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^/dev/vdb\s'
+        line: "/dev/vdb {{ ledger_dir }} xfs defaults 0 0"
+
+    - name: Mark host as playbook-built (PB-315 assertion target)
+      ansible.builtin.file: { path: /etc/bahyway_built_by_playbook, state: touch }
+
+- name: "PB-320c | Format + mount the projections disk on uruk-node-read"
+  hosts: enkidb_read
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
+  tasks:
+    - name: "Wait for SSH to come back up after the virsh start above"
+      ansible.builtin.wait_for_connection:
+        timeout: 120
+
+    - name: "Check if /dev/vdb already has a filesystem (never re-format a disk that might hold real data)"
+      ansible.builtin.command: blkid -o value -s TYPE /dev/vdb
+      register: vdb_fstype
+      failed_when: false
+      changed_when: false
+
+    - name: "Format the projections disk as XFS (only when blkid found nothing on it)"
+      ansible.builtin.command: mkfs.xfs /dev/vdb
+      when: vdb_fstype.rc != 0
+
+    - name: "Ensure {{ projections_dir }} exists"
+      ansible.builtin.file: { path: "{{ projections_dir }}", state: directory, mode: "0750" }
+
+    - name: "Check if /dev/vdb is already mounted at {{ projections_dir }}"
+      ansible.builtin.command: mountpoint -q {{ projections_dir }}
+      register: proj_mounted
+      failed_when: false
+      changed_when: false
+
+    - name: "Mount /dev/vdb at {{ projections_dir }}"
+      ansible.builtin.command: mount /dev/vdb {{ projections_dir }}
+      when: proj_mounted.rc != 0
+
+    - name: "Persist the mount in /etc/fstab (idempotent -- never duplicates the line)"
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^/dev/vdb\s'
+        line: "/dev/vdb {{ projections_dir }} xfs defaults 0 0"
+
+    - name: Mark host as playbook-built (PB-315 assertion target)
+      ansible.builtin.file: { path: /etc/bahyway_built_by_playbook, state: touch }
+
+# 2026-08-24, closing the deferred gap this playbook's own header used to
+# note ("uruk-node-vault deliberately NOT included yet -- vault_hot's
+# guest-side mount path is still undecided"): group_vars/all.yml already
+# settles it implicitly -- PB-310's ship_target_dir (/vault/hot/ledger_
+# segments) and PB-311's vault_mount (/nuzivault, a separate dataset root)
+# both already assume a real filesystem lives at /vault/hot on
+# uruk-node-vault, the same "dedicated LV mounted at the path other
+# playbooks already write into" pattern ledger_dir/projections_dir use
+# above. Mounting the vault_hot LV there (not a new/different path) is
+# what actually backs those existing paths with real, dedicated storage
+# instead of the vault's root disk. Safe to run any time: mkfs.xfs is
+# blkid-guarded exactly like PB-320b/c, and PB-310's own "ensure
+# ship_target_dir exists" task (delegate_to the vault) recreates
+# ledger_segments/ under the new mount automatically -- there is nothing
+# real under /vault/hot yet to lose (PB-310's most recent clean run
+# reported "no .seg segments yet", i.e. nothing has ever actually shipped
+# there). Re-run PB-310/PB-311 after this to confirm their paths still
+# resolve once the mount is live.
+- name: "PB-320d | Format + mount the vault-hot disk on uruk-node-vault"
+  hosts: enkidb_vault
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
+  vars:
+    vault_hot_dir: /vault/hot
+  tasks:
+    - name: "Wait for SSH to come back up after the virsh start above"
+      ansible.builtin.wait_for_connection:
+        timeout: 120
+
+    - name: "Check if /dev/vdb already has a filesystem (never re-format a disk that might hold real data)"
+      ansible.builtin.command: blkid -o value -s TYPE /dev/vdb
+      register: vdb_fstype
+      failed_when: false
+      changed_when: false
+
+    - name: "Format the vault-hot disk as XFS (only when blkid found nothing on it)"
+      ansible.builtin.command: mkfs.xfs /dev/vdb
+      when: vdb_fstype.rc != 0
+
+    - name: "Ensure {{ vault_hot_dir }} exists"
+      ansible.builtin.file: { path: "{{ vault_hot_dir }}", state: directory, mode: "0750" }
+
+    - name: "Check if /dev/vdb is already mounted at {{ vault_hot_dir }}"
+      ansible.builtin.command: mountpoint -q {{ vault_hot_dir }}
+      register: vault_hot_mounted
+      failed_when: false
+      changed_when: false
+
+    - name: "Mount /dev/vdb at {{ vault_hot_dir }}"
+      ansible.builtin.command: mount /dev/vdb {{ vault_hot_dir }}
+      when: vault_hot_mounted.rc != 0
+
+    - name: "Persist the mount in /etc/fstab (idempotent -- never duplicates the line)"
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^/dev/vdb\s'
+        line: "/dev/vdb {{ vault_hot_dir }} xfs defaults 0 0"
+
+    - name: Mark host as playbook-built (PB-315 assertion target)
+      ansible.builtin.file: { path: /etc/bahyway_built_by_playbook, state: touch }

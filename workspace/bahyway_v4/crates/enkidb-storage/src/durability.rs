@@ -20,7 +20,9 @@ pub enum FsyncPolicy {
 
 impl Default for FsyncPolicy {
     fn default() -> Self {
-        FsyncPolicy::Batched { window: Duration::from_millis(10) }
+        FsyncPolicy::Batched {
+            window: Duration::from_millis(10),
+        }
     }
 }
 

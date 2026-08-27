@@ -46,22 +46,33 @@ impl Cmi {
         f_water: f32,
         f_phenology: f32,
     ) -> Result<Self, AshnanError> {
-        for (name, val) in [("f_soil", f_soil), ("f_heat", f_heat),
-                             ("f_water", f_water), ("f_phenology", f_phenology)] {
+        for (name, val) in [
+            ("f_soil", f_soil),
+            ("f_heat", f_heat),
+            ("f_water", f_water),
+            ("f_phenology", f_phenology),
+        ] {
             if !(0.0..=1.0).contains(&val) {
-                return Err(AshnanError::InvalidFactor { factor: name, value: val });
+                return Err(AshnanError::InvalidFactor {
+                    factor: name,
+                    value: val,
+                });
             }
         }
         let product = weight * f_soil * f_heat * f_water * f_phenology;
-        let score = product.powf(0.25).min(1.0_f32).max(0.0_f32);
+        let score = product.powf(0.25).clamp(0.0_f32, 1.0_f32);
         let state = match score {
             s if s < 0.25 => CmiState::Golden,
             s if s < 0.55 => CmiState::Fuzzy,
             s if s < 0.80 => CmiState::Dead,
-            _             => CmiState::DeadCritical,
+            _ => CmiState::DeadCritical,
         };
         let colour_id = (score * 240.0).round().min(240.0) as u8;
-        Ok(Self { score, state, colour_id })
+        Ok(Self {
+            score,
+            state,
+            colour_id,
+        })
     }
 }
 

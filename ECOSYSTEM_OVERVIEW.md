@@ -9,7 +9,8 @@
 [![Branch](https://img.shields.io/badge/branch-claude%2Ffocused--pascal--Do6ld-blue)](https://github.com/bahyway/EnkiDB)
 [![Language](https://img.shields.io/badge/language-Rust-orange)](https://www.rust-lang.org/)
 [![Tests](https://img.shields.io/badge/tests-1%2C804%20passing-brightgreen)](#build--test)
-[![Crates](https://img.shields.io/badge/crates-79-blueviolet)](#architecture)
+[![Crates](https://img.shields.io/badge/crates-261-blueviolet)](#architecture)
+[![Era](https://img.shields.io/badge/era-Gudea%20v4.0%20sealed-8a2be2)](#v40--build-phase-sealed-gudea-era)
 [![License](https://img.shields.io/badge/license-Proprietary-red)](#license)
 
 > *𒁾 DUB.SAR — Written in the Tablet House of Eridu*
@@ -68,11 +69,11 @@ It is not a traditional database, framework, or library. It is an *ecosystem* �
 ```
 EnkiDB/
 ├── workspace/
-│   └── bahyway_v4/          ← Main v4.0 sovereign ecosystem (79 crates)
+│   └── bahyway_v4/          ← Main v4.0 sovereign ecosystem (261 crates)
 │       ├── Cargo.toml        ← Workspace root
 │       ├── ROADMAP.md        ← Full v4.0 roadmap with W5H2 crate entries
 │       ├── SOVEREIGN_MANUAL_STEP1.md  ← Layer-by-layer W5H2 reference
-│       └── crates/           ← 79 sovereign crates across 12 layers
+│       └── crates/           ← 261 sovereign crates across 12+ layers
 │           ├── bahyway-fabric/        ← NEW L8: Enterprise Data Fabric
 │           ├── bahyway-dqm/           ← NEW L8: Data Quality Metrics Engine
 │           └── data-cleansing-station/← UPGRADED: VGCA-powered cleansing
@@ -137,7 +138,7 @@ B11 = round(H(P) × 240)    ← ADR-001: divisor is ALWAYS 240, NEVER 255
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    BahyWay.Ecosystem v4.0                           │
-│              79 Crates · 5 Binaries · Pure Rust                     │
+│              261 Crates · 5 Binaries · Pure Rust                    │
 ├─────────────────────────────────────────────────────────────────────┤
 │ L12  bahyway-web                                                    │  ← Website / WASM UI
 │ L11  dubsar-ide · dubsar-visualizer                                 │  ← UI / IDE
@@ -404,7 +405,7 @@ bash bahyway.sh --all --yes
 # Individual phases
 bash bahyway.sh --env        # Fedora packages + Rust toolchain
 bash bahyway.sh --scaffold   # Create workspace structure
-bash bahyway.sh --build      # Build all 79 crates
+bash bahyway.sh --build      # Build all 261 crates
 bash bahyway.sh --verify     # Verify everything compiles
 bash bahyway.sh --build --release  # Release build
 ```
@@ -445,7 +446,11 @@ cargo test -p wpd-engine
 cargo test -p dmw-engine
 ```
 
-**Result: 1,804 tests · 0 failures · 0 unsafe code · 0 external runtime deps**
+**Last full-suite snapshot: 1,804 tests · 0 failures · 0 unsafe code · 0 external runtime deps**
+*(pre-dates the Gudea-era additions below — CSR-08, KISPU, pdm-shape-admission, and the
+17 C-4 tablet crates each carry their own passing `cargo test -p <crate>` counts documented
+in their own tablets; re-run `cargo test --workspace` for the current combined total rather
+than trusting this badge alone.)*
 
 ---
 
@@ -490,7 +495,7 @@ cargo test -p dmw-engine
 | `enkidb-quantdb` | *enkidb* + quant | Sovereign tick/OHLC time-series store (Layer 2) |
 | `quant-engine` | *šipru* (work) + quant | Sovereign quant analytics: returns, risk, factor model (Layer 5) |
 
-*Full 79-crate glossary with workflow diagrams: [`workspace/bahyway_v4/ROADMAP.md`](workspace/bahyway_v4/ROADMAP.md)*
+*Full 261-crate glossary with workflow diagrams: [`workspace/bahyway_v4/ROADMAP.md`](workspace/bahyway_v4/ROADMAP.md)*
 
 ---
 
@@ -524,15 +529,103 @@ When multiple laws fire simultaneously, the highest-priority law wins.
 
 ---
 
+## v4.0 — Build Phase Sealed (Gudea Era)
+
+**The build phase of BahyWay.Ecosystem v4.0 is sealed.** At `2026-08-27T12:37:44Z`,
+the Palû Crossing (law `GL-PAL-001`, coordinator `IsimudEngine`, seal `CSR-08`) closed
+the **Gudea** reign (v4.0) across all seven sovereign databases and opened the
+**Zagesi** reign (v4.1) for new enhancement work. From that timestamp forward, `era="Gudea"`
+is an immutable, physics-provable fact stamped on every particle of the closed reign —
+the registry does not reset, it stratifies. Proof lives in `palu/palu_certificates.jsonl`,
+`palu/COMPLETION-STELE-4.0.tsv`, and `palu/PALU-STELE-4.0-to-4.1.md`; a durable Git marker
+sits at the tag [`gudea-v4.0-sealed`](https://github.com/bahyway/EnkiDB/releases/tag/gudea-v4.0-sealed).
+
+### Completion Stele — C-1 through C-6 (all PASS)
+
+| Line | Requirement | Stamp | Verdict |
+|------|-------------|-------|---------|
+| C-1 | Deployment gates green, incl. 1B particles / 1s | MEASURED | ✅ PASS |
+| C-2 | TESTING_PHASE1 Blocks A–F passed | MEASURED | ✅ PASS |
+| C-3 | Arsenal census closed | DERIVED | ✅ PASS |
+| C-4 | All DRAFT law tablets sealed or DEFERRED (17 tablets, `docs/09_observatory/`) | DERIVED | ✅ PASS |
+| C-5 | The Five Refusals affirmed (`laws/GX-COMMENCEMENT-001.md`) | MEASURED | ✅ PASS |
+| C-6 | Seven journals healthy (7 probed, 7 present) | MEASURED | ✅ PASS |
+
+### ConEngine — Connection Sovereignty Rules (CSR-01…CSR-08)
+
+`enkidb-con-engine` enforces eight rules on every connection request — passport
+validation, role checks, audit journaling, credential expiry, cross-tribe gating,
+KIBRATU event emission, tribe isolation, and (new this era) Architect Sovereignty.
+12/12 tests passing (`cargo test -p enkidb-con-engine`).
+
+| Rule | Name | Status |
+|------|------|--------|
+| CSR-01 | Sargon Gate | ✅ real, coded |
+| CSR-02 | Role Gate | ✅ real, coded |
+| CSR-03 | NĀRU Frame Journal | ✅ real, coded |
+| CSR-04 | Credential Check | ⚠️ real trait, but only `StubCredentialStore` implements it |
+| CSR-05 | Gilgamesh Gate | ✅ real, coded |
+| CSR-06 | KIBRATU Emission | ⚠️ emission is real; the full 7-variant cause taxonomy is not |
+| CSR-07 | Tribe Isolation | ✅ real, coded |
+| CSR-08 | **Architect Sovereignty** | ✅ real, coded — gates any `Create`/`Supersede`/`Retire` particle affecting a crate, engine, agent, template, KAKI, tribe, session, playbook, or configuration behind `architect_confirmed`; append-only honest (no literal in-place modify/delete, per §0.3) |
+
+Full account, including open PAZUZU threat-simulation gaps: [`docs/18_security/CONENGINE_CSR.md`](docs/18_security/CONENGINE_CSR.md).
+
+### KISPU — the four-way atomic commit
+
+`enkidb-ingest::kispu` binds every real write into one all-or-nothing commit across
+four operations: the Event KAKI, the NATIRU orbital-range index, the zakāru audit
+journal, and the Orbital position — audit-leg-first ordering, no partial writes reach
+the Golden Store.
+
+### BeeMDM — the 7-Station ETL pipeline
+
+`bin/bee-watchdog` runs every dropped ZIP through the real per-record station chain:
+
+```
+adad-gate (sole KAKI issuer) → DataStructureStation → data-cleansing (DAMA-DMBOK)
+→ VGCA beam → client-dq-profile → score-engine (→ B11)
+→ routed by B11: Gem/Tribe → Golden · Active → Fuzzy+Steward · Dead → PersistedDb only
+```
+
+preceded by the Musarû security gate, VGCA-Δ zip-bomb detection, and a
+compare-tribe-schema gate. Full account: [`docs/08_pipeline_alaktu/BEEMDM_ETL_PIPELINE.md`](docs/08_pipeline_alaktu/BEEMDM_ETL_PIPELINE.md).
+
+### What's next — Testing Plan Phase 1
+
+With the build phase sealed, the ecosystem enters its Testing Plan (tablet `GL-TST-001`,
+still DRAFT): layers L0 (Kernel) through L10 (Watcher), a TP-00…TP-13 playbook register,
+and corpora C-01…C-07 including a deterministic 1-billion-particle Wadi al-Salam corpus
+generator with an adversarial taint layer for defect-detection grading.
+
+---
+
 ## Development Branches
 
 | Branch | Purpose |
 |--------|---------|
-| `claude/focused-pascal-Do6ld` | **Active** — Layer 8 Data Fabric + DQM + VGCA cleansing |
-| `master` | Stable, reviewed snapshots |
+| `master` | **Sealed v4.0 trunk** — tag `gudea-v4.0-sealed` marks the Gudea-era build-complete state |
+| `claude/ecosystem-delivery-rd1ksb` | Active Zagesi/v4.1 delivery branch — PRs against `master` open from here |
+| `claude/eriduscaffold-existence-91xe19` | Bare-metal tracking branch — kept fast-forwarded to mirror what actually runs on the Fedora host (`uruk`/`girsu`) |
 
 ---
 
+<!-- BEGIN PB-686 WED0826 LANDINGS -->
+## Recent Landings — Wed0826 (2026-08-26)
+
+Four law tablets (GL-AGT-001 the Watcher, GL-BND-001 the Band, GL-IMM-001 the shared
+membrane, GL-ALG-001 the Algebra Register) landed in `playbooks/files/` and
+`docs/09_observatory/`, each with a seal playbook (`playbook_681`..`playbook_684`) — as
+of this run, all four sealed real Ed25519 receipts confirmed present at ~/bahyway/laws/receipts/.
+GL-ALG-001's four visualization tabs (`sala_algebra_register_v1..v4.html`) are promoted by
+`playbook_685`. All five are walked by `playbook_672`'s extended backlog
+(`playbooks/data/run_manifest_672_backlog.yml`, group `wed0826_corpus`).
+
+See `docs/00_codex/BahyWay_Ecosystem_Manual.md` §6 and
+`docs/00_codex/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md` (Wed0826 addenda) for the full account.
+
+---
+<!-- END PB-686 WED0826 LANDINGS -->
 ## Documentation
 
 | Document | Location | Contents |

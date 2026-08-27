@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn event_count_triggers_at_threshold() {
         let s = SnapshotSchedule::EventCount(100);
-        assert!(!s.should_snapshot(99,  Duration::ZERO));
+        assert!(!s.should_snapshot(99, Duration::ZERO));
         assert!(s.should_snapshot(100, Duration::ZERO));
         assert!(s.should_snapshot(200, Duration::ZERO));
     }

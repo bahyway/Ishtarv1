@@ -29,7 +29,7 @@ pub struct SpscRing<T> {
 impl<T> SpscRing<T> {
     /// Create a new ring buffer with the given capacity (rounded up to power of 2).
     pub fn new(capacity: usize) -> Self {
-        let cap = capacity.next_power_of_two().min(1 << 20).max(2);
+        let cap = capacity.next_power_of_two().clamp(2, 1 << 20);
         Self {
             inner: Arc::new(Mutex::new(VecDeque::with_capacity(cap))),
             capacity: cap,
@@ -41,13 +41,18 @@ impl<T> SpscRing<T> {
         let inner = self.inner;
         let cap = self.capacity;
         (
-            Producer { inner: Arc::clone(&inner), capacity: cap },
+            Producer {
+                inner: Arc::clone(&inner),
+                capacity: cap,
+            },
             Consumer { inner },
         )
     }
 
     /// Capacity of this ring (always a power of 2).
-    pub fn capacity(&self) -> usize { self.capacity }
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
 }
 
 /// Sending half — owned by the single producer.
@@ -68,9 +73,13 @@ impl<T> Producer<T> {
     }
 
     /// Number of items currently in the ring.
-    pub fn len(&self) -> usize { self.inner.lock().unwrap().len() }
+    pub fn len(&self) -> usize {
+        self.inner.lock().unwrap().len()
+    }
 
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Receiving half — owned by the single consumer.
@@ -91,8 +100,12 @@ impl<T> Consumer<T> {
         q.drain(..n).collect()
     }
 
-    pub fn len(&self) -> usize { self.inner.lock().unwrap().len() }
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
+    pub fn len(&self) -> usize {
+        self.inner.lock().unwrap().len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[cfg(test)]
@@ -126,7 +139,9 @@ mod tests {
     fn drain_batch() {
         let ring: SpscRing<u32> = SpscRing::new(16);
         let (tx, rx) = ring.split();
-        for i in 0..10u32 { tx.push(i).unwrap(); }
+        for i in 0..10u32 {
+            tx.push(i).unwrap();
+        }
         let batch = rx.drain_batch(4);
         assert_eq!(batch, vec![0, 1, 2, 3]);
         assert_eq!(rx.len(), 6);

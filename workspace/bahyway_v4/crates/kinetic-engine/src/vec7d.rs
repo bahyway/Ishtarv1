@@ -16,7 +16,7 @@
 //! | ud    | UD 𒌓    | Volatility — Cache / Plan       |
 //! | uru   | URU 𒌷   | Strength — Index Health         |
 
-use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Neg};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// A vector in the sovereign 7-dimensional Heptagon space.
 ///
@@ -26,17 +26,17 @@ use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Neg};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec7D {
     /// ME 𒈨 — Intent / Set Theory dimension
-    pub me:  f64,
+    pub me: f64,
     /// GU 𒄖 — Mass / Cardinality dimension
-    pub gu:  f64,
+    pub gu: f64,
     /// SAG 𒊕 — Gravity / Selectivity dimension
     pub sag: f64,
     /// A 𒀀 — Viscosity / IO Friction dimension
-    pub a:   f64,
+    pub a: f64,
     /// IZI 𒉈 — Heat / CPU Burn dimension
     pub izi: f64,
     /// UD 𒌓 — Volatility / Cache dimension
-    pub ud:  f64,
+    pub ud: f64,
     /// URU 𒌷 — Strength / Index Health dimension
     pub uru: f64,
 }
@@ -46,46 +46,73 @@ impl Vec7D {
 
     /// The zero vector — no force, no velocity, no position
     pub const ZERO: Self = Self {
-        me: 0.0, gu: 0.0, sag: 0.0, a: 0.0,
-        izi: 0.0, ud: 0.0, uru: 0.0,
+        me: 0.0,
+        gu: 0.0,
+        sag: 0.0,
+        a: 0.0,
+        izi: 0.0,
+        ud: 0.0,
+        uru: 0.0,
     };
 
     /// The unit vector — equal weight on all 7 dimensions
     pub const UNIT: Self = Self {
-        me: 1.0, gu: 1.0, sag: 1.0, a: 1.0,
-        izi: 1.0, ud: 1.0, uru: 1.0,
+        me: 1.0,
+        gu: 1.0,
+        sag: 1.0,
+        a: 1.0,
+        izi: 1.0,
+        ud: 1.0,
+        uru: 1.0,
     };
 
     /// The healthy orbit center — a particle at this position
     /// is perfectly sovereign across all 7 dimensions.
     pub const HEALTHY_ORBIT: Self = Self {
-        me: 1.0, gu: 1.0, sag: 1.0, a: 1.0,
-        izi: 1.0, ud: 1.0, uru: 1.0,
+        me: 1.0,
+        gu: 1.0,
+        sag: 1.0,
+        a: 1.0,
+        izi: 1.0,
+        ud: 1.0,
+        uru: 1.0,
     };
 
     // ── Constructors ───────────────────────────────────────────────────────
 
     /// Construct a Vec7D from named dimension values
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        me: f64, gu: f64, sag: f64, a: f64,
-        izi: f64, ud: f64, uru: f64,
-    ) -> Self {
-        Self { me, gu, sag, a, izi, ud, uru }
+    pub fn new(me: f64, gu: f64, sag: f64, a: f64, izi: f64, ud: f64, uru: f64) -> Self {
+        Self {
+            me,
+            gu,
+            sag,
+            a,
+            izi,
+            ud,
+            uru,
+        }
     }
 
     /// Construct from a `[f64; 7]` array in Heptagon order
     /// `[me, gu, sag, a, izi, ud, uru]`
     pub fn from_array(arr: [f64; 7]) -> Self {
         Self {
-            me:  arr[0], gu:  arr[1], sag: arr[2],
-            a:   arr[3], izi: arr[4], ud:  arr[5], uru: arr[6],
+            me: arr[0],
+            gu: arr[1],
+            sag: arr[2],
+            a: arr[3],
+            izi: arr[4],
+            ud: arr[5],
+            uru: arr[6],
         }
     }
 
     /// Export to `[f64; 7]` in Heptagon order
     pub fn to_array(self) -> [f64; 7] {
-        [self.me, self.gu, self.sag, self.a, self.izi, self.ud, self.uru]
+        [
+            self.me, self.gu, self.sag, self.a, self.izi, self.ud, self.uru,
+        ]
     }
 
     /// Construct a vector with one dimension set and all others zero
@@ -93,12 +120,12 @@ impl Vec7D {
         use crate::force::HeptaDimension::*;
         let mut v = Self::ZERO;
         match dim {
-            ME  => v.me  = value,
-            GU  => v.gu  = value,
+            ME => v.me = value,
+            GU => v.gu = value,
             SAG => v.sag = value,
-            A   => v.a   = value,
+            A => v.a = value,
             IZI => v.izi = value,
-            UD  => v.ud  = value,
+            UD => v.ud = value,
             URU => v.uru = value,
         }
         v
@@ -108,12 +135,12 @@ impl Vec7D {
 
     /// Sum of squares — avoids sqrt when comparison is sufficient
     pub fn magnitude_squared(self) -> f64 {
-        self.me  * self.me
-            + self.gu  * self.gu
+        self.me * self.me
+            + self.gu * self.gu
             + self.sag * self.sag
-            + self.a   * self.a
+            + self.a * self.a
             + self.izi * self.izi
-            + self.ud  * self.ud
+            + self.ud * self.ud
             + self.uru * self.uru
     }
 
@@ -124,12 +151,12 @@ impl Vec7D {
 
     /// Dot product — the inner product of two sovereign vectors
     pub fn dot(self, other: Vec7D) -> f64 {
-        self.me  * other.me
-            + self.gu  * other.gu
+        self.me * other.me
+            + self.gu * other.gu
             + self.sag * other.sag
-            + self.a   * other.a
+            + self.a * other.a
             + self.izi * other.izi
-            + self.ud  * other.ud
+            + self.ud * other.ud
             + self.uru * other.uru
     }
 
@@ -148,18 +175,22 @@ impl Vec7D {
     /// Returns 0.0 if magnitude is negligible (infinite mass — immovable)
     pub fn inverse_magnitude(self) -> f64 {
         let mag = self.magnitude();
-        if mag < f64::EPSILON { 0.0 } else { 1.0 / mag }
+        if mag < f64::EPSILON {
+            0.0
+        } else {
+            1.0 / mag
+        }
     }
 
     /// Component-wise clamp to `[min, max]`
     pub fn clamp(self, min: f64, max: f64) -> Vec7D {
         Vec7D {
-            me:  self.me.clamp(min, max),
-            gu:  self.gu.clamp(min, max),
+            me: self.me.clamp(min, max),
+            gu: self.gu.clamp(min, max),
             sag: self.sag.clamp(min, max),
-            a:   self.a.clamp(min, max),
+            a: self.a.clamp(min, max),
             izi: self.izi.clamp(min, max),
-            ud:  self.ud.clamp(min, max),
+            ud: self.ud.clamp(min, max),
             uru: self.uru.clamp(min, max),
         }
     }
@@ -221,12 +252,12 @@ impl Add for Vec7D {
     type Output = Vec7D;
     fn add(self, rhs: Vec7D) -> Vec7D {
         Vec7D {
-            me:  self.me  + rhs.me,
-            gu:  self.gu  + rhs.gu,
+            me: self.me + rhs.me,
+            gu: self.gu + rhs.gu,
             sag: self.sag + rhs.sag,
-            a:   self.a   + rhs.a,
+            a: self.a + rhs.a,
             izi: self.izi + rhs.izi,
-            ud:  self.ud  + rhs.ud,
+            ud: self.ud + rhs.ud,
             uru: self.uru + rhs.uru,
         }
     }
@@ -242,12 +273,12 @@ impl Sub for Vec7D {
     type Output = Vec7D;
     fn sub(self, rhs: Vec7D) -> Vec7D {
         Vec7D {
-            me:  self.me  - rhs.me,
-            gu:  self.gu  - rhs.gu,
+            me: self.me - rhs.me,
+            gu: self.gu - rhs.gu,
             sag: self.sag - rhs.sag,
-            a:   self.a   - rhs.a,
+            a: self.a - rhs.a,
             izi: self.izi - rhs.izi,
-            ud:  self.ud  - rhs.ud,
+            ud: self.ud - rhs.ud,
             uru: self.uru - rhs.uru,
         }
     }
@@ -263,12 +294,12 @@ impl Mul<f64> for Vec7D {
     type Output = Vec7D;
     fn mul(self, scalar: f64) -> Vec7D {
         Vec7D {
-            me:  self.me  * scalar,
-            gu:  self.gu  * scalar,
+            me: self.me * scalar,
+            gu: self.gu * scalar,
             sag: self.sag * scalar,
-            a:   self.a   * scalar,
+            a: self.a * scalar,
             izi: self.izi * scalar,
-            ud:  self.ud  * scalar,
+            ud: self.ud * scalar,
             uru: self.uru * scalar,
         }
     }
@@ -441,7 +472,10 @@ mod tests {
 
     #[test]
     fn health_score_on_healthy_orbit_is_one() {
-        assert!(approx(Vec7D::HEALTHY_ORBIT.health_score(Vec7D::HEALTHY_ORBIT), 1.0));
+        assert!(approx(
+            Vec7D::HEALTHY_ORBIT.health_score(Vec7D::HEALTHY_ORBIT),
+            1.0
+        ));
     }
 
     #[test]
@@ -488,7 +522,7 @@ mod tests {
     fn add_assign_operator() {
         let mut v = Vec7D::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         v += Vec7D::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-        assert!(approx(v.me,  1.0));
+        assert!(approx(v.me, 1.0));
         assert!(approx(v.uru, 1.0));
     }
 

@@ -142,7 +142,11 @@ pub struct LamassuEngine {
 
 impl LamassuEngine {
     pub fn new(max_epsilon: f64, r_max: f64, h_max: f64) -> Self {
-        LamassuEngine { max_epsilon, r_max, h_max }
+        LamassuEngine {
+            max_epsilon,
+            r_max,
+            h_max,
+        }
     }
 
     /// Sample a landmark subset of a Tribe's particles — `(kaki_bytes,
@@ -207,7 +211,12 @@ mod tests {
         let particles: Vec<([u8; 16], f64)> = kakis.into_iter().map(|k| (k, 0.5)).collect();
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
         let reading = lamassu.scan_tribe(0x0001, &particles);
-        assert_eq!(reading.signature, TopologicalSignature::Golden, "{:?}", reading.diagram);
+        assert_eq!(
+            reading.signature,
+            TopologicalSignature::Golden,
+            "{:?}",
+            reading.diagram
+        );
         assert_eq!(reading.component_count, 1);
         // A planar ring is a loop (H1), not a hollow 3D shell (H2): no void.
         assert_eq!(reading.void_count, 0);
@@ -226,8 +235,16 @@ mod tests {
         // and classify_fuzzy_* already do above.
         let diag = PersistenceDiagram {
             pairs: vec![
-                PersistencePair { dim: 0, birth: 0.0, death: f64::INFINITY },
-                PersistencePair { dim: 2, birth: 0.4, death: f64::INFINITY },
+                PersistencePair {
+                    dim: 0,
+                    birth: 0.0,
+                    death: f64::INFINITY,
+                },
+                PersistencePair {
+                    dim: 2,
+                    birth: 0.4,
+                    death: f64::INFINITY,
+                },
             ],
         };
         let signature = classify(&diag, 1.0);
@@ -258,13 +275,22 @@ mod tests {
             .collect();
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
         let reading = lamassu.scan_tribe(0x0002, &particles);
-        assert_eq!(reading.signature, TopologicalSignature::Dead, "{:?}", reading.diagram);
+        assert_eq!(
+            reading.signature,
+            TopologicalSignature::Dead,
+            "{:?}",
+            reading.diagram
+        );
     }
 
     #[test]
     fn classify_golden_requires_ratio_above_threshold() {
         let diag = PersistenceDiagram {
-            pairs: vec![PersistencePair { dim: 1, birth: 0.1, death: 0.9 }],
+            pairs: vec![PersistencePair {
+                dim: 1,
+                birth: 0.1,
+                death: 0.9,
+            }],
         };
         assert_eq!(classify(&diag, 1.0), TopologicalSignature::Golden);
     }
@@ -272,7 +298,11 @@ mod tests {
     #[test]
     fn classify_fuzzy_below_threshold() {
         let diag = PersistenceDiagram {
-            pairs: vec![PersistencePair { dim: 1, birth: 0.1, death: 0.15 }],
+            pairs: vec![PersistencePair {
+                dim: 1,
+                birth: 0.1,
+                death: 0.15,
+            }],
         };
         assert_eq!(classify(&diag, 1.0), TopologicalSignature::Fuzzy);
     }
@@ -280,7 +310,11 @@ mod tests {
     #[test]
     fn classify_dead_with_no_h1() {
         let diag = PersistenceDiagram {
-            pairs: vec![PersistencePair { dim: 0, birth: 0.0, death: f64::INFINITY }],
+            pairs: vec![PersistencePair {
+                dim: 0,
+                birth: 0.0,
+                death: f64::INFINITY,
+            }],
         };
         assert_eq!(classify(&diag, 1.0), TopologicalSignature::Dead);
     }
@@ -288,8 +322,20 @@ mod tests {
     #[test]
     fn compare_readings_flags_matching_golden_signatures_across_tribes() {
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
-        let a = lamassu.scan_tribe(0x0001, &ring_kaki_bytes(16).into_iter().map(|k| (k, 0.5)).collect::<Vec<_>>());
-        let b = lamassu.scan_tribe(0x0002, &ring_kaki_bytes(16).into_iter().map(|k| (k, 0.5)).collect::<Vec<_>>());
+        let a = lamassu.scan_tribe(
+            0x0001,
+            &ring_kaki_bytes(16)
+                .into_iter()
+                .map(|k| (k, 0.5))
+                .collect::<Vec<_>>(),
+        );
+        let b = lamassu.scan_tribe(
+            0x0002,
+            &ring_kaki_bytes(16)
+                .into_iter()
+                .map(|k| (k, 0.5))
+                .collect::<Vec<_>>(),
+        );
         let cmp = compare_readings(&a, &b);
         assert!(cmp.same_signature);
         assert_eq!(cmp.a_signature, TopologicalSignature::Golden);
@@ -300,7 +346,13 @@ mod tests {
     #[test]
     fn compare_readings_flags_a_divergent_pair() {
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
-        let golden = lamassu.scan_tribe(0x0001, &ring_kaki_bytes(16).into_iter().map(|k| (k, 0.5)).collect::<Vec<_>>());
+        let golden = lamassu.scan_tribe(
+            0x0001,
+            &ring_kaki_bytes(16)
+                .into_iter()
+                .map(|k| (k, 0.5))
+                .collect::<Vec<_>>(),
+        );
         let dead = lamassu.scan_tribe(0x0002, &[]);
         let cmp = compare_readings(&golden, &dead);
         assert!(!cmp.same_signature);

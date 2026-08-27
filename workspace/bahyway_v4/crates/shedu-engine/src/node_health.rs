@@ -14,10 +14,10 @@
 use crate::hardware::HardwareMetrics;
 
 /// D7 dimension weights for hardware health (sum = 1.0).
-pub const D7_W_GPU:  f32 = 0.35;
+pub const D7_W_GPU: f32 = 0.35;
 pub const D7_W_VRAM: f32 = 0.30;
-pub const D7_W_CPU:  f32 = 0.20;
-pub const D7_W_NET:  f32 = 0.15;
+pub const D7_W_CPU: f32 = 0.20;
+pub const D7_W_NET: f32 = 0.15;
 
 /// Below this B11 value the node is considered DEAD → freeze imminent.
 pub const NODE_DEAD_B11: u8 = 60;
@@ -43,11 +43,18 @@ impl NodeHealth {
     pub fn from_metrics(node_id: u8, metrics: HardwareMetrics) -> Self {
         let d7 = compute_d7_integrity(&metrics);
         let b11 = (d7 * 240.0).round() as u8;
-        Self { node_id, b11, d7_integrity: d7, metrics }
+        Self {
+            node_id,
+            b11,
+            d7_integrity: d7,
+            metrics,
+        }
     }
 
     /// Node is in DEAD lane — Quantum Freeze should fire immediately.
-    pub fn is_imminent_failure(&self) -> bool { self.b11 < NODE_DEAD_B11 }
+    pub fn is_imminent_failure(&self) -> bool {
+        self.b11 < NODE_DEAD_B11
+    }
 
     /// Node is in FUZZY lane — issue warning to stakeholder.
     pub fn is_warning(&self) -> bool {
@@ -55,29 +62,34 @@ impl NodeHealth {
     }
 
     /// Node is healthy (GEM/TRIBE/ACTIVE).
-    pub fn is_healthy(&self) -> bool { self.b11 >= NODE_FUZZY_B11 }
+    pub fn is_healthy(&self) -> bool {
+        self.b11 >= NODE_FUZZY_B11
+    }
 
     pub fn label(&self) -> &'static str {
-        if self.b11 >= 200      { "GEM-NODE" }
-        else if self.b11 >= 140 { "TRIBE-NODE" }
-        else if self.b11 >= 100 { "ACTIVE-NODE" }
-        else if self.b11 >= 60  { "FUZZY-NODE" }
-        else                    { "DEAD-NODE" }
+        if self.b11 >= 200 {
+            "GEM-NODE"
+        } else if self.b11 >= 140 {
+            "TRIBE-NODE"
+        } else if self.b11 >= 100 {
+            "ACTIVE-NODE"
+        } else if self.b11 >= 60 {
+            "FUZZY-NODE"
+        } else {
+            "DEAD-NODE"
+        }
     }
 }
 
 /// Compute the composite D7 hardware integrity score (0..1).
 pub fn compute_d7_integrity(m: &HardwareMetrics) -> f32 {
     // Each sub-score maps the raw metric to [0,1] headroom remaining
-    let gpu_score  = gpu_headroom(m.gpu_temp_celsius);
+    let gpu_score = gpu_headroom(m.gpu_temp_celsius);
     let vram_score = 1.0 - m.vram_utilisation();
-    let cpu_score  = (1.0 - m.cpu_load).clamp(0.0, 1.0);
-    let net_score  = net_headroom(m.net_latency_ms);
+    let cpu_score = (1.0 - m.cpu_load).clamp(0.0, 1.0);
+    let net_score = net_headroom(m.net_latency_ms);
 
-    (D7_W_GPU  * gpu_score
-   + D7_W_VRAM * vram_score
-   + D7_W_CPU  * cpu_score
-   + D7_W_NET  * net_score)
+    (D7_W_GPU * gpu_score + D7_W_VRAM * vram_score + D7_W_CPU * cpu_score + D7_W_NET * net_score)
         .clamp(0.0, 1.0)
 }
 
@@ -101,7 +113,11 @@ mod tests {
     fn healthy_node_high_b11() {
         let m = HardwareMetrics::simulated_healthy(0);
         let h = NodeHealth::from_metrics(0, m);
-        assert!(h.b11 >= NODE_FUZZY_B11, "healthy node should be above fuzzy: b11={}", h.b11);
+        assert!(
+            h.b11 >= NODE_FUZZY_B11,
+            "healthy node should be above fuzzy: b11={}",
+            h.b11
+        );
         assert!(h.is_healthy());
         assert!(!h.is_warning());
         assert!(!h.is_imminent_failure());
@@ -111,7 +127,11 @@ mod tests {
     fn critical_node_low_b11() {
         let m = HardwareMetrics::simulated_critical(0);
         let h = NodeHealth::from_metrics(0, m);
-        assert!(h.b11 < NODE_FUZZY_B11, "critical node should be below fuzzy: b11={}", h.b11);
+        assert!(
+            h.b11 < NODE_FUZZY_B11,
+            "critical node should be below fuzzy: b11={}",
+            h.b11
+        );
         assert!(h.is_imminent_failure() || h.is_warning());
     }
 
@@ -124,11 +144,20 @@ mod tests {
 
     #[test]
     fn zero_latency_full_net_score() {
-        let m = HardwareMetrics { net_latency_ms: 0.0, ..HardwareMetrics::simulated_healthy(0) };
-        let d7_low_net  = compute_d7_integrity(&m);
-        let m2 = HardwareMetrics { net_latency_ms: 400.0, ..HardwareMetrics::simulated_healthy(0) };
+        let m = HardwareMetrics {
+            net_latency_ms: 0.0,
+            ..HardwareMetrics::simulated_healthy(0)
+        };
+        let d7_low_net = compute_d7_integrity(&m);
+        let m2 = HardwareMetrics {
+            net_latency_ms: 400.0,
+            ..HardwareMetrics::simulated_healthy(0)
+        };
         let d7_high_net = compute_d7_integrity(&m2);
-        assert!(d7_low_net > d7_high_net, "lower latency should give higher D7");
+        assert!(
+            d7_low_net > d7_high_net,
+            "lower latency should give higher D7"
+        );
     }
 
     #[test]
@@ -149,6 +178,9 @@ mod tests {
     #[test]
     fn weights_sum_to_one() {
         let sum = D7_W_GPU + D7_W_VRAM + D7_W_CPU + D7_W_NET;
-        assert!((sum - 1.0).abs() < 1e-5, "weights must sum to 1.0, got {sum}");
+        assert!(
+            (sum - 1.0).abs() < 1e-5,
+            "weights must sum to 1.0, got {sum}"
+        );
     }
 }

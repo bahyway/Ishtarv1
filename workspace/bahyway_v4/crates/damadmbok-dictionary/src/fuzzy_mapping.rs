@@ -7,13 +7,13 @@
 #[derive(Debug, Clone, Copy)]
 pub struct DimensionMapping {
     /// Dimension index (1–8).
-    pub dimension:       u8,
+    pub dimension: u8,
     /// DAMA-DMBOK term code (e.g. "DQ.COMPLETENESS").
-    pub dama_code:       &'static str,
+    pub dama_code: &'static str,
     /// The BahyWay field or concept being scored.
-    pub bahyway_field:   &'static str,
+    pub bahyway_field: &'static str,
     /// Human-readable description of what this dimension measures.
-    pub description:     &'static str,
+    pub description: &'static str,
 }
 
 /// All 8 fuzzy dimension mappings.
@@ -75,7 +75,10 @@ pub fn dimension_to_dama(d: u8) -> Option<&'static DimensionMapping> {
 
 /// Return all dimension mappings for a given DAMA code.
 pub fn dimensions_for_dama(dama_code: &str) -> Vec<&'static DimensionMapping> {
-    DIMENSION_MAPPINGS.iter().filter(|m| m.dama_code == dama_code).collect()
+    DIMENSION_MAPPINGS
+        .iter()
+        .filter(|m| m.dama_code == dama_code)
+        .collect()
 }
 
 #[cfg(test)]
@@ -86,10 +89,7 @@ mod tests {
     fn all_8_dimensions_present() {
         assert_eq!(DIMENSION_MAPPINGS.len(), 8);
         for i in 1u8..=8 {
-            assert!(
-                dimension_to_dama(i).is_some(),
-                "Missing dimension D{i}"
-            );
+            assert!(dimension_to_dama(i).is_some(), "Missing dimension D{i}");
         }
     }
 

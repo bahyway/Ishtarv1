@@ -6,5 +6,5 @@
 pub mod runtime;
 pub mod scheduler_loop;
 
-pub use runtime::{EriduRuntime, Task, TaskResult, RuntimeState};
+pub use runtime::{EriduRuntime, RuntimeState, Task, TaskResult};
 pub use scheduler_loop::{SchedulerLoop, TickOutcome};

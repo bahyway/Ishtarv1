@@ -6,7 +6,7 @@
 > already using that number. This document's content is unchanged; only
 > its ID moved. See `docs/phase2-incoming/RENUMBERING_MAP.md`.
 ## The Inner Life of Data · Shape as Reading, Not Illustration · Pattern V-7
-### BahyWay.Ecosystem v4.0 · Phase Two (GL-STD-002) · Status: DRAFT — pending CSR-08 sealing by DUB.SAR 𒁾
+### BahyWay.Ecosystem v4.0 · Phase Two (GL-STD-002) · Status: SEALED — landed by `crates/morphology`, 3/3 tests passing (the mapping table, D-2's provenance-match requirement, D-1's candidate-to-finding gate)
 
 ---
 
@@ -94,10 +94,28 @@ whitepaper. It should be sealed only after (or alongside) the GL-ALG-002
 Promotion Program, so the algebra it proposes into is itself hardened.
 
 ## 5 · Open seals for CSR-08
-GL-VIZ-007 adoption · V-7 registration · sovereign name for the Morphological
-Discovery rite · confirmation of the §1 mapping table as canonical · whether
-D-1 (morphology-proposes) becomes a general law binding ALL Šala courts, not
-only this one.
 
-*Recorded in the reign of Gudea 1.0, Phase Two. Nothing herein is sealed until
-DUB.SAR confirms under CSR-08.*
+**Resolved by this seal** (2026-08-27, explicit chat confirmation, CSR-08):
+GL-VIZ-007 adoption · V-7 registration · confirmation of the §1 mapping table
+as canonical.
+
+**Still open, not decided here:** the sovereign (BWVL/cuneiform-derived) name
+for the Morphological Discovery rite, and whether D-1 (morphology-proposes)
+becomes a general law binding ALL Šala courts, not only this one -- the
+latter is a cross-cutting policy question beyond this tablet's own scope and
+is left to a future decree.
+
+## 6 · Seal
+
+```
+Sealed by: DUB.SAR 𒁾 (Bahaa Fadam), via explicit chat confirmation (CSR-08)
+Date:      2026-08-27
+AkkadianSeal (Ed25519): PENDING — no real signing infrastructure wired
+                        yet (no Sargon/Gilgamesh passport ceremony run
+                        against this tablet). The chat confirmation above
+                        is the Architect's real CSR-08 act; the
+                        cryptographic seal is separate, real follow-on
+                        work.
+```
+
+*Recorded in the reign of Gudea 1.0, Phase Two.*

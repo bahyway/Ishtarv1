@@ -44,18 +44,23 @@ pub enum GeometricFit {
 impl GeometricFit {
     /// Classify a raw geometric fit score.
     pub fn from_score(score: f64) -> Self {
-        if      score >= CLEAN_THRESHOLD   { Self::Clean   }
-        else if score >= SUSPECT_THRESHOLD { Self::Suspect }
-        else if score >= ALIEN_THRESHOLD   { Self::Outlier }
-        else                               { Self::Alien   }
+        if score >= CLEAN_THRESHOLD {
+            Self::Clean
+        } else if score >= SUSPECT_THRESHOLD {
+            Self::Suspect
+        } else if score >= ALIEN_THRESHOLD {
+            Self::Outlier
+        } else {
+            Self::Alien
+        }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Clean   => "CLEAN",
+            Self::Clean => "CLEAN",
             Self::Suspect => "SUSPECT",
             Self::Outlier => "OUTLIER",
-            Self::Alien   => "ALIEN",
+            Self::Alien => "ALIEN",
         }
     }
 
@@ -78,17 +83,21 @@ impl GeometricFit {
 /// the sovereign data ideal for the domain, never toward degraded data.
 #[derive(Debug, Clone)]
 pub struct DomainCentroid {
-    dims:      [f64; 7],
+    dims: [f64; 7],
     /// Total weight used in the running average (seed counts as 1 prior).
     avg_weight: u64,
     /// Number of actual GEM-lane particles that have updated this centroid.
-    gem_count:  u64,
+    gem_count: u64,
 }
 
 impl DomainCentroid {
     /// Start from the all-ones ideal point (perfect quality in every dimension).
     pub fn new() -> Self {
-        Self { dims: [1.0; 7], avg_weight: 0, gem_count: 0 }
+        Self {
+            dims: [1.0; 7],
+            avg_weight: 0,
+            gem_count: 0,
+        }
     }
 
     /// Start from an explicit seed centroid (domain-specific prior).
@@ -96,7 +105,11 @@ impl DomainCentroid {
     /// The seed contributes weight=1 to the running average but is NOT counted
     /// as a GEM calibration — `gem_count()` only tracks real GEM updates.
     pub fn from_seed(seed: [f64; 7]) -> Self {
-        Self { dims: seed, avg_weight: 1, gem_count: 0 }
+        Self {
+            dims: seed,
+            avg_weight: 1,
+            gem_count: 0,
+        }
     }
 
     /// Update the centroid using a GEM-lane particle's FSV.
@@ -106,11 +119,11 @@ impl DomainCentroid {
     pub fn update_with_gem(&mut self, fsv: &FeatureScoreVector) {
         let n = self.avg_weight as f64;
         let new_dims = fsv.as_array();
-        for i in 0..7 {
-            self.dims[i] = (self.dims[i] * n + new_dims[i]) / (n + 1.0);
+        for (d, nd) in self.dims.iter_mut().zip(new_dims.iter()) {
+            *d = (*d * n + nd) / (n + 1.0);
         }
         self.avg_weight += 1;
-        self.gem_count  += 1;
+        self.gem_count += 1;
     }
 
     /// Compute the geometric fit score of an FSV against this centroid.
@@ -124,7 +137,9 @@ impl DomainCentroid {
             return 1.0; // uncalibrated → accept all
         }
         let fsv_dims = fsv.as_array();
-        let dist: f64 = self.dims.iter()
+        let dist: f64 = self
+            .dims
+            .iter()
             .zip(fsv_dims.iter())
             .map(|(c, f)| (c - f).powi(2))
             .sum::<f64>()
@@ -138,14 +153,20 @@ impl DomainCentroid {
     }
 
     /// Number of GEM particles that have calibrated this centroid.
-    pub fn gem_count(&self) -> u64 { self.gem_count }
+    pub fn gem_count(&self) -> u64 {
+        self.gem_count
+    }
 
     /// Current centroid coordinates (read-only).
-    pub fn dims(&self) -> &[f64; 7] { &self.dims }
+    pub fn dims(&self) -> &[f64; 7] {
+        &self.dims
+    }
 }
 
 impl Default for DomainCentroid {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Full VGCA result ─────────────────────────────────────────────────────────
@@ -153,9 +174,9 @@ impl Default for DomainCentroid {
 /// Complete result of running VGCA-Σ on one text field.
 #[derive(Debug, Clone)]
 pub struct VgcaResult {
-    pub fsv:     FeatureScoreVector,
-    pub score:   f64,
-    pub fit:     GeometricFit,
+    pub fsv: FeatureScoreVector,
+    pub score: f64,
+    pub fit: GeometricFit,
     /// EAV attributes to write to Orbit (7 float dimensions + 1 fit category).
     pub attrs_count: usize,
 }
@@ -163,12 +184,21 @@ pub struct VgcaResult {
 impl VgcaResult {
     pub fn compute(fsv: FeatureScoreVector, centroid: &DomainCentroid) -> Self {
         let score = centroid.geometric_fit_score(&fsv);
-        let fit   = GeometricFit::from_score(score);
-        Self { fsv, score, fit, attrs_count: 8 }
+        let fit = GeometricFit::from_score(score);
+        Self {
+            fsv,
+            score,
+            fit,
+            attrs_count: 8,
+        }
     }
 
-    pub fn is_clean(&self) -> bool { self.fit == GeometricFit::Clean }
-    pub fn is_alien(&self) -> bool { self.fit == GeometricFit::Alien }
+    pub fn is_clean(&self) -> bool {
+        self.fit == GeometricFit::Clean
+    }
+    pub fn is_alien(&self) -> bool {
+        self.fit == GeometricFit::Alien
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -195,7 +225,10 @@ mod tests {
         assert_eq!(c.gem_count(), 1);
         // centroid shifted toward arabic_name
         let dims = c.dims();
-        assert!(dims[2] > 0.5, "centroid D3 (arabic_density) should increase");
+        assert!(
+            dims[2] > 0.5,
+            "centroid D3 (arabic_density) should increase"
+        );
     }
 
     #[test]
@@ -214,7 +247,10 @@ mod tests {
             c.update_with_gem(&FeatureScoreVector::perfect());
         }
         let score = c.geometric_fit_score(&FeatureScoreVector::zero());
-        assert!(score < SUSPECT_THRESHOLD, "zero FSV against perfect centroid: score={score}");
+        assert!(
+            score < SUSPECT_THRESHOLD,
+            "zero FSV against perfect centroid: score={score}"
+        );
     }
 
     #[test]
@@ -261,8 +297,12 @@ mod tests {
 
     #[test]
     fn geometric_fit_labels_non_empty() {
-        for fit in [GeometricFit::Clean, GeometricFit::Suspect,
-                    GeometricFit::Outlier, GeometricFit::Alien] {
+        for fit in [
+            GeometricFit::Clean,
+            GeometricFit::Suspect,
+            GeometricFit::Outlier,
+            GeometricFit::Alien,
+        ] {
             assert!(!fit.label().is_empty());
         }
     }

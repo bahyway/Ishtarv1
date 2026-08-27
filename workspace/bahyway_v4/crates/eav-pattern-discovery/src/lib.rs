@@ -60,7 +60,12 @@ pub fn discover_mandatory_pattern(
     let result = mandatory_track::score_mandatory_value_pattern(samples)?;
     let bytes: Vec<u8> = samples
         .iter()
-        .flat_map(|s| s.freshness.to_le_bytes().into_iter().chain(s.velocity.to_le_bytes()))
+        .flat_map(|s| {
+            s.freshness
+                .to_le_bytes()
+                .into_iter()
+                .chain(s.velocity.to_le_bytes())
+        })
         .collect();
     let symbolic = symbolic_hash_of(&[&bytes]);
     build_discovered_pattern(
@@ -130,8 +135,13 @@ pub(crate) fn build_discovered_pattern(
     }
     let confidence_millipercent = (confidence.clamp(0.0, 1.0) * 10_000.0).round() as u16;
     let centroid = FixedCoord7D { d: symbolic_hash };
-    let pattern_kaki =
-        derive_pattern_kaki(pattern_type, centroid, constituent_merkle_root, confidence_millipercent, orbital_formed);
+    let pattern_kaki = derive_pattern_kaki(
+        pattern_type,
+        centroid,
+        constituent_merkle_root,
+        confidence_millipercent,
+        orbital_formed,
+    );
     let lifecycle = if confidence >= STABLE_CONFIDENCE {
         PatternLifecycle::Stable
     } else {
@@ -206,9 +216,18 @@ mod tests {
     #[test]
     fn discover_mandatory_pattern_mints_a_real_pattern_for_a_coherent_batch() {
         let samples = vec![
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.5 },
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.5 },
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.5 },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.5,
+            },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.5,
+            },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.5,
+            },
         ];
         let pattern = discover_mandatory_pattern(&samples, 100).unwrap();
         assert_eq!(pattern.pattern_type, PatternType::Custom);
@@ -219,9 +238,18 @@ mod tests {
     #[test]
     fn discover_mandatory_pattern_returns_none_for_incoherent_batch() {
         let samples = vec![
-            MandatoryAttrSample { freshness: 0.0, velocity: 0.0 },
-            MandatoryAttrSample { freshness: 1.0, velocity: 1.0 },
-            MandatoryAttrSample { freshness: 0.5, velocity: 0.9 },
+            MandatoryAttrSample {
+                freshness: 0.0,
+                velocity: 0.0,
+            },
+            MandatoryAttrSample {
+                freshness: 1.0,
+                velocity: 1.0,
+            },
+            MandatoryAttrSample {
+                freshness: 0.5,
+                velocity: 0.9,
+            },
         ];
         assert!(discover_mandatory_pattern(&samples, 100).is_none());
     }
@@ -230,8 +258,14 @@ mod tests {
     fn discover_smd_pattern_mints_a_real_pattern_for_the_architects_example() {
         let cluster = smd_track::SmdEquivalenceCluster {
             members: vec![
-                smd_track::DepartmentAttr { department: "hr".into(), attr_name: "employee_name".into() },
-                smd_track::DepartmentAttr { department: "finance".into(), attr_name: "Employee_Full_Name".into() },
+                smd_track::DepartmentAttr {
+                    department: "hr".into(),
+                    attr_name: "employee_name".into(),
+                },
+                smd_track::DepartmentAttr {
+                    department: "finance".into(),
+                    attr_name: "Employee_Full_Name".into(),
+                },
             ],
             confidence: 0.75,
         };
@@ -248,10 +282,17 @@ mod tests {
         use enkimdb::{PatternProfile, WriteNode};
 
         let samples = vec![
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.5 },
-            MandatoryAttrSample { freshness: 0.8, velocity: 0.5 },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.5,
+            },
+            MandatoryAttrSample {
+                freshness: 0.8,
+                velocity: 0.5,
+            },
         ];
-        let pattern = discover_mandatory_pattern(&samples, 1).expect("coherent batch must discover a pattern");
+        let pattern = discover_mandatory_pattern(&samples, 1)
+            .expect("coherent batch must discover a pattern");
 
         let mut wn = WriteNode::new(KakiMinter::new(TribeId::from_u16(0x0001)), 64);
         let profile = PatternProfile::new(pattern, 0);
@@ -259,6 +300,9 @@ mod tests {
 
         let history = wn.journal().read_particle_history(&identity);
         assert_eq!(history.len(), 1);
-        assert!(history[0].eav.iter().count() > 0, "the minted particle must carry real EAV data");
+        assert!(
+            history[0].eav.iter().count() > 0,
+            "the minted particle must carry real EAV data"
+        );
     }
 }

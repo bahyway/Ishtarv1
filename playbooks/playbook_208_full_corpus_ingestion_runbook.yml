@@ -42,6 +42,24 @@
 
   tasks:
     # ── 0. Preflight ─────────────────────────────────────────────────
+    # PB-212.7 FIX (found live, 2026-08-21): the PB-212.6 fix originally
+    # put enkiddb_write_host/read_host/write_ip/read_ip in this play's
+    # static `vars:` block, templated from `groups[...]`/`hostvars[...]`.
+    # Confirmed live: task 2.1 below then failed with "'enkiddb_write_ip'
+    # is undefined" -- play-level `vars:` Jinja on this ansible-core
+    # version doesn't reliably resolve inventory magic vars before task
+    # execution starts; a failed nested template silently surfaces as
+    # "undefined" at first use rather than showing the real error.
+    # `set_fact` (task-time, inventory guaranteed fully loaded by then)
+    # is the standard reliable pattern for exactly this -- moved here,
+    # first task in the play, before anything can reference these.
+    - name: "0.05 | Resolve real write/read host+IP from inventory (PB-212.7)"
+      ansible.builtin.set_fact:
+        enkiddb_write_host: "{{ groups['enkidb_write'][0] }}"
+        enkiddb_read_host: "{{ groups['enkidb_read'][0] }}"
+        enkiddb_write_ip: "{{ hostvars[groups['enkidb_write'][0]]['ansible_host'] }}"
+        enkiddb_read_ip: "{{ hostvars[groups['enkidb_read'][0]]['ansible_host'] }}"
+
     - name: "0.1 | Confirm the repo checkout exists and is current"
       ansible.builtin.command:
         cmd: git rev-parse --short HEAD
@@ -53,14 +71,28 @@
       ansible.builtin.debug:
         msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-208's own commit."
 
+    # PB-212.7 FIX (found live, 2026-08-21): this task ran `podman ps` on
+    # `localhost` (the control node, uruk) with no `delegate_to` -- but
+    # the containers live on enkiddb_write_host/enkiddb_read_host
+    # (uruk-node-write/uruk-node-read), not on uruk itself. It never
+    # failed; it just silently checked nothing and always printed an
+    # empty header-only table, confirmed live moments ago. Now delegates
+    # to both real nodes, matching PB-213's own task 0.1 pattern.
     - name: "0.3 | Confirm enkiddb-write / enkiddb-read containers are up"
       ansible.builtin.command: podman ps --filter "name=enkiddb-write" --filter "name=enkiddb-read"
+      delegate_to: "{{ item }}"
+      loop:
+        - "{{ enkiddb_write_host }}"
+        - "{{ enkiddb_read_host }}"
       register: containers_up
       changed_when: false
 
     - name: "0.4 | Show container status"
       ansible.builtin.debug:
-        msg: "{{ containers_up.stdout_lines }}"
+        msg: "{{ item.item }}: {{ item.stdout_lines }}"
+      loop: "{{ containers_up.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: "0.5 | Check for a Rust toolchain on THIS host (enkiddb-cli runs bare-metal, not containerized)"
       ansible.builtin.command: cargo --version
@@ -107,7 +139,7 @@
         cmd: >-
           {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}/workspace/bahyway_v4/target/release/enkiddb-cli
           ingest {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}
-          --remote {{ enkiddb_write_ip | default('192.168.122.101') }}:7101
+          --remote {{ enkiddb_write_ip }}:7101
           --team-allowlist {{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}/config/enkiddb_team_allowlist.txt
       register: ingest_run
       changed_when: true
@@ -116,6 +148,22 @@
     - name: "2.2 | Show the full ingestion report (every file, OK/SKIP/REJECTED, and why)"
       ansible.builtin.debug:
         msg: "{{ ingest_run.stdout_lines }}"
+
+    # enkiddb-cli's run_remote() (bin/enkiddb-cli/src/main.rs) now sums the
+    # REAL total EAV-particle count across every OK: response (parent doc +
+    # every section, not a per-file count -- see the Architect's own
+    # correction, 2026-08-26: "1 billion records is not equal to 1 file=1
+    # particle, it is equal to how each domain has built its own EAV
+    # schema") and reports it in PU (Particle Units, 7 particles = 1 PU).
+    # Pulled out of the full log here so it's not buried among hundreds of
+    # per-file lines.
+    - name: "2.25 | Show the real particle count (PU = Particle Units, 7 particles = 1 PU)"
+      ansible.builtin.debug:
+        msg: >-
+          {{ ingest_run.stdout_lines
+             | select('search', 'particles ingested:')
+             | list
+             | default(['(no particle-count line found -- enkiddb-cli/enkiddb-write-server may predate this field; rebuild both and re-run)'], true) }}
 
     # FIXED (2026-07-26): this message previously said "continuing to
     # FLUSH/sync/verify the documents that DID succeed" unconditionally
@@ -170,11 +218,12 @@
         enkiddb_db_label: "enkiddb"
         enkiddb_write_volume: "enkiddb-write-data"
         enkiddb_read_volume: "enkiddb-read-data"
-        enkiddb_write_host: "enkidb-node-write"
-        enkiddb_read_host: "enkidb-node-read"
+        # enkiddb_write_host/read_host/read_ip deliberately NOT re-declared
+        # here (PB-212.6) -- they'd shadow the play-level vars above (now
+        # derived from inventory) with the old hardcoded values again.
+        # Falling through to the play-level vars is the fix.
         enkiddb_write_port: 7101
         enkiddb_read_port: 7102
-        enkiddb_read_ip: "192.168.122.107"
         enkiddb_query_what: "meta.title, meta.collection"
         enkiddb_query_where_attr: "meta.collection"
         enkiddb_query_value: "general"

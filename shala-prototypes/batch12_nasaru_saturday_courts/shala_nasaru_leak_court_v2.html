@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Nasaru Leak Court v2 — BWVL Camera Deck</title>
+<style>
+  :root{
+    --basalt:#0b0e13; --tablet:#141922; --line:#232b38;
+    --gold:#d9a441; --gold-dim:#8a6a2c; --lapis:#4d7fb8; --copper:#4fae8a;
+    --alarm:#d4553f; --maroon:#7a2230; --ash:#8b93a3; --bone:#e8e2d4;
+    --fuzzy:#c88b3a; --dead:#4a5261;
+    --mono:"Iosevka","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--basalt);color:var(--ash);font:15px/1.65 var(--serif)}
+  ::selection{background:var(--gold-dim);color:var(--basalt)}
+
+  header{border-bottom:1px solid var(--line);padding:34px 5vw 26px;
+    background:radial-gradient(1200px 320px at 18% -40%, rgba(217,164,65,.10), transparent 62%),
+               radial-gradient(900px 300px at 85% -30%, rgba(77,127,184,.10), transparent 60%)}
+  .cune{font-size:30px;color:var(--gold);letter-spacing:.08em}
+  h1{font-size:clamp(26px,3.6vw,42px);color:var(--bone);font-weight:600;margin:6px 0 4px}
+  .sub{font-family:var(--mono);font-size:12.5px;color:var(--ash);letter-spacing:.04em}
+  .sub b{color:var(--gold);font-weight:600}
+  .lawrow{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+  .law{font-family:var(--mono);font-size:11px;border:1px solid var(--line);color:var(--ash);
+       padding:3px 9px;border-radius:2px;background:rgba(20,25,34,.6)}
+  .law em{color:var(--gold);font-style:normal}
+  .rehearsal{margin-top:16px;font-family:var(--mono);font-size:11.5px;color:var(--basalt);
+      background:var(--gold);display:inline-block;padding:4px 12px;border-radius:2px;letter-spacing:.05em}
+
+  /* BWVL camera deck legend */
+  .deck{margin-top:14px;font-family:var(--mono);font-size:11.5px;color:var(--ash);
+      border:1px solid var(--line);border-left:3px solid var(--lapis);background:rgba(20,25,34,.6);
+      padding:8px 14px;border-radius:2px;max-width:900px}
+  .deck b{color:var(--lapis);font-weight:600}
+  .deck i{color:var(--gold);font-style:normal}
+
+  nav.mediums{position:sticky;top:0;z-index:40;background:rgba(11,14,19,.94);backdrop-filter:blur(6px);
+      border-bottom:1px solid var(--line);display:flex;padding:0 5vw;overflow-x:auto}
+  nav.mediums button{appearance:none;background:none;border:none;border-bottom:2px solid transparent;
+      color:var(--ash);font-family:var(--mono);font-size:12.5px;letter-spacing:.05em;
+      padding:14px 18px;cursor:pointer;white-space:nowrap}
+  nav.mediums button:hover{color:var(--bone)}
+  nav.mediums button.on{color:var(--gold);border-bottom-color:var(--gold)}
+  nav.mediums button:focus-visible{outline:2px solid var(--lapis);outline-offset:-2px}
+
+  main{padding:0 5vw 80px;max-width:1180px;margin:0 auto}
+  section.rite{margin-top:58px}
+  .rite-head{display:flex;align-items:baseline;gap:16px;border-bottom:1px solid var(--line);padding-bottom:10px}
+  .rite-glyph{font-family:var(--mono);font-size:12px;color:var(--basalt);background:var(--gold);
+      padding:2px 8px;border-radius:2px;letter-spacing:.08em}
+  .rite-head h2{color:var(--bone);font-size:22px;font-weight:600}
+  .rite-head .hs{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--lapis)}
+  .rite p.lede{margin:14px 0 4px;max-width:74ch}
+  .rite p.lede b{color:var(--bone);font-weight:600}
+
+  .panel{background:var(--tablet);border:1px solid var(--line);border-radius:4px;margin-top:18px;overflow:hidden}
+  .panel .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+      border-bottom:1px solid var(--line);padding:10px 16px;font-family:var(--mono);font-size:12px}
+  .panel .bar .tag{color:var(--gold)}
+  .panel .bar label{color:var(--ash)}
+  .panel .bar output{color:var(--bone);min-width:80px;display:inline-block}
+  canvas{display:block;width:100%;height:auto;background:#0d1119;touch-action:none;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  .duo{display:grid;grid-template-columns:1fr 1fr}
+  .duo>div{min-width:0}
+  .duo>div+div{border-left:1px solid var(--line)}
+  .cap{font-family:var(--mono);font-size:11px;color:var(--ash);padding:8px 16px;border-top:1px solid var(--line)}
+  .cap b{color:var(--gold);font-weight:600}
+  input[type=range]{accent-color:var(--gold);width:170px;vertical-align:middle}
+  .switch{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11.5px;padding:5px 12px;cursor:pointer;border-radius:2px}
+  .switch.on{border-color:var(--lapis);color:var(--lapis)}
+  .switch:focus-visible{outline:2px solid var(--lapis)}
+  .camdeck{display:flex;gap:6px;margin-left:auto}
+  .cam{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11px;padding:4px 10px;cursor:pointer;border-radius:2px}
+  .cam:hover{color:var(--bone)}
+  .cam.on{border-color:var(--gold);color:var(--gold)}
+  .cam:focus-visible{outline:2px solid var(--lapis)}
+
+  .verdict{font-family:var(--mono);font-size:12.5px;padding:10px 16px;border-top:1px solid var(--line)}
+  .verdict .ok{color:var(--copper)} .verdict .bad{color:var(--alarm)} .verdict .gold{color:var(--gold)}
+  .journal{font-family:var(--mono);font-size:12px;padding:10px 16px;border-top:1px solid var(--line);
+      color:var(--ash);min-height:42px}
+  .journal b{color:var(--gold)} .journal .kaki{color:var(--lapis)}
+
+  #latticeWrap{touch-action:none;cursor:grab}
+  #latticeWrap svg{display:block;width:100%;height:auto}
+  .concept{cursor:pointer}
+  .intentBox{font-family:var(--mono);font-size:12px;padding:12px 16px;border-top:1px solid var(--line);min-height:66px}
+  .intentBox b{color:var(--gold)}
+  .intentBox .attr{display:inline-block;border:1px solid var(--line);padding:1px 8px;margin:2px 4px 2px 0;border-radius:2px}
+  .intentBox .attr.inv{border-color:var(--gold);color:var(--gold)}
+
+  .clauses{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+  .clause{border:1px solid var(--line);border-left:3px solid var(--gold);background:var(--tablet);
+      padding:14px 16px;border-radius:2px}
+  .clause h3{font-family:var(--mono);font-size:11.5px;color:var(--gold);letter-spacing:.06em;margin-bottom:6px}
+  .clause p{font-size:13.5px}
+  .clause.limit{border-left-color:var(--alarm)}
+  .clause.limit h3{color:var(--alarm)}
+
+  footer{border-top:1px solid var(--line);margin-top:70px;padding:26px 5vw;
+      font-family:var(--mono);font-size:11.5px;color:var(--ash);display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
+  footer .seal{color:var(--gold)}
+  @media(max-width:860px){.duo{grid-template-columns:1fr}.duo>div+div{border-left:none;border-top:1px solid var(--line)}
+    .camdeck{margin-left:0;width:100%}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="cune">𒁾 𒀭 𒈗</div>
+  <h1>Nasaru Leak Court <span style="color:var(--lapis);font-size:.55em;font-family:var(--mono)">v2 · BWVL DECK</span></h1>
+  <div class="sub">Hyperspectral sensing · stochastic-geometry witness · <b>Nebuchadnezzar</b> Unified Pattern · navigation mint</div>
+  <div class="lawrow">
+    <span class="law"><em>GL-ONT-001</em> OntoGraph</span>
+    <span class="law"><em>GL-TPL-001</em> Pattern Minting</span>
+    <span class="law"><em>GL-ALG-002</em> 𝒟<sub>Θ</sub> deficit</span>
+    <span class="law"><em>Kidinnu</em> verification</span>
+    <span class="law"><em>NL-001 §6b</em> Landmark Pattern</span>
+  </div>
+  <div class="deck"><b>BWVL CAMERA DECK</b> — every court below is a live viewport:
+    <i>wheel / pinch</i> zoom · <i>drag</i> pan · <i>double-tap</i> reset ·
+    <i>⌖ BIRD EYE</i> full survey · <i>✛ GROUND</i> low station at the fault ·
+    <i>⟳ ṬĀLUKU</i> orbital sweep (ω ∝ r⁻¹·⁵) ·
+    <i>⌉ ⌈ Ṣabātu</i> — click a particle to bracket it and read its StoryEngine journal line.</div>
+  <div class="rehearsal">ŠALA REHEARSAL ONLY — PRODUCTION SURFACE IS DUBSAR egui/WGPU (WoW rule 4–5)</div>
+</header>
+
+<nav class="mediums" id="mediums" aria-label="Medium profiles"></nav>
+
+<main>
+
+<!-- ══ RITE I ══ -->
+<section class="rite" id="r1">
+  <div class="rite-head"><span class="rite-glyph">RITE I</span><h2>The Cube — spectral ingest</h2>
+    <span class="hs">EMIT cube(tribe) PRESENT λ, reflectance</span></div>
+  <p class="lede">Every pixel is a <b>particle</b>: one KAKI, ~200 spectral attributes in Optional EAV. Drag λ through the bands; the plume confesses only inside the medium's <b>absorption window</b>. Then fly: Bird Eye for the whole easement, Ground to stand at joint J-2, ṬĀLUKU to circle the fault.</p>
+  <div class="panel">
+    <div class="bar">
+      <span class="tag" id="medTag">WATER</span>
+      <label>λ <input type="range" id="lambda" min="400" max="2500" value="650" step="10"></label>
+      <output id="lambdaOut">650 nm</output>
+      <span id="bandNote"></span>
+      <span class="camdeck" data-deck="cube"></span>
+    </div>
+    <canvas id="cubeCv" width="1100" height="360" aria-label="Corridor scene at selected wavelength"></canvas>
+    <div class="cap"><b>Reading:</b> pipeline easement, joints ◆. <span id="winNote"></span></div>
+  </div>
+</section>
+
+<!-- ══ RITE II ══ -->
+<section class="rite" id="r2">
+  <div class="rite-head"><span class="rite-glyph">RITE II</span><h2>Spectral anomaly — the RX score</h2>
+    <span class="hs">PROVE anomaly(particle) AGAINST background</span></div>
+  <p class="lede">Mahalanobis distance to the background manifold, written to <b>Optional EAV only</b>. TIAMAT bands price the alarm. Zoom into the cluster; <b>Ṣabātu-pick</b> any particle to bracket it and read its journal — KAKI address, rx score, band, verdict-in-waiting. Lone bright ghosts pass the threshold too: Rite II cannot convict alone.</p>
+  <div class="panel">
+    <div class="bar"><span class="tag">RX FIELD</span>
+      <label>threshold <input type="range" id="rxThr" min="1" max="9" value="4" step="0.5"></label>
+      <output id="rxOut">σ = 4.0</output>
+      <span class="camdeck" data-deck="rx"></span>
+    </div>
+    <canvas id="rxCv" width="1100" height="300" aria-label="RX anomaly score field"></canvas>
+    <div class="journal" id="rxJournal">⌉ ⌈ Ṣabātu idle — click a particle to bracket it.</div>
+    <div class="verdict" id="rxVerdict"></div>
+  </div>
+</section>
+
+<!-- ══ RITE III ══ -->
+<section class="rite" id="r3">
+  <div class="rite-head"><span class="rite-glyph">RITE III</span><h2>Spatial witness — the point process testifies</h2>
+    <span class="hs">PROVE spatial(anomalies) AGAINST poisson WITNESS naru</span></div>
+  <p class="lede">Anomalies form a <b>point pattern</b>; a leak is clustering beyond chance. Left: the pattern — zoomable, Ṣabātu-pickable. Right: Ripley's <b>K(r)</b> against the Poisson envelope. Toggle the null: same count, no story, K falls home.</p>
+  <div class="panel">
+    <div class="bar"><span class="tag">RIPLEY COURT</span>
+      <button class="switch on" id="obsBtn">OBSERVED</button>
+      <button class="switch" id="nullBtn">POISSON NULL</button>
+      <span class="camdeck" data-deck="pts"></span>
+    </div>
+    <div class="duo">
+      <div><canvas id="ptsCv" width="550" height="330" aria-label="Anomaly point pattern"></canvas></div>
+      <div><canvas id="kCv" width="550" height="330" aria-label="Ripley K against Poisson envelope"></canvas></div>
+    </div>
+    <div class="journal" id="ptsJournal">⌉ ⌈ Ṣabātu idle.</div>
+    <div class="verdict" id="kVerdict"></div>
+  </div>
+</section>
+
+<!-- ══ RITE IV ══ -->
+<section class="rite" id="r4">
+  <div class="rite-head"><span class="rite-glyph">RITE IV</span><h2>Nebuchadnezzar — the Unified Pattern</h2>
+    <span class="hs">PROVE pattern(Nebuchadnezzar) WITNESS naru</span></div>
+  <p class="lede">Four mediums, one FCA closure. Nodes = formal concepts; hulls = <b>hyperedges</b>; the gold spine is the invariant intent every leak shares — the Unified Pattern, minted under GL-TPL-001. The lattice is a viewport too: zoom into a concept's neighborhood, pan the order, double-tap home.</p>
+  <div class="panel">
+    <div class="bar"><span class="tag">CONCEPT LATTICE</span>
+      <span style="color:var(--ash)">objects = clusters · attributes = verdicts</span>
+      <span class="camdeck" data-deck="lat"></span></div>
+    <div id="latticeWrap"></div>
+    <div class="intentBox" id="intentBox"><b>⊤ Nebuchadnezzar</b> — hover a concept…</div>
+  </div>
+</section>
+
+<!-- ══ RITE V ══ -->
+<section class="rite" id="r5">
+  <div class="rite-head"><span class="rite-glyph">RITE V</span><h2>Navigation mint — the corridor speaks its ε</h2>
+    <span class="hs">EMIT corridor(route) PRESENT ε, seal</span></div>
+  <p class="lede">Risk field → cost-field routing → a corridor that carries <b>risk &lt; θ with confidence 1−ε</b>, Ed25519-sealed per Kidinnu. Bird Eye surveys the field; Ground stands where a deminer stands; ṬĀLUKU circles the worst cluster. Soil chapter: crater point patterns drive the field between craters.</p>
+  <div class="panel">
+    <div class="bar"><span class="tag">RISK FIELD</span>
+      <button class="switch on" id="corBtn">PIPELINE CHAPTER</button>
+      <button class="switch" id="soilBtn">SOIL / WAR-ZONE CHAPTER</button>
+      <span class="camdeck" data-deck="nav"></span>
+    </div>
+    <canvas id="navCv" width="1100" height="380" aria-label="Risk field with sealed corridor"></canvas>
+    <div class="verdict" id="navVerdict"></div>
+  </div>
+
+  <div class="clauses">
+    <div class="clause"><h3>TWO-WITNESS CALIBRATION</h3><p>Heavy metals and residues are read by proxy. The cube proposes; sparse ground samples calibrate; only then does the model extrapolate. No single-witness soil verdicts.</p></div>
+    <div class="clause limit"><h3>UXO LIMITATION CLAUSE</h3><p>This instrument does not see buried ordnance. It sees proxies — craters, disturbed soil, burn scars — and speaks only in hazard probability. The instrument refuses to say more.</p></div>
+    <div class="clause"><h3>SENSOR-FUSION-FOR-FREE</h3><p>Hyperspectral, SAR, thermal, drone RGB each add attributes to the same particles. The closure finds the invariant intent across sensors as across mediums. Nebuchadnezzar does not ask who testified.</p></div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <span>ŠALA prototype hub · scratch rehearsal · no production authority</span>
+  <span class="seal">DUB.SAR 𒁾 · BahyWay.Ecosystem v4.0 · awaiting AkkadianSeal</span>
+</footer>
+
+<script>
+"use strict";
+const REDUCED=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const MONO="12px "+getComputedStyle(document.body).getPropertyValue("--mono");
+
+/* ── medium profiles ── */
+const MEDIUMS={
+  WATER:{label:"WATER 𒀀",win:[1350,1550],win2:[1850,2000],plume:"#4d7fb8",
+    note:"soil-moisture absorption 1.4 / 1.9 µm + vegetation stress over the easement"},
+  OIL:{label:"OIL 𒉌",win:[1700,1780],win2:[2290,2360],plume:"#8a6a2c",
+    note:"C–H hydrocarbon absorption 1.73 / 2.31 µm — surface film & soaked soil"},
+  GAS:{label:"GAS 𒅆",win:[2200,2400],win2:null,plume:"#c88b3a",
+    note:"methane SWIR window ≈ 2.3 µm — plume elongated downwind"},
+  ELECTRICITY:{label:"ELECTRICITY 𒂊",win:[900,1100],win2:null,plume:"#d4553f",
+    note:"thermal/NIR hotspot + corona proxy — no substance leaks; the fault leaks heat"}};
+let MED="WATER";
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+const PIPE={x0:60,y0:250,x1:1040,y1:130};
+const pipeAt=t=>({x:PIPE.x0+(PIPE.x1-PIPE.x0)*t,y:PIPE.y0+(PIPE.y1-PIPE.y0)*t});
+const JOINTS=[0.18,0.42,0.66,0.86],LEAK_T=0.42,LEAK=pipeAt(LEAK_T);
+
+const tr=mulberry32(7);
+const G=[...Array(41)].map(()=>[...Array(15)].map(()=>tr()));
+function terrain(x,y){const gx=x/1100*39,gy=y/360*13,x0=gx|0,y0=gy|0,fx=gx-x0,fy=gy-y0,
+  s=(a,b,f)=>a+(b-a)*(f*f*(3-2*f));
+  const a=G[Math.min(x0,39)][Math.min(y0,13)],b=G[Math.min(x0+1,40)][Math.min(y0,13)],
+        c=G[Math.min(x0,39)][Math.min(y0+1,14)],d=G[Math.min(x0+1,40)][Math.min(y0+1,14)];
+  return s(s(a,b,fx),s(c,d,fx),fy)}
+
+function plume(x,y){const p=LEAK;
+  const wind=MED==="GAS"?{x:1,y:.25}:MED==="OIL"?{x:.3,y:1}:{x:.55,y:.85};
+  const dx=x-p.x,dy=y-p.y,along=dx*wind.x+dy*wind.y,perp=dx*-wind.y+dy*wind.x;
+  if(along<-8)return 0;
+  const L=MED==="GAS"?260:150,W=MED==="GAS"?34:60;
+  const a=Math.max(0,1-along/L),b=Math.exp(-(perp*perp)/(2*W*W*Math.max(.25,a)));
+  return Math.max(0,a*b)}
+
+/* ══════════════ BWVL CAMERA ══════════════ */
+function makeCam(cv,redraw,worldW,worldH){
+  const cam={k:1,x:0,y:0,anim:null,cv};
+  const clamp=()=>{cam.k=Math.min(10,Math.max(1,cam.k));
+    cam.x=Math.min(worldW-worldW/cam.k,Math.max(0,cam.x));
+    cam.y=Math.min(worldH-worldH/cam.k,Math.max(0,cam.y))};
+  cam.apply=ctx=>ctx.setTransform(cam.k,0,0,cam.k,-cam.x*cam.k,-cam.y*cam.k);
+  const px=e=>{const r=cv.getBoundingClientRect();
+    return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}};
+  cam.s2w=e=>{const p=px(e);return{x:p.x/cam.k+cam.x,y:p.y/cam.k+cam.y}};
+  cam.stop=()=>{if(cam.anim){cancelAnimationFrame(cam.anim);cam.anim=null;
+    cam.deckBtns&&cam.deckBtns.taluku.classList.remove("on")}};
+  cam.setView=(k,cx,cy)=>{cam.stop();cam.k=k;
+    cam.x=cx-worldW/(2*k)*(worldW/worldW);cam.x=cx-(worldW/k)/2;cam.y=cy-(worldH/k)/2;
+    clamp();redraw()};
+  cam.reset=()=>{cam.stop();cam.k=1;cam.x=0;cam.y=0;redraw()};
+  /* wheel zoom at cursor */
+  cv.addEventListener("wheel",e=>{e.preventDefault();cam.stop();
+    const p=px(e),w={x:p.x/cam.k+cam.x,y:p.y/cam.k+cam.y};
+    cam.k*=Math.exp(-e.deltaY*0.0016);cam.k=Math.min(10,Math.max(1,cam.k));
+    cam.x=w.x-p.x/cam.k;cam.y=w.y-p.y/cam.k;clamp();redraw()},{passive:false});
+  /* drag pan + pinch */
+  const ptr=new Map();let last=null,moved=false;
+  cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);
+    ptr.set(e.pointerId,px(e));last=px(e);moved=false;cv.classList.add("dragging")});
+  cv.addEventListener("pointermove",e=>{if(!ptr.has(e.pointerId))return;
+    const p=px(e);
+    if(ptr.size===2){const ids=[...ptr.keys()],o=ptr.get(ids[0]===e.pointerId?ids[1]:ids[0]);
+      const d0=Math.hypot(ptr.get(e.pointerId).x-o.x,ptr.get(e.pointerId).y-o.y);
+      const d1=Math.hypot(p.x-o.x,p.y-o.y);
+      if(d0>4){cam.stop();const mid={x:(p.x+o.x)/2,y:(p.y+o.y)/2},
+        w={x:mid.x/cam.k+cam.x,y:mid.y/cam.k+cam.y};
+        cam.k*=d1/d0;cam.k=Math.min(10,Math.max(1,cam.k));
+        cam.x=w.x-mid.x/cam.k;cam.y=w.y-mid.y/cam.k;clamp();redraw()}
+      ptr.set(e.pointerId,p);return}
+    if(last){const dx=p.x-last.x,dy=p.y-last.y;
+      if(Math.abs(dx)+Math.abs(dy)>2)moved=true;
+      if(moved){cam.stop();cam.x-=dx/cam.k;cam.y-=dy/cam.k;clamp();redraw()}}
+    last=p;ptr.set(e.pointerId,p)});
+  const up=e=>{ptr.delete(e.pointerId);last=null;cv.classList.remove("dragging");
+    if(!moved&&cam.onPick)cam.onPick(cam.s2w(e));moved=false};
+  cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
+  cv.addEventListener("dblclick",e=>{e.preventDefault();cam.reset()});
+  /* ṬĀLUKU orbital sweep around a target: ω ∝ r^-1.5 */
+  cam.taluku=(cx,cy,r)=>{cam.stop();
+    if(REDUCED){cam.setView(2.8,cx+r,cy);return}
+    cam.deckBtns&&cam.deckBtns.taluku.classList.add("on");
+    let th=0;const w=140*Math.pow(Math.max(r,30),-1.5);
+    const step=()=>{th+=w;const tx=cx+Math.cos(th)*r,ty=cy+Math.sin(th)*r*0.55;
+      cam.k=2.8;cam.x=tx-(worldW/cam.k)/2;cam.y=ty-(worldH/cam.k)/2;clamp();redraw();
+      cam.anim=requestAnimationFrame(step)};
+    cam.anim=requestAnimationFrame(step)};
+  return cam;
+}
+/* deck buttons factory */
+function buildDeck(slot,cam,ground,orbit){
+  const mk=(t,title,fn)=>{const b=document.createElement("button");
+    b.className="cam";b.textContent=t;b.title=title;b.onclick=fn;slot.appendChild(b);return b};
+  const bird=mk("⌖ BIRD EYE","full survey",()=>cam.reset());
+  const gnd=mk("✛ GROUND","low station at the fault",()=>cam.setView(3.2,ground.x,ground.y));
+  const tal=mk("⟳ ṬĀLUKU","orbital sweep, ω∝r⁻¹·⁵",()=>cam.taluku(orbit.x,orbit.y,orbit.r));
+  cam.deckBtns={bird,ground:gnd,taluku:tal};
+}
+
+/* ══════════════ RITE I: cube ══════════════ */
+const cubeCv=document.getElementById("cubeCv"),cctx=cubeCv.getContext("2d");
+const off1=document.createElement("canvas");off1.width=1100;off1.height=360;
+const o1=off1.getContext("2d");
+const lambda=document.getElementById("lambda"),lambdaOut=document.getElementById("lambdaOut");
+function winStrength(l){const m=MEDIUMS[MED],f=a=>{if(!a)return 0;
+  const c=(a[0]+a[1])/2,hw=(a[1]-a[0])/2;return Math.max(0,1-Math.abs(l-c)/(hw*1.6))};
+  return Math.max(f(m.win),f(m.win2))}
+function renderCubeScene(){
+  const l=+lambda.value,W=1100,H=360,img=o1.createImageData(W,H),d=img.data;
+  const s=winStrength(l),pl=MEDIUMS[MED].plume;
+  const pr=parseInt(pl.slice(1,3),16),pg=parseInt(pl.slice(3,5),16),pb=parseInt(pl.slice(5,7),16);
+  for(let y=0;y<H;y+=2)for(let x=0;x<W;x+=2){
+    const t=terrain(x,y),vis=Math.max(0,1-Math.abs(l-550)/900);
+    let r=18+t*26+vis*t*10,g=24+t*34+vis*t*22,b=30+t*30;
+    const pm=plume(x,y)*s;
+    if(pm>0.04){r=r*(1-pm*.75)+pr*pm*.55;g=g*(1-pm*.8)+pg*pm*.5;b=b*(1-pm*.7)+pb*pm*.6}
+    for(let dy=0;dy<2;dy++)for(let dx=0;dx<2;dx++){
+      const i=((y+dy)*W+(x+dx))*4;d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255}}
+  o1.putImageData(img,0,0)}
+function drawCube(){
+  const l=+lambda.value;lambdaOut.textContent=l+" nm";
+  const s=winStrength(l),k=camCube.k;
+  cctx.setTransform(1,0,0,1,0,0);cctx.clearRect(0,0,1100,360);
+  camCube.apply(cctx);cctx.drawImage(off1,0,0);
+  cctx.strokeStyle="#5a6474";cctx.lineWidth=5/k;cctx.beginPath();
+  cctx.moveTo(PIPE.x0,PIPE.y0);cctx.lineTo(PIPE.x1,PIPE.y1);cctx.stroke();
+  JOINTS.forEach((t,i)=>{const p=pipeAt(t);
+    cctx.fillStyle=(t===LEAK_T&&s>.35)?"#d4553f":"#d9a441";
+    cctx.save();cctx.translate(p.x,p.y);cctx.rotate(Math.PI/4);
+    const j=5/Math.sqrt(k);cctx.fillRect(-j,-j,2*j,2*j);cctx.restore();
+    cctx.fillStyle="#8b93a3";cctx.font=(11/k)+"px monospace";
+    cctx.fillText("J-"+(i+1),p.x+9/k,p.y-8/k)});
+  cctx.setTransform(1,0,0,1,0,0);
+  cctx.fillStyle=s>.35?"#d9a441":"#4a5261";cctx.font=MONO;
+  cctx.fillText(s>.35?"◈ SIGNATURE WINDOW OPEN":"— outside signature window",16,24);
+  cctx.fillStyle="#4d7fb8";cctx.fillText("cam ×"+k.toFixed(1),16,42);
+  document.getElementById("bandNote").textContent=s>.35?"◈ inside sealed window":"";
+}
+const camCube=makeCam(cubeCv,drawCube,1100,360);
+lambda.addEventListener("input",()=>{renderCubeScene();drawCube()});
+
+/* ══════════════ RITE II: RX + Ṣabātu ══════════════ */
+const rxCv=document.getElementById("rxCv"),rctx=rxCv.getContext("2d");
+const rxThr=document.getElementById("rxThr"),rxOut=document.getElementById("rxOut");
+const rrng0=mulberry32(11);
+function buildAnoms(){const rr=mulberry32(11+MED.length);const pts=[];const p=LEAK;
+  for(let i=0;i<95;i++){let x,y,t=0;do{x=p.x+(rr()*2-1)*240;y=p.y+(rr()*2-1)*160;t++}
+    while(plume(x,y)<0.08&&t<40);
+    pts.push({x,y:y*300/360,score:3.5+plume(x,y)*6+rr()*1.5,leak:true})}
+  for(let i=0;i<60;i++)pts.push({x:20+rr()*1060,y:20+rr()*240,score:1+rr()*5.5,leak:false});
+  return pts}
+let ANOMS=buildAnoms();
+let SAB={i:-1,t0:0};              /* Ṣabātu selection */
+function kakiHex(i){const rr=mulberry32(1000+i);let h="";
+  for(let b=0;b<16;b++){if(b===4){h+="00 07 ";b++;continue}      /* tribe 0x0007 */
+    h+=("0"+((rr()*256)|0).toString(16)).slice(-2)+" "}return h.trim().toUpperCase()}
+function drawRX(now){
+  const thr=+rxThr.value;rxOut.textContent="σ = "+thr.toFixed(1);
+  const k=camRX.k;
+  rctx.setTransform(1,0,0,1,0,0);rctx.fillStyle="#0d1119";rctx.fillRect(0,0,1100,300);
+  camRX.apply(rctx);
+  rctx.strokeStyle="#232b38";rctx.setLineDash([6/k,6/k]);rctx.lineWidth=1/k;
+  rctx.beginPath();rctx.moveTo(PIPE.x0,PIPE.y0*300/360);rctx.lineTo(PIPE.x1,PIPE.y1*300/360);
+  rctx.stroke();rctx.setLineDash([]);
+  let pass=0,ghost=0;
+  ANOMS.forEach((a,i)=>{const on=a.score>=thr;if(on){pass++;if(!a.leak)ghost++}
+    const c=!on?"#4a5261":a.score>7?"#7a2230":a.score>5.2?"#d4553f":"#c88b3a";
+    rctx.globalAlpha=on?0.95:0.35;rctx.fillStyle=c;
+    rctx.beginPath();rctx.arc(a.x,a.y,(on?3.4:2)/Math.sqrt(k),0,7);rctx.fill()});
+  rctx.globalAlpha=1;
+  /* Ṣabātu bracket reticle with squash-and-stretch bounce */
+  if(SAB.i>=0){const a=ANOMS[SAB.i];
+    const t=REDUCED?1:Math.min(1,(now-SAB.t0)/450);
+    const bounce=1+0.35*Math.sin(t*Math.PI)*(1-t);      /* squash & settle */
+    const r=14*bounce/k,c=6*bounce/k;
+    rctx.strokeStyle="#d9a441";rctx.lineWidth=2/k;
+    const B=(sx,sy,dx,dy)=>{rctx.beginPath();
+      rctx.moveTo(a.x+sx*r,a.y+sy*r+dy*c);rctx.lineTo(a.x+sx*r,a.y+sy*r);
+      rctx.lineTo(a.x+sx*r+dx*c,a.y+sy*r);rctx.stroke()};
+    B(-1,-1,1,1);B(1,-1,-1,1);B(-1,1,1,-1);B(1,1,-1,-1);
+    if(t<1&&!REDUCED)requestAnimationFrame(drawRX)}
+  rctx.setTransform(1,0,0,1,0,0);
+  rctx.fillStyle="#4d7fb8";rctx.font=MONO;rctx.fillText("cam ×"+k.toFixed(1),16,20);
+  document.getElementById("rxVerdict").innerHTML=
+   `<span class="gold">EAV write:</span> onto.rx_score → ${pass} particles ≥ σ ·
+    <span class="bad">${ghost} isolated ghosts among them</span> ·
+    verdict withheld — <span class="ok">Rite III must witness the geometry</span>`}
+const camRX=makeCam(rxCv,()=>drawRX(performance.now()),1100,300);
+camRX.onPick=w=>{let best=-1,bd=1e9;
+  ANOMS.forEach((a,i)=>{const d=(a.x-w.x)**2+(a.y-w.y)**2;if(d<bd){bd=d;best=i}});
+  if(Math.sqrt(bd)<=14/Math.sqrt(camRX.k)+6){SAB={i:best,t0:performance.now()};
+    const a=ANOMS[best],band=a.score>7?"MAROON":a.score>5.2?"NERGAL":a.score>3.5?"KAKKAB":"DILBAT";
+    document.getElementById("rxJournal").innerHTML=
+      `<b>Ṣabātu ⌉ ⌈</b> particle #${best} · <span class="kaki">KAKI ${kakiHex(best)}</span><br>
+       onto.rx_score=${a.score.toFixed(2)} · TIAMAT band <b>${band}</b> ·
+       ${a.leak?"member of corridor cluster — awaiting Rite III witness":"isolated — no spatial companions, likely ghost"} ·
+       journal appended (GL-STY-001)`;
+    drawRX(performance.now())}};
+rxThr.addEventListener("input",()=>drawRX(performance.now()));
+
+/* ══════════════ RITE III: Ripley + camera + Ṣabātu ══════════════ */
+const ptsCv=document.getElementById("ptsCv"),pctx=ptsCv.getContext("2d");
+const kCv=document.getElementById("kCv"),kctx=kCv.getContext("2d");
+const obsBtn=document.getElementById("obsBtn"),nullBtn=document.getElementById("nullBtn");
+let SHOW="obs",SAB3={i:-1,t0:0};
+const krng=mulberry32(23);
+function makeObs(){const p={x:230,y:170},pts=[];
+  for(let i=0;i<70;i++){const a=krng()*Math.PI*2,r=Math.pow(krng(),1.6)*95;
+    pts.push({x:p.x+Math.cos(a)*r*1.7,y:p.y+Math.sin(a)*r})}
+  for(let i=0;i<25;i++)pts.push({x:20+krng()*510,y:20+krng()*290});return pts}
+function makeNull(n){const rr=mulberry32(41),pts=[];
+  for(let i=0;i<n;i++)pts.push({x:20+rr()*510,y:20+rr()*290});return pts}
+const OBS=makeObs(),NUL=makeNull(OBS.length);
+function ripleyK(pts,rmax,steps){const A=510*290,n=pts.length,lam=n/A,out=[];
+  for(let s=1;s<=steps;s++){const r=rmax*s/steps;let c=0;
+    for(let i=0;i<n;i++)for(let j=0;j<n;j++){if(i===j)continue;
+      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y;if(dx*dx+dy*dy<=r*r)c++}
+    out.push({r,K:c/(n*lam)})}return out}
+const KOBS=ripleyK(OBS,120,24),KNUL=ripleyK(NUL,120,24);
+function drawPts(now){
+  const k=camPts.k;
+  pctx.setTransform(1,0,0,1,0,0);pctx.fillStyle="#0d1119";pctx.fillRect(0,0,550,330);
+  camPts.apply(pctx);
+  pctx.strokeStyle="#232b38";pctx.lineWidth=1/k;pctx.strokeRect(20,20,510,290);
+  const pts=SHOW==="obs"?OBS:NUL;
+  pctx.fillStyle=SHOW==="obs"?"#d4553f":"#4d7fb8";
+  pts.forEach(p=>{pctx.beginPath();pctx.arc(p.x,p.y,2.8/Math.sqrt(k),0,7);pctx.fill()});
+  if(SAB3.i>=0&&SHOW==="obs"){const a=OBS[SAB3.i];
+    const t=REDUCED?1:Math.min(1,(now-SAB3.t0)/450),b=1+0.35*Math.sin(t*Math.PI)*(1-t);
+    const r=12*b/k,c=5*b/k;pctx.strokeStyle="#d9a441";pctx.lineWidth=2/k;
+    const B=(sx,sy,dx,dy)=>{pctx.beginPath();
+      pctx.moveTo(a.x+sx*r,a.y+sy*r+dy*c);pctx.lineTo(a.x+sx*r,a.y+sy*r);
+      pctx.lineTo(a.x+sx*r+dx*c,a.y+sy*r);pctx.stroke()};
+    B(-1,-1,1,1);B(1,-1,-1,1);B(-1,1,1,-1);B(1,1,-1,-1);
+    if(t<1&&!REDUCED)requestAnimationFrame(drawPts)}
+  pctx.setTransform(1,0,0,1,0,0);
+  pctx.fillStyle="#8b93a3";pctx.font="11px monospace";
+  pctx.fillText(SHOW==="obs"?"observed pattern (n="+OBS.length+") · cam ×"+k.toFixed(1)
+                            :"Poisson null — same count, no story",26,316)}
+const camPts=makeCam(ptsCv,()=>drawPts(performance.now()),550,330);
+camPts.onPick=w=>{if(SHOW!=="obs")return;let best=-1,bd=1e9;
+  OBS.forEach((p,i)=>{const d=(p.x-w.x)**2+(p.y-w.y)**2;if(d<bd){bd=d;best=i}});
+  if(Math.sqrt(bd)<=12/Math.sqrt(camPts.k)+5){SAB3={i:best,t0:performance.now()};
+    document.getElementById("ptsJournal").innerHTML=
+      `<b>Ṣabātu ⌉ ⌈</b> witness point #${best} · <span class="kaki">KAKI ${kakiHex(200+best)}</span> ·
+       contributes to K(r) excursion at r≈${Math.round(Math.hypot(OBS[best].x-230,OBS[best].y-170))}px from cluster core`;
+    drawPts(performance.now())}};
+function drawK(){
+  kctx.setTransform(1,0,0,1,0,0);kctx.fillStyle="#0d1119";kctx.fillRect(0,0,550,330);
+  const x0=54,y0=290,w=470,h=240,rmax=120,kmax=Math.max(...KOBS.map(p=>p.K))*1.1;
+  kctx.strokeStyle="#232b38";kctx.beginPath();
+  kctx.moveTo(x0,y0-h);kctx.lineTo(x0,y0);kctx.lineTo(x0+w,y0);kctx.stroke();
+  kctx.fillStyle="rgba(77,127,184,.16)";kctx.beginPath();
+  KNUL.forEach((p,s)=>{const X=x0+w*p.r/rmax,Y=y0-h*(Math.PI*p.r*p.r*1.35)/kmax;
+    s?kctx.lineTo(X,Y):kctx.moveTo(X,Y)});
+  for(let s=KNUL.length-1;s>=0;s--){const p=KNUL[s];
+    kctx.lineTo(x0+w*p.r/rmax,y0-h*(Math.PI*p.r*p.r*0.68)/kmax)}
+  kctx.closePath();kctx.fill();
+  const line=(data,col)=>{kctx.strokeStyle=col;kctx.lineWidth=2;kctx.beginPath();
+    data.forEach((p,i)=>{const X=x0+w*p.r/rmax,Y=y0-h*Math.min(p.K,kmax)/kmax;
+      i?kctx.lineTo(X,Y):kctx.moveTo(X,Y)});kctx.stroke()};
+  line(KNUL,"#4d7fb8");if(SHOW==="obs")line(KOBS,"#d4553f");
+  kctx.fillStyle="#8b93a3";kctx.font="11px monospace";
+  kctx.fillText("K(r)",x0-38,y0-h+10);kctx.fillText("r →",x0+w-24,y0+18);
+  kctx.fillStyle="#4d7fb8";kctx.fillText("Poisson envelope (1−ε)",x0+8,y0-h+16);
+  if(SHOW==="obs"){kctx.fillStyle="#d4553f";kctx.fillText("K_obs — excursion above envelope",x0+8,y0-h+32)}
+  document.getElementById("kVerdict").innerHTML=SHOW==="obs"
+   ?`<span class="bad">K_obs escapes the envelope at r ∈ [14,74]px</span> →
+     <span class="gold">PROVE spatial ✓</span> witnessed in NĀRU · P(pattern|null) &lt; ε = 0.01 ·
+     Rite II ghosts <span class="ok">acquitted</span> — they never clustered`
+   :`<span class="ok">K stays inside the envelope</span> — same count, zero verdict.
+     The court convicts geometry, not brightness.`}
+function setShow(m){SHOW=m;obsBtn.classList.toggle("on",m==="obs");
+  nullBtn.classList.toggle("on",m!=="obs");drawPts(performance.now());drawK()}
+obsBtn.onclick=()=>setShow("obs");nullBtn.onclick=()=>setShow("null");
+
+/* ══════════════ RITE IV: lattice viewport ══════════════ */
+const INV=["corridor-aligned","K-excursion ✓","persistent T>3 obs","source at joint"];
+const CONCEPTS=[
+ {id:"⊤",x:.5,y:.08,intent:INV,ext:"all confirmed leaks — every medium",inv:true},
+ {id:"C₁",x:.16,y:.42,intent:[...INV,"H₂O 1.4/1.9µm","moisture halo"],ext:"water leaks"},
+ {id:"C₂",x:.38,y:.42,intent:[...INV,"C–H 1.73/2.31µm","gravity film"],ext:"oil leaks"},
+ {id:"C₃",x:.62,y:.42,intent:[...INV,"CH₄ 2.3µm","wind-elongated"],ext:"gas plumes"},
+ {id:"C₄",x:.84,y:.42,intent:[...INV,"thermal hotspot","corona proxy"],ext:"electrical faults"},
+ {id:"C₅",x:.27,y:.74,intent:[...INV,"fluid substance","SWIR chemistry"],ext:"water ∪ oil ∪ gas"},
+ {id:"⊥",x:.5,y:.93,intent:["(all attributes)"],ext:"∅ — no single event carries every mark"}];
+const EDGES=[["⊤","C₁"],["⊤","C₂"],["⊤","C₃"],["⊤","C₄"],["C₁","C₅"],["C₂","C₅"],["C₃","C₅"],["C₅","⊥"],["C₄","⊥"]];
+const LVB={x:0,y:0,w:1100,h:420};let lsvg=null;
+function latApply(){lsvg&&lsvg.setAttribute("viewBox",`${LVB.x} ${LVB.y} ${LVB.w} ${LVB.h}`)}
+function buildLattice(){
+  const W=1100,H=420,S=id=>CONCEPTS.find(c=>c.id===id);
+  let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Nebuchadnezzar concept lattice">`;
+  const hull=(c,col)=>`<ellipse cx="${c.x*W}" cy="${c.y*H+6}" rx="86" ry="44" fill="${col}" opacity="0.10"/>`;
+  g+=hull(S("C₁"),"#4d7fb8")+hull(S("C₂"),"#8a6a2c")+hull(S("C₃"),"#c88b3a")+hull(S("C₄"),"#d4553f");
+  EDGES.forEach(([a,b])=>{const A=S(a),B=S(b),gold=a==="⊤";
+    g+=`<line x1="${A.x*W}" y1="${A.y*H}" x2="${B.x*W}" y2="${B.y*H}"
+        stroke="${gold?"#d9a441":"#232b38"}" stroke-width="${gold?2.2:1.4}"/>`});
+  CONCEPTS.forEach((c,i)=>{const gold=c.inv||c.id==="⊤";
+    g+=`<g class="concept" data-i="${i}">
+      <circle cx="${c.x*W}" cy="${c.y*H}" r="${c.id==="⊤"?22:c.id==="⊥"?12:17}"
+        fill="#141922" stroke="${gold?"#d9a441":"#4d7fb8"}" stroke-width="2"/>
+      <text x="${c.x*W}" y="${c.y*H+4}" text-anchor="middle"
+        fill="${gold?"#d9a441":"#e8e2d4"}" font-size="12" font-family="monospace">${c.id}</text>
+      <text x="${c.x*W}" y="${c.y*H+(c.id==="⊤"?-30:34)}" text-anchor="middle"
+        fill="#8b93a3" font-size="10.5" font-family="monospace">${c.ext}</text></g>`});
+  g+="</svg>";
+  const wrap=document.getElementById("latticeWrap");wrap.innerHTML=g;
+  lsvg=wrap.querySelector("svg");
+  const box=document.getElementById("intentBox");
+  const show=i=>{const c=CONCEPTS[i];
+    box.innerHTML=`<b>${c.id}</b> extent: ${c.ext} · intent: `+
+      c.intent.map(a=>`<span class="attr ${INV.includes(a)?"inv":""}">${a}</span>`).join("")+
+      (c.id==="⊤"?` <span style="color:var(--gold)">← minted as template particle, GL-TPL-001</span>`:"")};
+  wrap.querySelectorAll(".concept").forEach(el=>{
+    el.addEventListener("mouseenter",()=>show(+el.dataset.i));
+    el.addEventListener("click",e=>{e.stopPropagation();show(+el.dataset.i)})});
+  show(0);
+  /* viewport: wheel zoom + drag pan + dblclick reset on the SVG */
+  const pxOf=e=>{const r=lsvg.getBoundingClientRect();
+    return{x:LVB.x+(e.clientX-r.left)/r.width*LVB.w,y:LVB.y+(e.clientY-r.top)/r.height*LVB.h}};
+  wrap.addEventListener("wheel",e=>{e.preventDefault();
+    const p=pxOf(e),f=Math.exp(e.deltaY*0.0016);
+    const nw=Math.min(1100,Math.max(160,LVB.w*f)),nh=nw*420/1100;
+    LVB.x=Math.min(1100-nw,Math.max(0,p.x-(p.x-LVB.x)*nw/LVB.w));
+    LVB.y=Math.min(420-nh,Math.max(0,p.y-(p.y-LVB.y)*nh/LVB.h));
+    LVB.w=nw;LVB.h=nh;latApply()},{passive:false});
+  let ld=null;
+  wrap.addEventListener("pointerdown",e=>{ld=pxOf(e);wrap.setPointerCapture(e.pointerId)});
+  wrap.addEventListener("pointermove",e=>{if(!ld)return;const p=pxOf(e);
+    LVB.x=Math.min(1100-LVB.w,Math.max(0,LVB.x-(p.x-ld.x)));
+    LVB.y=Math.min(420-LVB.h,Math.max(0,LVB.y-(p.y-ld.y)));latApply()});
+  const lup=()=>{ld=null};
+  wrap.addEventListener("pointerup",lup);wrap.addEventListener("pointercancel",lup);
+  wrap.addEventListener("dblclick",()=>{LVB.x=0;LVB.y=0;LVB.w=1100;LVB.h=420;latApply()});
+}
+/* lattice deck: bird eye / ground(⊤) / ṬĀLUKU across mediums */
+let latAnim=null;
+function latSet(cx,cy,w){LVB.w=w;LVB.h=w*420/1100;
+  LVB.x=Math.min(1100-LVB.w,Math.max(0,cx-LVB.w/2));
+  LVB.y=Math.min(420-LVB.h,Math.max(0,cy-LVB.h/2));latApply()}
+function latDeck(slot){
+  const mk=(t,fn)=>{const b=document.createElement("button");b.className="cam";
+    b.textContent=t;b.onclick=fn;slot.appendChild(b);return b};
+  mk("⌖ BIRD EYE",()=>{latAnim&&cancelAnimationFrame(latAnim);latAnim=null;
+    LVB.x=0;LVB.y=0;LVB.w=1100;LVB.h=420;latApply()});
+  mk("✛ GROUND",()=>{latAnim&&cancelAnimationFrame(latAnim);latAnim=null;
+    latSet(550,34,420)});                          /* stand at ⊤ */
+  mk("⟳ ṬĀLUKU",()=>{latAnim&&cancelAnimationFrame(latAnim);
+    if(REDUCED){latSet(176,176,420);return}
+    let th=0;const step=()=>{th+=0.012;
+      const cx=550+Math.cos(th)*380,cy=176+Math.sin(th)*36;
+      latSet(cx,cy,430);latAnim=requestAnimationFrame(step)};
+    latAnim=requestAnimationFrame(step)});
+}
+
+/* ══════════════ RITE V: navigation ══════════════ */
+const navCv=document.getElementById("navCv"),nctx=navCv.getContext("2d");
+const off5=document.createElement("canvas");off5.width=1100;off5.height=380;
+const o5=off5.getContext("2d");
+const corBtn=document.getElementById("corBtn"),soilBtn=document.getElementById("soilBtn");
+let CHAP="pipe";
+const nrng=mulberry32(77);
+const CRATERS=[...Array(26)].map(()=>{const cx=[300,620,820][(nrng()*3)|0],cy=[140,240,120][(nrng()*3)|0];
+  return{x:cx+(nrng()*2-1)*110,y:cy+(nrng()*2-1)*70,r:6+nrng()*10}});
+function risk(x,y){if(CHAP==="pipe"){return Math.min(1,plume(x,y*360/380)*1.6)}
+  let v=0;CRATERS.forEach(c=>{v+=Math.exp(-(((x-c.x)**2+(y-c.y)**2))/(2*(c.r*4.2)**2))});
+  return Math.min(1,v*.9)}
+let PATH=[];
+function renderNavScene(){
+  const W=1100,H=380,img=o5.createImageData(W,H),d=img.data;
+  for(let y=0;y<H;y+=2)for(let x=0;x<W;x+=2){
+    const t=terrain(x,y*360/380),r=risk(x,y);
+    let R=16+t*20+r*150,Gc=22+t*26+r*22,B=26+t*24+r*30;
+    if(r>0.55){R=122+r*60;Gc=34;B=48}
+    for(let dy=0;dy<2;dy++)for(let dx=0;dx<2;dx++){
+      const i=((y+dy)*W+(x+dx))*4;d[i]=R;d[i+1]=Gc;d[i+2]=B;d[i+3]=255}}
+  o5.putImageData(img,0,0);
+  PATH=[];let y=CHAP==="pipe"?330:320;PATH.push({x:10,y});
+  for(let x=10;x<=1090;x+=22){let best=y,bv=1e9;
+    for(let dy=-34;dy<=34;dy+=17){const ny=Math.min(360,Math.max(20,y+dy));
+      const v=risk(x,ny)+Math.abs(dy)*0.0009;if(v<bv){bv=v;best=ny}}
+    y=best;PATH.push({x,y})}}
+function drawNav(){
+  const k=camNav.k;
+  nctx.setTransform(1,0,0,1,0,0);nctx.clearRect(0,0,1100,380);
+  camNav.apply(nctx);nctx.drawImage(off5,0,0);
+  if(CHAP==="soil"){nctx.strokeStyle="rgba(212,85,63,.8)";nctx.lineWidth=1.4/k;
+    CRATERS.forEach(c=>{nctx.beginPath();nctx.arc(c.x,c.y,c.r,0,7);nctx.stroke()})}
+  else{nctx.strokeStyle="#5a6474";nctx.lineWidth=4/k;nctx.beginPath();
+    nctx.moveTo(PIPE.x0,PIPE.y0*380/360);nctx.lineTo(PIPE.x1,PIPE.y1*380/360);nctx.stroke()}
+  nctx.strokeStyle="rgba(79,174,138,.25)";nctx.lineWidth=14/k;nctx.beginPath();
+  PATH.forEach((p,i)=>i?nctx.lineTo(p.x,p.y):nctx.moveTo(p.x,p.y));nctx.stroke();
+  nctx.strokeStyle="#4fae8a";nctx.lineWidth=4/k;nctx.stroke();
+  nctx.setTransform(1,0,0,1,0,0);
+  nctx.fillStyle="#4fae8a";nctx.font=MONO;
+  nctx.fillText("◈ SEALED CORRIDOR — risk<θ, 1−ε=0.99, Ed25519 ✓, offline ladder L2",22,26);
+  nctx.fillStyle="#4d7fb8";nctx.fillText("cam ×"+k.toFixed(1),22,44);
+  document.getElementById("navVerdict").innerHTML=CHAP==="pipe"
+   ?`<span class="gold">Mint:</span> inspection corridor to joint J-2 · every segment carries its ε ·
+     verifiable against the seal — <span class="ok">Kidinnu discipline holds</span>`
+   :`<span class="gold">Mint:</span> soil chapter — crater point-process intensity → hazard field between craters ·
+     <span class="bad">UXO clause active: probability only, never clearance</span> ·
+     sampling-priority zones queued for two-witness calibration`}
+const camNav=makeCam(navCv,drawNav,1100,380);
+function setChap(c){CHAP=c;corBtn.classList.toggle("on",c==="pipe");
+  soilBtn.classList.toggle("on",c==="soil");renderNavScene();camNav.reset()}
+corBtn.onclick=()=>setChap("pipe");soilBtn.onclick=()=>setChap("soil");
+
+/* ══════════════ deck wiring ══════════════ */
+const worstCrater=CRATERS.reduce((a,b)=>a.r>b.r?a:b);
+document.querySelectorAll(".camdeck").forEach(slot=>{
+  const d=slot.dataset.deck;
+  if(d==="cube")buildDeck(slot,camCube,{x:LEAK.x,y:LEAK.y},{x:LEAK.x,y:LEAK.y,r:110});
+  if(d==="rx")buildDeck(slot,camRX,{x:LEAK.x,y:LEAK.y*300/360},{x:LEAK.x,y:LEAK.y*300/360,r:100});
+  if(d==="pts")buildDeck(slot,camPts,{x:230,y:170},{x:230,y:170,r:80});
+  if(d==="nav")buildDeck(slot,camNav,
+      CHAP==="pipe"?{x:LEAK.x,y:LEAK.y*380/360}:{x:worstCrater.x,y:worstCrater.y},
+      {x:LEAK.x,y:LEAK.y*380/360,r:120});
+  if(d==="lat")latDeck(slot)});
+
+/* ══════════════ medium tabs ══════════════ */
+const navTabs=document.getElementById("mediums");
+Object.keys(MEDIUMS).forEach(kk=>{
+  const b=document.createElement("button");b.textContent=MEDIUMS[kk].label;
+  b.className=kk===MED?"on":"";
+  b.onclick=()=>{MED=kk;[...navTabs.children].forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    document.getElementById("medTag").textContent=kk;
+    document.getElementById("winNote").textContent=MEDIUMS[kk].note;
+    ANOMS=buildAnoms();SAB.i=-1;
+    const w=MEDIUMS[kk].win;lambda.value=Math.round((w[0]+w[1])/2);
+    renderCubeScene();drawCube();drawRX(performance.now());
+    if(CHAP==="pipe"){renderNavScene();drawNav()}};
+  navTabs.appendChild(b)});
+document.getElementById("winNote").textContent=MEDIUMS[MED].note;
+
+/* boot */
+renderCubeScene();drawCube();
+drawRX(performance.now());
+setShow("obs");buildLattice();
+renderNavScene();drawNav();
+</script>
+</body>
+</html>

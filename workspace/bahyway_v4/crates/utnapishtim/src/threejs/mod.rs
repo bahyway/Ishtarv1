@@ -10,21 +10,21 @@
 //!   - W5H2 query syntax in TCP refresh (anti-SQL sovereign)
 
 #![forbid(unsafe_code)]
-use crate::{ClientTopology, PLIMPTON_322_DIVISOR, GOLDEN_ANGLE_DEG};
+use crate::{ClientTopology, GOLDEN_ANGLE_DEG, PLIMPTON_322_DIVISOR};
 use crate::{
-    ORBITAL_GOLDEN_GEM, ORBITAL_GOLDEN_ALIVE, ORBITAL_FUZZY_AGED,
-    ORBITAL_FUZZY_GRAY,  ORBITAL_FUZZY_DECAY,
-    ORBITAL_DEAD_EXPIRED, ORBITAL_DEAD_SEALED,
+    ORBITAL_DEAD_EXPIRED, ORBITAL_DEAD_SEALED, ORBITAL_FUZZY_AGED, ORBITAL_FUZZY_DECAY,
+    ORBITAL_FUZZY_GRAY, ORBITAL_GOLDEN_ALIVE, ORBITAL_GOLDEN_GEM,
 };
 
 pub fn generate_threejs_viewer(topo: &ClientTopology) -> String {
-    let tribe_js   = build_tribe_js(topo);
+    let tribe_js = build_tribe_js(topo);
     let orbital_js = build_orbital_constants();
     let client_name = &topo.client_name;
-    let client_id   = topo.client_id;
-    let sealed_at   = topo.sealed_at;
+    let client_id = topo.client_id;
+    let sealed_at = topo.sealed_at;
 
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -211,7 +211,8 @@ window.addEventListener('resize', () => {{
 }});
   </script>
 </body>
-</html>"#)
+</html>"#
+    )
 }
 
 fn build_tribe_js(topo: &ClientTopology) -> String {

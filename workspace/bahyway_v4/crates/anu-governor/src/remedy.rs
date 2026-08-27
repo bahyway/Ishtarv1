@@ -11,11 +11,15 @@ pub fn write_fix_playbook(fix_dir: &str, rule: &RemedyRule, ev: &ErrorEvent) -> 
     let stem = ev
         .playbook
         .split(['/', '\\'])
-        .last()
+        .next_back()
         .unwrap_or(&ev.playbook)
         .trim_end_matches(".yml")
         .trim_end_matches(".yaml");
-    let name = format!("{}_fix_{}.yml", stem, rule.id.to_lowercase().replace('-', ""));
+    let name = format!(
+        "{}_fix_{}.yml",
+        stem,
+        rule.id.to_lowercase().replace('-', "")
+    );
     let path = PathBuf::from(fix_dir).join(name);
 
     let body = rule

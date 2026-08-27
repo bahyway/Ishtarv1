@@ -10,14 +10,14 @@ pub mod event_cause;
 pub mod journal;
 pub mod partition;
 
-pub use entry::{JournalEntry, EavTriple};
+pub use entry::{EavTriple, JournalEntry};
 pub use error_registry::{ErrorOccurrenceSpec, ErrorSeverity, ErrorTypeSpec};
 pub use event_cause::EventCause;
 pub use journal::Journal;
 pub use partition::PartitionKey;
 
 pub mod prelude {
-    pub use super::entry::{JournalEntry, EavTriple};
+    pub use super::entry::{EavTriple, JournalEntry};
     pub use super::error_registry::{ErrorOccurrenceSpec, ErrorSeverity, ErrorTypeSpec};
     pub use super::event_cause::EventCause;
     pub use super::journal::Journal;

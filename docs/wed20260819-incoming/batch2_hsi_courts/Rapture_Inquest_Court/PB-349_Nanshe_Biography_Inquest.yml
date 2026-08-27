@@ -1,0 +1,302 @@
+---
+# ============================================================
+#  PB-349 — Nanshe Particle Biography & Rupture Inquest (GL-HSI-001-A3)
+#  BahyWay.Ecosystem v4.0
+#
+#  Run from the Fedora bare-metal HOST:
+#    ansible-playbook -i inventory PB-349_Nanshe_Biography_Inquest.yml
+#  Running this playbook is the CSR-08 confirmation point.
+#
+#  GATE: requires nanshe rupture module (PB-348).
+#  Sovereignty: pure Rust, no deps, append-only ledger, deterministic.
+# ============================================================
+- name: PB-349 nanshe biography and inquest
+  hosts: bahyway_host
+  gather_facts: false
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    crate_dir: "{{ v4_root }}/engines/nanshe"
+    tablets_dir: "{{ v4_root }}/tablets"
+    shala_dir: "{{ v4_root }}/shala"
+
+  tasks:
+    - name: GATE · rupture module must exist (PB-348)
+      ansible.builtin.stat:
+        path: "{{ crate_dir }}/src/rupture.rs"
+      register: rup
+
+    - name: GATE · refuse if PB-348 not run
+      ansible.builtin.fail:
+        msg: "COMPLETION LAW REFUSAL: rupture.rs absent — run PB-348 first."
+      when: not rup.stat.exists
+
+    - name: Deposit amendment tablet
+      ansible.builtin.copy:
+        src: "GL-HSI-001-A3_Particle_Biography_Inquest.md"
+        dest: "{{ tablets_dir }}/GL-HSI-001-A3_Particle_Biography_Inquest.md"
+        mode: "0644"
+
+    - name: Deposit Šala tab (standing habit — one PB, one tab)
+      ansible.builtin.copy:
+        src: "shala_rupture_inquest_court.html"
+        dest: "{{ shala_dir }}/shala_rupture_inquest_court.html"
+        mode: "0644"
+
+    - name: Register module in lib.rs
+      ansible.builtin.lineinfile:
+        path: "{{ crate_dir }}/src/lib.rs"
+        line: "pub mod story;"
+
+    - name: src/story.rs — the biography ledger and the inquest
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/story.rs"
+        mode: "0644"
+        content: |
+          //! GL-HSI-001-A3 — Particle Biography & Rupture Inquest.
+          //! Events are derived from sealed trajectories (append-only),
+          //! never from animation state. The inquest is deterministic and
+          //! refuses wrong causes with the citation.
+
+          pub const SHELLS: [f64; 2] = [1.5, 2.5]; // L1 < 1.5 <= L2 < 2.5 <= L3
+          const EPS_CURVE: f64 = 1e-6;
+          const EPS_DECAY: f64 = 1e-6;
+
+          #[derive(Debug, Clone, PartialEq)]
+          pub enum Event {
+              Birth { epoch: usize, r: f64, shell: u8 },
+              Inflection { epoch: usize, r: f64 },
+              ShellCross { epoch: usize, from: u8, to: u8, outward: bool },
+              DecayOnset { epoch: usize, r: f64 },
+              RuptureWitness { epoch: usize },
+          }
+
+          pub fn shell_of(r: f64) -> u8 {
+              if r < SHELLS[0] { 1 } else if r < SHELLS[1] { 2 } else { 3 }
+          }
+
+          /// The curving moment (L-HSI-16): first epoch i where the second
+          /// difference d2[i] = r[i+1] - 2 r[i] + r[i-1] is positive AND the
+          /// next second difference is also positive. Linear growth (d2 == 0)
+          /// and isolated noise spikes never qualify.
+          pub fn inflection_epoch(r: &[f64]) -> Option<usize> {
+              if r.len() < 4 { return None; }
+              for i in 1..r.len() - 2 {
+                  let d2a = r[i + 1] - 2.0 * r[i] + r[i - 1];
+                  let d2b = r[i + 2] - 2.0 * r[i + 1] + r[i];
+                  if d2a > EPS_CURVE && d2b > EPS_CURVE { return Some(i); }
+              }
+              None
+          }
+
+          /// Decay onset (L-HSI-18): first epoch of two consecutive shrinks.
+          pub fn decay_epoch(r: &[f64]) -> Option<usize> {
+              if r.len() < 3 { return None; }
+              for i in 1..r.len() - 1 {
+                  if r[i] - r[i - 1] < -EPS_DECAY && r[i + 1] - r[i] < -EPS_DECAY {
+                      return Some(i);
+                  }
+              }
+              None
+          }
+
+          /// Build the full biography from a sealed trajectory (L-HSI-17).
+          /// Append-only: events are emitted in epoch order.
+          pub fn biography(r: &[f64], rupture_epoch: Option<usize>,
+                           in_tear_region: bool) -> Vec<Event> {
+              let mut ev = Vec::new();
+              if r.is_empty() { return ev; }
+              ev.push(Event::Birth { epoch: 0, r: r[0], shell: shell_of(r[0]) });
+              let infl = inflection_epoch(r);
+              let dec = decay_epoch(r);
+              let mut prev_shell = shell_of(r[0]);
+              for (i, &ri) in r.iter().enumerate().skip(1) {
+                  if Some(i) == infl {
+                      // a decayer's own shrink never mints INFLECTION (L-HSI-18):
+                      // guard — inflection must occur while radius >= birth radius
+                      // or while growing; shrink-curvature is decay's business.
+                      if dec.map_or(true, |d| i < d) || ri >= r[0] {
+                          ev.push(Event::Inflection { epoch: i, r: ri });
+                      }
+                  }
+                  if Some(i) == dec {
+                      ev.push(Event::DecayOnset { epoch: i, r: ri });
+                  }
+                  let s = shell_of(ri);
+                  if s != prev_shell {
+                      ev.push(Event::ShellCross { epoch: i, from: prev_shell,
+                                                  to: s, outward: s > prev_shell });
+                      prev_shell = s;
+                  }
+              }
+              if let (Some(re), true) = (rupture_epoch, in_tear_region) {
+                  if re < r.len() {
+                      ev.push(Event::RuptureWitness { epoch: re });
+                  }
+              }
+              ev
+          }
+
+          /// One tracked particle in the inquest.
+          pub struct Tracked {
+              pub index: usize,
+              pub kaki_hash: u32,
+              pub events: Vec<Event>,
+              pub reached_tear: bool,
+          }
+
+          impl Tracked {
+              pub fn inflection(&self) -> Option<usize> {
+                  self.events.iter().find_map(|e| match e {
+                      Event::Inflection { epoch, .. } => Some(*epoch), _ => None })
+              }
+              pub fn is_decayer(&self) -> bool {
+                  self.events.iter().any(|e| matches!(e, Event::DecayOnset { .. }))
+                      && self.inflection().is_none()
+              }
+          }
+
+          #[derive(Debug, PartialEq)]
+          pub enum InquestClose {
+              Closed { first_mover: usize },
+              RefusedWrongCause { proposed: usize, citation: &'static str },
+              RefusedNoReport { citation: &'static str },
+          }
+
+          /// Causal order (L-HSI-19): qualifying = inflected AND reached tear
+          /// region; sorted by inflection epoch, ties by index. Deterministic.
+          pub fn causal_order(parts: &[Tracked]) -> Vec<usize> {
+              let mut q: Vec<(usize, usize)> = parts.iter()
+                  .filter(|p| p.reached_tear)
+                  .filter_map(|p| p.inflection().map(|e| (e, p.index)))
+                  .collect();
+              q.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+              q.into_iter().map(|(_, i)| i).collect()
+          }
+
+          /// The closing (L-HSI-20): no silent close, wrong cause refused,
+          /// decayers exculpated.
+          pub fn close_inquest(parts: &[Tracked],
+                               proposed: Option<usize>) -> InquestClose {
+              let order = causal_order(parts);
+              let first = match order.first() {
+                  Some(f) => *f,
+                  None => return InquestClose::RefusedNoReport {
+                      citation: "GL-HSI-001-A3 §3: no qualifying inflection — \
+                                 the inquest cannot close on an empty ledger" },
+              };
+              match proposed {
+                  None => InquestClose::RefusedNoReport {
+                      citation: "GL-HSI-001-A3 §3: no-silent-close — the court \
+                                 must name the first mover" },
+                  Some(p) if p == first => InquestClose::Closed { first_mover: p },
+                  Some(p) => {
+                      let cit = if parts.iter().any(|t| t.index == p && t.is_decayer()) {
+                          "GL-HSI-001-A3 §3: exculpation — shrinking cannot open a wall"
+                      } else {
+                          "GL-HSI-001-A3 §3: wrong-cause refusal — the ledger names \
+                           an earlier curving moment"
+                      };
+                      InquestClose::RefusedWrongCause { proposed: p, citation: cit }
+                  }
+              }
+          }
+
+    - name: tests/story_law_tests.rs — L-HSI-16..20
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/story_law_tests.rs"
+        mode: "0644"
+        content: |
+          use nanshe::story::*;
+
+          fn curver(t0: usize, a: f64, n: usize) -> Vec<f64> {
+              (0..n).map(|t| 1.0 + if t > t0 {
+                  a * ((t - t0) as f64).powi(2) } else { 0.0 }).collect()
+          }
+          fn decayer(t0: usize, n: usize) -> Vec<f64> {
+              (0..n).map(|t| 1.2 - if t > t0 {
+                  0.03 * ((t - t0) as f64) } else { 0.0 }).collect()
+          }
+
+          #[test]
+          fn l_hsi_16_inflection_true_onset_never_linear() {
+              let r = curver(6, 0.05, 30);
+              let e = inflection_epoch(&r).expect("curver must inflect");
+              assert!((6..=8).contains(&e), "onset near t0, got {}", e);
+              let lin: Vec<f64> = (0..30).map(|t| 1.0 + 0.05 * t as f64).collect();
+              assert_eq!(inflection_epoch(&lin), None);   // linear never curves
+              let noise = vec![1.0, 1.0, 1.4, 1.0, 1.0, 1.0, 1.0, 1.0];
+              assert_eq!(inflection_epoch(&noise), None); // isolated spike refused
+          }
+
+          #[test]
+          fn l_hsi_17_shell_cross_exact() {
+              let r = curver(2, 0.02, 40);
+              let bio = biography(&r, None, false);
+              let crosses: Vec<_> = bio.iter().filter_map(|e| match e {
+                  Event::ShellCross { epoch, from, to, outward } =>
+                      Some((*epoch, *from, *to, *outward)), _ => None }).collect();
+              // analytic: r crosses 1.5 when 0.02(t-2)^2 > 0.5 -> t-2 > 5 -> t=8
+              assert_eq!(crosses[0].0, 8);
+              assert_eq!((crosses[0].1, crosses[0].2, crosses[0].3), (1, 2, true));
+              // crosses 2.5 when 0.02(t-2)^2 > 1.5 -> t-2 > 8.66 -> t=11
+              assert_eq!(crosses[1].0, 11);
+              assert_eq!((crosses[1].1, crosses[1].2), (2, 3));
+          }
+
+          #[test]
+          fn l_hsi_18_decay_never_inflects() {
+              let r = decayer(5, 30);
+              let bio = biography(&r, None, false);
+              assert!(bio.iter().any(|e| matches!(e,
+                  Event::DecayOnset { epoch: 6, .. })));
+              assert!(!bio.iter().any(|e| matches!(e, Event::Inflection { .. })));
+          }
+
+          #[test]
+          fn l_hsi_19_causal_order_deterministic() {
+              let mk = |idx: usize, t0: usize| Tracked {
+                  index: idx, kaki_hash: idx as u32,
+                  events: biography(&curver(t0, 0.05, 30), Some(25), true),
+                  reached_tear: true };
+              let parts = vec![mk(0, 9), mk(1, 4), mk(2, 4), mk(3, 12)];
+              let o1 = causal_order(&parts);
+              let o2 = causal_order(&parts);
+              assert_eq!(o1, o2);                       // bit-stable
+              assert_eq!(o1[0], 1);                     // earliest t0, lowest index
+              assert_eq!(o1[1], 2);                     // tie broken by index
+          }
+
+          #[test]
+          fn l_hsi_20_no_silent_close_wrong_cause_refused() {
+              let mk = |idx: usize, t0: usize, tear: bool| Tracked {
+                  index: idx, kaki_hash: idx as u32,
+                  events: biography(&curver(t0, 0.05, 30), Some(25), tear),
+                  reached_tear: tear };
+              let dec = Tracked { index: 9, kaki_hash: 9,
+                  events: biography(&decayer(3, 30), Some(25), true),
+                  reached_tear: true };
+              let parts = vec![mk(0, 8, true), mk(1, 3, true), dec];
+              match close_inquest(&parts, None) {
+                  InquestClose::RefusedNoReport { .. } => {}
+                  v => panic!("silent close must refuse, got {:?}", v) }
+              match close_inquest(&parts, Some(0)) {
+                  InquestClose::RefusedWrongCause { .. } => {}
+                  v => panic!("wrong cause must refuse, got {:?}", v) }
+              match close_inquest(&parts, Some(9)) {
+                  InquestClose::RefusedWrongCause { citation } =>
+                      assert!(citation.contains("exculpation")),
+                  v => panic!("decayer must be exculpated, got {:?}", v) }
+              assert_eq!(close_inquest(&parts, Some(1)),
+                         InquestClose::Closed { first_mover: 1 });
+          }
+
+    - name: Build and run law tests (release)
+      ansible.builtin.command:
+        cmd: cargo test --release
+        chdir: "{{ crate_dir }}"
+      register: law_tests
+      changed_when: false
+
+    - name: Announce
+      ansible.builtin.debug:
+        msg: "Biography & Inquest sealed. Law tests: {{ 'GREEN' if law_tests.rc == 0 else 'RED' }}. GL-HSI-001-A3 awaits CSR-08."

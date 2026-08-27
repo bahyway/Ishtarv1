@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · PB-360 · The Uttu Loom — From Phantom to Tissue</title>
+<style>
+  :root{
+    --clay-deep:#17110c; --clay:#241a12; --clay-panel:#2d2118;
+    --reed:#c9b28a; --reed-dim:#8a7a5e; --lapis:#3d6b9e; --lapis-bright:#6fa8dc;
+    --golden:#e8b23a; --golden-soft:#c99a2e; --wound:#b8442c;
+    --seal:#7a5c3a; --ink:#0d0a07; --uruk:#5aa07a; --phantom:#e8d8a0;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--clay-deep); color:var(--reed);
+    font-family:Georgia,'Times New Roman',serif; overflow:hidden;}
+  header{padding:10px 16px 8px; border-bottom:1px solid var(--seal);
+    background:linear-gradient(180deg,var(--clay),var(--clay-deep));}
+  .crumbs{font-size:11px; letter-spacing:.14em; color:var(--reed-dim);
+    text-transform:uppercase; font-family:'Courier New',monospace;}
+  .crumbs b{color:var(--golden);}
+  h1{font-size:20px; font-weight:normal; margin-top:4px;}
+  h1 .cun{color:var(--golden); margin-right:6px;}
+  .lede{font-size:12.5px; color:var(--reed-dim); font-style:italic; margin-top:2px;}
+  .lawtags{margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;}
+  .lawtag{font-family:'Courier New',monospace; font-size:10px; padding:2px 7px;
+    border:1px solid var(--seal); border-radius:2px; color:var(--reed-dim);
+    background:var(--ink); letter-spacing:.06em;}
+  .lawtag.hot{border-color:var(--golden-soft); color:var(--golden);}
+  .banner{padding:5px 16px; font-size:11px; letter-spacing:.1em;
+    font-family:'Courier New',monospace; text-transform:uppercase;}
+  #honesty{background:#3a2c14; color:var(--golden); border-bottom:1px solid var(--golden-soft);}
+  #fault{display:none; background:#4a1c12; color:#f0a08a; border-bottom:1px solid var(--wound);}
+  .gates{float:right;}
+  .gate{display:inline-block; margin-left:10px;}
+  .gate .dot{display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:#555; margin-right:4px; vertical-align:middle;}
+  .gate.green .dot{background:var(--uruk); box-shadow:0 0 6px var(--uruk);}
+  .gate.red .dot{background:var(--wound); box-shadow:0 0 6px var(--wound);}
+  main{display:flex; height:calc(100% - 148px);}
+  #stage{flex:1; position:relative; min-width:0;}
+  #stage canvas{display:block;}
+  #surinnu{position:absolute; left:12px; top:12px; width:200px;
+    background:linear-gradient(180deg,var(--clay-panel),var(--clay));
+    border:1px solid var(--seal); border-radius:3px; padding:10px; z-index:5;
+    box-shadow:0 4px 18px rgba(0,0,0,.55);}
+  #surinnu h3{font-size:10px; letter-spacing:.18em; color:var(--golden);
+    text-transform:uppercase; font-family:'Courier New',monospace;
+    border-bottom:1px solid var(--seal); padding-bottom:5px; margin-bottom:7px;}
+  .reg{display:flex; align-items:center; gap:7px; font-size:11.5px;
+    padding:3px 0; cursor:pointer; user-select:none;}
+  .reg:hover{color:#e8dcc0;}
+  .sw{width:11px; height:11px; border-radius:2px; border:1px solid var(--seal); flex:0 0 11px;}
+  .reg.off{opacity:.38;}
+  .reg small{margin-left:auto; color:var(--reed-dim); font-family:'Courier New',monospace; font-size:9px;}
+  #seedline{margin-top:7px; padding-top:6px; border-top:1px solid var(--seal);
+    font-size:9.5px; color:var(--reed-dim); font-family:'Courier New',monospace;}
+  #loomdeck{position:absolute; right:12px; top:12px; width:216px; z-index:5;
+    background:linear-gradient(180deg,var(--clay-panel),var(--clay));
+    border:1px solid var(--seal); border-radius:3px; padding:10px;
+    box-shadow:0 4px 18px rgba(0,0,0,.55); font-family:'Courier New',monospace;}
+  #loomdeck h3{font-size:10px; letter-spacing:.18em; color:var(--golden);
+    text-transform:uppercase; border-bottom:1px solid var(--seal);
+    padding-bottom:5px; margin-bottom:7px;}
+  .hrow{display:flex; justify-content:space-between; font-size:10.5px; padding:2.5px 0;}
+  .hrow b{color:var(--phantom);}
+  #stagebadge{margin-top:6px; padding:4px 6px; border:1px solid var(--phantom);
+    border-radius:2px; font-size:10px; color:var(--phantom); letter-spacing:.12em;
+    text-align:center;}
+  #stagebadge.tissue{border-color:var(--golden); color:var(--golden); font-weight:bold;}
+  #rigbar{margin-top:6px; height:7px; background:var(--ink); border:1px solid var(--seal);
+    border-radius:2px; overflow:hidden;}
+  #rigfill{height:100%; width:0%; background:linear-gradient(90deg,var(--phantom),var(--golden));
+    transition:width .5s;}
+  aside{width:330px; flex:0 0 330px; background:var(--clay); border-left:1px solid var(--seal);
+    display:flex; flex-direction:column; overflow:hidden;}
+  .panelhead{font-size:10px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--golden); font-family:'Courier New',monospace; padding:8px 12px 5px;
+    border-bottom:1px solid var(--seal);}
+  #tablet{padding:9px 12px; font-size:11.5px; line-height:1.5;
+    border-bottom:1px solid var(--seal); max-height:146px; overflow-y:auto;}
+  #tablet em{color:var(--golden-soft);}
+  #storybody{padding:8px 12px; font-size:11px; line-height:1.55; min-height:84px;
+    max-height:164px; overflow-y:auto; border-bottom:1px solid var(--seal);}
+  #storybody .ev{margin-bottom:5px; padding-left:9px; border-left:2px solid var(--seal);}
+  #storybody .ev.tissue{border-left-color:var(--golden);}
+  #storybody .ev.refuse{border-left-color:var(--wound);}
+  #storybody .muted{color:var(--reed-dim); font-style:italic;}
+  #journal{flex:1; overflow-y:auto; padding:6px 12px; font-family:'Courier New',monospace;
+    font-size:9.8px; line-height:1.6; color:var(--reed-dim);}
+  #journal .V-CONDENSING{color:var(--phantom);}
+  #journal .V-RECOVERED{color:var(--lapis-bright);}
+  #journal .V-TISSUE-ADMITTED{color:var(--golden); font-weight:bold;}
+  #journal .V-UTILITY-REFUSED{color:var(--wound); font-weight:bold;}
+  #journal .V-UTILITY-WITNESSED{color:var(--uruk); font-weight:bold;}
+  #journal .V-OBSERVED{color:var(--reed-dim);}
+  footer{height:64px; border-top:1px solid var(--seal); background:var(--clay);
+    display:flex; align-items:center; padding:0 14px; gap:14px;}
+  #verdictline{flex:1; font-family:'Courier New',monospace; font-size:11.5px;
+    color:var(--golden); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #camdeck{display:flex; gap:6px;}
+  #camdeck button{background:var(--ink); color:var(--reed); border:1px solid var(--seal);
+    font-family:'Courier New',monospace; font-size:9.5px; letter-spacing:.08em;
+    padding:6px 9px; cursor:pointer; border-radius:2px; text-transform:uppercase;}
+  #camdeck button:hover{border-color:var(--golden-soft); color:var(--golden);}
+  #camdeck button.active{background:var(--seal); color:var(--golden); border-color:var(--golden);}
+  #camdeck button.ride{border-color:#2a4a5e; color:var(--lapis-bright);}
+  #rites{display:none; position:fixed; z-index:50; min-width:220px;
+    background:var(--clay-panel); border:1px solid var(--golden-soft);
+    border-radius:3px; box-shadow:0 8px 26px rgba(0,0,0,.7); font-size:11.5px;}
+  #rites .rhead{padding:7px 11px; font-family:'Courier New',monospace; font-size:9.5px;
+    letter-spacing:.12em; color:var(--golden); text-transform:uppercase;
+    border-bottom:1px solid var(--seal);}
+  #rites .rite{padding:7px 11px; cursor:pointer;}
+  #rites .rite:hover{background:var(--ink); color:var(--golden);}
+  #rites .rite.locked{color:var(--reed-dim); font-style:italic;}
+</style>
+</head>
+<body>
+<header>
+  <div class="crumbs">BahyWay.Ecosystem v4.+ · Šala Hub · <b>PB-360</b> · Uttu Loom · recovery is existence, tissue is service</div>
+  <h1><span class="cun">𒌇</span>The Uttu Loom — From Phantom to Tissue</h1>
+  <div class="lede">A pattern is finished when it is woven into the membrane: rigidity as ribs, meaning as new curvature. Then — and only then — it may carry a train.</div>
+  <div class="lawtags">
+    <span class="lawtag hot">GL-LSN-001 · §Uttu pending</span>
+    <span class="lawtag">3-engine tissue admission</span>
+    <span class="lawtag">GL-NIM-003 · 4 Bārûtu ribs</span>
+    <span class="lawtag">WPDEngine σ_d ≤ 0.10 m</span>
+    <span class="lawtag">Membrane Motion Doctrine</span>
+    <span class="lawtag">SALA-STD-001-A1 · N9</span>
+  </div>
+</header>
+
+<div class="banner" id="honesty">
+  ⚠ REHEARSAL · synthetic confirmations · seed 3600 (šár) · utility verdicts follow the gate in tissue.rs — refusals included by design
+  <span class="gates">
+    <span class="gate" id="gate-compile"><span class="dot"></span>COMPILE</span>
+    <span class="gate" id="gate-runtime"><span class="dot"></span>RUNTIME</span>
+  </span>
+</div>
+<div class="banner" id="fault"></div>
+
+<main>
+  <div id="stage">
+    <div id="surinnu">
+      <h3>Šurinnu · Legend Stele</h3>
+      <div class="reg" data-layer="pattern"><span class="sw" style="background:var(--phantom)"></span>Maturing pattern <small>ladder</small></div>
+      <div class="reg" data-layer="tissue"><span class="sw" style="background:var(--golden)"></span>Tissue vault + ribs <small>weave</small></div>
+      <div class="reg" data-layer="convoy"><span class="sw" style="background:var(--lapis)"></span>Transit convoy <small>service</small></div>
+      <div class="reg" data-layer="wave"><span class="sw" style="background:var(--wound)"></span>Load wave <small>test</small></div>
+      <div class="reg" data-layer="breath"><span class="sw" style="background:var(--uruk)"></span>Membrane breath <small>idle</small></div>
+      <div id="seedline">mulberry32 · seed 3600<br>a phantom cannot<br>carry a train</div>
+    </div>
+    <div id="loomdeck">
+      <h3>Uttu · Loom Deck</h3>
+      <div class="hrow"><span>Confirming engines</span><b id="l-eng">0 / 3</b></div>
+      <div class="hrow"><span>Ribs woven</span><b id="l-rib">0 / 4</b></div>
+      <div class="hrow"><span>Transit passages</span><b id="l-pas">0</b></div>
+      <div class="hrow"><span>Leak σ_d</span><b id="l-sig">—</b></div>
+      <div class="hrow"><span>Load cycles held</span><b id="l-loa">0</b></div>
+      <div id="stagebadge">STAGE · PHANTOM</div>
+      <div id="rigbar"><div id="rigfill"></div></div>
+    </div>
+  </div>
+  <aside>
+    <div class="panelhead">Tablet · the loom law</div>
+    <div id="tablet">
+      <em>Ladder:</em> rigidity grows only by independent engine confirmation. 1st: CONDENSING — edges harden, sway stops. 2nd: RECOVERED — two-witness flesh. 3rd: TISSUE — woven into the membrane, four Bārûtu rib channels alive, curvature reshaped.
+      <em>Utility gate:</em> only Tissue may claim UTILITY-WITNESSED. Refusals name their law — including σ_d above the Cramér–Rao gate: a vague pinpoint is not a pinpoint.
+    </div>
+    <div class="panelhead">StoryEngine · particle biography</div>
+    <div id="storybody"><span class="muted">Click the maturing pattern, a convoy car, or a rib crown. Right-click for rites. Try Suqu-Ride once the vault is woven.</span></div>
+    <div class="panelhead">NĀRU Journal · append-only</div>
+    <div id="journal"></div>
+  </aside>
+</main>
+
+<footer>
+  <div id="verdictline">The loom is threaded. One phantom waits for its first independent witness…</div>
+  <div id="camdeck">
+    <button data-cam="ORBIT-TRACK" class="active">Orbit-Track</button>
+    <button data-cam="SUQU-RIDE" class="ride">Suqu-Ride</button>
+    <button data-cam="FOLLOW">Follow</button>
+    <button data-cam="CRANE">Crane</button>
+    <button data-cam="LANDING">Landing</button>
+    <button data-cam="BIRD">Bird-Flight</button>
+  </div>
+</footer>
+
+<div id="rites"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+/* Šala · PB-360 · Uttu Loom — Naṣāru suite inline.
+   Membrane Motion Doctrine, final form: the pattern does not sit ON the
+   surface — at tissue stage it BECOMES the surface. New curvature is the
+   pattern's meaning made structural. */
+
+const faultEl=document.getElementById('fault');
+window.onerror=function(msg,src,line){faultEl.style.display='block';
+  faultEl.textContent='⚑ FAULT WITNESSED · '+msg+' · line '+line;
+  setGate('gate-runtime',false); return false;};
+function setGate(id,ok){const g=document.getElementById(id);
+  g.classList.remove('green','red'); g.classList.add(ok?'green':'red');}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296;}}
+const rng=mulberry32(3600);
+const REDUCED=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ===== tissue.rs mirror (the ladder + utility gate) ===== */
+const SIGMA_GATE=0.10;
+const rec={engines:new Set(),stage:'PHANTOM',ribs:0,rigidity:0};
+function confirm(engine){
+  const fresh=!rec.engines.has(engine); rec.engines.add(engine);
+  if(fresh)rec.rigidity=Math.min(1.02,rec.rigidity+0.34);
+  const n=rec.engines.size;
+  rec.stage=n===0?'PHANTOM':n===1?'CONDENSING':n===2?'RECOVERED':'TISSUE';
+  rec.ribs=rec.stage==='TISSUE'?4:0;
+  return rec.stage;
+}
+function witnessUtility(kind,arg){
+  if(rec.stage!=='TISSUE')
+    return {ok:false,msg:'pattern is '+rec.stage+' — a phantom cannot carry a train; tissue needs three independent engines'};
+  if(kind==='leak'){
+    if(arg.rib<1||arg.rib>rec.ribs)return {ok:false,msg:'rib '+arg.rib+' was never woven'};
+    if(arg.sigma>SIGMA_GATE)return {ok:false,msg:'σ_d = '+arg.sigma.toFixed(2)+' m exceeds the Cramér–Rao gate (0.10 m) — a vague pinpoint is not a pinpoint'};
+    return {ok:true,msg:'leak localized on rib '+arg.rib+' at σ_d = '+arg.sigma.toFixed(2)+' m — within the gate'};}
+  if(kind==='transit')return {ok:true,msg:'transit service: '+arg.passages+' passages through the woven vault'};
+  return {ok:true,msg:'vault curvature absorbed '+arg.cycles+' load cycles — the pattern IS the structure'};
+}
+function selfTest(){
+  const save={...rec,engines:new Set(rec.engines)};
+  rec.engines=new Set(); rec.stage='PHANTOM'; rec.ribs=0; rec.rigidity=0;
+  confirm('a'); confirm('a');
+  if(rec.stage!=='CONDENSING'||Math.abs(rec.rigidity-0.34)>1e-9)return false; // enthusiasm ≠ independence
+  confirm('b'); if(rec.stage!=='RECOVERED')return false;
+  if(witnessUtility('transit',{passages:1}).ok)return false;                   // gate refuses pre-tissue
+  confirm('c'); if(rec.stage!=='TISSUE'||rec.ribs!==4)return false;
+  if(witnessUtility('leak',{sigma:0.32,rib:3}).ok)return false;                // σ gate
+  if(!witnessUtility('leak',{sigma:0.08,rib:3}).ok)return false;
+  if(witnessUtility('leak',{sigma:0.08,rib:9}).ok)return false;                // unwoven rib
+  rec.engines=save.engines; rec.stage=save.stage; rec.ribs=save.ribs; rec.rigidity=save.rigidity;
+  return true;
+}
+
+/* ===== scene: membrane whose curvature the tissue rewrites ===== */
+const stage=document.getElementById('stage');
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x17110c,0.013);
+const camera=new THREE.PerspectiveCamera(52,1,0.1,400);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setClearColor(0x17110c); stage.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x8a7a5e,0.55));
+const keyL=new THREE.DirectionalLight(0xe8d8b0,0.9); keyL.position.set(18,30,12); scene.add(keyL);
+const lapL=new THREE.PointLight(0x3d6b9e,0.5,90); lapL.position.set(-20,16,-16); scene.add(lapL);
+
+const SEG=80,SPAN=46,RCURV=95, TZ=3, TX0=-13, TX1=13;
+const memGeo=new THREE.PlaneGeometry(SPAN,SPAN,SEG,SEG); memGeo.rotateX(-Math.PI/2);
+const memMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.82,metalness:.14,
+  side:THREE.DoubleSide,vertexColors:true});
+const membrane=new THREE.Mesh(memGeo,memMat); scene.add(membrane);
+const colAttr=new THREE.BufferAttribute(new Float32Array(memGeo.attributes.position.count*3),3);
+memGeo.setAttribute('color',colAttr);
+
+let breathOn=!REDUCED, growth=0, growTarget=0;
+const wave={active:false,zc:-24,amp:1.6,cycles:0};
+function axialFade(x){ // smooth extent of the vault along x
+  const a=Math.min(1,Math.max(0,(x-TX0)/3)), b=Math.min(1,Math.max(0,(TX1-x)/3));
+  return Math.min(a,b);
+}
+function tissueMask(x,z){ const dz=z-TZ;
+  return axialFade(x)*Math.exp(-(dz*dz)/6.5); }
+function memH(x,z,t){
+  let y=-(RCURV-Math.sqrt(Math.max(RCURV*RCURV-x*x-z*z,0)));
+  if(breathOn)y+=0.28*Math.sin(0.6*t+x*0.18)*Math.cos(0.5*t+z*0.15);
+  /* the tissue rewrites curvature: trench with raised vault shoulders */
+  const dz=z-TZ, f=axialFade(x)*growth;
+  y+=f*(-1.7*Math.exp(-(dz*dz)/3.0)+0.62*Math.exp(-(dz*dz)/13));
+  /* load wave — damped where tissue holds */
+  if(wave.active){
+    const d2=(z-wave.zc)*(z-wave.zc)/18+((x-0)*(x-0))/140;
+    const damp=1-0.78*tissueMask(x,z)*growth;
+    y+=wave.amp*damp*Math.exp(-d2);
+  }
+  return y;
+}
+function updateMembrane(t){
+  const pos=memGeo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),z=pos.getZ(i);
+    pos.setY(i,memH(x,z,t));
+    let r=0.176,g=0.129,b=0.094;
+    const m=tissueMask(x,z)*growth;
+    if(m>0.03){ /* woven tissue: golden band with weave striping */
+      const weave=0.5+0.5*Math.sin(x*2.6)*Math.sin((z-TZ)*3.4);
+      r+=m*(0.52+0.16*weave); g+=m*(0.38+0.11*weave); b+=m*0.06;
+    }
+    colAttr.setXYZ(i,Math.min(r,1),Math.min(g,1),Math.min(b,1));
+  }
+  pos.needsUpdate=true; colAttr.needsUpdate=true;
+  memGeo.computeVertexNormals();
+}
+
+/* ===== the maturing pattern + ribs + convoy ===== */
+const particles=[]; let selected=null;
+function mkStory(kind,label,txt){return {kind,label,story:[{cls:'',txt}]};}
+const patGeo=new THREE.IcosahedronGeometry(0.9,1);
+const pattern={mesh:new THREE.Mesh(patGeo,new THREE.MeshStandardMaterial({
+    color:0xe8d8a0,emissive:0x6a5a20,transparent:true,opacity:0.30,wireframe:true})),
+  x:0,z:TZ,kind:'PATTERN',label:'rupture·limit-cycle·pipe',bounce:0,shimmer:0,phase:0,
+  story:[{cls:'',txt:'Predicted phantom, awaiting independent witnesses. Sway is doubt made visible.'}]};
+scene.add(pattern.mesh); particles.push(pattern);
+
+const ribMeshes=[],ribX=[-9,-3,3,9];
+ribX.forEach((rx,i)=>{
+  const g=new THREE.TorusGeometry(2.35,0.16,10,26,Math.PI);
+  const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xc99a2e,
+    emissive:0x4a3510,roughness:.35,metalness:.3}));
+  m.rotation.y=Math.PI/2; m.visible=false; scene.add(m);
+  const crown={mesh:new THREE.Mesh(new THREE.SphereGeometry(0.34,12,10),
+    new THREE.MeshStandardMaterial({color:0xe8b23a,emissive:0x5a3f08})),
+    x:rx,z:TZ,kind:'RIB',label:'Bārûtu rib '+(i+1),bounce:0,shimmer:0,phase:0,
+    story:[{cls:'tissue',txt:'Bārûtu channel '+(i+1)+' of 4 (GL-NIM-003): a surface organ of the woven vault, listening for leaks and load.'}]};
+  crown.mesh.visible=false; scene.add(crown.mesh);
+  particles.push(crown);
+  ribMeshes.push({arc:m,crown,rx});
+});
+const convoy=[];
+for(let i=0;i<5;i++){
+  const c={mesh:new THREE.Mesh(new THREE.SphereGeometry(0.42,14,10),
+    new THREE.MeshStandardMaterial({color:0x3d6b9e,emissive:0x14273d})),
+    s:-i*1.9,kind:'CAR',label:'convoy car '+(i+1),x:0,z:TZ,bounce:0,shimmer:0,phase:0,
+    story:[{cls:'',txt:'Transit particle. It exists because the vault does: service riding structure.'}]};
+  c.mesh.visible=false; scene.add(c.mesh); convoy.push(c); particles.push(c);
+}
+let convoyOn=false,passages=0;
+const leakMarker=new THREE.Mesh(new THREE.SphereGeometry(0.22,10,8),
+  new THREE.MeshBasicMaterial({color:0xe06a4a})); leakMarker.visible=false; scene.add(leakMarker);
+
+/* ===== journal / deck ===== */
+const journalEl=document.getElementById('journal'),verdictEl=document.getElementById('verdictline');
+function journal(v,sig,cause){const d=document.createElement('div');
+  d.className='V-'+v; d.textContent='['+v+'] '+sig+' — '+cause;
+  journalEl.appendChild(d); journalEl.scrollTop=journalEl.scrollHeight;
+  verdictEl.textContent='⟶ '+v+' · '+sig+' · '+cause;}
+function deck(){
+  document.getElementById('l-eng').textContent=rec.engines.size+' / 3';
+  document.getElementById('l-rib').textContent=rec.ribs+' / 4';
+  document.getElementById('l-pas').textContent=passages;
+  document.getElementById('l-loa').textContent=wave.cycles;
+  const b=document.getElementById('stagebadge');
+  b.textContent='STAGE · '+rec.stage;
+  b.classList.toggle('tissue',rec.stage==='TISSUE');
+  document.getElementById('rigfill').style.width=Math.round(Math.min(1,rec.rigidity)*100)+'%';
+}
+
+/* ===== the scripted evolution ===== */
+let events=[];
+(function build(){let t=1.5;
+  events.push({t,type:'confirm',e:'nanshe'}); t+=3.0;
+  events.push({t,type:'confirm',e:'wpdengine'}); t+=2.0;
+  events.push({t,type:'try-early'}); t+=2.0;
+  events.push({t,type:'confirm',e:'igigi'}); t+=4.2;
+  events.push({t,type:'transit'}); t+=5.0;
+  events.push({t,type:'leak-vague'}); t+=2.6;
+  events.push({t,type:'leak-sharp'}); t+=3.0;
+  events.push({t,type:'load'});
+})();
+function runEvent(ev){
+  if(ev.type==='confirm'){
+    const st=confirm(ev.e); deck();
+    if(st==='CONDENSING'){
+      journal('CONDENSING',pattern.label,ev.e+' confirms — edges harden, the sway stops');
+      pattern.mesh.material.wireframe=true; pattern.mesh.material.opacity=0.62;
+      pattern.story.push({cls:'',txt:'First independent witness ('+ev.e+'). Rigidity 0.34 — doubt begins to set.'});
+    }else if(st==='RECOVERED'){
+      journal('RECOVERED',pattern.label,ev.e+' confirms — two-witness rule met, phantom made flesh');
+      pattern.mesh.material=new THREE.MeshStandardMaterial({color:0xe8b23a,emissive:0x5a3f08,roughness:.4});
+      pattern.story.push({cls:'',txt:'Second engine ('+ev.e+'). Solid — but existence is not yet service.'});
+    }else if(st==='TISSUE'){
+      growTarget=1;
+      journal('TISSUE-ADMITTED',pattern.label,ev.e+' confirms — third engine; the pattern is woven INTO the membrane: vault curvature + 4 Bārûtu ribs');
+      pattern.story.push({cls:'tissue',txt:'Third engine ('+ev.e+'). The sphere dissolves into the manifold: its rigidity becomes ribs, its meaning becomes curvature.'});
+      ribMeshes.forEach(r=>{r.arc.visible=true; r.crown.mesh.visible=true;});
+    }
+  }
+  if(ev.type==='try-early'){
+    const v=witnessUtility('transit',{passages:1});
+    journal('UTILITY-REFUSED',pattern.label,v.msg);
+    pattern.story.push({cls:'refuse',txt:'Utility claimed at RECOVERED stage — refused by the gate. '+v.msg});
+  }
+  if(ev.type==='transit'){
+    convoyOn=true; convoy.forEach(c=>c.mesh.visible=true);
+    const v=witnessUtility('transit',{passages:'…counting'});
+    journal('UTILITY-WITNESSED',pattern.label,'transit service opens — convoy enters the woven vault');
+  }
+  if(ev.type==='leak-vague'){
+    const v=witnessUtility('leak',{sigma:0.32,rib:3});
+    document.getElementById('l-sig').textContent='0.32 m ✕';
+    journal('UTILITY-REFUSED','Bārûtu rib 3',v.msg);
+  }
+  if(ev.type==='leak-sharp'){
+    const v=witnessUtility('leak',{sigma:0.08,rib:3});
+    document.getElementById('l-sig').textContent='0.08 m ✓';
+    journal('UTILITY-WITNESSED','Bārûtu rib 3',v.msg);
+    const r=ribMeshes[2]; r.crown.bounce=1.8; r.crown.shimmer=1;
+    leakMarker.visible=true;
+    r.crown.story.push({cls:'tissue',txt:'Leak localized at σ_d = 0.08 m — within the Cramér–Rao gate. The rib heard it first.'});
+  }
+  if(ev.type==='load'){
+    wave.active=true; wave.zc=-24;
+    journal('OBSERVED','load wave','a transient crosses the membrane — watch the vault damp it');
+  }
+}
+
+/* ===== camera (N9 + Suqu-Ride through the vault) ===== */
+const Cam={mode:'ORBIT-TRACK',theta:0.85,phi:0.9,dist:42,target:new THREE.Vector3(0,0,TZ),landT:-1,birdT:0,rideS:TX0};
+function camTick(t,dt){
+  const focus=selected||pattern;
+  switch(Cam.mode){
+    case 'ORBIT-TRACK':
+      if(!REDUCED)Cam.theta+=dt*0.07;
+      Cam.target.lerp(new THREE.Vector3(focus.x,memH(focus.x,focus.z,t),focus.z),0.03);
+      camera.position.set(Cam.target.x+Cam.dist*Math.sin(Cam.phi)*Math.cos(Cam.theta),
+        Cam.target.y+Cam.dist*Math.cos(Cam.phi),Cam.target.z+Cam.dist*Math.sin(Cam.phi)*Math.sin(Cam.theta));
+      break;
+    case 'SUQU-RIDE': {
+      Cam.rideS+=dt*(REDUCED?1.2:3.2); if(Cam.rideS>TX1+3)Cam.rideS=TX0-2;
+      const y=memH(Cam.rideS,TZ,t);
+      camera.position.lerp(new THREE.Vector3(Cam.rideS,y+1.1,TZ),0.2);
+      Cam.target.lerp(new THREE.Vector3(Cam.rideS+5,memH(Cam.rideS+5,TZ,t)+0.9,TZ),0.25);
+      break;}
+    case 'FOLLOW':{const y=memH(focus.x,focus.z,t);
+      camera.position.lerp(new THREE.Vector3(focus.x-7,y+5,focus.z+9),0.06);
+      Cam.target.lerp(new THREE.Vector3(focus.x,y+0.8,focus.z),0.1); break;}
+    case 'CRANE': camera.position.lerp(new THREE.Vector3(0.1,58,TZ),0.05);
+      Cam.target.lerp(new THREE.Vector3(0,0,TZ),0.08); break;
+    case 'LANDING':{Cam.landT=Math.min(Cam.landT+dt*(REDUCED?1:0.28),1);
+      const y=memH(focus.x,focus.z,t);
+      const k=Cam.landT<0?0:1-Math.pow(1-Cam.landT,3);
+      camera.position.lerpVectors(new THREE.Vector3(120,150,120),new THREE.Vector3(focus.x+4,y+3.2,focus.z+5),k);
+      Cam.target.lerp(new THREE.Vector3(focus.x,y+0.6,focus.z),0.15); break;}
+    case 'BIRD': Cam.birdT+=dt*(REDUCED?0.05:0.22);
+      const bx=16*Math.cos(Cam.birdT),bz=TZ+10*Math.sin(Cam.birdT*0.8);
+      camera.position.lerp(new THREE.Vector3(bx,memH(bx,bz,t)+11,bz),0.06);
+      Cam.target.lerp(new THREE.Vector3(16*Math.cos(Cam.birdT+0.5),0,TZ+10*Math.sin(Cam.birdT*0.8+0.5)),0.06);
+      break;
+  }
+  camera.lookAt(Cam.target);
+}
+document.querySelectorAll('#camdeck button').forEach(b=>{
+  b.addEventListener('click',()=>{document.querySelectorAll('#camdeck button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); Cam.mode=b.dataset.cam;
+    if(b.dataset.cam==='LANDING')Cam.landT=0;
+    if(b.dataset.cam==='SUQU-RIDE')Cam.rideS=TX0-2;});});
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();
+  Cam.dist=Math.max(10,Math.min(120,Cam.dist+e.deltaY*0.04));},{passive:false});
+let dragging=false,dragMoved=0,lastX=0,lastY=0;
+renderer.domElement.addEventListener('pointerdown',e=>{if(e.button!==0)return;
+  dragging=true;dragMoved=0;lastX=e.clientX;lastY=e.clientY;});
+window.addEventListener('pointermove',e=>{if(!dragging)return;
+  const dx=e.clientX-lastX,dy=e.clientY-lastY;dragMoved+=Math.abs(dx)+Math.abs(dy);
+  lastX=e.clientX;lastY=e.clientY;
+  Cam.theta-=dx*0.005;Cam.phi=Math.max(0.15,Math.min(1.5,Cam.phi-dy*0.004));});
+window.addEventListener('pointerup',()=>{dragging=false;});
+
+/* ===== pick / StoryEngine / rites ===== */
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
+function pick(e){const r=renderer.domElement.getBoundingClientRect();
+  ndc.x=((e.clientX-r.left)/r.width)*2-1; ndc.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(ndc,camera);
+  const hits=ray.intersectObjects(particles.map(p=>p.mesh));
+  return hits.length?particles.find(p=>p.mesh===hits[0].object):null;}
+const storyBody=document.getElementById('storybody');
+function showStory(p){storyBody.innerHTML='';
+  const h=document.createElement('div');
+  h.innerHTML='<b style="color:var(--golden)">'+p.label+'</b> · <b>'+(p.kind==='PATTERN'?rec.stage:p.kind)+'</b>';
+  storyBody.appendChild(h);
+  p.story.forEach(ev=>{const d=document.createElement('div');
+    d.className='ev '+(ev.cls||''); d.textContent=ev.txt; storyBody.appendChild(d);});}
+renderer.domElement.addEventListener('click',e=>{
+  if(dragMoved>6)return; const p=pick(e); if(!p)return;
+  selected=p; p.bounce=1.6;
+  particles.forEach(q=>{if(q!==p&&q.kind===p.kind)q.shimmer=1.0;});
+  showStory(p);});
+const rites=document.getElementById('rites');
+renderer.domElement.addEventListener('contextmenu',e=>{
+  e.preventDefault(); const p=pick(e);
+  if(!p){rites.style.display='none';return;}
+  selected=p; showStory(p);
+  const items=p.kind==='RIB'
+    ?[['Read Bārûtu channel record',()=>journal('OBSERVED',p.label,'channel record read — four organs of the vault')],
+      ['Witness leak pinpoint (rib 3 only)',()=>{const v=witnessUtility('leak',{sigma:0.08,rib:3});
+        journal(v.ok?'UTILITY-WITNESSED':'UTILITY-REFUSED','Bārûtu rib 3',v.msg);}],
+      ['Seal structure — Bahaa only',null]]
+    :p.kind==='CAR'
+    ?[['Read transit manifest',()=>journal('OBSERVED',p.label,'manifest read: service riding structure')],
+      ['Send to Workbench',()=>journal('OBSERVED',p.label,'sent to DubSar Workbench')]]
+    :[['Read maturation ledger',()=>journal('OBSERVED',p.label,'ladder: '+[...rec.engines].join(', ')+' → '+rec.stage)],
+      ['Claim utility now (gate decides)',()=>{const v=witnessUtility('transit',{passages:passages});
+        journal(v.ok?'UTILITY-WITNESSED':'UTILITY-REFUSED',p.label,v.msg);}],
+      ['Seal tissue law — Bahaa only',null]];
+  rites.innerHTML='<div class="rhead">'+(p.kind==='PATTERN'?rec.stage:p.kind)+' · rites</div>';
+  items.forEach(([label,fn])=>{const d=document.createElement('div');
+    d.className='rite'+(fn?'':' locked'); d.textContent=label;
+    if(fn)d.addEventListener('click',()=>{fn();rites.style.display='none';});
+    rites.appendChild(d);});
+  rites.style.left=Math.min(e.clientX,innerWidth-240)+'px';
+  rites.style.top=Math.min(e.clientY,innerHeight-170)+'px';
+  rites.style.display='block';});
+window.addEventListener('click',e=>{if(!rites.contains(e.target))rites.style.display='none';});
+
+/* ===== stele ===== */
+const layers={pattern:true,tissue:true,convoy:true,wave:true,breath:!REDUCED};
+document.querySelectorAll('.reg').forEach(r=>{const k=r.dataset.layer;
+  if(!layers[k])r.classList.add('off');
+  r.addEventListener('click',()=>{layers[k]=!layers[k];r.classList.toggle('off',!layers[k]);
+    if(k==='breath')breathOn=layers.breath;});});
+
+/* ===== loop ===== */
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;
+  renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}
+window.addEventListener('resize',resize);
+let t=0,last=performance.now(),evIdx=0,firstFrame=true;
+function loop(now){
+  const dt=Math.min((now-last)/1000,0.1); last=now; t+=dt;
+  while(evIdx<events.length&&events[evIdx].t<=t){runEvent(events[evIdx]);evIdx++;}
+  growth+=(growTarget*(layers.tissue?1:0)-growth)*dt*(REDUCED?4:0.9);
+  if(wave.active&&layers.wave){wave.zc+=dt*(REDUCED?24:7);
+    if(wave.zc>26){wave.zc=-24; wave.cycles++; deck();
+      if(wave.cycles===1){const v=witnessUtility('load',{cycles:1});
+        journal('UTILITY-WITNESSED',pattern.label,v.msg);}
+      if(wave.cycles>=4)wave.active=false;}}
+  updateMembrane(t);
+  /* the maturing pattern: sways as phantom, settles, sinks into tissue */
+  const py=memH(pattern.x,pattern.z,t);
+  const sway=(rec.stage==='PHANTOM'&&!REDUCED)?0.5*Math.sin(t*1.1):0;
+  const sink=growth*1.15;
+  pattern.bounce=Math.max(0,pattern.bounce-dt*2.2);
+  pattern.mesh.position.set(pattern.x+sway,py+0.95-sink+(REDUCED?0:Math.sin(pattern.bounce*9)*pattern.bounce),pattern.z);
+  pattern.mesh.material.opacity=rec.stage==='PHANTOM'?0.3+0.1*Math.sin(t*1.6)
+    :rec.stage==='CONDENSING'?0.62:1;
+  pattern.mesh.scale.setScalar(1-growth*0.55);
+  pattern.mesh.visible=layers.pattern&&growth<0.97;
+  /* ribs ride the tissue curvature */
+  ribMeshes.forEach((r,i)=>{
+    const y=memH(r.rx,TZ,t);
+    r.arc.position.set(r.rx,y+0.15,TZ);
+    r.arc.scale.setScalar(0.2+0.8*growth);
+    r.arc.visible=layers.tissue&&growth>0.05;
+    r.crown.mesh.position.set(r.rx,y+2.35*(0.2+0.8*growth),TZ);
+    r.crown.bounce=Math.max(0,r.crown.bounce-dt*2.2);
+    r.crown.shimmer=Math.max(0,r.crown.shimmer-dt*1.4);
+    r.crown.mesh.visible=layers.tissue&&growth>0.4;
+    r.crown.mesh.material.emissiveIntensity=1+r.crown.shimmer*3+r.crown.bounce*1.5;});
+  leakMarker.position.set(3,memH(3,TZ,t)+0.35,TZ+0.8);
+  /* convoy through the vault */
+  if(convoyOn&&layers.convoy){convoy.forEach(c=>{
+    c.s+=dt*(REDUCED?2:4.6);
+    if(c.s>TX1+2){c.s=TX0-2; passages++; deck();}
+    c.x=c.s; c.mesh.position.set(c.s,memH(c.s,TZ,t)+0.55,TZ);
+    c.mesh.visible=layers.convoy&&c.s>=TX0-2&&c.s<=TX1+2;});}
+  camTick(t,dt);
+  renderer.render(scene,camera);
+  if(firstFrame){firstFrame=false;
+    setGate('gate-runtime',selfTest()); deck();
+    journal('OBSERVED','court','RUNTIME gate: first frame rendered, ladder + utility-gate self-test passed');}
+  requestAnimationFrame(loop);
+}
+resize();
+setGate('gate-compile',true);
+journal('OBSERVED','court','COMPILE gate: loom threaded, membrane woven');
+journal('OBSERVED','court','honesty: REHEARSAL confirmations · seed 3600 · refusals are part of the demonstration');
+requestAnimationFrame(loop);
+deck();
+</script>
+</body>
+</html>

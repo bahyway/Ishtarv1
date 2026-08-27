@@ -11,13 +11,13 @@
 //!   - Time-travel-safe — project_at(T) instead of project().
 //!   - No stored cross-tribe state (§10, forbidden op #8).
 
-pub mod probe;
 pub mod crosstribe;
+pub mod probe;
 
-pub use probe::{IduProbe, IduProbeResult};
 pub use crosstribe::CrossTribeLinkState;
+pub use probe::{IduProbe, IduProbeResult};
 
 pub mod prelude {
-    pub use super::probe::{IduProbe, IduProbeResult};
     pub use super::crosstribe::CrossTribeLinkState;
+    pub use super::probe::{IduProbe, IduProbeResult};
 }

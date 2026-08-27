@@ -34,10 +34,15 @@ impl ParticleState {
     /// Map a normalised quality score [0,1] to a health state.
     /// Boundary: 0.8 = Healthy, 0.5 = Degraded, 0.2 = Anomalous, else Corrupted.
     pub fn from_score(score: f64) -> Self {
-        if      score >= 0.8 { Self::Healthy   }
-        else if score >= 0.5 { Self::Degraded  }
-        else if score >= 0.2 { Self::Anomalous }
-        else                 { Self::Corrupted }
+        if score >= 0.8 {
+            Self::Healthy
+        } else if score >= 0.5 {
+            Self::Degraded
+        } else if score >= 0.2 {
+            Self::Anomalous
+        } else {
+            Self::Corrupted
+        }
     }
 }
 
@@ -72,12 +77,18 @@ impl DataSteward for DefaultSteward {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::FeatureAttrib;
     use crate::node::{DfgNode, NodeKind};
+    use crate::plan::FeatureAttrib;
 
     fn dummy_node() -> DfgNode {
-        DfgNode { id: 0, kind: NodeKind::ExecutionCluster, label: "TEST".into(),
-                  sector_index: 0, condition: None, attribs: vec![] }
+        DfgNode {
+            id: 0,
+            kind: NodeKind::ExecutionCluster,
+            label: "TEST".into(),
+            sector_index: 0,
+            condition: None,
+            attribs: vec![],
+        }
     }
 
     #[test]
@@ -89,16 +100,23 @@ mod tests {
     #[test]
     fn default_steward_escalates_high_risk() {
         let d = DefaultSteward;
-        let attribs = vec![FeatureAttrib { domain: "risk".into(), key: "level".into(), value: "HIGH".into() }];
-        assert_eq!(d.evaluate(&dummy_node(), &attribs), GovernanceDecision::RequiresHuman);
+        let attribs = vec![FeatureAttrib {
+            domain: "risk".into(),
+            key: "level".into(),
+            value: "HIGH".into(),
+        }];
+        assert_eq!(
+            d.evaluate(&dummy_node(), &attribs),
+            GovernanceDecision::RequiresHuman
+        );
     }
 
     #[test]
     fn particle_state_thresholds() {
-        assert_eq!(ParticleState::from_score(1.0),  ParticleState::Healthy);
-        assert_eq!(ParticleState::from_score(0.8),  ParticleState::Healthy);
+        assert_eq!(ParticleState::from_score(1.0), ParticleState::Healthy);
+        assert_eq!(ParticleState::from_score(0.8), ParticleState::Healthy);
         assert_eq!(ParticleState::from_score(0.79), ParticleState::Degraded);
-        assert_eq!(ParticleState::from_score(0.5),  ParticleState::Degraded);
+        assert_eq!(ParticleState::from_score(0.5), ParticleState::Degraded);
         assert_eq!(ParticleState::from_score(0.49), ParticleState::Anomalous);
         assert_eq!(ParticleState::from_score(0.19), ParticleState::Corrupted);
     }

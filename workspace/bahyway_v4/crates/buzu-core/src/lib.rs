@@ -70,7 +70,11 @@ impl Bivector {
     /// reuses `Multivector::wedge`, already tested in bahyway-algebra.
     pub fn from_plane(u: [f64; 3], v: [f64; 3]) -> Self {
         let w = vector_to_mv(u).wedge(&vector_to_mv(v));
-        Bivector { b01: w.c[E01], b02: w.c[E02], b12: w.c[E12] }
+        Bivector {
+            b01: w.c[E01],
+            b02: w.c[E02],
+            b12: w.c[E12],
+        }
     }
 
     /// Magnitude of the bivector (area of the spanned parallelogram).
@@ -84,7 +88,11 @@ impl Bivector {
         if m < 1e-15 {
             *self // degenerate plane; caller error, return as-is rather than divide by zero
         } else {
-            Bivector { b01: self.b01 / m, b02: self.b02 / m, b12: self.b12 / m }
+            Bivector {
+                b01: self.b01 / m,
+                b02: self.b02 / m,
+                b12: self.b12 / m,
+            }
         }
     }
 
@@ -109,7 +117,11 @@ impl Bivector {
     pub fn canonical_reference(&self) -> [f64; 3] {
         let n = self.normal();
         let n_len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-        let n_hat = if n_len < 1e-15 { [0.0, 0.0, 1.0] } else { [n[0] / n_len, n[1] / n_len, n[2] / n_len] };
+        let n_hat = if n_len < 1e-15 {
+            [0.0, 0.0, 1.0]
+        } else {
+            [n[0] / n_len, n[1] / n_len, n[2] / n_len]
+        };
 
         let e0 = [1.0, 0.0, 0.0];
         let e1 = [0.0, 1.0, 0.0];
@@ -117,7 +129,11 @@ impl Bivector {
         let candidate = if dot(e0, n_hat).abs() < 0.9 { e0 } else { e1 };
 
         let d = dot(candidate, n_hat);
-        let proj = [candidate[0] - d * n_hat[0], candidate[1] - d * n_hat[1], candidate[2] - d * n_hat[2]];
+        let proj = [
+            candidate[0] - d * n_hat[0],
+            candidate[1] - d * n_hat[1],
+            candidate[2] - d * n_hat[2],
+        ];
         let plen = (proj[0] * proj[0] + proj[1] * proj[1] + proj[2] * proj[2]).sqrt();
         [proj[0] / plen, proj[1] / plen, proj[2] / plen]
     }
@@ -129,7 +145,12 @@ impl Bivector {
         let b = self.unit();
         let half = theta / 2.0;
         let (s, c) = half.sin_cos();
-        Rotor { s: c, b01: -s * b.b01, b02: -s * b.b02, b12: -s * b.b12 }
+        Rotor {
+            s: c,
+            b01: -s * b.b01,
+            b02: -s * b.b02,
+            b12: -s * b.b12,
+        }
     }
 }
 
@@ -157,7 +178,12 @@ impl Rotor {
     /// Reverse (R~): reversion of a grade-0+2 element negates the
     /// grade-2 part. R * R~ = 1 for a unit rotor -- the rotor's inverse.
     pub fn reverse(self) -> Rotor {
-        Rotor { s: self.s, b01: -self.b01, b02: -self.b02, b12: -self.b12 }
+        Rotor {
+            s: self.s,
+            b01: -self.b01,
+            b02: -self.b02,
+            b12: -self.b12,
+        }
     }
 
     /// Rotate a vector via the sandwich product v' = R v R~, built
@@ -202,7 +228,11 @@ pub fn orbit_position_perturbed(
     perturbation: [f64; 3],
 ) -> [f64; 3] {
     let p = orbit_position(nucleus, reference, plane, theta);
-    [p[0] + perturbation[0], p[1] + perturbation[1], p[2] + perturbation[2]]
+    [
+        p[0] + perturbation[0],
+        p[1] + perturbation[1],
+        p[2] + perturbation[2],
+    ]
 }
 
 #[cfg(test)]
@@ -243,8 +273,14 @@ mod tests {
         ];
         for plane in planes {
             let r = plane.canonical_reference();
-            assert!((dot(r, r).sqrt() - 1.0).abs() < 1e-9, "reference must be unit length");
-            assert!(dot(r, plane.normal()).abs() < 1e-9, "reference must lie in the plane");
+            assert!(
+                (dot(r, r).sqrt() - 1.0).abs() < 1e-9,
+                "reference must be unit length"
+            );
+            assert!(
+                dot(r, plane.normal()).abs() < 1e-9,
+                "reference must lie in the plane"
+            );
         }
     }
 
@@ -265,8 +301,14 @@ mod tests {
         // on orientation -- the direction is a convention, but landing
         // exactly on the e1 axis (not drifting off-plane) is the claim.
         assert!(after[2].abs() < 1e-9, "must stay in the xy plane");
-        assert!((after[0].abs()) < 1e-9, "must land on the e1 axis, not partway");
-        assert!((after[1].abs() - 1.0).abs() < 1e-9, "must preserve radius 1");
+        assert!(
+            (after[0].abs()) < 1e-9,
+            "must land on the e1 axis, not partway"
+        );
+        assert!(
+            (after[1].abs() - 1.0).abs() < 1e-9,
+            "must preserve radius 1"
+        );
     }
 
     #[test]
@@ -296,7 +338,12 @@ mod tests {
             .exp(theta1)
             .to_mv()
             .geometric(&plane.exp(theta2).to_mv());
-        let composed = Rotor { s: step.c[0], b01: step.c[E01], b02: step.c[E02], b12: step.c[E12] };
+        let composed = Rotor {
+            s: step.c[0],
+            b01: step.c[E01],
+            b02: step.c[E02],
+            b12: step.c[E12],
+        };
         let via_composition = composed.apply(start);
 
         // One full step at the summed angle.
@@ -344,6 +391,15 @@ mod tests {
         let golden = orbit_position(nucleus, reference, &plane, theta);
         let fuzzy = orbit_position_perturbed(nucleus, reference, &plane, theta, delta);
 
-        assert!(dist([fuzzy[0] - golden[0], fuzzy[1] - golden[1], fuzzy[2] - golden[2]], delta) < 1e-9);
+        assert!(
+            dist(
+                [
+                    fuzzy[0] - golden[0],
+                    fuzzy[1] - golden[1],
+                    fuzzy[2] - golden[2]
+                ],
+                delta
+            ) < 1e-9
+        );
     }
 }

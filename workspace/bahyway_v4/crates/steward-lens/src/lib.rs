@@ -17,12 +17,12 @@
 //! ## Eight anomaly codes (SL-ANOMALY-001):
 //! SA-001 through SA-008 — see `AnomalyCode` enum.
 
-pub mod anomaly;
 pub mod alert;
-pub mod device;
+pub mod anomaly;
 pub mod audit_view;
+pub mod device;
 
+pub use alert::{AlertSeverity, StewardAlert};
 pub use anomaly::{AnomalyCode, AnomalyEvent};
-pub use alert::{StewardAlert, AlertSeverity};
-pub use device::DeviceTier;
 pub use audit_view::AuditView;
+pub use device::DeviceTier;

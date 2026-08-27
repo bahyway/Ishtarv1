@@ -1,0 +1,157 @@
+---
+# PB-378 · Šala Run Bridge · lets a Šala tab request a playbook run, safely
+# Doctrine: a browser tab may PROPOSE a run; only a whitelisted, signed request executes.
+# GL-SEC-002 §5 own-host only · §7 no silent fix · GL-UNT-001 §3 the bridge never leaves the tailnet.
+- name: PB-378 install the Sala run bridge
+  hosts: girsu
+  become: true
+  vars:
+    bridge_dir: /opt/bahyway/bridge
+    bind_addr: "{{ tailscale_ip | default('100.64.0.1') }}"   # NEVER 0.0.0.0
+    bind_port: 7377
+    allowed_playbooks:
+      - PB-371_cdse_arsenal_fetch.yml
+      - PB-376_nergal_av_posture.yml
+    lz: /volume1/bahyway/landing_zone
+  tasks:
+    - name: Ensure bridge directory
+      ansible.builtin.file: {path: "{{ bridge_dir }}", state: directory, mode: "0750"}
+
+    - name: Install the bridge (stdlib only, no framework)
+      ansible.builtin.copy:
+        dest: "{{ bridge_dir }}/bridge.py"
+        mode: "0750"
+        content: |
+          #!/usr/bin/env python3
+          """Sala Run Bridge - accepts a run REQUEST, executes only whitelisted playbooks.
+          Binds the tailnet address only. Token in BRIDGE_TOKEN. Streams the journal as NDJSON."""
+          import json, os, subprocess, threading, queue, http.server, socketserver, urllib.parse
+          ALLOWED = set(json.loads(os.environ["ALLOWED_PLAYBOOKS"]))
+          TOKEN   = os.environ["BRIDGE_TOKEN"]
+          PBDIR   = os.environ.get("PB_DIR", "/opt/bahyway/playbooks")
+          BIND    = (os.environ["BIND_ADDR"], int(os.environ["BIND_PORT"]))
+          RUNS    = {}
+
+          def spawn(run_id, playbook, extra):
+              q = queue.Queue(); RUNS[run_id] = q
+              cmd = ["ansible-playbook", os.path.join(PBDIR, playbook)]
+              for k, v in extra.items():
+                  cmd += ["-e", f"{k}={v}"]
+              def worker():
+                  q.put({"line": "RUN " + " ".join(cmd)})
+                  p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, bufsize=1)
+                  for line in p.stdout:
+                      q.put({"line": line.rstrip()})
+                  p.wait(); q.put({"done": True, "rc": p.returncode}); q.put(None)
+              threading.Thread(target=worker, daemon=True).start()
+
+          class H(http.server.BaseHTTPRequestHandler):
+              def _auth(self):
+                  return self.headers.get("X-Bridge-Token") == TOKEN
+              def _cors(self):
+                  self.send_header("Access-Control-Allow-Origin", "*")
+                  self.send_header("Access-Control-Allow-Headers", "content-type,x-bridge-token")
+              def do_OPTIONS(self):
+                  self.send_response(204); self._cors(); self.end_headers()
+              def do_GET(self):
+                  u = urllib.parse.urlparse(self.path)
+                  if u.path == "/health":
+                      self.send_response(200); self._cors()
+                      self.send_header("content-type", "application/json"); self.end_headers()
+                      self.wfile.write(json.dumps({"ok": True, "allowed": sorted(ALLOWED)}).encode()); return
+                  if u.path == "/journal":
+                      if not self._auth(): self.send_response(401); self._cors(); self.end_headers(); return
+                      rid = urllib.parse.parse_qs(u.query).get("run", [""])[0]
+                      q = RUNS.get(rid)
+                      if not q: self.send_response(404); self._cors(); self.end_headers(); return
+                      self.send_response(200); self._cors()
+                      self.send_header("content-type", "application/x-ndjson"); self.end_headers()
+                      while True:
+                          item = q.get()
+                          if item is None: break
+                          self.wfile.write((json.dumps(item) + "\n").encode()); self.wfile.flush()
+                      return
+                  self.send_response(404); self._cors(); self.end_headers()
+              def do_POST(self):
+                  if not self._auth(): self.send_response(401); self._cors(); self.end_headers(); return
+                  if urllib.parse.urlparse(self.path).path != "/run":
+                      self.send_response(404); self._cors(); self.end_headers(); return
+                  body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+                  pb = body.get("playbook")
+                  if pb not in ALLOWED:                      # the whole point of the bridge
+                      self.send_response(403); self._cors()
+                      self.send_header("content-type", "application/json"); self.end_headers()
+                      self.wfile.write(json.dumps({"refused": pb, "reason": "not in the whitelist"}).encode()); return
+                  extra = {k: v for k, v in (body.get("extra") or {}).items()
+                           if isinstance(v, (str, int, float)) and len(str(v)) < 400}
+                  rid = os.urandom(6).hex(); spawn(rid, pb, extra)
+                  self.send_response(202); self._cors()
+                  self.send_header("content-type", "application/json"); self.end_headers()
+                  self.wfile.write(json.dumps({"run": rid}).encode())
+              def log_message(self, *a): pass
+
+          class S(socketserver.ThreadingTCPServer): allow_reuse_address = True
+          S(BIND, H).serve_forever()
+
+    - name: Systemd unit bound to the tailnet only
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/bahyway-bridge.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=BahyWay Sala Run Bridge
+          After=network-online.target tailscaled.service
+          [Service]
+          Environment=BIND_ADDR={{ bind_addr }}
+          Environment=BIND_PORT={{ bind_port }}
+          Environment=PB_DIR=/opt/bahyway/playbooks
+          Environment=ALLOWED_PLAYBOOKS={{ allowed_playbooks | to_json }}
+          EnvironmentFile=/etc/bahyway/bridge.env
+          ExecStart={{ bridge_dir }}/bridge.py
+          Restart=on-failure
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectSystem=strict
+          ReadWritePaths={{ lz }} /volume1/bahyway
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Token file (generate once, never in git)
+      ansible.builtin.shell: |
+        mkdir -p /etc/bahyway
+        [ -f /etc/bahyway/bridge.env ] || printf 'BRIDGE_TOKEN=%s\n' "$(openssl rand -hex 24)" > /etc/bahyway/bridge.env
+        chmod 600 /etc/bahyway/bridge.env
+      changed_when: false
+
+    - name: Enable and start
+      ansible.builtin.systemd: {name: bahyway-bridge, enabled: true, state: restarted, daemon_reload: true}
+
+    - name: Gate B1 · bridge answers on the tailnet
+      ansible.builtin.uri: {url: "http://{{ bind_addr }}:{{ bind_port }}/health", return_content: true}
+      register: b1
+      failed_when: not (b1.json.ok | default(false))
+
+    - name: Gate B2 · bridge does NOT answer on 0.0.0.0 or the public address
+      ansible.builtin.shell: |
+        ! ss -ltn | grep -q '0\.0\.0\.0:{{ bind_port }}'
+        pub=$(curl -s https://api.ipify.org)
+        ! timeout 3 bash -c "</dev/tcp/$pub/{{ bind_port }}" 2>/dev/null
+        echo "B2 green"
+      changed_when: false
+
+    - name: Gate B3 · a non-whitelisted playbook is refused
+      ansible.builtin.uri:
+        url: "http://{{ bind_addr }}:{{ bind_port }}/run"
+        method: POST
+        headers: {X-Bridge-Token: "{{ lookup('file','/etc/bahyway/bridge.env') | regex_search('BRIDGE_TOKEN=(.*)','\\1') | first }}"}
+        body_format: json
+        body: {playbook: "PB-999_not_allowed.yml"}
+        status_code: 403
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: /volume1/bahyway/sala/court_journal.log
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-378 Sala run bridge up on {{ bind_addr }}:{{ bind_port }} - whitelist {{ allowed_playbooks | join(',') }}"

@@ -51,7 +51,7 @@ pub fn extract_tar(data: &[u8]) -> Result<Vec<ExtractedFile>, ArchiveError> {
         pos += BLOCK;
 
         // Data blocks
-        let data_blocks = (size + BLOCK - 1) / BLOCK;
+        let data_blocks = size.div_ceil(BLOCK);
         let data_end = pos + data_blocks * BLOCK;
 
         if data_end > data.len() {
@@ -66,7 +66,10 @@ pub fn extract_tar(data: &[u8]) -> Result<Vec<ExtractedFile>, ArchiveError> {
                 }
                 let file_data = data[pos..pos + size].to_vec();
                 if !name.is_empty() {
-                    results.push(ExtractedFile { name, data: file_data });
+                    results.push(ExtractedFile {
+                        name,
+                        data: file_data,
+                    });
                 }
             }
             b'5' => { /* directory — skip */ }
@@ -87,12 +90,15 @@ fn parse_string(bytes: &[u8]) -> String {
 
 fn parse_octal(bytes: &[u8]) -> Option<usize> {
     // Skip leading spaces and nulls, take octal digits
-    let s = bytes.iter()
+    let s = bytes
+        .iter()
         .skip_while(|&&b| b == b' ' || b == 0)
-        .take_while(|&&b| b >= b'0' && b <= b'7')
+        .take_while(|&&b| (b'0'..=b'7').contains(&b))
         .copied()
         .collect::<Vec<u8>>();
-    if s.is_empty() { return Some(0); }
+    if s.is_empty() {
+        return Some(0);
+    }
     let s = core::str::from_utf8(&s).ok()?;
     usize::from_str_radix(s, 8).ok()
 }

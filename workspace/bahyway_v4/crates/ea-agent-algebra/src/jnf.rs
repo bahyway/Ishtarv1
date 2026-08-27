@@ -27,28 +27,35 @@
 /// Panics if `a` is not square or not symmetric (within 1e-9).
 pub fn jacobi_eigen(a: &[Vec<f64>], max_iter: usize, tol: f64) -> (Vec<f64>, Vec<Vec<f64>>) {
     let n = a.len();
-    for row in a { assert_eq!(row.len(), n, "matrix must be square"); }
-    for i in 0..n {
-        for j in 0..n {
-            assert!((a[i][j] - a[j][i]).abs() < 1e-9, "matrix must be symmetric");
+    for row in a {
+        assert_eq!(row.len(), n, "matrix must be square");
+    }
+    for (i, row) in a.iter().enumerate() {
+        for (j, &aij) in row.iter().enumerate() {
+            assert!((aij - a[j][i]).abs() < 1e-9, "matrix must be symmetric");
         }
     }
 
     let mut m: Vec<Vec<f64>> = a.to_vec();
-    let mut v: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect()).collect();
+    let mut v: Vec<Vec<f64>> = (0..n)
+        .map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
+        .collect();
 
     for _ in 0..max_iter {
         // find largest off-diagonal element
         let (mut p, mut q, mut max_val) = (0, 1, 0.0f64);
-        for i in 0..n {
-            for j in (i + 1)..n {
-                if m[i][j].abs() > max_val {
-                    max_val = m[i][j].abs();
-                    p = i; q = j;
+        for (i, row) in m.iter().enumerate() {
+            for (j, &val) in row.iter().enumerate().skip(i + 1) {
+                if val.abs() > max_val {
+                    max_val = val.abs();
+                    p = i;
+                    q = j;
                 }
             }
         }
-        if max_val < tol { break; }
+        if max_val < tol {
+            break;
+        }
 
         let (c, s) = if m[p][q].abs() > 1e-300 {
             let theta = (m[q][q] - m[p][p]) / (2.0 * m[p][q]);
@@ -66,6 +73,11 @@ pub fn jacobi_eigen(a: &[Vec<f64>], max_iter: usize, tol: f64) -> (Vec<f64>, Vec
         m[p][q] = 0.0;
         m[q][p] = 0.0;
 
+        // i writes m[i][p]/m[i][q] AND their symmetric mirrors m[p][i]/m[q][i]
+        // (two different rows, not row i) -- a real enumerate() rewrite can't
+        // hold &mut on row i plus rows p and q at once through safe
+        // iteration alone, so the explicit index is kept here.
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             if i != p && i != q {
                 let aip = m[i][p];
@@ -76,11 +88,11 @@ pub fn jacobi_eigen(a: &[Vec<f64>], max_iter: usize, tol: f64) -> (Vec<f64>, Vec
                 m[q][i] = m[i][q];
             }
         }
-        for i in 0..n {
-            let vip = v[i][p];
-            let viq = v[i][q];
-            v[i][p] = c * vip - s * viq;
-            v[i][q] = s * vip + c * viq;
+        for row in v.iter_mut() {
+            let vip = row[p];
+            let viq = row[q];
+            row[p] = c * vip - s * viq;
+            row[q] = s * vip + c * viq;
         }
     }
 
@@ -102,7 +114,9 @@ mod tests {
 
     fn matvec(a: &[Vec<f64>], v: &[f64]) -> Vec<f64> {
         let n = a.len();
-        (0..n).map(|i| (0..n).map(|j| a[i][j] * v[j]).sum()).collect()
+        (0..n)
+            .map(|i| (0..n).map(|j| a[i][j] * v[j]).sum())
+            .collect()
     }
 
     #[test]
@@ -123,8 +137,12 @@ mod tests {
             let col: Vec<f64> = (0..2).map(|i| v[i][k]).collect();
             let av = matvec(&a, &col);
             for i in 0..2 {
-                assert!((av[i] - eig[k] * col[i]).abs() < 1e-6,
-                    "A v_{k} != lambda_{k} v_{k} at component {i}: {} vs {}", av[i], eig[k] * col[i]);
+                assert!(
+                    (av[i] - eig[k] * col[i]).abs() < 1e-6,
+                    "A v_{k} != lambda_{k} v_{k} at component {i}: {} vs {}",
+                    av[i],
+                    eig[k] * col[i]
+                );
             }
         }
     }
@@ -142,7 +160,10 @@ mod tests {
             for k2 in 0..n {
                 let dot: f64 = (0..n).map(|i| v[i][k1] * v[i][k2]).sum();
                 let expected = if k1 == k2 { 1.0 } else { 0.0 };
-                assert!((dot - expected).abs() < 1e-6, "v_{k1}.v_{k2} = {dot}, expected {expected}");
+                assert!(
+                    (dot - expected).abs() < 1e-6,
+                    "v_{k1}.v_{k2} = {dot}, expected {expected}"
+                );
             }
         }
     }
@@ -157,7 +178,10 @@ mod tests {
         let trace: f64 = (0..3).map(|i| a[i][i]).sum();
         let (eig, _v) = jacobi_eigen(&a, 200, 1e-12);
         let eig_sum: f64 = eig.iter().sum();
-        assert!((trace - eig_sum).abs() < 1e-6, "trace={trace} sum(eig)={eig_sum}");
+        assert!(
+            (trace - eig_sum).abs() < 1e-6,
+            "trace={trace} sum(eig)={eig_sum}"
+        );
     }
 
     #[test]

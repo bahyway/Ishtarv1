@@ -16,12 +16,12 @@ pub enum KupruError {
 impl std::fmt::Display for KupruError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidInput(m)  => write!(f, "LEMNĪ (invalid input): {m}"),
-            Self::SealBroken(m)    => write!(f, "NAKRU (seal broken): {m}"),
-            Self::Io(m)            => write!(f, "KUPRU IO: {m}"),
-            Self::Crypto(m)        => write!(f, "KUPRU crypto: {m}"),
-            Self::Expired(m)       => write!(f, "ŠANÛ ŠATTĀTI (expired): {m}"),
-            Self::AccessDenied(m)  => write!(f, "DŪRU (access denied): {m}"),
+            Self::InvalidInput(m) => write!(f, "LEMNĪ (invalid input): {m}"),
+            Self::SealBroken(m) => write!(f, "NAKRU (seal broken): {m}"),
+            Self::Io(m) => write!(f, "KUPRU IO: {m}"),
+            Self::Crypto(m) => write!(f, "KUPRU crypto: {m}"),
+            Self::Expired(m) => write!(f, "ŠANÛ ŠATTĀTI (expired): {m}"),
+            Self::AccessDenied(m) => write!(f, "DŪRU (access denied): {m}"),
         }
     }
 }

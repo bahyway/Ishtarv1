@@ -20,14 +20,14 @@ pub mod schema_version;
 pub mod tribe_completeness;
 
 // V1→V2 pipeline
-pub use schema_version::{FieldMeta, FieldType, SchemaVersion};
-pub use field_diff::{FieldChange, FieldDiff};
-pub use schema_comparator::{CompareReport, CompareVerdict, compare_versions};
 pub use dead_verdict::{AlertPriority, DeadVerdict, SchemaMismatchAlert};
+pub use field_diff::{FieldChange, FieldDiff};
+pub use pauli_dedup::{dedup_tribes, PauliDedupReport, PauliDuplicate};
+pub use schema_comparator::{compare_versions, CompareReport, CompareVerdict};
+pub use schema_version::{FieldMeta, FieldType, SchemaVersion};
 pub use tribe_completeness::{
-    TribeCompleteness, TribeRank, completeness_gap, most_organized, rank_tribes,
+    completeness_gap, most_organized, rank_tribes, TribeCompleteness, TribeRank,
 };
-pub use pauli_dedup::{PauliDedupReport, PauliDuplicate, dedup_tribes};
 
 // Legacy template diff
-pub use compare::{SchemaDiff, compare};
+pub use compare::{compare, SchemaDiff};

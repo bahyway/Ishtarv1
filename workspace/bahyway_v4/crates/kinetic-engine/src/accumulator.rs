@@ -14,8 +14,8 @@
 //! x(t+1) = x(t) + v(t+1) * dt           (position integration)
 //! ```
 
-use crate::vec7d::Vec7D;
 use crate::force::ForceGenerator;
+use crate::vec7d::Vec7D;
 
 // ── KineticParticle ─────────────────────────────────────────────────────────
 
@@ -110,7 +110,7 @@ impl KineticParticle {
 /// df/dt = I_phys + I_mem + I_learn
 /// ```
 pub struct SovereignAccumulator {
-    forces:  Vec<Box<dyn ForceGenerator>>,
+    forces: Vec<Box<dyn ForceGenerator>>,
     pub dt: f64,
 }
 
@@ -158,8 +158,8 @@ impl SovereignAccumulator {
             return;
         }
 
-        let total_force   = self.total_force(&particle.position);
-        let acceleration  = total_force * particle.inverse_mass;
+        let total_force = self.total_force(&particle.position);
+        let acceleration = total_force * particle.inverse_mass;
         particle.velocity += acceleration * self.dt;
 
         let decay = particle.damping.powf(self.dt);
@@ -249,7 +249,10 @@ mod tests {
         let mut p = KineticParticle::sovereign(Vec7D::HEALTHY_ORBIT);
         let initial = p.position;
         let mut acc = SovereignAccumulator::default_cycle();
-        acc.add_force(Box::new(ConstantForce::new(Vec7D::UNIT, HeptaDimension::ME)));
+        acc.add_force(Box::new(ConstantForce::new(
+            Vec7D::UNIT,
+            HeptaDimension::ME,
+        )));
         acc.integrate(&mut p);
         assert_eq!(p.position, initial, "sovereign particle must not move");
     }
@@ -279,13 +282,16 @@ mod tests {
         let mut acc = SovereignAccumulator::default_cycle();
         acc.add_force(Box::new(PhysicalForce::new(0.38, 0.0)));
         acc.integrate(&mut p);
-        assert!(p.position.uru < initial_uru,
-            "uru should decrease under Gray-Rot: initial={initial_uru}, final={}", p.position.uru);
+        assert!(
+            p.position.uru < initial_uru,
+            "uru should decrease under Gray-Rot: initial={initial_uru}, final={}",
+            p.position.uru
+        );
     }
 
     #[test]
     fn heavy_particle_accelerates_less_than_light_particle() {
-        let pos   = Vec7D::new(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5);
+        let pos = Vec7D::new(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5);
         let force = Vec7D::UNIT;
         let mut light = KineticParticle::new(pos, 1.0, 1.0);
         let mut heavy = KineticParticle::new(pos, 10.0, 1.0);
@@ -298,9 +304,12 @@ mod tests {
         acc2.add_force(Box::new(ConstantForce::new(force, HeptaDimension::ME)));
         acc2.integrate(&mut heavy);
 
-        assert!(light.velocity.me > heavy.velocity.me,
+        assert!(
+            light.velocity.me > heavy.velocity.me,
             "light particle should have higher velocity: light={}, heavy={}",
-            light.velocity.me, heavy.velocity.me);
+            light.velocity.me,
+            heavy.velocity.me
+        );
     }
 
     #[test]
@@ -312,9 +321,14 @@ mod tests {
         let v_after_1 = p.velocity.me;
         acc.integrate(&mut p);
         let v_after_2 = p.velocity.me;
-        assert!(v_after_2 < v_after_1,
-            "velocity should decay: after_1={v_after_1}, after_2={v_after_2}");
-        assert!(v_after_1 < 1.0, "initial velocity should already have decayed");
+        assert!(
+            v_after_2 < v_after_1,
+            "velocity should decay: after_1={v_after_1}, after_2={v_after_2}"
+        );
+        assert!(
+            v_after_1 < 1.0,
+            "initial velocity should already have decayed"
+        );
     }
 
     #[test]
@@ -326,14 +340,20 @@ mod tests {
         acc.add_force(Box::new(ConstantForce::new(f1, HeptaDimension::ME)));
         acc.add_force(Box::new(ConstantForce::new(f2, HeptaDimension::ME)));
         acc.integrate(&mut p);
-        assert!(approx(p.velocity.me, 2.0),
-            "accumulated forces should sum: velocity.me={}", p.velocity.me);
+        assert!(
+            approx(p.velocity.me, 2.0),
+            "accumulated forces should sum: velocity.me={}",
+            p.velocity.me
+        );
     }
 
     #[test]
     fn clear_forces_empties_accumulator() {
         let mut acc = SovereignAccumulator::default_cycle();
-        acc.add_force(Box::new(ConstantForce::new(Vec7D::UNIT, HeptaDimension::ME)));
+        acc.add_force(Box::new(ConstantForce::new(
+            Vec7D::UNIT,
+            HeptaDimension::ME,
+        )));
         assert_eq!(acc.force_count(), 1);
         acc.clear_forces();
         assert_eq!(acc.force_count(), 0);
@@ -346,7 +366,10 @@ mod tests {
         let mut acc = SovereignAccumulator::default_cycle();
         acc.add_force(Box::new(LearningForce::full()));
         let dh = acc.health_velocity(&p);
-        assert!(dh >= 0.0, "dH/dt should be >= 0 under pure learning force: {dh}");
+        assert!(
+            dh >= 0.0,
+            "dH/dt should be >= 0 under pure learning force: {dh}"
+        );
     }
 
     #[test]
@@ -356,9 +379,15 @@ mod tests {
         let mut acc = SovereignAccumulator::default_cycle();
         acc.add_force(Box::new(ConstantForce::new(force, HeptaDimension::ME)));
         acc.integrate_cycles(&mut p, 5);
-        assert!(p.position.me > 0.0,
-            "position.me should be positive after 5 cycles: {}", p.position.me);
-        assert!(p.velocity.me > 0.0,
-            "velocity.me should be positive after 5 cycles: {}", p.velocity.me);
+        assert!(
+            p.position.me > 0.0,
+            "position.me should be positive after 5 cycles: {}",
+            p.position.me
+        );
+        assert!(
+            p.velocity.me > 0.0,
+            "velocity.me should be positive after 5 cycles: {}",
+            p.velocity.me
+        );
     }
 }

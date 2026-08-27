@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EnkiDDB · Visualization Solution · ENLIL engine · PB-407</title>
+<style>
+:root{--bg:#0b1218;--rail:#111b23;--panel:#16222c;--line:#22323e;--ink:#fff;--dim:#7fa3bd;--gold:#ffc600;--lapis:#0088ff;--green:#3ad900;--violet:#fb94ff;--alarm:#ff628c;--hi:#ffee80;--basalt:#5b6b78;
+--mono:"IBM Plex Mono","JetBrains Mono",ui-monospace,Menlo,monospace;--serif:"Iowan Old Style",Palatino,Georgia,serif}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1.45 var(--serif);overflow:hidden}
+#app{display:grid;grid-template-rows:38px 1fr 26px;height:100vh}
+#top{display:flex;align-items:center;gap:12px;padding:0 10px;background:var(--rail);border-bottom:1px solid var(--line);font:11px var(--mono);color:var(--dim)}
+#top b{color:var(--gold)}#top .cune{color:var(--gold)}
+#burger{background:none;border:1px solid var(--line);color:var(--ink);border-radius:4px;padding:2px 8px;cursor:pointer;font:13px var(--mono)}
+#top .honest{color:var(--hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+#body{display:grid;grid-template-columns:250px 1fr;min-height:0}#body.railoff{grid-template-columns:0 1fr}
+#rail{background:var(--rail);border-right:1px solid var(--line);overflow:auto}#rail.hidden{display:none}
+.sec{border-bottom:1px solid var(--line)}
+.sec>h3{margin:0;font:600 10px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);padding:7px 9px;cursor:pointer;display:flex;justify-content:space-between}
+.sec>h3 i{color:var(--dim);font-style:normal}
+.sec .in{padding:6px 9px 10px;display:grid;gap:6px;font:11px var(--mono)}.sec.closed .in{display:none}
+button,select{background:#0d171e;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 7px;font:11px var(--mono);cursor:pointer}
+button:hover{border-color:var(--gold);color:var(--hi)}button[aria-pressed=true]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+label{display:flex;align-items:center;gap:5px;color:var(--dim)}
+.row{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.tree{display:grid;gap:2px}
+.tree .cr{color:var(--lapis);cursor:pointer;padding:2px 4px;border-radius:3px}
+.tree .cr[aria-pressed=true]{background:#1b2a35;color:var(--hi)}
+.tree .md{color:var(--dim);cursor:pointer;padding:1px 4px 1px 14px;border-radius:3px}
+.tree .md[aria-pressed=true]{background:#1b2a35;color:var(--hi)}
+#work{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);min-height:0}
+@media(max-width:1000px){#work{grid-template-columns:1fr}}
+#codewrap{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+#codehead{padding:6px 10px;font:10px var(--mono);color:var(--dim);border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
+#codehead b{color:var(--gold)}
+#code{flex:1;overflow:auto;font:12px/1.62 var(--mono);padding:6px 0 60px}
+.ln{display:grid;grid-template-columns:44px 1fr;gap:0;white-space:pre;cursor:default}
+.ln .no{color:#3d525f;text-align:right;padding-right:10px;user-select:none}
+.ln.an{cursor:pointer}
+.ln.an:hover{background:#16222c}
+.ln.an .no{color:var(--gold)}
+.ln.sel{background:#1b2a35;box-shadow:inset 3px 0 0 var(--gold)}
+.k{color:#ff9d5c}.t{color:#66d9ff}.f{color:var(--hi)}.s{color:#9ee493}.c{color:#4d6472;font-style:italic}.m{color:var(--violet)}.n{color:#ffc600}
+#right{display:flex;flex-direction:column;min-height:0}
+#anim{flex:0 0 auto;height:52%;background:linear-gradient(180deg,#0d1a22 0%,#070d12 100%);border-bottom:1px solid var(--line);display:block;width:100%}
+#why{flex:1;overflow:auto;padding:10px 12px;font:12px/1.6 var(--mono)}
+#why h4{margin:0 0 6px;font:600 11px var(--mono);letter-spacing:.1em;color:var(--gold);text-transform:uppercase}
+#why .cls{display:inline-block;font:9px var(--mono);padding:1px 5px;border-radius:3px;color:#0b1218;margin-right:6px}
+#why p{margin:0 0 8px}#why .dim{color:var(--dim)}
+#why .breaks{border-top:1px dashed var(--line);padding-top:7px;margin-top:8px;color:var(--alarm)}
+#status{display:flex;align-items:center;gap:14px;padding:0 10px;background:var(--rail);border-top:1px solid var(--line);font:11px var(--mono);color:var(--dim);overflow:hidden}
+#status b{color:var(--hi)}#tick{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#flow{display:none;width:100%;height:100%}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <button id="burger">☰</button>
+    <span>ENKIDDB·7007 · <b>VISUALIZATION SOLUTION</b> · PB-407 · the engine, its crates, and why each line is shaped as it is</span>
+    <span class="honest" id="honest">code is MEASURED (it is the crate) · rationale is ADVISED (it was authored) · animations are illustrations, not traces</span>
+    <span class="cune">𒁾</span>
+  </div>
+
+  <div id="body">
+    <div id="rail">
+      <div class="sec" data-s="eng"><h3>Engine <i>▾</i></h3><div class="in">
+        <select id="engine"><option value="ENLIL">ENLIL · the field kernel</option></select>
+        <div class="dim" id="engblurb" style="color:var(--dim)"></div>
+      </div></div>
+      <div class="sec" data-s="crates"><h3>Crates &amp; modules <i>▾</i></h3><div class="in"><div class="tree" id="tree"></div></div></div>
+      <div class="sec" data-s="view"><h3>View <i>▾</i></h3><div class="in">
+        <div class="row"><button data-view="code" aria-pressed="true">code + animation</button><button data-view="flow">flowchart</button>
+          <button data-view="resp">responsibilities</button></div>
+        <div class="row"><span style="color:var(--dim)">lens</span>
+          <button data-lens="orbit" aria-pressed="true" title="what the ecosystem sees">⟳ ecosystem</button>
+          <button data-lens="machine" title="what the machine holds">▤ machine</button></div>
+        <div style="color:var(--dim)">L toggles the lens · the orbit lens says what the code is <i>for</i>; the machine lens says why it is <i>shaped</i> that way</div>
+        <label>speed <input id="speed" type="range" min="0" max="2" step="0.1" value="1"></label>
+        <label><input type="checkbox" id="loop" checked> loop the animation</label>
+      </div></div>
+      <div class="sec" data-s="marks"><h3>Annotated lines <i>▾</i></h3><div class="in"><div class="tree" id="marks"></div></div></div>
+      <div class="sec closed" data-s="leg"><h3>Reading the page <i>▸</i></h3><div class="in" style="color:var(--dim)">
+        <div><span style="color:var(--green)">MEASURED</span> — taken from the crate text itself</div>
+        <div><span style="color:var(--gold)">ADVISED</span> — the architect's reason; authored, not derived</div>
+        <div><span style="color:var(--violet)">ESTIMATED</span> — a performance claim not measured on your hardware</div>
+        <div style="margin-top:5px">An annotation offers <b>both lenses</b> where both are defined. Where only one is, the other says so rather than inventing a picture.</div>
+        <div style="margin-top:5px">Every annotation says what <b style="color:var(--alarm)">breaks</b> if the construct is removed. If it breaks nothing, it should not be there.</div>
+      </div></div>
+    </div>
+
+    <div id="work">
+      <div id="codewrap">
+        <div id="codehead"><b id="chCrate">—</b><span id="chPath"></span><span id="chLines" style="margin-left:auto"></span></div>
+        <div id="code"></div>
+      </div>
+      <div id="right">
+        <canvas id="anim"></canvas>
+        <div id="why"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status"><span id="verdict">—</span><span id="tick"></span></div>
+</div>
+
+<script>
+(function(){"use strict";
+const $=id=>document.getElementById(id);
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const C={line:'#22323e',ink:'#fff',dim:'#7fa3bd',gold:'#ffc600',lapis:'#0088ff',green:'#3ad900',violet:'#fb94ff',alarm:'#ff628c',hi:'#ffee80',basalt:'#5b6b78'};
+function tick(s){$('tick').textContent='· '+s;}
+
+/* ================= the engine ================= */
+const ENGINE={name:'ENLIL',blurb:'One pass over the crowd; the field is the answer. Reads particles, writes bins, never the store.',
+crates:[
+{name:'kaki-core',role:'identity — 16 bytes, fixed for ever',modules:[
+{path:'src/kaki.rs',code:
+`use core::mem::size_of;
+
+/// A KAKI is identity, not data. Sixteen bytes, laid out once,
+/// never widened, never reordered. Everything else lives in EAV.
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Kaki {
+    uuid_hash: [u8; 4],   // κ[0..3]  identity, never the physical order
+    tribe_id:  [u8; 2],   // κ[4..5]  which crowd it belongs to
+    kaki_type: u8,        // κ[6]
+    kaki_role: u8,        // κ[7]
+    reserved:  [u8; 4],   // κ[8..11] sealed; growth is not a plan
+    timestamp: [u8; 2],   // κ[12..13] monotonic within a tribe
+    crc:       [u8; 2],   // κ[14..15] CRC-16/CCITT over the first fourteen
+}
+
+const _: () = assert!(size_of::<Kaki>() == 16);
+
+impl Kaki {
+    /// The physical order. Never the hash.
+    #[inline]
+    pub fn sort_key(&self) -> u32 {
+        (u16::from_be_bytes(self.tribe_id) as u32) << 16
+            | u16::from_be_bytes(self.timestamp) as u32
+    }
+}`,
+ann:[
+{l:[5,16],title:'#[repr(C)] and a compile-time size assert',cls:'ADVISED',anim:'layout',
+ why:'The layout is part of the law, so it is pinned by the language rather than by a comment. <b>repr(C)</b> forbids the compiler from reordering fields, and the const assert fails the <i>build</i> if anyone widens the struct.',
+ breaks:'Without it a well-meaning junior adds a field, the struct silently becomes 24 bytes, every persisted KAKI on disk is misread, and nothing complains until the data is unreadable.'},
+{l:[8,8],title:'uuid_hash is κ[0..3] — identity, never order',cls:'ADVISED',anim:'order',
+ why:'A hash is uniformly distributed by design. Sorting by it means every insert lands on a random page. The comment is doctrine, and <b>sort_key</b> below is the enforcement.',
+ breaks:'Cluster on the hash and you get maximum page splits and an orbit scan that touches one extent per citizen — the segment stops matching the ontology.'},
+{l:[24,29],title:'sort_key: tribe first, then time',cls:'MEASURED',anim:'order',
+ why:'Tribe in the high sixteen bits, timestamp in the low: monotonic <i>within</i> a tribe, so inserts append at the end of that tribe’s run instead of splitting pages in the middle.',
+ breaks:'Swap the halves and the ordering becomes global-by-time; tribes interleave, and an orbit scan of one tribe reads the whole file.'}]},
+]},
+{name:'hepta-grid',role:'address — (MLU, θ, RU) to a bin index',modules:[
+{path:'src/grid.rs',code:
+`/// The grid is the address space, not a cache of one.
+/// Shells × angles × radii, flattened once, shared everywhere.
+#[derive(Clone, Copy)]
+pub struct Grid { pub shells: usize, pub angles: usize, pub radii: usize }
+
+impl Grid {
+    #[inline(always)]
+    pub const fn bins(&self) -> usize { self.shells * self.angles * self.radii }
+
+    /// Row-major so that one shell is contiguous: a shell scan is
+    /// one linear read, which is what the court asks for most often.
+    #[inline(always)]
+    pub const fn index(&self, m: usize, a: usize, r: usize) -> usize {
+        (m * self.angles + a) * self.radii + r
+    }
+
+    /// Address of a particle. Branchless: clamp instead of if/else,
+    /// because this runs once per particle at 10^9.
+    #[inline(always)]
+    pub fn locate(&self, mlu: i8, theta: f32, ru: f32) -> usize {
+        let m = (mlu + 3).clamp(0, 6) as usize;
+        let a = ((theta * self.angles as f32) as usize).min(self.angles - 1);
+        let r = ((ru * self.radii as f32) as usize).min(self.radii - 1);
+        self.index(m, a, r)
+    }
+}`,
+ann:[
+{l:[11,15],title:'Row-major: the shell is contiguous',cls:'ADVISED',anim:'rowmajor',
+ why:'Index order decides what a scan costs. Putting <b>radii</b> innermost makes one MLU shell a single contiguous run, so a shell scan is one sequential read and the prefetcher does the work for you.',
+ breaks:'Flip the order and a shell scan strides across the whole grid; the same query does the same arithmetic and takes an order of magnitude longer.'},
+{l:[17,25],title:'clamp, not if/else — branchless by intent',cls:'ESTIMATED',anim:'branch',
+ why:'This runs once per particle. A mispredicted branch costs more than the arithmetic it guards, and the mispredictions are data-dependent, so they cannot be trained away. <b>clamp</b> and <b>min</b> compile to conditional moves.',
+ breaks:'Nothing breaks correctness — this one is speed only, and the claim is ESTIMATED until measured on your hardware. Do not repeat it as fact.'},
+{l:[7,8],title:'const fn + inline(always)',cls:'ADVISED',anim:'inline',
+ why:'<b>const fn</b> lets bin counts be computed at compile time where the grid is fixed; <b>inline(always)</b> removes the call from the innermost loop entirely.',
+ breaks:'Left as an ordinary call, this function appears once per particle in the profile for no reason.'}]},
+]},
+{name:'pyo3-bridge',role:'the boundary — the notebook commands, it never joins the loop',modules:[
+{path:'src/lib.rs',code:
+`use numpy::{PyReadonlyArray1, PyReadonlyArray2};
+use pyo3::prelude::*;
+use enlil_field::{Field, Refusal};
+use hepta_grid::Grid;
+
+/// The notebook holds this. It owns nothing the store owns.
+#[pyclass]
+pub struct PyField { inner: Field }
+
+#[pymethods]
+impl PyField {
+    #[new]
+    fn new(shells: usize, angles: usize, radii: usize) -> Self {
+        PyField { inner: Field::new(Grid { shells, angles, radii }) }
+    }
+
+    /// One call, one pass. The arrays are borrowed from NumPy, not copied:
+    /// Python keeps ownership, Rust reads through. The GIL is released for
+    /// the whole sweep, so the notebook stays alive while the crowd is counted.
+    fn scatter(
+        &mut self,
+        py: Python<'_>,
+        mlu: PyReadonlyArray1<i8>,
+        theta: PyReadonlyArray1<f32>,
+        ru: PyReadonlyArray1<f32>,
+    ) -> PyResult<u64> {
+        let (m, th, r) = (mlu.as_slice()?, theta.as_slice()?, ru.as_slice()?);
+        if m.len() != th.len() || th.len() != r.len() {
+            return Err(BridgeError::Ragged.into());
+        }
+        py.allow_threads(|| self.inner.scatter_cols(m, th, r))
+            .map_err(Into::into)
+    }
+
+    /// The field goes back as a NumPy view of the same memory — one buffer,
+    /// two languages, no copy. matplotlib draws it without a round trip.
+    fn bins<'py>(&self, py: Python<'py>) -> &'py numpy::PyArray1<u32> {
+        numpy::PyArray1::from_slice(py, self.inner.as_slice())
+    }
+}
+
+/// A refusal crosses the boundary as a Python exception, keeping its cause.
+impl From<Refusal> for PyErr {
+    fn from(r: Refusal) -> PyErr {
+        PyRefusal::new_err(format!("{r:?}"))
+    }
+}`,
+ann:[
+{l:[17,31],title:'One call per pass — never per particle',cls:'ADVISED',anim:'boundary',orbit:'boundary',machine:'ffi',
+ why:'The whole design of this crate is one number: <b>how many times the boundary is crossed</b>. Here the arrays arrive whole, so the crossing cost is paid once for a billion particles instead of a billion times.',
+ breaks:'Expose a per-particle <code>add(kaki, mlu, θ, ru)</code> and every call boxes arguments, takes the GIL and returns a PyObject. The kernel becomes the fastest part of a very slow program.'},
+{l:[19,22],title:'PyReadonlyArray — borrowed, not copied',cls:'MEASURED',anim:'zerocopy',orbit:'zerocopy',machine:'zerocopy',
+ why:'<b>PyReadonlyArray</b> takes the NumPy buffer by reference. Python still owns the memory; Rust reads through it. <i>Readonly</i> is the promise — the bridge cannot alter what the notebook handed it.',
+ breaks:'Take <code>Vec&lt;f32&gt;</code> instead and every call copies the array. At 10⁹ particles that is gigabytes moved for nothing, before a single bin is touched.'},
+{l:[28,29],title:'allow_threads — the GIL is released for the sweep',cls:'ADVISED',anim:'gil',orbit:'gil',machine:'gil',
+ why:'Inside <b>allow_threads</b> the GIL is dropped, so the notebook keeps redrawing while ENLIL runs, and other Python threads keep working. It is safe precisely because the closure touches nothing Python owns.',
+ breaks:'Hold the GIL through the pass and the notebook freezes for the duration — the cell looks hung, and a junior kills a healthy job.'},
+{l:[35,37],title:'bins() returns a view, not a copy',cls:'ADVISED',anim:'zerocopy',orbit:'masku',machine:'zerocopy',
+ why:'One buffer, two languages. matplotlib, pandas and scikit-learn read the same memory the kernel wrote, so a plot costs nothing extra.',
+ breaks:'Copy on the way out and every plot pays for the field again — and the two copies can drift, which is the second store this ecosystem forbids.'},
+{l:[41,45],title:'A refusal crosses as an exception, with its cause',cls:'ADVISED',anim:'result',orbit:'result',machine:'ffi',
+ why:'<b>Refusal</b> becomes a typed Python exception rather than a return code. The notebook can catch it by kind, and the cause survives the crossing.',
+ breaks:'Return −1 and the notebook cannot tell an overflow from a ragged input; the cause dies at the boundary and the steward has nothing to cite.'}]},
+]},
+{name:'enlil-field',role:'the pass — scatter-add, one sweep, no store',modules:[
+{path:'src/field.rs',code:
+`use hepta_grid::Grid;
+use kaki_core::Kaki;
+
+/// The field is a view over sovereign particles. It is never the store.
+pub struct Field { grid: Grid, bins: Box<[u32]> }
+
+#[derive(Debug)]
+pub enum Refusal { GridMismatch, CountOverflow }
+
+impl Field {
+    pub fn new(grid: Grid) -> Self {
+        Self { grid, bins: vec![0u32; grid.bins()].into_boxed_slice() }
+    }
+
+    /// One sweep. Borrows the particles immutably — the pass may read
+    /// the crowd, it may never alter it. There is no UPDATE here or anywhere.
+    pub fn scatter(&mut self, ps: &[(Kaki, i8, f32, f32)]) -> Result<u64, Refusal> {
+        let mut n: u64 = 0;
+        for &(_k, mlu, theta, ru) in ps {
+            let i = self.grid.locate(mlu, theta, ru);
+            // Safety of the index is the grid's promise, not a runtime check.
+            self.bins[i] = self.bins[i].checked_add(1).ok_or(Refusal::CountOverflow)?;
+            n += 1;
+        }
+        Ok(n)
+    }
+
+    /// Descent: the field hands back nothing but a bin. Identity is
+    /// recovered by re-running the generator, never by storing rows here.
+    pub fn bin(&self, m: usize, a: usize, r: usize) -> u32 {
+        self.bins[self.grid.index(m, a, r)]
+    }
+}`,
+ann:[
+{l:[17,17],title:'&mut self, but &[..] for the crowd',cls:'MEASURED',anim:'borrow',
+ why:'The signature is the promise. <b>&mut self</b> says the field will change; <b>&[..]</b> says the particles will not. The compiler enforces what the tablet only asserts: this pass cannot write to the store.',
+ breaks:'Take <b>&mut [..]</b> instead and the pass gains the power to alter the crowd it is measuring. Nothing in the law would stop it — only this signature does.'},
+{l:[17,17],title:'Result<u64, Refusal> — refusal is a value',cls:'ADVISED',anim:'result',
+ why:'A refusal is data the caller must handle, not a panic that unwinds the court. The <b>?</b> on the next lines hands the refusal upward with its cause intact.',
+ breaks:'Use unwrap and a single overflowing bin takes down a pass over a billion particles, with no record of which bin.'},
+{l:[18,24],title:'One pass, one counter — the whole kernel',cls:'MEASURED',anim:'scatter',
+ why:'This loop is the entire idea: read a particle, compute its address, add one. Cost scales with the grid, not with N — which is how a billion particles become one surface within the sub-second law.',
+ breaks:'Nothing else in the ecosystem changes if this loop is wrong; everything above it becomes fiction.'},
+{l:[22,22],title:'checked_add, not wrapping',cls:'ADVISED',anim:'overflow',
+ why:'A silently wrapped counter reports a crowd as empty. The court would then draw a void where a crowd stands — the one lie the render grammar cannot catch.',
+ breaks:'With wrapping arithmetic, the busiest bin in the estate is the one most likely to read as zero.'},
+{l:[29,31],title:'bin() returns a count, never a row',cls:'ADVISED',anim:'masku',
+ why:'The field hands back density and nothing else. Identity is recovered by re-running the deterministic generator for that bin — the store is untouched by the view.',
+ breaks:'Return the particles from here and the field quietly becomes a second store, with its own copy to drift out of date.'}]},
+]}]};
+
+/* ================= state ================= */
+let CRATE=0,MOD=0,SEL=null,VIEW='code',SPEED=1,LOOP=true,t=0,LENS='orbit';
+function cur(){return ENGINE.crates[CRATE].modules[MOD];}
+
+/* ================= code render ================= */
+const KW=/\b(pub|fn|let|mut|const|struct|impl|enum|use|for|in|if|else|match|return|self|Self|as|where|type|unsafe|move)\b/g;
+const TY=/\b(u8|u16|u32|u64|i8|f32|f64|usize|bool|Box|Vec|Result|Option|Ok|Err|Some|None|Kaki|Grid|Field|Refusal|str|String)\b/g;
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function hi(line){
+  let s=esc(line);
+  s=s.replace(/(\/\/.*)$/g,'<span class="c">$1</span>');
+  s=s.replace(/(#\[[^\]]*\])/g,'<span class="m">$1</span>');
+  s=s.replace(/(&quot;[^&]*&quot;)/g,'<span class="s">$1</span>');
+  s=s.replace(KW,'<span class="k">$1</span>');
+  s=s.replace(TY,'<span class="t">$1</span>');
+  s=s.replace(/\b(\d+)\b/g,'<span class="n">$1</span>');
+  return s;}
+function renderCode(){
+  const m=cur(),lines=m.code.split('\n'),host=$('code');
+  $('chCrate').textContent=ENGINE.crates[CRATE].name;$('chPath').textContent=m.path;
+  $('chLines').textContent=lines.length+' lines · '+m.ann.length+' annotated';
+  const marked=new Map();
+  m.ann.forEach((a,i)=>{for(let l=a.l[0];l<=a.l[1];l++)if(!marked.has(l))marked.set(l,i);});
+  host.innerHTML=lines.map((ln,i)=>{
+    const no=i+1,ai=marked.get(no);
+    return '<div class="ln'+(ai!==undefined?' an':'')+'" data-a="'+(ai===undefined?'':ai)+'" data-l="'+no+'">'
+      +'<span class="no">'+no+'</span><span>'+hi(ln)+'</span></div>';}).join('');
+  host.querySelectorAll('.ln.an').forEach(el=>el.onclick=()=>select(+el.dataset.a));
+  renderMarks();
+  if(m.ann.length)select(0);else{SEL=null;$('why').innerHTML='<p class="dim">No annotations in this module.</p>';}}
+function renderMarks(){const m=cur();
+  $('marks').innerHTML=m.ann.map((a,i)=>'<div class="md" data-i="'+i+'" aria-pressed="'+(SEL===i)+'">'+(a.l[0])+' · '+a.title+'</div>').join('');
+  $('marks').querySelectorAll('.md').forEach(el=>el.onclick=()=>select(+el.dataset.i));}
+function select(i){SEL=i;const a=cur().ann[i];t=0;
+  document.querySelectorAll('#code .ln').forEach(el=>el.classList.remove('sel'));
+  for(let l=a.l[0];l<=a.l[1];l++){const el=document.querySelector('#code .ln[data-l="'+l+'"]');if(el)el.classList.add('sel');}
+  const first=document.querySelector('#code .ln[data-l="'+a.l[0]+'"]');if(first)first.scrollIntoView({block:'center',behavior:reduced?'auto':'smooth'});
+  const col=a.cls==='MEASURED'?C.green:a.cls==='ADVISED'?C.gold:C.violet;
+  $('why').innerHTML='<h4>'+a.title+'</h4>'
+    +'<p><span class="cls" style="background:'+col+'">'+a.cls+'</span>'
+    +(a.cls==='MEASURED'?'read from the crate itself':a.cls==='ADVISED'?'the architect’s reason — authored, not derived':'a performance claim, unmeasured on your hardware')+'</p>'
+    +'<p>'+a.why+'</p>'
+    +'<div class="breaks"><b>What breaks without it:</b> '+a.breaks+'</div>';
+  renderMarks();tick('line '+a.l[0]+' · '+a.title);
+  $('verdict').innerHTML='engine <b>'+ENGINE.name+'</b> · crate <b>'+ENGINE.crates[CRATE].name+'</b> · '+cur().path+' · annotation <b>'+(i+1)+'/'+cur().ann.length+'</b> · '+a.cls;}
+
+/* ================= animations ================= */
+const cv=$('anim'),ctx=cv.getContext('2d');
+function fit(){const r=cv.getBoundingClientRect();cv.width=Math.max(320,r.width*devicePixelRatio);cv.height=Math.max(160,r.height*devicePixelRatio);}
+addEventListener('resize',fit);
+function H(txt,x,y,s,col){ctx.font='600 '+s*devicePixelRatio+'px '+getComputedStyle(document.documentElement).getPropertyValue('--mono');
+  ctx.lineWidth=4;ctx.strokeStyle='#050a0e';ctx.lineJoin='round';ctx.strokeText(txt,x,y);ctx.fillStyle=col;ctx.fillText(txt,x,y);}
+function box(x,y,w,h,col,fill){ctx.strokeStyle=col;ctx.lineWidth=1.5*devicePixelRatio;
+  if(fill){ctx.fillStyle=fill;ctx.globalAlpha=.18;ctx.fillRect(x,y,w,h);ctx.globalAlpha=1;}ctx.strokeRect(x,y,w,h);ctx.lineWidth=1;}
+const ANIM={
+ /* ---- ecosystem lens ---- */
+ kakiOrbit(p){const W=cv.width,H0=cv.height,cx=W*.5,cy=H0*.5,R=Math.min(W,H0)*.30;
+   ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.strokeStyle=C.line;ctx.stroke();
+   for(let i=0;i<3;i++){const a=p*Math.PI*2+i*2.1,x=cx+Math.cos(a)*R,y=cy+Math.sin(a)*R;
+     ctx.beginPath();ctx.arc(x,y,7*devicePixelRatio,0,7);ctx.fillStyle=[C.gold,C.lapis,C.green][i];ctx.fill();
+     H(['tribe','when','sound'][i],x+11*devicePixelRatio,y+4*devicePixelRatio,9,[C.gold,C.lapis,C.green][i]);}
+   ctx.beginPath();ctx.arc(cx,cy,10*devicePixelRatio,0,7);ctx.fillStyle=C.hi;ctx.fill();
+   H('a citizen: who it is, whose crowd, and when it arrived',W*.08,H0*.16,11,C.hi);
+   H('the identity is fixed for life — nothing about it is ever rewritten',W*.08,H0*.86,10,C.dim);},
+ orderOrbit(p){const W=cv.width,H0=cv.height,y=H0*.55,n=22;
+   for(let i=0;i<n;i++){const x=W*.08+i*(W*.84/n),tribe=Math.floor(i/6);
+     ctx.beginPath();ctx.arc(x,y,5*devicePixelRatio,0,7);
+     ctx.fillStyle=[C.gold,C.lapis,C.green,C.violet][tribe%4];ctx.globalAlpha=.85;ctx.fill();ctx.globalAlpha=1;}
+   const k=Math.floor(p*4)%4;const x0=W*.08+(k*6+5)*(W*.84/n);
+   ctx.beginPath();ctx.arc(x0+12*devicePixelRatio,y-24*devicePixelRatio,6*devicePixelRatio,0,7);ctx.fillStyle=C.hi;ctx.fill();
+   H('a newcomer joins the END of its own crowd',W*.08,H0*.28,11,C.hi);
+   H('tribe first, then time — the crowd stays together on the disk',W*.08,H0*.86,10,C.dim);},
+ shellOrbit(p){const W=cv.width,H0=cv.height,cx=W*.5,cy=H0*.55;
+   for(let m=0;m<5;m++){const R=Math.min(W,H0)*(.09+m*.055);
+     ctx.beginPath();ctx.arc(cx,cy,R,0,7);const on=m===2;
+     ctx.strokeStyle=on?C.gold:C.line;ctx.lineWidth=on?2.4*devicePixelRatio:1;ctx.globalAlpha=on?.95:.4;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+     if(on)for(let i=0;i<26;i++){const a=i/26*Math.PI*2+p*.5;
+       ctx.beginPath();ctx.arc(cx+Math.cos(a)*R,cy+Math.sin(a)*R,3.2*devicePixelRatio,0,7);ctx.fillStyle=C.gold;ctx.fill();}}
+   H('one shell read in one sweep — the crowd on that membrane, together',W*.08,H0*.16,11,C.hi);},
+ borrowOrbit(p){const W=cv.width,H0=cv.height,cx=W*.62,cy=H0*.52,R=Math.min(W,H0)*.22;
+   ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.strokeStyle=C.gold;ctx.stroke();
+   for(let i=0;i<18;i++){const a=i/18*Math.PI*2;ctx.beginPath();
+     ctx.arc(cx+Math.cos(a)*R,cy+Math.sin(a)*R,3.4*devicePixelRatio,0,7);ctx.fillStyle=C.lapis;ctx.fill();}
+   H('the court may LOOK at the crowd',W*.06,H0*.30,11,C.lapis);
+   ctx.beginPath();ctx.moveTo(W*.10,H0*.40);ctx.lineTo(cx-R,cy);ctx.strokeStyle=C.lapis;ctx.lineWidth=2*devicePixelRatio;ctx.stroke();ctx.lineWidth=1;
+   if(p>.45){H('it may not MOVE anyone',W*.06,H0*.70,11,C.alarm);
+     ctx.beginPath();ctx.moveTo(W*.10,H0*.66);ctx.lineTo(cx-R*.7,cy+R*.7);ctx.strokeStyle=C.alarm;ctx.setLineDash([6,6]);ctx.lineWidth=2*devicePixelRatio;ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;
+     H('the signature is what forbids it',W*.06,H0*.86,10,C.alarm);}},
+ overflowOrbit(p){const W=cv.width,H0=cv.height,cx=W*.5,cy=H0*.55,R=Math.min(W,H0)*.24;
+   const many=p<.6;
+   for(let i=0;i<(many?60:0);i++){const a=i/60*Math.PI*2;
+     ctx.beginPath();ctx.arc(cx+Math.cos(a)*R*(.5+.5*((i*37)%7)/7),cy+Math.sin(a)*R*.8,3*devicePixelRatio,0,7);
+     ctx.fillStyle=C.alarm;ctx.globalAlpha=.8;ctx.fill();ctx.globalAlpha=1;}
+   H(many?'a crowded bin — sixty citizens standing here':'the same bin, reported as empty',W*.08,H0*.18,11,many?C.hi:C.alarm);
+   if(!many)H('a wrapped counter draws a void where a crowd stands',W*.08,H0*.86,10,C.alarm);},
+ boundary(p){const W=cv.width,H0=cv.height,y=H0*.5;
+   ctx.beginPath();ctx.moveTo(W*.5,H0*.14);ctx.lineTo(W*.5,H0*.80);ctx.strokeStyle=C.violet;ctx.setLineDash([6,6]);ctx.lineWidth=2*devicePixelRatio;ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;
+   H('notebook',W*.14,H0*.18,11,C.green);H('the kernel',W*.72,H0*.18,11,C.gold);
+   H('the boundary',W*.44,H0*.86,10,C.violet);
+   if(p<.5){ // one crossing
+     const k=p*2;const x=W*.16+(W*.68)*k;
+     ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y-16*devicePixelRatio,W*.10,32*devicePixelRatio,4):ctx.rect(x,y-16*devicePixelRatio,W*.10,32*devicePixelRatio);
+     ctx.fillStyle=C.green;ctx.globalAlpha=.7;ctx.fill();ctx.globalAlpha=1;
+     H('one array · one crossing · 10⁹ particles inside it',W*.10,H0*.32,10,C.green);}
+   else{ // per-particle
+     for(let i=0;i<14;i++){const k=((p-.5)*2+i*.07)%1;const x=W*.16+(W*.68)*k;
+       ctx.beginPath();ctx.arc(x,y+((i%3)-1)*12*devicePixelRatio,3.4*devicePixelRatio,0,7);ctx.fillStyle=C.alarm;ctx.fill();}
+     H('one particle per crossing · box, GIL, unbox — a billion times',W*.10,H0*.32,10,C.alarm);}},
+ gil(p){const W=cv.width,H0=cv.height,y=H0*.42;
+   H('the GIL — only one hand on the interpreter at a time',W*.08,H0*.18,11,C.hi);
+   const held=p<.5;
+   box(W*.08,y,W*.36,40*devicePixelRatio,held?C.alarm:C.green,held?C.alarm:C.green);
+   H(held?'held through the pass · the notebook freezes':'released · the notebook keeps drawing',W*.10,y+26*devicePixelRatio,10,held?C.alarm:C.green);
+   box(W*.56,y,W*.36,40*devicePixelRatio,C.gold,C.gold);H('ENLIL sweeping',W*.58,y+26*devicePixelRatio,10,C.gold);
+   for(let i=0;i<10;i++){const yy=y+70*devicePixelRatio+i*10*devicePixelRatio;
+     if(yy>H0*.88)break;
+     ctx.beginPath();ctx.moveTo(W*.08,yy);ctx.lineTo(W*.08+(held?0:W*.36)*((i+1)/10),yy);
+     ctx.strokeStyle=held?C.alarm:C.green;ctx.globalAlpha=.5;ctx.stroke();ctx.globalAlpha=1;}
+   H(held?'a healthy job looks hung, and a junior kills it':'allow_threads · safe because the closure touches nothing Python owns',W*.08,H0*.92,10,held?C.alarm:C.dim);},
+ zerocopy(p){const W=cv.width,H0=cv.height,y=H0*.44,bw=W*.34;
+   box(W*.33,y,bw,60*devicePixelRatio,C.gold,C.gold);H('one buffer',W*.35,y+36*devicePixelRatio,11,C.gold);
+   H('numpy holds it',W*.06,y-10*devicePixelRatio,10,C.green);
+   H('rust reads it',W*.72,y-10*devicePixelRatio,10,C.lapis);
+   ctx.beginPath();ctx.moveTo(W*.20,y+30*devicePixelRatio);ctx.lineTo(W*.33,y+30*devicePixelRatio);ctx.strokeStyle=C.green;ctx.lineWidth=2*devicePixelRatio;ctx.stroke();
+   ctx.beginPath();ctx.moveTo(W*.33+bw,y+30*devicePixelRatio);ctx.lineTo(W*.80,y+30*devicePixelRatio);ctx.strokeStyle=C.lapis;ctx.stroke();ctx.lineWidth=1;
+   if(p>.55){box(W*.33,y+90*devicePixelRatio,bw,40*devicePixelRatio,C.alarm);
+     H('the copy that a Vec<f32> signature would force — gigabytes, for nothing',W*.10,y+150*devicePixelRatio,10,C.alarm);}
+   else H('no copy · a plot costs nothing extra, and the two cannot drift',W*.10,y+110*devicePixelRatio,10,C.dim);},
+ ffi(p){const W=cv.width,H0=cv.height,y=H0*.46;
+   const stages=[['PyObject*',C.green],['unbox',C.violet],['&[f32]',C.lapis],['loop',C.gold],['PyResult',C.green]];
+   stages.forEach((s,i)=>{const x=W*.06+i*(W*.185);
+     box(x,y,W*.16,44*devicePixelRatio,s[1],s[1]);H(s[0],x+8*devicePixelRatio,y+28*devicePixelRatio,10,s[1]);
+     if(i<stages.length-1){ctx.beginPath();ctx.moveTo(x+W*.16,y+22*devicePixelRatio);ctx.lineTo(x+W*.185,y+22*devicePixelRatio);
+       ctx.strokeStyle=C.line;ctx.stroke();}});
+   H('the crossing has a fixed cost — pay it once per pass, not once per particle',W*.06,H0*.22,11,C.hi);
+   H(p<.5?'per pass · this whole row runs once':'per particle · this whole row runs 10⁹ times',W*.06,H0*.82,11,p<.5?C.green:C.alarm);},
+ scatterBytes(p){const W=cv.width,H0=cv.height,y=H0*.68,nb=20,bw=W*.80/nb;
+   for(let b=0;b<nb;b++){const v=((b*53)%11)+2;box(W*.10+b*bw,y-v*6*devicePixelRatio,bw-3*devicePixelRatio,v*6*devicePixelRatio,C.lapis,C.lapis);}
+   const i=Math.floor(p*nb)%nb;
+   box(W*.10+i*bw,y-90*devicePixelRatio,bw-3*devicePixelRatio,14*devicePixelRatio,C.hi,C.hi);
+   H('bins[i] += 1 · a u32 at a computed offset',W*.10,H0*.20,11,C.hi);
+   H('the index is arithmetic, not a lookup — no branch, no table, no hash',W*.10,H0*.86,10,C.dim);},
+ layout(p){const W=cv.width,H0=cv.height,bw=W*.052,x0=W*.10,y=H0*.42;
+   const groups=[[0,4,'κ0-3 uuid_hash',C.violet],[4,2,'κ4-5 tribe',C.lapis],[6,1,'κ6',C.dim],[7,1,'κ7',C.dim],
+                 [8,4,'κ8-11 reserved',C.basalt],[12,2,'κ12-13 time',C.gold],[14,2,'κ14-15 crc',C.green]];
+   groups.forEach(g=>{for(let b=0;b<g[1];b++){const x=x0+(g[0]+b)*bw;
+     const lift=(p>.4&&g[3]===C.basalt)?Math.sin((p-.4)*6)*4*devicePixelRatio:0;
+     box(x,y-lift,bw-3*devicePixelRatio,bw,g[3],g[3]);}
+     H(g[2],x0+g[0]*bw,y+bw+16*devicePixelRatio,8,g[3]);});
+   H('16 bytes · repr(C) · the const assert fails the build if this widens',x0,y-26*devicePixelRatio,10,C.hi);
+   if(p>.55)H('add one field → 24 bytes → every stored KAKI misread',x0,y+bw+40*devicePixelRatio,10,C.alarm);},
+ order(p){const W=cv.width,H0=cv.height,y1=H0*.34,y2=H0*.70,n=26;
+   H('clustered on the hash — every insert lands anywhere',W*.08,y1-22*devicePixelRatio,10,C.alarm);
+   H('clustered on (tribe, time) — inserts append at the tribe’s end',W*.08,y2-22*devicePixelRatio,10,C.green);
+   for(let i=0;i<n;i++){const x=W*.08+i*(W*.84/n);
+     box(x,y1,W*.84/n-3*devicePixelRatio,18*devicePixelRatio,C.line);
+     box(x,y2,W*.84/n-3*devicePixelRatio,18*devicePixelRatio,C.line);}
+   const k=Math.floor(p*n*2)%n;
+   const rnd=(Math.sin(k*97.13)*.5+.5);
+   const xr=W*.08+Math.floor(rnd*n)*(W*.84/n);
+   box(xr,y1,W*.84/n-3*devicePixelRatio,18*devicePixelRatio,C.alarm,C.alarm);
+   const xs=W*.08+k*(W*.84/n);
+   box(xs,y2,W*.84/n-3*devicePixelRatio,18*devicePixelRatio,C.green,C.green);
+   if(p>.5)H('a split every time it lands mid-page',xr,y1-6*devicePixelRatio,9,C.alarm);},
+ rowmajor(p){const W=cv.width,H0=cv.height,cols=14,rows=6,cw=W*.055,ch=H0*.085,x0=W*.10,y0=H0*.22;
+   for(let m=0;m<rows;m++)for(let r=0;r<cols;r++){const on=(p<.5)?(m===2):(r===6);
+     box(x0+r*cw,y0+m*ch,cw-3*devicePixelRatio,ch-3*devicePixelRatio,on?C.gold:C.line,on?C.gold:null);}
+   H(p<.5?'row-major · one shell is contiguous — a single sequential read'
+         :'column-major · the same query strides the whole grid',x0,y0-14*devicePixelRatio,10,p<.5?C.green:C.alarm);
+   H('radii innermost → shell scan = one run',x0,y0+rows*ch+18*devicePixelRatio,9,C.dim);},
+ branch(p){const W=cv.width,H0=cv.height,y=H0*.45;
+   H('if/else · the pipeline guesses, and data-dependent guesses miss',W*.08,y-40*devicePixelRatio,10,C.alarm);
+   H('clamp/min · one conditional move, nothing to guess',W*.08,y+60*devicePixelRatio,10,C.green);
+   for(let i=0;i<16;i++){const x=W*.08+i*(W*.055),miss=(Math.sin(i*13.7)>.55);
+     box(x,y-24*devicePixelRatio,W*.05,16*devicePixelRatio,miss&&p>.3?C.alarm:C.line,miss&&p>.3?C.alarm:null);
+     box(x,y+28*devicePixelRatio,W*.05,16*devicePixelRatio,C.green,C.green);}
+   H('ESTIMATED — speed only; measure before you repeat it',W*.08,H0*.88,9,C.violet);},
+ inline(p){const W=cv.width,H0=cv.height;
+   box(W*.08,H0*.30,W*.34,H0*.34,C.line);H('call · push, jump, return',W*.10,H0*.28,10,C.dim);
+   for(let i=0;i<5;i++){const yy=H0*.36+i*H0*.055;H('call locate()  ↘',W*.11,yy,9,C.dim);}
+   box(W*.56,H0*.30,W*.34,H0*.34,C.green);H('inline(always) · the body is here',W*.58,H0*.28,10,C.green);
+   for(let i=0;i<5;i++){const yy=H0*.36+i*H0*.055;H('clamp; min; index;',W*.59,yy,9,C.green);}
+   if(p>.5)H('at 10⁹ the call itself shows in the profile',W*.08,H0*.80,10,C.hi);},
+ borrow(p){const W=cv.width,H0=cv.height,bx=W*.42,by=H0*.36,bw=W*.20,bh=H0*.26;
+   box(bx,by,bw,bh,C.gold,C.gold);H('self.bins  &mut',bx+8*devicePixelRatio,by-10*devicePixelRatio,10,C.gold);
+   const px=W*.10,py=H0*.36;box(px,py,W*.20,bh,C.lapis,C.lapis);H('particles  &[..]',px+8*devicePixelRatio,py-10*devicePixelRatio,10,C.lapis);
+   ctx.beginPath();ctx.moveTo(px+W*.20,py+bh/2);ctx.lineTo(bx,by+bh/2);ctx.strokeStyle=C.lapis;ctx.lineWidth=2*devicePixelRatio;ctx.stroke();ctx.lineWidth=1;
+   H('reads',px+W*.22,py+bh/2-8*devicePixelRatio,9,C.lapis);
+   if(p>.45){const y2=H0*.78;box(px,y2,W*.20,H0*.14,C.alarm);
+     H('a second &mut to the same crowd',px+6*devicePixelRatio,y2-8*devicePixelRatio,9,C.alarm);
+     ctx.beginPath();ctx.moveTo(px+W*.20,y2+H0*.07);ctx.lineTo(bx,by+bh);ctx.strokeStyle=C.alarm;ctx.setLineDash([5,5]);ctx.lineWidth=2*devicePixelRatio;ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;
+     H('refused at compile time — the signature is the promise',bx+bw+10*devicePixelRatio,by+bh,10,C.alarm);}},
+ result(p){const W=cv.width,H0=cv.height,x0=W*.10,y=H0*.48;
+   box(x0,y-18*devicePixelRatio,W*.22,36*devicePixelRatio,C.lapis);H('scatter(..)',x0+10*devicePixelRatio,y+5*devicePixelRatio,10,C.lapis);
+   const fx=x0+W*.30;
+   box(fx,y-70*devicePixelRatio,W*.24,36*devicePixelRatio,C.green,C.green);H('Ok(n)',fx+10*devicePixelRatio,y-47*devicePixelRatio,10,C.green);
+   box(fx,y+34*devicePixelRatio,W*.24,36*devicePixelRatio,C.alarm,C.alarm);H('Err(Refusal)',fx+10*devicePixelRatio,y+57*devicePixelRatio,10,C.alarm);
+   const k=(p*2)%1;const yy=k<.5?y-52*devicePixelRatio:y+52*devicePixelRatio;
+   ctx.beginPath();ctx.arc(x0+W*.22+(fx-x0-W*.22)*((k*2)%1),y+(yy-y)*((k*2)%1),4*devicePixelRatio,0,7);
+   ctx.fillStyle=k<.5?C.green:C.alarm;ctx.fill();
+   H('? hands the refusal upward with its cause intact — no unwind, no lost bin',x0,H0*.86,10,C.hi);},
+ scatter(p){const W=cv.width,H0=cv.height,nb=18,bw=W*.82/nb,y=H0*.72;
+   const counts=new Array(nb).fill(0);
+   const N=Math.floor(p*90);
+   for(let i=0;i<N;i++){const b=Math.floor((Math.sin(i*12.9898)*.5+.5)*nb);counts[b]++;}
+   for(let b=0;b<nb;b++){const h=counts[b]*4*devicePixelRatio;
+     box(W*.09+b*bw,y-h,bw-3*devicePixelRatio,Math.max(3*devicePixelRatio,h),C.lapis,C.lapis);}
+   for(let i=Math.max(0,N-8);i<N;i++){const b=Math.floor((Math.sin(i*12.9898)*.5+.5)*nb);
+     const k=(N-i)/8;const sx=W*.09+b*bw+bw/2, sy=H0*.18+(y-H0*.18)*(1-k);
+     ctx.beginPath();ctx.arc(sx,sy,3*devicePixelRatio,0,7);ctx.fillStyle=C.hi;ctx.fill();}
+   H('one sweep · read a particle, compute its address, add one',W*.09,H0*.14,10,C.hi);
+   H('cost scales with the grid, not with N — amplitude is density',W*.09,y+22*devicePixelRatio,10,C.dim);},
+ overflow(p){const W=cv.width,H0=cv.height,y=H0*.45;
+   box(W*.10,y,W*.34,44*devicePixelRatio,C.green,C.green);H('checked_add → Err(CountOverflow)',W*.12,y+28*devicePixelRatio,10,C.green);
+   box(W*.56,y,W*.34,44*devicePixelRatio,C.alarm,C.alarm);
+   const v=p<.6?4294967290+Math.floor(p*10):Math.floor((p-.6)*12);
+   H('wrapping → '+v,W*.58,y+28*devicePixelRatio,10,C.alarm);
+   if(p>.6)H('the busiest bin in the estate now reads as empty',W*.56,y+70*devicePixelRatio,10,C.alarm);
+   H('a wrapped counter draws a void where a crowd stands',W*.10,H0*.86,10,C.hi);},
+ masku(p){const W=cv.width,H0=cv.height;
+   box(W*.08,H0*.30,W*.34,H0*.40,C.lapis);H('the store · sovereign particles',W*.10,H0*.27,10,C.lapis);
+   for(let i=0;i<40;i++){const x=W*.10+(i%8)*(W*.038),yy=H0*.36+Math.floor(i/8)*(H0*.06);
+     ctx.beginPath();ctx.arc(x,yy,2.6*devicePixelRatio,0,7);ctx.fillStyle=C.lapis;ctx.globalAlpha=.8;ctx.fill();ctx.globalAlpha=1;}
+   box(W*.58,H0*.30,W*.34,H0*.40,C.gold);H('the field · counts only',W*.60,H0*.27,10,C.gold);
+   for(let b=0;b<6;b++){const h=(8+((b*37)%22))*devicePixelRatio;
+     box(W*.60+b*(W*.052),H0*.66-h,W*.045,h,C.gold,C.gold);}
+   ctx.beginPath();ctx.moveTo(W*.42,H0*.50);ctx.lineTo(W*.58,H0*.50);ctx.strokeStyle=C.gold;ctx.lineWidth=2*devicePixelRatio;ctx.stroke();ctx.lineWidth=1;
+   H('a view, one way',W*.44,H0*.47,9,C.dim);
+   if(p>.5){ctx.beginPath();ctx.moveTo(W*.58,H0*.58);ctx.lineTo(W*.42,H0*.58);ctx.strokeStyle=C.alarm;ctx.setLineDash([5,5]);ctx.lineWidth=2*devicePixelRatio;ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;
+     H('return rows from here and the view becomes a second store',W*.10,H0*.86,10,C.alarm);}}
+};
+const LENSMAP={ // construct → {orbit, machine}
+ layout:{orbit:'kakiOrbit',machine:'layout'}, order:{orbit:'orderOrbit',machine:'order'},
+ rowmajor:{orbit:'shellOrbit',machine:'rowmajor'}, branch:{orbit:null,machine:'branch'},
+ inline:{orbit:null,machine:'inline'}, borrow:{orbit:'borrowOrbit',machine:'borrow'},
+ result:{orbit:'result',machine:'ffi'}, scatter:{orbit:'scatter',machine:'scatterBytes'},
+ overflow:{orbit:'overflowOrbit',machine:'overflow'}, masku:{orbit:'masku',machine:'zerocopy'},
+ boundary:{orbit:'boundary',machine:'ffi'}, zerocopy:{orbit:'masku',machine:'zerocopy'},
+ gil:{orbit:'gil',machine:'gil'}, ffi:{orbit:'boundary',machine:'ffi'}};
+function lensKey(a){
+  if(a.orbit||a.machine)return LENS==='orbit'?(a.orbit||null):(a.machine||null);
+  const m=LENSMAP[a.anim];if(!m)return a.anim;
+  return LENS==='orbit'?m.orbit:m.machine;}
+function drawAnim(){fit();ctx.clearRect(0,0,cv.width,cv.height);
+  if(VIEW==='flow')return drawFlow();
+  if(VIEW==='resp')return drawResp();
+  if(SEL===null)return;
+  const a=cur().ann[SEL],key=lensKey(a),fn=key&&ANIM[key];
+  const p=LOOP?((t*0.28*SPEED)%1):Math.min(1,t*0.28*SPEED);
+  if(fn)fn(p);
+  else{H((LENS==='orbit'?'⟳ ecosystem lens':'▤ machine lens')+' · no picture is defined for this construct',20,44,11,C.dim);
+    H('and none is invented — press L for the '+(LENS==='orbit'?'machine':'ecosystem')+' lens',20,66,10,C.violet);}
+  H(LENS==='orbit'?'⟳ as the ecosystem sees it':'▤ as the machine holds it',20,cv.height-16*devicePixelRatio,10,LENS==='orbit'?C.gold:C.lapis);}
+function drawFlow(){const W=cv.width,H0=cv.height;
+  const steps=[['particles','&[(Kaki, mlu, θ, ru)]',C.lapis],['locate()','address, branchless',C.gold],
+               ['bins[i] += 1','checked_add',C.green],['Field','a view, never the store',C.violet],
+               ['descent','re-run the generator for one bin',C.hi]];
+  const w=W*.16,h=H0*.22,y=H0*.38;
+  steps.forEach((s,i)=>{const x=W*.04+i*(W*.19);
+    box(x,y,w,h,s[2],s[2]);H(s[0],x+8*devicePixelRatio,y-8*devicePixelRatio,10,s[2]);
+    H(s[1],x+8*devicePixelRatio,y+h+14*devicePixelRatio,8,C.dim);
+    if(i<steps.length-1){ctx.beginPath();ctx.moveTo(x+w,y+h/2);ctx.lineTo(x+W*.19,y+h/2);
+      ctx.strokeStyle=C.line;ctx.lineWidth=1.5*devicePixelRatio;ctx.stroke();ctx.lineWidth=1;
+      if(!reduced){const k=((t*0.4*SPEED)+i*0.2)%1;ctx.beginPath();
+        ctx.arc(x+w+(W*.19-w)*k,y+h/2,3*devicePixelRatio,0,7);ctx.fillStyle=C.gold;ctx.fill();}}});
+  H('ENLIL · one pass · the field is the answer',W*.04,H0*.16,12,C.gold);
+  H('nothing in this chain writes to a store — descent re-derives identity instead of keeping a copy',W*.04,H0*.86,10,C.dim);}
+function drawResp(){const W=cv.width,H0=cv.height;
+  ENGINE.crates.forEach((cr,i)=>{const x=W*.06+i*(W*.31),y=H0*.28,w=W*.27,h=H0*.40;
+    box(x,y,w,h,[C.violet,C.lapis,C.gold][i],[C.violet,C.lapis,C.gold][i]);
+    H(cr.name,x+10*devicePixelRatio,y-10*devicePixelRatio,12,[C.violet,C.lapis,C.gold][i]);
+    H(cr.role,x+10*devicePixelRatio,y+24*devicePixelRatio,9,C.dim);
+    cr.modules.forEach((m,k)=>H('· '+m.path,x+10*devicePixelRatio,y+48*devicePixelRatio+k*16*devicePixelRatio,9,C.ink));
+    if(i<ENGINE.crates.length-1){ctx.beginPath();ctx.moveTo(x+w,y+h/2);ctx.lineTo(x+W*.31,y+h/2);
+      ctx.strokeStyle=C.line;ctx.stroke();H('depends on ↑',x+w+6*devicePixelRatio,y+h/2-6*devicePixelRatio,8,C.dim);}});
+  H('one crate, one responsibility — identity, address, pass',W*.06,H0*.16,12,C.gold);
+  H('a crate that needs two sentences to describe is two crates',W*.06,H0*.82,10,C.dim);}
+
+/* ================= rail ================= */
+function buildTree(){const el=$('tree');el.innerHTML='';
+  ENGINE.crates.forEach((cr,ci)=>{
+    const c=document.createElement('div');c.className='cr';c.textContent=cr.name;c.setAttribute('aria-pressed',ci===CRATE);
+    c.onclick=()=>{CRATE=ci;MOD=0;buildTree();renderCode();};el.appendChild(c);
+    cr.modules.forEach((m,mi)=>{const d=document.createElement('div');d.className='md';d.textContent=m.path;
+      d.setAttribute('aria-pressed',ci===CRATE&&mi===MOD);
+      d.onclick=()=>{CRATE=ci;MOD=mi;buildTree();renderCode();};el.appendChild(d);});});}
+document.querySelectorAll('.sec>h3').forEach(h=>h.onclick=()=>{const s=h.parentElement;s.classList.toggle('closed');
+  h.querySelector('i').textContent=s.classList.contains('closed')?'▸':'▾';});
+$('burger').onclick=()=>{$('body').classList.toggle('railoff');$('rail').classList.toggle('hidden');};
+document.querySelectorAll('#rail button[data-view]').forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;t=0;
+  document.querySelectorAll('#rail button[data-view]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.view===VIEW));
+  $('codewrap').style.display=VIEW==='code'?'flex':'none';
+  $('anim').style.height=VIEW==='code'?'52%':'100%';
+  $('why').style.display=VIEW==='code'?'block':'none';
+  tick('view · '+VIEW);});
+document.querySelectorAll('#rail button[data-lens]').forEach(b=>b.onclick=()=>setLens(b.dataset.lens));
+function setLens(l){LENS=l;t=0;
+  document.querySelectorAll('#rail button[data-lens]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.lens===LENS));
+  tick('lens · '+(LENS==='orbit'?'⟳ as the ecosystem sees it — what the code is for':'▤ as the machine holds it — why it is shaped that way'));}
+addEventListener('keydown',e=>{if(e.key==='l'||e.key==='L')setLens(LENS==='orbit'?'machine':'orbit');});
+$('speed').oninput=e=>{SPEED=+e.target.value;};
+$('loop').onchange=e=>{LOOP=e.target.checked;t=0;};
+$('engblurb').textContent=ENGINE.blurb;
+
+/* ================= loop ================= */
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;if(!reduced)t+=dt;drawAnim();requestAnimationFrame(frame);}
+buildTree();renderCode();fit();requestAnimationFrame(frame);
+tick('press L to switch lens · click any gold line number — the animation shows why that construct is there, and what breaks without it');
+})();
+</script>
+</body>
+</html>

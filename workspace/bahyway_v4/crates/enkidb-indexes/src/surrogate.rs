@@ -69,11 +69,18 @@ impl SurrogateMap {
 
     /// Batch resolution: returns `u32::MAX` for unknown KAKIs.
     pub fn resolve_batch(&self, kakis: &[[u8; 16]]) -> Vec<u32> {
-        kakis.iter().map(|k| self.resolve(k).unwrap_or(u32::MAX)).collect()
+        kakis
+            .iter()
+            .map(|k| self.resolve(k).unwrap_or(u32::MAX))
+            .collect()
     }
 
-    pub fn len(&self)      -> usize { self.entries.len() }
-    pub fn is_empty(&self) -> bool  { self.entries.is_empty() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -120,7 +127,7 @@ mod tests {
         let kakis: Vec<[u8; 16]> = (0..32).map(make_kaki).collect();
         let map = SurrogateMap::build(&kakis);
         let singles: Vec<u32> = kakis.iter().map(|k| map.resolve(k).unwrap()).collect();
-        let batch  = map.resolve_batch(&kakis);
+        let batch = map.resolve_batch(&kakis);
         assert_eq!(singles, batch);
     }
 

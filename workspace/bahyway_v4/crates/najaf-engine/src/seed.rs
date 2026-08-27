@@ -5,7 +5,7 @@
 //! Grave IDs 101–107 (avoids overlap with NaviEngine node IDs 1–7).
 
 use bahyway_core::TribeId;
-use navi_engine::{NaviCoord, NaviGraph, NaviMap, seven_node_map};
+use navi_engine::{seven_node_map, NaviCoord, NaviGraph, NaviMap};
 
 use crate::grave::GraveParticle;
 use crate::search::GraveRegistry;
@@ -18,13 +18,55 @@ pub fn seven_grave_registry() -> GraveRegistry {
     let mut reg = GraveRegistry::new();
 
     // Approximate bounding box of Wadi al-Salam: 31.980–32.010°N, 44.310–44.340°E
-    reg.register(GraveParticle::new(101, NaviCoord::new(31.995, 44.320, 0.0), NajafSector::Entrance,  tribe, 1400));
-    reg.register(GraveParticle::new(102, NaviCoord::new(32.005, 44.320, 0.0), NajafSector::Shuhadaa, tribe, 1410));
-    reg.register(GraveParticle::new(103, NaviCoord::new(32.003, 44.333, 0.0), NajafSector::Awliya,   tribe, 1420));
-    reg.register(GraveParticle::new(104, NaviCoord::new(31.988, 44.333, 0.0), NajafSector::Huffaz,   tribe, 1430));
-    reg.register(GraveParticle::new(105, NaviCoord::new(31.983, 44.320, 0.0), NajafSector::Momineen, tribe, 1440));
-    reg.register(GraveParticle::new(106, NaviCoord::new(31.988, 44.307, 0.0), NajafSector::Ulamaa,   tribe, 1450));
-    reg.register(GraveParticle::new(107, NaviCoord::new(32.003, 44.307, 0.0), NajafSector::Anbiya,   tribe, 1460));
+    reg.register(GraveParticle::new(
+        101,
+        NaviCoord::new(31.995, 44.320, 0.0),
+        NajafSector::Entrance,
+        tribe,
+        1400,
+    ));
+    reg.register(GraveParticle::new(
+        102,
+        NaviCoord::new(32.005, 44.320, 0.0),
+        NajafSector::Shuhadaa,
+        tribe,
+        1410,
+    ));
+    reg.register(GraveParticle::new(
+        103,
+        NaviCoord::new(32.003, 44.333, 0.0),
+        NajafSector::Awliya,
+        tribe,
+        1420,
+    ));
+    reg.register(GraveParticle::new(
+        104,
+        NaviCoord::new(31.988, 44.333, 0.0),
+        NajafSector::Huffaz,
+        tribe,
+        1430,
+    ));
+    reg.register(GraveParticle::new(
+        105,
+        NaviCoord::new(31.983, 44.320, 0.0),
+        NajafSector::Momineen,
+        tribe,
+        1440,
+    ));
+    reg.register(GraveParticle::new(
+        106,
+        NaviCoord::new(31.988, 44.307, 0.0),
+        NajafSector::Ulamaa,
+        tribe,
+        1450,
+    ));
+    reg.register(GraveParticle::new(
+        107,
+        NaviCoord::new(32.003, 44.307, 0.0),
+        NajafSector::Anbiya,
+        tribe,
+        1460,
+    ));
 
     reg
 }
@@ -54,7 +96,11 @@ mod tests {
     fn each_sector_has_exactly_one_grave() {
         let r = seven_grave_registry();
         for &s in NajafSector::all().iter() {
-            assert_eq!(r.by_sector(s).len(), 1, "sector {s:?} must have exactly 1 grave");
+            assert_eq!(
+                r.by_sector(s).len(),
+                1,
+                "sector {s:?} must have exactly 1 grave"
+            );
         }
     }
 

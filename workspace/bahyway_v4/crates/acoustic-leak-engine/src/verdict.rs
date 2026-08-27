@@ -4,6 +4,7 @@
 //!   - the stage is authorized to claim position at all, and
 //!   - sigma_d <= SOVEREIGN_MARGIN_M (0.10 m), and
 //!   - the peak is not inside the junction guard (else Stage 3 mandatory).
+//!
 //! Anything less is an Escalation, never a Verdict.
 
 use crate::{JUNCTION_GUARD_M, SOVEREIGN_MARGIN_M};
@@ -67,14 +68,22 @@ pub fn judge(claim: &PositionClaim) -> Result<SignedVerdict, Escalation> {
             if claim.sigma_d_m <= SOVEREIGN_MARGIN_M {
                 // Even a compliant Stage-2 sigma_d is only signable on pipe
                 // body away from nodes.
-                Ok(SignedVerdict { position_m: claim.position_m, sigma_d_m: claim.sigma_d_m, site: LeakSite::PipeBody })
+                Ok(SignedVerdict {
+                    position_m: claim.position_m,
+                    sigma_d_m: claim.sigma_d_m,
+                    site: LeakSite::PipeBody,
+                })
             } else {
                 Err(Escalation::RunStage3Pinpoint)
             }
         }
         Stage::Stage3Pinpoint => {
             if claim.sigma_d_m <= SOVEREIGN_MARGIN_M {
-                Ok(SignedVerdict { position_m: claim.position_m, sigma_d_m: claim.sigma_d_m, site: claim.site })
+                Ok(SignedVerdict {
+                    position_m: claim.position_m,
+                    sigma_d_m: claim.sigma_d_m,
+                    site: claim.site,
+                })
             } else {
                 // Stage 3 above margin means the measurement itself must be
                 // repeated under better conditions (night survey).

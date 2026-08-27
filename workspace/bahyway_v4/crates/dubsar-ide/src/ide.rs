@@ -5,8 +5,8 @@
 //!   - HeptaScript (.hepta) query parsing and syntax checking
 //!   - Template field completion hints
 
-use aaol::tokenize as aaol_tokenize;
 use aaol::ast::Parser as AaolParser;
+use aaol::tokenize as aaol_tokenize;
 use heptascript::parse_query;
 use template_engine::TemplateRegistry;
 
@@ -20,7 +20,7 @@ pub enum SourceKind {
 /// Diagnostic from the IDE language service.
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
-    pub kind:    SourceKind,
+    pub kind: SourceKind,
     pub message: String,
     pub is_error: bool,
 }
@@ -32,7 +32,9 @@ pub struct DubSarIde {
 
 impl DubSarIde {
     pub fn new() -> Self {
-        DubSarIde { registry: TemplateRegistry::new() }
+        DubSarIde {
+            registry: TemplateRegistry::new(),
+        }
     }
 
     /// Parse and validate an AAOL `.akk` source.
@@ -42,8 +44,8 @@ impl DubSarIde {
             Ok(t) => t,
             Err(e) => {
                 diags.push(Diagnostic {
-                    kind:     SourceKind::Aaol,
-                    message:  format!("Lexer error: {e}"),
+                    kind: SourceKind::Aaol,
+                    message: format!("Lexer error: {e}"),
                     is_error: true,
                 });
                 return diags;
@@ -52,8 +54,8 @@ impl DubSarIde {
         let mut parser = AaolParser::new(tokens);
         if let Err(e) = parser.parse() {
             diags.push(Diagnostic {
-                kind:     SourceKind::Aaol,
-                message:  format!("Parse error: {e}"),
+                kind: SourceKind::Aaol,
+                message: format!("Parse error: {e}"),
                 is_error: true,
             });
         }
@@ -65,8 +67,8 @@ impl DubSarIde {
         let mut diags = Vec::new();
         if let Err(e) = parse_query(source) {
             diags.push(Diagnostic {
-                kind:     SourceKind::HeptaScript,
-                message:  format!("Parse error: {e}"),
+                kind: SourceKind::HeptaScript,
+                message: format!("Parse error: {e}"),
                 is_error: true,
             });
         }
@@ -75,14 +77,17 @@ impl DubSarIde {
 
     /// Return field completion hints for a template by name.
     pub fn complete_fields(&self, template_name: &str) -> Vec<String> {
-        self.registry.get(template_name)
+        self.registry
+            .get(template_name)
             .map(|t| t.fields.iter().map(|f| f.label.to_string()).collect())
             .unwrap_or_default()
     }
 }
 
 impl Default for DubSarIde {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -132,7 +137,8 @@ mod tests {
         use template_engine::{FieldSpec, Template};
         let mut ide = DubSarIde::new();
         ide.registry.register(Template::default_template(
-            "t.test", "Test",
+            "t.test",
+            "Test",
             &[FieldSpec::new(0x1A4B, "state", true)],
         ));
         let hints = ide.complete_fields("t.test");

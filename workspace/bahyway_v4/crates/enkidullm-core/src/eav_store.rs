@@ -32,11 +32,19 @@ pub enum OrbitValue {
 impl OrbitValue {
     /// Store an f32 (NaN-safe: NaN becomes Absent).
     pub fn from_f32(v: f32) -> Self {
-        if v.is_nan() { OrbitValue::Absent } else { OrbitValue::Float(v.to_bits()) }
+        if v.is_nan() {
+            OrbitValue::Absent
+        } else {
+            OrbitValue::Float(v.to_bits())
+        }
     }
 
     pub fn as_f32(&self) -> Option<f32> {
-        if let OrbitValue::Float(b) = self { Some(f32::from_bits(*b)) } else { None }
+        if let OrbitValue::Float(b) = self {
+            Some(f32::from_bits(*b))
+        } else {
+            None
+        }
     }
 
     /// Store a Vec<f32> as an embedding (bit-pattern encoded for no-serde storage).
@@ -47,18 +55,20 @@ impl OrbitValue {
     pub fn as_embedding(&self) -> Option<Vec<f32>> {
         if let OrbitValue::Embedding(bits) = self {
             Some(bits.iter().map(|b| f32::from_bits(*b)).collect())
-        } else { None }
+        } else {
+            None
+        }
     }
 
     fn discriminant(&self) -> u8 {
         match self {
-            OrbitValue::Absent      => 0,
-            OrbitValue::Text(_)     => 1,
-            OrbitValue::Integer(_)  => 2,
-            OrbitValue::Float(_)    => 3,
-            OrbitValue::Boolean(_)  => 4,
-            OrbitValue::KakiRef(_)  => 5,
-            OrbitValue::DoiRef(_)   => 6,
+            OrbitValue::Absent => 0,
+            OrbitValue::Text(_) => 1,
+            OrbitValue::Integer(_) => 2,
+            OrbitValue::Float(_) => 3,
+            OrbitValue::Boolean(_) => 4,
+            OrbitValue::KakiRef(_) => 5,
+            OrbitValue::DoiRef(_) => 6,
             OrbitValue::ConceptRef(_) => 7,
             OrbitValue::Embedding(_) => 8,
         }
@@ -75,12 +85,12 @@ impl Ord for OrbitValue {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         use OrbitValue::*;
         match (self, other) {
-            (Text(a),    Text(b))    => a.cmp(b),
+            (Text(a), Text(b)) => a.cmp(b),
             (Integer(a), Integer(b)) => a.cmp(b),
-            (Float(a),   Float(b))   => a.cmp(b),
+            (Float(a), Float(b)) => a.cmp(b),
             (Boolean(a), Boolean(b)) => a.cmp(b),
             (KakiRef(a), KakiRef(b)) => a.cmp(b),
-            (DoiRef(a),  DoiRef(b))  => a.cmp(b),
+            (DoiRef(a), DoiRef(b)) => a.cmp(b),
             (ConceptRef(a), ConceptRef(b)) => a.cmp(b),
             _ => self.discriminant().cmp(&other.discriminant()),
         }
@@ -93,7 +103,7 @@ pub struct VerticalLine {
     /// Append-only log — each update appends a new versioned entry.
     pub entries: Vec<(u32, OrbitValue, u64)>,
     /// Inverted index: value → kaki_uuids. Embeddings are NOT indexed.
-    pub index:   BTreeMap<OrbitValue, Vec<u32>>,
+    pub index: BTreeMap<OrbitValue, Vec<u32>>,
 }
 
 impl VerticalLine {
@@ -111,7 +121,8 @@ impl VerticalLine {
 
     /// Get highest-version value for a specific kaki_uuid. O(n entries).
     pub fn get_latest(&self, kaki_uuid: u32) -> Option<&OrbitValue> {
-        self.entries.iter()
+        self.entries
+            .iter()
             .filter(|(uid, _, _)| *uid == kaki_uuid)
             .max_by_key(|(_, _, v)| *v)
             .map(|(_, val, _)| val)
@@ -119,7 +130,8 @@ impl VerticalLine {
 
     /// Get all versioned values for a kaki — for temporal DIFF queries.
     pub fn history(&self, kaki_uuid: u32) -> Vec<(&OrbitValue, u64)> {
-        self.entries.iter()
+        self.entries
+            .iter()
             .filter(|(uid, _, _)| *uid == kaki_uuid)
             .map(|(_, val, ver)| (val, *ver))
             .collect()
@@ -133,31 +145,39 @@ pub struct VerticalEavStore {
 }
 
 impl VerticalEavStore {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Insert an attribute value. O(log n) for index.
     pub fn insert(&mut self, kaki_uuid: u32, attribute: &str, value: OrbitValue, version: u64) {
-        self.lines.entry(attribute.to_string()).or_default()
+        self.lines
+            .entry(attribute.to_string())
+            .or_default()
             .insert(kaki_uuid, value, version);
     }
 
     /// Find all KAKIs where attribute = value. O(log n).
     pub fn find_by_attribute(&self, attribute: &str, value: &OrbitValue) -> Vec<u32> {
-        self.lines.get(attribute)
+        self.lines
+            .get(attribute)
             .map(|l| l.find_by_value(value))
             .unwrap_or_default()
     }
 
     /// Find all KAKIs where attribute value is >= min and <= max. O(k) where k = range hits.
     pub fn find_in_range(&self, attribute: &str, min: &OrbitValue, max: &OrbitValue) -> Vec<u32> {
-        let Some(line) = self.lines.get(attribute) else { return Vec::new(); };
-        line.index.range(min.clone()..=max.clone())
+        let Some(line) = self.lines.get(attribute) else {
+            return Vec::new();
+        };
+        line.index
+            .range(min.clone()..=max.clone())
             .flat_map(|(_, uuids)| uuids.iter().copied())
             .collect()
     }
 
     /// Scatter-gather: get all latest attribute values for one KAKI. O(n_attributes).
-    pub fn get_profile<'a>(&'a self, kaki_uuid: u32) -> HashMap<&'a str, &'a OrbitValue> {
+    pub fn get_profile(&self, kaki_uuid: u32) -> HashMap<&str, &OrbitValue> {
         let mut profile = HashMap::new();
         for (attr, line) in &self.lines {
             if let Some(val) = line.get_latest(kaki_uuid) {
@@ -174,7 +194,9 @@ impl VerticalEavStore {
         let mut result = Vec::new();
         queue.push_back((start, 0usize));
         while let Some((current, depth)) = queue.pop_front() {
-            if depth >= max_depth || !visited.insert(current) { continue; }
+            if depth >= max_depth || !visited.insert(current) {
+                continue;
+            }
             result.push(current);
             for line in self.lines.values() {
                 if let Some(OrbitValue::KakiRef(target)) = line.get_latest(current) {
@@ -195,9 +217,20 @@ mod tests {
     #[test]
     fn insert_and_find_text() {
         let mut store = VerticalEavStore::new();
-        store.insert(0xA1, "domain", OrbitValue::Text("distributed_systems".into()), 1);
-        store.insert(0xB2, "domain", OrbitValue::Text("machine_learning".into()),    1);
-        let hits = store.find_by_attribute("domain", &OrbitValue::Text("distributed_systems".into()));
+        store.insert(
+            0xA1,
+            "domain",
+            OrbitValue::Text("distributed_systems".into()),
+            1,
+        );
+        store.insert(
+            0xB2,
+            "domain",
+            OrbitValue::Text("machine_learning".into()),
+            1,
+        );
+        let hits =
+            store.find_by_attribute("domain", &OrbitValue::Text("distributed_systems".into()));
         assert_eq!(hits, vec![0xA1]);
     }
 
@@ -207,8 +240,11 @@ mod tests {
         store.insert(0x01, "depth", OrbitValue::from_f32(0.9), 1);
         store.insert(0x02, "depth", OrbitValue::from_f32(0.5), 1);
         store.insert(0x03, "depth", OrbitValue::from_f32(0.3), 1);
-        let hits = store.find_in_range("depth",
-            &OrbitValue::from_f32(0.7), &OrbitValue::from_f32(1.0));
+        let hits = store.find_in_range(
+            "depth",
+            &OrbitValue::from_f32(0.7),
+            &OrbitValue::from_f32(1.0),
+        );
         assert!(hits.contains(&0x01));
         assert!(!hits.contains(&0x02));
     }
@@ -216,9 +252,14 @@ mod tests {
     #[test]
     fn get_profile_scatter_gather() {
         let mut store = VerticalEavStore::new();
-        store.insert(0xA1, "domain",    OrbitValue::Text("distributed_systems".into()), 1);
-        store.insert(0xA1, "depth",     OrbitValue::from_f32(0.85),                    1);
-        store.insert(0xA1, "citations", OrbitValue::Integer(9500),                     1);
+        store.insert(
+            0xA1,
+            "domain",
+            OrbitValue::Text("distributed_systems".into()),
+            1,
+        );
+        store.insert(0xA1, "depth", OrbitValue::from_f32(0.85), 1);
+        store.insert(0xA1, "citations", OrbitValue::Integer(9500), 1);
         let profile = store.get_profile(0xA1);
         assert_eq!(profile.len(), 3);
         assert!(profile.contains_key("domain"));
@@ -264,7 +305,12 @@ mod tests {
     #[test]
     fn embedding_not_indexed() {
         let mut store = VerticalEavStore::new();
-        store.insert(0xA1, "embedding", OrbitValue::from_embedding(&[0.1, 0.2, 0.3]), 1);
+        store.insert(
+            0xA1,
+            "embedding",
+            OrbitValue::from_embedding(&[0.1, 0.2, 0.3]),
+            1,
+        );
         // Index should be empty for embeddings
         let line = store.lines.get("embedding").unwrap();
         assert!(line.index.is_empty());

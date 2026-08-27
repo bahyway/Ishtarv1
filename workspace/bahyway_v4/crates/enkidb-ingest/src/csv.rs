@@ -41,9 +41,9 @@ pub fn parse_csv(input: &str) -> Result<Vec<CsvRow>, CsvError> {
         let raw_fields = parse_line(trimmed);
         if raw_fields.len() != col_count {
             return Err(CsvError::ColumnCountMismatch {
-                line:     line_idx + 2,
+                line: line_idx + 2,
                 expected: col_count,
-                got:      raw_fields.len(),
+                got: raw_fields.len(),
             });
         }
         let fields = headers
@@ -59,8 +59,8 @@ pub fn parse_csv(input: &str) -> Result<Vec<CsvRow>, CsvError> {
 /// Parse one CSV line into raw string fields (handles quoting).
 fn parse_line(line: &str) -> Vec<String> {
     let mut fields = Vec::new();
-    let mut cur    = String::new();
-    let mut chars  = line.chars().peekable();
+    let mut cur = String::new();
+    let mut chars = line.chars().peekable();
     let mut in_quotes = false;
 
     while let Some(ch) = chars.next() {
@@ -102,7 +102,7 @@ pub fn infer_value(raw: &str) -> AkkValue {
         return AkkValue::Null;
     }
     match s.to_lowercase().as_str() {
-        "true"  => return AkkValue::Bool(true),
+        "true" => return AkkValue::Bool(true),
         "false" => return AkkValue::Bool(false),
         _ => {}
     }
@@ -121,7 +121,11 @@ pub fn infer_value(raw: &str) -> AkkValue {
 pub enum CsvError {
     EmptyInput,
     EmptyHeader,
-    ColumnCountMismatch { line: usize, expected: usize, got: usize },
+    ColumnCountMismatch {
+        line: usize,
+        expected: usize,
+        got: usize,
+    },
 }
 
 impl core::fmt::Display for CsvError {
@@ -129,8 +133,14 @@ impl core::fmt::Display for CsvError {
         match self {
             Self::EmptyInput => write!(f, "CSV: input is empty"),
             Self::EmptyHeader => write!(f, "CSV: header row is empty"),
-            Self::ColumnCountMismatch { line, expected, got } =>
-                write!(f, "CSV: line {line}: expected {expected} columns, got {got}"),
+            Self::ColumnCountMismatch {
+                line,
+                expected,
+                got,
+            } => write!(
+                f,
+                "CSV: line {line}: expected {expected} columns, got {got}"
+            ),
         }
     }
 }
@@ -146,10 +156,16 @@ mod tests {
         let csv = "name,age,score\nAlice,30,9.5\nBob,25,7.0";
         let rows = parse_csv(csv).unwrap();
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].fields[0], ("name".into(), AkkValue::Text("Alice".into())));
-        assert_eq!(rows[0].fields[1], ("age".into(),  AkkValue::Int(30)));
+        assert_eq!(
+            rows[0].fields[0],
+            ("name".into(), AkkValue::Text("Alice".into()))
+        );
+        assert_eq!(rows[0].fields[1], ("age".into(), AkkValue::Int(30)));
         assert_eq!(rows[0].fields[2], ("score".into(), AkkValue::Float(9.5)));
-        assert_eq!(rows[1].fields[0], ("name".into(), AkkValue::Text("Bob".into())));
+        assert_eq!(
+            rows[1].fields[0],
+            ("name".into(), AkkValue::Text("Bob".into()))
+        );
     }
 
     #[test]
@@ -182,7 +198,10 @@ mod tests {
 Alice,"She said ""hello"""
 "#;
         let rows = parse_csv(csv).unwrap();
-        assert_eq!(rows[0].fields[1].1, AkkValue::Text("She said \"hello\"".into()));
+        assert_eq!(
+            rows[0].fields[1].1,
+            AkkValue::Text("She said \"hello\"".into())
+        );
     }
 
     #[test]
@@ -208,7 +227,11 @@ Alice,"She said ""hello"""
         let csv = "a,b\n1";
         assert!(matches!(
             parse_csv(csv),
-            Err(CsvError::ColumnCountMismatch { line: 2, expected: 2, got: 1 })
+            Err(CsvError::ColumnCountMismatch {
+                line: 2,
+                expected: 2,
+                got: 1
+            })
         ));
     }
 

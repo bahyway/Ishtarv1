@@ -31,14 +31,18 @@ pub enum AgedDecision {
 /// Sovereign thresholds (no wall-clock anywhere).
 #[derive(Debug, Clone, Copy)]
 pub struct ArsThresholds {
-    pub aged_score: f64,        // agedness score above which -> MarkAged
-    pub rotor_band: f64,        // rotor radians triggering a snapshot
-    pub cold_access: f64,       // access_heat below which counts as cold
+    pub aged_score: f64,  // agedness score above which -> MarkAged
+    pub rotor_band: f64,  // rotor radians triggering a snapshot
+    pub cold_access: f64, // access_heat below which counts as cold
 }
 
 impl Default for ArsThresholds {
     fn default() -> Self {
-        ArsThresholds { aged_score: 0.6, rotor_band: 1.0, cold_access: 0.2 }
+        ArsThresholds {
+            aged_score: 0.6,
+            rotor_band: 1.0,
+            cold_access: 0.2,
+        }
     }
 }
 
@@ -47,9 +51,7 @@ impl Default for ArsThresholds {
 pub fn agedness_score(s: &AgednessSignals) -> f64 {
     let coldness = 1.0 - s.access_heat;
     let depth_norm = (s.supersede_depth as f64 / 8.0).min(1.0);
-    let raw = 0.45 * s.superseded_ratio
-            + 0.35 * coldness
-            + 0.20 * depth_norm;
+    let raw = 0.45 * s.superseded_ratio + 0.35 * coldness + 0.20 * depth_norm;
     raw.clamp(0.0, 1.0)
 }
 
@@ -67,7 +69,11 @@ pub fn decide(s: &AgednessSignals, t: &ArsThresholds) -> AgedDecision {
 
 /// Batch sweep: returns (index, decision) for a slice of particles.
 pub fn sweep(signals: &[AgednessSignals], t: &ArsThresholds) -> Vec<(usize, AgedDecision)> {
-    signals.iter().enumerate().map(|(i, s)| (i, decide(s, t))).collect()
+    signals
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (i, decide(s, t)))
+        .collect()
 }
 
 #[cfg(test)]
@@ -75,28 +81,52 @@ mod tests {
     use super::*;
 
     fn hot() -> AgednessSignals {
-        AgednessSignals { superseded_ratio: 0.0, access_heat: 0.9, rotor_accum: 0.1, supersede_depth: 0 }
+        AgednessSignals {
+            superseded_ratio: 0.0,
+            access_heat: 0.9,
+            rotor_accum: 0.1,
+            supersede_depth: 0,
+        }
     }
     fn cold_superseded() -> AgednessSignals {
-        AgednessSignals { superseded_ratio: 0.8, access_heat: 0.1, rotor_accum: 0.2, supersede_depth: 4 }
+        AgednessSignals {
+            superseded_ratio: 0.8,
+            access_heat: 0.1,
+            rotor_accum: 0.2,
+            supersede_depth: 4,
+        }
     }
     fn churning() -> AgednessSignals {
-        AgednessSignals { superseded_ratio: 0.1, access_heat: 0.9, rotor_accum: 1.5, supersede_depth: 0 }
+        AgednessSignals {
+            superseded_ratio: 0.1,
+            access_heat: 0.9,
+            rotor_accum: 1.5,
+            supersede_depth: 0,
+        }
     }
 
     #[test]
     fn hot_particle_stays_active() {
-        assert_eq!(decide(&hot(), &ArsThresholds::default()), AgedDecision::KeepActive);
+        assert_eq!(
+            decide(&hot(), &ArsThresholds::default()),
+            AgedDecision::KeepActive
+        );
     }
 
     #[test]
     fn cold_superseded_is_marked_aged() {
-        assert_eq!(decide(&cold_superseded(), &ArsThresholds::default()), AgedDecision::MarkAged);
+        assert_eq!(
+            decide(&cold_superseded(), &ArsThresholds::default()),
+            AgedDecision::MarkAged
+        );
     }
 
     #[test]
     fn churning_particle_triggers_snapshot() {
-        assert_eq!(decide(&churning(), &ArsThresholds::default()), AgedDecision::SnapshotNow);
+        assert_eq!(
+            decide(&churning(), &ArsThresholds::default()),
+            AgedDecision::SnapshotNow
+        );
     }
 
     #[test]
@@ -104,7 +134,10 @@ mod tests {
         // Even a cold+superseded particle snapshots first if rotor high.
         let mut s = cold_superseded();
         s.rotor_accum = 2.0;
-        assert_eq!(decide(&s, &ArsThresholds::default()), AgedDecision::SnapshotNow);
+        assert_eq!(
+            decide(&s, &ArsThresholds::default()),
+            AgedDecision::SnapshotNow
+        );
     }
 
     #[test]

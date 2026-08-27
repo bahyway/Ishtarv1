@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · The Rupture Inquest — Who Curved First (GL-HSI-001-A3)</title>
+<style>
+  :root{
+    --basalt:#0b0e13; --tablet:#141922; --line:#232b38;
+    --gold:#d9a441; --gold-dim:#8a6a2c; --lapis:#4d7fb8; --copper:#4fae8a;
+    --alarm:#d4553f; --maroon:#7a2230; --ash:#8b93a3; --bone:#e8e2d4;
+    --fuzzy:#c88b3a;
+    --mono:"Iosevka","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--basalt);color:var(--ash);font:15px/1.65 var(--serif)}
+  ::selection{background:var(--gold-dim);color:var(--basalt)}
+  header{border-bottom:1px solid var(--line);padding:30px 5vw 22px;text-align:center;
+    background:radial-gradient(1100px 300px at 50% -50%, rgba(212,85,63,.10), transparent 65%)}
+  .crumbs{font-family:var(--mono);font-size:11.5px;letter-spacing:.35em;color:var(--gold-dim)}
+  h1{font-size:clamp(24px,3.2vw,38px);color:var(--bone);font-weight:600;margin:10px 0 8px}
+  .lede{max-width:84ch;margin:0 auto;color:var(--ash)}
+  .lede b{color:var(--gold);font-weight:600}
+  .lede i{color:var(--bone)}
+  .rehearsal{margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--basalt);
+      background:var(--gold);display:inline-block;padding:4px 12px;border-radius:2px;letter-spacing:.05em}
+  main{padding:24px 4vw 70px;max-width:1460px;margin:0 auto}
+  .stage{display:grid;grid-template-columns:1fr 400px;gap:16px}
+  .panel{background:var(--tablet);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      border-bottom:1px solid var(--line);padding:10px 14px;font-family:var(--mono);font-size:12px}
+  .bar .tag{color:var(--gold)}
+  canvas{display:block;width:100%;height:auto;background:#0d1119;touch-action:none;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  input[type=range]{accent-color:var(--gold);vertical-align:middle}
+  #scrub{width:300px}
+  output{color:var(--bone);min-width:40px;display:inline-block}
+  .cam{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11px;padding:4px 9px;cursor:pointer;border-radius:2px}
+  .cam.on,.cam:hover{border-color:var(--gold);color:var(--gold)}
+  .camdeck{display:flex;gap:6px;margin-left:auto}
+  .act{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11.5px;padding:6px 12px;cursor:pointer;border-radius:2px}
+  .act:hover{color:var(--bone);border-color:var(--ash)}
+  .act.on{border-color:var(--copper);color:var(--copper)}
+  .act.gold{border-color:var(--gold-dim);color:var(--gold)}
+  .side{display:flex;flex-direction:column;gap:16px}
+  .side h3{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.12em;
+      padding:10px 14px;border-bottom:1px solid var(--line)}
+  .verdict{font-family:var(--mono);font-size:12px;padding:10px 14px;border-top:1px solid var(--line);min-height:40px}
+  .verdict .ok{color:var(--copper)} .verdict .bad{color:var(--alarm)}
+  .verdict .gold{color:var(--gold)} .verdict .fz{color:var(--fuzzy)} .verdict .lp{color:var(--lapis)}
+  .lawtag{font-family:var(--mono);font-size:10.5px;color:var(--lapis);padding:0 14px 12px}
+  #movers{font-family:var(--mono);font-size:11.5px;padding:8px 14px;max-height:150px;overflow-y:auto}
+  #movers .row{display:flex;gap:10px;border-top:1px dotted var(--line);padding:4px 0;cursor:pointer}
+  #movers .row:hover{color:var(--bone)}
+  #movers .row.first{color:var(--gold)}
+  #movers .row.accused{color:var(--alarm)}
+  #naru{max-height:190px;overflow-y:auto;font-family:var(--mono);font-size:11.5px;padding:8px 14px}
+  #naru .e{border-top:1px dotted var(--line);padding:4px 0}
+  #naru .w{color:var(--gold)}
+  #ctx{display:none;position:fixed;z-index:50;background:#0d1119;
+    border:1px solid var(--ash);border-radius:2px;min-width:250px;overflow:hidden;
+    font-family:var(--mono);font-size:12px}
+  #ctx .h{padding:6px 12px;color:var(--lapis);background:var(--tablet);border-bottom:1px solid var(--line);font-size:10.5px}
+  #ctx .i{padding:8px 12px;cursor:pointer;color:var(--ash)}
+  #ctx .i:hover{background:var(--tablet);color:var(--bone)}
+  @media(max-width:1020px){.stage{grid-template-columns:1fr}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crumbs">Š A L A&nbsp;&nbsp;H U B&nbsp;&nbsp;·&nbsp;&nbsp;M E M B R A N E&nbsp;&nbsp;C O U R T S&nbsp;&nbsp;·&nbsp;&nbsp;T H E&nbsp;&nbsp;R U P T U R E&nbsp;&nbsp;I N Q U E S T</div>
+  <h1>WHO CURVED FIRST 𒁾</h1>
+  <p class="lede">A rupture shown without its causes is <i>naive animation</i> — this court owns the <b>ledger</b>.
+    Every particle carries a biography of KAKI Events: BIRTH, the <b>INFLECTION</b> (the exact epoch its radius
+    left the law — the curving moment), <b>SHELL-CROSS</b> (geometric layers shifted outward by pressure or inward
+    by decay), DECAY-ONSET, RUPTURE-WITNESS. Scrub the timeline back to any instant — the view is recomputed from
+    sealed trajectories, never cached frames. Click a particle to bounce it and read its story; when the wall opens,
+    the inquest opens with it, and it <b>cannot close silently</b>: accuse the first mover from the ledger, and a
+    wrong cause — or an exculpated decayer, for <i>shrinking cannot open a wall</i> — is <b>refused with the citation</b>.</p>
+  <div class="rehearsal">ŠALA REHEARSAL ONLY — PRODUCTION SURFACE IS DUBSAR egui/WGPU (WoW rule 4–5)</div>
+</header>
+
+<main>
+<div class="stage">
+
+  <!-- ═══ STAGE ═══ -->
+  <div class="panel">
+    <div class="bar">
+      <span class="tag">TUBE · J2 corridor · the ledger replayed</span>
+      <label>timeline <input type="range" id="scrub" min="0" max="60" value="0" step="0.1"></label>
+      <output id="scrubOut">0.0</output>
+      <span class="camdeck">
+        <button class="cam" id="birdBtn">⌖</button>
+        <button class="cam" id="gndBtn">✛</button>
+        <button class="cam" id="talBtn">⟳</button>
+      </span>
+    </div>
+    <div class="bar">
+      <button class="act on" id="runBtn">◈ BREATHE</button>
+      <button class="act gold" id="ruptBtn">⇥ JUMP TO RUPTURE</button>
+      <button class="act" id="replayBtn">⟲ REPLAY</button>
+      <span style="margin-left:auto" id="clock"></span>
+    </div>
+    <canvas id="cv" width="1020" height="600" aria-label="Tube wall with individually biographied particles; scrub the timeline and select particles"></canvas>
+    <div class="verdict" id="stageVerdict"></div>
+    <div class="lawtag">GL-HSI-001-A3 §4 — replay is lawful, bending is not · GL-VIZ-001 — left-click: bounce + biography · right-click: court menu (accusation when the inquest is open)</div>
+  </div>
+
+  <!-- ═══ FLAT INSTRUMENTS ═══ -->
+  <div class="side">
+    <div class="panel">
+      <h3>THE CURVING MOMENT — SELECTED PARTICLE</h3>
+      <canvas id="pcv" width="400" height="210" aria-label="Selected particle radius trajectory with shell bands and inflection marker"></canvas>
+      <div class="verdict" id="pVerdict"></div>
+      <div class="lawtag">§1 — INFLECTION from second differences, epoch-exact · shells L1&lt;1.5 · L2&lt;2.5 · L3 (PU) · L-HSI-16/17</div>
+    </div>
+    <div class="panel">
+      <h3>THE FIRST MOVERS — CAUSAL ORDER</h3>
+      <div id="movers"></div>
+      <div class="verdict" id="iVerdict"></div>
+      <div class="lawtag">§3 — order by inflection epoch, ties by index · decayers exculpated · no-silent-close · L-HSI-19/20</div>
+    </div>
+    <div class="panel">
+      <h3>NĀRU · BIOGRAPHY OF THE SELECTED</h3>
+      <div id="naru"></div>
+    </div>
+  </div>
+
+</div>
+</main>
+<div id="ctx"></div>
+
+<script>
+"use strict";
+const REDUCED=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rng=mulberry32(349);
+const gau=()=>(rng()+rng()+rng()-1.5)/1.5;
+
+/* ═══ sealed histories (mirror nanshe::story) ═══ */
+const N_EP=61, SHELLS=[1.5,2.5], EPSC=1e-6;
+const L=760, RAD=175, NS=44, NT=40, SIG=26;
+const JOINT={s:0.42,th:1.05};
+function geo(a,b){const du=(a.s-b.s)*L;let dv=Math.abs(a.th-b.th)%(2*Math.PI);
+  if(dv>Math.PI)dv=2*Math.PI-dv;return Math.hypot(du,RAD*dv)}
+function shellOf(r){return r<SHELLS[0]?1:r<SHELLS[1]?2:3}
+function inflectionEpoch(r){for(let i=1;i<r.length-2;i++){
+  const a=r[i+1]-2*r[i]+r[i-1],b=r[i+2]-2*r[i+1]+r[i];
+  if(a>EPSC&&b>EPSC)return i}return null}
+function decayEpoch(r){for(let i=1;i<r.length-1;i++){
+  if(r[i]-r[i-1]<-EPSC&&r[i+1]-r[i]<-EPSC)return i}return null}
+function biography(r,ruptEp,inTear){const ev=[];
+  ev.push({k:"BIRTH",ep:0,txt:`born · r=${r[0].toFixed(2)} PU · shell L${shellOf(r[0])} · KAKI minted`});
+  const infl=inflectionEpoch(r),dec=decayEpoch(r);
+  let prev=shellOf(r[0]);
+  for(let i=1;i<r.length;i++){
+    if(i===infl&&(dec===null||i<dec||r[i]>=r[0]))
+      ev.push({k:"INFLECTION",ep:i,txt:`the curving moment — d²r turns and holds · r=${r[i].toFixed(2)} PU`});
+    if(i===dec)ev.push({k:"DECAY",ep:i,txt:`decay onset — sustained shrink · r=${r[i].toFixed(2)} PU`});
+    const s=shellOf(r[i]);
+    if(s!==prev){ev.push({k:"SHELL",ep:i,
+      txt:`layer shift L${prev}→L${s} · ${s>prev?"outward — pressure":"inward — decay"}`});prev=s}}
+  if(ruptEp!==null&&inTear)ev.push({k:"WITNESS",ep:ruptEp,
+    txt:"present at the opening — ledger becomes evidence"});
+  return ev}
+
+/* build 34 particles */
+const PARTS=[];
+for(let i=0;i<34;i++){
+  const s=JOINT.s+gau()*0.10, th=JOINT.th+gau()*0.75;
+  const r0=0.8+rng()*0.55;
+  const typ=i<10?"curver":i<16?"decayer":"stable";
+  const t0=typ==="curver"?6+Math.floor(rng()*20):8+Math.floor(rng()*12);
+  const a=0.004+rng()*0.009;
+  const series=[];
+  for(let t=0;t<N_EP;t++){
+    let r=r0;
+    if(typ==="curver"&&t>t0)r=r0+a*(t-t0)*(t-t0);
+    if(typ==="decayer"&&t>t0)r=Math.max(0.15,r0-0.028*(t-t0));
+    series.push(r)}
+  PARTS.push({i,s,th,r0,typ,series,b:0,bv:0,born:true,
+    inTear:geo({s,th},JOINT)<34})}
+/* girth & rupture epoch */
+function trimMean(v){const a=[...v].sort((x,y)=>x-y);
+  const tr=Math.floor(a.length*0.05);const c=a.slice(tr,a.length-tr||a.length);
+  return c.reduce((p,q)=>p+q,0)/c.length}
+const G_SERIES=[];for(let t=0;t<N_EP;t++)
+  G_SERIES.push(trimMean(PARTS.map(p=>p.series[t])));
+const G0v=G_SERIES[0], GMAXv=G0v*1.9;
+let T_R=null;for(let t=0;t<N_EP;t++)if(G_SERIES[t]>=GMAXv){T_R=t;break}
+if(T_R===null)T_R=N_EP-6;
+/* biographies + inquest ledger */
+PARTS.forEach(p=>{p.bio=biography(p.series,T_R,p.inTear);
+  p.infl=inflectionEpoch(p.series);
+  p.isDecayer=p.typ==="decayer"});
+const ORDER=PARTS.filter(p=>p.inTear&&p.infl!==null&&!p.isDecayer)
+  .map(p=>({i:p.i,e:p.infl})).sort((a,b)=>a.e-b.e||a.i-b.i);
+const FIRST=ORDER.length?ORDER[0].i:null;
+let ACCUSED=null, CLOSED=false;
+
+/* ═══ state ═══ */
+let VIEW=0, RUN=!REDUCED, SEL=null;
+const NONP={id:"NON-P",born:false,lore:"glare pixel refused at SUSA — never born, no ledger"};
+
+/* ═══ NĀRU (selected biography) ═══ */
+function renderBio(){const el=document.getElementById("naru");
+  if(SEL===null){el.innerHTML=`<div class="e">select a particle — bounce it — to open its story</div>`;return}
+  const p=PARTS[SEL];
+  el.innerHTML=p.bio.map(e=>{
+    const past=e.ep<=VIEW;
+    return `<div class="e" style="opacity:${past?1:.35}">
+      <span class="w">${e.k}</span> · ep ${e.ep} — ${e.txt}${past?"":" <span style='color:#555'>(not yet at this view)</span>"}</div>`}).join("")}
+
+/* ═══ camera (Abūbu die) ═══ */
+const cv=document.getElementById("cv"),ctx=cv.getContext("2d");
+const CAM={yaw:0.7,pitch:0.42,zoom:1};let tal=false;
+function pt3(s,th,dent){
+  const r=RAD-dent;
+  const x=(s-0.5)*L, y=Math.cos(th)*r, z=Math.sin(th)*r;
+  const cy=Math.cos(CAM.yaw),sy=Math.sin(CAM.yaw);
+  let X=x*cy+z*sy, Z=-x*sy+z*cy, Y=y;
+  const cp=Math.cos(CAM.pitch),sp=Math.sin(CAM.pitch);
+  const Y2=Y*cp-Z*sp, Z2=Y*sp+Z*cp;
+  const f=1500,den=Math.max(140,f-Z2*CAM.zoom);
+  const pers=Math.min(9,f/den);
+  return{x:510+X*0.62*CAM.zoom*pers,y:320+Y2*0.62*CAM.zoom*pers,z:Z2,pers}}
+const shellCol=sh=>sh===1?"#4d7fb8":sh===2?"#c88b3a":"#d4553f";
+
+/* dent field from radii at VIEW */
+let DENT=null;
+function computeDent(){const ruptured=VIEW>=T_R;
+  DENT=[...Array(NS+1)].map((_,i)=>[...Array(NT+1)].map((_,j)=>{
+    const p={s:i/NS,th:j/NT*2*Math.PI};let d=0;
+    PARTS.forEach(a=>{const r=a.series[Math.min(N_EP-1,Math.round(VIEW))];
+      if(ruptured&&a.inTear)return;
+      const gd=geo(p,a);d+=r*4.5*Math.exp(-(gd*gd)/(2*SIG*SIG))});
+    return Math.min(70,d*0.9)}))}
+function torn(i,j){if(VIEW<T_R)return false;
+  const p={s:i/NS,th:j/NT*2*Math.PI};return geo(p,JOINT)<34}
+
+let PICKS=[];
+function draw(){
+  ctx.clearRect(0,0,1020,600);
+  const ruptured=VIEW>=T_R;
+  const quads=[];
+  for(let i=0;i<NS;i++)for(let j=0;j<NT;j++){
+    if(torn(i,j))continue;
+    const p=[pt3(i/NS,j/NT*2*Math.PI,DENT[i][j]),
+             pt3((i+1)/NS,j/NT*2*Math.PI,DENT[i+1][j]),
+             pt3((i+1)/NS,(j+1)/NT*2*Math.PI,DENT[i+1][j+1]),
+             pt3(i/NS,(j+1)/NT*2*Math.PI,DENT[i][j+1])];
+    const z=(p[0].z+p[1].z+p[2].z+p[3].z)/4;
+    const dent=(DENT[i][j]+DENT[i+1][j]+DENT[i+1][j+1]+DENT[i][j+1])/4;
+    quads.push({p,z,dent,i,j})}
+  quads.sort((a,b)=>a.z-b.z);
+  const S=(G_SERIES[Math.min(N_EP-1,Math.round(VIEW))]-G0v)/(GMAXv-G0v);
+  const reg=S>=1?"RUPTURE":S>=0.6?"PLASTIC":"ELASTIC";
+  quads.forEach(q=>{
+    const front=q.z>0, d=q.dent/70;
+    const tint=reg==="RUPTURE"?[212,85,63]:reg==="PLASTIC"?[200,139,58]:[77,127,184];
+    const rC=217*(1-d)+tint[0]*d, gC=164*(1-d)+tint[1]*d, bC=65*(1-d)+tint[2]*d;
+    ctx.beginPath();ctx.moveTo(q.p[0].x,q.p[0].y);
+    for(let k=1;k<4;k++)ctx.lineTo(q.p[k].x,q.p[k].y);ctx.closePath();
+    ctx.fillStyle=`rgba(${rC|0},${gC|0},${bC|0},${front?0.055+d*0.34:0.03+d*0.10})`;ctx.fill();
+    const rim=ruptured&&(torn(q.i+1,q.j)||torn(q.i,q.j+1)||torn(q.i-1,q.j)||torn(q.i,q.j-1));
+    ctx.strokeStyle=rim?"rgba(212,85,63,.9)":front?`rgba(139,147,163,${0.16+d*0.25})`:"rgba(139,147,163,0.05)";
+    ctx.lineWidth=rim?1.8:0.7;ctx.stroke()});
+  /* particles with biographies */
+  PICKS=[];
+  const ep=Math.min(N_EP-1,Math.round(VIEW));
+  PARTS.forEach(p=>{
+    p.bv+=1.1;p.b=Math.max(0,p.b-p.bv*.28);if(p.b===0&&p.bv>0)p.bv=0;if(p.bv<0)p.b-=p.bv;
+    const r=p.series[ep];
+    let q;
+    if(ruptured&&p.inTear){const fall=Math.min(240,(VIEW-T_R)*36);
+      q=pt3(p.s,p.th,-fall);ctx.globalAlpha=Math.max(0.1,1-fall/260)}
+    else{const gi=Math.min(NS,Math.round(p.s*NS));
+      const gj=(((Math.round(p.th/(2*Math.PI)*NT))%NT)+NT)%NT;
+      q=pt3(p.s,p.th,(DENT[gi]&&DENT[gi][gj]||0)+2+p.b);ctx.globalAlpha=q.z>-30?0.95:0.2}
+    const sz=Math.max(1.4,(2.0+r*1.6)*q.pers*Math.max(.7,CAM.zoom*.9));
+    ctx.fillStyle=p.isDecayer&&decayEpoch(p.series)<=ep?"#6b7280":shellCol(shellOf(r));
+    ctx.beginPath();ctx.arc(q.x,q.y,sz,0,7);ctx.fill();
+    if(SEL===p.i){ctx.strokeStyle="#e8e2d4";ctx.lineWidth=1.6;
+      ctx.beginPath();ctx.arc(q.x,q.y,sz+3,0,7);ctx.stroke();ctx.lineWidth=1}
+    if(FIRST===p.i&&(CLOSED||VIEW>=T_R)){ctx.strokeStyle="#d9a441";
+      ctx.beginPath();ctx.arc(q.x,q.y,sz+6,0,7);ctx.stroke()}
+    ctx.globalAlpha=1;
+    PICKS.push({x:q.x,y:q.y,r:sz+5,p})});
+  const j0=pt3(JOINT.s,JOINT.th,30);
+  ctx.fillStyle=ruptured?"#d4553f":"#d9a441";ctx.font="12px monospace";
+  ctx.fillText(ruptured?"◆ ABŪBU — the wall is open · the inquest is OPEN":"◆ J-2",j0.x+10,j0.y-8);
+  ctx.fillStyle="#4d7fb8";
+  ctx.fillText(`cam yaw ${(CAM.yaw%6.283).toFixed(2)} · pitch ${CAM.pitch.toFixed(2)} · ×${CAM.zoom.toFixed(1)}`,16,22);
+  const sv=document.getElementById("stageVerdict");
+  if(CLOSED)sv.innerHTML=`<span class="gold">INQUEST CLOSED.</span> First mover P${FIRST} named from the ledger · W5H2 filed · witnesses may be released by decree`;
+  else if(ruptured)sv.innerHTML=`<span class="bad">S reached 1 at epoch ${T_R}.</span> <span class="fz">No silent close</span> — right-click the particle you accuse as first mover`;
+  else sv.innerHTML=`replaying the sealed ledger · S=${Math.max(0,S).toFixed(2)} · regime <span class="${reg==="PLASTIC"?"gold":"ok"}">${reg}</span> · the rupture arrives at epoch ${T_R}`;
+}
+
+/* ═══ curving-moment instrument ═══ */
+const pcv=document.getElementById("pcv"),px2=pcv.getContext("2d");
+function drawP(){
+  px2.fillStyle="#0d1119";px2.fillRect(0,0,400,210);
+  const x0=40,y0=182,w=346,h=148,rmax=4.2;
+  /* shell bands */
+  const bandY=r=>y0-h*Math.min(r,rmax)/rmax;
+  px2.fillStyle="rgba(77,127,184,.07)";px2.fillRect(x0,bandY(SHELLS[0]),w,y0-bandY(SHELLS[0]));
+  px2.fillStyle="rgba(200,139,58,.07)";px2.fillRect(x0,bandY(SHELLS[1]),w,bandY(SHELLS[0])-bandY(SHELLS[1]));
+  px2.fillStyle="rgba(212,85,63,.06)";px2.fillRect(x0,y0-h,w,bandY(SHELLS[1])-(y0-h));
+  px2.strokeStyle="#232b38";px2.beginPath();
+  px2.moveTo(x0,y0-h);px2.lineTo(x0,y0);px2.lineTo(x0+w,y0);px2.stroke();
+  px2.font="10.5px monospace";px2.fillStyle="#4d7fb8";px2.fillText("L1",x0+4,y0-6);
+  px2.fillStyle="#c88b3a";px2.fillText("L2",x0+4,bandY(SHELLS[0])-6);
+  px2.fillStyle="#d4553f";px2.fillText("L3",x0+4,bandY(SHELLS[1])-6);
+  const v=document.getElementById("pVerdict");
+  if(SEL===null){px2.fillStyle="#8b93a3";
+    px2.fillText("no particle selected — click one on the wall",x0+70,y0-h/2);
+    v.innerHTML=`<span class="lp">The instrument waits.</span> A biography needs a subject`;return}
+  const p=PARTS[SEL];
+  const X=t=>x0+w*t/(N_EP-1);
+  /* rupture epoch line */
+  px2.strokeStyle="rgba(212,85,63,.6)";px2.setLineDash([4,4]);
+  px2.beginPath();px2.moveTo(X(T_R),y0-h);px2.lineTo(X(T_R),y0);px2.stroke();px2.setLineDash([]);
+  px2.fillStyle="#d4553f";px2.fillText("rupture",X(T_R)-20,y0-h+10);
+  /* series */
+  px2.strokeStyle="#e8e2d4";px2.lineWidth=1.6;px2.beginPath();
+  p.series.forEach((r,t)=>{const Y=bandY(r);t===0?px2.moveTo(X(t),Y):px2.lineTo(X(t),Y)});
+  px2.stroke();px2.lineWidth=1;
+  /* inflection & decay markers */
+  if(p.infl!==null&&!p.isDecayer){px2.fillStyle="#d9a441";
+    px2.beginPath();px2.arc(X(p.infl),bandY(p.series[p.infl]),4.5,0,7);px2.fill();
+    px2.fillText("curving moment",X(p.infl)+6,bandY(p.series[p.infl])-6)}
+  const de=decayEpoch(p.series);
+  if(de!==null){px2.fillStyle="#6b7280";
+    px2.beginPath();px2.arc(X(de),bandY(p.series[de]),4,0,7);px2.fill();
+    px2.fillText("decay",X(de)+6,bandY(p.series[de])+12)}
+  /* now cursor */
+  px2.strokeStyle="rgba(79,174,138,.8)";px2.beginPath();
+  px2.moveTo(X(VIEW),y0-h);px2.lineTo(X(VIEW),y0);px2.stroke();
+  px2.fillStyle="#8b93a3";px2.fillText("epoch →",x0+w-50,y0+16);
+  const r=p.series[Math.min(N_EP-1,Math.round(VIEW))];
+  v.innerHTML=p.isDecayer
+   ?`<span class="lp">P${p.i} · decayer.</span> r=${r.toFixed(2)} PU · shrinking cannot open a wall — exculpated by §3`
+   :p.infl!==null
+   ?`<span class="gold">P${p.i} inflected at epoch ${p.infl}.</span> r=${r.toFixed(2)} PU · shell L${shellOf(r)} · Δr=${(r-p.r0).toFixed(2)} PU = ${((r-p.r0)/G0v).toFixed(2)} OU`
+   :`<span class="ok">P${p.i} keeps its law.</span> r=${r.toFixed(2)} PU · no curving moment on record`;
+}
+
+/* ═══ first movers ledger ═══ */
+function drawMovers(){
+  const el=document.getElementById("movers");
+  el.innerHTML=ORDER.map((o,k)=>{
+    const p=PARTS[o.i];
+    const cls=(o.i===FIRST?"first ":"")+(o.i===ACCUSED&&!CLOSED?"accused":"");
+    return `<div class="row ${cls}" data-i="${o.i}">
+      <span>#${k+1}</span><span>P${o.i}</span><span>inflected ep ${o.e}</span>
+      <span>L${shellOf(p.r0)}→L${shellOf(p.series[N_EP-1])}</span></div>`}).join("");
+  el.querySelectorAll(".row").forEach(r=>r.onclick=()=>{SEL=+r.dataset.i;
+    PARTS[SEL].bv=-7;renderBio()});
+  const iv=document.getElementById("iVerdict");
+  if(CLOSED){const p=PARTS[FIRST];
+    iv.innerHTML=`<span class="gold">CLOSED.</span> WHO P${FIRST} · WHAT inflection · WHEN ep ${p.infl} ·
+     WHERE J-2, L${shellOf(p.r0)}→L${shellOf(p.series[N_EP-1])} · WHY pressure · HOW quadratic curvature ·
+     HOW-MUCH Δr ${(p.series[N_EP-1]-p.r0).toFixed(2)} PU`}
+  else if(VIEW>=T_R)iv.innerHTML=`<span class="fz">INQUEST OPEN.</span> The ledger holds ${ORDER.length} qualifying curving moments · accuse by right-click on the wall`;
+  else iv.innerHTML=`<span class="ok">Ledger armed.</span> ${ORDER.length} curving moments recorded before the ceiling · the order is already sealed`;
+}
+
+/* ═══ loop ═══ */
+let last=null;
+function frame(now){
+  if(last===null)last=now;
+  const dt=Math.min(0.08,(now-last)/1000);last=now;
+  if(RUN&&!REDUCED){VIEW=Math.min(60,VIEW+dt*3.2);
+    document.getElementById("scrub").value=VIEW}
+  if(tal)CAM.yaw+=0.006;
+  document.getElementById("scrubOut").textContent=VIEW.toFixed(1);
+  document.getElementById("clock").textContent=
+    `epoch ${VIEW.toFixed(1)} / 60 · rupture at ${T_R} · G₀ ${G0v.toFixed(2)} PU · G_max ${GMAXv.toFixed(2)} PU`;
+  computeDent();draw();drawP();drawMovers();
+  requestAnimationFrame(frame)}
+
+/* ═══ controls ═══ */
+document.getElementById("scrub").addEventListener("input",e=>{
+  VIEW=+e.target.value;RUN=false;
+  const rb=document.getElementById("runBtn");
+  rb.classList.remove("on");rb.textContent="‖ HELD";renderBio()});
+document.getElementById("runBtn").onclick=e=>{RUN=!RUN;
+  e.target.classList.toggle("on",RUN);e.target.textContent=RUN?"◈ BREATHE":"‖ HELD"};
+document.getElementById("ruptBtn").onclick=()=>{VIEW=T_R;RUN=false;
+  document.getElementById("scrub").value=VIEW;
+  const rb=document.getElementById("runBtn");
+  rb.classList.remove("on");rb.textContent="‖ HELD";
+  J2("COURT",`jumped to the opening — epoch ${T_R}. The inquest is open; the ledger already knows.`);renderBio()};
+document.getElementById("replayBtn").onclick=()=>{VIEW=0;ACCUSED=null;CLOSED=false;RUN=true;
+  document.getElementById("scrub").value=0;
+  const rb=document.getElementById("runBtn");
+  rb.classList.add("on");rb.textContent="◈ BREATHE";
+  J2("COURT","⟲ replay — the past does not change under review; run the ledger again.");renderBio()};
+function J2(w,t){const el=document.getElementById("naru");
+  const d=document.createElement("div");d.className="e";
+  d.innerHTML=`<span class="w">${w}</span> — ${t}`;el.prepend(d)}
+
+/* camera (Abūbu die) */
+cv.addEventListener("wheel",e=>{e.preventDefault();stopTal();
+  CAM.zoom=Math.min(6,Math.max(0.6,CAM.zoom*Math.exp(-e.deltaY*0.0014)))},{passive:false});
+let drag=null,moved=0;
+const pxy=e=>{const r=cv.getBoundingClientRect();
+  return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}};
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);
+  drag=pxy(e);moved=0;cv.classList.add("dragging")});
+cv.addEventListener("pointermove",e=>{if(!drag)return;const p=pxy(e);
+  moved+=Math.abs(p.x-drag.x)+Math.abs(p.y-drag.y);
+  CAM.yaw+=(p.x-drag.x)*0.005;
+  CAM.pitch=Math.min(1.45,Math.max(-0.2,CAM.pitch+(p.y-drag.y)*0.004));
+  drag=p;if(moved>3)stopTal()});
+cv.addEventListener("pointerup",e=>{if(drag&&moved<3){const p=pxy(e);pick(p.x,p.y)}
+  drag=null;cv.classList.remove("dragging")});
+cv.addEventListener("pointercancel",()=>{drag=null;cv.classList.remove("dragging")});
+cv.addEventListener("dblclick",()=>{stopTal();CAM.yaw=0.7;CAM.pitch=0.42;CAM.zoom=1});
+function stopTal(){if(tal){tal=false;document.getElementById("talBtn").classList.remove("on")}}
+document.getElementById("birdBtn").onclick=()=>{stopTal();CAM.yaw=0;CAM.pitch=1.35;CAM.zoom=0.85};
+document.getElementById("gndBtn").onclick=()=>{stopTal();CAM.yaw=-0.25;CAM.pitch=0.10;CAM.zoom=2.6};
+document.getElementById("talBtn").onclick=e=>{
+  if(REDUCED){CAM.pitch=0.5;CAM.zoom=1.6;return}
+  tal=!tal;e.target.classList.toggle("on",tal)};
+
+/* ═══ NASARU: bounce + biography + accusation ═══ */
+function pick(mx,my){for(const q of PICKS){
+  if(Math.hypot(mx-q.x,my-q.y)<q.r+3){SEL=q.p.i;q.p.bv=-7;renderBio();return}}}
+const ctxM=document.getElementById("ctx");
+cv.addEventListener("contextmenu",e=>{e.preventDefault();
+  const r=cv.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
+  for(const q of PICKS){if(Math.hypot(mx-q.x,my-q.y)<q.r+3){const p=q.p;
+    ctxM.style.display="block";ctxM.style.left=e.clientX+"px";ctxM.style.top=e.clientY+"px";
+    const accuse=VIEW>=T_R&&!CLOSED
+      ?`<div class="i" data-a="a">⚖ Name P${p.i} as first mover</div>`:"";
+    ctxM.innerHTML=`<div class="h">P${p.i} · born (KAKI minted) · ${p.typ}</div>
+       <div class="i" data-a="j">Open StoryEngine biography</div>
+       <div class="i" data-a="c">Add to cohort</div>${accuse}`;
+    ctxM.querySelectorAll(".i").forEach(it=>it.onclick=()=>{ctxM.style.display="none";
+      if(it.dataset.a==="j"){SEL=p.i;renderBio()}
+      if(it.dataset.a==="c")J2("COHORT",`P${p.i} added to the inquest cohort.`);
+      if(it.dataset.a==="a"){ACCUSED=p.i;
+        if(p.i===FIRST){CLOSED=true;
+          J2("VERDICT",`P${p.i} named — the ledger agrees: earliest curving moment (ep ${p.infl}). INQUEST CLOSED.`)}
+        else if(p.isDecayer)
+          J2("REFUSAL",`P${p.i} REFUSED — GL-HSI-001-A3 §3 exculpation: shrinking cannot open a wall. The inquest stays open.`);
+        else J2("REFUSAL",`P${p.i} REFUSED — §3 wrong-cause: the ledger names an earlier curving moment (P${FIRST}, ep ${PARTS[FIRST].infl}). The inquest stays open.`)}});
+    return}}
+  ctxM.style.display="none"});
+addEventListener("click",()=>ctxM.style.display="none");
+
+/* boot */
+if(REDUCED){RUN=false;const rb=document.getElementById("runBtn");
+  rb.classList.remove("on");rb.textContent="‖ HELD"}
+computeDent();renderBio();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

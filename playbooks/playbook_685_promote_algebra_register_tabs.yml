@@ -1,0 +1,56 @@
+---
+# PB-685 · Promote the Šala Algebra Register tabs (v1..v4)
+# Landed alongside playbook_684 (which seals the law text itself, GL-ALG-001). This
+# playbook covers the four HTML visualization iterations: v1 first cut (register +
+# claim gate), v2 the ANTI-SQL banner/purge, v3 the arsenal (actual vs envisioned vs
+# candidate vs leaning-on-air) view, v4 the legend fix. Per this repo's concordance
+# doctrine (history annotated, not silently deleted, same as playbook_625/680): every
+# version is deposited side by side under its own filename.
+- name: PB-685 promote the Sala Algebra Register tabs
+  hosts: girsu
+  vars:
+    bahyway_provides: ["artifact:algebra_register_tabs"]
+    bahyway_requires: ["law:GL-ALG-001"]
+    sala: "{{ ansible_env.HOME }}/bahyway/sala/tabs"
+    tabs:
+      - sala_algebra_register_v1.html
+      - sala_algebra_register_v2.html
+      - sala_algebra_register_v3.html
+      - sala_algebra_register_v4.html
+  tasks:
+    - name: Ensure tabs directory
+      ansible.builtin.file: {path: "{{ sala }}", state: directory, mode: "0755"}
+
+    - name: Place tabs
+      ansible.builtin.copy: {src: "{{ item }}", dest: "{{ sala }}/{{ item }}", mode: "0644"}
+      loop: "{{ tabs }}"
+
+    - name: Gate S1 · every tab still parses
+      ansible.builtin.shell: |
+        node -e "const h=require('fs').readFileSync('{{ sala }}/{{ item }}','utf8');
+                 new Function(h.split('<script>')[1].split('</script>')[0]);console.log('ok');"
+      loop: "{{ tabs }}"
+      changed_when: false
+
+    - name: Gate S2 · no actual SQL syntax leaks into the tabs
+      # Adapted from the G2 regex (playbook_654/681-684): matches real SQL syntax, not
+      # the English word "select"/"exists" (index selectivity, querySelectorAll, "no
+      # composition exists (§8)") or the tablet's own ANTI-SQL prose (e.g. "joins by
+      # product-then-select"). EXISTS is matched case-sensitively — SQL keywords are
+      # conventionally uppercase, the tabs' own prose only ever uses lowercase "exists".
+      ansible.builtin.shell: |
+        set -e
+        for f in {{ tabs | join(' ') }}; do
+          if grep -Eiq 'SELECT +[A-Za-z*].{0,200}\bFROM\b|INNER JOIN|LEFT JOIN' "{{ sala }}/$f" \
+             || grep -Eq 'EXISTS *\(' "{{ sala }}/$f"; then
+            echo "$f leaks actual SQL syntax"; exit 1
+          fi
+        done
+        echo "S2 green - no real SQL syntax; ANTI-SQL is the only place that vocabulary appears"
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-685 promoted {{ tabs | length }} Algebra Register tabs (v1 register+claim gate · v2 ANTI-SQL banner · v3 the arsenal · v4 legend)"

@@ -130,7 +130,11 @@ mod tests {
         let mut hashes: Vec<u32> = MandatoryAttr::ALL.iter().map(|a| a.attr_hash()).collect();
         hashes.sort_unstable();
         hashes.dedup();
-        assert_eq!(hashes.len(), 7, "every mandatory attribute must have a distinct hash");
+        assert_eq!(
+            hashes.len(),
+            7,
+            "every mandatory attribute must have a distinct hash"
+        );
     }
 
     #[test]

@@ -7,13 +7,13 @@
 //!
 //! Vector IDs are self-generated at creation, never recycled, never mutated.
 
-pub mod vector_id;
 pub mod schema;
+pub mod vector_id;
 
-pub use vector_id::VectorId;
 pub use schema::VectorIdKind;
+pub use vector_id::VectorId;
 
 pub mod prelude {
-    pub use super::vector_id::VectorId;
     pub use super::schema::VectorIdKind;
+    pub use super::vector_id::VectorId;
 }

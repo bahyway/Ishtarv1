@@ -54,8 +54,8 @@ impl QuppuLayer {
         let now = SargonKdf::sovereign_now();
         Self {
             passport_id: Uuid::new_v4(),
-            created_at:  now,
-            expires_at:  now + SATTATU_MAX,
+            created_at: now,
+            expires_at: now + SATTATU_MAX,
             issuer_kaki,
         }
     }
@@ -79,7 +79,8 @@ impl QuppuLayer {
     /// Seconds remaining until renewal is recommended (0 if already due).
     /// For SATTATU_MAX's default 54h, this starts at ~43.2 hours.
     pub fn seconds_until_renewal_due(&self) -> u64 {
-        self.renewal_threshold().saturating_sub(SargonKdf::sovereign_now())
+        self.renewal_threshold()
+            .saturating_sub(SargonKdf::sovereign_now())
     }
 }
 
@@ -109,16 +110,21 @@ impl KupruLayer {
         rand::thread_rng().fill_bytes(&mut nonce);
 
         let content_hash = hasher.digest(inner_bytes);
-        let hmac         = hasher.keyed_digest(integrity_key, inner_bytes)?;
+        let hmac = hasher.keyed_digest(integrity_key, inner_bytes)?;
         let algorithm_id = hasher.algorithm() as u8;
 
-        Ok(Self { content_hash, hmac, nonce, algorithm_id })
+        Ok(Self {
+            content_hash,
+            hmac,
+            nonce,
+            algorithm_id,
+        })
     }
 
     pub fn verify(&self, inner_bytes: &[u8], integrity_key: &[u8]) -> KupruResult<()> {
-        let hasher         = default_hasher();
-        let expected_hash  = hasher.digest(inner_bytes);
-        let expected_hmac  = hasher.keyed_digest(integrity_key, inner_bytes)?;
+        let hasher = default_hasher();
+        let expected_hash = hasher.digest(inner_bytes);
+        let expected_hmac = hasher.keyed_digest(integrity_key, inner_bytes)?;
 
         use subtle::ConstantTimeEq;
         let hash_ok: bool = self.content_hash.ct_eq(&expected_hash).into();
@@ -175,9 +181,9 @@ impl IshtarLayer {
     /// Minimal read-only gardener permissions (entry level).
     pub fn gardener(realm: &str) -> Self {
         Self {
-            isretu_scopes:   vec![format!("{realm}:read"), "story:read".into()],
-            access_matrix:   std::collections::HashMap::new(),
-            nadanu_chain:    vec![],
+            isretu_scopes: vec![format!("{realm}:read"), "story:read".into()],
+            access_matrix: std::collections::HashMap::new(),
+            nadanu_chain: vec![],
             privilege_level: 1, // NUKARIB (gardener)
         }
     }
@@ -190,10 +196,10 @@ impl IshtarLayer {
                 "kaki:*".into(),
                 "enki:*".into(),
                 "story:*".into(),
-                "zero:*".into(),   // v4.0: no "Way" suffix
+                "zero:*".into(), // v4.0: no "Way" suffix
             ],
-            access_matrix:   std::collections::HashMap::new(),
-            nadanu_chain:    vec![],
+            access_matrix: std::collections::HashMap::new(),
+            nadanu_chain: vec![],
             privilege_level: 7, // ŠARRU (king)
         }
     }
@@ -204,11 +210,11 @@ impl IshtarLayer {
 /// The complete Sargon Passport — four layers + outer AkkadianSeal.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SargonPassport {
-    pub quppu:                QuppuLayer,
-    pub kupru:                KupruLayer,
-    pub naru:                 NaruLayer,
-    pub istar:                IshtarLayer,
-    pub outer_seal:           Vec<u8>,
+    pub quppu: QuppuLayer,
+    pub kupru: KupruLayer,
+    pub naru: NaruLayer,
+    pub istar: IshtarLayer,
+    pub outer_seal: Vec<u8>,
     pub issuer_verifying_key: Vec<u8>,
 }
 
@@ -216,16 +222,16 @@ impl SargonPassport {
     /// Issue a new passport. The only constructor — a passport cannot
     /// exist without a valid seal.
     pub fn issue(
-        naru:           NaruLayer,
-        istar:          IshtarLayer,
-        issuer_kaki:    [u8; 16],
+        naru: NaruLayer,
+        istar: IshtarLayer,
+        issuer_kaki: [u8; 16],
         issuer_keypair: &SealKeyPair,
-        integrity_key:  &[u8; 32],
+        integrity_key: &[u8; 32],
     ) -> KupruResult<Self> {
         let quppu = QuppuLayer::new(issuer_kaki);
 
-        let inner = serde_json::to_vec(&(&naru, &istar))
-            .map_err(|e| KupruError::Io(e.to_string()))?;
+        let inner =
+            serde_json::to_vec(&(&naru, &istar)).map_err(|e| KupruError::Io(e.to_string()))?;
 
         let kupru = KupruLayer::compute(&inner, integrity_key)?;
 
@@ -271,14 +277,19 @@ impl SargonPassport {
 
     /// True if the named scope (or a wildcard covering it) is granted.
     pub fn has_scope(&self, scope: &str) -> bool {
-        self.istar.isretu_scopes.iter().any(|s| {
-            s == scope || (s.ends_with(":*") && scope.starts_with(&s[..s.len() - 1]))
-        })
+        self.istar
+            .isretu_scopes
+            .iter()
+            .any(|s| s == scope || (s.ends_with(":*") && scope.starts_with(&s[..s.len() - 1])))
     }
 
-    pub fn subject_kaki(&self) -> [u8; 16] { self.naru.subject_kaki }
+    pub fn subject_kaki(&self) -> [u8; 16] {
+        self.naru.subject_kaki
+    }
 
-    pub fn passport_id(&self) -> String { self.quppu.passport_id.to_string() }
+    pub fn passport_id(&self) -> String {
+        self.quppu.passport_id.to_string()
+    }
 
     /// True once this passport should be reissued (80% of its lifetime
     /// elapsed) -- check this on a schedule (e.g. once per login-gate
@@ -287,10 +298,14 @@ impl SargonPassport {
     /// when it flips true. There is no "extend" operation by design --
     /// renewal is always a fresh issuance with a fresh QUPPU/outer_seal,
     /// never a mutation of the existing one.
-    pub fn renewal_due(&self) -> bool { self.quppu.renewal_due() }
+    pub fn renewal_due(&self) -> bool {
+        self.quppu.renewal_due()
+    }
 
     /// Seconds remaining until renewal is recommended (0 if already due).
-    pub fn seconds_until_renewal_due(&self) -> u64 { self.quppu.seconds_until_renewal_due() }
+    pub fn seconds_until_renewal_due(&self) -> u64 {
+        self.quppu.seconds_until_renewal_due()
+    }
 }
 
 #[cfg(test)]
@@ -329,22 +344,31 @@ mod tests {
     fn tampering_with_privilege_level_is_detected() {
         let (mut passport, _keypair) = issue_test_passport();
         assert_eq!(passport.istar.privilege_level, 1); // gardener
-        passport.istar.privilege_level = 7;            // attacker tries to self-promote to king
-        assert!(passport.verify_seal().is_err(), "privilege escalation must invalidate the seal");
+        passport.istar.privilege_level = 7; // attacker tries to self-promote to king
+        assert!(
+            passport.verify_seal().is_err(),
+            "privilege escalation must invalidate the seal"
+        );
     }
 
     #[test]
     fn tampering_with_subject_kaki_is_detected() {
         let (mut passport, _keypair) = issue_test_passport();
         passport.naru.subject_kaki = [0xFFu8; 16]; // attacker tries to claim someone else's identity
-        assert!(passport.verify_seal().is_err(), "identity substitution must invalidate the seal");
+        assert!(
+            passport.verify_seal().is_err(),
+            "identity substitution must invalidate the seal"
+        );
     }
 
     #[test]
     fn tampering_with_expiry_is_detected() {
         let (mut passport, _keypair) = issue_test_passport();
         passport.quppu.expires_at = SargonKdf::sovereign_now() + 999_999_999; // attacker extends TTL
-        assert!(passport.verify_seal().is_err(), "TTL extension must invalidate the seal");
+        assert!(
+            passport.verify_seal().is_err(),
+            "TTL extension must invalidate the seal"
+        );
     }
 
     /// An attacker who doesn't hold the issuer's private key cannot produce
@@ -360,13 +384,21 @@ mod tests {
         // key, then claims it came from the real issuer by swapping in the
         // real issuer's public key bytes.
         let forged_seal = passport_seal(
-            &genuine.quppu, &genuine.kupru, &genuine.naru, &genuine.istar, &attacker_keypair,
-        ).unwrap();
+            &genuine.quppu,
+            &genuine.kupru,
+            &genuine.naru,
+            &genuine.istar,
+            &attacker_keypair,
+        )
+        .unwrap();
         genuine.outer_seal = forged_seal;
         // issuer_verifying_key still says it's the real issuer -- but the
         // signature was produced by attacker_keypair's private key, which
         // does not match. Verification must fail.
-        assert!(genuine.verify_seal().is_err(), "a seal from the wrong private key must never verify");
+        assert!(
+            genuine.verify_seal().is_err(),
+            "a seal from the wrong private key must never verify"
+        );
     }
 
     #[test]
@@ -374,7 +406,10 @@ mod tests {
         let (mut passport, _keypair) = issue_test_passport();
         // Simulate a passport issued in the past whose TTL has lapsed.
         passport.quppu.expires_at = SargonKdf::sovereign_now() - 10;
-        assert!(passport.verify_seal().is_err(), "an expired passport must fail verify_seal()");
+        assert!(
+            passport.verify_seal().is_err(),
+            "an expired passport must fail verify_seal()"
+        );
     }
 
     #[test]
@@ -396,8 +431,8 @@ mod tests {
             (p, keypair)
         };
 
-        assert!(passport.has_scope("kaki:read"));   // covered by "kaki:*"
-        assert!(passport.has_scope("kaki:write"));  // covered by "kaki:*"
+        assert!(passport.has_scope("kaki:read")); // covered by "kaki:*"
+        assert!(passport.has_scope("kaki:write")); // covered by "kaki:*"
         assert!(!passport.has_scope("unrelated:read"));
     }
 

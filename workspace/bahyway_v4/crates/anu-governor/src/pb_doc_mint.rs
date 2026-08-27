@@ -58,7 +58,10 @@ pub fn mint_or_supersede_pb_docs(
 
     let playbooks_dir = repo_root.join("playbooks");
     let Ok(entries) = std::fs::read_dir(&playbooks_dir) else {
-        log.push(format!("⚠ playbook doc corpus scan failed: cannot read {}", playbooks_dir.display()));
+        log.push(format!(
+            "⚠ playbook doc corpus scan failed: cannot read {}",
+            playbooks_dir.display()
+        ));
         return log;
     };
     let mut files: Vec<_> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
@@ -78,29 +81,54 @@ pub fn mint_or_supersede_pb_docs(
         })
         .collect();
 
-    type ChangedEntry = (String, enkiddb::DocumentStructure, String, Option<(String, [u8; 16])>);
+    type ChangedEntry = (
+        String,
+        enkiddb::DocumentStructure,
+        String,
+        Option<(String, [u8; 16])>,
+    );
     let mut changed: Vec<ChangedEntry> = Vec::new();
     for path in &files {
         if path.extension().and_then(|e| e.to_str()) != Some("yml") {
             continue;
         }
-        let Some(file) = path.file_name().map(|f| f.to_string_lossy().to_string()) else { continue };
-        let Ok(text) = std::fs::read_to_string(path) else { continue };
+        let Some(file) = path.file_name().map(|f| f.to_string_lossy().to_string()) else {
+            continue;
+        };
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
         let scan = enkiddb::scan_document(text.as_bytes());
         if !scan.clean {
             log.push(format!("⚠ skipped {file}: {}", scan.detail));
             continue;
         }
-        let Some(structure) = DocumentParser::parse_playbook_header(&text) else { continue };
+        let Some(structure) = DocumentParser::parse_playbook_header(&text) else {
+            continue;
+        };
         // Hash the extracted header text, not the whole file -- a
         // playbook's TASKS changing without its documented intent
         // changing is not a new documentation version.
-        let header_text = format!("{}\n{}", structure.title, structure.body.iter().map(|b| b.content.as_str()).collect::<Vec<_>>().join("\n"));
+        let header_text = format!(
+            "{}\n{}",
+            structure.title,
+            structure
+                .body
+                .iter()
+                .map(|b| b.content.as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
         let sha = sha256_hex(&header_text);
 
         match previous.get(&file) {
             Some((old_sha, _)) if old_sha == &sha => continue, // unchanged, quiet
-            Some((old_sha, old_kaki_bytes)) => changed.push((file, structure, sha, Some((old_sha.clone(), *old_kaki_bytes)))),
+            Some((old_sha, old_kaki_bytes)) => changed.push((
+                file,
+                structure,
+                sha,
+                Some((old_sha.clone(), *old_kaki_bytes)),
+            )),
             None => changed.push((file, structure, sha, None)),
         }
     }
@@ -115,7 +143,11 @@ pub fn mint_or_supersede_pb_docs(
     if let Some(p) = registry_path.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    let mut registry_file = std::fs::OpenOptions::new().create(true).append(true).open(registry_path).ok();
+    let mut registry_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(registry_path)
+        .ok();
 
     for (i, (file, structure, sha, old)) in changed.iter().enumerate() {
         let epoch = i as u32 + 1;
@@ -124,9 +156,15 @@ pub fn mint_or_supersede_pb_docs(
         if let Some((old_sha, old_kaki_bytes)) = old {
             if let Ok(old_raw) = Kaki::from_bytes(*old_kaki_bytes) {
                 if let Ok(old_kaki) = IdentityKaki::try_from_kaki(old_raw) {
-                    let reason = format!("playbook header content changed (sha256 {}…→{}…)", &old_sha[..12], &sha[..12]);
+                    let reason = format!(
+                        "playbook header content changed (sha256 {}…→{}…)",
+                        &old_sha[..12],
+                        &sha[..12]
+                    );
                     write_node.supersede_document(old_kaki, kaki, &reason, epoch);
-                    log.push(format!("↻ superseded prior doc-version of {file}: {old_kaki} → {kaki} ({reason})"));
+                    log.push(format!(
+                        "↻ superseded prior doc-version of {file}: {old_kaki} → {kaki} ({reason})"
+                    ));
                 }
             }
         } else {
@@ -187,8 +225,13 @@ mod tests {
         let enkiddb_root = dir.join("enkiddb_data");
 
         let log = mint_or_supersede_pb_docs(&dir, &registry, &enkiddb_root);
-        assert!(log.iter().any(|l| l.contains("minted playbook doc")), "log: {log:?}");
-        assert!(std::fs::read_to_string(&registry).unwrap().contains("playbook_901_scratch.yml"));
+        assert!(
+            log.iter().any(|l| l.contains("minted playbook doc")),
+            "log: {log:?}"
+        );
+        assert!(std::fs::read_to_string(&registry)
+            .unwrap()
+            .contains("playbook_901_scratch.yml"));
     }
 
     #[test]
@@ -201,7 +244,10 @@ mod tests {
         let first = mint_or_supersede_pb_docs(&dir, &registry, &enkiddb_root);
         assert!(!first.is_empty());
         let second = mint_or_supersede_pb_docs(&dir, &registry, &enkiddb_root);
-        assert!(second.is_empty(), "unchanged header must mint nothing: {second:?}");
+        assert!(
+            second.is_empty(),
+            "unchanged header must mint nothing: {second:?}"
+        );
     }
 
     #[test]
@@ -214,8 +260,17 @@ mod tests {
         let first = mint_or_supersede_pb_docs(&dir, &registry, &enkiddb_root);
         assert!(first.iter().any(|l| l.contains("minted playbook doc")));
 
-        write_pb(&dir, "playbook_903_scratch.yml", "a REVISED reason after the fact");
+        write_pb(
+            &dir,
+            "playbook_903_scratch.yml",
+            "a REVISED reason after the fact",
+        );
         let second = mint_or_supersede_pb_docs(&dir, &registry, &enkiddb_root);
-        assert!(second.iter().any(|l| l.contains("superseded prior doc-version")), "log: {second:?}");
+        assert!(
+            second
+                .iter()
+                .any(|l| l.contains("superseded prior doc-version")),
+            "log: {second:?}"
+        );
     }
 }

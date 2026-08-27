@@ -295,9 +295,25 @@
     state: absent
   changed_when: true
 
-- name: "[{{ enkiddb_db_label }}] Wait for the Read Node to reload (RELOAD_SECS, default 30s)"
+# PB-212.8 FIX (found live, 2026-08-21): the fixed 35s pause below,
+# followed by exactly one QUERY attempt, assumed the read-server's
+# background reload thread (enkiddb-read-server/src/main.rs -- ticks
+# every RELOAD_SECS, default 30s, on a fixed cadence FROM CONTAINER
+# START, not from when new data actually lands) would always catch the
+# freshly swapped-in data within that single window. Confirmed live:
+# it doesn't -- if the swap lands just after a tick, the next tick is
+# up to ~60s away, comfortably past a single 35s wait. The data itself
+# was correctly and fully synced (confirmed by the "Confirm the swap
+# landed" task immediately above showing real, correctly-sized files);
+# only the read-server's own in-memory cache hadn't ticked over yet.
+# Retries the QUERY itself (Ansible's native until/retries/delay)
+# instead of a single fixed pause + single attempt -- 4 attempts x 35s
+# bounds the worst case at 140s, well past any single reload cycle,
+# while still failing loudly (not silently) if something is genuinely
+# wrong after that many real attempts.
+- name: "[{{ enkiddb_db_label }}] Brief initial pause before polling for reload"
   ansible.builtin.pause:
-    seconds: 35
+    seconds: 5
 
 # HeptaScript's WHERE clause requires a leading exact-equality condition
 # to index on -- there's no "select everything, no filter" form (found
@@ -312,7 +328,7 @@
 # own doc comment for the full per-row layout. This only needs the row
 # count, so it reads the tag + row_count and stops there; it does not
 # parse the row payload itself.
-- name: "[{{ enkiddb_db_label }}] Real QUERY over the network against enkidb-node-read"
+- name: "[{{ enkiddb_db_label }}] Real QUERY over the network against enkidb-node-read (retries through the reload-cadence race, PB-212.8)"
   ansible.builtin.shell: |
     python3 -c "
     import socket, struct
@@ -337,6 +353,9 @@
         print(f'OK: matched={row_count} rows')
     "
   register: query_result
+  until: "'not ready' not in query_result.stdout"
+  retries: 3
+  delay: 35
   changed_when: false
 
 - name: "[{{ enkiddb_db_label }}] Show real QUERY results"

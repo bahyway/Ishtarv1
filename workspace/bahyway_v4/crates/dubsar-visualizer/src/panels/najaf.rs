@@ -8,13 +8,48 @@ use crate::theme;
 // (English name, Arabic name, sacred_weight, approx_graves)
 // Wadi al-Salam is estimated at ~6 million total burials.
 const SECTORS: [(&str, &str, f32, u32); 7] = [
-    ("Entrance",    "\u{0627}\u{0644}\u{0645}\u{062F}\u{062E}\u{0644}",    1.00, 50_000),
-    ("Martyrs",     "\u{0627}\u{0644}\u{0634}\u{0647}\u{062F}\u{0627}\u{0621}",    0.85, 800_000),
-    ("Saints",      "\u{0627}\u{0644}\u{0623}\u{0648}\u{0644}\u{064A}\u{0627}\u{0621}",  0.90, 950_000),
-    ("Memorisers",  "\u{0627}\u{0644}\u{062D}\u{0641}\u{0651}\u{0627}\u{0638}",    0.95, 700_000),
-    ("Believers",   "\u{0627}\u{0644}\u{0645}\u{0624}\u{0645}\u{0646}\u{064A}\u{0646}",  1.00, 1_200_000),
-    ("Scholars",    "\u{0627}\u{0644}\u{0639}\u{0644}\u{0645}\u{0627}\u{0621}",    0.92, 600_000),
-    ("Prophets",    "\u{0627}\u{0644}\u{0623}\u{0646}\u{0628}\u{064A}\u{0627}\u{0621}",  0.88, 850_000),
+    (
+        "Entrance",
+        "\u{0627}\u{0644}\u{0645}\u{062F}\u{062E}\u{0644}",
+        1.00,
+        50_000,
+    ),
+    (
+        "Martyrs",
+        "\u{0627}\u{0644}\u{0634}\u{0647}\u{062F}\u{0627}\u{0621}",
+        0.85,
+        800_000,
+    ),
+    (
+        "Saints",
+        "\u{0627}\u{0644}\u{0623}\u{0648}\u{0644}\u{064A}\u{0627}\u{0621}",
+        0.90,
+        950_000,
+    ),
+    (
+        "Memorisers",
+        "\u{0627}\u{0644}\u{062D}\u{0641}\u{0651}\u{0627}\u{0638}",
+        0.95,
+        700_000,
+    ),
+    (
+        "Believers",
+        "\u{0627}\u{0644}\u{0645}\u{0624}\u{0645}\u{0646}\u{064A}\u{0646}",
+        1.00,
+        1_200_000,
+    ),
+    (
+        "Scholars",
+        "\u{0627}\u{0644}\u{0639}\u{0644}\u{0645}\u{0627}\u{0621}",
+        0.92,
+        600_000,
+    ),
+    (
+        "Prophets",
+        "\u{0627}\u{0644}\u{0623}\u{0646}\u{0628}\u{064A}\u{0627}\u{0621}",
+        0.88,
+        850_000,
+    ),
 ];
 
 // Map: idx=0 → centre; idx=1..=6 → rim nodes at N,NE,SE,S,SW,NW (60° intervals)
@@ -23,7 +58,10 @@ fn node_pos(center: Pos2, radius: f32, idx: usize) -> Pos2 {
         return center;
     }
     let angle = -PI / 2.0 + (idx as f32 - 1.0) * 2.0 * PI / 6.0;
-    pos2(center.x + radius * angle.cos(), center.y + radius * angle.sin())
+    pos2(
+        center.x + radius * angle.cos(),
+        center.y + radius * angle.sin(),
+    )
 }
 
 pub fn draw(ui: &mut Ui) {
@@ -47,7 +85,10 @@ pub fn draw(ui: &mut Ui) {
     ui.columns(2, |cols| {
         // ── Left: heptagram map ───────────────────────────────────────
         let left = &mut cols[0];
-        let map_sz = left.available_width().min(left.available_height() - 40.0).max(200.0);
+        let map_sz = left
+            .available_width()
+            .min(left.available_height() - 40.0)
+            .max(200.0);
         let (resp, painter) = left.allocate_painter(Vec2::splat(map_sz), egui::Sense::hover());
         draw_map(&painter, resp.rect);
 
@@ -71,15 +112,16 @@ pub fn draw(ui: &mut Ui) {
                             // Arabic renders as boxes without an Arabic font,
                             // but is included for completeness and correct copy-paste.
                             ui.label(RichText::new(arab).color(sec_color).size(14.0));
-                            ui.label(
-                                RichText::new(format!("  ({eng})"))
-                                    .color(theme::TEXT_DIM),
-                            );
+                            ui.label(RichText::new(format!("  ({eng})")).color(theme::TEXT_DIM));
                         });
 
                         // Sacred weight + grave count
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("Sacred Weight:").color(theme::TEXT_DIM).small());
+                            ui.label(
+                                RichText::new("Sacred Weight:")
+                                    .color(theme::TEXT_DIM)
+                                    .small(),
+                            );
                             ui.label(
                                 RichText::new(format!("{:.2}", weight))
                                     .color(sec_color)
@@ -88,9 +130,7 @@ pub fn draw(ui: &mut Ui) {
                             );
                             ui.add_space(10.0);
                             ui.label(RichText::new("Graves:").color(theme::TEXT_DIM).small());
-                            ui.label(
-                                RichText::new(fmt_num(graves)).color(theme::CYAN).small(),
-                            );
+                            ui.label(RichText::new(fmt_num(graves)).color(theme::CYAN).small());
                         });
 
                         // Pilgrimage priority bar (inverted: lower weight → higher priority)
@@ -120,13 +160,16 @@ fn draw_map(painter: &Painter, rect: egui::Rect) {
     // Spokes: centre → each rim node
     for rim in 1..=6usize {
         let rim_pt = node_pos(center, radius, rim);
-        painter.line_segment([center, rim_pt], Stroke::new(1.0, theme::AXIS_LINE));
+        painter.line_segment([center, rim_pt], Stroke::new(1.0_f32, theme::AXIS_LINE));
     }
 
     // Rim ring: connect rim nodes in order
     {
         let rim_pts: Vec<Pos2> = (1..=6).map(|i| node_pos(center, radius, i)).collect();
-        painter.add(Shape::closed_line(rim_pts, Stroke::new(1.0, theme::RING_LINE)));
+        painter.add(Shape::closed_line(
+            rim_pts,
+            Stroke::new(1.0_f32, theme::RING_LINE),
+        ));
     }
 
     // Sector nodes + labels
@@ -137,7 +180,7 @@ fn draw_map(painter: &Painter, rect: egui::Rect) {
 
         // Node fill + border
         painter.circle_filled(pos, node_r, col.linear_multiply(0.22));
-        painter.circle_stroke(pos, node_r, Stroke::new(1.5, col));
+        painter.circle_stroke(pos, node_r, Stroke::new(1.5_f32, col));
 
         // Label position: outward from center for rim nodes
         let lbl = if i == 0 {
@@ -179,10 +222,8 @@ fn draw_map(painter: &Painter, rect: egui::Rect) {
 fn priority_bar(ui: &mut Ui, priority: f32, color: Color32, width: f32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 6.0), egui::Sense::hover());
     ui.painter().rect_filled(rect, 2.0, theme::BG_DARK);
-    let fill = egui::Rect::from_min_size(
-        rect.min,
-        Vec2::new(width * priority.clamp(0.0, 1.0), 6.0),
-    );
+    let fill =
+        egui::Rect::from_min_size(rect.min, Vec2::new(width * priority.clamp(0.0, 1.0), 6.0));
     ui.painter().rect_filled(fill, 2.0, color);
 }
 

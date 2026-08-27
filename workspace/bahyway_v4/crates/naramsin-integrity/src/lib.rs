@@ -44,9 +44,9 @@ impl NrmCode {
     /// Derive NRM code from a Stage 0 archive error.
     pub fn from_archive_error(e: &ArchiveError) -> Self {
         match e {
-            ArchiveError::Truncated          => Self::Truncated,
-            ArchiveError::UnknownFormat      => Self::UnknownFormat,
-            ArchiveError::EmptyInput         => Self::Malformed,
+            ArchiveError::Truncated => Self::Truncated,
+            ArchiveError::UnknownFormat => Self::UnknownFormat,
+            ArchiveError::EmptyInput => Self::Malformed,
             ArchiveError::MaxRecursionDepth(_) => Self::Malformed,
             ArchiveError::UnsupportedFormat(_) => Self::UnknownFormat,
         }
@@ -56,26 +56,29 @@ impl NrmCode {
     pub fn from_format_error(e: &FormatError) -> Self {
         match e {
             FormatError::RaggedCsvRow { .. } => Self::Malformed,
-            FormatError::InvalidJson { .. }  => Self::Malformed,
-            FormatError::InvalidXml { .. }   => Self::Malformed,
-            FormatError::SchemaDrift { .. }  => Self::SchemaDrift,
+            FormatError::InvalidJson { .. } => Self::Malformed,
+            FormatError::InvalidXml { .. } => Self::Malformed,
+            FormatError::SchemaDrift { .. } => Self::SchemaDrift,
         }
     }
 
     /// True if this code results in a sovereign rejection (no forward pass to MASHSHARU).
     pub fn is_rejection(&self) -> bool {
-        matches!(self, Self::Truncated | Self::Malformed | Self::UnknownFormat)
+        matches!(
+            self,
+            Self::Truncated | Self::Malformed | Self::UnknownFormat
+        )
     }
 
     /// Human-readable label for NĀRU audit journal.
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Clean         => "NRM_CLEAN",
-            Self::Partial       => "NRM_PARTIAL",
-            Self::Truncated     => "NRM_TRUNCATED",
-            Self::Malformed     => "NRM_MALFORMED",
+            Self::Clean => "NRM_CLEAN",
+            Self::Partial => "NRM_PARTIAL",
+            Self::Truncated => "NRM_TRUNCATED",
+            Self::Malformed => "NRM_MALFORMED",
             Self::UnknownFormat => "NRM_UNKNOWN_FORMAT",
-            Self::SchemaDrift   => "NRM_SCHEMA_DRIFT",
+            Self::SchemaDrift => "NRM_SCHEMA_DRIFT",
         }
     }
 }

@@ -2,11 +2,10 @@
 //! NisabaDiscovery — the main pattern discovery entry point.
 //! Converts a GaCluster into a DiscoveredPattern with a minted Pattern-KAKI.
 
-use enkidb_kaki::{
-    derive_pattern_kaki, pattern_kaki_confidence, PatternKaki, PatternLifecycle, PatternType,
-    Kaki,
-};
 use crate::cluster::GaCluster;
+use enkidb_kaki::{
+    derive_pattern_kaki, pattern_kaki_confidence, Kaki, PatternKaki, PatternLifecycle, PatternType,
+};
 
 /// A discovered pattern ready for submission to ENKI-PATTERN registry.
 #[derive(Clone, Debug)]
@@ -41,10 +40,7 @@ impl NisabaDiscovery {
     /// Convert a `GaCluster` to a `DiscoveredPattern` by deriving a Pattern-KAKI.
     ///
     /// Returns `None` if the cluster's confidence is below the Emerging threshold (0.60).
-    pub fn discover(
-        cluster: &GaCluster,
-        pattern_type: PatternType,
-    ) -> Option<DiscoveredPattern> {
+    pub fn discover(cluster: &GaCluster, pattern_type: PatternType) -> Option<DiscoveredPattern> {
         if !cluster.metrics.is_emerging() {
             return None;
         }
@@ -87,8 +83,8 @@ impl NisabaDiscovery {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_kaki::FixedCoord7D;
     use crate::cluster::GaCluster;
+    use enkidb_kaki::FixedCoord7D;
 
     fn make_cluster(confidence: f64) -> GaCluster {
         // density=1.0, coherence=confidence → confidence = sqrt(1 × confidence²)
@@ -96,7 +92,9 @@ mod tests {
         // Since confidence = sqrt(density × coherence), set both to confidence:
         // confidence = sqrt(c × c) = c.
         GaCluster::new(
-            FixedCoord7D { d: [1_000, 2_000, 500, 1, 2, 3, 0] },
+            FixedCoord7D {
+                d: [1_000, 2_000, 500, 1, 2, 3, 0],
+            },
             vec![],
             confidence,
             confidence,

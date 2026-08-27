@@ -36,11 +36,11 @@ impl DqmDimension {
     pub fn label(self) -> &'static str {
         match self {
             DqmDimension::Completeness => "Completeness",
-            DqmDimension::Validity     => "Validity",
-            DqmDimension::Accuracy     => "Accuracy",
-            DqmDimension::Consistency  => "Consistency",
-            DqmDimension::Uniqueness   => "Uniqueness",
-            DqmDimension::Timeliness   => "Timeliness",
+            DqmDimension::Validity => "Validity",
+            DqmDimension::Accuracy => "Accuracy",
+            DqmDimension::Consistency => "Consistency",
+            DqmDimension::Uniqueness => "Uniqueness",
+            DqmDimension::Timeliness => "Timeliness",
         }
     }
 
@@ -48,11 +48,11 @@ impl DqmDimension {
     pub fn code(self) -> &'static str {
         match self {
             DqmDimension::Completeness => "COMP",
-            DqmDimension::Validity     => "VALD",
-            DqmDimension::Accuracy     => "ACCY",
-            DqmDimension::Consistency  => "CONS",
-            DqmDimension::Uniqueness   => "UNIQ",
-            DqmDimension::Timeliness   => "TIME",
+            DqmDimension::Validity => "VALD",
+            DqmDimension::Accuracy => "ACCY",
+            DqmDimension::Consistency => "CONS",
+            DqmDimension::Uniqueness => "UNIQ",
+            DqmDimension::Timeliness => "TIME",
         }
     }
 }
@@ -63,16 +63,20 @@ impl DqmDimension {
 pub struct DimensionScore {
     pub dimension: DqmDimension,
     /// Quality score: 1.0 = perfect, 0.0 = total failure.
-    pub score:     f32,
+    pub score: f32,
     /// B11 equivalent: `(score × 240.0).round() as u8` — matches ADR-001.
-    pub b11:       u8,
+    pub b11: u8,
 }
 
 impl DimensionScore {
     pub fn new(dimension: DqmDimension, score: f32) -> Self {
         let clamped = score.clamp(0.0, 1.0);
         let b11 = (clamped * 240.0_f32).round() as u8;
-        DimensionScore { dimension, score: clamped, b11 }
+        DimensionScore {
+            dimension,
+            score: clamped,
+            b11,
+        }
     }
 
     /// True when this dimension score meets its SLA threshold.
@@ -85,12 +89,12 @@ impl DimensionScore {
 /// Default thresholds match the DAMA-DMBOK enterprise baseline.
 #[derive(Debug, Clone)]
 pub struct DqmSla {
-    pub completeness: f32,  // default 0.98 — nearly all required fields present
-    pub validity:     f32,  // default 0.95 — most values pass rules
-    pub accuracy:     f32,  // default 0.90 — high fidelity to golden source
-    pub consistency:  f32,  // default 0.95 — cross-field agreement
-    pub uniqueness:   f32,  // default 0.99 — near-zero duplicate rate
-    pub timeliness:   f32,  // default 0.90 — within freshness window
+    pub completeness: f32, // default 0.98 — nearly all required fields present
+    pub validity: f32,     // default 0.95 — most values pass rules
+    pub accuracy: f32,     // default 0.90 — high fidelity to golden source
+    pub consistency: f32,  // default 0.95 — cross-field agreement
+    pub uniqueness: f32,   // default 0.99 — near-zero duplicate rate
+    pub timeliness: f32,   // default 0.90 — within freshness window
 }
 
 impl DqmSla {
@@ -98,11 +102,11 @@ impl DqmSla {
     pub fn enterprise() -> Self {
         DqmSla {
             completeness: 0.98,
-            validity:     0.95,
-            accuracy:     0.90,
-            consistency:  0.95,
-            uniqueness:   0.99,
-            timeliness:   0.90,
+            validity: 0.95,
+            accuracy: 0.90,
+            consistency: 0.95,
+            uniqueness: 0.99,
+            timeliness: 0.90,
         }
     }
 
@@ -110,11 +114,11 @@ impl DqmSla {
     pub fn exploratory() -> Self {
         DqmSla {
             completeness: 0.80,
-            validity:     0.75,
-            accuracy:     0.70,
-            consistency:  0.75,
-            uniqueness:   0.90,
-            timeliness:   0.70,
+            validity: 0.75,
+            accuracy: 0.70,
+            consistency: 0.75,
+            uniqueness: 0.90,
+            timeliness: 0.70,
         }
     }
 
@@ -122,22 +126,22 @@ impl DqmSla {
     pub fn master_data() -> Self {
         DqmSla {
             completeness: 1.00,
-            validity:     0.99,
-            accuracy:     0.99,
-            consistency:  0.99,
-            uniqueness:   1.00,
-            timeliness:   0.95,
+            validity: 0.99,
+            accuracy: 0.99,
+            consistency: 0.99,
+            uniqueness: 1.00,
+            timeliness: 0.95,
         }
     }
 
     pub fn threshold_for(&self, dim: DqmDimension) -> f32 {
         match dim {
             DqmDimension::Completeness => self.completeness,
-            DqmDimension::Validity     => self.validity,
-            DqmDimension::Accuracy     => self.accuracy,
-            DqmDimension::Consistency  => self.consistency,
-            DqmDimension::Uniqueness   => self.uniqueness,
-            DqmDimension::Timeliness   => self.timeliness,
+            DqmDimension::Validity => self.validity,
+            DqmDimension::Accuracy => self.accuracy,
+            DqmDimension::Consistency => self.consistency,
+            DqmDimension::Uniqueness => self.uniqueness,
+            DqmDimension::Timeliness => self.timeliness,
         }
     }
 
@@ -145,17 +149,19 @@ impl DqmSla {
         let t = threshold.clamp(0.0, 1.0);
         match dim {
             DqmDimension::Completeness => self.completeness = t,
-            DqmDimension::Validity     => self.validity     = t,
-            DqmDimension::Accuracy     => self.accuracy     = t,
-            DqmDimension::Consistency  => self.consistency  = t,
-            DqmDimension::Uniqueness   => self.uniqueness   = t,
-            DqmDimension::Timeliness   => self.timeliness   = t,
+            DqmDimension::Validity => self.validity = t,
+            DqmDimension::Accuracy => self.accuracy = t,
+            DqmDimension::Consistency => self.consistency = t,
+            DqmDimension::Uniqueness => self.uniqueness = t,
+            DqmDimension::Timeliness => self.timeliness = t,
         }
     }
 }
 
 impl Default for DqmSla {
-    fn default() -> Self { Self::enterprise() }
+    fn default() -> Self {
+        Self::enterprise()
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +211,6 @@ mod tests {
         let e = DqmSla::enterprise();
         let m = DqmSla::master_data();
         assert!(m.completeness >= e.completeness);
-        assert!(m.uniqueness   >= e.uniqueness);
+        assert!(m.uniqueness >= e.uniqueness);
     }
 }

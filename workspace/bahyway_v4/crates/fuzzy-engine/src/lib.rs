@@ -18,9 +18,9 @@ pub use rules::{evaluate_rules, AggregatedOutput, QualityTier, RuleFiring};
 pub const FUZZY_ENGINE_VERSION: &str = "3.5.1";
 
 /// B11 threshold: scores ≥ this value are Gem (Golden Record).
-pub const GEM_THRESHOLD:    u8 = 200;
+pub const GEM_THRESHOLD: u8 = 200;
 /// B11 threshold: scores ≥ this value are Tribe (near-golden).
-pub const TRIBE_THRESHOLD:  u8 = 140;
+pub const TRIBE_THRESHOLD: u8 = 140;
 /// B11 threshold: scores ≥ this value are Active (fuzzy / uncertain).
 pub const ACTIVE_THRESHOLD: u8 = 100;
 
@@ -34,7 +34,9 @@ impl FuzzyEngine {
     /// Returns quality byte B11 (0–255).
     pub fn score(dims: &FuzzyDimensions, format: FormatLayer) -> u8 {
         let raw = Self::score_raw(dims);
-        let scaled = (raw as f32 * format.score_multiplier()).round().clamp(0.0, 255.0);
+        let scaled = (raw as f32 * format.score_multiplier())
+            .round()
+            .clamp(0.0, 255.0);
         scaled as u8
     }
 
@@ -47,10 +49,15 @@ impl FuzzyEngine {
 
     /// Classify a B11 quality byte into a QualityTier.
     pub fn classify(b11: u8) -> QualityTier {
-        if b11 >= GEM_THRESHOLD    { QualityTier::Gem }
-        else if b11 >= TRIBE_THRESHOLD  { QualityTier::Tribe }
-        else if b11 >= ACTIVE_THRESHOLD { QualityTier::Active }
-        else                            { QualityTier::NonActive }
+        if b11 >= GEM_THRESHOLD {
+            QualityTier::Gem
+        } else if b11 >= TRIBE_THRESHOLD {
+            QualityTier::Tribe
+        } else if b11 >= ACTIVE_THRESHOLD {
+            QualityTier::Active
+        } else {
+            QualityTier::NonActive
+        }
     }
 }
 
@@ -61,16 +68,22 @@ mod tests {
     #[test]
     fn perfect_record_scores_gem() {
         let dims = FuzzyDimensions::perfect();
-        let b11  = FuzzyEngine::score(&dims, FormatLayer::CivilRegistry);
-        assert!(b11 >= GEM_THRESHOLD, "perfect CivilRegistry must be Gem, got {b11}");
+        let b11 = FuzzyEngine::score(&dims, FormatLayer::CivilRegistry);
+        assert!(
+            b11 >= GEM_THRESHOLD,
+            "perfect CivilRegistry must be Gem, got {b11}"
+        );
     }
 
     #[test]
     fn format_layer_multiplier_lowers_score() {
-        let dims   = FuzzyDimensions::perfect();
-        let raw    = FuzzyEngine::score_raw(&dims);
+        let dims = FuzzyDimensions::perfect();
+        let raw = FuzzyEngine::score_raw(&dims);
         let scaled = FuzzyEngine::score(&dims, FormatLayer::GenericEav);
-        assert!(scaled <= raw, "GenericEav multiplier must not exceed raw score");
+        assert!(
+            scaled <= raw,
+            "GenericEav multiplier must not exceed raw score"
+        );
     }
 
     #[test]
@@ -81,8 +94,8 @@ mod tests {
         assert_eq!(FuzzyEngine::classify(140), QualityTier::Tribe);
         assert_eq!(FuzzyEngine::classify(139), QualityTier::Active);
         assert_eq!(FuzzyEngine::classify(100), QualityTier::Active);
-        assert_eq!(FuzzyEngine::classify(99),  QualityTier::NonActive);
-        assert_eq!(FuzzyEngine::classify(0),   QualityTier::NonActive);
+        assert_eq!(FuzzyEngine::classify(99), QualityTier::NonActive);
+        assert_eq!(FuzzyEngine::classify(0), QualityTier::NonActive);
     }
 
     #[test]
@@ -93,7 +106,7 @@ mod tests {
     #[test]
     fn score_raw_and_score_civil_registry_equal_for_perfect() {
         let dims = FuzzyDimensions::perfect();
-        let raw  = FuzzyEngine::score_raw(&dims);
+        let raw = FuzzyEngine::score_raw(&dims);
         let with_layer = FuzzyEngine::score(&dims, FormatLayer::CivilRegistry);
         // CivilRegistry multiplier is 1.0 — should be identical
         assert_eq!(raw, with_layer);

@@ -18,13 +18,13 @@
 /// A single row in the simulated SalesOrder result grid.
 #[derive(Debug, Clone)]
 pub struct SalesOrderRow {
-    pub order_id:      u32,
+    pub order_id: u32,
     pub carrier_number: String,
     pub product_color: String,
-    pub order_date:    String,
-    pub customer_id:   u32,
-    pub total_amount:  f32,
-    pub status:        RowStatus,
+    pub order_date: String,
+    pub customer_id: u32,
+    pub total_amount: f32,
+    pub status: RowStatus,
 }
 
 /// Order lifecycle status.
@@ -39,9 +39,9 @@ pub enum RowStatus {
 impl std::fmt::Display for RowStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RowStatus::Active    => f.write_str("Active"),
-            RowStatus::Pending   => f.write_str("Pending"),
-            RowStatus::Shipped   => f.write_str("Shipped"),
+            RowStatus::Active => f.write_str("Active"),
+            RowStatus::Pending => f.write_str("Pending"),
+            RowStatus::Shipped => f.write_str("Shipped"),
             RowStatus::Cancelled => f.write_str("Cancelled"),
         }
     }
@@ -52,13 +52,13 @@ impl std::fmt::Display for RowStatus {
 /// Simulated execution metrics for one plan (legacy or sovereign).
 #[derive(Debug, Clone)]
 pub struct ExecutionMetrics {
-    pub plan_name:      String,
-    pub execution_ms:   f32,
-    pub logical_reads:  u64,
+    pub plan_name: String,
+    pub execution_ms: f32,
+    pub logical_reads: u64,
     pub physical_reads: u64,
-    pub rows_returned:  usize,
-    pub cpu_time_ms:    f32,
-    pub is_sovereign:   bool,
+    pub rows_returned: usize,
+    pub cpu_time_ms: f32,
+    pub is_sovereign: bool,
 }
 
 impl ExecutionMetrics {
@@ -67,7 +67,9 @@ impl ExecutionMetrics {
     pub fn speedup_vs(&self, other: &ExecutionMetrics) -> f32 {
         if self.execution_ms > 0.0 {
             other.execution_ms / self.execution_ms
-        } else { 1.0 }
+        } else {
+            1.0
+        }
     }
 }
 
@@ -79,40 +81,48 @@ pub struct DataSimulator;
 impl DataSimulator {
     /// Generate `count` mock SalesOrder rows with deterministic, unique data.
     pub fn generate_rows(count: usize) -> Vec<SalesOrderRow> {
-        const COLORS:   &[&str]      = &["Red","Black","Silver","Yellow","Blue","Multi","White","Green"];
-        const STATUSES: &[RowStatus] = &[RowStatus::Active, RowStatus::Shipped,
-                                         RowStatus::Pending, RowStatus::Cancelled];
+        const COLORS: &[&str] = &[
+            "Red", "Black", "Silver", "Yellow", "Blue", "Multi", "White", "Green",
+        ];
+        const STATUSES: &[RowStatus] = &[
+            RowStatus::Active,
+            RowStatus::Shipped,
+            RowStatus::Pending,
+            RowStatus::Cancelled,
+        ];
 
-        (0..count).map(|i| {
-            let id = 43659 + i as u32;
-            SalesOrderRow {
-                order_id:      id,
-                carrier_number: format!("4911-{:04X}-{}", id % 9999, (id * 7) % 999),
-                product_color: COLORS[i % COLORS.len()].to_string(),
-                order_date:    format!("2024-{:02}-{:02}", 1 + i % 12, 1 + i % 28),
-                customer_id:   29825 + (i as u32 * 13) % 5000,
-                total_amount:  24.99 + (i as f32 * 7.77) % 5000.0,
-                status:        STATUSES[i % STATUSES.len()].clone(),
-            }
-        }).collect()
+        (0..count)
+            .map(|i| {
+                let id = 43659 + i as u32;
+                SalesOrderRow {
+                    order_id: id,
+                    carrier_number: format!("4911-{:04X}-{}", id % 9999, (id * 7) % 999),
+                    product_color: COLORS[i % COLORS.len()].to_string(),
+                    order_date: format!("2024-{:02}-{:02}", 1 + i % 12, 1 + i % 28),
+                    customer_id: 29825 + (i as u32 * 13) % 5000,
+                    total_amount: 24.99 + (i as f32 * 7.77) % 5000.0,
+                    status: STATUSES[i % STATUSES.len()].clone(),
+                }
+            })
+            .collect()
     }
 
     /// Simulate legacy plan execution metrics.
     ///
     /// Models a Nested Loop join: O(n²) scan cost with fragmentation penalty.
     pub fn legacy_metrics(row_count: usize, fragmentation_pct: f32) -> ExecutionMetrics {
-        let base_ms      = (row_count as f32).powi(2) / 10_000.0;
+        let base_ms = (row_count as f32).powi(2) / 10_000.0;
         let frag_penalty = 1.0 + fragmentation_pct / 100.0;
-        let exec_ms      = (base_ms * frag_penalty).min(9_999.0);
+        let exec_ms = (base_ms * frag_penalty).min(9_999.0);
 
         ExecutionMetrics {
-            plan_name:      "Legacy Plan (Nested Loop)".into(),
-            execution_ms:   exec_ms,
-            logical_reads:  row_count as u64 * 1250,
+            plan_name: "Legacy Plan (Nested Loop)".into(),
+            execution_ms: exec_ms,
+            logical_reads: row_count as u64 * 1250,
             physical_reads: row_count as u64 * 48,
-            rows_returned:  row_count,
-            cpu_time_ms:    exec_ms * 0.85,
-            is_sovereign:   false,
+            rows_returned: row_count,
+            cpu_time_ms: exec_ms * 0.85,
+            is_sovereign: false,
         }
     }
 
@@ -122,13 +132,13 @@ impl DataSimulator {
     pub fn sovereign_metrics(row_count: usize) -> ExecutionMetrics {
         let exec_ms = row_count as f32 * 0.018;
         ExecutionMetrics {
-            plan_name:      "DMW Sovereign Plan (Hash Join)".into(),
-            execution_ms:   exec_ms,
-            logical_reads:  row_count as u64 * 8,
+            plan_name: "DMW Sovereign Plan (Hash Join)".into(),
+            execution_ms: exec_ms,
+            logical_reads: row_count as u64 * 8,
             physical_reads: 0,
-            rows_returned:  row_count,
-            cpu_time_ms:    exec_ms * 0.4,
-            is_sovereign:   true,
+            rows_returned: row_count,
+            cpu_time_ms: exec_ms * 0.4,
+            is_sovereign: true,
         }
     }
 
@@ -164,9 +174,12 @@ mod tests {
     fn sovereign_faster_than_legacy() {
         let l = DataSimulator::legacy_metrics(500, 38.0);
         let s = DataSimulator::sovereign_metrics(500);
-        assert!(s.execution_ms < l.execution_ms,
+        assert!(
+            s.execution_ms < l.execution_ms,
             "sovereign {:.1}ms must be faster than legacy {:.1}ms",
-            s.execution_ms, l.execution_ms);
+            s.execution_ms,
+            l.execution_ms
+        );
     }
 
     #[test]
@@ -186,30 +199,39 @@ mod tests {
     fn speedup_meaningful_at_500_rows() {
         let l = DataSimulator::legacy_metrics(500, 38.0);
         let s = DataSimulator::sovereign_metrics(500);
-        assert!(s.speedup_vs(&l) > 2.0,
-            "expected >2x speedup, got {:.1}x", s.speedup_vs(&l));
+        assert!(
+            s.speedup_vs(&l) > 2.0,
+            "expected >2x speedup, got {:.1}x",
+            s.speedup_vs(&l)
+        );
     }
 
     #[test]
     fn demo_comparison_sovereign_wins() {
         let (legacy, sovereign) = DataSimulator::demo_comparison();
         assert!(sovereign.execution_ms < legacy.execution_ms);
-        assert!(sovereign.speedup_vs(&legacy) > 10.0,
+        assert!(
+            sovereign.speedup_vs(&legacy) > 10.0,
             "6069 rows demo must show >10x speedup, got {:.1}x",
-            sovereign.speedup_vs(&legacy));
+            sovereign.speedup_vs(&legacy)
+        );
     }
 
     #[test]
     fn fragmentation_makes_legacy_slower() {
-        let clean  = DataSimulator::legacy_metrics(500, 0.0);
+        let clean = DataSimulator::legacy_metrics(500, 0.0);
         let rotted = DataSimulator::legacy_metrics(500, 80.0);
         assert!(rotted.execution_ms > clean.execution_ms);
     }
 
     #[test]
     fn row_status_display_non_empty() {
-        for s in [RowStatus::Active, RowStatus::Pending,
-                  RowStatus::Shipped, RowStatus::Cancelled] {
+        for s in [
+            RowStatus::Active,
+            RowStatus::Pending,
+            RowStatus::Shipped,
+            RowStatus::Cancelled,
+        ] {
             assert!(!format!("{s}").is_empty());
         }
     }
@@ -217,6 +239,6 @@ mod tests {
     #[test]
     fn sovereign_flag_set_correctly() {
         assert!(!DataSimulator::legacy_metrics(100, 0.0).is_sovereign);
-        assert!( DataSimulator::sovereign_metrics(100).is_sovereign);
+        assert!(DataSimulator::sovereign_metrics(100).is_sovereign);
     }
 }

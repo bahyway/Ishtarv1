@@ -30,38 +30,38 @@ pub enum Token {
 
     // ── Sovereign Operation verbs (optional, precede everything else) ────────
     // See operations.rs for the conceptual five; only these are parseable.
-    VerbOrbit,    // ORBIT   — read/scan (default when no verb keyword given)
-    VerbEmit,     // EMIT    — read filtered to birth-event particles
-    VerbProve,    // PROVE   — read with full per-epoch history projection
-    VerbSync,     // SYNC    — read plus an order-independent state fingerprint
-    VerbWitness,  // WITNESS — read plus a SHA3-256 content digest
+    VerbOrbit,   // ORBIT   — read/scan (default when no verb keyword given)
+    VerbEmit,    // EMIT    — read filtered to birth-event particles
+    VerbProve,   // PROVE   — read with full per-epoch history projection
+    VerbSync,    // SYNC    — read plus an order-independent state fingerprint
+    VerbWitness, // WITNESS — read plus a SHA3-256 content digest
 
     // ── v2.0 clause keywords ─────────────────────────────────────────────────
-    Node,       // NODE clause — target database type(s)
-    Across,     // ACROSS clause — cross-BIGRING federation
-    Tier,       // TIER clause — storage tier filter
-    State,      // STATE clause — lifecycle filter
-    Nash,       // NASH clause — Nash equilibrium filter
-    Pattern,    // PATTERN clause — ENKI-PATTERN registry query
-    Lineage,    // LINEAGE clause — causality depth
-    Gate,       // GATE clause — ETL station routing
-    Satamu,     // SATAMU clause — governance override
+    Node,    // NODE clause — target database type(s)
+    Across,  // ACROSS clause — cross-BIGRING federation
+    Tier,    // TIER clause — storage tier filter
+    State,   // STATE clause — lifecycle filter
+    Nash,    // NASH clause — Nash equilibrium filter
+    Pattern, // PATTERN clause — ENKI-PATTERN registry query
+    Lineage, // LINEAGE clause — causality depth
+    Gate,    // GATE clause — ETL station routing
+    Satamu,  // SATAMU clause — governance override
 
     // ── v2.0 NODE targets ────────────────────────────────────────────────────
-    NodeAll,        // ALL
-    DbEnkiDb,       // EnkiDB   (port 7001 — operational OLTP)
-    DbEnkiDw,       // EnkiDW   (port 7002 — data warehouse)
-    DbEnkiSdb,      // EnkiSDB  (port 7003 — security)
-    DbEnkiOdb,      // EnkiODB  (port 7004 — operational between-gate)
-    DbEnkiQdb,      // EnkiQDB  (port 7005 — quantum probability)
-    DbEnkiMdb,      // EnkiMDB  (port 7006 — master data)
-    DbEnkiDdb,      // EnkiDDB  (port 7007 — client documentation)
-    DbNarudu,       // NARUDU   (pattern event bus)
-    DbEnkiPattern,  // ENKI_PATTERN (pattern registry)
-    Pipe,           // | separator for multiple targets
+    NodeAll,       // ALL
+    DbEnkiDb,      // EnkiDB   (port 7001 — operational OLTP)
+    DbEnkiDw,      // EnkiDW   (port 7002 — data warehouse)
+    DbEnkiSdb,     // EnkiSDB  (port 7003 — security)
+    DbEnkiOdb,     // EnkiODB  (port 7004 — operational between-gate)
+    DbEnkiQdb,     // EnkiQDB  (port 7005 — quantum probability)
+    DbEnkiMdb,     // EnkiMDB  (port 7006 — master data)
+    DbEnkiDdb,     // EnkiDDB  (port 7007 — client documentation)
+    DbNarudu,      // NARUDU   (pattern event bus)
+    DbEnkiPattern, // ENKI_PATTERN (pattern registry)
+    Pipe,          // | separator for multiple targets
 
     // ── v2.0 ACROSS sub-keywords ─────────────────────────────────────────────
-    Bigring,    // BIGRING keyword in ACROSS clause
+    Bigring, // BIGRING keyword in ACROSS clause
 
     // ── v2.0 TIER values ─────────────────────────────────────────────────────
     TierHot,          // HOT
@@ -80,19 +80,19 @@ pub enum Token {
     NashBreaking, // BREAKING
 
     // ── v2.0 PATTERN sub-keywords ────────────────────────────────────────────
-    PatternType,        // TYPE
-    PatternConfidence,  // CONFIDENCE
-    PatternConstituents,// MAX_CONSTITUENTS
+    PatternType,         // TYPE
+    PatternConfidence,   // CONFIDENCE
+    PatternConstituents, // MAX_CONSTITUENTS
 
     // Pattern type names
-    PtCrowdFlow,          // CrowdFlow
-    PtAviationCorridor,   // AviationCorridor
-    PtAviationHolding,    // AviationHolding
-    PtIndoorHallway,      // IndoorHallway
-    PtIndoorRoom,         // IndoorRoom
-    PtIndoorTransition,   // IndoorTransition
-    PtWaterFlow,          // WaterFlow
-    PtCustom,             // Custom
+    PtCrowdFlow,        // CrowdFlow
+    PtAviationCorridor, // AviationCorridor
+    PtAviationHolding,  // AviationHolding
+    PtIndoorHallway,    // IndoorHallway
+    PtIndoorRoom,       // IndoorRoom
+    PtIndoorTransition, // IndoorTransition
+    PtWaterFlow,        // WaterFlow
+    PtCustom,           // Custom
 
     // ── v2.0 LINEAGE sub-keywords ────────────────────────────────────────────
     LineageDepth, // DEPTH
@@ -103,8 +103,8 @@ pub enum Token {
     SatamuBypass,   // BYPASS
 
     // ── v2.0 ORBITAL sub-keyword ─────────────────────────────────────────────
-    Orbital,    // ORBITAL keyword
-    DotDot,     // .. range operator
+    Orbital, // ORBITAL keyword
+    DotDot,  // .. range operator
 
     // ── Production execution hint keywords (1B+ particles, <1 sec) ───────────
     Anchor,              // ANCHOR clause keyword
@@ -118,14 +118,14 @@ pub enum Token {
     AbortScan,           // ABORT_SCAN N — safety valve
     FilterOrder,         // FILTER_ORDER — explicit predicate pipeline keyword
     // FilterStage tokens (values after FILTER_ORDER)
-    FsSurrogateRange,    // SURROGATE_RANGE
-    FsOrbitalRange,      // ORBITAL_RANGE
-    FsState,             // STATE_FILTER (distinct from STATE clause)
-    FsDeriveStation,     // DERIVE_STATION_FILTER
-    FsLane,              // LANE_FILTER
-    FsQualityByte,       // QUALITY_BYTE_FILTER
-    FsEavAttr,           // EAV_ATTR
-    FsE7Region,          // E7_REGION
+    FsSurrogateRange, // SURROGATE_RANGE
+    FsOrbitalRange,   // ORBITAL_RANGE
+    FsState,          // STATE_FILTER (distinct from STATE clause)
+    FsDeriveStation,  // DERIVE_STATION_FILTER
+    FsLane,           // LANE_FILTER
+    FsQualityByte,    // QUALITY_BYTE_FILTER
+    FsEavAttr,        // EAV_ATTR
+    FsE7Region,       // E7_REGION
 
     // ── WHO sub-keywords (v1) ────────────────────────────────────────────────
     BoundTo,
@@ -152,13 +152,13 @@ pub enum Token {
     // Not the fifth-plus sovereign verb (Operation is a closed set of exactly
     // five: ORBIT/EMIT/PROVE/SYNC/WITNESS) -- these are ordinary clauses,
     // same footing as HOW_MUCH, that combine with any of the five.
-    Measure,     // MEASURE clause keyword
-    Dense,       // DENSE      -- real O(N) tally (COUNT-equivalent)
-    Flux,        // FLUX       -- Multivector::add fold (SUM-equivalent)
-    RotorMean,   // ROTOR_MEAN -- circular mean / arithmetic mean (AVG-equivalent)
-    Gravity,     // GRAVITY clause keyword -- partition (GROUP BY-equivalent)
-    Band,        // BAND width -- numeric bucket partition mode
-    MaxGroups,   // MAX_GROUPS cap -- required safety bound for exact-match mode
+    Measure,   // MEASURE clause keyword
+    Dense,     // DENSE      -- real O(N) tally (COUNT-equivalent)
+    Flux,      // FLUX       -- Multivector::add fold (SUM-equivalent)
+    RotorMean, // ROTOR_MEAN -- circular mean / arithmetic mean (AVG-equivalent)
+    Gravity,   // GRAVITY clause keyword -- partition (GROUP BY-equivalent)
+    Band,      // BAND width -- numeric bucket partition mode
+    MaxGroups, // MAX_GROUPS cap -- required safety bound for exact-match mode
 
     // ── Logical ──────────────────────────────────────────────────────────────
     And,
@@ -167,19 +167,19 @@ pub enum Token {
     Exists,
 
     // ── Comparison operators ─────────────────────────────────────────────────
-    Eq,   // =
-    Neq,  // !=
-    Gt,   // >
-    Lt,   // <
-    Gte,  // >=
-    Lte,  // <=
+    Eq,  // =
+    Neq, // !=
+    Gt,  // >
+    Lt,  // <
+    Gte, // >=
+    Lte, // <=
 
     // ── Punctuation ──────────────────────────────────────────────────────────
-    Dot,       // .
-    Comma,     // ,
-    Star,      // *
-    LBracket,  // [
-    RBracket,  // ]
+    Dot,      // .
+    Comma,    // ,
+    Star,     // *
+    LBracket, // [
+    RBracket, // ]
 
     // ── NaviMap / modular-index queries (ROUTE — retained) ───────────────────
     Route,
@@ -211,21 +211,29 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
         let ch = chars[i];
 
         // Whitespace
-        if ch.is_whitespace() { i += 1; continue; }
+        if ch.is_whitespace() {
+            i += 1;
+            continue;
+        }
 
         // Comments: -- to end of line
-        if ch == '-' && i + 1 < n && chars[i+1] == '-' {
-            while i < n && chars[i] != '\n' { i += 1; }
+        if ch == '-' && i + 1 < n && chars[i + 1] == '-' {
+            while i < n && chars[i] != '\n' {
+                i += 1;
+            }
             continue;
         }
 
         // Negative integer: -<digits>
-        if ch == '-' && i + 1 < n && chars[i+1].is_ascii_digit() {
+        if ch == '-' && i + 1 < n && chars[i + 1].is_ascii_digit() {
             i += 1;
             let start = i;
-            while i < n && chars[i].is_ascii_digit() { i += 1; }
+            while i < n && chars[i].is_ascii_digit() {
+                i += 1;
+            }
             let num_str: String = chars[start..i].iter().collect();
-            let v: i64 = num_str.parse::<i64>()
+            let v: i64 = num_str
+                .parse::<i64>()
                 .map(|v| -v)
                 .map_err(|_| format!("Bad negative integer: -{num_str}"))?;
             tokens.push(Token::Int(v));
@@ -233,33 +241,77 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
         }
 
         // Two-char operators
-        if ch == '!' && i + 1 < n && chars[i+1] == '=' {
-            tokens.push(Token::Neq); i += 2; continue;
+        if ch == '!' && i + 1 < n && chars[i + 1] == '=' {
+            tokens.push(Token::Neq);
+            i += 2;
+            continue;
         }
-        if ch == '>' && i + 1 < n && chars[i+1] == '=' {
-            tokens.push(Token::Gte); i += 2; continue;
+        if ch == '>' && i + 1 < n && chars[i + 1] == '=' {
+            tokens.push(Token::Gte);
+            i += 2;
+            continue;
         }
-        if ch == '<' && i + 1 < n && chars[i+1] == '=' {
-            tokens.push(Token::Lte); i += 2; continue;
+        if ch == '<' && i + 1 < n && chars[i + 1] == '=' {
+            tokens.push(Token::Lte);
+            i += 2;
+            continue;
         }
         // .. range operator (must come before single '.')
-        if ch == '.' && i + 1 < n && chars[i+1] == '.' {
-            tokens.push(Token::DotDot); i += 2; continue;
+        if ch == '.' && i + 1 < n && chars[i + 1] == '.' {
+            tokens.push(Token::DotDot);
+            i += 2;
+            continue;
         }
 
         // | pipe operator
-        if ch == '|' { tokens.push(Token::Pipe); i += 1; continue; }
+        if ch == '|' {
+            tokens.push(Token::Pipe);
+            i += 1;
+            continue;
+        }
 
         // Single-char operators and punctuation
         match ch {
-            '=' => { tokens.push(Token::Eq);       i += 1; continue; }
-            '>' => { tokens.push(Token::Gt);        i += 1; continue; }
-            '<' => { tokens.push(Token::Lt);        i += 1; continue; }
-            '.' => { tokens.push(Token::Dot);       i += 1; continue; }
-            ',' => { tokens.push(Token::Comma);     i += 1; continue; }
-            '*' => { tokens.push(Token::Star);      i += 1; continue; }
-            '[' => { tokens.push(Token::LBracket);  i += 1; continue; }
-            ']' => { tokens.push(Token::RBracket);  i += 1; continue; }
+            '=' => {
+                tokens.push(Token::Eq);
+                i += 1;
+                continue;
+            }
+            '>' => {
+                tokens.push(Token::Gt);
+                i += 1;
+                continue;
+            }
+            '<' => {
+                tokens.push(Token::Lt);
+                i += 1;
+                continue;
+            }
+            '.' => {
+                tokens.push(Token::Dot);
+                i += 1;
+                continue;
+            }
+            ',' => {
+                tokens.push(Token::Comma);
+                i += 1;
+                continue;
+            }
+            '*' => {
+                tokens.push(Token::Star);
+                i += 1;
+                continue;
+            }
+            '[' => {
+                tokens.push(Token::LBracket);
+                i += 1;
+                continue;
+            }
+            ']' => {
+                tokens.push(Token::RBracket);
+                i += 1;
+                continue;
+            }
             _ => {}
         }
 
@@ -269,7 +321,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
             let mut s = String::new();
             while i < n {
                 if chars[i] == '"' {
-                    if i + 1 < n && chars[i+1] == '"' {
+                    if i + 1 < n && chars[i + 1] == '"' {
                         s.push('"');
                         i += 2;
                     } else {
@@ -289,15 +341,21 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
         if ch.is_ascii_digit() {
             let start = i;
             let mut is_float = false;
-            while i < n && chars[i].is_ascii_digit() { i += 1; }
-            if i < n && chars[i] == '.' && i + 1 < n && chars[i+1].is_ascii_digit() {
+            while i < n && chars[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i < n && chars[i] == '.' && i + 1 < n && chars[i + 1].is_ascii_digit() {
                 is_float = true;
                 i += 1;
-                while i < n && chars[i].is_ascii_digit() { i += 1; }
+                while i < n && chars[i].is_ascii_digit() {
+                    i += 1;
+                }
             }
             let num_str: String = chars[start..i].iter().collect();
             if is_float {
-                let f: f64 = num_str.parse().map_err(|_| format!("Bad float: {num_str}"))?;
+                let f: f64 = num_str
+                    .parse()
+                    .map_err(|_| format!("Bad float: {num_str}"))?;
                 tokens.push(Token::Float(f));
             } else {
                 let v: i64 = num_str.parse().map_err(|_| format!("Bad int: {num_str}"))?;
@@ -309,158 +367,160 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
         // Identifiers / keywords
         if ch.is_alphabetic() || ch == '_' {
             let start = i;
-            while i < n && (chars[i].is_alphanumeric() || chars[i] == '_') { i += 1; }
+            while i < n && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                i += 1;
+            }
             let word: String = chars[start..i].iter().collect();
             let tok = match word.as_str() {
                 // W5H2 clause keywords (v1)
-                "WHO"          | "who"          => Token::Who,
-                "WHAT"         | "what"         => Token::What,
-                "WHERE"        | "where"        => Token::Where,
-                "WHEN"         | "when"         => Token::When,
-                "WHY"          | "why"          => Token::Why,
-                "HOW"          | "how"          => Token::How,
-                "HOW_MUCH"     | "how_much"     => Token::HowMuch,
+                "WHO" | "who" => Token::Who,
+                "WHAT" | "what" => Token::What,
+                "WHERE" | "where" => Token::Where,
+                "WHEN" | "when" => Token::When,
+                "WHY" | "why" => Token::Why,
+                "HOW" | "how" => Token::How,
+                "HOW_MUCH" | "how_much" => Token::HowMuch,
 
                 // Sovereign Operation verbs (optional, lead the whole query)
-                "ORBIT"        | "orbit"        => Token::VerbOrbit,
-                "EMIT"         | "emit"         => Token::VerbEmit,
-                "PROVE"        | "prove"        => Token::VerbProve,
-                "SYNC"         | "sync"         => Token::VerbSync,
-                "WITNESS"      | "witness"      => Token::VerbWitness,
+                "ORBIT" | "orbit" => Token::VerbOrbit,
+                "EMIT" | "emit" => Token::VerbEmit,
+                "PROVE" | "prove" => Token::VerbProve,
+                "SYNC" | "sync" => Token::VerbSync,
+                "WITNESS" | "witness" => Token::VerbWitness,
 
                 // v2.0 clause keywords
-                "NODE"         | "node"         => Token::Node,
-                "ACROSS"       | "across"       => Token::Across,
-                "TIER"         | "tier"         => Token::Tier,
-                "STATE"        | "state"        => Token::State,
-                "NASH"         | "nash"         => Token::Nash,
-                "PATTERN"      | "pattern"      => Token::Pattern,
-                "LINEAGE"      | "lineage"      => Token::Lineage,
-                "GATE"         | "gate"         => Token::Gate,
-                "SATAMU"       | "satamu"       => Token::Satamu,
-                "ORBITAL"      | "orbital"      => Token::Orbital,
+                "NODE" | "node" => Token::Node,
+                "ACROSS" | "across" => Token::Across,
+                "TIER" | "tier" => Token::Tier,
+                "STATE" | "state" => Token::State,
+                "NASH" | "nash" => Token::Nash,
+                "PATTERN" | "pattern" => Token::Pattern,
+                "LINEAGE" | "lineage" => Token::Lineage,
+                "GATE" | "gate" => Token::Gate,
+                "SATAMU" | "satamu" => Token::Satamu,
+                "ORBITAL" | "orbital" => Token::Orbital,
 
                 // NODE targets
-                "ALL"          | "all"          => Token::NodeAll,
-                "EnkiDB"       | "ENKIDB"       => Token::DbEnkiDb,
-                "EnkiDW"       | "ENKIDW"       => Token::DbEnkiDw,
-                "EnkiSDB"      | "ENKISDB"      => Token::DbEnkiSdb,
-                "EnkiODB"      | "ENKIODB"      => Token::DbEnkiOdb,
-                "EnkiQDB"      | "ENKIQDB"      => Token::DbEnkiQdb,
-                "EnkiMDB"      | "ENKIMDB"      => Token::DbEnkiMdb,
-                "EnkiDDB"      | "ENKIDDB"      => Token::DbEnkiDdb,
-                "NARUDU"       | "narudu"       => Token::DbNarudu,
+                "ALL" | "all" => Token::NodeAll,
+                "EnkiDB" | "ENKIDB" => Token::DbEnkiDb,
+                "EnkiDW" | "ENKIDW" => Token::DbEnkiDw,
+                "EnkiSDB" | "ENKISDB" => Token::DbEnkiSdb,
+                "EnkiODB" | "ENKIODB" => Token::DbEnkiOdb,
+                "EnkiQDB" | "ENKIQDB" => Token::DbEnkiQdb,
+                "EnkiMDB" | "ENKIMDB" => Token::DbEnkiMdb,
+                "EnkiDDB" | "ENKIDDB" => Token::DbEnkiDdb,
+                "NARUDU" | "narudu" => Token::DbNarudu,
                 "ENKI_PATTERN" | "enki_pattern" => Token::DbEnkiPattern,
 
                 // ACROSS sub-keyword
-                "BIGRING"      | "bigring"      => Token::Bigring,
+                "BIGRING" | "bigring" => Token::Bigring,
 
                 // TIER values
-                "HOT"            | "hot"            => Token::TierHot,
-                "WARM"           | "warm"           => Token::TierWarm,
-                "COLD"           | "cold"           => Token::TierCold,
-                "CRYSTALLIZED"   | "crystallized"   => Token::TierCrystallized,
+                "HOT" | "hot" => Token::TierHot,
+                "WARM" | "warm" => Token::TierWarm,
+                "COLD" | "cold" => Token::TierCold,
+                "CRYSTALLIZED" | "crystallized" => Token::TierCrystallized,
 
                 // STATE values
-                "EMERGING"       | "emerging"       => Token::StateEmerging,
-                "STABLE"         | "stable"         => Token::StateStable,
-                "CANONICAL"      | "canonical"      => Token::StateCanonical,
-                "DEPRECATED"     | "deprecated"     => Token::StateDeprecated,
+                "EMERGING" | "emerging" => Token::StateEmerging,
+                "STABLE" | "stable" => Token::StateStable,
+                "CANONICAL" | "canonical" => Token::StateCanonical,
+                "DEPRECATED" | "deprecated" => Token::StateDeprecated,
 
                 // NASH sub-keywords
-                "SCORE"          | "score"          => Token::NashScore,
-                "BREAKING"       | "breaking"       => Token::NashBreaking,
+                "SCORE" | "score" => Token::NashScore,
+                "BREAKING" | "breaking" => Token::NashBreaking,
 
                 // PATTERN sub-keywords
-                "TYPE"           | "type"           => Token::PatternType,
-                "CONFIDENCE"     | "confidence"     => Token::PatternConfidence,
-                "MAX_CONSTITUENTS"| "max_constituents" => Token::PatternConstituents,
+                "TYPE" | "type" => Token::PatternType,
+                "CONFIDENCE" | "confidence" => Token::PatternConfidence,
+                "MAX_CONSTITUENTS" | "max_constituents" => Token::PatternConstituents,
 
                 // Pattern type names
-                "CrowdFlow"       | "CROWDFLOW"       => Token::PtCrowdFlow,
-                "AviationCorridor"| "AVIATIONCORRIDOR" => Token::PtAviationCorridor,
-                "AviationHolding" | "AVIATIONHOLDING"  => Token::PtAviationHolding,
-                "IndoorHallway"   | "INDOORHALLWAY"    => Token::PtIndoorHallway,
-                "IndoorRoom"      | "INDOORROOM"       => Token::PtIndoorRoom,
-                "IndoorTransition"| "INDOORTRANSITION" => Token::PtIndoorTransition,
-                "WaterFlow"       | "WATERFLOW"        => Token::PtWaterFlow,
-                "Custom"          | "CUSTOM"           => Token::PtCustom,
+                "CrowdFlow" | "CROWDFLOW" => Token::PtCrowdFlow,
+                "AviationCorridor" | "AVIATIONCORRIDOR" => Token::PtAviationCorridor,
+                "AviationHolding" | "AVIATIONHOLDING" => Token::PtAviationHolding,
+                "IndoorHallway" | "INDOORHALLWAY" => Token::PtIndoorHallway,
+                "IndoorRoom" | "INDOORROOM" => Token::PtIndoorRoom,
+                "IndoorTransition" | "INDOORTRANSITION" => Token::PtIndoorTransition,
+                "WaterFlow" | "WATERFLOW" => Token::PtWaterFlow,
+                "Custom" | "CUSTOM" => Token::PtCustom,
 
                 // LINEAGE sub-keywords
-                "DEPTH"          | "depth"          => Token::LineageDepth,
-                "FULL"           | "full"           => Token::LineageFull,
+                "DEPTH" | "depth" => Token::LineageDepth,
+                "FULL" | "full" => Token::LineageFull,
 
                 // SATAMU sub-keywords
-                "REQUIRED"       | "required"       => Token::SatamuRequired,
-                "BYPASS"         | "bypass"         => Token::SatamuBypass,
+                "REQUIRED" | "required" => Token::SatamuRequired,
+                "BYPASS" | "bypass" => Token::SatamuBypass,
 
                 // WHO sub-keywords (v1)
-                "BOUND_TO"     | "bound_to"     => Token::BoundTo,
+                "BOUND_TO" | "bound_to" => Token::BoundTo,
 
                 // WHEN sub-keywords (v1)
-                "AT"           | "at"           => Token::At,
-                "EPOCH"        | "epoch"        => Token::Epoch,
-                "BEFORE"       | "before"       => Token::Before,
-                "AFTER"        | "after"        => Token::After,
-                "NOW"          | "now"          => Token::Now,
+                "AT" | "at" => Token::At,
+                "EPOCH" | "epoch" => Token::Epoch,
+                "BEFORE" | "before" => Token::Before,
+                "AFTER" | "after" => Token::After,
+                "NOW" | "now" => Token::Now,
 
                 // WHY sub-keywords (v1)
-                "LANE"         | "lane"         => Token::Lane,
+                "LANE" | "lane" => Token::Lane,
                 "QUALITY_BYTE" | "quality_byte" => Token::QualityByte,
 
                 // HOW / HOW_MUCH sub-keywords (v1)
-                "BY"           | "by"           => Token::By,
-                "ASC"          | "asc"          => Token::Asc,
-                "DESC"         | "desc"         => Token::Desc,
-                "LIMIT"        | "limit"        => Token::Limit,
-                "TOP"          | "top"          => Token::Top,
+                "BY" | "by" => Token::By,
+                "ASC" | "asc" => Token::Asc,
+                "DESC" | "desc" => Token::Desc,
+                "LIMIT" | "limit" => Token::Limit,
+                "TOP" | "top" => Token::Top,
 
                 // v2.1 MEASURE / GRAVITY (Anti-SQL aggregate clauses)
-                "MEASURE"      | "measure"      => Token::Measure,
-                "DENSE"        | "dense"        => Token::Dense,
-                "FLUX"         | "flux"         => Token::Flux,
-                "ROTOR_MEAN"   | "rotor_mean"   => Token::RotorMean,
-                "GRAVITY"      | "gravity"      => Token::Gravity,
-                "BAND"         | "band"         => Token::Band,
-                "MAX_GROUPS"   | "max_groups"   => Token::MaxGroups,
+                "MEASURE" | "measure" => Token::Measure,
+                "DENSE" | "dense" => Token::Dense,
+                "FLUX" | "flux" => Token::Flux,
+                "ROTOR_MEAN" | "rotor_mean" => Token::RotorMean,
+                "GRAVITY" | "gravity" => Token::Gravity,
+                "BAND" | "band" => Token::Band,
+                "MAX_GROUPS" | "max_groups" => Token::MaxGroups,
 
                 // Logical (v1)
-                "AND"          | "and"          => Token::And,
-                "OR"           | "or"           => Token::Or,
-                "NOT"          | "not"          => Token::Not,
-                "EXISTS"       | "exists"       => Token::Exists,
+                "AND" | "and" => Token::And,
+                "OR" | "or" => Token::Or,
+                "NOT" | "not" => Token::Not,
+                "EXISTS" | "exists" => Token::Exists,
 
                 // Production execution hints
-                "ANCHOR"           | "anchor"           => Token::Anchor,
-                "AUTO"             | "auto"             => Token::AnchorAuto,
-                "SURROGATE_TIME"   | "surrogate_time"   => Token::AnchorSurrogateTime,
-                "STATE_STATION"    | "state_station"    => Token::AnchorStateStation,
-                "E7_FIRST"         | "e7_first"         => Token::AnchorE7First,
-                "FULL_SCAN"        | "full_scan"        => Token::AnchorFullScan,
-                "STREAM"           | "stream"           => Token::Stream,
-                "DERIVE_STATION"   | "derive_station"   => Token::DeriveStation,
-                "ABORT_SCAN"       | "abort_scan"       => Token::AbortScan,
-                "FILTER_ORDER"     | "filter_order"     => Token::FilterOrder,
-                "SURROGATE_RANGE"  | "surrogate_range"  => Token::FsSurrogateRange,
-                "ORBITAL_RANGE"    | "orbital_range"    => Token::FsOrbitalRange,
-                "STATE_FILTER"     | "state_filter"     => Token::FsState,
+                "ANCHOR" | "anchor" => Token::Anchor,
+                "AUTO" | "auto" => Token::AnchorAuto,
+                "SURROGATE_TIME" | "surrogate_time" => Token::AnchorSurrogateTime,
+                "STATE_STATION" | "state_station" => Token::AnchorStateStation,
+                "E7_FIRST" | "e7_first" => Token::AnchorE7First,
+                "FULL_SCAN" | "full_scan" => Token::AnchorFullScan,
+                "STREAM" | "stream" => Token::Stream,
+                "DERIVE_STATION" | "derive_station" => Token::DeriveStation,
+                "ABORT_SCAN" | "abort_scan" => Token::AbortScan,
+                "FILTER_ORDER" | "filter_order" => Token::FilterOrder,
+                "SURROGATE_RANGE" | "surrogate_range" => Token::FsSurrogateRange,
+                "ORBITAL_RANGE" | "orbital_range" => Token::FsOrbitalRange,
+                "STATE_FILTER" | "state_filter" => Token::FsState,
                 "DERIVE_STATION_FILTER" | "derive_station_filter" => Token::FsDeriveStation,
-                "LANE_FILTER"      | "lane_filter"      => Token::FsLane,
+                "LANE_FILTER" | "lane_filter" => Token::FsLane,
                 "QUALITY_BYTE_FILTER" | "quality_byte_filter" => Token::FsQualityByte,
-                "EAV_ATTR"         | "eav_attr"         => Token::FsEavAttr,
-                "E7_REGION"        | "e7_region"        => Token::FsE7Region,
+                "EAV_ATTR" | "eav_attr" => Token::FsEavAttr,
+                "E7_REGION" | "e7_region" => Token::FsE7Region,
 
                 // NaviMap (retained from v1)
-                "ROUTE"        | "route"        => Token::Route,
-                "INDEX"        | "index"        => Token::Index,
-                "MODULAR"      | "modular"      => Token::Modular,
-                "weight"                        => Token::AttrWeight,
-                "level"                         => Token::AttrLevel,
-                "signature"                     => Token::AttrSignature,
-                "total_mass"                    => Token::AttrTotalMass,
-                "peak_cost"                     => Token::AttrPeakCost,
+                "ROUTE" | "route" => Token::Route,
+                "INDEX" | "index" => Token::Index,
+                "MODULAR" | "modular" => Token::Modular,
+                "weight" => Token::AttrWeight,
+                "level" => Token::AttrLevel,
+                "signature" => Token::AttrSignature,
+                "total_mass" => Token::AttrTotalMass,
+                "peak_cost" => Token::AttrPeakCost,
 
-                _                               => Token::Ident(word),
+                _ => Token::Ident(word),
             };
             tokens.push(tok);
             continue;
@@ -634,14 +694,16 @@ mod tests {
 
     #[test]
     fn tokenize_route_query() {
-        let toks = tokenize("ROUTE NaviLattice7 WHERE index.weight = -1 AND index.level = 7").unwrap();
+        let toks =
+            tokenize("ROUTE NaviLattice7 WHERE index.weight = -1 AND index.level = 7").unwrap();
         assert_eq!(toks[0], Token::Route);
         assert_eq!(toks[5], Token::AttrWeight);
     }
 
     #[test]
     fn tokenize_full_w5h2_query() {
-        let src = "WHO Citizens.E\nWHAT E[name.given]\nWHERE E[city.name] = \"Najaf\"\nHOW_MUCH LIMIT 10";
+        let src =
+            "WHO Citizens.E\nWHAT E[name.given]\nWHERE E[city.name] = \"Najaf\"\nHOW_MUCH LIMIT 10";
         let toks = tokenize(src).unwrap();
         assert_eq!(toks[0], Token::Who);
         assert_eq!(*toks.last().unwrap(), Token::Eof);

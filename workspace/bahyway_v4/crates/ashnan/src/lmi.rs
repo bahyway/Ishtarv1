@@ -45,21 +45,32 @@ impl Lmi {
         f_forage: f32,
         f_disease: f32,
     ) -> Result<Self, AshnanError> {
-        for (name, val) in [("f_thi", f_thi), ("f_forage", f_forage), ("f_disease", f_disease)] {
+        for (name, val) in [
+            ("f_thi", f_thi),
+            ("f_forage", f_forage),
+            ("f_disease", f_disease),
+        ] {
             if !(0.0..=1.0).contains(&val) {
-                return Err(AshnanError::InvalidFactor { factor: name, value: val });
+                return Err(AshnanError::InvalidFactor {
+                    factor: name,
+                    value: val,
+                });
             }
         }
         let product = weight * f_thi * f_forage * f_disease;
-        let score = product.powf(1.0 / 3.0).min(1.0_f32).max(0.0_f32);
+        let score = product.powf(1.0 / 3.0).clamp(0.0_f32, 1.0_f32);
         let state = match score {
             s if s < 0.25 => LmiState::Golden,
             s if s < 0.55 => LmiState::Fuzzy,
             s if s < 0.80 => LmiState::Dead,
-            _             => LmiState::DeadCritical,
+            _ => LmiState::DeadCritical,
         };
         let colour_id = (score * 240.0).round().min(240.0) as u8;
-        Ok(Self { score, state, colour_id })
+        Ok(Self {
+            score,
+            state,
+            colour_id,
+        })
     }
 
     /// Compute the standard veterinary Temperature-Humidity Index (THI).

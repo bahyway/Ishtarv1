@@ -14,7 +14,7 @@
 //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust
 
 use crate::colorid::{ColorId, LevelColorContribution};
-use crate::gray_rot::{GrayRotReport};
+use crate::gray_rot::GrayRotReport;
 
 // ── Index Coverage ────────────────────────────────────────────────────────────
 
@@ -33,28 +33,28 @@ pub enum IndexCoverageStatus {
 impl IndexCoverageStatus {
     pub fn label(self) -> &'static str {
         match self {
-            IndexCoverageStatus::FullyCovering   => "Fully covering",
+            IndexCoverageStatus::FullyCovering => "Fully covering",
             IndexCoverageStatus::PartialCovering => "Partial (Key Lookup needed)",
-            IndexCoverageStatus::NotUsed         => "Exists but not used",
-            IndexCoverageStatus::Missing         => "Missing index",
+            IndexCoverageStatus::NotUsed => "Exists but not used",
+            IndexCoverageStatus::Missing => "Missing index",
         }
     }
 
     pub fn blue_value(self) -> u8 {
         match self {
-            IndexCoverageStatus::FullyCovering   => 220,
+            IndexCoverageStatus::FullyCovering => 220,
             IndexCoverageStatus::PartialCovering => 140,
-            IndexCoverageStatus::NotUsed         => 80,
-            IndexCoverageStatus::Missing         => 20,
+            IndexCoverageStatus::NotUsed => 80,
+            IndexCoverageStatus::Missing => 20,
         }
     }
 
     pub fn red_penalty(self) -> u8 {
         match self {
-            IndexCoverageStatus::FullyCovering   => 0,
+            IndexCoverageStatus::FullyCovering => 0,
             IndexCoverageStatus::PartialCovering => 40,
-            IndexCoverageStatus::NotUsed         => 80,
-            IndexCoverageStatus::Missing         => 160,
+            IndexCoverageStatus::NotUsed => 80,
+            IndexCoverageStatus::Missing => 160,
         }
     }
 }
@@ -63,41 +63,43 @@ impl IndexCoverageStatus {
 
 #[derive(Debug, Clone)]
 pub struct IndexRecommendation {
-    pub table_name:        String,
-    pub current_status:    IndexCoverageStatus,
-    pub current_index:     Option<String>,
+    pub table_name: String,
+    pub current_status: IndexCoverageStatus,
+    pub current_index: Option<String>,
     pub recommended_index: String,
-    pub create_statement:  String,
+    pub create_statement: String,
     pub estimated_benefit: String,
-    pub key_columns:       Vec<String>,
-    pub include_columns:   Vec<String>,
-    pub akkadi_rule:       String,
+    pub key_columns: Vec<String>,
+    pub include_columns: Vec<String>,
+    pub akkadi_rule: String,
 }
 
 // ── Index Health Analysis ─────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct IndexHealthAnalysis {
-    pub recommendations:               Vec<IndexRecommendation>,
-    pub gray_rot:                       GrayRotReport,
+    pub recommendations: Vec<IndexRecommendation>,
+    pub gray_rot: GrayRotReport,
     pub fragmentation_trend_weekly_pct: f32,
-    pub days_until_gray_rot_threshold:  Option<u32>,
-    pub full_rebuild_script:            String,
-    pub color_contribution:             ColorId,
+    pub days_until_gray_rot_threshold: Option<u32>,
+    pub full_rebuild_script: String,
+    pub color_contribution: ColorId,
 }
 
 impl IndexHealthAnalysis {
     /// Returns true when immediate index maintenance is required.
     pub fn requires_immediate_action(&self) -> bool {
         self.gray_rot.action_required
-            || self.recommendations.iter()
-               .any(|r| r.current_status == IndexCoverageStatus::Missing)
+            || self
+                .recommendations
+                .iter()
+                .any(|r| r.current_status == IndexCoverageStatus::Missing)
     }
 
     /// Combined improvement estimate from all index recommendations.
     pub fn total_estimated_improvement(&self) -> String {
         let issues = self.recommendations.len();
-        let frag   = self.gray_rot.fragmentation_pct;
+        let frag = self.gray_rot.fragmentation_pct;
         if issues == 0 && !self.gray_rot.action_required {
             "No index improvements needed.".into()
         } else {
@@ -115,13 +117,13 @@ pub struct IndexHealthAnalyser;
 
 impl IndexHealthAnalyser {
     pub fn analyse(
-        table_name:          &str,
-        coverage_status:     IndexCoverageStatus,
-        fragmentation_pct:   f32,
-        page_reads:          u64,
-        filter_columns:      &[&str],
-        select_columns:      &[&str],
-        fragmentation_trend: f32,  // % per week increase
+        table_name: &str,
+        coverage_status: IndexCoverageStatus,
+        fragmentation_pct: f32,
+        page_reads: u64,
+        filter_columns: &[&str],
+        select_columns: &[&str],
+        fragmentation_trend: f32, // % per week increase
     ) -> IndexHealthAnalysis {
         let gray_rot = GrayRotReport::from_plan_data(fragmentation_pct, page_reads);
 
@@ -136,14 +138,10 @@ impl IndexHealthAnalyser {
         // Build recommendation when index is not fully covering
         let mut recommendations = Vec::new();
         if coverage_status != IndexCoverageStatus::FullyCovering {
-            let key_cols: Vec<String> = filter_columns.iter()
-                .map(|s| s.to_string())
-                .collect();
-            let inc_cols: Vec<String> = select_columns.iter()
-                .map(|s| s.to_string())
-                .collect();
+            let key_cols: Vec<String> = filter_columns.iter().map(|s| s.to_string()).collect();
+            let inc_cols: Vec<String> = select_columns.iter().map(|s| s.to_string()).collect();
 
-            let idx_name   = format!("ix_{}_Cover", table_name.replace('.', "_"));
+            let idx_name = format!("ix_{}_Cover", table_name.replace('.', "_"));
             let create_stmt = format!(
                 "CREATE NONCLUSTERED INDEX [{}]\nON [{}] ({})\nINCLUDE ({});",
                 idx_name,
@@ -153,16 +151,17 @@ impl IndexHealthAnalyser {
             );
 
             recommendations.push(IndexRecommendation {
-                table_name:        table_name.to_string(),
-                current_status:    coverage_status,
-                current_index:     None,
+                table_name: table_name.to_string(),
+                current_status: coverage_status,
+                current_index: None,
                 recommended_index: idx_name,
-                create_statement:  create_stmt,
+                create_statement: create_stmt,
                 estimated_benefit: "Eliminates Key Lookup / Table Scan — \
-                    reduces logical reads by ~95%.".into(),
-                key_columns:       key_cols,
-                include_columns:   inc_cols,
-                akkadi_rule:       "create_covering_index".into(),
+                    reduces logical reads by ~95%."
+                    .into(),
+                key_columns: key_cols,
+                include_columns: inc_cols,
+                akkadi_rule: "create_covering_index".into(),
             });
         }
 
@@ -171,25 +170,27 @@ impl IndexHealthAnalyser {
             "-- VaultWay Gray-Rot: {:.1}% fragmentation\n\
              -- Threshold: 20% | Action: {}\n\
              ALTER INDEX ALL ON [{}] REBUILD WITH (ONLINE = ON, MAXDOP = 4);",
-            fragmentation_pct,
-            gray_rot.recommended_action,
-            table_name
+            fragmentation_pct, gray_rot.recommended_action, table_name
         );
 
         // ColorID
-        let blue  = coverage_status.blue_value();
-        let red   = 20u8
+        let blue = coverage_status.blue_value();
+        let red = 20u8
             .saturating_add(coverage_status.red_penalty())
             .saturating_add(if gray_rot.action_required { 60 } else { 0 });
-        let green = if gray_rot.action_required { 120u8 } else { 180u8 };
+        let green = if gray_rot.action_required {
+            120u8
+        } else {
+            180u8
+        };
 
         IndexHealthAnalysis {
             recommendations,
             gray_rot,
             fragmentation_trend_weekly_pct: fragmentation_trend,
-            days_until_gray_rot_threshold:  days_until_threshold,
-            full_rebuild_script:            rebuild,
-            color_contribution:             ColorId::new(red, green, blue),
+            days_until_gray_rot_threshold: days_until_threshold,
+            full_rebuild_script: rebuild,
+            color_contribution: ColorId::new(red, green, blue),
         }
     }
 
@@ -198,11 +199,11 @@ impl IndexHealthAnalyser {
         Self::analyse(
             "Sales.SalesOrderDetail",
             IndexCoverageStatus::PartialCovering,
-            38.0,    // above 20% Gray-Rot threshold
-            12_592,  // page reads
+            38.0,   // above 20% Gray-Rot threshold
+            12_592, // page reads
             &["ModifiedDate"],
             &["CarrierTrackingNumber", "ProductID", "Color"],
-            2.1,     // 2.1% fragmentation growth per week
+            2.1, // 2.1% fragmentation growth per week
         )
     }
 
@@ -257,8 +258,13 @@ mod tests {
     #[test]
     fn below_threshold_predicts_days() {
         let a = IndexHealthAnalyser::analyse(
-            "T", IndexCoverageStatus::FullyCovering,
-            10.0, 1000, &[], &[], 2.0,
+            "T",
+            IndexCoverageStatus::FullyCovering,
+            10.0,
+            1000,
+            &[],
+            &[],
+            2.0,
         );
         // 10% now, growing 2%/week → reaches 20% in 5 weeks = 35 days
         assert!(a.days_until_gray_rot_threshold.is_some());
@@ -269,8 +275,13 @@ mod tests {
     #[test]
     fn missing_index_color_low_blue() {
         let a = IndexHealthAnalyser::analyse(
-            "T", IndexCoverageStatus::Missing,
-            5.0, 500, &["col"], &["a", "b"], 0.5,
+            "T",
+            IndexCoverageStatus::Missing,
+            5.0,
+            500,
+            &["col"],
+            &["a", "b"],
+            0.5,
         );
         assert!(a.color_contribution.blue < 50);
     }
@@ -285,8 +296,13 @@ mod tests {
     #[test]
     fn fully_covering_has_no_recommendation() {
         let a = IndexHealthAnalyser::analyse(
-            "T", IndexCoverageStatus::FullyCovering,
-            5.0, 100, &[], &[], 0.0,
+            "T",
+            IndexCoverageStatus::FullyCovering,
+            5.0,
+            100,
+            &[],
+            &[],
+            0.0,
         );
         assert!(a.recommendations.is_empty());
     }

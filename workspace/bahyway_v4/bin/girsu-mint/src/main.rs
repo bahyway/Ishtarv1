@@ -46,11 +46,16 @@ fn parse_args() -> Args {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--enkimdb-root" => {
-                enkimdb_root =
-                    PathBuf::from(it.next().unwrap_or_else(|| fail("--enkimdb-root needs a value")))
+                enkimdb_root = PathBuf::from(
+                    it.next()
+                        .unwrap_or_else(|| fail("--enkimdb-root needs a value")),
+                )
             }
             "--registry" => {
-                registry = PathBuf::from(it.next().unwrap_or_else(|| fail("--registry needs a value")))
+                registry = PathBuf::from(
+                    it.next()
+                        .unwrap_or_else(|| fail("--registry needs a value")),
+                )
             }
             "--help" | "-h" => {
                 print_usage();
@@ -62,7 +67,11 @@ fn parse_args() -> Args {
     }
 
     let file = file.unwrap_or_else(|| fail("missing required <file> argument"));
-    Args { file, enkimdb_root, registry }
+    Args {
+        file,
+        enkimdb_root,
+        registry,
+    }
 }
 
 fn fail(msg: &str) -> ! {
@@ -121,13 +130,20 @@ fn main() {
         sha256: profile.sha256.clone(),
         minted_at: chrono::Utc::now().to_rfc3339(),
     };
-    match std::fs::OpenOptions::new().create(true).append(true).open(&args.registry) {
+    match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&args.registry)
+    {
         Ok(mut f) => {
             if let Ok(json) = serde_json::to_string(&line) {
                 let _ = writeln!(f, "{json}");
             }
         }
-        Err(e) => eprintln!("⚠ girsu-mint: could not write registry {}: {e}", args.registry.display()),
+        Err(e) => eprintln!(
+            "⚠ girsu-mint: could not write registry {}: {e}",
+            args.registry.display()
+        ),
     }
 
     println!(

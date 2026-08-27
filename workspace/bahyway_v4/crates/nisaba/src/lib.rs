@@ -24,21 +24,21 @@
 //! See `orchestrator`'s doc comment for the CSR-08 propose-not-ratify
 //! discipline it follows.
 //!
-//! HONEST FLAG (carried over from the EriduOS UI panel rename, PB-189):
-//! this crate's GA-clustering pattern discovery and the EriduOS hologram
+//! HONEST FLAG (carried over from the UrOS UI panel rename, PB-189):
+//! this crate's GA-clustering pattern discovery and the UrOS hologram
 //! agent panel share the name NISABA but were, until this orchestrator,
 //! two unrelated real components. The orchestrator is what actually joins
 //! them: it lives in this crate, and the UI panel now has a real backend
 //! to read from instead of static strings.
 
+pub mod autonomy;
 pub mod cluster;
-pub mod trajectory;
 pub mod discovery;
 pub mod orchestrator;
-pub mod autonomy;
+pub mod trajectory;
 
-pub use cluster::{GaCluster, ClusterMetrics};
-pub use trajectory::{TrajectorySegment, TrajectoryBuffer};
-pub use discovery::{NisabaDiscovery, DiscoveredPattern};
-pub use orchestrator::{NisabaOrchestrator, NisabaDigest, NisabaNote, AutonomousResolution};
-pub use autonomy::{NisabaEnvironment, AutonomyClass, GrantClaim, NisabaGrant};
+pub use autonomy::{AutonomyClass, GrantClaim, NisabaEnvironment, NisabaGrant};
+pub use cluster::{ClusterMetrics, GaCluster};
+pub use discovery::{DiscoveredPattern, NisabaDiscovery};
+pub use orchestrator::{AutonomousResolution, NisabaDigest, NisabaNote, NisabaOrchestrator};
+pub use trajectory::{TrajectoryBuffer, TrajectorySegment};

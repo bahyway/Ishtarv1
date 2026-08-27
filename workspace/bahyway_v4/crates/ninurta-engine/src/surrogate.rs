@@ -85,7 +85,7 @@ fn fourier_surrogate(series: &[f64], rng: &mut Rng) -> Vec<f64> {
         // stay real-valued or the series picks up a spurious imaginary
         // component -- both are self-conjugate under mirroring, so
         // leave their original value alone rather than randomizing.
-        if k == 0 || (n % 2 == 0 && k == half) {
+        if k == 0 || (n.is_multiple_of(2) && k == half) {
             randomized[k] = (re, im);
             continue;
         }
@@ -120,7 +120,10 @@ pub fn surrogate_p_value(real_trend: f64, surrogate_trends: &[f64]) -> f64 {
     if surrogate_trends.is_empty() {
         return 1.0;
     }
-    let at_least_as_extreme = surrogate_trends.iter().filter(|&&t| t >= real_trend).count();
+    let at_least_as_extreme = surrogate_trends
+        .iter()
+        .filter(|&&t| t >= real_trend)
+        .count();
     at_least_as_extreme as f64 / surrogate_trends.len() as f64
 }
 
@@ -139,7 +142,9 @@ mod tests {
 
     #[test]
     fn fourier_surrogate_preserves_variance_closely() {
-        let series: Vec<f64> = (0..40).map(|i| (i as f64 * 0.3).sin() + (i as f64 * 0.05)).collect();
+        let series: Vec<f64> = (0..40)
+            .map(|i| (i as f64 * 0.3).sin() + (i as f64 * 0.05))
+            .collect();
         let mut rng = Rng::new(7);
         let surr = fourier_surrogate(&series, &mut rng);
         let var_orig = variance(&series);
@@ -152,7 +157,10 @@ mod tests {
     fn different_surrogates_in_a_batch_are_not_identical() {
         let series: Vec<f64> = (0..24).map(|i| (i as f64 * 0.4).cos()).collect();
         let batch = fourier_surrogates(&series, 5, 42);
-        assert_ne!(batch[0], batch[1], "independent surrogates must not be identical draws");
+        assert_ne!(
+            batch[0], batch[1],
+            "independent surrogates must not be identical draws"
+        );
     }
 
     #[test]

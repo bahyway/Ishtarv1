@@ -72,13 +72,50 @@
 #     live-run. Must be run for real on the Architect's own Fedora
 #     Workstation 44 host.
 #
+# AUTOMATION PILLAR (Architect directive, 2026-08-15): this playbook installs
+# its own OS packages (dnf: libvirt/virt-install/qemu-img) and enables its
+# own service (systemd: libvirtd) -- no shell command to run by hand, ever.
+#
+# BASE IMAGE, UNIFIED PER ECOSYSTEM VERSION (Architect directive,
+# 2026-08-15): this playbook does NOT download the base image itself. It
+# READS a shared, version-pinned qcow2 from
+# Infra/OSImage/v{{ fedora_release }}/ inside the Forge tree -- the SAME
+# file every VM in that Ecosystem version boots from (write, read, vault,
+# every environment). That file is fetched exactly once per fedora_release
+# by playbook_273_fetch_os_image.yml (auto-discovers Fedora's real current
+# filename + checksum, no pasted URL). If nothing is there yet, this
+# playbook's preflight fails and names that exact command to run -- it
+# never fetches anything on its own, keeping "what OS image is this
+# Ecosystem version built on" a single, unambiguous file on disk.
+#
 # USAGE:
+#   # one-time per Ecosystem version (see playbook_273's own header):
+#   ansible-playbook playbooks/playbook_273_fetch_os_image.yml
+#   # then, any number of times, for any node topology:
 #   ansible-playbook playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml
 #   ansible-playbook playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml \
 #     -e cqrs_environment=dev
-#   # override the base image location if it isn't at the default path:
+#   # bypass the shared Infra/OSImage/ folder entirely and point at an
+#   # image you already have somewhere else:
 #   ansible-playbook playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml \
 #     -e base_image_path=/path/to/fedora-44-base.qcow2
+#   # fully custom node names/IPs (Ansible -e beats the vars: block's own
+#   # environment-derived defaults entirely -- no code change needed):
+#   # picked to stand up a fresh pair without touching or colliding with
+#   # any existing enkidb-node-* VMs, e.g. when starting a clean OTAP
+#   # environment under a new host-derived name (2026-08-15, Architect
+#   # request -- see docs/16_runbooks/BAREMETAL_URUK_GOLIVE_RUNBOOK.md):
+#   ansible-playbook playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml \
+#     -e cqrs_environment=dev \
+#     -e node_write_name=uruk-node-write -e node_write_ip=192.168.122.111 \
+#     -e node_read_name=uruk-node-read   -e node_read_ip=192.168.122.112
+#   # same, plus a third vault-librarian node (off by default -- see the
+#   # create_vault_node var and its own comment above):
+#   ansible-playbook playbooks/playbook_265_anu_governor_type1_infra_cqrs_nodes.yml \
+#     -e cqrs_environment=dev -e create_vault_node=true \
+#     -e node_write_name=uruk-node-write -e node_write_ip=192.168.122.111 \
+#     -e node_read_name=uruk-node-read   -e node_read_ip=192.168.122.112 \
+#     -e node_vault_name=uruk-node-vault -e node_vault_ip=192.168.122.113
 #   # require real Sargon-vault passport authentication before provisioning
 #   # anything (off by default -- see "Safety mechanism 3" and vars below):
 #   KUPRU_VAULT_PASSPHRASE='...' ansible-playbook \
@@ -90,6 +127,14 @@
   hosts: localhost
   connection: local
   become: true
+  # Automation Pillar (Architect directive 2026-08-15): the base-image
+  # source lives in one small config file, not a runbook full of manual
+  # mkdir/curl/mv/sudo steps -- see that file's own header for why the
+  # URL itself still needs a one-time human edit (Fedora's published
+  # filename changes every release; this repo has no way to verify it
+  # without a human having looked at the real page).
+  vars_files:
+    - "{{ playbook_dir }}/../ansible/vars/base_image.yml"
   vars:
     cqrs_environment: production
     # Production keeps the exact node names/IPs every other playbook in
@@ -101,13 +146,79 @@
     node_write_ip:   "{{ '192.168.122.101' if cqrs_environment == 'production' else '192.168.122.' + (151 + (['dev','test','acc'].index(cqrs_environment) * 2)) | string }}"
     node_read_ip:    "{{ '192.168.122.107' if cqrs_environment == 'production' else '192.168.122.' + (152 + (['dev','test','acc'].index(cqrs_environment) * 2)) | string }}"
 
-    libvirt_pool_dir: "{{ ansible_env.HOME }}/vdi"
-    base_image_path:  "{{ libvirt_pool_dir }}/fedora-44-base.qcow2"
+    # ── Optional third node: the vault-librarian (2026-08-15, Architect
+    # request). Off by default -- existing write/read-only invocations of
+    # this playbook are unaffected. When on, provisions a third VM
+    # alongside write/read via the exact same mechanism (cloud-init, TLS
+    # keypair, virt-install). This VM gets Podman and is ready to run
+    # vault-librarian software, but its actual ZFS-backed "vault body"
+    # storage (the real 7x5TB NAS RAID-Z2 pool, playbook_318_vault_body_
+    # zfs.yml) is separate, real, hardware-dependent follow-on work --
+    # this playbook does not and cannot provision physical NAS disks.
+    # IP scheme deliberately distinct from both the write/read pairs
+    # above (.101/.107 prod, .151-.156 dev/test/acc) and any custom
+    # write/read override, to avoid any collision.
+    create_vault_node: false
+    node_vault_name: "{{ 'enkidb-node-vault' if cqrs_environment == 'production' else 'enkidb-node-vault-' + cqrs_environment }}"
+    node_vault_ip:   "{{ '192.168.122.113' if cqrs_environment == 'production' else '192.168.122.' + (171 + ['dev','test','acc'].index(cqrs_environment)) | string }}"
+
+    # Single source of truth every task below loops over, instead of
+    # repeating "when: create_vault_node" on each one individually.
+    nodes: >-
+      {{
+        [
+          {'name': node_write_name, 'ip': node_write_ip, 'role': 'cqrs-write'},
+          {'name': node_read_name,  'ip': node_read_ip,  'role': 'cqrs-read'}
+        ]
+        + ([{'name': node_vault_name, 'ip': node_vault_ip, 'role': 'vault-librarian'}] if create_vault_node | bool else [])
+      }}
+
+    # Real bug, caught live (2026-08-15): this used to be
+    # "{{ ansible_facts.env.HOME }}/vdi" (root's home, /root/vdi). That's
+    # not a become/HOME-resolution issue like the two already fixed above
+    # -- virt-install failed with "Cannot access storage file ... as
+    # uid:107, gid:107: Permission denied", because libvirt's qemu:///system
+    # driver runs the actual guest process as the unprivileged `qemu`
+    # service account, which cannot even traverse into /root (mode 0700)
+    # to reach the disk/seed-ISO files -- no file-level permission fixes
+    # the files themselves, since every directory component in the path
+    # needs search/execute permission for that account. The real fix is
+    # the standard KVM one: put VM storage under the canonical libvirt
+    # images pool, which the libvirt/qemu packages already configure with
+    # correct qemu-account traversal permissions, instead of anywhere
+    # under a human or root home directory.
+    libvirt_pool_dir: /var/lib/libvirt/images/bahyway
+    # Shared, version-pinned base image (Architect request, 2026-08-15):
+    # one real qcow2 per Ecosystem version, downloaded ONCE by
+    # playbook_273_fetch_os_image.yml into a folder inside the Forge tree
+    # itself, then only ever READ from here -- never downloaded again --
+    # by every VM this playbook creates (write/read/vault, any
+    # environment). This guarantees every VM in a given fedora_release
+    # boots from the exact same file, instead of each VM-creation run
+    # potentially fetching its own copy. Override base_image_path directly
+    # to bypass this folder entirely and point at an image you already
+    # have somewhere else.
+    os_image_dir: "{{ playbook_dir }}/../Infra/OSImage/v{{ fedora_release }}"
+    base_image_path: ""
     node_vcpus: 4
     node_memory_mb: 8192
     node_disk_gb: 40
-    ssh_pubkey_path: "{{ ansible_env.HOME }}/.ssh/id_ed25519.pub"
-    tls_dir: "{{ ansible_env.HOME }}/vdi/tls"
+    # Real bug, caught live (2026-08-15): under become: true, ansible_env.HOME
+    # is a FACT gathered by a task that itself runs as root (the become-user),
+    # so it silently resolved to /root/.ssh/id_ed25519.pub -- a key that will
+    # never exist, since the real key belongs to the Architect logged in as
+    # themselves, not root. lookup('env', 'HOME') is evaluated on the
+    # controller when this vars: block is templated, before any become
+    # escalation applies to a task -- it reads the actual invoking user's
+    # $HOME (whoever ran `ansible-playbook ...`), which is what "the
+    # Architect's own real pubkey" (see the cloud-init comment below) has
+    # always meant. Override with -e ssh_pubkey_path=... if the invoking
+    # user's default keypair isn't the right one to inject.
+    ssh_pubkey_path: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519.pub"
+    # libvirt_pool_dir/tls_dir intentionally stay under root's home: qemu-img/
+    # virt-install/the TLS keypair files are written and owned by root (this
+    # play's become-user), not by the invoking login user.
+    tls_dir: "{{ ansible_facts.env.HOME }}/vdi/tls"
 
     # ── Safety mechanism 3: real Sargon-vault operator authentication ──
     # Off by default reasons this playbook would otherwise be unusable
@@ -116,7 +227,10 @@
     # default below once that's the norm on the real host). Gate, not a
     # secrets source -- see the header's amended note.
     vault_check_enabled: false
-    vault_path: "{{ ansible_env.HOME }}/.config/bahyway/sargon_vault.dat"
+    # Same fix as ssh_pubkey_path above, same reason: the vault is the
+    # Architect's own passport store, minted as themselves -- root has no
+    # such file and never will.
+    vault_path: "{{ lookup('env', 'HOME') }}/.config/bahyway/sargon_vault.dat"
     # 5 = Administrator tier in the Architect's own 5-group model
     # (Architect=7/Gilgamesh, dataSteward/Administrator/Developer=Sargon
     # 3 priorities, Other-Stakeholders=temporary) -- infra creation is a
@@ -212,42 +326,87 @@
         msg: "{{ vault_auth_result.stdout }}"
       when: vault_check_enabled | bool and vault_auth_result.rc == 0
 
-    - name: Confirm required tools are present (real preflight, not assumed)
+    # Automation Pillar: previously this just failed and told the Architect
+    # to run `sudo dnf install ...` by hand. become: true already makes this
+    # play root -- so let it actually install/enable the tooling itself,
+    # idempotently (dnf/systemd modules are no-ops on a host that already
+    # has them), instead of stopping to ask for a manual command.
+    - name: "AUTOMATION | ensure libvirt/virtinst/qemu-img are installed"
+      ansible.builtin.dnf:
+        name: [libvirt, virt-install, qemu-img]
+        state: present
+
+    - name: "AUTOMATION | ensure libvirtd is enabled and running"
+      ansible.builtin.systemd:
+        name: libvirtd
+        state: started
+        enabled: true
+
+    - name: "GATE | confirm the tools are really on PATH after automated install"
       ansible.builtin.command: "which {{ item }}"
       loop: [virsh, virt-install, qemu-img]
       register: tool_check
       changed_when: false
-      failed_when: false
 
-    - name: Fail clearly if libvirt tooling is missing
-      ansible.builtin.fail:
-        msg: >-
-          Required tool '{{ item.item }}' not found on PATH. This playbook needs
-          libvirt + virtinst on the bare-metal Fedora host:
-          `sudo dnf install -y libvirt virt-install qemu-img && sudo systemctl enable --now libvirtd`.
-          This is an honest "not installed," not a bug in this playbook.
-      loop: "{{ tool_check.results }}"
-      when: item.rc != 0
+    # This playbook only READS the shared, per-Ecosystem-version base
+    # image -- it never downloads one. That download happens exactly once
+    # per fedora_release, via playbook_273_fetch_os_image.yml, into
+    # Infra/OSImage/v{{ fedora_release }}/ inside the Forge tree itself
+    # (Architect request, 2026-08-15: unify the image used across the
+    # whole Ecosystem per version, instead of every VM-creation playbook
+    # fetching its own copy). Skipped entirely when -e base_image_path=...
+    # is passed explicitly -- that always wins (Ansible extra-vars
+    # precedence), same as before.
+    - name: "Resolve base_image_path from the shared per-version OS image folder"
+      when: base_image_path | length == 0
+      block:
+        - name: "Look for the shared base image for fedora_release={{ fedora_release }}"
+          ansible.builtin.find:
+            paths: "{{ os_image_dir }}"
+            patterns: "*.qcow2"
+          register: shared_os_images
 
-    - name: Confirm the base Fedora 44 cloud image exists
+        - name: "FAIL | no shared base image found for this Ecosystem version"
+          ansible.builtin.fail:
+            msg: >-
+              No .qcow2 found in {{ os_image_dir }}. This playbook never
+              downloads one itself -- fetch it once via:
+              `ansible-playbook playbooks/playbook_273_fetch_os_image.yml -e fedora_release={{ fedora_release }}`
+              Every VM this playbook creates for fedora_release={{ fedora_release }}
+              (write/read/vault, any environment) will then read that same
+              shared file. Or pass -e base_image_path=/real/path.qcow2 to
+              bypass the shared-folder convention entirely.
+          when: shared_os_images.files | length == 0
+
+        - name: "FAIL | more than one qcow2 in this version's folder -- ambiguous"
+          ansible.builtin.fail:
+            msg: >-
+              {{ shared_os_images.files | length }} .qcow2 files found in
+              {{ os_image_dir }} -- exactly one shared image is expected
+              per Ecosystem version. Remove the stale one(s) by hand (a
+              deliberate deletion, not something this playbook will do for
+              you) and re-run, or pass -e base_image_path=/real/path.qcow2
+              to pick one explicitly.
+          when: shared_os_images.files | length > 1
+
+        - name: "Use the shared image found for this Ecosystem version"
+          ansible.builtin.set_fact:
+            base_image_path: "{{ shared_os_images.files[0].path }}"
+
+    - name: "GATE | confirm the resolved base image actually exists"
       ansible.builtin.stat:
         path: "{{ base_image_path }}"
       register: base_image_stat
 
-    - name: Fail clearly if the base image is missing
+    - name: "FAIL | base_image_path does not point at a real file"
       ansible.builtin.fail:
-        msg: >-
-          Base image not found at {{ base_image_path }}. Download the real Fedora
-          Cloud Base qcow2 (https://fedoraproject.org/cloud/download) to this path,
-          or pass -e base_image_path=/real/path.
+        msg: "No file at {{ base_image_path }} (base_image_path was set explicitly via -e)."
       when: not base_image_stat.stat.exists
 
     # ── Safety mechanism 1 & 2: duplicate-CQRS-pair guard, every environment ──
-    - name: Check whether either target VM already exists
+    - name: Check whether any target VM already exists
       ansible.builtin.command: "virsh dominfo {{ item }}"
-      loop:
-        - "{{ node_write_name }}"
-        - "{{ node_read_name }}"
+      loop: "{{ nodes | map(attribute='name') | list }}"
       register: existing_vm_check
       changed_when: false
       failed_when: false
@@ -289,9 +448,33 @@
         -subj "/O=BahyWay.Ecosystem/CN={{ item }}"
       args:
         creates: "{{ tls_dir }}/{{ item }}.crt"
-      loop:
-        - "{{ node_write_name }}"
-        - "{{ node_read_name }}"
+      loop: "{{ nodes | map(attribute='name') | list }}"
+
+    # ── Read each node's TLS cert/key as root (real bug, caught live,
+    #    2026-08-15): lookup('file', ...) below used to read these
+    #    directly, but lookup() is evaluated by the CONTROLLER process
+    #    (the invoking login user) even under become: true + connection:
+    #    local -- become only elevates actual task/module execution, never
+    #    Jinja2 lookup-plugin evaluation. tls_dir is root-owned, mode 0700
+    #    (correctly, for private key material), so the login user cannot
+    #    read into it and the lookup failed "File not found" even though
+    #    the files were sitting there, created successfully by the
+    #    previous (become-elevated) openssl task. ansible.builtin.slurp is
+    #    a real module -- it DOES run under become -- so it can actually
+    #    read root-only files; the content comes back base64-encoded and
+    #    is decoded below where it's embedded, keeping tls_dir's
+    #    permissions exactly as strict as they already were.
+    - name: "Read each node's TLS certificate (root-owned; slurp runs under become, unlike lookup())"
+      ansible.builtin.slurp:
+        src: "{{ tls_dir }}/{{ item.name }}.crt"
+      loop: "{{ nodes }}"
+      register: tls_crt_slurp
+
+    - name: "Read each node's TLS private key (root-owned; slurp runs under become, unlike lookup())"
+      ansible.builtin.slurp:
+        src: "{{ tls_dir }}/{{ item.name }}.key"
+      loop: "{{ nodes }}"
+      register: tls_key_slurp
 
     # ── Per-node cloud-init: hostname, static IP on the libvirt default
     #    NAT network, a real user with the Architect's own real pubkey
@@ -319,16 +502,50 @@
             - path: /etc/bahyway-node-role
               content: "{{ item.role }}"
             - path: /etc/pki/tls/certs/bahyway-node.crt
-              content: "{{ lookup('file', tls_dir + '/' + item.name + '.crt') }}"
+              content: "{{ (tls_crt_slurp.results | selectattr('item.name', 'equalto', item.name) | first).content | b64decode }}"
             - path: /etc/pki/tls/private/bahyway-node.key
-              content: "{{ lookup('file', tls_dir + '/' + item.name + '.key') }}"
+              content: "{{ (tls_key_slurp.results | selectattr('item.name', 'equalto', item.name) | first).content | b64decode }}"
               permissions: "0600"
           runcmd:
             - [systemctl, enable, --now, podman.socket]
-      loop:
-        - { name: "{{ node_write_name }}", role: "cqrs-write" }
-        - { name: "{{ node_read_name }}",  role: "cqrs-read" }
+      loop: "{{ nodes }}"
 
+    # Real bug, suspected live (2026-08-15, pending the Architect's own
+    # `virsh net-dhcp-leases default` confirmation): hardcoding the
+    # interface name "eth0" assumes legacy naming, but systemd's
+    # predictable-network-interface-names scheme (the default on modern
+    # Fedora) names a virtio-net NIC something like "enp1s0"/"ens3"
+    # instead -- "eth0" then matches nothing, cloud-init's static config
+    # silently never applies, and the guest likely falls back to whatever
+    # NetworkManager/dnsmasq DHCP address the libvirt "default" network
+    # hands out -- not the .111/.112/.113 this playbook then waits on,
+    # which is why the wait_for below timed out even though virt-install
+    # itself succeeded. Fixed by matching on the virtio_net DRIVER
+    # instead of guessing a name -- guaranteed correct given
+    # `--network network=default,model=virtio` above.
+    #
+    # Real bug, caught live (2026-08-15) via actual console/boot-log
+    # evidence: the `set-name: vnet0` above silently failed to rename
+    # the device -- cloud-init's own boot-time network report showed the
+    # interface still named `enp1s0` (its real predictable name), up,
+    # but with ONLY a link-local IPv6 address -- no static IPv4 at all.
+    #
+    # Second real bug, caught live (2026-08-15), same symptom, next
+    # attempt: dropping set-name and keeping `match: driver: virtio_net`
+    # alone did NOT fix it either -- a second fresh boot (different MAC,
+    # confirmed via console) showed the exact same "enp1s0 up, IPv6
+    # link-local only" result. Whatever renderer this cloud-init version
+    # uses for network-config v2 does not reliably apply an `addresses:`
+    # block keyed under a `match:`-only entry to the real device here --
+    # not a naming problem, a matching problem.
+    #
+    # Fixed by dropping `match:`/`set-name` entirely and keying the
+    # config directly on `enp1s0` -- the real, predictable name this
+    # exact virt-install topology (single virtio-net-pci device, fixed
+    # PCI bus/slot, identical across every node) has now produced
+    # identically on two independent fresh boots with two different MAC
+    # addresses. Not a guess: empirically confirmed twice via console
+    # before hardcoding it.
     - name: Render per-node cloud-init network-config (static IP on the libvirt default NAT network)
       ansible.builtin.copy:
         dest: "{{ libvirt_pool_dir }}/{{ item.name }}-network-config.yaml"
@@ -336,25 +553,34 @@
         content: |
           version: 2
           ethernets:
-            eth0:
+            enp1s0:
               addresses: [{{ item.ip }}/24]
               gateway4: 192.168.122.1
               nameservers:
                 addresses: [192.168.122.1, 1.1.1.1]
-      loop:
-        - { name: "{{ node_write_name }}", ip: "{{ node_write_ip }}" }
-        - { name: "{{ node_read_name }}",  ip: "{{ node_read_ip }}" }
+      loop: "{{ nodes }}"
 
+    # Real bug, caught live (2026-08-15) -- the actual root cause behind
+    # both SSH-timeout runs, not the eth0-vs-driver-name question fixed
+    # above (though that fix stays, since it's still correct on its own
+    # terms): cloud-localds' real CLI is
+    # `cloud-localds [options] OUTPUT USERDATA [METADATA]` -- the third
+    # bare positional argument is meta-data, NOT network-config. This
+    # task was silently handing the network-config.yaml file to
+    # cloud-localds as meta-data, so cloud-init never received real
+    # network configuration in ANY run so far, regardless of whether the
+    # file said "eth0" or matched by driver -- the content was never
+    # reaching cloud-init's network stage at all. Network config must be
+    # passed explicitly via -N/--network-config.
     - name: Create the per-node cloud-init seed ISO
       ansible.builtin.command: >-
-        cloud-localds {{ libvirt_pool_dir }}/{{ item }}-seed.iso
+        cloud-localds
+        --network-config={{ libvirt_pool_dir }}/{{ item }}-network-config.yaml
+        {{ libvirt_pool_dir }}/{{ item }}-seed.iso
         {{ libvirt_pool_dir }}/{{ item }}-user-data.yaml
-        {{ libvirt_pool_dir }}/{{ item }}-network-config.yaml
       args:
         creates: "{{ libvirt_pool_dir }}/{{ item }}-seed.iso"
-      loop:
-        - "{{ node_write_name }}"
-        - "{{ node_read_name }}"
+      loop: "{{ nodes | map(attribute='name') | list }}"
 
     - name: Create each node's copy-on-write disk from the base image
       ansible.builtin.command: >-
@@ -364,9 +590,7 @@
         {{ node_disk_gb }}G
       args:
         creates: "{{ libvirt_pool_dir }}/{{ item }}.qcow2"
-      loop:
-        - "{{ node_write_name }}"
-        - "{{ node_read_name }}"
+      loop: "{{ nodes | map(attribute='name') | list }}"
 
     - name: Define and start each VM via virt-install
       ansible.builtin.command: >-
@@ -385,28 +609,32 @@
         creates: null
       register: vm_create_result
       changed_when: "'Domain creation completed' in vm_create_result.stdout or vm_create_result.rc == 0"
-      loop:
-        - "{{ node_write_name }}"
-        - "{{ node_read_name }}"
+      loop: "{{ nodes | map(attribute='name') | list }}"
 
+    # 300s was too tight for real hardware: first boot on a fresh Fedora
+    # Cloud image, with package_update: true plus installing podman and
+    # openssl over the network, can genuinely take longer than 5 minutes
+    # -- caught live, 2026-08-15, when a VM confirmed still `running` and
+    # accumulating real CPU time well past 300s turned out to just need
+    # more time, not a fix.
     - name: Wait for cloud-init to finish on each node (SSH reachable)
       ansible.builtin.wait_for:
         host: "{{ item }}"
         port: 22
-        timeout: 300
-      loop:
-        - "{{ node_write_ip }}"
-        - "{{ node_read_ip }}"
+        timeout: 600
+      loop: "{{ nodes | map(attribute='ip') | list }}"
 
   post_tasks:
     - name: Summary
       ansible.builtin.debug:
         msg:
           - "PB-265 complete for environment '{{ cqrs_environment }}'."
-          - "Write node: {{ node_write_name }} ({{ node_write_ip }})"
-          - "Read node : {{ node_read_name }} ({{ node_read_ip }})"
-          - "Podman is enabled on both; hand off to the existing deploy playbooks"
-          - "(PB-192/205/212-class) to install the 7 EnkiDB Types' server containers."
+          - "Write node : {{ node_write_name }} ({{ node_write_ip }})"
+          - "Read node  : {{ node_read_name }} ({{ node_read_ip }})"
+          - "{{ 'Vault node : ' + node_vault_name + ' (' + node_vault_ip + ')' if create_vault_node | bool else 'Vault node : not created this run (create_vault_node=false)' }}"
+          - "Podman is enabled on all nodes created; hand off to the existing deploy playbooks"
+          - "(PB-192/205/212-class) to install the 7 EnkiDB Types' server containers on write/read."
+          - "{{ 'The vault node is ready for vault-librarian software, but its real ZFS-backed vault body (playbook_318_vault_body_zfs.yml, needs the 7x5TB NAS hardware) is separate, not-yet-attached follow-on work.' if create_vault_node | bool else '' }}"
           - "{{ 'Vault-gated: operator authenticated via a real Sargon-vault passport.' if vault_check_enabled | bool else 'Vault gate was OFF this run (vault_check_enabled=false) -- ran unauthenticated.' }}"
           - "NOT YET DONE (tracked separately): a genuine secrets store for"
           - "TLS/SSH material (the Sargon vault holds passports, not secrets --"

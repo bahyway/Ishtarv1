@@ -8,13 +8,13 @@ use crate::provenance::ProvenanceBlock;
 #[repr(u8)]
 pub enum AshnanKakiClass {
     /// 0x01 / KISHIB — Pest Identity particle (trap catch, species ID, outbreak).
-    PestIdentity    = 0x01,
+    PestIdentity = 0x01,
     /// 0x02 / ZIKRU — Soil/Crop Event particle (soil moisture, NDVI, weather).
-    SoilCropEvent   = 0x02,
+    SoilCropEvent = 0x02,
     /// 0x02 / PARZU — Livestock Health Event particle (ear-tag biosensor, vet report).
-    LivestockEvent  = 0x03,
+    LivestockEvent = 0x03,
     /// 0x03 CrossTribe — External Ingestion particle (FAO/WOAH/met with provenance).
-    ExternalIngest  = 0x04,
+    ExternalIngest = 0x04,
 }
 
 /// External ingestion particle — FAO bulletin, WOAH alert, or met-service forecast.

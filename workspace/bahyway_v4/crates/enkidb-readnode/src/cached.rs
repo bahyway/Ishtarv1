@@ -121,13 +121,15 @@ impl CachedReadNode {
         // `kaki_bytes[i]`) lines up with it by construction.
         let raw = entities_reader.iter_all_raw()?;
         let mut kaki_bytes: Vec<[u8; 16]> = Vec::with_capacity(raw.len());
-        let mut by_surrogate: Vec<(IdentityKaki, Vec<JournalEntry>)> = Vec::with_capacity(raw.len());
+        let mut by_surrogate: Vec<(IdentityKaki, Vec<JournalEntry>)> =
+            Vec::with_capacity(raw.len());
         for (bytes, blob) in raw {
             let identity = IdentityKaki::try_from_kaki(
                 Kaki::from_bytes(bytes).map_err(|_| CachedReadNodeError::CorruptRecord)?,
             )
             .map_err(|_| CachedReadNodeError::CorruptRecord)?;
-            let history = decode_history(&identity, &blob).ok_or(CachedReadNodeError::CorruptRecord)?;
+            let history =
+                decode_history(&identity, &blob).ok_or(CachedReadNodeError::CorruptRecord)?;
             kaki_bytes.push(bytes);
             by_surrogate.push((identity, history));
         }
@@ -146,7 +148,8 @@ impl CachedReadNode {
         // extra disk I/O -- everything here is already in RAM) to build the
         // three Elu Index Stack members `heptascript::indexed::HeptaIndexes`
         // also builds, for the reasons this struct's own doc comment gives.
-        let spatial_hashes: [u32; 7] = SPATIAL_ATTRS.map(|name| bahyway_crc::crc16(name.as_bytes()) as u32);
+        let spatial_hashes: [u32; 7] =
+            SPATIAL_ATTRS.map(|name| bahyway_crc::crc16(name.as_bytes()) as u32);
         let mut orbital_pairs: Vec<(u64, u32)> = Vec::new();
         let mut shell_entries: Vec<([f64; 7], u32)> = Vec::new();
 
@@ -167,7 +170,9 @@ impl CachedReadNode {
                     .and_then(|t| decode_f64(&t.value));
                 match latest {
                     Some(v) => position[dim] = v,
-                    None => { has_all_dims = false; }
+                    None => {
+                        has_all_dims = false;
+                    }
                 }
             }
             if has_all_dims {
@@ -184,7 +189,14 @@ impl CachedReadNode {
 
         let shell = HeptaShellIndex::build(&shell_entries);
 
-        Ok(Self { surrogates, by_surrogate, eav_postings, nairu, radix, shell })
+        Ok(Self {
+            surrogates,
+            by_surrogate,
+            eav_postings,
+            nairu,
+            radix,
+            shell,
+        })
     }
 
     /// Number of entities resident in memory.
@@ -248,7 +260,9 @@ impl CachedReadNode {
                 let take_n = safe_early_limit(q);
                 let histories: Vec<(IdentityKaki, Vec<JournalEntry>)> = match ids_ref {
                     Some(ids) => {
-                        let iter = ids.iter().filter_map(|&id| self.by_surrogate.get(id as usize));
+                        let iter = ids
+                            .iter()
+                            .filter_map(|&id| self.by_surrogate.get(id as usize));
                         match take_n {
                             Some(n) => iter.take(n).cloned().collect(),
                             None => iter.cloned().collect(),
@@ -412,7 +426,10 @@ fn indexable_condition(conditions: &[WhereCondition]) -> Option<(&str, &HeptaVal
     if conditions.is_empty() {
         return None;
     }
-    if conditions[1..].iter().any(|c| c.combinator == Combinator::Or) {
+    if conditions[1..]
+        .iter()
+        .any(|c| c.combinator == Combinator::Or)
+    {
         return None;
     }
     match &conditions[0].test {
@@ -429,7 +446,7 @@ fn decode_f64(bytes: &[u8]) -> Option<f64> {
     let (v, _) = codec::decode(bytes, 0).ok()?;
     match v {
         AkkValue::Float(f) => Some(f),
-        AkkValue::Int(i)   => Some(i as f64),
+        AkkValue::Int(i) => Some(i as f64),
         _ => None,
     }
 }
@@ -473,9 +490,15 @@ mod tests {
         let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
         let eav: Vec<EavTriple> = attrs
             .iter()
-            .map(|(name, val)| EavTriple::new(bahyway_crc::crc16(name.as_bytes()) as u32, codec::encode(val)))
+            .map(|(name, val)| {
+                EavTriple::new(
+                    bahyway_crc::crc16(name.as_bytes()) as u32,
+                    codec::encode(val),
+                )
+            })
             .collect();
-        jnl.append(JournalEntry::new(ek, target.clone(), epoch, eav)).unwrap();
+        jnl.append(JournalEntry::new(ek, target.clone(), epoch, eav))
+            .unwrap();
     }
 
     /// The core promise: identical to a full scan, for the queries a
@@ -490,19 +513,42 @@ mod tests {
             .map(|_| IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap())
             .collect();
         for e in &najaf {
-            push_eav(&mut jnl, &m, e, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                e,
+                1,
+                &[("city.name", AkkValue::Text("Najaf".into()))],
+            );
         }
         for _ in 0..20 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m, &e, 1, &[("city.name", AkkValue::Text("Baghdad".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[("city.name", AkkValue::Text("Baghdad".into()))],
+            );
         }
 
         let base = tmp_base("matches_full_scan");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
-        let full = heptascript::execute(&parse_query("WHO T.E\nWHERE E[city.name] = \"Najaf\"").unwrap(), &jnl);
-        let via_crn = crn.query("WHO T.E\nWHERE E[city.name] = \"Najaf\"").unwrap();
+        let full = heptascript::execute(
+            &parse_query("WHO T.E\nWHERE E[city.name] = \"Najaf\"").unwrap(),
+            &jnl,
+        );
+        let via_crn = crn
+            .query("WHO T.E\nWHERE E[city.name] = \"Najaf\"")
+            .unwrap();
 
         assert_eq!(via_crn.matched.len(), 5);
         let mut full_bytes: Vec<_> = full.matched.iter().map(|m| *m.entity.bytes()).collect();
@@ -525,14 +571,26 @@ mod tests {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
             let age = if i % 2 == 0 { 20 } else { 40 };
             push_eav(
-                &mut jnl, &m, &e, 1,
-                &[("city.name", AkkValue::Text("Najaf".into())), ("age", AkkValue::Int(age))],
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[
+                    ("city.name", AkkValue::Text("Najaf".into())),
+                    ("age", AkkValue::Int(age)),
+                ],
             );
         }
 
         let base = tmp_base("serves_rejected_queries");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         let q = "WHO T.E\nWHERE E[city.name] = \"Najaf\" AND E[age] > 30";
         let full = heptascript::execute(&parse_query(q).unwrap(), &jnl);
@@ -556,13 +614,27 @@ mod tests {
         let mut jnl = Journal::new(64);
         let m = KakiMinter::new(tribe);
         let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-        push_eav(&mut jnl, &m, &e, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            1,
+            &[("city.name", AkkValue::Text("Najaf".into()))],
+        );
 
         let base = tmp_base("unknown_value");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
-        let res = crn.query("WHO T.E\nWHERE E[city.name] = \"Karbala\"").unwrap();
+        let res = crn
+            .query("WHO T.E\nWHERE E[city.name] = \"Karbala\"")
+            .unwrap();
         assert!(res.matched.is_empty());
     }
 
@@ -574,14 +646,26 @@ mod tests {
         for rank in 0..50 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
             push_eav(
-                &mut jnl, &m, &e, 1,
-                &[("city.name", AkkValue::Text("Najaf".into())), ("rank", AkkValue::Int(rank))],
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[
+                    ("city.name", AkkValue::Text("Najaf".into())),
+                    ("rank", AkkValue::Int(rank)),
+                ],
             );
         }
 
         let base = tmp_base("limit_with_how_sort");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         let res = crn
             .query("WHO T.E\nWHAT E[rank]\nWHERE E[city.name] = \"Najaf\"\nHOW BY E[rank] DESC\nHOW_MUCH LIMIT 3")
@@ -590,9 +674,16 @@ mod tests {
         let ranks: Vec<i64> = res
             .matched
             .iter()
-            .map(|m| match m.projected.iter().find(|(k, _)| k == "rank").map(|(_, v)| v) {
-                Some(AkkValue::Int(n)) => *n,
-                other => panic!("expected rank to be projected as Int, got {other:?}"),
+            .map(|m| {
+                match m
+                    .projected
+                    .iter()
+                    .find(|(k, _)| k == "rank")
+                    .map(|(_, v)| v)
+                {
+                    Some(AkkValue::Int(n)) => *n,
+                    other => panic!("expected rank to be projected as Int, got {other:?}"),
+                }
             })
             .collect();
         assert_eq!(ranks, vec![49, 48, 47]);
@@ -605,15 +696,33 @@ mod tests {
         let m = KakiMinter::new(tribe);
         for _ in 0..500 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m, &e, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[("city.name", AkkValue::Text("Najaf".into()))],
+            );
         }
 
         let base = tmp_base("limit_truncates_indexed");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
-        let res = crn.query("WHO T.E\nWHERE E[city.name] = \"Najaf\"\nHOW_MUCH LIMIT 10").unwrap();
-        assert_eq!(res.matched.len(), 10, "500 true matches exist; LIMIT 10 must still return exactly 10");
+        let res = crn
+            .query("WHO T.E\nWHERE E[city.name] = \"Najaf\"\nHOW_MUCH LIMIT 10")
+            .unwrap();
+        assert_eq!(
+            res.matched.len(),
+            10,
+            "500 true matches exist; LIMIT 10 must still return exactly 10"
+        );
     }
 
     #[test]
@@ -627,11 +736,21 @@ mod tests {
         }
 
         let base = tmp_base("limit_truncates_full_scan");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         let res = crn.query("WHO T.E\nHOW_MUCH LIMIT 10").unwrap();
-        assert_eq!(res.matched.len(), 10, "500 entities exist with no filter; LIMIT 10 must still return exactly 10");
+        assert_eq!(
+            res.matched.len(),
+            10,
+            "500 entities exist with no filter; LIMIT 10 must still return exactly 10"
+        );
     }
 
     #[test]
@@ -647,19 +766,35 @@ mod tests {
         for i in 0..20 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
             let status = if i < 3 { "active" } else { "inactive" };
-            push_eav(&mut jnl, &m, &e, 1, &[("status", AkkValue::Text(status.into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[("status", AkkValue::Text(status.into()))],
+            );
         }
 
         let base = tmp_base("full_scan_limit_with_where");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         // OR disables the indexed fast path -- exercises the full-scan
         // branch with a real WHERE clause present.
         let res = crn
             .query("WHO T.E\nWHERE E[status] = \"active\" OR E[status] = \"active\"\nHOW_MUCH LIMIT 10")
             .unwrap();
-        assert_eq!(res.matched.len(), 3, "only 3 true matches exist; must not overcount or undercount");
+        assert_eq!(
+            res.matched.len(),
+            3,
+            "only 3 true matches exist; must not overcount or undercount"
+        );
     }
 
     #[test]
@@ -675,12 +810,24 @@ mod tests {
         let m = KakiMinter::new(tribe);
         for _ in 0..500 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m, &e, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[("city.name", AkkValue::Text("Najaf".into()))],
+            );
         }
 
         let base = tmp_base("measure_ignores_indexed_limit");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         let res = crn
             .query("WHO T.E\nWHERE E[city.name] = \"Najaf\"\nHOW_MUCH LIMIT 10\nMEASURE DENSE")
@@ -704,10 +851,18 @@ mod tests {
         }
 
         let base = tmp_base("measure_ignores_full_scan_limit");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
-        let res = crn.query("WHO T.E\nHOW_MUCH LIMIT 10\nMEASURE DENSE").unwrap();
+        let res = crn
+            .query("WHO T.E\nHOW_MUCH LIMIT 10\nMEASURE DENSE")
+            .unwrap();
         assert_eq!(res.matched.len(), 10);
         assert_eq!(res.measured, Some(heptascript::MeasureValue::Dense(500)));
     }
@@ -729,25 +884,49 @@ mod tests {
 
         for _ in 0..5 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m, &e, 100, &[("status", AkkValue::Text("late".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                100,
+                &[("status", AkkValue::Text("late".into()))],
+            );
         }
         for _ in 0..20 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m, &e, 1, &[("status", AkkValue::Text("early".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[("status", AkkValue::Text("early".into()))],
+            );
         }
 
         let base = tmp_base("nairu_when_after_epoch");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         let full = heptascript::execute(
             &parse_query("WHO T.E\nWHERE E[status] = \"late\"\nWHEN AFTER EPOCH 50").unwrap(),
             &jnl,
         );
-        let via_crn = crn.query("WHO T.E\nWHERE E[status] = \"late\"\nWHEN AFTER EPOCH 50").unwrap();
+        let via_crn = crn
+            .query("WHO T.E\nWHERE E[status] = \"late\"\nWHEN AFTER EPOCH 50")
+            .unwrap();
 
         assert_eq!(full.matched.len(), 5);
-        assert_eq!(via_crn.matched.len(), 5, "must agree with a full journal scan");
+        assert_eq!(
+            via_crn.matched.len(),
+            5,
+            "must agree with a full journal scan"
+        );
     }
 
     #[test]
@@ -758,12 +937,24 @@ mod tests {
 
         for epoch in 0..50u32 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m, &e, epoch, &[("kind", AkkValue::Text("particle".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                epoch,
+                &[("kind", AkkValue::Text("particle".into()))],
+            );
         }
 
         let base = tmp_base("radix_orbital_range");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         let full = heptascript::execute(
             &parse_query("WHO T.E\nWHERE E[kind] = \"particle\"\nORBITAL 10 .. 19").unwrap(),
@@ -773,8 +964,16 @@ mod tests {
             .query("WHO T.E\nWHERE E[kind] = \"particle\"\nORBITAL 10 .. 19")
             .unwrap();
 
-        assert_eq!(full.matched.len(), 10, "epochs 10..=19 inclusive is 10 particles");
-        assert_eq!(via_crn.matched.len(), 10, "must agree with a full journal scan");
+        assert_eq!(
+            full.matched.len(),
+            10,
+            "epochs 10..=19 inclusive is 10 particles"
+        );
+        assert_eq!(
+            via_crn.matched.len(),
+            10,
+            "must agree with a full journal scan"
+        );
     }
 
     #[test]
@@ -791,17 +990,33 @@ mod tests {
 
         for epoch in 0..50u32 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m, &e, epoch, &[("kind", AkkValue::Text("particle".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                epoch,
+                &[("kind", AkkValue::Text("particle".into()))],
+            );
         }
 
         let base = tmp_base("radix_orbital_with_limit");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         let res = crn
             .query("WHO T.E\nWHERE E[kind] = \"particle\"\nORBITAL 10 .. 19\nHOW_MUCH LIMIT 100")
             .unwrap();
-        assert_eq!(res.matched.len(), 10, "only 10 true in-range matches exist; LIMIT 100 must not undercount");
+        assert_eq!(
+            res.matched.len(),
+            10,
+            "only 10 true in-range matches exist; LIMIT 100 must not undercount"
+        );
     }
 
     #[test]
@@ -812,11 +1027,17 @@ mod tests {
 
         let target = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
         push_eav(
-            &mut jnl, &m, &target, 1,
+            &mut jnl,
+            &m,
+            &target,
+            1,
             &[
-                ("orbit.r", AkkValue::Float(1.0)), ("orbit.theta", AkkValue::Float(2.0)),
-                ("orbit.phi", AkkValue::Float(3.0)), ("orbit.d3", AkkValue::Float(4.0)),
-                ("orbit.d4", AkkValue::Float(5.0)), ("orbit.d5", AkkValue::Float(6.0)),
+                ("orbit.r", AkkValue::Float(1.0)),
+                ("orbit.theta", AkkValue::Float(2.0)),
+                ("orbit.phi", AkkValue::Float(3.0)),
+                ("orbit.d3", AkkValue::Float(4.0)),
+                ("orbit.d4", AkkValue::Float(5.0)),
+                ("orbit.d5", AkkValue::Float(6.0)),
                 ("orbit.d6", AkkValue::Float(7.0)),
             ],
         );
@@ -824,19 +1045,31 @@ mod tests {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
             let v = (i as f64 + 100.0) * 3.0;
             push_eav(
-                &mut jnl, &m, &e, 1,
+                &mut jnl,
+                &m,
+                &e,
+                1,
                 &[
-                    ("orbit.r", AkkValue::Float(v)), ("orbit.theta", AkkValue::Float(v)),
-                    ("orbit.phi", AkkValue::Float(v)), ("orbit.d3", AkkValue::Float(v)),
-                    ("orbit.d4", AkkValue::Float(v)), ("orbit.d5", AkkValue::Float(v)),
+                    ("orbit.r", AkkValue::Float(v)),
+                    ("orbit.theta", AkkValue::Float(v)),
+                    ("orbit.phi", AkkValue::Float(v)),
+                    ("orbit.d3", AkkValue::Float(v)),
+                    ("orbit.d4", AkkValue::Float(v)),
+                    ("orbit.d5", AkkValue::Float(v)),
                     ("orbit.d6", AkkValue::Float(v)),
                 ],
             );
         }
 
         let base = tmp_base("shell_e7_first_anchor");
-        materialize(&jnl, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        materialize(
+            &jnl,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let crn = CachedReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"))
+            .unwrap();
 
         let q = "WHO T.E\n\
                  WHERE E[orbit.r] = 1.0 AND E[orbit.theta] = 2.0 AND E[orbit.phi] = 3.0 \
@@ -846,7 +1079,14 @@ mod tests {
         let via_crn = crn.query(q).unwrap();
 
         assert_eq!(full.matched.len(), 1);
-        assert_eq!(via_crn.matched.len(), 1, "must agree with a full journal scan");
-        assert_eq!(*full.matched[0].entity.bytes(), *via_crn.matched[0].entity.bytes());
+        assert_eq!(
+            via_crn.matched.len(),
+            1,
+            "must agree with a full journal scan"
+        );
+        assert_eq!(
+            *full.matched[0].entity.bytes(),
+            *via_crn.matched[0].entity.bytes()
+        );
     }
 }

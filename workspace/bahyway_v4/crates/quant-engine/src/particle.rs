@@ -14,10 +14,10 @@ use crate::factor::FactorScores;
 use crate::risk::RiskReport;
 
 // ── Sovereign lane constants (ADR-001 + ADR-008) ─────────────────────────────
-pub const GEM_B11:    u8 = 200;
-pub const TRIBE_B11:  u8 = 140;
+pub const GEM_B11: u8 = 200;
+pub const TRIBE_B11: u8 = 140;
 pub const ACTIVE_B11: u8 = 100;
-pub const FUZZY_B11:  u8 =  60;
+pub const FUZZY_B11: u8 = 60;
 
 /// Sovereign quality lane for an asset particle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,21 +37,21 @@ pub enum AssetQualityLane {
 impl AssetQualityLane {
     pub fn from_b11(b11: u8) -> Self {
         match b11 {
-            b if b >= GEM_B11    => Self::Gem,
-            b if b >= TRIBE_B11  => Self::Tribe,
+            b if b >= GEM_B11 => Self::Gem,
+            b if b >= TRIBE_B11 => Self::Tribe,
             b if b >= ACTIVE_B11 => Self::Active,
-            b if b >= FUZZY_B11  => Self::Fuzzy,
-            _                    => Self::Dead,
+            b if b >= FUZZY_B11 => Self::Fuzzy,
+            _ => Self::Dead,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Gem    => "GEM",
-            Self::Tribe  => "TRIBE",
+            Self::Gem => "GEM",
+            Self::Tribe => "TRIBE",
             Self::Active => "ACTIVE",
-            Self::Fuzzy  => "FUZZY",
-            Self::Dead   => "DEAD",
+            Self::Fuzzy => "FUZZY",
+            Self::Dead => "DEAD",
         }
     }
 
@@ -59,7 +59,9 @@ impl AssetQualityLane {
         matches!(self, Self::Gem | Self::Tribe | Self::Active)
     }
 
-    pub fn is_gem(self) -> bool { matches!(self, Self::Gem) }
+    pub fn is_gem(self) -> bool {
+        matches!(self, Self::Gem)
+    }
 }
 
 /// An asset as a sovereign BahyWay particle.
@@ -69,36 +71,45 @@ impl AssetQualityLane {
 #[derive(Debug, Clone)]
 pub struct AssetParticle {
     /// Sovereign 32-bit asset identity (lower 32 bits of KAKI uuid_hash).
-    pub asset_hash:    u32,
+    pub asset_hash: u32,
     /// Current epoch.
-    pub epoch:         u32,
+    pub epoch: u32,
     /// Latest close price (fixed-point).
-    pub latest_price:  i64,
+    pub latest_price: i64,
     /// Factor scores (5-factor model).
-    pub factors:       FactorScores,
+    pub factors: FactorScores,
     /// Risk report (Sharpe, VaR, drawdown, etc.).
-    pub risk:          RiskReport,
+    pub risk: RiskReport,
     /// Composite B11 quality score (ADR-001: × 240, never × 255).
-    pub b11:           u8,
+    pub b11: u8,
     /// Quality lane derived from B11.
-    pub lane:          AssetQualityLane,
+    pub lane: AssetQualityLane,
     /// H(P) quality score [0.0–1.0] = b11 / 240.0.
-    pub hp:            f64,
+    pub hp: f64,
 }
 
 impl AssetParticle {
     /// Construct an asset particle from factor scores and risk report.
     pub fn new(
-        asset_hash:   u32,
-        epoch:        u32,
+        asset_hash: u32,
+        epoch: u32,
         latest_price: i64,
-        factors:      FactorScores,
-        risk:         RiskReport,
+        factors: FactorScores,
+        risk: RiskReport,
     ) -> Self {
-        let b11  = factors.b11();
+        let b11 = factors.b11();
         let lane = AssetQualityLane::from_b11(b11);
-        let hp   = b11 as f64 / 240.0;
-        Self { asset_hash, epoch, latest_price, factors, risk, b11, lane, hp }
+        let hp = b11 as f64 / 240.0;
+        Self {
+            asset_hash,
+            epoch,
+            latest_price,
+            factors,
+            risk,
+            b11,
+            lane,
+            hp,
+        }
     }
 
     /// One-line sovereign summary for Dashboard and lineage annotation.
@@ -115,7 +126,9 @@ impl AssetParticle {
     }
 
     /// True if this asset should update the universe centroid (GEM lane).
-    pub fn updates_centroid(&self) -> bool { self.lane.is_gem() }
+    pub fn updates_centroid(&self) -> bool {
+        self.lane.is_gem()
+    }
 }
 
 /// Universe centroid — the quality ideal point for the asset universe.
@@ -125,14 +138,18 @@ impl AssetParticle {
 #[derive(Debug, Clone)]
 pub struct UniverseCentroid {
     /// Running mean of 5 factor scores across GEM-lane assets.
-    dims:       [f64; 5],
-    gem_count:  u64,
-    weight:     u64,
+    dims: [f64; 5],
+    gem_count: u64,
+    weight: u64,
 }
 
 impl UniverseCentroid {
     pub fn new() -> Self {
-        Self { dims: [1.0; 5], gem_count: 0, weight: 0 }
+        Self {
+            dims: [1.0; 5],
+            gem_count: 0,
+            weight: 0,
+        }
     }
 
     /// Update with a GEM-lane asset's factor scores.
@@ -142,13 +159,16 @@ impl UniverseCentroid {
         for i in 0..5 {
             self.dims[i] = (self.dims[i] * n + factors.scores[i]) / (n + 1.0);
         }
-        self.weight  += 1;
+        self.weight += 1;
         self.gem_count += 1;
     }
 
     /// Euclidean distance from an asset's factor scores to this centroid.
     pub fn distance(&self, factors: &FactorScores) -> f64 {
-        factors.scores.iter().zip(self.dims.iter())
+        factors
+            .scores
+            .iter()
+            .zip(self.dims.iter())
             .map(|(s, c)| (s - c).powi(2))
             .sum::<f64>()
             .sqrt()
@@ -159,12 +179,18 @@ impl UniverseCentroid {
         1.0 / (1.0 + self.distance(factors))
     }
 
-    pub fn gem_count(&self) -> u64 { self.gem_count }
-    pub fn dims(&self) -> &[f64; 5] { &self.dims }
+    pub fn gem_count(&self) -> u64 {
+        self.gem_count
+    }
+    pub fn dims(&self) -> &[f64; 5] {
+        &self.dims
+    }
 }
 
 impl Default for UniverseCentroid {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -186,8 +212,8 @@ mod tests {
         assert_eq!(AssetQualityLane::from_b11(200), AssetQualityLane::Gem);
         assert_eq!(AssetQualityLane::from_b11(199), AssetQualityLane::Tribe);
         assert_eq!(AssetQualityLane::from_b11(139), AssetQualityLane::Active);
-        assert_eq!(AssetQualityLane::from_b11(99),  AssetQualityLane::Fuzzy);
-        assert_eq!(AssetQualityLane::from_b11(59),  AssetQualityLane::Dead);
+        assert_eq!(AssetQualityLane::from_b11(99), AssetQualityLane::Fuzzy);
+        assert_eq!(AssetQualityLane::from_b11(59), AssetQualityLane::Dead);
     }
 
     #[test]
@@ -212,7 +238,7 @@ mod tests {
     fn summary_contains_lane_and_b11() {
         let p = make_particle(200);
         let s = p.summary();
-        assert!(s.contains("GEM"),  "summary={s}");
+        assert!(s.contains("GEM"), "summary={s}");
         assert!(s.contains("B11="), "summary={s}");
     }
 
@@ -241,16 +267,22 @@ mod tests {
         let mut centroid = UniverseCentroid::new();
         let fsv = [1.0f64; 7];
         let scores = FactorScores::from_fsv(0x01, 1, &fsv);
-        for _ in 0..10 { centroid.update_with_gem(&scores); }
+        for _ in 0..10 {
+            centroid.update_with_gem(&scores);
+        }
         let fit = centroid.geometric_fit(&scores);
         assert!(fit > 0.99, "fit={fit}");
     }
 
     #[test]
     fn all_lane_labels_non_empty() {
-        for lane in [AssetQualityLane::Gem, AssetQualityLane::Tribe,
-                     AssetQualityLane::Active, AssetQualityLane::Fuzzy,
-                     AssetQualityLane::Dead] {
+        for lane in [
+            AssetQualityLane::Gem,
+            AssetQualityLane::Tribe,
+            AssetQualityLane::Active,
+            AssetQualityLane::Fuzzy,
+            AssetQualityLane::Dead,
+        ] {
             assert!(!lane.label().is_empty());
         }
     }

@@ -3,9 +3,9 @@
 //! All lookups are in-process. No external storage — the registry is loaded
 //! at startup from the sovereign data source and kept in memory.
 
-use std::collections::HashMap;
 use bahyway_core::TribeId;
-use navi_engine::{NaviCoord, haversine_m};
+use navi_engine::{haversine_m, NaviCoord};
+use std::collections::HashMap;
 
 use crate::grave::{GraveCondition, GraveId, GraveParticle};
 use crate::sector::NajafSector;
@@ -16,7 +16,9 @@ pub struct GraveRegistry {
 
 impl GraveRegistry {
     pub fn new() -> Self {
-        GraveRegistry { graves: HashMap::new() }
+        GraveRegistry {
+            graves: HashMap::new(),
+        }
     }
 
     pub fn register(&mut self, grave: GraveParticle) {
@@ -31,10 +33,15 @@ impl GraveRegistry {
         self.graves.get_mut(&id)
     }
 
-    pub fn count(&self) -> usize { self.graves.len() }
+    pub fn count(&self) -> usize {
+        self.graves.len()
+    }
 
     pub fn by_sector(&self, sector: NajafSector) -> Vec<&GraveParticle> {
-        self.graves.values().filter(|g| g.sector == sector).collect()
+        self.graves
+            .values()
+            .filter(|g| g.sector == sector)
+            .collect()
     }
 
     pub fn by_tribe(&self, tribe: TribeId) -> Vec<&GraveParticle> {
@@ -42,7 +49,10 @@ impl GraveRegistry {
     }
 
     pub fn by_epoch_range(&self, from: u32, to: u32) -> Vec<&GraveParticle> {
-        self.graves.values().filter(|g| g.epoch >= from && g.epoch <= to).collect()
+        self.graves
+            .values()
+            .filter(|g| g.epoch >= from && g.epoch <= to)
+            .collect()
     }
 
     pub fn accessible(&self) -> Vec<&GraveParticle> {
@@ -50,7 +60,8 @@ impl GraveRegistry {
     }
 
     pub fn accessible_in_sector(&self, sector: NajafSector) -> Vec<&GraveParticle> {
-        self.graves.values()
+        self.graves
+            .values()
             .filter(|g| g.sector == sector && g.is_accessible())
             .collect()
     }
@@ -67,7 +78,8 @@ impl GraveRegistry {
 
     /// Returns the nearest *accessible* grave to the given coordinate.
     pub fn nearest_accessible(&self, coord: &NaviCoord) -> Option<&GraveParticle> {
-        self.graves.values()
+        self.graves
+            .values()
             .filter(|g| g.is_accessible())
             .min_by(|a, b| {
                 let da = haversine_m(a.coord.lat, a.coord.lon, coord.lat, coord.lon);
@@ -84,46 +96,66 @@ impl GraveRegistry {
 
     /// Return graves matching a specific physical condition.
     pub fn by_condition(&self, condition: GraveCondition) -> Vec<&GraveParticle> {
-        self.graves.values().filter(|g| g.condition == condition).collect()
+        self.graves
+            .values()
+            .filter(|g| g.condition == condition)
+            .collect()
     }
 
     /// Return graves whose identity confidence is below `threshold`.
     ///
     /// Use with `QUALITY_DIVISOR=240`: threshold=60 finds speculative or lower.
     pub fn unidentified(&self, threshold: u8) -> Vec<&GraveParticle> {
-        self.graves.values()
+        self.graves
+            .values()
             .filter(|g| g.identity_confidence < threshold)
             .collect()
     }
 
     /// Return graves that are physically damaged (Partial or Destroyed condition).
     pub fn damaged(&self) -> Vec<&GraveParticle> {
-        self.graves.values().filter(|g| g.condition.is_damaged()).collect()
+        self.graves
+            .values()
+            .filter(|g| g.condition.is_damaged())
+            .collect()
     }
 
     /// Return damaged graves that are also unidentified (confidence < threshold).
     pub fn damaged_and_unidentified(&self, threshold: u8) -> Vec<&GraveParticle> {
-        self.graves.values()
+        self.graves
+            .values()
             .filter(|g| g.condition.is_damaged() && g.identity_confidence < threshold)
             .collect()
     }
 }
 
 impl Default for GraveRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use navi_engine::NaviCoord;
-    use bahyway_core::TribeId;
     use crate::grave::{DiscoverySource, GraveCondition, GraveParticle};
+    use bahyway_core::TribeId;
+    use navi_engine::NaviCoord;
 
-    fn tribe1() -> TribeId { TribeId::from_u16(0x0001) }
-    fn tribe2() -> TribeId { TribeId::from_u16(0x0002) }
+    fn tribe1() -> TribeId {
+        TribeId::from_u16(0x0001)
+    }
+    fn tribe2() -> TribeId {
+        TribeId::from_u16(0x0002)
+    }
 
-    fn make_grave(id: GraveId, sector: NajafSector, tribe: TribeId, epoch: u32, lat: f32) -> GraveParticle {
+    fn make_grave(
+        id: GraveId,
+        sector: NajafSector,
+        tribe: TribeId,
+        epoch: u32,
+        lat: f32,
+    ) -> GraveParticle {
         GraveParticle::new(id, NaviCoord::new(lat, 44.320, 0.0), sector, tribe, epoch)
     }
 
@@ -131,9 +163,9 @@ mod tests {
         let mut r = GraveRegistry::new();
         r.register(make_grave(1, NajafSector::Shuhadaa, tribe1(), 1400, 31.990));
         r.register(make_grave(2, NajafSector::Shuhadaa, tribe1(), 1410, 31.991));
-        r.register(make_grave(3, NajafSector::Awliya,   tribe1(), 1420, 31.992));
+        r.register(make_grave(3, NajafSector::Awliya, tribe1(), 1420, 31.992));
         r.register(make_grave(4, NajafSector::Momineen, tribe2(), 1430, 31.993));
-        r.register(make_grave(5, NajafSector::Anbiya,   tribe2(), 1440, 31.994));
+        r.register(make_grave(5, NajafSector::Anbiya, tribe2(), 1440, 31.994));
         r
     }
 
@@ -177,7 +209,7 @@ mod tests {
     #[test]
     fn accessible_returns_occupied_and_reserved() {
         let mut r = populate();
-        r.get_mut(1).unwrap().seal();   // now inaccessible
+        r.get_mut(1).unwrap().seal(); // now inaccessible
         r.get_mut(2).unwrap().reserve(); // still accessible
         let acc = r.accessible();
         assert_eq!(acc.len(), 4); // 2 (reserved), 3, 4, 5

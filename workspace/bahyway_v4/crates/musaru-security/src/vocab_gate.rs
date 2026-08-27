@@ -32,35 +32,35 @@ use std::path::{Path, PathBuf};
 /// stability convention `zip_scan::MALWARE_SIGS` uses, since a
 /// `FoundTerm`'s index may be logged/referenced elsewhere.
 pub const FORBIDDEN_TERMS: &[&str] = &[
-    "SQL",           // 0
-    "NoSQL",         // 1
-    "Relational",    // 2
-    "Multi-Model",   // 3 — explicitly named for EnkiMDB in enki_engines.gd
-    "PostgreSQL",    // 4
-    "Postgres",      // 5
-    "MySQL",         // 6
-    "MariaDB",       // 7
-    "MongoDB",       // 8
-    "Cassandra",     // 9
-    "Redis",         // 10
-    "SQLite",        // 11
+    "SQL",             // 0
+    "NoSQL",           // 1
+    "Relational",      // 2
+    "Multi-Model",     // 3 — explicitly named for EnkiMDB in enki_engines.gd
+    "PostgreSQL",      // 4
+    "Postgres",        // 5
+    "MySQL",           // 6
+    "MariaDB",         // 7
+    "MongoDB",         // 8
+    "Cassandra",       // 9
+    "Redis",           // 10
+    "SQLite",          // 11
     "Oracle Database", // 12
-    "SQL Server",    // 13
-    "DynamoDB",      // 14
-    "CouchDB",       // 15
-    "Neo4j",         // 16
-    "Elasticsearch", // 17
-    // Deliberately NOT included: bare SQL verbs (SELECT, INSERT, DELETE,
-    // GROUP BY, ORDER BY, JOIN, ...). A first pass included them and, run
-    // against the real repo, mostly matched ordinary English/GDScript —
-    // "select a node", "_select_database()", "database_selected" — not a
-    // single real violation. `operations::Operation::parse()` already
-    // owns SQL-verb rejection precisely, as an exact-token match against
-    // real *parsed* HeptaScript source, never prose (`OperationError::
-    // SqlForbidden`) — that is the correct tool for verbs; substring-
-    // scanning prose for them is not. This gate's real, non-redundant job
-    // is the surface that scanner never sees: product names, paradigm
-    // words, and ports, in UI copy and adopted prototypes.
+    "SQL Server",      // 13
+    "DynamoDB",        // 14
+    "CouchDB",         // 15
+    "Neo4j",           // 16
+    "Elasticsearch",   // 17
+                       // Deliberately NOT included: bare SQL verbs (SELECT, INSERT, DELETE,
+                       // GROUP BY, ORDER BY, JOIN, ...). A first pass included them and, run
+                       // against the real repo, mostly matched ordinary English/GDScript —
+                       // "select a node", "_select_database()", "database_selected" — not a
+                       // single real violation. `operations::Operation::parse()` already
+                       // owns SQL-verb rejection precisely, as an exact-token match against
+                       // real *parsed* HeptaScript source, never prose (`OperationError::
+                       // SqlForbidden`) — that is the correct tool for verbs; substring-
+                       // scanning prose for them is not. This gate's real, non-redundant job
+                       // is the surface that scanner never sees: product names, paradigm
+                       // words, and ports, in UI copy and adopted prototypes.
 ];
 
 /// Real default ports of foreign database products — "any foreign
@@ -148,7 +148,9 @@ pub fn scan_text(text: &str) -> Vec<Violation> {
 
     for (idx, raw_line) in lines.iter().copied().enumerate() {
         let window_start = idx.saturating_sub(EXEMPT_WINDOW);
-        let in_exempt_window = lines_lower[window_start..=idx].iter().any(|l| line_is_exempt(l));
+        let in_exempt_window = lines_lower[window_start..=idx]
+            .iter()
+            .any(|l| line_is_exempt(l));
         if in_exempt_window {
             continue;
         }
@@ -204,7 +206,10 @@ fn contains_port_token(line: &str, port: &str) -> bool {
 /// Scan one file on disk.
 pub fn scan_file(path: &Path) -> std::io::Result<VocabScanReport> {
     let text = fs::read_to_string(path)?;
-    Ok(VocabScanReport { path: Some(path.to_path_buf()), violations: scan_text(&text) })
+    Ok(VocabScanReport {
+        path: Some(path.to_path_buf()),
+        violations: scan_text(&text),
+    })
 }
 
 /// Extensions this gate is meant to scan — UI/design surfaces, never
@@ -232,7 +237,11 @@ fn walk(dir: &Path, extensions: &[&str], out: &mut Vec<VocabScanReport>) -> std:
         let path = entry.path();
         let file_name = entry.file_name();
         let name = file_name.to_string_lossy();
-        if name == ".git" || name == ".godot" || name == "_retired_2026-07-10" || name.starts_with('.') {
+        if name == ".git"
+            || name == ".godot"
+            || name == "_retired_2026-07-10"
+            || name.starts_with('.')
+        {
             continue;
         }
         if path.is_dir() {
@@ -342,18 +351,39 @@ mod tests {
     fn scan_dir_finds_violations_across_multiple_gated_files() {
         let dir = std::env::temp_dir().join(format!(
             "musaru_vocab_gate_test_{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("clean.gd"), "extends Control\n# EnkiDB port 7001\n").unwrap();
+        fs::write(
+            dir.join("clean.gd"),
+            "extends Control\n# EnkiDB port 7001\n",
+        )
+        .unwrap();
         fs::write(dir.join("dirty.html"), "<div>MongoDB port 27017</div>\n").unwrap();
-        fs::write(dir.join("ignored.rs"), "// MongoDB — not a gated extension\n").unwrap();
+        fs::write(
+            dir.join("ignored.rs"),
+            "// MongoDB — not a gated extension\n",
+        )
+        .unwrap();
 
         let reports = scan_dir(&dir, GATED_EXTENSIONS).unwrap();
-        assert_eq!(reports.len(), 2, "only .gd and .html are gated extensions here");
-        let dirty = reports.iter().find(|r| r.path.as_ref().unwrap().ends_with("dirty.html")).unwrap();
+        assert_eq!(
+            reports.len(),
+            2,
+            "only .gd and .html are gated extensions here"
+        );
+        let dirty = reports
+            .iter()
+            .find(|r| r.path.as_ref().unwrap().ends_with("dirty.html"))
+            .unwrap();
         assert!(!dirty.is_clean());
-        let clean = reports.iter().find(|r| r.path.as_ref().unwrap().ends_with("clean.gd")).unwrap();
+        let clean = reports
+            .iter()
+            .find(|r| r.path.as_ref().unwrap().ends_with("clean.gd"))
+            .unwrap();
         assert!(clean.is_clean());
 
         fs::remove_dir_all(&dir).unwrap();

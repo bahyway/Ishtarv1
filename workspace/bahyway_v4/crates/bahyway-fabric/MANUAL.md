@@ -48,7 +48,7 @@ The chain is append-only. No hop is ever modified or deleted.
 `chain.report()` produces a human-readable lineage trace readable in Dubsar.
 
 ### Problem 3: High Cost & Complexity
-**Solution: `PipelineDeclaration` — declare WHAT, EriduOS executes HOW**
+**Solution: `PipelineDeclaration` — declare WHAT, UrOS executes HOW**
 
 A pipeline is a named, versioned struct listing source, stages, targets, and
 exception policies. To add a new integration: write a new `PipelineDeclaration`

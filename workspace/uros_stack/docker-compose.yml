@@ -1,0 +1,348 @@
+# ═══════════════════════════════════════════════════════════════
+#  UrOS v4.0 — Full Service Stack
+#  Run: podman-compose up -d <service_name>
+#
+#  PORT MAP:
+#    80/443   Traefik (reverse proxy)
+#    3300     Gitea
+#    3000     Open WebUI (Ollama frontend)
+#    4040     n8n (AAOL workflow bridge)
+#    5050     Plausible Analytics
+#    5678     Vaultwarden UI
+#    8050     Woodpecker CI
+#    9001     Penpot
+#    9002     AppFlowy
+#    9003     Cal.com
+#    9090     Netdata
+#    11434    Ollama API
+#    19999    Netdata UI
+# ═══════════════════════════════════════════════════════════════
+
+networks:
+  uros_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.88.0.0/16
+
+volumes:
+  postgres_data:
+  gitea_data:
+  vaultwarden_data:
+  ollama_models:
+  openwebui_data:
+  netdata_config:
+  netdata_lib:
+  netdata_cache:
+  plausible_db:
+  plausible_events:
+  appflowy_data:
+  n8n_data:
+  woodpecker_data:
+  penpot_data:
+  traefik_certs:
+  crowdsec_data:
+  crowdsec_config:
+
+services:
+
+  # ── 0. TRAEFIK — Reverse Proxy (entry point for all services) ──
+  traefik:
+    image: traefik:v3.0
+    container_name: uros_traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"   # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_certs:/certs
+      - ./config/traefik.yml:/etc/traefik/traefik.yml:ro
+    networks: [uros_net]
+    labels:
+      - "traefik.enable=true"
+
+  # ── 1. POSTGRESQL — Shared database for all services ───────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: uros_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_MULTIPLE_DATABASES: "gitea,plausible,calcom,appflowy,uros_main"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
+    networks: [uros_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 2. OLLAMA — Local LLM Engine (CPU mode for Hyper-V) ────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: uros_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [uros_net]
+    environment:
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
+    # NOTE: Remove next 2 lines when you have a real GPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           capabilities: [gpu]
+
+  # ── 3. OPEN WEBUI — Ollama Frontend ────────────────────────────
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: uros_openwebui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=${N8N_ENCRYPTION_KEY}
+    depends_on: [ollama]
+    networks: [uros_net]
+
+  # ── 4. VAULTWARDEN — Password Manager ──────────────────────────
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: uros_vaultwarden
+    restart: unless-stopped
+    ports:
+      - "5678:80"
+    volumes:
+      - vaultwarden_data:/data
+    environment:
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+      - DOMAIN=${VAULTWARDEN_DOMAIN}
+      - SIGNUPS_ALLOWED=false
+    networks: [uros_net]
+
+  # ── 5. GITEA — Self-hosted Git ──────────────────────────────────
+  gitea:
+    image: gitea/gitea:latest
+    container_name: uros_gitea
+    restart: unless-stopped
+    ports:
+      - "3300:3000"
+      - "2222:22"
+    volumes:
+      - gitea_data:/data
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=${POSTGRES_USER}
+      - GITEA__database__PASSWD=${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [uros_net]
+
+  # ── 6. WOODPECKER CI — Self-hosted CI/CD ───────────────────────
+  woodpecker-server:
+    image: woodpeckerci/woodpecker-server:latest
+    container_name: uros_woodpecker
+    restart: unless-stopped
+    ports:
+      - "8050:8000"
+    volumes:
+      - woodpecker_data:/var/lib/woodpecker
+    environment:
+      - WOODPECKER_OPEN=false
+      - WOODPECKER_ADMIN=${WOODPECKER_ADMIN}
+      - WOODPECKER_HOST=${WOODPECKER_HOST}
+      - WOODPECKER_GITEA=true
+      - WOODPECKER_GITEA_URL=${WOODPECKER_GITEA_URL}
+      - WOODPECKER_GITEA_CLIENT=${WOODPECKER_GITEA_CLIENT}
+      - WOODPECKER_GITEA_SECRET=${WOODPECKER_GITEA_SECRET}
+      - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
+    depends_on: [gitea]
+    networks: [uros_net]
+
+  woodpecker-agent:
+    image: woodpeckerci/woodpecker-agent:latest
+    container_name: uros_woodpecker_agent
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WOODPECKER_SERVER=woodpecker-server:9000
+      - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
+    depends_on: [woodpecker-server]
+    networks: [uros_net]
+
+  # ── 7. N8N — Workflow Automation (AAOL bridge) ──────────────────
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: uros_n8n
+    restart: unless-stopped
+    ports:
+      - "4040:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_DATABASE=uros_main
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [uros_net]
+
+  # ── 8. PLAUSIBLE ANALYTICS ─────────────────────────────────────
+  plausible:
+    image: ghcr.io/plausible/community-edition:v2
+    container_name: uros_plausible
+    restart: unless-stopped
+    ports:
+      - "5050:8000"
+    environment:
+      - SECRET_KEY_BASE=${PLAUSIBLE_SECRET_KEY_BASE}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/plausible
+      - CLICKHOUSE_DATABASE_URL=http://clickhouse:8123/plausible_events
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks: [uros_net]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.3-alpine
+    container_name: uros_clickhouse
+    restart: unless-stopped
+    volumes:
+      - plausible_events:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks: [uros_net]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 9. APPFLOWY — Notion Alternative ───────────────────────────
+  appflowy_cloud:
+    image: appflowyinc/appflowy_cloud:latest
+    container_name: uros_appflowy
+    restart: unless-stopped
+    ports:
+      - "9002:8000"
+    environment:
+      - APPFLOWY_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/appflowy
+      - GOTRUE_JWT_SECRET=${APPFLOWY_GOTRUE_JWT_SECRET}
+      - APPFLOWY_ADMIN_EMAIL=${APPFLOWY_ADMIN_EMAIL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - appflowy_data:/app/data
+    networks: [uros_net]
+
+  # ── 10. PENPOT — Design Tool (Figma alternative) ───────────────
+  penpot-frontend:
+    image: penpotapp/frontend:latest
+    container_name: uros_penpot_frontend
+    restart: unless-stopped
+    ports:
+      - "9001:80"
+    environment:
+      - PENPOT_FLAGS=enable-registration enable-login
+    networks: [uros_net]
+
+  penpot-backend:
+    image: penpotapp/backend:latest
+    container_name: uros_penpot_backend
+    restart: unless-stopped
+    environment:
+      - PENPOT_SECRET_KEY=${PENPOT_SECRET_KEY}
+      - PENPOT_PUBLIC_URI=${PENPOT_PUBLIC_URI}
+      - PENPOT_DATABASE_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/penpot
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - penpot_data:/app/data
+    networks: [uros_net]
+
+  # ── 11. NETDATA — Real-time Monitoring ─────────────────────────
+  netdata:
+    image: netdata/netdata:latest
+    container_name: uros_netdata
+    restart: unless-stopped
+    pid: host
+    ports:
+      - "19999:19999"
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - netdata_config:/etc/netdata
+      - netdata_lib:/var/lib/netdata
+      - netdata_cache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+    networks: [uros_net]
+
+  # ── 12. CROWDSEC — Security (WAY Language backend) ─────────────
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: uros_crowdsec
+    restart: unless-stopped
+    environment:
+      - GID=1000
+      - COLLECTIONS=crowdsecurity/linux crowdsecurity/traefik
+    volumes:
+      - crowdsec_config:/etc/crowdsec
+      - crowdsec_data:/var/lib/crowdsec/data
+      - /var/log:/var/log:ro
+    networks: [uros_net]
+
+  # ── 13. CAL.COM — Scheduling ────────────────────────────────────
+  calcom:
+    image: calcom/cal.com:latest
+    container_name: uros_calcom
+    restart: unless-stopped
+    ports:
+      - "9003:3000"
+    environment:
+      - DATABASE_URL=${CAL_DATABASE_URL}
+      - NEXTAUTH_SECRET=${CAL_NEXTAUTH_SECRET}
+      - CALENDSO_ENCRYPTION_KEY=${CAL_CALENDSO_ENCRYPTION_KEY}
+      - NEXTAUTH_URL=http://${HOST_IP}:9003
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [uros_net]

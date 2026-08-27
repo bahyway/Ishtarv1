@@ -16,30 +16,42 @@ pub const DELTA_FRAG: f64 = 0.35;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BinaryFeatureVector {
     /// B1 — Shannon byte entropy normalised to [0,1] (max 8 bits)
-    pub byte_entropy:     f64,
+    pub byte_entropy: f64,
     /// B2 — fraction of null bytes (0x00)
-    pub null_density:     f64,
+    pub null_density: f64,
     /// B3 — fraction of printable ASCII bytes (0x20–0x7E)
-    pub printable_ratio:  f64,
+    pub printable_ratio: f64,
     /// B4 — fraction of high bytes (0x80–0xFF)
-    pub high_byte_ratio:  f64,
+    pub high_byte_ratio: f64,
     /// B5 — normalised run-length (longest same-byte run / block length)
-    pub run_length_norm:  f64,
+    pub run_length_norm: f64,
     /// B6 — repeating 4-byte pattern score (0 = no pattern, 1 = fully periodic)
-    pub pattern_score:    f64,
+    pub pattern_score: f64,
 }
 
 impl BinaryFeatureVector {
     /// All-zero BFV — represents an empty block.
     pub fn zero() -> Self {
-        Self { byte_entropy: 0.0, null_density: 0.0, printable_ratio: 0.0,
-               high_byte_ratio: 0.0, run_length_norm: 0.0, pattern_score: 0.0 }
+        Self {
+            byte_entropy: 0.0,
+            null_density: 0.0,
+            printable_ratio: 0.0,
+            high_byte_ratio: 0.0,
+            run_length_norm: 0.0,
+            pattern_score: 0.0,
+        }
     }
 
     /// Return dimensions as a `[f64; 6]` array.
     pub fn as_array(&self) -> [f64; 6] {
-        [self.byte_entropy, self.null_density, self.printable_ratio,
-         self.high_byte_ratio, self.run_length_norm, self.pattern_score]
+        [
+            self.byte_entropy,
+            self.null_density,
+            self.printable_ratio,
+            self.high_byte_ratio,
+            self.run_length_norm,
+            self.pattern_score,
+        ]
     }
 }
 
@@ -58,9 +70,13 @@ pub fn compute_bfv(bytes: &[u8]) -> BinaryFeatureVector {
     }
 
     // B1: Shannon byte entropy
-    let entropy: f64 = freq.iter()
+    let entropy: f64 = freq
+        .iter()
         .filter(|&&cnt| cnt > 0)
-        .map(|&cnt| { let p = cnt as f64 / nf; -p * p.log2() })
+        .map(|&cnt| {
+            let p = cnt as f64 / nf;
+            -p * p.log2()
+        })
         .sum::<f64>();
     let byte_entropy = (entropy / 8.0).min(1.0); // max 8 bits
 
@@ -81,7 +97,9 @@ pub fn compute_bfv(bytes: &[u8]) -> BinaryFeatureVector {
     for i in 1..n {
         if bytes[i] == bytes[i - 1] {
             cur_run += 1;
-            if cur_run > max_run { max_run = cur_run; }
+            if cur_run > max_run {
+                max_run = cur_run;
+            }
         } else {
             cur_run = 1;
         }
@@ -93,8 +111,12 @@ pub fn compute_bfv(bytes: &[u8]) -> BinaryFeatureVector {
     let pattern_score = detect_pattern_score(bytes);
 
     BinaryFeatureVector {
-        byte_entropy, null_density, printable_ratio,
-        high_byte_ratio, run_length_norm, pattern_score,
+        byte_entropy,
+        null_density,
+        printable_ratio,
+        high_byte_ratio,
+        run_length_norm,
+        pattern_score,
     }
 }
 
@@ -104,11 +126,15 @@ pub fn compute_bfv(bytes: &[u8]) -> BinaryFeatureVector {
 /// 0.0 = no discernible period-4 pattern.
 fn detect_pattern_score(bytes: &[u8]) -> f64 {
     let n = bytes.len();
-    if n < 8 { return 0.0; }
+    if n < 8 {
+        return 0.0;
+    }
 
     // Count how many positions i where bytes[i] == bytes[i % 4]
     let pattern: [u8; 4] = [bytes[0], bytes[1], bytes[2], bytes[3]];
-    let matches = bytes.iter().enumerate()
+    let matches = bytes
+        .iter()
+        .enumerate()
         .filter(|(i, &b)| b == pattern[i % 4])
         .count();
 
@@ -120,10 +146,10 @@ fn detect_pattern_score(bytes: &[u8]) -> f64 {
 /// Weights: entropy (0.30) + nulls (0.20) + non-printable (0.30) + high bytes (0.20)
 /// A fragmented block scores > δ_frag = 0.35.
 pub fn fragmentation_score(bfv: &BinaryFeatureVector) -> f64 {
-    bfv.byte_entropy        * 0.30
-    + bfv.null_density      * 0.20
-    + (1.0 - bfv.printable_ratio) * 0.30
-    + bfv.high_byte_ratio   * 0.20
+    bfv.byte_entropy * 0.30
+        + bfv.null_density * 0.20
+        + (1.0 - bfv.printable_ratio) * 0.30
+        + bfv.high_byte_ratio * 0.20
 }
 
 /// Returns `true` if the block is fragmented (score > δ_frag).
@@ -158,7 +184,11 @@ mod tests {
     fn printable_ascii_gives_full_printable_ratio() {
         let text = b"Hello World!";
         let bfv = compute_bfv(text);
-        assert!((bfv.printable_ratio - 1.0).abs() < 1e-9, "{}", bfv.printable_ratio);
+        assert!(
+            (bfv.printable_ratio - 1.0).abs() < 1e-9,
+            "{}",
+            bfv.printable_ratio
+        );
         assert_eq!(bfv.null_density, 0.0);
         assert_eq!(bfv.high_byte_ratio, 0.0);
     }
@@ -166,7 +196,11 @@ mod tests {
     #[test]
     fn all_dimensions_in_unit_interval() {
         let cases: &[&[u8]] = &[
-            &[], &[0u8; 4], b"hello", &[0xFF; 8], &[0x41; 16],
+            &[],
+            &[0u8; 4],
+            b"hello",
+            &[0xFF; 8],
+            &[0x41; 16],
             &[0x00, 0x01, 0x02, 0x03, 0xF0, 0xE0, 0xD0, 0xC0],
         ];
         for &bytes in cases {
@@ -179,7 +213,10 @@ mod tests {
 
     #[test]
     fn delta_frag_constant_is_sovereign() {
-        assert!((DELTA_FRAG - 0.35).abs() < 1e-9, "δ_frag must be 0.35 (ADR-008)");
+        assert!(
+            (DELTA_FRAG - 0.35).abs() < 1e-9,
+            "δ_frag must be 0.35 (ADR-008)"
+        );
     }
 
     #[test]
@@ -208,7 +245,11 @@ mod tests {
         // Repeating [0xAB, 0xCD, 0xEF, 0x01] pattern
         let bytes: Vec<u8> = (0..32).map(|i| [0xABu8, 0xCD, 0xEF, 0x01][i % 4]).collect();
         let bfv = compute_bfv(&bytes);
-        assert!(bfv.pattern_score > 0.9, "pattern_score={}", bfv.pattern_score);
+        assert!(
+            bfv.pattern_score > 0.9,
+            "pattern_score={}",
+            bfv.pattern_score
+        );
     }
 
     #[test]

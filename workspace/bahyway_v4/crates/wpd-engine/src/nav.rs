@@ -15,10 +15,10 @@ impl SiteAccess {
     /// Travel cost multiplier relative to Open access.
     pub fn cost_multiplier(self) -> f32 {
         match self {
-            SiteAccess::Open       => 1.0,
-            SiteAccess::FootOnly   => 1.8,
+            SiteAccess::Open => 1.0,
+            SiteAccess::FootOnly => 1.8,
             SiteAccess::Restricted => 2.5,
-            SiteAccess::Dangerous  => 4.0,
+            SiteAccess::Dangerous => 4.0,
         }
     }
 
@@ -28,10 +28,10 @@ impl SiteAccess {
 
     pub fn name(self) -> &'static str {
         match self {
-            SiteAccess::Open       => "Open",
-            SiteAccess::FootOnly   => "Foot Only",
+            SiteAccess::Open => "Open",
+            SiteAccess::FootOnly => "Foot Only",
             SiteAccess::Restricted => "Restricted",
-            SiteAccess::Dangerous  => "Dangerous",
+            SiteAccess::Dangerous => "Dangerous",
         }
     }
 }
@@ -40,21 +40,21 @@ impl SiteAccess {
 
 #[derive(Debug, Clone)]
 pub struct RepairWaypoint {
-    pub lat:      f64,
-    pub lon:      f64,
+    pub lat: f64,
+    pub lon: f64,
     pub landmark: String,
-    pub access:   SiteAccess,
+    pub access: SiteAccess,
 }
 
 #[derive(Debug, Clone)]
 pub struct RepairRoute {
-    pub segment_id:        String,
-    pub waypoints:         Vec<RepairWaypoint>,
-    pub distance_metres:   u32,
+    pub segment_id: String,
+    pub waypoints: Vec<RepairWaypoint>,
+    pub distance_metres: u32,
     pub estimated_minutes: u32,
-    pub requires_escort:   bool,
+    pub requires_escort: bool,
     pub blueprint_missing: bool,
-    pub directions:        Vec<String>,
+    pub directions: Vec<String>,
 }
 
 // ── Navigator preferences ─────────────────────────────────────────
@@ -62,12 +62,15 @@ pub struct RepairRoute {
 #[derive(Debug, Clone)]
 pub struct RepairPrefs {
     pub avoid_dangerous: bool,
-    pub max_distance_m:  Option<u32>,
+    pub max_distance_m: Option<u32>,
 }
 
 impl Default for RepairPrefs {
     fn default() -> Self {
-        Self { avoid_dangerous: true, max_distance_m: None }
+        Self {
+            avoid_dangerous: true,
+            max_distance_m: None,
+        }
     }
 }
 
@@ -87,14 +90,14 @@ impl RepairNavigator {
         // A placeholder staging waypoint; real coordinates come from drone dispatch.
         let waypoints = vec![
             RepairWaypoint {
-                lat:      33.3400,
-                lon:      44.3900,
+                lat: 33.3400,
+                lon: 44.3900,
                 landmark: "Operations Base Baghdad".to_string(),
-                access:   SiteAccess::Open,
+                access: SiteAccess::Open,
             },
             RepairWaypoint {
-                lat:      33.3400,
-                lon:      44.3900,
+                lat: 33.3400,
+                lon: 44.3900,
                 landmark: format!("Segment {}", defect.segment_id),
                 access,
             },
@@ -108,7 +111,7 @@ impl RepairNavigator {
             }
         }
         // speed in m/min adjusted by access cost
-        let speed_mpm       = 70.0 / access.cost_multiplier();
+        let speed_mpm = 70.0 / access.cost_multiplier();
         let estimated_minutes = ((distance_metres as f32 / speed_mpm) as u32).max(1);
         let requires_escort = matches!(access, SiteAccess::Restricted | SiteAccess::Dangerous);
         Ok(RepairRoute {
@@ -120,14 +123,19 @@ impl RepairNavigator {
             blueprint_missing: false,
             directions: vec![
                 "Proceed to Operations Base Baghdad".to_string(),
-                format!("Navigate to segment {} for inspection and repair", defect.segment_id),
+                format!(
+                    "Navigate to segment {} for inspection and repair",
+                    defect.segment_id
+                ),
             ],
         })
     }
 
     fn estimate_access(defect: &DefectEvent) -> SiteAccess {
-        if matches!(defect.defect_class, DefectClass::ActiveLeak | DefectClass::Crack)
-            && defect.composite_score > 0.80
+        if matches!(
+            defect.defect_class,
+            DefectClass::ActiveLeak | DefectClass::Crack
+        ) && defect.composite_score > 0.80
         {
             SiteAccess::Dangerous
         } else if defect.composite_score > 0.70 {
@@ -156,7 +164,10 @@ mod tests {
 
     fn make_event(score: f32, confidence: f32) -> DefectEvent {
         DefectClassifier::classify(
-            "BGH-SC-001", score, confidence, 1_717_000_000_000,
+            "BGH-SC-001",
+            score,
+            confidence,
+            1_717_000_000_000,
             DetectionMethod::SpectralScan,
         )
         .unwrap()
@@ -164,7 +175,7 @@ mod tests {
 
     #[test]
     fn safe_defect_produces_route() {
-        let ev    = make_event(0.50, 0.80);
+        let ev = make_event(0.50, 0.80);
         let prefs = RepairPrefs::default();
         let route = RepairNavigator::route_to(&ev, &prefs).unwrap();
         assert_eq!(route.segment_id, "BGH-SC-001");
@@ -173,22 +184,28 @@ mod tests {
 
     #[test]
     fn dangerous_defect_blocked_by_default() {
-        let ev    = make_event(0.95, 0.90);
+        let ev = make_event(0.95, 0.90);
         let prefs = RepairPrefs::default();
         assert!(RepairNavigator::route_to(&ev, &prefs).is_err());
     }
 
     #[test]
     fn dangerous_defect_allowed_when_override() {
-        let ev    = make_event(0.95, 0.90);
-        let prefs = RepairPrefs { avoid_dangerous: false, max_distance_m: None };
+        let ev = make_event(0.95, 0.90);
+        let prefs = RepairPrefs {
+            avoid_dangerous: false,
+            max_distance_m: None,
+        };
         assert!(RepairNavigator::route_to(&ev, &prefs).is_ok());
     }
 
     #[test]
     fn max_distance_enforced() {
-        let ev    = make_event(0.30, 0.70);
-        let prefs = RepairPrefs { avoid_dangerous: true, max_distance_m: Some(100) };
+        let ev = make_event(0.30, 0.70);
+        let prefs = RepairPrefs {
+            avoid_dangerous: true,
+            max_distance_m: Some(100),
+        };
         assert!(RepairNavigator::route_to(&ev, &prefs).is_err());
     }
 

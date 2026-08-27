@@ -17,10 +17,10 @@ pub mod pb_doc_mint;
 pub mod pb_mint;
 pub mod pb_story;
 pub mod remedy;
-pub mod resource_check;
-pub mod tablet_mint;
 pub mod report;
+pub mod resource_check;
 pub mod runner;
+pub mod tablet_mint;
 
 #[cfg(feature = "gui")]
 pub mod app;

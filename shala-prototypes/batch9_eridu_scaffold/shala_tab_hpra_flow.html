@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ŠALA — HPRA resource-allocation flow (rehearsal)</title>
+<!-- ════════════════════════════════════════════════════════════════
+     ŠALA TAB — HPRA · RESOURCE ALLOCATION ON A HYPERGRAPH
+     BahyWay.Ecosystem v4.0 · rehearsal only (Way-of-Work rule 5)
+     HPRA (Kumar et al. 2020) adapts the classical Resource-Allocation
+     index to hypergraph geometry. A unit of resource leaves the source
+     node and flows through the HYPEREDGES it belongs to — each hyperedge
+     is a transmitter that splits the resource among its members, so a
+     bigger hyperedge dilutes more (factor 1/(|e|-1)). Resource reaching
+     a shared neighbour s flows on to the target, thinned by how busy s
+     is (÷|N(s)|). What arrives at the target is the similarity score.
+       · connection score  SD(u,v) = Σ_{e∋u,v} 1/(|e|-1)
+       · HRA(u,v) = SD(u,v)  +  Σ_{s∈N(u)∩N(v)} SD(u,s)·SD(s,v)/|N(s)|
+     Deterministic · explainable · NO AI. For BahyWay this is an
+     auditable ε (confidence) on an inferred CrossTribe link (GL-DB-001):
+     the number comes with its own derivation, not a black box.
+     Computation verified against a hand calculation. Figures illustrative.
+     ════════════════════════════════════════════════════════════════ -->
+<style>
+:root{
+  --bg-base:#2B2D31; --bg-panel:#232527; --bg-widget:#1E2022; --bg-deep:#121315;
+  --bg-hover:#383A3E; --bg-selected:#404349; --stroke:#3D3F43;
+  --gold:#D6A44C; --teal:#4FB8A8; --orange:#D98E3E; --crimson:#C34A3F;
+  --purple:#9B7FC7; --pale:#C9CDD4; --grey:#8A8D92;
+  --ink:#E8E6E1; --muted:#9A9C9F; --dim:#6E7074;
+  --serif:"Iowan Old Style",Palatino,Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:"Inter","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-base);color:var(--ink);font-family:var(--sans);font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:baseline;gap:16px;padding:14px 22px;border-bottom:1px solid var(--stroke)}
+header h1{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:.24em;color:var(--gold)}
+header .sub{font-size:12px;color:var(--dim)}
+.wrap{padding:16px 22px;max-width:1240px;margin:0 auto;width:100%}
+.bar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+button{background:var(--bg-widget);color:var(--ink);border:1px solid var(--stroke);border-radius:6px;padding:8px 13px;font-size:12.5px;cursor:pointer}
+button:hover{background:var(--bg-hover)}
+button.gold{border-color:var(--gold);color:var(--gold)}
+.stat{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+.scene{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px}
+canvas{display:block;width:100%;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:8px;cursor:pointer}
+.side{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--bg-panel);border:1px solid var(--stroke);border-radius:8px;overflow:hidden}
+.card .h{padding:9px 12px;border-bottom:1px solid var(--stroke);background:var(--bg-widget);font-family:var(--serif);font-size:12.5px;color:var(--gold)}
+.card .b{padding:11px 12px}
+.sel{font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.9}
+.sel .u{color:var(--gold)} .sel .v{color:var(--teal)}
+.formula{font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.7;background:var(--bg-deep);border:1px solid var(--stroke);border-radius:6px;padding:9px}
+.formula .hi{color:var(--gold)}
+.terms{font-family:var(--mono);font-size:10.5px;line-height:1.9}
+.terms .row{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #26282B}
+.terms .row .lab{color:var(--muted)} .terms .row .val{color:var(--pale)}
+.terms .row.direct .lab{color:var(--gold)} .terms .row.indirect .lab{color:var(--teal)}
+.terms .total{display:flex;justify-content:space-between;margin-top:7px;padding-top:7px;border-top:2px solid var(--gold);font-size:13px}
+.terms .total .lab{color:var(--gold)} .terms .total .val{color:var(--ink);font-weight:600}
+.eps{margin-top:8px;font-family:var(--serif);font-style:italic;font-size:11.5px;color:var(--teal);line-height:1.5}
+.legend{font-size:10.5px;color:var(--muted);line-height:1.9}
+.legend .row{display:flex;align-items:center;gap:6px}
+.legend .sw{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+footer{padding:10px 22px;font-family:var(--serif);font-style:italic;font-size:12px;color:var(--dim);text-align:center}
+@media(max-width:1000px){.scene{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>Š A L A</h1><span class="sub">HPRA — resource allocation across a hypergraph</span></header>
+<div class="wrap">
+  <div class="bar">
+    <button class="gold" id="flowBtn">▶ Send the resource</button>
+    <button id="clearBtn">↺ clear selection</button>
+    <span class="stat" id="stat">click a node for the source, then another for the target</span>
+  </div>
+  <div class="scene">
+    <canvas id="cv" height="440"></canvas>
+    <div class="side">
+      <div class="card"><div class="h">◆ selection</div><div class="b">
+        <div class="sel" id="selTxt">source: <span class="u">— </span><br>target: <span class="v">—</span></div>
+      </div></div>
+      <div class="card"><div class="h">⬡ HRA score — the resource that arrives</div><div class="b">
+        <div class="formula">HRA(<span class="hi">u</span>,<span class="hi">v</span>) = SD(u,v) + Σ<sub>s</sub> SD(u,s)·SD(s,v) / |N(s)|<br><span style="color:var(--dim)">SD(a,b) = Σ<sub>e∋a,b</sub> 1/(|e|−1) · larger e dilutes</span></div>
+        <div class="terms" id="terms" style="margin-top:9px"><div style="color:var(--dim)">select a source and target…</div></div>
+        <div class="eps" id="epsNote"></div>
+      </div></div>
+      <div class="card"><div class="h">legend</div><div class="b"><div class="legend">
+        <div class="row"><span class="sw" style="background:var(--gold)"></span>source (resource origin)</div>
+        <div class="row"><span class="sw" style="background:var(--teal)"></span>target (resource sink)</div>
+        <div class="row"><span class="sw" style="background:var(--purple)"></span>common neighbour (relay)</div>
+        <div class="row"><span class="sw" style="background:var(--grey)"></span>other node</div>
+        <div style="margin-top:5px;color:var(--dim)">blobs = hyperedges (transmitters). Brighter flow = more resource.</div>
+      </div></div></div>
+    </div>
+  </div>
+</div>
+<footer>Rehearsal only. HPRA (Kumar et al. 2020): a deterministic resource-allocation similarity on a hypergraph — no AI. For BahyWay it is an auditable ε on an inferred CrossTribe link: the confidence arrives with its own derivation (GL-DB-001). Computation verified. Figures illustrative. — inscribed for DUB.SAR 𒁾</footer>
+
+<script>
+"use strict";
+/* ── the hypergraph ── */
+const NODES={
+ v1:{x:.15,y:.30},v2:{x:.32,y:.14},v3:{x:.44,y:.44},
+ v4:{x:.27,y:.72},v5:{x:.60,y:.56},v6:{x:.77,y:.34},v7:{x:.88,y:.64}
+};
+const HE=[
+ {id:'e1',nodes:['v1','v2','v3'],      col:[214,164,76]},
+ {id:'e2',nodes:['v2','v3','v4','v5'], col:[155,127,199]},
+ {id:'e3',nodes:['v3','v5','v6'],      col:[79,184,168]},
+ {id:'e4',nodes:['v5','v6','v7'],      col:[217,142,62]},
+ {id:'e5',nodes:['v1','v4'],           col:[111,168,220]},
+];
+/* ── the real HPRA math ── */
+function SD(u,v){let s=0;HE.forEach(e=>{if(e.nodes.includes(u)&&e.nodes.includes(v))s+=1/(e.nodes.length-1);});return s;}
+function Nset(u){const s=new Set();HE.forEach(e=>{if(e.nodes.includes(u))e.nodes.forEach(x=>{if(x!==u)s.add(x);});});return s;}
+function HRA(u,v){
+  const direct=SD(u,v);
+  const Nu=Nset(u),Nv=Nset(v);
+  const common=[...Nu].filter(x=>Nv.has(x));
+  const terms=[];
+  common.forEach(s=>{const sdUs=SD(u,s),sdSv=SD(s,v),deg=Nset(s).size,c=sdUs*sdSv/deg;
+    if(c>0)terms.push({s,c,sdUs,sdSv,deg});});
+  const indirect=terms.reduce((a,b)=>a+b.c,0);
+  return {direct,terms,indirect,total:direct+indirect,common};
+}
+
+/* ── canvas ── */
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let DPR=Math.min(2,devicePixelRatio||1),W,H=440;
+function size(){W=cv.clientWidth;cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';}
+size();addEventListener('resize',size);
+function XY(id){return [NODES[id].x*W,NODES[id].y*H];}
+
+let src=null,tgt=null,res=null,flows=[],flowing=false,tAcc=0;
+
+/* convex-hull blob for a hyperedge (padded, rounded) */
+function hull(points){
+  if(points.length<3)return points.slice();
+  const pts=points.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lo=[];for(const p of pts){while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
+  const up=[];for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(up.length>=2&&cross(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p);}
+  lo.pop();up.pop();return lo.concat(up);
+}
+function drawHE(e){
+  const pts=e.nodes.map(XY);
+  const cx=pts.reduce((a,p)=>a+p[0],0)/pts.length, cy=pts.reduce((a,p)=>a+p[1],0)/pts.length;
+  const pad=26/(e.nodes.length>2?1:1.4);
+  let poly=hull(pts).map(p=>{const dx=p[0]-cx,dy=p[1]-cy,d=Math.hypot(dx,dy)||1;return [p[0]+dx/d*pad,p[1]+dy/d*pad];});
+  if(poly.length<3){ // 2-node hyperedge → capsule-ish
+    const [a,b]=pts;const ang=Math.atan2(b[1]-a[1],b[0]-a[0])+Math.PI/2;
+    poly=[[a[0]+Math.cos(ang)*pad,a[1]+Math.sin(ang)*pad],[b[0]+Math.cos(ang)*pad,b[1]+Math.sin(ang)*pad],
+          [b[0]-Math.cos(ang)*pad,b[1]-Math.sin(ang)*pad],[a[0]-Math.cos(ang)*pad,a[1]-Math.sin(ang)*pad]];
+  }
+  ctx.beginPath();
+  for(let i=0;i<poly.length;i++){const p=poly[i],n=poly[(i+1)%poly.length];const mx=(p[0]+n[0])/2,my=(p[1]+n[1])/2;
+    if(i===0)ctx.moveTo(mx,my);ctx.quadraticCurveTo(n[0],n[1],(n[0]+poly[(i+2)%poly.length][0])/2,(n[1]+poly[(i+2)%poly.length][1])/2);}
+  ctx.closePath();
+  ctx.fillStyle='rgba('+e.col[0]+','+e.col[1]+','+e.col[2]+',.09)';ctx.fill();
+  ctx.strokeStyle='rgba('+e.col[0]+','+e.col[1]+','+e.col[2]+',.35)';ctx.lineWidth=1;ctx.stroke();
+  // label |e| near centroid edge
+  ctx.fillStyle='rgba('+e.col[0]+','+e.col[1]+','+e.col[2]+',.7)';ctx.font='9px monospace';ctx.textAlign='center';
+  ctx.fillText(e.id+' |'+e.nodes.length+'|',cx,cy - (e.nodes.length>2?0:22));
+  ctx.textAlign='left';
+}
+
+function draw(){
+  tAcc++;
+  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#121315';ctx.fillRect(0,0,W,H);
+  HE.forEach(drawHE);
+  // flow particles
+  if(flowing && res){
+    ctx.globalCompositeOperation='lighter';
+    flows.forEach(f=>{
+      // f: path array of node ids; intensity; color
+      const segCount=f.path.length-1;
+      for(let k=0;k<f.count;k++){
+        const phase=((tAcc*f.speed)+(k/f.count))%1;
+        const seg=Math.min(segCount-1,Math.floor(phase*segCount));
+        const local=(phase*segCount)-seg;
+        const [ax,ay]=XY(f.path[seg]),[bx,by]=XY(f.path[seg+1]);
+        const x=ax+(bx-ax)*local,y=ay+(by-ay)*local;
+        ctx.fillStyle='rgba('+f.col[0]+','+f.col[1]+','+f.col[2]+','+(f.intensity)+')';
+        ctx.beginPath();ctx.arc(x,y,2.3,0,6.2832);ctx.fill();
+      }
+    });
+    ctx.globalCompositeOperation='source-over';
+  }
+  // nodes
+  Object.keys(NODES).forEach(id=>{
+    const [x,y]=XY(id);
+    let col=[138,141,146];
+    if(id===src)col=[214,164,76]; else if(id===tgt)col=[79,184,168];
+    else if(res&&res.common.includes(id))col=[155,127,199];
+    if(id===src||id===tgt){ctx.beginPath();ctx.arc(x,y,17,0,6.2832);
+      ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+',.8)';ctx.lineWidth=2;ctx.stroke();}
+    ctx.beginPath();ctx.arc(x,y,11,0,6.2832);ctx.fillStyle='rgb('+col[0]+','+col[1]+','+col[2]+')';ctx.fill();
+    ctx.fillStyle='#151515';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.fillText(id,x,y+3);
+  });
+  ctx.textAlign='left';
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* selection */
+cv.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  let best=null,bd=500;
+  Object.keys(NODES).forEach(id=>{const [x,y]=XY(id);const d=(mx-x)**2+(my-y)**2;if(d<bd){bd=d;best=id;}});
+  if(!best)return;
+  if(!src||(src&&tgt)){src=best;tgt=null;res=null;flowing=false;flows=[];}
+  else if(best!==src){tgt=best;compute();}
+  updateSel();
+});
+function updateSel(){
+  document.getElementById('selTxt').innerHTML='source: <span class="u">'+(src||'—')+'</span><br>target: <span class="v">'+(tgt||'—')+'</span>';
+  document.getElementById('stat').textContent = !src?'click a node for the source, then another for the target'
+    : !tgt?'source '+src+' set — now click a target' : 'HRA('+src+','+tgt+') computed — press "Send the resource"';
+}
+function compute(){
+  res=HRA(src,tgt);
+  // build flow paths
+  flows=[];
+  if(res.direct>0){flows.push({path:[src,tgt],col:[214,164,76],intensity:Math.min(.9,.3+res.direct),count:Math.max(3,Math.round(res.direct*8)),speed:0.010});}
+  res.terms.forEach(t=>{flows.push({path:[src,t.s,tgt],col:[79,184,168],intensity:Math.min(.85,.25+t.c*3),count:Math.max(2,Math.round(t.c*40)),speed:0.008});});
+  // render terms
+  let h='';
+  h+='<div class="row direct"><span class="lab">direct SD('+src+','+tgt+')</span><span class="val">'+res.direct.toFixed(3)+'</span></div>';
+  if(res.terms.length===0 && res.direct===0){h+='<div style="color:var(--crimson);padding:4px 0">no shared hyperedge, no common relay → 0 (no basis for a link)</div>';}
+  res.terms.forEach(t=>{
+    h+='<div class="row indirect"><span class="lab">via '+t.s+' : '+t.sdUs.toFixed(2)+'·'+t.sdSv.toFixed(2)+'/'+t.deg+'</span><span class="val">'+t.c.toFixed(3)+'</span></div>';
+  });
+  h+='<div class="total"><span class="lab">HRA('+src+','+tgt+')</span><span class="val">'+res.total.toFixed(3)+'</span></div>';
+  document.getElementById('terms').innerHTML=h;
+  // epsilon interpretation
+  const strength = res.total>=0.4?'strong':res.total>=0.12?'moderate':res.total>0?'weak':'none';
+  const conf = res.total>0? Math.min(0.99, res.total/ (res.total+0.5)) : 0; // squashing to a 0..1-ish confidence
+  document.getElementById('epsNote').innerHTML = res.total>0
+    ? 'As an inferred-link ε: <b>'+strength+'</b> support (≈ '+conf.toFixed(2)+' confidence). The number carries its own derivation above — auditable, not a black box.'
+    : 'No support: an inferred link here would be unfounded — refuse it, don\u2019t guess.';
+  updateSel();
+}
+document.getElementById('flowBtn').addEventListener('click',()=>{if(src&&tgt){flowing=true;
+  document.getElementById('stat').textContent='resource flowing '+src+' → '+tgt+' · what arrives is the HRA score';}});
+document.getElementById('clearBtn').addEventListener('click',()=>{src=null;tgt=null;res=null;flows=[];flowing=false;
+  document.getElementById('terms').innerHTML='<div style="color:var(--dim)">select a source and target…</div>';
+  document.getElementById('epsNote').innerHTML='';updateSel();});
+/* boot: preselect an illustrative pair */
+src='v1';tgt='v6';compute();updateSel();
+</script>
+</body>
+</html>

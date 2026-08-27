@@ -42,21 +42,29 @@ pub enum SniffingRisk {
 impl SniffingRisk {
     pub fn label(self) -> &'static str {
         match self {
-            SniffingRisk::Low       => "Low — distribution is uniform",
-            SniffingRisk::Moderate  => "Moderate — some data skew",
-            SniffingRisk::High      => "High — significant data skew",
+            SniffingRisk::Low => "Low — distribution is uniform",
+            SniffingRisk::Moderate => "Moderate — some data skew",
+            SniffingRisk::High => "High — significant data skew",
             SniffingRisk::Confirmed => "Confirmed — stale cached plan",
         }
     }
 
     pub fn red_penalty(self) -> u8 {
-        match self { SniffingRisk::Low => 0, SniffingRisk::Moderate => 30,
-                     SniffingRisk::High => 80, SniffingRisk::Confirmed => 150 }
+        match self {
+            SniffingRisk::Low => 0,
+            SniffingRisk::Moderate => 30,
+            SniffingRisk::High => 80,
+            SniffingRisk::Confirmed => 150,
+        }
     }
 
     pub fn green_penalty(self) -> u8 {
-        match self { SniffingRisk::Low => 0, SniffingRisk::Moderate => 40,
-                     SniffingRisk::High => 100, SniffingRisk::Confirmed => 160 }
+        match self {
+            SniffingRisk::Low => 0,
+            SniffingRisk::Moderate => 40,
+            SniffingRisk::High => 100,
+            SniffingRisk::Confirmed => 160,
+        }
     }
 }
 
@@ -81,29 +89,32 @@ impl CacheFixStrategy {
     pub fn sql_hint(self) -> &'static str {
         match self {
             CacheFixStrategy::OptimizeForUnknown => "OPTION(OPTIMIZE FOR UNKNOWN)",
-            CacheFixStrategy::Recompile          => "OPTION(RECOMPILE)",
-            CacheFixStrategy::SplitByTier        => "-- Split into sp_Query_Small and sp_Query_Large",
-            CacheFixStrategy::PlanGuide          => "EXEC sp_create_plan_guide ...",
-            CacheFixStrategy::None               => "",
+            CacheFixStrategy::Recompile => "OPTION(RECOMPILE)",
+            CacheFixStrategy::SplitByTier => "-- Split into sp_Query_Small and sp_Query_Large",
+            CacheFixStrategy::PlanGuide => "EXEC sp_create_plan_guide ...",
+            CacheFixStrategy::None => "",
         }
     }
 
     pub fn when_to_use(self) -> &'static str {
         match self {
-            CacheFixStrategy::OptimizeForUnknown =>
+            CacheFixStrategy::OptimizeForUnknown => {
                 "Use when data skew exists but pattern is unknown. \
-                 Uses average statistics for all executions.",
-            CacheFixStrategy::Recompile =>
+                 Uses average statistics for all executions."
+            }
+            CacheFixStrategy::Recompile => {
                 "Use when correctness is critical and CPU is not constrained. \
-                 Compiles a fresh plan every call — safe but expensive.",
-            CacheFixStrategy::SplitByTier =>
+                 Compiles a fresh plan every call — safe but expensive."
+            }
+            CacheFixStrategy::SplitByTier => {
                 "Best practice: separate procedures for small and large inputs. \
-                 Each gets its own optimally compiled plan.",
-            CacheFixStrategy::PlanGuide =>
+                 Each gets its own optimally compiled plan."
+            }
+            CacheFixStrategy::PlanGuide => {
                 "Advanced: force specific join/index hints via plan guide. \
-                 Use only when other strategies fail.",
-            CacheFixStrategy::None =>
-                "No action needed — plan cache is healthy.",
+                 Use only when other strategies fail."
+            }
+            CacheFixStrategy::None => "No action needed — plan cache is healthy.",
         }
     }
 }
@@ -113,17 +124,17 @@ impl CacheFixStrategy {
 /// Full Level 6 cache / parameter-sniffing analysis result.
 #[derive(Debug, Clone)]
 pub struct CacheAnalysis {
-    pub sniffing_risk:      SniffingRisk,
-    pub plan_age_minutes:   u32,
-    pub plan_use_count:     u64,
+    pub sniffing_risk: SniffingRisk,
+    pub plan_age_minutes: u32,
+    pub plan_use_count: u64,
     /// Row count when the plan was first compiled.
-    pub compiled_for_rows:  u64,
+    pub compiled_for_rows: u64,
     /// Row count in the current execution.
-    pub actual_rows:        u64,
-    pub fix_strategy:       CacheFixStrategy,
-    pub explanation:        String,
+    pub actual_rows: u64,
+    pub fix_strategy: CacheFixStrategy,
+    pub explanation: String,
     /// StoryWay narrative entry for this level.
-    pub storyway_entry:     String,
+    pub storyway_entry: String,
     pub color_contribution: ColorId,
 }
 
@@ -135,15 +146,17 @@ impl CacheAnalyser {
     ///
     /// `data_skew_factor` — 0.0 = uniform distribution, 1.0 = extreme skew.
     pub fn analyse(
-        plan_age_minutes:  u32,
-        plan_use_count:    u64,
+        plan_age_minutes: u32,
+        plan_use_count: u64,
         compiled_for_rows: u64,
-        actual_rows:       u64,
-        data_skew_factor:  f32,
+        actual_rows: u64,
+        data_skew_factor: f32,
     ) -> CacheAnalysis {
         let row_ratio = if compiled_for_rows > 0 {
             actual_rows as f64 / compiled_for_rows as f64
-        } else { 1.0 };
+        } else {
+            1.0
+        };
 
         let risk = if row_ratio > 100.0 || (row_ratio < 0.01 && actual_rows > 100) {
             SniffingRisk::Confirmed
@@ -156,12 +169,15 @@ impl CacheAnalyser {
         };
 
         let fix = match risk {
-            SniffingRisk::Low       => CacheFixStrategy::None,
-            SniffingRisk::Moderate  => CacheFixStrategy::OptimizeForUnknown,
-            SniffingRisk::High      => CacheFixStrategy::SplitByTier,
+            SniffingRisk::Low => CacheFixStrategy::None,
+            SniffingRisk::Moderate => CacheFixStrategy::OptimizeForUnknown,
+            SniffingRisk::High => CacheFixStrategy::SplitByTier,
             SniffingRisk::Confirmed => {
-                if plan_use_count > 1000 { CacheFixStrategy::SplitByTier }
-                else                     { CacheFixStrategy::OptimizeForUnknown }
+                if plan_use_count > 1000 {
+                    CacheFixStrategy::SplitByTier
+                } else {
+                    CacheFixStrategy::OptimizeForUnknown
+                }
             }
         };
 
@@ -170,34 +186,42 @@ impl CacheAnalyser {
                 "PARAMETER SNIFFING CONFIRMED: Plan compiled for {} row(s), \
                  reused {} times. Current execution needs {} rows. \
                  Apply: {}",
-                compiled_for_rows, plan_use_count, actual_rows, fix.sql_hint()),
+                compiled_for_rows,
+                plan_use_count,
+                actual_rows,
+                fix.sql_hint()
+            ),
             SniffingRisk::High => format!(
                 "High sniffing risk: data distribution skewed {:.0}%. \
                  Plan may be suboptimal for some parameter values.",
-                data_skew_factor * 100.0),
-            SniffingRisk::Moderate =>
-                "Moderate sniffing risk. Monitor plan performance across \
-                 different parameter ranges.".into(),
-            SniffingRisk::Low =>
-                "Plan cache is healthy. No parameter sniffing detected.".into(),
+                data_skew_factor * 100.0
+            ),
+            SniffingRisk::Moderate => "Moderate sniffing risk. Monitor plan performance across \
+                 different parameter ranges."
+                .into(),
+            SniffingRisk::Low => "Plan cache is healthy. No parameter sniffing detected.".into(),
         };
 
         let storyway_entry = format!(
             "L6 UD: plan age={}min, reused {} times. \
              Compiled for {} rows, actual {}. Risk: {}",
-            plan_age_minutes, plan_use_count,
-            compiled_for_rows, actual_rows, risk.label());
-
-        let red   = 20u8.saturating_add(risk.red_penalty());
-        let green = 220u8.saturating_sub(risk.green_penalty());
-
-        CacheAnalysis {
-            sniffing_risk:     risk,
             plan_age_minutes,
             plan_use_count,
             compiled_for_rows,
             actual_rows,
-            fix_strategy:      fix,
+            risk.label()
+        );
+
+        let red = 20u8.saturating_add(risk.red_penalty());
+        let green = 220u8.saturating_sub(risk.green_penalty());
+
+        CacheAnalysis {
+            sniffing_risk: risk,
+            plan_age_minutes,
+            plan_use_count,
+            compiled_for_rows,
+            actual_rows,
+            fix_strategy: fix,
             explanation,
             storyway_entry,
             color_contribution: ColorId::new(red, green, 160),
@@ -207,11 +231,11 @@ impl CacheAnalyser {
     /// Demo analysis — plan compiled for 1 row, used 8,542 times, actual 6,069 rows.
     pub fn demo_analysis() -> CacheAnalysis {
         Self::analyse(
-            4320,  // plan age: 3 days
-            8542,  // reused 8,542 times
-            1,     // compiled for 1 row (2019 data)
-            6069,  // actual rows (2024 data)
-            0.85,  // high data skew
+            4320, // plan age: 3 days
+            8542, // reused 8,542 times
+            1,    // compiled for 1 row (2019 data)
+            6069, // actual rows (2024 data)
+            0.85, // high data skew
         )
     }
 
@@ -219,9 +243,11 @@ impl CacheAnalyser {
         LevelColorContribution::new(
             "L6 UD (Volatility)",
             analysis.color_contribution,
-            &format!("Sniffing risk: {} — fix: {}",
+            &format!(
+                "Sniffing risk: {} — fix: {}",
                 analysis.sniffing_risk.label(),
-                analysis.fix_strategy.sql_hint()),
+                analysis.fix_strategy.sql_hint()
+            ),
         )
     }
 }
@@ -234,19 +260,30 @@ mod tests {
 
     #[test]
     fn demo_is_confirmed_sniffing() {
-        assert_eq!(CacheAnalyser::demo_analysis().sniffing_risk, SniffingRisk::Confirmed);
+        assert_eq!(
+            CacheAnalyser::demo_analysis().sniffing_risk,
+            SniffingRisk::Confirmed
+        );
     }
 
     #[test]
     fn confirmed_sniffing_has_high_red() {
         let a = CacheAnalyser::demo_analysis();
-        assert!(a.color_contribution.red > 100, "red={}", a.color_contribution.red);
+        assert!(
+            a.color_contribution.red > 100,
+            "red={}",
+            a.color_contribution.red
+        );
     }
 
     #[test]
     fn confirmed_sniffing_has_low_green() {
         let a = CacheAnalyser::demo_analysis();
-        assert!(a.color_contribution.green < 100, "green={}", a.color_contribution.green);
+        assert!(
+            a.color_contribution.green < 100,
+            "green={}",
+            a.color_contribution.green
+        );
     }
 
     #[test]
@@ -276,7 +313,11 @@ mod tests {
     #[test]
     fn storyway_entry_contains_actual_rows() {
         let a = CacheAnalyser::demo_analysis();
-        assert!(a.storyway_entry.contains("6069"), "entry={}", a.storyway_entry);
+        assert!(
+            a.storyway_entry.contains("6069"),
+            "entry={}",
+            a.storyway_entry
+        );
     }
 
     #[test]
@@ -301,8 +342,12 @@ mod tests {
 
     #[test]
     fn sniffing_risk_labels_non_empty() {
-        for r in [SniffingRisk::Low, SniffingRisk::Moderate,
-                  SniffingRisk::High, SniffingRisk::Confirmed] {
+        for r in [
+            SniffingRisk::Low,
+            SniffingRisk::Moderate,
+            SniffingRisk::High,
+            SniffingRisk::Confirmed,
+        ] {
             assert!(!r.label().is_empty());
         }
     }

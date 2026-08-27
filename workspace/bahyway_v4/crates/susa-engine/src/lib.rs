@@ -44,11 +44,17 @@ pub enum SourceFormat {
 
 pub fn detect_format(filename: &str) -> SourceFormat {
     let lower = filename.to_ascii_lowercase();
-    if lower.ends_with(".md") { SourceFormat::Markdown }
-    else if lower.ends_with(".html") || lower.ends_with(".htm") { SourceFormat::Html }
-    else if lower.ends_with(".rs") { SourceFormat::RustSource }
-    else if lower.ends_with(".svg") { SourceFormat::Svg }
-    else { SourceFormat::Unsupported }
+    if lower.ends_with(".md") {
+        SourceFormat::Markdown
+    } else if lower.ends_with(".html") || lower.ends_with(".htm") {
+        SourceFormat::Html
+    } else if lower.ends_with(".rs") {
+        SourceFormat::RustSource
+    } else if lower.ends_with(".svg") {
+        SourceFormat::Svg
+    } else {
+        SourceFormat::Unsupported
+    }
 }
 
 /// Sovereign pure-std content checksum (FNV-1a 64) — NO sha256 crate.
@@ -73,8 +79,11 @@ pub fn sovereign_walk(root: &std::path::Path) -> std::io::Result<Vec<std::path::
             for entry in std::fs::read_dir(&dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.is_dir() { stack.push(path); }
-                else { out.push(path); }
+                if path.is_dir() {
+                    stack.push(path);
+                } else {
+                    out.push(path);
+                }
             }
         }
     }
@@ -95,7 +104,10 @@ pub enum StagingStatus {
 /// A Template suggestion — ADVISORY ONLY. Susa never originates.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CategorySuggestion {
-    MatchedTemplate { template_name: String, similarity: f32 },
+    MatchedTemplate {
+        template_name: String,
+        similarity: f32,
+    },
     NoMatchAlertArchitect,
 }
 
@@ -113,16 +125,28 @@ pub struct StagedArtifact {
 impl StagedArtifact {
     pub fn new(staging_id: u32, source_path: &str, format: SourceFormat, checksum: u64) -> Self {
         StagedArtifact {
-            staging_id, source_path: source_path.to_string(), format, checksum,
-            status: StagingStatus::Uploaded, suggestion: None, eav: BTreeMap::new(),
+            staging_id,
+            source_path: source_path.to_string(),
+            format,
+            checksum,
+            status: StagingStatus::Uploaded,
+            suggestion: None,
+            eav: BTreeMap::new(),
         }
     }
 
     /// Record an analysis fact as EAV. Guard: reject v3.5 RGB keys.
     pub fn set_eav(&mut self, key: &str, value: &str) -> Result<(), String> {
         let k = key.to_ascii_lowercase();
-        if k.contains("quality_byte") || k.contains("red") || k.contains("green") || k.contains("blue") {
-            return Err(format!("forbidden v3.5 attribute '{}': quality/colour live as EAV, never bytes", key));
+        if k.contains("quality_byte")
+            || k.contains("red")
+            || k.contains("green")
+            || k.contains("blue")
+        {
+            return Err(format!(
+                "forbidden v3.5 attribute '{}': quality/colour live as EAV, never bytes",
+                key
+            ));
         }
         self.eav.insert(key.to_string(), value.to_string());
         Ok(())
@@ -141,8 +165,10 @@ pub struct StagingBatch {
 impl StagingBatch {
     pub fn create(batch_name: &str, threshold: Threshold) -> Self {
         StagingBatch {
-            batch_name: batch_name.to_string(), threshold,
-            artifacts: Vec::new(), next_id: 1,
+            batch_name: batch_name.to_string(),
+            threshold,
+            artifacts: Vec::new(),
+            next_id: 1,
             seen_checksums: std::collections::HashSet::new(),
         }
     }
@@ -163,7 +189,11 @@ impl StagingBatch {
     }
 
     pub fn suggest(&mut self, staging_id: u32, suggestion: CategorySuggestion) {
-        if let Some(a) = self.artifacts.iter_mut().find(|a| a.staging_id == staging_id) {
+        if let Some(a) = self
+            .artifacts
+            .iter_mut()
+            .find(|a| a.staging_id == staging_id)
+        {
             if a.status != StagingStatus::Duplicate {
                 a.suggestion = Some(suggestion);
                 a.status = StagingStatus::Analyzed;
@@ -173,14 +203,19 @@ impl StagingBatch {
 
     /// Architect confirms (the sovereign act). Blocks when no match.
     pub fn approve(&mut self, staging_id: u32) -> Result<(), String> {
-        let a = self.artifacts.iter_mut().find(|a| a.staging_id == staging_id)
+        let a = self
+            .artifacts
+            .iter_mut()
+            .find(|a| a.staging_id == staging_id)
             .ok_or("staging id not found")?;
         match &a.suggestion {
             Some(CategorySuggestion::MatchedTemplate { .. }) => {
-                a.status = StagingStatus::Approved; Ok(())
+                a.status = StagingStatus::Approved;
+                Ok(())
             }
-            Some(CategorySuggestion::NoMatchAlertArchitect) =>
-                Err("no Template matched — Architect must author/bind one before approval".into()),
+            Some(CategorySuggestion::NoMatchAlertArchitect) => {
+                Err("no Template matched — Architect must author/bind one before approval".into())
+            }
             None => Err("artifact not analyzed yet".into()),
         }
     }
@@ -188,11 +223,17 @@ impl StagingBatch {
     /// The commit MANIFEST: approved artifacts ready to cross.
     /// KAKI minting happens DOWNSTREAM in enkidb-ingest::bridge.
     pub fn commit_manifest(&self) -> Vec<&StagedArtifact> {
-        self.artifacts.iter().filter(|a| a.status == StagingStatus::Approved).collect()
+        self.artifacts
+            .iter()
+            .filter(|a| a.status == StagingStatus::Approved)
+            .collect()
     }
 
     pub fn duplicates(&self) -> Vec<&StagedArtifact> {
-        self.artifacts.iter().filter(|a| a.status == StagingStatus::Duplicate).collect()
+        self.artifacts
+            .iter()
+            .filter(|a| a.status == StagingStatus::Duplicate)
+            .collect()
     }
 }
 
@@ -249,9 +290,13 @@ mod tests {
     fn matched_template_allows_approval_and_commit() {
         let mut b = StagingBatch::create("batch1", Threshold::EnkiDDB);
         let id = b.add("docs/etl.md", b"dataflow pipeline etl content");
-        b.suggest(id, CategorySuggestion::MatchedTemplate {
-            template_name: "PARZU_etl_v2".into(), similarity: 0.87,
-        });
+        b.suggest(
+            id,
+            CategorySuggestion::MatchedTemplate {
+                template_name: "PARZU_etl_v2".into(),
+                similarity: 0.87,
+            },
+        );
         assert!(b.approve(id).is_ok());
         assert_eq!(b.commit_manifest().len(), 1);
     }
@@ -261,9 +306,13 @@ mod tests {
         let mut b = StagingBatch::create("batch1", Threshold::EnkiMDB);
         let id1 = b.add("svc/a.rs", b"pub fn main() {}");
         b.add("svc/a_copy.rs", b"pub fn main() {}");
-        b.suggest(id1, CategorySuggestion::MatchedTemplate {
-            template_name: "PARZU_service_v1".into(), similarity: 0.9,
-        });
+        b.suggest(
+            id1,
+            CategorySuggestion::MatchedTemplate {
+                template_name: "PARZU_service_v1".into(),
+                similarity: 0.9,
+            },
+        );
         b.approve(id1).unwrap();
         assert_eq!(b.commit_manifest().len(), 1);
     }
@@ -273,9 +322,13 @@ mod tests {
         let mut b = StagingBatch::create("services", Threshold::EnkiMDB);
         let id = b.add("crates/kaki/src/lib.rs", b"pub struct KakiV4([u8;16]);");
         assert_eq!(b.artifacts[0].format, SourceFormat::RustSource);
-        b.suggest(id, CategorySuggestion::MatchedTemplate {
-            template_name: "PARZU_rust_crate_v1".into(), similarity: 0.95,
-        });
+        b.suggest(
+            id,
+            CategorySuggestion::MatchedTemplate {
+                template_name: "PARZU_rust_crate_v1".into(),
+                similarity: 0.95,
+            },
+        );
         assert!(b.approve(id).is_ok());
     }
 }

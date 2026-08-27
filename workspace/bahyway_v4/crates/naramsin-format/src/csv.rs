@@ -16,30 +16,43 @@ pub fn parse_csv(src: &str) -> Result<Vec<Row>, FormatError> {
     let mut lines = src.lines();
     let header_line = match lines.next() {
         Some(h) => h,
-        None    => return Ok(vec![]),
+        None => return Ok(vec![]),
     };
     let headers: Vec<&str> = split_csv_line(header_line);
     let expected = headers.len() as u32;
 
     let mut rows = Vec::new();
     for (idx, line) in lines.enumerate() {
-        if line.trim().is_empty() { continue; }
+        if line.trim().is_empty() {
+            continue;
+        }
         let values = split_csv_line(line);
         if values.len() as u32 != expected {
             return Err(FormatError::RaggedCsvRow {
-                row:      (idx + 2) as u32,
+                row: (idx + 2) as u32,
                 expected,
-                got:      values.len() as u32,
+                got: values.len() as u32,
             });
         }
         // SAFETY NOTE: &'static str for field names is deferred to Phase 2 schema binding.
         // For the skeleton, we use a leak-free approach: field names come from the header
         // slice. In production, MASHSHARU binds them against the tribe ontology.
-        let fields: Vec<Field> = headers.iter().zip(values.iter()).map(|(_, v)| {
-            // Placeholder: name resolution happens at MASHSHARU gate
-            Field { name: "col", value: v.to_string(), is_null: v.is_empty() }
-        }).collect();
-        rows.push(Row { index: (idx + 1) as u32, fields });
+        let fields: Vec<Field> = headers
+            .iter()
+            .zip(values.iter())
+            .map(|(_, v)| {
+                // Placeholder: name resolution happens at MASHSHARU gate
+                Field {
+                    name: "col",
+                    value: v.to_string(),
+                    is_null: v.is_empty(),
+                }
+            })
+            .collect();
+        rows.push(Row {
+            index: (idx + 1) as u32,
+            fields,
+        });
     }
     Ok(rows)
 }

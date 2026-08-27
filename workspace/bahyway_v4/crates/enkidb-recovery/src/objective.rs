@@ -31,7 +31,9 @@ impl RecoveryObjective {
     /// Cloud/data-center profile: batched durability, < 5 seconds RTO.
     pub fn datacenter() -> Self {
         RecoveryObjective {
-            rpo: RecoveryPointObjective::FsyncBatch { window: Duration::from_millis(10) },
+            rpo: RecoveryPointObjective::FsyncBatch {
+                window: Duration::from_millis(10),
+            },
             rto_target: Duration::from_secs(5),
         }
     }

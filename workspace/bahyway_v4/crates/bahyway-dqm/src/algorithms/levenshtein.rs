@@ -13,11 +13,17 @@
 pub fn levenshtein(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
-    let (a, b) = if a.len() < b.len() { (&b, &a) } else { (&a, &b) };
+    let (a, b) = if a.len() < b.len() {
+        (&b, &a)
+    } else {
+        (&a, &b)
+    };
     let n = a.len();
     let m = b.len();
 
-    if m == 0 { return n; }
+    if m == 0 {
+        return n;
+    }
 
     let mut prev: Vec<usize> = (0..=m).collect();
     let mut curr: Vec<usize> = vec![0; m + 1];
@@ -26,9 +32,7 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
         curr[0] = i;
         for j in 1..=m {
             let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
-            curr[j] = (prev[j] + 1)
-                .min(curr[j - 1] + 1)
-                .min(prev[j - 1] + cost);
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -38,9 +42,13 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
 /// Normalised Levenshtein similarity ∈ [0.0, 1.0].
 /// 1.0 = identical strings.  0.0 = completely different.
 pub fn levenshtein_similarity(a: &str, b: &str) -> f32 {
-    if a.is_empty() && b.is_empty() { return 1.0; }
+    if a.is_empty() && b.is_empty() {
+        return 1.0;
+    }
     let max_len = a.chars().count().max(b.chars().count());
-    if max_len == 0 { return 1.0; }
+    if max_len == 0 {
+        return 1.0;
+    }
     let dist = levenshtein(a, b);
     1.0 - (dist as f32 / max_len as f32)
 }

@@ -19,12 +19,22 @@ const TIMEOUT_SECS: u64 = 30;
 
 /// Sends one document (`<collection>\n<markdown>`) to a running
 /// `enkiddb-write-server` and returns its raw response text verbatim
-/// (`OK:<kaki_hex>:<section_count>` or `ERR:<reason>`) -- the caller
-/// decides what counts as success, this function never interprets it.
-pub fn send_document(host: &str, port: u16, collection: &str, body: &str) -> Result<String, String> {
+/// (`OK:<kaki_hex>:<section_count>:<particle_count>` or `ERR:<reason>`) --
+/// the caller decides what counts as success, this function never
+/// interprets it.
+pub fn send_document(
+    host: &str,
+    port: u16,
+    collection: &str,
+    body: &str,
+) -> Result<String, String> {
     let mut stream = TcpStream::connect((host, port)).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(Duration::from_secs(TIMEOUT_SECS))).ok();
-    stream.set_write_timeout(Some(Duration::from_secs(TIMEOUT_SECS))).ok();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(TIMEOUT_SECS)))
+        .ok();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(TIMEOUT_SECS)))
+        .ok();
 
     let payload = format!("{collection}\n{body}");
     write_frame(&mut stream, &payload).map_err(|e| e.to_string())?;
@@ -46,7 +56,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

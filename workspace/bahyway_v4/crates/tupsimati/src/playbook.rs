@@ -42,13 +42,21 @@ mod tests {
 
     #[test]
     fn refuses_to_emit_from_an_unsealed_tablet() {
-        let t = Tablet { version: 1, created_millis: 0, ..Default::default() };
+        let t = Tablet {
+            version: 1,
+            created_millis: 0,
+            ..Default::default()
+        };
         assert!(emit_playbook(&t, 233).is_err());
     }
 
     #[test]
     fn emits_a_playbook_from_a_sealed_tablet() {
-        let mut t = Tablet { version: 1, created_millis: 0, ..Default::default() };
+        let mut t = Tablet {
+            version: 1,
+            created_millis: 0,
+            ..Default::default()
+        };
         let key = SealKeyPair::generate().unwrap();
         t.seal_with(&key).unwrap();
         let pb = emit_playbook(&t, 233).unwrap();

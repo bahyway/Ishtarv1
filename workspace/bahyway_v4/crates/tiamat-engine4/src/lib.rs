@@ -16,8 +16,8 @@
 //!   SAHU  = measurement uncertainty modifier on SARU accumulation
 #![forbid(unsafe_code)]
 
-pub mod tau;
 pub mod saru;
+pub mod tau;
 
-pub use tau::{TauInput, compute_tau_full};
 pub use saru::{SaruAccumulator, SaruReport};
+pub use tau::{compute_tau_full, TauInput};

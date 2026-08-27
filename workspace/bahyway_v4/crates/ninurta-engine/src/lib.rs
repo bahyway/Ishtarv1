@@ -24,4 +24,7 @@ pub mod indicators;
 pub mod purussum;
 pub mod surrogate;
 
-pub use purussum::{render_verdict, trichotomy_for_lambda, LambdaTrichotomy, PurussumVerdict, SIGNIFICANCE_THRESHOLD};
+pub use purussum::{
+    render_verdict, trichotomy_for_lambda, LambdaTrichotomy, PurussumVerdict,
+    SIGNIFICANCE_THRESHOLD,
+};

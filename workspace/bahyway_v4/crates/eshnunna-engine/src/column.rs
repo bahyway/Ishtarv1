@@ -17,7 +17,10 @@ pub enum EshnunnaError {
     /// `append_row` was called with a surrogate other than the next
     /// expected one -- Eshnunna only ever appends, in surrogate order,
     /// never at arbitrary offsets (Rule: append-only, ADR-006).
-    OutOfOrderSurrogate { expected: u32, got: u32 },
+    OutOfOrderSurrogate {
+        expected: u32,
+        got: u32,
+    },
     Storage(BahywayError),
     Io(std::io::Error),
 }
@@ -71,7 +74,10 @@ impl<const W: usize> ColumnWriter<W> {
             Ok(meta) => (meta.len() as usize / stride(W)) as u32,
             Err(_) => 0,
         };
-        Ok(Self { writer, next_surrogate })
+        Ok(Self {
+            writer,
+            next_surrogate,
+        })
     }
 
     /// Append the value for `surrogate`. Must equal the next expected
@@ -103,7 +109,9 @@ pub struct ColumnReader<const W: usize> {
 
 impl<const W: usize> ColumnReader<W> {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, EshnunnaError> {
-        Ok(Self { mmap: MmapReader::open(path)? })
+        Ok(Self {
+            mmap: MmapReader::open(path)?,
+        })
     }
 
     /// Fetch the value for `surrogate` by direct offset. `None` if the
@@ -151,7 +159,11 @@ mod tests {
         assert_eq!(r.row_count(), 100);
         for i in 0u32..100 {
             let got = r.get(i).expect("row must exist");
-            assert_eq!(u64::from_le_bytes(got), i as u64 * 7, "surrogate {i} mismatch");
+            assert_eq!(
+                u64::from_le_bytes(got),
+                i as u64 * 7,
+                "surrogate {i} mismatch"
+            );
         }
     }
 
@@ -181,7 +193,10 @@ mod tests {
         let err = w.append_row(5, 5u32.to_le_bytes()).unwrap_err();
         assert!(matches!(
             err,
-            EshnunnaError::OutOfOrderSurrogate { expected: 1, got: 5 }
+            EshnunnaError::OutOfOrderSurrogate {
+                expected: 1,
+                got: 5
+            }
         ));
     }
 

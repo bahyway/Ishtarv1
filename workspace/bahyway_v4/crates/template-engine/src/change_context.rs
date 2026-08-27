@@ -35,21 +35,19 @@ impl TriggerSource {
     pub fn is_automated(&self) -> bool {
         matches!(
             self,
-            TriggerSource::CompilerCheck
-                | TriggerSource::Ci
-                | TriggerSource::DependencyChange
+            TriggerSource::CompilerCheck | TriggerSource::Ci | TriggerSource::DependencyChange
         )
     }
 
     /// Short label for Hepta query display.
     pub fn label(&self) -> &'static str {
         match self {
-            TriggerSource::Manual          => "Manual",
-            TriggerSource::CompilerCheck   => "CompilerCheck",
-            TriggerSource::FileWatcher     => "FileWatcher",
-            TriggerSource::Ci              => "CI",
+            TriggerSource::Manual => "Manual",
+            TriggerSource::CompilerCheck => "CompilerCheck",
+            TriggerSource::FileWatcher => "FileWatcher",
+            TriggerSource::Ci => "CI",
             TriggerSource::StewardOverride => "StewardOverride",
-            TriggerSource::DocsRequest     => "DocsRequest",
+            TriggerSource::DocsRequest => "DocsRequest",
             TriggerSource::DependencyChange => "DependencyChange",
         }
     }
@@ -88,14 +86,14 @@ impl ChangeReason {
     /// Short label for Hepta query display and AlertWay documentation-gap alerts.
     pub fn label(&self) -> &'static str {
         match self {
-            ChangeReason::UserEdit                => "UserEdit",
-            ChangeReason::DependencyPropagation   => "DependencyPropagation",
-            ChangeReason::PolicyUpdate            => "PolicyUpdate",
-            ChangeReason::CorrectionOfDefect      => "CorrectionOfDefect",
-            ChangeReason::Refactoring             => "Refactoring",
-            ChangeReason::NewFeature              => "NewFeature",
-            ChangeReason::SecurityPatch           => "SecurityPatch",
-            ChangeReason::Unspecified             => "Unspecified",
+            ChangeReason::UserEdit => "UserEdit",
+            ChangeReason::DependencyPropagation => "DependencyPropagation",
+            ChangeReason::PolicyUpdate => "PolicyUpdate",
+            ChangeReason::CorrectionOfDefect => "CorrectionOfDefect",
+            ChangeReason::Refactoring => "Refactoring",
+            ChangeReason::NewFeature => "NewFeature",
+            ChangeReason::SecurityPatch => "SecurityPatch",
+            ChangeReason::Unspecified => "Unspecified",
         }
     }
 }

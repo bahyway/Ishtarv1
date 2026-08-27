@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unified TDA Meta-Model Colony Visualizer</title>
+    <!-- Tailwind CSS for robust responsive dashboard infrastructure -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Custom scrollbar adjustments for cross-platform unified look */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-purple-500/30 selection:text-purple-200">
+
+    <!-- Header / Meta-Model Control Hub -->
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between sticky top-0 z-50 gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-gradient-to-tr from-purple-500 via-pink-500 to-amber-500 rounded-xl shadow-lg shadow-purple-500/10">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight bg-gradient-to-r from-slate-100 via-purple-200 to-amber-200 bg-clip-text text-transparent">Bacteriology Colony Meta-Model Map</h1>
+                <p class="text-xs text-slate-400">Unifying Physical Phenotypes (Agar Morphologies, Color Formats) into Unified Topological EAV Schemas</p>
+            </div>
+        </div>
+        
+        <!-- Interactive Navigation Hub -->
+        <div class="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-end">
+            <div id="breadcrumb-trail" class="flex items-center space-x-1 bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-300 font-medium font-mono">
+                <!-- Injected via JS -->
+            </div>
+            <button id="btn-zoom-parent" onclick="navigateHierarchyUp()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-700 transition flex items-center space-x-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                <span>Zoom Out</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Multi-Panel Workspace Grid -->
+    <main class="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-6 p-6 overflow-hidden">
+        
+        <!-- Left Workspace Zone: Multi-View Simulation Area (7 Columns) -->
+        <section class="xl:col-span-7 flex flex-col space-y-4 min-h-[500px]">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col flex-1 shadow-xl relative">
+                
+                <!-- View Selector Tabs & Status Readouts -->
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-3 mb-4 gap-2">
+                    <div class="flex flex-wrap gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800/80">
+                        <button id="tab-logical" onclick="switchDisplayMode('logical')" class="text-xs font-medium px-3 py-1.5 rounded-lg transition-all bg-purple-600 text-white shadow">
+                            Logical Topology Space
+                        </button>
+                        <button id="tab-physical" onclick="switchDisplayMode('physical')" class="text-xs font-medium px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200">
+                            Physical Agar Culture Format
+                        </button>
+                        <button id="tab-sankey" onclick="switchDisplayMode('sankey')" class="text-xs font-medium px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200">
+                            Sankey Clinical Flow
+                        </button>
+                    </div>
+                    <div class="text-[10px] code-font bg-slate-950 text-purple-400 px-2.5 py-1 border border-slate-800 rounded-lg shadow-inner">
+                        Meta-Model State: <span id="meta-model-status-text" class="text-slate-200 font-bold">Global Domain</span>
+                    </div>
+                </div>
+
+                <!-- Shared Rendering Canvas Window -->
+                <div class="relative bg-slate-950 rounded-xl border border-slate-800 flex-1 min-h-[380px] flex items-center justify-center overflow-hidden shadow-inner">
+                    <canvas id="main-model-canvas" class="absolute inset-0 w-full h-full"></canvas>
+                    
+                    <!-- Meta-Model Vector Mapping Grid Graphic Overlay Hint -->
+                    <div id="physical-plate-legend" class="hidden absolute top-3 left-3 bg-slate-900/90 backdrop-blur border border-slate-800 p-3 rounded-xl text-[10px] space-y-1.5 text-slate-300 max-w-xs shadow-md">
+                        <div class="font-bold text-amber-400 border-b border-slate-800 pb-1 mb-1">Colony Agar Key Matrix</div>
+                        <div class="flex items-center justify-between"><span class="text-slate-400">Medium Target:</span> <span id="lbl-agar-medium" class="font-mono text-slate-100">-</span></div>
+                        <div class="flex items-center justify-between"><span class="text-slate-400">Colony Format:</span> <span id="lbl-colony-format" class="font-mono text-slate-100">-</span></div>
+                        <div class="flex items-center justify-between"><span class="text-slate-400">Color Profile:</span> <span id="lbl-colony-color" class="font-mono text-slate-100">-</span></div>
+                    </div>
+
+                    <!-- HUD Status Telemetry -->
+                    <div class="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur border border-slate-800 px-3 py-2 rounded-xl text-[10px] code-font space-y-0.5 text-slate-400 shadow-md">
+                        <div id="hud-resolution-layer">Resolution Scale: Domain Point Cloud</div>
+                        <div id="hud-focus-node" class="text-purple-400 font-semibold">Active Coordinates: Roots Cluster</div>
+                    </div>
+                    
+                    <div class="absolute top-3 right-3 text-[10px] bg-slate-900/80 border border-slate-800 text-slate-500 font-mono px-2 py-0.5 rounded-md">
+                        Interactive View Area
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Workspace Zone: Unified Meta-Model Parser & Physical EAV Store (5 Columns) -->
+        <section class="xl:col-span-5 flex flex-col space-y-4 overflow-y-auto max-h-[calc(100vh-120px)] pr-1">
+            
+            <!-- Metadata Documentation Profile Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <h2 id="profile-card-title" class="text-xs font-bold uppercase tracking-wider text-slate-400">Bacterial Domain Metadata</h2>
+                    <span id="badge-gram-status" class="text-[9px] font-mono px-2 py-0.5 rounded-md uppercase font-bold tracking-wider bg-slate-950 text-slate-400 border border-slate-800">Domain Scale</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                    <div class="sm:col-span-4 h-24 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shadow-inner relative group">
+                        <img id="profile-avatar-img" src="https://images.unsplash.com/photo-1174341792525-683b103fffe8?fm=jpg&q=60&w=3000&auto=format&fit=crop" 
+                             alt="Colony appearance template" class="w-full h-full object-cover opacity-75 group-hover:scale-105 transition-transform duration-500">
+                    </div>
+                    <div class="sm:col-span-8 space-y-1">
+                        <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Semantic Text Profile</h3>
+                        <p id="profile-description-text" class="text-xs text-slate-300 leading-relaxed max-h-20 overflow-y-auto pr-1">
+                            Select a specific node coordinate (Family or Species clusters) to trigger the unified mapping transformation matrix.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Operational Action Reference Hyperlinks -->
+                <div id="profile-links-layout" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <!-- Target external reference components injected dynamically -->
+                </div>
+            </div>
+
+            <!-- Deep Clinical Context Node Profile Summary Block -->
+            <div id="clinical-detail-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hidden">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2 border-b border-slate-800 pb-1.5">
+                    Active Clinical Projections Profile
+                </h3>
+                <div class="grid grid-cols-1 gap-2.5 text-xs">
+                    <div>
+                        <span class="text-slate-400 block font-medium">Associated Human Pathology:</span>
+                        <span id="txt-clinical-disease" class="text-slate-200 font-semibold">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Diagnostic Manifestations &amp; Symptoms:</span>
+                        <span id="txt-clinical-symptoms" class="text-slate-200">-</span>
+                    </div>
+                    <div class="p-2.5 bg-slate-950 rounded-xl border border-slate-800/80">
+                        <span class="text-purple-400 block font-bold text-[11px] uppercase tracking-wide mb-1 font-mono">
+                            Therapeutic Protocol &amp; First-Line Medications:
+                        </span>
+                        <span id="txt-clinical-treatment" class="text-emerald-400 font-mono leading-relaxed block text-[11px]">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Unified Meta-Model Transform Architecture Diagram panel -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center space-x-1.5">
+                    <span class="w-1.5 h-1.5 bg-purple-500 rounded-full"></span>
+                    <span>TDA Meta-Model Invariant Translation Template</span>
+                </h2>
+                <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 text-[11px] code-font text-slate-400 space-y-1 relative">
+                    <div class="flex justify-between text-purple-400 border-b border-slate-900 pb-1 mb-1">
+                        <span>Physical Phenotype (Data Document)</span>
+                        <span>Unified EAV Object Model Layer</span>
+                    </div>
+                    <div class="flex justify-between"><span>Gram-Positive / Negative Stain Flag</span> <span>&rarr; Entity Identity Classification Tuple</span></div>
+                    <div class="flex justify-between"><span>Agar Base Medium Medium Variant</span> <span>&rarr; Structural Attribute Domain Space</span></div>
+                    <div class="flex justify-between"><span>Colony Formatting (Form / Margin / Elev)</span> <span>&rarr; Homology Cluster Invariant Vectors</span></div>
+                    <div class="flex justify-between"><span>Clinical Human Management Profile</span> <span>&rarr; Medical Management Sinks Value</span></div>
+                </div>
+            </div>
+
+            <!-- Normalized Materialized EAV Target Warehouse Store -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col flex-1">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
+                        <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                        <span>Physical Warehouse Target: Schema Rows Ledger</span>
+                    </h2>
+                    <span class="text-[9px] font-mono bg-slate-950 text-slate-500 px-1.5 py-0.5 rounded border border-slate-800">tbl_eav_warehouse</span>
+                </div>
+
+                <div class="overflow-x-auto text-[11px] code-font bg-slate-950 rounded-xl border border-slate-800/80 p-2 shadow-inner max-h-56 overflow-y-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="text-slate-500 border-b border-slate-800/60">
+                                <th class="pb-1.5 font-medium pl-2">Entity_Key</th>
+                                <th class="pb-1.5 font-medium">Attribute (1-Simplex)</th>
+                                <th class="pb-1.5 font-medium pr-2">Resolved_Value (Sink)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="eav-matrix-tbody" class="text-slate-300">
+                            <!-- Dynamically generated rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Unified Dashboard Orchestration Script Logic -->
+    <script>
+        // High-fidelity integrated biological dataset modeling positive and negative structural configurations
+        const unifiedMetaDataset = {
+            level: 'global',
+            name: 'Bacteria Domain',
+            description: 'Unified meta-model structure grouping microbial targets into topological quadrants based on cell wall envelopes and physical colony geometry attributes.',
+            imageUrl: 'https://images.unsplash.com/photo-1703500584838-ba17cd6c1b5f?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+            gramStatus: 'Mixed Envelope',
+            links: [
+                { name: 'NCBI Taxonomy Browser', url: 'https://google.com' },
+                { name: 'Bergey Systemic Manual', url: 'https://google.com' }
+            ],
+            eavRows: [
+                { ent: 'Vibrionaceae', attr: 'Classification', val: 'Gram-Negative Class' },
+                { ent: 'Enterobacteriaceae', attr: 'Classification', val: 'Gram-Negative Class' },
+                { ent: 'Staphylococcaceae', attr: 'Classification', val: 'Gram-Positive Class' },
+                { ent: 'Bacillaceae', attr: 'Classification', val: 'Gram-Positive Class' }
+            ],
+            children: {
+                'Gram-Negative Box': {
+                    level: 'family',
+                    name: 'Gram-Negative Envelopes',
+                    description: 'Bacteria retaining thin peptidoglycan layer maps and lipopolysaccharide membrane blocks. Physical cultures display high diversity on selective and differential agars.',
+                    imageUrl: 'https://images.unsplash.com/photo-1574341792525-683b103fffe8?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                    gramStatus: 'Gram-Negative',
+                    links: [{ name: 'Differential Media Archives', url: 'https://google.com' }],
+                    eavRows: [
+                        { ent: 'Vibrio cholerae', attr: 'Envelope Envelope', val: 'Gram-Negative Rod' },
+                        { ent: 'Escherichia coli', attr: 'Envelope Envelope', val: 'Gram-Negative Bacillus' }
+                    ],
+                    children: {
+                        'Vibrio cholerae': {
+                            level: 'species',
+                            name: 'Vibrio cholerae',
+                            description: 'A halophilic, comma-shaped Gram-negative rod organism. It produces large yellow colonies on green TCBS selective agar matrices due to sucrose fermentation profiles.',
+                            imageUrl: 'https://images.unsplash.com/photo-1706204787101-0e86c5ab20d6?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            gramStatus: 'Gram-Negative',
+                            mediumName: 'TCBS Agar Medium',
+                            colonyColor: '#eab308', // Vibrant yellow
+                            colonyFormat: '2-4mm, Smooth, Slightly Flattened, Translucent Edges',
+                            bgColor: '#064e3b', // Deep green agar canvas background
+                            drawPattern: 'yellow-dots-flat',
+                            disease: 'Cholera Gastrointestinal Pathology',
+                            symptoms: 'Sudden onset of massive watery diarrhea ("rice-water" appearance), nausea, severe vomiting, rapid muscle cramping, and potential hypovolemic cardiovascular shock.',
+                            treatment: 'Immediate aggressive oral/intravenous rehydration (WHO-ORS). For severe disease profiles, first-line antibiotic options include single-dose Doxycycline (300mg) for adults, or Azithromycin for pediatric clusters and pregnant patients.',
+                            links: [{ name: 'CDC Cholera Guide', url: 'https://google.com' }],
+                            eavRows: [
+                                { ent: 'Vibrio cholerae', attr: 'Gram Stain Type', val: 'Gram-Negative (-)' },
+                                { ent: 'Vibrio cholerae', attr: 'Selective Agar Medium', val: 'TCBS Selective Agar' },
+                                { ent: 'Vibrio cholerae', attr: 'Clinical Pathology', val: 'Cholera Infection' },
+                                { ent: 'Vibrio cholerae', attr: 'Therapeutic Solution', val: 'ORS + Doxycycline / Azithromycin' }
+                            ]
+                        },
+                        'Escherichia coli': {
+                            level: 'species',
+                            name: 'Escherichia coli',
+                            description: 'A facultative anaerobic rod coliform specimen. Focuses primarily on Shiga-toxin producing strains (STEC like O157:H7) causing severe blood vessel breakdown.',
+                            imageUrl: 'https://images.unsplash.com/photo-1631824683860-9a7aa1fe0713?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            gramStatus: 'Gram-Negative',
+                            mediumName: 'MacConkey Differential Agar',
+                            colonyColor: '#ec4899', // Bright pink
+                            colonyFormat: 'Large, Circular, Concentric Donut Format, Dry Texture',
+                            bgColor: '#451a03', // Warm brick reddish-amber agar look
+                            drawPattern: 'pink-donuts',
+                            disease: 'Hemorrhagic Colitis / Hemolytic Uremic Syndrome (HUS)',
+                            symptoms: 'Severe, excruciating abdominal cramps, initial watery stools progressing to heavily bloody diarrhea, accompanied by variable low-grade fever.',
+                            treatment: 'CRITICAL CLINICAL ALERT: Antibiotic deployment is strictly contraindicated for suspected STEC O157:H7 as cell lysis accelerates systemic Shiga-toxin release, drastically raising HUS and kidney failure risks. Manage purely via strict supportive fluid replacement.',
+                            links: [{ name: 'Microbiome Database', url: 'https://google.com' }],
+                            eavRows: [
+                                { ent: 'Escherichia coli', attr: 'Gram Stain Type', val: 'Gram-Negative (-)' },
+                                { ent: 'Escherichia coli', attr: 'Clinical Disease', val: 'Hemorrhagic Colitis' },
+                                { ent: 'Escherichia coli', attr: 'Therapeutic Protocol', val: 'Supportive Fluids Only (Antibiotics Banned)' }
+                            ]
+                        }
+                    }
+                },
+                'Gram-Positive Box': {
+                    level: 'family',
+                    name: 'Gram-Positive Envelopes',
+                    description: 'Microbes built with dense outer peptidoglycan shell walls. Frequently evaluated on mammalian blood agar plates to test catalytic hemolytic breakdown responses.',
+                    imageUrl: 'https://images.unsplash.com/photo-1631824683860-9a7aa1fe0713?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                    gramStatus: 'Gram-Positive',
+                    links: [{ name: 'Hemolysis Identification Chart', url: 'https://google.com' }],
+                    eavRows: [
+                        { ent: 'Staphylococcus aureus', attr: 'Envelope Envelope', val: 'Gram-Positive Coccus' },
+                        { ent: 'Bacillus anthracis', attr: 'Envelope Envelope', val: 'Gram-Positive Endospore Bacillus' }
+                    ],
+                    children: {
+                        'Staphylococcus aureus': {
+                            level: 'species',
+                            name: 'Staphylococcus aureus',
+                            description: 'Spherical Gram-positive cluster coccus. Colonies appear as golden-yellow creamy dots surrounded by a clear halo zone of beta-hemolysis on mammalian blood agars.',
+                            imageUrl: 'https://images.unsplash.com/photo-1574341792525-683b103fffe8?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            gramStatus: 'Gram-Positive',
+                            mediumName: '5% Sheep Blood Agar Base',
+                            colonyColor: '#f59e0b', // Golden amber
+                            colonyFormat: 'Medium-Sized, Circular, Smooth Glistening Convex Spheres',
+                            bgColor: '#7f1d1d', // Crimson dark red blood agar appearance
+                            drawPattern: 'golden-halos',
+                            disease: 'Deep-Tissue Bacteremia / Staphylococcal Toxic Shock Syndrome (TSS)',
+                            symptoms: 'Sudden onset of high spiking fever, profound hypotension, diffuse sunburn-like desquamating rash, confusion, multi-organ dysfunction, and system failure.',
+                            treatment: 'Aggressive fluid resuscitation alongside source control. Antimicrobial framework mandates pairing a cell wall agent (Nafcillin/Oxacillin for MSSA; Vancomycin for MRSA) directly with Clindamycin or Linezolid to arrest toxic synthesis mechanisms.',
+                            links: [{ name: 'Staphylococcal Registry', url: 'https://google.com' }],
+                            eavRows: [
+                                { ent: 'Staphylococcus aureus', attr: 'Gram Stain Type', val: 'Gram-Positive (+)' },
+                                { ent: 'Staphylococcus aureus', attr: 'Clinical Infection', val: 'Bacteremia / Toxic Shock' },
+                                { ent: 'Staphylococcus aureus', attr: 'Therapeutic Solution', val: 'Vancomycin/Oxacillin + Clindamycin' }
+                            ]
+                        },
+                        'Bacillus anthracis': {
+                            level: 'species',
+                            name: 'Bacillus anthracis',
+                            description: 'A large, endospore-forming Gram-positive rod bacterium. Produces distinctive matte grey-white, flat, ground-glass colonies with irregular curled "Medusa-head" wavy margins.',
+                            imageUrl: 'https://images.unsplash.com/photo-1174341792525-683b103fffe8?fm=jpg&q=60&w=3000&auto=format&fit=crop',
+                            gramStatus: 'Gram-Positive',
+                            mediumName: 'Defibrinated Sheep Blood Agar',
+                            colonyColor: '#cbd5e1', // Slate grey-white
+                            colonyFormat: '2-5mm, Flat, Dull Ground-Glass Matt Texture, Tenacious Loop Feel',
+                            bgColor: '#7f1d1d', // Crimson red blood agar background
+                            drawPattern: 'medusa-heads',
+                            disease: 'Systemic Inhalation / Cutaneous Anthrax Pathology',
+                            symptoms: 'Inhalation triggers biphasic symptoms starting with non-specific flu-like malaise, advancing rapidly to severe acute dyspnea, hemorrhagic mediastinitis, and stridor. Cutaneous presents with a localized painless pruritic papule converting into a necrotic black eschar sore surrounded by gelatinous edema.',
+                            treatment: 'Systemic anthrax demands a multi-drug combination strategy including at least one potent intravenous bactericidal fluoroquinolone (Ciprofloxacin/Levofloxacin) combined with a protein synthesis inhibitor agent (Doxycycline/Linezolid), augmented by specialized anti-toxin antibodies.',
+                            links: [{ name: 'CDC Anthrax Safety Portal', url: 'https://google.com' }],
+                            eavRows: [
+                                { ent: 'Bacillus anthracis', attr: 'Gram Stain Type', val: 'Gram-Positive (+)' },
+                                { ent: 'Bacillus anthracis', attr: 'Clinical Disease', val: 'Systemic Anthrax' },
+                                { ent: 'Bacillus anthracis', attr: 'Therapeutic Solution', val: 'Ciprofloxacin + Doxycycline + Antitoxin' }
+                            ]
+                        }
+                    }
+                }
+            }
+        };
+
+        // Navigation and View Mode States Tracking Matrix
+        let navigationPathStack = [unifiedMetaDataset];
+        let currentDisplayMode = 'logical'; // Options: 'logical' | 'physical' | 'sankey'
+
+        // Setup DOM Node Pointers
+        const canvas = document.getElementById('main-model-canvas');
+        const ctx = canvas.getContext('2d');
+        let renderedCoordinatesList = [];
+
+        // Tab and Header DOM elements Hooks
+        const tabLogical = document.getElementById('tab-logical');
+        const tabPhysical = document.getElementById('tab-physical');
+        const tabSankey = document.getElementById('tab-sankey');
+        const metaStatusText = document.getElementById('meta-model-status-text');
+        const btnZoomParent = document.getElementById('btn-zoom-parent');
+        const breadcrumbTrail = document.getElementById('breadcrumb-trail');
+        const legendContainer = document.getElementById('physical-plate-legend');
+
+        // Document Details UI Component Elements
+        const profileTitle = document.getElementById('profile-card-title');
+        const profileGramBadge = document.getElementById('badge-gram-status');
+        const profileAvatar = document.getElementById('profile-avatar-img');
+        const profileDescText = document.getElementById('profile-description-text');
+        const profileLinksBox = document.getElementById('profile-links-layout');
+        const eavWarehouseTableBody = document.getElementById('eav-matrix-tbody');
+
+        // Clinical Profile UI Component Hooks
+        const clinicalCard = document.getElementById('clinical-detail-card');
+        const txtDisease = document.getElementById('txt-clinical-disease');
+        const txtSymptoms = document.getElementById('txt-clinical-symptoms');
+        const txtTreatment = document.getElementById('txt-clinical-treatment');
+
+        // Physical Colony Description Elements
+        const lblAgarMedium = document.getElementById('lbl-agar-medium');
+        const lblColonyFormat = document.getElementById('lbl-colony-format');
+        const lblColonyColor = document.getElementById('lbl-colony-color');
+
+        // HUD Elements
+        const hudResolution = document.getElementById('hud-resolution-layer');
+        const hudFocusNode = document.getElementById('hud-focus-node');
+
+        // Window resize canvas configuration logic
+        function scaleCanvasBounds() {
+            const boundaryRect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = boundaryRect.width;
+            canvas.height = boundaryRect.height;
+            recalculateModelPlotSpace();
+        }
+
+        window.addEventListener('resize', scaleCanvasBounds);
+
+        // Switch panel visibility variables layout
+        function switchDisplayMode(mode) {
+            currentDisplayMode = mode;
+            
+            // Manage Active Button Tab Styles
+            tabLogical.className = "text-xs font-medium px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200";
+            tabPhysical.className = "text-xs font-medium px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200";
+            tabSankey.className = "text-xs font-medium px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200";
+            legendContainer.classList.add('hidden');
+
+            if (mode === 'logical') {
+                tabLogical.className = "text-xs font-medium px-3 py-1.5 rounded-lg transition-all bg-purple-600 text-white shadow";
+            } else if (mode === 'physical') {
+                tabPhysical.className = "text-xs font-medium px-3 py-1.5 rounded-lg transition-all bg-amber-500 text-white shadow";
+                if (getActiveScope().level === 'species') legendContainer.classList.remove('hidden');
+            } else if (mode === 'sankey') {
+                tabSankey.className = "text-xs font-medium px-3 py-1.5 rounded-lg transition-all bg-blue-600 text-white shadow";
+            }
+            
+            recalculateModelPlotSpace();
+        }
+
+        // Return current navigation layer reference pointer
+        function getActiveScope() {
+            return navigationPathStack[navigationPathStack.length - 1];
+        }
+
+        // Recalculate layout nodes coordinates inside the vector viewport cloud
+        function recalculateModelPlotSpace() {
+            const state = getActiveScope();
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            renderedCoordinatesList = [];
+
+            if (currentDisplayMode === 'logical') {
+                // Construct standard TDA topological network workspace graph
+                renderedCoordinatesList.push({
+                    id: 'core-sink',
+                    name: state.name,
+                    isCenter: true,
+                    x: cx,
+                    y: cy,
+                    radius: 20,
+                    color: '#a855f7' // Purple meta invariant core
+                });
+
+                const structuralChildKeys = Object.keys(state.children || {});
+                const nodesCount = structuralChildKeys.length;
+
+                structuralChildKeys.forEach((key, idx) => {
+                    const angleStep = (idx * 2 * Math.PI) / nodesCount;
+                    const boundaryOrbitRadius = Math.min(canvas.width, canvas.height) * 0.32;
+
+                    renderedCoordinatesList.push({
+                        id: key,
+                        name: key,
+                        isCenter: false,
+                        x: cx + boundaryOrbitRadius * Math.cos(angleStep),
+                        y: cy + boundaryOrbitRadius * Math.sin(angleStep),
+                        radius: state.level === 'global' ? 14 : 12,
+                        color: state.level === 'global' ? '#6366f1' : '#f59e0b', // Indigo or Amber nodes
+                        childDataPayload: state.children[key]
+                    });
+                });
+            } else if (currentDisplayMode === 'physical') {
+                if (state.level !== 'species') {
+                    renderedCoordinatesList.push({
+                        id: 'instructional-msg',
+                        name: 'Awaiting Organism Target focus',
+                        isPrompt: true,
+                        x: cx,
+                        y: cy,
+                        textMessage: 'Zoom into a terminal Bacteria Species node to visualize its explicit Agar Plate Colony Format'
+                    });
+                } else {
+                    renderedCoordinatesList.push({
+                        id: 'petri-dish-rim',
+                        isPetriPlate: true,
+                        x: cx,
+                        y: cy,
+                        radius: Math.min(canvas.width, canvas.height) * 0.42,
+                        payload: state
+                    });
+                }
+            } else if (currentDisplayMode === 'sankey') {
+                // Generate a multi-tier flow topology model mapping倾斜 clinical paths
+                buildClinicalSankeyFlowStructures();
+            }
+            renderActiveCanvasGraphics();
+        }
+
+        // Build expanded 4-column clinical Sankey structure linking morphology directly to disease, manifestations and medical solutions
+        function buildClinicalSankeyFlowStructures() {
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            // Four distinct processing columns spaced evenly across the view
+            const colX1 = w * 0.10;
+            const colX2 = w * 0.35;
+            const colX3 = w * 0.60;
+            const colX4 = w * 0.86;
+
+            // Tier 1: Envelopes (Classification Vector)
+            const leftNodes = [
+                { id: 'T1_NEG', name: 'Gram-Negative', x: colX1, y: h * 0.3, h: h * 0.35, color: '#06b6d4' },
+                { id: 'T1_POS', name: 'Gram-Positive', x: colX1, y: h * 0.7, h: h * 0.35, color: '#a855f7' }
+            ];
+
+            // Tier 2: Microbes (Foundational Entities)
+            const midNodes = [
+                { id: 'T2_VC', name: 'V. cholerae', x: colX2, y: h * 0.18, h: h * 0.12, color: '#6366f1', linkTo: 'T1_NEG' },
+                { id: 'T2_EC', name: 'E. coli', x: colX2, y: h * 0.38, h: h * 0.12, color: '#4f46e5', linkTo: 'T1_NEG' },
+                { id: 'T2_SA', name: 'S. aureus', x: colX2, y: h * 0.62, h: h * 0.12, color: '#ec4899', linkTo: 'T1_POS' },
+                { id: 'T2_BA', name: 'B. anthracis', x: colX2, y: h * 0.82, h: h * 0.12, color: '#db2777', linkTo: 'T1_POS' }
+            ];
+
+            // Tier 3: Pathologies (Human Infection State)
+            const diseaseNodes = [
+                { id: 'T3_CHOL', name: 'Cholera Disease', x: colX3, y: h * 0.18, h: h * 0.12, color: '#3b82f6', parentMid: 'T2_VC' },
+                { id: 'T3_COLI', name: 'Hemorrhagic Colitis', x: colX3, y: h * 0.38, h: h * 0.12, color: '#1d4ed8', parentMid: 'T2_EC' },
+                { id: 'T3_SEPS', name: 'Staph Bacteremia / TSS', x: colX3, y: h * 0.62, h: h * 0.12, color: '#f43f5e', parentMid: 'T2_SA' },
+                { id: 'T3_ANTH', name: 'Systemic Anthrax', x: colX3, y: h * 0.82, h: h * 0.12, color: '#e11d48', parentMid: 'T2_BA' }
+            ];
+
+            // Tier 4: Manifestations (Human Symptoms Sinks)
+            const symptomNodes = [
+                { id: 'T4_RICE', name: 'Rice-Water Stools & Fluids', x: colX4, y: h * 0.18, h: h * 0.12, color: '#10b981', parentDisease: 'T3_CHOL' },
+                { id: 'T4_CRAMP', name: 'Bloody Stools (No Abx)', x: colX4, y: h * 0.38, h: h * 0.12, color: '#059669', parentDisease: 'T3_COLI' },
+                { id: 'T4_FEVER', name: 'Spiking Fever & Shock', x: colX4, y: h * 0.62, h: h * 0.12, color: '#f59e0b', parentDisease: 'T3_SEPS' },
+                { id: 'T4_ESCHAR', name: 'Dyspnea & Black Eschars', x: colX4, y: h * 0.82, h: h * 0.12, color: '#cbd5e1', parentDisease: 'T3_ANTH' }
+            ];
+
+            renderedCoordinatesList = {
+                isClinicalSankey: true,
+                tier1: leftNodes,
+                tier2: midNodes,
+                tier3: diseaseNodes,
+                tier4: symptomNodes
+            };
+        }
+
+        // Main graphics paint dispatcher loop
+        function renderActiveCanvasGraphics() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (currentDisplayMode === 'logical') {
+                // 1. Draw simplicial edges trajectories connections maps
+                const centerHubNode = renderedCoordinatesList.find(n => n.isCenter);
+                if (centerHubNode) {
+                    renderedCoordinatesList.forEach(node => {
+                        if (!node.isCenter) {
+                            ctx.beginPath();
+                            ctx.moveTo(centerHubNode.x, centerHubNode.y);
+                            ctx.lineTo(node.x, node.y);
+                            ctx.lineWidth = 2.5;
+                            ctx.strokeStyle = 'rgba(168, 85, 247, 0.35)';
+                            ctx.stroke();
+
+                            const midpointX = (centerHubNode.x + node.x) / 2;
+                            const midpointY = (centerHubNode.y + node.y) / 2;
+                            ctx.beginPath();
+                            ctx.arc(midpointX, midpointY, 4, 0, 2 * Math.PI);
+                            ctx.fillStyle = node.color;
+                            ctx.fill();
+                        }
+                    });
+                }
+
+                // 2. Render discrete cloud vertices points metrics
+                renderedCoordinatesList.forEach(node => {
+                    ctx.shadowBlur = node.isCenter ? 18 : 8;
+                    ctx.shadowColor = node.color + '66';
+
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = node.color;
+                    ctx.fill();
+
+                    ctx.shadowBlur = 0;
+                    ctx.strokeStyle = '#0f172a';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#f1f5f9';
+                    ctx.font = node.isCenter ? 'bold 12px "Plus Jakarta Sans", sans-serif' : '600 11px "Plus Jakarta Sans", sans-serif';
+                    ctx.textAlign = 'center';
+                    
+                    const labelVerticalOffset = node.y > canvas.height / 2 ? 15 + node.radius : -8 - node.radius;
+                    ctx.fillText(node.name, node.x, node.y + labelVerticalOffset);
+                });
+
+            } else if (currentDisplayMode === 'physical') {
+                renderedCoordinatesList.forEach(item => {
+                    if (item.isPrompt) {
+                        ctx.fillStyle = '#64748b';
+                        ctx.font = '500 12px "JetBrains Mono", monospace';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(item.textMessage, item.x, item.y);
+                    } else if (item.isPetriPlate) {
+                        const targetData = item.payload;
+
+                        ctx.beginPath();
+                        ctx.arc(item.x, item.y, item.radius, 0, 2 * Math.PI);
+                        ctx.fillStyle = targetData.bgColor;
+                        ctx.fill();
+                        
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                        ctx.lineWidth = 6;
+                        ctx.stroke();
+
+                        executeColonyDrawMatrix(item.x, item.y, item.radius, targetData.drawPattern, targetData.colonyColor);
+                    }
+                });
+            } else if (currentDisplayMode === 'sankey' && renderedCoordinatesList.isClinicalSankey) {
+                // Draw 4-tier streaming disease flow lanes
+                drawClinicalSankeyFlowLanes();
+            }
+        }
+
+        // Draw multi-tier smooth cubic Bezier flow bands connecting clinical pathways
+        function drawClinicalSankeyFlowLanes() {
+            const m = renderedCoordinatesList;
+
+            // Lane Flow 1: Classification to Microbe
+            m.tier2.forEach(t2 => {
+                const t1 = m.tier1.find(l => l.id === t2.linkTo);
+                if (t1) {
+                    drawBezierSankeyBand(t1.x, t1.y, t2.x, t2.y, t1.h * 0.4, t2.h, t1.color + '22', t1.color + '55');
+                }
+            });
+
+            // Lane Flow 2: Microbe to Disease State
+            m.tier3.forEach(t3 => {
+                const t2 = m.tier2.find(md => md.id === t3.parentMid);
+                if (t2) {
+                    drawBezierSankeyBand(t2.x, t2.y, t3.x, t3.y, t2.h, t3.h, t2.color + '22', t3.color + '55');
+                }
+            });
+
+            // Lane Flow 3: Disease State to Human Symptoms
+            m.tier4.forEach(t4 => {
+                const t3 = m.tier3.find(ds => ds.id === t4.parentDisease);
+                if (t3) {
+                    drawBezierSankeyBand(t3.x, t3.y, t4.x, t4.y, t3.h, t4.h, t3.color + '22', t4.color + '55');
+                }
+            });
+
+            // Render Solid Rectangular Node Bars across all tiers
+            const allTiersCombined = [...m.tier1, ...m.tier2, ...m.tier3, ...m.tier4];
+            allTiersCombined.forEach(node => {
+                ctx.fillStyle = node.color;
+                ctx.fillRect(node.x - 5, node.y - node.h / 2, 10, node.h);
+
+                // Strategic text placement based on columns to keep flow un-cluttered
+                ctx.fillStyle = '#f1f5f9';
+                ctx.font = 'bold 10px "Plus Jakarta Sans", sans-serif';
+                
+                if (node.x < canvas.width * 0.2) {
+                    ctx.textAlign = 'left';
+                    ctx.fillText(node.name, node.x + 12, node.y + 3);
+                } else if (node.x > canvas.width * 0.8) {
+                    ctx.textAlign = 'right';
+                    ctx.fillText(node.name, node.x - 12, node.y + 3);
+                } else {
+                    ctx.textAlign = 'center';
+                    ctx.fillText(node.name, node.x, node.y - node.h / 2 - 5);
+                }
+            });
+        }
+
+        // Utility to draw sleek gradient Bezier flow curves
+        function drawBezierSankeyBand(x1, y1, x2, y2, h1, h2, fillColor, strokeColor) {
+            ctx.save();
+            const cpX1 = x1 + (x2 - x1) * 0.45;
+            const cpY1 = y1;
+            const cpX2 = x1 + (x2 - x1) * 0.55;
+            const cpY2 = y2;
+
+            ctx.beginPath();
+            ctx.moveTo(x1, y1 - h1 / 2);
+            ctx.bezierCurveTo(cpX1, cpY1 - h1 / 2, cpX2, cpY2 - h2 / 2, x2, y2 - h2 / 2);
+            ctx.lineTo(x2, y2 + h2 / 2);
+            ctx.bezierCurveTo(cpX2, cpY2 + h2 / 2, cpX1, cpY1 + h1 / 2, x1, y1 + h1 / 2);
+            ctx.closePath();
+
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Draw explicit colony arrangements inside the Petri Plate circle
+        function executeColonyDrawMatrix(cx, cy, maxRadius, pattern, baseColor) {
+            let scatterSeed = 42;
+            function getSeededRandom() {
+                let s = Math.sin(scatterSeed++) * 10000;
+                return s - Math.floor(s);
+            }
+
+            const pointsCount = 45;
+            for (let i = 0; i < pointsCount; i++) {
+                const distanceRatio = getSeededRandom() * 0.85;
+                const randomAngle = getSeededRandom() * 2 * Math.PI;
+
+                const colX = cx + maxRadius * distanceRatio * Math.cos(randomAngle);
+                const colY = cy + maxRadius * distanceRatio * Math.sin(randomAngle);
+                
+                ctx.save();
+                if (pattern === 'yellow-dots-flat') {
+                    ctx.beginPath();
+                    ctx.arc(colX, colY, 7, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'rgba(234, 179, 8, 0.25)';
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(colX, colY, 4, 0, 2 * Math.PI);
+                    ctx.fillStyle = baseColor;
+                    ctx.fill();
+                } else if (pattern === 'pink-donuts') {
+                    ctx.beginPath();
+                    ctx.arc(colX, colY, 9, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'rgba(236, 72, 153, 0.15)';
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(colX, colY, 6, 0, 2 * Math.PI);
+                    ctx.fillStyle = baseColor;
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(colX, colY, 2.5, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#4d0429';
+                    ctx.fill();
+                } else if (pattern === 'golden-halos') {
+                    ctx.beginPath();
+                    ctx.arc(colX, colY, 13, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'rgba(220, 38, 38, 0.1)';
+                    ctx.strokeStyle = 'rgba(251, 191, 36, 0.25)';
+                    ctx.lineWidth = 1;
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(colX, colY, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = baseColor;
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(colX - 1.5, colY - 1.5, 1, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                } else if (pattern === 'medusa-heads') {
+                    ctx.fillStyle = 'rgba(203, 213, 225, 0.85)';
+                    ctx.strokeStyle = 'rgba(241, 245, 249, 0.6)';
+                    ctx.lineWidth = 0.8;
+                    
+                    ctx.beginPath();
+                    const armsCount = 8;
+                    const centerPointRadius = 5;
+                    for (let j = 0; j <= armsCount * 2; j++) {
+                        const waveAngle = (j * Math.PI) / armsCount;
+                        const vectorOffsetRadius = centerPointRadius + (j % 2 === 0 ? 3 : -1.5);
+                        const waveX = colX + vectorOffsetRadius * Math.cos(waveAngle);
+                        const waveY = colY + vectorOffsetRadius * Math.sin(waveAngle);
+                        if (j === 0) ctx.moveTo(waveX, waveY);
+                        else ctx.lineTo(waveX, waveY);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+        }
+
+        // Coordinate synchronization dashboard pipeline engine
+        function refreshDisplayTensors() {
+            const scope = getActiveScope();
+            
+            // 1. Level text classifications updates
+            metaStatusText.textContent = scope.name;
+            if (scope.level === 'global') {
+                hudResolution.textContent = "Resolution Scale: Domain Point Cloud";
+                profileTitle.textContent = "Bacterial Domain Metadata";
+                profileGramBadge.textContent = "Multi-Envelope Scale";
+                profileGramBadge.className = "text-[9px] font-mono px-2 py-0.5 rounded-md uppercase font-bold tracking-wider bg-slate-950 text-slate-400 border border-slate-800";
+                clinicalCard.classList.add('hidden');
+            } else if (scope.level === 'family') {
+                hudResolution.textContent = "Resolution Scale: Homology H₁ Invariant Group";
+                profileTitle.textContent = `Structural Class: ${scope.name}`;
+                profileGramBadge.textContent = scope.gramStatus;
+                profileGramBadge.className = scope.gramStatus === 'Gram-Positive' 
+                    ? "text-[9px] font-mono px-2 py-0.5 rounded-md uppercase font-bold tracking-wider bg-purple-950 text-purple-400 border border-purple-800"
+                    : "text-[9px] font-mono px-2 py-0.5 rounded-md uppercase font-bold tracking-wider bg-cyan-950 text-cyan-400 border border-cyan-800";
+                clinicalCard.classList.add('hidden');
+            } else {
+                // Terminal Organism Level: Expose clinical profiling sub-panel explicitly
+                hudResolution.textContent = "Resolution Scale: Meta-Model EAV Attractor";
+                profileTitle.textContent = `Species Profile: ${scope.name}`;
+                profileGramBadge.textContent = scope.gramStatus;
+                profileGramBadge.className = scope.gramStatus === 'Gram-Positive' 
+                    ? "text-[9px] font-mono px-2 py-0.5 rounded-md uppercase font-bold tracking-wider bg-purple-950 text-purple-400 border border-purple-800"
+                    : "text-[9px] font-mono px-2 py-0.5 rounded-md uppercase font-bold tracking-wider bg-cyan-950 text-cyan-400 border border-cyan-800";
+                
+                // Bind clinical content vectors to card targets
+                txtDisease.textContent = scope.disease;
+                txtSymptoms.textContent = scope.symptoms;
+                txtTreatment.textContent = scope.treatment;
+                clinicalCard.classList.remove('hidden');
+            }
+
+            hudFocusNode.textContent = `Active Coordinates: ${scope.name}`;
+            btnZoomParent.disabled = navigationPathStack.length === 1;
+
+            // Update physical description attributes texts
+            if (scope.level === 'species') {
+                lblAgarMedium.textContent = scope.mediumName;
+                lblColonyFormat.textContent = scope.colonyFormat;
+                lblColonyColor.textContent = scope.colonyColor;
+                if (currentDisplayMode === 'physical') legendContainer.classList.remove('hidden');
+            } else {
+                legendContainer.classList.add('hidden');
+            }
+
+            // 2. Refresh textual descriptive strings and asset targets
+            profileDescText.textContent = scope.description;
+            profileAvatar.src = scope.imageUrl;
+
+            // 3. Render integrated Actionable Hyperlink elements
+            profileLinksBox.innerHTML = '';
+            scope.links.forEach(lnk => {
+                profileLinksBox.innerHTML += `
+                    <a href="${lnk.url}" target="_blank" rel="noopener noreferrer" 
+                       class="text-[11px] text-purple-400 bg-purple-950/20 hover:bg-purple-950/40 border border-purple-900/40 px-3 py-1.5 rounded-xl transition flex items-center justify-between group font-mono">
+                        <span class="font-medium truncate mr-1">${lnk.name}</span>
+                        <svg class="w-3 h-3 text-purple-500 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                    </a>
+                `;
+            });
+
+            // 4. Synthesize rows inside the Materialized Schema Warehouse table ledger
+            eavWarehouseTableBody.innerHTML = '';
+            if (scope.eavRows.length === 0) {
+                eavWarehouseTableBody.innerHTML = `<tr><td colspan="3" class="py-3 text-slate-600 text-center italic">No data vectors allocated at this topological scale boundary.</td></tr>`;
+            } else {
+                scope.eavRows.forEach(row => {
+                    eavWarehouseTableBody.innerHTML += `
+                        <tr class="hover:bg-slate-900/60 border-b border-slate-900/50 transition">
+                            <td class="py-2 pl-2 text-purple-400 font-semibold font-mono">${row.ent}</td>
+                            <td class="py-2 text-slate-400 font-mono">${row.attr}</td>
+                            <td class="py-2 pr-2 text-amber-400 font-semibold font-mono">${row.val}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            // 5. Draw breadcrumb vector track maps elements
+            drawBreadcrumbArray();
+            recalculateModelPlotSpace();
+        }
+
+        // Generate tracking pathway elements strings
+        function drawBreadcrumbArray() {
+            breadcrumbTrail.innerHTML = '';
+            navigationPathStack.forEach((layer, index) => {
+                const isFinalIndex = index === navigationPathStack.length - 1;
+                let normalizedText = layer.name === 'Bacteria Domain' ? 'ROOT' : layer.name.split(' ')[0];
+                
+                breadcrumbTrail.innerHTML += `
+                    <span class="${isFinalIndex ? 'text-purple-400 font-bold' : 'text-slate-500 cursor-pointer hover:text-slate-300'}" 
+                          onclick="jumpDirectToBreadcrumbIndex(${index})">
+                        ${normalizedText}
+                    </span>
+                `;
+                if (!isFinalIndex) {
+                    breadcrumbTrail.innerHTML += `<span class="text-slate-700 font-light mx-1">&rarr;</span>`;
+                }
+            });
+        }
+
+        // Click routing handling loops tracking
+        canvas.addEventListener('click', (e) => {
+            if (currentDisplayMode !== 'logical') return; // Selection routing only processes on logical networks
+            
+            const layoutRect = canvas.getBoundingClientRect();
+            const clickPositionX = e.clientX - layoutRect.left;
+            const clickPositionY = e.clientY - layoutRect.top;
+
+            for (let pointNode of renderedCoordinatesList) {
+                if (pointNode.isCenter) continue;
+
+                const distanceVectorRadius = Math.sqrt((clickPositionX - pointNode.x) ** 2 + (clickPositionY - pointNode.y) ** 2);
+                if (distanceVectorRadius <= pointNode.radius + 14) {
+                    if (pointNode.childDataPayload) {
+                        navigationPathStack.push(pointNode.childDataPayload);
+                        refreshDisplayTensors();
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Zoom Out action dispatcher
+        function navigateHierarchyUp() {
+            if (navigationPathStack.length > 1) {
+                navigationPathStack.pop();
+                refreshDisplayTensors();
+            }
+        }
+
+        // Direct item jumper link navigation handler
+        window.jumpDirectToBreadcrumbIndex = function(idx) {
+            if (idx < navigationPathStack.length - 1) {
+                navigationPathStack = navigationPathStack.slice(0, idx + 1);
+                refreshDisplayTensors();
+            }
+        }
+
+        // Initialize frame sizing arrays on startup
+        window.onload = function() {
+            scaleCanvasBounds();
+            refreshDisplayTensors();
+        };
+    </script>
+</body>
+</html>

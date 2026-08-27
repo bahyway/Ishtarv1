@@ -34,7 +34,7 @@ pub type Point3 = [f64; 3];
 /// for a class that survives to `max_epsilon` without being filled in.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PersistencePair {
-    pub dim:   u8,
+    pub dim: u8,
     pub birth: f64,
     pub death: f64,
 }
@@ -134,13 +134,19 @@ pub fn vietoris_rips_persistence(points: &[Point3], max_epsilon: f64) -> Persist
     // ── Build the filtration: vertices, then edges, then triangles ──────
     let mut simplices: Vec<Simplex> = Vec::with_capacity(n);
     for i in 0..n {
-        simplices.push(Simplex { verts: vec![i], value: 0.0 });
+        simplices.push(Simplex {
+            verts: vec![i],
+            value: 0.0,
+        });
     }
     for i in 0..n {
         for j in (i + 1)..n {
             let d = euclidean(&points[i], &points[j]);
             if d <= max_epsilon {
-                simplices.push(Simplex { verts: vec![i, j], value: d });
+                simplices.push(Simplex {
+                    verts: vec![i, j],
+                    value: d,
+                });
             }
         }
     }
@@ -155,7 +161,10 @@ pub fn vietoris_rips_persistence(points: &[Point3], max_epsilon: f64) -> Persist
                 let djk = euclidean(&points[j], &points[k]);
                 let v = dij.max(dik).max(djk);
                 if v <= max_epsilon {
-                    simplices.push(Simplex { verts: vec![i, j, k], value: v });
+                    simplices.push(Simplex {
+                        verts: vec![i, j, k],
+                        value: v,
+                    });
                 }
             }
         }
@@ -186,7 +195,10 @@ pub fn vietoris_rips_persistence(points: &[Point3], max_epsilon: f64) -> Persist
                     let dkl = euclidean(&points[k], &points[l]);
                     let v = dij.max(dik).max(djk).max(dil).max(djl).max(dkl);
                     if v <= max_epsilon {
-                        simplices.push(Simplex { verts: vec![i, j, k, l], value: v });
+                        simplices.push(Simplex {
+                            verts: vec![i, j, k, l],
+                            value: v,
+                        });
                     }
                 }
             }
@@ -233,29 +245,46 @@ pub fn clique_complex_persistence(
 
     let mut simplices: Vec<Simplex> = Vec::with_capacity(n_vertices);
     for i in 0..n_vertices {
-        simplices.push(Simplex { verts: vec![i], value: 0.0 });
+        simplices.push(Simplex {
+            verts: vec![i],
+            value: 0.0,
+        });
     }
     for i in 0..n_vertices {
         for j in (i + 1)..n_vertices {
             if let Some(w) = edge_weight(i, j) {
-                simplices.push(Simplex { verts: vec![i, j], value: w });
+                simplices.push(Simplex {
+                    verts: vec![i, j],
+                    value: w,
+                });
             }
         }
     }
     for i in 0..n_vertices {
         for j in (i + 1)..n_vertices {
-            let Some(wij) = edge_weight(i, j) else { continue };
+            let Some(wij) = edge_weight(i, j) else {
+                continue;
+            };
             for k in (j + 1)..n_vertices {
-                let (Some(wik), Some(wjk)) = (edge_weight(i, k), edge_weight(j, k)) else { continue };
-                simplices.push(Simplex { verts: vec![i, j, k], value: wij.max(wik).max(wjk) });
+                let (Some(wik), Some(wjk)) = (edge_weight(i, k), edge_weight(j, k)) else {
+                    continue;
+                };
+                simplices.push(Simplex {
+                    verts: vec![i, j, k],
+                    value: wij.max(wik).max(wjk),
+                });
             }
         }
     }
     for i in 0..n_vertices {
         for j in (i + 1)..n_vertices {
-            let Some(wij) = edge_weight(i, j) else { continue };
+            let Some(wij) = edge_weight(i, j) else {
+                continue;
+            };
             for k in (j + 1)..n_vertices {
-                let (Some(wik), Some(wjk)) = (edge_weight(i, k), edge_weight(j, k)) else { continue };
+                let (Some(wik), Some(wjk)) = (edge_weight(i, k), edge_weight(j, k)) else {
+                    continue;
+                };
                 for l in (k + 1)..n_vertices {
                     let (Some(wil), Some(wjl), Some(wkl)) =
                         (edge_weight(i, l), edge_weight(j, l), edge_weight(k, l))
@@ -263,7 +292,10 @@ pub fn clique_complex_persistence(
                         continue;
                     };
                     let v = wij.max(wik).max(wjk).max(wil).max(wjl).max(wkl);
-                    simplices.push(Simplex { verts: vec![i, j, k, l], value: v });
+                    simplices.push(Simplex {
+                        verts: vec![i, j, k, l],
+                        value: v,
+                    });
                 }
             }
         }
@@ -337,7 +369,11 @@ fn reduce_filtration(mut simplices: Vec<Simplex>) -> PersistenceDiagram {
                 let death_val = simplices[j].value;
                 if death_val > birth_val {
                     let dim = (simplices[low_idx].verts.len() - 1) as u8;
-                    pairs.push(PersistencePair { dim, birth: birth_val, death: death_val });
+                    pairs.push(PersistencePair {
+                        dim,
+                        birth: birth_val,
+                        death: death_val,
+                    });
                 }
             }
             None => column_empty[j] = true,
@@ -348,7 +384,11 @@ fn reduce_filtration(mut simplices: Vec<Simplex>) -> PersistenceDiagram {
     for j in 0..m {
         if column_empty[j] && !got_paired[j] {
             let dim = (simplices[j].verts.len() - 1) as u8;
-            pairs.push(PersistencePair { dim, birth: simplices[j].value, death: f64::INFINITY });
+            pairs.push(PersistencePair {
+                dim,
+                birth: simplices[j].value,
+                death: f64::INFINITY,
+            });
         }
     }
 
@@ -407,8 +447,16 @@ mod tests {
             [0.01, 0.01, 0.01],
         ];
         let diag = vietoris_rips_persistence(&points, 0.2);
-        assert_eq!(diag.component_count(), 1, "tight cluster fully merges into one component");
-        assert_eq!(diag.h1_count(), 0, "DEAD signature: no loop in a solid blob");
+        assert_eq!(
+            diag.component_count(),
+            1,
+            "tight cluster fully merges into one component"
+        );
+        assert_eq!(
+            diag.h1_count(),
+            0,
+            "DEAD signature: no loop in a solid blob"
+        );
     }
 
     #[test]
@@ -427,8 +475,15 @@ mod tests {
             })
             .collect();
         let diag = vietoris_rips_persistence(&points, 1.2);
-        assert_eq!(diag.component_count(), 1, "the ring is one connected component");
-        assert!(diag.h1_count() >= 1, "a ring must produce at least one H1 class");
+        assert_eq!(
+            diag.component_count(),
+            1,
+            "the ring is one connected component"
+        );
+        assert!(
+            diag.h1_count() >= 1,
+            "a ring must produce at least one H1 class"
+        );
         // The un-circle announcing itself: one dot far above the diagonal.
         let max_persist = diag.max_h1_persistence();
         assert!(
@@ -440,12 +495,20 @@ mod tests {
     #[test]
     fn two_separated_clusters_are_two_infinite_h0_bars() {
         let points: Vec<Point3> = vec![
-            [0.0, 0.0, 0.0], [0.05, 0.0, 0.0], [0.0, 0.05, 0.0],
-            [10.0, 0.0, 0.0], [10.05, 0.0, 0.0], [10.0, 0.05, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.05, 0.0, 0.0],
+            [0.0, 0.05, 0.0],
+            [10.0, 0.0, 0.0],
+            [10.05, 0.0, 0.0],
+            [10.0, 0.05, 0.0],
         ];
         // Epsilon smaller than the inter-cluster gap: the two blobs never merge.
         let diag = vietoris_rips_persistence(&points, 0.2);
-        assert_eq!(diag.component_count(), 2, "two far-apart blobs stay two components");
+        assert_eq!(
+            diag.component_count(),
+            2,
+            "two far-apart blobs stay two components"
+        );
     }
 
     /// The 6 vertices of an octahedron: (+-1,0,0), (0,+-1,0), (0,0,+-1).
@@ -461,9 +524,12 @@ mod tests {
     /// center.
     fn octahedron_vertices() -> Vec<Point3> {
         vec![
-            [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0], [0.0, -1.0, 0.0],
-            [0.0, 0.0, 1.0], [0.0, 0.0, -1.0],
+            [1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
         ]
     }
 
@@ -471,9 +537,21 @@ mod tests {
     fn hollow_octahedron_shell_has_one_persistent_h2_void() {
         let points = octahedron_vertices();
         let diag = vietoris_rips_persistence(&points, 1.5);
-        assert_eq!(diag.component_count(), 1, "the shell is one connected surface");
-        assert_eq!(diag.h1_count(), 0, "the closed surface has no un-filled loop, only a void");
-        assert_eq!(diag.void_count(), 1, "a hollow shell encloses exactly one void — the missing center");
+        assert_eq!(
+            diag.component_count(),
+            1,
+            "the shell is one connected surface"
+        );
+        assert_eq!(
+            diag.h1_count(),
+            0,
+            "the closed surface has no un-filled loop, only a void"
+        );
+        assert_eq!(
+            diag.void_count(),
+            1,
+            "a hollow shell encloses exactly one void — the missing center"
+        );
         assert!(
             diag.max_h2_persistence().is_infinite(),
             "nothing in the cloud ever fills the void within max_epsilon"
@@ -492,7 +570,11 @@ mod tests {
         points.push([0.0, 0.0, 0.0]);
         let diag = vietoris_rips_persistence(&points, 1.5);
         assert_eq!(diag.component_count(), 1);
-        assert_eq!(diag.void_count(), 0, "coning in the missing center fills the void completely");
+        assert_eq!(
+            diag.void_count(),
+            0,
+            "coning in the missing center fills the void completely"
+        );
     }
 
     #[test]
@@ -508,11 +590,24 @@ mod tests {
         // but driven by an explicit relationship graph instead of
         // Euclidean coordinates -- this is the "relationship-based
         // complex-builder" the PDM-discovery paradigm needs.
-        let edges = [(0, 1, 0.1), (1, 2, 0.1), (2, 3, 0.1), (3, 4, 0.1), (4, 0, 0.1)];
+        let edges = [
+            (0, 1, 0.1),
+            (1, 2, 0.1),
+            (2, 3, 0.1),
+            (3, 4, 0.1),
+            (4, 0, 0.1),
+        ];
         let diag = clique_complex_persistence(5, &edges, 1.0);
         assert_eq!(diag.component_count(), 1);
-        assert_eq!(diag.h1_count(), 1, "no chords ever fill the ring in, so exactly one H1 class is born");
-        assert!(diag.max_h1_persistence().is_infinite(), "nothing in the graph ever fills it");
+        assert_eq!(
+            diag.h1_count(),
+            1,
+            "no chords ever fill the ring in, so exactly one H1 class is born"
+        );
+        assert!(
+            diag.max_h1_persistence().is_infinite(),
+            "nothing in the graph ever fills it"
+        );
     }
 
     #[test]
@@ -542,8 +637,16 @@ mod tests {
     fn clique_complex_octahedron_graph_has_one_persistent_h2_void() {
         let diag = clique_complex_persistence(6, &octahedron_edges(), 1.0);
         assert_eq!(diag.component_count(), 1);
-        assert_eq!(diag.h1_count(), 0, "the closed surface has no un-filled loop, only a void");
-        assert_eq!(diag.void_count(), 1, "the discovered relationship graph encloses one void");
+        assert_eq!(
+            diag.h1_count(),
+            0,
+            "the closed surface has no un-filled loop, only a void"
+        );
+        assert_eq!(
+            diag.void_count(),
+            1,
+            "the discovered relationship graph encloses one void"
+        );
     }
 
     #[test]
@@ -557,7 +660,11 @@ mod tests {
         }
         let diag = clique_complex_persistence(7, &edges, 1.0);
         assert_eq!(diag.component_count(), 1);
-        assert_eq!(diag.void_count(), 0, "the missing relationship, once supplied, fills the void");
+        assert_eq!(
+            diag.void_count(),
+            0,
+            "the missing relationship, once supplied, fills the void"
+        );
     }
 
     #[test]

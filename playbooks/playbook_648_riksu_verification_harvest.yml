@@ -1,0 +1,222 @@
+---
+# ============================================================================
+# PB-365 :: THE RIKSU VERIFICATION HARVEST — edges become witnessed, or they
+#           do not enter the OntoGraph
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series · EN-MDB-002 (Stele Law,
+#              candidate) · feeds DubSar PDM (Data SHAPES) and the OntoGraph
+# Purpose    : Verify the relationships (heptascript↔marduk-engine,
+#              heptascript↔enkidb-ingest, and every other pair) with the
+#              TWO-WITNESS rule the ecosystem already lives by:
+#
+#                WITNESS 1 — DECLARED : the Cargo.toml manifest names the
+#                            dependency (path/workspace member).
+#                WITNESS 2 — OBSERVED : the source actually speaks it
+#                            (`use <crate>::` / `<crate>::` call sites).
+#
+#              VERDICTS (per edge):
+#                CONFIRMED      — both witnesses convict → lawful RIKSU edge,
+#                                 eligible to become a PDM pillar.
+#                DECLARED-ONLY  — manifest says yes, source never speaks it →
+#                                 candidate dead weight; PDM must not build
+#                                 a SHAPE on it.
+#                OBSERVED-ONLY  — source speaks a crate the manifest never
+#                                 granted → anomaly (vendored path, macro,
+#                                 or drift); refused as an edge, journaled.
+#
+#              Plus the CrossTribe 0x03 candidate sweep: which crates SPEAK
+#              which Arsenal members (Napharu, Nabû, Enbilulu, Šību, …) —
+#              the implements/rehearses edges, witnessed by grep census.
+#
+# Doctrine   : Read-only over the source tree. sha-256 Kanīku on the ledger.
+#              No edge unwitnessed; refusals journaled, never faked.
+#              These verdict edges are EXACTLY the input for DubSar PDM:
+#              ḪARRĀNU paths, KIPPATU cycles, β₁ loops of the OntoGraph are
+#              computed over CONFIRMED edges only.
+# Run        : from the bare-metal Fedora HOST (CSR-08 = your run):
+#   ansible-playbook PB-365_riksu_verification_harvest.yml \
+#     -e repo_root=$HOME/Forge/bahyway_v4
+# ============================================================================
+
+- name: "PB-365 :: Riksu Verification Harvest (two-witness edge verdicts)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    repo_root: "{{ lookup('env','BAHYWAY_ROOT') | default(lookup('env','HOME') + '/Forge/bahyway_v4', true) }}"
+    report_dir: "{{ lookup('env','HOME') }}/bahyway-reports"
+    edge_ledger: "{{ report_dir }}/EDGE-LEDGER-001.tsv"
+    cross_ledger: "{{ report_dir }}/CROSSTRIBE-CANDIDATES-001.tsv"
+    summary_md: "{{ report_dir }}/RIKSU-VERDICT-SUMMARY-001.md"
+    naru_dir: "{{ report_dir }}/naru"
+    arsenal_terms:
+      - "Napharu"
+      - "Zibanitu"
+      - "Zibānītu"
+      - "Nabu Calculus"
+      - "Nabû"
+      - "Enbilulu"
+      - "enbi_"
+      - "Shibu"
+      - "Šību"
+      - "Puluhtu"
+      - "Puluḫtu"
+      - "Fadam"
+      - "betti"
+      - "tau_deficit"
+
+  tasks:
+
+    - name: "WITNESS :: repo exists"
+      ansible.builtin.stat: { path: "{{ repo_root }}" }
+      register: repo
+
+    - name: "JUDGE :: refuse a missing repo"
+      ansible.builtin.assert:
+        that: repo.stat.exists
+        fail_msg: "REFUSED — {{ repo_root }} not found. Pass -e repo_root=/path. Nothing faked."
+
+    - name: "STAGE :: report chamber"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ report_dir }}", "{{ naru_dir }}"]
+
+    - name: "MOVE :: the two-witness harvest (read-only sweep)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        python3 << 'PYEOF'
+        import os, re, hashlib, datetime, json
+
+        ROOT   = "{{ repo_root }}"
+        EDGES  = "{{ edge_ledger }}"
+        CROSS  = "{{ cross_ledger }}"
+        SUMMARY= "{{ summary_md }}"
+        TERMS  = {{ arsenal_terms | to_json }}
+
+        # -------- census of crates: every dir with a Cargo.toml ------------
+        crates = {}   # name -> {dir, manifest, declared:set()}
+        for dirpath, dirs, files in os.walk(ROOT):
+            if 'target' in dirpath.split(os.sep): continue
+            if 'Cargo.toml' in files:
+                mf = os.path.join(dirpath, 'Cargo.toml')
+                try: txt = open(mf, encoding='utf-8', errors='replace').read()
+                except OSError: continue
+                m = re.search(r'^\s*name\s*=\s*"([^"]+)"', txt, re.M)
+                if not m: continue
+                crates[m.group(1)] = {'dir': dirpath, 'manifest': mf,
+                                      'mtxt': txt, 'declared': set()}
+        names = set(crates)
+
+        # -------- WITNESS 1: DECLARED (manifest names an internal crate) ---
+        for name, c in crates.items():
+            in_deps = False
+            for line in c['mtxt'].splitlines():
+                if re.match(r'^\s*\[(dev-|build-)?dependencies', line): in_deps = True; continue
+                if re.match(r'^\s*\[', line): in_deps = False; continue
+                if not in_deps: continue
+                dm = re.match(r'^\s*([A-Za-z0-9_-]+)\s*=', line)
+                if dm:
+                    dep = dm.group(1)
+                    # crate names use '-', identifiers '_' — accept both spellings
+                    for cand in (dep, dep.replace('_','-'), dep.replace('-','_')):
+                        if cand in names and cand != name:
+                            c['declared'].add(cand)
+
+        # -------- WITNESS 2: OBSERVED (source speaks the crate) ------------
+        observed = {}  # (a,b) -> hits
+        for name, c in crates.items():
+            idents = {}
+            for other in names:
+                if other == name: continue
+                idents[other] = other.replace('-','_')
+            for dirpath, dirs, files in os.walk(c['dir']):
+                if 'target' in dirpath.split(os.sep): continue
+                for f in files:
+                    if not f.endswith('.rs'): continue
+                    try: src = open(os.path.join(dirpath,f),encoding='utf-8',errors='replace').read()
+                    except OSError: continue
+                    for other, ident in idents.items():
+                        hits = len(re.findall(r'\buse\s+'+re.escape(ident)+r'(::|;)', src)) \
+                             + len(re.findall(r'\b'+re.escape(ident)+r'::', src))
+                        if hits:
+                            observed[(name,other)] = observed.get((name,other),0)+hits
+
+        # -------- VERDICTS -------------------------------------------------
+        rows=[]
+        pairs=set()
+        for a,c in crates.items():
+            for b in c['declared']: pairs.add((a,b))
+        for k in observed: pairs.add(k)
+        for (a,b) in sorted(pairs):
+            dec = b in crates[a]['declared']
+            obs = observed.get((a,b),0)
+            if dec and obs: v='CONFIRMED'
+            elif dec:       v='DECLARED-ONLY'
+            else:           v='OBSERVED-ONLY'
+            wit = 'manifest:'+os.path.relpath(crates[a]['manifest'],ROOT) if dec else '-'
+            rows.append((a,b,v,str(obs),wit))
+
+        stamp=datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        with open(EDGES,'w') as f:
+            f.write('from\tto\tverdict\tuse_hits\tdeclared_witness\tharvested_utc\n')
+            for r in rows: f.write('\t'.join(r)+'\t'+stamp+'\n')
+
+        # -------- CrossTribe candidates: crates that SPEAK the Arsenal -----
+        with open(CROSS,'w') as f:
+            f.write('crate\tarsenal_term\thits\tharvested_utc\n')
+            for name,c in crates.items():
+                for dirpath, dirs, files in os.walk(c['dir']):
+                    if 'target' in dirpath.split(os.sep): continue
+                    for fl in files:
+                        if not (fl.endswith('.rs') or fl.endswith('.md')): continue
+                        try: src=open(os.path.join(dirpath,fl),encoding='utf-8',errors='replace').read()
+                        except OSError: continue
+                        for t in TERMS:
+                            n=src.count(t)
+                            if n: f.write(f'{name}\t{t}\t{n}\t{stamp}\n')
+
+        # -------- Kanīku + summary ----------------------------------------
+        sha=hashlib.sha256(open(EDGES,'rb').read()).hexdigest()
+        conf=sum(1 for r in rows if r[2]=='CONFIRMED')
+        donly=sum(1 for r in rows if r[2]=='DECLARED-ONLY')
+        oonly=sum(1 for r in rows if r[2]=='OBSERVED-ONLY')
+        summary_lines = [
+            '# RIKSU VERDICT SUMMARY — ' + stamp,
+            'crates censused : %d' % len(crates),
+            'edges judged    : %d' % len(rows),
+            'CONFIRMED       : %d   (two witnesses — lawful PDM pillars)' % conf,
+            'DECLARED-ONLY   : %d   (manifest without speech — no SHAPE may stand on these)' % donly,
+            'OBSERVED-ONLY   : %d   (speech without grant — anomalies, journaled)' % oonly,
+            'edge ledger sha : ' + sha,
+            '',
+            "PDM law: HARRANU paths, KIPPATU cycles, and the OntoGraph's b1 loops",
+            'are computed over CONFIRMED edges ONLY. A declared-but-silent edge is',
+            'not a pillar; an observed-but-ungranted edge is a wound for Gula.']
+        with open(SUMMARY,'w') as f:
+            f.write('\n'.join(summary_lines) + '\n')
+        print(f'⚖ {len(rows)} edges judged — {conf} CONFIRMED, {donly} DECLARED-ONLY, {oonly} OBSERVED-ONLY · sha {sha[:12]}…')
+        PYEOF
+      args: { executable: /bin/bash }
+      register: harvest
+      changed_when: true
+
+    - name: "NĀRU :: record the act"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/playbook_acts.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-365","act":"riksu-verification","law":"two-witness edge verdicts",
+          "ledgers":["EDGE-LEDGER-001.tsv","CROSSTRIBE-CANDIDATES-001.tsv"],
+          "feeds":"DubSar PDM shapes + OntoGraph (CONFIRMED edges only)"}
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "{{ harvest.stdout_lines | last if harvest.stdout_lines else '(harvester produced no output — nothing to summarize)' }}"
+          - "Ledgers: {{ edge_ledger }} · {{ cross_ledger }} · {{ summary_md }}"
+          - "Feed the CONFIRMED rows to the Registry Court and to DubSar PDM."
+          - "Šala rehearsal: sala_riksu_verification_court.html"

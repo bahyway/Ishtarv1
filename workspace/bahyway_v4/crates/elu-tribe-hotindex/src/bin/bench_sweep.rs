@@ -6,9 +6,14 @@ use std::time::Instant;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let n: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1_000_000_000);
+    let n: usize = args
+        .get(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1_000_000_000);
     let threads: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(
-        std::thread::available_parallelism().map(|p| p.get()).unwrap_or(1),
+        std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(1),
     );
 
     // Registry with 1,024 live tribes, headroom over any realistic count.
@@ -39,7 +44,10 @@ fn main() {
 
     println!(
         "swept {} particles in {:.4}s on {} thread(s) → {:.2} B particles/s",
-        rep.checked, dt, threads, rep.checked as f64 / dt / 1e9
+        rep.checked,
+        dt,
+        threads,
+        rep.checked as f64 / dt / 1e9
     );
     println!(
         "valid={} invalid={} first_invalid={:?} epoch={:016x}",
@@ -47,6 +55,10 @@ fn main() {
     );
     println!(
         "LAW: 1B under 1s → {}",
-        if rep.checked as f64 / dt >= 1e9 { "HOLDS on this hardware" } else { "NOT met on this hardware" }
+        if rep.checked as f64 / dt >= 1e9 {
+            "HOLDS on this hardware"
+        } else {
+            "NOT met on this hardware"
+        }
     );
 }

@@ -1,8 +1,8 @@
 //! Index 2 — Sovereignty Index: tribe_id → sorted list of uuid_hashes (§9.3)
 //! Answers "enumerate all particles in tribe X" in O(k) where k is tribe size.
 
-use std::collections::{HashMap, HashSet};
 use bahyway_core::TribeId;
+use std::collections::{HashMap, HashSet};
 
 /// Sovereignty index: tribe_id → set of uuid_hashes (sorted only on read).
 pub struct SovereigntyIndex {
@@ -11,7 +11,9 @@ pub struct SovereigntyIndex {
 
 impl SovereigntyIndex {
     pub fn new() -> Self {
-        SovereigntyIndex { tribes: HashMap::new() }
+        SovereigntyIndex {
+            tribes: HashMap::new(),
+        }
     }
 
     /// O(1) average. Previously a sorted `Vec<u32>` with `Vec::insert(pos,
@@ -43,7 +45,9 @@ impl SovereigntyIndex {
 }
 
 impl Default for SovereigntyIndex {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

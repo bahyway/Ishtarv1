@@ -12,17 +12,19 @@ use enkidb_kaki::IdentityKaki;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum HeptaAxis {
-    Entity    = 0, // E — KAKI uuid_hash dimension
+    Entity = 0,    // E — KAKI uuid_hash dimension
     Attribute = 1, // A — attr_hash dimension
-    Value     = 2, // V — value magnitude dimension
-    Tribe     = 3, // T — tribe_id dimension
-    Segment   = 4, // S — spatial segment dimension
-    Zone      = 5, // Z — temporal zone dimension
-    Mode      = 6, // M — operational mode dimension
+    Value = 2,     // V — value magnitude dimension
+    Tribe = 3,     // T — tribe_id dimension
+    Segment = 4,   // S — spatial segment dimension
+    Zone = 5,      // Z — temporal zone dimension
+    Mode = 6,      // M — operational mode dimension
 }
 
 impl HeptaAxis {
-    pub fn index(self) -> usize { self as usize }
+    pub fn index(self) -> usize {
+        self as usize
+    }
 }
 
 /// A 7D position vector in the Hepta manifold.
@@ -65,17 +67,12 @@ pub trait OrbitField {
     ///
     /// Returns the new density: φ(t+dt) using explicit Euler integration.
     /// For stability, dt must satisfy the convergence condition (see convergence module).
-    fn step_euler(
-        &self,
-        kaki: &IdentityKaki,
-        epoch: u64,
-        dt: f64,
-    ) -> f64 {
-        let phi     = self.density_at(kaki, epoch);
-        let grad    = self.gradient(kaki, epoch);
-        let g       = self.source_term(epoch);
-        let s       = self.sink_term(epoch);
-        let lap     = self.laplacian_smoothing(kaki, epoch);
+    fn step_euler(&self, kaki: &IdentityKaki, epoch: u64, dt: f64) -> f64 {
+        let phi = self.density_at(kaki, epoch);
+        let grad = self.gradient(kaki, epoch);
+        let g = self.source_term(epoch);
+        let s = self.sink_term(epoch);
+        let lap = self.laplacian_smoothing(kaki, epoch);
 
         // Flow divergence: ∇·(φV) ≈ φ × |∇Ψ| (simplified scalar approximation)
         let flow_div: f64 = phi * grad.iter().map(|v| v.abs()).sum::<f64>();
@@ -89,17 +86,25 @@ pub trait OrbitField {
 pub struct NullOrbitField;
 
 impl OrbitField for NullOrbitField {
-    fn density_at(&self, _: &IdentityKaki, _: u64) -> f64 { 0.0 }
-    fn gradient(&self,   _: &IdentityKaki, _: u64) -> HeptaPosition { [0.0; 7] }
-    fn source_term(&self, _: u64) -> f64 { 0.0 }
-    fn sink_term(&self,   _: u64) -> f64 { 0.0 }
+    fn density_at(&self, _: &IdentityKaki, _: u64) -> f64 {
+        0.0
+    }
+    fn gradient(&self, _: &IdentityKaki, _: u64) -> HeptaPosition {
+        [0.0; 7]
+    }
+    fn source_term(&self, _: u64) -> f64 {
+        0.0
+    }
+    fn sink_term(&self, _: u64) -> f64 {
+        0.0
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use bahyway_core::TribeId;
-    use enkidb_kaki::{KakiMinter, KakiRole, IdentityKaki as IK};
+    use enkidb_kaki::{IdentityKaki as IK, KakiMinter, KakiRole};
 
     fn test_kaki() -> IdentityKaki {
         let m = KakiMinter::new(TribeId::from_u16(0x0001));
@@ -112,19 +117,27 @@ mod tests {
         let k = test_kaki();
         let f = NullOrbitField;
         assert_eq!(f.density_at(&k, 0), 0.0);
-        assert_eq!(f.gradient(&k, 0),   [0.0; 7]);
-        assert_eq!(f.source_term(0),    0.0);
-        assert_eq!(f.sink_term(0),      0.0);
+        assert_eq!(f.gradient(&k, 0), [0.0; 7]);
+        assert_eq!(f.source_term(0), 0.0);
+        assert_eq!(f.sink_term(0), 0.0);
     }
 
     #[test]
     fn euler_step_with_source_increases_density() {
         struct SimpleSource;
         impl OrbitField for SimpleSource {
-            fn density_at(&self, _: &IdentityKaki, _: u64) -> f64 { 0.5 }
-            fn gradient(&self, _: &IdentityKaki, _: u64) -> HeptaPosition { [0.0; 7] }
-            fn source_term(&self, _: u64) -> f64 { 0.1 }
-            fn sink_term(&self,   _: u64) -> f64 { 0.0 }
+            fn density_at(&self, _: &IdentityKaki, _: u64) -> f64 {
+                0.5
+            }
+            fn gradient(&self, _: &IdentityKaki, _: u64) -> HeptaPosition {
+                [0.0; 7]
+            }
+            fn source_term(&self, _: u64) -> f64 {
+                0.1
+            }
+            fn sink_term(&self, _: u64) -> f64 {
+                0.0
+            }
         }
         let k = test_kaki();
         let phi_next = SimpleSource.step_euler(&k, 0, 1.0);
@@ -135,12 +148,12 @@ mod tests {
     #[test]
     fn hepta_axis_indices_are_0_through_6() {
         use HeptaAxis::*;
-        assert_eq!(Entity.index(),    0);
+        assert_eq!(Entity.index(), 0);
         assert_eq!(Attribute.index(), 1);
-        assert_eq!(Value.index(),     2);
-        assert_eq!(Tribe.index(),     3);
-        assert_eq!(Segment.index(),   4);
-        assert_eq!(Zone.index(),      5);
-        assert_eq!(Mode.index(),      6);
+        assert_eq!(Value.index(), 2);
+        assert_eq!(Tribe.index(), 3);
+        assert_eq!(Segment.index(), 4);
+        assert_eq!(Zone.index(), 5);
+        assert_eq!(Mode.index(), 6);
     }
 }

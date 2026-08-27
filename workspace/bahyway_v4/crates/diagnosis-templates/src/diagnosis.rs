@@ -21,51 +21,53 @@ pub enum DiagnosisKind {
 /// A diagnosis record linking an alert to the template that describes it.
 #[derive(Debug, Clone)]
 pub struct Diagnosis {
-    pub uuid_hash:     u32,
-    pub kind:          DiagnosisKind,
-    pub severity:      AlertSeverity,
-    pub drift:         f32,
+    pub uuid_hash: u32,
+    pub kind: DiagnosisKind,
+    pub severity: AlertSeverity,
+    pub drift: f32,
     /// Name of the template describing this diagnosis class.
     pub template_name: &'static str,
     /// Short human-readable description of the issue.
-    pub description:   &'static str,
+    pub description: &'static str,
     /// Recommended stewardship action per DAMA-DMBOK.
-    pub action:        &'static str,
+    pub action: &'static str,
 }
 
 impl DiagnosisKind {
     pub fn template_name(self) -> &'static str {
         match self {
             DiagnosisKind::QualityDegraded => "diagnosis.quality_degraded",
-            DiagnosisKind::StaleData       => "diagnosis.stale_data",
-            DiagnosisKind::DeadParticle    => "diagnosis.dead_particle",
-            DiagnosisKind::Critical        => "diagnosis.critical",
+            DiagnosisKind::StaleData => "diagnosis.stale_data",
+            DiagnosisKind::DeadParticle => "diagnosis.dead_particle",
+            DiagnosisKind::Critical => "diagnosis.critical",
         }
     }
 
     pub fn description(self) -> &'static str {
         match self {
-            DiagnosisKind::QualityDegraded =>
-                "Quality score (HPS G-channel) has dropped below threshold.",
-            DiagnosisKind::StaleData =>
-                "Freshness decay (B-channel) indicates the record is outdated.",
-            DiagnosisKind::DeadParticle =>
-                "Particle state is Dead — record is inactive.",
-            DiagnosisKind::Critical =>
-                "All ColorID channels degraded — immediate stewardship required.",
+            DiagnosisKind::QualityDegraded => {
+                "Quality score (HPS G-channel) has dropped below threshold."
+            }
+            DiagnosisKind::StaleData => {
+                "Freshness decay (B-channel) indicates the record is outdated."
+            }
+            DiagnosisKind::DeadParticle => "Particle state is Dead — record is inactive.",
+            DiagnosisKind::Critical => {
+                "All ColorID channels degraded — immediate stewardship required."
+            }
         }
     }
 
     pub fn action(self) -> &'static str {
         match self {
-            DiagnosisKind::QualityDegraded =>
-                "Schedule a re-validation event and update quality score.",
-            DiagnosisKind::StaleData =>
-                "Trigger a freshness refresh or mark record as archived.",
-            DiagnosisKind::DeadParticle =>
-                "Review record history via StoryEngine and confirm deactivation.",
-            DiagnosisKind::Critical =>
-                "Escalate to Data Steward Station for immediate triage.",
+            DiagnosisKind::QualityDegraded => {
+                "Schedule a re-validation event and update quality score."
+            }
+            DiagnosisKind::StaleData => "Trigger a freshness refresh or mark record as archived.",
+            DiagnosisKind::DeadParticle => {
+                "Review record history via StoryEngine and confirm deactivation."
+            }
+            DiagnosisKind::Critical => "Escalate to Data Steward Station for immediate triage.",
         }
     }
 }
@@ -74,14 +76,14 @@ impl DiagnosisKind {
 pub fn classify(severity: AlertSeverity, drift: f32) -> DiagnosisKind {
     match severity {
         AlertSeverity::Critical => DiagnosisKind::Critical,
-        AlertSeverity::Warning  => {
+        AlertSeverity::Warning => {
             if drift > 200.0 {
                 DiagnosisKind::StaleData
             } else {
                 DiagnosisKind::QualityDegraded
             }
         }
-        AlertSeverity::Watch    => DiagnosisKind::QualityDegraded,
+        AlertSeverity::Watch => DiagnosisKind::QualityDegraded,
     }
 }
 
@@ -94,8 +96,8 @@ pub fn diagnose(uuid_hash: u32, severity: AlertSeverity, drift: f32) -> Diagnosi
         severity,
         drift,
         template_name: kind.template_name(),
-        description:   kind.description(),
-        action:        kind.action(),
+        description: kind.description(),
+        action: kind.action(),
     }
 }
 
@@ -106,13 +108,22 @@ mod tests {
 
     #[test]
     fn classify_critical() {
-        assert_eq!(classify(AlertSeverity::Critical, 400.0), DiagnosisKind::Critical);
+        assert_eq!(
+            classify(AlertSeverity::Critical, 400.0),
+            DiagnosisKind::Critical
+        );
     }
 
     #[test]
     fn classify_stale_vs_quality() {
-        assert_eq!(classify(AlertSeverity::Warning, 250.0), DiagnosisKind::StaleData);
-        assert_eq!(classify(AlertSeverity::Warning, 100.0), DiagnosisKind::QualityDegraded);
+        assert_eq!(
+            classify(AlertSeverity::Warning, 250.0),
+            DiagnosisKind::StaleData
+        );
+        assert_eq!(
+            classify(AlertSeverity::Warning, 100.0),
+            DiagnosisKind::QualityDegraded
+        );
     }
 
     #[test]

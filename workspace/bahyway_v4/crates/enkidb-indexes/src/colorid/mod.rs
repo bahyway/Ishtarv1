@@ -15,9 +15,9 @@ use std::collections::HashMap;
 /// BLUE (freshness), RADIAL (distance from tribe nucleus in orbital space).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ColorIdPoint {
-    pub r:      u8,
-    pub g:      u8,
-    pub b:      u8,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
     pub radial: f32,
 }
 
@@ -43,7 +43,9 @@ pub struct ColorIdIndex {
 
 impl ColorIdIndex {
     pub fn new() -> Self {
-        ColorIdIndex { entries: HashMap::new() }
+        ColorIdIndex {
+            entries: HashMap::new(),
+        }
     }
 
     pub fn upsert(&mut self, uuid_hash: u32, point: ColorIdPoint) {
@@ -63,23 +65,33 @@ impl ColorIdIndex {
     /// Return all particles in a bounding box of the color space.
     pub fn query_bbox(
         &self,
-        r_min: u8, r_max: u8,
-        g_min: u8, g_max: u8,
-        b_min: u8, b_max: u8,
+        r_min: u8,
+        r_max: u8,
+        g_min: u8,
+        g_max: u8,
+        b_min: u8,
+        b_max: u8,
     ) -> Vec<u32> {
         self.entries
             .iter()
             .filter(|(_, p)| {
-                p.r >= r_min && p.r <= r_max &&
-                p.g >= g_min && p.g <= g_max &&
-                p.b >= b_min && p.b <= b_max
+                p.r >= r_min
+                    && p.r <= r_max
+                    && p.g >= g_min
+                    && p.g <= g_max
+                    && p.b >= b_min
+                    && p.b <= b_max
             })
             .map(|(&h, _)| h)
             .collect()
     }
 }
 
-impl Default for ColorIdIndex { fn default() -> Self { Self::new() } }
+impl Default for ColorIdIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -105,7 +117,7 @@ mod tests {
     fn bbox_query() {
         let mut idx = ColorIdIndex::new();
         idx.upsert(0x0001, ColorIdPoint::new(200, 200, 200, 0.0));
-        idx.upsert(0x0002, ColorIdPoint::new(50,  50,  50,  0.0));
+        idx.upsert(0x0002, ColorIdPoint::new(50, 50, 50, 0.0));
         let results = idx.query_bbox(100, 255, 100, 255, 100, 255);
         assert!(results.contains(&0x0001));
         assert!(!results.contains(&0x0002));

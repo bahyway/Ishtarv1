@@ -53,8 +53,10 @@ mod tests {
     #[test]
     fn hepta_weights_sum_to_one() {
         let sum: f64 = HEPTA_WEIGHTS.iter().sum();
-        assert!((sum - 1.0).abs() < ABZU_PRECISION,
-            "Hepta weights must sum to 1.0, got {sum}");
+        assert!(
+            (sum - 1.0).abs() < ABZU_PRECISION,
+            "Hepta weights must sum to 1.0, got {sum}"
+        );
     }
 
     #[test]

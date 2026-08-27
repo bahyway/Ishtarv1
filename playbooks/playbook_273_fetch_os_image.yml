@@ -1,0 +1,246 @@
+# =============================================================================
+# PB-273 -- Fetch the shared OS base image for one Ecosystem version, once.
+# BahyWay.Ecosystem v4.0 -- 2026-08-15 (Architect request: unify the base
+# image used across the whole Ecosystem per version, instead of every
+# VM-creation playbook downloading its own copy).
+#
+# WHY THIS EXISTS: playbook_265 (CQRS write/read/vault VM creation) used to
+# download the Fedora Cloud Base qcow2 itself, on every run, straight into
+# root's libvirt pool dir. That works, but it means the "what OS image is
+# this Ecosystem version actually built on" question has no single answer
+# on disk -- every VM-creation run could, in principle, fetch a slightly
+# different file if Fedora updated it between runs. The Architect's fix:
+# download ONCE per Ecosystem version into a shared, version-pinned folder
+# inside the Forge tree itself --
+#   {{ repo_root }}/Infra/OSImage/v<fedora_release>/<real Fedora filename>
+# -- and have every VM-creation playbook (write/read/vault nodes, and any
+# future ones) READ from that folder instead of downloading anything. One
+# real file on disk, one Ecosystem version, every VM in that version boots
+# from the exact same base image.
+#
+# THIS PLAYBOOK IS THE "DOWNLOAD ONCE" ACT. Run it deliberately, whenever a
+# new fedora_release needs a base image (or the very first time this
+# Ecosystem is bootstrapped on a fresh Forge checkout) -- not on every VM
+# build. playbook_265 fails clearly, pointing back at this playbook by
+# name, if it can't find anything under Infra/OSImage/v<release>/.
+#
+# AUTOMATION, no manual mkdir/curl/mv/sudo, no pasted URL: fetches Fedora's
+# own live directory listing, finds the real current qcow2 filename Fedora
+# is serving right now (not a guessed one), fetches the matching CHECKSUM
+# file from the same directory, and downloads+verifies against that real
+# checksum. fedora_release (the version number, e.g. "44") is the one
+# deliberate pin -- kept explicit rather than "latest" so this Ecosystem
+# version's image never silently changes underneath it.
+#
+# Idempotent: if Infra/OSImage/v<release>/ already contains a .qcow2, this
+# playbook reports it and does nothing further -- safe to run any number
+# of times, including as a first step of playbook_265's own runbook entry.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_273_fetch_os_image.yml
+#   ansible-playbook playbooks/playbook_273_fetch_os_image.yml -e fedora_release=45
+#   # force a re-fetch even if a file is already present (e.g. to pick up
+#   # a corrected CHECKSUM after Fedora respun an image):
+#   ansible-playbook playbooks/playbook_273_fetch_os_image.yml -e force_refetch=true
+# =============================================================================
+---
+- name: "PB-273 -- Fetch the shared OS base image for one Ecosystem version"
+  hosts: localhost
+  connection: local
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../ansible/vars/base_image.yml"
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    os_images_root: "{{ repo_root }}/Infra/OSImage"
+    os_image_dir: "{{ os_images_root }}/v{{ fedora_release }}"
+    force_refetch: false
+
+  tasks:
+    - name: "AUTOMATION | ensure the version-scoped image folder exists"
+      ansible.builtin.file:
+        path: "{{ os_image_dir }}"
+        state: directory
+        mode: "0755"
+
+    # Real bug, caught live (2026-08-15): this image is deliberately kept
+    # inside the Forge tree (Architect request), which means it lives
+    # under a human login user's home directory -- and Fedora's default
+    # home-directory permissions (mode 0700) block the unprivileged
+    # `qemu` service account from traversing in at all, exactly the same
+    # class of bug playbook_265 already hit once for /root. This time
+    # it's not the VM's own overlay disk (that already lives under the
+    # qemu-accessible /var/lib/libvirt/images/bahyway) -- it's THIS
+    # image, referenced as a copy-on-write BACKING FILE inside every
+    # node's overlay, which QEMU must still open directly at boot no
+    # matter where the overlay itself sits. virt-install can report
+    # success (defining the domain and issuing the start call both
+    # succeed) moments before QEMU actually fails to open the backing
+    # chain and the domain vanishes.
+    #
+    # Fixed with a POSIX ACL, not a chmod: grants the qemu account
+    # execute-only (traversal) permission on every directory between the
+    # login user's home and this image folder, without making anything
+    # listable or readable by anyone else -- the Architect's home
+    # directory keeps its normal privacy for every other account.
+    - name: "AUTOMATION | ensure setfacl is available"
+      ansible.builtin.dnf:
+        name: acl
+        state: present
+
+    - name: "AUTOMATION | grant the qemu account traversal into every directory from HOME down to the OS image folder"
+      ansible.builtin.shell: |
+        set -e
+        p="{{ os_image_dir }}"
+        while [ "$p" != "/" ] && [ -n "$p" ]; do
+          setfacl -m u:qemu:--x "$p" 2>/dev/null || true
+          p=$(dirname "$p")
+        done
+      changed_when: true
+
+    # Real bug, fixed proactively (2026-08-15) rather than waiting for a
+    # confirmed failure round-trip: Fedora ships SELinux enforcing by
+    # default, and qemu's confined domain only permits opening files
+    # labeled virt_image_t -- which files outside the conventional
+    # /var/lib/libvirt/images/ path never get automatically. This is a
+    # second, independent blocker on top of the ACL fix above (POSIX
+    # permissions and SELinux are enforced separately; fixing one doesn't
+    # fix the other). Safe to run even if SELinux turns out to be
+    # permissive/disabled on this host -- both commands are then
+    # harmless no-ops, not errors.
+    - name: "AUTOMATION | ensure semanage/restorecon are available (SELinux file-context tooling)"
+      ansible.builtin.dnf:
+        name: policycoreutils-python-utils
+        state: present
+
+    - name: "AUTOMATION | label the OS image folder virt_image_t so SELinux permits qemu to open files there"
+      ansible.builtin.command: semanage fcontext -a -t virt_image_t "{{ os_image_dir }}(/.*)?"
+      register: semanage_fcontext
+      failed_when: semanage_fcontext.rc != 0 and 'already defined' not in semanage_fcontext.stderr
+      changed_when: semanage_fcontext.rc == 0
+
+    - name: "AUTOMATION | apply the new SELinux label to whatever is already on disk"
+      ansible.builtin.command: restorecon -Rv "{{ os_image_dir }}"
+      register: restorecon_result
+      changed_when: "restorecon_result.stdout | length > 0"
+
+    - name: "Check whether a base image already lives in this version's folder"
+      ansible.builtin.find:
+        paths: "{{ os_image_dir }}"
+        patterns: "*.qcow2"
+      register: existing_images
+
+    - name: "DONE | already present, nothing to do (idempotent no-op)"
+      ansible.builtin.debug:
+        msg: >-
+          {{ existing_images.files[0].path }} already present for
+          fedora_release={{ fedora_release }} -- every VM-creation playbook
+          in this Ecosystem version reads this same file. Pass
+          -e force_refetch=true to re-fetch anyway.
+      when: (existing_images.files | length > 0) and not (force_refetch | bool)
+
+    - name: "FAIL | more than one qcow2 in this version's folder -- ambiguous, needs a human decision"
+      ansible.builtin.fail:
+        msg: >-
+          {{ existing_images.files | length }} .qcow2 files found in
+          {{ os_image_dir }} -- this folder must hold exactly one shared
+          base image per Ecosystem version, or every VM-creation playbook
+          reading from it would be guessing which one to use. Remove the
+          stale one(s) by hand (a deliberate deletion, not something this
+          playbook will do for you) and re-run.
+      when: existing_images.files | length > 1
+
+    # ── Auto-discovery: only runs when no image is present yet (or
+    # force_refetch=true), and only when fedora_cloud_base_image_url is NOT
+    # pinned in ansible/vars/base_image.yml. Scrapes Fedora's own live
+    # directory listing (a plain autoindex) for the real current qcow2
+    # filename and its paired CHECKSUM file -- nothing here is guessed, it's
+    # whatever Fedora is actually serving at run time.
+    - name: "AUTOMATION | fetch the live Fedora Cloud Base directory listing"
+      ansible.builtin.uri:
+        url: "https://download.fedoraproject.org/pub/fedora/linux/releases/{{ fedora_release }}/Cloud/x86_64/images/"
+        return_content: true
+      register: fedora_dir_listing
+      when: >-
+        (existing_images.files | length == 0 or force_refetch | bool)
+        and (fedora_cloud_base_image_url | default('') | length == 0)
+
+    - name: "AUTOMATION | parse the qcow2 filename and its CHECKSUM filename out of the listing"
+      ansible.builtin.set_fact:
+        discovered_image_filename: "{{ fedora_dir_listing.content | regex_search('Fedora-Cloud-Base-Generic-' + fedora_release + '-[0-9.]+\\.x86_64\\.qcow2') }}"
+        discovered_checksum_filename: "{{ fedora_dir_listing.content | regex_search('Fedora-Cloud-' + fedora_release + '-[0-9.]+-x86_64-CHECKSUM') }}"
+      when: >-
+        (existing_images.files | length == 0 or force_refetch | bool)
+        and (fedora_cloud_base_image_url | default('') | length == 0)
+
+    - name: "FAIL | auto-discovery found nothing at the expected Fedora path"
+      ansible.builtin.fail:
+        msg: >-
+          Could not find a Fedora-Cloud-Base-Generic-{{ fedora_release }}-*.x86_64.qcow2
+          entry at https://download.fedoraproject.org/pub/fedora/linux/releases/{{ fedora_release }}/Cloud/x86_64/images/ .
+          Either fedora_release={{ fedora_release }} (ansible/vars/base_image.yml)
+          isn't published under this path yet, or Fedora changed its naming
+          scheme. Pin fedora_cloud_base_image_url explicitly in that same
+          file to bypass auto-discovery entirely.
+      when: >-
+        (existing_images.files | length == 0 or force_refetch | bool)
+        and (fedora_cloud_base_image_url | default('') | length == 0)
+        and (discovered_image_filename | default('') | length == 0)
+
+    - name: "AUTOMATION | fetch the CHECKSUM file for the discovered image"
+      ansible.builtin.uri:
+        url: "https://download.fedoraproject.org/pub/fedora/linux/releases/{{ fedora_release }}/Cloud/x86_64/images/{{ discovered_checksum_filename }}"
+        return_content: true
+      register: fedora_checksum_listing
+      when: >-
+        (existing_images.files | length == 0 or force_refetch | bool)
+        and (fedora_cloud_base_image_url | default('') | length == 0)
+        and (discovered_image_filename | default('') | length > 0)
+
+    - name: "AUTOMATION | extract this image's sha256 from the CHECKSUM file (best-effort -- get_url still works without it)"
+      ansible.builtin.set_fact:
+        discovered_image_sha256: >-
+          {{ (fedora_checksum_listing.content
+              | regex_findall('SHA256 \(' + discovered_image_filename + '\) = ([0-9a-f]{64})')
+              | first) | default('', true) }}
+      when: >-
+        (existing_images.files | length == 0 or force_refetch | bool)
+        and (fedora_cloud_base_image_url | default('') | length == 0)
+        and (discovered_image_filename | default('') | length > 0)
+        and fedora_checksum_listing is succeeded
+
+    - name: "AUTOMATION | resolve the destination filename (pinned URL's basename, or the discovered one)"
+      ansible.builtin.set_fact:
+        resolved_image_filename: >-
+          {{ (fedora_cloud_base_image_url | default('') | basename)
+             if fedora_cloud_base_image_url | default('') | length > 0
+             else discovered_image_filename | default('') }}
+      when: existing_images.files | length == 0 or force_refetch | bool
+
+    - name: "AUTOMATION | download the base Fedora Cloud Base qcow2 into this version's shared folder (checksum-verified when available)"
+      ansible.builtin.get_url:
+        url: >-
+          {{ fedora_cloud_base_image_url
+             if fedora_cloud_base_image_url | default('') | length > 0
+             else 'https://download.fedoraproject.org/pub/fedora/linux/releases/' + fedora_release + '/Cloud/x86_64/images/' + discovered_image_filename }}
+        dest: "{{ os_image_dir }}/{{ resolved_image_filename }}"
+        checksum: >-
+          {{ 'sha256:' + (fedora_cloud_base_image_sha256 | default('')
+             if fedora_cloud_base_image_sha256 | default('') | length > 0
+             else discovered_image_sha256 | default(''))
+             if (fedora_cloud_base_image_sha256 | default('') | length > 0 or discovered_image_sha256 | default('') | length > 0)
+             else omit }}
+        mode: "0644"
+        timeout: 1800
+      when: existing_images.files | length == 0 or force_refetch | bool
+
+    - name: "DONE | PB-273 complete"
+      ansible.builtin.debug:
+        msg: >-
+          Ecosystem version v{{ fedora_release }}'s shared base image is
+          ready at {{ os_image_dir }}/{{ resolved_image_filename | default(existing_images.files[0].path | basename) }}.
+          Every playbook_265 run for this fedora_release -- write, read,
+          vault, dev/test/acc/production, any custom node names -- reads
+          this exact same file. Bump fedora_release and re-run this
+          playbook only when you deliberately want a newer Ecosystem
+          version.

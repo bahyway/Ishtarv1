@@ -7,4 +7,4 @@
 pub mod disk_journal;
 pub mod persisted_db;
 
-pub use persisted_db::{PersistedDb, PersistStats};
+pub use persisted_db::{PersistStats, PersistedDb};

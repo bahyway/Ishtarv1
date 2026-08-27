@@ -45,7 +45,10 @@ pub fn send_query(host: &str, port: u16, payload: &str) -> Result<EnkiddbRespons
     write_frame(&mut stream, payload).map_err(|e| format!("write request: {e}"))?;
     let response = read_frame(&mut stream).map_err(|e| format!("read response: {e}"))?;
 
-    Ok(EnkiddbResponse { response, elapsed_ms: start.elapsed().as_millis() })
+    Ok(EnkiddbResponse {
+        response,
+        elapsed_ms: start.elapsed().as_millis(),
+    })
 }
 
 fn write_frame(stream: &mut TcpStream, payload: &str) -> io::Result<()> {
@@ -63,7 +66,10 @@ fn read_frame(stream: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     stream.read_exact(&mut buf)?;

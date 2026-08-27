@@ -13,14 +13,15 @@
 ///
 /// Returns 0.0 for empty input, 1.0 for a perfectly uniform tribe.
 pub fn harmony_coefficient(b11s: &[u8]) -> f32 {
-    if b11s.is_empty() { return 0.0; }
-    if b11s.len() == 1 { return 1.0; }
+    if b11s.is_empty() {
+        return 0.0;
+    }
+    if b11s.len() == 1 {
+        return 1.0;
+    }
 
     let mean = b11s.iter().map(|&b| b as f32).sum::<f32>() / b11s.len() as f32;
-    let variance = b11s.iter()
-        .map(|&b| (b as f32 - mean).powi(2))
-        .sum::<f32>()
-        / b11s.len() as f32;
+    let variance = b11s.iter().map(|&b| (b as f32 - mean).powi(2)).sum::<f32>() / b11s.len() as f32;
     let sigma = variance.sqrt();
 
     1.0 / (1.0 + sigma / 240.0)
@@ -28,19 +29,25 @@ pub fn harmony_coefficient(b11s: &[u8]) -> f32 {
 
 /// Mean B11 quality for the tribe.
 pub fn mean_b11(b11s: &[u8]) -> f32 {
-    if b11s.is_empty() { return 0.0; }
+    if b11s.is_empty() {
+        return 0.0;
+    }
     b11s.iter().map(|&b| b as f32).sum::<f32>() / b11s.len() as f32
 }
 
 /// Fraction of the tribe in GEM lane (B11 ≥ 200).
 pub fn gem_fraction(b11s: &[u8]) -> f32 {
-    if b11s.is_empty() { return 0.0; }
+    if b11s.is_empty() {
+        return 0.0;
+    }
     b11s.iter().filter(|&&b| b >= 200).count() as f32 / b11s.len() as f32
 }
 
 /// Fraction of the tribe in DEAD lane (B11 < 60).
 pub fn dead_fraction(b11s: &[u8]) -> f32 {
-    if b11s.is_empty() { return 0.0; }
+    if b11s.is_empty() {
+        return 0.0;
+    }
     b11s.iter().filter(|&&b| b < 60).count() as f32 / b11s.len() as f32
 }
 
@@ -63,8 +70,10 @@ mod tests {
     #[test]
     fn uniform_tribe_returns_one() {
         let b11s = vec![180u8; 7];
-        assert!((harmony_coefficient(&b11s) - 1.0).abs() < 1e-5,
-            "uniform tribe must be 1.0");
+        assert!(
+            (harmony_coefficient(&b11s) - 1.0).abs() < 1e-5,
+            "uniform tribe must be 1.0"
+        );
     }
 
     #[test]
@@ -77,7 +86,7 @@ mod tests {
 
     #[test]
     fn higher_variance_lower_harmony() {
-        let uniform   = [180u8, 180, 180, 180, 180, 180, 180];
+        let uniform = [180u8, 180, 180, 180, 180, 180, 180];
         let dispersed = [240u8, 200, 150, 100, 60, 30, 10];
         assert!(harmony_coefficient(&uniform) > harmony_coefficient(&dispersed));
     }

@@ -1,0 +1,152 @@
+---
+# =============================================================================
+# PB-DATA-005 :: THE IRAQ IMAGERY SHELF — open-library harvest & acquisition rite
+# =============================================================================
+# Purpose    : Stock the test-material shelf for Iraqi urban work: OSM skeleton,
+#              elevation truth, humanitarian context (no credentials needed),
+#              and inscribe the CORONA/HEXAGON + optical acquisition rites for
+#              the elder epochs of GL-KGS-002 Banu and the Adannu lineages.
+# Registers  : every deliverable lands with its register named -
+#              VECTOR-CONTEXT (OSM), MEASURED-DEM (Copernicus GLO-30),
+#              MANIFEST (HDX), ELDER-EPOCH (CORONA/HEXAGON rite),
+#              CURRENT-OPTICAL (Sentinel-2 rite via existing PB-DATA roads).
+# Discipline : WITNESS -> JUDGE -> MOVE -> STAGE ; sha256 Kaniku on every file;
+#              refuse-empty-shelf gate; re-runnable append-only.
+# Cities     : Baghdad, Najaf (incl. Wadi al-Salam), Basra, Mosul
+#              (same bounding boxes as PB-DATA-004).
+# =============================================================================
+- name: "PB-DATA-005 :: Iraq imagery shelf harvest"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    shelf_root: "{{ playbook_dir }}/IRAQ-IMAGERY-SHELF"
+    kaniku_ledger: "{{ shelf_root }}/KANIKU-SHELF.tsv"
+    cities:
+      - { name: "baghdad", w: 44.20, s: 33.15, e: 44.60, n: 33.50 }
+      - { name: "najaf",   w: 44.25, s: 31.93, e: 44.45, n: 32.08 }
+      - { name: "basra",   w: 47.65, s: 30.42, e: 47.90, n: 30.62 }
+      - { name: "mosul",   w: 43.05, s: 36.28, e: 43.25, n: 36.42 }
+
+  tasks:
+    - name: "STAGE :: raise the shelf"
+      ansible.builtin.file:
+        path: "{{ shelf_root }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["osm", "dem", "hdx", "elder-epochs", "receipts"]
+
+    # ---------------- VECTOR-CONTEXT: the OSM skeleton (no login) ------------
+    - name: "MOVE :: fetch the Iraq OSM extract (Geofabrik, updated daily)"
+      ansible.builtin.get_url:
+        url: "https://download.geofabrik.de/asia/iraq-latest.osm.pbf"
+        dest: "{{ shelf_root }}/osm/iraq-latest.osm.pbf"
+        mode: "0644"
+        timeout: 300
+      register: osm_fetch
+      retries: 2
+      delay: 10
+
+    # ---------------- MEASURED-DEM: Copernicus GLO-30 tiles (AWS open) -------
+    - name: "MOVE :: fetch Copernicus GLO-30 DEM tiles covering the four cities"
+      ansible.builtin.get_url:
+        url: "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N{{ item.lat }}_00_E0{{ item.lon }}_00_DEM/Copernicus_DSM_COG_10_N{{ item.lat }}_00_E0{{ item.lon }}_00_DEM.tif"
+        dest: "{{ shelf_root }}/dem/GLO30_N{{ item.lat }}_E0{{ item.lon }}.tif"
+        mode: "0644"
+        timeout: 300
+      loop:
+        - { lat: 33, lon: 44 }   # Baghdad
+        - { lat: 31, lon: 44 }   # Najaf / Wadi al-Salam
+        - { lat: 32, lon: 44 }   # Najaf north sheet
+        - { lat: 30, lon: 47 }   # Basra
+        - { lat: 36, lon: 43 }   # Mosul
+      register: dem_fetch
+      failed_when: false
+
+    # ---------------- MANIFEST: HDX context packages -------------------------
+    - name: "MOVE :: record the HDX Iraq manifest (admin boundaries, settlements)"
+      ansible.builtin.get_url:
+        url: "https://data.humdata.org/api/3/action/package_search?q=groups:irq&rows=100"
+        dest: "{{ shelf_root }}/hdx/hdx_iraq_manifest.json"
+        mode: "0644"
+        timeout: 120
+      failed_when: false
+
+    # ---------------- ELDER-EPOCH: the CORONA / HEXAGON acquisition rite -----
+    - name: "MOVE :: inscribe the elder-epoch acquisition rite"
+      ansible.builtin.copy:
+        dest: "{{ shelf_root }}/elder-epochs/ACQUISITION-RITE.md"
+        mode: "0644"
+        content: |
+          # THE ELDER-EPOCH RITE - CORONA & HEXAGON over the four cities
+          Register: ELDER-EPOCH (historic MEASURED, film-derived, ~2 m).
+          These frames are the oldest Adannu templates of the cities:
+          Najaf/Wadi al-Salam BEFORE the sprawl, Baghdad's canals intact.
+
+          ## Road A - CORONA Atlas (CAST, University of Arkansas) - FREE
+          1. Open https://corona.cast.uark.edu/atlas
+          2. Zoom to each city bbox (see KANIKU-SHELF.tsv).
+          3. Toggle mission footprints; prefer KH-4B (1967-1972, ~1.8 m).
+          4. Use the blue down-arrow per image: download the GeoTIFF
+             (orthorectified, Web Mercator - GIS-ready).
+          5. Drop files into elder-epochs/ ; re-run this playbook: the
+             Kaniku stage below receipts them automatically.
+          License: CC BY-SA 4.0 - credit "CAST, University of Arkansas /
+          U.S. Geological Survey" in any court or tablet that shows them.
+
+          ## Road B - HEXAGON via USGS EarthExplorer (login, free)
+          1. https://earthexplorer.usgs.gov -> Declassified Data 3.
+          2. Search each bbox, 1971-1984; order scans where not yet digitized.
+          Purpose: the 1970s-80s middle epoch between CORONA and Landsat.
+
+          ## Road C - current optical
+          Sentinel-2 via Copernicus Data Space (existing PB-DATA roads);
+          Landsat 1-9 via EarthExplorer for the 1972-present ladder.
+
+    - name: "MOVE :: inscribe the city bboxes for the rite"
+      ansible.builtin.copy:
+        dest: "{{ shelf_root }}/elder-epochs/CITY-BBOXES.tsv"
+        mode: "0644"
+        content: |
+          city	west	south	east	north	note
+          baghdad	44.20	33.15	44.60	33.50	Diyala confluence; relict canals rich in CORONA
+          najaf	44.25	31.93	44.45	32.08	Wadi al-Salam pre-sprawl extent - the Banu elder template
+          basra	47.65	30.42	47.90	30.62	Shatt al-Arab date-garden fabric of the 1960s
+          mosul	43.05	36.28	43.25	36.42	old city fabric prior to modern reconstruction
+
+    # ---------------- JUDGE: refuse an empty shelf ---------------------------
+    - name: "JUDGE :: count what the shelf now holds"
+      ansible.builtin.find:
+        paths: "{{ shelf_root }}"
+        recurse: true
+        file_type: file
+      register: shelf_files
+
+    - name: "JUDGE :: THE SHELF GATE - refuse emptiness"
+      ansible.builtin.assert:
+        that:
+          - shelf_files.files | length >= 4
+        fail_msg: "REFUSED :: the shelf is empty - no harvest landed; the network or the sources must be examined before any seal."
+        success_msg: "THE SHELF HOLDS :: {{ shelf_files.files | length }} files landed."
+
+    # ---------------- KANIKU: receipts --------------------------------------
+    - name: "MOVE :: seal every file with its Kaniku (sha256)"
+      ansible.builtin.shell: |
+        cd "{{ shelf_root }}"
+        printf "path\tsha256\tbytes\tsealed_utc\n" > "{{ kaniku_ledger }}"
+        find . -type f ! -name "KANIKU-SHELF.tsv" -print0 | while IFS= read -r -d '' f; do
+          printf "%s\t%s\t%s\t%s\n" "$f" "$(sha256sum "$f" | cut -d' ' -f1)" \
+            "$(stat -c%s "$f")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        done >> "{{ kaniku_ledger }}"
+      changed_when: true
+
+    - name: "STAGE :: proclaim"
+      ansible.builtin.debug:
+        msg:
+          - "SHELF   :: {{ shelf_root }}"
+          - "OSM     :: Iraq skeleton fetched (register VECTOR-CONTEXT)."
+          - "DEM     :: GLO-30 tiles over the four cities (register MEASURED-DEM)."
+          - "HDX     :: manifest recorded (register MANIFEST)."
+          - "ELDER   :: CORONA/HEXAGON rite inscribed - the Wadi before the sprawl awaits your hand."
+          - "KANIKU  :: every file receipted; the shelf is append-only."
+          - "WORD    :: the elder epochs of Banu are one browser-session away."

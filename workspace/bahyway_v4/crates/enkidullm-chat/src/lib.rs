@@ -18,15 +18,18 @@
 #![forbid(unsafe_code)]
 
 pub mod chat_engine;
-pub mod prompt;
 pub mod commands;
 pub mod enkiddb_bridge;
 pub mod model_loader;
 pub mod panel_state;
+pub mod prompt;
 
 pub use chat_engine::{ChatEngine, ChatError, ChatResponse};
-pub use prompt::{PromptBuilder, ChatTemplate, DEEPSEEK_SYSTEM};
-pub use commands::{QuickCommand, parse_quick_command, handle_quick_command};
-pub use enkiddb_bridge::{search as enkiddb_search, EnkiddbHit, DEFAULT_HOST as ENKIDDB_DEFAULT_HOST, DEFAULT_PORT as ENKIDDB_DEFAULT_PORT};
+pub use commands::{handle_quick_command, parse_quick_command, QuickCommand};
+pub use enkiddb_bridge::{
+    search as enkiddb_search, EnkiddbHit, DEFAULT_HOST as ENKIDDB_DEFAULT_HOST,
+    DEFAULT_PORT as ENKIDDB_DEFAULT_PORT,
+};
 pub use model_loader::{ModelLoader, ModelStatus, DEFAULT_MODEL_NAME};
-pub use panel_state::{TamuzPanelState, PanelMessage, MessageKind};
+pub use panel_state::{MessageKind, PanelMessage, TamuzPanelState};
+pub use prompt::{ChatTemplate, PromptBuilder, DEEPSEEK_SYSTEM};

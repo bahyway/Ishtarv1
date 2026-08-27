@@ -26,15 +26,25 @@
 /// module docs) rather than a dependency on a nonexistent `tiamat` crate.
 #[derive(Debug, Clone)]
 pub struct ParticleSnapshot {
-    pub kaki_hex:    String,
-    pub tribe_id:    u16,
+    pub kaki_hex: String,
+    pub tribe_id: u16,
     pub eav_quality: f32,
     pub detected_at: u64,
 }
 
 impl ParticleSnapshot {
-    pub fn new(kaki_hex: impl Into<String>, tribe_id: u16, eav_quality: f32, detected_at: u64) -> Self {
-        Self { kaki_hex: kaki_hex.into(), tribe_id, eav_quality, detected_at }
+    pub fn new(
+        kaki_hex: impl Into<String>,
+        tribe_id: u16,
+        eav_quality: f32,
+        detected_at: u64,
+    ) -> Self {
+        Self {
+            kaki_hex: kaki_hex.into(),
+            tribe_id,
+            eav_quality,
+            detected_at,
+        }
     }
 }
 
@@ -49,7 +59,10 @@ pub enum EnumaPatternType {
     /// Healthy quality but drifting from GEM attractor
     Anomaly { attraction_threshold: f32 },
     /// Oscillating breach/recovery (customs fraud signal)
-    Repeat { threshold: f32, min_occurrences: u32 },
+    Repeat {
+        threshold: f32,
+        min_occurrences: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,12 +77,12 @@ pub enum ShapePattern {
 
 #[derive(Debug, Clone)]
 pub struct EnumaMatch {
-    pub kaki_hex:     String,
-    pub tribe_id:     u16,
-    pub pattern:      EnumaPatternType,
-    pub confidence:   f32,   // 0.0–1.0
-    pub detected_at:  u64,   // unix timestamp
-    pub evidence:     Vec<String>,
+    pub kaki_hex: String,
+    pub tribe_id: u16,
+    pub pattern: EnumaPatternType,
+    pub confidence: f32,  // 0.0–1.0
+    pub detected_at: u64, // unix timestamp
+    pub evidence: Vec<String>,
 }
 
 // ── ENUMA Engine ──────────────────────────────────────────────
@@ -82,17 +95,18 @@ impl Enuma {
     /// NEVER from KAKI bytes.
     pub fn match_shape(
         snapshots: &[ParticleSnapshot],
-        pattern:   &ShapePattern,
+        pattern: &ShapePattern,
     ) -> Option<EnumaMatch> {
-        if snapshots.len() < 4 { return None; }
+        if snapshots.len() < 4 {
+            return None;
+        }
 
-        let qualities: Vec<f32> = snapshots.iter()
-            .map(|s| s.eav_quality)  // EAV — never KAKI bytes
+        let qualities: Vec<f32> = snapshots
+            .iter()
+            .map(|s| s.eav_quality) // EAV — never KAKI bytes
             .collect();
 
-        let velocities: Vec<f32> = qualities.windows(2)
-            .map(|w| w[1] - w[0])
-            .collect();
+        let velocities: Vec<f32> = qualities.windows(2).map(|w| w[1] - w[0]).collect();
 
         let matched = match pattern {
             ShapePattern::WDecay => Self::detect_w_decay(&velocities),
@@ -101,20 +115,27 @@ impl Enuma {
             ShapePattern::OscillatingDrop => Self::detect_oscillating(&velocities),
         };
 
-        if matched < 0.40 { return None; }
+        if matched < 0.40 {
+            return None;
+        }
 
         let snap = snapshots.last().unwrap();
         Some(EnumaMatch {
-            kaki_hex:    snap.kaki_hex.clone(),
-            tribe_id:    snap.tribe_id,
-            pattern:     EnumaPatternType::Shape(pattern.clone()),
-            confidence:  matched,
+            kaki_hex: snap.kaki_hex.clone(),
+            tribe_id: snap.tribe_id,
+            pattern: EnumaPatternType::Shape(pattern.clone()),
+            confidence: matched,
             detected_at: 0,
-            evidence:    vec![
-                format!("Velocity sequence: {:?}", &velocities[..velocities.len().min(5)]),
-                format!("EAV quality range: {:.2}–{:.2}",
+            evidence: vec![
+                format!(
+                    "Velocity sequence: {:?}",
+                    &velocities[..velocities.len().min(5)]
+                ),
+                format!(
+                    "EAV quality range: {:.2}–{:.2}",
                     qualities.iter().cloned().fold(f32::INFINITY, f32::min),
-                    qualities.iter().cloned().fold(f32::NEG_INFINITY, f32::max)),
+                    qualities.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
+                ),
             ],
         })
     }
@@ -122,33 +143,38 @@ impl Enuma {
     /// Match REPEAT pattern (oscillating breach/recovery).
     /// Business case: customs fraud cycling pattern.
     pub fn match_repeat(
-        snapshots:       &[ParticleSnapshot],
-        threshold:       f32,
+        snapshots: &[ParticleSnapshot],
+        threshold: f32,
         min_occurrences: u32,
     ) -> Option<EnumaMatch> {
         let mut breach_count = 0u32;
-        let mut in_breach    = false;
+        let mut in_breach = false;
 
         for snap in snapshots {
-            let q = snap.eav_quality;  // EAV — never KAKI bytes
+            let q = snap.eav_quality; // EAV — never KAKI bytes
             if q < threshold && !in_breach {
                 breach_count += 1;
-                in_breach     = true;
+                in_breach = true;
             } else if q >= threshold {
                 in_breach = false;
             }
         }
 
-        if breach_count < min_occurrences { return None; }
+        if breach_count < min_occurrences {
+            return None;
+        }
 
         let snap = snapshots.last().unwrap();
         Some(EnumaMatch {
-            kaki_hex:    snap.kaki_hex.clone(),
-            tribe_id:    snap.tribe_id,
-            pattern:     EnumaPatternType::Repeat { threshold, min_occurrences },
-            confidence:  (breach_count as f32 / min_occurrences as f32).min(1.0),
+            kaki_hex: snap.kaki_hex.clone(),
+            tribe_id: snap.tribe_id,
+            pattern: EnumaPatternType::Repeat {
+                threshold,
+                min_occurrences,
+            },
+            confidence: (breach_count as f32 / min_occurrences as f32).min(1.0),
             detected_at: 0,
-            evidence:    vec![
+            evidence: vec![
                 format!("Breach count: {}/{}", breach_count, min_occurrences),
                 format!("Threshold: {:.2}", threshold),
             ],
@@ -156,11 +182,17 @@ impl Enuma {
     }
 
     fn detect_w_decay(velocities: &[f32]) -> f32 {
-        if velocities.len() < 3 { return 0.0; }
-        let drop1    = velocities[0] < -0.05;
-        let recover  = velocities[1] >  0.03;
-        let drop2    = velocities.last().map(|&v| v < -0.05).unwrap_or(false);
-        if drop1 && recover && drop2 { 0.85 } else { 0.0 }
+        if velocities.len() < 3 {
+            return 0.0;
+        }
+        let drop1 = velocities[0] < -0.05;
+        let recover = velocities[1] > 0.03;
+        let drop2 = velocities.last().map(|&v| v < -0.05).unwrap_or(false);
+        if drop1 && recover && drop2 {
+            0.85
+        } else {
+            0.0
+        }
     }
 
     fn detect_steady_decline(velocities: &[f32]) -> f32 {
@@ -169,16 +201,23 @@ impl Enuma {
     }
 
     fn detect_false_recovery(velocities: &[f32]) -> f32 {
-        if velocities.len() < 3 { return 0.0; }
+        if velocities.len() < 3 {
+            return 0.0;
+        }
         let initial_drop = velocities[0] < -0.05;
-        let recovery     = velocities[1] >  0.05;
-        let faster_drop  = velocities.len() > 2 &&
-            velocities[velocities.len()-1] < velocities[0] - 0.02;
-        if initial_drop && recovery && faster_drop { 0.80 } else { 0.0 }
+        let recovery = velocities[1] > 0.05;
+        let faster_drop =
+            velocities.len() > 2 && velocities[velocities.len() - 1] < velocities[0] - 0.02;
+        if initial_drop && recovery && faster_drop {
+            0.80
+        } else {
+            0.0
+        }
     }
 
     fn detect_oscillating(velocities: &[f32]) -> f32 {
-        let sign_changes = velocities.windows(2)
+        let sign_changes = velocities
+            .windows(2)
             .filter(|w| w[0].signum() != w[1].signum())
             .count();
         (sign_changes as f32 / velocities.len() as f32).min(1.0)
@@ -196,9 +235,11 @@ mod tests {
     #[test]
     fn test_w_decay_detected() {
         let history = vec![
-            snap(0.85, 0), snap(0.65, 1),  // drop
-            snap(0.72, 2),                   // recover
-            snap(0.50, 3), snap(0.40, 4),   // drop again
+            snap(0.85, 0),
+            snap(0.65, 1), // drop
+            snap(0.72, 2), // recover
+            snap(0.50, 3),
+            snap(0.40, 4), // drop again
         ];
         let result = Enuma::match_shape(&history, &ShapePattern::WDecay);
         assert!(result.is_some());
@@ -208,10 +249,12 @@ mod tests {
     #[test]
     fn test_repeat_breach_customs_fraud() {
         // Oscillating breach/recovery = customs fraud signal
-        let history: Vec<_> = (0..10).map(|i| {
-            let q = if i % 3 == 0 { 0.45 } else { 0.65 };
-            snap(q, i)
-        }).collect();
+        let history: Vec<_> = (0..10)
+            .map(|i| {
+                let q = if i % 3 == 0 { 0.45 } else { 0.65 };
+                snap(q, i)
+            })
+            .collect();
         let result = Enuma::match_repeat(&history, 0.55, 3);
         assert!(result.is_some());
     }

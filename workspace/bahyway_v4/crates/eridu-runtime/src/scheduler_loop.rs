@@ -6,8 +6,8 @@
 //!      a. Run ValidationSweep on the SdbStore.
 //!      b. Drain promoted particles from SDB into ODB.
 //!      c. BlackBox Station scans quarantined particles and routes each to
-//!         its final jail: confirmed-harmful → Storage Sector (terminal),
-//!         fuzzy/unknown → EnkiQDB (pending Data Steward review).
+//!      its final jail: confirmed-harmful → Storage Sector (terminal),
+//!      fuzzy/unknown → EnkiQDB (pending Data Steward review).
 //!      d. Journal all transitions with correct EventCauses.
 //!
 //! The SchedulerLoop owns the SdbStore, OdbStore, QdbStore, StorageSector,
@@ -15,48 +15,48 @@
 //! external locking needed.
 
 use bahyway_core::TribeId;
-use enkidb_kaki::KakiMinter;
+use blackbox_station::BlackBoxStation;
 use enkidb_journal::Journal;
-use enkisdb::SdbStore;
-use enkisdb::validation_sweep::ValidationSweep;
+use enkidb_kaki::KakiMinter;
 use enkiodb::OdbStore;
 use enkiqdb::QdbStore;
-use storage_sector::StorageSector;
-use blackbox_station::BlackBoxStation;
+use enkisdb::validation_sweep::ValidationSweep;
+use enkisdb::SdbStore;
 use eridu_scheduler::{EriduScheduler, JobKind, VALIDATION_SWEEP_DEFAULT_TICKS};
+use storage_sector::StorageSector;
 
 /// Outcome of one scheduler tick cycle.
 #[derive(Debug, Default, Clone)]
 pub struct TickOutcome {
     /// Number of ticks advanced.
-    pub ticks:                    u64,
+    pub ticks: u64,
     /// True if the ValidationSweep ran this cycle.
-    pub sweep_ran:                bool,
+    pub sweep_ran: bool,
     /// Particles promoted to ODB this cycle.
-    pub promoted:                 usize,
+    pub promoted: usize,
     /// Particles quarantined by the sweep this cycle (before BlackBox routing).
-    pub quarantined:              usize,
+    pub quarantined: usize,
     /// Of the quarantined particles, how many BlackBox Station sealed into
     /// the Storage Sector as confirmed harmful.
     pub routed_to_storage_sector: usize,
     /// Of the quarantined particles, how many BlackBox Station routed to
     /// EnkiQDB pending Data Steward review.
-    pub routed_to_qdb:            usize,
+    pub routed_to_qdb: usize,
 }
 
 /// The integrated tick-based pipeline runner.
 pub struct SchedulerLoop {
-    pub scheduler:      EriduScheduler,
-    pub sweep:          ValidationSweep,
-    pub sdb:            SdbStore,
-    pub odb:            OdbStore,
-    pub qdb:            QdbStore,
+    pub scheduler: EriduScheduler,
+    pub sweep: ValidationSweep,
+    pub sdb: SdbStore,
+    pub odb: OdbStore,
+    pub qdb: QdbStore,
     pub storage_sector: StorageSector,
-    pub blackbox:       BlackBoxStation,
-    pub journal:        Journal,
-    pub minter:         KakiMinter,
-    pub tribe_id:       TribeId,
-    current_tick:       u64,
+    pub blackbox: BlackBoxStation,
+    pub journal: Journal,
+    pub minter: KakiMinter,
+    pub tribe_id: TribeId,
+    current_tick: u64,
 }
 
 impl SchedulerLoop {
@@ -67,26 +67,24 @@ impl SchedulerLoop {
 
         SchedulerLoop {
             scheduler,
-            sweep:          ValidationSweep::default_interval(),
-            sdb:            SdbStore::new(),
-            odb:            OdbStore::new(),
-            qdb:            QdbStore::new(),
+            sweep: ValidationSweep::default_interval(),
+            sdb: SdbStore::new(),
+            odb: OdbStore::new(),
+            qdb: QdbStore::new(),
             storage_sector: StorageSector::new(),
-            blackbox:       BlackBoxStation::new(),
-            journal:        Journal::new(shard_count),
-            minter:         KakiMinter::new(tribe_id),
+            blackbox: BlackBoxStation::new(),
+            journal: Journal::new(shard_count),
+            minter: KakiMinter::new(tribe_id),
             tribe_id,
-            current_tick:   0,
+            current_tick: 0,
         }
     }
 
     /// Create with a custom sweep interval (for testing / admin override).
     pub fn with_interval(tribe_id: TribeId, shard_count: u16, sweep_interval: u64) -> Self {
         let mut lp = Self::new(tribe_id, shard_count);
-        lp.scheduler.set_job_interval(
-            eridu_scheduler::VALIDATION_SWEEP_JOB,
-            sweep_interval,
-        );
+        lp.scheduler
+            .set_job_interval(eridu_scheduler::VALIDATION_SWEEP_JOB, sweep_interval);
         lp.sweep = ValidationSweep::new(sweep_interval);
         lp
     }
@@ -94,7 +92,10 @@ impl SchedulerLoop {
     /// Advance by `n` ticks and dispatch any due jobs.
     pub fn tick(&mut self, n: u64) -> TickOutcome {
         self.current_tick += n;
-        let mut outcome = TickOutcome { ticks: n, ..Default::default() };
+        let mut outcome = TickOutcome {
+            ticks: n,
+            ..Default::default()
+        };
 
         let due = self.scheduler.tick_typed(n);
 
@@ -109,10 +110,14 @@ impl SchedulerLoop {
     }
 
     /// Current logical tick.
-    pub fn current_tick(&self) -> u64 { self.current_tick }
+    pub fn current_tick(&self) -> u64 {
+        self.current_tick
+    }
 
     /// Expose a mutable reference to the SDB store so the SdbPipeline can stage particles.
-    pub fn sdb_mut(&mut self) -> &mut SdbStore { &mut self.sdb }
+    pub fn sdb_mut(&mut self) -> &mut SdbStore {
+        &mut self.sdb
+    }
 
     // ── Internal sweep execution ──────────────────────────────────────────────
 
@@ -125,11 +130,16 @@ impl SchedulerLoop {
             self.tribe_id,
             self.current_tick,
         );
-        outcome.promoted    = result.promoted;
+        outcome.promoted = result.promoted;
         outcome.quarantined = result.quarantined;
 
         // Step 2: Drain promoted particles into ODB.
-        self.odb.drain_from_sdb(&self.sdb, &mut self.journal, &self.minter, self.current_tick);
+        self.odb.drain_from_sdb(
+            &self.sdb,
+            &mut self.journal,
+            &self.minter,
+            self.current_tick,
+        );
 
         // Step 3: BlackBox Station scans quarantined particles and routes
         // each to its final jail — Storage Sector for confirmed-harmful,
@@ -144,7 +154,7 @@ impl SchedulerLoop {
             self.current_tick,
         );
         outcome.routed_to_storage_sector = bb_report.routed_to_storage_sector;
-        outcome.routed_to_qdb            = bb_report.routed_to_qdb;
+        outcome.routed_to_qdb = bb_report.routed_to_qdb;
     }
 }
 
@@ -160,32 +170,30 @@ mod tests {
     }
 
     fn stage_valid_particle(lp: &mut SchedulerLoop) {
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(
-            lp.minter.identity(KakiRole::Zikru)
-        ).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(lp.minter.identity(KakiRole::Zikru)).unwrap();
         lp.sdb.stage(StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     lp.tribe_id.as_u16(),
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [80, 200, 255],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: lp.tribe_id.as_u16(),
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [80, 200, 255],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: false,
         });
     }
 
     fn stage_malware_particle(lp: &mut SchedulerLoop) {
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(
-            lp.minter.identity(KakiRole::Zikru)
-        ).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(lp.minter.identity(KakiRole::Zikru)).unwrap();
         lp.sdb.stage(StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     lp.tribe_id.as_u16(),
-            epoch:        1,
-            eav:          Vec::new(),
-            color_rgb:    [255, 0, 0],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: lp.tribe_id.as_u16(),
+            epoch: 1,
+            eav: Vec::new(),
+            color_rgb: [255, 0, 0],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: true,
         });
@@ -197,8 +205,8 @@ mod tests {
         stage_valid_particle(&mut lp);
 
         let outcome = lp.tick(5); // interval=10, first tick fires immediately
-        // First tick fires immediately (last_run=0 → is_due)
-        // so sweep_ran should be true on first tick
+                                  // First tick fires immediately (last_run=0 → is_due)
+                                  // so sweep_ran should be true on first tick
         let _ = outcome;
         // Just ensure no panic
     }
@@ -210,7 +218,7 @@ mod tests {
 
         let outcome = lp.tick(1); // first tick fires sweep immediately
         assert!(outcome.sweep_ran);
-        assert_eq!(outcome.promoted,    1);
+        assert_eq!(outcome.promoted, 1);
         assert_eq!(outcome.quarantined, 0);
         assert_eq!(lp.odb.stats().active_count, 1);
         assert_eq!(lp.qdb.len(), 0);
@@ -238,8 +246,8 @@ mod tests {
         lp.tick(1);
 
         assert_eq!(lp.odb.stats().active_count, 2);
-        assert_eq!(lp.qdb.len(),                0);
-        assert_eq!(lp.storage_sector.len(),     1);
+        assert_eq!(lp.qdb.len(), 0);
+        assert_eq!(lp.storage_sector.len(), 1);
     }
 
     #[test]
@@ -247,7 +255,7 @@ mod tests {
         let mut lp = make_loop();
         stage_valid_particle(&mut lp);
 
-        lp.tick(1);  // first sweep: 1 promoted
+        lp.tick(1); // first sweep: 1 promoted
         let before_odb = lp.odb.stats().active_count;
 
         // Stage another particle and wait for next sweep

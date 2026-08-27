@@ -13,34 +13,50 @@ pub mod vocab_gate;
 pub mod way_kernel;
 pub mod zip_scan;
 
-pub use check::{SecurityResult, check_sovereignty};
-pub use emergency::{EmergencyLevel, EmergencyTablet, emergency_scribe};
-pub use vocab_gate::{
-    Violation as VocabViolation, VocabScanReport,
-    scan_text as vocab_scan_text, scan_file as vocab_scan_file, scan_dir as vocab_scan_dir,
-    FORBIDDEN_TERMS, FORBIDDEN_PORTS, GATED_EXTENSIONS,
-};
-pub use zip_scan::{ZipScanResult, scan as zip_scan, scan_all as zip_scan_all, MALWARE_SIGS};
-pub use late_quarantine::{AffectedParticle, LateQuarantineReport, emit_late_quarantine};
-pub use spectral_defender::{GapDetectionResult, detect_gap, GAP_SIGMA_THRESHOLD};
+pub use check::{check_sovereignty, SecurityResult};
+pub use emergency::{emergency_scribe, EmergencyLevel, EmergencyTablet};
 pub use failover::{
-    FailoverState, check_failover, cluster_failover_state,
-    QUANTUM_FREEZE_WARNING_THRESHOLD, QUANTUM_FREEZE_CRITICAL_THRESHOLD,
+    check_failover, cluster_failover_state, FailoverState, QUANTUM_FREEZE_CRITICAL_THRESHOLD,
+    QUANTUM_FREEZE_WARNING_THRESHOLD,
+};
+pub use late_quarantine::{emit_late_quarantine, AffectedParticle, LateQuarantineReport};
+pub use spectral_defender::{detect_gap, GapDetectionResult, GAP_SIGMA_THRESHOLD};
+pub use vocab_gate::{
+    scan_dir as vocab_scan_dir, scan_file as vocab_scan_file, scan_text as vocab_scan_text,
+    Violation as VocabViolation, VocabScanReport, FORBIDDEN_PORTS, FORBIDDEN_TERMS,
+    GATED_EXTENSIONS,
 };
 pub use way_kernel::{
-    // Sorts
-    CapabilityId, Capability, Action, Scope,
-    PropagationPath, ValidationResult as WayValidationResult,
-    TrustState, SealState,
-    // Errors
-    SecurityError, PropagationError,
-    // Metric constants
-    ALPHA_CROSS, TAU_RADIUS, EPSILON_UNSTABLE, PI_THROTTLE, TAU_MIN, DEFAULT_DECAY,
-    // Metric functions
-    trust_at, orbit_entropy_from_counts, orbit_entropy_from_lanes, is_orbit_unstable,
     check_radius_and_trust,
+    is_orbit_unstable,
+    orbit_entropy_from_counts,
+    orbit_entropy_from_lanes,
+    // Metric functions
+    trust_at,
+    Action,
+    AlwaysContinuousValidator,
+    AlwaysDiscontinuousValidator,
+    Capability,
+    // Sorts
+    CapabilityId,
+    PropagationError,
+    PropagationPath,
+    Scope,
+    SealState,
+    // Errors
+    SecurityError,
+    TrustState,
+    ValidationResult as WayValidationResult,
     // Validator trait + fixtures
-    Validator, AlwaysContinuousValidator, AlwaysDiscontinuousValidator,
+    Validator,
     // WAY STIR pipeline
     WayPipelineStage,
+    // Metric constants
+    ALPHA_CROSS,
+    DEFAULT_DECAY,
+    EPSILON_UNSTABLE,
+    PI_THROTTLE,
+    TAU_MIN,
+    TAU_RADIUS,
 };
+pub use zip_scan::{scan as zip_scan, scan_all as zip_scan_all, ZipScanResult, MALWARE_SIGS};

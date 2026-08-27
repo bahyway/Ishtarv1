@@ -2,25 +2,28 @@ use super::cell::{CellKind, CellState, NotebookCell};
 
 pub fn render_cell(cell: &NotebookCell) {
     let kind_label = match &cell.kind {
-        CellKind::AkkadiCommand    => "[akkadi]",
-        CellKind::AkkadianAol      => "[.akk]",
-        CellKind::HeptaMap         => "[hepta]",
-        CellKind::VgcaAnalysis     => "[vgca]",
-        CellKind::SqlQuery         => "[sql]",
+        CellKind::AkkadiCommand => "[akkadi]",
+        CellKind::AkkadianAol => "[.akk]",
+        CellKind::HeptaMap => "[hepta]",
+        CellKind::VgcaAnalysis => "[vgca]",
+        CellKind::SqlQuery => "[sql]",
         CellKind::SovereignVsLegacy => "[compare]",
-        CellKind::LiveStream       => "[stream]",
-        CellKind::Markdown         => "[md]",
-        CellKind::KakiQuery        => "[kaki]",
-        CellKind::PipelineStatus   => "[pipeline]",
-        CellKind::EnkiddbQuery     => "[enkiddb]",
+        CellKind::LiveStream => "[stream]",
+        CellKind::Markdown => "[md]",
+        CellKind::KakiQuery => "[kaki]",
+        CellKind::PipelineStatus => "[pipeline]",
+        CellKind::EnkiddbQuery => "[enkiddb]",
     };
     let state_sym = match cell.state {
-        CellState::Idle    => "○",
+        CellState::Idle => "○",
         CellState::Running => "◎",
-        CellState::Done    => "●",
-        CellState::Error   => "✗",
+        CellState::Done => "●",
+        CellState::Error => "✗",
     };
-    println!("{state_sym} {kind_label} — {}", &cell.source[..cell.source.len().min(72)]);
+    println!(
+        "{state_sym} {kind_label} — {}",
+        &cell.source[..cell.source.len().min(72)]
+    );
     if let Some(out) = &cell.output {
         for line in out.lines() {
             println!("  │ {line}");

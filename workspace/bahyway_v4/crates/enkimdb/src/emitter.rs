@@ -108,8 +108,12 @@ mod tests {
         let (_, with_particles) = e.emit(&with_version);
         let (_, without_particles) = e.emit(&without_version);
 
-        assert!(with_particles.iter().any(|p| p.attribute == "artifact.version"));
-        assert!(!without_particles.iter().any(|p| p.attribute == "artifact.version"));
+        assert!(with_particles
+            .iter()
+            .any(|p| p.attribute == "artifact.version"));
+        assert!(!without_particles
+            .iter()
+            .any(|p| p.attribute == "artifact.version"));
     }
 
     #[test]

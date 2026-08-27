@@ -11,13 +11,11 @@
 #![forbid(unsafe_code)]
 
 pub mod conversation;
-pub mod session;
 pub mod memory_store;
 pub mod search;
+pub mod session;
 
-pub use conversation::{
-    Turn, TurnRole, ConversationParticle, CONV_TRIBE_ID,
-};
-pub use session::{Session, SessionStats};
-pub use memory_store::{MemoryStore, MemoryError};
+pub use conversation::{ConversationParticle, Turn, TurnRole, CONV_TRIBE_ID};
+pub use memory_store::{MemoryError, MemoryStore};
 pub use search::{MemorySearch, SearchResult};
+pub use session::{Session, SessionStats};

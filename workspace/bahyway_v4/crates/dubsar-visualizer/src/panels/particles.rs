@@ -4,14 +4,13 @@ use bahyway_core::ParticleState;
 use enkidb_journal::Journal;
 use enkidb_kaki::IdentityKaki;
 use enkidb_snapshot::SnapshotRecord;
-use story_engine::StoryEngine;
 use story_engine::projection::{
     ATTR_COLOR_RGB, ATTR_SNAPSHOT_DATE, ATTR_SNAPSHOT_FREQUENCY, ATTR_SNAPSHOT_STATE,
 };
+use story_engine::StoryEngine;
 
 use crate::app::{
-    ParticleDemo,
-    ATTR_DEFECT_SCORE, ATTR_EVENT_TYPE, ATTR_FRESHNESS, ATTR_QUALITY,
+    ParticleDemo, ATTR_DEFECT_SCORE, ATTR_EVENT_TYPE, ATTR_FRESHNESS, ATTR_QUALITY,
     ATTR_SECTOR_NAME, ATTR_SEGMENT_REF, ATTR_STATE,
 };
 use crate::panels::InspectorTab;
@@ -20,13 +19,13 @@ use crate::theme;
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn draw(
-    ui:         &mut Ui,
-    particles:  &[ParticleDemo],
-    selected:   &mut usize,
-    tab:        &mut InspectorTab,
-    journal:    &Journal,
+    ui: &mut Ui,
+    particles: &[ParticleDemo],
+    selected: &mut usize,
+    tab: &mut InspectorTab,
+    journal: &Journal,
     identities: &[IdentityKaki],
-    snapshots:  &[SnapshotRecord],
+    snapshots: &[SnapshotRecord],
 ) {
     if particles.is_empty() {
         ui.label("No particles.");
@@ -49,7 +48,11 @@ pub fn draw(
         )
         .show_inside(ui, |ui| {
             ui.add_space(6.0);
-            ui.label(RichText::new("  Particle Nodes").color(theme::GOLD).heading());
+            ui.label(
+                RichText::new("  Particle Nodes")
+                    .color(theme::GOLD)
+                    .heading(),
+            );
             ui.add_space(4.0);
             ui.separator();
             egui::ScrollArea::vertical()
@@ -106,8 +109,10 @@ fn draw_node(ui: &mut Ui, p: &ParticleDemo, idx: usize, is_sel: bool) -> bool {
 
             let (cr, cg, cb) = p.rgb;
             let dot_center = pos2(rect.min.x + 16.0, rect.center().y);
-            ui.painter().circle_filled(dot_center, 6.0, Color32::from_rgb(cr, cg, cb));
-            ui.painter().circle_stroke(dot_center, 6.0, egui::Stroke::new(1.0, sc));
+            ui.painter()
+                .circle_filled(dot_center, 6.0, Color32::from_rgb(cr, cg, cb));
+            ui.painter()
+                .circle_stroke(dot_center, 6.0, egui::Stroke::new(1.0_f32, sc));
 
             let tx = rect.min.x + 28.0;
 
@@ -123,7 +128,11 @@ fn draw_node(ui: &mut Ui, p: &ParticleDemo, idx: usize, is_sel: bool) -> bool {
                 egui::Align2::LEFT_TOP,
                 &p.label,
                 FontId::proportional(12.0),
-                if is_sel { theme::GOLD } else { theme::TEXT_MAIN },
+                if is_sel {
+                    theme::GOLD
+                } else {
+                    theme::TEXT_MAIN
+                },
             );
             ui.painter().text(
                 pos2(tx, rect.min.y + 42.0),
@@ -147,11 +156,11 @@ fn draw_node(ui: &mut Ui, p: &ParticleDemo, idx: usize, is_sel: bool) -> bool {
 // ── Inspector panel ───────────────────────────────────────────────────────────
 
 fn draw_inspector(
-    ui:        &mut Ui,
-    p:         &ParticleDemo,
-    tab:       &mut InspectorTab,
-    identity:  &IdentityKaki,
-    journal:   &Journal,
+    ui: &mut Ui,
+    p: &ParticleDemo,
+    tab: &mut InspectorTab,
+    identity: &IdentityKaki,
+    journal: &Journal,
     snapshots: &[SnapshotRecord],
 ) {
     ui.horizontal(|ui| {
@@ -160,29 +169,33 @@ fn draw_inspector(
         let (sw_rect, _) = ui.allocate_exact_size(Vec2::new(16.0, 16.0), egui::Sense::hover());
         ui.painter().rect_filled(sw_rect, 3.0, swatch);
         ui.add_space(6.0);
-        ui.label(RichText::new(&p.label).color(theme::GOLD).strong().size(15.0));
+        ui.label(
+            RichText::new(&p.label)
+                .color(theme::GOLD)
+                .strong()
+                .size(15.0),
+        );
         ui.add_space(8.0);
         ui.label(RichText::new(p.state).color(state_color(p.state)).strong());
         ui.add_space(8.0);
         ui.label(
-            RichText::new(format!("HPS {:.0}%", p.hps * 100.0))
-                .color(theme::hps_color(p.hps)),
+            RichText::new(format!("HPS {:.0}%", p.hps * 100.0)).color(theme::hps_color(p.hps)),
         );
     });
     ui.add_space(4.0);
 
     ui.horizontal(|ui| {
-        itab(ui, tab, InspectorTab::Radar,      "⬡  Radar");
+        itab(ui, tab, InspectorTab::Radar, "⬡  Radar");
         itab(ui, tab, InspectorTab::Attributes, "⚙  Attributes");
-        itab(ui, tab, InspectorTab::Story,      "\u{1F4DC}  Story");
+        itab(ui, tab, InspectorTab::Story, "\u{1F4DC}  Story");
     });
     ui.separator();
     ui.add_space(4.0);
 
     match *tab {
-        InspectorTab::Radar      => tab_radar(ui, p),
+        InspectorTab::Radar => tab_radar(ui, p),
         InspectorTab::Attributes => tab_attributes(ui, p),
-        InspectorTab::Story      => tab_story(ui, p, identity, journal, snapshots),
+        InspectorTab::Story => tab_story(ui, p, identity, journal, snapshots),
     }
 }
 
@@ -194,7 +207,11 @@ fn itab(ui: &mut Ui, current: &mut InspectorTab, target: InspectorTab, label: &s
         RichText::new(label).color(theme::TEXT_DIM)
     };
     if ui
-        .add(egui::Button::new(text).fill(if active { theme::BG_HOVER } else { Color32::TRANSPARENT }))
+        .add(egui::Button::new(text).fill(if active {
+            theme::BG_HOVER
+        } else {
+            Color32::TRANSPARENT
+        }))
         .clicked()
     {
         *current = target;
@@ -272,9 +289,9 @@ fn tab_attributes(ui: &mut Ui, p: &ParticleDemo) {
 
             section_hdr(ui, "\u{26A1}  Mandatory Attributes");
             theme::card_frame(theme::BG_CARD).show(ui, |ui| {
-                arow(ui, "id",     &p.id,     theme::CYAN);
-                arow(ui, "label",  &p.label,  theme::TEXT_MAIN);
-                arow(ui, "state",  p.state,   state_color(p.state));
+                arow(ui, "id", &p.id, theme::CYAN);
+                arow(ui, "label", &p.label, theme::TEXT_MAIN);
+                arow(ui, "state", p.state, state_color(p.state));
                 arow(
                     ui,
                     "hps",
@@ -306,10 +323,10 @@ fn tab_attributes(ui: &mut Ui, p: &ParticleDemo) {
             section_hdr(ui, "\u{25CE}  Optional Attributes");
             theme::card_frame(theme::BG_CARD).show(ui, |ui| {
                 let sector = sector_from_id(&p.id);
-                arow(ui, "sector",        sector,             theme::TEXT_MAIN);
-                arow(ui, "tribe",         "0x0001",           theme::VIOLET);
-                arow(ui, "pipeline_type", "Water",            theme::CYAN);
-                arow(ui, "engine",        "wpd-engine v4.0",  theme::TEXT_DIM);
+                arow(ui, "sector", sector, theme::TEXT_MAIN);
+                arow(ui, "tribe", "0x0001", theme::VIOLET);
+                arow(ui, "pipeline_type", "Water", theme::CYAN);
+                arow(ui, "engine", "wpd-engine v4.0", theme::TEXT_DIM);
             });
         });
 }
@@ -326,20 +343,20 @@ fn sector_from_id(id: &str) -> &'static str {
         "RS" => "Rashid  (H7-04 MARS)",
         "JD" => "Al-Jadria  (H7-05 JUPITER)",
         "MN" => "Al-Mansour  (H7-06 SATURN)",
-        _    => "Unknown",
+        _ => "Unknown",
     }
 }
 
 // ── Tab: Story (real StoryTellingEngine projection) ───────────────────────────
 
 fn tab_story(
-    ui:        &mut Ui,
-    p:         &ParticleDemo,
-    identity:  &IdentityKaki,
-    journal:   &Journal,
+    ui: &mut Ui,
+    p: &ParticleDemo,
+    identity: &IdentityKaki,
+    journal: &Journal,
     snapshots: &[SnapshotRecord],
 ) {
-    let engine    = StoryEngine::new(journal, snapshots);
+    let engine = StoryEngine::new(journal, snapshots);
     let projected = engine.project(identity);
     let mut history: Vec<_> = journal.read_particle_history(identity);
     history.sort_by_key(|e| e.epoch);
@@ -351,44 +368,45 @@ fn tab_story(
             theme::card_frame(theme::BG_CARD).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     let (state_lbl, state_col) = match projected.state {
-                        ParticleState::Golden => ("Golden",   theme::GOLD),
-                        ParticleState::Fuzzy  => ("Drifting", theme::ORANGE),
-                        ParticleState::Dead   => ("Gray",     theme::TEXT_DIM),
+                        ParticleState::Golden => ("Golden", theme::GOLD),
+                        ParticleState::Fuzzy => ("Drifting", theme::ORANGE),
+                        ParticleState::Dead => ("Gray", theme::TEXT_DIM),
                     };
                     ui.label(
                         RichText::new("Projected State")
-                            .color(theme::TEXT_DIM).small()
+                            .color(theme::TEXT_DIM)
+                            .small(),
                     );
                     ui.add_space(8.0);
-                    ui.label(
-                        RichText::new(state_lbl).color(state_col).strong().small()
-                    );
+                    ui.label(RichText::new(state_lbl).color(state_col).strong().small());
                     ui.add_space(16.0);
                     ui.label(
                         RichText::new(format!("{} events replayed", projected.events_seen))
-                            .color(theme::CYAN).small()
+                            .color(theme::CYAN)
+                            .small(),
                     );
                     if projected.from_snapshot {
                         ui.add_space(8.0);
                         ui.label(
                             RichText::new("⚡ snapshot-accelerated")
-                                .color(theme::GOLD).small()
+                                .color(theme::GOLD)
+                                .small(),
                         );
                     }
                 });
                 if let Some(q) = projected.get(ATTR_QUALITY) {
-                    arow(ui, "quality",   &String::from_utf8_lossy(q), theme::GREEN);
+                    arow(ui, "quality", &String::from_utf8_lossy(q), theme::GREEN);
                 }
                 if let Some(f) = projected.get(ATTR_FRESHNESS) {
                     arow(ui, "freshness", &String::from_utf8_lossy(f), theme::CYAN);
                 }
                 if let Some(s) = projected.get(ATTR_SECTOR_NAME) {
-                    arow(ui, "sector",    &String::from_utf8_lossy(s), theme::TEXT_MAIN);
+                    arow(ui, "sector", &String::from_utf8_lossy(s), theme::TEXT_MAIN);
                 }
                 if let Some(d) = projected.get(ATTR_DEFECT_SCORE) {
                     let dv = String::from_utf8_lossy(d);
                     let df: f32 = dv.parse().unwrap_or(0.0);
-                    arow(ui, "defect",    &dv, theme::defect_color(df));
+                    arow(ui, "defect", &dv, theme::defect_color(df));
                 }
             });
             ui.add_space(8.0);
@@ -406,7 +424,9 @@ fn tab_story(
 
             // ── Event entries ──────────────────────────────────────────
             for entry in &history {
-                let event_type = entry.eav.iter()
+                let event_type = entry
+                    .eav
+                    .iter()
                     .find(|t| t.attr_hash == ATTR_EVENT_TYPE)
                     .map(|t| String::from_utf8_lossy(&t.value).into_owned())
                     .unwrap_or_else(|| "EVENT".to_string());
@@ -436,15 +456,19 @@ fn tab_story(
                             continue;
                         }
                         let name = attr_name(triple.attr_hash);
-                        let val  = String::from_utf8_lossy(&triple.value);
+                        let val = String::from_utf8_lossy(&triple.value);
                         ui.horizontal(|ui| {
                             ui.label(
                                 RichText::new(format!("  {:<16}", name))
-                                    .color(theme::TEXT_DIM).small().monospace()
+                                    .color(theme::TEXT_DIM)
+                                    .small()
+                                    .monospace(),
                             );
                             ui.label(
                                 RichText::new(val.as_ref())
-                                    .color(theme::TEXT_MAIN).small().monospace()
+                                    .color(theme::TEXT_MAIN)
+                                    .small()
+                                    .monospace(),
                             );
                         });
                     }
@@ -476,50 +500,47 @@ fn arow(ui: &mut Ui, key: &str, val: &str, color: Color32) {
 fn dim_bar(ui: &mut Ui, value: f32, color: Color32, width: f32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 7.0), egui::Sense::hover());
     ui.painter().rect_filled(rect, 2.0, theme::BG_DARK);
-    let fill = egui::Rect::from_min_size(
-        rect.min,
-        Vec2::new(width * value.clamp(0.0, 1.0), 7.0),
-    );
+    let fill = egui::Rect::from_min_size(rect.min, Vec2::new(width * value.clamp(0.0, 1.0), 7.0));
     ui.painter().rect_filled(fill, 2.0, color);
 }
 
 fn state_color(state: &str) -> Color32 {
     match state {
-        "Golden"   => theme::GOLD,
+        "Golden" => theme::GOLD,
         "Drifting" => theme::ORANGE,
-        _          => theme::TEXT_DIM,
+        _ => theme::TEXT_DIM,
     }
 }
 
 fn attr_name(hash: u32) -> &'static str {
     match hash {
-        ATTR_STATE              => "state",
-        ATTR_QUALITY            => "quality",
-        ATTR_FRESHNESS          => "freshness",
-        ATTR_COLOR_RGB          => "color_rgb",
-        ATTR_SNAPSHOT_DATE      => "snapshot_date",
-        ATTR_SNAPSHOT_STATE     => "snapshot_state",
+        ATTR_STATE => "state",
+        ATTR_QUALITY => "quality",
+        ATTR_FRESHNESS => "freshness",
+        ATTR_COLOR_RGB => "color_rgb",
+        ATTR_SNAPSHOT_DATE => "snapshot_date",
+        ATTR_SNAPSHOT_STATE => "snapshot_state",
         ATTR_SNAPSHOT_FREQUENCY => "snapshot_frequency",
-        ATTR_SEGMENT_REF        => "segment_ref",
-        ATTR_DEFECT_SCORE       => "defect_score",
-        ATTR_SECTOR_NAME        => "sector_name",
-        ATTR_EVENT_TYPE         => "event_type",
-        _                       => "?unknown",
+        ATTR_SEGMENT_REF => "segment_ref",
+        ATTR_DEFECT_SCORE => "defect_score",
+        ATTR_SECTOR_NAME => "sector_name",
+        ATTR_EVENT_TYPE => "event_type",
+        _ => "?unknown",
     }
 }
 
 fn event_type_color(event_type: &str) -> Color32 {
     match event_type {
-        "REGISTERED"      => theme::CYAN,
-        "INITIAL_SCAN"    => theme::TEXT_MAIN,
-        "SCORED"          => theme::GREEN,
-        "SNAPSHOT_TAKEN"  => theme::GOLD,
-        "VERIFIED"        => theme::GREEN,
+        "REGISTERED" => theme::CYAN,
+        "INITIAL_SCAN" => theme::TEXT_MAIN,
+        "SCORED" => theme::GREEN,
+        "SNAPSHOT_TAKEN" => theme::GOLD,
+        "VERIFIED" => theme::GREEN,
         "QUALITY_WARNING" => theme::ORANGE,
-        "QUALITY_ALERT"   => theme::RED_HOT,
-        "MONITORED"       => theme::ORANGE,
-        "QUARANTINED"     => theme::RED_HOT,
-        "LIVE"            => theme::VIOLET,
-        _                 => theme::TEXT_MAIN,
+        "QUALITY_ALERT" => theme::RED_HOT,
+        "MONITORED" => theme::ORANGE,
+        "QUARANTINED" => theme::RED_HOT,
+        "LIVE" => theme::VIOLET,
+        _ => theme::TEXT_MAIN,
     }
 }

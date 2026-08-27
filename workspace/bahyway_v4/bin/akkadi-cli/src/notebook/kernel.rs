@@ -14,21 +14,27 @@ impl AkkadiKernel {
     pub fn execute(&self, cell: &mut NotebookCell) {
         cell.state = CellState::Running;
         let result = match &cell.kind {
-            CellKind::AkkadiCommand    => self.run_akkadi_command(&cell.source),
-            CellKind::AkkadianAol      => self.run_aaol(&cell.source),
-            CellKind::HeptaMap         => self.run_hepta_map(&cell.source),
-            CellKind::VgcaAnalysis     => self.run_vgca(&cell.source),
-            CellKind::SqlQuery         => self.run_sql_query(&cell.source),
+            CellKind::AkkadiCommand => self.run_akkadi_command(&cell.source),
+            CellKind::AkkadianAol => self.run_aaol(&cell.source),
+            CellKind::HeptaMap => self.run_hepta_map(&cell.source),
+            CellKind::VgcaAnalysis => self.run_vgca(&cell.source),
+            CellKind::SqlQuery => self.run_sql_query(&cell.source),
             CellKind::SovereignVsLegacy => self.run_compare(&cell.source),
-            CellKind::LiveStream       => self.run_live_stream(&cell.source),
-            CellKind::Markdown         => Ok(cell.source.clone()),
-            CellKind::KakiQuery        => self.run_kaki_query(&cell.source),
-            CellKind::PipelineStatus   => self.run_pipeline_status(),
-            CellKind::EnkiddbQuery     => self.run_enkiddb_query(&cell.source),
+            CellKind::LiveStream => self.run_live_stream(&cell.source),
+            CellKind::Markdown => Ok(cell.source.clone()),
+            CellKind::KakiQuery => self.run_kaki_query(&cell.source),
+            CellKind::PipelineStatus => self.run_pipeline_status(),
+            CellKind::EnkiddbQuery => self.run_enkiddb_query(&cell.source),
         };
         match result {
-            Ok(out)  => { cell.output = Some(out); cell.state = CellState::Done; }
-            Err(e)   => { cell.output = Some(e);   cell.state = CellState::Error; }
+            Ok(out) => {
+                cell.output = Some(out);
+                cell.state = CellState::Done;
+            }
+            Err(e) => {
+                cell.output = Some(e);
+                cell.state = CellState::Error;
+            }
         }
     }
 
@@ -40,9 +46,12 @@ impl AkkadiKernel {
         use aaol::compiler::parser::Parser;
         let (_, lex_errs, parse_errs) = Parser::parse_source(src);
         if !lex_errs.is_empty() || !parse_errs.is_empty() {
-            let msg = lex_errs.iter().map(|e| format!("{e:?}"))
+            let msg = lex_errs
+                .iter()
+                .map(|e| format!("{e:?}"))
                 .chain(parse_errs.iter().map(|e| format!("{e}")))
-                .collect::<Vec<_>>().join("; ");
+                .collect::<Vec<_>>()
+                .join("; ");
             return Err(msg);
         }
         Ok(format!("✓ AkkadianAOL compiled ({} chars)", src.len()))
@@ -85,7 +94,11 @@ impl AkkadiKernel {
     /// notebook want that text preserved as the cell's output either way,
     /// not swallowed into a generic failure.
     fn run_enkiddb_query(&self, src: &str) -> Result<String, String> {
-        let resp = enkiddb_client::send_query(&self.cfg.enkiddb_read_host, self.cfg.enkiddb_read_port, src)?;
+        let resp = enkiddb_client::send_query(
+            &self.cfg.enkiddb_read_host,
+            self.cfg.enkiddb_read_port,
+            src,
+        )?;
         Ok(format!("{} ({}ms)", resp.response, resp.elapsed_ms))
     }
 }

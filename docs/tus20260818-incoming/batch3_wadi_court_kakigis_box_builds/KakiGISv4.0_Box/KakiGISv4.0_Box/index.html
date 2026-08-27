@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KAKIGIS v4.0 Box — Wadi-us-Salaam · SilaEngine · HeptaSpaceMap</title>
+<!-- ======================================================================
+  KAKIGIS v4.0 — BOX TEST EDITION. Zero AI in this runtime.
+  Vendored Leaflet 1.9.4 (BSD-2) + OSM tiles (ODbL) + on-fly {7,3} mask.
+  REAL yard boundary: data/yard.geojson if present, otherwise fetched
+  LIVE from the OSM API (way 325851897 — the surveyed Wadi-us-Salaam).
+  PALAHU LAW: map.flyTo() forbidden; arrivals via veil, exact per cm.
+  Run with run.sh -> http://127.0.0.1:8090 (do not open via file://).
+====================================================================== -->
+<link rel="stylesheet" href="vendor/leaflet.css">
+<style>
+  html,body{margin:0;height:100%;font-family:Georgia,serif;background:#0a0f1e;}
+  #map{position:absolute;inset:0;}
+  .bar{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    z-index:1000;display:flex;gap:8px;align-items:center;
+    background:#101830ee;border:1px solid #2a3a5c;border-radius:8px;
+    padding:8px 10px;color:#dfe6f5;}
+  .bar input{width:260px;background:#0e1730;color:#eef;border:1px solid #2a3a5c;
+    border-radius:6px;padding:7px 10px;font:13px Georgia;outline:none;}
+  .bar button{background:#141f3d;border:1px solid #2a3a5c;color:#cfe0ff;
+    font:12px Georgia;padding:7px 10px;border-radius:6px;cursor:pointer;}
+  .bar button.on{border-color:#d4af37;color:#d4af37;}
+  #stat{font:11px monospace;color:#c8b269;max-width:340px;}
+  #results{position:absolute;top:56px;left:50%;transform:translateX(-50%);
+    z-index:1000;background:#0e1730f8;border:1px solid #2a3a5c;
+    border-radius:8px;max-height:200px;overflow:auto;display:none;
+    min-width:340px;}
+  #results div{padding:7px 12px;font-size:13px;color:#dfe6f5;cursor:pointer;
+    display:flex;justify-content:space-between;gap:14px;}
+  #results div:hover{background:#1a2748;}
+  #results .hid{color:#7f93bd;font-size:11px;}
+  #veil{position:absolute;inset:0;background:#060a18;opacity:0;
+    transition:opacity .16s ease;pointer-events:none;z-index:2000;}
+  #brand{position:absolute;bottom:22px;left:10px;z-index:1000;
+    color:#d4af37;background:#101830cc;border-radius:6px;
+    padding:4px 10px;font-size:12px;}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="bar">
+  <button id="bUse">Use mask ⚙</button>
+  <input id="q" placeholder="Say where — the veil brings you down…" autocomplete="off">
+  <span id="stat">loading…</span>
+</div>
+<div id="results"></div>
+<div id="veil"></div>
+<div id="brand">KAKIGIS v4.0 Box · SilaEngine · index space {7,3} — truth UTM 38N</div>
+
+<script src="vendor/leaflet.js"></script>
+<script>
+"use strict";
+var stat=document.getElementById('stat');
+if(location.protocol==='file:'){
+  stat.textContent='REFUSED: opened via file:// — run run.sh and open http://127.0.0.1:8090';
+}
+/* ---------------- map (OSM, ODbL attribution mandatory) ------------- */
+var map=L.map('map',{zoomControl:true}).setView([32.017,44.297],14);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19,attribution:'&copy; OpenStreetMap contributors (ODbL)'
+}).addTo(map);
+map.flyTo=function(){throw new Error('PALAHU: flyTo forbidden — use veilTo');};
+
+/* ---------------- {7,3} generator ----------------------------------- */
+function C(re,im){return{re:re,im:im};}
+function cadd(a,b){return C(a.re+b.re,a.im+b.im);}
+function csub(a,b){return C(a.re-b.re,a.im-b.im);}
+function cabs2(a){return a.re*a.re+a.im*a.im;}
+function cscale(a,s){return C(a.re*s,a.im*s);}
+var coshR=Math.cos(Math.PI/3)/Math.sin(Math.PI/7);
+var Rh=Math.log(coshR+Math.sqrt(coshR*coshR-1)),rv=Math.tanh(Rh/2);
+var centerVerts=[];
+for(var k=0;k<7;k++){var a=2*Math.PI*k/7-Math.PI/2;
+  centerVerts.push(C(rv*Math.cos(a),rv*Math.sin(a)));}
+function geoCircle(A,B){var den=2*(A.re*B.im-B.re*A.im);
+  if(Math.abs(den)<1e-8)return null;
+  var A1=cabs2(A)+1,A2=cabs2(B)+1;
+  var cx=(A1*B.im-A2*A.im)/den,cy=(A2*A.re-A1*B.re)/den;
+  return{c:C(cx,cy),r2:cx*cx+cy*cy-1};}
+function reflect(z,A,B){var g=geoCircle(A,B);
+  if(!g){var ph=Math.atan2(B.im-A.im,B.re-A.re);
+    return C(Math.cos(2*ph)*z.re+Math.sin(2*ph)*z.im,
+             Math.sin(2*ph)*z.re-Math.cos(2*ph)*z.im);}
+  var d=csub(z,g.c);return cadd(g.c,cscale(d,g.r2/cabs2(d)));}
+function sampleGeo(z1,z2,n){var g=geoCircle(z1,z2),pts=[];
+  if(!g){for(var i=0;i<=n;i++)
+    pts.push(C(z1.re+(z2.re-z1.re)*i/n,z1.im+(z2.im-z1.im)*i/n));return pts;}
+  var t1=Math.atan2(z1.im-g.c.im,z1.re-g.c.re);
+  var dt=Math.atan2(z2.im-g.c.im,z2.re-g.c.re)-t1;
+  while(dt>Math.PI)dt-=2*Math.PI;while(dt<-Math.PI)dt+=2*Math.PI;
+  var r=Math.sqrt(Math.max(0,g.r2));
+  for(var j=0;j<=n;j++){var th=t1+dt*j/n;
+    pts.push(C(g.c.re+r*Math.cos(th),g.c.im+r*Math.sin(th)));}
+  return pts;}
+function cen7(vs){var x=0,y=0;
+  for(var i=0;i<vs.length;i++){x+=vs[i].re;y+=vs[i].im;}
+  return C(x/vs.length,y/vs.length);}
+
+/* ---------------- REAL yard: local file OR live OSM API ------------- */
+var RE=6378137;
+function rad(d){return d*Math.PI/180;}
+function m2x(lon){return RE*rad(lon);}
+function m2y(lat){return RE*Math.log(Math.tan(Math.PI/4+rad(lat)/2));}
+function xy2ll(x,y){return[(2*Math.atan(Math.exp(y/RE))-Math.PI/2)*180/Math.PI,
+                           (x/RE)*180/Math.PI];}
+var YARD=null,AX=0,AY=0,MASK_R=0;
+function installYard(ringLatLon,sourceLabel){
+  L.polygon(ringLatLon,{color:'#8c620a',weight:2,fill:false}).addTo(map);
+  YARD=ringLatLon.map(function(p){return[m2x(p[1]),m2y(p[0])];});
+  AX=0;AY=0;
+  for(var i=0;i<YARD.length;i++){AX+=YARD[i][0];AY+=YARD[i][1];}
+  AX/=YARD.length;AY/=YARD.length;
+  MASK_R=0;
+  for(var j=0;j<YARD.length;j++){
+    var d=Math.hypot(YARD[j][0]-AX,YARD[j][1]-AY);if(d>MASK_R)MASK_R=d;}
+  MASK_R*=1.03;
+  var c=xy2ll(AX,AY);
+  map.setView(c,14,{animate:false});
+  stat.textContent='REAL yard: '+sourceLabel+' ('+YARD.length
+    +' vertices) — size the view, press Use mask';
+}
+function loadFromOsmApi(){
+  stat.textContent='fetching REAL boundary from OSM (way 325851897)…';
+  fetch('https://api.openstreetmap.org/api/0.6/way/325851897/full.json')
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(j){
+    var nodes={},way=null;
+    j.elements.forEach(function(e){
+      if(e.type==='node')nodes[e.id]=[e.lat,e.lon];
+      if(e.type==='way'&&String(e.id)==='325851897')way=e;});
+    if(!way)throw new Error('way missing in response');
+    var ring=way.nodes.map(function(id){return nodes[id];});
+    if(ring.length<4)throw new Error('degenerate ring');
+    installYard(ring,'OSM live (ODbL, © OpenStreetMap contributors)');
+  })
+  .catch(function(e){
+    stat.textContent='REFUSED: no yard — local file absent and OSM fetch failed ('
+      +e.message+'). Internet needed once, or provide data/yard.geojson.';
+  });
+}
+fetch('data/yard.geojson')
+.then(function(r){if(!r.ok)throw new Error('absent');return r.json();})
+.then(function(gj){
+  var ring=gj.features[0].geometry.coordinates[0]
+    .map(function(p){return[p[1],p[0]];});
+  installYard(ring,'local GeoJSON (PB-335)');
+})
+.catch(loadFromOsmApi);
+function chartLL(z){return xy2ll(AX+z.re*MASK_R,AY+z.im*MASK_R);}
+
+/* ---------------- HeptaSpaceMap layer (on-fly, PB-334 rule) ---------- */
+var HeptaLayer=L.Layer.extend({
+  onAdd:function(m){this._m=m;
+    this._c=L.DomUtil.create('canvas');
+    this._c.style.position='absolute';this._c.style.pointerEvents='none';
+    m.getPanes().overlayPane.appendChild(this._c);
+    m.on('move zoom viewreset resize',this._draw,this);
+    this.cells=[];this._draw();},
+  onRemove:function(m){m.off('move zoom viewreset resize',this._draw,this);
+    L.DomUtil.remove(this._c);},
+  generate:function(){
+    if(!YARD)return null;
+    var t0=performance.now(),m=this._m;
+    var out=[],seen={},iter=0;
+    var q=[{v:centerVerts,c:cen7(centerVerts)}];
+    seen[this._kk(q[0].c)]=1;
+    var sz=m.getSize(),MINPX=24,MAXC=800;
+    while(q.length&&out.length<MAXC&&iter<5200){
+      iter++;var cell=q.shift();
+      var px=this._px(cell),s=this._scr(cell.c);
+      var mg=px*2+240;
+      var near=s.x>-mg&&s.x<sz.x+mg&&s.y>-mg&&s.y<sz.y+mg;
+      var vis=s.x>-px&&s.x<sz.x+px&&s.y>-px&&s.y<sz.y+px;
+      if(vis&&px>=1.6)out.push(cell);
+      if(px>MINPX&&near){
+        for(var e=0;e<7;e++){
+          var A=cell.v[e],B=cell.v[(e+1)%7],nv=[];
+          for(var i=0;i<7;i++)nv.push(reflect(cell.v[i],A,B));
+          var nc=cen7(nv);
+          if(Math.hypot(nc.re,nc.im)>0.9995)continue;
+          var k2=this._kk(nc);if(seen[k2])continue;seen[k2]=1;
+          q.push({v:nv,c:nc});}}}
+    this.cells=out;this._draw();
+    return{n:out.length,ms:(performance.now()-t0).toFixed(0)};},
+  _kk:function(c){return Math.round(c.re*30000)+'_'+Math.round(c.im*30000);},
+  _scr:function(c){return this._m.latLngToContainerPoint(chartLL(c));},
+  _px:function(cell){var sc=this._scr(cell.c),mx=0;
+    for(var i=0;i<7;i++){var sv=this._scr(cell.v[i]);
+      var d=Math.hypot(sv.x-sc.x,sv.y-sc.y);if(d>mx)mx=d;}
+    return mx;},
+  _draw:function(){
+    var m=this._m,sz=m.getSize();
+    var tl=m.containerPointToLayerPoint([0,0]);
+    L.DomUtil.setPosition(this._c,tl);
+    this._c.width=sz.x;this._c.height=sz.y;
+    var g=this._c.getContext('2d');
+    g.clearRect(0,0,sz.x,sz.y);
+    if(!this.cells.length||!YARD)return;
+    g.save();g.beginPath();
+    for(var b=0;b<YARD.length;b++){
+      var ll=xy2ll(YARD[b][0],YARD[b][1]);
+      var p=m.latLngToContainerPoint(ll);
+      if(b)g.lineTo(p.x,p.y);else g.moveTo(p.x,p.y);}
+    g.closePath();g.clip();
+    for(var ci=0;ci<this.cells.length;ci++){
+      var cell=this.cells[ci],px=this._px(cell);
+      if(px<1.6)continue;
+      g.strokeStyle='rgba(140,98,10,'+Math.min(0.8,px*0.006+0.25).toFixed(2)+')';
+      g.lineWidth=1;
+      for(var k=0;k<7;k++){
+        var pts=sampleGeo(cell.v[k],cell.v[(k+1)%7],4);
+        g.beginPath();
+        for(var i=0;i<pts.length;i++){
+          var s=m.latLngToContainerPoint(chartLL(pts[i]));
+          if(i)g.lineTo(s.x,s.y);else g.moveTo(s.x,s.y);}
+        g.stroke();}}
+    g.restore();}
+});
+var hepta=new HeptaLayer().addTo(map);
+var auto=false,regenT=null;
+function useMask(){var r=hepta.generate();
+  if(!r){stat.textContent='mask: no yard yet — wait for boundary, then retry';return;}
+  var first=!auto;auto=true;
+  stat.textContent='mask: '+r.n+' cells · '+r.ms+' ms · z'+map.getZoom()
+    +' · auto'+(first?' engaged':'');
+  document.getElementById('bUse').classList.add('on');}
+document.getElementById('bUse').onclick=useMask;
+map.on('moveend zoomend',function(){
+  if(!auto)return;clearTimeout(regenT);regenT=setTimeout(useMask,280);});
+
+/* ---------------- plots: SilaEngine bridge, mock fallback ------------ */
+var plots=[];
+fetch('http://127.0.0.1:7010/plots').then(function(r){return r.json();})
+.then(function(j){plots=j;addPlots();})
+.catch(function(){
+  plots=[
+   {name:'Target plot NJF-80211',lat:32.0198,lon:44.2971,addr:'3·5·1·0·2·6·4·1·3'},
+   {name:'Plot NJF-80272',lat:32.0152,lon:44.2938,addr:'3·5·1·0·2·6·4·2·0'},
+   {name:'Wadi al-Salam gate 3',lat:32.0093,lon:44.3031,addr:'3·0·—'},
+   {name:'Imam Ali shrine',lat:31.9961,lon:44.3142,addr:'anchor'}];
+  addPlots();});
+function addPlots(){
+  plots.forEach(function(p){
+    p.marker=L.circleMarker([p.lat,p.lon],{radius:6,color:'#fff',weight:1.4,
+      fillColor:'#1D9E75',fillOpacity:1}).addTo(map)
+      .bindPopup('<b>'+p.name+'</b><br>Hepta-address '+p.addr
+        +'<br>one grave = one cell · truth UTM 38N');});}
+
+/* ---------------- Palahu veil arrival -------------------------------- */
+var veil=document.getElementById('veil');
+function veilTo(p){
+  veil.style.opacity='1';
+  setTimeout(function(){
+    map.setView([p.lat,p.lon],19,{animate:false});
+    setTimeout(function(){
+      veil.style.opacity='0';
+      var errM=map.distance(map.getCenter(),L.latLng(p.lat,p.lon));
+      stat.textContent='Palāḫu arrival — '+p.name+' · error '
+        +(errM*100).toFixed(1)+' cm';
+      p.marker.openPopup();
+      if(auto)useMask();
+    },160);
+  },160);}
+var q=document.getElementById('q'),res=document.getElementById('results');
+q.addEventListener('input',function(){
+  var v=q.value.trim().toLowerCase();
+  if(!v){res.style.display='none';return;}
+  var m=plots.filter(function(p){return p.name.toLowerCase().indexOf(v)>=0;});
+  res.innerHTML=m.map(function(p){
+    return '<div data-n="'+plots.indexOf(p)+'">'+p.name
+      +'<span class="hid">'+p.addr+'</span></div>';}).join('')
+    ||'<div>no orbit particle answers</div>';
+  res.style.display='block';});
+res.addEventListener('click',function(e){
+  var el=e.target.closest('div[data-n]');if(!el)return;
+  res.style.display='none';q.value='';
+  veilTo(plots[+el.dataset.n]);});
+</script>
+</body>
+</html>

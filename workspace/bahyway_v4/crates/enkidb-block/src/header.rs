@@ -19,9 +19,9 @@ pub const HEADER_SIZE: usize = 256;
 ///   [17..256] reserved         zeroed
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockHeader {
-    pub tribe_id:         TribeId,
-    pub block_size:       u32,
-    pub checksum_algo:    u8,
+    pub tribe_id: TribeId,
+    pub block_size: u32,
+    pub checksum_algo: u8,
 }
 
 impl BlockHeader {
@@ -29,7 +29,7 @@ impl BlockHeader {
     pub fn new(tribe_id: TribeId) -> Self {
         BlockHeader {
             tribe_id,
-            block_size:    BLOCK_SIZE_BYTES,
+            block_size: BLOCK_SIZE_BYTES,
             checksum_algo: CHECKSUM_ALGO_CRC16_CCITT,
         }
     }
@@ -54,17 +54,17 @@ impl BlockHeader {
             magic.copy_from_slice(&raw[0..8]);
             return Err(BahywayError::BlockMagicMismatch(magic));
         }
-        let stored_cs   = u16::from_be_bytes([raw[15], raw[16]]);
+        let stored_cs = u16::from_be_bytes([raw[15], raw[16]]);
         let computed_cs = crc16(&raw[0..15]);
         if stored_cs != computed_cs {
             return Err(BahywayError::ChecksumMismatch {
                 expected: computed_cs,
-                actual:   stored_cs,
+                actual: stored_cs,
             });
         }
         Ok(BlockHeader {
-            tribe_id:      TribeId::from_be_bytes([raw[8], raw[9]]),
-            block_size:    u32::from_be_bytes(raw[10..14].try_into().unwrap()),
+            tribe_id: TribeId::from_be_bytes([raw[8], raw[9]]),
+            block_size: u32::from_be_bytes(raw[10..14].try_into().unwrap()),
             checksum_algo: raw[14],
         })
     }
@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let h  = BlockHeader::new(TribeId::from_u16(0x0042));
+        let h = BlockHeader::new(TribeId::from_u16(0x0042));
         let raw = h.to_bytes();
         assert_eq!(raw.len(), HEADER_SIZE);
         let h2 = BlockHeader::from_bytes(&raw).unwrap();
@@ -87,7 +87,7 @@ mod tests {
     fn magic_rejection() {
         let mut raw = BlockHeader::new(TribeId::from_u16(0x0001)).to_bytes();
         raw[0] = b'X'; // corrupt magic
-        // Also recompute checksum to isolate magic check
+                       // Also recompute checksum to isolate magic check
         let cs = crc16(&raw[0..15]);
         raw[15..17].copy_from_slice(&cs.to_be_bytes());
         assert!(matches!(

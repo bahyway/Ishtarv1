@@ -39,22 +39,21 @@
 
 #![forbid(unsafe_code)]
 
-pub mod tick;
+pub mod asset;
 pub mod ohlc;
 pub mod store;
+pub mod tick;
 pub mod window;
-pub mod asset;
 
-pub use tick::TickRecord;
-pub use ohlc::{OhlcBar, OhlcAggregator};
+pub use asset::{AssetClass, AssetDescriptor, MarketId};
+pub use ohlc::{OhlcAggregator, OhlcBar};
 pub use store::QuantDbStore;
+pub use tick::TickRecord;
 pub use window::TimeSeriesWindow;
-pub use asset::{AssetDescriptor, AssetClass, MarketId};
 
 pub mod prelude {
     pub use crate::{
-        TickRecord, OhlcBar, OhlcAggregator,
-        QuantDbStore, TimeSeriesWindow,
-        AssetDescriptor, AssetClass, MarketId,
+        AssetClass, AssetDescriptor, MarketId, OhlcAggregator, OhlcBar, QuantDbStore, TickRecord,
+        TimeSeriesWindow,
     };
 }

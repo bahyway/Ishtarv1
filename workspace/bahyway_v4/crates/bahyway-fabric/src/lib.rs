@@ -8,7 +8,7 @@
 //! |---------------------------------|----------------------------------------------------------|
 //! | No single source of truth       | KAKI sovereign identity — every particle born once       |
 //! | Hard to trace & maintain        | `LineageLedger` — every hop: source → stage → target     |
-//! | High cost & complexity          | `PipelineDeclaration` — declare WHAT, Eridu runs HOW    |
+//! | High cost & complexity          | `PipelineDeclaration` — declare WHAT, Ur runs HOW    |
 //! | Error prone & inconsistent      | `SchemaContract` enforced at every connector boundary    |
 //! | Slow changes & time to market   | Hot-swappable connectors — add a source, touch nothing   |
 //!
@@ -65,13 +65,13 @@
 //! ```
 
 pub mod adapters;
-pub mod pipeline_flow;
 pub mod connector;
 pub mod contract;
 pub mod exception;
 pub mod lineage;
 pub mod orchestrator;
 pub mod pipeline;
+pub mod pipeline_flow;
 
 /// `lineage`'s sovereign name — NUZI. `LineageLedger`'s immutable,
 /// hop-by-hop provenance chain (source -> stage -> stage, hash-proven,
@@ -83,21 +83,20 @@ pub const NUZI: &str = "nuzi";
 
 pub mod prelude {
     pub use crate::adapters::{
-        CrmConnector, DashboardTarget, DataWarehouseTarget, EmailInboxConnector,
-        ErpConnector, ExcelFileConnector, ExternalPartnerConnector, ExternalPortalTarget,
-        FileExportTarget, HrSystemConnector, LegacySystemConnector, NotificationTarget,
-        OtherApplicationsTarget, ReportingToolsTarget, ThirdPartyApiConnector,
+        CrmConnector, DashboardTarget, DataWarehouseTarget, EmailInboxConnector, ErpConnector,
+        ExcelFileConnector, ExternalPartnerConnector, ExternalPortalTarget, FileExportTarget,
+        HrSystemConnector, LegacySystemConnector, NotificationTarget, OtherApplicationsTarget,
+        ReportingToolsTarget, ThirdPartyApiConnector,
     };
     pub use crate::connector::{
-        DataBatch, DeliveryReceipt, ExtractionCursor, SourceConnector, SourceId,
-        TargetConnector, TargetId,
+        DataBatch, DeliveryReceipt, ExtractionCursor, SourceConnector, SourceId, TargetConnector,
+        TargetId,
     };
     pub use crate::contract::{FieldSpec, FieldType, SchemaContract};
     pub use crate::exception::{ExceptionKind, FabricException};
     pub use crate::lineage::{LineageChain, LineageHop, QualitySnapshot, StageId};
     pub use crate::orchestrator::{FabricOrchestrator, OrchestratorResult};
     pub use crate::pipeline::{
-        AggregationStrategy, ExceptionPolicy, ExceptionRule, PipelineDeclaration, PipelineId,
-        Stage,
+        AggregationStrategy, ExceptionPolicy, ExceptionRule, PipelineDeclaration, PipelineId, Stage,
     };
 }

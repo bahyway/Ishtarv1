@@ -8,8 +8,8 @@
 //!
 //! Cost: O(events since last snapshot) instead of O(total events).
 
-use enkidb_kaki::IdentityKaki;
 use enkidb_journal::Journal;
+use enkidb_kaki::IdentityKaki;
 
 use crate::snapshot_record::SnapshotRecord;
 
@@ -24,8 +24,8 @@ pub enum ProjectionAlgorithm {
 
 /// Determine which projection algorithm to use for a given particle at time T.
 pub fn choose_algorithm(
-    particle:  &IdentityKaki,
-    at_epoch:  u64,
+    particle: &IdentityKaki,
+    at_epoch: u64,
     snapshots: &[SnapshotRecord],
 ) -> ProjectionAlgorithm {
     // Find the most recent snapshot at or before `at_epoch`.
@@ -35,18 +35,16 @@ pub fn choose_algorithm(
         .max_by_key(|s| s.snapshot_date);
 
     match best {
-        Some(s) => ProjectionAlgorithm::SnapshotAccelerated { snapshot_epoch: s.snapshot_date },
-        None    => ProjectionAlgorithm::FullReplay,
+        Some(s) => ProjectionAlgorithm::SnapshotAccelerated {
+            snapshot_epoch: s.snapshot_date,
+        },
+        None => ProjectionAlgorithm::FullReplay,
     }
 }
 
 /// Count events that would need to be applied for the given projection window.
 /// Used for performance estimation.
-pub fn delta_event_count(
-    particle:       &IdentityKaki,
-    since_epoch:    u32,
-    journal:        &Journal,
-) -> usize {
+pub fn delta_event_count(particle: &IdentityKaki, since_epoch: u32, journal: &Journal) -> usize {
     journal
         .read_particle_history(particle)
         .iter()
@@ -57,10 +55,10 @@ pub fn delta_event_count(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_kaki::{KakiRole, mint::KakiMinter};
-    use bahyway_core::TribeId;
-    use enkidb_vector_id::VectorId;
     use crate::snapshot_record::SnapshotRecord;
+    use bahyway_core::TribeId;
+    use enkidb_kaki::{mint::KakiMinter, KakiRole};
+    use enkidb_vector_id::VectorId;
 
     #[test]
     fn full_replay_when_no_snapshot() {
@@ -76,7 +74,12 @@ mod tests {
         let p = enkidb_kaki::IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
         let snap = SnapshotRecord::new(p.clone(), 500, vec![], VectorId::NEVER_SNAPSHOT);
         let algo = choose_algorithm(&p, 1000, &[snap]);
-        assert_eq!(algo, ProjectionAlgorithm::SnapshotAccelerated { snapshot_epoch: 500 });
+        assert_eq!(
+            algo,
+            ProjectionAlgorithm::SnapshotAccelerated {
+                snapshot_epoch: 500
+            }
+        );
     }
 
     #[test]

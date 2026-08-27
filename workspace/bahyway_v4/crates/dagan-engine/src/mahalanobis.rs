@@ -26,9 +26,9 @@ pub fn invert_symmetric(m: &Mat7) -> Option<Mat7> {
         // in this column, for numerical stability.
         let mut pivot_row = col;
         let mut pivot_val = aug[col][col].abs();
-        for r in (col + 1)..D {
-            if aug[r][col].abs() > pivot_val {
-                pivot_val = aug[r][col].abs();
+        for (r, row) in aug.iter().enumerate().skip(col + 1) {
+            if row[col].abs() > pivot_val {
+                pivot_val = row[col].abs();
                 pivot_row = r;
             }
         }
@@ -38,8 +38,8 @@ pub fn invert_symmetric(m: &Mat7) -> Option<Mat7> {
         aug.swap(col, pivot_row);
 
         let pivot = aug[col][col];
-        for j in 0..(2 * D) {
-            aug[col][j] /= pivot;
+        for cell in aug[col].iter_mut() {
+            *cell /= pivot;
         }
         for r in 0..D {
             if r == col {
@@ -47,6 +47,12 @@ pub fn invert_symmetric(m: &Mat7) -> Option<Mat7> {
             }
             let factor = aug[r][col];
             if factor != 0.0 {
+                // j reads aug[col][j] (the pivot row) while writing aug[r][j] (a
+                // different row) -- same class as riemannian.rs's tensor-
+                // contraction loops: two different rows of the same
+                // Vec<Vec<_>>-shaped array can't both be borrowed through one
+                // safe iterator, so the explicit index is kept.
+                #[allow(clippy::needless_range_loop)]
                 for j in 0..(2 * D) {
                     aug[r][j] -= factor * aug[col][j];
                 }

@@ -69,7 +69,14 @@ fn entry_to_dict(e: &NamingEntry, internal: bool) -> VDict {
     d.set("source_doc", e.source_doc.unwrap_or(""));
     // Redacted for non-internal viewers -- not merely omitted from the
     // Godot render, actually never sent across the FFI boundary.
-    d.set("crate_path", if internal { e.crate_path.unwrap_or("") } else { "" });
+    d.set(
+        "crate_path",
+        if internal {
+            e.crate_path.unwrap_or("")
+        } else {
+            ""
+        },
+    );
     d.set("blurb", e.blurb);
     d
 }
@@ -201,7 +208,13 @@ impl NamingRegistryBridge {
     /// touched at all when `internal` is false, so this is real
     /// enforcement, not a field the UI merely chooses not to render.
     #[func]
-    fn snippet(&self, name: GString, workspace_root: GString, max_lines: i64, internal: bool) -> VDict {
+    fn snippet(
+        &self,
+        name: GString,
+        workspace_root: GString,
+        max_lines: i64,
+        internal: bool,
+    ) -> VDict {
         let reg = seed();
         let mut out = VDict::new();
         let Some(entry) = reg.find(&name.to_string()) else {
@@ -211,10 +224,17 @@ impl NamingRegistryBridge {
         };
         if !internal {
             out.set("ok", false);
-            out.set("error", "redacted: viewing source snippets requires an internal (architect-tier) passport");
+            out.set(
+                "error",
+                "redacted: viewing source snippets requires an internal (architect-tier) passport",
+            );
             return out;
         }
-        let lines = if max_lines > 0 { max_lines as usize } else { 60 };
+        let lines = if max_lines > 0 {
+            max_lines as usize
+        } else {
+            60
+        };
         match naming_registry::read_snippet(Path::new(&workspace_root.to_string()), entry, lines) {
             Ok(text) => {
                 out.set("ok", true);

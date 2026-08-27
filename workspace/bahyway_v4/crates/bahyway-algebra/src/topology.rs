@@ -215,11 +215,7 @@ where
 ///
 /// Operates on dimensions (0,1,2) = (E,A,V) — the first three Hepta axes.
 /// Returns the 3-component curl vector for those axes.
-pub fn curl<Fx, Fy, Fz>(
-    fx: Fx, fy: Fy, fz: Fz,
-    p: &HeptaPoint,
-    h: f64,
-) -> [f64; 3]
+pub fn curl<Fx, Fy, Fz>(fx: Fx, fy: Fy, fz: Fz, p: &HeptaPoint, h: f64) -> [f64; 3]
 where
     Fx: Fn(&HeptaPoint) -> Scalar,
     Fy: Fn(&HeptaPoint) -> Scalar,
@@ -231,11 +227,7 @@ where
     let dfz_dx = partial_deriv(&fz, p, 0, h);
     let dfy_dx = partial_deriv(&fy, p, 0, h);
     let dfx_dy = partial_deriv(&fx, p, 1, h);
-    [
-        dfz_dy - dfy_dz,
-        dfx_dz - dfz_dx,
-        dfy_dx - dfx_dy,
-    ]
+    [dfz_dy - dfy_dz, dfx_dz - dfz_dx, dfy_dx - dfx_dy]
 }
 
 /// Δ — Laplacian of a scalar field f at point p.
@@ -288,9 +280,9 @@ mod tests {
     fn interior_excludes_boundary() {
         let c = ORIGIN;
         let p_inside = [0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        let p_on     = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        assert!( interior(&p_inside, &c, 1.0));
-        assert!(!interior(&p_on,     &c, 1.0)); // strictly < radius
+        let p_on = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        assert!(interior(&p_inside, &c, 1.0));
+        assert!(!interior(&p_on, &c, 1.0)); // strictly < radius
     }
 
     #[test]
@@ -327,7 +319,9 @@ mod tests {
         let g = gradient(f, &ORIGIN, H);
         assert!((g[0] - 1.0).abs() < 1e-6);
         assert!((g[1] - 2.0).abs() < 1e-6);
-        for i in 2..7 { assert!(g[i].abs() < 1e-6); }
+        for i in 2..7 {
+            assert!(g[i].abs() < 1e-6);
+        }
     }
 
     #[test]
@@ -345,7 +339,9 @@ mod tests {
         let v2 = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let faces = boundary_n(&[v0, v1, v2]);
         assert_eq!(faces.len(), 3); // triangle has 3 edges
-        for face in &faces { assert_eq!(face.len(), 2); }
+        for face in &faces {
+            assert_eq!(face.len(), 2);
+        }
     }
 
     #[test]

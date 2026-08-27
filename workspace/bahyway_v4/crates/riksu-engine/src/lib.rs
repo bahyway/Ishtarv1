@@ -18,13 +18,13 @@
 #![forbid(unsafe_code)]
 
 pub mod arc;
-pub mod topology;
 pub mod snapshot;
+pub mod topology;
 
-pub use arc::{RiksuArc, ArcState, arc_id_from_tribes, ARC_STRENGTH_MIN, ARC_DIM_PER_FAILURE};
-pub use topology::RiksuTopology;
+pub use arc::{arc_id_from_tribes, ArcState, RiksuArc, ARC_DIM_PER_FAILURE, ARC_STRENGTH_MIN};
+pub use shedu_engine::{trigger_quantum_freeze, FreezeReason, FreezeResult};
 pub use snapshot::FrozenTopology;
-pub use shedu_engine::{FreezeReason, FreezeResult, trigger_quantum_freeze};
+pub use topology::RiksuTopology;
 
 /// Full Quantum Freeze protocol for the Riksu topology.
 ///
@@ -34,11 +34,11 @@ pub use shedu_engine::{FreezeReason, FreezeResult, trigger_quantum_freeze};
 ///
 /// Returns the FrozenTopology and the .akk-sim source string.
 pub fn quantum_freeze_topology(
-    topo:   &mut RiksuTopology,
+    topo: &mut RiksuTopology,
     result: FreezeResult,
 ) -> (FrozenTopology, String) {
     topo.freeze();
-    let frozen  = FrozenTopology::from_topology(topo, result);
+    let frozen = FrozenTopology::from_topology(topo, result);
     let akk_sim = frozen.to_akk_sim_source();
     (frozen, akk_sim)
 }
@@ -59,10 +59,7 @@ mod tests {
     }
 
     fn make_freeze(node_id: u8) -> FreezeResult {
-        let h = NodeHealth::from_metrics(
-            node_id,
-            HardwareMetrics::simulated_critical(1_000)
-        );
+        let h = NodeHealth::from_metrics(node_id, HardwareMetrics::simulated_critical(1_000));
         trigger_quantum_freeze(&h, FreezeReason::LastNodeFailing, 1_000)
     }
 
@@ -74,7 +71,7 @@ mod tests {
 
         // Simulate tribe 2 node dying
         topo.apply_node_dead(2);
-        assert_eq!(topo.active_arc_count(), 1);  // only 1-3 survives
+        assert_eq!(topo.active_arc_count(), 1); // only 1-3 survives
 
         // Quantum Freeze
         let (frozen, akk_sim) = quantum_freeze_topology(&mut topo, make_freeze(0));
@@ -101,8 +98,8 @@ mod tests {
     #[test]
     fn arc_id_in_frozen_topology_is_cross_tribe_type() {
         let kakis = vec![cross_kaki(4, 5)];
-        let topo  = RiksuTopology::from_cross_tribe_kakis(&kakis);
-        let arc   = topo.find_arc(4, 5).unwrap();
+        let topo = RiksuTopology::from_cross_tribe_kakis(&kakis);
+        let arc = topo.find_arc(4, 5).unwrap();
         assert_eq!(arc.arc_id[6], 0x03);
     }
 }

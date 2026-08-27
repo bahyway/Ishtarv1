@@ -62,10 +62,16 @@ fn tribe_id() -> u16 {
         .unwrap_or(0x7600)
 }
 fn poll_secs() -> u64 {
-    env::var("POLL_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(5)
+    env::var("POLL_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(5)
 }
 fn materialize_every_secs() -> u64 {
-    env::var("MATERIALIZE_EVERY_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(30)
+    env::var("MATERIALIZE_EVERY_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30)
 }
 
 struct SharedState {
@@ -82,10 +88,15 @@ fn main() {
     let poll_secs = poll_secs();
     let materialize_every_secs = materialize_every_secs();
 
-    let pipeline = EtlPipeline::open(&landing, &persist, tribe, FsyncPolicy::PerCommit).unwrap_or_else(|e| {
-        eprintln!("FATAL: cannot open EtlPipeline (landing={}, persist={}): {e}", landing.display(), persist.display());
-        std::process::exit(1);
-    });
+    let pipeline = EtlPipeline::open(&landing, &persist, tribe, FsyncPolicy::PerCommit)
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "FATAL: cannot open EtlPipeline (landing={}, persist={}): {e}",
+                landing.display(),
+                persist.display()
+            );
+            std::process::exit(1);
+        });
 
     let state = Mutex::new(SharedState { pipeline });
 
@@ -116,7 +127,11 @@ fn main() {
                         eprintln!("[dw-pipeline] {}", alert.message);
                     }
                     if ingest_stats.records_ingested > last_ingested {
-                        eprintln!("[dw-pipeline] ingested={} (+{})", ingest_stats.records_ingested, ingest_stats.records_ingested - last_ingested);
+                        eprintln!(
+                            "[dw-pipeline] ingested={} (+{})",
+                            ingest_stats.records_ingested,
+                            ingest_stats.records_ingested - last_ingested
+                        );
                         last_ingested = ingest_stats.records_ingested;
                     }
 
@@ -142,7 +157,10 @@ fn main() {
         for stream in listener.incoming() {
             match stream {
                 Ok(s) => {
-                    let peer = s.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "?".into());
+                    let peer = s
+                        .peer_addr()
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|_| "?".into());
                     let state_ref = &state;
                     let data_dir = data_dir.clone();
                     scope.spawn(move || {
@@ -167,10 +185,13 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path) ->
             let st = state.lock().unwrap_or_else(|e| e.into_inner());
             let s = st.pipeline.stats();
             let total_particles = st.pipeline.pdb().db().journal().all_particles().len();
-            send(&mut stream, &format!(
+            send(
+                &mut stream,
+                &format!(
                 "OK:STATS:files_seen={}:records_ingested={}:records_skipped={}:total_particles={}",
                 s.files_seen, s.records_ingested, s.records_skipped, total_particles,
-            ))
+            ),
+            )
         }
         "FLUSH" => {
             let st = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -179,15 +200,25 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path) ->
                 Err(e) => send(&mut stream, &format!("ERR:materialize: {e}")),
             }
         }
-        _ => send(&mut stream, "ERR:unrecognized request -- use STATS or FLUSH"),
+        _ => send(
+            &mut stream,
+            "ERR:unrecognized request -- use STATS or FLUSH",
+        ),
     }
 }
 
-fn materialize_fresh(st: &SharedState, data_dir: &Path) -> io::Result<enkidb_readnode::MaterializeStats> {
+fn materialize_fresh(
+    st: &SharedState,
+    data_dir: &Path,
+) -> io::Result<enkidb_readnode::MaterializeStats> {
     let current = data_dir.join("current");
     let _ = fs::remove_dir_all(&current);
     fs::create_dir_all(&current)?;
-    enkidb_readnode::materialize(st.pipeline.pdb().db().journal(), current.join("entities"), current.join("eav"))
+    enkidb_readnode::materialize(
+        st.pipeline.pdb().db().journal(),
+        current.join("entities"),
+        current.join("eav"),
+    )
 }
 
 fn send(stream: &mut TcpStream, payload: &str) -> io::Result<()> {
@@ -204,7 +235,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

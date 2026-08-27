@@ -32,19 +32,18 @@
 //! pub const GENESIS_DIGEST: [u8; 32] = [0u8; 32];  // first event anchor
 //! ```
 
-pub mod error;
-pub mod event;
-pub mod emitter;
 pub mod broker;
 pub mod consumer;
+pub mod emitter;
+pub mod error;
+pub mod event;
 pub mod journal_bridge;
 
+pub use broker::{BrokerConfig, PassportValidator, ReplicationBroker};
+pub use consumer::{ApplyFn, ConsumerStats, ReplicationConsumer};
+pub use emitter::ReplicationEmitter;
 pub use error::{ReplicationError, ReplicationResult};
 pub use event::{
-    KakiSealedEvent, ReplEventKind,
-    FRAME_MAGIC, REPL_DOMAIN, REPL_MAX_SECS, GENESIS_DIGEST,
+    KakiSealedEvent, ReplEventKind, FRAME_MAGIC, GENESIS_DIGEST, REPL_DOMAIN, REPL_MAX_SECS,
 };
-pub use emitter::ReplicationEmitter;
-pub use broker::{BrokerConfig, ReplicationBroker, PassportValidator};
-pub use consumer::{ReplicationConsumer, ConsumerStats, ApplyFn};
 pub use journal_bridge::{apply_delta_to_journal, emit_journal_entry, materialize_journal};

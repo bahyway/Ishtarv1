@@ -19,27 +19,27 @@
 /// A parsed BahyWay Sovereign Security Declaration.
 #[derive(Debug, Clone)]
 pub struct WayFile {
-    pub tribe_id:     u16,
-    pub class:        String,
-    pub sovereignty:  String,
-    pub clearance:    u8,
-    pub template:     String,
-    pub emit_tribe:   Option<u16>,
-    pub role:         String,
-    pub sign:         String,
+    pub tribe_id: u16,
+    pub class: String,
+    pub sovereignty: String,
+    pub clearance: u8,
+    pub template: String,
+    pub emit_tribe: Option<u16>,
+    pub role: String,
+    pub sign: String,
 }
 
 impl Default for WayFile {
     fn default() -> Self {
         WayFile {
-            tribe_id:    0x0001,
-            class:       "civil.registry".to_string(),
+            tribe_id: 0x0001,
+            class: "civil.registry".to_string(),
             sovereignty: "PA-15".to_string(),
-            clearance:   3,
-            template:    "civil.registry".to_string(),
-            emit_tribe:  None,
-            role:        "Zikru".to_string(),
-            sign:        "CRC-16".to_string(),
+            clearance: 3,
+            template: "civil.registry".to_string(),
+            emit_tribe: None,
+            role: "Zikru".to_string(),
+            sign: "CRC-16".to_string(),
         }
     }
 }
@@ -51,32 +51,46 @@ impl WayFile {
         let mut w = WayFile::default();
         for (lineno, raw) in src.lines().enumerate() {
             let line = raw.trim();
-            if line.is_empty() || line.starts_with('#') { continue; }
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
 
-            let (key, val) = split_kv(line)
-                .ok_or_else(|| format!("line {}: expected 'key value', got: {line:?}", lineno + 1))?;
+            let (key, val) = split_kv(line).ok_or_else(|| {
+                format!("line {}: expected 'key value', got: {line:?}", lineno + 1)
+            })?;
 
             match key {
                 "tribe" => {
                     w.tribe_id = parse_hex_u16(val)
                         .ok_or_else(|| format!("line {}: bad tribe hex '{val}'", lineno + 1))?;
                 }
-                "class"       => { w.class       = val.to_string(); }
-                "sovereignty" => { w.sovereignty = val.to_string(); }
-                "clearance"   => {
-                    w.clearance = val.parse::<u8>()
+                "class" => {
+                    w.class = val.to_string();
+                }
+                "sovereignty" => {
+                    w.sovereignty = val.to_string();
+                }
+                "clearance" => {
+                    w.clearance = val
+                        .parse::<u8>()
                         .map_err(|_| format!("line {}: bad clearance '{val}'", lineno + 1))?;
                 }
-                "template"    => { w.template    = val.to_string(); }
-                "emit"        => {
+                "template" => {
+                    w.template = val.to_string();
+                }
+                "emit" => {
                     w.emit_tribe = Some(
                         parse_hex_u16(val)
-                            .ok_or_else(|| format!("line {}: bad emit hex '{val}'", lineno + 1))?
+                            .ok_or_else(|| format!("line {}: bad emit hex '{val}'", lineno + 1))?,
                     );
                 }
-                "role"        => { w.role = val.to_string(); }
-                "sign"        => { w.sign = val.to_string(); }
-                other         => {
+                "role" => {
+                    w.role = val.to_string();
+                }
+                "sign" => {
+                    w.sign = val.to_string();
+                }
+                other => {
                     return Err(format!("line {}: unknown directive '{other}'", lineno + 1));
                 }
             }
@@ -97,7 +111,7 @@ impl WayFile {
             .map(|part| {
                 let mut c = part.chars();
                 match c.next() {
-                    None    => String::new(),
+                    None => String::new(),
                     Some(f) => f.to_ascii_uppercase().to_string() + c.as_str(),
                 }
             })
@@ -155,7 +169,7 @@ sign        CRC-16
     fn defaults_for_missing_fields() {
         let w = WayFile::parse("tribe 0x0002").unwrap();
         assert_eq!(w.tribe_id, 0x0002);
-        assert_eq!(w.clearance, 3);   // default
+        assert_eq!(w.clearance, 3); // default
         assert_eq!(w.role, "Zikru"); // default
     }
 

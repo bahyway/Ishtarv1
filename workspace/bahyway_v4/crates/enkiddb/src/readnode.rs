@@ -29,15 +29,20 @@ pub const SOVEREIGN_NAME: &str = "tigris";
 /// view needs to catch up with new writes — it is not automatic, exactly
 /// like EnkiDB's own Read Node (ADR-012 never re-materializes implicitly).
 ///
-/// **Real constraint, discovered and proven by test in this module:**
-/// `enkidb_datafile::DataFileWriter::open` always opens in append mode —
-/// it never truncates. Calling this twice at the *same* path does not
-/// refresh the Read Node's view; it appends a second, duplicate copy of
-/// every entity. Each materialization generation needs a fresh base path.
-/// Prefer [`materialize_version`] over this function directly — it builds
-/// that fresh path for you and makes the result listable and comparable
-/// (e.g. "Tigris v4.0" vs "Tigris v4.1" in DubSar Theater's version
-/// picker) instead of leaving path management to the caller.
+/// Calling this twice at the *same* path (e.g. a production write-server
+/// re-materializing `current/entities`/`current/eav` on every `FLUSH`, the
+/// real, expected usage) replaces that path's state with the journal's
+/// current state — `enkidb_readnode::materialize::materialize` resets the
+/// target Data Files before writing (fixed 2026-08-21, after a real
+/// incident where a Podman volume survived container rebuilds and every
+/// past FLUSH's leftover records accumulated underneath the current one,
+/// crashing a Read Node's reload with `CorruptRecord` the moment one of
+/// them didn't decode cleanly).
+///
+/// Prefer [`materialize_version`] when you want each materialization kept
+/// as its own independently-openable, listable generation (e.g. "Tigris
+/// v4.0" vs "Tigris v4.1" in DubSar Theater's version picker) rather than
+/// overwritten in place.
 pub fn materialize_now(
     write_node: &WriteNode,
     entities_base: impl AsRef<Path>,
@@ -56,7 +61,12 @@ pub fn materialize_version(
     root: impl AsRef<Path>,
     version: &str,
 ) -> io::Result<(Generation, MaterializeStats)> {
-    enkidb_readnode::generation::materialize_generation(write_node.journal(), root, SOVEREIGN_NAME, version)
+    enkidb_readnode::generation::materialize_generation(
+        write_node.journal(),
+        root,
+        SOVEREIGN_NAME,
+        version,
+    )
 }
 
 /// Every Tigris version materialized so far under `root`, sorted (e.g.
@@ -112,12 +122,24 @@ mod tests {
         let mut rn_v40 = gen_v40.open().unwrap();
         let mut rn_v41 = gen_v41.open().unwrap();
         assert_eq!(rn_v40.entity_count(), 1, "Tigris v4.0 has one document");
-        assert_eq!(rn_v41.entity_count(), 2, "Tigris v4.1 has grown to two documents");
+        assert_eq!(
+            rn_v41.entity_count(),
+            2,
+            "Tigris v4.1 has grown to two documents"
+        );
 
-        let found_in_v41_only = rn_v41.query("WHO T.E\nWHERE E[meta.title] = \"Migration Guide\"").unwrap();
+        let found_in_v41_only = rn_v41
+            .query("WHO T.E\nWHERE E[meta.title] = \"Migration Guide\"")
+            .unwrap();
         assert_eq!(found_in_v41_only.matched.len(), 1);
-        let absent_from_v40 = rn_v40.query("WHO T.E\nWHERE E[meta.title] = \"Migration Guide\"").unwrap();
-        assert_eq!(absent_from_v40.matched.len(), 0, "v4.0's generation predates the Migration Guide");
+        let absent_from_v40 = rn_v40
+            .query("WHO T.E\nWHERE E[meta.title] = \"Migration Guide\"")
+            .unwrap();
+        assert_eq!(
+            absent_from_v40.matched.len(),
+            0,
+            "v4.0's generation predates the Migration Guide"
+        );
     }
 
     #[test]
@@ -127,10 +149,16 @@ mod tests {
         let doc_kaki = wn.ingest_document(&doc, 1);
 
         let base = tmp_base("round_trip");
-        let stats = materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let stats = materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
         assert_eq!(stats.entities, 1);
 
-        let mut rn = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let mut rn =
+            ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
         assert_eq!(rn.entity_count(), 1);
 
         let attr = "meta.title";
@@ -148,12 +176,19 @@ mod tests {
         let mut wn = WriteNode::new(KakiMinter::new(TribeId::from_u16(0xFF09)), 64);
         let doc = DocumentParser::parse_markdown("# Before\n");
         wn.ingest_document(&doc, 1);
-        assert_eq!(wn.document_count(), 1, "the write node itself sees the document immediately");
+        assert_eq!(
+            wn.document_count(),
+            1,
+            "the write node itself sees the document immediately"
+        );
 
         let base = tmp_base("before_materialize");
         // No materialize_now call yet -- the read node's files don't exist.
         let opened = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav"));
-        assert!(opened.is_err(), "Read Node must not exist before its Data Files are materialized");
+        assert!(
+            opened.is_err(),
+            "Read Node must not exist before its Data Files are materialized"
+        );
     }
 
     #[test]
@@ -166,34 +201,69 @@ mod tests {
         let a = DocumentParser::parse_markdown("# Alpha\n");
         wn.ingest_document(&a, 1);
         let gen1 = tmp_base("two_pass_gen1");
-        materialize_now(&wn, gen1.with_file_name("entities"), gen1.with_file_name("eav")).unwrap();
+        materialize_now(
+            &wn,
+            gen1.with_file_name("entities"),
+            gen1.with_file_name("eav"),
+        )
+        .unwrap();
         {
-            let rn = ReadNode::open(gen1.with_file_name("entities"), gen1.with_file_name("eav")).unwrap();
+            let rn = ReadNode::open(gen1.with_file_name("entities"), gen1.with_file_name("eav"))
+                .unwrap();
             assert_eq!(rn.entity_count(), 1);
         }
 
         let b = DocumentParser::parse_markdown("# Beta\n");
         wn.ingest_document(&b, 2);
         let gen2 = tmp_base("two_pass_gen2");
-        materialize_now(&wn, gen2.with_file_name("entities"), gen2.with_file_name("eav")).unwrap();
-        let rn = ReadNode::open(gen2.with_file_name("entities"), gen2.with_file_name("eav")).unwrap();
-        assert_eq!(rn.entity_count(), 2, "the new generation must include both write node documents");
+        materialize_now(
+            &wn,
+            gen2.with_file_name("entities"),
+            gen2.with_file_name("eav"),
+        )
+        .unwrap();
+        let rn =
+            ReadNode::open(gen2.with_file_name("entities"), gen2.with_file_name("eav")).unwrap();
+        assert_eq!(
+            rn.entity_count(),
+            2,
+            "the new generation must include both write node documents"
+        );
     }
 
     #[test]
-    fn rematerializing_to_the_same_path_appends_rather_than_replaces() {
-        // Documents the real constraint directly, so nobody re-discovers it
-        // the hard way: enkidb-datafile's DataFileWriter::open always opens
-        // in append mode (OpenOptions::append(true), never truncates).
+    fn rematerializing_to_the_same_path_replaces_rather_than_appends() {
+        // Real production usage: a write-server re-materializes the SAME
+        // `current/entities`/`current/eav` path on every FLUSH, against a
+        // Podman volume that survives container rebuilds. A second pass
+        // must reflect the journal's CURRENT state, not layer on top of
+        // the first pass's records (that accumulation is the real
+        // 2026-08-21 incident: a Read Node's reload crashed with
+        // `CorruptRecord` once enough stale leftover records piled up).
         let mut wn = WriteNode::new(KakiMinter::new(TribeId::from_u16(0xFF0B)), 64);
         let a = DocumentParser::parse_markdown("# Alpha\n");
         wn.ingest_document(&a, 1);
 
-        let base = tmp_base("same_path_appends");
-        materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        let base = tmp_base("same_path_replaces");
+        materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
 
-        let rn = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        assert_eq!(rn.entity_count(), 2, "same-path re-materialize duplicates the one entity written so far");
+        let rn =
+            ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        assert_eq!(
+            rn.entity_count(),
+            1,
+            "same-path re-materialize must replace, not duplicate, the one entity written so far"
+        );
     }
 }

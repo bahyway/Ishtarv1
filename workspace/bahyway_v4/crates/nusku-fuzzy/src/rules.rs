@@ -12,17 +12,25 @@
 #[derive(Debug, Clone)]
 pub struct Antecedent {
     pub variable: String,
-    pub term:     String,
-    pub negated:  bool,
+    pub term: String,
+    pub negated: bool,
 }
 
 impl Antecedent {
     pub fn new(variable: &str, term: &str) -> Self {
-        Self { variable: variable.into(), term: term.into(), negated: false }
+        Self {
+            variable: variable.into(),
+            term: term.into(),
+            negated: false,
+        }
     }
 
     pub fn not(variable: &str, term: &str) -> Self {
-        Self { variable: variable.into(), term: term.into(), negated: true }
+        Self {
+            variable: variable.into(),
+            term: term.into(),
+            negated: true,
+        }
     }
 }
 
@@ -32,41 +40,54 @@ impl Antecedent {
 #[derive(Debug, Clone)]
 pub struct Consequent {
     pub variable: String,
-    pub term:     String,
+    pub term: String,
 }
 
 impl Consequent {
     pub fn new(variable: &str, term: &str) -> Self {
-        Self { variable: variable.into(), term: term.into() }
+        Self {
+            variable: variable.into(),
+            term: term.into(),
+        }
     }
 }
 
 // ── Connective ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-pub enum Connective { And, Or }
+pub enum Connective {
+    And,
+    Or,
+}
 
 // ── FuzzyRule ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct FuzzyRule {
-    pub id:          u32,
+    pub id: u32,
     pub description: String,
     pub antecedents: Vec<Antecedent>,
-    pub connective:  Connective,
-    pub consequent:  Consequent,
-    pub weight:      f32,
+    pub connective: Connective,
+    pub consequent: Consequent,
+    pub weight: f32,
 }
 
 impl FuzzyRule {
     pub fn and(id: u32, desc: &str, ants: Vec<Antecedent>, cons: Consequent) -> Self {
         Self {
-            id, description: desc.into(), antecedents: ants,
-            connective: Connective::And, consequent: cons, weight: 1.0,
+            id,
+            description: desc.into(),
+            antecedents: ants,
+            connective: Connective::And,
+            consequent: cons,
+            weight: 1.0,
         }
     }
 
-    pub fn weighted(mut self, w: f32) -> Self { self.weight = w; self }
+    pub fn weighted(mut self, w: f32) -> Self {
+        self.weight = w;
+        self
+    }
 }
 
 // ── Nusku Rule Base ───────────────────────────────────────────────────────────
@@ -81,13 +102,13 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             1,
             "Classic cold-shadow + detonator heat pattern",
             vec![
-                Antecedent::new("torso_deviation",     "cold_shadow"),
-                Antecedent::new("arm_deviation",        "hot_wiring"),
-                Antecedent::new("torso_arm_inversion",  "strong"),
+                Antecedent::new("torso_deviation", "cold_shadow"),
+                Antecedent::new("arm_deviation", "hot_wiring"),
+                Antecedent::new("torso_arm_inversion", "strong"),
             ],
             Consequent::new("state", "security_threat"),
-        ).weighted(0.95),
-
+        )
+        .weighted(0.95),
         // Rule 02: Security threat with stress
         // IF torso=cold_shadow AND head=stress_elevated
         // THEN state=security_threat [0.88]
@@ -96,11 +117,11 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             "Cold-shadow torso + elevated head (stress carrying device)",
             vec![
                 Antecedent::new("torso_deviation", "cold_shadow"),
-                Antecedent::new("head_deviation",  "stress_elevated"),
+                Antecedent::new("head_deviation", "stress_elevated"),
             ],
             Consequent::new("state", "security_threat"),
-        ).weighted(0.88),
-
+        )
+        .weighted(0.88),
         // Rule 03: Systemic fever
         // IF torso=hot_fever AND head=fever_elevated AND symmetry=symmetric
         // THEN state=fever [0.92]
@@ -109,12 +130,12 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             "Symmetric whole-body elevation — systemic fever",
             vec![
                 Antecedent::new("torso_deviation", "hot_fever"),
-                Antecedent::new("head_deviation",  "fever_elevated"),
-                Antecedent::new("symmetry",        "symmetric"),
+                Antecedent::new("head_deviation", "fever_elevated"),
+                Antecedent::new("symmetry", "symmetric"),
             ],
             Consequent::new("state", "fever"),
-        ).weighted(0.92),
-
+        )
+        .weighted(0.92),
         // Rule 04: Fever without cold shadow
         // IF torso=warm AND head=fever_elevated AND NOT torso=cold_shadow
         // THEN state=fever [0.85]
@@ -123,12 +144,12 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             "Warm torso + elevated head, no cold shadow — fever",
             vec![
                 Antecedent::new("torso_deviation", "warm"),
-                Antecedent::new("head_deviation",  "fever_elevated"),
+                Antecedent::new("head_deviation", "fever_elevated"),
                 Antecedent::not("torso_deviation", "cold_shadow"),
             ],
             Consequent::new("state", "fever"),
-        ).weighted(0.85),
-
+        )
+        .weighted(0.85),
         // Rule 05: Anxiety / Stress (no threat)
         // IF head=stress_elevated AND arm=cold_hands AND torso=normal
         // THEN state=stress [0.82]
@@ -136,13 +157,13 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             5,
             "Elevated head + cold hands + normal torso — anxiety response",
             vec![
-                Antecedent::new("head_deviation",  "stress_elevated"),
-                Antecedent::new("arm_deviation",   "cold_hands"),
+                Antecedent::new("head_deviation", "stress_elevated"),
+                Antecedent::new("arm_deviation", "cold_hands"),
                 Antecedent::new("torso_deviation", "normal"),
             ],
             Consequent::new("state", "stress"),
-        ).weighted(0.82),
-
+        )
+        .weighted(0.82),
         // Rule 06: Adrenaline only (fear but no device)
         // IF head=stress_elevated AND torso=normal AND NOT arm=hot_wiring
         // THEN state=stress [0.75]
@@ -150,13 +171,13 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             6,
             "Elevated head + normal torso + no hot arms — pure adrenaline",
             vec![
-                Antecedent::new("head_deviation",  "stress_elevated"),
+                Antecedent::new("head_deviation", "stress_elevated"),
                 Antecedent::new("torso_deviation", "normal"),
-                Antecedent::not("arm_deviation",   "hot_wiring"),
+                Antecedent::not("arm_deviation", "hot_wiring"),
             ],
             Consequent::new("state", "stress"),
-        ).weighted(0.75),
-
+        )
+        .weighted(0.75),
         // Rule 07: Ambiguous — cold torso + no hot arms
         // IF torso=cold_shadow AND NOT arm=hot_wiring
         // THEN state=ambiguous [0.70]
@@ -165,23 +186,23 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             "Cold torso but no hot arms — clothing or ambiguous",
             vec![
                 Antecedent::new("torso_deviation", "cold_shadow"),
-                Antecedent::not("arm_deviation",   "hot_wiring"),
+                Antecedent::not("arm_deviation", "hot_wiring"),
             ],
             Consequent::new("state", "ambiguous"),
-        ).weighted(0.70),
-
+        )
+        .weighted(0.70),
         // Rule 08: Clear — all zones normal
         FuzzyRule::and(
             8,
             "All zones within normal range",
             vec![
                 Antecedent::new("torso_deviation", "normal"),
-                Antecedent::new("head_deviation",  "normal"),
-                Antecedent::new("arm_deviation",   "normal"),
+                Antecedent::new("head_deviation", "normal"),
+                Antecedent::new("arm_deviation", "normal"),
             ],
             Consequent::new("state", "clear"),
-        ).weighted(0.95),
-
+        )
+        .weighted(0.95),
         // Rule 09: Medical — fever with asymmetry
         // IF head=fever_elevated AND symmetry=asymmetric
         // THEN state=medical_other [0.72]
@@ -190,11 +211,11 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             "Fever with asymmetry — localized infection or one-sided condition",
             vec![
                 Antecedent::new("head_deviation", "fever_elevated"),
-                Antecedent::new("symmetry",       "asymmetric"),
+                Antecedent::new("symmetry", "asymmetric"),
             ],
             Consequent::new("state", "medical_other"),
-        ).weighted(0.72),
-
+        )
+        .weighted(0.72),
         // Rule 10: Iraq high-alert — partial cold shadow (elevated sensitivity)
         // IF torso=slightly_cool AND arm=warm AND inversion=partial
         // THEN state=ambiguous [0.80]
@@ -202,12 +223,13 @@ pub fn nusku_rule_base() -> Vec<FuzzyRule> {
             10,
             "Partial torso cooling + arm warmth — elevated watch (Iraq protocol)",
             vec![
-                Antecedent::new("torso_deviation",     "slightly_cool"),
-                Antecedent::new("arm_deviation",       "warm"),
+                Antecedent::new("torso_deviation", "slightly_cool"),
+                Antecedent::new("arm_deviation", "warm"),
                 Antecedent::new("torso_arm_inversion", "partial"),
             ],
             Consequent::new("state", "ambiguous"),
-        ).weighted(0.80),
+        )
+        .weighted(0.80),
     ]
 }
 
@@ -234,15 +256,23 @@ mod tests {
     #[test]
     fn rule_weights_are_valid() {
         for r in nusku_rule_base() {
-            assert!(r.weight > 0.0 && r.weight <= 1.0,
-                "rule {} weight={}", r.id, r.weight);
+            assert!(
+                r.weight > 0.0 && r.weight <= 1.0,
+                "rule {} weight={}",
+                r.id,
+                r.weight
+            );
         }
     }
 
     #[test]
     fn all_rules_have_descriptions() {
         for r in nusku_rule_base() {
-            assert!(!r.description.is_empty(), "rule {} has empty description", r.id);
+            assert!(
+                !r.description.is_empty(),
+                "rule {} has empty description",
+                r.id
+            );
         }
     }
 
@@ -265,7 +295,7 @@ mod tests {
         for r in nusku_rule_base() {
             for ant in &r.antecedents {
                 assert!(!ant.variable.is_empty(), "rule {} ant variable empty", r.id);
-                assert!(!ant.term.is_empty(),     "rule {} ant term empty",     r.id);
+                assert!(!ant.term.is_empty(), "rule {} ant term empty", r.id);
             }
         }
     }

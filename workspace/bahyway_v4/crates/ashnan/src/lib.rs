@@ -41,17 +41,17 @@
 //! | 8 | Regional extension framework (Jordan/Syria/Fertile Crescent) | 193–197 |
 
 pub mod cmi;
-pub mod iri;
-pub mod lmi;
-pub mod provenance;
-pub mod kaki;
 pub mod colour;
 pub mod error;
+pub mod iri;
+pub mod kaki;
+pub mod lmi;
+pub mod provenance;
 
-pub use error::AshnanError;
 pub use cmi::{Cmi, CmiState};
+pub use colour::colour_id_b11;
+pub use error::AshnanError;
 pub use iri::{Iri, IriState};
+pub use kaki::{AshnanKakiClass, ExternalIngestionParticle};
 pub use lmi::{Lmi, LmiState};
 pub use provenance::{ConfidenceTier, ProvenanceBlock};
-pub use kaki::{AshnanKakiClass, ExternalIngestionParticle};
-pub use colour::colour_id_b11;

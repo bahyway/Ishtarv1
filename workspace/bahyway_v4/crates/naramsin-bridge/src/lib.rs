@@ -18,9 +18,15 @@ pub enum NaramsinOutcome {
     /// All stages succeeded — clean row data ready for MASHSHARU ingestion.
     Clean(Vec<Row>),
     /// Archive had recoverable failures — partial row data plus NRM_PARTIAL code.
-    Partial { rows: Vec<Row>, audit: ArchiveAuditRecord },
+    Partial {
+        rows: Vec<Row>,
+        audit: ArchiveAuditRecord,
+    },
     /// Unrecoverable failure — the NRM_* rejection code and audit record.
-    Rejected { code: NrmCode, audit: ArchiveAuditRecord },
+    Rejected {
+        code: NrmCode,
+        audit: ArchiveAuditRecord,
+    },
 }
 
 /// Process a raw archive or single-file byte slice through the full
@@ -38,11 +44,19 @@ pub fn process(
 ) -> NaramsinOutcome {
     // Stage 0 — format detection
     let format = match detect_format(raw) {
-        Ok(f)  => f,
+        Ok(f) => f,
         Err(e) => {
             let code = NrmCode::from_archive_error(&e);
-            let audit = build_audit(archive_id, source_filename, "unknown", code, 0, 0,
-                                    destination, processing_start_ms);
+            let audit = build_audit(
+                archive_id,
+                source_filename,
+                "unknown",
+                code,
+                0,
+                0,
+                destination,
+                processing_start_ms,
+            );
             return NaramsinOutcome::Rejected { code, audit };
         }
     };
@@ -52,12 +66,22 @@ pub fn process(
     // for all recognised archive formats on the happy path, allowing integration
     // tests and the MASHSHARU gate to reference the sovereign entrypoint today.
     let _audit = build_audit(
-        archive_id, source_filename, format.name(),
-        NrmCode::Clean, 0, 0, destination, processing_start_ms,
+        archive_id,
+        source_filename,
+        format.name(),
+        NrmCode::Clean,
+        0,
+        0,
+        destination,
+        processing_start_ms,
     );
     NaramsinOutcome::Clean(vec![])
 }
 
+// Each param mirrors one ArchiveAuditRecord field -- same reasoning as
+// enkiodb/odb_store.rs's ingest_from_gui: bundling into a params struct
+// is a real API design call, not a mechanical lint fix.
+#[allow(clippy::too_many_arguments)]
 fn build_audit(
     archive_id: u128,
     source_filename: &'static str,

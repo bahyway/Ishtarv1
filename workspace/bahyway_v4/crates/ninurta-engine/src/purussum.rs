@@ -136,7 +136,13 @@ mod tests {
     /// AR(1) process's own variance is `noise_var / (1 - (1+lambda)^2)`,
     /// which genuinely grows as lambda rises toward 0, giving the
     /// later windows real signal to regress on, not just noise.
-    fn synthetic_series(len: usize, lambda_start: f64, lambda_end: f64, noise_scale: f64, seed: u64) -> Vec<f64> {
+    fn synthetic_series(
+        len: usize,
+        lambda_start: f64,
+        lambda_end: f64,
+        noise_scale: f64,
+        seed: u64,
+    ) -> Vec<f64> {
         let mut x = 0.0_f64;
         let mut out = Vec::with_capacity(len);
         let mut s = seed;
@@ -170,15 +176,25 @@ mod tests {
     #[test]
     fn a_destabilizing_series_produces_a_positive_lambda_trend() {
         let series = destabilizing_series(120);
-        let verdict = render_verdict(&series, 20, 5, 5, 200, 1).expect("enough windows to compute a trend");
-        assert!(verdict.lambda_trend > 0.0, "expected lambda to trend upward toward instability, got {}", verdict.lambda_trend);
+        let verdict =
+            render_verdict(&series, 20, 5, 5, 200, 1).expect("enough windows to compute a trend");
+        assert!(
+            verdict.lambda_trend > 0.0,
+            "expected lambda to trend upward toward instability, got {}",
+            verdict.lambda_trend
+        );
     }
 
     #[test]
     fn a_stable_series_has_a_lambda_trend_near_zero() {
         let series = stable_series(120);
-        let verdict = render_verdict(&series, 20, 5, 5, 200, 2).expect("enough windows to compute a trend");
-        assert!(verdict.lambda_trend.abs() < 0.05, "a stable series' lambda should not trend meaningfully, got {}", verdict.lambda_trend);
+        let verdict =
+            render_verdict(&series, 20, 5, 5, 200, 2).expect("enough windows to compute a trend");
+        assert!(
+            verdict.lambda_trend.abs() < 0.05,
+            "a stable series' lambda should not trend meaningfully, got {}",
+            verdict.lambda_trend
+        );
     }
 
     #[test]

@@ -22,21 +22,23 @@ pub enum EaModelStatus {
 }
 
 impl EaModelStatus {
-    pub fn is_ready(&self) -> bool { matches!(self, Self::Ready(_)) }
+    pub fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready(_))
+    }
     pub fn status_str(&self) -> &str {
         match self {
-            Self::NotFound   => "⚫ No model",
-            Self::Found(_)   => "🟡 Found",
+            Self::NotFound => "⚫ No model",
+            Self::Found(_) => "🟡 Found",
             Self::Loading(_) => "🟠 Loading...",
-            Self::Ready(_)   => "🟢 Ready",
-            Self::Error(_)   => "🔴 Error",
+            Self::Ready(_) => "🟢 Ready",
+            Self::Error(_) => "🔴 Error",
         }
     }
 }
 
 pub struct EaModelLoader {
     pub search_dirs: Vec<PathBuf>,
-    pub status:      EaModelStatus,
+    pub status: EaModelStatus,
 }
 
 impl EaModelLoader {
@@ -64,7 +66,8 @@ impl EaModelLoader {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().and_then(|e| e.to_str()) == Some("gguf") {
-                        let name = path.file_name()
+                        let name = path
+                            .file_name()
                             .and_then(|n| n.to_str())
                             .unwrap_or("")
                             .to_lowercase();
@@ -91,7 +94,11 @@ impl EaModelLoader {
     }
 }
 
-impl Default for EaModelLoader { fn default() -> Self { Self::new() } }
+impl Default for EaModelLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {

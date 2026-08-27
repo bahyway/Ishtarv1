@@ -14,33 +14,45 @@ pub struct Multivector {
 }
 
 impl Multivector {
-    pub fn zero() -> Self { Multivector { c: [0.0; BLADES] } }
+    pub fn zero() -> Self {
+        Multivector { c: [0.0; BLADES] }
+    }
 
     /// A pure scalar (grade-0) — a measure.
     pub fn scalar(x: f64) -> Self {
-        let mut m = Self::zero(); m.c[0] = x; m
+        let mut m = Self::zero();
+        m.c[0] = x;
+        m
     }
 
     /// A base dimension e_i (grade-1), i in 0..7.
     pub fn basis(i: usize) -> Self {
         assert!(i < DIMS);
-        let mut m = Self::zero(); m.c[1 << i] = 1.0; m
+        let mut m = Self::zero();
+        m.c[1 << i] = 1.0;
+        m
     }
 
     pub fn add(&self, o: &Multivector) -> Multivector {
         let mut r = Self::zero();
-        for k in 0..BLADES { r.c[k] = self.c[k] + o.c[k]; }
+        for k in 0..BLADES {
+            r.c[k] = self.c[k] + o.c[k];
+        }
         r
     }
 
     /// Grade (popcount) of a blade index.
-    pub fn blade_grade(mask: usize) -> u32 { (mask as u32).count_ones() }
+    pub fn blade_grade(mask: usize) -> u32 {
+        (mask as u32).count_ones()
+    }
 
     /// Extract the grade-g part.
     pub fn grade(&self, g: u32) -> Multivector {
         let mut r = Self::zero();
         for k in 0..BLADES {
-            if Self::blade_grade(k) == g { r.c[k] = self.c[k]; }
+            if Self::blade_grade(k) == g {
+                r.c[k] = self.c[k];
+            }
         }
         r
     }
@@ -57,12 +69,12 @@ impl Multivector {
                 swaps += (higher as u32).count_ones();
             }
         }
-        let result = a ^ b;            // matching bits annihilate (e_i^2=+1)
+        let result = a ^ b; // matching bits annihilate (e_i^2=+1)
         let common = a & b;
         // each common bit contributes e_i^2 = +1 (no sign) in Euclidean
         let _ = common;
         a = result;
-        let sign = if swaps % 2 == 0 { 1.0 } else { -1.0 };
+        let sign = if swaps.is_multiple_of(2) { 1.0 } else { -1.0 };
         (a, sign)
     }
 
@@ -70,9 +82,13 @@ impl Multivector {
     pub fn geometric(&self, o: &Multivector) -> Multivector {
         let mut r = Self::zero();
         for i in 0..BLADES {
-            if self.c[i] == 0.0 { continue; }
+            if self.c[i] == 0.0 {
+                continue;
+            }
             for j in 0..BLADES {
-                if o.c[j] == 0.0 { continue; }
+                if o.c[j] == 0.0 {
+                    continue;
+                }
                 let (blade, sign) = Self::blade_product_sign(i, j);
                 r.c[blade] += sign * self.c[i] * o.c[j];
             }
@@ -84,10 +100,16 @@ impl Multivector {
     pub fn wedge(&self, o: &Multivector) -> Multivector {
         let mut r = Self::zero();
         for i in 0..BLADES {
-            if self.c[i] == 0.0 { continue; }
+            if self.c[i] == 0.0 {
+                continue;
+            }
             for j in 0..BLADES {
-                if o.c[j] == 0.0 { continue; }
-                if i & j != 0 { continue; } // shared factor => wedge is 0
+                if o.c[j] == 0.0 {
+                    continue;
+                }
+                if i & j != 0 {
+                    continue;
+                } // shared factor => wedge is 0
                 let (blade, sign) = Self::blade_product_sign(i, j);
                 r.c[blade] += sign * self.c[i] * o.c[j];
             }
@@ -124,7 +146,9 @@ mod tests {
         let a = e0.wedge(&e1);
         let b = e1.wedge(&e0);
         // e0^e1 = -(e1^e0)
-        for k in 0..BLADES { assert!((a.c[k] + b.c[k]).abs() < 1e-12); }
+        for k in 0..BLADES {
+            assert!((a.c[k] + b.c[k]).abs() < 1e-12);
+        }
     }
 
     #[test]

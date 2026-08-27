@@ -14,9 +14,9 @@
 //! `particle_state` bridges DMW state into the BahyWay particle lifecycle
 //! (Golden / Fuzzy / Dead) so query health participates in the wider Orbit model.
 
-use bahyway_core::ParticleState;
 use crate::colorid::ColorId;
 use crate::journey::DmwState;
+use bahyway_core::ParticleState;
 
 /// Maximum orbit radius — the outer boundary of the heptagon space.
 pub const MAX_ORBIT: f32 = 100.0;
@@ -42,11 +42,11 @@ impl std::fmt::Display for LeakType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LeakType::NonSargablePredicate => write!(f, "Non-Sargable Predicate"),
-            LeakType::NestedLoopJoin       => write!(f, "Nested Loop Join"),
-            LeakType::DiskFragmentation    => write!(f, "Disk Fragmentation"),
-            LeakType::DeepRecursion        => write!(f, "Deep Recursion"),
-            LeakType::CartesianProduct     => write!(f, "Cartesian Product"),
-            LeakType::Combined             => write!(f, "Combined Leaks"),
+            LeakType::NestedLoopJoin => write!(f, "Nested Loop Join"),
+            LeakType::DiskFragmentation => write!(f, "Disk Fragmentation"),
+            LeakType::DeepRecursion => write!(f, "Deep Recursion"),
+            LeakType::CartesianProduct => write!(f, "Cartesian Product"),
+            LeakType::Combined => write!(f, "Combined Leaks"),
         }
     }
 }
@@ -65,8 +65,8 @@ pub enum MotionState {
 impl MotionState {
     pub fn label(self) -> &'static str {
         match self {
-            MotionState::Laminar  => "Laminar",
-            MotionState::Vortex   => "Vortex",
+            MotionState::Laminar => "Laminar",
+            MotionState::Vortex => "Vortex",
             MotionState::DeadZone => "Dead Zone",
         }
     }
@@ -74,9 +74,9 @@ impl MotionState {
     /// Derive motion from DMW alignment state.
     pub fn from_dmw_state(state: DmwState) -> Self {
         match state {
-            DmwState::Golden                          => MotionState::Laminar,
-            DmwState::Stable | DmwState::Turbulent   => MotionState::Vortex,
-            DmwState::Critical                        => MotionState::DeadZone,
+            DmwState::Golden => MotionState::Laminar,
+            DmwState::Stable | DmwState::Turbulent => MotionState::Vortex,
+            DmwState::Critical => MotionState::DeadZone,
         }
     }
 
@@ -93,26 +93,33 @@ impl MotionState {
 #[derive(Debug, Clone)]
 pub struct QueryParticle {
     /// RGB health fingerprint.
-    pub color_id:       ColorId,
+    pub color_id: ColorId,
     /// Orbital motion state.
-    pub motion:         MotionState,
+    pub motion: MotionState,
     /// BahyWay particle lifecycle state derived from DMW alignment.
     pub particle_state: ParticleState,
     /// Alignment score 0–100 %.
-    pub alignment_pct:  f32,
+    pub alignment_pct: f32,
     /// Distance from the heptagon centre: 0 = perfect orbit, MAX_ORBIT = dead zone.
-    pub orbit_radius:   f32,
+    pub orbit_radius: f32,
     /// Primary leak type driving a Vortex or DeadZone state (None when Laminar).
-    pub leak:           Option<LeakType>,
+    pub leak: Option<LeakType>,
 }
 
 impl QueryParticle {
     /// Construct a QueryParticle from pre-computed DMW components.
     pub fn new(color_id: ColorId, dmw_state: DmwState, alignment_pct: f32) -> Self {
-        let motion         = MotionState::from_dmw_state(dmw_state);
+        let motion = MotionState::from_dmw_state(dmw_state);
         let particle_state = dmw_state_to_particle_state(dmw_state);
-        let orbit_radius   = (1.0 - alignment_pct / 100.0).max(0.0) * MAX_ORBIT;
-        QueryParticle { color_id, motion, particle_state, alignment_pct, orbit_radius, leak: None }
+        let orbit_radius = (1.0 - alignment_pct / 100.0).max(0.0) * MAX_ORBIT;
+        QueryParticle {
+            color_id,
+            motion,
+            particle_state,
+            alignment_pct,
+            orbit_radius,
+            leak: None,
+        }
     }
 
     /// `true` when the particle holds sovereign orbit — Golden motion and Golden lifecycle.
@@ -134,10 +141,10 @@ impl QueryParticle {
 /// Map a DMW alignment state to the BahyWay particle lifecycle state.
 fn dmw_state_to_particle_state(dmw: DmwState) -> ParticleState {
     match dmw {
-        DmwState::Golden    => ParticleState::Golden,
-        DmwState::Stable    => ParticleState::Fuzzy,
+        DmwState::Golden => ParticleState::Golden,
+        DmwState::Stable => ParticleState::Fuzzy,
         DmwState::Turbulent => ParticleState::Fuzzy,
-        DmwState::Critical  => ParticleState::Dead,
+        DmwState::Critical => ParticleState::Dead,
     }
 }
 
@@ -146,22 +153,29 @@ mod tests {
     use super::*;
     use crate::bottleneck::BottleneckDetector;
     use crate::colorid::ColorId;
-    use crate::plan::{sales_order_plan, simple_nested_loop_plan, OpKind, PlanNode, QueryPlan, ScanType};
+    use crate::plan::{
+        sales_order_plan, simple_nested_loop_plan, OpKind, PlanNode, QueryPlan, ScanType,
+    };
 
     fn particle_for(plan: &QueryPlan) -> QueryParticle {
-        let bns     = BottleneckDetector::detect(plan);
+        let bns = BottleneckDetector::detect(plan);
         let journey = crate::journey::SevenLevelJourney::analyze(plan, &bns);
-        let color   = ColorId::from_journey(plan, &journey);
-        let state   = journey.state();
-        let pct     = journey.alignment_score();
+        let color = ColorId::from_journey(plan, &journey);
+        let state = journey.state();
+        let pct = journey.alignment_score();
         QueryParticle::new(color, state, pct)
     }
 
     #[test]
     fn laminar_for_golden_state() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         let p = particle_for(&plan);
@@ -177,13 +191,22 @@ mod tests {
     #[test]
     fn orbit_radius_zero_for_perfect_alignment() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         let p = particle_for(&plan);
         // Golden (≥80%) means radius is small
-        assert!(p.orbit_radius < MAX_ORBIT * 0.25, "orbit_radius={}", p.orbit_radius);
+        assert!(
+            p.orbit_radius < MAX_ORBIT * 0.25,
+            "orbit_radius={}",
+            p.orbit_radius
+        );
     }
 
     #[test]
@@ -193,7 +216,9 @@ mod tests {
         let outer = PlanNode::new(OpKind::TableScan { name: "A".into() }, 50.0, 100_000, 5_000);
         let mut root = PlanNode::new(
             OpKind::NestedLoopJoin(crate::plan::JoinType::Inner),
-            100.0, 100_000, 10_000,
+            100.0,
+            100_000,
+            10_000,
         );
         root.children.push(outer);
         root.children.push(inner);
@@ -206,8 +231,13 @@ mod tests {
     #[test]
     fn is_sovereign_only_when_golden_laminar() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         let p = particle_for(&plan);
@@ -236,8 +266,13 @@ mod tests {
     #[test]
     fn particle_state_golden_for_golden_motion() {
         let root = PlanNode::new(
-            OpKind::IndexSeek { name: "PK_T".into(), scan_type: ScanType::Clustered },
-            10.0, 100, 50,
+            OpKind::IndexSeek {
+                name: "PK_T".into(),
+                scan_type: ScanType::Clustered,
+            },
+            10.0,
+            100,
+            50,
         );
         let plan = QueryPlan::new("perfect", root, 10.0).with_actual_rows(100);
         let p = particle_for(&plan);
@@ -258,7 +293,11 @@ mod tests {
 
     #[test]
     fn motion_state_labels_non_empty() {
-        for s in [MotionState::Laminar, MotionState::Vortex, MotionState::DeadZone] {
+        for s in [
+            MotionState::Laminar,
+            MotionState::Vortex,
+            MotionState::DeadZone,
+        ] {
             assert!(!s.label().is_empty());
         }
     }

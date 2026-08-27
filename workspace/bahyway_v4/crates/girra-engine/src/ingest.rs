@@ -16,7 +16,7 @@ pub fn spawn_listener(registry: Shared, port: u16) {
             let reg = registry.clone();
             thread::spawn(move || {
                 let reader = BufReader::new(stream);
-                for line in reader.lines().flatten() {
+                for line in reader.lines().map_while(Result::ok) {
                     if let Some(sample) = parse_line(&line) {
                         if let Ok(mut r) = reg.lock() {
                             r.push(&sample.0, sample.1, sample.2);
@@ -46,7 +46,10 @@ mod tests {
     #[test]
     fn parses_a_well_formed_line() {
         let parsed = parse_line("cqrs_lag_ms 42.5 1700000000000");
-        assert_eq!(parsed, Some(("cqrs_lag_ms".to_string(), 42.5, 1_700_000_000_000)));
+        assert_eq!(
+            parsed,
+            Some(("cqrs_lag_ms".to_string(), 42.5, 1_700_000_000_000))
+        );
     }
 
     #[test]

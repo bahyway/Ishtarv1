@@ -2,6 +2,6 @@
 
 pub mod scheduler;
 pub use scheduler::{
-    EriduScheduler, ScheduledJob, DueJob, JobKind,
-    VALIDATION_SWEEP_JOB, VALIDATION_SWEEP_DEFAULT_TICKS,
+    DueJob, EriduScheduler, JobKind, ScheduledJob, VALIDATION_SWEEP_DEFAULT_TICKS,
+    VALIDATION_SWEEP_JOB,
 };

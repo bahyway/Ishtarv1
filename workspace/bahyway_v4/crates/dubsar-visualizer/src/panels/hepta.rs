@@ -1,9 +1,7 @@
 use std::f32::consts::PI;
 
-use egui::{
-    pos2, Color32, FontId, Painter, Pos2, RichText, Shape, Stroke, Ui, Vec2,
-};
 use egui::epaint::{PathShape, PathStroke};
+use egui::{pos2, Color32, FontId, Painter, Pos2, RichText, Shape, Stroke, Ui, Vec2};
 
 use crate::app::ParticleDemo;
 use crate::theme;
@@ -92,7 +90,10 @@ pub fn draw(ui: &mut Ui, particles: &[ParticleDemo], selected: &mut usize) {
         );
         right.add_space(4.0);
 
-        let sz = right.available_width().min(right.available_height() - 60.0).max(200.0);
+        let sz = right
+            .available_width()
+            .min(right.available_height() - 60.0)
+            .max(200.0);
         let (resp, painter) = right.allocate_painter(Vec2::splat(sz), egui::Sense::hover());
         draw_radar(&painter, resp.rect, particle);
 
@@ -113,25 +114,32 @@ pub(crate) fn draw_radar(painter: &Painter, rect: egui::Rect, p: &ParticleDemo) 
     let radius = rect.width().min(rect.height()) * 0.36;
 
     // Background disc
-    painter.circle_filled(center, radius * 1.08, Color32::from_rgba_premultiplied(8, 8, 22, 230));
+    painter.circle_filled(
+        center,
+        radius * 1.08,
+        Color32::from_rgba_premultiplied(8, 8, 22, 230),
+    );
 
     // Five concentric ring heptagons
     for ring in 1u32..=5 {
         let r = radius * ring as f32 / 5.0;
         let ring_pts: Vec<Pos2> = (0..7).map(|i| axis_pt(center, r, i, 1.0)).collect();
-        painter.add(Shape::closed_line(ring_pts, Stroke::new(0.5, theme::RING_LINE)));
+        painter.add(Shape::closed_line(
+            ring_pts,
+            Stroke::new(0.5_f32, theme::RING_LINE),
+        ));
     }
 
     // Axis lines + labels
-    for i in 0..7 {
+    for (i, label) in AXIS_LABELS.iter().enumerate() {
         let outer = axis_pt(center, radius, i, 1.0);
-        painter.line_segment([center, outer], Stroke::new(0.8, theme::AXIS_LINE));
+        painter.line_segment([center, outer], Stroke::new(0.8_f32, theme::AXIS_LINE));
 
         let lbl_pos = axis_pt(center, radius * 1.17, i, 1.0);
         painter.text(
             lbl_pos,
             egui::Align2::CENTER_CENTER,
-            AXIS_LABELS[i],
+            *label,
             FontId::proportional(10.0),
             theme::TEXT_DIM,
         );
@@ -146,13 +154,17 @@ pub(crate) fn draw_radar(painter: &Painter, rect: egui::Rect, p: &ParticleDemo) 
         points: data_pts.clone(),
         closed: true,
         fill: Color32::from_rgba_premultiplied(255, 215, 0, 38),
-        stroke: PathStroke::new(2.0, theme::GOLD),
+        stroke: PathStroke::new(2.0_f32, theme::GOLD),
     }));
 
     // Dim data points
     for (i, &pt) in data_pts.iter().enumerate() {
         painter.circle_filled(pt, 5.0, DIM_COLORS[i]);
-        painter.circle_stroke(pt, 6.5, Stroke::new(1.0, Color32::from_rgba_premultiplied(255, 255, 255, 50)));
+        painter.circle_stroke(
+            pt,
+            6.5,
+            Stroke::new(1.0_f32, Color32::from_rgba_premultiplied(255, 255, 255, 50)),
+        );
     }
 
     // Centre dot

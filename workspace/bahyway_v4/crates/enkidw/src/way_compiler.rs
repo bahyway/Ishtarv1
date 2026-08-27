@@ -18,7 +18,7 @@ pub struct CompileResult {
     /// Generated AAOL (.akk) source.
     pub akk_source: String,
     /// Any parse warnings (not fatal).
-    pub warnings:   Vec<String>,
+    pub warnings: Vec<String>,
 }
 
 /// Compile a `WayFile` into validated AAOL source.
@@ -30,16 +30,19 @@ pub fn compile(way: &WayFile) -> Result<CompileResult, String> {
     let mut parser = Parser::new(tokens);
     parser.parse().map_err(|e| format!("parse: {e}"))?;
 
-    Ok(CompileResult { akk_source: akk, warnings: Vec::new() })
+    Ok(CompileResult {
+        akk_source: akk,
+        warnings: Vec::new(),
+    })
 }
 
 /// Generate AAOL source from a `WayFile` without validating.
 pub fn generate_akk(way: &WayFile) -> String {
-    let tribe_name  = way.tribe_name();
-    let actor_name  = actor_name_for(&way.class);
-    let role        = &way.role;
+    let tribe_name = way.tribe_name();
+    let actor_name = actor_name_for(&way.class);
+    let role = &way.role;
     let sovereignty = &way.sovereignty;
-    let clearance   = way.clearance;
+    let clearance = way.clearance;
 
     // Actor name derived from sovereignty tag + clearance
     // e.g. PA-15 clearance 3 → "PA15L3"
@@ -58,13 +61,13 @@ pub fn generate_akk(way: &WayFile) -> String {
          }}\n\
          when event \"arrival\" then emit snapshot;\n\
          when event \"mutation\" then emit snapshot;\n",
-        class       = way.class,
+        class = way.class,
         sovereignty = sovereignty,
-        clearance   = clearance,
-        tribe_name  = tribe_name,
-        actor_name  = actor_name,
+        clearance = clearance,
+        tribe_name = tribe_name,
+        actor_name = actor_name,
         cleared_actor = cleared_actor,
-        role        = role,
+        role = role,
     )
 }
 
@@ -76,16 +79,21 @@ fn actor_name_for(class: &str) -> String {
         _ => {}
     }
     let segment = class.rsplit('.').next().unwrap_or(class);
-    let mut name: String = segment.chars().enumerate().map(|(i, c)| {
-        if i == 0 { c.to_ascii_uppercase() } else { c }
-    }).collect();
+    let mut name: String = segment
+        .chars()
+        .enumerate()
+        .map(|(i, c)| if i == 0 { c.to_ascii_uppercase() } else { c })
+        .collect();
     name.push_str("Agent");
     name
 }
 
 fn sovereignty_actor(sovereignty: &str, clearance: u8) -> String {
     // "PA-15" → "PA15", then append "L<clearance>"
-    let tag: String = sovereignty.chars().filter(|c| c.is_alphanumeric()).collect();
+    let tag: String = sovereignty
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect();
     format!("{tag}L{clearance}")
 }
 
@@ -96,8 +104,9 @@ mod tests {
 
     fn najaf_way() -> WayFile {
         WayFile::parse(
-            "tribe 0x0001\nclass civil.registry\nsovereignty PA-15\nclearance 3\nrole Zikru"
-        ).unwrap()
+            "tribe 0x0001\nclass civil.registry\nsovereignty PA-15\nclearance 3\nrole Zikru",
+        )
+        .unwrap()
     }
 
     #[test]
@@ -115,14 +124,16 @@ mod tests {
         let res = compile(&way).unwrap();
         let tokens = aaol::tokenize(&res.akk_source).unwrap();
         let mut parser = aaol::Parser::new(tokens);
-        parser.parse().expect("generated AAOL must parse without errors");
+        parser
+            .parse()
+            .expect("generated AAOL must parse without errors");
     }
 
     #[test]
     fn actor_naming_for_known_classes() {
-        assert_eq!(actor_name_for("civil.registry"),  "Registrar");
-        assert_eq!(actor_name_for("sensor.stream"),   "StreamAgent");
-        assert_eq!(actor_name_for("operational"),     "OperationalAgent");
-        assert_eq!(actor_name_for("data.pipeline"),   "PipelineAgent");
+        assert_eq!(actor_name_for("civil.registry"), "Registrar");
+        assert_eq!(actor_name_for("sensor.stream"), "StreamAgent");
+        assert_eq!(actor_name_for("operational"), "OperationalAgent");
+        assert_eq!(actor_name_for("data.pipeline"), "PipelineAgent");
     }
 }

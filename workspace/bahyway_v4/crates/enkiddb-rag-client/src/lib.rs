@@ -25,15 +25,14 @@ const MAX_FRAME: u32 = 16 * 1024 * 1024;
 const TIMEOUT_SECS: u64 = 30;
 
 /// The default EnkiDDB Read Node every client in this ecosystem defaults
-/// to unless overridden -- `enkidb-node-read`'s real IP (PB-212,
-/// 2026-07-19: Write and Read moved off the single eriduous-vdi host
-/// onto their own dedicated VMs in the real 2-VM CQRS split), matching
-/// the IP every pre-existing Godot script in this workspace
-/// (`dubsar_proof.gd`, `enkidb_tcp.gd`, `theater_3d.gd`, etc.) already
-/// used as its own default. `TamuzAI`/`EaAgent` run as part of DubSar
-/// IDE on `eriduous-vdi`, where `127.0.0.1` would no longer reach the
-/// Read Node once it lived on a separate VM.
-pub const DEFAULT_HOST: &str = "192.168.122.107";
+/// to unless overridden -- `uruk-node-read`'s real IP (updated
+/// 2026-08-26: the bare-metal migration renamed and re-addressed the
+/// CQRS nodes -- `enkidb-node-read` at .107 was the pre-rename address;
+/// `uruk-node-read` at .112 is the real, current one, confirmed live
+/// against `ansible/inventory.ini`). `TamuzAI`/`EaAgent` run as part of
+/// DubSar IDE on the bare-metal host, where `127.0.0.1` would not reach
+/// the Read Node, which lives on its own dedicated VM.
+pub const DEFAULT_HOST: &str = "192.168.122.112";
 pub const DEFAULT_PORT: u16 = 7102;
 
 /// One real search hit, parsed from `enkiddb-read-server`'s actual JSON
@@ -63,9 +62,14 @@ pub fn search(host: &str, port: u16, top_k: usize, query: &str) -> Result<Vec<En
 }
 
 fn send_frame(host: &str, port: u16, payload: &str) -> Result<String, String> {
-    let mut stream = TcpStream::connect((host, port)).map_err(|e| format!("connect {host}:{port}: {e}"))?;
-    stream.set_read_timeout(Some(Duration::from_secs(TIMEOUT_SECS))).ok();
-    stream.set_write_timeout(Some(Duration::from_secs(TIMEOUT_SECS))).ok();
+    let mut stream =
+        TcpStream::connect((host, port)).map_err(|e| format!("connect {host}:{port}: {e}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(TIMEOUT_SECS)))
+        .ok();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(TIMEOUT_SECS)))
+        .ok();
     write_frame(&mut stream, payload).map_err(|e| e.to_string())?;
     read_frame(&mut stream).map_err(|e| e.to_string())
 }
@@ -85,7 +89,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;
@@ -107,7 +114,9 @@ fn parse_hits(json: &str) -> Result<Vec<EnkiddbHit>, String> {
     let mut hits = Vec::new();
     let mut rest = trimmed.trim_start_matches('[').trim_end_matches(']');
     while !rest.is_empty() {
-        let obj_end = rest.find('}').ok_or_else(|| "malformed hit: no closing brace".to_string())?;
+        let obj_end = rest
+            .find('}')
+            .ok_or_else(|| "malformed hit: no closing brace".to_string())?;
         let obj = &rest[..=obj_end];
         hits.push(parse_one_hit(obj)?);
         rest = rest[obj_end + 1..].trim_start_matches(',').trim_start();
@@ -119,7 +128,11 @@ fn parse_one_hit(obj: &str) -> Result<EnkiddbHit, String> {
     let kaki = extract_string_field(obj, "kaki").ok_or("missing \"kaki\" field")?;
     let score: f32 = extract_number_field(obj, "score").ok_or("missing \"score\" field")?;
     let text = extract_string_field(obj, "text").ok_or("missing \"text\" field")?;
-    Ok(EnkiddbHit { kaki, score, text: unescape(&text) })
+    Ok(EnkiddbHit {
+        kaki,
+        score,
+        text: unescape(&text),
+    })
 }
 
 fn extract_string_field(obj: &str, field: &str) -> Option<String> {
@@ -140,12 +153,14 @@ fn extract_number_field(obj: &str, field: &str) -> Option<f32> {
     let needle = format!("\"{field}\":");
     let start = obj.find(&needle)? + needle.len();
     let rest = &obj[start..];
-    let end = rest.find(|c: char| c == ',' || c == '}').unwrap_or(rest.len());
+    let end = rest.find([',', '}']).unwrap_or(rest.len());
     rest[..end].trim().parse().ok()
 }
 
 fn unescape(s: &str) -> String {
-    s.replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\")
+    s.replace("\\n", "\n")
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\")
 }
 
 #[cfg(test)]

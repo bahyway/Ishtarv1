@@ -1,0 +1,224 @@
+---
+# ============================================================
+#  PB-344 — Nergal Transport Kernel (Monte Carlo on the sector graph)
+#  BahyWay.Ecosystem v4.0 — Law GL-NRG-001
+#  Run from the Fedora bare-metal HOST (corrected WoW rule 1)
+#
+#  ansible-playbook -i inventory PB-344_nergal_kernel.yml
+#  Running this playbook is the CSR-08 confirmation point.
+# ============================================================
+- name: PB-344 Nergal kernel scaffold
+  hosts: bahyway_host
+  gather_facts: false
+  vars:
+    v4_root: "{{ bahyway_v4_root | default('/home/bahaa/BahyWay.Ecosystem/v4.0') }}"
+    crate_dir: "{{ v4_root }}/services/nergal/transport"
+    tablets_dir: "{{ v4_root }}/tablets"
+    tablet_src: "GL-NRG-001_Nergal_Transport_Calculus.md"
+
+  tasks:
+    - name: Ensure directories
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0755"}
+      loop: ["{{ crate_dir }}/src", "{{ crate_dir }}/tests", "{{ tablets_dir }}"]
+
+    - name: Deposit GL-NRG-001 tablet
+      ansible.builtin.copy:
+        src: "{{ tablet_src }}"
+        dest: "{{ tablets_dir }}/{{ tablet_src }}"
+        mode: "0644"
+
+    - name: Cargo.toml
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/Cargo.toml"
+        mode: "0644"
+        content: |
+          [package]
+          name = "nergal-transport"
+          version = "0.1.0"
+          edition = "2021"
+          description = "Infection as particle transport: k_eff, shielding, importance scanning (GL-NRG-001)"
+          license = "LicenseRef-BahyWay-Sovereign"
+          [dependencies]
+
+    - name: src/lib.rs
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/src/lib.rs"
+        mode: "0644"
+        content: |
+          //! Nergal (GL-NRG-001): the plague-lord as control rod.
+          //! Discrete-event MC on a sector graph. k_eff decides invasion;
+          //! quarantine is shielding; scanning is importance-sampled.
+          #![forbid(unsafe_code)]
+
+          pub struct Rng(u64);
+          impl Rng {
+              pub fn new(seed: u64) -> Rng { Rng(seed.wrapping_mul(0x9E3779B97F4A7C15) | 1) }
+              pub fn uniform(&mut self) -> f64 {
+                  // SplitMix64
+                  self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
+                  let mut z = self.0;
+                  z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+                  z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+                  ((z ^ (z >> 31)) >> 11) as f64 / (1u64 << 53) as f64
+              }
+          }
+
+          /// A sector's material: probabilities per collision (sum <= 1;
+          /// remainder = scatter). fission spawns `nu` new walkers.
+          #[derive(Clone, Copy)]
+          pub struct Material {
+              pub p_absorb: f64,        // dead ends + Nergal scan-kill
+              pub p_fission: f64,       // dropper fan-out
+              pub nu: usize,
+          }
+
+          /// Sector graph: adjacency (copy targets) + per-sector material.
+          pub struct Mesh { pub adj: Vec<Vec<usize>>, pub mat: Vec<Material> }
+
+          /// One outbreak from `seed`: returns total collisions until the
+          /// chain dies, capped (cap hit = "invasion" in tests).
+          pub fn outbreak(mesh: &Mesh, seed_sector: usize, rng: &mut Rng,
+                          cap: usize) -> usize {
+              let mut frontier = vec![seed_sector];
+              let mut events = 0usize;
+              while let Some(s) = frontier.pop() {
+                  events += 1;
+                  if events >= cap { return events; }
+                  let m = mesh.mat[s];
+                  let u = rng.uniform();
+                  if u < m.p_absorb { continue; }                    // absorbed
+                  let targets = &mesh.adj[s];
+                  if targets.is_empty() { continue; }
+                  if u < m.p_absorb + m.p_fission {
+                      for _ in 0..m.nu {                             // fission
+                          let t = targets[(rng.uniform() * targets.len() as f64)
+                                          as usize % targets.len()];
+                          frontier.push(t);
+                      }
+                  } else {                                           // scatter
+                      let t = targets[(rng.uniform() * targets.len() as f64)
+                                      as usize % targets.len()];
+                      frontier.push(t);
+                  }
+              }
+              events
+          }
+
+          /// k_eff estimate: mean offspring per collision (analog estimator).
+          pub fn k_eff(mat: &Material) -> f64 {
+              // scatter keeps 1 walker; fission keeps nu; absorb keeps 0
+              let p_scatter = 1.0 - mat.p_absorb - mat.p_fission;
+              p_scatter * 1.0 + mat.p_fission * mat.nu as f64
+          }
+
+          /// Shielding: barrier of `d` layers each with kill prob per layer
+          /// derived from Sigma_t; transmission = product of survivals.
+          pub fn barrier_transmission(sigma_t: f64, d: usize,
+                                      trials: usize, rng: &mut Rng) -> f64 {
+              let p_survive_layer = (-sigma_t).exp();
+              let mut through = 0usize;
+              for _ in 0..trials {
+                  let mut alive = true;
+                  for _ in 0..d {
+                      if rng.uniform() >= p_survive_layer { alive = false; break; }
+                  }
+                  if alive { through += 1; }
+              }
+              through as f64 / trials as f64
+          }
+
+          /// Importance-weighted scanning: scan sectors in order of prior
+          /// risk weight; return scans needed to find all `infected`.
+          pub fn scans_to_find(order: &[usize], infected: &[usize]) -> usize {
+              let mut remaining: Vec<usize> = infected.to_vec();
+              for (n, s) in order.iter().enumerate() {
+                  remaining.retain(|x| x != s);
+                  if remaining.is_empty() { return n + 1; }
+              }
+              order.len()
+          }
+
+    - name: tests/law_tests.rs
+      ansible.builtin.copy:
+        dest: "{{ crate_dir }}/tests/law_tests.rs"
+        mode: "0644"
+        content: |
+          use nergal_transport::*;
+
+          /// Ring-of-sectors mesh: every sector copies to 2 neighbours.
+          fn ring_mesh(n: usize, mat: Material) -> Mesh {
+              Mesh {
+                  adj: (0..n).map(|i| vec![(i + 1) % n, (i + n - 1) % n]).collect(),
+                  mat: vec![mat; n],
+              }
+          }
+
+          #[test]
+          fn l45_subcritical_outbreaks_always_die() {
+              // p_absorb .5, p_fission .1 nu=2 -> k = .4 + .2 = 0.6 < 1
+              let m = Material { p_absorb: 0.5, p_fission: 0.1, nu: 2 };
+              assert!(k_eff(&m) < 1.0);
+              let mesh = ring_mesh(400, m);
+              for seed in 1..=30u64 {
+                  let mut rng = Rng::new(seed);
+                  let ev = outbreak(&mesh, 7, &mut rng, 100_000);
+                  assert!(ev < 100_000, "subcritical chain hit the cap (seed {})", seed);
+              }
+          }
+
+          #[test]
+          fn l46_the_control_rod_works() {
+              // supercritical: p_absorb .1, p_fission .3 nu=2 -> k = .6 + .6 = 1.2
+              let hot = Material { p_absorb: 0.10, p_fission: 0.3, nu: 2 };
+              assert!(k_eff(&hot) > 1.0);
+              let mesh = ring_mesh(400, hot);
+              let mut invaded = 0;
+              for seed in 1..=20u64 {
+                  if outbreak(&mesh, 7, &mut Rng::new(seed), 50_000) >= 50_000 { invaded += 1; }
+              }
+              assert!(invaded >= 15, "supercritical medium failed to invade: {}/20", invaded);
+              // Nergal adds absorption (scan-kill): p_absorb .45 -> k = .25+.6? recompute:
+              // scatter = 1-.45-.3 = .25; k = .25 + .6 = .85 < 1
+              let rodded = Material { p_absorb: 0.45, p_fission: 0.3, nu: 2 };
+              assert!(k_eff(&rodded) < 1.0);
+              let mesh2 = ring_mesh(400, rodded);
+              for seed in 1..=20u64 {
+                  assert!(outbreak(&mesh2, 7, &mut Rng::new(seed), 50_000) < 50_000,
+                      "the control rod failed (seed {})", seed);
+              }
+          }
+
+          #[test]
+          fn l47_quarantine_transmission_is_exponential() {
+              let (sigma, d) = (0.6f64, 5usize);
+              let mut rng = Rng::new(99);
+              let t = barrier_transmission(sigma, d, 200_000, &mut rng);
+              let expect = (-sigma * d as f64).exp();
+              assert!((t - expect).abs() < 0.005,
+                  "breach probability {} != e^-tau {}", t, expect);
+          }
+
+          #[test]
+          fn l48_importance_scanning_beats_uniform() {
+              // 1000 sectors; infections cluster in the hot region 100..120
+              let infected: Vec<usize> = (100..120).collect();
+              let uniform: Vec<usize> = (0..1000).collect();
+              let mut weighted: Vec<usize> = (100..1000).collect();
+              weighted.splice(0..0, 100..120);            // hot region first
+              let a = scans_to_find(&uniform, &infected);
+              let b = scans_to_find(&weighted, &infected);
+              assert!(b * 5 < a,
+                  "importance scanning not >=5x cheaper: {} vs {}", b, a);
+          }
+
+    - name: cargo build
+      ansible.builtin.command: {cmd: cargo build --release, chdir: "{{ crate_dir }}"}
+      register: build
+      changed_when: false
+    - name: cargo test (law tests L45–L48)
+      ansible.builtin.command: {cmd: cargo test --release, chdir: "{{ crate_dir }}"}
+      register: test
+      changed_when: false
+    - name: Report
+      ansible.builtin.debug:
+        msg: ["PB-344 complete — nergal-transport at {{ crate_dir }}", "{{ test.stdout_lines[-3:] }}"]

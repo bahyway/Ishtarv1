@@ -82,8 +82,17 @@ impl FisConfig {
             out += &format!("SET {} {} {}\n", s.metric, s.label, shape);
         }
         for r in &self.rules {
-            let ants: Vec<String> = r.antecedents.iter().map(|(m, l)| format!("{m}:{l}")).collect();
-            out += &format!("RULE {} THEN {} W {}\n", ants.join(" AND "), r.consequent, r.weight);
+            let ants: Vec<String> = r
+                .antecedents
+                .iter()
+                .map(|(m, l)| format!("{m}:{l}"))
+                .collect();
+            out += &format!(
+                "RULE {} THEN {} W {}\n",
+                ants.join(" AND "),
+                r.consequent,
+                r.weight
+            );
         }
         for (m, w) in &self.score_weights {
             out += &format!("WEIGHT {m} {w}\n");
@@ -116,7 +125,12 @@ mod tests {
             sets: vec![FuzzySet {
                 metric: "cqrs_lag_ms".into(),
                 label: "high".into(),
-                shape: Membership::Trapezoidal { a: 100.0, b: 500.0, c: 1000.0, d: 2000.0 },
+                shape: Membership::Trapezoidal {
+                    a: 100.0,
+                    b: 500.0,
+                    c: 1000.0,
+                    d: 2000.0,
+                },
             }],
             rules: vec![MamdaniRule {
                 antecedents: vec![("cqrs_lag_ms".into(), "high".into())],
@@ -134,9 +148,17 @@ mod tests {
             sets: vec![FuzzySet {
                 metric: "m".into(),
                 label: "l".into(),
-                shape: Membership::Triangular { a: 0.0, b: 1.0, c: 2.0 },
+                shape: Membership::Triangular {
+                    a: 0.0,
+                    b: 1.0,
+                    c: 2.0,
+                },
             }],
-            rules: vec![MamdaniRule { antecedents: vec![("m".into(), "l".into())], consequent: "c".into(), weight: 1.5 }],
+            rules: vec![MamdaniRule {
+                antecedents: vec![("m".into(), "l".into())],
+                consequent: "c".into(),
+                weight: 1.5,
+            }],
             score_weights: vec![],
         };
         assert!(fis.validate().is_err());
@@ -144,7 +166,11 @@ mod tests {
 
     #[test]
     fn triangular_membership_peaks_at_b() {
-        let m = Membership::Triangular { a: 0.0, b: 1.0, c: 2.0 };
+        let m = Membership::Triangular {
+            a: 0.0,
+            b: 1.0,
+            c: 2.0,
+        };
         assert_eq!(m.degree(1.0), 1.0);
         assert_eq!(m.degree(0.0), 0.0);
         assert_eq!(m.degree(2.0), 0.0);

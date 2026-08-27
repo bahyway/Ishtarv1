@@ -26,24 +26,26 @@
 //! `enkidb-read-server` uses — see that server's own doc comment).
 //!
 //! ## Protocol
+//! ```text
 //! One request frame in, one response frame out:
-//!   - `QUERY:<heptascript source>` -> binary response, tag `0x00`
-//!       (row stream — see `enkidb-read-server`'s own module doc for the
+//!   - QUERY:<heptascript source> -> binary response, tag 0x00
+//!       (row stream — see enkidb-read-server's own module doc for the
 //!       exact row/attr/history encoding, reused verbatim here)
-//!   - `SEARCH:<top_k>:<query text>` -> binary response, tag `0x02`
-//!       (`[u32 hit_count]` then per hit `[16B kaki][4B f32 score LE]
-//!       [u32 text_len][utf8 text bytes]`)
-//!   - `TRIBES:<heptascript source>` -> binary response, tag `0x00`,
+//!   - SEARCH:<top_k>:<query text> -> binary response, tag 0x02
+//!       ([u32 hit_count] then per hit [16B kaki][4B f32 score LE]
+//!       [u32 text_len][utf8 text bytes])
+//!   - TRIBES:<heptascript source> -> binary response, tag 0x00,
 //!       same row/attr encoding as QUERY:, but answered from the real
-//!       per-tribe particle-count corpus `materialize()` writes alongside
-//!       the main one (`enkidb_readnode::open_tribe_summaries` --
+//!       per-tribe particle-count corpus materialize() writes alongside
+//!       the main one (enkidb_readnode::open_tribe_summaries --
 //!       registered 2026-07-21, the Architect's "PU" idea). Real,
-//!       ordinary entities: `tribe.id` (Int), `tribe.particle_count`
-//!       (Int), `meta.kind = "tribe_summary"`. E.g.
-//!       `TRIBES:WHO T.E\nWHAT E[tribe.particle_count]\nWHERE E[tribe.id] = 28673`.
+//!       ordinary entities: tribe.id (Int), tribe.particle_count
+//!       (Int), meta.kind = "tribe_summary". E.g.
+//!       TRIBES:WHO T.E\nWHAT E[tribe.particle_count]\nWHERE E[tribe.id] = 28673.
 //!       Answers "not ready" (tag 0x01) if this data dir predates the
 //!       feature or hasn't been re-materialized since.
-//!   - anything else -> binary response, tag `0x01` (error — `[u32 len][utf8 msg]`)
+//!   - anything else -> binary response, tag 0x01 (error — [u32 len][utf8 msg])
+//! ```
 #![forbid(unsafe_code)]
 
 use std::env;
@@ -73,7 +75,10 @@ fn data_dir() -> PathBuf {
     PathBuf::from(env::var("DATA_DIR").unwrap_or_else(|_| "/data".to_string()))
 }
 fn reload_secs() -> u64 {
-    env::var("RELOAD_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(30)
+    env::var("RELOAD_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30)
 }
 
 struct Live {
@@ -82,14 +87,46 @@ struct Live {
     tribes: Option<CachedReadNode>,
 }
 
+// PB-212.9 FIX (found live, 2026-08-21): this used to be
+// `CachedReadNode::open(&entities, &eav).ok()?` -- `.ok()` silently
+// discards the real `Err`, so a server stuck permanently answering
+// "not ready" gave zero diagnostic information about why, on every
+// single reload tick, forever. Confirmed live: two separate real
+// syncs landed correct, correctly-sized Data Files on enkidb-node-read
+// (verified by a direct `podman unshare ls -la` immediately after each
+// swap), yet the server never once loaded them -- with the old code
+// there was no way to tell whether that was a permissions error, a
+// corrupt-record parse failure, or something else, short of adding
+// print statements and rebuilding. Logs the real error at both
+// fallible steps now; still returns `None` (retried next tick) either way.
 fn try_load(data_dir: &std::path::Path) -> Option<Live> {
     let current = data_dir.join("current");
     let entities = current.join("entities");
     let eav = current.join("eav");
-    let read_node = CachedReadNode::open(&entities, &eav).ok()?;
-    let rag = RagIndex::build_from_cached(&read_node).ok()?;
+    let read_node = match CachedReadNode::open(&entities, &eav) {
+        Ok(rn) => rn,
+        Err(e) => {
+            eprintln!(
+                "[reload] FAILED to open Data Files ({}, {}): {e:?}",
+                entities.display(),
+                eav.display()
+            );
+            return None;
+        }
+    };
+    let rag = match RagIndex::build_from_cached(&read_node) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[reload] Data Files opened, but RagIndex::build_from_cached FAILED: {e:?}");
+            return None;
+        }
+    };
     let tribes = enkidb_readnode::open_tribe_summaries(&entities, &eav);
-    Some(Live { read_node, rag, tribes })
+    Some(Live {
+        read_node,
+        rag,
+        tribes,
+    })
 }
 
 fn main() {
@@ -97,12 +134,16 @@ fn main() {
 
     let data_dir = data_dir();
     let reload_secs = reload_secs();
-    let state: Arc<RwLock<Option<Arc<Live>>>> = Arc::new(RwLock::new(try_load(&data_dir).map(Arc::new)));
+    let state: Arc<RwLock<Option<Arc<Live>>>> =
+        Arc::new(RwLock::new(try_load(&data_dir).map(Arc::new)));
 
     {
         let ready = state.read().unwrap().is_some();
         eprintln!("  data_dir = {}", data_dir.display());
-        eprintln!("  initial state: {}", if ready { "loaded" } else { "not ready yet" });
+        eprintln!(
+            "  initial state: {}",
+            if ready { "loaded" } else { "not ready yet" }
+        );
     }
 
     {
@@ -130,7 +171,10 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(s) => {
-                let peer = s.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "?".into());
+                let peer = s
+                    .peer_addr()
+                    .map(|a| a.to_string())
+                    .unwrap_or_else(|_| "?".into());
                 let state = Arc::clone(&state);
                 thread::spawn(move || {
                     if let Err(e) = handle(s, &state) {
@@ -150,7 +194,10 @@ fn handle(mut stream: TcpStream, state: &RwLock<Option<Arc<Live>>>) -> io::Resul
     let src = read_frame(&mut stream)?;
     let live = state.read().unwrap_or_else(|e| e.into_inner()).clone();
     let Some(live) = live else {
-        return send_error(&mut stream, "not ready -- Data Files not synced from the Write Node yet");
+        return send_error(
+            &mut stream,
+            "not ready -- Data Files not synced from the Write Node yet",
+        );
     };
 
     if let Some(query) = src.strip_prefix("QUERY:") {
@@ -203,14 +250,21 @@ fn send_query_success(stream: &mut TcpStream, result: &heptascript::QueryResult)
     send_frame(stream, &buf)
 }
 
-fn send_search_success(stream: &mut TcpStream, live: &Live, hits: &[enkiddb::RagHit]) -> io::Result<()> {
+fn send_search_success(
+    stream: &mut TcpStream,
+    live: &Live,
+    hits: &[enkiddb::RagHit],
+) -> io::Result<()> {
     let mut buf = Vec::with_capacity(64 + hits.len() * 256);
     buf.push(0x02u8);
     buf.extend_from_slice(&(hits.len() as u32).to_le_bytes());
     for hit in hits {
         buf.extend_from_slice(hit.section.bytes());
         buf.extend_from_slice(&hit.score.to_le_bytes());
-        let text = live.rag.fetch_value_from_readnode(&hit.section).unwrap_or_default();
+        let text = live
+            .rag
+            .fetch_value_from_readnode(&hit.section)
+            .unwrap_or_default();
         let text_bytes = text.as_bytes();
         buf.extend_from_slice(&(text_bytes.len() as u32).to_le_bytes());
         buf.extend_from_slice(text_bytes);
@@ -363,7 +417,6 @@ fn encode_gravity_key(buf: &mut Vec<u8>, key: &heptascript::GravityKey) {
     }
 }
 
-
 fn encode_short_string(buf: &mut Vec<u8>, s: &str) {
     let bytes = &s.as_bytes()[..s.len().min(255)];
     buf.push(bytes.len() as u8);
@@ -385,7 +438,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

@@ -21,7 +21,7 @@ pub struct StagedEntry {
 /// Manages the Processing/ and Moved_To/ sub-directories inside a shard root.
 pub struct ProcessingZone {
     processing_dir: PathBuf,
-    moved_to_dir:   PathBuf,
+    moved_to_dir: PathBuf,
 }
 
 impl ProcessingZone {
@@ -29,10 +29,13 @@ impl ProcessingZone {
     /// Creates `shard_dir/Processing/` and `shard_dir/Moved_To/` if they don't exist.
     pub fn new(shard_dir: &Path) -> io::Result<Self> {
         let processing = shard_dir.join("Processing");
-        let moved_to   = shard_dir.join("Moved_To");
+        let moved_to = shard_dir.join("Moved_To");
         fs::create_dir_all(&processing)?;
         fs::create_dir_all(&moved_to)?;
-        Ok(ProcessingZone { processing_dir: processing, moved_to_dir: moved_to })
+        Ok(ProcessingZone {
+            processing_dir: processing,
+            moved_to_dir: moved_to,
+        })
     }
 
     /// Stage a list of entries into `Processing/{batch_dir_name}/`.
@@ -51,7 +54,12 @@ impl ProcessingZone {
     }
 
     /// Write a text file (e.g. `.schema` descriptor) directly into a staged batch dir.
-    pub fn write_in_batch(&self, batch_dir_name: &str, file_name: &str, content: &str) -> io::Result<()> {
+    pub fn write_in_batch(
+        &self,
+        batch_dir_name: &str,
+        file_name: &str,
+        content: &str,
+    ) -> io::Result<()> {
         let path = self.processing_dir.join(batch_dir_name).join(file_name);
         fs::write(path, content.as_bytes())
     }
@@ -59,7 +67,7 @@ impl ProcessingZone {
     /// Move `Processing/{batch_dir_name}/` → `Moved_To/{batch_dir_name}/`.
     /// The batch directory must exist in Processing/.
     pub fn complete(&self, batch_dir_name: &str) -> io::Result<PathBuf> {
-        let src  = self.processing_dir.join(batch_dir_name);
+        let src = self.processing_dir.join(batch_dir_name);
         let dest = self.moved_to_dir.join(batch_dir_name);
         fs::rename(&src, &dest)?;
         Ok(dest)
@@ -70,8 +78,12 @@ impl ProcessingZone {
         self.processing_dir.join(batch_dir_name).is_dir()
     }
 
-    pub fn processing_dir(&self) -> &Path { &self.processing_dir }
-    pub fn moved_to_dir(&self) -> &Path   { &self.moved_to_dir }
+    pub fn processing_dir(&self) -> &Path {
+        &self.processing_dir
+    }
+    pub fn moved_to_dir(&self) -> &Path {
+        &self.moved_to_dir
+    }
 }
 
 #[cfg(test)]
@@ -89,7 +101,7 @@ mod tests {
     #[test]
     fn creates_subdirs() {
         let shard = tmp("create");
-        let zone  = ProcessingZone::new(&shard).unwrap();
+        let zone = ProcessingZone::new(&shard).unwrap();
         assert!(zone.processing_dir().exists());
         assert!(zone.moved_to_dir().exists());
         let _ = fs::remove_dir_all(&shard);
@@ -98,11 +110,12 @@ mod tests {
     #[test]
     fn stage_and_complete() {
         let shard = tmp("stage");
-        let zone  = ProcessingZone::new(&shard).unwrap();
+        let zone = ProcessingZone::new(&shard).unwrap();
 
-        let entries = vec![
-            StagedEntry { name: "data.csv".into(), data: b"id,name\n1,Ali\n".to_vec() },
-        ];
+        let entries = vec![StagedEntry {
+            name: "data.csv".into(),
+            data: b"id,name\n1,Ali\n".to_vec(),
+        }];
         let batch_dir = zone.stage("batch_001", &entries).unwrap();
         assert!(batch_dir.join("data.csv").exists());
         assert!(zone.is_staged("batch_001"));
@@ -116,12 +129,12 @@ mod tests {
     #[test]
     fn write_schema_descriptor() {
         let shard = tmp("schema");
-        let zone  = ProcessingZone::new(&shard).unwrap();
+        let zone = ProcessingZone::new(&shard).unwrap();
         zone.stage("b", &[]).unwrap();
-        zone.write_in_batch("b", "batch.schema", "table_name = tb_test\n").unwrap();
-        let content = fs::read_to_string(
-            zone.processing_dir().join("b").join("batch.schema")
-        ).unwrap();
+        zone.write_in_batch("b", "batch.schema", "table_name = tb_test\n")
+            .unwrap();
+        let content =
+            fs::read_to_string(zone.processing_dir().join("b").join("batch.schema")).unwrap();
         assert!(content.contains("tb_test"));
         let _ = fs::remove_dir_all(&shard);
     }

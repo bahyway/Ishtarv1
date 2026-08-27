@@ -16,6 +16,7 @@
 //!   - GUE Wigner surmise (level-repulsion, β=2): a real closed-form CDF
 //!     derived from the standard PDF p(s) = (32/π²) s² exp(-4s²/π) — see
 //!     `cdf_gue`'s own doc comment for the derivation.
+//!
 //! The heavy analytic machinery this is a cheap proxy for (dynamical
 //! zeta functions, Selberg/Gutzwiller trace formulas) stays design-time
 //! math, per GL-MRD-003 — it is never computed at runtime here.
@@ -32,7 +33,10 @@ pub fn spacings(returns: &[f64]) -> Vec<f64> {
         return Vec::new();
     }
     let mut sorted: Vec<f64> = returns.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).expect("orbit return times must not be NaN"));
+    sorted.sort_by(|a, b| {
+        a.partial_cmp(b)
+            .expect("orbit return times must not be NaN")
+    });
     let raw: Vec<f64> = sorted.windows(2).map(|w| w[1] - w[0]).collect();
     let mean: f64 = raw.iter().sum::<f64>() / raw.len() as f64;
     if mean <= 0.0 {
@@ -83,9 +87,8 @@ pub fn cdf_gue(s: f64) -> f64 {
     if s <= 0.0 {
         return 0.0;
     }
-    const TWO_OVER_SQRT_PI: f64 = 1.128_379_167_095_512_6; // 2/sqrt(pi)
     const FOUR_OVER_PI: f64 = 1.273_239_544_735_162_7; // 4/pi
-    erf(TWO_OVER_SQRT_PI * s) - FOUR_OVER_PI * s * (-FOUR_OVER_PI * s * s).exp()
+    erf(std::f64::consts::FRAC_2_SQRT_PI * s) - FOUR_OVER_PI * s * (-FOUR_OVER_PI * s * s).exp()
 }
 
 /// PDF of the GUE Wigner surmise — exposed for the derivative-matches

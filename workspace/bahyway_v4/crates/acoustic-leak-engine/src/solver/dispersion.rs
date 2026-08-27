@@ -9,6 +9,7 @@
 //!
 //! The dispersion-induced excess phase over a propagation range R is
 //! >   Δφ(f) = 2*pi*f*R * (1/v(f) - 1/v_ref)
+//!
 //! which requires a coarse range estimate -- so compensation is ITERATIVE:
 //! run plain GCC-PHAT for a coarse R, compensate, re-estimate, repeat.
 //! `iterate_compensated_delay` performs this loop. alpha = 0 degrades
@@ -104,8 +105,15 @@ pub fn compensated_delay(
     if energy <= 0.0 {
         return None;
     }
-    let lag_samples = if best_idx > m / 2 { best_idx as f64 - m as f64 } else { best_idx as f64 };
-    Some(DelayEstimate { delay_s: -lag_samples / sample_rate_hz, peak_quality: (best_val / energy).clamp(0.0, 1.0) })
+    let lag_samples = if best_idx > m / 2 {
+        best_idx as f64 - m as f64
+    } else {
+        best_idx as f64
+    };
+    Some(DelayEstimate {
+        delay_s: -lag_samples / sample_rate_hz,
+        peak_quality: (best_val / energy).clamp(0.0, 1.0),
+    })
 }
 
 /// Iterative refinement: coarse GCC-PHAT -> compensate -> converge.
@@ -119,7 +127,8 @@ pub fn iterate_compensated_delay(
 ) -> Option<DelayEstimate> {
     let mut est = gcc_phat_delay(x, y, sample_rate_hz)?;
     for _ in 0..max_iter.max(1) {
-        let d = ((sensor_spacing_m - model.v_ref_mps * est.delay_s) / 2.0).clamp(0.0, sensor_spacing_m);
+        let d =
+            ((sensor_spacing_m - model.v_ref_mps * est.delay_s) / 2.0).clamp(0.0, sensor_spacing_m);
         // Dominant propagation range = the longer leg to a sensor.
         let range = d.max(sensor_spacing_m - d);
         let next = compensated_delay(x, y, sample_rate_hz, model, range)?;

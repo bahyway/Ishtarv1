@@ -13,12 +13,11 @@ pub mod result;
 pub mod types;
 
 // ── Flat re-exports for ergonomic use ─────────────────────────────
-pub use types::{KakiPK, KAKI_VOID, Hepta, BodyTribe, ZoneId, BodyType};
+pub use database::{AuthorityLookupResult, DatabaseConnector, DatabaseStatus};
 pub use kaki::{derive_kaki, kaki_to_hex};
-pub use particle::{ParticleSignal, BodyScan};
-pub use result::{ScanResult, PrimaryFinding, FaceMatchResult};
+pub use particle::{BodyScan, ParticleSignal};
 pub use pipeline::{
-    PipelineContext, PipelineTiming, PipelineBudgets,
-    NuskuAlert, PIPELINE_BUDGET_MS,
+    NuskuAlert, PipelineBudgets, PipelineContext, PipelineTiming, PIPELINE_BUDGET_MS,
 };
-pub use database::{DatabaseConnector, DatabaseStatus, AuthorityLookupResult};
+pub use result::{FaceMatchResult, PrimaryFinding, ScanResult};
+pub use types::{BodyTribe, BodyType, Hepta, KakiPK, ZoneId, KAKI_VOID};

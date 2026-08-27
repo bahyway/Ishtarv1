@@ -1,21 +1,21 @@
-use serde::{Deserialize, Serialize};
 use super::cell::NotebookCell;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AkkadiNotebook {
-    pub title:   String,
-    pub author:  String,
+    pub title: String,
+    pub author: String,
     pub version: String,
-    pub cells:   Vec<NotebookCell>,
+    pub cells: Vec<NotebookCell>,
 }
 
 impl AkkadiNotebook {
     pub fn new(title: impl Into<String>, author: impl Into<String>) -> Self {
         Self {
-            title:   title.into(),
-            author:  author.into(),
+            title: title.into(),
+            author: author.into(),
             version: "4.0.0".into(),
-            cells:   vec![],
+            cells: vec![],
         }
     }
 

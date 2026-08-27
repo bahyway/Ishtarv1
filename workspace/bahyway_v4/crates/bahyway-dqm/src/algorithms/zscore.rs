@@ -14,65 +14,83 @@
 #[derive(Debug, Clone)]
 pub struct RunningStats {
     count: u64,
-    mean:  f64,
-    m2:    f64,  // sum of squared deviations from mean
+    mean: f64,
+    m2: f64, // sum of squared deviations from mean
 }
 
 impl RunningStats {
     pub fn new() -> Self {
-        RunningStats { count: 0, mean: 0.0, m2: 0.0 }
+        RunningStats {
+            count: 0,
+            mean: 0.0,
+            m2: 0.0,
+        }
     }
 
     /// Incorporate one new observation using Welford's method.
     pub fn update(&mut self, x: f64) {
         self.count += 1;
-        let delta  = x - self.mean;
+        let delta = x - self.mean;
         self.mean += delta / self.count as f64;
         let delta2 = x - self.mean;
-        self.m2   += delta * delta2;
+        self.m2 += delta * delta2;
     }
 
     /// Incremental mean.
-    pub fn mean(&self) -> f64 { self.mean }
+    pub fn mean(&self) -> f64 {
+        self.mean
+    }
 
     /// Population variance.
     pub fn variance(&self) -> f64 {
-        if self.count < 2 { return 0.0; }
+        if self.count < 2 {
+            return 0.0;
+        }
         self.m2 / self.count as f64
     }
 
     /// Population standard deviation.
-    pub fn std_dev(&self) -> f64 { self.variance().sqrt() }
+    pub fn std_dev(&self) -> f64 {
+        self.variance().sqrt()
+    }
 
     /// Number of observations incorporated.
-    pub fn count(&self) -> u64 { self.count }
+    pub fn count(&self) -> u64 {
+        self.count
+    }
 
     /// Z-score for a new value: (x - mean) / std_dev.
     /// Returns None if fewer than 2 observations (std_dev undefined).
     pub fn z_score(&self, x: f64) -> Option<f64> {
         let sd = self.std_dev();
-        if sd < f64::EPSILON { return None; }
+        if sd < f64::EPSILON {
+            return None;
+        }
         Some((x - self.mean) / sd)
     }
 
     /// True when `x` is an outlier at the given `threshold` (|z| > threshold).
     /// Standard threshold is 3.0; use 2.5 for stricter detection.
     pub fn is_outlier(&self, x: f64, threshold: f64) -> bool {
-        self.z_score(x).map(|z| z.abs() > threshold).unwrap_or(false)
+        self.z_score(x)
+            .map(|z| z.abs() > threshold)
+            .unwrap_or(false)
     }
 
     /// Quality score for `x`: 1.0 when z=0, approaches 0.0 as |z| → threshold.
     /// Score = max(0, 1 - |z| / threshold).
     pub fn anomaly_score(&self, x: f64, threshold: f64) -> f32 {
         match self.z_score(x) {
-            None    => 1.0,
+            None => 1.0,
             Some(z) => (1.0 - z.abs() / threshold).max(0.0) as f32,
         }
     }
 }
 
 impl Default for RunningStats {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Batch Z-score: compute z-scores for all values given pre-computed statistics.
@@ -85,10 +103,12 @@ pub fn batch_z_scores(values: &[f64], mean: f64, std_dev: f64) -> Vec<f64> {
 
 /// Compute mean and population std_dev over a slice.
 pub fn slice_stats(values: &[f64]) -> (f64, f64) {
-    if values.is_empty() { return (0.0, 0.0); }
+    if values.is_empty() {
+        return (0.0, 0.0);
+    }
     let n = values.len() as f64;
     let mean = values.iter().sum::<f64>() / n;
-    let var  = values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / n;
+    let var = values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / n;
     (mean, var.sqrt())
 }
 
@@ -97,7 +117,9 @@ mod tests {
     use super::*;
 
     fn feed(stats: &mut RunningStats, values: &[f64]) {
-        for &v in values { stats.update(v); }
+        for &v in values {
+            stats.update(v);
+        }
     }
 
     #[test]

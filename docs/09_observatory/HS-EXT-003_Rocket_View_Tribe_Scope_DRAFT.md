@@ -1,6 +1,6 @@
 # HS-EXT-003 (candidate) — THE ROCKET VIEW
 ## HeptaScript Extension · Tribe-Scope Selection & Ring-Granularity Topology
-### BahyWay.Ecosystem v4.0 · Phase Two (GL-STD-002 compliant) · Status: DRAFT — pending CSR-08 sealing by DUB.SAR 𒁾
+### BahyWay.Ecosystem v4.0 · Phase Two (GL-STD-002 compliant) · Status: SEALED — landed by `crates/rocket-view`, 6/6 tests passing (SCOPE altitude ordering, IN BIGRING selection, NESU's never-merges/quick-merge cases, CONSTELLATION coherence, ASCENT_SHARE/HORIZON read-through)
 
 ---
 
@@ -125,9 +125,26 @@ justified its lighting.
   the HS-EXT lineage; the five verbs are unchanged.
 
 ## 6 · Open seals for CSR-08
-HS-EXT-003 adoption · NESU as the isolation measure's sovereign name ·
-nesu_horizon default per sector · whether CONSTELLATION also enters HS-EXT-002
-as a resonance noun.
 
-*Recorded in the reign of Gudea 1.0, Phase Two. Nothing herein is sealed until
-DUB.SAR confirms under CSR-08.*
+**Resolved by this seal** (2026-08-27, explicit chat confirmation, CSR-08):
+HS-EXT-003 adoption · NESU as the isolation measure's sovereign name.
+
+**Still open, not decided here:** nesu_horizon's default per sector, and
+whether CONSTELLATION also enters HS-EXT-002 as a resonance noun -- both are
+tuning/scope decisions for other tablets or per-domain configuration, left
+to a future decree.
+
+## 7 · Seal
+
+```
+Sealed by: DUB.SAR 𒁾 (Bahaa Fadam), via explicit chat confirmation (CSR-08)
+Date:      2026-08-27
+AkkadianSeal (Ed25519): PENDING — no real signing infrastructure wired
+                        yet (no Sargon/Gilgamesh passport ceremony run
+                        against this tablet). The chat confirmation above
+                        is the Architect's real CSR-08 act; the
+                        cryptographic seal is separate, real follow-on
+                        work.
+```
+
+*Recorded in the reign of Gudea 1.0, Phase Two.*

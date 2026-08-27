@@ -45,18 +45,27 @@ use crate::sensors::RawSensorReading;
 #[derive(Debug)]
 pub enum ImportError {
     Ambiguous {
-        top:        String,
+        top: String,
         confidence: f32,
-        threshold:  f32,
+        threshold: f32,
         candidates: String,
     },
     UnsupportedFormat(String),
     NoAdapter(String),
-    FieldMappingFailed { field: String, reason: String },
-    CsvParseError      { row: usize, reason: String },
+    FieldMappingFailed {
+        field: String,
+        reason: String,
+    },
+    CsvParseError {
+        row: usize,
+        reason: String,
+    },
     /// Sovereign JSON parse error (replaces serde_json::Error)
     JsonParseError(String),
-    UnitConversionFailed { field: String, reason: String },
+    UnitConversionFailed {
+        field: String,
+        reason: String,
+    },
     EmptyPayload,
     DomainError(PollutionError),
 }
@@ -64,26 +73,31 @@ pub enum ImportError {
 impl std::fmt::Display for ImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Ambiguous { top, confidence, threshold, candidates } =>
-                write!(f,
-                    "Schema ambiguous: top domain '{top}' confidence {confidence:.2} \
-                     < threshold {threshold:.2}. Candidates: {candidates}"),
-            Self::UnsupportedFormat(fmt) =>
-                write!(f, "Unsupported payload format: {fmt}"),
-            Self::NoAdapter(s) =>
-                write!(f, "No adapter registered for source '{s}'"),
-            Self::FieldMappingFailed { field, reason } =>
-                write!(f, "Field mapping failed — field '{field}' not found in payload: {reason}"),
-            Self::CsvParseError { row, reason } =>
-                write!(f, "CSV parse error at row {row}: {reason}"),
-            Self::JsonParseError(msg) =>
-                write!(f, "JSON parse error: {msg}"),
-            Self::UnitConversionFailed { field, reason } =>
-                write!(f, "Unit conversion failed for field '{field}': {reason}"),
-            Self::EmptyPayload =>
-                write!(f, "Empty payload — no rows to process"),
-            Self::DomainError(e) =>
-                write!(f, "Pollution domain error: {e}"),
+            Self::Ambiguous {
+                top,
+                confidence,
+                threshold,
+                candidates,
+            } => write!(
+                f,
+                "Schema ambiguous: top domain '{top}' confidence {confidence:.2} \
+                     < threshold {threshold:.2}. Candidates: {candidates}"
+            ),
+            Self::UnsupportedFormat(fmt) => write!(f, "Unsupported payload format: {fmt}"),
+            Self::NoAdapter(s) => write!(f, "No adapter registered for source '{s}'"),
+            Self::FieldMappingFailed { field, reason } => write!(
+                f,
+                "Field mapping failed — field '{field}' not found in payload: {reason}"
+            ),
+            Self::CsvParseError { row, reason } => {
+                write!(f, "CSV parse error at row {row}: {reason}")
+            }
+            Self::JsonParseError(msg) => write!(f, "JSON parse error: {msg}"),
+            Self::UnitConversionFailed { field, reason } => {
+                write!(f, "Unit conversion failed for field '{field}': {reason}")
+            }
+            Self::EmptyPayload => write!(f, "Empty payload — no rows to process"),
+            Self::DomainError(e) => write!(f, "Pollution domain error: {e}"),
         }
     }
 }
@@ -98,7 +112,9 @@ impl std::error::Error for ImportError {
 }
 
 impl From<PollutionError> for ImportError {
-    fn from(e: PollutionError) -> Self { Self::DomainError(e) }
+    fn from(e: PollutionError) -> Self {
+        Self::DomainError(e)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -107,18 +123,26 @@ impl From<PollutionError> for ImportError {
 
 #[derive(Debug)]
 pub struct ImportResult {
-    pub readings:     Vec<RawSensorReading>,
-    pub row_errors:   Vec<(usize, ImportError)>,
-    pub detection:    DetectionResult,
+    pub readings: Vec<RawSensorReading>,
+    pub row_errors: Vec<(usize, ImportError)>,
+    pub detection: DetectionResult,
     pub adapter_used: String,
-    pub source_hint:  String,
+    pub source_hint: String,
 }
 
 impl ImportResult {
-    pub fn success_count(&self) -> usize { self.readings.len() }
-    pub fn error_count(&self)   -> usize { self.row_errors.len() }
-    pub fn total_rows(&self)    -> usize { self.readings.len() + self.row_errors.len() }
-    pub fn is_clean(&self)      -> bool  { self.row_errors.is_empty() }
+    pub fn success_count(&self) -> usize {
+        self.readings.len()
+    }
+    pub fn error_count(&self) -> usize {
+        self.row_errors.len()
+    }
+    pub fn total_rows(&self) -> usize {
+        self.readings.len() + self.row_errors.len()
+    }
+    pub fn is_clean(&self) -> bool {
+        self.row_errors.is_empty()
+    }
 
     pub fn akk_summary(&self) -> String {
         format!(
@@ -145,28 +169,29 @@ pub fn smart_import(
     confidence_threshold: f32,
 ) -> Result<ImportResult, ImportError> {
     // 1. Detect format and build payload
-    let router  = ImportRouter::default();
+    let router = ImportRouter;
     let payload = router.parse(raw, source_url)?;
 
     // 2. Score domain confidence
-    let detector  = SchemaDetector::default();
+    let detector = SchemaDetector;
     let detection = detector.detect(&payload);
 
     // 3. Reject if ambiguous — sovereign GATE 5: bypass for known (non-Unknown) sources
     let is_known_source = !matches!(payload.source, SourceHint::Unknown(_));
     if !is_known_source && detection.top_confidence() < confidence_threshold {
         return Err(ImportError::Ambiguous {
-            top:        format!("{:?}", detection.top_domain()),
+            top: format!("{:?}", detection.top_domain()),
             confidence: detection.top_confidence(),
-            threshold:  confidence_threshold,
+            threshold: confidence_threshold,
             candidates: detection.scores_summary(),
         });
     }
 
     // 4. Select adapter from registry
-    let registry     = AdapterRegistry::default();
+    let registry = AdapterRegistry::default();
     let adapter_name = registry.select(&detection, &payload)?;
-    let adapter      = registry.get(&adapter_name)
+    let adapter = registry
+        .get(&adapter_name)
         .ok_or_else(|| ImportError::NoAdapter(adapter_name.clone()))?;
 
     // 5. Normalize rows
@@ -177,6 +202,6 @@ pub fn smart_import(
         row_errors,
         detection,
         adapter_used: adapter_name,
-        source_hint:  source_url.to_string(),
+        source_hint: source_url.to_string(),
     })
 }

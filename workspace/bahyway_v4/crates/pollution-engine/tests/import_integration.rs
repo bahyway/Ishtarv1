@@ -1,12 +1,12 @@
 //! # Import Integration Tests — ze kiest EAV schema
 //! **PollutionEngine v4.0 | BahyWay.Ecosystem | DUB.SAR 𒁾**
 
+use pollution_engine::domain::PollutionDomain;
 use pollution_engine::import::{
-    smart_import,
     detector::SchemaDetector,
     router::{ImportRouter, PayloadFormat, SourceHint},
+    smart_import,
 };
-use pollution_engine::domain::PollutionDomain;
 
 // ─────────────────────────────────────────────────────────────
 //  ROUTER TESTS
@@ -32,7 +32,9 @@ fn test_router_detects_csv() {
 fn test_router_source_hint_openaq() {
     let json = r#"[{"pm2_5": 5.0, "lat": 1.0, "lon": 1.0}]"#;
     let router = ImportRouter::default();
-    let payload = router.parse(json, "https://api.openaq.org/v3/measurements").unwrap();
+    let payload = router
+        .parse(json, "https://api.openaq.org/v3/measurements")
+        .unwrap();
     assert_eq!(payload.source, SourceHint::OpenAq);
 }
 
@@ -40,7 +42,9 @@ fn test_router_source_hint_openaq() {
 fn test_router_source_hint_eea() {
     let csv = "monitoringsiteid,lat,lon\nEEA_NL001,52.1,4.5\n";
     let router = ImportRouter::default();
-    let payload = router.parse(csv, "https://www.eea.europa.eu/waterbase/data.csv").unwrap();
+    let payload = router
+        .parse(csv, "https://www.eea.europa.eu/waterbase/data.csv")
+        .unwrap();
     assert_eq!(payload.source, SourceHint::EeaWaterbase);
 }
 
@@ -48,7 +52,9 @@ fn test_router_source_hint_eea() {
 fn test_router_source_hint_noaa() {
     let csv = "name,lat,lon,threat\nSpill 1,29.5,-90.1,Oil\n";
     let router = ImportRouter::default();
-    let payload = router.parse(csv, "https://incidentnews.noaa.gov/raw/index").unwrap();
+    let payload = router
+        .parse(csv, "https://incidentnews.noaa.gov/raw/index")
+        .unwrap();
     assert_eq!(payload.source, SourceHint::NoaaIncident);
 }
 
@@ -66,7 +72,8 @@ fn test_router_flattens_nested_json() {
 
 #[test]
 fn test_router_ndjson_parses_multiple_rows() {
-    let ndjson = "{\"pm2_5\":5.0,\"lat\":52.0,\"lon\":4.8}\n{\"pm2_5\":8.0,\"lat\":52.1,\"lon\":4.9}";
+    let ndjson =
+        "{\"pm2_5\":5.0,\"lat\":52.0,\"lon\":4.8}\n{\"pm2_5\":8.0,\"lat\":52.1,\"lon\":4.9}";
     let router = ImportRouter::default();
     let payload = router.parse(ndjson, "unknown").unwrap();
     assert_eq!(payload.rows.len(), 2);
@@ -90,12 +97,18 @@ fn test_detector_air_from_pm_fields() {
     let payload = router.parse(csv, "unknown_source").unwrap();
 
     let detector = SchemaDetector::default();
-    let result   = detector.detect(&payload);
+    let result = detector.detect(&payload);
 
-    assert_eq!(result.top_domain(), PollutionDomain::Air,
-        "PM fields should detect AIR domain");
-    assert!(result.top_confidence() > 0.50,
-        "AIR confidence should exceed 0.50, got {:.2}", result.top_confidence());
+    assert_eq!(
+        result.top_domain(),
+        PollutionDomain::Air,
+        "PM fields should detect AIR domain"
+    );
+    assert!(
+        result.top_confidence() > 0.50,
+        "AIR confidence should exceed 0.50, got {:.2}",
+        result.top_confidence()
+    );
 }
 
 #[test]
@@ -105,7 +118,7 @@ fn test_detector_water_from_turbidity_ph() {
     let payload = router.parse(csv, "unknown").unwrap();
 
     let detector = SchemaDetector::default();
-    let result   = detector.detect(&payload);
+    let result = detector.detect(&payload);
 
     assert_eq!(result.top_domain(), PollutionDomain::Water);
     assert!(result.top_confidence() > 0.50);
@@ -118,7 +131,7 @@ fn test_detector_oil_from_tphc_pah() {
     let payload = router.parse(csv, "unknown").unwrap();
 
     let detector = SchemaDetector::default();
-    let result   = detector.detect(&payload);
+    let result = detector.detect(&payload);
 
     assert_eq!(result.top_domain(), PollutionDomain::Oil);
     assert!(result.top_confidence() > 0.50);
@@ -130,16 +143,17 @@ fn test_detector_source_hint_boosts_confidence() {
     let router = ImportRouter::default();
 
     let payload_unknown = router.parse(csv, "unknown_source").unwrap();
-    let payload_openaq  = router.parse(csv, "https://api.openaq.org/v3/").unwrap();
+    let payload_openaq = router.parse(csv, "https://api.openaq.org/v3/").unwrap();
 
     let detector = SchemaDetector::default();
     let det_unknown = detector.detect(&payload_unknown);
-    let det_openaq  = detector.detect(&payload_openaq);
+    let det_openaq = detector.detect(&payload_openaq);
 
     assert!(
         det_openaq.air.combined > det_unknown.air.combined,
         "OpenAQ source hint should increase AIR confidence: {:.2} vs {:.2}",
-        det_openaq.air.combined, det_unknown.air.combined
+        det_openaq.air.combined,
+        det_unknown.air.combined
     );
 }
 
@@ -150,9 +164,9 @@ fn test_detector_multi_domain_detection() {
     let payload = router.parse(csv, "unknown").unwrap();
 
     let detector = SchemaDetector::default();
-    let result   = detector.detect(&payload);
+    let result = detector.detect(&payload);
 
-    assert!(result.air.field_score   > 0.0);
+    assert!(result.air.field_score > 0.0);
     assert!(result.water.field_score > 0.0);
 }
 
@@ -184,7 +198,10 @@ fn test_openaq_json_ingestion() {
     ]"#;
 
     let result = smart_import(json, "https://api.openaq.org/v3/measurements", 0.40).unwrap();
-    assert!(result.success_count() >= 1, "OpenAQ pivot should produce at least 1 location reading");
+    assert!(
+        result.success_count() >= 1,
+        "OpenAQ pivot should produce at least 1 location reading"
+    );
     assert_eq!(result.adapter_used, "openaq");
     assert_eq!(result.detection.top_domain(), PollutionDomain::Air);
 }
@@ -204,7 +221,10 @@ NL002,51.9,4.4,Turbidity,45.0,2024-01-02\n\
 NL002,51.9,4.4,Ph,5.8,2024-01-02\n";
 
     let result = smart_import(csv, "https://www.eea.europa.eu/waterbase/data.csv", 0.50).unwrap();
-    assert!(result.success_count() >= 2, "Should produce at least 2 pivoted station readings");
+    assert!(
+        result.success_count() >= 2,
+        "Should produce at least 2 pivoted station readings"
+    );
     assert_eq!(result.adapter_used, "eea_waterbase");
 }
 
@@ -221,7 +241,11 @@ River Chemical,39.1,-84.5,Chemical,acetone,5000,\n\
 Tanker Leak,51.9,4.1,Oil,diesel,50000,\"sheen\"\n";
 
     let result = smart_import(csv, "https://incidentnews.noaa.gov/raw/index", 0.40).unwrap();
-    assert_eq!(result.success_count(), 2, "Should only import Oil-threat incidents");
+    assert_eq!(
+        result.success_count(),
+        2,
+        "Should only import Oil-threat incidents"
+    );
     assert_eq!(result.adapter_used, "noaa_incident");
 }
 
@@ -253,9 +277,9 @@ R3,52.2,5.0,,,2500.0\n";
     assert_eq!(result.success_count(), 3);
 
     let domains: Vec<&str> = result.readings.iter().map(|r| r.domain.as_str()).collect();
-    assert!(domains.contains(&"AIR"),   "Row 1 should be AIR");
+    assert!(domains.contains(&"AIR"), "Row 1 should be AIR");
     assert!(domains.contains(&"WATER"), "Row 2 should be WATER");
-    assert!(domains.contains(&"OIL"),   "Row 3 should be OIL");
+    assert!(domains.contains(&"OIL"), "Row 3 should be OIL");
 }
 
 #[test]
@@ -274,7 +298,10 @@ fn test_generic_adapter_unknown_rows_fail_gracefully() {
 fn test_ambiguous_detection_returns_error() {
     let csv = "col_a,col_b,col_c\n1,2,3\n4,5,6\n";
     let result = smart_import(csv, "truly_unknown_source.csv", 0.70);
-    assert!(result.is_err(), "No recognisable fields should trigger Ambiguous error");
+    assert!(
+        result.is_err(),
+        "No recognisable fields should trigger Ambiguous error"
+    );
 
     if let Err(pollution_engine::import::ImportError::Ambiguous { confidence, .. }) = result {
         assert!(confidence < 0.70);
@@ -298,10 +325,19 @@ fn test_import_result_akk_summary_format() {
     let result = smart_import(json, "https://api.openaq.org/v3/", 0.30).unwrap();
     let summary = result.akk_summary();
 
-    assert!(summary.starts_with("IMPORT source="),  "AKK summary must start with IMPORT");
-    assert!(summary.contains("adapter="),            "AKK summary must contain adapter");
-    assert!(summary.contains("confidence="),         "AKK summary must contain confidence");
-    assert!(summary.contains("ok="),                 "AKK summary must contain ok count");
+    assert!(
+        summary.starts_with("IMPORT source="),
+        "AKK summary must start with IMPORT"
+    );
+    assert!(
+        summary.contains("adapter="),
+        "AKK summary must contain adapter"
+    );
+    assert!(
+        summary.contains("confidence="),
+        "AKK summary must contain confidence"
+    );
+    assert!(summary.contains("ok="), "AKK summary must contain ok count");
 }
 
 #[test]

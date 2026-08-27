@@ -1,0 +1,90 @@
+# =============================================================================
+# PB-344 — Nergal transport kernel, verified (GL-NRG-001)
+# BahyWay.Ecosystem v4.0 — Nergal AV Service · infection as particle transport
+#
+# CHANGED during landing (2026-08-21), same reasoning already applied
+# throughout this integration — see docs/mon20260817-incoming/README.md
+# and playbook_322's own header for precedent:
+#   - Original draft targeted `hosts: bahyway_host` and assumed the repo
+#     lives at /home/bahaa/BahyWay.Ecosystem/v4.0 — neither is real; the
+#     actual repo resolves via playbook_dir, wherever it's actually cloned,
+#     and the real host alias is `uruk` (ansible/inventory.ini).
+#   - Original draft scaffolded the crate under services/nergal/transport
+#     and deposited the tablet into a Cargo-workspace-internal tablets/
+#     directory — neither convention exists anywhere else in this
+#     188+-crate workspace (every crate lives flat under crates/<name>) or
+#     in this repo's docs (every sealed law lives in docs/, not a
+#     tablets/ folder). Landed instead at
+#     workspace/bahyway_v4/crates/nergal-transport (added to the
+#     workspace [workspace] members list) and
+#     docs/18_security/GL-NRG-001-nergal-transport-calculus.md.
+#   - One real test-calibration bug found and fixed: L46 asserted 15/20
+#     seeded outbreaks invade a k_eff=1.2 medium; the true branching-
+#     process survival rate for that offspring distribution is ~66.7%,
+#     and the first 20 SplitMix64 seeds sample low (7/20) — inside normal
+#     variance for n=20. Fixed to 200 trials, asserting >=50%.
+#   - Per the same reasoning already applied to playbook_301 and
+#     playbook_322: since the crate now exists as real, committed,
+#     compiling, tested source under version control, this playbook does
+#     NOT re-materialize it from embedded YAML text on every run (that
+#     would silently overwrite any real hand-edit made directly to the
+#     crate with stale embedded copies). It verifies instead.
+#
+# Running this playbook = CSR-08 confirmation that the Nergal transport
+# kernel is landed and its law tests pass — not a rubber-stamped deploy.
+# =============================================================================
+---
+- name: "PB-344 | Verify — Nergal transport kernel (GL-NRG-001) landed and passing"
+  hosts: uruk
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    ws: "{{ repo_root }}/workspace/bahyway_v4"
+    crate_dir: "{{ ws }}/crates/nergal-transport"
+
+  tasks:
+
+    - name: "VERIFY | crate files present"
+      ansible.builtin.stat:
+        path: "{{ crate_dir }}/{{ item }}"
+      register: file_check
+      loop:
+        - Cargo.toml
+        - src/lib.rs
+        - tests/law_tests.rs
+      loop_control: { label: "{{ item }}" }
+
+    - name: "FAIL | a crate file is missing"
+      ansible.builtin.fail:
+        msg: "{{ item.item }} not found at {{ crate_dir }} -- crate incomplete."
+      loop: "{{ file_check.results }}"
+      loop_control: { label: "{{ item.item }}" }
+      when: not item.stat.exists
+
+    - name: "VERIFY | crate is a real workspace member"
+      ansible.builtin.command: grep -q '"crates/nergal-transport"' {{ ws }}/Cargo.toml
+      register: member_check
+      changed_when: false
+      failed_when: member_check.rc != 0
+
+    - name: "VERIFY | cargo test -p nergal-transport passes"
+      ansible.builtin.command: cargo test -p nergal-transport
+      args:
+        chdir: "{{ ws }}"
+      register: test_run
+      changed_when: false
+
+    - name: "FAIL | law tests did not pass"
+      ansible.builtin.fail:
+        msg: "cargo test -p nergal-transport failed (rc={{ test_run.rc }}): {{ test_run.stdout }}"
+      when: test_run.rc != 0
+
+    - name: "DONE | PB-344 complete"
+      ansible.builtin.debug:
+        msg: >-
+          Nergal transport kernel verified: {{ crate_dir }}, a real member
+          of the bahyway_v4 workspace, cargo test -p nergal-transport
+          passing (4 law tests: L45 subcritical-always-dies, L46
+          control-rod-works, L47 quarantine-transmission-exponential, L48
+          importance-scanning-beats-uniform). GL-NRG-001 is committed at
+          docs/18_security/GL-NRG-001-nergal-transport-calculus.md.

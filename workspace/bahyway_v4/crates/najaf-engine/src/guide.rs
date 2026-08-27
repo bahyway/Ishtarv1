@@ -20,9 +20,9 @@ pub const BLESSED_COST_THRESHOLD: f32 = 2_000.0;
 // ── PilgrimRoute ──────────────────────────────────────────────────────────────
 
 pub struct PilgrimRoute {
-    pub waypoints:  Vec<NaviNodeId>,
-    pub grave_id:   GraveId,
-    pub sector:     NajafSector,
+    pub waypoints: Vec<NaviNodeId>,
+    pub grave_id: GraveId,
+    pub sector: NajafSector,
     pub total_cost: f32,
     /// True when sacred cost is below the blessed threshold.
     pub is_blessed: bool,
@@ -31,7 +31,7 @@ pub struct PilgrimRoute {
 impl PilgrimRoute {
     fn from_plan(plan: RoutePlan, grave_id: GraveId, sector: NajafSector) -> Self {
         let sacred_cost = plan.total_cost * sector.sacred_weight();
-        let is_blessed  = sacred_cost < BLESSED_COST_THRESHOLD;
+        let is_blessed = sacred_cost < BLESSED_COST_THRESHOLD;
         PilgrimRoute {
             waypoints: plan.waypoints,
             grave_id,
@@ -41,7 +41,9 @@ impl PilgrimRoute {
         }
     }
 
-    pub fn waypoint_count(&self) -> usize { self.waypoints.len() }
+    pub fn waypoint_count(&self) -> usize {
+        self.waypoints.len()
+    }
 
     /// A route is valid if it has at least one waypoint and a finite cost.
     /// A single-waypoint route means the pilgrim is already at the destination.
@@ -53,13 +55,16 @@ impl PilgrimRoute {
 // ── PilgrimGuide ─────────────────────────────────────────────────────────────
 
 pub struct PilgrimGuide<'a> {
-    engine:   RouteEngine<'a>,
+    engine: RouteEngine<'a>,
     registry: &'a GraveRegistry,
 }
 
 impl<'a> PilgrimGuide<'a> {
     pub fn new(graph: &'a NaviGraph, registry: &'a GraveRegistry) -> Self {
-        PilgrimGuide { engine: RouteEngine::new(graph), registry }
+        PilgrimGuide {
+            engine: RouteEngine::new(graph),
+            registry,
+        }
     }
 
     /// Route from `entrance_node` to the sector node nearest the target grave.
@@ -68,7 +73,9 @@ impl<'a> PilgrimGuide<'a> {
         entrance_node: NaviNodeId,
         grave_id: GraveId,
     ) -> NajafResult<PilgrimRoute> {
-        let grave = self.registry.get(grave_id)
+        let grave = self
+            .registry
+            .get(grave_id)
             .ok_or(NajafError::GraveNotFound(grave_id))?;
 
         if !grave.is_accessible() {
@@ -82,7 +89,7 @@ impl<'a> PilgrimGuide<'a> {
         if entrance_node == dest_node {
             let sector = grave.sector;
             return Ok(PilgrimRoute {
-                waypoints:  vec![entrance_node],
+                waypoints: vec![entrance_node],
                 grave_id,
                 sector,
                 total_cost: 0.0,
@@ -90,7 +97,8 @@ impl<'a> PilgrimGuide<'a> {
             });
         }
 
-        let plan = self.engine
+        let plan = self
+            .engine
             .plan(entrance_node, dest_node, RouteConstraints::default())?;
 
         Ok(PilgrimRoute::from_plan(plan, grave_id, grave.sector))
@@ -102,7 +110,8 @@ impl<'a> PilgrimGuide<'a> {
         entrance_node: NaviNodeId,
         sector: NajafSector,
     ) -> NajafResult<Vec<PilgrimRoute>> {
-        let accessible: Vec<GraveId> = self.registry
+        let accessible: Vec<GraveId> = self
+            .registry
             .accessible_in_sector(sector)
             .into_iter()
             .map(|g| g.id)
@@ -124,16 +133,20 @@ impl<'a> PilgrimGuide<'a> {
         entrance_node: NaviNodeId,
         coord: &navi_engine::NaviCoord,
     ) -> NajafResult<PilgrimRoute> {
-        let grave = self.registry.nearest_accessible(coord)
+        let grave = self
+            .registry
+            .nearest_accessible(coord)
             .ok_or(NajafError::EmptyCemetery)?;
         self.guide_to_grave(entrance_node, grave.id)
     }
 
     /// Batch: route from entrance to all accessible graves in all sectors.
     pub fn full_pilgrimage_scan(&self, entrance_node: NaviNodeId) -> Vec<PilgrimRoute> {
-        self.registry.accessible().into_iter().filter_map(|g| {
-            self.guide_to_grave(entrance_node, g.id).ok()
-        }).collect()
+        self.registry
+            .accessible()
+            .into_iter()
+            .filter_map(|g| self.guide_to_grave(entrance_node, g.id).ok())
+            .collect()
     }
 }
 
@@ -175,7 +188,8 @@ mod tests {
         let (g, r) = setup();
         let guide = PilgrimGuide::new(&g, &r);
         for grave_id in 101u32..=107 {
-            let route = guide.guide_to_grave(1, grave_id)
+            let route = guide
+                .guide_to_grave(1, grave_id)
                 .unwrap_or_else(|e| panic!("grave {grave_id} failed: {e}"));
             assert!(route.is_valid(), "grave {grave_id} route is invalid");
         }
@@ -202,7 +216,9 @@ mod tests {
     fn guide_to_sector_shuhadaa_returns_one_route() {
         let (g, r) = setup();
         let guide = PilgrimGuide::new(&g, &r);
-        let routes = guide.guide_to_sector(1, NajafSector::Shuhadaa).expect("must route");
+        let routes = guide
+            .guide_to_sector(1, NajafSector::Shuhadaa)
+            .expect("must route");
         assert_eq!(routes.len(), 1);
     }
 
@@ -215,7 +231,10 @@ mod tests {
         r2.get_mut(104).unwrap().seal();
         let guide2 = PilgrimGuide::new(&g, &r2);
         let result = guide2.guide_to_sector(1, NajafSector::Huffaz);
-        assert!(matches!(result, Err(NajafError::NoAccessibleGravesInSector(_))));
+        assert!(matches!(
+            result,
+            Err(NajafError::NoAccessibleGravesInSector(_))
+        ));
     }
 
     #[test]
@@ -223,7 +242,9 @@ mod tests {
         let (g, r) = setup();
         let guide = PilgrimGuide::new(&g, &r);
         let coord = navi_engine::NaviCoord::new(32.005, 44.320, 0.0); // near Shuhadaa
-        let route = guide.nearest_accessible(1, &coord).expect("must find nearest");
+        let route = guide
+            .nearest_accessible(1, &coord)
+            .expect("must find nearest");
         assert!(route.is_valid());
     }
 

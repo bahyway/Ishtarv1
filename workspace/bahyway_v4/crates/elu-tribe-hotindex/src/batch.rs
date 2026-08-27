@@ -46,7 +46,13 @@ pub fn validate_batch(idx: &HotIndex, tribe_ids: &[u16]) -> BatchReport {
     } else {
         None
     };
-    BatchReport { checked, valid: valid as usize, invalid, first_invalid, epoch: idx.epoch }
+    BatchReport {
+        checked,
+        valid: valid as usize,
+        invalid,
+        first_invalid,
+        epoch: idx.epoch,
+    }
 }
 
 /// std::thread fan-out (sovereign law: stdlib threads, zero async runtime).
@@ -66,7 +72,13 @@ pub fn validate_batch_parallel(idx: &HotIndex, tribe_ids: &[u16], threads: usize
             reports.push(h.join().expect("validator thread"));
         }
     });
-    let mut out = BatchReport { checked: 0, valid: 0, invalid: 0, first_invalid: None, epoch: idx.epoch };
+    let mut out = BatchReport {
+        checked: 0,
+        valid: 0,
+        invalid: 0,
+        first_invalid: None,
+        epoch: idx.epoch,
+    };
     let mut offset = 0usize;
     for r in reports {
         if out.first_invalid.is_none() {
@@ -131,6 +143,9 @@ mod tests {
     fn empty_sweep_is_lawful() {
         let i = idx();
         let r = validate_batch(&i, &[]);
-        assert_eq!((r.checked, r.valid, r.invalid, r.first_invalid), (0, 0, 0, None));
+        assert_eq!(
+            (r.checked, r.valid, r.invalid, r.first_invalid),
+            (0, 0, 0, None)
+        );
     }
 }

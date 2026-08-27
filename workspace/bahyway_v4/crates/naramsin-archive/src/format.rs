@@ -21,24 +21,24 @@ impl ArchiveFormat {
     /// Magic-byte signature for this format, used by Stage 0 detection.
     pub fn magic(&self) -> &'static [u8] {
         match self {
-            Self::Zip     => &[0x50, 0x4B, 0x03, 0x04],
-            Self::TarGz   => &[0x1F, 0x8B],
-            Self::TarBz2  => &[0x42, 0x5A, 0x68],
-            Self::TarXz   => &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00],
+            Self::Zip => &[0x50, 0x4B, 0x03, 0x04],
+            Self::TarGz => &[0x1F, 0x8B],
+            Self::TarBz2 => &[0x42, 0x5A, 0x68],
+            Self::TarXz => &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00],
             Self::SevenZip => &[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C],
-            Self::None    => &[],
+            Self::None => &[],
         }
     }
 
     /// Human-readable name for audit logging.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Zip      => "zip",
-            Self::TarGz    => "tar.gz",
-            Self::TarBz2   => "tar.bz2",
-            Self::TarXz    => "tar.xz",
+            Self::Zip => "zip",
+            Self::TarGz => "tar.gz",
+            Self::TarBz2 => "tar.bz2",
+            Self::TarXz => "tar.xz",
             Self::SevenZip => "7z",
-            Self::None     => "none",
+            Self::None => "none",
         }
     }
 }

@@ -32,8 +32,9 @@ mod tests {
     #[test]
     fn declining_b11_predicts_a_future_crossing() {
         // B11 falling 1.0/day, now at 220, floor 200 -> ~20 days.
-        let h: Vec<trend_core::Sample> =
-            (0..30).map(|i| (-(30 - i) as f64, 220.0 + (30 - i) as f64 * 1.0)).collect();
+        let h: Vec<trend_core::Sample> = (0..30)
+            .map(|i| (-(30 - i) as f64, 220.0 + (30 - i) as f64 * 1.0))
+            .collect();
         match golden_horizon(&h) {
             Ok(Some(d)) => assert!((d - 20.0).abs() < 2.0, "expected ~20, got {d}"),
             other => panic!("expected Some(~20), got {other:?}"),

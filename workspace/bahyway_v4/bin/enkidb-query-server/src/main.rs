@@ -41,7 +41,10 @@ use bahyway_algebra::orbital::{orbital_position, OrbitalPosition};
 use bahyway_core::TribeId;
 use enkidb_persist::persisted_db::PersistedDb;
 use enkidb_storage::FsyncPolicy;
-use heptascript::{build_indexes, execute_indexed, parse_query, AcrossClause, HeptaIndexes, MatchedEntity, QueryResult};
+use heptascript::{
+    build_indexes, execute_indexed, parse_query, AcrossClause, HeptaIndexes, MatchedEntity,
+    QueryResult,
+};
 
 const BIND_ADDR: &str = "0.0.0.0:7001";
 const DEFAULT_DATA_DIR: &str = "/home/bahyway/enkidb/data";
@@ -94,7 +97,10 @@ fn main() {
     // existing. See heptascript::indexed for the full explanation.
     let t1 = Instant::now();
     let indexes = build_indexes(db.db().journal());
-    eprintln!("  ✓ ENLIL index snapshot built in {}ms", t1.elapsed().as_millis());
+    eprintln!(
+        "  ✓ ENLIL index snapshot built in {}ms",
+        t1.elapsed().as_millis()
+    );
 
     let shared_db = Arc::new(db);
     let shared_indexes = Arc::new(indexes);
@@ -143,7 +149,10 @@ fn handle(mut stream: TcpStream, db: &PersistedDb, indexes: &HeptaIndexes) -> io
     let query = match parse_query(&clean) {
         Ok(q) => q,
         Err(e) => {
-            return send_err(&mut stream, &format!("parse: {}", e.to_string().replace('"', "'")))
+            return send_err(
+                &mut stream,
+                &format!("parse: {}", e.to_string().replace('"', "'")),
+            )
         }
     };
 
@@ -193,7 +202,13 @@ fn rows_to_json(result: &QueryResult, bigring: bool) -> String {
         if i > 0 {
             out.push(',');
         }
-        let hex: String = m.entity.0.bytes().iter().map(|b| format!("{b:02x}")).collect();
+        let hex: String = m
+            .entity
+            .0
+            .bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         out.push_str("{\"kaki\":\"");
         out.push_str(&hex);
         out.push_str("\",\"attrs\":[");
@@ -347,14 +362,23 @@ mod tests {
         let e = IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let ek = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
         jnl.append(JournalEntry::new(
-            ek, e, 1,
-            vec![EavTriple::new(attr_hash("b11"), codec::encode(&AkkValue::Int(150)))],
-        )).unwrap();
+            ek,
+            e,
+            1,
+            vec![EavTriple::new(
+                attr_hash("b11"),
+                codec::encode(&AkkValue::Int(150)),
+            )],
+        ))
+        .unwrap();
 
         let q = parse_query("WHO T.E\nWHAT E[b11]").unwrap();
         let res = execute(&q, &jnl);
         let json = rows_to_json(&res, false);
-        assert!(!json.contains("\"history\""), "ORBIT query must not emit a history key: {json}");
+        assert!(
+            !json.contains("\"history\""),
+            "ORBIT query must not emit a history key: {json}"
+        );
     }
 
     #[test]
@@ -367,15 +391,24 @@ mod tests {
         for (epoch, b11) in [(1u32, 100i64), (2, 150), (3, 210)] {
             let ek = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
             jnl.append(JournalEntry::new(
-                ek, e, epoch,
-                vec![EavTriple::new(attr_hash("b11"), codec::encode(&AkkValue::Int(b11)))],
-            )).unwrap();
+                ek,
+                e,
+                epoch,
+                vec![EavTriple::new(
+                    attr_hash("b11"),
+                    codec::encode(&AkkValue::Int(b11)),
+                )],
+            ))
+            .unwrap();
         }
 
         let q = parse_query("PROVE\nWHO T.E\nWHAT E[b11]").unwrap();
         let res = execute(&q, &jnl);
         let json = rows_to_json(&res, false);
-        assert!(json.contains("\"history\":["), "expected a history array: {json}");
+        assert!(
+            json.contains("\"history\":["),
+            "expected a history array: {json}"
+        );
         assert!(json.contains("\"epoch\":1"), "{json}");
         assert!(json.contains("\"epoch\":2"), "{json}");
         assert!(json.contains("\"epoch\":3"), "{json}");

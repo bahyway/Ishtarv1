@@ -52,7 +52,8 @@ fn parse_args() -> Args {
     // a test harness can point both the seeder and the server at the same
     // scratch directory without passing --data-dir to each separately.
     let mut data_dir = PathBuf::from(
-        env::var("ENKIDB_QUERY_DATA_DIR").unwrap_or_else(|_| "/home/bahyway/enkidb/data".to_string()),
+        env::var("ENKIDB_QUERY_DATA_DIR")
+            .unwrap_or_else(|_| "/home/bahyway/enkidb/data".to_string()),
     );
     let mut tribe_id: u16 = 0x0001;
     let mut count: u64 = 10_000_000;
@@ -64,7 +65,10 @@ fn parse_args() -> Args {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--data-dir" => {
-                data_dir = PathBuf::from(it.next().unwrap_or_else(|| fail("--data-dir needs a value")))
+                data_dir = PathBuf::from(
+                    it.next()
+                        .unwrap_or_else(|| fail("--data-dir needs a value")),
+                )
             }
             "--tribe" => {
                 tribe_id = it
@@ -88,7 +92,9 @@ fn parse_args() -> Args {
                     .unwrap_or_else(|_| fail("--shard-every must be an integer"))
             }
             "--shard-value" => {
-                shard_value = it.next().unwrap_or_else(|| fail("--shard-value needs a value"))
+                shard_value = it
+                    .next()
+                    .unwrap_or_else(|| fail("--shard-value needs a value"))
             }
             "--progress-every" => {
                 progress_every = it
@@ -109,7 +115,14 @@ fn parse_args() -> Args {
         fail("--shard-every must be >= 1");
     }
 
-    Args { data_dir, tribe_id, count, shard_every, shard_value, progress_every }
+    Args {
+        data_dir,
+        tribe_id,
+        count,
+        shard_every,
+        shard_value,
+        progress_every,
+    }
 }
 
 fn fail(msg: &str) -> ! {
@@ -148,7 +161,9 @@ fn main() {
     let mut db = PersistedDb::open(
         &args.data_dir,
         tribe_id,
-        FsyncPolicy::Batched { window: Duration::from_millis(250) },
+        FsyncPolicy::Batched {
+            window: Duration::from_millis(250),
+        },
     )
     .unwrap_or_else(|e| {
         eprintln!("FATAL: open {}: {e}", args.data_dir.display());
@@ -173,7 +188,10 @@ fn main() {
             std::process::exit(1);
         });
 
-        let mut eav = vec![EavTriple::new(seed_idx_hash, codec::encode(&AkkValue::Int(i as i64)))];
+        let mut eav = vec![EavTriple::new(
+            seed_idx_hash,
+            codec::encode(&AkkValue::Int(i as i64)),
+        )];
         if i % args.shard_every == 0 {
             eav.push(EavTriple::new(shard_hash, shard_value_encoded.clone()));
             shard_count += 1;

@@ -4,8 +4,10 @@
 # protection: the Architect's typed seal is required, the old primary is FENCED
 # before any stream repoints, and declared loss (if any) is printed, never hidden.
 - name: PB-313 | Write-node promotion ceremony
-  hosts: host_forge
+  hosts: uruk
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
   vars_prompt:
     - name: architect_seal
       prompt: "CSR-08 — type the Architect seal phrase to authorize promotion"
@@ -20,7 +22,7 @@
         fail_msg: "No seal, no promotion. The ceremony ends here."
 
     - name: Freeze shipping on (possibly dead) primary
-      ansible.builtin.command: ssh root@192.168.122.101 systemctl stop lahmu-ship.timer
+      ansible.builtin.command: ssh root@192.168.122.111 systemctl stop lahmu-ship.timer
       failed_when: false
 
     - name: Record watermark from standby copy
@@ -30,10 +32,10 @@
       failed_when: false
 
     - name: FENCE old primary (virsh destroy) — before anything repoints
-      ansible.builtin.command: virsh destroy enki-write
+      ansible.builtin.command: virsh destroy uruk-node-write
       failed_when: false
     - name: GATE precondition | confirm fence
-      ansible.builtin.shell: virsh domstate enki-write | grep -q 'shut off'
+      ansible.builtin.shell: virsh domstate uruk-node-write | grep -q 'shut off'
 
     - name: Promote Lahamu (start write services on standby)
       ansible.builtin.command: >
@@ -46,6 +48,7 @@
 
     - name: Promotion KAKI — watermark, loss, operator, seal-hash
       ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
         PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
         SEALH=$(echo -n "{{ architect_seal }}" | sha256sum | cut -d' ' -f1)
         echo "{\"pb\":\"PB-313\",\"adannu\":\"$(date -Is)\",\"watermark\":\"{{ wm.stdout | default('unknown') }}\",\"declared_loss\":\"{{ declared_loss }}\",\"operator\":\"$USER\",\"seal\":\"$SEALH\",\"prev\":\"$PREV\"}" >> {{ kaki_runs }}

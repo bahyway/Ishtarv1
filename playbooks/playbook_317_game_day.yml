@@ -4,33 +4,44 @@
 # tier; measure RTO/RPO against sealed targets. Truth Before Beauty applies to
 # our own outages most of all: the report hides nothing.
 - name: PB-317 | Game day orchestration
-  hosts: host_forge
+  hosts: uruk
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/uruk/group_vars/all.yml"
   vars:
     gameday_report: "{{ bahyway_root | default('/var/lib/bahyway') }}/gameday_{{ ansible_date_time.date }}.log"
   tasks:
     - name: T0 | record start, then simulate write-node loss
       ansible.builtin.shell: |
+        mkdir -p $(dirname {{ gameday_report }})
         echo "GAMEDAY START $(date -Is)" > {{ gameday_report }}
-        virsh destroy enki-write || true
+        virsh destroy uruk-node-write || true
         echo "T0 write node destroyed $(date -Is)" >> {{ gameday_report }}
 
+    # NOTE (2026-08-23): T1 invokes playbook_313, which has its own
+    # vars_prompt for the CSR-08 architect_seal. ansible.builtin.command's
+    # child process is not guaranteed a TTY, so this sub-invocation can hang
+    # or fail waiting on input that never arrives when PB-317 itself is run
+    # non-interactively. Real gap, not fixed here — game-day automation
+    # around an interactive human seal is a design decision, not a path/IP
+    # bug. Run PB-317 interactively (foreground terminal) until this is
+    # resolved, and watch T1's rc.
     - name: T1 | promotion ceremony (imported; seal prompted inside)
-      ansible.builtin.command: ansible-playbook -i inventories/uruk pb313_promotion_ceremony.yml
+      ansible.builtin.command: ansible-playbook playbooks/playbook_313_promotion_ceremony.yml
       register: t1
       failed_when: false
     - ansible.builtin.shell: echo "T1 promotion rc={{ t1.rc }} $(date -Is)" >> {{ gameday_report }}
       name: log T1
 
     - name: T2 | read-node rebuild rite
-      ansible.builtin.command: ansible-playbook -i inventories/uruk pb312_read_node_rebuild.yml
+      ansible.builtin.command: ansible-playbook playbooks/playbook_312_read_node_rebuild.yml
       register: t2
       failed_when: false
     - ansible.builtin.shell: echo "T2 rebuild rc={{ t2.rc }} $(date -Is)" >> {{ gameday_report }}
       name: log T2
 
     - name: T3 | restore one tier from the vault (muster)
-      ansible.builtin.command: ansible-playbook -i inventories/uruk pb314_backup_muster.yml
+      ansible.builtin.command: ansible-playbook playbooks/playbook_314_backup_muster.yml
       register: t3
       failed_when: false
     - ansible.builtin.shell: echo "T3 muster rc={{ t3.rc }} $(date -Is)" >> {{ gameday_report }}
@@ -39,13 +50,14 @@
     - name: GATE | reads and writes live at ceremony's end
       ansible.builtin.shell: |
         set -e
-        curl -sf http://enki-write:{{ enkidb_ports.db }}/health
-        curl -sf http://192.168.122.107:{{ enkidb_ports.db }}/health
+        curl -sf http://192.168.122.111:{{ enkidb_ports.db }}/health
+        curl -sf http://192.168.122.112:{{ enkidb_ports.db }}/health
         echo "GATE reads+writes live $(date -Is)" >> {{ gameday_report }}
       failed_when: false   # advisory until health endpoints exist; then flip hard
 
     - name: Game-day KAKI — every measured number, every surprise
       ansible.builtin.shell: |
+        mkdir -p $(dirname {{ kaki_runs }})
         PREV=$(tail -n1 {{ kaki_runs }} 2>/dev/null | sha256sum | cut -d' ' -f1)
         R=$(sha256sum {{ gameday_report }} | cut -d' ' -f1)
         echo "{\"pb\":\"PB-317\",\"adannu\":\"$(date -Is)\",\"prev\":\"$PREV\",\"report_sha\":\"$R\",\"gate\":\"ecosystem-serving\"}" >> {{ kaki_runs }}

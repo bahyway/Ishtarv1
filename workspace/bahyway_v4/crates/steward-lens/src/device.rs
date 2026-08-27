@@ -27,8 +27,8 @@ impl DeviceTier {
         match self {
             DeviceTier::Smartwatch => "Smartwatch",
             DeviceTier::Smartphone => "Smartphone",
-            DeviceTier::Tablet     => "Tablet",
-            DeviceTier::Desktop    => "Desktop",
+            DeviceTier::Tablet => "Tablet",
+            DeviceTier::Desktop => "Desktop",
         }
     }
 
@@ -37,16 +37,20 @@ impl DeviceTier {
         match self {
             DeviceTier::Smartwatch => 0,
             DeviceTier::Smartphone => 30,
-            DeviceTier::Tablet     => 60,
-            DeviceTier::Desktop    => 120,
+            DeviceTier::Tablet => 60,
+            DeviceTier::Desktop => 120,
         }
     }
 
     /// Whether this tier can display the full AICouncil vote breakdown.
-    pub fn can_show_ai_council(self) -> bool { self >= DeviceTier::Tablet }
+    pub fn can_show_ai_council(self) -> bool {
+        self >= DeviceTier::Tablet
+    }
 
     /// Whether this tier supports the HeptaScript editor.
-    pub fn can_edit_heptascript(self) -> bool { self == DeviceTier::Desktop }
+    pub fn can_edit_heptascript(self) -> bool {
+        self == DeviceTier::Desktop
+    }
 }
 
 impl core::fmt::Display for DeviceTier {
@@ -62,7 +66,7 @@ mod tests {
     #[test]
     fn tier_ordering() {
         assert!(DeviceTier::Desktop > DeviceTier::Tablet);
-        assert!(DeviceTier::Tablet  > DeviceTier::Smartphone);
+        assert!(DeviceTier::Tablet > DeviceTier::Smartphone);
         assert!(DeviceTier::Smartphone > DeviceTier::Smartwatch);
     }
 

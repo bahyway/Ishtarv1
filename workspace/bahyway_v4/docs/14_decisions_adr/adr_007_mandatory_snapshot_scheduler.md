@@ -1,4 +1,4 @@
-# ADR-007 — Mandatory Snapshot Scheduler in EnkiDB and EriduOS
+# ADR-007 — Mandatory Snapshot Scheduler in EnkiDB and UrOS
 
 > **DubSar Help** | `ADR > 007` | Architecture Decisions
 
@@ -134,7 +134,7 @@ SnapshotSchedule::civil_registry()    // every 10,000 events — low-churn sover
 SnapshotSchedule::sensor_stream()     // every 100 events — high-churn IoT data
 ```
 
-### Decision 4 — EriduOS Runs the Scheduler (eridu-scheduler + eridu-runtime)
+### Decision 4 — UrOS Runs the Scheduler (eridu-scheduler + eridu-runtime)
 
 The `EriduScheduler` in `crates/eridu-scheduler` is the sovereign job
 dispatcher. It uses **logical ticks** (not wall-clock time) — making it
@@ -223,7 +223,7 @@ This is the sovereign performance guarantee of mandatory snapshotting.
 
 | W | Answer |
 |---|---|
-| **Who** | Every EnkiDB instance, every EnkiDW instance, EriduOS runtime (eridu-scheduler + eridu-runtime), and every data steward configuring a tribe's Template |
+| **Who** | Every EnkiDB instance, every EnkiDW instance, UrOS runtime (eridu-scheduler + eridu-runtime), and every data steward configuring a tribe's Template |
 | **What** | A mandatory scheduled `SnapshotJob` that periodically appends a Snapshot Event-Kaki to each particle's Journal, capturing full projected state. This bounds projection cost to O(events since last snapshot) regardless of total journal length |
 | **When** | From EnkiDB v4.0 onwards — eternal, never revised. Schedule frequency is configurable per tribe/template; the existence of a schedule is not |
 | **Where** | `crates/enkidb-snapshot` (SnapshotRecord, ProjectionAlgorithm), `crates/snapshot-job` (SnapshotJob, SnapshotSchedule), `crates/eridu-scheduler` (EriduScheduler, JobKind), `crates/eridu-runtime` (scheduler_loop) |
@@ -288,7 +288,7 @@ All three must be present. All three are mandatory. None is optional.
 - An attacker cannot fake a "clean" snapshot at an earlier point to hide
   intervening events — the chain hash would break.
 
-**EriduOS integration:**
+**UrOS integration:**
 - The scheduler uses logical ticks — it runs identically in production,
   test, and simulation environments.
 - `set_job_interval()` allows administrators to tune schedules without
@@ -333,7 +333,7 @@ All three must be present. All three are mandatory. None is optional.
 > past is not forgotten — it is summarised. The future reads from the
 > summary, not from the entire history.**
 >
-> **In EriduOS and in every EnkiDB and EnkiDW instance: there is no
+> **In UrOS and in every EnkiDB and EnkiDW instance: there is no
 > production database without a Snapshot Scheduler. This is not
 > negotiable.**
 

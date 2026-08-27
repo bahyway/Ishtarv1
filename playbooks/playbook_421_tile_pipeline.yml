@@ -9,13 +9,22 @@
     mbtiles_out: "/srv/najaf/wadi_al_salam.mbtiles"
     zoom: "14-21"
   tasks:
+    # 2026-08-23, first real run on Fedora 44: `gdal2tiles.py` is not on
+    # PATH after installing gdal/python3-gdal alone -- the standalone
+    # script isn't on PATH by default. First fix attempt added a
+    # python3-gdal-utils package, but Fedora 44's repos don't have a
+    # package by that name ("No package python3-gdal-utils available",
+    # found live -- dnf refuses the WHOLE list if any one name is
+    # invalid). Reverted: python3-gdal itself already bundles the
+    # osgeo_utils submodule on Fedora, which the module-invocation form
+    # below uses directly -- no extra package needed.
     - name: tooling (gdal for raster tiles)
       ansible.builtin.dnf: {name: [gdal, python3-gdal], state: present}
       become: yes
 
     - name: raster tiles from the drone orthophoto
       ansible.builtin.command:
-        cmd: "gdal2tiles.py -z {{ zoom }} --xyz {{ survey_ortho }} {{ tile_dir }}"
+        cmd: "python3 -m osgeo_utils.gdal2tiles -z {{ zoom }} --xyz {{ survey_ortho }} {{ tile_dir }}"
         creates: "{{ tile_dir }}/14"
 
     - name: pack tiles into MBTiles (single-file vault for the SD card)

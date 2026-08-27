@@ -20,9 +20,9 @@ impl SourceTrust {
     pub fn score(self) -> f32 {
         match self {
             SourceTrust::Authoritative => 1.00,
-            SourceTrust::Official      => 0.75,
-            SourceTrust::Community     => 0.40,
-            SourceTrust::Unknown       => 0.10,
+            SourceTrust::Official => 0.75,
+            SourceTrust::Community => 0.40,
+            SourceTrust::Unknown => 0.10,
         }
     }
 
@@ -52,22 +52,22 @@ impl SourceTrust {
 #[derive(Debug, Clone)]
 pub struct FuzzyDimensions {
     /// D1 — name completeness: fraction of 5 name parts present (0.0–1.0).
-    pub d1_name_completeness:   f32,
+    pub d1_name_completeness: f32,
     /// D2 — name consistency: Arabic BERT cosine similarity (0.0–1.0).
-    pub d2_name_consistency:    f32,
+    pub d2_name_consistency: f32,
     /// D3 — ID validity: 1.0 if valid 12-digit Iraqi national ID, else 0.0.
-    pub d3_id_validity:         f32,
+    pub d3_id_validity: f32,
     /// D4 — date validity: Hijri + Gregorian cross-check score (0.0–1.0).
-    pub d4_date_validity:       f32,
+    pub d4_date_validity: f32,
     /// D5 — geographic precision: H3 resolution / 15.0 (0.0–1.0).
-    pub d5_geo_precision:       f32,
+    pub d5_geo_precision: f32,
     /// D6 — source trust level.
-    pub d6_source_trust:        SourceTrust,
+    pub d6_source_trust: SourceTrust,
     /// D7 — duplicate proximity: 1.0 - (cosine dist to nearest particle).
     /// High value = close to duplicate = bad.
     pub d7_duplicate_proximity: f32,
     /// D8 — Arabic density: VGCA-Λ arabic_density from FSV d3 (0.0–1.0).
-    pub d8_arabic_density:      f32,
+    pub d8_arabic_density: f32,
     /// D9 — Orbital trust penalty: accumulated penalty from orbital-trust-probe
     /// (0.0 = no violations observed, 1.0 = maximum sustained deviation).
     /// Feeds back into D6 effective score before fuzzification.
@@ -79,14 +79,14 @@ impl FuzzyDimensions {
     /// Construct a perfect-score dimensions record (all 1.0, Authoritative, no duplicates).
     pub fn perfect() -> Self {
         Self {
-            d1_name_completeness:     1.0,
-            d2_name_consistency:      1.0,
-            d3_id_validity:           1.0,
-            d4_date_validity:         1.0,
-            d5_geo_precision:         1.0,
-            d6_source_trust:          SourceTrust::Authoritative,
-            d7_duplicate_proximity:   0.0,
-            d8_arabic_density:        1.0,
+            d1_name_completeness: 1.0,
+            d2_name_consistency: 1.0,
+            d3_id_validity: 1.0,
+            d4_date_validity: 1.0,
+            d5_geo_precision: 1.0,
+            d6_source_trust: SourceTrust::Authoritative,
+            d7_duplicate_proximity: 0.0,
+            d8_arabic_density: 1.0,
             d9_orbital_trust_penalty: 0.0,
         }
     }
@@ -95,7 +95,9 @@ impl FuzzyDimensions {
     pub fn fuzzify(&self) -> FuzzifiedDimensions {
         // D9 orbital penalty degrades the effective D6 trust score before fuzzification.
         // Zero penalty → no effect; 1.0 penalty → D6 collapses to the Unknown floor (0.10).
-        let trust = self.d6_source_trust.with_orbital_penalty(self.d9_orbital_trust_penalty);
+        let trust = self
+            .d6_source_trust
+            .with_orbital_penalty(self.d9_orbital_trust_penalty);
         FuzzifiedDimensions {
             d1: fuzzify_completeness(self.d1_name_completeness),
             d2: fuzzify_similarity(self.d2_name_consistency),
@@ -124,32 +126,60 @@ pub struct FuzzifiedDimensions {
 }
 
 fn fuzzify_completeness(x: f32) -> (f32, f32, f32) {
-    (f_left(x, 0.3, 0.6), f_tri(x, 0.3, 0.65, 0.9), f_right(x, 0.8, 1.0))
+    (
+        f_left(x, 0.3, 0.6),
+        f_tri(x, 0.3, 0.65, 0.9),
+        f_right(x, 0.8, 1.0),
+    )
 }
 
 fn fuzzify_similarity(x: f32) -> (f32, f32, f32) {
-    (f_left(x, 0.4, 0.7), f_tri(x, 0.4, 0.7, 0.9), f_right(x, 0.85, 1.0))
+    (
+        f_left(x, 0.4, 0.7),
+        f_tri(x, 0.4, 0.7, 0.9),
+        f_right(x, 0.85, 1.0),
+    )
 }
 
 fn fuzzify_validity(x: f32) -> (f32, f32, f32) {
-    (f_left(x, 0.3, 0.6), f_tri(x, 0.4, 0.6, 0.85), f_right(x, 0.75, 1.0))
+    (
+        f_left(x, 0.3, 0.6),
+        f_tri(x, 0.4, 0.6, 0.85),
+        f_right(x, 0.75, 1.0),
+    )
 }
 
 fn fuzzify_precision(x: f32) -> (f32, f32, f32) {
-    (f_left(x, 0.2, 0.5), f_tri(x, 0.3, 0.6, 0.85), f_right(x, 0.7, 1.0))
+    (
+        f_left(x, 0.2, 0.5),
+        f_tri(x, 0.3, 0.6, 0.85),
+        f_right(x, 0.7, 1.0),
+    )
 }
 
 fn fuzzify_trust(x: f32) -> (f32, f32, f32) {
-    (f_left(x, 0.2, 0.5), f_tri(x, 0.3, 0.55, 0.8), f_right(x, 0.7, 1.0))
+    (
+        f_left(x, 0.2, 0.5),
+        f_tri(x, 0.3, 0.55, 0.8),
+        f_right(x, 0.7, 1.0),
+    )
 }
 
 fn fuzzify_proximity(x: f32) -> (f32, f32, f32) {
     // Low proximity = good (no duplicates); high = bad
-    (f_left(x, 0.1, 0.3), f_tri(x, 0.1, 0.35, 0.6), f_right(x, 0.5, 0.9))
+    (
+        f_left(x, 0.1, 0.3),
+        f_tri(x, 0.1, 0.35, 0.6),
+        f_right(x, 0.5, 0.9),
+    )
 }
 
 fn fuzzify_density(x: f32) -> (f32, f32, f32) {
-    (f_left(x, 0.2, 0.5), f_tri(x, 0.3, 0.6, 0.85), f_right(x, 0.7, 1.0))
+    (
+        f_left(x, 0.2, 0.5),
+        f_tri(x, 0.3, 0.6, 0.85),
+        f_right(x, 0.7, 1.0),
+    )
 }
 
 #[cfg(test)]
@@ -192,8 +222,8 @@ mod tests {
     #[test]
     fn source_trust_scores_are_ordered() {
         assert!(SourceTrust::Authoritative.score() > SourceTrust::Official.score());
-        assert!(SourceTrust::Official.score()      > SourceTrust::Community.score());
-        assert!(SourceTrust::Community.score()     > SourceTrust::Unknown.score());
+        assert!(SourceTrust::Official.score() > SourceTrust::Community.score());
+        assert!(SourceTrust::Community.score() > SourceTrust::Unknown.score());
     }
 
     #[test]
@@ -219,17 +249,20 @@ mod tests {
 
     #[test]
     fn orbital_penalty_lowers_b11_via_fuzzify() {
-        let mut d_clean  = FuzzyDimensions::perfect();
+        let mut d_clean = FuzzyDimensions::perfect();
         d_clean.d9_orbital_trust_penalty = 0.0;
         let mut d_penalised = FuzzyDimensions::perfect();
         d_penalised.d9_orbital_trust_penalty = 0.8;
 
-        let f_clean     = d_clean.fuzzify();
+        let f_clean = d_clean.fuzzify();
         let f_penalised = d_penalised.fuzzify();
         // D6 high membership should be lower when penalised
-        assert!(f_penalised.d6.2 < f_clean.d6.2,
+        assert!(
+            f_penalised.d6.2 < f_clean.d6.2,
             "penalty must reduce D6 high membership: clean={} penalised={}",
-            f_clean.d6.2, f_penalised.d6.2);
+            f_clean.d6.2,
+            f_penalised.d6.2
+        );
     }
 
     #[test]

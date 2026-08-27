@@ -1,0 +1,34 @@
+---
+# PB-369 · Master runner for the CSR-08 seal rite of 2026-08-24
+# Run order is law: tablets first, then ontology, then kernels, then the house.
+- import_playbook: playbook_618_seal_gl_unt_001.yml
+- import_playbook: playbook_619_seal_gl_fed_001.yml
+- import_playbook: playbook_620_seal_gl_fld_001.yml
+- import_playbook: playbook_621_register_units.yml
+- import_playbook: playbook_622_factor_leaf_particles.yml
+- import_playbook: playbook_623_enlil_field_kernel.yml
+- import_playbook: playbook_624_account_emitter.yml
+- import_playbook: playbook_625_promote_sala_tabs.yml
+
+- name: PB-369 verification of the whole rite
+  hosts: girsu
+  vars:
+    law_root: "{{ ansible_env.HOME }}/bahyway/laws"
+  tasks:
+    - name: Verify every seal against the tablet bytes
+      ansible.builtin.shell: |
+        set -e
+        for t in GL-UNT-001 GL-FED-001 GL-FLD-001; do
+          f="{{ law_root }}/sealed/${t}_SEALED.md"
+          r="{{ law_root }}/receipts/${t}.kaniku.yml"
+          want=$(grep '^sha256:' "$r" | tr -d ' "' | cut -d: -f2)
+          have=$(sha256sum "$f" | cut -d' ' -f1)
+          [ "$want" = "$have" ] || { echo "$t seal broken"; exit 1; }
+          echo "$t verified"
+        done
+      changed_when: false
+      register: verify
+
+    - name: Show the rite result
+      ansible.builtin.debug:
+        msg: "{{ verify.stdout_lines }} · CSR-08 rite complete · RU, MLU, federation and wave-field are law"

@@ -26,7 +26,10 @@ pub fn farthest_first_init(points: &[Vec7], k: usize) -> Vec<Vec7> {
         let mut best_idx = 0;
         let mut best_min_dist = -1.0_f64;
         for (i, p) in points.iter().enumerate() {
-            let min_dist = centroids.iter().map(|c| sq_dist(p, c)).fold(f64::MAX, f64::min);
+            let min_dist = centroids
+                .iter()
+                .map(|c| sq_dist(p, c))
+                .fold(f64::MAX, f64::min);
             if min_dist > best_min_dist {
                 best_min_dist = min_dist;
                 best_idx = i;
@@ -48,7 +51,11 @@ pub struct KMeansResult {
 
 /// Standard Lloyd iteration from a given (typically `farthest_first_init`)
 /// starting point. Converges when no point changes assignment.
-pub fn lloyd_iterate(points: &[Vec7], initial_centroids: Vec<Vec7>, max_iter: usize) -> KMeansResult {
+pub fn lloyd_iterate(
+    points: &[Vec7],
+    initial_centroids: Vec<Vec7>,
+    max_iter: usize,
+) -> KMeansResult {
     let k = initial_centroids.len();
     let mut centroids = initial_centroids;
     let mut assignments = vec![0usize; points.len()];
@@ -100,7 +107,12 @@ pub fn lloyd_iterate(points: &[Vec7], initial_centroids: Vec<Vec7>, max_iter: us
         }
     }
 
-    KMeansResult { centroids, assignments, iterations_run, converged }
+    KMeansResult {
+        centroids,
+        assignments,
+        iterations_run,
+        converged,
+    }
 }
 
 #[cfg(test)]
@@ -116,7 +128,12 @@ mod tests {
 
     #[test]
     fn farthest_first_init_is_deterministic_across_calls() {
-        let points = vec![point(0.0, 0.0), point(10.0, 0.0), point(5.0, 5.0), point(0.0, 10.0)];
+        let points = vec![
+            point(0.0, 0.0),
+            point(10.0, 0.0),
+            point(5.0, 5.0),
+            point(0.0, 10.0),
+        ];
         let a = farthest_first_init(&points, 2);
         let b = farthest_first_init(&points, 2);
         assert_eq!(a, b);
@@ -124,7 +141,12 @@ mod tests {
 
     #[test]
     fn farthest_first_init_spreads_centroids_apart() {
-        let points = vec![point(0.0, 0.0), point(1.0, 0.0), point(10.0, 10.0), point(11.0, 10.0)];
+        let points = vec![
+            point(0.0, 0.0),
+            point(1.0, 0.0),
+            point(10.0, 10.0),
+            point(11.0, 10.0),
+        ];
         let seeds = farthest_first_init(&points, 2);
         // The two natural clusters are far apart -- seeding should pick
         // one point from each, not two neighbours.

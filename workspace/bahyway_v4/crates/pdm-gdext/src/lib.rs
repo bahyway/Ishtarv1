@@ -61,7 +61,13 @@ impl PdmBridge {
 
     /// ∂A — true if `p` is within `epsilon` of the ball's surface.
     #[func]
-    fn boundary(&self, p: PackedFloat64Array, centroid: PackedFloat64Array, radius: f64, epsilon: f64) -> VDict {
+    fn boundary(
+        &self,
+        p: PackedFloat64Array,
+        centroid: PackedFloat64Array,
+        radius: f64,
+        epsilon: f64,
+    ) -> VDict {
         match (Self::to_point(&p), Self::to_point(&centroid)) {
             (Some(p), Some(c)) => Self::ok_bool(geo::boundary(&p, &c, radius, epsilon)),
             _ => Self::error_dict("p and centroid must each be a PackedFloat64Array of length 7"),
@@ -94,12 +100,24 @@ impl PdmBridge {
     }
 
     #[func]
-    fn intersects(&self, c1: PackedFloat64Array, r1: f64, c2: PackedFloat64Array, r2: f64) -> VDict {
+    fn intersects(
+        &self,
+        c1: PackedFloat64Array,
+        r1: f64,
+        c2: PackedFloat64Array,
+        r2: f64,
+    ) -> VDict {
         Self::relate(&c1, r1, &c2, r2, geo::intersects)
     }
 
     #[func]
-    fn within(&self, c_a: PackedFloat64Array, r_a: f64, c_b: PackedFloat64Array, r_b: f64) -> VDict {
+    fn within(
+        &self,
+        c_a: PackedFloat64Array,
+        r_a: f64,
+        c_b: PackedFloat64Array,
+        r_b: f64,
+    ) -> VDict {
         Self::relate(&c_a, r_a, &c_b, r_b, geo::within)
     }
 
@@ -120,7 +138,8 @@ impl PdmBridge {
     /// of PackedFloat64Array(7) (one inner array per face).
     #[func]
     fn boundary_n(&self, vertices: Array<PackedFloat64Array>) -> VDict {
-        let pts: Option<Vec<[f64; 7]>> = vertices.iter_shared().map(|v| Self::to_point(&v)).collect();
+        let pts: Option<Vec<[f64; 7]>> =
+            vertices.iter_shared().map(|v| Self::to_point(&v)).collect();
         let Some(pts) = pts else {
             return Self::error_dict("every vertex must be a PackedFloat64Array of length 7");
         };
@@ -169,11 +188,16 @@ impl PdmBridge {
     /// Barycentric containment test: is `p` inside the simplex spanned
     /// by `vertices` (2-8 points, up to a 7-simplex)?
     #[func]
-    fn particle_in_complex(&self, p: PackedFloat64Array, vertices: Array<PackedFloat64Array>) -> VDict {
+    fn particle_in_complex(
+        &self,
+        p: PackedFloat64Array,
+        vertices: Array<PackedFloat64Array>,
+    ) -> VDict {
         let Some(p) = Self::to_point(&p) else {
             return Self::error_dict("p must be a PackedFloat64Array of length 7");
         };
-        let pts: Option<Vec<[f64; 7]>> = vertices.iter_shared().map(|v| Self::to_point(&v)).collect();
+        let pts: Option<Vec<[f64; 7]>> =
+            vertices.iter_shared().map(|v| Self::to_point(&v)).collect();
         let Some(pts) = pts else {
             return Self::error_dict("every vertex must be a PackedFloat64Array of length 7");
         };
@@ -186,7 +210,10 @@ impl PdmBridge {
     /// whose physical position was never recorded.
     #[func]
     fn reconstruct_ghost(&self, neighbours: Array<PackedFloat64Array>) -> VDict {
-        let pts: Option<Vec<[f64; 7]>> = neighbours.iter_shared().map(|v| Self::to_point(&v)).collect();
+        let pts: Option<Vec<[f64; 7]>> = neighbours
+            .iter_shared()
+            .map(|v| Self::to_point(&v))
+            .collect();
         let Some(pts) = pts else {
             return Self::error_dict("every neighbour must be a PackedFloat64Array of length 7");
         };
@@ -208,8 +235,8 @@ impl PdmBridge {
             return None;
         }
         let mut out = [0.0f64; 7];
-        for i in 0..7 {
-            out[i] = arr.get(i as usize)?;
+        for (i, o) in out.iter_mut().enumerate() {
+            *o = arr.get(i)?;
         }
         Some(out)
     }

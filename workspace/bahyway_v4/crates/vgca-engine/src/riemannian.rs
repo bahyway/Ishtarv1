@@ -21,17 +21,24 @@
 //! of the second kind -> geodesic ODE (RK4) / Riemann curvature tensor
 //! -> Ricci tensor / scalar -> Gaussian curvature (2D case, K = R/2).
 
+/// Signature of a metric tensor field g_ij(x): a point x maps to its n x n metric matrix.
+type MetricFn = Box<dyn Fn(&[f64]) -> Vec<Vec<f64>>>;
+
 /// A Riemannian manifold given by a metric tensor field g_ij(x), n x n,
 /// symmetric positive-definite at every x in its domain.
 pub struct RiemannianManifold {
     pub dim: usize,
-    metric_fn: Box<dyn Fn(&[f64]) -> Vec<Vec<f64>>>,
+    metric_fn: MetricFn,
     h: f64, // finite-difference step
 }
 
 impl RiemannianManifold {
     pub fn new(dim: usize, metric_fn: impl Fn(&[f64]) -> Vec<Vec<f64>> + 'static) -> Self {
-        RiemannianManifold { dim, metric_fn: Box::new(metric_fn), h: 1e-4 }
+        RiemannianManifold {
+            dim,
+            metric_fn: Box::new(metric_fn),
+            h: 1e-4,
+        }
     }
 
     pub fn metric(&self, x: &[f64]) -> Vec<Vec<f64>> {
@@ -41,25 +48,32 @@ impl RiemannianManifold {
     /// Inverse of an n x n matrix via Gauss-Jordan elimination.
     fn invert(m: &[Vec<f64>]) -> Vec<Vec<f64>> {
         let n = m.len();
-        let mut a: Vec<Vec<f64>> = m.iter().map(|row| row.clone()).collect();
-        let mut inv: Vec<Vec<f64>> = (0..n).map(|i| {
-            (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect()
-        }).collect();
+        let mut a: Vec<Vec<f64>> = m.to_vec();
+        let mut inv: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
+            .collect();
 
         for col in 0..n {
             // partial pivot
             let mut pivot = col;
             for r in (col + 1)..n {
-                if a[r][col].abs() > a[pivot][col].abs() { pivot = r; }
+                if a[r][col].abs() > a[pivot][col].abs() {
+                    pivot = r;
+                }
             }
             a.swap(col, pivot);
             inv.swap(col, pivot);
 
             let d = a[col][col];
-            for j in 0..n { a[col][j] /= d; inv[col][j] /= d; }
+            for j in 0..n {
+                a[col][j] /= d;
+                inv[col][j] /= d;
+            }
 
             for r in 0..n {
-                if r == col { continue; }
+                if r == col {
+                    continue;
+                }
                 let factor = a[r][col];
                 for j in 0..n {
                     a[r][j] -= factor * a[col][j];
@@ -129,14 +143,16 @@ impl RiemannianManifold {
         let vm = v(&xm);
         let gamma = self.christoffel(x);
 
-        (0..n).map(|k| {
-            let dvk = (vp[k] - vm[k]) / (2.0 * self.h);
-            let mut correction = 0.0;
-            for j in 0..n {
-                correction += gamma[k][along][j] * v0[j];
-            }
-            dvk + correction
-        }).collect()
+        (0..n)
+            .map(|k| {
+                let dvk = (vp[k] - vm[k]) / (2.0 * self.h);
+                let mut correction = 0.0;
+                for j in 0..n {
+                    correction += gamma[k][along][j] * v0[j];
+                }
+                dvk + correction
+            })
+            .collect()
     }
 
     /// Geodesic ODE: d^2x^k/dt^2 = -Gamma^k_ij dx^i/dt dx^j/dt.
@@ -150,15 +166,17 @@ impl RiemannianManifold {
 
         let accel = |x: &[f64], v: &[f64]| -> Vec<f64> {
             let gamma = self.christoffel(x);
-            (0..n).map(|k| {
-                let mut a = 0.0;
-                for i in 0..n {
-                    for j in 0..n {
-                        a -= gamma[k][i][j] * v[i] * v[j];
+            (0..n)
+                .map(|k| {
+                    let mut a = 0.0;
+                    for i in 0..n {
+                        for j in 0..n {
+                            a -= gamma[k][i][j] * v[i] * v[j];
+                        }
                     }
-                }
-                a
-            }).collect()
+                    a
+                })
+                .collect()
         };
 
         for _ in 0..steps {
@@ -229,6 +247,12 @@ impl RiemannianManifold {
                         // under this contraction/index convention, so the
                         // tensor is negated here to match the verified case.
                         let mut val = dgamma[i][l][j][k] - dgamma[j][l][i][k];
+                        // m indexes gamma at two different tensor slots in the
+                        // same expression (contracted index), not a simple
+                        // parallel walk -- an enumerate()-based rewrite would
+                        // only cover one slot and risk a silent indexing bug
+                        // in this contraction. Loop kept explicit.
+                        #[allow(clippy::needless_range_loop)]
                         for m in 0..n {
                             val += gamma[l][i][m] * gamma[m][j][k];
                             val -= gamma[l][j][m] * gamma[m][i][k];
@@ -249,6 +273,11 @@ impl RiemannianManifold {
         for i in 0..n {
             for j in 0..n {
                 let mut sum = 0.0;
+                // k indexes riem at two different tensor slots (the Ricci
+                // contraction R_ij = R^k_ikj) -- same reasoning as
+                // riemann_tensor's own m-loop above: kept explicit rather
+                // than an enumerate() that would only cover one slot.
+                #[allow(clippy::needless_range_loop)]
                 for k in 0..n {
                     sum += riem[k][i][k][j];
                 }
@@ -288,7 +317,9 @@ mod tests {
     fn nabu_metric_7d(_x: &[f64]) -> Vec<Vec<f64>> {
         let w = [0.30, 0.20, 0.15, 0.15, 0.10, 0.05, 0.05];
         let mut g = vec![vec![0.0; 7]; 7];
-        for i in 0..7 { g[i][i] = w[i]; }
+        for i in 0..7 {
+            g[i][i] = w[i];
+        }
         g
     }
 
@@ -300,8 +331,11 @@ mod tests {
         for k in 0..7 {
             for i in 0..7 {
                 for j in 0..7 {
-                    assert!(gamma[k][i][j].abs() < 1e-6,
-                        "constant diagonal metric must have Gamma=0, got {}", gamma[k][i][j]);
+                    assert!(
+                        gamma[k][i][j].abs() < 1e-6,
+                        "constant diagonal metric must have Gamma=0, got {}",
+                        gamma[k][i][j]
+                    );
                 }
             }
         }
@@ -317,9 +351,12 @@ mod tests {
         let t = 5.0 * 0.1;
         for i in 0..7 {
             let expected = x0[i] + v0[i] * t;
-            assert!((traj.last().unwrap()[i] - expected).abs() < 1e-3,
+            assert!(
+                (traj.last().unwrap()[i] - expected).abs() < 1e-3,
                 "flat-metric geodesic should be a straight line: got {}, expected {}",
-                traj.last().unwrap()[i], expected);
+                traj.last().unwrap()[i],
+                expected
+            );
         }
     }
 
@@ -346,8 +383,10 @@ mod tests {
         let x = vec![std::f64::consts::FRAC_PI_2, 0.7];
         let k = m.gaussian_curvature_2d(&x);
         let expected = 1.0 / (r * r);
-        assert!((k - expected).abs() < 1e-2,
-            "sphere of radius {r} should have K=1/r^2={expected}, got {k}");
+        assert!(
+            (k - expected).abs() < 1e-2,
+            "sphere of radius {r} should have K=1/r^2={expected}, got {k}"
+        );
     }
 
     #[test]
@@ -357,7 +396,10 @@ mod tests {
         for theta_frac in [0.3, 0.5, 0.7, 1.0, 1.5] {
             let x = vec![theta_frac, 0.2];
             let k = m.gaussian_curvature_2d(&x);
-            assert!(k > 0.0, "sphere curvature must be positive, got {k} at theta={theta_frac}");
+            assert!(
+                k > 0.0,
+                "sphere curvature must be positive, got {k} at theta={theta_frac}"
+            );
         }
     }
 
@@ -369,7 +411,10 @@ mod tests {
         for along in 0..7 {
             let d = m.covariant_derivative(&constant_field, &x, along);
             for &c in &d {
-                assert!(c.abs() < 1e-5, "constant field on flat metric has zero covariant derivative, got {c}");
+                assert!(
+                    c.abs() < 1e-5,
+                    "constant field on flat metric has zero covariant derivative, got {c}"
+                );
             }
         }
     }

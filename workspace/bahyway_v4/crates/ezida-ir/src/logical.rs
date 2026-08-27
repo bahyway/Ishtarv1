@@ -9,22 +9,13 @@ use crate::expr::Expr;
 #[derive(Debug, Clone)]
 pub enum LogicalPlan {
     /// Full scan by entity identifier.
-    ScanEntity {
-        entity: String,
-    },
+    ScanEntity { entity: String },
     /// Scan all tuples for a given attribute.
-    ScanAttr {
-        attr: String,
-    },
+    ScanAttr { attr: String },
     /// Temporal range scan: all tuples with `time_start <= T < time_end`.
-    ScanTimeRange {
-        time_start: u64,
-        time_end: u64,
-    },
+    ScanTimeRange { time_start: u64, time_end: u64 },
     /// Shard-local scan.
-    ScanShard {
-        shard: u32,
-    },
+    ScanShard { shard: u32 },
     /// Filter: keep tuples matching the predicate.
     Filter {
         input: Box<LogicalPlan>,

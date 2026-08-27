@@ -6,12 +6,12 @@
 /// Mirrors the 7D index space `(E,A,V,T,S,Z,M)` of EnkiDB.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RaftEav {
-    pub entity:          u64,
-    pub attr:            u32,
-    pub value_bytes:     [u8; 16],
-    pub time:            u64,
-    pub shard:           u8,
-    pub proof_ctx:       u8,
+    pub entity: u64,
+    pub attr: u32,
+    pub value_bytes: [u8; 16],
+    pub time: u64,
+    pub shard: u8,
+    pub proof_ctx: u8,
     pub materialization: u8,
 }
 
@@ -19,7 +19,7 @@ pub struct RaftEav {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogEntry {
     /// Leader's term when the entry was created.
-    pub term:    u64,
+    pub term: u64,
     /// The EAV command to apply to the state machine.
     pub command: RaftEav,
 }
@@ -38,7 +38,7 @@ impl<'a> LogView<'a> {
     pub fn last_log_index_term(&self) -> (usize, u64) {
         match self.0.last() {
             Some(e) => (self.0.len(), e.term),
-            None    => (0, 0),
+            None => (0, 0),
         }
     }
 
@@ -47,7 +47,7 @@ impl<'a> LogView<'a> {
         if index == 0 {
             return true; // empty log matches everything
         }
-        self.0.get(index - 1).map_or(false, |e| e.term == term)
+        self.0.get(index - 1).is_some_and(|e| e.term == term)
     }
 }
 
@@ -56,7 +56,15 @@ mod tests {
     use super::*;
 
     fn eav(e: u64) -> RaftEav {
-        RaftEav { entity: e, attr: 0, value_bytes: [0; 16], time: 0, shard: 0, proof_ctx: 0, materialization: 0 }
+        RaftEav {
+            entity: e,
+            attr: 0,
+            value_bytes: [0; 16],
+            time: 0,
+            shard: 0,
+            proof_ctx: 0,
+            materialization: 0,
+        }
     }
 
     #[test]

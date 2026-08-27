@@ -25,7 +25,9 @@ pub fn parse_ply(bytes: &[u8]) -> Result<PointCloud, ParseError> {
 
     let magic = lines.next().unwrap_or("").trim();
     if magic != "ply" {
-        return Err(ParseError(format!("not a PLY file (expected 'ply' magic line, got '{magic}')")));
+        return Err(ParseError(format!(
+            "not a PLY file (expected 'ply' magic line, got '{magic}')"
+        )));
     }
 
     let mut elements: Vec<ElementDecl> = Vec::new();
@@ -45,13 +47,21 @@ pub fn parse_ply(bytes: &[u8]) -> Result<PointCloud, ParseError> {
             format_seen = true;
         } else if let Some(rest) = line.strip_prefix("element ") {
             let mut parts = rest.split_whitespace();
-            let name = parts.next().ok_or_else(|| ParseError("malformed 'element' line".to_string()))?;
+            let name = parts
+                .next()
+                .ok_or_else(|| ParseError("malformed 'element' line".to_string()))?;
             let count: usize = parts
                 .next()
                 .ok_or_else(|| ParseError("malformed 'element' line: missing count".to_string()))?
                 .parse()
-                .map_err(|_| ParseError("malformed 'element' line: count is not a number".to_string()))?;
-            elements.push(ElementDecl { name: name.to_string(), count, properties: Vec::new() });
+                .map_err(|_| {
+                    ParseError("malformed 'element' line: count is not a number".to_string())
+                })?;
+            elements.push(ElementDecl {
+                name: name.to_string(),
+                count,
+                properties: Vec::new(),
+            });
         } else if let Some(rest) = line.strip_prefix("property ") {
             let elem = elements
                 .last_mut()
@@ -67,7 +77,9 @@ pub fn parse_ply(bytes: &[u8]) -> Result<PointCloud, ParseError> {
         } else if line == "end_header" {
             break;
         } else {
-            return Err(ParseError(format!("unrecognized PLY header line: '{line}'")));
+            return Err(ParseError(format!(
+                "unrecognized PLY header line: '{line}'"
+            )));
         }
     }
     if !format_seen {
@@ -104,7 +116,10 @@ pub fn parse_ply(bytes: &[u8]) -> Result<PointCloud, ParseError> {
         }
         for row in 0..elem.count {
             let line = lines.next().ok_or_else(|| {
-                ParseError(format!("PLY file truncated: expected {} vertex rows, got {row}", elem.count))
+                ParseError(format!(
+                    "PLY file truncated: expected {} vertex rows, got {row}",
+                    elem.count
+                ))
             })?;
             let fields: Vec<&str> = line.split_whitespace().collect();
             let get = |idx: usize| -> Result<f64, ParseError> {
@@ -121,7 +136,9 @@ pub fn parse_ply(bytes: &[u8]) -> Result<PointCloud, ParseError> {
                         .get(idx)
                         .ok_or_else(|| ParseError(format!("vertex color field missing: '{line}'")))?
                         .parse::<u8>()
-                        .map_err(|_| ParseError(format!("vertex color field is not a byte: '{line}'")))
+                        .map_err(|_| {
+                            ParseError(format!("vertex color field is not a byte: '{line}'"))
+                        })
                 };
                 cols.push([byte(r)?, byte(g)?, byte(b)?]);
             }
@@ -186,7 +203,8 @@ mod tests {
 
     #[test]
     fn rejects_vertex_element_missing_xyz() {
-        let text = "ply\nformat ascii 1.0\nelement vertex 1\nproperty float intensity\nend_header\n42\n";
+        let text =
+            "ply\nformat ascii 1.0\nelement vertex 1\nproperty float intensity\nend_header\n42\n";
         let err = parse_ply(text.as_bytes()).unwrap_err();
         assert!(err.0.contains("'x'"), "{}", err.0);
     }

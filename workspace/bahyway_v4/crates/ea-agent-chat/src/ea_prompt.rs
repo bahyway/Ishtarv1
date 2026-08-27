@@ -34,7 +34,9 @@ pub struct EaPromptBuilder {
 
 impl EaPromptBuilder {
     pub fn new() -> Self {
-        Self { system: DEEPSEEK_MATH_SYSTEM.to_string() }
+        Self {
+            system: DEEPSEEK_MATH_SYSTEM.to_string(),
+        }
     }
 
     pub fn build(&self, history: &[(&str, &str)], user_msg: &str) -> String {
@@ -45,10 +47,12 @@ impl EaPromptBuilder {
         );
         for (role, content) in history {
             match *role {
-                "user"      => prompt.push_str(&format!(
-                    "<|begin_of_sentence|>user\n{content}\n<|end_of_sentence|>\n")),
+                "user" => prompt.push_str(&format!(
+                    "<|begin_of_sentence|>user\n{content}\n<|end_of_sentence|>\n"
+                )),
                 "assistant" => prompt.push_str(&format!(
-                    "<|begin_of_sentence|>assistant\n{content}\n<|end_of_sentence|>\n")),
+                    "<|begin_of_sentence|>assistant\n{content}\n<|end_of_sentence|>\n"
+                )),
                 _ => {}
             }
         }
@@ -60,7 +64,11 @@ impl EaPromptBuilder {
     }
 }
 
-impl Default for EaPromptBuilder { fn default() -> Self { Self::new() } }
+impl Default for EaPromptBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {

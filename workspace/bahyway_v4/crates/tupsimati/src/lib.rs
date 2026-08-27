@@ -72,7 +72,10 @@ impl Tablet {
     ///   TUPSIMATI 1
     ///   DB EnkiODB 7002 SEG 128 PART day PIN 3600 RET 14 SLAMS 50 SLAAV 0.999
     pub fn to_lines(&self) -> String {
-        let mut out = format!("TUPSIMATI {}\nCREATED {}\n", self.version, self.created_millis);
+        let mut out = format!(
+            "TUPSIMATI {}\nCREATED {}\n",
+            self.version, self.created_millis
+        );
         for db in &self.dbs {
             out += &format!(
                 "DB {} {} SEG {} PART {} PIN {} RET {} SLAMS {} SLAAV {}\n",
@@ -116,7 +119,9 @@ impl Tablet {
         }
         self.validate()?;
         let bytes = self.to_lines().into_bytes();
-        let seal = sealer.seal(&bytes).map_err(|e| format!("seal failed: {e:?}"))?;
+        let seal = sealer
+            .seal(&bytes)
+            .map_err(|e| format!("seal failed: {e:?}"))?;
         self.seal = Some(seal);
         Ok(())
     }
@@ -191,7 +196,9 @@ mod tests {
     fn to_lines_round_trips_the_hot_orbit_line() {
         let t = sample_tablet();
         let lines = t.to_lines();
-        assert!(lines.contains("DB EnkiODB 7002 SEG 128 PART day PIN 3600 RET 14 SLAMS 50 SLAAV 0.999"));
+        assert!(
+            lines.contains("DB EnkiODB 7002 SEG 128 PART day PIN 3600 RET 14 SLAMS 50 SLAAV 0.999")
+        );
         assert!(lines.contains("HOT EnkiODB nusku"));
     }
 }

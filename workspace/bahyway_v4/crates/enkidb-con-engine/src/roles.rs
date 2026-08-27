@@ -3,10 +3,10 @@
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SovereignRole {
-    Client      = 0,
+    Client = 0,
     DataSteward = 1,
     TabletWriter = 2,
-    DubSar      = 3,
+    DubSar = 3,
 }
 
 impl SovereignRole {

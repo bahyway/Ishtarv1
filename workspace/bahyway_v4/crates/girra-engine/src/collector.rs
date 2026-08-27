@@ -5,14 +5,21 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn now_millis() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
 }
 
 /// Returns (idle, total) jiffies from /proc/stat's first cpu line.
 pub fn cpu_jiffies() -> Option<(u64, u64)> {
     let stat = fs::read_to_string("/proc/stat").ok()?;
     let line = stat.lines().next()?;
-    let vals: Vec<u64> = line.split_whitespace().skip(1).filter_map(|v| v.parse().ok()).collect();
+    let vals: Vec<u64> = line
+        .split_whitespace()
+        .skip(1)
+        .filter_map(|v| v.parse().ok())
+        .collect();
     if vals.len() < 5 {
         return None;
     }

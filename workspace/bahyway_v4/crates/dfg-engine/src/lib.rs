@@ -9,14 +9,14 @@
 //! - [`governance`]                 — GovernanceDecision, ParticleState, DataSteward
 //! - [`kernel`]                     — UekKernel: event execution loop
 
-pub mod node;
 pub mod edge;
 pub mod governance;
-pub mod plan;
 pub mod kernel;
+pub mod node;
+pub mod plan;
 
-pub use node::{DfgNode, NodeKind, NodeId};
 pub use edge::{DfgEdge, EdgeKind, EdgeMeta};
-pub use governance::{GovernanceDecision, ParticleState, DataSteward, DefaultSteward};
+pub use governance::{DataSteward, DefaultSteward, GovernanceDecision, ParticleState};
+pub use kernel::{ExecuteOutcome, FlaggedJournal, KakiStalk, UekEvent, UekKernel};
+pub use node::{DfgNode, NodeId, NodeKind};
 pub use plan::{DfgPlan, FeatureAttrib};
-pub use kernel::{UekKernel, KakiStalk, UekEvent, ExecuteOutcome, FlaggedJournal};

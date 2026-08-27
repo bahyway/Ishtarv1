@@ -22,49 +22,40 @@ pub enum CellKind {
     EnkiddbQuery,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum CellState {
+    #[default]
     Idle,
     Running,
     Done,
     Error,
 }
 
-impl Default for CellState {
-    fn default() -> Self { Self::Idle }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CellMetadata {
-    pub tags:     Vec<String>,
+    pub tags: Vec<String>,
     pub collapsed: bool,
-}
-
-impl Default for CellMetadata {
-    fn default() -> Self {
-        Self { tags: vec![], collapsed: false }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotebookCell {
-    pub id:       String,
-    pub kind:     CellKind,
-    pub source:   String,
-    pub output:   Option<String>,
-    pub state:    CellState,
+    pub id: String,
+    pub kind: CellKind,
+    pub source: String,
+    pub output: Option<String>,
+    pub state: CellState,
     pub metadata: CellMetadata,
 }
 
 impl NotebookCell {
     pub fn new(kind: CellKind, source: impl Into<String>) -> Self {
         Self {
-            id:       Uuid::new_v4().to_string(),
+            id: Uuid::new_v4().to_string(),
             kind,
-            source:   source.into(),
-            output:   None,
-            state:    CellState::default(),
+            source: source.into(),
+            output: None,
+            state: CellState::default(),
             metadata: CellMetadata::default(),
         }
     }

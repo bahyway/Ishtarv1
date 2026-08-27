@@ -1,0 +1,255 @@
+---
+# ============================================================================
+# PB-347 · UṢURTU — HeptaSpaceMap address codec scaffold (SilaEngine)
+# ----------------------------------------------------------------------------
+# LAW CONTEXT
+#   GL-MAP-001 (candidate) — The Unified Membrane Law:
+#     • Index space is {7,3} (order-3 heptagonal tiling, hyperbolic):
+#       coverage is gapless and exact IN INDEX SPACE.
+#     • Truth space remains UTM 38N. The veil = the mapping between them.
+#     • Aperture-7 hierarchy: every cell has exactly 7 children (digits 0–6).
+#       Hepta-address = base-7 path, ≤16 levels reaches 1 cm cells.
+#     • Cell KAKI: κ[0..3] uuid_hash = H(membrane_kaki ‖ hepta_address),
+#       deterministic + idempotent. Full address is an EnkiMDB facet,
+#       NEVER embedded in reserved bytes. KAKI v4.0 layout untouched.
+#     • Interment event-kaki witnesses (deceased κ, cell κ, membrane κ, t)
+#       via KISPU — two independent witnesses of place (UTM + hepta-address).
+#   NL-001 pending CSR-08: Kulla (god of bricks/foundations) → tiling engine;
+#     Nebuchadnezzar → era name for the seven-pattern canon (kings name eras).
+#   Ḫubullu gloss (GL-NAM-002): uṣurtu = "drawing, plan, ordinance".
+#
+# WAY OF WORK
+#   Run FROM the Fedora bare-metal HOST, targeting KVM/libvirt VMs.
+#   No manual commands. Running this playbook is the CSR-08 confirmation.
+# ============================================================================
+
+- name: "PB-347 · Uṣurtu hepta-address codec scaffold"
+  hosts: silaengine_vms
+  become: false
+  vars:
+    bahyway_root: "{{ ansible_env.HOME }}/bahyway"
+    sila_crate: "{{ bahyway_root }}/silaengine"
+    module_dir: "{{ sila_crate }}/src/usurtu"
+    max_depth: 16          # base-7 digits → ~1 cm at Wadi-scale root
+    aperture: 7
+
+  tasks:
+
+    - name: "PB-347.1 · Assert SilaEngine crate exists"
+      ansible.builtin.stat:
+        path: "{{ sila_crate }}/Cargo.toml"
+      register: sila_cargo
+
+    - name: "PB-347.1a · Refuse to proceed without the crate (sealed-law guard)"
+      ansible.builtin.fail:
+        msg: "SilaEngine crate not found at {{ sila_crate }} — Uṣurtu is born inside SilaEngine or not at all."
+      when: not sila_cargo.stat.exists
+
+    - name: "PB-347.2 · Create usurtu module directory"
+      ansible.builtin.file:
+        path: "{{ module_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: "PB-347.3 · Scaffold usurtu/mod.rs — HeptaAddress codec"
+      ansible.builtin.copy:
+        dest: "{{ module_dir }}/mod.rs"
+        mode: "0644"
+        force: false          # never clobber hand-grown law
+        content: |
+          //! UṢURTU (uṣurtu — "drawing, plan, ordinance")
+          //! HeptaSpaceMap address codec — GL-MAP-001 candidate.
+          //!
+          //! Index space: {7,3} hyperbolic tiling — gapless in index space.
+          //! Truth space: UTM 38N — the veil maps between them.
+          //! Aperture-7: every cell has exactly 7 children, digits 0..=6.
+
+          pub mod veil;      // {7,3} index-space ↔ UTM 38N truth mapping
+          pub mod mint;      // deterministic cell-KAKI derivation
+          pub mod interment; // KISPU interment event emitter (event-kaki)
+
+          pub const APERTURE: u8 = 7;
+          pub const MAX_DEPTH: usize = 16;
+
+          /// A base-7 path into the {7,3} hierarchy. Digit i is level i.
+          #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+          pub struct HeptaAddress {
+              digits: heapless::Vec<u8, MAX_DEPTH>,
+          }
+
+          impl HeptaAddress {
+              pub fn root() -> Self {
+                  Self { digits: heapless::Vec::new() }
+              }
+
+              /// Descend one level. Errors on digit ≥ 7 or depth > MAX_DEPTH.
+              pub fn child(&self, digit: u8) -> Result<Self, UsurtuError> {
+                  if digit >= APERTURE { return Err(UsurtuError::DigitOutOfCanon(digit)); }
+                  let mut d = self.digits.clone();
+                  d.push(digit).map_err(|_| UsurtuError::DepthExceeded)?;
+                  Ok(Self { digits: d })
+              }
+
+              pub fn parent(&self) -> Option<Self> {
+                  let mut d = self.digits.clone();
+                  d.pop()?;
+                  Some(Self { digits: d })
+              }
+
+              pub fn depth(&self) -> usize { self.digits.len() }
+
+              /// Prefix containment — the radix-trie descent HeptaScript
+              /// `WHERE cell WITHIN a·b·c` compiles to. O(depth).
+              pub fn within(&self, prefix: &HeptaAddress) -> bool {
+                  self.digits.starts_with(&prefix.digits)
+              }
+
+              /// Canonical middle-dot form: 3·5·1·0·2·6·4·2·0
+              pub fn canon(&self) -> String {
+                  self.digits.iter().map(|d| d.to_string())
+                      .collect::<Vec<_>>().join("\u{00B7}")
+              }
+
+              /// Packed form: 3 bits per digit, ≤ 48 bits at MAX_DEPTH.
+              /// This is a FACET encoding for EnkiMDB — it is NEVER written
+              /// into KAKI reserved bytes (layout is permanently locked).
+              pub fn packed(&self) -> (u64, u8) {
+                  let mut v: u64 = 0;
+                  for &d in self.digits.iter() { v = (v << 3) | d as u64; }
+                  (v, self.depth() as u8)
+              }
+          }
+
+          #[derive(Debug, thiserror::Error)]
+          pub enum UsurtuError {
+              #[error("digit {0} outside the seven-fold canon (0..=6)")]
+              DigitOutOfCanon(u8),
+              #[error("depth beyond MAX_DEPTH — the doll has a smallest self")]
+              DepthExceeded,
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn njf_80272_roundtrip() {
+                  // Plot NJF-80272 · 3·5·1·0·2·6·4·2·0
+                  let mut a = HeptaAddress::root();
+                  for d in [3u8,5,1,0,2,6,4,2,0] { a = a.child(d).unwrap(); }
+                  assert_eq!(a.canon(), "3·5·1·0·2·6·4·2·0");
+                  assert_eq!(a.depth(), 9);
+              }
+
+              #[test]
+              fn within_is_prefix_descent() {
+                  let mut p = HeptaAddress::root();
+                  for d in [3u8,5,1] { p = p.child(d).unwrap(); }
+                  let mut c = p.clone();
+                  for d in [0u8,2] { c = c.child(d).unwrap(); }
+                  assert!(c.within(&p));
+                  assert!(!p.within(&c));
+              }
+
+              #[test]
+              fn eighth_digit_is_refused() {
+                  assert!(HeptaAddress::root().child(7).is_err());
+              }
+          }
+
+    - name: "PB-347.4 · Scaffold usurtu/mint.rs — deterministic cell-KAKI derivation"
+      ansible.builtin.copy:
+        dest: "{{ module_dir }}/mint.rs"
+        mode: "0644"
+        force: false
+        content: |
+          //! Deterministic cell identity — GL-MAP-001 §mint.
+          //! κ[0..3] uuid_hash = H(membrane_kaki ‖ hepta_address_packed).
+          //! Same cell → same KAKI, forever. Idempotent, replay-safe.
+          //! KAKI v4.0 canonical layout is LOCKED and honored verbatim:
+          //!   κ[0..3]=uuid_hash κ[4..5]=tribe_id κ[6]=type κ[7]=role
+          //!   κ[8..11]=reserved(zero) κ[12..13]=timestamp κ[14..15]=CRC-16/CCITT
+
+          use super::HeptaAddress;
+
+          pub fn derive_uuid_hash(membrane_kaki: &[u8; 16], addr: &HeptaAddress) -> [u8; 4] {
+              let (packed, depth) = addr.packed();
+              let mut hasher = blake3::Hasher::new();
+              hasher.update(membrane_kaki);
+              hasher.update(&packed.to_be_bytes());
+              hasher.update(&[depth]);
+              let out = hasher.finalize();
+              let mut h = [0u8; 4];
+              h.copy_from_slice(&out.as_bytes()[..4]);
+              h
+          }
+
+          // TODO(BLK-guard): full mint fn wires tribe_id/type/role from the
+          // membrane pattern record in EnkiMDB and stamps CRC-16/CCITT last.
+
+    - name: "PB-347.5 · Scaffold usurtu/veil.rs — {7,3} index ↔ UTM 38N truth"
+      ansible.builtin.copy:
+        dest: "{{ module_dir }}/veil.rs"
+        mode: "0644"
+        force: false
+        content: |
+          //! THE VEIL — GL-MAP-001 §veil.
+          //! Index space {7,3} is gapless BY CONSTRUCTION (hyperbolic).
+          //! Truth space is UTM 38N. Cells project quasi-heptagonal,
+          //! boundary-matched. Truth answers WHERE; index answers WHO-PATH.
+          //!
+          //! Stub: forward (utm → deepest containing address at depth d)
+          //! and inverse (address → truth polygon) transforms.
+
+          use super::HeptaAddress;
+
+          pub struct TruthPoint { pub easting_m: f64, pub northing_m: f64 } // UTM 38N
+
+          pub fn locate(_p: &TruthPoint, _depth: usize) -> HeptaAddress {
+              // TODO: {7,3} conformal descent — see GL-MAP-001 appendix.
+              HeptaAddress::root()
+          }
+
+    - name: "PB-347.6 · Scaffold usurtu/interment.rs — KISPU interment event"
+      ansible.builtin.copy:
+        dest: "{{ module_dir }}/interment.rs"
+        mode: "0644"
+        force: false
+        content: |
+          //! INTERMENT EVENT — GL-MAP-001 §interment.
+          //! Event-kaki witnesses: (deceased κ, cell κ, membrane κ, timestamp).
+          //! Committed through KISPU micro-batch boundary (N particles or T ms).
+          //! Two independent witnesses of place: UTM 38N truth + hepta-address
+          //! reached through the membrane KAKI. StoryEngine reads this event
+          //! to journal: "laid in the grave at t, cell κ, membrane κₘ."
+
+          pub struct IntermentEvent {
+              pub deceased_kaki: [u8; 16],
+              pub cell_kaki: [u8; 16],
+              pub membrane_kaki: [u8; 16],
+              pub timestamp_epoch: u16, // KAKI κ[12..13] convention
+          }
+
+          // TODO: emit via enkidb-ingest::bridge — sole write node.
+
+    - name: "PB-347.7 · Register module in SilaEngine lib.rs (idempotent)"
+      ansible.builtin.lineinfile:
+        path: "{{ sila_crate }}/src/lib.rs"
+        line: "pub mod usurtu;"
+        state: present
+
+    - name: "PB-347.8 · Cargo check (witness of compilability)"
+      ansible.builtin.command:
+        cmd: cargo check
+        chdir: "{{ sila_crate }}"
+      register: cargo_check
+      changed_when: false
+      failed_when: cargo_check.rc != 0
+
+    - name: "PB-347.9 · Verdict"
+      ansible.builtin.debug:
+        msg: >
+          PB-347 sealed-scaffold complete. Uṣurtu lives in SilaEngine.
+          Open decisions for CSR-08: (a) Kulla Engine naming for the tiling
+          minting engine, (b) Nebuchadnezzar Canon as ERA name per NL-001,
+          (c) GL-MAP-001 sealing text with the {7,3} index/truth split.

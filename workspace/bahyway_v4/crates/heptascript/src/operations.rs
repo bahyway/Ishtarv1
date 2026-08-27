@@ -66,9 +66,8 @@ impl Operation {
             "PROVE" => Ok(Operation::Prove),
             "SYNC" => Ok(Operation::Sync),
             "WITNESS" => Ok(Operation::Witness),
-            "SELECT" | "INSERT" | "UPDATE" | "DELETE" | "FROM"
-            | "WHERE" | "JOIN" | "GROUP" | "ORDER" | "TABLE" | "VIEW" =>
-                Err(OperationError::SqlForbidden(token.to_string())),
+            "SELECT" | "INSERT" | "UPDATE" | "DELETE" | "FROM" | "WHERE" | "JOIN" | "GROUP"
+            | "ORDER" | "TABLE" | "VIEW" => Err(OperationError::SqlForbidden(token.to_string())),
             other => Err(OperationError::Unknown(other.to_string())),
         }
     }
@@ -95,8 +94,11 @@ pub enum OperationError {
 impl std::fmt::Display for OperationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OperationError::SqlForbidden(t) =>
-                write!(f, "SQL is forbidden in BahyWay v4.0: '{}' — use ORBIT/EMIT/PROVE/SYNC/WITNESS", t),
+            OperationError::SqlForbidden(t) => write!(
+                f,
+                "SQL is forbidden in BahyWay v4.0: '{}' — use ORBIT/EMIT/PROVE/SYNC/WITNESS",
+                t
+            ),
             OperationError::Unknown(t) => write!(f, "unknown sovereign verb: '{}'", t),
         }
     }
@@ -120,9 +122,10 @@ mod tests {
 
     #[test]
     fn every_sql_keyword_is_rejected() {
-        for kw in ["SELECT", "INSERT", "UPDATE", "DELETE", "FROM",
-                   "WHERE", "JOIN", "GROUP", "ORDER", "TABLE", "VIEW",
-                   "select", "Join"] {
+        for kw in [
+            "SELECT", "INSERT", "UPDATE", "DELETE", "FROM", "WHERE", "JOIN", "GROUP", "ORDER",
+            "TABLE", "VIEW", "select", "Join",
+        ] {
             match Operation::parse(kw) {
                 Err(OperationError::SqlForbidden(_)) => {}
                 other => panic!("SQL keyword {} not rejected: {:?}", kw, other),
@@ -133,7 +136,12 @@ mod tests {
     #[test]
     fn only_emit_births_particles() {
         assert!(Operation::Emit.births_particles());
-        for op in [Operation::Orbit, Operation::Prove, Operation::Sync, Operation::Witness] {
+        for op in [
+            Operation::Orbit,
+            Operation::Prove,
+            Operation::Sync,
+            Operation::Witness,
+        ] {
             assert!(!op.births_particles());
         }
     }

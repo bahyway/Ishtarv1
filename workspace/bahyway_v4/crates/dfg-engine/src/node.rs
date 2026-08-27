@@ -24,16 +24,16 @@ pub enum NodeKind {
 #[derive(Debug, Clone)]
 pub struct DfgNode {
     /// Stable identity within this plan (0-indexed, assigned during translation).
-    pub id:           NodeId,
-    pub kind:         NodeKind,
+    pub id: NodeId,
+    pub kind: NodeKind,
     /// Human-readable label (e.g. "MOON", "SATURN", "SHRINE").
-    pub label:        String,
+    pub label: String,
     /// 0-based sector index from the Hepta file.
     pub sector_index: u8,
     /// Conditional activation expression (`condition:` in Hepta).
-    pub condition:    Option<String>,
+    pub condition: Option<String>,
     /// Feature vector derived from ATTRIB statements.
-    pub attribs:      Vec<super::plan::FeatureAttrib>,
+    pub attribs: Vec<super::plan::FeatureAttrib>,
 }
 
 impl DfgNode {

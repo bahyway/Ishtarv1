@@ -10,28 +10,28 @@ use crate::gguf::GgufError;
 /// Quantization type enum matching GGML constants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Quantization {
-    F32   = 0,
-    F16   = 1,
-    Q4_0  = 2,
-    Q4_1  = 3,
-    Q8_0  = 8,
-    Q4KS  = 12,
-    Q4KM  = 13,
-    Q6K   = 14,
+    F32 = 0,
+    F16 = 1,
+    Q4_0 = 2,
+    Q4_1 = 3,
+    Q8_0 = 8,
+    Q4KS = 12,
+    Q4KM = 13,
+    Q6K = 14,
 }
 
 impl Quantization {
     pub fn from_u32(v: u32) -> Option<Self> {
         match v {
-            0  => Some(Self::F32),
-            1  => Some(Self::F16),
-            2  => Some(Self::Q4_0),
-            3  => Some(Self::Q4_1),
-            8  => Some(Self::Q8_0),
+            0 => Some(Self::F32),
+            1 => Some(Self::F16),
+            2 => Some(Self::Q4_0),
+            3 => Some(Self::Q4_1),
+            8 => Some(Self::Q8_0),
             12 => Some(Self::Q4KS),
             13 => Some(Self::Q4KM),
             14 => Some(Self::Q6K),
-            _  => None,
+            _ => None,
         }
     }
     /// Block size in number of elements.
@@ -57,9 +57,11 @@ pub fn dequantize_q4_k_m(data: &[u8], num_elem: usize) -> Result<Vec<f32>, GgufE
 
     let num_blocks = num_elem / BLOCK_SIZE;
     if data.len() < num_blocks * BLOCK_BYTES {
-        return Err(GgufError::AlignmentError(
-            format!("Q4_K_M: expected {} bytes, got {}", num_blocks * BLOCK_BYTES, data.len())
-        ));
+        return Err(GgufError::AlignmentError(format!(
+            "Q4_K_M: expected {} bytes, got {}",
+            num_blocks * BLOCK_BYTES,
+            data.len()
+        )));
     }
 
     let mut out = Vec::with_capacity(num_elem);
@@ -69,7 +71,7 @@ pub fn dequantize_q4_k_m(data: &[u8], num_elem: usize) -> Result<Vec<f32>, GgufE
         let block = &data[base..base + BLOCK_BYTES];
 
         // Read super-block scale and min (f16 → f32)
-        let d    = f16_to_f32(u16::from_le_bytes([block[0], block[1]]));
+        let d = f16_to_f32(u16::from_le_bytes([block[0], block[1]]));
         let dmin = f16_to_f32(u16::from_le_bytes([block[2], block[3]]));
 
         // Read 8 sub-block scales (6-bit each, packed in 12 bytes)
@@ -108,21 +110,23 @@ pub fn dequantize_q4_0(data: &[u8], num_elem: usize) -> Result<Vec<f32>, GgufErr
 
     let num_blocks = num_elem / BLOCK_SIZE;
     if data.len() < num_blocks * BLOCK_BYTES {
-        return Err(GgufError::AlignmentError(
-            format!("Q4_0: expected {} bytes, got {}", num_blocks * BLOCK_BYTES, data.len())
-        ));
+        return Err(GgufError::AlignmentError(format!(
+            "Q4_0: expected {} bytes, got {}",
+            num_blocks * BLOCK_BYTES,
+            data.len()
+        )));
     }
 
     let mut out = Vec::with_capacity(num_elem);
 
     for block_idx in 0..num_blocks {
-        let base  = block_idx * BLOCK_BYTES;
-        let d     = f16_to_f32(u16::from_le_bytes([data[base], data[base+1]]));
-        let quants = &data[base+2..base+18];
+        let base = block_idx * BLOCK_BYTES;
+        let d = f16_to_f32(u16::from_le_bytes([data[base], data[base + 1]]));
+        let quants = &data[base + 2..base + 18];
 
         for i in 0..BLOCK_SIZE {
             let byte_idx = i / 2;
-            let nibble   = if i % 2 == 0 {
+            let nibble = if i % 2 == 0 {
                 quants[byte_idx] & 0x0F
             } else {
                 (quants[byte_idx] >> 4) & 0x0F
@@ -144,17 +148,19 @@ pub fn dequantize_q8_0(data: &[u8], num_elem: usize) -> Result<Vec<f32>, GgufErr
 
     let num_blocks = num_elem / BLOCK_SIZE;
     if data.len() < num_blocks * BLOCK_BYTES {
-        return Err(GgufError::AlignmentError(
-            format!("Q8_0: expected {} bytes, got {}", num_blocks * BLOCK_BYTES, data.len())
-        ));
+        return Err(GgufError::AlignmentError(format!(
+            "Q8_0: expected {} bytes, got {}",
+            num_blocks * BLOCK_BYTES,
+            data.len()
+        )));
     }
 
     let mut out = Vec::with_capacity(num_elem);
 
     for block_idx in 0..num_blocks {
-        let base   = block_idx * BLOCK_BYTES;
-        let d      = f16_to_f32(u16::from_le_bytes([data[base], data[base+1]]));
-        let quants = &data[base+2..base+34];
+        let base = block_idx * BLOCK_BYTES;
+        let d = f16_to_f32(u16::from_le_bytes([data[base], data[base + 1]]));
+        let quants = &data[base + 2..base + 34];
 
         for &q in quants {
             out.push(d * (q as i8) as f32);
@@ -167,8 +173,8 @@ pub fn dequantize_q8_0(data: &[u8], num_elem: usize) -> Result<Vec<f32>, GgufErr
 /// Convert F16 (IEEE 754 half precision) to F32.
 /// Pure Rust — no intrinsics.
 pub fn f16_to_f32(half: u16) -> f32 {
-    let sign     = ((half >> 15) as u32) << 31;
-    let exp      = ((half >> 10) & 0x1F) as u32;
+    let sign = ((half >> 15) as u32) << 31;
+    let exp = ((half >> 10) & 0x1F) as u32;
     let mantissa = (half & 0x3FF) as u32;
 
     if exp == 0 {
@@ -203,28 +209,28 @@ fn read_6bit_scales(data: &[u8]) -> [u8; 16] {
     // 12 bytes encode 16 values of 6 bits each (96 bits total)
     for i in 0..8 {
         let bit_offset = i * 12;
-        let byte_lo    = bit_offset / 8;
-        let bit_lo     = bit_offset % 8;
+        let byte_lo = bit_offset / 8;
+        let bit_lo = bit_offset % 8;
 
         // Scale (6 bits)
         let raw_s = if bit_lo <= 2 {
             (data[byte_lo] >> bit_lo) & 0x3F
         } else {
             let lo = (data[byte_lo] >> bit_lo) as u16;
-            let hi = ((data[byte_lo + 1] as u16) << (8 - bit_lo)) as u16;
+            let hi = (data[byte_lo + 1] as u16) << (8 - bit_lo);
             ((lo | hi) & 0x3F) as u8
         };
         out[i * 2] = raw_s;
 
         // Min scale (next 6 bits)
         let bit_offset2 = bit_offset + 6;
-        let byte_lo2    = bit_offset2 / 8;
-        let bit_lo2     = bit_offset2 % 8;
+        let byte_lo2 = bit_offset2 / 8;
+        let bit_lo2 = bit_offset2 % 8;
         let raw_m = if bit_lo2 <= 2 {
             (data[byte_lo2] >> bit_lo2) & 0x3F
         } else if byte_lo2 + 1 < data.len() {
             let lo = (data[byte_lo2] >> bit_lo2) as u16;
-            let hi = ((data[byte_lo2 + 1] as u16) << (8 - bit_lo2)) as u16;
+            let hi = (data[byte_lo2 + 1] as u16) << (8 - bit_lo2);
             ((lo | hi) & 0x3F) as u8
         } else {
             (data[byte_lo2] >> bit_lo2) & 0x3F
@@ -240,13 +246,13 @@ pub fn matmul_f32(a: &[f32], x: &[f32], rows: usize, cols: usize) -> Vec<f32> {
     assert_eq!(a.len(), rows * cols, "matrix size mismatch");
     assert_eq!(x.len(), cols, "vector size mismatch");
     let mut y = vec![0.0f32; rows];
-    for r in 0..rows {
+    for (r, y_r) in y.iter_mut().enumerate() {
         let row_start = r * cols;
         let mut acc = 0.0f32;
         for c in 0..cols {
             acc += a[row_start + c] * x[c];
         }
-        y[r] = acc;
+        *y_r = acc;
     }
     y
 }
@@ -260,7 +266,9 @@ pub fn softmax_inplace(x: &mut [f32]) {
         sum += *v;
     }
     if sum > 0.0 {
-        for v in x.iter_mut() { *v /= sum; }
+        for v in x.iter_mut() {
+            *v /= sum;
+        }
     }
 }
 
@@ -268,7 +276,10 @@ pub fn softmax_inplace(x: &mut [f32]) {
 pub fn rms_norm(x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
     assert_eq!(x.len(), weight.len());
     let rms = (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32 + eps).sqrt();
-    x.iter().zip(weight.iter()).map(|(v, w)| v / rms * w).collect()
+    x.iter()
+        .zip(weight.iter())
+        .map(|(v, w)| v / rms * w)
+        .collect()
 }
 
 /// SiLU activation: x * sigmoid(x)
@@ -342,7 +353,9 @@ mod tests {
         // Construct a minimal Q8_0 block: scale=1.0 (f16=0x3C00), values 0..31
         let mut data = Vec::new();
         data.extend_from_slice(&0x3C00u16.to_le_bytes()); // scale = 1.0
-        for i in 0i8..32 { data.push(i as u8); }
+        for i in 0i8..32 {
+            data.push(i as u8);
+        }
         let result = dequantize_q8_0(&data, 32).unwrap();
         assert_eq!(result.len(), 32);
         assert!((result[0] - 0.0).abs() < 1e-5);

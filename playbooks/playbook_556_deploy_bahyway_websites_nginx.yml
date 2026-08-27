@@ -67,7 +67,17 @@
   hosts: uruk
   become: false
   vars:
-    repo_root: "{{ playbook_dir }}/.."
+    # 2026-08-24, found live: an un-normalized ".." in this path is the real
+    # cause of the persistent 403 -- nginx's own error log showed it opening
+    # ".../playbooks/../website/bahyway.com/index.html" literally. semanage
+    # fcontext/restorecon canonicalize the TARGET file's real path before
+    # matching it against a stored regex spec, but the spec itself was
+    # registered with the un-resolved ".." still in it, so it could never
+    # match -- restorecon kept reporting "changed" while leaving the
+    # default user_home_t label untouched. `realpath` fixes it at the
+    # source so every downstream use (nginx root, fcontext spec,
+    # restorecon target) shares one canonical path.
+    repo_root: "{{ (playbook_dir ~ '/..') | realpath }}"
     request_tls: false
     admin_email: "webmaster@bahyway.com"
     sites:
@@ -94,11 +104,93 @@
       loop_control: { label: "{{ item.item.domain }}" }
       when: not item.stat.exists
 
+    # 2026-08-23, found live: nginx served a real 403 Forbidden for
+    # heptascript.com even though its index.html genuinely exists and the
+    # server block is correct -- classic Fedora SELinux gotcha, serving
+    # from a path under /home/ that has neither the httpd_sys_content_t
+    # file context nor the httpd_enable_homedirs boolean nginx needs to
+    # read outside its usual webroot. Fixed both ways, each guarded to be
+    # a no-op where it doesn't apply: plain world-read/execute bits
+    # (always relevant) and the SELinux context + boolean (only when
+    # SELinux is actually enforcing on this host).
+    - name: "0.2 | Ensure website content is world-readable (nginx worker isn't the repo owner)"
+      ansible.builtin.shell: >-
+        find {{ item.root }} -type d -exec chmod o+rx {} + &&
+        find {{ item.root }} -type f -exec chmod o+r {} +
+      loop: "{{ sites }}"
+      loop_control: { label: "{{ item.domain }}" }
+      changed_when: true
+      check_mode: false
+
+    - name: "0.3 | SELinux context for the website content (Fedora default: enforcing)"
+      ansible.builtin.command: >-
+        semanage fcontext -a -t httpd_sys_content_t "{{ item.root }}(/.*)?"
+      loop: "{{ sites }}"
+      loop_control: { label: "{{ item.domain }}" }
+      become: true
+      when: ansible_facts.selinux.status is defined and ansible_facts.selinux.status == 'enabled'
+      register: fcontext_add
+      failed_when: fcontext_add.rc != 0 and 'already defined' not in fcontext_add.stderr
+      changed_when: fcontext_add.rc == 0
+      check_mode: false
+
+    - name: "0.4 | Apply the SELinux context (restorecon)"
+      ansible.builtin.command: "restorecon -R {{ item.root }}"
+      loop: "{{ sites }}"
+      loop_control: { label: "{{ item.domain }}" }
+      become: true
+      when: ansible_facts.selinux.status is defined and ansible_facts.selinux.status == 'enabled'
+      changed_when: true
+      check_mode: false
+
+    # Plain setsebool (not the ansible.posix.seboolean module) -- keeps this
+    # task dependency-free like the other two SELinux tasks above, rather
+    # than assuming a collection is installed on every control node this
+    # ever runs from.
+    - name: "0.5 | Allow nginx to read content under /home (httpd_enable_homedirs)"
+      ansible.builtin.command: setsebool -P httpd_enable_homedirs on
+      become: true
+      when: ansible_facts.selinux.status is defined and ansible_facts.selinux.status == 'enabled'
+      register: setsebool_result
+      failed_when: setsebool_result.rc != 0
+      changed_when: setsebool_result.rc == 0
+      check_mode: false
+
+    # 2026-08-24, found live: 0.3/0.4/0.5 above all reported "changed" while
+    # the SELinux context silently stayed wrong (see repo_root fix above) --
+    # changed_when: true doesn't mean it worked. Verify what's actually true
+    # on disk every run, not just when something fails, so drift is visible
+    # immediately instead of after another 403.
+    - name: "0.6 | Verify the SELinux state this playbook depends on"
+      ansible.builtin.shell: >-
+        echo "enforce=$(getenforce)";
+        echo "httpd_enable_homedirs=$(getsebool httpd_enable_homedirs 2>&1)";
+        echo "{{ item.domain }}: $(ls -dZ {{ item.root }})"
+      loop: "{{ sites }}"
+      loop_control: { label: "{{ item.domain }}" }
+      become: true
+      when: ansible_facts.selinux.status is defined and ansible_facts.selinux.status == 'enabled'
+      register: selinux_state
+      changed_when: false
+
+    - name: "0.7 | SELinux state"
+      ansible.builtin.debug:
+        msg: "{{ selinux_state.results | map(attribute='stdout') | list }}"
+      when: ansible_facts.selinux.status is defined and ansible_facts.selinux.status == 'enabled'
+
+    # 2026-08-23, found live: a dnf task is simulated (not really run) under
+    # --check, so task "2.3 | Enable + (re)start nginx" then genuinely can't
+    # find the nginx service ("Could not find the requested service nginx:
+    # host"). check_mode: false here means --check on this playbook now
+    # genuinely installs nginx rather than only previewing -- necessary so
+    # PB-609's own check-then-live gate (LIVE only runs if --check succeeds)
+    # can ever reach this playbook's LIVE phase at all.
     - name: "1.1 | Install nginx"
       ansible.builtin.dnf:
         name: nginx
         state: present
       become: true
+      check_mode: false
 
     - name: "1.2 | Install certbot + the nginx plugin (only needed if request_tls)"
       ansible.builtin.dnf:
@@ -200,16 +292,51 @@
       loop_control: { label: "{{ item.item.domain }}" }
       when: request_tls and item.rc is defined and item.rc != 0
 
+    # 2026-08-23, found live: heptascript.com alone still 403'd here after
+    # the 0.2-0.5 permission/SELinux fixes above -- bahyway.com and
+    # beemdm.com both passed with identical directory layouts and
+    # permissions, so this isn't the same class of bug and shouldn't be
+    # guessed at blindly again. Capture real evidence on failure (SELinux
+    # context actually applied to this site's files, and nginx's own error
+    # log line for the request) so the next run's output shows the real
+    # cause instead of a bare 403.
     - name: "5.1 | Verify each site actually answers, don't just assume"
-      ansible.builtin.uri:
-        url: "http://127.0.0.1/"
-        headers:
-          Host: "{{ item.domain }}"
-        return_content: true
-        status_code: 200
-      register: site_answer
-      loop: "{{ sites }}"
-      loop_control: { label: "{{ item.domain }}" }
+      block:
+        - name: "5.1a | check"
+          ansible.builtin.uri:
+            url: "http://127.0.0.1/"
+            headers:
+              Host: "{{ item.domain }}"
+            return_content: true
+            status_code: 200
+          loop: "{{ sites }}"
+          loop_control: { label: "{{ item.domain }}" }
+          register: site_answer
+      rescue:
+        - name: "5.1b | diagnose the failure -- SELinux context actually on disk"
+          ansible.builtin.command: "ls -laZ {{ item.root }}"
+          loop: "{{ sites }}"
+          loop_control: { label: "{{ item.domain }}" }
+          become: true
+          changed_when: false
+          register: ctx_check
+
+        - name: "5.1c | diagnose the failure -- nginx's own error log tail"
+          ansible.builtin.command: tail -n 20 /var/log/nginx/error.log
+          become: true
+          changed_when: false
+          register: nginx_err
+          failed_when: false
+
+        - name: "5.1d | diagnostics"
+          ansible.builtin.debug:
+            msg:
+              - "SELinux context per site: {{ ctx_check.results | map(attribute='stdout') | list }}"
+              - "nginx error.log tail: {{ nginx_err.stdout_lines | default([]) }}"
+
+        - name: "5.1e | re-raise the original failure"
+          ansible.builtin.fail:
+            msg: "PB-556 site verification failed -- see diagnostics above."
 
     - name: "DONE | PB-556 complete"
       ansible.builtin.debug:

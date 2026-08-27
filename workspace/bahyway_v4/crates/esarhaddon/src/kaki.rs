@@ -10,9 +10,9 @@ pub enum KakiClass {
     /// 0x01 / KISHIB — Survivor Identity particle.
     SurvivorIdentity = 0x01,
     /// 0x02 / ZIKRU — Seismic Event particle.
-    SeismicEvent     = 0x02,
+    SeismicEvent = 0x02,
     /// 0x02 / PARZU — Structural State particle (SMI snapshot).
-    StructuralState  = 0x03,
+    StructuralState = 0x03,
 }
 
 /// Seismic event particle — accelerometer / geophone reading.

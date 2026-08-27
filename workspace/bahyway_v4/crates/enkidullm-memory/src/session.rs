@@ -1,18 +1,18 @@
 //! session.rs — Conversation session management.
 #![forbid(unsafe_code)]
 
-use crate::conversation::{Turn, TurnRole, ConversationParticle, CONV_TRIBE_ID};
-use enkidb_kaki::KakiMinter;
+use crate::conversation::{ConversationParticle, Turn, TurnRole, CONV_TRIBE_ID};
 use bahyway_core::TribeId;
+use enkidb_kaki::KakiMinter;
 
 /// A conversation session — a sequence of turns with a shared context.
 pub struct Session {
-    pub session_id:   u64,
-    pub title:        String,
-    pub turns:        Vec<ConversationParticle>,
+    pub session_id: u64,
+    pub title: String,
+    pub turns: Vec<ConversationParticle>,
     pub created_epoch: u64,
-    minter:           KakiMinter,
-    turn_counter:     u32,
+    minter: KakiMinter,
+    turn_counter: u32,
 }
 
 impl Session {
@@ -32,8 +32,12 @@ impl Session {
     pub fn add_user(&mut self, content: &str, epoch: u64) -> &ConversationParticle {
         self.turn_counter += 1;
         let turn = Turn::new(
-            TurnRole::User, content.to_string(), epoch,
-            self.session_id, self.turn_counter, &self.minter,
+            TurnRole::User,
+            content.to_string(),
+            epoch,
+            self.session_id,
+            self.turn_counter,
+            &self.minter,
         );
         self.turns.push(ConversationParticle::from_turn(turn));
         self.turns.last().unwrap()
@@ -43,8 +47,12 @@ impl Session {
     pub fn add_assistant(&mut self, content: &str, epoch: u64) -> &ConversationParticle {
         self.turn_counter += 1;
         let turn = Turn::new(
-            TurnRole::Assistant, content.to_string(), epoch,
-            self.session_id, self.turn_counter, &self.minter,
+            TurnRole::Assistant,
+            content.to_string(),
+            epoch,
+            self.session_id,
+            self.turn_counter,
+            &self.minter,
         );
         self.turns.push(ConversationParticle::from_turn(turn));
         self.turns.last().unwrap()
@@ -54,8 +62,12 @@ impl Session {
     pub fn add_system(&mut self, content: &str, epoch: u64) {
         self.turn_counter += 1;
         let turn = Turn::new(
-            TurnRole::System, content.to_string(), epoch,
-            self.session_id, self.turn_counter, &self.minter,
+            TurnRole::System,
+            content.to_string(),
+            epoch,
+            self.session_id,
+            self.turn_counter,
+            &self.minter,
         );
         self.turns.push(ConversationParticle::from_turn(turn));
     }
@@ -67,11 +79,15 @@ impl Session {
 
         for particle in self.turns.iter().rev() {
             let tok_count = particle.turn.token_count;
-            if total_tokens + tok_count > max_tokens { break; }
+            if total_tokens + tok_count > max_tokens {
+                break;
+            }
             total_tokens += tok_count;
-            parts.push(format!("<|{}|>\n{}\n",
+            parts.push(format!(
+                "<|{}|>\n{}\n",
                 particle.turn.role.as_str(),
-                particle.turn.content));
+                particle.turn.content
+            ));
         }
 
         parts.reverse();
@@ -81,18 +97,31 @@ impl Session {
     /// Session statistics.
     pub fn stats(&self) -> SessionStats {
         let total_tokens: usize = self.turns.iter().map(|p| p.turn.token_count).sum();
-        let user_turns    = self.turns.iter().filter(|p| p.turn.role == TurnRole::User).count();
-        let asst_turns    = self.turns.iter().filter(|p| p.turn.role == TurnRole::Assistant).count();
-        SessionStats { total_turns: self.turns.len(), user_turns, asst_turns, total_tokens }
+        let user_turns = self
+            .turns
+            .iter()
+            .filter(|p| p.turn.role == TurnRole::User)
+            .count();
+        let asst_turns = self
+            .turns
+            .iter()
+            .filter(|p| p.turn.role == TurnRole::Assistant)
+            .count();
+        SessionStats {
+            total_turns: self.turns.len(),
+            user_turns,
+            asst_turns,
+            total_tokens,
+        }
     }
 }
 
 /// Session statistics summary.
 #[derive(Debug, Clone)]
 pub struct SessionStats {
-    pub total_turns:  usize,
-    pub user_turns:   usize,
-    pub asst_turns:   usize,
+    pub total_turns: usize,
+    pub user_turns: usize,
+    pub asst_turns: usize,
     pub total_tokens: usize,
 }
 

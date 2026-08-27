@@ -1,11 +1,13 @@
 //! ea_chat_engine.rs — EaAgent chat orchestrator.
 #![forbid(unsafe_code)]
 
-use crate::ea_commands::{parse_ea_command, handle_ea_command, EaCommand};
-use crate::ea_prompt::EaPromptBuilder;
+use crate::ea_commands::{handle_ea_command, parse_ea_command, EaCommand};
 use crate::ea_model_loader::{EaModelLoader, DEEPSEEK_MATH_MODEL};
 use crate::ea_panel_state::EaPanelState;
-use enkiddb_rag_client::{self, DEFAULT_HOST as ENKIDDB_DEFAULT_HOST, DEFAULT_PORT as ENKIDDB_DEFAULT_PORT};
+use crate::ea_prompt::EaPromptBuilder;
+use enkiddb_rag_client::{
+    self, DEFAULT_HOST as ENKIDDB_DEFAULT_HOST, DEFAULT_PORT as ENKIDDB_DEFAULT_PORT,
+};
 
 #[derive(Debug)]
 pub enum EaChatError {
@@ -16,7 +18,10 @@ pub enum EaChatError {
 impl std::fmt::Display for EaChatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ModelNotLoaded    => write!(f, "DeepSeek-Math model not loaded. Use !help for quick commands."),
+            Self::ModelNotLoaded => write!(
+                f,
+                "DeepSeek-Math model not loaded. Use !help for quick commands."
+            ),
             Self::InferenceError(e) => write!(f, "Inference error: {e}"),
         }
     }
@@ -24,21 +29,22 @@ impl std::fmt::Display for EaChatError {
 
 #[derive(Debug, Clone)]
 pub struct EaChatResponse {
-    pub text:       String,
+    pub text: String,
     pub from_quick: bool,
-    pub is_exact:   bool,  // true = sovereign exact math, no LLM
+    pub is_exact: bool, // true = sovereign exact math, no LLM
 }
 
 /// The EaAgent chat engine.
 pub struct EaChatEngine {
-    pub loader:  EaModelLoader,
-    pub panel:   EaPanelState,
-    prompt:      EaPromptBuilder,
+    pub loader: EaModelLoader,
+    pub panel: EaPanelState,
+    #[allow(dead_code)] // scaffolded for prompt-building, not yet wired into chat()
+    prompt: EaPromptBuilder,
     /// EnkiDDB Read Node this engine's `!enkiddb` command dials --
     /// defaults to the same host:port every other client in this
     /// ecosystem defaults to (TamuzAI's ChatEngine included). Override
     /// with `set_enkiddb_target` to point at a real deployed node (e.g.
-    /// eriduous-vdi:7102).
+    /// uruk-node-read:7102).
     enkiddb_host: String,
     enkiddb_port: u16,
 }
@@ -49,7 +55,7 @@ impl EaChatEngine {
         loader.discover();
         Self {
             loader,
-            panel:  EaPanelState::new(),
+            panel: EaPanelState::new(),
             prompt: EaPromptBuilder::new(),
             enkiddb_host: ENKIDDB_DEFAULT_HOST.to_string(),
             enkiddb_port: ENKIDDB_DEFAULT_PORT,
@@ -67,7 +73,11 @@ impl EaChatEngine {
     pub fn chat(&mut self, user_msg: &str) -> Result<EaChatResponse, EaChatError> {
         let msg = user_msg.trim();
         if msg.is_empty() {
-            return Ok(EaChatResponse { text: String::new(), from_quick: true, is_exact: false });
+            return Ok(EaChatResponse {
+                text: String::new(),
+                from_quick: true,
+                is_exact: false,
+            });
         }
 
         self.panel.push_user(msg);
@@ -77,7 +87,9 @@ impl EaChatEngine {
             if cmd == EaCommand::Clear {
                 self.panel.clear();
                 return Ok(EaChatResponse {
-                    text: "Cleared.".into(), from_quick: true, is_exact: false
+                    text: "Cleared.".into(),
+                    from_quick: true,
+                    is_exact: false,
                 });
             }
 
@@ -87,7 +99,11 @@ impl EaChatEngine {
             if let EaCommand::Enkiddb(query) = &cmd {
                 let response = self.run_enkiddb_search(query);
                 self.panel.push_agent(&response);
-                return Ok(EaChatResponse { text: response, from_quick: true, is_exact: false });
+                return Ok(EaChatResponse {
+                    text: response,
+                    from_quick: true,
+                    is_exact: false,
+                });
             }
 
             let is_exact = matches!(cmd, EaCommand::Solve(_) | EaCommand::B11(_));
@@ -99,20 +115,32 @@ impl EaChatEngine {
                 self.panel.push_agent(&response);
             }
 
-            return Ok(EaChatResponse { text: response, from_quick: true, is_exact });
+            return Ok(EaChatResponse {
+                text: response,
+                from_quick: true,
+                is_exact,
+            });
         }
 
         // Natural language — needs model
         if !self.loader.status.is_ready() {
             let resp = self.no_model_response(msg);
             self.panel.push_agent(&resp);
-            return Ok(EaChatResponse { text: resp, from_quick: true, is_exact: false });
+            return Ok(EaChatResponse {
+                text: resp,
+                from_quick: true,
+                is_exact: false,
+            });
         }
 
         // Model ready — structured response (full inference wired in v4.2+)
         let resp = self.structured_response(msg);
         self.panel.push_agent(&resp);
-        Ok(EaChatResponse { text: resp, from_quick: false, is_exact: false })
+        Ok(EaChatResponse {
+            text: resp,
+            from_quick: false,
+            is_exact: false,
+        })
     }
 
     /// Runs a real `SEARCH:` call against `self.enkiddb_host:enkiddb_port`
@@ -122,7 +150,8 @@ impl EaChatEngine {
     /// exact algebraic solver.
     fn run_enkiddb_search(&self, query: &str) -> String {
         if query.trim().is_empty() {
-            return "Usage: !enkiddb <phrase> — e.g. !enkiddb spectral radius stability".to_string();
+            return "Usage: !enkiddb <phrase> — e.g. !enkiddb spectral radius stability"
+                .to_string();
         }
         match enkiddb_rag_client::search(&self.enkiddb_host, self.enkiddb_port, 5, query) {
             Ok(hits) if hits.is_empty() => format!(
@@ -132,7 +161,9 @@ impl EaChatEngine {
             Ok(hits) => {
                 let mut out = format!(
                     "𒂗𒆠 EnkiDDB ({}:{}) — {} result(s) for \"{query}\":\n",
-                    self.enkiddb_host, self.enkiddb_port, hits.len()
+                    self.enkiddb_host,
+                    self.enkiddb_port,
+                    hits.len()
                 );
                 for hit in hits {
                     let snippet = if hit.text.len() > 160 {
@@ -154,13 +185,21 @@ impl EaChatEngine {
 
     fn no_model_response(&self, msg: &str) -> String {
         let lower = msg.to_lowercase();
-        if lower.contains("pauli")   { return handle_ea_command(&EaCommand::Pauli); }
-        if lower.contains("jordan")  { return handle_ea_command(&EaCommand::Jordan); }
-        if lower.contains("harmony") { return handle_ea_command(&EaCommand::Harmony); }
+        if lower.contains("pauli") {
+            return handle_ea_command(&EaCommand::Pauli);
+        }
+        if lower.contains("jordan") {
+            return handle_ea_command(&EaCommand::Jordan);
+        }
+        if lower.contains("harmony") {
+            return handle_ea_command(&EaCommand::Harmony);
+        }
         if lower.contains("b11") || lower.contains("h(p)") || lower.contains("quality") {
             return handle_ea_command(&EaCommand::Hepta);
         }
-        if lower.contains("law") { return handle_ea_command(&EaCommand::Laws); }
+        if lower.contains("law") {
+            return handle_ea_command(&EaCommand::Laws);
+        }
 
         format!(
             "𒂗𒆠 EaAgent understands: \"{msg}\"\n\n\
@@ -174,7 +213,8 @@ impl EaChatEngine {
              • !enkiddb <phrase> — Real SEARCH: against EnkiDDB's RAG\n\
              • !help    — All commands\n\n\
              To enable full AI:\n\
-             {}", EaModelLoader::download_instructions()
+             {}",
+            EaModelLoader::download_instructions()
         )
     }
 
@@ -187,13 +227,23 @@ impl EaChatEngine {
     }
 
     pub fn status_line(&self) -> String {
-        format!("EaAgent {} | {}", self.loader.status.status_str(), DEEPSEEK_MATH_MODEL)
+        format!(
+            "EaAgent {} | {}",
+            self.loader.status.status_str(),
+            DEEPSEEK_MATH_MODEL
+        )
     }
 
-    pub fn is_ready(&self) -> bool { self.loader.status.is_ready() }
+    pub fn is_ready(&self) -> bool {
+        self.loader.status.is_ready()
+    }
 }
 
-impl Default for EaChatEngine { fn default() -> Self { Self::new() } }
+impl Default for EaChatEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -252,7 +302,7 @@ mod tests {
     #[test]
     fn enkiddb_defaults_match_the_ecosystem_convention() {
         let e = EaChatEngine::new();
-        assert_eq!(e.enkiddb_host, "192.168.122.107");
+        assert_eq!(e.enkiddb_host, "192.168.122.112");
         assert_eq!(e.enkiddb_port, 7102);
     }
     #[test]

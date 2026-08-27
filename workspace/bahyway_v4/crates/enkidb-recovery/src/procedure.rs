@@ -20,15 +20,15 @@ pub enum RecoveryStep {
 /// Outcome of a completed recovery run.
 #[derive(Debug)]
 pub struct RecoveryOutcome {
-    pub events_replayed:    usize,
-    pub indexes_rebuilt:    usize,
-    pub journal_frontier:   u32,
-    pub snapshot_used:      Option<u64>,
+    pub events_replayed: usize,
+    pub indexes_rebuilt: usize,
+    pub journal_frontier: u32,
+    pub snapshot_used: Option<u64>,
 }
 
 /// Drives the deterministic recovery procedure.
 pub struct RecoveryProcedure<'a> {
-    journal:   &'a Journal,
+    journal: &'a Journal,
     snapshots: &'a [SnapshotRecord],
 }
 
@@ -43,9 +43,7 @@ impl<'a> RecoveryProcedure<'a> {
     /// over the in-memory Journal for integration testing.
     pub fn run(&self) -> Result<RecoveryOutcome> {
         // Step 1: find the latest valid snapshot
-        let latest_snapshot = self.snapshots
-            .iter()
-            .max_by_key(|s| s.snapshot_date);
+        let latest_snapshot = self.snapshots.iter().max_by_key(|s| s.snapshot_date);
 
         let snapshot_epoch = latest_snapshot.map(|s| s.snapshot_date);
 
@@ -75,32 +73,33 @@ impl<'a> RecoveryProcedure<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_kaki::{EventKaki, IdentityKaki, KakiRole, mint::KakiMinter};
-    use enkidb_journal::entry::{EavTriple, JournalEntry};
     use bahyway_core::TribeId;
+    use enkidb_journal::entry::{EavTriple, JournalEntry};
+    use enkidb_kaki::{mint::KakiMinter, EventKaki, IdentityKaki, KakiRole};
 
     #[test]
     fn recovery_with_empty_journal() {
-        let jnl   = Journal::new(64);
+        let jnl = Journal::new(64);
         let snaps = vec![];
-        let proc  = RecoveryProcedure::new(&jnl, &snaps);
-        let out   = proc.run().unwrap();
+        let proc = RecoveryProcedure::new(&jnl, &snaps);
+        let out = proc.run().unwrap();
         assert_eq!(out.events_replayed, 0);
         assert!(out.snapshot_used.is_none());
     }
 
     #[test]
     fn recovery_with_events() {
-        let m    = KakiMinter::new(TribeId::from_u16(0x0001));
-        let tgt  = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
+        let m = KakiMinter::new(TribeId::from_u16(0x0001));
+        let tgt = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
         let mut jnl = Journal::new(64);
         for i in 0..10u32 {
-            let ek  = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
+            let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
             let eav = vec![EavTriple::new(0x0001, b"GOLDEN".to_vec())];
-            jnl.append(JournalEntry::new(ek, tgt.clone(), i, eav)).unwrap();
+            jnl.append(JournalEntry::new(ek, tgt.clone(), i, eav))
+                .unwrap();
         }
         let proc = RecoveryProcedure::new(&jnl, &[]);
-        let out  = proc.run().unwrap();
+        let out = proc.run().unwrap();
         assert_eq!(out.events_replayed, 10);
         assert_eq!(out.journal_frontier, 10);
     }

@@ -10,15 +10,15 @@ use crate::compiler::lexer::{AkkToken, LexError, Lexer, Span, SpannedToken};
 #[derive(Debug, Clone)]
 pub struct AkkFile {
     pub tablets: Vec<AkkTablet>,
-    pub span:    Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct AkkTablet {
-    pub name:        String,
+    pub name: String,
     pub annotations: Vec<AkkAnnotation>,
-    pub decls:       Vec<AkkDecl>,
-    pub span:        Span,
+    pub decls: Vec<AkkDecl>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -33,66 +33,69 @@ pub enum AkkDecl {
 
 #[derive(Debug, Clone)]
 pub struct AkkSignDecl {
-    pub name:        String,
+    pub name: String,
     pub annotations: Vec<AkkAnnotation>,
-    pub fields:      Vec<AkkField>,
-    pub span:        Span,
+    pub fields: Vec<AkkField>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct AkkWordDecl {
-    pub name:        String,
+    pub name: String,
     pub annotations: Vec<AkkAnnotation>,
-    pub fields:      Vec<AkkField>,
-    pub span:        Span,
+    pub fields: Vec<AkkField>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct AkkAolMapDecl {
     pub mappings: Vec<AkkMapping>,
-    pub span:     Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct AkkMapping {
     pub fields: Vec<AkkField>,
-    pub span:   Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct AkkSeekDecl {
     pub fields: Vec<AkkField>,
-    pub span:   Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct AkkIngestDecl {
     pub fields: Vec<AkkField>,
-    pub span:   Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct AkkPolicyDecl {
-    pub name:  String,
+    pub name: String,
     pub rules: Vec<AkkRule>,
-    pub span:  Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct AkkRule {
-    pub kind:   RuleKind,
+    pub kind: RuleKind,
     pub fields: Vec<AkkField>,
-    pub span:   Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RuleKind { Allow, Deny }
+pub enum RuleKind {
+    Allow,
+    Deny,
+}
 
 #[derive(Debug, Clone)]
 pub struct AkkField {
-    pub key:   String,
+    pub key: String,
     pub value: AkkExpr,
-    pub span:  Span,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -126,12 +129,15 @@ pub enum AkkExpr {
 #[derive(Debug, Clone)]
 pub struct ParseError {
     pub message: String,
-    pub span:    Span,
+    pub span: Span,
 }
 
 impl ParseError {
     fn new(msg: impl Into<String>, span: Span) -> Self {
-        Self { message: msg.into(), span }
+        Self {
+            message: msg.into(),
+            span,
+        }
     }
 }
 
@@ -144,37 +150,53 @@ impl std::fmt::Display for ParseError {
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 pub struct Parser {
-    tokens:     Vec<SpannedToken>,
-    pos:        usize,
+    tokens: Vec<SpannedToken>,
+    pos: usize,
     pub errors: Vec<ParseError>,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<SpannedToken>) -> Self {
-        Self { tokens, pos: 0, errors: Vec::new() }
+        Self {
+            tokens,
+            pos: 0,
+            errors: Vec::new(),
+        }
     }
 
     fn peek(&self) -> &AkkToken {
-        self.tokens.get(self.pos).map(|st| &st.token).unwrap_or(&AkkToken::Eof)
+        self.tokens
+            .get(self.pos)
+            .map(|st| &st.token)
+            .unwrap_or(&AkkToken::Eof)
     }
 
     fn peek_span(&self) -> Span {
-        self.tokens.get(self.pos).map(|st| st.span).unwrap_or(Span::dummy())
+        self.tokens
+            .get(self.pos)
+            .map(|st| st.span)
+            .unwrap_or(Span::dummy())
     }
 
     fn advance(&mut self) -> &SpannedToken {
         let t = &self.tokens[self.pos.min(self.tokens.len() - 1)];
-        if self.pos < self.tokens.len() - 1 { self.pos += 1; }
+        if self.pos < self.tokens.len() - 1 {
+            self.pos += 1;
+        }
         t
     }
 
     fn expect(&mut self, expected: &AkkToken) -> Option<Span> {
         if self.peek() == expected {
-            let span = self.peek_span(); self.advance(); Some(span)
+            let span = self.peek_span();
+            self.advance();
+            Some(span)
         } else {
             let span = self.peek_span();
             self.errors.push(ParseError::new(
-                format!("expected {:?}, found {:?}", expected, self.peek()), span));
+                format!("expected {:?}, found {:?}", expected, self.peek()),
+                span,
+            ));
             None
         }
     }
@@ -182,24 +204,33 @@ impl Parser {
     fn expect_ident(&mut self) -> Option<(String, Span)> {
         let span = self.peek_span();
         match self.peek().clone() {
-            AkkToken::Ident(name) => { self.advance(); Some((name, span)) }
+            AkkToken::Ident(name) => {
+                self.advance();
+                Some((name, span))
+            }
             other => {
                 self.errors.push(ParseError::new(
-                    format!("expected identifier, found {:?}", other), span));
+                    format!("expected identifier, found {:?}", other),
+                    span,
+                ));
                 None
             }
         }
     }
 
     fn skip_semis(&mut self) {
-        while self.peek() == &AkkToken::Semi { self.advance(); }
+        while self.peek() == &AkkToken::Semi {
+            self.advance();
+        }
     }
 
     fn recover_to_rbrace(&mut self) {
         loop {
             match self.peek() {
                 AkkToken::RBrace | AkkToken::Eof => break,
-                _ => { self.advance(); }
+                _ => {
+                    self.advance();
+                }
             }
         }
     }
@@ -212,11 +243,17 @@ impl Parser {
             AkkToken::AtCite => {
                 self.advance();
                 let (name, _) = self.expect_ident()?;
-                Some(AkkAnnotation { kind: AnnotationKind::Cite(name), span: start })
+                Some(AkkAnnotation {
+                    kind: AnnotationKind::Cite(name),
+                    span: start,
+                })
             }
             AkkToken::AtSeal => {
                 self.advance();
-                Some(AkkAnnotation { kind: AnnotationKind::Seal, span: start })
+                Some(AkkAnnotation {
+                    kind: AnnotationKind::Seal,
+                    span: start,
+                })
             }
             AkkToken::AtDomain => {
                 self.advance();
@@ -224,10 +261,14 @@ impl Parser {
                 match self.peek().clone() {
                     AkkToken::StrLit(s) => {
                         self.advance();
-                        Some(AkkAnnotation { kind: AnnotationKind::Domain(s), span: start })
+                        Some(AkkAnnotation {
+                            kind: AnnotationKind::Domain(s),
+                            span: start,
+                        })
                     }
                     _ => {
-                        self.errors.push(ParseError::new("@domain requires a string literal", span));
+                        self.errors
+                            .push(ParseError::new("@domain requires a string literal", span));
                         None
                     }
                 }
@@ -238,10 +279,14 @@ impl Parser {
                 match self.peek().clone() {
                     AkkToken::StrLit(s) => {
                         self.advance();
-                        Some(AkkAnnotation { kind: AnnotationKind::Version(s), span: start })
+                        Some(AkkAnnotation {
+                            kind: AnnotationKind::Version(s),
+                            span: start,
+                        })
                     }
                     _ => {
-                        self.errors.push(ParseError::new("@version requires a string literal", span));
+                        self.errors
+                            .push(ParseError::new("@version requires a string literal", span));
                         None
                     }
                 }
@@ -251,15 +296,18 @@ impl Parser {
     }
 
     fn is_annotation_token(&self) -> bool {
-        matches!(self.peek(),
-            AkkToken::AtCite | AkkToken::AtSeal
-            | AkkToken::AtDomain | AkkToken::AtVersion)
+        matches!(
+            self.peek(),
+            AkkToken::AtCite | AkkToken::AtSeal | AkkToken::AtDomain | AkkToken::AtVersion
+        )
     }
 
     fn parse_annotations(&mut self) -> Vec<AkkAnnotation> {
         let mut anns = Vec::new();
         while self.is_annotation_token() {
-            if let Some(ann) = self.parse_annotation() { anns.push(ann); }
+            if let Some(ann) = self.parse_annotation() {
+                anns.push(ann);
+            }
         }
         anns
     }
@@ -269,12 +317,30 @@ impl Parser {
     fn parse_expr(&mut self) -> Option<AkkExpr> {
         let span = self.peek_span();
         match self.peek().clone() {
-            AkkToken::IntLit(n)   => { self.advance(); Some(AkkExpr::Int(n)) }
-            AkkToken::FloatLit(v) => { self.advance(); Some(AkkExpr::Float(v)) }
-            AkkToken::StrLit(s)   => { self.advance(); Some(AkkExpr::Str(s)) }
-            AkkToken::BoolLit(b)  => { self.advance(); Some(AkkExpr::Bool(b)) }
-            AkkToken::GlyphLit(c) => { self.advance(); Some(AkkExpr::Glyph(c)) }
-            AkkToken::MeszlLit(n) => { self.advance(); Some(AkkExpr::MeszlRef(n)) }
+            AkkToken::IntLit(n) => {
+                self.advance();
+                Some(AkkExpr::Int(n))
+            }
+            AkkToken::FloatLit(v) => {
+                self.advance();
+                Some(AkkExpr::Float(v))
+            }
+            AkkToken::StrLit(s) => {
+                self.advance();
+                Some(AkkExpr::Str(s))
+            }
+            AkkToken::BoolLit(b) => {
+                self.advance();
+                Some(AkkExpr::Bool(b))
+            }
+            AkkToken::GlyphLit(c) => {
+                self.advance();
+                Some(AkkExpr::Glyph(c))
+            }
+            AkkToken::MeszlLit(n) => {
+                self.advance();
+                Some(AkkExpr::MeszlRef(n))
+            }
             AkkToken::Ident(name) => {
                 self.advance();
                 if self.peek() == &AkkToken::Dot {
@@ -282,7 +348,10 @@ impl Parser {
                     while self.peek() == &AkkToken::Dot {
                         self.advance();
                         match self.peek().clone() {
-                            AkkToken::Ident(part) => { self.advance(); parts.push(part); }
+                            AkkToken::Ident(part) => {
+                                self.advance();
+                                parts.push(part);
+                            }
                             _ => break,
                         }
                     }
@@ -293,7 +362,9 @@ impl Parser {
             }
             other => {
                 self.errors.push(ParseError::new(
-                    format!("expected expression, found {:?}", other), span));
+                    format!("expected expression, found {:?}", other),
+                    span,
+                ));
                 None
             }
         }
@@ -307,7 +378,11 @@ impl Parser {
         self.expect(&AkkToken::Eq)?;
         let value = self.parse_expr()?;
         self.skip_semis();
-        Some(AkkField { key, value, span: start })
+        Some(AkkField {
+            key,
+            value,
+            span: start,
+        })
     }
 
     fn parse_fields(&mut self) -> Vec<AkkField> {
@@ -315,12 +390,18 @@ impl Parser {
         loop {
             match self.peek() {
                 AkkToken::RBrace | AkkToken::Eof => break,
-                AkkToken::AtCite | AkkToken::AtSeal
-                | AkkToken::AtDomain | AkkToken::AtVersion => { self.parse_annotation(); }
-                AkkToken::Semi => { self.advance(); }
+                AkkToken::AtCite | AkkToken::AtSeal | AkkToken::AtDomain | AkkToken::AtVersion => {
+                    self.parse_annotation();
+                }
+                AkkToken::Semi => {
+                    self.advance();
+                }
                 _ => match self.parse_field() {
                     Some(f) => fields.push(f),
-                    None    => { self.recover_to_rbrace(); break; }
+                    None => {
+                        self.recover_to_rbrace();
+                        break;
+                    }
                 },
             }
         }
@@ -340,19 +421,30 @@ impl Parser {
         loop {
             match self.peek() {
                 AkkToken::RBrace | AkkToken::Eof => break,
-                AkkToken::AtCite | AkkToken::AtSeal
-                | AkkToken::AtDomain | AkkToken::AtVersion => {
-                    if let Some(ann) = self.parse_annotation() { annotations.push(ann); }
+                AkkToken::AtCite | AkkToken::AtSeal | AkkToken::AtDomain | AkkToken::AtVersion => {
+                    if let Some(ann) = self.parse_annotation() {
+                        annotations.push(ann);
+                    }
                 }
-                AkkToken::Semi => { self.advance(); }
+                AkkToken::Semi => {
+                    self.advance();
+                }
                 _ => match self.parse_field() {
                     Some(f) => fields.push(f),
-                    None    => { self.recover_to_rbrace(); break; }
+                    None => {
+                        self.recover_to_rbrace();
+                        break;
+                    }
                 },
             }
         }
         self.expect(&AkkToken::RBrace)?;
-        Some(AkkDecl::Sign(AkkSignDecl { name, annotations, fields, span: start }))
+        Some(AkkDecl::Sign(AkkSignDecl {
+            name,
+            annotations,
+            fields,
+            span: start,
+        }))
     }
 
     fn parse_word(&mut self) -> Option<AkkDecl> {
@@ -365,19 +457,30 @@ impl Parser {
         loop {
             match self.peek() {
                 AkkToken::RBrace | AkkToken::Eof => break,
-                AkkToken::AtCite | AkkToken::AtSeal
-                | AkkToken::AtDomain | AkkToken::AtVersion => {
-                    if let Some(ann) = self.parse_annotation() { annotations.push(ann); }
+                AkkToken::AtCite | AkkToken::AtSeal | AkkToken::AtDomain | AkkToken::AtVersion => {
+                    if let Some(ann) = self.parse_annotation() {
+                        annotations.push(ann);
+                    }
                 }
-                AkkToken::Semi => { self.advance(); }
+                AkkToken::Semi => {
+                    self.advance();
+                }
                 _ => match self.parse_field() {
                     Some(f) => fields.push(f),
-                    None    => { self.recover_to_rbrace(); break; }
+                    None => {
+                        self.recover_to_rbrace();
+                        break;
+                    }
                 },
             }
         }
         self.expect(&AkkToken::RBrace)?;
-        Some(AkkDecl::Word(AkkWordDecl { name, annotations, fields, span: start }))
+        Some(AkkDecl::Word(AkkWordDecl {
+            name,
+            annotations,
+            fields,
+            span: start,
+        }))
     }
 
     fn parse_aol_map(&mut self) -> Option<AkkDecl> {
@@ -389,11 +492,19 @@ impl Parser {
             let map_start = self.peek_span();
             let fields = self.parse_fields();
             if !fields.is_empty() {
-                mappings.push(AkkMapping { fields, span: map_start });
-            } else { break; }
+                mappings.push(AkkMapping {
+                    fields,
+                    span: map_start,
+                });
+            } else {
+                break;
+            }
         }
         self.expect(&AkkToken::RBrace)?;
-        Some(AkkDecl::AolMap(AkkAolMapDecl { mappings, span: start }))
+        Some(AkkDecl::AolMap(AkkAolMapDecl {
+            mappings,
+            span: start,
+        }))
     }
 
     fn parse_seek(&mut self) -> Option<AkkDecl> {
@@ -402,7 +513,10 @@ impl Parser {
         self.expect(&AkkToken::LBrace)?;
         let fields = self.parse_fields();
         self.expect(&AkkToken::RBrace)?;
-        Some(AkkDecl::Seek(AkkSeekDecl { fields, span: start }))
+        Some(AkkDecl::Seek(AkkSeekDecl {
+            fields,
+            span: start,
+        }))
     }
 
     fn parse_ingest(&mut self) -> Option<AkkDecl> {
@@ -411,7 +525,10 @@ impl Parser {
         self.expect(&AkkToken::LBrace)?;
         let fields = self.parse_fields();
         self.expect(&AkkToken::RBrace)?;
-        Some(AkkDecl::Ingest(AkkIngestDecl { fields, span: start }))
+        Some(AkkDecl::Ingest(AkkIngestDecl {
+            fields,
+            span: start,
+        }))
     }
 
     fn parse_policy(&mut self) -> Option<AkkDecl> {
@@ -425,50 +542,80 @@ impl Parser {
                 AkkToken::RBrace | AkkToken::Eof => break,
                 AkkToken::Allow | AkkToken::Deny => {
                     let rule_start = self.peek_span();
-                    let kind = if self.peek() == &AkkToken::Allow { RuleKind::Allow } else { RuleKind::Deny };
+                    let kind = if self.peek() == &AkkToken::Allow {
+                        RuleKind::Allow
+                    } else {
+                        RuleKind::Deny
+                    };
                     self.advance();
                     // Parse fields until the next rule keyword or end of policy block.
                     let mut fields = Vec::new();
                     loop {
                         match self.peek() {
-                            AkkToken::RBrace | AkkToken::Eof
-                            | AkkToken::Allow | AkkToken::Deny => break,
-                            AkkToken::Semi => { self.advance(); }
+                            AkkToken::RBrace | AkkToken::Eof | AkkToken::Allow | AkkToken::Deny => {
+                                break
+                            }
+                            AkkToken::Semi => {
+                                self.advance();
+                            }
                             _ => match self.parse_field() {
                                 Some(f) => fields.push(f),
-                                None    => { self.recover_to_rbrace(); break; }
+                                None => {
+                                    self.recover_to_rbrace();
+                                    break;
+                                }
                             },
                         }
                     }
-                    rules.push(AkkRule { kind, fields, span: rule_start });
+                    rules.push(AkkRule {
+                        kind,
+                        fields,
+                        span: rule_start,
+                    });
                 }
-                AkkToken::Semi => { self.advance(); }
+                AkkToken::Semi => {
+                    self.advance();
+                }
                 _ => {
                     let span = self.peek_span();
                     self.errors.push(ParseError::new(
-                        format!("expected allow/deny in policy block, found {:?}", self.peek()), span));
+                        format!(
+                            "expected allow/deny in policy block, found {:?}",
+                            self.peek()
+                        ),
+                        span,
+                    ));
                     self.recover_to_rbrace();
                     break;
                 }
             }
         }
         self.expect(&AkkToken::RBrace)?;
-        Some(AkkDecl::Policy(AkkPolicyDecl { name, rules, span: start }))
+        Some(AkkDecl::Policy(AkkPolicyDecl {
+            name,
+            rules,
+            span: start,
+        }))
     }
 
     fn parse_decl(&mut self) -> Option<AkkDecl> {
         match self.peek() {
-            AkkToken::Sign   => self.parse_sign(),
-            AkkToken::Word   => self.parse_word(),
+            AkkToken::Sign => self.parse_sign(),
+            AkkToken::Word => self.parse_word(),
             AkkToken::AolMap => self.parse_aol_map(),
-            AkkToken::Seek   => self.parse_seek(),
+            AkkToken::Seek => self.parse_seek(),
             AkkToken::Ingest => self.parse_ingest(),
             AkkToken::Policy => self.parse_policy(),
-            AkkToken::Semi   => { self.advance(); None }
+            AkkToken::Semi => {
+                self.advance();
+                None
+            }
             other => {
                 let span = self.peek_span();
                 self.errors.push(ParseError::new(
-                    format!("unexpected token in tablet body: {:?}", other), span));
+                    format!("unexpected token in tablet body: {:?}", other),
+                    span,
+                ));
                 self.advance();
                 None
             }
@@ -485,11 +632,20 @@ impl Parser {
         loop {
             match self.peek() {
                 AkkToken::RBrace | AkkToken::Eof => break,
-                _ => { if let Some(decl) = self.parse_decl() { decls.push(decl); } }
+                _ => {
+                    if let Some(decl) = self.parse_decl() {
+                        decls.push(decl);
+                    }
+                }
             }
         }
         self.expect(&AkkToken::RBrace)?;
-        Some(AkkTablet { name, annotations, decls, span: start })
+        Some(AkkTablet {
+            name,
+            annotations,
+            decls,
+            span: start,
+        })
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -499,18 +655,29 @@ impl Parser {
         let mut tablets = Vec::new();
         loop {
             match self.peek() {
-                AkkToken::Eof    => break,
-                AkkToken::Tablet => { if let Some(t) = self.parse_tablet() { tablets.push(t); } }
-                AkkToken::Semi   => { self.advance(); }
+                AkkToken::Eof => break,
+                AkkToken::Tablet => {
+                    if let Some(t) = self.parse_tablet() {
+                        tablets.push(t);
+                    }
+                }
+                AkkToken::Semi => {
+                    self.advance();
+                }
                 other => {
                     let span = self.peek_span();
                     self.errors.push(ParseError::new(
-                        format!("expected 'tablet' at top level, found {:?}", other), span));
+                        format!("expected 'tablet' at top level, found {:?}", other),
+                        span,
+                    ));
                     self.advance();
                 }
             }
         }
-        AkkFile { tablets, span: start }
+        AkkFile {
+            tablets,
+            span: start,
+        }
     }
 
     pub fn parse_source(src: &str) -> (AkkFile, Vec<LexError>, Vec<ParseError>) {
@@ -532,17 +699,20 @@ impl AkkFile {
 impl AkkTablet {
     pub fn sign(&self, name: &str) -> Option<&AkkSignDecl> {
         self.decls.iter().find_map(|d| match d {
-            AkkDecl::Sign(s) if s.name == name => Some(s), _ => None,
+            AkkDecl::Sign(s) if s.name == name => Some(s),
+            _ => None,
         })
     }
     pub fn policy(&self, name: &str) -> Option<&AkkPolicyDecl> {
         self.decls.iter().find_map(|d| match d {
-            AkkDecl::Policy(p) if p.name == name => Some(p), _ => None,
+            AkkDecl::Policy(p) if p.name == name => Some(p),
+            _ => None,
         })
     }
     pub fn version(&self) -> Option<&str> {
         self.annotations.iter().find_map(|a| match &a.kind {
-            AnnotationKind::Version(v) => Some(v.as_str()), _ => None,
+            AnnotationKind::Version(v) => Some(v.as_str()),
+            _ => None,
         })
     }
 }
@@ -553,7 +723,8 @@ impl AkkSignDecl {
     }
     pub fn cite(&self) -> Option<&str> {
         self.annotations.iter().find_map(|a| match &a.kind {
-            AnnotationKind::Cite(s) => Some(s.as_str()), _ => None,
+            AnnotationKind::Cite(s) => Some(s.as_str()),
+            _ => None,
         })
     }
 }
@@ -564,7 +735,8 @@ impl AkkWordDecl {
     }
     pub fn cite(&self) -> Option<&str> {
         self.annotations.iter().find_map(|a| match &a.kind {
-            AnnotationKind::Cite(s) => Some(s.as_str()), _ => None,
+            AnnotationKind::Cite(s) => Some(s.as_str()),
+            _ => None,
         })
     }
 }
@@ -635,7 +807,11 @@ mod tests {
         "#;
         let (ast, errs) = parse(src);
         assert!(errs.is_empty(), "{:?}", errs);
-        let policy = ast.tablet("larsa_phone").unwrap().policy("camera_access").unwrap();
+        let policy = ast
+            .tablet("larsa_phone")
+            .unwrap()
+            .policy("camera_access")
+            .unwrap();
         assert_eq!(policy.rules[0].kind, RuleKind::Deny);
         assert_eq!(policy.rules[1].kind, RuleKind::Allow);
     }
@@ -645,9 +821,16 @@ mod tests {
         let src = r#"tablet test { seek { filter = kill_switch.camera } }"#;
         let (ast, errs) = parse(src);
         assert!(errs.is_empty(), "{:?}", errs);
-        let seek = ast.tablet("test").unwrap().decls.iter().find_map(|d| match d {
-            AkkDecl::Seek(s) => Some(s), _ => None,
-        }).unwrap();
+        let seek = ast
+            .tablet("test")
+            .unwrap()
+            .decls
+            .iter()
+            .find_map(|d| match d {
+                AkkDecl::Seek(s) => Some(s),
+                _ => None,
+            })
+            .unwrap();
         assert_eq!(
             seek.fields[0].value,
             AkkExpr::Path(vec!["kill_switch".into(), "camera".into()])
@@ -657,7 +840,8 @@ mod tests {
     #[test]
     fn test_parse_source_convenience() {
         let (ast, le, pe) = Parser::parse_source(r#"tablet test { sign x { val = 1 } }"#);
-        assert!(le.is_empty()); assert!(pe.is_empty());
+        assert!(le.is_empty());
+        assert!(pe.is_empty());
         assert_eq!(ast.tablets.len(), 1);
     }
 }

@@ -8,14 +8,14 @@
 //! No state is ever stored as a mutable value — projections are computed
 //! on demand from the immutable Journal.
 
-pub mod projection;
 pub mod projected_state;
+pub mod projection;
 pub mod story_engine;
 
-pub use story_engine::StoryEngine;
 pub use projected_state::ProjectedState;
+pub use story_engine::StoryEngine;
 
 pub mod prelude {
-    pub use super::story_engine::StoryEngine;
     pub use super::projected_state::ProjectedState;
+    pub use super::story_engine::StoryEngine;
 }

@@ -16,7 +16,7 @@
 //!
 //! DUB.SAR 𒁾 — BahyWay.Ecosystem v4.0 | Pure Rust
 
-use crate::token::{Token, tokenize};
+use crate::token::{tokenize, Token};
 
 // ── NodeId ────────────────────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ pub struct PmpvdProgram {
 #[derive(Debug, Clone)]
 pub struct AkkNode {
     pub node_id: NodeId,
-    pub kind:    AkkNodeKind,
+    pub kind: AkkNodeKind,
 }
 
 /// The 9 sovereign AkkNode kinds.
@@ -84,16 +84,16 @@ pub enum AkkNodeKind {
 /// `PARTICLE name { fields... TRIBE: TribeName }`
 #[derive(Debug, Clone)]
 pub struct ParticleDecl {
-    pub name:       String,
-    pub fields:     Vec<FieldDecl>,
+    pub name: String,
+    pub fields: Vec<FieldDecl>,
     pub tribe_name: Option<String>,
 }
 
 /// One field in a PARTICLE declaration.
 #[derive(Debug, Clone)]
 pub struct FieldDecl {
-    pub name:        String,
-    pub field_type:  FieldType,
+    pub name: String,
+    pub field_type: FieldType,
     pub constraints: Vec<QualityConstraint>,
 }
 
@@ -122,18 +122,18 @@ pub struct QualityConstraint {
 /// `TRIBE name { WEIGHTS: [...] IDEAL: [...] }`
 #[derive(Debug, Clone)]
 pub struct PmpvdTribeDecl {
-    pub name:    String,
+    pub name: String,
     pub weights: [f64; 7],
-    pub ideal:   [f64; 7],
+    pub ideal: [f64; 7],
 }
 
 impl PmpvdTribeDecl {
     /// Arabic MDM sovereign default weights.
     pub fn sovereign_arabic_mdm(name: impl Into<String>) -> Self {
         Self {
-            name:    name.into(),
+            name: name.into(),
             weights: [0.30, 0.20, 0.15, 0.15, 0.10, 0.05, 0.05],
-            ideal:   [1.0; 7],
+            ideal: [1.0; 7],
         }
     }
 
@@ -149,9 +149,9 @@ impl PmpvdTribeDecl {
 /// `RULE name { WHEN conditions... THEN actions... }`
 #[derive(Debug, Clone)]
 pub struct RuleDecl {
-    pub name:       String,
+    pub name: String,
     pub conditions: Vec<Condition>,
-    pub actions:    Vec<RuleAction>,
+    pub actions: Vec<RuleAction>,
 }
 
 /// A single WHEN condition: `path op value`.
@@ -160,15 +160,19 @@ pub struct RuleDecl {
 #[derive(Debug, Clone)]
 pub struct Condition {
     /// Dotted path: e.g. `"particle.hepta.health"`.
-    pub path:  String,
-    pub op:    CompareOp,
+    pub path: String,
+    pub op: CompareOp,
     pub value: ConditionValue,
 }
 
 /// Comparison operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompareOp {
-    Geq, Leq, Gt, Lt, Eq,
+    Geq,
+    Leq,
+    Gt,
+    Lt,
+    Eq,
 }
 
 /// Right-hand side of a condition.
@@ -200,9 +204,9 @@ pub enum RuleAction {
 /// Level 3: meta-equation that manages the equation library.
 #[derive(Debug, Clone)]
 pub struct EquationDecl {
-    pub name:       String,
+    pub name: String,
     pub conditions: Vec<Condition>,
-    pub emit:       EmitDecl,
+    pub emit: EmitDecl,
 }
 
 // ── GUARD ─────────────────────────────────────────────────────────────────────
@@ -210,9 +214,9 @@ pub struct EquationDecl {
 /// `GUARD name { REQUIRE: conditions... ALLOW: [lane, ...] }`
 #[derive(Debug, Clone)]
 pub struct GuardDecl {
-    pub name:     String,
+    pub name: String,
     pub requires: Vec<Condition>,
-    pub allows:   Vec<String>,
+    pub allows: Vec<String>,
 }
 
 // ── FLOW ──────────────────────────────────────────────────────────────────────
@@ -220,24 +224,24 @@ pub struct GuardDecl {
 /// `FLOW name { SOURCE: ... PIPE: ... SINK: ... }`
 #[derive(Debug, Clone)]
 pub struct FlowDecl {
-    pub name:   String,
+    pub name: String,
     pub source: FlowEndpoint,
-    pub pipes:  Vec<PipeStep>,
-    pub sink:   FlowEndpoint,
+    pub pipes: Vec<PipeStep>,
+    pub sink: FlowEndpoint,
 }
 
 /// A service endpoint: `ServiceName(arg)` or bare `ServiceName`.
 #[derive(Debug, Clone)]
 pub struct FlowEndpoint {
     pub service: String,
-    pub arg:     Option<String>,
+    pub arg: Option<String>,
 }
 
 /// A single PIPE step in a FLOW.
 #[derive(Debug, Clone)]
 pub struct PipeStep {
     pub service: String,
-    pub arg:     Option<String>,
+    pub arg: Option<String>,
 }
 
 // ── OBSERVE ───────────────────────────────────────────────────────────────────
@@ -247,11 +251,11 @@ pub struct PipeStep {
 /// A geometric rotation query — returns particle states, not SQL rows.
 #[derive(Debug, Clone)]
 pub struct ObserveDecl {
-    pub name:       String,
+    pub name: String,
     pub from_tribe: String,
     pub where_cond: Option<Condition>,
-    pub sort_by:    Option<SortSpec>,
-    pub limit:      Option<u64>,
+    pub sort_by: Option<SortSpec>,
+    pub limit: Option<u64>,
 }
 
 /// Sort specification: `orbital_radius ASC`.
@@ -262,14 +266,17 @@ pub struct SortSpec {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortOrder { Asc, Desc }
+pub enum SortOrder {
+    Asc,
+    Desc,
+}
 
 // ── EMIT ──────────────────────────────────────────────────────────────────────
 
 /// `EMIT Target("payload")` or `EMIT target.akk { key: value ... }`
 #[derive(Debug, Clone)]
 pub struct EmitDecl {
-    pub target:  String,
+    pub target: String,
     pub payload: Option<String>,
 }
 
@@ -280,9 +287,9 @@ pub struct EmitDecl {
 /// A sovereign boot or healing sequence — each stage is a service name.
 #[derive(Debug, Clone)]
 pub struct PipelineDecl {
-    pub name:    String,
+    pub name: String,
     pub version: Option<String>,
-    pub stages:  Vec<String>,
+    pub stages: Vec<String>,
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────
@@ -290,7 +297,7 @@ pub struct PipelineDecl {
 /// PMPVD parser — converts an AAOL token stream into a `PmpvdProgram`.
 pub struct PmpvdParser {
     tokens: Vec<Token>,
-    pos:    usize,
+    pos: usize,
 }
 
 impl PmpvdParser {
@@ -312,7 +319,9 @@ impl PmpvdParser {
         Ok(PmpvdProgram { nodes })
     }
 
-    fn peek(&self) -> &Token { &self.tokens[self.pos] }
+    fn peek(&self) -> &Token {
+        &self.tokens[self.pos]
+    }
 
     fn advance(&mut self) -> Token {
         let t = self.tokens[self.pos].clone();
@@ -320,7 +329,9 @@ impl PmpvdParser {
         t
     }
 
-    fn is_eof(&self) -> bool { matches!(self.peek(), Token::Eof) }
+    fn is_eof(&self) -> bool {
+        matches!(self.peek(), Token::Eof)
+    }
 
     fn expect_ident(&mut self) -> Result<String, String> {
         match self.advance() {
@@ -331,22 +342,22 @@ impl PmpvdParser {
 
     fn expect_ident_or_kw(&mut self) -> Result<String, String> {
         match self.advance() {
-            Token::Ident(s)    => Ok(s),
-            Token::Text        => Ok("TEXT".into()),
-            Token::KakiType    => Ok("KAKI".into()),
-            Token::Asc         => Ok("ASC".into()),
-            Token::Desc        => Ok("DESC".into()),
-            Token::From        => Ok("FROM".into()),
-            Token::Where       => Ok("WHERE".into()),
-            Token::Sort        => Ok("SORT".into()),
-            Token::Limit       => Ok("LIMIT".into()),
-            Token::Source      => Ok("SOURCE".into()),
-            Token::Pipe        => Ok("PIPE".into()),
-            Token::Sink        => Ok("SINK".into()),
-            Token::Require     => Ok("REQUIRE".into()),
-            Token::Allow       => Ok("ALLOW".into()),
-            Token::Lane        => Ok("LANE".into()),
-            Token::Orbit       => Ok("ORBIT".into()),
+            Token::Ident(s) => Ok(s),
+            Token::Text => Ok("TEXT".into()),
+            Token::KakiType => Ok("KAKI".into()),
+            Token::Asc => Ok("ASC".into()),
+            Token::Desc => Ok("DESC".into()),
+            Token::From => Ok("FROM".into()),
+            Token::Where => Ok("WHERE".into()),
+            Token::Sort => Ok("SORT".into()),
+            Token::Limit => Ok("LIMIT".into()),
+            Token::Source => Ok("SOURCE".into()),
+            Token::Pipe => Ok("PIPE".into()),
+            Token::Sink => Ok("SINK".into()),
+            Token::Require => Ok("REQUIRE".into()),
+            Token::Allow => Ok("ALLOW".into()),
+            Token::Lane => Ok("LANE".into()),
+            Token::Orbit => Ok("ORBIT".into()),
             t => Err(format!("Expected identifier or keyword, got {t:?}")),
         }
     }
@@ -355,22 +366,24 @@ impl PmpvdParser {
     /// Covers both plain identifiers and PMPVD keywords used as variable names.
     fn expect_path_segment(&mut self) -> Result<String, String> {
         match self.advance() {
-            Token::Ident(s)  => Ok(s),
-            Token::Particle  => Ok("particle".into()),
-            Token::Tribe     => Ok("tribe".into()),
-            Token::Rule      => Ok("rule".into()),
-            Token::Equation  => Ok("equation".into()),
-            Token::Guard     => Ok("guard".into()),
-            Token::Flow      => Ok("flow".into()),
-            Token::Observe   => Ok("observe".into()),
-            Token::Pipeline  => Ok("pipeline".into()),
-            Token::Lane      => Ok("lane".into()),
-            Token::Orbit     => Ok("orbit".into()),
-            Token::Weights   => Ok("weights".into()),
-            Token::Ideal     => Ok("ideal".into()),
-            Token::KakiType  => Ok("kaki".into()),
-            Token::Text      => Ok("text".into()),
-            t => Err(format!("Expected path segment (ident or keyword), got {t:?}")),
+            Token::Ident(s) => Ok(s),
+            Token::Particle => Ok("particle".into()),
+            Token::Tribe => Ok("tribe".into()),
+            Token::Rule => Ok("rule".into()),
+            Token::Equation => Ok("equation".into()),
+            Token::Guard => Ok("guard".into()),
+            Token::Flow => Ok("flow".into()),
+            Token::Observe => Ok("observe".into()),
+            Token::Pipeline => Ok("pipeline".into()),
+            Token::Lane => Ok("lane".into()),
+            Token::Orbit => Ok("orbit".into()),
+            Token::Weights => Ok("weights".into()),
+            Token::Ideal => Ok("ideal".into()),
+            Token::KakiType => Ok("kaki".into()),
+            Token::Text => Ok("text".into()),
+            t => Err(format!(
+                "Expected path segment (ident or keyword), got {t:?}"
+            )),
         }
     }
 
@@ -393,13 +406,13 @@ impl PmpvdParser {
     fn parse_node(&mut self) -> Result<AkkNode, String> {
         match self.peek().clone() {
             Token::Particle => self.parse_particle(),
-            Token::Tribe    => self.parse_pmpvd_tribe(),
-            Token::Rule     => self.parse_rule(),
+            Token::Tribe => self.parse_pmpvd_tribe(),
+            Token::Rule => self.parse_rule(),
             Token::Equation => self.parse_equation(),
-            Token::Guard    => self.parse_guard(),
-            Token::Flow     => self.parse_flow(),
-            Token::Observe  => self.parse_observe(),
-            Token::Emit     => self.parse_emit_node(),
+            Token::Guard => self.parse_guard(),
+            Token::Flow => self.parse_flow(),
+            Token::Observe => self.parse_observe(),
+            Token::Emit => self.parse_emit_node(),
             Token::Pipeline => self.parse_pipeline(),
             t => Err(format!("Expected PMPVD node keyword, got {t:?}")),
         }
@@ -412,7 +425,7 @@ impl PmpvdParser {
         let name = self.expect_ident()?;
         self.expect(&Token::LBrace)?;
 
-        let mut fields     = Vec::new();
+        let mut fields = Vec::new();
         let mut tribe_name = None;
 
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
@@ -430,7 +443,11 @@ impl PmpvdParser {
         let node_id = make_node_id("particle", &name);
         Ok(AkkNode {
             node_id,
-            kind: AkkNodeKind::Particle(ParticleDecl { name, fields, tribe_name }),
+            kind: AkkNodeKind::Particle(ParticleDecl {
+                name,
+                fields,
+                tribe_name,
+            }),
         })
     }
 
@@ -455,7 +472,11 @@ impl PmpvdParser {
             t => return Err(format!("Expected field type, got {t:?}")),
         };
 
-        Ok(FieldDecl { name, field_type, constraints })
+        Ok(FieldDecl {
+            name,
+            field_type,
+            constraints,
+        })
     }
 
     fn parse_constraints(&mut self) -> Result<Vec<QualityConstraint>, String> {
@@ -464,15 +485,20 @@ impl PmpvdParser {
             let dim = self.expect_ident()?;
             self.expect(&Token::EqSign)?;
             let threshold = self.parse_float()?;
-            cs.push(QualityConstraint { dimension: dim, threshold });
-            if matches!(self.peek(), Token::Comma) { self.advance(); }
+            cs.push(QualityConstraint {
+                dimension: dim,
+                threshold,
+            });
+            if matches!(self.peek(), Token::Comma) {
+                self.advance();
+            }
         }
         Ok(cs)
     }
 
     fn parse_float(&mut self) -> Result<f64, String> {
         match self.advance() {
-            Token::Float(f)  => Ok(f),
+            Token::Float(f) => Ok(f),
             Token::Number(n) => Ok(n as f64),
             t => Err(format!("Expected float, got {t:?}")),
         }
@@ -486,7 +512,7 @@ impl PmpvdParser {
         self.expect(&Token::LBrace)?;
 
         let mut weights = [0.0f64; 7];
-        let mut ideal   = [1.0f64; 7];
+        let mut ideal = [1.0f64; 7];
 
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             match self.peek().clone() {
@@ -500,7 +526,9 @@ impl PmpvdParser {
                     self.expect(&Token::Colon)?;
                     ideal = self.parse_f64_array7()?;
                 }
-                _ => { self.advance(); } // skip unknown tokens
+                _ => {
+                    self.advance();
+                } // skip unknown tokens
             }
         }
         self.expect(&Token::RBrace)?;
@@ -508,7 +536,11 @@ impl PmpvdParser {
         let node_id = make_node_id("tribe", &name);
         Ok(AkkNode {
             node_id,
-            kind: AkkNodeKind::Tribe(PmpvdTribeDecl { name, weights, ideal }),
+            kind: AkkNodeKind::Tribe(PmpvdTribeDecl {
+                name,
+                weights,
+                ideal,
+            }),
         })
     }
 
@@ -517,7 +549,9 @@ impl PmpvdParser {
         let mut vals = [0.0f64; 7];
         for (i, val) in vals.iter_mut().enumerate() {
             *val = self.parse_float()?;
-            if i < 6 { self.expect(&Token::Comma)?; }
+            if i < 6 {
+                self.expect(&Token::Comma)?;
+            }
         }
         self.expect(&Token::RBracket)?;
         Ok(vals)
@@ -531,14 +565,18 @@ impl PmpvdParser {
         self.expect(&Token::LBrace)?;
 
         let conditions = self.parse_when_clause()?;
-        let actions    = self.parse_then_actions()?;
+        let actions = self.parse_then_actions()?;
 
         self.expect(&Token::RBrace)?;
 
         let node_id = make_node_id("rule", &name);
         Ok(AkkNode {
             node_id,
-            kind: AkkNodeKind::Rule(RuleDecl { name, conditions, actions }),
+            kind: AkkNodeKind::Rule(RuleDecl {
+                name,
+                conditions,
+                actions,
+            }),
         })
     }
 
@@ -569,18 +607,27 @@ impl PmpvdParser {
         }
 
         let op = match self.advance() {
-            Token::Geq    => CompareOp::Geq,
-            Token::Leq    => CompareOp::Leq,
-            Token::Gt     => CompareOp::Gt,
-            Token::Lt     => CompareOp::Lt,
+            Token::Geq => CompareOp::Geq,
+            Token::Leq => CompareOp::Leq,
+            Token::Gt => CompareOp::Gt,
+            Token::Lt => CompareOp::Lt,
             Token::EqSign => CompareOp::Eq,
             t => return Err(format!("Expected comparison operator, got {t:?}")),
         };
 
         let value = match self.peek().clone() {
-            Token::Float(f)  => { self.advance(); ConditionValue::Float(f) }
-            Token::Number(n) => { self.advance(); ConditionValue::Integer(n) }
-            Token::Ident(s)  => { self.advance(); ConditionValue::Ident(s) }
+            Token::Float(f) => {
+                self.advance();
+                ConditionValue::Float(f)
+            }
+            Token::Number(n) => {
+                self.advance();
+                ConditionValue::Integer(n)
+            }
+            Token::Ident(s) => {
+                self.advance();
+                ConditionValue::Ident(s)
+            }
             t => return Err(format!("Expected condition value, got {t:?}")),
         };
 
@@ -588,7 +635,9 @@ impl PmpvdParser {
     }
 
     fn parse_then_actions(&mut self) -> Result<Vec<RuleAction>, String> {
-        if !matches!(self.peek(), Token::Then) { return Ok(Vec::new()); }
+        if !matches!(self.peek(), Token::Then) {
+            return Ok(Vec::new());
+        }
         self.advance(); // consume THEN
 
         let mut actions = Vec::new();
@@ -625,7 +674,9 @@ impl PmpvdParser {
 
         let conditions = self.parse_when_clause()?;
         // THEN EMIT ...
-        if matches!(self.peek(), Token::Then) { self.advance(); }
+        if matches!(self.peek(), Token::Then) {
+            self.advance();
+        }
         let emit = self.parse_emit_decl()?;
 
         self.expect(&Token::RBrace)?;
@@ -633,7 +684,11 @@ impl PmpvdParser {
         let node_id = make_node_id("equation", &name);
         Ok(AkkNode {
             node_id,
-            kind: AkkNodeKind::Equation(EquationDecl { name, conditions, emit }),
+            kind: AkkNodeKind::Equation(EquationDecl {
+                name,
+                conditions,
+                emit,
+            }),
         })
     }
 
@@ -645,7 +700,7 @@ impl PmpvdParser {
         self.expect(&Token::LBrace)?;
 
         let mut requires = Vec::new();
-        let mut allows   = Vec::new();
+        let mut allows = Vec::new();
 
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             match self.peek().clone() {
@@ -660,11 +715,15 @@ impl PmpvdParser {
                     self.expect(&Token::LBracket)?;
                     while !matches!(self.peek(), Token::RBracket | Token::Eof) {
                         allows.push(self.expect_ident()?);
-                        if matches!(self.peek(), Token::Comma) { self.advance(); }
+                        if matches!(self.peek(), Token::Comma) {
+                            self.advance();
+                        }
                     }
                     self.expect(&Token::RBracket)?;
                 }
-                _ => { self.advance(); }
+                _ => {
+                    self.advance();
+                }
             }
         }
         self.expect(&Token::RBrace)?;
@@ -672,7 +731,11 @@ impl PmpvdParser {
         let node_id = make_node_id("guard", &name);
         Ok(AkkNode {
             node_id,
-            kind: AkkNodeKind::Guard(GuardDecl { name, requires, allows }),
+            kind: AkkNodeKind::Guard(GuardDecl {
+                name,
+                requires,
+                allows,
+            }),
         })
     }
 
@@ -683,9 +746,15 @@ impl PmpvdParser {
         let name = self.expect_ident()?;
         self.expect(&Token::LBrace)?;
 
-        let mut source = FlowEndpoint { service: String::new(), arg: None };
-        let mut pipes  = Vec::new();
-        let mut sink   = FlowEndpoint { service: String::new(), arg: None };
+        let mut source = FlowEndpoint {
+            service: String::new(),
+            arg: None,
+        };
+        let mut pipes = Vec::new();
+        let mut sink = FlowEndpoint {
+            service: String::new(),
+            arg: None,
+        };
 
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             match self.peek().clone() {
@@ -698,14 +767,19 @@ impl PmpvdParser {
                     self.advance();
                     self.expect(&Token::Colon)?;
                     let ep = self.parse_endpoint()?;
-                    pipes.push(PipeStep { service: ep.service, arg: ep.arg });
+                    pipes.push(PipeStep {
+                        service: ep.service,
+                        arg: ep.arg,
+                    });
                 }
                 Token::Sink => {
                     self.advance();
                     self.expect(&Token::Colon)?;
                     sink = self.parse_endpoint()?;
                 }
-                _ => { self.advance(); }
+                _ => {
+                    self.advance();
+                }
             }
         }
         self.expect(&Token::RBrace)?;
@@ -713,7 +787,12 @@ impl PmpvdParser {
         let node_id = make_node_id("flow", &name);
         Ok(AkkNode {
             node_id,
-            kind: AkkNodeKind::Flow(FlowDecl { name, source, pipes, sink }),
+            kind: AkkNodeKind::Flow(FlowDecl {
+                name,
+                source,
+                pipes,
+                sink,
+            }),
         })
     }
 
@@ -726,16 +805,33 @@ impl PmpvdParser {
             let mut depth = 1usize;
             while !self.is_eof() && depth > 0 {
                 match self.peek().clone() {
-                    Token::LParen  => { depth += 1; raw.push('('); self.advance(); }
-                    Token::RParen  => {
-                        depth -= 1;
-                        if depth > 0 { raw.push(')'); }
+                    Token::LParen => {
+                        depth += 1;
+                        raw.push('(');
                         self.advance();
                     }
-                    Token::Ident(s) => { raw.push_str(&s); self.advance(); }
-                    Token::StringLit(s) => { raw.push_str(&s); self.advance(); }
-                    Token::EqSign  => { raw.push('='); self.advance(); }
-                    _ => { self.advance(); }
+                    Token::RParen => {
+                        depth -= 1;
+                        if depth > 0 {
+                            raw.push(')');
+                        }
+                        self.advance();
+                    }
+                    Token::Ident(s) => {
+                        raw.push_str(&s);
+                        self.advance();
+                    }
+                    Token::StringLit(s) => {
+                        raw.push_str(&s);
+                        self.advance();
+                    }
+                    Token::EqSign => {
+                        raw.push('=');
+                        self.advance();
+                    }
+                    _ => {
+                        self.advance();
+                    }
                 }
             }
             Some(raw)
@@ -754,8 +850,8 @@ impl PmpvdParser {
 
         let mut from_tribe = String::new();
         let mut where_cond = None;
-        let mut sort_by    = None;
-        let mut limit      = None;
+        let mut sort_by = None;
+        let mut limit = None;
 
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             match self.peek().clone() {
@@ -763,7 +859,9 @@ impl PmpvdParser {
                     self.advance();
                     self.expect(&Token::Colon)?;
                     // optional "TRIBE" keyword before name
-                    if matches!(self.peek(), Token::Tribe) { self.advance(); }
+                    if matches!(self.peek(), Token::Tribe) {
+                        self.advance();
+                    }
                     from_tribe = self.expect_ident()?;
                 }
                 Token::Where => {
@@ -776,9 +874,15 @@ impl PmpvdParser {
                     self.expect(&Token::Colon)?;
                     let field = self.expect_ident()?;
                     let order = match self.peek().clone() {
-                        Token::Asc  => { self.advance(); SortOrder::Asc  }
-                        Token::Desc => { self.advance(); SortOrder::Desc }
-                        _           => SortOrder::Asc,
+                        Token::Asc => {
+                            self.advance();
+                            SortOrder::Asc
+                        }
+                        Token::Desc => {
+                            self.advance();
+                            SortOrder::Desc
+                        }
+                        _ => SortOrder::Asc,
                     };
                     sort_by = Some(SortSpec { field, order });
                 }
@@ -790,7 +894,9 @@ impl PmpvdParser {
                         t => return Err(format!("Expected number for LIMIT, got {t:?}")),
                     }
                 }
-                _ => { self.advance(); }
+                _ => {
+                    self.advance();
+                }
             }
         }
         self.expect(&Token::RBrace)?;
@@ -799,7 +905,11 @@ impl PmpvdParser {
         Ok(AkkNode {
             node_id,
             kind: AkkNodeKind::Observe(ObserveDecl {
-                name, from_tribe, where_cond, sort_by, limit,
+                name,
+                from_tribe,
+                where_cond,
+                sort_by,
+                limit,
             }),
         })
     }
@@ -809,7 +919,10 @@ impl PmpvdParser {
     fn parse_emit_node(&mut self) -> Result<AkkNode, String> {
         let emit = self.parse_emit_decl()?;
         let node_id = make_node_id("emit", &emit.target);
-        Ok(AkkNode { node_id, kind: AkkNodeKind::Emit(emit) })
+        Ok(AkkNode {
+            node_id,
+            kind: AkkNodeKind::Emit(emit),
+        })
     }
 
     fn parse_emit_decl(&mut self) -> Result<EmitDecl, String> {
@@ -860,7 +973,11 @@ impl PmpvdParser {
         let node_id = make_node_id("pipeline", &name);
         Ok(AkkNode {
             node_id,
-            kind: AkkNodeKind::Pipeline(PipelineDecl { name, version, stages }),
+            kind: AkkNodeKind::Pipeline(PipelineDecl {
+                name,
+                version,
+                stages,
+            }),
         })
     }
 }
@@ -881,7 +998,7 @@ mod tests {
     #[test]
     fn node_id_unique_across_kinds() {
         let id_particle = make_node_id("particle", "citizen");
-        let id_rule     = make_node_id("rule",     "citizen");
+        let id_rule = make_node_id("rule", "citizen");
         assert_ne!(id_particle, id_rule);
     }
 
@@ -1050,8 +1167,9 @@ mod tests {
     #[test]
     fn all_nine_node_kinds_round_trip() {
         // Verify each kind is reachable from a known keyword
-        let kinds = ["Particle", "Tribe", "Rule", "Equation", "Guard",
-                     "Flow", "Observe", "Emit", "Pipeline"];
+        let kinds = [
+            "Particle", "Tribe", "Rule", "Equation", "Guard", "Flow", "Observe", "Emit", "Pipeline",
+        ];
         for k in &kinds {
             let id = make_node_id(k, "test");
             assert!(id != 0, "{k} NodeId must not be zero");

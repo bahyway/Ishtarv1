@@ -61,10 +61,20 @@ pub fn parse_csv_table(table_name: &str, csv_text: &str) -> NamedTable {
     let mut lines = csv_text.lines().filter(|l| !l.trim().is_empty());
     let header: Vec<String> = match lines.next() {
         Some(h) => h.split(',').map(|s| s.trim().to_string()).collect(),
-        None => return NamedTable { name: table_name.to_string(), columns: Vec::new() },
+        None => {
+            return NamedTable {
+                name: table_name.to_string(),
+                columns: Vec::new(),
+            }
+        }
     };
-    let mut columns: Vec<NamedColumn> =
-        header.iter().map(|name| NamedColumn { name: name.clone(), values: Vec::new() }).collect();
+    let mut columns: Vec<NamedColumn> = header
+        .iter()
+        .map(|name| NamedColumn {
+            name: name.clone(),
+            values: Vec::new(),
+        })
+        .collect();
     for line in lines {
         for (i, field) in line.split(',').enumerate() {
             if let Some(col) = columns.get_mut(i) {
@@ -72,7 +82,10 @@ pub fn parse_csv_table(table_name: &str, csv_text: &str) -> NamedTable {
             }
         }
     }
-    NamedTable { name: table_name.to_string(), columns }
+    NamedTable {
+        name: table_name.to_string(),
+        columns,
+    }
 }
 
 /// One column's profile: what `detect_join_keys` reasons over.
@@ -88,8 +101,12 @@ pub fn profile_columns(tables: &[NamedTable]) -> Vec<ColumnProfile> {
     let mut profiles = Vec::new();
     for table in tables {
         for col in &table.columns {
-            let distinct: HashSet<String> =
-                col.values.iter().filter(|v| !v.is_empty()).cloned().collect();
+            let distinct: HashSet<String> = col
+                .values
+                .iter()
+                .filter(|v| !v.is_empty())
+                .cloned()
+                .collect();
             profiles.push(ColumnProfile {
                 table: table.name.clone(),
                 column: col.name.clone(),
@@ -240,13 +257,18 @@ fn json_escape(s: &str) -> String {
 /// filtration at all (pass `1.0` to admit every detected relationship
 /// regardless of confidence, since edge weight here is `1.0 -
 /// overlap_confidence`).
-pub fn discover_schema(tables: &[NamedTable], min_confidence: f64, max_weight: f64) -> SchemaProposal {
+pub fn discover_schema(
+    tables: &[NamedTable],
+    min_confidence: f64,
+    max_weight: f64,
+) -> SchemaProposal {
     let table_names: Vec<String> = tables.iter().map(|t| t.name.clone()).collect();
     let profiles = profile_columns(tables);
     let relationships = detect_join_keys(&profiles, min_confidence);
 
     let index_of = |name: &str| table_names.iter().position(|n| n == name).unwrap();
-    let mut best_edge: std::collections::HashMap<(usize, usize), f64> = std::collections::HashMap::new();
+    let mut best_edge: std::collections::HashMap<(usize, usize), f64> =
+        std::collections::HashMap::new();
     for r in &relationships {
         let a = index_of(&r.from_table);
         let b = index_of(&r.to_table);
@@ -262,7 +284,11 @@ pub fn discover_schema(tables: &[NamedTable], min_confidence: f64, max_weight: f
 
     let diagram = clique_complex_persistence(table_names.len(), &edges, max_weight);
 
-    SchemaProposal { tables: table_names, relationships, diagram }
+    SchemaProposal {
+        tables: table_names,
+        relationships,
+        diagram,
+    }
 }
 
 #[cfg(test)]
@@ -292,14 +318,29 @@ mod tests {
 
     #[test]
     fn detect_join_keys_finds_a_real_foreign_key_relationship() {
-        let customers = table("customers", &[("customer_id", &["100", "101", "102", "103"]), ("name", &["a", "b", "c", "d"])]);
-        let orders = table("orders", &[("order_id", &["1", "2", "3"]), ("customer_id", &["100", "101", "102"])]);
+        let customers = table(
+            "customers",
+            &[
+                ("customer_id", &["100", "101", "102", "103"]),
+                ("name", &["a", "b", "c", "d"]),
+            ],
+        );
+        let orders = table(
+            "orders",
+            &[
+                ("order_id", &["1", "2", "3"]),
+                ("customer_id", &["100", "101", "102"]),
+            ],
+        );
         let profiles = profile_columns(&[customers, orders]);
         let rels = detect_join_keys(&profiles, 0.99);
         let found = rels
             .iter()
             .find(|r| r.from_column == "customer_id" && r.to_column == "customer_id");
-        assert!(found.is_some(), "customer_id should be detected as a shared key: {rels:?}");
+        assert!(
+            found.is_some(),
+            "customer_id should be detected as a shared key: {rels:?}"
+        );
         assert_eq!(found.unwrap().overlap_confidence, 1.0);
     }
 
@@ -312,7 +353,10 @@ mod tests {
         let b = table("tickets", &[("status", &["OPEN", "CLOSED", "CLOSED"])]);
         let profiles = profile_columns(&[a, b]);
         let rels = detect_join_keys(&profiles, 0.5);
-        assert!(rels.is_empty(), "low-cardinality status columns must not be flagged: {rels:?}");
+        assert!(
+            rels.is_empty(),
+            "low-cardinality status columns must not be flagged: {rels:?}"
+        );
     }
 
     #[test]
@@ -320,7 +364,10 @@ mod tests {
         let t = table("t", &[("a", &["1", "2", "3"]), ("b", &["1", "2", "3"])]);
         let profiles = profile_columns(&[t]);
         let rels = detect_join_keys(&profiles, 0.5);
-        assert!(rels.is_empty(), "same-table column pairs are not cross-table relationships");
+        assert!(
+            rels.is_empty(),
+            "same-table column pairs are not cross-table relationships"
+        );
     }
 
     #[test]
@@ -337,23 +384,39 @@ mod tests {
         // an unintended chord and defeat the point of the test).
         let accounts = table(
             "accounts",
-            &[("account_id", &["A1", "A2", "A3", "A4"]), ("acct_id", &["Z1", "Z2", "Z3", "Z4"])],
+            &[
+                ("account_id", &["A1", "A2", "A3", "A4"]),
+                ("acct_id", &["Z1", "Z2", "Z3", "Z4"]),
+            ],
         );
         let orders = table(
             "orders",
-            &[("account_id", &["A1", "A2", "A3"]), ("order_id", &["O1", "O2", "O3", "O4"])],
+            &[
+                ("account_id", &["A1", "A2", "A3"]),
+                ("order_id", &["O1", "O2", "O3", "O4"]),
+            ],
         );
         let shipments = table(
             "shipments",
-            &[("order_id", &["O1", "O2", "O3"]), ("ship_id", &["S1", "S2", "S3", "S4"])],
+            &[
+                ("order_id", &["O1", "O2", "O3"]),
+                ("ship_id", &["S1", "S2", "S3", "S4"]),
+            ],
         );
         let returns = table(
             "returns",
-            &[("ship_id", &["S1", "S2", "S3"]), ("acct_id", &["Z1", "Z2", "Z3"])],
+            &[
+                ("ship_id", &["S1", "S2", "S3"]),
+                ("acct_id", &["Z1", "Z2", "Z3"]),
+            ],
         );
         let proposal = discover_schema(&[accounts, orders, shipments, returns], 0.99, 1.0);
         assert_eq!(proposal.tables.len(), 4);
-        assert_eq!(proposal.component_count(), 1, "the ring is one connected schema");
+        assert_eq!(
+            proposal.component_count(),
+            1,
+            "the ring is one connected schema"
+        );
         assert!(
             proposal.diagram.h1_count() >= 1,
             "a chordless 4-table relationship ring must surface as a persistent H1 loop: {:?}",
@@ -370,7 +433,11 @@ mod tests {
         let addresses = table("addresses", &[("customer_id", &["C1", "C2", "C3"])]);
         let proposal = discover_schema(&[customers, orders, addresses], 0.99, 1.0);
         assert_eq!(proposal.component_count(), 1);
-        assert_eq!(proposal.diagram.h1_count(), 0, "a star/hub schema has no cycle to detect");
+        assert_eq!(
+            proposal.diagram.h1_count(),
+            0,
+            "a star/hub schema has no cycle to detect"
+        );
     }
 
     #[test]

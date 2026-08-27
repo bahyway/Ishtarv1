@@ -12,7 +12,7 @@
 #   - NISABA Stage 1: light cone above center stage
 #   - EnkiDbWizard (scenes/wizard.tscn): the real connection wizard
 #   - HeptaScriptEditor overlay (Ctrl+E): real, live-wired to EnkiDDB/
-#     EnkiMDB (192.168.122.107:7102/7202)
+#     EnkiMDB (192.168.122.112:7102/7202)
 #
 # The actual "Grid & Orbit" 3D particle-visualization UI lives in the
 # separate scenes/theater_3d.tscn, reached via Ctrl+G (open_grid_orbit_
@@ -27,6 +27,17 @@
 extends Node3D
 
 const DubSarTheme = preload("res://scripts/dubsar_theme.gd")
+const SessionIdentity = preload("res://scripts/session_identity.gd")
+
+# ŠARRU (king) -- matches kupru's own IshtarLayer::architect() constant
+# (crates/kupru/src/passport.rs), the real privilege_level a Gilgamesh-
+# minted Architect passport carries. A Sargon-minted gardener passport
+# (privilege_level 1) already gets past login.gd's mandatory gate to
+# REACH Theater at all -- this is the one further check login.gd's own
+# "HONEST LIMIT" comment names as real, separate future work: nothing
+# in Theater reads privilege_level to gate an individual feature. The
+# EnkiDB Connector Wizard is the first one to.
+const ARCHITECT_PRIVILEGE_LEVEL := 7
 
 @onready var _enkidb_wizard = $EnkiDbWizard
 @onready var _heptascript_editor = $HeptaScriptEditor
@@ -165,8 +176,28 @@ func _on_enkidb_wizard_tested(success: bool, message: String) -> void:
     print("EnkiDB wizard test: ", "OK" if success else "FAILED", " — ", message)
 
 func open_enkidb_wizard() -> void:
+    if SessionIdentity.privilege_level < ARCHITECT_PRIVILEGE_LEVEL:
+        _show_architect_required_dialog()
+        return
     if _enkidb_wizard:
         _enkidb_wizard.open()
+
+# Shown when a passport below Architect privilege (a Sargon-minted
+# gardener, privilege_level 1) tries to open the EnkiDB Connector
+# Wizard. login.gd already guarantees SessionIdentity.valid is true by
+# the time this scene is even reachable, so the only real question here
+# is privilege_level, not whether anyone is logged in at all.
+func _show_architect_required_dialog() -> void:
+    var template := "The EnkiDB Connector Wizard needs an Architect passport (privilege_level %d). " \
+        + "This session is signed in as \"%s\" at privilege_level %d.\n\n" \
+        + "Mint or import a Gilgamesh Master Key passport, then log in again to DubSar IDE with it."
+    var dialog := AcceptDialog.new()
+    dialog.title = "Architect passport required"
+    dialog.dialog_text = template % [ARCHITECT_PRIVILEGE_LEVEL, SessionIdentity.identity, SessionIdentity.privilege_level]
+    add_child(dialog)
+    dialog.popup_centered()
+    dialog.confirmed.connect(dialog.queue_free)
+    dialog.canceled.connect(dialog.queue_free)
 
 # Added 2026-07-10 alongside scenes/heptascript_editor.tscn: opens the
 # HeptaScript editor (CodeEdit + CLI log + NODE-target fan-out + PDM tab).

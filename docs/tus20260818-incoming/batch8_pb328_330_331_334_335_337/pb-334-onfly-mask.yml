@@ -1,0 +1,220 @@
+---
+# ============================================================================
+# PB-334 — ON-FLY MASK fix (viewport-adaptive generation, Use Mask -> auto)
+# BahyWay.Ecosystem v4.0 — SilaEngine · Wadi-us-Salaam Court
+# ----------------------------------------------------------------------------
+# CORRECTION SEALED BY THIS TABLET:
+#   * A pregenerated fixed-depth mask can only be correct at ONE zoom;
+#     at all others it is either a coarse blob or invisible dust. Retired.
+#   * v3 behaviour (patched into the deployed v2 court):
+#       1. Nothing is generated at load. Size the OSM view first.
+#       2. "Use Mask" button generates the {7,3} chart ON THE FLY for the
+#          CURRENT view: BFS from the central cell, refining until cells
+#          reach ~26 px on screen, expanding only toward the viewport,
+#          capped at 900 cells, clipped to the yard. Generation time and
+#          cell count are reported on screen.
+#       3. After the first successful generation, AUTO MODE engages:
+#          zoom end, pan end, and every Palahu arrival regenerate the
+#          mask silently (debounced ~280 ms). The button remains for
+#          manual refresh but is no longer required.
+#   * Addresses stay consistent: the chart (anchor + covering radius from
+#     the yard polygon, PB-333) is unchanged — only WHICH cells are
+#     materialised follows the eye. Index space only; truth = UTM 38N.
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-334-onfly-mask.yml
+# ============================================================================
+
+- name: "PB-334 | On-fly viewport-adaptive mask (Use Mask -> auto)"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    workshop_root: /opt/bahyway/najaf_navi_placeholder_never_used
+    court: "/opt/bahyway/workshop/najaf_navi/shala/shala_wadi_us_salaam_heptamask_v2.html"
+    nuzi_dir: "/opt/bahyway/workshop/najaf_navi/nuzi_provenance"
+
+  tasks:
+
+    - name: "1.1 | Assert the v2 court is deployed (PB-333)"
+      ansible.builtin.stat:
+        path: "{{ court }}"
+      register: c
+
+    - name: "1.2 | Halt if the court is missing"
+      ansible.builtin.assert:
+        that: c.stat.exists
+        fail_msg: "REFUSED: run PB-333 first — the v2 court is not deployed."
+
+    - name: "2.1 | Inject the on-fly mask patch before </body>"
+      ansible.builtin.blockinfile:
+        path: "{{ court }}"
+        insertbefore: "</body>"
+        marker: "<!-- {mark} PB-334 ONFLY MASK -->"
+        block: |
+          <script>
+          /* ================================================================
+             PB-334 — ON-FLY MASK. Generated for the CURRENT view on
+             "Use Mask"; auto-regeneration after first success.
+             Redefines frame(); the static preloaded mask is dead weight
+             and is never drawn again.
+             ============================================================== */
+          var maskCells=[],maskAuto=false;
+          var maskInfo='mask: not generated — size the view, then press Use Mask';
+          maskOn=false;
+          document.getElementById('btnMask').classList.remove('on');
+
+          function _cen7(vs){var x=0,y=0;
+            for(var i=0;i<vs.length;i++){x+=vs[i].re;y+=vs[i].im;}
+            return C(x/vs.length,y/vs.length);}
+          function _pxOf(vs,c){var sz=0;
+            for(var i=0;i<vs.length;i++){
+              var d=Math.hypot(vs[i].re-c.re,vs[i].im-c.im);
+              if(d>sz)sz=d;}
+            return sz*MASK_R*scale();}
+          function _scr(c){var m=chart(c);return proj(m[0],m[1],0);}
+          function _kk(c){return Math.round(c.re*30000)+'_'+Math.round(c.im*30000);}
+
+          function generateMask(){
+            var t0=performance.now();
+            var out=[],seen={},iter=0;
+            var q=[{verts:centerVerts,c:_cen7(centerVerts)}];
+            seen[_kk(q[0].c)]=1;
+            var MINPX=26,MAXC=900;
+            while(q.length&&out.length<MAXC&&iter<6000){
+              iter++;
+              var cell=q.shift();
+              var px=_pxOf(cell.verts,cell.c);
+              var s=_scr(cell.c);
+              var mNear=px*2+260;
+              var near=s[0]>-mNear&&s[0]<W+mNear&&s[1]>-mNear&&s[1]<H+mNear;
+              var vis=s[0]>-px&&s[0]<W+px&&s[1]>-px&&s[1]<H+px;
+              if(vis&&px>=1.6)out.push(cell);
+              if(px>MINPX&&near){
+                for(var e=0;e<7;e++){
+                  var A=cell.verts[e],B=cell.verts[(e+1)%7];
+                  var nv=[];
+                  for(var j=0;j<7;j++)nv.push(reflect(cell.verts[j],A,B));
+                  var nc=_cen7(nv);
+                  if(Math.hypot(nc.re,nc.im)>0.9995)continue;
+                  var k2=_kk(nc);if(seen[k2])continue;seen[k2]=1;
+                  q.push({verts:nv,c:nc});
+                }
+              }
+            }
+            maskCells=out;
+            var ms=(performance.now()-t0).toFixed(0);
+            var first=!maskAuto;
+            maskAuto=true;
+            maskInfo='mask: '+out.length+' cells · '+ms+' ms · z'
+              +cam.zoom.toFixed(1)+' · auto'+(first?' engaged':'');
+            maskOn=true;
+            document.getElementById('btnMask').classList.add('on');
+          }
+
+          /* Use Mask button */
+          var bUse=document.createElement('button');
+          bUse.id='btnUse';bUse.textContent='Use Mask ⚙';
+          var ctl=document.querySelector('.ctl');
+          ctl.insertBefore(bUse,document.getElementById('btnMask'));
+          bUse.onclick=generateMask;
+
+          /* status line */
+          var mi=document.createElement('div');
+          mi.style.cssText='position:fixed;top:74px;right:16px;'
+            +'font:11px monospace;color:#c8b269;z-index:20;text-align:right;';
+          document.body.appendChild(mi);
+
+          /* auto regeneration (debounced) after first success */
+          var _regenT=null;
+          function scheduleRegen(){
+            if(!maskAuto)return;
+            clearTimeout(_regenT);
+            _regenT=setTimeout(generateMask,280);}
+          cv.addEventListener('wheel',scheduleRegen,{passive:true});
+          addEventListener('mouseup',scheduleRegen);
+
+          /* frame v3 — draws the on-fly mask; regenerates after the veil */
+          var _palWas=false;
+          function frame(now){
+            var dt=now-last;last=now;
+            if(orbitOn&&!_pal)cam.yaw+=0.00030*dt;
+            stepPal(dt);
+            if(_palWas&&!_pal)scheduleRegen();   /* Palahu arrival -> regen */
+            _palWas=!!_pal;
+            cx2.setTransform(1,0,0,1,0,0);
+            cx2.fillStyle='#060a18';cx2.fillRect(0,0,W,H);
+            drawTiles();
+            cx2.fillStyle='rgba(6,10,24,0.52)';cx2.fillRect(0,0,W,H);
+
+            if(maskOn&&maskCells.length){
+              cx2.save();yardPath();cx2.clip();
+              for(var ci=0;ci<maskCells.length;ci++){
+                var cell=maskCells[ci];
+                var px=_pxOf(cell.verts,cell.c);
+                if(px<1.6)continue;
+                var szd=px/(MASK_R*scale());
+                cx2.strokeStyle='rgba(212,175,55,'
+                  +Math.min(0.5,szd*2.6+0.14)+')';
+                cx2.lineWidth=0.9;
+                for(var k=0;k<7;k++){
+                  var pts=sampleGeo(cell.verts[k],cell.verts[(k+1)%7],4);
+                  cx2.beginPath();
+                  for(var i=0;i<pts.length;i++){
+                    var m=chart(pts[i]);
+                    var s=proj(m[0],m[1],0);
+                    if(i)cx2.lineTo(s[0],s[1]);else cx2.moveTo(s[0],s[1]);}
+                  cx2.stroke();}}
+              cx2.restore();}
+
+            if(boundOn){yardPath();
+              cx2.strokeStyle='rgba(212,175,55,0.55)';
+              cx2.lineWidth=1.6;cx2.stroke();}
+
+            for(var pi=0;pi<particles.length;pi++){
+              var p=particles[pi];
+              if(p.bounceT>=0){p.bounceT+=dt/1000;var t=p.bounceT;
+                p.z=16+13*Math.exp(-2.6*t)*Math.abs(Math.sin(t*9));
+                if(t>2.6)p.z=16;}
+              if(p.z>0.4){var a=proj(p.mx,p.my,0),b=proj(p.mx,p.my,p.z);
+                cx2.strokeStyle='rgba(223,230,245,0.5)';cx2.lineWidth=1;
+                cx2.beginPath();cx2.moveTo(a[0],a[1]);
+                cx2.lineTo(b[0],b[1]);cx2.stroke();}
+              var s2=proj(p.mx,p.my,p.z);p._sx=s2[0];p._sy=s2[1];
+              var r=Math.max(4.5,Math.min(9,cam.zoom-11));
+              cx2.shadowColor=p.col;cx2.shadowBlur=12;
+              cx2.fillStyle=p.col;cx2.beginPath();
+              cx2.arc(s2[0],s2[1],r,0,2*Math.PI);cx2.fill();
+              cx2.shadowBlur=0;
+              if(cam.zoom>15.4||dest===p){cx2.fillStyle='#e8eefc';
+                cx2.font='11.5px Georgia';
+                cx2.fillText(p.name,s2[0]+r+5,s2[1]+3);}}
+
+            coordT+=dt;
+            if(coordT>200){coordT=0;
+              document.getElementById('coords').textContent=
+                y2lat(cam.cy).toFixed(4)+' N, '+x2lon(cam.cx).toFixed(4)
+                +' E · z'+cam.zoom.toFixed(1);
+              mi.textContent=maskInfo;}
+            requestAnimationFrame(frame);}
+          </script>
+
+    - name: "3.1 | NUZI provenance note"
+      ansible.builtin.copy:
+        dest: "{{ nuzi_dir }}/pb-334-note.md"
+        mode: "0640"
+        content: |
+          PB-334 ON-FLY MASK. Static pregenerated mask retired (correct at
+          one zoom only — waste). New: nothing generated at load; "Use Mask"
+          generates the {7,3} chart for the current view (refine to ~26 px
+          cells, expand toward viewport only, cap 900, clipped to yard,
+          time + count reported). First success engages AUTO: zoom end,
+          pan end, and every Palahu arrival regenerate silently. Chart
+          anchor/radius unchanged (PB-333) so addresses stay consistent.
+
+    - name: "4.1 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "On-fly mask patched into the court."
+          - "Flow: size the view -> Use Mask -> auto from then on."

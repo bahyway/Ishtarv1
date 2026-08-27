@@ -19,14 +19,16 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
+use hepta_sec_firewall::FirewallVerdict;
 use hepta_sec_firewall::{KakiPacket, PacketProtocol};
 use hepta_sec_sentinel::HeptaSecSentinel;
-use hepta_sec_firewall::FirewallVerdict;
-use kupru::{SovereignVerifier, SealVerifier};
+use kupru::{SealVerifier, SovereignVerifier};
 
 use crate::error::{ReplicationError, ReplicationResult};
-use crate::event::{KakiSealedEvent, ReplEventKind, FRAME_MAGIC, REPL_MAX_SECS, GENESIS_DIGEST};
 use crate::event::fnv1a_u32;
+#[cfg(test)]
+use crate::event::ReplEventKind;
+use crate::event::{KakiSealedEvent, FRAME_MAGIC, GENESIS_DIGEST, REPL_MAX_SECS};
 
 // ── PassportCheck ─────────────────────────────────────────────────────────────
 
@@ -42,35 +44,39 @@ pub struct BrokerConfig {
     /// SHA3-256 verifying key bytes (32) from the Write Pod's SealKeyPair.
     pub write_pod_verifying_key: [u8; 32],
     /// KAKI hash of the Write Pod — must match every event's kaki_hash field.
-    pub write_pod_kaki_hash:     u32,
+    pub write_pod_kaki_hash: u32,
     /// Path to the Write Pod's append-only log (mounted `:ro`).
-    pub input_log_path:          PathBuf,
+    pub input_log_path: PathBuf,
     /// Path to the verified output delta file (mounted `:rw` toward Read Pod).
-    pub output_delta_path:       PathBuf,
+    pub output_delta_path: PathBuf,
     /// Optional passport validator — called with `now_epoch` on each sweep.
-    pub passport_validator:      Option<PassportValidator>,
+    pub passport_validator: Option<PassportValidator>,
 }
 
 impl BrokerConfig {
-    pub fn input_log_path(&self)   -> &PathBuf { &self.input_log_path }
-    pub fn output_delta_path(&self) -> &PathBuf { &self.output_delta_path }
+    pub fn input_log_path(&self) -> &PathBuf {
+        &self.input_log_path
+    }
+    pub fn output_delta_path(&self) -> &PathBuf {
+        &self.output_delta_path
+    }
 }
 
 // ── ReplicationBroker ─────────────────────────────────────────────────────────
 
 /// Sovereign 7-layer replication broker.
 pub struct ReplicationBroker {
-    config:          BrokerConfig,
-    verifier:        SovereignVerifier,
-    sentinel:        HeptaSecSentinel,
-    last_seq:        u64,
-    last_digest:     [u8; 32],
+    config: BrokerConfig,
+    verifier: SovereignVerifier,
+    sentinel: HeptaSecSentinel,
+    last_seq: u64,
+    last_digest: [u8; 32],
     /// Bytes consumed from the input log so far (file cursor position).
-    log_offset:      u64,
+    log_offset: u64,
     /// Total events successfully forwarded to the Read Pod.
-    forwarded:       u64,
+    forwarded: u64,
     /// Total events rejected (any check failed).
-    rejected:        u64,
+    rejected: u64,
 }
 
 impl ReplicationBroker {
@@ -86,11 +92,11 @@ impl ReplicationBroker {
             config,
             verifier,
             sentinel,
-            last_seq:    0,
+            last_seq: 0,
             last_digest: GENESIS_DIGEST,
-            log_offset:  0,
-            forwarded:   0,
-            rejected:    0,
+            log_offset: 0,
+            forwarded: 0,
+            rejected: 0,
         }
     }
 
@@ -104,33 +110,36 @@ impl ReplicationBroker {
     /// Returns the number of events forwarded in this sweep.
     pub fn sweep(&mut self, now_epoch: u32) -> ReplicationResult<usize> {
         let new_bytes = self.read_new_log_bytes()?;
-        if new_bytes.is_empty() { return Ok(0); }
+        if new_bytes.is_empty() {
+            return Ok(0);
+        }
 
         let mut forwarded_this_sweep = 0usize;
         let mut pos = 0usize;
 
         while pos < new_bytes.len() {
             // Need at least 8 bytes (magic + frame_len)
-            if pos + 8 > new_bytes.len() { break; }
-            if &new_bytes[pos..pos+4] != &FRAME_MAGIC {
+            if pos + 8 > new_bytes.len() {
+                break;
+            }
+            if new_bytes[pos..pos + 4] != FRAME_MAGIC {
                 return Err(ReplicationError::InvalidFrame);
             }
-            let frame_len = u32::from_le_bytes(
-                new_bytes[pos+4..pos+8].try_into().unwrap()
-            ) as usize;
+            let frame_len =
+                u32::from_le_bytes(new_bytes[pos + 4..pos + 8].try_into().unwrap()) as usize;
             let total = 8 + frame_len;
             if pos + total > new_bytes.len() {
                 // Partial write — stop here, retry next sweep
                 break;
             }
-            let frame = &new_bytes[pos..pos+total];
+            let frame = &new_bytes[pos..pos + total];
 
             match self.verify_and_forward(frame, now_epoch) {
                 Ok(ev) => {
-                    self.last_seq    = ev.seq;
+                    self.last_seq = ev.seq;
                     self.last_digest = ev.digest;
                     self.log_offset += total as u64;
-                    self.forwarded  += 1;
+                    self.forwarded += 1;
                     forwarded_this_sweep += 1;
                 }
                 Err(e) => {
@@ -147,10 +156,9 @@ impl ReplicationBroker {
 
     fn verify_and_forward(
         &mut self,
-        frame:     &[u8],
+        frame: &[u8],
         now_epoch: u32,
     ) -> ReplicationResult<KakiSealedEvent> {
-
         // ── Check 1+6: frame integrity + SHA3-256 ŠIPIR ŠARRI ────────────────
         // from_frame() validates frame magic, digest, and payload_fnv together.
         let ev = KakiSealedEvent::from_frame(frame)?;
@@ -169,7 +177,7 @@ impl ReplicationBroker {
         if ev.seq != expected_seq {
             return Err(ReplicationError::SequenceGap {
                 expected: expected_seq,
-                got:      ev.seq,
+                got: ev.seq,
             });
         }
 
@@ -194,10 +202,10 @@ impl ReplicationBroker {
         let packet = KakiPacket {
             src_kaki_hash: Some(ev.write_pod_kaki_hash),
             dst_kaki_hash: Some(fnv1a_u32(b"ReadPodKaki")),
-            payload_fnv:   ev.payload_fnv,
-            protocol:      PacketProtocol::KakiNative,
-            epoch:         ev.epoch,
-            size_bytes:    ev.delta.len() as u32,
+            payload_fnv: ev.payload_fnv,
+            protocol: PacketProtocol::KakiNative,
+            epoch: ev.epoch,
+            size_bytes: ev.delta.len() as u32,
         };
         match self.sentinel.inspect_packet(&packet, now_epoch) {
             FirewallVerdict::Allow { .. } => {}
@@ -241,12 +249,24 @@ impl ReplicationBroker {
 
     // ── Stats ─────────────────────────────────────────────────────────────────
 
-    pub fn forwarded(&self)         -> u64     { self.forwarded }
-    pub fn rejected(&self)          -> u64     { self.rejected }
-    pub fn last_seq(&self)          -> u64     { self.last_seq }
-    pub fn log_offset(&self)        -> u64     { self.log_offset }
-    pub fn input_log_path(&self)    -> &PathBuf { &self.config.input_log_path }
-    pub fn output_delta_path(&self) -> &PathBuf { &self.config.output_delta_path }
+    pub fn forwarded(&self) -> u64 {
+        self.forwarded
+    }
+    pub fn rejected(&self) -> u64 {
+        self.rejected
+    }
+    pub fn last_seq(&self) -> u64 {
+        self.last_seq
+    }
+    pub fn log_offset(&self) -> u64 {
+        self.log_offset
+    }
+    pub fn input_log_path(&self) -> &PathBuf {
+        &self.config.input_log_path
+    }
+    pub fn output_delta_path(&self) -> &PathBuf {
+        &self.config.output_delta_path
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -254,29 +274,32 @@ impl ReplicationBroker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kupru::SealKeyPair;
     use crate::emitter::ReplicationEmitter;
+    use kupru::SealKeyPair;
 
     fn temp_path(tag: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("enkwal_broker_{}_{}.enkwal", tag,
+        std::env::temp_dir().join(format!(
+            "enkwal_broker_{}_{}.enkwal",
+            tag,
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
-                .subsec_nanos()))
+                .subsec_nanos()
+        ))
     }
 
     fn make_pair(kaki_hash: u32) -> (ReplicationEmitter, ReplicationBroker) {
         let keypair = SealKeyPair::generate().expect("keypair");
         let verifying_key = keypair.verifying_key_bytes();
-        let input  = temp_path("input");
+        let input = temp_path("input");
         let output = temp_path("output");
         let emitter = ReplicationEmitter::new_log(kaki_hash, keypair, &input);
-        let config  = BrokerConfig {
+        let config = BrokerConfig {
             write_pod_verifying_key: verifying_key,
-            write_pod_kaki_hash:     kaki_hash,
-            input_log_path:          input,
-            output_delta_path:       output,
-            passport_validator:      None,
+            write_pod_kaki_hash: kaki_hash,
+            input_log_path: input,
+            output_delta_path: output,
+            passport_validator: None,
         };
         let broker = ReplicationBroker::new(config);
         (emitter, broker)
@@ -290,7 +313,8 @@ mod tests {
     #[test]
     fn single_event_end_to_end() {
         let (mut em, mut br) = make_pair(0xAAAA_0001);
-        em.emit(ReplEventKind::ParticleInsert, b"data".to_vec(), 1_000).unwrap();
+        em.emit(ReplEventKind::ParticleInsert, b"data".to_vec(), 1_000)
+            .unwrap();
         let n = br.sweep(1_000).unwrap();
         assert_eq!(n, 1);
         assert_eq!(br.forwarded(), 1);
@@ -302,7 +326,8 @@ mod tests {
     fn three_events_forwarded() {
         let (mut em, mut br) = make_pair(0xBBBB_0002);
         for i in 0..3u32 {
-            em.emit(ReplEventKind::ParticleInsert, vec![i as u8], 1_000 + i).unwrap();
+            em.emit(ReplEventKind::ParticleInsert, vec![i as u8], 1_000 + i)
+                .unwrap();
         }
         let n = br.sweep(1_002).unwrap();
         assert_eq!(n, 3);
@@ -313,7 +338,8 @@ mod tests {
     #[test]
     fn expired_epoch_rejected() {
         let (mut em, mut br) = make_pair(0xCCCC_0003);
-        em.emit(ReplEventKind::ParticleInsert, b"old".to_vec(), 1_000).unwrap();
+        em.emit(ReplEventKind::ParticleInsert, b"old".to_vec(), 1_000)
+            .unwrap();
         // now_epoch is REPL_MAX_SECS + 1 seconds after event epoch
         let result = br.sweep(1_000 + REPL_MAX_SECS + 1);
         assert!(matches!(result, Err(ReplicationError::EpochExpired { .. })));
@@ -324,21 +350,25 @@ mod tests {
     fn wrong_kaki_hash_rejected() {
         let keypair = SealKeyPair::generate().unwrap();
         let verifying_key = keypair.verifying_key_bytes();
-        let input  = temp_path("kaki_wrong_in");
+        let input = temp_path("kaki_wrong_in");
         let output = temp_path("kaki_wrong_out");
 
         // Emitter uses kaki_hash 0x1111, broker expects 0x2222
         let mut em = ReplicationEmitter::new_log(0x1111_0001, keypair, &input);
         let config = BrokerConfig {
             write_pod_verifying_key: verifying_key,
-            write_pod_kaki_hash:     0x2222_0001, // mismatch
-            input_log_path:          input.clone(),
-            output_delta_path:       output.clone(),
-            passport_validator:      None,
+            write_pod_kaki_hash: 0x2222_0001, // mismatch
+            input_log_path: input.clone(),
+            output_delta_path: output.clone(),
+            passport_validator: None,
         };
         let mut br = ReplicationBroker::new(config);
-        em.emit(ReplEventKind::ParticleInsert, b"data".to_vec(), 1_000).unwrap();
-        assert!(matches!(br.sweep(1_000), Err(ReplicationError::KakiBlocked)));
+        em.emit(ReplEventKind::ParticleInsert, b"data".to_vec(), 1_000)
+            .unwrap();
+        assert!(matches!(
+            br.sweep(1_000),
+            Err(ReplicationError::KakiBlocked)
+        ));
         let _ = std::fs::remove_file(input);
         let _ = std::fs::remove_file(output);
     }
@@ -346,7 +376,8 @@ mod tests {
     #[test]
     fn output_file_contains_verified_frame() {
         let (mut em, mut br) = make_pair(0xDDDD_0004);
-        em.emit(ReplEventKind::ParticleUpdate, b"payload".to_vec(), 5_000).unwrap();
+        em.emit(ReplEventKind::ParticleUpdate, b"payload".to_vec(), 5_000)
+            .unwrap();
         br.sweep(5_000).unwrap();
         let out = std::fs::read(br.output_delta_path()).unwrap();
         assert!(out.starts_with(&FRAME_MAGIC));
@@ -356,7 +387,8 @@ mod tests {
     #[test]
     fn second_sweep_skips_already_forwarded() {
         let (mut em, mut br) = make_pair(0xEEEE_0005);
-        em.emit(ReplEventKind::ParticleInsert, b"ev1".to_vec(), 1_000).unwrap();
+        em.emit(ReplEventKind::ParticleInsert, b"ev1".to_vec(), 1_000)
+            .unwrap();
         br.sweep(1_000).unwrap();
         // Second sweep with no new events
         let n = br.sweep(1_001).unwrap();

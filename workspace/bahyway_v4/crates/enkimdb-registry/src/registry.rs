@@ -66,7 +66,10 @@ impl EnkiMdbRegistry {
         }
         self.profiles
             .iter()
-            .filter(|p| p.crate_name.to_ascii_lowercase().contains(&q) || p.description.to_ascii_lowercase().contains(&q))
+            .filter(|p| {
+                p.crate_name.to_ascii_lowercase().contains(&q)
+                    || p.description.to_ascii_lowercase().contains(&q)
+            })
             .collect()
     }
 

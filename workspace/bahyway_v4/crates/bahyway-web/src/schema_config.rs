@@ -1,7 +1,7 @@
 //! Schema Config + Particles Data Model — Client SLA GUI first step.
 //!
 //! Two views on one page:
-//!
+//! ```text
 //!   1. DQ Profile Editor
 //!      Client pastes their .schema file → sees all columns → configures per-attribute rules:
 //!        nullable (yes/no), fill threshold (0-100%), dimension tag, weight
@@ -12,58 +12,80 @@
 //!        Entity (Tribe) → Particles → EAV triples
 //!        State machine: Fuzzy → Golden → Dead
 //!        ColorID: RED=domain, GREEN=quality, BLUE=freshness
+//! ```
 
 /// Parsed column entry from a .schema descriptor.
 #[derive(Debug, Clone)]
 pub struct SchemaColumn {
-    pub name:      String,
+    pub name: String,
     pub mandatory: bool,
 }
 
 /// One configured attribute row (mirrors AttrProfile from client-dq-profile).
 #[derive(Debug, Clone)]
 pub struct AttrConfig {
-    pub name:           String,
-    pub mandatory:      bool,    // from BatchSchema inference
-    pub nullable:       bool,    // client override
-    pub fill_threshold: u8,      // 0-100 (%)
-    pub dim_tag:        DimTag,
-    pub weight_pct:     u8,      // 0-100 (%)
+    pub name: String,
+    pub mandatory: bool,    // from BatchSchema inference
+    pub nullable: bool,     // client override
+    pub fill_threshold: u8, // 0-100 (%)
+    pub dim_tag: DimTag,
+    pub weight_pct: u8, // 0-100 (%)
 }
 
 /// Dimension tags shown in the GUI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DimTag {
-    Name, Identity, Date, Geography, Content, General,
+    Name,
+    Identity,
+    Date,
+    Geography,
+    Content,
+    General,
 }
 
 impl DimTag {
     pub fn label(self) -> &'static str {
         match self {
-            DimTag::Name      => "Name",
-            DimTag::Identity  => "Identity",
-            DimTag::Date      => "Date",
+            DimTag::Name => "Name",
+            DimTag::Identity => "Identity",
+            DimTag::Date => "Date",
             DimTag::Geography => "Geography",
-            DimTag::Content   => "Content",
-            DimTag::General   => "General",
+            DimTag::Content => "Content",
+            DimTag::General => "General",
         }
     }
 
     pub fn all() -> &'static [DimTag] {
-        &[DimTag::Name, DimTag::Identity, DimTag::Date,
-          DimTag::Geography, DimTag::Content, DimTag::General]
+        &[
+            DimTag::Name,
+            DimTag::Identity,
+            DimTag::Date,
+            DimTag::Geography,
+            DimTag::Content,
+            DimTag::General,
+        ]
     }
 
     pub fn auto_detect(col: &str) -> Self {
         let n = col.to_lowercase();
-        if n.contains("name") || n.contains("ism") { return DimTag::Name; }
-        if n.contains("id") || n == "uid" || n == "identifier" { return DimTag::Identity; }
+        if n.contains("name") || n.contains("ism") {
+            return DimTag::Name;
+        }
+        if n.contains("id") || n == "uid" || n == "identifier" {
+            return DimTag::Identity;
+        }
         if n.contains("date") || n.contains("birth") || n.contains("death") || n.contains("year") {
             return DimTag::Date;
         }
-        if n.contains("location") || n.contains("cemetery") || n.contains("region")
-            || n.contains("zone") || n.contains("city") || n.contains("section")
-        { return DimTag::Geography; }
+        if n.contains("location")
+            || n.contains("cemetery")
+            || n.contains("region")
+            || n.contains("zone")
+            || n.contains("city")
+            || n.contains("section")
+        {
+            return DimTag::Geography;
+        }
         DimTag::General
     }
 }
@@ -72,16 +94,24 @@ impl DimTag {
 /// Returns (batch_name, mandatory_columns, optional_columns).
 pub fn parse_schema_descriptor(text: &str) -> (String, Vec<String>, Vec<String>) {
     let mut batch_name = String::new();
-    let mut mandatory  = Vec::new();
-    let mut optional   = Vec::new();
-    let mut section    = "";
+    let mut mandatory = Vec::new();
+    let mut optional = Vec::new();
+    let mut section = "";
 
     for line in text.lines() {
         let t = line.trim();
-        if t.is_empty() || t.starts_with('#') { continue; }
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
 
-        if t == "[mandatory_attributes]" { section = "mandatory"; continue; }
-        if t == "[optional_attributes]"  { section = "optional";  continue; }
+        if t == "[mandatory_attributes]" {
+            section = "mandatory";
+            continue;
+        }
+        if t == "[optional_attributes]" {
+            section = "optional";
+            continue;
+        }
 
         if t.starts_with("schema_name") {
             if let Some(v) = t.split('=').nth(1) {
@@ -97,8 +127,12 @@ pub fn parse_schema_descriptor(text: &str) -> (String, Vec<String>, Vec<String>)
         }
 
         match section {
-            "mandatory" => { if !t.is_empty() { mandatory.push(t.to_string()); } }
-            "optional"  => { if !t.is_empty() { optional.push(t.to_string()); } }
+            "mandatory" if !t.is_empty() => {
+                mandatory.push(t.to_string());
+            }
+            "optional" if !t.is_empty() => {
+                optional.push(t.to_string());
+            }
             _ => {}
         }
     }
@@ -111,22 +145,22 @@ pub fn build_attr_configs(mandatory: &[String], optional: &[String]) -> Vec<Attr
     let mut out = Vec::new();
     for col in mandatory {
         out.push(AttrConfig {
-            name:           col.clone(),
-            mandatory:      true,
-            nullable:       false,
+            name: col.clone(),
+            mandatory: true,
+            nullable: false,
             fill_threshold: 95,
-            dim_tag:        DimTag::auto_detect(col),
-            weight_pct:     100,
+            dim_tag: DimTag::auto_detect(col),
+            weight_pct: 100,
         });
     }
     for col in optional {
         out.push(AttrConfig {
-            name:           col.clone(),
-            mandatory:      false,
-            nullable:       true,
+            name: col.clone(),
+            mandatory: false,
+            nullable: true,
             fill_threshold: 0,
-            dim_tag:        DimTag::auto_detect(col),
-            weight_pct:     60,
+            dim_tag: DimTag::auto_detect(col),
+            weight_pct: 60,
         });
     }
     out
@@ -134,12 +168,12 @@ pub fn build_attr_configs(mandatory: &[String], optional: &[String]) -> Vec<Attr
 
 /// Render a .dqprofile text from the current configuration.
 pub fn render_dqprofile(
-    batch_name:      &str,
-    format_layer:    &str,
-    source_trust:    &str,
-    gem_threshold:   u8,
+    batch_name: &str,
+    format_layer: &str,
+    source_trust: &str,
+    gem_threshold: u8,
     tribe_threshold: u8,
-    attrs:           &[AttrConfig],
+    attrs: &[AttrConfig],
 ) -> String {
     let mut s = String::new();
     s.push_str("# BahyWay DQ Profile — generated by Schema Config GUI\n");
@@ -152,52 +186,68 @@ pub fn render_dqprofile(
         s.push('\n');
         s.push_str(&format!("[attr {}]\n", attr.name));
         s.push_str(&format!("nullable        = {}\n", attr.nullable));
-        s.push_str(&format!("fill_threshold  = {:.2}\n", attr.fill_threshold as f32 / 100.0));
+        s.push_str(&format!(
+            "fill_threshold  = {:.2}\n",
+            attr.fill_threshold as f32 / 100.0
+        ));
         s.push_str(&format!("dim             = {}\n", attr.dim_tag.label()));
-        s.push_str(&format!("weight          = {:.1}\n", attr.weight_pct as f32 / 100.0));
+        s.push_str(&format!(
+            "weight          = {:.1}\n",
+            attr.weight_pct as f32 / 100.0
+        ));
     }
     s
 }
 
 /// State for the Schema Config page.
 pub struct SchemaConfigState {
-    pub batch_name:      String,
-    pub attrs:           Vec<AttrConfig>,
-    pub format_layer:    usize,   // index into FORMAT_LAYERS
-    pub source_trust:    usize,   // index into SOURCE_TRUST_LEVELS
-    pub gem_threshold:   u8,
+    pub batch_name: String,
+    pub attrs: Vec<AttrConfig>,
+    pub format_layer: usize, // index into FORMAT_LAYERS
+    pub source_trust: usize, // index into SOURCE_TRUST_LEVELS
+    pub gem_threshold: u8,
     pub tribe_threshold: u8,
-    pub output_profile:  String,  // rendered .dqprofile, updated on Export
-    pub schema_loaded:   bool,
+    pub output_profile: String, // rendered .dqprofile, updated on Export
+    pub schema_loaded: bool,
 }
 
 pub const FORMAT_LAYERS: &[&str] = &[
-    "CivilRegistry", "MedicalRecord", "PipelineData", "CuneiformDictionary", "GenericEav",
+    "CivilRegistry",
+    "MedicalRecord",
+    "PipelineData",
+    "CuneiformDictionary",
+    "GenericEav",
 ];
 
-pub const SOURCE_TRUST_LEVELS: &[&str] = &[
-    "Authoritative", "Official", "Community", "Unknown",
-];
+pub const SOURCE_TRUST_LEVELS: &[&str] = &["Authoritative", "Official", "Community", "Unknown"];
 
 impl SchemaConfigState {
     pub fn new() -> Self {
         SchemaConfigState {
-            batch_name:      String::new(),
-            attrs:           Vec::new(),
-            format_layer:    0,
-            source_trust:    1,
-            gem_threshold:   200,
+            batch_name: String::new(),
+            attrs: Vec::new(),
+            format_layer: 0,
+            source_trust: 1,
+            gem_threshold: 200,
             tribe_threshold: 140,
-            output_profile:  String::new(),
-            schema_loaded:   false,
+            output_profile: String::new(),
+            schema_loaded: false,
         }
     }
+}
 
+impl Default for SchemaConfigState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SchemaConfigState {
     /// Load from a .schema descriptor string.
     pub fn load_schema(&mut self, text: &str) {
         let (batch_name, mandatory, optional) = parse_schema_descriptor(text);
-        self.batch_name  = batch_name;
-        self.attrs       = build_attr_configs(&mandatory, &optional);
+        self.batch_name = batch_name;
+        self.attrs = build_attr_configs(&mandatory, &optional);
         self.schema_loaded = true;
         self.output_profile = String::new();
     }
@@ -233,12 +283,12 @@ impl SchemaConfigState {
     pub fn cycle_dim(&mut self, idx: usize) {
         if let Some(a) = self.attrs.get_mut(idx) {
             a.dim_tag = match a.dim_tag {
-                DimTag::Name      => DimTag::Identity,
-                DimTag::Identity  => DimTag::Date,
-                DimTag::Date      => DimTag::Geography,
+                DimTag::Name => DimTag::Identity,
+                DimTag::Identity => DimTag::Date,
+                DimTag::Date => DimTag::Geography,
                 DimTag::Geography => DimTag::Content,
-                DimTag::Content   => DimTag::General,
-                DimTag::General   => DimTag::Name,
+                DimTag::Content => DimTag::General,
+                DimTag::General => DimTag::Name,
             };
         }
     }
@@ -257,13 +307,15 @@ pub fn render_schema_table_html(state: &SchemaConfigState) -> String {
         return r#"<p style="color:var(--muted);font-style:italic">
             Paste your <code>.schema</code> file contents in the text area above and click
             <strong>Load Schema</strong>.
-        </p>"#.to_string();
+        </p>"#
+            .to_string();
     }
     if state.attrs.is_empty() {
         return "<p style='color:var(--muted)'>No columns found in schema.</p>".to_string();
     }
 
-    let mut html = String::from(r#"<table style="width:100%;border-collapse:collapse;font-size:13px">
+    let mut html = String::from(
+        r#"<table style="width:100%;border-collapse:collapse;font-size:13px">
 <thead><tr style="border-bottom:1px solid var(--border)">
   <th style="text-align:left;padding:6px 8px">Attribute</th>
   <th style="padding:6px 8px">Source</th>
@@ -271,7 +323,8 @@ pub fn render_schema_table_html(state: &SchemaConfigState) -> String {
   <th style="padding:6px 8px">Fill %</th>
   <th style="padding:6px 8px">Dimension</th>
   <th style="padding:6px 8px">Weight %</th>
-</tr></thead><tbody>"#);
+</tr></thead><tbody>"#,
+    );
 
     for (i, attr) in state.attrs.iter().enumerate() {
         let source_badge = if attr.mandatory {
@@ -284,15 +337,19 @@ pub fn render_schema_table_html(state: &SchemaConfigState) -> String {
         } else {
             "background:var(--surface2);color:var(--red);border:1px solid var(--red)"
         };
-        let null_label = if attr.nullable { "nullable" } else { "required" };
+        let null_label = if attr.nullable {
+            "nullable"
+        } else {
+            "required"
+        };
 
         let dim_color = match attr.dim_tag {
-            DimTag::Name      => "var(--accent)",
-            DimTag::Identity  => "#e8c36a",
-            DimTag::Date      => "#6ac3e8",
+            DimTag::Name => "var(--accent)",
+            DimTag::Identity => "#e8c36a",
+            DimTag::Date => "#6ac3e8",
             DimTag::Geography => "#6ae890",
-            DimTag::Content   => "#c36ae8",
-            DimTag::General   => "var(--muted)",
+            DimTag::Content => "#c36ae8",
+            DimTag::General => "var(--muted)",
         };
 
         html.push_str(&format!(r#"<tr style="border-bottom:1px solid var(--border)" id="attr-row-{i}">
@@ -328,16 +385,14 @@ pub fn render_schema_table_html(state: &SchemaConfigState) -> String {
 }
 
 fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Render the Particles Data Model Canvas (pure Canvas 2D, called from WASM).
 #[cfg(target_arch = "wasm32")]
-pub fn draw_particles_model(
-    ctx: &web_sys::CanvasRenderingContext2d,
-    w:   f64,
-    h:   f64,
-) {
+pub fn draw_particles_model(ctx: &web_sys::CanvasRenderingContext2d, w: f64, h: f64) {
     use std::f64::consts::PI;
 
     ctx.set_fill_style_str("#0e0f14");
@@ -353,11 +408,24 @@ pub fn draw_particles_model(
 
     // ── Entity box (top) ──────────────────────────────────────────────────────
     let ey = 55.0;
-    rounded_box(ctx, cx - 80.0, ey, 160.0, 36.0, "#7c5cbf", "#3a2860", "Entity (Tribe)");
+    rounded_box(
+        ctx,
+        cx - 80.0,
+        ey,
+        160.0,
+        36.0,
+        "#7c5cbf",
+        "#3a2860",
+        "Entity (Tribe)",
+    );
 
     // ── Three particles ───────────────────────────────────────────────────────
     let py = ey + 80.0;
-    let colors = [("#50c878", "Golden", "B11≥140"), ("#e8c36a", "Fuzzy", "B11 100-139"), ("#808080", "Dead", "B11<100")];
+    let colors = [
+        ("#50c878", "Golden", "B11≥140"),
+        ("#e8c36a", "Fuzzy", "B11 100-139"),
+        ("#808080", "Dead", "B11<100"),
+    ];
     let px_offsets = [-160.0, 0.0, 160.0];
 
     for (i, ((color, label, b11), &px)) in colors.iter().zip(px_offsets.iter()).enumerate() {
@@ -369,7 +437,16 @@ pub fn draw_particles_model(
         ctx.line_to(cx + px, py);
         let _ = ctx.stroke();
 
-        rounded_box(ctx, cx + px - 60.0, py, 120.0, 32.0, color, "#0e0f14", label);
+        rounded_box(
+            ctx,
+            cx + px - 60.0,
+            py,
+            120.0,
+            32.0,
+            color,
+            "#0e0f14",
+            label,
+        );
         ctx.set_fill_style_str("#888");
         ctx.set_font("10px monospace");
         let _ = ctx.fill_text(b11, cx + px, py + 46.0);
@@ -378,9 +455,27 @@ pub fn draw_particles_model(
         let eav_y = py + 65.0;
         let eav_labels = ["ATTR_STATE", "ATTR_QUALITY", "ATTR_COLOR_RGB"];
         let eav_vals = [
-            if i == 0 { "GOLDEN" } else if i == 1 { "FUZZY" } else { "DEAD" },
-            if i == 0 { "0.900" } else if i == 1 { "0.450" } else { "0.100" },
-            if i == 0 { "#50c878" } else if i == 1 { "#e8c36a" } else { "#808080" },
+            if i == 0 {
+                "GOLDEN"
+            } else if i == 1 {
+                "FUZZY"
+            } else {
+                "DEAD"
+            },
+            if i == 0 {
+                "0.900"
+            } else if i == 1 {
+                "0.450"
+            } else {
+                "0.100"
+            },
+            if i == 0 {
+                "#50c878"
+            } else if i == 1 {
+                "#e8c36a"
+            } else {
+                "#808080"
+            },
         ];
         for (j, (attr, val)) in eav_labels.iter().zip(eav_vals.iter()).enumerate() {
             let ey2 = eav_y + j as f64 * 28.0;
@@ -405,28 +500,44 @@ pub fn draw_particles_model(
     ctx.set_font("11px monospace");
     ctx.set_text_align("left");
     let _ = ctx.fill_text("ColorID:  RED = domain class", cx - 190.0, ly + 14.0);
-    let _ = ctx.fill_text("GREEN = quality (HPS)   BLUE = freshness (δt)", cx - 190.0, ly + 28.0);
+    let _ = ctx.fill_text(
+        "GREEN = quality (HPS)   BLUE = freshness (δt)",
+        cx - 190.0,
+        ly + 28.0,
+    );
 
     // KAKI label (bottom right)
     ctx.set_text_align("right");
     ctx.set_fill_style_str("#7c5cbf");
     ctx.set_font("bold 10px monospace");
-    let _ = ctx.fill_text("KAKI: Entity KAKI → Particle KAKI → Event KAKI", cx + 200.0, ly + 22.0);
+    let _ = ctx.fill_text(
+        "KAKI: Entity KAKI → Particle KAKI → Event KAKI",
+        cx + 200.0,
+        ly + 22.0,
+    );
 
     // EAV label
     ctx.set_text_align("center");
     ctx.set_fill_style_str("#606080");
     ctx.set_font("10px monospace");
-    let _ = ctx.fill_text("Each particle holds N EAV triples — attr_hash (u32) → value (bytes)", cx, ly - 10.0);
+    let _ = ctx.fill_text(
+        "Each particle holds N EAV triples — attr_hash (u32) → value (bytes)",
+        cx,
+        ly - 10.0,
+    );
 
     let _ = PI; // suppress unused warning
 }
 
 #[cfg(target_arch = "wasm32")]
 fn rounded_box(
-    ctx:   &web_sys::CanvasRenderingContext2d,
-    x: f64, y: f64, w: f64, h: f64,
-    stroke: &str, fill: &str,
+    ctx: &web_sys::CanvasRenderingContext2d,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    stroke: &str,
+    fill: &str,
     label: &str,
 ) {
     ctx.set_fill_style_str(fill);
@@ -467,30 +578,36 @@ entity_seed     = 0x3a4f2c1d
         let (batch, mand, opt) = parse_schema_descriptor(SAMPLE_SCHEMA);
         assert_eq!(batch, "najaf_cemetery_batch_001");
         assert_eq!(mand.len(), 3);
-        assert_eq!(opt.len(),  2);
+        assert_eq!(opt.len(), 2);
     }
 
     #[test]
     fn build_attr_configs_nullable_defaults() {
         let mandatory = vec!["name".to_string(), "national_id".to_string()];
-        let optional  = vec!["notes".to_string()];
-        let configs   = build_attr_configs(&mandatory, &optional);
+        let optional = vec!["notes".to_string()];
+        let configs = build_attr_configs(&mandatory, &optional);
         assert!(!configs[0].nullable, "mandatory defaults to non-nullable");
-        assert!( configs[2].nullable, "optional defaults to nullable");
+        assert!(configs[2].nullable, "optional defaults to nullable");
     }
 
     #[test]
     fn dim_auto_detect() {
-        assert!(matches!(DimTag::auto_detect("name"),            DimTag::Name));
-        assert!(matches!(DimTag::auto_detect("national_id"),     DimTag::Identity));
-        assert!(matches!(DimTag::auto_detect("date_of_death"),   DimTag::Date));
-        assert!(matches!(DimTag::auto_detect("cemetery_section"),DimTag::Geography));
+        assert!(matches!(DimTag::auto_detect("name"), DimTag::Name));
+        assert!(matches!(
+            DimTag::auto_detect("national_id"),
+            DimTag::Identity
+        ));
+        assert!(matches!(DimTag::auto_detect("date_of_death"), DimTag::Date));
+        assert!(matches!(
+            DimTag::auto_detect("cemetery_section"),
+            DimTag::Geography
+        ));
     }
 
     #[test]
     fn render_dqprofile_round_trips_batch_name() {
         let attrs = build_attr_configs(&["name".to_string()], &["notes".to_string()]);
-        let text  = render_dqprofile("my_batch", "CivilRegistry", "Official", 200, 140, &attrs);
+        let text = render_dqprofile("my_batch", "CivilRegistry", "Official", 200, 140, &attrs);
         assert!(text.contains("batch_name      = my_batch"));
         assert!(text.contains("[attr name]"));
         assert!(text.contains("nullable        = false"));

@@ -14,7 +14,7 @@ use nusku_engine::KakiPK;
 pub const WPDWAY_DOMAIN: u8 = 0x03;
 
 const PHI: u32 = 0x9e37_79b9; // golden-ratio fractional (Knuth)
-const C:   u32 = 0x6c62_272e; // Murmur3-style secondary constant
+const C: u32 = 0x6c62_272e; // Murmur3-style secondary constant
 
 /// Avalanche hash of a UTF-8 segment ID string for KAKI D1 (identity).
 fn segment_id_hash(segment_id: &str) -> f32 {
@@ -22,21 +22,21 @@ fn segment_id_hash(segment_id: &str) -> f32 {
     for (i, b) in segment_id.bytes().enumerate() {
         v = v.wrapping_add((b as u32).wrapping_mul(PHI));
         v ^= v >> 16;
-        v  = v.wrapping_mul(C.wrapping_add(i as u32 + 1));
+        v = v.wrapping_mul(C.wrapping_add(i as u32 + 1));
     }
     // Wang hash finalisation
     v ^= v >> 16;
-    v  = v.wrapping_mul(0x45d9_f3b7);
+    v = v.wrapping_mul(0x45d9_f3b7);
     v ^= v >> 16;
     v as f32 / u32::MAX as f32
 }
 
 /// Derive a 16-byte WPD KAKI PK for a defect event.
 pub fn derive_wpd_kaki(
-    segment_id:      &str,
+    segment_id: &str,
     composite_score: f32,
-    confidence:      f32,
-    timestamp_ms:    u64,
+    confidence: f32,
+    timestamp_ms: u64,
 ) -> KakiPK {
     let d1 = segment_id_hash(segment_id);
     let d2 = WPDWAY_DOMAIN as f32 / 255.0;
@@ -51,10 +51,10 @@ pub fn derive_wpd_kaki(
     let d7 = ((d1 + d3 + d4 + d5) / 4.0).clamp(0.0, 1.0);
 
     let mut kaki = [0u8; 16];
-    kaki[0..4].copy_from_slice(  &((d1 * u32::MAX as f32) as u32).to_le_bytes());
-    kaki[4..6].copy_from_slice(  &((d2 * u16::MAX as f32) as u16).to_le_bytes());
-    kaki[6..8].copy_from_slice(  &((d3 * u16::MAX as f32) as u16).to_le_bytes());
-    kaki[8..10].copy_from_slice( &((d4 * u16::MAX as f32) as u16).to_le_bytes());
+    kaki[0..4].copy_from_slice(&((d1 * u32::MAX as f32) as u32).to_le_bytes());
+    kaki[4..6].copy_from_slice(&((d2 * u16::MAX as f32) as u16).to_le_bytes());
+    kaki[6..8].copy_from_slice(&((d3 * u16::MAX as f32) as u16).to_le_bytes());
+    kaki[8..10].copy_from_slice(&((d4 * u16::MAX as f32) as u16).to_le_bytes());
     kaki[10..12].copy_from_slice(&((d5 * u16::MAX as f32) as u16).to_le_bytes());
     kaki[12..14].copy_from_slice(&((d6 * u16::MAX as f32) as u16).to_le_bytes());
     kaki[14..16].copy_from_slice(&((d7 * u16::MAX as f32) as u16).to_le_bytes());
@@ -89,9 +89,11 @@ mod tests {
 
     #[test]
     fn hex_is_32_char_uppercase() {
-        let k   = derive_wpd_kaki("BGH-KZ-001", 0.45, 0.90, 1_717_000_000_000);
+        let k = derive_wpd_kaki("BGH-KZ-001", 0.45, 0.90, 1_717_000_000_000);
         let hex = kaki_to_hex(&k);
         assert_eq!(hex.len(), 32);
-        assert!(hex.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()));
+        assert!(hex
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()));
     }
 }

@@ -7,9 +7,9 @@
 #![forbid(unsafe_code)]
 
 pub mod domain;
-pub mod sensors;
 pub mod import;
+pub mod sensors;
 
 pub use domain::{PollutionDomain, PollutionError};
-pub use sensors::RawSensorReading;
 pub use import::smart_import;
+pub use sensors::RawSensorReading;

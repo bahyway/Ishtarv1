@@ -231,7 +231,8 @@ mod tests {
 
     #[test]
     fn death_state_pronounced_only_when_sealed() {
-        let expired = DeathState::new(ParticleState::Dead, Some(DeathDisposition::Expired)).unwrap();
+        let expired =
+            DeathState::new(ParticleState::Dead, Some(DeathDisposition::Expired)).unwrap();
         assert!(!expired.is_pronounced());
         let sealed = DeathState::new(ParticleState::Dead, Some(DeathDisposition::Sealed)).unwrap();
         assert!(sealed.is_pronounced());
@@ -246,7 +247,9 @@ mod tests {
     fn settlement_lawful_when_all_settled() {
         let s = LegacySettlement::new([
             Resolution::NotApplicable,
-            Resolution::Transferred { to_uuid_hash: 0xDEAD },
+            Resolution::Transferred {
+                to_uuid_hash: 0xDEAD,
+            },
             Resolution::Archived,
             Resolution::NotApplicable,
             Resolution::Archived,
@@ -269,7 +272,10 @@ mod tests {
             Resolution::NotApplicable,
         ]);
         assert!(!s.is_lawful());
-        assert_eq!(s.unresolved_load_bearing(), vec![InheritanceChannel::Belonging]);
+        assert_eq!(
+            s.unresolved_load_bearing(),
+            vec![InheritanceChannel::Belonging]
+        );
     }
 
     #[test]

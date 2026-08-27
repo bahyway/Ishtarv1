@@ -22,33 +22,33 @@ pub enum KnowledgeArea {
 impl KnowledgeArea {
     pub fn code(self) -> &'static str {
         match self {
-            Self::DataGovernance          => "DG",
-            Self::DataArchitecture        => "DA",
-            Self::DataModeling            => "DM",
+            Self::DataGovernance => "DG",
+            Self::DataArchitecture => "DA",
+            Self::DataModeling => "DM",
             Self::DataStorageAndOperations => "DSO",
-            Self::DataSecurity            => "DS",
-            Self::DataIntegration         => "DI",
-            Self::DocumentAndContent      => "DC",
-            Self::ReferenceAndMasterData  => "RMD",
-            Self::DataWarehousing         => "DW",
-            Self::Metadata                => "MD",
-            Self::DataQuality             => "DQ",
+            Self::DataSecurity => "DS",
+            Self::DataIntegration => "DI",
+            Self::DocumentAndContent => "DC",
+            Self::ReferenceAndMasterData => "RMD",
+            Self::DataWarehousing => "DW",
+            Self::Metadata => "MD",
+            Self::DataQuality => "DQ",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::DataGovernance          => "Data Governance",
-            Self::DataArchitecture        => "Data Architecture",
-            Self::DataModeling            => "Data Modelling & Design",
+            Self::DataGovernance => "Data Governance",
+            Self::DataArchitecture => "Data Architecture",
+            Self::DataModeling => "Data Modelling & Design",
             Self::DataStorageAndOperations => "Data Storage & Operations",
-            Self::DataSecurity            => "Data Security",
-            Self::DataIntegration         => "Data Integration & Interoperability",
-            Self::DocumentAndContent      => "Document & Content Management",
-            Self::ReferenceAndMasterData  => "Reference & Master Data",
-            Self::DataWarehousing         => "Data Warehousing & Business Intelligence",
-            Self::Metadata                => "Metadata Management",
-            Self::DataQuality             => "Data Quality",
+            Self::DataSecurity => "Data Security",
+            Self::DataIntegration => "Data Integration & Interoperability",
+            Self::DocumentAndContent => "Document & Content Management",
+            Self::ReferenceAndMasterData => "Reference & Master Data",
+            Self::DataWarehousing => "Data Warehousing & Business Intelligence",
+            Self::Metadata => "Metadata Management",
+            Self::DataQuality => "Data Quality",
         }
     }
 
@@ -72,17 +72,17 @@ impl KnowledgeArea {
     /// DAMA-DMBOK v2 chapter number (1–11).
     pub fn chapter_number(self) -> u8 {
         match self {
-            Self::DataGovernance          => 3,
-            Self::DataArchitecture        => 4,
-            Self::DataModeling            => 5,
+            Self::DataGovernance => 3,
+            Self::DataArchitecture => 4,
+            Self::DataModeling => 5,
             Self::DataStorageAndOperations => 6,
-            Self::DataSecurity            => 7,
-            Self::DataIntegration         => 8,
-            Self::DocumentAndContent      => 9,
-            Self::ReferenceAndMasterData  => 10,
-            Self::DataWarehousing         => 11,
-            Self::Metadata                => 12,
-            Self::DataQuality             => 13,
+            Self::DataSecurity => 7,
+            Self::DataIntegration => 8,
+            Self::DocumentAndContent => 9,
+            Self::ReferenceAndMasterData => 10,
+            Self::DataWarehousing => 11,
+            Self::Metadata => 12,
+            Self::DataQuality => 13,
         }
     }
 }
@@ -91,23 +91,28 @@ impl KnowledgeArea {
 #[derive(Debug, Clone)]
 pub struct DmBokTerm {
     /// Short code (e.g. "DQ.COMPLETENESS").
-    pub code:        &'static str,
+    pub code: &'static str,
     /// Full label.
-    pub label:       &'static str,
+    pub label: &'static str,
     /// Concise definition (one sentence).
-    pub definition:  &'static str,
+    pub definition: &'static str,
     /// Primary DAMA-DMBOK knowledge area.
-    pub area:        KnowledgeArea,
+    pub area: KnowledgeArea,
 }
 
 impl DmBokTerm {
     pub const fn new(
-        code:       &'static str,
-        label:      &'static str,
+        code: &'static str,
+        label: &'static str,
         definition: &'static str,
-        area:       KnowledgeArea,
+        area: KnowledgeArea,
     ) -> Self {
-        DmBokTerm { code, label, definition, area }
+        DmBokTerm {
+            code,
+            label,
+            definition,
+            area,
+        }
     }
 }
 
@@ -842,9 +847,12 @@ pub fn by_area(area: KnowledgeArea) -> impl Iterator<Item = &'static DmBokTerm> 
 /// Case-insensitive substring search on label + definition.
 pub fn search(keyword: &str) -> Vec<&'static DmBokTerm> {
     let kw = keyword.to_lowercase();
-    DICTIONARY.iter().filter(|t| {
-        t.label.to_lowercase().contains(&kw) || t.definition.to_lowercase().contains(&kw)
-    }).collect()
+    DICTIONARY
+        .iter()
+        .filter(|t| {
+            t.label.to_lowercase().contains(&kw) || t.definition.to_lowercase().contains(&kw)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -892,7 +900,11 @@ mod tests {
 
     #[test]
     fn dictionary_has_100_plus_terms() {
-        assert!(DICTIONARY.len() >= 100, "Expected 100+ terms, got {}", DICTIONARY.len());
+        assert!(
+            DICTIONARY.len() >= 100,
+            "Expected 100+ terms, got {}",
+            DICTIONARY.len()
+        );
     }
 
     #[test]

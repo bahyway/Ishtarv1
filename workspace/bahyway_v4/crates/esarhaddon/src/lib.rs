@@ -34,16 +34,16 @@
 //! | 6 | DubSar Theater scenes | 144–150 |
 //! | 7 | Field ruggedisation + NĀRU audit journal | 151–155 |
 
+pub mod atmosphere;
+pub mod error;
+pub mod grid;
 pub mod kaki;
 pub mod smi;
 pub mod survivor;
-pub mod grid;
-pub mod atmosphere;
-pub mod error;
 
+pub use atmosphere::AtmosphericThreat;
 pub use error::EsarhaddonError;
-pub use kaki::{KakiClass, SeismicEvent, SurvivorSignal, StructuralState};
+pub use grid::{RescueZone, ZoneClass};
+pub use kaki::{KakiClass, SeismicEvent, StructuralState, SurvivorSignal};
 pub use smi::{Smi, SmiState};
 pub use survivor::SurvivorAggregator;
-pub use grid::{RescueZone, ZoneClass};
-pub use atmosphere::AtmosphericThreat;

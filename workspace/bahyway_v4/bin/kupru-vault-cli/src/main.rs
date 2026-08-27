@@ -35,7 +35,10 @@ use std::fs;
 use std::process::ExitCode;
 
 fn parse_flag(args: &[String], name: &str) -> Option<String> {
-    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned()
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1))
+        .cloned()
 }
 
 fn main() -> ExitCode {

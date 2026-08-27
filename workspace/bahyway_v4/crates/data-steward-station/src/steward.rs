@@ -6,7 +6,7 @@
 //! by submitting corrective Event-Kakis through AdadGate.
 
 use alert_engine::alert::Alert;
-use diagnosis_templates::{Diagnosis, diagnose};
+use diagnosis_templates::{diagnose, Diagnosis};
 
 /// The Data Steward Station — accumulates diagnoses for steward review.
 pub struct StewardStation {
@@ -20,11 +20,7 @@ impl StewardStation {
 
     /// Receive an alert and enqueue its diagnosis.
     pub fn receive(&mut self, alert: &Alert) {
-        let d = diagnose(
-            alert.uuid_hash,
-            alert.severity,
-            alert.drift_distance,
-        );
+        let d = diagnose(alert.uuid_hash, alert.severity, alert.drift_distance);
         self.queue.push(d);
     }
 
@@ -49,7 +45,9 @@ impl StewardStation {
 }
 
 impl Default for StewardStation {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -70,9 +68,9 @@ mod tests {
 
     #[test]
     fn receive_batch() {
-        let mut s  = StewardStation::new();
+        let mut s = StewardStation::new();
         let alerts = vec![
-            make_alert(60.0,  AlertSeverity::Watch),
+            make_alert(60.0, AlertSeverity::Watch),
             make_alert(200.0, AlertSeverity::Warning),
             make_alert(400.0, AlertSeverity::Critical),
         ];

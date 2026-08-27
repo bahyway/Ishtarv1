@@ -52,7 +52,10 @@ pub enum AuthzDecision {
     Allowed,
     /// Denied because the query touches a restricted namespace and the
     /// caller's privilege_level (if any) doesn't clear the bar.
-    Denied { namespace: &'static str, required_privilege: u8 },
+    Denied {
+        namespace: &'static str,
+        required_privilege: u8,
+    },
 }
 
 /// True if any WHAT projection or WHERE condition attribute starts with
@@ -74,7 +77,10 @@ pub fn query_touches_restricted_namespace(query: &HeptaQuery) -> Option<&'static
     }
 
     let attrs_touching = |attr: &str| {
-        RESTRICTED_NAMESPACES.iter().find(|ns| attr.starts_with(*ns)).copied()
+        RESTRICTED_NAMESPACES
+            .iter()
+            .find(|ns| attr.starts_with(*ns))
+            .copied()
     };
 
     if let Some(what) = &query.what {
@@ -103,11 +109,15 @@ pub fn authorize(query: &HeptaQuery, caller_privilege_level: Option<u8>) -> Auth
     match query_touches_restricted_namespace(query) {
         None => AuthzDecision::Allowed,
         Some(namespace) => {
-            let ok = caller_privilege_level.is_some_and(|lvl| lvl >= RESTRICTED_NAMESPACE_MIN_PRIVILEGE);
+            let ok =
+                caller_privilege_level.is_some_and(|lvl| lvl >= RESTRICTED_NAMESPACE_MIN_PRIVILEGE);
             if ok {
                 AuthzDecision::Allowed
             } else {
-                AuthzDecision::Denied { namespace, required_privilege: RESTRICTED_NAMESPACE_MIN_PRIVILEGE }
+                AuthzDecision::Denied {
+                    namespace,
+                    required_privilege: RESTRICTED_NAMESPACE_MIN_PRIVILEGE,
+                }
             }
         }
     }
@@ -120,47 +130,74 @@ mod tests {
 
     #[test]
     fn plain_query_with_no_passport_attrs_is_allowed_unauthenticated() {
-        let q = parse_query("WHO T.E\nWHAT E[artifact.name]\nWHERE E[artifact.kind] = \"Crate\"").unwrap();
+        let q = parse_query("WHO T.E\nWHAT E[artifact.name]\nWHERE E[artifact.kind] = \"Crate\"")
+            .unwrap();
         assert_eq!(authorize(&q, None), AuthzDecision::Allowed);
     }
 
     #[test]
     fn what_projection_on_passport_attr_is_denied_without_privilege() {
-        let q = parse_query("WHO T.E\nWHAT E[passport.privilege_level]\nWHERE E[artifact.kind] = \"Crate\"").unwrap();
+        let q = parse_query(
+            "WHO T.E\nWHAT E[passport.privilege_level]\nWHERE E[artifact.kind] = \"Crate\"",
+        )
+        .unwrap();
         assert_eq!(
             authorize(&q, None),
-            AuthzDecision::Denied { namespace: "passport.", required_privilege: 5 }
+            AuthzDecision::Denied {
+                namespace: "passport.",
+                required_privilege: 5
+            }
         );
     }
 
     #[test]
     fn where_condition_on_passport_attr_is_denied_without_privilege() {
-        let q = parse_query("WHO T.E\nWHAT E[artifact.name]\nWHERE E[passport.realm] = \"bahyway\"").unwrap();
+        let q =
+            parse_query("WHO T.E\nWHAT E[artifact.name]\nWHERE E[passport.realm] = \"bahyway\"")
+                .unwrap();
         assert!(matches!(authorize(&q, None), AuthzDecision::Denied { .. }));
     }
 
     #[test]
     fn anu_governor_run_attr_is_denied_without_privilege_and_allowed_at_5() {
-        let q = parse_query("WHO T.E\nWHAT E[anu_governor_run.outcome]\nWHERE E[artifact.kind] = \"Crate\"").unwrap();
+        let q = parse_query(
+            "WHO T.E\nWHAT E[anu_governor_run.outcome]\nWHERE E[artifact.kind] = \"Crate\"",
+        )
+        .unwrap();
         assert_eq!(
             authorize(&q, None),
-            AuthzDecision::Denied { namespace: "anu_governor_run.", required_privilege: 5 }
+            AuthzDecision::Denied {
+                namespace: "anu_governor_run.",
+                required_privilege: 5
+            }
         );
         assert_eq!(authorize(&q, Some(5)), AuthzDecision::Allowed);
-        assert!(matches!(authorize(&q, Some(4)), AuthzDecision::Denied { .. }));
+        assert!(matches!(
+            authorize(&q, Some(4)),
+            AuthzDecision::Denied { .. }
+        ));
     }
 
     #[test]
     fn passport_attr_query_is_allowed_at_sufficient_privilege() {
-        let q = parse_query("WHO T.E\nWHAT E[passport.privilege_level]\nWHERE E[artifact.kind] = \"Crate\"").unwrap();
+        let q = parse_query(
+            "WHO T.E\nWHAT E[passport.privilege_level]\nWHERE E[artifact.kind] = \"Crate\"",
+        )
+        .unwrap();
         assert_eq!(authorize(&q, Some(5)), AuthzDecision::Allowed);
         assert_eq!(authorize(&q, Some(7)), AuthzDecision::Allowed);
     }
 
     #[test]
     fn passport_attr_query_is_still_denied_below_threshold() {
-        let q = parse_query("WHO T.E\nWHAT E[passport.privilege_level]\nWHERE E[artifact.kind] = \"Crate\"").unwrap();
-        assert!(matches!(authorize(&q, Some(4)), AuthzDecision::Denied { .. }));
+        let q = parse_query(
+            "WHO T.E\nWHAT E[passport.privilege_level]\nWHERE E[artifact.kind] = \"Crate\"",
+        )
+        .unwrap();
+        assert!(matches!(
+            authorize(&q, Some(4)),
+            AuthzDecision::Denied { .. }
+        ));
     }
 
     #[test]
@@ -169,7 +206,10 @@ mod tests {
         // comparison VALUE -- a query filtering on an unrelated attribute
         // whose string value happens to mention "passport." must not be
         // treated as touching the restricted namespace.
-        let q = parse_query("WHO T.E\nWHAT E[artifact.name]\nWHERE E[artifact.name] = \"passport.txt\"").unwrap();
+        let q = parse_query(
+            "WHO T.E\nWHAT E[artifact.name]\nWHERE E[artifact.name] = \"passport.txt\"",
+        )
+        .unwrap();
         assert_eq!(authorize(&q, None), AuthzDecision::Allowed);
     }
 

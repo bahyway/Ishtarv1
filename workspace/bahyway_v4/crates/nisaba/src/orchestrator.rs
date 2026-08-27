@@ -27,6 +27,7 @@
 //!     through AdadGate, or otherwise mutates ecosystem state. Corrective
 //!     action stays exactly where CSR-08 already puts it: the steward (the
 //!     Architect) reviewing the queue and acting through AdadGate.
+//!
 //! This mirrors the propose-not-ratify shape `ninsun-agent` already uses
 //! for the same reason, rather than inventing a new autonomy pattern.
 //!
@@ -60,7 +61,7 @@ pub struct AutonomousResolution {
 
 /// One line of NISABA's running narration — what she would say if asked
 /// "what have you seen." Used to build the daily digest and to answer
-/// direct questions in the EriduOS hologram panel.
+/// direct questions in the UrOS hologram panel.
 #[derive(Debug, Clone)]
 pub struct NisabaNote {
     pub narration: String,
@@ -169,7 +170,10 @@ impl NisabaOrchestrator {
         band == StoryBand::Watch
             && matches!(
                 self.active_grant,
-                Some(GrantClaim { class: AutonomyClass::WatchBandOnly, .. })
+                Some(GrantClaim {
+                    class: AutonomyClass::WatchBandOnly,
+                    ..
+                })
             )
     }
 
@@ -182,8 +186,11 @@ impl NisabaOrchestrator {
     pub fn observe_story_projections(&mut self, projections: &[ProjectedState]) -> usize {
         let mut raised = 0;
         for projected in projections {
-            if let Some(StorySentinelFinding { alert, band, narration }) =
-                story_sentinel::scan(projected)
+            if let Some(StorySentinelFinding {
+                alert,
+                band,
+                narration,
+            }) = story_sentinel::scan(projected)
             {
                 if self.can_autonomously_resolve(band) {
                     self.notes.push(NisabaNote {
@@ -414,8 +421,13 @@ mod tests {
         let mut nisaba = new_orch(NisabaEnvironment::Test);
         let grant = NisabaGrant::issue(
             &architect_key,
-            GrantClaim { environment: NisabaEnvironment::Test, class: AutonomyClass::WatchBandOnly, issued_at: 1 },
-        ).unwrap();
+            GrantClaim {
+                environment: NisabaEnvironment::Test,
+                class: AutonomyClass::WatchBandOnly,
+                issued_at: 1,
+            },
+        )
+        .unwrap();
         assert!(nisaba.grant_autonomy(&grant, &architect_key.verifier()));
 
         nisaba.observe_story_projections(&[projected(ParticleState::Dead, 1, 0xC0FFEE)]);
@@ -426,7 +438,10 @@ mod tests {
         assert_eq!(digest.tribe_readings_count, 0);
         assert_eq!(digest.note_count, 0);
         assert_eq!(digest.autonomous_resolutions_count, 0);
-        assert!(nisaba.active_autonomy().is_some(), "clear() must not silently revoke autonomy");
+        assert!(
+            nisaba.active_autonomy().is_some(),
+            "clear() must not silently revoke autonomy"
+        );
     }
 
     #[test]
@@ -444,12 +459,20 @@ mod tests {
         let mut nisaba = new_orch(NisabaEnvironment::Test);
         let grant = NisabaGrant::issue(
             &architect_key,
-            GrantClaim { environment: NisabaEnvironment::Test, class: AutonomyClass::WatchBandOnly, issued_at: 1 },
-        ).unwrap();
+            GrantClaim {
+                environment: NisabaEnvironment::Test,
+                class: AutonomyClass::WatchBandOnly,
+                issued_at: 1,
+            },
+        )
+        .unwrap();
         assert!(nisaba.grant_autonomy(&grant, &architect_key.verifier()));
 
         let raised = nisaba.observe_story_projections(&[watch_band_projected(0xC0FFEE)]);
-        assert_eq!(raised, 0, "auto-resolved findings are not raised to the Architect");
+        assert_eq!(
+            raised, 0,
+            "auto-resolved findings are not raised to the Architect"
+        );
         assert_eq!(nisaba.steward_queue().len(), 0);
         assert_eq!(nisaba.digest().autonomous_resolutions_count, 1);
     }
@@ -460,12 +483,18 @@ mod tests {
         let mut nisaba = new_orch(NisabaEnvironment::Test);
         let grant = NisabaGrant::issue(
             &architect_key,
-            GrantClaim { environment: NisabaEnvironment::Test, class: AutonomyClass::WatchBandOnly, issued_at: 1 },
-        ).unwrap();
+            GrantClaim {
+                environment: NisabaEnvironment::Test,
+                class: AutonomyClass::WatchBandOnly,
+                issued_at: 1,
+            },
+        )
+        .unwrap();
         assert!(nisaba.grant_autonomy(&grant, &architect_key.verifier()));
 
         // Dead -> HighPriority/Critical, never auto-resolvable regardless of grant.
-        let raised = nisaba.observe_story_projections(&[projected(ParticleState::Dead, 1, 0xC0FFEE)]);
+        let raised =
+            nisaba.observe_story_projections(&[projected(ParticleState::Dead, 1, 0xC0FFEE)]);
         assert_eq!(raised, 1);
         assert_eq!(nisaba.steward_queue().len(), 1);
         assert_eq!(nisaba.digest().autonomous_resolutions_count, 0);
@@ -477,8 +506,13 @@ mod tests {
         let mut nisaba = new_orch(NisabaEnvironment::Prod);
         let test_grant = NisabaGrant::issue(
             &architect_key,
-            GrantClaim { environment: NisabaEnvironment::Test, class: AutonomyClass::WatchBandOnly, issued_at: 1 },
-        ).unwrap();
+            GrantClaim {
+                environment: NisabaEnvironment::Test,
+                class: AutonomyClass::WatchBandOnly,
+                issued_at: 1,
+            },
+        )
+        .unwrap();
         assert!(!nisaba.grant_autonomy(&test_grant, &architect_key.verifier()));
         assert!(nisaba.active_autonomy().is_none());
 
@@ -495,8 +529,13 @@ mod tests {
         let mut nisaba = new_orch(NisabaEnvironment::Test);
         let forged = NisabaGrant::issue(
             &impostor_key,
-            GrantClaim { environment: NisabaEnvironment::Test, class: AutonomyClass::WatchBandOnly, issued_at: 1 },
-        ).unwrap();
+            GrantClaim {
+                environment: NisabaEnvironment::Test,
+                class: AutonomyClass::WatchBandOnly,
+                issued_at: 1,
+            },
+        )
+        .unwrap();
         // Verified against the real Architect key, not the impostor's.
         assert!(!nisaba.grant_autonomy(&forged, &architect_key.verifier()));
         assert!(nisaba.active_autonomy().is_none());
@@ -506,13 +545,23 @@ mod tests {
 
     fn healthy_etl_counts() -> bee_mdm_bus::EtlTierCounts {
         bee_mdm_bus::EtlTierCounts {
-            sdb_pending: 5, sdb_promoted: 100, sdb_quarantined: 0,
-            sdb_malware_hits: 0, sdb_tribal_rgb: [0, 0, 0],
-            qdb_total: 0, qdb_malware_count: 0, qdb_tribal_rgb: [0, 0, 0],
-            odb_total: 100, odb_tribal_rgb: [0, 0, 0],
-            dw_total: 0, dw_tribal_rgb: [0, 0, 0],
-            db_total: 50, db_tribal_rgb: [0, 0, 0],
-            current_tick: 10, sweep_interval: 900, ticks_until_sweep: 890,
+            sdb_pending: 5,
+            sdb_promoted: 100,
+            sdb_quarantined: 0,
+            sdb_malware_hits: 0,
+            sdb_tribal_rgb: [0, 0, 0],
+            qdb_total: 0,
+            qdb_malware_count: 0,
+            qdb_tribal_rgb: [0, 0, 0],
+            odb_total: 100,
+            odb_tribal_rgb: [0, 0, 0],
+            dw_total: 0,
+            dw_tribal_rgb: [0, 0, 0],
+            db_total: 50,
+            db_tribal_rgb: [0, 0, 0],
+            current_tick: 10,
+            sweep_interval: 900,
+            ticks_until_sweep: 890,
         }
     }
 
@@ -532,7 +581,10 @@ mod tests {
         let raised = nisaba.observe_etl_tier_counts(&counts);
         assert_eq!(raised, 1);
         assert_eq!(nisaba.architect_digest().len(), 1);
-        assert_eq!(nisaba.architect_digest()[0].severity, ArchitectSeverity::HighPriority);
+        assert_eq!(
+            nisaba.architect_digest()[0].severity,
+            ArchitectSeverity::HighPriority
+        );
         assert!(nisaba.architect_digest()[0].narration.contains("malware"));
     }
 
@@ -561,7 +613,11 @@ mod tests {
         counts.sdb_malware_hits = 1;
         nisaba.observe_etl_tier_counts(&counts);
         assert_eq!(nisaba.architect_digest().len(), 1);
-        assert_eq!(nisaba.steward_queue().len(), 0, "ETL pipeline findings must never land in the Data Steward's per-particle queue");
+        assert_eq!(
+            nisaba.steward_queue().len(),
+            0,
+            "ETL pipeline findings must never land in the Data Steward's per-particle queue"
+        );
     }
 
     #[test]
@@ -581,13 +637,21 @@ mod tests {
         let mut nisaba = new_orch(NisabaEnvironment::Test);
         let grant = NisabaGrant::issue(
             &architect_key,
-            GrantClaim { environment: NisabaEnvironment::Test, class: AutonomyClass::WatchBandOnly, issued_at: 1 },
-        ).unwrap();
+            GrantClaim {
+                environment: NisabaEnvironment::Test,
+                class: AutonomyClass::WatchBandOnly,
+                issued_at: 1,
+            },
+        )
+        .unwrap();
         assert!(nisaba.grant_autonomy(&grant, &architect_key.verifier()));
         nisaba.revoke_autonomy();
         assert!(nisaba.active_autonomy().is_none());
 
         let raised = nisaba.observe_story_projections(&[watch_band_projected(0xC0FFEE)]);
-        assert_eq!(raised, 1, "after revocation, everything goes back to the steward");
+        assert_eq!(
+            raised, 1,
+            "after revocation, everything goes back to the steward"
+        );
     }
 }

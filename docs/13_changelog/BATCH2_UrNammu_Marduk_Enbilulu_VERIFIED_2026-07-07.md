@@ -61,10 +61,10 @@ Calculus, and the four proposed domain calculi (Šazu/Addu/Suhrim/Namtila).
 
 | | |
 |---|---|
-| **What** | UrNammu Engine — hardware trust layer for EriduOS v4.0 (SHEDU sector's 4th pillar, beneath AkkadiSafeEngine/AkkadiRulesEngine/AkkadiCipherEngine). Boot integrity (Secure Boot + TPM measured boot), port/peripheral control (usbguard via ABAC), DMA/Thunderbolt protection (IOMMU), continuous runtime attestation — every event written as an immutable KAKI Event particle through the standard KISPU four-way commit. |
+| **What** | UrNammu Engine — hardware trust layer for UrOS v4.0 (SHEDU sector's 4th pillar, beneath AkkadiSafeEngine/AkkadiRulesEngine/AkkadiCipherEngine). Boot integrity (Secure Boot + TPM measured boot), port/peripheral control (usbguard via ABAC), DMA/Thunderbolt protection (IOMMU), continuous runtime attestation — every event written as an immutable KAKI Event particle through the standard KISPU four-way commit. |
 | **Who** | DUB.SAR Bahaa Fadam. |
 | **When** | Document header says "Status: Draft for Review — Playbook 99." |
-| **Where** | SHEDU security sector, EriduOS v4.0 kickstart. |
+| **Where** | SHEDU security sector, UrOS v4.0 kickstart. |
 | **Why** | The three existing security engines (credentials, ABAC policy, crypto) all implicitly assume a clean, untampered machine; UrNammu makes that assumption an explicit, continuously-verified fact instead. |
 | **How** | Standard, mature Linux subsystems (Secure Boot, TPM 2.0, usbguard, IOMMU) reporting into KAKI/KISPU/EAV instead of a separate syslog. |
 | **How much** | 9 sections, 139 lines extracted; includes an honest "Threat Model & Honest Limits" section (mitigates USB/boot-tampering/cold-boot DMA; explicitly does NOT mitigate the analog hole, phone photography, or network exfiltration). |

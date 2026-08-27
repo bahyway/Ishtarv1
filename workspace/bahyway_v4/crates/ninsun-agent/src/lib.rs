@@ -17,10 +17,10 @@ pub struct RefineProposal {
     pub proposal_id: String,
     pub target_kaki: String, // KAKI ID being advised on
     pub tribe_id: String,
-    pub drift_pattern: String, // e.g. "FUZZY_SUSTAINED_7DAY"
-    pub explanation: String,  // human-readable from DeepSeek
+    pub drift_pattern: String,                // e.g. "FUZZY_SUSTAINED_7DAY"
+    pub explanation: String,                  // human-readable from DeepSeek
     pub suggested_eav: Vec<(String, String)>, // proposed EAV corrections
-    pub confidence: f64,      // 0.0..1.0
+    pub confidence: f64,                      // 0.0..1.0
 }
 
 /// Top-level analysis entry point.

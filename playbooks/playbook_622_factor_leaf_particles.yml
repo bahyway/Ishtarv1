@@ -1,0 +1,60 @@
+---
+# PB-365 · EN-ODB-005 · FACTOR and LEAF particles
+# GL-FED-001 §2 · factors are few and ontological; leaves are bands; readings stay EAV on measured particles.
+- name: PB-365 mint FACTOR and LEAF particle types
+  hosts: girsu
+  vars:
+    odb_port: 7002
+    onto_root: "{{ ansible_env.HOME }}/bahyway/onto"
+  tasks:
+    - name: Write the factor catalogue
+      ansible.builtin.copy:
+        dest: "{{ onto_root }}/factors_v4.yml"
+        mode: "0640"
+        content: |
+          # kaki_type = 0x46 (FACTOR) / 0x4C (LEAF). kaki_role in κ[7] points a LEAF back to its FACTOR.
+          # A measured particle never CONTAINS a leaf - it ORBITs it.
+          structural:            # host-agnostic, run the whole federation (GL-FED-001 §2)
+            - {id: ph_band,  name: Persistent-Homology band (beta1 persistence), unit: l,  minted_by: LamassuEngine}
+            - {id: age,      name: Sibu age,                                     unit: sb, minted_by: SibuCourt}
+            - {id: ru_order, name: RU ring order,                                unit: RU, minted_by: GeoEngine}
+            - {id: energy,   name: energy state,                                 unit: sigma}
+          material:              # stop at the edge of their host type
+            human: [{id: oxygen, unit: pct}, {id: inflammation, unit: mg_L}, {id: ph, unit: pH}, {id: temperature, unit: C}]
+            robot: [{id: torque, unit: Nm}, {id: battery_sag, unit: V}, {id: latency, unit: ms}, {id: temperature, unit: C}]
+          leaf_rule:
+            bands_per_factor: 7          # MLU -3..+3
+            band_width: one_sigma_of_factor
+            membership: ORBIT            # never containment
+            deep_leak_at_mlu: 2
+
+    - name: Gate · no material factor is declared host-agnostic
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import yaml,sys
+        d=yaml.safe_load(open("{{ onto_root }}/factors_v4.yml"))
+        s={f['id'] for f in d['structural']}
+        m=set()
+        for k,v in d['material'].items(): m|={f['id'] for f in v}
+        bad=s&m
+        print("overlap:",bad)
+        sys.exit(1 if bad else 0)
+        PY
+      changed_when: false
+
+    - name: ORBIT factors and leaves
+      ansible.builtin.command: >
+        bahyway-enkidb orbit --db EnkiODB --port {{ odb_port }}
+        --kaki-type FACTOR --with-leaves --from {{ onto_root }}/factors_v4.yml --seal-required
+      register: orbit
+      changed_when: "'ORBITED' in orbit.stdout"
+
+    - name: Gate · every LEAF has a kaki_role pointing to a live FACTOR
+      ansible.builtin.command: bahyway-enkidb prove --db EnkiODB --port {{ odb_port }} --rule leaf_role_integrity
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-365 EN-ODB-005 FACTOR/LEAF minted - structural vs material separation enforced"

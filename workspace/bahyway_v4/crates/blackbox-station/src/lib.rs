@@ -10,8 +10,8 @@
 
 pub mod route;
 
-pub use route::{BlackBoxStation, BlackBoxReport};
+pub use route::{BlackBoxReport, BlackBoxStation};
 
 pub mod prelude {
-    pub use super::route::{BlackBoxStation, BlackBoxReport};
+    pub use super::route::{BlackBoxReport, BlackBoxStation};
 }

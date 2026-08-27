@@ -36,10 +36,10 @@ pub enum QuantFactor {
 impl QuantFactor {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Momentum     => "MOMENTUM",
-            Self::Size         => "SIZE",
-            Self::Value        => "VALUE",
-            Self::Quality      => "QUALITY",
+            Self::Momentum => "MOMENTUM",
+            Self::Size => "SIZE",
+            Self::Value => "VALUE",
+            Self::Quality => "QUALITY",
             Self::LowVolatility => "LOW_VOL",
         }
     }
@@ -47,10 +47,10 @@ impl QuantFactor {
     /// Index into the FSV array (D1=0, D2=1, ..., D7=6).
     pub fn fsv_index(self) -> usize {
         match self {
-            Self::Momentum      => 6, // D7 shannon_entropy_norm
-            Self::Size          => 0, // D1 char_count_norm
-            Self::Value         => 1, // D2 digit_density
-            Self::Quality       => 3, // D4 latin_density
+            Self::Momentum => 6,      // D7 shannon_entropy_norm
+            Self::Size => 0,          // D1 char_count_norm
+            Self::Value => 1,         // D2 digit_density
+            Self::Quality => 3,       // D4 latin_density
             Self::LowVolatility => 5, // D6 word_count_norm
         }
     }
@@ -59,12 +59,12 @@ impl QuantFactor {
 /// Factor scores for one asset at one point in time.
 #[derive(Debug, Clone)]
 pub struct FactorScores {
-    pub asset_hash:   u32,
-    pub epoch:        u32,
+    pub asset_hash: u32,
+    pub epoch: u32,
     /// Raw factor scores in [0, 1] mapped from FSV dimensions.
-    pub scores:       [f64; 5],
+    pub scores: [f64; 5],
     /// Z-scored factor exposures (cross-sectional, set externally).
-    pub z_scores:     [f64; 5],
+    pub z_scores: [f64; 5],
 }
 
 impl FactorScores {
@@ -77,7 +77,12 @@ impl FactorScores {
             fsv[QuantFactor::Quality.fsv_index()],
             fsv[QuantFactor::LowVolatility.fsv_index()],
         ];
-        Self { asset_hash, epoch, scores, z_scores: [0.0; 5] }
+        Self {
+            asset_hash,
+            epoch,
+            scores,
+            z_scores: [0.0; 5],
+        }
     }
 
     /// Score for a specific factor.
@@ -103,7 +108,11 @@ pub struct FactorModel {
 }
 
 impl FactorModel {
-    pub fn new() -> Self { FactorModel { universe: Vec::new() } }
+    pub fn new() -> Self {
+        FactorModel {
+            universe: Vec::new(),
+        }
+    }
 
     /// Add factor scores for one asset.
     pub fn add(&mut self, scores: FactorScores) {
@@ -117,15 +126,23 @@ impl FactorModel {
         let vals: Vec<f64> = self.universe.iter().map(|s| s.scores[idx]).collect();
         let (mean, std) = mean_and_std_local(&vals);
         for s in &mut self.universe {
-            s.z_scores[idx] = if std > 1e-12 { (s.scores[idx] - mean) / std } else { 0.0 };
+            s.z_scores[idx] = if std > 1e-12 {
+                (s.scores[idx] - mean) / std
+            } else {
+                0.0
+            };
         }
     }
 
     /// Run cross-sectional z-scoring for all 5 factors.
     pub fn compute_all_z_scores(&mut self) {
-        for factor in [QuantFactor::Momentum, QuantFactor::Size,
-                       QuantFactor::Value, QuantFactor::Quality,
-                       QuantFactor::LowVolatility] {
+        for factor in [
+            QuantFactor::Momentum,
+            QuantFactor::Size,
+            QuantFactor::Value,
+            QuantFactor::Quality,
+            QuantFactor::LowVolatility,
+        ] {
             self.compute_cross_sectional_z(factor);
         }
     }
@@ -144,16 +161,22 @@ impl FactorModel {
 
     /// GEM rate across the universe (ADR-004 target: 35.4%).
     pub fn gem_rate(&self) -> f64 {
-        if self.universe.is_empty() { return 0.0; }
+        if self.universe.is_empty() {
+            return 0.0;
+        }
         let gem = self.universe.iter().filter(|s| s.b11() >= 200).count();
         gem as f64 / self.universe.len() as f64
     }
 
-    pub fn asset_count(&self) -> usize { self.universe.len() }
+    pub fn asset_count(&self) -> usize {
+        self.universe.len()
+    }
 }
 
 impl Default for FactorModel {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Build factor scores from a return series using price-derived momentum.
@@ -161,20 +184,26 @@ impl Default for FactorModel {
 /// Uses rolling Z-score of returns to generate the momentum factor score,
 /// mapping it to a [0,1] range (0.5 = neutral, >0.5 = positive momentum).
 pub fn momentum_from_returns(returns: &ReturnSeries, window: usize) -> Vec<f64> {
-    if returns.is_empty() { return Vec::new(); }
+    if returns.is_empty() {
+        return Vec::new();
+    }
     let rw = RollingWindow::new(returns.log_returns().to_vec(), window);
     let sma = rw.sma();
-    sma.iter().map(|v| match v {
-        None    => 0.5,
-        Some(m) => (0.5 + m * 10.0).clamp(0.0, 1.0),
-    }).collect()
+    sma.iter()
+        .map(|v| match v {
+            None => 0.5,
+            Some(m) => (0.5 + m * 10.0).clamp(0.0, 1.0),
+        })
+        .collect()
 }
 
 fn mean_and_std_local(values: &[f64]) -> (f64, f64) {
     let n = values.len();
-    if n == 0 { return (0.0, 0.0); }
+    if n == 0 {
+        return (0.0, 0.0);
+    }
     let mean = values.iter().sum::<f64>() / n as f64;
-    let var  = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
+    let var = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
     (mean, var.sqrt())
 }
 
@@ -182,9 +211,15 @@ fn mean_and_std_local(values: &[f64]) -> (f64, f64) {
 mod tests {
     use super::*;
 
-    fn fsv_perfect() -> [f64; 7] { [1.0; 7] }
-    fn fsv_zero()    -> [f64; 7] { [0.0; 7] }
-    fn fsv_mixed()   -> [f64; 7] { [0.8, 0.6, 0.7, 0.9, 0.5, 0.4, 0.7] }
+    fn fsv_perfect() -> [f64; 7] {
+        [1.0; 7]
+    }
+    fn fsv_zero() -> [f64; 7] {
+        [0.0; 7]
+    }
+    fn fsv_mixed() -> [f64; 7] {
+        [0.8, 0.6, 0.7, 0.9, 0.5, 0.4, 0.7]
+    }
 
     #[test]
     fn perfect_fsv_b11_is_240() {
@@ -206,16 +241,26 @@ mod tests {
 
     #[test]
     fn factor_labels_non_empty() {
-        for f in [QuantFactor::Momentum, QuantFactor::Size, QuantFactor::Value,
-                  QuantFactor::Quality, QuantFactor::LowVolatility] {
+        for f in [
+            QuantFactor::Momentum,
+            QuantFactor::Size,
+            QuantFactor::Value,
+            QuantFactor::Quality,
+            QuantFactor::LowVolatility,
+        ] {
             assert!(!f.label().is_empty());
         }
     }
 
     #[test]
     fn factor_fsv_indices_in_range() {
-        for f in [QuantFactor::Momentum, QuantFactor::Size, QuantFactor::Value,
-                  QuantFactor::Quality, QuantFactor::LowVolatility] {
+        for f in [
+            QuantFactor::Momentum,
+            QuantFactor::Size,
+            QuantFactor::Value,
+            QuantFactor::Quality,
+            QuantFactor::LowVolatility,
+        ] {
             assert!(f.fsv_index() < 7, "{} index={}", f.label(), f.fsv_index());
         }
     }
@@ -258,9 +303,16 @@ mod tests {
             model.add(FactorScores::from_fsv(i, 1, &fsv));
         }
         model.compute_cross_sectional_z(QuantFactor::Size);
-        let z_scores: Vec<f64> = model.universe.iter().map(|s| s.z_scores[QuantFactor::Size as usize]).collect();
+        let z_scores: Vec<f64> = model
+            .universe
+            .iter()
+            .map(|s| s.z_scores[QuantFactor::Size as usize])
+            .collect();
         let z_mean: f64 = z_scores.iter().sum::<f64>() / z_scores.len() as f64;
-        assert!(z_mean.abs() < 1e-9, "z-score mean should be ~0, got {z_mean}");
+        assert!(
+            z_mean.abs() < 1e-9,
+            "z-score mean should be ~0, got {z_mean}"
+        );
     }
 
     #[test]
@@ -269,6 +321,8 @@ mod tests {
         let prices: Vec<i64> = (1..=20).map(|i| i * 100).collect();
         let rs = ReturnSeries::from_prices(&prices, 1);
         let mom = momentum_from_returns(&rs, 3);
-        for &v in &mom { assert!(v >= 0.0 && v <= 1.0, "v={v}"); }
+        for &v in &mom {
+            assert!(v >= 0.0 && v <= 1.0, "v={v}");
+        }
     }
 }

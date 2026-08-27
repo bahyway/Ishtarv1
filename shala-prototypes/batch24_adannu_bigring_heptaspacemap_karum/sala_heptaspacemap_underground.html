@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · HeptaSpaceMap 7D — the Underground Court</title>
+<style>
+  :root{--basalt:#14120f;--tablet:#1f1b16;--gold:#c9a227;--lapis:#2e5d8c;
+    --copper:#b0642f;--alarm:#c23b2a;--bone:#e8e0cf;--tablet-edge:#3a332a;
+    --dim:#8f8672;--green:#7fbf5f;--violet:#a58cc0;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--basalt);color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif;overflow:hidden;}
+  #crumbs{padding:8px 16px 0;font-size:12px;color:var(--dim);letter-spacing:.08em;}
+  #crumbs b{color:var(--gold);font-weight:normal;}
+  #lede{padding:2px 16px 6px;font-size:12.5px;}
+  #banner{background:var(--alarm);color:var(--bone);text-align:center;
+    font-size:10.5px;letter-spacing:.28em;padding:3px 0;font-family:monospace;}
+  #grid{display:grid;grid-template-columns:1fr 340px;gap:10px;
+    padding:8px 16px 14px;height:calc(100% - 78px);}
+  .panel{background:var(--tablet);border:1px solid var(--tablet-edge);
+    border-radius:6px;position:relative;overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block;}
+  #cv{width:100%;height:100%;}
+  #status{position:absolute;top:8px;left:12px;right:12px;z-index:5;
+    font-family:monospace;font-size:10.5px;color:var(--gold);
+    background:rgba(20,18,15,.78);padding:5px 9px;border-radius:4px;
+    border:1px solid var(--tablet-edge);}
+  #lens{position:absolute;top:42px;left:12px;z-index:5;display:flex;gap:5px;flex-wrap:wrap;max-width:70%;}
+  #lens button{background:var(--basalt);color:var(--dim);font-family:monospace;
+    border:1px solid var(--tablet-edge);border-radius:4px;padding:4px 9px;
+    font-size:10.5px;cursor:pointer;}
+  #lens button.on{color:var(--gold);border-color:var(--gold);}
+  #deck{position:absolute;top:42px;right:10px;z-index:5;}
+  #deck button{width:32px;height:32px;background:var(--basalt);color:var(--gold);
+    border:1px solid var(--tablet-edge);border-radius:4px;font-size:15px;cursor:pointer;}
+  #acts{position:absolute;bottom:10px;left:10px;display:flex;gap:6px;z-index:5;}
+  #acts button{background:var(--basalt);color:var(--copper);font-family:inherit;
+    border:1px solid var(--copper);border-radius:4px;padding:6px 12px;
+    font-size:12px;cursor:pointer;}
+  #acts button:hover{color:var(--gold);border-color:var(--gold);}
+  #acts button.on{color:var(--green);border-color:var(--green);}
+  #lawtags{position:absolute;bottom:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:5;}
+  .lawtag{font-family:monospace;font-size:10px;color:var(--basalt);
+    background:var(--gold);padding:2px 7px;border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis);color:var(--bone);}
+  #side{display:flex;flex-direction:column;overflow:hidden;}
+  #side h2{font-size:11px;letter-spacing:.2em;color:var(--gold);
+    padding:7px 12px 4px;border-bottom:1px solid var(--tablet-edge);flex:none;}
+  #dim7{padding:6px 12px;border-bottom:1px solid var(--tablet-edge);flex:none;
+    font-size:10.5px;line-height:1.5;color:var(--dim);}
+  #story{flex:1 1 40%;overflow-y:auto;padding:6px 12px;font-size:11px;
+    line-height:1.45;border-bottom:1px solid var(--tablet-edge);}
+  #story .ev{margin-bottom:5px;border-left:2px solid var(--lapis);padding-left:7px;}
+  #story .ev .e{color:var(--gold);font-family:monospace;font-size:9px;}
+  #story .empty{color:var(--dim);font-style:italic;}
+  #journal{flex:1;overflow-y:auto;padding:7px 12px;font-size:11px;line-height:1.45;}
+  .entry{margin-bottom:7px;border-left:2px solid var(--copper);padding-left:7px;}
+  .entry .t{color:var(--dim);font-family:monospace;font-size:9px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ HeptaSpaceMap Court ▸ <b>the Underground — 7D where they stop at 4</b></div>
+<div id="lede">A city block: ghost buildings above, and below the street — the invisible grid, rendered as citizens. <b>Water main, sewer, power, and fibre</b> lie in the <b>d* depth shells of GL-NIM-002</b>, every segment a KAKI particle. Where the LiDAR-4D projects give points x-y-z-t, HeptaSpaceMap gives each point <b>seven lenses</b> — press them and watch the SAME grid answer seven different questions. Press <b>▶ SURVEY</b> to run campaigns: when surface moisture (SafaaHarmony) and displacement (Kīnu) agree at one hepta-address, the <b>Two Witnesses of Place</b> convict a hidden leak. Drag to rotate, scroll to zoom, click any segment for its story.</div>
+<div id="banner">THEY DIGITIZE THE VISIBLE IN 4D — WE JUDGE THE INVISIBLE IN 7D · GROUND TRUTH BY LAW (KLIC/WIBON) · TWO WITNESSES BEFORE ANY VERDICT</div>
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="status">…</div>
+    <div id="lens">
+      <button data-l="0" class="on">D1 IDENTITY</button>
+      <button data-l="1">D2 BELONGING</button>
+      <button data-l="2">D3 TEMPORAL</button>
+      <button data-l="3">D4 INTEGRITY</button>
+      <button data-l="4">D5 QUALITY</button>
+      <button data-l="5">D6 COLOUR·VERDICT</button>
+      <button data-l="6">D7 ORBIT·DEPTH</button>
+    </div>
+    <div id="deck"><button id="bHome" title="Reset view">⌖</button></div>
+    <div id="acts"><button id="aRun">▶ SURVEY CAMPAIGNS</button></div>
+    <div id="lawtags">
+      <span class="lawtag">GL-MAP-001</span>
+      <span class="lawtag lapis">GL-NIM-002 · d* SHELLS</span>
+      <span class="lawtag lapis">TWO WITNESSES</span>
+      <span class="lawtag">7D LENSES</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>THE SEVEN DIMENSIONS — ACTIVE LENS</h2>
+    <div id="dim7">…</div>
+    <h2>SEGMENT STORY — STORYENGINE</h2>
+    <div id="story"><div class="empty">click a buried segment</div></div>
+    <h2>COURT JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+<script>
+"use strict";
+window.onerror=function(m,s,l){var e=document.getElementById('status');
+  if(e)e.textContent='RUNTIME FAULT: '+m+' (line '+l+')';return false;};
+var cv=document.getElementById('cv');
+var g=cv.getContext('2d');
+var stage=document.getElementById('stage'),statusEl=document.getElementById('status');
+function fit(){cv.width=stage.clientWidth;cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit);fit();
+var jEl=document.getElementById('journal'),sEl=document.getElementById('story'),dEl=document.getElementById('dim7');
+var canDOM=!!document.createElement;
+function journal(t){if(!canDOM)return;
+  var d=document.createElement('div');d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;jEl.prepend(d);}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+var rnd=mulberry32(0x48455054); /* HEPT */
+/* ---- the buried grid: 4 networks in 3 depth shells; each segment a KAKI particle ---- */
+var NETS=[
+ {name:'WATER MAIN',tribe:'A·MÛ',col:'#2e5d8c',shell:1,d:-0.16,mat:'PVC ø160',
+   path:[[-0.85,0.05],[-0.4,0.03],[0.0,0.02],[0.45,0.04],[0.85,0.05]]},
+ {name:'SEWER',tribe:'B·ZÛ',col:'#b0642f',shell:2,d:-0.30,mat:'concrete ø400',
+   path:[[-0.85,-0.12],[-0.35,-0.13],[0.1,-0.14],[0.5,-0.12],[0.85,-0.13]]},
+ {name:'POWER',tribe:'C·BIRQU',col:'#c9a227',shell:0,d:-0.07,mat:'MV cable',
+   path:[[-0.85,0.20],[-0.3,0.19],[0.2,0.21],[0.85,0.20]]},
+ {name:'FIBRE',tribe:'D·QÛ',col:'#a58cc0',shell:0,d:-0.05,mat:'duct 40mm',
+   path:[[-0.85,-0.28],[-0.2,-0.27],[0.4,-0.29],[0.85,-0.28]]}
+];
+var SEG=[]; /* particles: interpolated along each path */
+NETS.forEach(function(net,ni){
+  for(var p=0;p<net.path.length-1;p++){
+    var a=net.path[p],b=net.path[p+1];
+    var steps=Math.max(3,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])*12));
+    for(var s2=0;s2<steps;s2++){
+      var f=s2/steps;
+      SEG.push({net:ni,x:a[0]+(b[0]-a[0])*f,z:a[1]+(b[1]-a[1])*f,y:net.d,
+        age:1958+Math.floor(rnd()*66),reg:['MEASURED','DERIVED','ESTIMATED'][Math.floor(rnd()*3)],
+        kaki:('K'+((SEG.length*2654435761)>>>0).toString(16).slice(0,8)).toUpperCase(),
+        verdict:'NOMINAL'});}}});
+var NS=SEG.length;
+/* leak scenario: one water-main segment, two witnesses across campaigns */
+var leakIdx=(function(){for(var i=0;i<NS;i++)
+  if(SEG[i].net===0&&Math.abs(SEG[i].x-0.2)<0.06)return i;return 8;})();
+var t=0,TMAX=120,running=false,lastStep=0;
+var w1_at=55,w2_at=78; /* moisture witness, displacement witness campaigns */
+var convicted=false;
+function step(){
+  if(t>=TMAX)return;t++;
+  if(t===w1_at)journal('<b style="color:var(--lapis)">WITNESS 1 · SafaaHarmony</b> — surface moisture anomaly (SWIR shed) above hepta-address '+SEG[leakIdx].kaki+', shell d*1. One witness: an ESTIMATE, not a verdict — the court waits (GL-NIM-002).');
+  if(t===w2_at){convicted=true;SEG[leakIdx].verdict='LEAK·CONVICTED';
+    journal('<b style="color:var(--alarm)">⚑ WITNESS 2 · Kīnu</b> — millimetric subsidence trend at the SAME hepta-address, independent channel. <b>Two Witnesses of Place stand: the hidden leak is CONVICTED</b> — underground, unseen, and named. Enbilulu receives it for ≤0.10 m localization; Bārûtu for dating. The invisible testified.');}
+}
+var LENS=[
+ {k:'D1 IDENTITY',gloss:'Every buried segment is a named citizen — its KAKI shown. A LiDAR point has coordinates; a HeptaSpace particle has a NAME that survives forever.'},
+ {k:'D2 BELONGING',gloss:'Colour by network Tribe: water A·MÛ, sewer B·ZÛ, power C·BIRQU, fibre D·QÛ. Membership is law, not layer-styling.'},
+ {k:'D3 TEMPORAL',gloss:'Colour by installation age (1958–2024): the grid\'s biography made visible — the oldest mains glow warning-warm.'},
+ {k:'D4 INTEGRITY',gloss:'Brightness by epistemic register: MEASURED bright, DERIVED mid, ESTIMATED faint — the map confesses how well it knows each metre.'},
+ {k:'D5 QUALITY',gloss:'Glyph by material/diameter (EAV): what the segment IS, physically — queryable, not a PDF as-built.'},
+ {k:'D6 COLOUR·VERDICT',gloss:'ColourID as verdict: NOMINAL grey-green; a CONVICTED leak burns alarm-red. Colour is judgment, never decoration.'},
+ {k:'D7 ORBIT·DEPTH',gloss:'The d* shells of GL-NIM-002 drawn as strata: position IS state — surface, shell 0 (services), shell 1 (mains), shell 2 (trunk).'}
+];
+var lens=0;
+function setLens(l2){lens=l2;
+  if(canDOM)document.querySelectorAll('#lens button').forEach(function(b,q){
+    b.classList.toggle('on',q===l2);});
+  if(canDOM)dEl.innerHTML='<b style="color:var(--gold)">'+LENS[l2].k+'</b> — '+LENS[l2].gloss;
+  journal('LENS → '+LENS[l2].k+'. Same grid, new question: '+LENS[l2].gloss);}
+if(canDOM){
+  document.querySelectorAll('#lens button').forEach(function(b){
+    b.addEventListener('click',function(){setLens(+b.getAttribute('data-l'));});});
+  document.getElementById('aRun').addEventListener('click',function(){
+    running=!running;this.classList.toggle('on',running);});
+  document.getElementById('bHome').addEventListener('click',function(){
+    cam={yaw:0.7,pitch:0.5,z:1};});
+}
+window.addEventListener('keydown',function(e2){
+  var n=parseInt(e2.key,10);
+  if(!isNaN(n)&&n>=1&&n<=7)setLens(n-1);
+  if(e2.key===' '&&canDOM)document.getElementById('aRun').click();});
+var cam={yaw:0.7,pitch:0.5,z:1},drag=null,dragMoved=false,dragDist=0;
+stage.addEventListener('wheel',function(e2){e2.preventDefault();
+  cam.z=Math.min(6,Math.max(0.5,cam.z*(e2.deltaY<0?1.12:0.89)));},{passive:false});
+stage.addEventListener('mousedown',function(e2){if(e2.button!==0)return;
+  drag={x:e2.clientX,y:e2.clientY};dragMoved=false;dragDist=0;});
+window.addEventListener('mouseup',function(){drag=null;});
+stage.addEventListener('mousemove',function(e2){
+  if(!drag)return;
+  var dx=e2.clientX-drag.x,dy=e2.clientY-drag.y;
+  dragDist+=Math.abs(dx)+Math.abs(dy);if(dragDist>9)dragMoved=true;
+  cam.yaw+=dx*0.005;cam.pitch=Math.max(0.05,Math.min(1.35,cam.pitch+dy*0.005));
+  drag={x:e2.clientX,y:e2.clientY};});
+function project(x,y,z){
+  var cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+  var cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  var X=x*cy+z*sy,Z=-x*sy+z*cy;
+  var Y=y*cp-Z*sp,Z2=y*sp+Z*cp;
+  var S=Math.min(cv.width,cv.height)*0.55*cam.z;
+  var f=2.6/(2.6+Z2);
+  return {x:cv.width*0.47+X*S*f,y:cv.height*0.44-Y*S*f,f:f};}
+var sel=-1,selT=0;
+function segColor(i2,tt){
+  var s2=SEG[i2],net=NETS[s2.net];
+  if(s2.verdict!=='NOMINAL')return (Math.sin(tt*5)>0)?'#c23b2a':'#7a2018';
+  if(lens===1)return net.col;
+  if(lens===2){var a=(s2.age-1958)/66;
+    return 'hsl('+(30+120*(1-a))+',55%,'+(34+18*a)+'%)';}
+  if(lens===3){var L={'MEASURED':62,'DERIVED':44,'ESTIMATED':26}[s2.reg];
+    return 'hsl(45,40%,'+L+'%)';}
+  if(lens===5)return '#5d7a5a';
+  if(lens===6)return ['#c9a227','#2e5d8c','#b0642f'][net.shell];
+  return 'rgba(200,190,170,0.85)';}
+function tellSeg(i2){
+  var s2=SEG[i2],net=NETS[s2.net];
+  var evs=[
+   {e:'D1 IDENTITY',t:'KAKI '+s2.kaki+' — a named citizen of the invisible city.'},
+   {e:'D2 BELONGING',t:'Tribe '+net.tribe+' ('+net.name+').'},
+   {e:'D3 TEMPORAL',t:'Installed '+s2.age+' — '+(2026-s2.age)+' years in the dark.'},
+   {e:'D4 INTEGRITY',t:'Register '+s2.reg+' — the map confesses its certainty (KLIC as-built '+(s2.reg==='MEASURED'?'verified by survey':'awaiting verification')+').'},
+   {e:'D5 QUALITY',t:net.mat+' — EAV attributes, queryable.'},
+   {e:'D7 ORBIT·DEPTH',t:'Hepta-address at shell d*'+net.shell+' ('+(-net.d*100).toFixed(0)+' rehearsal-cm below street): position is state.'},
+   {e:'D6 VERDICT',t:s2.verdict==='NOMINAL'?'NOMINAL — and honestly so.':'⚑ LEAK · CONVICTED by the Two Witnesses of Place — moisture (SafaaHarmony) + subsidence (Kīnu) at one address. Enbilulu localizes; Bārûtu dates.'}
+  ];
+  if(canDOM)sEl.innerHTML=evs.map(function(x){return '<div class="ev"><div class="e">'+x.e+'</div>'+x.t+'</div>';}).join('');
+  journal('WITNESS '+s2.kaki+' ('+net.name+') — seven dimensions told.');
+  return evs.length;}
+stage.addEventListener('click',function(ev){
+  if(dragMoved)return;
+  var r=cv.getBoundingClientRect(),mx=ev.clientX-r.left,my=ev.clientY-r.top;
+  var best=-1,bd=13*13;
+  for(var i2=0;i2<NS;i2++){var p=project(SEG[i2].x,SEG[i2].y,SEG[i2].z);
+    var d=(p.x-mx)*(p.x-mx)+(p.y-my)*(p.y-my);
+    if(d<bd){bd=d;best=i2;}}
+  if(best>=0){sel=best;selT=performance.now();tellSeg(best);}});
+function frame(now){
+  var tt=now/1000;
+  if(running&&now-lastStep>160){lastStep=now;step();
+    if(t>=TMAX){running=false;if(canDOM)document.getElementById('aRun').classList.remove('on');}}
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle='#14120f';g.fillRect(0,0,cv.width,cv.height);
+  /* street plane */
+  var corners=[[-0.95,-0.42],[0.95,-0.42],[0.95,0.32],[-0.95,0.32]];
+  g.beginPath();
+  corners.forEach(function(c,q){var p=project(c[0],0,c[1]);
+    q?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y);});
+  g.closePath();g.fillStyle='rgba(58,51,42,0.28)';g.fill();
+  g.strokeStyle='rgba(143,134,114,0.5)';g.lineWidth=1;g.stroke();
+  var lp=project(-0.9,0,-0.38);
+  g.fillStyle='rgba(143,134,114,0.8)';g.font='10px monospace';g.textAlign='left';
+  g.fillText('STREET LEVEL — the visible (their 4D stops here)',lp.x,lp.y-6);
+  /* ghost buildings */
+  [[-0.6,0.42,0.22],[0.15,0.40,0.30],[0.65,0.44,0.18]].forEach(function(b){
+    var base=[[b[0]-0.12,b[1]-0.10],[b[0]+0.12,b[1]-0.10],[b[0]+0.12,b[1]+0.10],[b[0]-0.12,b[1]+0.10]];
+    base.forEach(function(c,q){
+      var p0=project(c[0],0,c[1]),p1=project(c[0],b[2],c[1]);
+      g.strokeStyle='rgba(143,134,114,0.28)';g.lineWidth=0.8;
+      g.beginPath();g.moveTo(p0.x,p0.y);g.lineTo(p1.x,p1.y);g.stroke();
+      var n=base[(q+1)%4];
+      var p2=project(n[0],b[2],n[1]);
+      g.beginPath();g.moveTo(p1.x,p1.y);g.lineTo(p2.x,p2.y);g.stroke();});});
+  /* d* shells (lens 7 emphasizes) */
+  [[-0.07,'d*0 · services'],[-0.16,'d*1 · mains'],[-0.30,'d*2 · trunk']].forEach(function(sh,si){
+    var em=lens===6;
+    g.beginPath();
+    corners.forEach(function(c,q){var p=project(c[0],sh[0],c[1]);
+      q?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y);});
+    g.closePath();
+    g.strokeStyle=em?['#c9a227','#2e5d8c','#b0642f'][si]:'rgba(58,51,42,'+(em?0.9:0.45)+')';
+    g.setLineDash([4,5]);g.lineWidth=em?1.4:0.8;g.stroke();g.setLineDash([]);
+    var sp=project(0.97,sh[0],-0.42);
+    g.fillStyle=em?['#c9a227','#2e5d8c','#b0642f'][si]:'rgba(143,134,114,0.55)';
+    g.font='9px monospace';g.fillText(sh[1],sp.x+4,sp.y);});
+  /* buried networks: chains of particles */
+  NETS.forEach(function(net,ni){
+    /* pipe line */
+    g.beginPath();
+    var first=true;
+    for(var i2=0;i2<NS;i2++)if(SEG[i2].net===ni){
+      var p=project(SEG[i2].x,SEG[i2].y,SEG[i2].z);
+      first?g.moveTo(p.x,p.y):g.lineTo(p.x,p.y);first=false;}
+    g.strokeStyle=lens===1?net.col:'rgba(143,134,114,0.35)';
+    g.lineWidth=1.2;g.stroke();});
+  for(var i2=0;i2<NS;i2++){
+    var s2=SEG[i2];
+    var y=s2.y;
+    if(sel===i2){var bt=(now-selT)/1000;
+      y+=Math.abs(Math.sin(bt*6))*Math.exp(-bt*0.3)*0.05;}
+    var p=project(s2.x,y,s2.z);
+    var rad=(sel===i2?5:(s2.verdict!=='NOMINAL'?4.4:2.6))*p.f*Math.sqrt(cam.z);
+    g.beginPath();g.arc(p.x,p.y,rad,0,2*Math.PI);
+    g.fillStyle=segColor(i2,tt);
+    g.globalAlpha=0.5+0.5*Math.max(0,Math.min(1,(p.f-0.4)*1.6));
+    g.fill();g.globalAlpha=1;
+    if(sel===i2){g.strokeStyle='#e8e0cf';g.lineWidth=1.3;g.stroke();}
+    if(lens===0&&(i2%5===0||sel===i2)){
+      g.fillStyle='rgba(232,224,207,'+(sel===i2?0.95:0.4)+')';
+      g.font='7.5px monospace';g.textAlign='center';
+      g.fillText(s2.kaki.slice(0,6),p.x,p.y-rad-3);}
+    if(lens===4){g.fillStyle='rgba(232,224,207,0.5)';g.font='7px monospace';g.textAlign='center';
+      if(i2%6===0)g.fillText(NETS[s2.net].mat,p.x,p.y+rad+8);}
+  }
+  /* witness beams during survey */
+  if(t>=w1_at){var lk=SEG[leakIdx];
+    var ps=project(lk.x,0,lk.z),pu=project(lk.x,lk.y,lk.z);
+    g.strokeStyle='rgba(46,93,140,'+(0.35+0.25*Math.sin(tt*3))+')';
+    g.setLineDash([3,3]);g.lineWidth=1.4;
+    g.beginPath();g.moveTo(ps.x,ps.y-30);g.lineTo(ps.x,ps.y);g.stroke();
+    if(t>=w2_at){g.strokeStyle='rgba(194,59,42,'+(0.5+0.3*Math.sin(tt*4))+')';
+      g.beginPath();g.moveTo(ps.x,ps.y);g.lineTo(pu.x,pu.y);g.stroke();}
+    g.setLineDash([]);
+    g.fillStyle=t>=w2_at?'#c23b2a':'#2e5d8c';g.font='9px monospace';g.textAlign='center';
+    g.fillText(t>=w2_at?'⚑ TWO WITNESSES — LEAK CONVICTED':'witness 1: moisture (awaiting second)',ps.x,ps.y-36);}
+  statusEl.textContent='HEPTASPACEMAP UNDERGROUND · lens '+LENS[lens].k+' · campaign '+t+'/'+TMAX
+    +(convicted?' · LEAK CONVICTED at '+SEG[leakIdx].kaki:t>=w1_at?' · one witness stands — the court waits':'')
+    +' · keys 1–7 lenses · SPACE survey · drag rotate · scroll zoom '+cam.z.toFixed(1)+'×';
+  requestAnimationFrame(frame);
+}
+setLens(0);
+requestAnimationFrame(frame);
+journal('THE UNDERGROUND COURT OPENS. The 4D projects scan what light can reach; this map governs what light cannot: '+NS+' buried citizens in three d* shells, each carrying all seven dimensions. Press keys 1–7 — the same grid will answer seven different questions. Then press SPACE: somewhere beneath this street a main is failing, and only when TWO independent witnesses agree at one hepta-address will the court speak. The invisible, judged.');
+</script>
+</body>
+</html>

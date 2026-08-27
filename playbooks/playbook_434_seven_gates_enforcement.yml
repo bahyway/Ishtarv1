@@ -2,17 +2,35 @@
 # PB-434 · seven_gates_enforcement · DRAFT (BahyWay.Ecosystem v4.0 finalization suite)
 # Running this playbook is the Architect's CSR-08 confirmation. Nothing is law until run.
 - name: "PB-434 · Seven Gates G1–G7 at EnkiDB admission: refuse any UNKNOWN/red-state soul, always"
-  hosts: enkidb-node-write
+  hosts: uruk
   tasks:
+    # 2026-08-23, found live: was hosts: uruk-node-write -- this task only writes
+    # into the shared Forge workspace ({{ playbook_dir }}/../workspace/bahyway_v4) and
+    # NARU.journal on the control node uruk (ansible_connection=local); it never
+    # touches the write node's live services. Targeting uruk-node-write meant this
+    # ran over SSH as a different user on a different machine, writing (or failing
+    # to write) into an unrelated filesystem -- so the journal line PB-530/PB-437's
+    # chain gate checks for never landed where the gate actually looks. Traced from
+    # PB-530's short count (4/15) and PB-437's (6/10), both explained exactly by
+    # counting how many playbooks in their range were mis-targeted this way.
+    # 2026-08-23, found live (traced from PB-437's short chain-gate count):
+    # no playbook ever creates {{ playbook_dir }}/../workspace/bahyway_v4/gates/ before
+    # this copy writes into it -- `copy` doesn't create missing parent
+    # directories, so LIVE failed with "Destination directory does not
+    # exist", the journal line below never got appended, and PB-437's
+    # gate count came up short. Same gap in PB-506 (gates/LADDER.decree).
+    - name: ensure gates dir
+      ansible.builtin.file: { path: "{{ playbook_dir }}/../workspace/bahyway_v4/gates", state: directory, mode: "0755" }
+      check_mode: false
     - name: gate decree
       ansible.builtin.copy:
-        dest: /home/bfadam/Forge/bahyway_v4/gates/G1-G7.decree
+        dest: "{{ playbook_dir }}/../workspace/bahyway_v4/gates/G1-G7.decree"
         content: |
           SEVEN GATES · EnkiDB (7004) admission law
           G1 checksum witness · G2 Lamassu β₁ witness · G3 EAV mandatory facets · G4 dual seal · G5 lineage kinship (RIKSU) · G6 temporal freshness · G7 state != UNKNOWN
           VERDICT: any failure → EnkiQDB custody (never delete, never admit). No harmful, corrupt, malware, or unknown soul can EVER reach the golden house.
     - name: journal (NARU discipline)
       ansible.builtin.lineinfile:
-        path: /home/bfadam/Forge/bahyway_v4/NARU.journal
+        path: "{{ playbook_dir }}/../workspace/bahyway_v4/NARU.journal"
         line: "{{ ansible_date_time.iso8601 }} · PB-434 · Seven Gates decreed at 7004"
         create: yes

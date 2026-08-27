@@ -123,7 +123,9 @@ impl TopicGraph {
     /// engine `enkiddb-read-server` actually runs.
     pub fn build_from_readnode(read_node: &mut ReadNode) -> Result<Self, ReadNodeError> {
         let result = read_node.query(BIRTH_QUERY)?;
-        Ok(Self::from_rows(result.matched.into_iter().map(|m| (m.entity, m.projected))))
+        Ok(Self::from_rows(
+            result.matched.into_iter().map(|m| (m.entity, m.projected)),
+        ))
     }
 
     /// Same as [`TopicGraph::build_from_readnode`], built from a
@@ -131,7 +133,9 @@ impl TopicGraph {
     /// `enkiddb-read-server` runs, mirroring `rag::RagIndex::build_from_cached`.
     pub fn build_from_cached(crn: &CachedReadNode) -> Result<Self, ParseError> {
         let result = crn.query(BIRTH_QUERY)?;
-        Ok(Self::from_rows(result.matched.into_iter().map(|m| (m.entity, m.projected))))
+        Ok(Self::from_rows(
+            result.matched.into_iter().map(|m| (m.entity, m.projected)),
+        ))
     }
 
     fn from_rows(rows: impl Iterator<Item = (IdentityKaki, Vec<(String, AkkValue)>)>) -> Self {
@@ -155,7 +159,9 @@ impl TopicGraph {
                     ("meta.title", AkkValue::Text(s)) => title = Some(s.clone()),
                     ("link.target", AkkValue::KakiPk(bytes)) => target = Some(*bytes),
                     ("link.source", AkkValue::KakiPk(bytes)) => source = Some(*bytes),
-                    ("link.description", AkkValue::Text(s)) if s == "depends-on" => is_depends_on = true,
+                    ("link.description", AkkValue::Text(s)) if s == "depends-on" => {
+                        is_depends_on = true
+                    }
                     _ => {}
                 }
             }
@@ -189,7 +195,14 @@ impl TopicGraph {
             if let Some(t) = &topic {
                 by_topic.entry(t.clone()).or_default().push(*doc_kaki);
             }
-            docs.insert(*doc_kaki, DocRecord { topic, title, cites_into });
+            docs.insert(
+                *doc_kaki,
+                DocRecord {
+                    topic,
+                    title,
+                    cites_into,
+                },
+            );
         }
 
         TopicGraph { docs, by_topic }
@@ -197,9 +210,17 @@ impl TopicGraph {
 
     /// [`TopicGraph::placement`] with a custom bridge-detection threshold
     /// instead of [`DEFAULT_BRIDGE_THRESHOLD`].
-    pub fn placement_with_threshold(&self, doc: &IdentityKaki, bridge_threshold: f32) -> Option<TopicPlacement> {
+    pub fn placement_with_threshold(
+        &self,
+        doc: &IdentityKaki,
+        bridge_threshold: f32,
+    ) -> Option<TopicPlacement> {
         let record = self.docs.get(doc.bytes())?;
-        let resolved: Vec<&String> = record.cites_into.iter().filter_map(|t| t.as_ref()).collect();
+        let resolved: Vec<&String> = record
+            .cites_into
+            .iter()
+            .filter_map(|t| t.as_ref())
+            .collect();
         let total = resolved.len();
         if total == 0 {
             return None;
@@ -222,7 +243,12 @@ impl TopicGraph {
             .map(|(topic, _)| topic.to_string())
             .collect();
 
-        Some(TopicPlacement { home_topic: home_topic.to_string(), affinity, radius, bridges_to })
+        Some(TopicPlacement {
+            home_topic: home_topic.to_string(),
+            affinity,
+            radius,
+            bridges_to,
+        })
     }
 
     /// A document's placement using [`DEFAULT_BRIDGE_THRESHOLD`]. `None`
@@ -239,29 +265,45 @@ impl TopicGraph {
     /// surfaced ahead of same-radius same-topic neighbors. Empty if `doc`
     /// has no placement.
     pub fn related(&self, doc: &IdentityKaki, k: usize) -> Vec<IdentityKaki> {
-        let Some(anchor) = self.placement(doc) else { return vec![] };
+        let Some(anchor) = self.placement(doc) else {
+            return vec![];
+        };
         let mut scored: Vec<(bool, f32, [u8; 16])> = Vec::new();
 
         for (other_bytes, record) in &self.docs {
             if other_bytes == doc.bytes() {
                 continue;
             }
-            let Some(other_topic) = &record.topic else { continue };
-            let Some(other) = self.placement_by_bytes(*other_bytes) else { continue };
+            let Some(other_topic) = &record.topic else {
+                continue;
+            };
+            let Some(other) = self.placement_by_bytes(*other_bytes) else {
+                continue;
+            };
 
             let same_home = *other_topic == anchor.home_topic;
-            let is_bridge = other.bridges_to.contains(&anchor.home_topic) || anchor.bridges_to.contains(other_topic);
+            let is_bridge = other.bridges_to.contains(&anchor.home_topic)
+                || anchor.bridges_to.contains(other_topic);
             if !same_home && !is_bridge {
                 continue;
             }
-            scored.push((!is_bridge, (other.radius - anchor.radius).abs(), *other_bytes));
+            scored.push((
+                !is_bridge,
+                (other.radius - anchor.radius).abs(),
+                *other_bytes,
+            ));
         }
 
-        scored.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)));
+        scored.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        });
         scored
             .into_iter()
             .take(k)
-            .filter_map(|(_, _, bytes)| IdentityKaki::try_from_kaki(Kaki::from_bytes(bytes).ok()?).ok())
+            .filter_map(|(_, _, bytes)| {
+                IdentityKaki::try_from_kaki(Kaki::from_bytes(bytes).ok()?).ok()
+            })
             .collect()
     }
 
@@ -290,7 +332,12 @@ impl TopicGraph {
                 let topic = record.topic.clone()?;
                 let kaki = IdentityKaki::try_from_kaki(Kaki::from_bytes(*bytes).ok()?).ok()?;
                 let placement = self.placement(&kaki);
-                Some(DocumentTopic { kaki, title: record.title.clone(), topic, placement })
+                Some(DocumentTopic {
+                    kaki,
+                    title: record.title.clone(),
+                    topic,
+                    placement,
+                })
             })
             .collect();
         out.sort_by(|a, b| a.topic.cmp(&b.topic).then_with(|| a.title.cmp(&b.title)));
@@ -325,7 +372,12 @@ mod tests {
     }
 
     fn git(dir: &std::path::Path, args: &[&str]) {
-        let status = std::process::Command::new("git").arg("-C").arg(dir).args(args).status().unwrap();
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .status()
+            .unwrap();
         assert!(status.success(), "git {args:?} failed");
     }
 
@@ -350,7 +402,11 @@ mod tests {
         // cites THREE others must show all three as real edges once read
         // back through a Read Node, not just the last-journaled one.
         let dir = git_scratch_dir("multi_cite");
-        std::fs::write(dir.join("hub.md"), "# Hub\n\nSee [a](./a.md), [b](./b.md), and [c](./c.md).\n").unwrap();
+        std::fs::write(
+            dir.join("hub.md"),
+            "# Hub\n\nSee [a](./a.md), [b](./b.md), and [c](./c.md).\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("a.md"), "# A\n\nBody A.\n").unwrap();
         std::fs::write(dir.join("b.md"), "# B\n\nBody B.\n").unwrap();
         std::fs::write(dir.join("c.md"), "# C\n\nBody C.\n").unwrap();
@@ -358,24 +414,36 @@ mod tests {
 
         let mut wn = write_node();
         let allow = crate::authorship::TeamAllowlist::seed();
-        let kakis = wn.ingest_directory_categorized_checked(&dir, 1, &allow).unwrap();
+        let kakis = wn
+            .ingest_directory_categorized_checked(&dir, 1, &allow)
+            .unwrap();
         assert_eq!(kakis.len(), 4, "hub.md + a.md + b.md + c.md");
 
         let base = tmp_base("multi_cite");
-        crate::readnode::materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let mut rn = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        crate::readnode::materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let mut rn =
+            ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
 
         let result = rn.query(BIRTH_QUERY).unwrap();
         let depends_on_edges = result
             .matched
             .iter()
             .filter(|m| {
-                m.projected.iter().any(
-                    |(attr, val)| attr == "link.description" && matches!(val, AkkValue::Text(s) if s == "depends-on"),
-                )
+                m.projected.iter().any(|(attr, val)| {
+                    attr == "link.description"
+                        && matches!(val, AkkValue::Text(s) if s == "depends-on")
+                })
             })
             .count();
-        assert_eq!(depends_on_edges, 3, "all three depends-on edges from hub.md must be independently queryable");
+        assert_eq!(
+            depends_on_edges, 3,
+            "all three depends-on edges from hub.md must be independently queryable"
+        );
     }
 
     #[test]
@@ -400,12 +468,20 @@ mod tests {
 
         let mut wn = write_node();
         let allow = crate::authorship::TeamAllowlist::seed();
-        let kakis = wn.ingest_directory_categorized_checked(&dir, 1, &allow).unwrap();
+        let kakis = wn
+            .ingest_directory_categorized_checked(&dir, 1, &allow)
+            .unwrap();
         assert_eq!(kakis.len(), 4);
 
         let base = tmp_base("bridge");
-        crate::readnode::materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let mut rn = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        crate::readnode::materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let mut rn =
+            ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
         let graph = TopicGraph::build_from_readnode(&mut rn).unwrap();
 
         assert_eq!(graph.topics(), vec!["components", "gates"]);
@@ -415,8 +491,15 @@ mod tests {
         // path->kaki map, only the list, so identify it by outcome
         // (exactly one of the four should be a bridge).
         let placements: Vec<_> = kakis.iter().filter_map(|k| graph.placement(k)).collect();
-        let bridges: Vec<_> = placements.iter().filter(|p| !p.bridges_to.is_empty()).collect();
-        assert_eq!(bridges.len(), 1, "exactly one document (gate_a) should bridge");
+        let bridges: Vec<_> = placements
+            .iter()
+            .filter(|p| !p.bridges_to.is_empty())
+            .collect();
+        assert_eq!(
+            bridges.len(),
+            1,
+            "exactly one document (gate_a) should bridge"
+        );
         assert_eq!(bridges[0].home_topic, "gates");
         assert_eq!(bridges[0].bridges_to, vec!["components".to_string()]);
     }
@@ -432,19 +515,30 @@ mod tests {
 
         let mut wn = write_node();
         let allow = crate::authorship::TeamAllowlist::seed();
-        let kakis = wn.ingest_directory_categorized_checked(&dir, 1, &allow).unwrap();
+        let kakis = wn
+            .ingest_directory_categorized_checked(&dir, 1, &allow)
+            .unwrap();
         assert_eq!(kakis.len(), 3);
 
         let base = tmp_base("related");
-        crate::readnode::materialize_now(&wn, base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
-        let mut rn = ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
+        crate::readnode::materialize_now(
+            &wn,
+            base.with_file_name("entities"),
+            base.with_file_name("eav"),
+        )
+        .unwrap();
+        let mut rn =
+            ReadNode::open(base.with_file_name("entities"), base.with_file_name("eav")).unwrap();
         let graph = TopicGraph::build_from_readnode(&mut rn).unwrap();
 
         // g1 and g3 both cite into "gates" exclusively -- g3 should find
         // g1 as a related neighbor (g2 also qualifies; both share the
         // only topic in this fixture).
         let g3 = kakis.iter().find(|k| graph.placement(k).is_some()).copied();
-        assert!(g3.is_some(), "at least one document has a resolvable placement");
+        assert!(
+            g3.is_some(),
+            "at least one document has a resolvable placement"
+        );
         let related = graph.related(&g3.unwrap(), 5);
         assert!(!related.is_empty(), "same-topic neighbors should be found");
     }

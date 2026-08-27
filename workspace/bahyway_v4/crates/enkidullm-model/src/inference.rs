@@ -6,8 +6,8 @@
 #![forbid(unsafe_code)]
 
 use crate::model_config::ModelConfig;
-use crate::quant::{rms_norm, softmax_inplace, silu, matmul_f32};
-use crate::sampler::{TokenSampler, SamplerConfig};
+use crate::quant::{matmul_f32, rms_norm, silu, softmax_inplace};
+use crate::sampler::{SamplerConfig, TokenSampler};
 
 /// Configuration for a single inference run.
 #[derive(Debug, Clone)]
@@ -15,11 +15,11 @@ pub struct InferenceConfig {
     /// Maximum tokens to generate.
     pub max_new_tokens: usize,
     /// System prompt prepended to every conversation.
-    pub system_prompt:  Option<String>,
+    pub system_prompt: Option<String>,
     /// Sampler configuration.
-    pub sampler:        SamplerConfig,
+    pub sampler: SamplerConfig,
     /// Stop at EOS token.
-    pub stop_at_eos:    bool,
+    pub stop_at_eos: bool,
 }
 
 impl Default for InferenceConfig {
@@ -36,32 +36,36 @@ impl Default for InferenceConfig {
 /// A single generated token with metadata.
 #[derive(Debug, Clone)]
 pub struct StreamToken {
-    pub token_id:  u32,
+    pub token_id: u32,
     pub token_str: String,
-    pub logprob:   f32,
-    pub is_eos:    bool,
+    pub logprob: f32,
+    pub is_eos: bool,
 }
 
 /// Complete inference result.
 #[derive(Debug)]
 pub struct InferenceResult {
-    pub generated_text:   String,
+    pub generated_text: String,
     pub tokens_generated: usize,
-    pub tokens_prompt:    usize,
-    pub stopped_by_eos:   bool,
+    pub tokens_prompt: usize,
+    pub stopped_by_eos: bool,
 }
 
 /// KV cache entry for one transformer layer.
 struct KvCache {
-    k: Vec<f32>,  // [seq_len × num_kv_heads × head_dim]
-    v: Vec<f32>,  // [seq_len × num_kv_heads × head_dim]
+    k: Vec<f32>, // [seq_len × num_kv_heads × head_dim]
+    v: Vec<f32>, // [seq_len × num_kv_heads × head_dim]
     seq_len: usize,
 }
 
 impl KvCache {
     fn new(max_seq: usize, num_kv_heads: usize, head_dim: usize) -> Self {
         let cap = max_seq * num_kv_heads * head_dim;
-        Self { k: vec![0.0; cap], v: vec![0.0; cap], seq_len: 0 }
+        Self {
+            k: vec![0.0; cap],
+            v: vec![0.0; cap],
+            seq_len: 0,
+        }
     }
 
     fn append_kv(&mut self, k_new: &[f32], v_new: &[f32], num_kv_heads: usize, head_dim: usize) {
@@ -75,24 +79,24 @@ impl KvCache {
 
 /// Pre-loaded weight tensors for one transformer layer.
 pub struct LayerWeights {
-    pub attn_norm:  Vec<f32>,  // [dim]
-    pub ffn_norm:   Vec<f32>,  // [dim]
-    pub wq:         Vec<f32>,  // [dim × dim]
-    pub wk:         Vec<f32>,  // [dim × kv_dim]
-    pub wv:         Vec<f32>,  // [dim × kv_dim]
-    pub wo:         Vec<f32>,  // [dim × dim]
-    pub w_gate:     Vec<f32>,  // [ffn_dim × dim]
-    pub w_up:       Vec<f32>,  // [ffn_dim × dim]
-    pub w_down:     Vec<f32>,  // [dim × ffn_dim]
+    pub attn_norm: Vec<f32>, // [dim]
+    pub ffn_norm: Vec<f32>,  // [dim]
+    pub wq: Vec<f32>,        // [dim × dim]
+    pub wk: Vec<f32>,        // [dim × kv_dim]
+    pub wv: Vec<f32>,        // [dim × kv_dim]
+    pub wo: Vec<f32>,        // [dim × dim]
+    pub w_gate: Vec<f32>,    // [ffn_dim × dim]
+    pub w_up: Vec<f32>,      // [ffn_dim × dim]
+    pub w_down: Vec<f32>,    // [dim × ffn_dim]
 }
 
 /// Complete model weights.
 pub struct ModelWeights {
-    pub config:       ModelConfig,
-    pub token_emb:    Vec<f32>,  // [vocab × dim]
-    pub norm_final:   Vec<f32>,  // [dim]
-    pub lm_head:      Vec<f32>,  // [vocab × dim]
-    pub layers:       Vec<LayerWeights>,
+    pub config: ModelConfig,
+    pub token_emb: Vec<f32>,  // [vocab × dim]
+    pub norm_final: Vec<f32>, // [dim]
+    pub lm_head: Vec<f32>,    // [vocab × dim]
+    pub layers: Vec<LayerWeights>,
 }
 
 /// The sovereign inference engine.
@@ -115,11 +119,11 @@ impl InferenceEngine {
         // Build full prompt with system context
         let full_prompt = match &config.system_prompt {
             Some(sys) => format!("<|system|>\n{sys}\n<|user|>\n{prompt}\n<|assistant|>\n"),
-            None      => prompt.to_string(),
+            None => prompt.to_string(),
         };
 
         let prompt_tokens = tokenizer.encode(&full_prompt, true);
-        let prompt_len    = prompt_tokens.len();
+        let prompt_len = prompt_tokens.len();
 
         // Initialize KV caches
         let cfg = &self.weights.config;
@@ -150,7 +154,9 @@ impl InferenceEngine {
             }
 
             let pos = prompt_len + step;
-            if pos >= cfg.context_length { break; }
+            if pos >= cfg.context_length {
+                break;
+            }
 
             logits = self.forward_single(next_tok, pos, &mut kv_caches);
         }
@@ -159,13 +165,13 @@ impl InferenceEngine {
         InferenceResult {
             generated_text,
             tokens_generated: generated_ids.len(),
-            tokens_prompt:    prompt_len,
+            tokens_prompt: prompt_len,
             stopped_by_eos,
         }
     }
 
     /// Forward pass for a single token at position `pos`.
-    fn forward_single(&self, token_id: u32, pos: usize, kv_caches: &mut Vec<KvCache>) -> Vec<f32> {
+    fn forward_single(&self, token_id: u32, pos: usize, kv_caches: &mut [KvCache]) -> Vec<f32> {
         let cfg = &self.weights.config;
         let dim = cfg.embedding_dim;
         let head_dim = cfg.head_dim();
@@ -197,43 +203,51 @@ impl InferenceEngine {
 
             // 5. Multi-head attention
             let attn_out = grouped_query_attention(
-                &q_rope, &kv_caches[layer_idx],
-                cfg.num_heads, cfg.num_kv_heads, head_dim,
+                &q_rope,
+                &kv_caches[layer_idx],
+                cfg.num_heads,
+                cfg.num_kv_heads,
+                head_dim,
             );
 
             // 6. Output projection + residual
             let attn_proj = matmul_f32(&layer.wo, &attn_out, dim, dim);
-            for (xi, ai) in x.iter_mut().zip(attn_proj.iter()) { *xi += ai; }
+            for (xi, ai) in x.iter_mut().zip(attn_proj.iter()) {
+                *xi += ai;
+            }
 
             // 7. FFN pre-norm
             let x_norm2 = rms_norm(&x, &layer.ffn_norm, cfg.rms_norm_eps);
 
             // 8. SwiGLU FFN: down(silu(gate(x)) * up(x))
             let gate_out = matmul_f32(&layer.w_gate, &x_norm2, cfg.feed_forward_dim, dim);
-            let up_out   = matmul_f32(&layer.w_up,   &x_norm2, cfg.feed_forward_dim, dim);
-            let swiglu: Vec<f32> = gate_out.iter().zip(up_out.iter())
+            let up_out = matmul_f32(&layer.w_up, &x_norm2, cfg.feed_forward_dim, dim);
+            let swiglu: Vec<f32> = gate_out
+                .iter()
+                .zip(up_out.iter())
                 .map(|(g, u)| silu(*g) * u)
                 .collect();
             let ffn_out = matmul_f32(&layer.w_down, &swiglu, dim, cfg.feed_forward_dim);
 
             // 9. FFN residual
-            for (xi, fi) in x.iter_mut().zip(ffn_out.iter()) { *xi += fi; }
+            for (xi, fi) in x.iter_mut().zip(ffn_out.iter()) {
+                *xi += fi;
+            }
         }
 
         // Final norm
         let x_final = rms_norm(&x, &self.weights.norm_final, cfg.rms_norm_eps);
 
         // LM head → logits
-        let logits = matmul_f32(&self.weights.lm_head, &x_final, cfg.vocab_size, dim);
 
         // Temperature is handled in sampler — return raw logits
-        logits
+        matmul_f32(&self.weights.lm_head, &x_final, cfg.vocab_size, dim)
     }
 }
 
 /// Compute RoPE frequency table for a given head dimension and theta.
 fn compute_rope_freqs(head_dim: usize, theta: f32) -> Vec<f32> {
-    (0..head_dim/2)
+    (0..head_dim / 2)
         .map(|i| 1.0 / theta.powf(2.0 * i as f32 / head_dim as f32))
         .collect()
 }
@@ -243,15 +257,15 @@ fn apply_rope(x: &[f32], pos: usize, num_heads: usize, head_dim: usize, freqs: &
     let mut out = x.to_vec();
     for head in 0..num_heads {
         let base = head * head_dim;
-        for i in 0..head_dim/2 {
-            let freq  = freqs[i];
+        for i in 0..head_dim / 2 {
+            let freq = freqs[i];
             let angle = pos as f32 * freq;
-            let cos   = angle.cos();
-            let sin   = angle.sin();
-            let x0    = out[base + i];
-            let x1    = out[base + i + head_dim/2];
-            out[base + i]             = x0 * cos - x1 * sin;
-            out[base + i + head_dim/2] = x0 * sin + x1 * cos;
+            let cos = angle.cos();
+            let sin = angle.sin();
+            let x0 = out[base + i];
+            let x1 = out[base + i + head_dim / 2];
+            out[base + i] = x0 * cos - x1 * sin;
+            out[base + i + head_dim / 2] = x0 * sin + x1 * cos;
         }
     }
     out
@@ -265,34 +279,40 @@ fn grouped_query_attention(
     num_kv_heads: usize,
     head_dim: usize,
 ) -> Vec<f32> {
-    let dim      = num_heads * head_dim;
-    let kv_dim   = num_kv_heads * head_dim;
-    let seq_len  = kv_cache.seq_len;
+    let dim = num_heads * head_dim;
+    let kv_dim = num_kv_heads * head_dim;
+    let seq_len = kv_cache.seq_len;
     let gqa_factor = num_heads / num_kv_heads;
-    let scale    = (head_dim as f32).sqrt().recip();
+    let scale = (head_dim as f32).sqrt().recip();
 
     let mut out = vec![0.0f32; dim];
 
     for h in 0..num_heads {
         let kv_head = h / gqa_factor;
-        let q_base  = h * head_dim;
-        let q_vec   = &q[q_base..q_base + head_dim];
+        let q_base = h * head_dim;
+        let q_vec = &q[q_base..q_base + head_dim];
 
         // Compute attention scores over all cached positions
-        let mut scores: Vec<f32> = (0..seq_len).map(|t| {
-            let k_base = t * kv_dim + kv_head * head_dim;
-            let k_vec  = &kv_cache.k[k_base..k_base + head_dim];
-            q_vec.iter().zip(k_vec.iter()).map(|(qi, ki)| qi * ki).sum::<f32>() * scale
-        }).collect();
+        let mut scores: Vec<f32> = (0..seq_len)
+            .map(|t| {
+                let k_base = t * kv_dim + kv_head * head_dim;
+                let k_vec = &kv_cache.k[k_base..k_base + head_dim];
+                q_vec
+                    .iter()
+                    .zip(k_vec.iter())
+                    .map(|(qi, ki)| qi * ki)
+                    .sum::<f32>()
+                    * scale
+            })
+            .collect();
 
         softmax_inplace(&mut scores);
 
         // Weighted sum of values
         let out_base = h * head_dim;
-        for t in 0..seq_len {
+        for (t, &w) in scores.iter().enumerate() {
             let v_base = t * kv_dim + kv_head * head_dim;
-            let v_vec  = &kv_cache.v[v_base..v_base + head_dim];
-            let w      = scores[t];
+            let v_vec = &kv_cache.v[v_base..v_base + head_dim];
             for i in 0..head_dim {
                 out[out_base + i] += w * v_vec[i];
             }
@@ -310,8 +330,8 @@ mod tests {
         let freqs = compute_rope_freqs(128, 10000.0);
         assert_eq!(freqs.len(), 64);
         // Frequencies should be strictly decreasing
-        for i in 0..freqs.len()-1 {
-            assert!(freqs[i] > freqs[i+1], "freqs not decreasing at {i}");
+        for i in 0..freqs.len() - 1 {
+            assert!(freqs[i] > freqs[i + 1], "freqs not decreasing at {i}");
         }
     }
 
@@ -321,10 +341,12 @@ mod tests {
         let freqs = compute_rope_freqs(128, 10000.0);
         let x_rope = apply_rope(&x, 0, 1, 128, &freqs);
         // At position 0, angle=0, cos=1, sin=0 → no change
-        let norm_before: f32 = x.iter().map(|v| v*v).sum::<f32>().sqrt();
-        let norm_after: f32  = x_rope.iter().map(|v| v*v).sum::<f32>().sqrt();
-        assert!((norm_before - norm_after).abs() < 1e-4,
-            "RoPE changed norm: {norm_before} → {norm_after}");
+        let norm_before: f32 = x.iter().map(|v| v * v).sum::<f32>().sqrt();
+        let norm_after: f32 = x_rope.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!(
+            (norm_before - norm_after).abs() < 1e-4,
+            "RoPE changed norm: {norm_before} → {norm_after}"
+        );
     }
 
     #[test]

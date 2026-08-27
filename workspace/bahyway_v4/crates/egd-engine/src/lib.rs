@@ -28,7 +28,11 @@ pub fn sweep(
         .into_iter()
         .enumerate()
         .map(|(i, kappa)| {
-            let r = BaruResidual { node_id: net.nodes[i].id, kappa, ts_millis };
+            let r = BaruResidual {
+                node_id: net.nodes[i].id,
+                kappa,
+                ts_millis,
+            };
             if kappa > tol {
                 sink.emit(gibil::ALERT_CLASS, r.node_id, kappa, ts_millis);
             }
@@ -60,10 +64,21 @@ mod tests {
 
         let mut net = Network {
             nodes: vec![
-                Node { id: 0, injection: Phasor::zero().sub(i_line) },
-                Node { id: 1, injection: i_line },
+                Node {
+                    id: 0,
+                    injection: Phasor::zero().sub(i_line),
+                },
+                Node {
+                    id: 1,
+                    injection: i_line,
+                },
             ],
-            edges: vec![Edge { from: 0, to: 1, coeff: y, in_service: true }],
+            edges: vec![Edge {
+                from: 0,
+                to: 1,
+                coeff: y,
+                in_service: true,
+            }],
         };
 
         let mut sink = Collect(vec![]);
@@ -88,10 +103,21 @@ mod tests {
         let i_line = y.mul(v[0].sub(v[1]));
         let net = Network {
             nodes: vec![
-                Node { id: 0, injection: Phasor::zero().sub(i_line) },
-                Node { id: 1, injection: i_line },
+                Node {
+                    id: 0,
+                    injection: Phasor::zero().sub(i_line),
+                },
+                Node {
+                    id: 1,
+                    injection: i_line,
+                },
             ],
-            edges: vec![Edge { from: 0, to: 1, coeff: y, in_service: false }],
+            edges: vec![Edge {
+                from: 0,
+                to: 1,
+                coeff: y,
+                in_service: false,
+            }],
         };
         let mut sink = Collect(vec![]);
         let r = sweep(&net, &v, 1e-9, 0, &mut sink).unwrap();
@@ -101,11 +127,26 @@ mod tests {
     #[test]
     fn mismatched_phi_length_is_a_typed_error_not_a_panic() {
         let net = Network::<Phasor> {
-            nodes: vec![Node { id: 0, injection: Phasor::zero() }, Node { id: 1, injection: Phasor::zero() }],
+            nodes: vec![
+                Node {
+                    id: 0,
+                    injection: Phasor::zero(),
+                },
+                Node {
+                    id: 1,
+                    injection: Phasor::zero(),
+                },
+            ],
             edges: vec![],
         };
         let mut sink = Collect(vec![]);
         let err = sweep(&net, &[Phasor::zero()], 1e-9, 0, &mut sink).unwrap_err();
-        assert_eq!(err, FddError::PotentialLengthMismatch { expected: 2, got: 1 });
+        assert_eq!(
+            err,
+            FddError::PotentialLengthMismatch {
+                expected: 2,
+                got: 1
+            }
+        );
     }
 }

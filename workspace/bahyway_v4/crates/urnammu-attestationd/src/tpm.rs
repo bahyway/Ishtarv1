@@ -25,7 +25,8 @@ pub fn read_pcr_state() -> Result<Vec<u8>, String> {
 
 /// Parse tpm2_pcrread YAML output, extract hex digests for PCR 0, 4, 7.
 fn parse_pcr_output(raw: &[u8]) -> Result<Vec<u8>, String> {
-    let text = std::str::from_utf8(raw).map_err(|e| format!("tpm2_pcrread output not UTF-8: {e}"))?;
+    let text =
+        std::str::from_utf8(raw).map_err(|e| format!("tpm2_pcrread output not UTF-8: {e}"))?;
     let mut combined = Vec::with_capacity(96);
     for line in text.lines() {
         let trimmed = line.trim();
@@ -44,7 +45,7 @@ fn parse_pcr_output(raw: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Minimal hex decoder — avoids pulling in the `hex` crate for one function.
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err(format!("PCR hex decode error: odd-length string '{s}'"));
     }
     (0..s.len())

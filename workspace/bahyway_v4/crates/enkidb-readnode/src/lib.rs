@@ -22,5 +22,7 @@ pub mod readnode;
 
 pub use cached::{CachedReadNode, CachedReadNodeError};
 pub use generation::{list_generations, materialize_generation, Generation};
-pub use materialize::{materialize, open_tribe_summaries, tribe_summary_paths, MaterializeStats, TRIBE_SUMMARY_KIND};
+pub use materialize::{
+    materialize, open_tribe_summaries, tribe_summary_paths, MaterializeStats, TRIBE_SUMMARY_KIND,
+};
 pub use readnode::{ReadNode, ReadNodeError};

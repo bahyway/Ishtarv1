@@ -21,22 +21,37 @@ pub struct ColorRgb {
 }
 
 impl ColorRgb {
-    pub const GRAY:   ColorRgb = ColorRgb { r: 0x80, g: 0x80, b: 0x80 };
-    pub const GOLDEN: ColorRgb = ColorRgb { r: 0xFF, g: 0xFF, b: 0xFF };
+    pub const GRAY: ColorRgb = ColorRgb {
+        r: 0x80,
+        g: 0x80,
+        b: 0x80,
+    };
+    pub const GOLDEN: ColorRgb = ColorRgb {
+        r: 0xFF,
+        g: 0xFF,
+        b: 0xFF,
+    };
 
-    pub fn new(r: u8, g: u8, b: u8) -> Self { ColorRgb { r, g, b } }
+    pub fn new(r: u8, g: u8, b: u8) -> Self {
+        ColorRgb { r, g, b }
+    }
 
     /// Serialize to 3 bytes (wire / EAV storage format).
-    pub fn to_bytes(self) -> [u8; 3] { [self.r, self.g, self.b] }
+    pub fn to_bytes(self) -> [u8; 3] {
+        [self.r, self.g, self.b]
+    }
 
-    pub fn from_bytes(raw: [u8; 3]) -> Self { ColorRgb { r: raw[0], g: raw[1], b: raw[2] } }
+    pub fn from_bytes(raw: [u8; 3]) -> Self {
+        ColorRgb {
+            r: raw[0],
+            g: raw[1],
+            b: raw[2],
+        }
+    }
 
     /// Euclidean distance to the origin color (0, 0, 0) — proxy for "how gray".
     pub fn magnitude(self) -> f32 {
-        ((self.r as f32).powi(2)
-            + (self.g as f32).powi(2)
-            + (self.b as f32).powi(2))
-        .sqrt()
+        ((self.r as f32).powi(2) + (self.g as f32).powi(2) + (self.b as f32).powi(2)).sqrt()
     }
 
     /// Drift toward Gray: distance from a pure Gray (128, 128, 128).
@@ -52,9 +67,9 @@ impl ColorRgb {
 /// Domain byte is passed in from the Template definition.
 pub fn compute_color(
     domain_byte: u8,
-    quality:     f32,     // HPS 0.0–1.0
-    freshness:   f32,     // δₜ 0.0–1.0
-    state:       ParticleState,
+    quality: f32,   // HPS 0.0–1.0
+    freshness: f32, // δₜ 0.0–1.0
+    state: ParticleState,
 ) -> ColorRgb {
     if state == ParticleState::Dead {
         return ColorRgb::GRAY;
@@ -91,7 +106,7 @@ mod tests {
 
     #[test]
     fn round_trip_bytes() {
-        let c  = ColorRgb::new(10, 200, 50);
+        let c = ColorRgb::new(10, 200, 50);
         let c2 = ColorRgb::from_bytes(c.to_bytes());
         assert_eq!(c, c2);
     }

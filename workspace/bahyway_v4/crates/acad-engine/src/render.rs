@@ -6,29 +6,44 @@
 use crate::{Block, Lecture, SiteDomain};
 
 fn esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 pub fn render_lecture(l: &Lecture, domain: SiteDomain) -> String {
     let mut h = String::new();
     h += "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n";
-    h += &format!("<meta charset=\"utf-8\">\n<title>{}</title>\n", esc(&l.title));
+    h += &format!(
+        "<meta charset=\"utf-8\">\n<title>{}</title>\n",
+        esc(&l.title)
+    );
     if domain != SiteDomain::Bahyway {
         h += &format!("<link rel=\"canonical\" href=\"{}\">\n", l.canonical());
     }
     h += "<meta name=\"generator\" content=\"AcadEngine\">\n</head>\n<body>\n";
-    h += &format!("<header data-site=\"{}\"><h1>{}</h1>\n",
-        domain.host(), esc(&l.title));
-    h += &format!("<p class=\"address\">{:?} / {:?} / {}</p>\n",
-        l.sector, l.category, esc(&l.era));
+    h += &format!(
+        "<header data-site=\"{}\"><h1>{}</h1>\n",
+        domain.host(),
+        esc(&l.title)
+    );
+    h += &format!(
+        "<p class=\"address\">{:?} / {:?} / {}</p>\n",
+        l.sector,
+        l.category,
+        esc(&l.era)
+    );
     if let Some(e) = &l.superseded_by {
         h += &format!("<p class=\"superseded\">Superseded in era {}</p>\n", esc(e));
     }
     h += "</header>\n<section class=\"w5h2\">\n";
     for (label, text) in [
-        ("WHO", &l.w5h2.who), ("WHAT", &l.w5h2.what),
-        ("WHEN", &l.w5h2.when), ("WHERE", &l.w5h2.where_),
-        ("WHY", &l.w5h2.why), ("HOW", &l.w5h2.how),
+        ("WHO", &l.w5h2.who),
+        ("WHAT", &l.w5h2.what),
+        ("WHEN", &l.w5h2.when),
+        ("WHERE", &l.w5h2.where_),
+        ("WHY", &l.w5h2.why),
+        ("HOW", &l.w5h2.how),
         ("HOW MUCH", &l.w5h2.how_much),
     ] {
         if !text.is_empty() {
@@ -41,8 +56,11 @@ pub fn render_lecture(l: &Lecture, domain: SiteDomain) -> String {
             Block::Prose(p) => h += &format!("<p>{}</p>\n", esc(p)),
             Block::MathMl(m) => h += &format!("<div class=\"math\">{m}</div>\n"),
             Block::Code { lang, source } => {
-                h += &format!("<pre class=\"code lang-{}\"><code>{}</code></pre>\n",
-                    esc(lang), esc(source));
+                h += &format!(
+                    "<pre class=\"code lang-{}\"><code>{}</code></pre>\n",
+                    esc(lang),
+                    esc(source)
+                );
             }
             Block::Video { src, caption } => {
                 h += &format!(
@@ -50,8 +68,11 @@ pub fn render_lecture(l: &Lecture, domain: SiteDomain) -> String {
                     esc(src), esc(caption));
             }
             Block::Reference { cite, note } => {
-                h += &format!("<p class=\"ref\"><cite>{}</cite> — {}</p>\n",
-                    esc(cite), esc(note));
+                h += &format!(
+                    "<p class=\"ref\"><cite>{}</cite> — {}</p>\n",
+                    esc(cite),
+                    esc(note)
+                );
             }
         }
     }
@@ -61,8 +82,8 @@ pub fn render_lecture(l: &Lecture, domain: SiteDomain) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
     use super::render_lecture;
+    use crate::*;
 
     fn founding() -> Lecture {
         Lecture {
@@ -77,7 +98,9 @@ mod tests {
                 ..Default::default()
             },
             blocks: vec![Block::Reference {
-                cite: "PH-002".into(), note: "the sealed tablet".into() }],
+                cite: "PH-002".into(),
+                note: "the sealed tablet".into(),
+            }],
             superseded_by: None,
             declared_domains: vec![],
         }

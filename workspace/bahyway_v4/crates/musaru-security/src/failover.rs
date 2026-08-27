@@ -62,9 +62,11 @@ impl FailoverState {
     /// Human-readable status message for the DubSar IDE notification bar.
     pub fn status_message(&self) -> &'static str {
         match self {
-            FailoverState::Healthy         => "Stream Nominal — All Nodes Operational",
-            FailoverState::Warning { .. }  => "Stream Degraded — Replication Lag Detected",
-            FailoverState::QuantumFreeze   => "Real-time Stream Unstable — Materializing Final Sovereign Snapshot",
+            FailoverState::Healthy => "Stream Nominal — All Nodes Operational",
+            FailoverState::Warning { .. } => "Stream Degraded — Replication Lag Detected",
+            FailoverState::QuantumFreeze => {
+                "Real-time Stream Unstable — Materializing Final Sovereign Snapshot"
+            }
         }
     }
 }
@@ -100,8 +102,13 @@ pub fn cluster_failover_state(d7_values: &[u8]) -> FailoverState {
         let state = check_failover(d7);
         // ordering: Healthy < Warning < QuantumFreeze
         match (&state, &worst) {
-            (FailoverState::QuantumFreeze, _) => { worst = state; break; }
-            (FailoverState::Warning { .. }, FailoverState::Healthy) => { worst = state; }
+            (FailoverState::QuantumFreeze, _) => {
+                worst = state;
+                break;
+            }
+            (FailoverState::Warning { .. }, FailoverState::Healthy) => {
+                worst = state;
+            }
             _ => {}
         }
     }
@@ -135,7 +142,12 @@ mod tests {
     #[test]
     fn test_warning_at_lower_bound() {
         let state = check_failover(QUANTUM_FREEZE_CRITICAL_THRESHOLD);
-        assert_eq!(state, FailoverState::Warning { d7: QUANTUM_FREEZE_CRITICAL_THRESHOLD });
+        assert_eq!(
+            state,
+            FailoverState::Warning {
+                d7: QUANTUM_FREEZE_CRITICAL_THRESHOLD
+            }
+        );
     }
 
     #[test]
@@ -154,7 +166,9 @@ mod tests {
     #[test]
     fn test_status_messages_non_empty() {
         assert!(!FailoverState::Healthy.status_message().is_empty());
-        assert!(!FailoverState::Warning { d7: 60 }.status_message().is_empty());
+        assert!(!FailoverState::Warning { d7: 60 }
+            .status_message()
+            .is_empty());
         assert!(!FailoverState::QuantumFreeze.status_message().is_empty());
     }
 

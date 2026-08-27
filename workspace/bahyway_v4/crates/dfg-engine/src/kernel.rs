@@ -21,10 +21,10 @@ pub type KakiId = [u8; 16];
 /// One executable event bound to a KAKI identity.
 #[derive(Debug, Clone)]
 pub struct UekEvent {
-    pub kaki_id:          KakiId,
-    pub timestamp:        u64,
-    pub attribute:        String,
-    pub value:            String,
+    pub kaki_id: KakiId,
+    pub timestamp: u64,
+    pub attribute: String,
+    pub value: String,
     pub governance_score: f64,
 }
 
@@ -32,12 +32,15 @@ pub struct UekEvent {
 #[derive(Debug, Default, Clone)]
 pub struct KakiStalk {
     pub kaki_id: KakiId,
-    pub events:  Vec<UekEvent>,
+    pub events: Vec<UekEvent>,
 }
 
 impl KakiStalk {
     pub fn new(kaki_id: KakiId) -> Self {
-        Self { kaki_id, events: Vec::new() }
+        Self {
+            kaki_id,
+            events: Vec::new(),
+        }
     }
 
     pub fn append(&mut self, event: UekEvent) {
@@ -60,8 +63,12 @@ impl FlaggedJournal {
         self.entries.push((decision, event));
     }
 
-    pub fn len(&self) -> usize { self.entries.len() }
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 
     pub fn iter(&self) -> impl Iterator<Item = &(GovernanceDecision, UekEvent)> {
         self.entries.iter()
@@ -80,27 +87,37 @@ pub enum ExecuteOutcome {
 
 /// Minimal UEK kernel for a single `DfgPlan`.
 pub struct UekKernel<S: DataSteward> {
-    pub plan:    DfgPlan,
-    pub stalks:  Vec<KakiStalk>,
+    pub plan: DfgPlan,
+    pub stalks: Vec<KakiStalk>,
     pub journal: FlaggedJournal,
-    steward:     S,
+    steward: S,
 }
 
 impl<S: DataSteward> UekKernel<S> {
     pub fn new(plan: DfgPlan, steward: S) -> Self {
-        Self { plan, stalks: Vec::new(), journal: FlaggedJournal::default(), steward }
+        Self {
+            plan,
+            stalks: Vec::new(),
+            journal: FlaggedJournal::default(),
+            steward,
+        }
     }
 
     /// Execute one event through the full UEK pipeline.
     pub fn execute(&mut self, event: UekEvent) -> ExecuteOutcome {
         // Resolve the DFG node for this event (by kaki_id hash → label lookup is
         // deferred to future work; for now we evaluate the whole plan's attribs).
-        let attribs: Vec<FeatureAttrib> = self.plan.nodes.iter()
+        let attribs: Vec<FeatureAttrib> = self
+            .plan
+            .nodes
+            .iter()
             .flat_map(|n| n.attribs.iter().cloned())
             .collect();
 
         // Use first cluster node as the governance context (minimal kernel).
-        let ctx_node: &DfgNode = self.plan.cluster_nodes()
+        let ctx_node: &DfgNode = self
+            .plan
+            .cluster_nodes()
             .next()
             .or_else(|| self.plan.nodes.first())
             .unwrap_or_else(|| &self.plan.nodes[0]);
@@ -126,7 +143,8 @@ impl<S: DataSteward> UekKernel<S> {
             }
 
             GovernanceDecision::RequiresHuman => {
-                self.journal.record(GovernanceDecision::RequiresHuman, event);
+                self.journal
+                    .record(GovernanceDecision::RequiresHuman, event);
                 ExecuteOutcome::Escalated
             }
         }
@@ -143,8 +161,12 @@ impl<S: DataSteward> UekKernel<S> {
         }
     }
 
-    pub fn stalk_count(&self) -> usize { self.stalks.len() }
-    pub fn total_events(&self) -> usize { self.stalks.iter().map(|s| s.events.len()).sum() }
+    pub fn stalk_count(&self) -> usize {
+        self.stalks.len()
+    }
+    pub fn total_events(&self) -> usize {
+        self.stalks.iter().map(|s| s.events.len()).sum()
+    }
 }
 
 #[cfg(test)]
@@ -153,22 +175,30 @@ mod tests {
     use crate::governance::DefaultSteward;
     use crate::node::{DfgNode, NodeKind};
 
-
     fn empty_plan() -> DfgPlan {
         DfgPlan {
-            project_id:   None,
+            project_id: None,
             coord_system: "Kaki7d".into(),
-            nodes:        vec![DfgNode {
-                id: 0, kind: NodeKind::ExecutionCluster, label: "ROOT".into(),
-                sector_index: 0, condition: None, attribs: vec![],
+            nodes: vec![DfgNode {
+                id: 0,
+                kind: NodeKind::ExecutionCluster,
+                label: "ROOT".into(),
+                sector_index: 0,
+                condition: None,
+                attribs: vec![],
             }],
             edges: vec![],
         }
     }
 
     fn event(ts: u64) -> UekEvent {
-        UekEvent { kaki_id: [0u8; 16], timestamp: ts, attribute: "attr".into(),
-                   value: "val".into(), governance_score: 0.9 }
+        UekEvent {
+            kaki_id: [0u8; 16],
+            timestamp: ts,
+            attribute: "attr".into(),
+            value: "val".into(),
+            governance_score: 0.9,
+        }
     }
 
     #[test]
@@ -182,9 +212,11 @@ mod tests {
     #[test]
     fn append_only_grows_stalk() {
         let mut k = UekKernel::new(empty_plan(), DefaultSteward);
-        for i in 0..5 { k.execute(event(i)); }
+        for i in 0..5 {
+            k.execute(event(i));
+        }
         assert_eq!(k.total_events(), 5);
-        assert_eq!(k.stalk_count(), 1);  // same kaki_id
+        assert_eq!(k.stalk_count(), 1); // same kaki_id
     }
 
     #[test]

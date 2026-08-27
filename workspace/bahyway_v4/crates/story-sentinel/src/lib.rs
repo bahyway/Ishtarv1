@@ -49,8 +49,16 @@ impl StorySentinelFactors {
 /// Derive the sentinel factors directly from a StoryEngine projection.
 pub fn derive_factors(projected: &ProjectedState) -> StorySentinelFactors {
     StorySentinelFactors {
-        dead_state: if projected.state == ParticleState::Dead { 1.0 } else { 0.0 },
-        fuzzy_state: if projected.state == ParticleState::Fuzzy { 1.0 } else { 0.0 },
+        dead_state: if projected.state == ParticleState::Dead {
+            1.0
+        } else {
+            0.0
+        },
+        fuzzy_state: if projected.state == ParticleState::Fuzzy {
+            1.0
+        } else {
+            0.0
+        },
         orphan_identity: if projected.events_seen == 0 { 1.0 } else { 0.0 },
     }
 }
@@ -114,7 +122,12 @@ fn dominant_cause(f: &StorySentinelFactors) -> DriftCause {
 /// A human-readable narration for one finding — for NISABA's hologram
 /// panel and for the steward's own review queue, same role as
 /// `enbilulu::narrate`.
-pub fn narrate(uuid_hash: u32, factors: &StorySentinelFactors, phi: f32, band: StoryBand) -> String {
+pub fn narrate(
+    uuid_hash: u32,
+    factors: &StorySentinelFactors,
+    phi: f32,
+    band: StoryBand,
+) -> String {
     let reason = if factors.dead_state > 0.0 {
         "projected to DEAD (ground) state"
     } else if factors.orphan_identity > 0.0 {
@@ -150,7 +163,11 @@ pub fn scan(projected: &ProjectedState) -> Option<StorySentinelFinding> {
     let uuid_hash = projected.particle.uuid_hash();
     let alert = Alert::new(uuid_hash, severity, cause, phi);
     let narration = narrate(uuid_hash, &factors, phi, band);
-    Some(StorySentinelFinding { alert, band, narration })
+    Some(StorySentinelFinding {
+        alert,
+        band,
+        narration,
+    })
 }
 
 #[cfg(test)]
@@ -172,7 +189,10 @@ mod tests {
     #[test]
     fn weights_sum_to_one() {
         let sum: f32 = STORY_SENTINEL_WEIGHTS.iter().sum();
-        assert!((sum - 1.0).abs() < 1e-6, "weights={STORY_SENTINEL_WEIGHTS:?}");
+        assert!(
+            (sum - 1.0).abs() < 1e-6,
+            "weights={STORY_SENTINEL_WEIGHTS:?}"
+        );
     }
 
     #[test]

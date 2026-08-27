@@ -47,23 +47,23 @@ pub enum NonSargableKind {
 impl NonSargableKind {
     pub fn label(self) -> &'static str {
         match self {
-            NonSargableKind::FunctionOnColumn   => "Function on column",
+            NonSargableKind::FunctionOnColumn => "Function on column",
             NonSargableKind::ImplicitConversion => "Implicit type conversion",
-            NonSargableKind::LeadingWildcard    => "Leading wildcard LIKE",
+            NonSargableKind::LeadingWildcard => "Leading wildcard LIKE",
             NonSargableKind::ArithmeticOnColumn => "Arithmetic on column",
-            NonSargableKind::NegationTrap       => "Negation trap",
-            NonSargableKind::OrAcrossColumns    => "OR across columns",
+            NonSargableKind::NegationTrap => "Negation trap",
+            NonSargableKind::OrAcrossColumns => "OR across columns",
         }
     }
 
     pub fn red_penalty(self) -> u8 {
         match self {
-            NonSargableKind::FunctionOnColumn   => 100,
+            NonSargableKind::FunctionOnColumn => 100,
             NonSargableKind::ImplicitConversion => 120,
-            NonSargableKind::LeadingWildcard    => 80,
+            NonSargableKind::LeadingWildcard => 80,
             NonSargableKind::ArithmeticOnColumn => 60,
-            NonSargableKind::NegationTrap       => 40,
-            NonSargableKind::OrAcrossColumns    => 50,
+            NonSargableKind::NegationTrap => 40,
+            NonSargableKind::OrAcrossColumns => 50,
         }
     }
 }
@@ -74,22 +74,24 @@ impl NonSargableKind {
 #[derive(Debug, Clone)]
 pub struct PredicateAnalysis {
     /// The raw predicate SQL fragment
-    pub predicate_sql:     String,
+    pub predicate_sql: String,
     /// Whether this predicate can use an index
-    pub is_sargable:       bool,
+    pub is_sargable: bool,
     /// Why it is non-sargable (if applicable)
     pub non_sargable_kind: Option<NonSargableKind>,
     /// The sargable rewrite
-    pub sargable_rewrite:  Option<String>,
+    pub sargable_rewrite: Option<String>,
     /// Estimated page reads: non-sargable (scan) vs sargable (seek)
-    pub page_reads_scan:   u64,
-    pub page_reads_seek:   u64,
+    pub page_reads_scan: u64,
+    pub page_reads_seek: u64,
 }
 
 impl PredicateAnalysis {
     /// Fractional reduction in page reads if this predicate is made sargable.
     pub fn page_read_reduction(&self) -> f32 {
-        if self.page_reads_scan == 0 { return 0.0; }
+        if self.page_reads_scan == 0 {
+            return 0.0;
+        }
         1.0 - (self.page_reads_seek as f32 / self.page_reads_scan as f32)
     }
 }
@@ -99,12 +101,12 @@ impl PredicateAnalysis {
 /// Full Level 3 sargability analysis result.
 #[derive(Debug, Clone)]
 pub struct SargabilityAnalysis {
-    pub predicates:                   Vec<PredicateAnalysis>,
-    pub sargable_count:               usize,
-    pub non_sargable_count:           usize,
+    pub predicates: Vec<PredicateAnalysis>,
+    pub sargable_count: usize,
+    pub non_sargable_count: usize,
     /// Total page read reduction achievable by fixing all non-sargable predicates (0–100).
     pub potential_read_reduction_pct: f32,
-    pub color_contribution:           ColorId,
+    pub color_contribution: ColorId,
 }
 
 impl SargabilityAnalysis {
@@ -114,7 +116,8 @@ impl SargabilityAnalysis {
 
     /// The worst non-sargable predicate (highest scan cost).
     pub fn worst_predicate(&self) -> Option<&PredicateAnalysis> {
-        self.predicates.iter()
+        self.predicates
+            .iter()
             .filter(|p| !p.is_sargable)
             .max_by_key(|p| p.page_reads_scan)
     }
@@ -126,7 +129,7 @@ pub struct SargabilityAnalyser;
 impl SargabilityAnalyser {
     /// Analyses a list of predicates for sargability and returns Level 3 report.
     pub fn analyse(predicates: Vec<PredicateAnalysis>) -> SargabilityAnalysis {
-        let sargable_count     = predicates.iter().filter(|p|  p.is_sargable).count();
+        let sargable_count = predicates.iter().filter(|p| p.is_sargable).count();
         let non_sargable_count = predicates.iter().filter(|p| !p.is_sargable).count();
 
         // Blue channel: 255 = all sargable, 0 = none sargable
@@ -137,7 +140,8 @@ impl SargabilityAnalyser {
         };
 
         // Red channel: penalty per non-sargable predicate (capped)
-        let extra_red: u8 = predicates.iter()
+        let extra_red: u8 = predicates
+            .iter()
             .filter_map(|p| p.non_sargable_kind)
             .map(|k| k.red_penalty())
             .fold(0u8, |acc, v| acc.saturating_add(v / 2));
@@ -165,21 +169,22 @@ impl SargabilityAnalyser {
     pub fn demo_analysis() -> SargabilityAnalysis {
         Self::analyse(vec![
             PredicateAnalysis {
-                predicate_sql:     "YEAR(Sl.ModifiedDate) = 2024".into(),
-                is_sargable:       false,
+                predicate_sql: "YEAR(Sl.ModifiedDate) = 2024".into(),
+                is_sargable: false,
                 non_sargable_kind: Some(NonSargableKind::FunctionOnColumn),
-                sargable_rewrite:  Some(
-                    "Sl.ModifiedDate >= '2024-01-01' AND Sl.ModifiedDate < '2025-01-01'".into()),
-                page_reads_scan:   12_592,
-                page_reads_seek:   47,
+                sargable_rewrite: Some(
+                    "Sl.ModifiedDate >= '2024-01-01' AND Sl.ModifiedDate < '2025-01-01'".into(),
+                ),
+                page_reads_scan: 12_592,
+                page_reads_seek: 47,
             },
             PredicateAnalysis {
-                predicate_sql:     "Color.ProductID = Sl.ProductID".into(),
-                is_sargable:       true,
+                predicate_sql: "Color.ProductID = Sl.ProductID".into(),
+                is_sargable: true,
                 non_sargable_kind: None,
-                sargable_rewrite:  None,
-                page_reads_scan:   0,
-                page_reads_seek:   6,
+                sargable_rewrite: None,
+                page_reads_scan: 0,
+                page_reads_seek: 6,
             },
         ])
     }
@@ -190,8 +195,7 @@ impl SargabilityAnalyser {
             analysis.color_contribution,
             &format!(
                 "{} non-sargable predicate(s) — {:.0}% read reduction available",
-                analysis.non_sargable_count,
-                analysis.potential_read_reduction_pct,
+                analysis.non_sargable_count, analysis.potential_read_reduction_pct,
             ),
         )
     }
@@ -207,37 +211,39 @@ mod tests {
     fn demo_has_one_non_sargable_one_sargable() {
         let a = SargabilityAnalyser::demo_analysis();
         assert_eq!(a.non_sargable_count, 1);
-        assert_eq!(a.sargable_count,     1);
+        assert_eq!(a.sargable_count, 1);
     }
 
     #[test]
     fn non_sargable_lowers_blue_channel() {
-        let a = SargabilityAnalyser::analyse(vec![
-            PredicateAnalysis {
-                predicate_sql:     "YEAR(col) = 2024".into(),
-                is_sargable:       false,
-                non_sargable_kind: Some(NonSargableKind::FunctionOnColumn),
-                sargable_rewrite:  None,
-                page_reads_scan:   10_000,
-                page_reads_seek:   10,
-            },
-        ]);
-        assert!(a.color_contribution.blue < 100, "all non-sargable must lower blue");
+        let a = SargabilityAnalyser::analyse(vec![PredicateAnalysis {
+            predicate_sql: "YEAR(col) = 2024".into(),
+            is_sargable: false,
+            non_sargable_kind: Some(NonSargableKind::FunctionOnColumn),
+            sargable_rewrite: None,
+            page_reads_scan: 10_000,
+            page_reads_seek: 10,
+        }]);
+        assert!(
+            a.color_contribution.blue < 100,
+            "all non-sargable must lower blue"
+        );
     }
 
     #[test]
     fn fully_sargable_gives_high_blue() {
-        let a = SargabilityAnalyser::analyse(vec![
-            PredicateAnalysis {
-                predicate_sql:     "col = 42".into(),
-                is_sargable:       true,
-                non_sargable_kind: None,
-                sargable_rewrite:  None,
-                page_reads_scan:   100,
-                page_reads_seek:   1,
-            },
-        ]);
-        assert!(a.color_contribution.blue > 200, "fully sargable must give high blue");
+        let a = SargabilityAnalyser::analyse(vec![PredicateAnalysis {
+            predicate_sql: "col = 42".into(),
+            is_sargable: true,
+            non_sargable_kind: None,
+            sargable_rewrite: None,
+            page_reads_scan: 100,
+            page_reads_seek: 1,
+        }]);
+        assert!(
+            a.color_contribution.blue > 200,
+            "fully sargable must give high blue"
+        );
     }
 
     #[test]
@@ -252,12 +258,12 @@ mod tests {
     #[test]
     fn function_on_column_has_highest_red_penalty() {
         assert!(
-            NonSargableKind::FunctionOnColumn.red_penalty() >=
-            NonSargableKind::ArithmeticOnColumn.red_penalty()
+            NonSargableKind::FunctionOnColumn.red_penalty()
+                >= NonSargableKind::ArithmeticOnColumn.red_penalty()
         );
         assert!(
-            NonSargableKind::ImplicitConversion.red_penalty() >=
-            NonSargableKind::FunctionOnColumn.red_penalty()
+            NonSargableKind::ImplicitConversion.red_penalty()
+                >= NonSargableKind::FunctionOnColumn.red_penalty()
         );
     }
 
@@ -284,33 +290,34 @@ mod tests {
             NonSargableKind::NegationTrap,
             NonSargableKind::OrAcrossColumns,
         ];
-        for k in kinds { assert!(!k.label().is_empty(), "{k:?}"); }
+        for k in kinds {
+            assert!(!k.label().is_empty(), "{k:?}");
+        }
     }
 
     #[test]
     fn page_read_reduction_zero_when_scan_is_zero() {
         let p = PredicateAnalysis {
-            predicate_sql:     "col = 1".into(),
-            is_sargable:       true,
+            predicate_sql: "col = 1".into(),
+            is_sargable: true,
             non_sargable_kind: None,
-            sargable_rewrite:  None,
-            page_reads_scan:   0,
-            page_reads_seek:   5,
+            sargable_rewrite: None,
+            page_reads_scan: 0,
+            page_reads_seek: 5,
         };
         assert_eq!(p.page_read_reduction(), 0.0);
     }
 
     #[test]
     fn red_elevated_for_non_sargable() {
-        let a = SargabilityAnalyser::analyse(vec![
-            PredicateAnalysis {
-                predicate_sql:     "CAST(col AS VARCHAR) = @p".into(),
-                is_sargable:       false,
-                non_sargable_kind: Some(NonSargableKind::ImplicitConversion),
-                sargable_rewrite:  None,
-                page_reads_scan:   5000, page_reads_seek: 50,
-            },
-        ]);
+        let a = SargabilityAnalyser::analyse(vec![PredicateAnalysis {
+            predicate_sql: "CAST(col AS VARCHAR) = @p".into(),
+            is_sargable: false,
+            non_sargable_kind: Some(NonSargableKind::ImplicitConversion),
+            sargable_rewrite: None,
+            page_reads_scan: 5000,
+            page_reads_seek: 50,
+        }]);
         assert!(a.color_contribution.red > 50);
     }
 }

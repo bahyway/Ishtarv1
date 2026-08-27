@@ -1,15 +1,15 @@
 #![forbid(unsafe_code)]
 //! DfgPlan — the complete, translated DFG execution plan for one Hepta file.
 
-use super::node::{DfgNode, NodeId, NodeKind};
 use super::edge::DfgEdge;
+use super::node::{DfgNode, NodeId, NodeKind};
 
 /// A single EAV-style feature derived from a Hepta ATTRIB statement.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FeatureAttrib {
     pub domain: String,
-    pub key:    String,
-    pub value:  String,
+    pub key: String,
+    pub value: String,
 }
 
 /// Complete DFG plan produced by translating one `HeptaFile`.
@@ -20,10 +20,10 @@ pub struct FeatureAttrib {
 /// execution flow topology.
 #[derive(Debug, Clone)]
 pub struct DfgPlan {
-    pub project_id:   Option<String>,
+    pub project_id: Option<String>,
     pub coord_system: String,
-    pub nodes:        Vec<DfgNode>,
-    pub edges:        Vec<DfgEdge>,
+    pub nodes: Vec<DfgNode>,
+    pub edges: Vec<DfgEdge>,
 }
 
 impl DfgPlan {
@@ -44,22 +44,32 @@ impl DfgPlan {
     }
 
     pub fn root_nodes(&self) -> impl Iterator<Item = &DfgNode> {
-        self.nodes.iter().filter(|n| n.kind == NodeKind::RootGovernance)
+        self.nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::RootGovernance)
     }
 
     pub fn cluster_nodes(&self) -> impl Iterator<Item = &DfgNode> {
-        self.nodes.iter().filter(|n| n.kind == NodeKind::ExecutionCluster)
+        self.nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::ExecutionCluster)
     }
 
     pub fn container_nodes(&self) -> impl Iterator<Item = &DfgNode> {
-        self.nodes.iter().filter(|n| n.kind == NodeKind::ParticleContainer)
+        self.nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::ParticleContainer)
     }
 
     /// Total nodes.
-    pub fn node_count(&self) -> usize { self.nodes.len() }
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
 
     /// Total directed edges.
-    pub fn edge_count(&self) -> usize { self.edges.len() }
+    pub fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
 }
 
 #[cfg(test)]
@@ -70,14 +80,44 @@ mod tests {
 
     fn make_plan() -> DfgPlan {
         let nodes = vec![
-            DfgNode { id: 0, kind: NodeKind::RootGovernance,  label: "ANCHOR".into(), sector_index: 0, condition: None, attribs: vec![] },
-            DfgNode { id: 1, kind: NodeKind::ExecutionCluster, label: "MOON".into(),  sector_index: 1, condition: None, attribs: vec![] },
-            DfgNode { id: 2, kind: NodeKind::ExecutionCluster, label: "MARS".into(),  sector_index: 4, condition: Some("ELEVATED_RISK".into()), attribs: vec![] },
+            DfgNode {
+                id: 0,
+                kind: NodeKind::RootGovernance,
+                label: "ANCHOR".into(),
+                sector_index: 0,
+                condition: None,
+                attribs: vec![],
+            },
+            DfgNode {
+                id: 1,
+                kind: NodeKind::ExecutionCluster,
+                label: "MOON".into(),
+                sector_index: 1,
+                condition: None,
+                attribs: vec![],
+            },
+            DfgNode {
+                id: 2,
+                kind: NodeKind::ExecutionCluster,
+                label: "MARS".into(),
+                sector_index: 4,
+                condition: Some("ELEVATED_RISK".into()),
+                attribs: vec![],
+            },
         ];
-        let edges = vec![
-            DfgEdge { from: 1, to: 2, kind: EdgeKind::Chord72, meta: EdgeMeta::default(), target_label: "MARS".into() },
-        ];
-        DfgPlan { project_id: Some("test".into()), coord_system: "Kaki7d".into(), nodes, edges }
+        let edges = vec![DfgEdge {
+            from: 1,
+            to: 2,
+            kind: EdgeKind::Chord72,
+            meta: EdgeMeta::default(),
+            target_label: "MARS".into(),
+        }];
+        DfgPlan {
+            project_id: Some("test".into()),
+            coord_system: "Kaki7d".into(),
+            nodes,
+            edges,
+        }
     }
 
     #[test]
@@ -99,7 +139,7 @@ mod tests {
     #[test]
     fn root_cluster_counts() {
         let p = make_plan();
-        assert_eq!(p.root_nodes().count(),    1);
+        assert_eq!(p.root_nodes().count(), 1);
         assert_eq!(p.cluster_nodes().count(), 2);
         assert_eq!(p.container_nodes().count(), 0);
     }

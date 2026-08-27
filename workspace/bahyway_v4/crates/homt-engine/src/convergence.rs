@@ -20,7 +20,10 @@ pub const QUALITY_GOLDEN_BOUNDARY: f64 = 0.6;
 ///
 /// η_max = 2 / L  — from the convergence theorem.
 pub fn max_stable_step(lipschitz_constant: f64) -> f64 {
-    debug_assert!(lipschitz_constant > 0.0, "Lipschitz constant must be positive");
+    debug_assert!(
+        lipschitz_constant > 0.0,
+        "Lipschitz constant must be positive"
+    );
     2.0 / lipschitz_constant
 }
 
@@ -52,7 +55,9 @@ pub fn lipschitz_bound(samples: &[(f64, f64)]) -> Option<f64> {
     for i in 0..samples.len() {
         for j in (i + 1)..samples.len() {
             let dx = (samples[i].0 - samples[j].0).abs();
-            if dx < f64::EPSILON { continue; }
+            if dx < f64::EPSILON {
+                continue;
+            }
             let dy = (samples[i].1 - samples[j].1).abs();
             l = l.max(dy / dx);
         }
@@ -75,8 +80,8 @@ impl ConvergenceState {
     pub fn as_str(self) -> &'static str {
         match self {
             ConvergenceState::Golden => "GOLDEN",
-            ConvergenceState::Fuzzy  => "FUZZY",
-            ConvergenceState::Dead   => "DEAD",
+            ConvergenceState::Fuzzy => "FUZZY",
+            ConvergenceState::Dead => "DEAD",
         }
     }
 }
@@ -121,9 +126,9 @@ pub const ZERO_7: Matrix7 = [[0.0; 7]; 7];
 /// - `b_matrix`  — input gain matrix (amplifies control events from Adad Gate)
 /// - `control_u` — 7D control input U(t) (event/perturbation at time t)
 pub fn state_evolution(
-    state_x:   &StateVec7,
-    j_matrix:  &Matrix7,
-    b_matrix:  &Matrix7,
+    state_x: &StateVec7,
+    j_matrix: &Matrix7,
+    b_matrix: &Matrix7,
     control_u: &StateVec7,
 ) -> StateVec7 {
     let mut result = [0.0f64; 7];
@@ -137,11 +142,11 @@ pub fn state_evolution(
 
 /// Apply `state_evolution` for `steps` time steps with a constant U(t).
 pub fn trajectory(
-    initial:   &StateVec7,
-    j_matrix:  &Matrix7,
-    b_matrix:  &Matrix7,
+    initial: &StateVec7,
+    j_matrix: &Matrix7,
+    b_matrix: &Matrix7,
     control_u: &StateVec7,
-    steps:     usize,
+    steps: usize,
 ) -> Vec<StateVec7> {
     let mut states = Vec::with_capacity(steps + 1);
     states.push(*initial);
@@ -158,12 +163,12 @@ mod tests {
 
     #[test]
     fn convergence_boundaries() {
-        assert_eq!(is_converged(0.0),  ConvergenceState::Dead);
+        assert_eq!(is_converged(0.0), ConvergenceState::Dead);
         assert_eq!(is_converged(0.19), ConvergenceState::Dead);
-        assert_eq!(is_converged(0.2),  ConvergenceState::Fuzzy);
+        assert_eq!(is_converged(0.2), ConvergenceState::Fuzzy);
         assert_eq!(is_converged(0.59), ConvergenceState::Fuzzy);
-        assert_eq!(is_converged(0.6),  ConvergenceState::Golden);
-        assert_eq!(is_converged(1.0),  ConvergenceState::Golden);
+        assert_eq!(is_converged(0.6), ConvergenceState::Golden);
+        assert_eq!(is_converged(1.0), ConvergenceState::Golden);
     }
 
     #[test]
@@ -176,10 +181,12 @@ mod tests {
     #[test]
     fn lipschitz_bound_linear_function() {
         // f(x) = 3x → L = 3
-        let samples: Vec<(f64, f64)> = (0..5).map(|i| {
-            let x = i as f64;
-            (x, 3.0 * x)
-        }).collect();
+        let samples: Vec<(f64, f64)> = (0..5)
+            .map(|i| {
+                let x = i as f64;
+                (x, 3.0 * x)
+            })
+            .collect();
         let l = lipschitz_bound(&samples).unwrap();
         assert!((l - 3.0).abs() < 1e-9);
     }
@@ -208,7 +215,9 @@ mod tests {
         let x: StateVec7 = [5.0; 7];
         let u: StateVec7 = [0.0; 7];
         let x1 = state_evolution(&x, &ZERO_7, &ZERO_7, &u);
-        for v in x1 { assert_eq!(v, 0.0); }
+        for v in x1 {
+            assert_eq!(v, 0.0);
+        }
     }
 
     #[test]
@@ -226,13 +235,19 @@ mod tests {
     fn nilpotent_j_decays_state_to_zero() {
         // A nilpotent 7×7 Jordan block: J[i][i+1] = 1, everything else 0.
         let mut j: Matrix7 = [[0.0; 7]; 7];
-        for i in 0..6 { j[i][i + 1] = 1.0; }
+        for i in 0..6 {
+            j[i][i + 1] = 1.0;
+        }
 
         let mut x: StateVec7 = [1.0; 7];
         let u: StateVec7 = [0.0; 7];
-        for _ in 0..7 { x = state_evolution(&x, &j, &ZERO_7, &u); }
+        for _ in 0..7 {
+            x = state_evolution(&x, &j, &ZERO_7, &u);
+        }
         // After N steps a nilpotent N×N matrix gives zero.
-        for v in x { assert_eq!(v, 0.0); }
+        for v in x {
+            assert_eq!(v, 0.0);
+        }
     }
 
     #[test]

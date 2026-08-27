@@ -7,44 +7,51 @@
 //! same way.
 //!
 //! ## Protocol
+//! ```text
 //! One request frame in, one response frame out, per connection:
-//!   - `FLUSH`                        -> force-materialize now, respond
-//!                                       `OK:FLUSHED:<entity_count>`
-//!   - `<collection>\n<markdown...>`  -> ingest one document (categorized
+//!   - FLUSH                          -> force-materialize now, respond
+//!                                       OK:FLUSHED:<entity_count>
+//!   - <collection>\n<markdown...>    -> ingest one document (categorized
 //!                                       + chunked into RAG sections, per
-//!                                       `WriteNode::ingest_document_categorized`),
-//!                                       respond `OK:<kaki_hex>:<section_count>`.
+//!                                       WriteNode::ingest_document_categorized),
+//!                                       respond
+//!                                       OK:<kaki_hex>:<section_count>:<particle_count>.
+//!                                       particle_count is the REAL total
+//!                                       EAV-triple count journaled for this
+//!                                       document (parent + every section) --
+//!                                       not a file/document count.
 //!                                       Gated first by a pre-parse security
-//!                                       scan (`enkiddb::scan_document`,
+//!                                       scan (enkiddb::scan_document,
 //!                                       PB-206 — Musarû's byte-signature
 //!                                       scanner, the real engine behind
 //!                                       the "Nergal" visualization panel)
 //!                                       rejecting known malware/webshell/
 //!                                       dropper byte patterns with
-//!                                       `ERR:security: <detail>` before
+//!                                       ERR:security: <detail> before
 //!                                       the body is ever parsed.
-//!   - `INGEST_DIR:<path>`            -> bulk-load every `.md` file under
-//!                                       `<path>` (categorized + chunked,
-//!                                       per `WriteNode::ingest_directory_categorized_checked`),
-//!                                       respond `OK:INGESTED:<count>`.
+//!   - INGEST_DIR:<path>              -> bulk-load every .md file under
+//!                                       <path> (categorized + chunked,
+//!                                       per WriteNode::ingest_directory_categorized_checked),
+//!                                       respond OK:INGESTED:<count>.
 //!                                       Gated by the same git-based
 //!                                       team-authorship check
-//!                                       `enkiddb-cli` enforces
-//!                                       (`enkiddb::authorship`) — a file
+//!                                       enkiddb-cli enforces
+//!                                       (enkiddb::authorship) — a file
 //!                                       whose last commit author isn't
 //!                                       on the allowlist aborts the
 //!                                       whole call, responding
-//!                                       `ERR:ingest_dir: <reason>`. The
+//!                                       ERR:ingest_dir: <reason>. The
 //!                                       allowlist comes from
-//!                                       `ENKIDDB_TEAM_ALLOWLIST` if set,
+//!                                       ENKIDDB_TEAM_ALLOWLIST if set,
 //!                                       else a built-in seed
-//!                                       (`TeamAllowlist::from_env_or_seed`).
+//!                                       (TeamAllowlist::from_env_or_seed).
 //!                                       Each file is also security-scanned
 //!                                       (same PB-206 gate as above) inside
-//!                                       `WriteNode::ingest_document_from_path`
+//!                                       WriteNode::ingest_document_from_path
 //!                                       -- a hit aborts the whole call the
 //!                                       same way an unauthorized author does.
-//!   - anything else malformed        -> `ERR:<message>`
+//!   - anything else malformed        -> ERR:<message>
+//! ```
 //!
 //! ## Durability contract (v1, stated plainly)
 //! The Journal itself is in-memory only -- this process does not persist
@@ -96,7 +103,10 @@ fn tribe_id() -> u16 {
         .unwrap_or(0x7160)
 }
 fn flush_every() -> u32 {
-    env::var("FLUSH_EVERY").ok().and_then(|s| s.parse().ok()).unwrap_or(10)
+    env::var("FLUSH_EVERY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10)
 }
 
 struct SharedState {
@@ -131,7 +141,10 @@ fn main() {
         for stream in listener.incoming() {
             match stream {
                 Ok(s) => {
-                    let peer = s.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "?".into());
+                    let peer = s
+                        .peer_addr()
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|_| "?".into());
                     request_count.fetch_add(1, Ordering::Relaxed);
                     let state_ref = &state;
                     let data_dir_ref = &data_dir;
@@ -147,7 +160,12 @@ fn main() {
     });
 }
 
-fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path, flush_every: u32) -> io::Result<()> {
+fn handle(
+    mut stream: TcpStream,
+    state: &Mutex<SharedState>,
+    data_dir: &Path,
+    flush_every: u32,
+) -> io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT)))?;
     stream.set_write_timeout(Some(Duration::from_secs(WRITE_TIMEOUT)))?;
 
@@ -172,7 +190,11 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path, fl
         let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
         st.epoch += 1;
         let start_epoch = st.epoch;
-        return match st.write_node.ingest_directory_categorized_checked(Path::new(root), start_epoch, &allowlist) {
+        return match st.write_node.ingest_directory_categorized_checked(
+            Path::new(root),
+            start_epoch,
+            &allowlist,
+        ) {
             Ok(kakis) => {
                 let count = kakis.len();
                 if count > 1 {
@@ -200,12 +222,18 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path, fl
     let collection = parts.next().unwrap_or("general").trim().to_string();
     let body = parts.next().unwrap_or("");
     if body.trim().is_empty() {
-        return send(&mut stream, "ERR:missing document body after collection line");
+        return send(
+            &mut stream,
+            "ERR:missing document body after collection line",
+        );
     }
 
     let scan = enkiddb::scan_document(body.as_bytes());
     if !scan.clean {
-        eprintln!("[security] rejected collection={collection}: {}", scan.detail);
+        eprintln!(
+            "[security] rejected collection={collection}: {}",
+            scan.detail
+        );
         return send(&mut stream, &format!("ERR:security: {}", scan.detail));
     }
 
@@ -214,7 +242,9 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path, fl
     st.epoch += 1;
     let epoch = st.epoch;
     let section_count = structure.sections().len();
-    let kaki = st.write_node.ingest_document_categorized(&structure, epoch, &collection);
+    let (kaki, particle_count) =
+        st.write_node
+            .ingest_document_categorized(&structure, epoch, &collection);
     st.since_flush += 1;
 
     let should_flush = st.since_flush >= flush_every;
@@ -227,13 +257,16 @@ fn handle(mut stream: TcpStream, state: &Mutex<SharedState>, data_dir: &Path, fl
 
     let hex: String = kaki.bytes().iter().map(|b| format!("{b:02x}")).collect();
     eprintln!(
-        "[ingest] collection={collection} sections={section_count} epoch={epoch} kaki={hex}{}",
+        "[ingest] collection={collection} sections={section_count} particles={particle_count} epoch={epoch} kaki={hex}{}",
         if should_flush { " [auto-flushed]" } else { "" }
     );
-    send(&mut stream, &format!("OK:{hex}:{section_count}"))
+    send(&mut stream, &format!("OK:{hex}:{section_count}:{particle_count}"))
 }
 
-fn materialize_fresh(write_node: &WriteNode, data_dir: &Path) -> io::Result<readnode::MaterializeStats> {
+fn materialize_fresh(
+    write_node: &WriteNode,
+    data_dir: &Path,
+) -> io::Result<readnode::MaterializeStats> {
     let current = data_dir.join("current");
     let _ = fs::remove_dir_all(&current);
     fs::create_dir_all(&current)?;
@@ -254,7 +287,10 @@ fn read_frame(s: &mut TcpStream) -> io::Result<String> {
         return Ok(String::new());
     }
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     s.read_exact(&mut buf)?;

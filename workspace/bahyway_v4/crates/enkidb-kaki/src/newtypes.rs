@@ -3,8 +3,8 @@
 //! Per §13.2: lifting the physical type to the type level prevents
 //! passing an IdentityKaki where an EventKaki is expected.
 
-use bahyway_core::{BahywayError, Result};
 use crate::{Kaki, KakiRole, KakiType};
+use bahyway_core::{BahywayError, Result};
 
 macro_rules! kaki_newtype {
     ($Wrapper:ident, $variant:expr, $doc:literal) => {
@@ -25,16 +25,22 @@ macro_rules! kaki_newtype {
 
             /// Borrow the inner `Kaki`.
             #[inline]
-            pub fn kaki(&self) -> &Kaki { &self.0 }
+            pub fn kaki(&self) -> &Kaki {
+                &self.0
+            }
 
             /// Logical role encoded in κ[7].
             #[inline]
-            pub fn role(&self) -> KakiRole { self.0.kaki_role() }
+            pub fn role(&self) -> KakiRole {
+                self.0.kaki_role()
+            }
         }
 
         impl core::ops::Deref for $Wrapper {
             type Target = Kaki;
-            fn deref(&self) -> &Kaki { &self.0 }
+            fn deref(&self) -> &Kaki {
+                &self.0
+            }
         }
 
         impl core::fmt::Display for $Wrapper {

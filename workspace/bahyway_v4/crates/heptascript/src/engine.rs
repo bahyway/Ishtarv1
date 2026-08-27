@@ -25,11 +25,13 @@
 //! returned alongside the result carries the v2.0 directives so the
 //! caller (enkidu-protocol dispatcher) can act on them.
 
+use std::collections::HashMap;
+
+use akkvalue::{codec::decode as codec_decode, AkkValue};
 use bahyway_crc::crc16;
-use enkidb_journal::Journal;
 use enkidb_journal::entry::JournalEntry;
+use enkidb_journal::Journal;
 use enkidb_kaki::IdentityKaki;
-use akkvalue::{AkkValue, codec::decode as codec_decode};
 
 use crate::query::*;
 
@@ -38,7 +40,7 @@ use crate::query::*;
 /// One entity that matched all W5H2 conditions, with projected attribute values.
 #[derive(Debug, Clone)]
 pub struct MatchedEntity {
-    pub entity:    IdentityKaki,
+    pub entity: IdentityKaki,
     /// Projected `(attr_name, value)` pairs from the WHAT clause.
     pub projected: Vec<(String, AkkValue)>,
     /// Populated only for `QueryVerb::Prove` — the same WHAT projection
@@ -58,11 +60,11 @@ pub struct EpochSnapshot {
 /// Result of executing a HeptaScript W5H2 query.
 #[derive(Debug, Clone)]
 pub struct QueryResult {
-    pub matched:   Vec<MatchedEntity>,
+    pub matched: Vec<MatchedEntity>,
     /// Total candidate entities evaluated before filtering.
     pub evaluated: usize,
     /// v2.0 query plan — carries routing / governance directives for the caller.
-    pub plan:      QueryPlan,
+    pub plan: QueryPlan,
     /// The Sovereign Operation this result came from — copied straight
     /// from the query, not inferred from which optional fields below are
     /// `Some`, so a caller can tell EMIT/PROVE/SYNC/WITNESS apart from
@@ -206,19 +208,27 @@ pub struct QueryPlan {
 impl QueryPlan {
     fn from_query(q: &HeptaQuery) -> Self {
         Self {
-            node_targets: q.node.as_ref().map(|n| n.targets.clone()).unwrap_or_default(),
-            across:       q.across.clone(),
-            tiers:        q.tier.as_ref().map(|t| t.tiers.clone()).unwrap_or_default(),
-            states:       q.state.as_ref().map(|s| s.states.clone()).unwrap_or_default(),
-            nash:         q.nash.clone(),
-            pattern:      q.pattern.clone(),
-            lineage:      q.lineage.clone(),
-            gates:        q.gate.as_ref().map(|g| g.gates.clone()).unwrap_or_default(),
-            satamu:       q.satamu.clone(),
-            orbital:      q.orbital.clone(),
-            anchor:       q.anchor.clone(),
+            node_targets: q
+                .node
+                .as_ref()
+                .map(|n| n.targets.clone())
+                .unwrap_or_default(),
+            across: q.across.clone(),
+            tiers: q.tier.as_ref().map(|t| t.tiers.clone()).unwrap_or_default(),
+            states: q
+                .state
+                .as_ref()
+                .map(|s| s.states.clone())
+                .unwrap_or_default(),
+            nash: q.nash.clone(),
+            pattern: q.pattern.clone(),
+            lineage: q.lineage.clone(),
+            gates: q.gate.as_ref().map(|g| g.gates.clone()).unwrap_or_default(),
+            satamu: q.satamu.clone(),
+            orbital: q.orbital.clone(),
+            anchor: q.anchor.clone(),
             derive_station: q.derive_station.clone(),
-            abort_scan:   q.abort_scan,
+            abort_scan: q.abort_scan,
             filter_order: q.filter_order.clone(),
         }
     }
@@ -354,32 +364,44 @@ impl<'q> Aggregator<'q> {
     /// order.
     fn key_order(k: &GravityKey) -> (u8, i64, &str) {
         match k {
-            GravityKey::Band(b)   => (0, *b, ""),
-            GravityKey::Exact(s)  => (1, 0, s.as_str()),
-            GravityKey::Missing   => (2, 0, ""),
-            GravityKey::Overflow  => (3, 0, ""),
+            GravityKey::Band(b) => (0, *b, ""),
+            GravityKey::Exact(s) => (1, 0, s.as_str()),
+            GravityKey::Missing => (2, 0, ""),
+            GravityKey::Overflow => (3, 0, ""),
         }
     }
 
     fn finish(self) -> (Option<MeasureValue>, Option<GravityResult>) {
         if self.gravity.is_none() {
-            let measured = self.measure.map(|_| Self::finalize_one(&self.global, self.measure));
+            let measured = self
+                .measure
+                .map(|_| Self::finalize_one(&self.global, self.measure));
             return (measured, None);
         }
         let measure = self.measure;
         let mut groups: Vec<GravityGroup> = self
             .groups
             .into_iter()
-            .map(|(key, acc)| GravityGroup { key, count: acc.count, measure: Self::finalize_one(&acc, measure) })
+            .map(|(key, acc)| GravityGroup {
+                key,
+                count: acc.count,
+                measure: Self::finalize_one(&acc, measure),
+            })
             .collect();
         groups.sort_by(|a, b| Self::key_order(&a.key).cmp(&Self::key_order(&b.key)));
-        (None, Some(GravityResult { groups, capped: self.capped }))
+        (
+            None,
+            Some(GravityResult {
+                groups,
+                capped: self.capped,
+            }),
+        )
     }
 }
 
 fn as_f64(v: &AkkValue) -> Option<f64> {
     match v {
-        AkkValue::Int(n)   => Some(*n as f64),
+        AkkValue::Int(n) => Some(*n as f64),
         AkkValue::Float(f) => Some(*f),
         _ => None,
     }
@@ -390,11 +412,11 @@ fn as_f64(v: &AkkValue) -> Option<f64> {
 /// and compare equal as group keys.
 fn canonical_key(v: &AkkValue) -> String {
     match v {
-        AkkValue::Text(s)  => s.clone(),
-        AkkValue::Int(n)   => n.to_string(),
+        AkkValue::Text(s) => s.clone(),
+        AkkValue::Int(n) => n.to_string(),
         AkkValue::Float(f) => f.to_string(),
-        AkkValue::Bool(b)  => b.to_string(),
-        other              => format!("{other:?}"),
+        AkkValue::Bool(b) => b.to_string(),
+        other => format!("{other:?}"),
     }
 }
 
@@ -427,20 +449,16 @@ pub struct StreamStats {
 ///
 /// HOW (sort) is **not** applied in stream mode — the caller is responsible
 /// for maintaining a bounded priority queue if ordered output is required.
-pub fn execute_stream<F>(
-    query:    &HeptaQuery,
-    journal:  &Journal,
-    mut callback: F,
-) -> StreamStats
+pub fn execute_stream<F>(query: &HeptaQuery, journal: &Journal, mut callback: F) -> StreamStats
 where
     F: FnMut(MatchedEntity) -> core::ops::ControlFlow<()>,
 {
     use core::ops::ControlFlow;
 
-    let plan          = QueryPlan::from_query(query);
-    let epoch_filter  = epoch_filter_from_when(query.when.as_ref());
-    let abort_limit   = query.abort_scan;
-    let stream_limit  = match &query.how_much {
+    let plan = QueryPlan::from_query(query);
+    let epoch_filter = epoch_filter_from_when(query.when.as_ref());
+    let abort_limit = query.abort_scan;
+    let stream_limit = match &query.how_much {
         Some(HowMuchClause::Limit(n)) => Some(*n),
         _ => None,
     };
@@ -451,8 +469,8 @@ where
     let candidates = journal.all_particles();
 
     let mut evaluated = 0usize;
-    let mut matched   = 0usize;
-    let mut aborted   = false;
+    let mut matched = 0usize;
+    let mut aborted = false;
 
     'outer: for entity in &candidates {
         // ABORT_SCAN safety valve
@@ -464,7 +482,9 @@ where
         }
 
         let history = journal.read_particle_history(entity);
-        if history.is_empty() { continue; }
+        if history.is_empty() {
+            continue;
+        }
 
         // Fast orbital pre-filter: skip if no entry falls in the orbital range.
         if let Some((orb_lo, orb_hi)) = orbital_range {
@@ -472,18 +492,29 @@ where
                 let orb = e.epoch as u64;
                 orb >= orb_lo && orb <= orb_hi
             });
-            if !any_in_range { evaluated += 1; continue; }
+            if !any_in_range {
+                evaluated += 1;
+                continue;
+            }
         }
 
         evaluated += 1;
 
         let eav = build_eav_map(&history, &epoch_filter);
 
-        if !eval_where(&query.r#where, &eav) { continue; }
-        if !eval_why(&query.why, &eav)       { continue; }
+        if !eval_where(&query.r#where, &eav) {
+            continue;
+        }
+        if !eval_why(&query.why, &eav) {
+            continue;
+        }
 
         let projected = project_what(&query.what, &eav);
-        let entity_match = MatchedEntity { entity: entity.clone(), projected, history: Vec::new() };
+        let entity_match = MatchedEntity {
+            entity: *entity,
+            projected,
+            history: Vec::new(),
+        };
 
         matched += 1;
         if callback(entity_match) == ControlFlow::Break(()) {
@@ -492,11 +523,18 @@ where
 
         // LIMIT satisfied — stop early
         if let Some(lim) = stream_limit {
-            if matched >= lim { break 'outer; }
+            if matched >= lim {
+                break 'outer;
+            }
         }
     }
 
-    StreamStats { matched, evaluated, aborted, plan }
+    StreamStats {
+        matched,
+        evaluated,
+        aborted,
+        plan,
+    }
 }
 
 // ── Orbital range helper ──────────────────────────────────────────────────────
@@ -550,15 +588,73 @@ pub fn execute(query: &HeptaQuery, journal: &Journal) -> QueryResult {
     execute_over(query, journal, &candidates)
 }
 
+/// Below this many candidates, per-candidate `Journal::read_particle_
+/// history` lookups stay cheap (it's priced for an occasional live
+/// lookup, per its own doc comment). At or above it, one grouped O(n)
+/// pass over the whole journal is cheaper overall -- the same trade-off
+/// `indexed::build_indexes` already makes for its own O(n) journal read
+/// (see that function's doc comment for the real stall this exact
+/// anti-pattern caused there).
+const BULK_HISTORY_THRESHOLD: usize = 1_000;
+
 /// Read every candidate's history from `journal`. Shared by `execute`'s
 /// ABORT_SCAN-capped enumeration path and `execute_over`, so both build
 /// `(entity, history)` pairs identically.
-fn histories_for(journal: &Journal, candidates: &[IdentityKaki]) -> Vec<(IdentityKaki, Vec<JournalEntry>)> {
+///
+/// FIXED (found live running the real Phase-1 E-004 10M-particle test,
+/// docs/17_troubleshooting/TESTING_PLAYBOOK_PHASE1.md): this used to
+/// always call `journal.read_particle_history()` once per candidate --
+/// each call rescans its whole shard partition, so a large candidate set
+/// (post-ORBITAL/EAV pruning, still realistically hundreds of thousands
+/// at 10M-particle scale) turned an indexed query meant to finish in
+/// under a second into one that hadn't finished after 11+ minutes. This
+/// is the exact same O(candidates × shard_size) anti-pattern
+/// `indexed::build_indexes` already found and fixed for its own O(n)
+/// pass -- that fix was never carried over to the query-execution path
+/// until now. Below `BULK_HISTORY_THRESHOLD`, per-candidate lookups are
+/// kept (cheap, and avoids paying a full journal scan for a
+/// two-candidate query); at or above it, one grouped pass over
+/// `journal.all_entries()` builds every candidate's history in a single
+/// O(journal_size) pass instead.
+fn histories_for(
+    journal: &Journal,
+    candidates: &[IdentityKaki],
+) -> Vec<(IdentityKaki, Vec<JournalEntry>)> {
+    if candidates.len() < BULK_HISTORY_THRESHOLD {
+        return candidates
+            .iter()
+            .map(|entity| {
+                let history = journal
+                    .read_particle_history(entity)
+                    .into_iter()
+                    .cloned()
+                    .collect();
+                (*entity, history)
+            })
+            .collect();
+    }
+
+    // FIXED (found live, same real E-004 run): building history for
+    // every particle in the whole journal -- not just the real,
+    // index-pruned candidate set -- meant a query pruned down to, say,
+    // 1M of 10M particles still paid the clone/allocate cost for all
+    // 10M. The journal scan itself stays O(journal_size) (an entry could
+    // belong to any candidate, so every entry must be looked at once),
+    // but only entries whose target is actually in `candidates` are
+    // cloned and kept.
+    let wanted: std::collections::HashSet<[u8; 16]> = candidates.iter().map(|e| *e.bytes()).collect();
+    let mut by_target: HashMap<[u8; 16], Vec<JournalEntry>> = HashMap::with_capacity(wanted.len());
+    for entry in journal.all_entries() {
+        let target = entry.target_kaki.bytes();
+        if wanted.contains(target) {
+            by_target.entry(*target).or_default().push(entry.clone());
+        }
+    }
     candidates
         .iter()
         .map(|entity| {
-            let history = journal.read_particle_history(entity).into_iter().cloned().collect();
-            (entity.clone(), history)
+            let history = by_target.remove(entity.bytes()).unwrap_or_default();
+            (*entity, history)
         })
         .collect()
 }
@@ -654,9 +750,12 @@ fn evaluate_capped(
     // still runs against the query's own first WHERE condition, untouched).
     let emit_condition = WhereCondition {
         combinator: Combinator::And,
-        var:  query.who.primary.var.clone(),
+        var: query.who.primary.var.clone(),
         attr: "hist.event".to_string(),
-        test: ConditionTest::Cmp { op: Op::Eq, val: HeptaValue::Text("BIRTH".to_string()) },
+        test: ConditionTest::Cmp {
+            op: Op::Eq,
+            val: HeptaValue::Text("BIRTH".to_string()),
+        },
     };
     let effective_where: Vec<WhereCondition> = match query.verb {
         QueryVerb::Emit => {
@@ -710,35 +809,49 @@ fn evaluate_capped(
 
     let mut aggregator = Aggregator::new(query.measure.as_ref(), query.gravity.as_ref());
 
-    let mut matched: Vec<MatchedEntity> = histories.iter().filter_map(|(entity, history)| {
-        if history.is_empty() { return None; }
+    let mut matched: Vec<MatchedEntity> = histories
+        .iter()
+        .filter_map(|(entity, history)| {
+            if history.is_empty() {
+                return None;
+            }
 
-        if let Some((lo, hi)) = orbital_range {
-            let any_in_range = history.iter().any(|e| {
-                let orb = e.epoch as u64;
-                orb >= lo && orb <= hi
-            });
-            if !any_in_range { return None; }
-        }
+            if let Some((lo, hi)) = orbital_range {
+                let any_in_range = history.iter().any(|e| {
+                    let orb = e.epoch as u64;
+                    orb >= lo && orb <= hi
+                });
+                if !any_in_range {
+                    return None;
+                }
+            }
 
-        let refs: Vec<&JournalEntry> = history.iter().collect();
-        let eav = build_eav_map(&refs, &epoch_filter);
+            let refs: Vec<&JournalEntry> = history.iter().collect();
+            let eav = build_eav_map(&refs, &epoch_filter);
 
-        if !eval_where(&effective_where, &eav) { return None; }
-        if !eval_why(&query.why, &eav)         { return None; }
+            if !eval_where(&effective_where, &eav) {
+                return None;
+            }
+            if !eval_why(&query.why, &eav) {
+                return None;
+            }
 
-        aggregator.observe(&eav);
+            aggregator.observe(&eav);
 
-        let projected = project_what(&query.what, &eav);
-        let history = if want_history {
-            epoch_snapshots(&refs, &query.what, &epoch_filter)
-        } else {
-            Vec::new()
-        };
-        Some(MatchedEntity { entity: entity.clone(), projected, history })
-    })
-    .take(early_limit)
-    .collect();
+            let projected = project_what(&query.what, &eav);
+            let history = if want_history {
+                epoch_snapshots(&refs, &query.what, &epoch_filter)
+            } else {
+                Vec::new()
+            };
+            Some(MatchedEntity {
+                entity: *entity,
+                projected,
+                history,
+            })
+        })
+        .take(early_limit)
+        .collect();
 
     let (measured, grouped) = aggregator.finish();
 
@@ -771,7 +884,17 @@ fn evaluate_capped(
     };
 
     let plan = QueryPlan::from_query(query);
-    QueryResult { matched, evaluated, plan, verb: query.verb, state_fingerprint, witness_digest, measured, grouped, aborted }
+    QueryResult {
+        matched,
+        evaluated,
+        plan,
+        verb: query.verb,
+        state_fingerprint,
+        witness_digest,
+        measured,
+        grouped,
+        aborted,
+    }
 }
 
 /// `QueryVerb::Prove`'s per-epoch projection: the same WHAT projection
@@ -795,10 +918,15 @@ fn epoch_snapshots(
     let mut out = Vec::with_capacity(sorted.len());
     for entry in &sorted {
         if let Some(f) = filter {
-            if !entry_passes(entry, f) { continue; }
+            if !entry_passes(entry, f) {
+                continue;
+            }
         }
         apply_entry_to_map(&mut map, entry);
-        out.push(EpochSnapshot { epoch: entry.epoch, attrs: project_what(what, &map) });
+        out.push(EpochSnapshot {
+            epoch: entry.epoch,
+            attrs: project_what(what, &map),
+        });
     }
     out
 }
@@ -841,7 +969,11 @@ fn witness_digest(matched: &[MatchedEntity]) -> String {
             hasher.update(format!("{v:?}").as_bytes());
         }
     }
-    hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 // ── Epoch filter ──────────────────────────────────────────────────────────────
@@ -855,10 +987,10 @@ enum EpochFilter {
 
 fn epoch_filter_from_when(when: Option<&WhenClause>) -> Option<EpochFilter> {
     match when? {
-        WhenClause::AtEpoch(EpochRef::Now)    => None,
+        WhenClause::AtEpoch(EpochRef::Now) => None,
         WhenClause::AtEpoch(EpochRef::Abs(n)) => Some(EpochFilter::AtOrBefore(*n)),
-        WhenClause::BeforeEpoch(n)            => Some(EpochFilter::Before(*n)),
-        WhenClause::AfterEpoch(n)             => Some(EpochFilter::After(*n)),
+        WhenClause::BeforeEpoch(n) => Some(EpochFilter::Before(*n)),
+        WhenClause::AfterEpoch(n) => Some(EpochFilter::After(*n)),
     }
 }
 
@@ -866,8 +998,8 @@ fn entry_passes(entry: &JournalEntry, filter: &EpochFilter) -> bool {
     let ep = entry.epoch as u64;
     match filter {
         EpochFilter::AtOrBefore(n) => ep <= *n,
-        EpochFilter::Before(n)     => ep < *n,
-        EpochFilter::After(n)      => ep > *n,
+        EpochFilter::Before(n) => ep < *n,
+        EpochFilter::After(n) => ep > *n,
     }
 }
 
@@ -883,7 +1015,9 @@ fn build_eav_map(history: &[&JournalEntry], filter: &Option<EpochFilter>) -> Eav
     let mut map: EavMap = Vec::new();
     for entry in &sorted {
         if let Some(f) = filter {
-            if !entry_passes(entry, f) { continue; }
+            if !entry_passes(entry, f) {
+                continue;
+            }
         }
         apply_entry_to_map(&mut map, entry);
     }
@@ -956,13 +1090,15 @@ fn get_val<'m>(map: &'m EavMap, attr: &str) -> Option<&'m AkkValue> {
 // ── WHERE evaluation ──────────────────────────────────────────────────────────
 
 fn eval_where(conditions: &[WhereCondition], map: &EavMap) -> bool {
-    if conditions.is_empty() { return true; }
+    if conditions.is_empty() {
+        return true;
+    }
     let mut ok = eval_where_cond(&conditions[0], map);
     for c in &conditions[1..] {
         let this = eval_where_cond(c, map);
         ok = match c.combinator {
             Combinator::And => ok && this,
-            Combinator::Or  => ok || this,
+            Combinator::Or => ok || this,
         };
     }
     ok
@@ -970,36 +1106,38 @@ fn eval_where(conditions: &[WhereCondition], map: &EavMap) -> bool {
 
 fn eval_where_cond(c: &WhereCondition, map: &EavMap) -> bool {
     match &c.test {
-        ConditionTest::Exists    => get_val(map, &c.attr).is_some(),
+        ConditionTest::Exists => get_val(map, &c.attr).is_some(),
         ConditionTest::NotExists => get_val(map, &c.attr).is_none(),
-        ConditionTest::Cmp { op, val } => {
-            match get_val(map, &c.attr) {
-                None         => false,
-                Some(stored) => compare_val(stored, op, val),
-            }
-        }
+        ConditionTest::Cmp { op, val } => match get_val(map, &c.attr) {
+            None => false,
+            Some(stored) => compare_val(stored, op, val),
+        },
     }
 }
 
 fn compare_val(stored: &AkkValue, op: &Op, expected: &HeptaValue) -> bool {
     match (stored, expected) {
-        (AkkValue::Text(a),  HeptaValue::Text(b))  => apply_op_ord(op, a.as_str(), b.as_str()),
-        (AkkValue::Int(a),   HeptaValue::Int(b))   => apply_op_i64(op, *a, *b),
+        (AkkValue::Text(a), HeptaValue::Text(b)) => apply_op_ord(op, a.as_str(), b.as_str()),
+        (AkkValue::Int(a), HeptaValue::Int(b)) => apply_op_i64(op, *a, *b),
         (AkkValue::Float(a), HeptaValue::Float(b)) => apply_op_f64(op, *a, *b),
-        (AkkValue::Float(a), HeptaValue::Int(b))   => apply_op_f64(op, *a, *b as f64),
-        (AkkValue::Int(a),   HeptaValue::Float(b)) => apply_op_f64(op, *a as f64, *b),
-        (AkkValue::Bool(a),  HeptaValue::Bool(b))  => match op { Op::Eq => a == b, Op::Neq => a != b, _ => false },
-        (AkkValue::Null,     HeptaValue::Null)      => matches!(op, Op::Eq),
+        (AkkValue::Float(a), HeptaValue::Int(b)) => apply_op_f64(op, *a, *b as f64),
+        (AkkValue::Int(a), HeptaValue::Float(b)) => apply_op_f64(op, *a as f64, *b),
+        (AkkValue::Bool(a), HeptaValue::Bool(b)) => match op {
+            Op::Eq => a == b,
+            Op::Neq => a != b,
+            _ => false,
+        },
+        (AkkValue::Null, HeptaValue::Null) => matches!(op, Op::Eq),
         _ => false,
     }
 }
 
 fn apply_op_ord<T: Ord>(op: &Op, a: T, b: T) -> bool {
     match op {
-        Op::Eq  => a == b,
+        Op::Eq => a == b,
         Op::Neq => a != b,
-        Op::Gt  => a > b,
-        Op::Lt  => a < b,
+        Op::Gt => a > b,
+        Op::Lt => a < b,
         Op::Gte => a >= b,
         Op::Lte => a <= b,
     }
@@ -1011,10 +1149,10 @@ fn apply_op_i64(op: &Op, a: i64, b: i64) -> bool {
 
 fn apply_op_f64(op: &Op, a: f64, b: f64) -> bool {
     match op {
-        Op::Eq  => (a - b).abs() < f64::EPSILON,
+        Op::Eq => (a - b).abs() < f64::EPSILON,
         Op::Neq => (a - b).abs() >= f64::EPSILON,
-        Op::Gt  => a > b,
-        Op::Lt  => a < b,
+        Op::Gt => a > b,
+        Op::Lt => a < b,
         Op::Gte => a >= b,
         Op::Lte => a <= b,
     }
@@ -1023,14 +1161,16 @@ fn apply_op_f64(op: &Op, a: f64, b: f64) -> bool {
 // ── WHY evaluation ────────────────────────────────────────────────────────────
 
 fn eval_why(conditions: &[WhyCondition], map: &EavMap) -> bool {
-    if conditions.is_empty() { return true; }
+    if conditions.is_empty() {
+        return true;
+    }
     let mut ok = eval_why_cond(&conditions[0], map);
     for c in &conditions[1..] {
         let this = eval_why_cond(c, map);
         let comb = why_combinator(c);
         ok = match comb {
             Combinator::And => ok && this,
-            Combinator::Or  => ok || this,
+            Combinator::Or => ok || this,
         };
     }
     ok
@@ -1038,47 +1178,46 @@ fn eval_why(conditions: &[WhyCondition], map: &EavMap) -> bool {
 
 fn why_combinator(c: &WhyCondition) -> &Combinator {
     match c {
-        WhyCondition::Lane          { combinator, .. } => combinator,
-        WhyCondition::QualityByte   { combinator, .. } => combinator,
-        WhyCondition::AttrExists    { combinator, .. } => combinator,
+        WhyCondition::Lane { combinator, .. } => combinator,
+        WhyCondition::QualityByte { combinator, .. } => combinator,
+        WhyCondition::AttrExists { combinator, .. } => combinator,
         WhyCondition::AttrNotExists { combinator, .. } => combinator,
     }
 }
 
 fn eval_why_cond(c: &WhyCondition, map: &EavMap) -> bool {
     match c {
-        WhyCondition::Lane { op, val, .. } => {
-            match get_val(map, "lane") {
-                Some(AkkValue::Text(s)) => apply_op_ord(op, s.as_str(), lane_str(val)),
-                _                       => false,
-            }
-        }
-        WhyCondition::QualityByte { op, val, .. } => {
-            match get_val(map, "quality.byte") {
-                Some(AkkValue::Int(n)) => apply_op_i64(op, *n, *val as i64),
-                _                      => false,
-            }
-        }
-        WhyCondition::AttrExists    { attr, .. } => get_val(map, attr).is_some(),
+        WhyCondition::Lane { op, val, .. } => match get_val(map, "lane") {
+            Some(AkkValue::Text(s)) => apply_op_ord(op, s.as_str(), lane_str(val)),
+            _ => false,
+        },
+        WhyCondition::QualityByte { op, val, .. } => match get_val(map, "quality.byte") {
+            Some(AkkValue::Int(n)) => apply_op_i64(op, *n, *val as i64),
+            _ => false,
+        },
+        WhyCondition::AttrExists { attr, .. } => get_val(map, attr).is_some(),
         WhyCondition::AttrNotExists { attr, .. } => get_val(map, attr).is_none(),
     }
 }
 
 fn lane_str(lane: &LaneValue) -> &'static str {
     match lane {
-        LaneValue::Gold   => "Gold",
+        LaneValue::Gold => "Gold",
         LaneValue::Silver => "Silver",
-        LaneValue::White  => "White",
-        LaneValue::Gray   => "Gray",
-        LaneValue::Red    => "Red",
-        LaneValue::Black  => "Black",
+        LaneValue::White => "White",
+        LaneValue::Gray => "Gray",
+        LaneValue::Red => "Red",
+        LaneValue::Black => "Black",
     }
 }
 
 // ── Projection ────────────────────────────────────────────────────────────────
 
 fn project_what(what: &Option<WhatClause>, map: &EavMap) -> Vec<(String, AkkValue)> {
-    let what = match what { Some(w) => w, None => return vec![] };
+    let what = match what {
+        Some(w) => w,
+        None => return vec![],
+    };
     let mut out = Vec::new();
     for proj in &what.projections {
         if proj.attrs.is_empty() {
@@ -1100,25 +1239,31 @@ fn project_what(what: &Option<WhatClause>, map: &EavMap) -> Vec<(String, AkkValu
 
 // ── Sorting ───────────────────────────────────────────────────────────────────
 
-fn sort_by_attr(entities: &mut Vec<MatchedEntity>, attr: &str, descending: bool) {
+fn sort_by_attr(entities: &mut [MatchedEntity], attr: &str, descending: bool) {
     entities.sort_by(|a, b| {
         let va = a.projected.iter().find(|(n, _)| n == attr).map(|(_, v)| v);
         let vb = b.projected.iter().find(|(n, _)| n == attr).map(|(_, v)| v);
         let ord = cmp_akk(va, vb);
-        if descending { ord.reverse() } else { ord }
+        if descending {
+            ord.reverse()
+        } else {
+            ord
+        }
     });
 }
 
 fn cmp_akk(a: Option<&AkkValue>, b: Option<&AkkValue>) -> core::cmp::Ordering {
     match (a, b) {
-        (None, None)   => core::cmp::Ordering::Equal,
-        (None, _)      => core::cmp::Ordering::Greater,
-        (_, None)      => core::cmp::Ordering::Less,
+        (None, None) => core::cmp::Ordering::Equal,
+        (None, _) => core::cmp::Ordering::Greater,
+        (_, None) => core::cmp::Ordering::Less,
         (Some(x), Some(y)) => match (x, y) {
-            (AkkValue::Int(i),   AkkValue::Int(j))   => i.cmp(j),
-            (AkkValue::Float(i), AkkValue::Float(j)) => i.partial_cmp(j).unwrap_or(core::cmp::Ordering::Equal),
-            (AkkValue::Text(i),  AkkValue::Text(j))  => i.cmp(j),
-            (AkkValue::Bool(i),  AkkValue::Bool(j))  => i.cmp(j),
+            (AkkValue::Int(i), AkkValue::Int(j)) => i.cmp(j),
+            (AkkValue::Float(i), AkkValue::Float(j)) => {
+                i.partial_cmp(j).unwrap_or(core::cmp::Ordering::Equal)
+            }
+            (AkkValue::Text(i), AkkValue::Text(j)) => i.cmp(j),
+            (AkkValue::Bool(i), AkkValue::Bool(j)) => i.cmp(j),
             _ => core::cmp::Ordering::Equal,
         },
     }
@@ -1130,11 +1275,11 @@ fn cmp_akk(a: Option<&AkkValue>, b: Option<&AkkValue>) -> core::cmp::Ordering {
 mod tests {
     use super::*;
     use crate::parser::parse_query;
+    use akkvalue::codec::encode as codec_encode;
     use bahyway_core::TribeId;
     use enkidb_journal::entry::EavTriple;
     use enkidb_journal::Journal;
-    use enkidb_kaki::{EventKaki, KakiRole, mint::KakiMinter};
-    use akkvalue::codec::encode as codec_encode;
+    use enkidb_kaki::{mint::KakiMinter, EventKaki, KakiRole};
 
     fn make_journal(tribe: TribeId) -> (Journal, KakiMinter) {
         (Journal::new(64), KakiMinter::new(tribe))
@@ -1142,17 +1287,19 @@ mod tests {
 
     fn push_eav(
         jnl: &mut Journal,
-        m:   &KakiMinter,
+        m: &KakiMinter,
         target: &IdentityKaki,
         epoch: u32,
         attrs: &[(&str, AkkValue)],
     ) {
         let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
-        let eav: Vec<EavTriple> = attrs.iter().map(|(name, val)| {
-            EavTriple::new(attr_hash(name), codec_encode(val))
-        }).collect();
+        let eav: Vec<EavTriple> = attrs
+            .iter()
+            .map(|(name, val)| EavTriple::new(attr_hash(name), codec_encode(val)))
+            .collect();
         use enkidb_journal::entry::JournalEntry;
-        jnl.append(JournalEntry::new(ek, target.clone(), epoch, eav)).unwrap();
+        jnl.append(JournalEntry::new(ek, target.clone(), epoch, eav))
+            .unwrap();
     }
 
     fn new_entity(m: &KakiMinter) -> IdentityKaki {
@@ -1168,8 +1315,20 @@ mod tests {
 
         let e1 = new_entity(&m);
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
-        push_eav(&mut jnl, &m, &e2, 1, &[("city.name", AkkValue::Text("Baghdad".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[("city.name", AkkValue::Text("Najaf".into()))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e2,
+            1,
+            &[("city.name", AkkValue::Text("Baghdad".into()))],
+        );
 
         let q = parse_query("WHO T.E\nWHERE E[city.name] = \"Najaf\"").unwrap();
         let res = execute(&q, &jnl);
@@ -1213,8 +1372,20 @@ mod tests {
 
         let e1 = new_entity(&m);
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[("leak.reported", AkkValue::Bool(true))]);
-        push_eav(&mut jnl, &m, &e2, 1, &[("status", AkkValue::Text("ok".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[("leak.reported", AkkValue::Bool(true))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e2,
+            1,
+            &[("status", AkkValue::Text("ok".into()))],
+        );
 
         let q = parse_query("WHO T.E\nWHERE E[leak.reported] EXISTS").unwrap();
         let res = execute(&q, &jnl);
@@ -1228,8 +1399,20 @@ mod tests {
 
         let e1 = new_entity(&m);
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[("archive.date", AkkValue::Int(1000))]);
-        push_eav(&mut jnl, &m, &e2, 1, &[("status",       AkkValue::Text("active".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[("archive.date", AkkValue::Int(1000))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e2,
+            1,
+            &[("status", AkkValue::Text("active".into()))],
+        );
 
         let q = parse_query("WHO T.E\nWHERE E[archive.date] NOT EXISTS").unwrap();
         let res = execute(&q, &jnl);
@@ -1244,16 +1427,29 @@ mod tests {
 
         let e1 = new_entity(&m);
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[
-            ("city.name",  AkkValue::Text("Najaf".into())),
-            ("birth.year", AkkValue::Int(1970)),
-        ]);
-        push_eav(&mut jnl, &m, &e2, 1, &[
-            ("city.name",  AkkValue::Text("Najaf".into())),
-            ("birth.year", AkkValue::Int(2000)),
-        ]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[
+                ("city.name", AkkValue::Text("Najaf".into())),
+                ("birth.year", AkkValue::Int(1970)),
+            ],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e2,
+            1,
+            &[
+                ("city.name", AkkValue::Text("Najaf".into())),
+                ("birth.year", AkkValue::Int(2000)),
+            ],
+        );
 
-        let q = parse_query("WHO T.E\nWHERE E[city.name] = \"Najaf\" AND E[birth.year] < 1990").unwrap();
+        let q = parse_query("WHO T.E\nWHERE E[city.name] = \"Najaf\" AND E[birth.year] < 1990")
+            .unwrap();
         let res = execute(&q, &jnl);
         assert_eq!(res.matched.len(), 1);
         assert_eq!(*res.matched[0].entity.bytes(), *e1.bytes());
@@ -1268,8 +1464,20 @@ mod tests {
         let e = new_entity(&m);
 
         // Write at epoch 5 (active) then override at epoch 10 (archived)
-        push_eav(&mut jnl, &m, &e, 5,  &[("status", AkkValue::Text("active".into()))]);
-        push_eav(&mut jnl, &m, &e, 10, &[("status", AkkValue::Text("archived".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            5,
+            &[("status", AkkValue::Text("active".into()))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            10,
+            &[("status", AkkValue::Text("archived".into()))],
+        );
 
         // At epoch 7: should see "active" (epoch 5 entry only)
         let q = parse_query("WHO T.E\nWHERE E[status] = \"active\"\nWHEN AT EPOCH 7").unwrap();
@@ -1291,7 +1499,13 @@ mod tests {
 
         let e1 = new_entity(&m);
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[("quality.byte", AkkValue::Int(200))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[("quality.byte", AkkValue::Int(200))],
+        );
         push_eav(&mut jnl, &m, &e2, 1, &[("quality.byte", AkkValue::Int(50))]);
 
         let q = parse_query("WHO T.E\nWHY QUALITY_BYTE > 150").unwrap();
@@ -1306,8 +1520,20 @@ mod tests {
 
         let e1 = new_entity(&m);
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[("lane", AkkValue::Text("Gold".into()))]);
-        push_eav(&mut jnl, &m, &e2, 1, &[("lane", AkkValue::Text("Black".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[("lane", AkkValue::Text("Gold".into()))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e2,
+            1,
+            &[("lane", AkkValue::Text("Black".into()))],
+        );
 
         let q = parse_query("WHO T.E\nWHY LANE != Black").unwrap();
         let res = execute(&q, &jnl);
@@ -1321,19 +1547,29 @@ mod tests {
         let tribe = TribeId::from_u16(0x0005);
         let (mut jnl, m) = make_journal(tribe);
         let e = new_entity(&m);
-        push_eav(&mut jnl, &m, &e, 1, &[
-            ("name.given", AkkValue::Text("Bahaa".into())),
-            ("city.name",  AkkValue::Text("Najaf".into())),
-            ("score",      AkkValue::Float(9.5)),
-        ]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            1,
+            &[
+                ("name.given", AkkValue::Text("Bahaa".into())),
+                ("city.name", AkkValue::Text("Najaf".into())),
+                ("score", AkkValue::Float(9.5)),
+            ],
+        );
 
         let q = parse_query("WHO T.E\nWHAT E[name.given, city.name]").unwrap();
         let res = execute(&q, &jnl);
         assert_eq!(res.matched.len(), 1);
         let proj = &res.matched[0].projected;
         assert_eq!(proj.len(), 2);
-        assert!(proj.iter().any(|(k, v)| k == "name.given" && *v == AkkValue::Text("Bahaa".into())));
-        assert!(proj.iter().any(|(k, v)| k == "city.name"  && *v == AkkValue::Text("Najaf".into())));
+        assert!(proj
+            .iter()
+            .any(|(k, v)| k == "name.given" && *v == AkkValue::Text("Bahaa".into())));
+        assert!(proj
+            .iter()
+            .any(|(k, v)| k == "city.name" && *v == AkkValue::Text("Najaf".into())));
     }
 
     // ── HOW + HOW_MUCH ────────────────────────────────────────────────────────
@@ -1394,9 +1630,18 @@ mod tests {
         }
         let q = parse_query("WHO T.E\nABORT_SCAN 3").unwrap();
         let res = execute(&q, &jnl);
-        assert_eq!(res.evaluated, 3, "must stop looking at candidates once the cap is hit");
-        assert!(res.aborted, "cap (3) is below the real candidate count (10) -- must report aborted");
-        assert!(res.matched.len() <= 3, "cannot match more than it evaluated");
+        assert_eq!(
+            res.evaluated, 3,
+            "must stop looking at candidates once the cap is hit"
+        );
+        assert!(
+            res.aborted,
+            "cap (3) is below the real candidate count (10) -- must report aborted"
+        );
+        assert!(
+            res.matched.len() <= 3,
+            "cannot match more than it evaluated"
+        );
     }
 
     #[test]
@@ -1409,7 +1654,10 @@ mod tests {
         }
         let q = parse_query("WHO T.E\nABORT_SCAN 5000000").unwrap();
         let res = execute(&q, &jnl);
-        assert_eq!(res.evaluated, 5, "a cap well above the real candidate count must not truncate the scan");
+        assert_eq!(
+            res.evaluated, 5,
+            "a cap well above the real candidate count must not truncate the scan"
+        );
         assert!(!res.aborted);
         assert_eq!(res.matched.len(), 5);
     }
@@ -1458,19 +1706,33 @@ mod tests {
         let (mut jnl, m) = make_journal(tribe);
 
         let born = new_entity(&m);
-        push_eav(&mut jnl, &m, &born, 1, &[
-            ("meta.title", AkkValue::Text("Born One".into())),
-            ("hist.event", AkkValue::Text("BIRTH".into())),
-        ]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &born,
+            1,
+            &[
+                ("meta.title", AkkValue::Text("Born One".into())),
+                ("hist.event", AkkValue::Text("BIRTH".into())),
+            ],
+        );
         let updated_only = new_entity(&m);
-        push_eav(&mut jnl, &m, &updated_only, 1, &[
-            ("meta.title", AkkValue::Text("Never Birthed".into())),
-        ]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &updated_only,
+            1,
+            &[("meta.title", AkkValue::Text("Never Birthed".into()))],
+        );
 
         let q = parse_query("EMIT\nWHO T.E\nWHAT E[meta.title]").unwrap();
         assert_eq!(q.verb, QueryVerb::Emit);
         let res = execute(&q, &jnl);
-        assert_eq!(res.matched.len(), 1, "only the BIRTH-tagged particle should match");
+        assert_eq!(
+            res.matched.len(),
+            1,
+            "only the BIRTH-tagged particle should match"
+        );
         assert_eq!(*res.matched[0].entity.bytes(), *born.bytes());
     }
 
@@ -1480,23 +1742,40 @@ mod tests {
         let (mut jnl, m) = make_journal(tribe);
 
         let matches_both = new_entity(&m);
-        push_eav(&mut jnl, &m, &matches_both, 1, &[
-            ("meta.collection", AkkValue::Text("component".into())),
-            ("hist.event",      AkkValue::Text("BIRTH".into())),
-        ]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &matches_both,
+            1,
+            &[
+                ("meta.collection", AkkValue::Text("component".into())),
+                ("hist.event", AkkValue::Text("BIRTH".into())),
+            ],
+        );
         let wrong_collection = new_entity(&m);
-        push_eav(&mut jnl, &m, &wrong_collection, 1, &[
-            ("meta.collection", AkkValue::Text("roadmap".into())),
-            ("hist.event",      AkkValue::Text("BIRTH".into())),
-        ]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &wrong_collection,
+            1,
+            &[
+                ("meta.collection", AkkValue::Text("roadmap".into())),
+                ("hist.event", AkkValue::Text("BIRTH".into())),
+            ],
+        );
         let not_born = new_entity(&m);
-        push_eav(&mut jnl, &m, &not_born, 1, &[
-            ("meta.collection", AkkValue::Text("component".into())),
-        ]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &not_born,
+            1,
+            &[("meta.collection", AkkValue::Text("component".into()))],
+        );
 
         let q = parse_query(
             "EMIT\nWHO T.E\nWHAT E[meta.collection]\nWHERE E[meta.collection] = \"component\"",
-        ).unwrap();
+        )
+        .unwrap();
         let res = execute(&q, &jnl);
         assert_eq!(res.matched.len(), 1);
         assert_eq!(*res.matched[0].entity.bytes(), *matches_both.bytes());
@@ -1507,8 +1786,20 @@ mod tests {
         let tribe = TribeId::from_u16(0x0103);
         let (mut jnl, m) = make_journal(tribe);
         let e = new_entity(&m);
-        push_eav(&mut jnl, &m, &e, 1, &[("status", AkkValue::Text("active".into()))]);
-        push_eav(&mut jnl, &m, &e, 5, &[("status", AkkValue::Text("archived".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            1,
+            &[("status", AkkValue::Text("active".into()))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            5,
+            &[("status", AkkValue::Text("archived".into()))],
+        );
 
         let q = parse_query("PROVE\nWHO T.E\nWHAT E[status]\nWHERE E[status] EXISTS").unwrap();
         assert_eq!(q.verb, QueryVerb::Prove);
@@ -1517,14 +1808,23 @@ mod tests {
 
         let m0 = &res.matched[0];
         // Current-state projection is unaffected — still last-write-wins.
-        assert_eq!(m0.projected, vec![("status".to_string(), AkkValue::Text("archived".into()))]);
+        assert_eq!(
+            m0.projected,
+            vec![("status".to_string(), AkkValue::Text("archived".into()))]
+        );
 
         // But the full history is now available too, oldest first.
         assert_eq!(m0.history.len(), 2);
         assert_eq!(m0.history[0].epoch, 1);
-        assert_eq!(m0.history[0].attrs, vec![("status".to_string(), AkkValue::Text("active".into()))]);
+        assert_eq!(
+            m0.history[0].attrs,
+            vec![("status".to_string(), AkkValue::Text("active".into()))]
+        );
         assert_eq!(m0.history[1].epoch, 5);
-        assert_eq!(m0.history[1].attrs, vec![("status".to_string(), AkkValue::Text("archived".into()))]);
+        assert_eq!(
+            m0.history[1].attrs,
+            vec![("status".to_string(), AkkValue::Text("archived".into()))]
+        );
     }
 
     #[test]
@@ -1532,12 +1832,27 @@ mod tests {
         let tribe = TribeId::from_u16(0x0104);
         let (mut jnl, m) = make_journal(tribe);
         let e = new_entity(&m);
-        push_eav(&mut jnl, &m, &e, 1, &[("status", AkkValue::Text("active".into()))]);
-        push_eav(&mut jnl, &m, &e, 5, &[("status", AkkValue::Text("archived".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            1,
+            &[("status", AkkValue::Text("active".into()))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            5,
+            &[("status", AkkValue::Text("archived".into()))],
+        );
 
         let q = parse_query("WHO T.E\nWHAT E[status]\nWHERE E[status] EXISTS").unwrap();
         let res = execute(&q, &jnl);
-        assert!(res.matched[0].history.is_empty(), "ORBIT must not pay PROVE's per-epoch cost");
+        assert!(
+            res.matched[0].history.is_empty(),
+            "ORBIT must not pay PROVE's per-epoch cost"
+        );
     }
 
     #[test]
@@ -1546,16 +1861,32 @@ mod tests {
         let (mut jnl, m) = make_journal(tribe);
         let e1 = new_entity(&m);
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
-        push_eav(&mut jnl, &m, &e2, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[("city.name", AkkValue::Text("Najaf".into()))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e2,
+            1,
+            &[("city.name", AkkValue::Text("Najaf".into()))],
+        );
 
-        let q = parse_query("SYNC\nWHO T.E\nWHAT E[city.name]\nWHERE E[city.name] = \"Najaf\"").unwrap();
+        let q = parse_query("SYNC\nWHO T.E\nWHAT E[city.name]\nWHERE E[city.name] = \"Najaf\"")
+            .unwrap();
         assert_eq!(q.verb, QueryVerb::Sync);
         let res_a = execute(&q, &jnl);
         let res_b = execute(&q, &jnl);
         assert_eq!(res_a.matched.len(), 2);
         assert!(res_a.state_fingerprint.is_some());
-        assert!(res_a.witness_digest.is_none(), "SYNC must not also compute WITNESS's digest");
+        assert!(
+            res_a.witness_digest.is_none(),
+            "SYNC must not also compute WITNESS's digest"
+        );
         // Two independent scans of the identical matched set agree exactly,
         // regardless of internal HashMap/journal iteration order.
         assert_eq!(res_a.state_fingerprint, res_b.state_fingerprint);
@@ -1566,16 +1897,32 @@ mod tests {
         let tribe = TribeId::from_u16(0x0106);
         let (mut jnl, m) = make_journal(tribe);
         let e1 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[("city.name", AkkValue::Text("Najaf".into()))],
+        );
 
-        let q = parse_query("SYNC\nWHO T.E\nWHAT E[city.name]\nWHERE E[city.name] = \"Najaf\"").unwrap();
+        let q = parse_query("SYNC\nWHO T.E\nWHAT E[city.name]\nWHERE E[city.name] = \"Najaf\"")
+            .unwrap();
         let before = execute(&q, &jnl).state_fingerprint;
 
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e2, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e2,
+            1,
+            &[("city.name", AkkValue::Text("Najaf".into()))],
+        );
         let after = execute(&q, &jnl).state_fingerprint;
 
-        assert_ne!(before, after, "adding a matching particle must change the fingerprint");
+        assert_ne!(
+            before, after,
+            "adding a matching particle must change the fingerprint"
+        );
     }
 
     #[test]
@@ -1583,23 +1930,50 @@ mod tests {
         let tribe = TribeId::from_u16(0x0107);
         let (mut jnl, m) = make_journal(tribe);
         let e = new_entity(&m);
-        push_eav(&mut jnl, &m, &e, 1, &[("meta.title", AkkValue::Text("Alpha".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            1,
+            &[("meta.title", AkkValue::Text("Alpha".into()))],
+        );
 
-        let q = parse_query("WITNESS\nWHO T.E\nWHAT E[meta.title]\nWHERE E[meta.title] EXISTS").unwrap();
+        let q = parse_query("WITNESS\nWHO T.E\nWHAT E[meta.title]\nWHERE E[meta.title] EXISTS")
+            .unwrap();
         assert_eq!(q.verb, QueryVerb::Witness);
         let res_a = execute(&q, &jnl);
         let res_b = execute(&q, &jnl);
-        assert!(res_a.state_fingerprint.is_none(), "WITNESS must not also compute SYNC's fingerprint");
-        let digest_a = res_a.witness_digest.expect("witness digest must be present");
+        assert!(
+            res_a.state_fingerprint.is_none(),
+            "WITNESS must not also compute SYNC's fingerprint"
+        );
+        let digest_a = res_a
+            .witness_digest
+            .expect("witness digest must be present");
         assert_eq!(digest_a.len(), 64, "SHA3-256 hex digest is 64 characters");
-        assert_eq!(Some(digest_a.clone()), res_b.witness_digest, "identical content must reproduce identically");
+        assert_eq!(
+            Some(digest_a.clone()),
+            res_b.witness_digest,
+            "identical content must reproduce identically"
+        );
 
         // Change the underlying content without changing which entity
         // matches -- the digest must move even though the matched SET
         // (what SYNC cares about) would not have.
-        push_eav(&mut jnl, &m, &e, 2, &[("meta.title", AkkValue::Text("Alpha Revised".into()))]);
-        let digest_b = execute(&q, &jnl).witness_digest.expect("witness digest must be present");
-        assert_ne!(digest_a, digest_b, "changed content must change the digest even for the same entity");
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            2,
+            &[("meta.title", AkkValue::Text("Alpha Revised".into()))],
+        );
+        let digest_b = execute(&q, &jnl)
+            .witness_digest
+            .expect("witness digest must be present");
+        assert_ne!(
+            digest_a, digest_b,
+            "changed content must change the digest even for the same entity"
+        );
     }
 
     // ── MEASURE / GRAVITY (v2.1 aggregate clauses) ───────────────────────────
@@ -1650,7 +2024,11 @@ mod tests {
         let q = parse_query("WHO T.E\nHOW_MUCH LIMIT 3\nMEASURE DENSE").unwrap();
         let res = execute(&q, &jnl);
         assert_eq!(res.matched.len(), 3, "returned rows honor LIMIT");
-        assert_eq!(res.measured, Some(MeasureValue::Dense(20)), "the aggregate must not");
+        assert_eq!(
+            res.measured,
+            Some(MeasureValue::Dense(20)),
+            "the aggregate must not"
+        );
     }
 
     #[test]
@@ -1677,8 +2055,20 @@ mod tests {
         let (mut jnl, m) = make_journal(tribe);
         let e1 = new_entity(&m);
         let e2 = new_entity(&m);
-        push_eav(&mut jnl, &m, &e1, 1, &[("orientation", AkkValue::Float(3.14))]);
-        push_eav(&mut jnl, &m, &e2, 1, &[("orientation", AkkValue::Float(-3.14))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e1,
+            1,
+            &[("orientation", AkkValue::Float(3.14))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e2,
+            1,
+            &[("orientation", AkkValue::Float(-3.14))],
+        );
 
         let q = parse_query("WHO T.E\nMEASURE ROTOR_MEAN E[orientation]").unwrap();
         let res = execute(&q, &jnl);
@@ -1686,7 +2076,10 @@ mod tests {
             Some(MeasureValue::RotorMean(v)) => v,
             other => panic!("expected RotorMean, got {other:?}"),
         };
-        assert!(mean.abs() > 3.0, "circular mean should stay near +-pi, got {mean}");
+        assert!(
+            mean.abs() > 3.0,
+            "circular mean should stay near +-pi, got {mean}"
+        );
     }
 
     #[test]
@@ -1720,19 +2113,31 @@ mod tests {
         // must fold into Overflow, never grow group memory past the cap.
         for station in ["A", "B", "C", "D", "E"] {
             let e = new_entity(&m);
-            push_eav(&mut jnl, &m, &e, 1, &[("station", AkkValue::Text(station.into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[("station", AkkValue::Text(station.into()))],
+            );
         }
 
         let q = parse_query("WHO T.E\nGRAVITY E[station] MAX_GROUPS 2\nMEASURE DENSE").unwrap();
         let res = execute(&q, &jnl);
         let grouped = res.grouped.expect("gravity result present");
-        assert!(grouped.capped, "cap must have been hit with 5 distinct values against MAX_GROUPS 2");
+        assert!(
+            grouped.capped,
+            "cap must have been hit with 5 distinct values against MAX_GROUPS 2"
+        );
         // At most 2 real Exact groups + 1 Overflow sentinel -- bounded
         // regardless of the attribute's true 5-value cardinality.
         assert!(grouped.groups.len() <= 3, "{:?}", grouped.groups);
         assert!(grouped.groups.iter().any(|g| g.key == GravityKey::Overflow));
         let total: usize = grouped.groups.iter().map(|g| g.count).sum();
-        assert_eq!(total, 5, "every matched particle must land in some group, none silently dropped");
+        assert_eq!(
+            total, 5,
+            "every matched particle must land in some group, none silently dropped"
+        );
     }
 
     #[test]
@@ -1741,7 +2146,13 @@ mod tests {
         let (mut jnl, m) = make_journal(tribe);
         for station in ["A", "B"] {
             let e = new_entity(&m);
-            push_eav(&mut jnl, &m, &e, 1, &[("station", AkkValue::Text(station.into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[("station", AkkValue::Text(station.into()))],
+            );
         }
 
         let q = parse_query("WHO T.E\nGRAVITY E[station] MAX_GROUPS 10\nMEASURE DENSE").unwrap();
@@ -1756,14 +2167,23 @@ mod tests {
         let tribe = TribeId::from_u16(0x0208);
         let (mut jnl, m) = make_journal(tribe);
         let has_station = new_entity(&m);
-        push_eav(&mut jnl, &m, &has_station, 1, &[("station", AkkValue::Text("A".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &has_station,
+            1,
+            &[("station", AkkValue::Text("A".into()))],
+        );
         let no_station = new_entity(&m);
         push_eav(&mut jnl, &m, &no_station, 1, &[("other", AkkValue::Int(1))]);
 
         let q = parse_query("WHO T.E\nGRAVITY E[station] MAX_GROUPS 10\nMEASURE DENSE").unwrap();
         let res = execute(&q, &jnl);
         let grouped = res.grouped.expect("gravity result present");
-        assert!(grouped.groups.iter().any(|g| g.key == GravityKey::Missing && g.count == 1));
+        assert!(grouped
+            .groups
+            .iter()
+            .any(|g| g.key == GravityKey::Missing && g.count == 1));
         let total: usize = grouped.groups.iter().map(|g| g.count).sum();
         assert_eq!(total, 2);
     }

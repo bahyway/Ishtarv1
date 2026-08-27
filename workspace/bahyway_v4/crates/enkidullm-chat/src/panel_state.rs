@@ -18,20 +18,20 @@ pub enum MessageKind {
 impl MessageKind {
     pub fn prefix(&self) -> &str {
         match self {
-            Self::User      => "You",
+            Self::User => "You",
             Self::Assistant => "𒀭 TamuzAI",
-            Self::System    => "⚙ System",
-            Self::Command   => "⚡ Quick",
-            Self::Error     => "⚠ Error",
+            Self::System => "⚙ System",
+            Self::Command => "⚡ Quick",
+            Self::Error => "⚠ Error",
         }
     }
     pub fn color_rgb(&self) -> [u8; 3] {
         match self {
-            Self::User      => [100, 180, 255],  // blue
-            Self::Assistant => [255, 215, 0],    // gold (𒁾 sovereign color)
-            Self::System    => [150, 150, 150],  // gray
-            Self::Command   => [0, 255, 136],    // green (GEM color)
-            Self::Error     => [255, 80, 80],    // red
+            Self::User => [100, 180, 255],    // blue
+            Self::Assistant => [255, 215, 0], // gold (𒁾 sovereign color)
+            Self::System => [150, 150, 150],  // gray
+            Self::Command => [0, 255, 136],   // green (GEM color)
+            Self::Error => [255, 80, 80],     // red
         }
     }
 }
@@ -39,26 +39,46 @@ impl MessageKind {
 /// A single message in the panel display.
 #[derive(Debug, Clone)]
 pub struct PanelMessage {
-    pub kind:    MessageKind,
+    pub kind: MessageKind,
     pub content: String,
-    pub epoch:   u64,
+    pub epoch: u64,
 }
 
 impl PanelMessage {
     pub fn user(content: &str, epoch: u64) -> Self {
-        Self { kind: MessageKind::User, content: content.to_string(), epoch }
+        Self {
+            kind: MessageKind::User,
+            content: content.to_string(),
+            epoch,
+        }
     }
     pub fn assistant(content: &str, epoch: u64) -> Self {
-        Self { kind: MessageKind::Assistant, content: content.to_string(), epoch }
+        Self {
+            kind: MessageKind::Assistant,
+            content: content.to_string(),
+            epoch,
+        }
     }
     pub fn system(content: &str) -> Self {
-        Self { kind: MessageKind::System, content: content.to_string(), epoch: 0 }
+        Self {
+            kind: MessageKind::System,
+            content: content.to_string(),
+            epoch: 0,
+        }
     }
     pub fn command(content: &str) -> Self {
-        Self { kind: MessageKind::Command, content: content.to_string(), epoch: 0 }
+        Self {
+            kind: MessageKind::Command,
+            content: content.to_string(),
+            epoch: 0,
+        }
     }
     pub fn error(content: &str) -> Self {
-        Self { kind: MessageKind::Error, content: content.to_string(), epoch: 0 }
+        Self {
+            kind: MessageKind::Error,
+            content: content.to_string(),
+            epoch: 0,
+        }
     }
 }
 
@@ -66,17 +86,17 @@ impl PanelMessage {
 #[derive(Debug)]
 pub struct TamuzPanelState {
     /// Chat message history for display.
-    pub messages:     Vec<PanelMessage>,
+    pub messages: Vec<PanelMessage>,
     /// Current input field text.
-    pub input:        String,
+    pub input: String,
     /// Model loading status.
     pub model_status: ModelStatus,
     /// Whether inference is currently running.
-    pub is_thinking:  bool,
+    pub is_thinking: bool,
     /// Current session ID.
-    pub session_id:   u64,
+    pub session_id: u64,
     /// Epoch counter.
-    epoch:            u64,
+    epoch: u64,
     /// Whether to show the download instructions.
     pub show_download: bool,
 }
@@ -84,19 +104,19 @@ pub struct TamuzPanelState {
 impl TamuzPanelState {
     pub fn new() -> Self {
         let mut state = Self {
-            messages:      Vec::new(),
-            input:         String::new(),
-            model_status:  ModelStatus::NotFound,
-            is_thinking:   false,
-            session_id:    1,
-            epoch:         0,
+            messages: Vec::new(),
+            input: String::new(),
+            model_status: ModelStatus::NotFound,
+            is_thinking: false,
+            session_id: 1,
+            epoch: 0,
             show_download: false,
         };
         // Welcome message
         state.messages.push(PanelMessage::system(
             "𒀭 TamuzAI — Sovereign Offline MetaEngine\n\
              Type !help for quick commands or ask anything about BahyWay.Ecosystem v4.0.\n\
-             Load DeepSeek-Coder-6.7B-Q4_K_M.gguf to enable full AI responses."
+             Load DeepSeek-Coder-6.7B-Q4_K_M.gguf to enable full AI responses.",
         ));
         state
     }
@@ -110,7 +130,8 @@ impl TamuzPanelState {
     /// Add an assistant response.
     pub fn push_assistant(&mut self, content: &str) {
         self.epoch += 1;
-        self.messages.push(PanelMessage::assistant(content, self.epoch));
+        self.messages
+            .push(PanelMessage::assistant(content, self.epoch));
     }
 
     /// Add a system notification.
@@ -131,7 +152,8 @@ impl TamuzPanelState {
     /// Clear all messages except the welcome.
     pub fn clear(&mut self) {
         self.messages.clear();
-        self.messages.push(PanelMessage::system("Conversation cleared. 𒁾"));
+        self.messages
+            .push(PanelMessage::system("Conversation cleared. 𒁾"));
     }
 
     /// Take the current input and clear the field.
@@ -143,7 +165,8 @@ impl TamuzPanelState {
 
     /// Recent messages for context window (last N).
     pub fn recent_context(&self, n: usize) -> Vec<(&str, &str)> {
-        self.messages.iter()
+        self.messages
+            .iter()
             .rev()
             .take(n)
             .filter(|m| m.kind == MessageKind::User || m.kind == MessageKind::Assistant)
@@ -154,10 +177,16 @@ impl TamuzPanelState {
             .collect()
     }
 
-    pub fn message_count(&self) -> usize { self.messages.len() }
+    pub fn message_count(&self) -> usize {
+        self.messages.len()
+    }
 }
 
-impl Default for TamuzPanelState { fn default() -> Self { Self::new() } }
+impl Default for TamuzPanelState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -201,9 +230,9 @@ mod tests {
 
     #[test]
     fn message_kind_colors_are_distinct() {
-        let user  = MessageKind::User.color_rgb();
-        let asst  = MessageKind::Assistant.color_rgb();
-        let err   = MessageKind::Error.color_rgb();
+        let user = MessageKind::User.color_rgb();
+        let asst = MessageKind::Assistant.color_rgb();
+        let err = MessageKind::Error.color_rgb();
         assert_ne!(user, asst);
         assert_ne!(user, err);
     }

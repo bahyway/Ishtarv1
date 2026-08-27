@@ -15,7 +15,7 @@ pub struct StageId(pub &'static str);
 #[derive(Debug, Clone, Copy)]
 pub struct QualitySnapshot {
     /// H(P) × 240 at entry to this stage.
-    pub b11_in:  u8,
+    pub b11_in: u8,
     /// H(P) × 240 at exit from this stage.
     pub b11_out: u8,
 }
@@ -23,17 +23,17 @@ pub struct QualitySnapshot {
 /// One hop in a particle's journey from source to target.
 #[derive(Debug, Clone)]
 pub struct LineageHop {
-    pub stage:        StageId,
-    pub source_id:    Option<SourceId>,
+    pub stage: StageId,
+    pub source_id: Option<SourceId>,
     /// FNV-1a of the input record bytes — proof of what entered the stage.
-    pub input_hash:   u64,
+    pub input_hash: u64,
     /// FNV-1a of the output record bytes — proof of what left the stage.
-    pub output_hash:  u64,
-    pub quality:      QualitySnapshot,
+    pub output_hash: u64,
+    pub quality: QualitySnapshot,
     /// Monotonic epoch when this hop was recorded.
-    pub epoch:        u32,
+    pub epoch: u32,
     /// Optional human-readable annotation (e.g. rule that fired).
-    pub annotation:   Option<String>,
+    pub annotation: Option<String>,
 }
 
 impl LineageHop {
@@ -45,7 +45,15 @@ impl LineageHop {
         quality: QualitySnapshot,
         epoch: u32,
     ) -> Self {
-        LineageHop { stage, source_id, input_hash, output_hash, quality, epoch, annotation: None }
+        LineageHop {
+            stage,
+            source_id,
+            input_hash,
+            output_hash,
+            quality,
+            epoch,
+            annotation: None,
+        }
     }
 
     pub fn with_annotation(mut self, note: impl Into<String>) -> Self {
@@ -67,7 +75,9 @@ pub struct LineageChain {
 }
 
 impl LineageChain {
-    pub fn new() -> Self { LineageChain { hops: Vec::new() } }
+    pub fn new() -> Self {
+        LineageChain { hops: Vec::new() }
+    }
 
     /// Append a hop — always append, never modify existing hops.
     pub fn push(&mut self, hop: LineageHop) {
@@ -80,7 +90,9 @@ impl LineageChain {
     }
 
     /// Total number of stages this particle passed through.
-    pub fn depth(&self) -> usize { self.hops.len() }
+    pub fn depth(&self) -> usize {
+        self.hops.len()
+    }
 
     /// Final quality score after all stages.
     pub fn final_b11(&self) -> Option<u8> {
@@ -98,9 +110,12 @@ impl LineageChain {
         for (i, hop) in self.hops.iter().enumerate() {
             out.push_str(&format!(
                 "  [{i:02}] stage={} epoch={} B11:{}->{} hash:{:x}->{:x}",
-                hop.stage.0, hop.epoch,
-                hop.quality.b11_in, hop.quality.b11_out,
-                hop.input_hash, hop.output_hash,
+                hop.stage.0,
+                hop.epoch,
+                hop.quality.b11_in,
+                hop.quality.b11_out,
+                hop.input_hash,
+                hop.output_hash,
             ));
             if let Some(note) = &hop.annotation {
                 out.push_str(&format!(" ({note})"));
@@ -156,7 +171,7 @@ mod tests {
     fn push_increments_depth() {
         let mut chain = LineageChain::new();
         chain.push(make_hop("validate", 180, 200, 1));
-        chain.push(make_hop("enrich",   200, 210, 2));
+        chain.push(make_hop("enrich", 200, 210, 2));
         assert_eq!(chain.depth(), 2);
     }
 
@@ -164,7 +179,7 @@ mod tests {
     fn final_b11_is_last_hop_out() {
         let mut chain = LineageChain::new();
         chain.push(make_hop("validate", 150, 170, 1));
-        chain.push(make_hop("enrich",   170, 205, 2));
+        chain.push(make_hop("enrich", 170, 205, 2));
         assert_eq!(chain.final_b11(), Some(205));
     }
 

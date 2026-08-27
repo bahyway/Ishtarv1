@@ -1,0 +1,120 @@
+---
+# ============================================================================
+# PB-DATA-003 — Harvest Iraq: hyperspectral + SAR witnesses of the homeland
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series
+# Purpose    : Bring REAL Iraq data onto the shelf, receipted:
+#              (1) EMIT L2A reflectance + L2B mineral granules over declared
+#                  Iraqi areas (Najaf/Wadi al-Salam; the Marshes) via
+#                  earthaccess — EMIT targets arid dust-source regions and
+#                  Iraq sits squarely in its 52N-52S mask. EMIT-10 minerals
+#                  include gypsum and calcite: the very stones of Najaf.
+#              (2) Sentinel-1 SLC over the same areas via ASF for sovereign
+#                  PSI (EGMS does NOT cover Iraq — the Kinu Amendment's own
+#                  network must be forged from these).
+#              (3) Notes for Hyperion (EarthExplorer, 2000-2017 archive) and
+#                  EnMAP/PRISMA (registration portals) — browser rites.
+#              Then NANSHE-ONTOGRAPH-002 (Iraq) may be forged by PB-HSI-006's
+#              forge on the first EMIT cube.
+# Requires   : NASA Earthdata account; `pip install earthaccess`; user token
+#              via --extra-vars "edl_user=... edl_pass=..." or ~/.netrc
+# Discipline : CSR-08. Append-only shelf; sha256 receipts; no receipt, no road.
+# ============================================================================
+
+- name: "PB-DATA-003 :: Harvest Iraq (EMIT + Sentinel-1), receipted"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    shelf: "/opt/bahyway/v4/data/iraq"
+    ledger_path: "/opt/bahyway/v4/data/LEDGER-DATA.tsv"
+    # Declared witness areas (lon_min, lat_min, lon_max, lat_max):
+    areas:
+      - { name: "najaf_wadi_al_salam", bbox: "44.20,31.90,44.55,32.10" }
+      - { name: "central_marshes",     bbox: "46.80,30.80,47.60,31.40" }
+    emit_temporal: "2022-08-01,2026-08-01"
+    max_granules_per_area: 2
+
+  tasks:
+
+    - name: "WITNESS :: shelf exists"
+      ansible.builtin.file:
+        path: "{{ shelf }}"
+        state: directory
+        mode: "0755"
+
+    - name: "WITNESS :: earthaccess present"
+      ansible.builtin.command: python3 -c "import earthaccess"
+      register: ea
+      changed_when: false
+      failed_when: false
+
+    - name: "JUDGE :: refuse without earthaccess"
+      ansible.builtin.assert:
+        that: ea.rc == 0
+        fail_msg: "REFUSED — pip install earthaccess first; the harvest needs its net."
+
+    - name: "MOVE :: search + download EMIT L2A reflectance per area (earthaccess)"
+      ansible.builtin.shell: |
+        python3 - << 'PY'
+        import earthaccess, os
+        earthaccess.login(strategy="netrc")  # or interactive on first run
+        bbox=tuple(float(x) for x in "{{ item.bbox }}".split(","))
+        res=earthaccess.search_data(short_name="EMITL2ARFL",
+             bounding_box=bbox, temporal=tuple("{{ emit_temporal }}".split(",")),
+             count={{ max_granules_per_area }})
+        os.makedirs("{{ shelf }}/{{ item.name }}", exist_ok=True)
+        files=earthaccess.download(res, "{{ shelf }}/{{ item.name }}")
+        print("downloaded:", files)
+        PY
+      loop: "{{ areas }}"
+      loop_control: {label: "{{ item.name }}"}
+      register: emit_dl
+      changed_when: true
+
+    - name: "MOVE :: also fetch EMIT L2B minerals for Najaf (gypsum/calcite witness)"
+      ansible.builtin.shell: |
+        python3 - << 'PY'
+        import earthaccess, os
+        earthaccess.login(strategy="netrc")
+        res=earthaccess.search_data(short_name="EMITL2BMIN",
+             bounding_box=(44.20,31.90,44.55,32.10),
+             temporal=tuple("{{ emit_temporal }}".split(",")), count=1)
+        os.makedirs("{{ shelf }}/najaf_wadi_al_salam", exist_ok=True)
+        print(earthaccess.download(res, "{{ shelf }}/najaf_wadi_al_salam"))
+        PY
+      changed_when: true
+
+    - name: "MOVE :: receipt every harvested file (sha256 Kaniku)"
+      ansible.builtin.shell: |
+        cd "{{ shelf }}" && find . -type f \( -name "*.nc" -o -name "*.zip" \) -exec sha256sum {} \;
+      register: receipts
+      changed_when: false
+
+    - name: "STAGE :: ensure data ledger exists"
+      ansible.builtin.copy:
+        dest: "{{ ledger_path }}"
+        content: "archive\tharvested_utc\tsha256\tsource\tstatus\n"
+        force: false
+        mode: "0644"
+
+    - name: "STAGE :: append receipts"
+      ansible.builtin.lineinfile:
+        path: "{{ ledger_path }}"
+        line: "{{ item.split()[1] }}\t{{ ansible_date_time.iso8601 }}\t{{ item.split()[0] }}\tEMIT-LPDAAC\tSEALED-REAL-IRAQ"
+        insertafter: EOF
+      loop: "{{ receipts.stdout_lines }}"
+      loop_control: {label: "{{ item.split()[1] | default('?') }}"}
+      when: receipts.stdout_lines | length > 0
+
+    - name: "STAGE :: browser rites (recorded, not automated)"
+      ansible.builtin.debug:
+        msg:
+          - "SENTINEL-1 SLC (for sovereign Iraqi PSI — EGMS does not reach Iraq):"
+          - "  search.asf.alaska.edu · dataset Sentinel-1 · SLC · draw the Najaf/Marshes AOIs · Earthdata login"
+          - "HYPERION archive (2000-2017 Iraq scenes): earthexplorer.usgs.gov · EO-1 Hyperion"
+          - "EnMAP: planning.enmap.org + geoservice.dlr.de (registration) · PRISMA: prisma.asi.it (registration)"
+          - "NEXT :: run PB-HSI-006's forge on the first EMIT cube -> NANSHE-ONTOGRAPH-002 (IRAQ):"
+          - "  python3 ontograph_forge.py --cube <EMIT nc converted to mat/npy> --out {{ shelf }}/NANSHE-ONTOGRAPH-002"
+          - "DOCTRINE :: The first queryable pattern archive of Iraqi ground — forged by an Iraqi hand. 𒁾"

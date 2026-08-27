@@ -3,12 +3,8 @@
 
 use super::{
     adapters::{
-        eea_waterbase::EeaWaterbaseAdapter,
-        generic::GenericAdapter,
-        noaa_adios::NoaaAdiosAdapter,
-        noaa_incident::NoaaIncidentAdapter,
-        open_meteo::OpenMeteoAdapter,
-        openaq::OpenAqAdapter,
+        eea_waterbase::EeaWaterbaseAdapter, generic::GenericAdapter, noaa_adios::NoaaAdiosAdapter,
+        noaa_incident::NoaaIncidentAdapter, open_meteo::OpenMeteoAdapter, openaq::OpenAqAdapter,
     },
     detector::DetectionResult,
     router::ImportPayload,
@@ -22,7 +18,7 @@ use std::collections::HashMap;
 // ─────────────────────────────────────────────────────────────
 
 pub trait SourceAdapter: Send + Sync {
-    fn name(&self)        -> &'static str;
+    fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
     fn supported_formats(&self) -> &[super::router::PayloadFormat];
     fn normalize(
@@ -41,13 +37,15 @@ pub struct AdapterRegistry {
 
 impl Default for AdapterRegistry {
     fn default() -> Self {
-        let mut r = Self { adapters: HashMap::new() };
-        r.register(Box::new(OpenAqAdapter::default()));
-        r.register(Box::new(EeaWaterbaseAdapter::default()));
-        r.register(Box::new(NoaaIncidentAdapter::default()));
-        r.register(Box::new(NoaaAdiosAdapter::default()));
-        r.register(Box::new(OpenMeteoAdapter::default()));
-        r.register(Box::new(GenericAdapter::default()));
+        let mut r = Self {
+            adapters: HashMap::new(),
+        };
+        r.register(Box::new(OpenAqAdapter));
+        r.register(Box::new(EeaWaterbaseAdapter));
+        r.register(Box::new(NoaaIncidentAdapter));
+        r.register(Box::new(NoaaAdiosAdapter));
+        r.register(Box::new(OpenMeteoAdapter));
+        r.register(Box::new(GenericAdapter));
         r
     }
 }
@@ -91,17 +89,19 @@ impl AdapterRegistry {
         }
 
         // Priority 2: domain + format heuristic (known source without direct hint match)
-        use crate::domain::PollutionDomain;
         use super::router::PayloadFormat;
+        use crate::domain::PollutionDomain;
 
         let top = detection.top_domain();
         let candidate = match (&top, &payload.format) {
-            (PollutionDomain::Air,   PayloadFormat::JsonArray | PayloadFormat::NdJson) => "openaq",
-            (PollutionDomain::Air,   PayloadFormat::Csv       | PayloadFormat::Tsv)   => "open_meteo",
-            (PollutionDomain::Water, PayloadFormat::Csv       | PayloadFormat::Tsv)   => "eea_waterbase",
+            (PollutionDomain::Air, PayloadFormat::JsonArray | PayloadFormat::NdJson) => "openaq",
+            (PollutionDomain::Air, PayloadFormat::Csv | PayloadFormat::Tsv) => "open_meteo",
+            (PollutionDomain::Water, PayloadFormat::Csv | PayloadFormat::Tsv) => "eea_waterbase",
             (PollutionDomain::Water, PayloadFormat::JsonArray | PayloadFormat::NdJson) => "generic",
-            (PollutionDomain::Oil,   PayloadFormat::Csv       | PayloadFormat::Tsv)   => "noaa_incident",
-            (PollutionDomain::Oil,   PayloadFormat::JsonArray | PayloadFormat::NdJson) => "noaa_adios",
+            (PollutionDomain::Oil, PayloadFormat::Csv | PayloadFormat::Tsv) => "noaa_incident",
+            (PollutionDomain::Oil, PayloadFormat::JsonArray | PayloadFormat::NdJson) => {
+                "noaa_adios"
+            }
         };
 
         if self.adapters.contains_key(candidate) {

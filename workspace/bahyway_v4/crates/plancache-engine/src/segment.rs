@@ -17,7 +17,10 @@ pub struct Segment {
 
 impl Segment {
     pub fn new(journal_watermark_offset: u64, built_at_millis: u64) -> Self {
-        Segment { journal_watermark_offset, built_at_millis }
+        Segment {
+            journal_watermark_offset,
+            built_at_millis,
+        }
     }
 
     /// Journal always wins: a segment is condemned the moment the journal's
@@ -39,7 +42,10 @@ impl Segment {
 /// judge a federated join by its freshest engine alone. Returns `None` for
 /// an empty slice (nothing to join).
 pub fn federated_staleness_ms(segments: &[Segment], now_millis: u64) -> Option<u64> {
-    segments.iter().map(|s| now_millis.saturating_sub(s.built_at_millis)).max()
+    segments
+        .iter()
+        .map(|s| now_millis.saturating_sub(s.built_at_millis))
+        .max()
 }
 
 #[cfg(test)]
@@ -62,7 +68,11 @@ mod tests {
 
     #[test]
     fn federated_staleness_is_governed_by_the_stalest_segment() {
-        let segments = [Segment::new(1, 100), Segment::new(2, 500), Segment::new(3, 900)];
+        let segments = [
+            Segment::new(1, 100),
+            Segment::new(2, 500),
+            Segment::new(3, 900),
+        ];
         // ages at now=1000: 900, 500, 100 -- the federated freshness is the
         // WORST (oldest) age, i.e. the maximum age value.
         assert_eq!(federated_staleness_ms(&segments, 1_000), Some(900));

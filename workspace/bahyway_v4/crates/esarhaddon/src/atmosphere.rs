@@ -25,10 +25,10 @@ impl GasSpecies {
     /// CH₄: LEL fraction (0–1.0); CO/H₂S: ppm; PM2.5: µg/m³.
     pub fn lethal_threshold(&self) -> f32 {
         match self {
-            Self::Methane            => 0.05,   // 5% v/v LEL
-            Self::CarbonMonoxide     => 1200.0, // ppm
-            Self::HydrogenSulphide   => 500.0,  // ppm
-            Self::ParticulateMatter  => 500.0,  // µg/m³
+            Self::Methane => 0.05,            // 5% v/v LEL
+            Self::CarbonMonoxide => 1200.0,   // ppm
+            Self::HydrogenSulphide => 500.0,  // ppm
+            Self::ParticulateMatter => 500.0, // µg/m³
         }
     }
 }
@@ -56,7 +56,12 @@ impl AtmosphericThreat {
             return Err(EsarhaddonError::InvalidConcentration(concentration));
         }
         let lethality_fraction = concentration / species.lethal_threshold();
-        Ok(Self { species, concentration, lethality_fraction, hepta_cell })
+        Ok(Self {
+            species,
+            concentration,
+            lethality_fraction,
+            hepta_cell,
+        })
     }
 
     /// Returns true if concentration exceeds the sovereign lethal threshold.

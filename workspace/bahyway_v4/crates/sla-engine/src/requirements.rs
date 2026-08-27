@@ -34,28 +34,28 @@ pub enum ComplianceDomain {
 impl ComplianceDomain {
     pub fn as_str(self) -> &'static str {
         match self {
-            ComplianceDomain::GdprPrivacy          => "GDPR / Privacy",
-            ComplianceDomain::EncryptionAtRest     => "Encryption at Rest",
-            ComplianceDomain::KeyManagement        => "Key Management",
-            ComplianceDomain::NetworkSecurity      => "Network Security",
-            ComplianceDomain::OperationalSecurity  => "Operational Security",
-            ComplianceDomain::NajafPrivacy         => "NajafEngine Privacy",
-            ComplianceDomain::WpdInfrastructure    => "WPD Infrastructure",
-            ComplianceDomain::GovernanceAssurance  => "Governance & Assurance",
+            ComplianceDomain::GdprPrivacy => "GDPR / Privacy",
+            ComplianceDomain::EncryptionAtRest => "Encryption at Rest",
+            ComplianceDomain::KeyManagement => "Key Management",
+            ComplianceDomain::NetworkSecurity => "Network Security",
+            ComplianceDomain::OperationalSecurity => "Operational Security",
+            ComplianceDomain::NajafPrivacy => "NajafEngine Privacy",
+            ComplianceDomain::WpdInfrastructure => "WPD Infrastructure",
+            ComplianceDomain::GovernanceAssurance => "Governance & Assurance",
         }
     }
 
     /// Icon code for HTML rendering (emoji-safe single char).
     pub fn icon(self) -> &'static str {
         match self {
-            ComplianceDomain::GdprPrivacy          => "&#x1F512;",  // lock
-            ComplianceDomain::EncryptionAtRest     => "&#x1F510;",  // locked with key
-            ComplianceDomain::KeyManagement        => "&#x1F511;",  // key
-            ComplianceDomain::NetworkSecurity      => "&#x1F6E1;",  // shield
-            ComplianceDomain::OperationalSecurity  => "&#x26A0;",   // warning
-            ComplianceDomain::NajafPrivacy         => "&#x1F54C;",  // mosque (closest available)
-            ComplianceDomain::WpdInfrastructure    => "&#x1F6B0;",  // water pipe
-            ComplianceDomain::GovernanceAssurance  => "&#x2705;",   // checkmark
+            ComplianceDomain::GdprPrivacy => "&#x1F512;", // lock
+            ComplianceDomain::EncryptionAtRest => "&#x1F510;", // locked with key
+            ComplianceDomain::KeyManagement => "&#x1F511;", // key
+            ComplianceDomain::NetworkSecurity => "&#x1F6E1;", // shield
+            ComplianceDomain::OperationalSecurity => "&#x26A0;", // warning
+            ComplianceDomain::NajafPrivacy => "&#x1F54C;", // mosque (closest available)
+            ComplianceDomain::WpdInfrastructure => "&#x1F6B0;", // water pipe
+            ComplianceDomain::GovernanceAssurance => "&#x2705;", // checkmark
         }
     }
 
@@ -63,14 +63,14 @@ impl ComplianceDomain {
     /// Mandatory domains (GDPR, Encryption) have higher weight.
     pub fn weight(self) -> u8 {
         match self {
-            ComplianceDomain::GdprPrivacy          => 240, // blocking — must pass
-            ComplianceDomain::EncryptionAtRest     => 220,
-            ComplianceDomain::KeyManagement        => 200,
-            ComplianceDomain::NetworkSecurity      => 200,
-            ComplianceDomain::OperationalSecurity  => 160,
-            ComplianceDomain::NajafPrivacy         => 240, // blocking for NajafEngine
-            ComplianceDomain::WpdInfrastructure    => 180,
-            ComplianceDomain::GovernanceAssurance  => 140,
+            ComplianceDomain::GdprPrivacy => 240, // blocking — must pass
+            ComplianceDomain::EncryptionAtRest => 220,
+            ComplianceDomain::KeyManagement => 200,
+            ComplianceDomain::NetworkSecurity => 200,
+            ComplianceDomain::OperationalSecurity => 160,
+            ComplianceDomain::NajafPrivacy => 240, // blocking for NajafEngine
+            ComplianceDomain::WpdInfrastructure => 180,
+            ComplianceDomain::GovernanceAssurance => 140,
         }
     }
 }
@@ -81,18 +81,18 @@ impl ComplianceDomain {
 #[derive(Debug, Clone, Copy)]
 pub struct SlaRequirement {
     /// Unique requirement ID within the BahyWay catalog.
-    pub id:          u16,
-    pub domain:      ComplianceDomain,
-    pub name:        &'static str,
+    pub id: u16,
+    pub domain: ComplianceDomain,
+    pub name: &'static str,
     pub description: &'static str,
     /// Weight within the domain (0–240).  Higher = more impact on domain score.
-    pub weight:      u8,
+    pub weight: u8,
     /// If `true`, scoring below `MANDATORY_THRESHOLD` blocks go-live entirely.
-    pub mandatory:   bool,
+    pub mandatory: bool,
     /// Associated WAYv4.0 `.akk` policy file, if any.
-    pub akk_policy:  Option<&'static str>,
+    pub akk_policy: Option<&'static str>,
     /// Recommended action if this requirement is not implemented.
-    pub gap_action:  &'static str,
+    pub gap_action: &'static str,
 }
 
 // ── Complete Requirements Catalog ─────────────────────────────────────────────
@@ -418,6 +418,8 @@ pub fn requirement_by_id(id: u16) -> Option<&'static SlaRequirement> {
 }
 
 /// All requirements for a specific domain.
-pub fn requirements_for_domain(domain: ComplianceDomain) -> impl Iterator<Item = &'static SlaRequirement> {
+pub fn requirements_for_domain(
+    domain: ComplianceDomain,
+) -> impl Iterator<Item = &'static SlaRequirement> {
     ALL_REQUIREMENTS.iter().filter(move |r| r.domain == domain)
 }

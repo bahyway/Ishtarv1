@@ -12,15 +12,10 @@
 use egui::{Color32, RichText, ScrollArea};
 use naming_registry::{seed, NamingEntry, NamingStatus};
 
+#[derive(Default)]
 pub struct GlossaryState {
     pub filter: String,
     pub selected: usize,
-}
-
-impl Default for GlossaryState {
-    fn default() -> Self {
-        Self { filter: String::new(), selected: 0 }
-    }
 }
 
 fn status_color(status: NamingStatus) -> Color32 {
@@ -49,9 +44,17 @@ pub fn draw(ui: &mut egui::Ui, state: &mut GlossaryState) {
     };
 
     ui.horizontal(|ui| {
-        ui.label(RichText::new("𒂍𒁾 Glossary").size(18.0).color(Color32::from_rgb(255, 215, 0)));
+        ui.label(
+            RichText::new("𒂍𒁾 Glossary")
+                .size(18.0)
+                .color(Color32::from_rgb(255, 215, 0)),
+        );
         ui.separator();
-        ui.label(RichText::new(format!("{} of {} entries", matches.len(), registry.0.len())).size(12.0).color(Color32::GRAY));
+        ui.label(
+            RichText::new(format!("{} of {} entries", matches.len(), registry.0.len()))
+                .size(12.0)
+                .color(Color32::GRAY),
+        );
     });
     ui.horizontal(|ui| {
         ui.label("search:");
@@ -68,22 +71,32 @@ pub fn draw(ui: &mut egui::Ui, state: &mut GlossaryState) {
         ui.vertical(|ui| {
             ui.set_min_width(220.0);
             ui.set_max_width(260.0);
-            ScrollArea::vertical().id_salt("glossary_list").max_height(ui.available_height()).show(ui, |ui| {
-                for (i, entry) in matches.iter().enumerate() {
-                    let selected = i == state.selected;
-                    let col = if selected { Color32::from_rgb(255, 215, 0) } else { Color32::from_rgb(200, 205, 215) };
-                    let label = format!("{} · {}", entry.name, status_label(entry.status));
-                    if ui
-                        .add(egui::SelectableLabel::new(selected, RichText::new(label).color(col).size(13.0)))
-                        .clicked()
-                    {
-                        state.selected = i;
+            ScrollArea::vertical()
+                .id_salt("glossary_list")
+                .max_height(ui.available_height())
+                .show(ui, |ui| {
+                    for (i, entry) in matches.iter().enumerate() {
+                        let selected = i == state.selected;
+                        let col = if selected {
+                            Color32::from_rgb(255, 215, 0)
+                        } else {
+                            Color32::from_rgb(200, 205, 215)
+                        };
+                        let label = format!("{} · {}", entry.name, status_label(entry.status));
+                        if ui
+                            .add(egui::SelectableLabel::new(
+                                selected,
+                                RichText::new(label).color(col).size(13.0),
+                            ))
+                            .clicked()
+                        {
+                            state.selected = i;
+                        }
                     }
-                }
-                if matches.is_empty() {
-                    ui.label(RichText::new("no matches").color(Color32::GRAY).italics());
-                }
-            });
+                    if matches.is_empty() {
+                        ui.label(RichText::new("no matches").color(Color32::GRAY).italics());
+                    }
+                });
         });
 
         ui.separator();
@@ -101,7 +114,12 @@ pub fn draw(ui: &mut egui::Ui, state: &mut GlossaryState) {
 
 fn draw_detail(ui: &mut egui::Ui, entry: &NamingEntry) {
     ui.horizontal(|ui| {
-        ui.label(RichText::new(entry.name).size(20.0).strong().color(Color32::from_rgb(255, 215, 0)));
+        ui.label(
+            RichText::new(entry.name)
+                .size(20.0)
+                .strong()
+                .color(Color32::from_rgb(255, 215, 0)),
+        );
         ui.label(
             RichText::new(status_label(entry.status))
                 .size(11.0)
@@ -109,18 +127,38 @@ fn draw_detail(ui: &mut egui::Ui, entry: &NamingEntry) {
                 .background_color(Color32::from_rgb(20, 20, 25)),
         );
     });
-    ui.label(RichText::new(format!("{:?} · {:?}", entry.mytho_category, entry.system_role)).color(Color32::GRAY).size(12.0));
+    ui.label(
+        RichText::new(format!(
+            "{:?} · {:?}",
+            entry.mytho_category, entry.system_role
+        ))
+        .color(Color32::GRAY)
+        .size(12.0),
+    );
     ui.add_space(6.0);
 
     // Image slot -- real and wired, empty honestly until a credited
     // image_path exists. Never renders an image without its credit.
     match (entry.image_path, entry.image_credit) {
         (Some(path), Some(credit)) => {
-            ui.label(RichText::new(format!("🖼 {path}")).size(12.0).color(Color32::LIGHT_BLUE));
-            ui.label(RichText::new(format!("credit: {credit}")).size(11.0).italics().color(Color32::GRAY));
+            ui.label(
+                RichText::new(format!("🖼 {path}"))
+                    .size(12.0)
+                    .color(Color32::LIGHT_BLUE),
+            );
+            ui.label(
+                RichText::new(format!("credit: {credit}"))
+                    .size(11.0)
+                    .italics()
+                    .color(Color32::GRAY),
+            );
         }
         _ => {
-            ui.label(RichText::new("(no image on file for this entry)").italics().color(Color32::from_rgb(90, 95, 105)));
+            ui.label(
+                RichText::new("(no image on file for this entry)")
+                    .italics()
+                    .color(Color32::from_rgb(90, 95, 105)),
+            );
         }
     }
     ui.add_space(6.0);
@@ -144,9 +182,17 @@ fn draw_detail(ui: &mut egui::Ui, entry: &NamingEntry) {
     }
 
     if let Some(doc) = entry.source_doc {
-        ui.label(RichText::new(format!("source: {doc}")).size(11.0).color(Color32::GRAY));
+        ui.label(
+            RichText::new(format!("source: {doc}"))
+                .size(11.0)
+                .color(Color32::GRAY),
+        );
     }
     if let Some(path) = entry.crate_path {
-        ui.label(RichText::new(format!("crate: {path}")).size(11.0).color(Color32::GRAY));
+        ui.label(
+            RichText::new(format!("crate: {path}"))
+                .size(11.0)
+                .color(Color32::GRAY),
+        );
     }
 }

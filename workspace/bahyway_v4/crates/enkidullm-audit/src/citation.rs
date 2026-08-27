@@ -13,11 +13,11 @@ pub struct CitationAnalysis {
     /// How many shared concepts the suspect covers from the source.
     pub shared_concept_count: u32,
     /// How many of the shared concepts' sources the suspect actually cites.
-    pub cited_source_count:   u32,
+    pub cited_source_count: u32,
     /// Ratio: cited_sources / shared_concepts. Low = suspicious.
-    pub coverage_ratio:       f32,
+    pub coverage_ratio: f32,
     /// True when coverage_ratio < SUSPICIOUS_THRESHOLD.
-    pub is_suspicious:        bool,
+    pub is_suspicious: bool,
 }
 
 /// Coverage ratio below which a book pair is flagged as suspicious.
@@ -31,44 +31,54 @@ pub const SUSPICIOUS_THRESHOLD: f32 = 0.15;
 ///   suspect_cited_hashes  — isbn hashes cited by the suspect book (B)
 ///   _all_source_hashes    — reserved for corpus-depth checks (future)
 pub fn analyze_citation_coverage(
-    source_uuid_hash:     u32,
-    shared_concepts:      &[String],
+    source_uuid_hash: u32,
+    shared_concepts: &[String],
     suspect_cited_hashes: &[u32],
-    _all_source_hashes:   &[u32],
+    _all_source_hashes: &[u32],
 ) -> CitationAnalysis {
     let shared_n = shared_concepts.len() as u32;
     if shared_n == 0 {
         return CitationAnalysis {
-            shared_concept_count: 0, cited_source_count: 0,
-            coverage_ratio: 1.0, is_suspicious: false,
+            shared_concept_count: 0,
+            cited_source_count: 0,
+            coverage_ratio: 1.0,
+            is_suspicious: false,
         };
     }
 
-    let cited = if suspect_cited_hashes.contains(&source_uuid_hash) { 1u32 } else { 0u32 };
+    let cited = if suspect_cited_hashes.contains(&source_uuid_hash) {
+        1u32
+    } else {
+        0u32
+    };
     let ratio = cited as f32 / shared_n as f32;
 
     CitationAnalysis {
         shared_concept_count: shared_n,
-        cited_source_count:   cited,
-        coverage_ratio:       ratio,
-        is_suspicious:        ratio < SUSPICIOUS_THRESHOLD,
+        cited_source_count: cited,
+        coverage_ratio: ratio,
+        is_suspicious: ratio < SUSPICIOUS_THRESHOLD,
     }
 }
 
 /// BFS depth from any of `suspect_hashes` to `source_hash` through citation edges.
 /// Returns None if the source is not reachable.
 pub fn citation_depth(
-    source_hash:    u32,
+    source_hash: u32,
     suspect_hashes: &[u32],
-    citation_map:   &[(u32, u32)],   // (from_hash, to_hash) citation edges
+    citation_map: &[(u32, u32)], // (from_hash, to_hash) citation edges
 ) -> Option<u32> {
-    use std::collections::{VecDeque, HashSet};
+    use std::collections::{HashSet, VecDeque};
     let mut visited: HashSet<u32> = HashSet::new();
     let mut queue: VecDeque<(u32, u32)> = suspect_hashes.iter().map(|&h| (h, 0)).collect();
 
     while let Some((current, depth)) = queue.pop_front() {
-        if current == source_hash { return Some(depth); }
-        if !visited.insert(current) { continue; }
+        if current == source_hash {
+            return Some(depth);
+        }
+        if !visited.insert(current) {
+            continue;
+        }
         for &(from, to) in citation_map {
             if from == current && !visited.contains(&to) {
                 queue.push_back((to, depth + 1));
@@ -84,9 +94,9 @@ pub fn citation_depth(
 mod tests {
     use super::*;
 
-    const SRC_HASH:     u32 = 0xAAAA_0001;
+    const SRC_HASH: u32 = 0xAAAA_0001;
     const SUSPECT_HASH: u32 = 0xBBBB_0002;
-    const OTHER_HASH:   u32 = 0xCCCC_0003;
+    const OTHER_HASH: u32 = 0xCCCC_0003;
 
     fn concepts(n: usize) -> Vec<String> {
         (0..n).map(|i| format!("concept_{}", i)).collect()

@@ -1,0 +1,146 @@
+# =============================================================================
+# PB-291 — Deploy Rimush (𒌷𒈬𒍑): the BahyWay.Ecosystem entrance GUI +
+# zero-dependency monitoring dashboard. BahyWay.Ecosystem v4.0 — 2026-08-21
+#
+# WHAT RIMUSH IS: one bare-metal HTTP server (workspace/bahyway_v4/bin/
+# rimush-server, zero crate dependencies -- see that crate's own module
+# doc for the full reasoning) serving two pages:
+#   /           Entrance -- five tiles (Girsu, DubSar PDM, DubSar Theater,
+#               Sargon Passport Manager, Gilgamesh Master Key), each one
+#               a one-click launch of the SAME playbook its own desktop
+#               launcher already uses (PB-226/230/285/542) -- never a
+#               second, drifting launch mechanism.
+#   /dashboard  Live TCP-liveness for the two CQRS VM nodes' real EnkiDB
+#               Type ports + the vault VM's SSH port, plus this host's
+#               own uptime/loadavg from /proc -- no Grafana, no
+#               Prometheus, no external service of any kind.
+#
+# WHY BARE-METAL (`uruk`), NOT THE VAULT VM: launching Girsu/DubSar PDM/
+# DubSar Theater means spawning real GUI processes with direct GPU
+# access, which only works on the machine that HAS the GPU. See the
+# crate's own module doc for the full reasoning (same "Vault VM or Host"
+# choice the Architect explicitly left open).
+#
+# WHY NO AUTH LAYER: Rimush binds 127.0.0.1 ONLY -- never reachable from
+# anywhere but a browser on this same host. Every tool it launches
+# already has its own real gate (Sargon Passport Manager's own vault-
+# unlock prompt, DubSar IDE's own Sovereign Login) -- Rimush is a menu
+# in front of already-secured doors, not a new door of its own.
+#
+# AUTOMATIC, NO MANUAL LOGIN (per the Architect's standing instruction —
+# "the Ecosystem automation accepts no human intervention, all Infra PBs
+# must do the whole configuration in the PBs"): this playbook builds,
+# (re)starts, and verifies Rimush is actually listening in one run --
+# nothing left as a follow-up manual step.
+#
+# USAGE:
+#   ansible-playbook playbooks/playbook_291_deploy_rimush_entrance_gui.yml
+#   ansible-playbook playbooks/playbook_291_deploy_rimush_entrance_gui.yml -e skip_build=true
+# =============================================================================
+---
+- name: "PB-291 | Build + run Rimush entrance GUI on uruk (bare-metal, loopback-only)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    enkidb_root: "{{ (playbook_dir + '/..') | realpath }}"
+    bind_addr: "127.0.0.1:7900"
+    skip_build: false
+    build_log: "/tmp/rimush_server_build.log"
+    run_log: "/tmp/rimush_server.log"
+    rimush_bin: "{{ enkidb_root }}/workspace/bahyway_v4/target/release/rimush-server"
+
+  tasks:
+
+    - name: "0.1 | Confirm ansible-playbook and this repo checkout are usable from here (Rimush shells out to both when a tile is clicked)"
+      ansible.builtin.stat:
+        path: "{{ enkidb_root }}/playbooks"
+      register: playbooks_dir_check
+
+    - name: "FAIL | playbooks/ directory not found at the expected repo root"
+      ansible.builtin.fail:
+        msg: "{{ enkidb_root }}/playbooks not found -- Rimush's launch tiles would fail every click. Run from a real EnkiDB checkout."
+      when: not playbooks_dir_check.stat.exists
+
+    - name: "1.1 | Build rimush-server"
+      ansible.builtin.shell: >-
+        cd {{ enkidb_root }}/workspace/bahyway_v4 &&
+        cargo build --release -p rimush-server
+        > {{ build_log }} 2>&1
+      register: build_result
+      failed_when: build_result.rc != 0
+      when: not skip_build
+
+    - name: "FAIL | build failed"
+      ansible.builtin.fail:
+        msg: "cargo build --release -p rimush-server failed (rc={{ build_result.rc }}). Full output: {{ build_log }}"
+      when: not skip_build and build_result.rc is defined and build_result.rc != 0
+
+    - name: "1.2 | Confirm the rimush-server binary exists"
+      ansible.builtin.stat:
+        path: "{{ rimush_bin }}"
+      register: bin_check
+
+    - name: "FAIL | rimush-server binary missing"
+      ansible.builtin.fail:
+        msg: "{{ rimush_bin }} not found. Run without -e skip_build=true first, or check {{ build_log }}."
+      when: not bin_check.stat.exists
+
+    - name: "2.1 | Kill any stale rimush-server instance"
+      ansible.builtin.command: "pkill -f target/release/rimush-server"
+      register: kill_result
+      failed_when: false
+      changed_when: kill_result.rc == 0
+
+    - name: "2.2 | Give a killed instance a moment to release the port"
+      ansible.builtin.pause:
+        seconds: 1
+      when: kill_result.rc == 0
+
+    - name: "2.3 | Launch rimush-server, detached"
+      ansible.builtin.shell: >-
+        BIND_ADDR={{ bind_addr }} ENKIDB_REPO_ROOT={{ enkidb_root }}
+        nohup {{ rimush_bin }}
+        > {{ run_log }} 2>&1 < /dev/null &
+      async: 1
+      poll: 0
+
+    - name: "2.4 | Give it a moment to bind"
+      ansible.builtin.pause:
+        seconds: 2
+
+    - name: "2.5 | Verify it's actually listening"
+      ansible.builtin.wait_for:
+        host: "{{ bind_addr.split(':')[0] }}"
+        port: "{{ bind_addr.split(':')[1] | int }}"
+        timeout: 10
+      register: listen_check
+      failed_when: false
+
+    - name: "FAIL | rimush-server never came up listening"
+      ansible.builtin.fail:
+        msg: "rimush-server did not start listening on {{ bind_addr }} within 10s. Check {{ run_log }}."
+      when: listen_check.failed | default(false)
+
+    - name: "3.1 | Confirm the entrance page actually serves (not just the port being open)"
+      ansible.builtin.uri:
+        url: "http://{{ bind_addr }}/"
+        return_content: false
+      register: entrance_check
+      failed_when: false
+
+    - name: "FAIL | rimush-server is listening but / did not return 200"
+      ansible.builtin.fail:
+        msg: "rimush-server is up on {{ bind_addr }} but GET / returned {{ entrance_check.status | default('no response') }}. Check {{ run_log }}."
+      when: entrance_check.status | default(0) != 200
+
+    - name: "DONE | PB-291 COMPLETE"
+      ansible.builtin.debug:
+        msg: >-
+          𒁾 Rimush is live at http://{{ bind_addr }}/ (loopback-only --
+          open it in a browser on this host). /dashboard shows live
+          TCP-liveness for both CQRS VM nodes' real ports + the vault
+          VM's SSH port, refreshed every 5s, no external monitoring
+          service. Re-run this playbook any time to rebuild/restart it
+          (-e skip_build=true to just restart without recompiling).

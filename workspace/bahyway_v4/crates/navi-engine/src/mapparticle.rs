@@ -24,25 +24,25 @@ use crate::particle::{NaviCoord, NaviParticleState};
 /// Functional road class — determines routing cost multiplier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoadClass {
-    Motorway,    // 0.60× — fastest arterial
-    Primary,     // 0.75× — national/regional highway
-    Secondary,   // 0.90× — inter-district road
-    Tertiary,    // 1.00× — local street
-    Local,       // 1.10× — residential / access road
-    Track,       // 1.40× — unpaved / rough
-    Footway,     // 2.00× — pedestrian only (no vehicles)
+    Motorway,  // 0.60× — fastest arterial
+    Primary,   // 0.75× — national/regional highway
+    Secondary, // 0.90× — inter-district road
+    Tertiary,  // 1.00× — local street
+    Local,     // 1.10× — residential / access road
+    Track,     // 1.40× — unpaved / rough
+    Footway,   // 2.00× — pedestrian only (no vehicles)
 }
 
 impl RoadClass {
     pub fn cost_multiplier(self) -> f32 {
         match self {
-            RoadClass::Motorway   => 0.60,
-            RoadClass::Primary    => 0.75,
-            RoadClass::Secondary  => 0.90,
-            RoadClass::Tertiary   => 1.00,
-            RoadClass::Local      => 1.10,
-            RoadClass::Track      => 1.40,
-            RoadClass::Footway    => 2.00,
+            RoadClass::Motorway => 0.60,
+            RoadClass::Primary => 0.75,
+            RoadClass::Secondary => 0.90,
+            RoadClass::Tertiary => 1.00,
+            RoadClass::Local => 1.10,
+            RoadClass::Track => 1.40,
+            RoadClass::Footway => 2.00,
         }
     }
 
@@ -52,13 +52,13 @@ impl RoadClass {
 
     pub fn as_u8(self) -> u8 {
         match self {
-            RoadClass::Motorway  => 0,
-            RoadClass::Primary   => 1,
+            RoadClass::Motorway => 0,
+            RoadClass::Primary => 1,
             RoadClass::Secondary => 2,
-            RoadClass::Tertiary  => 3,
-            RoadClass::Local     => 4,
-            RoadClass::Track     => 5,
-            RoadClass::Footway   => 6,
+            RoadClass::Tertiary => 3,
+            RoadClass::Local => 4,
+            RoadClass::Track => 5,
+            RoadClass::Footway => 6,
         }
     }
 
@@ -92,12 +92,12 @@ impl PipelineKind {
     pub fn label(self) -> &'static str {
         match self {
             PipelineKind::WaterSupply => "Water Supply",
-            PipelineKind::Sewage      => "Sewage",
-            PipelineKind::Drainage    => "Drainage",
-            PipelineKind::Gas         => "Gas",
-            PipelineKind::Power       => "Power",
-            PipelineKind::Irrigation  => "Irrigation",
-            PipelineKind::Telecoms    => "Telecoms",
+            PipelineKind::Sewage => "Sewage",
+            PipelineKind::Drainage => "Drainage",
+            PipelineKind::Gas => "Gas",
+            PipelineKind::Power => "Power",
+            PipelineKind::Irrigation => "Irrigation",
+            PipelineKind::Telecoms => "Telecoms",
         }
     }
 }
@@ -127,7 +127,7 @@ pub enum PoiCategory {
     Industrial,
     Commercial,
     Residential,
-    Station,        // transport hub
+    Station, // transport hub
     WaterTower,
     PumpStation,
     Other,
@@ -142,15 +142,9 @@ pub enum MapKind {
     /// Road or path intersection / routing node.
     Junction,
     /// A directed road segment between two junctions.
-    Road {
-        class:   RoadClass,
-        one_way: bool,
-    },
+    Road { class: RoadClass, one_way: bool },
     /// A utility pipeline segment.
-    Pipeline {
-        kind: PipelineKind,
-        flow: FlowDir,
-    },
+    Pipeline { kind: PipelineKind, flow: FlowDir },
     /// Named point of interest.
     Poi { category: PoiCategory },
     /// Named landmark for orientation (mosque, tower, etc.).
@@ -162,20 +156,26 @@ pub enum MapKind {
 }
 
 impl MapKind {
-    pub fn is_road(&self)     -> bool { matches!(self, MapKind::Road { .. }) }
-    pub fn is_pipeline(&self) -> bool { matches!(self, MapKind::Pipeline { .. }) }
-    pub fn is_junction(&self) -> bool { matches!(self, MapKind::Junction) }
+    pub fn is_road(&self) -> bool {
+        matches!(self, MapKind::Road { .. })
+    }
+    pub fn is_pipeline(&self) -> bool {
+        matches!(self, MapKind::Pipeline { .. })
+    }
+    pub fn is_junction(&self) -> bool {
+        matches!(self, MapKind::Junction)
+    }
 
     /// Routing cost multiplier imposed by the particle's structural type.
     pub fn routing_multiplier(&self) -> f32 {
         match self {
-            MapKind::Road { class, .. }     => class.cost_multiplier(),
-            MapKind::Junction               => 1.00,
-            MapKind::Pipeline { .. }        => 1.00,
-            MapKind::Poi { .. }             => 1.20,
-            MapKind::Landmark               => 1.10,
-            MapKind::Boundary               => 1.30,
-            MapKind::GraveMarker            => 0.95, // pilgrimage priority
+            MapKind::Road { class, .. } => class.cost_multiplier(),
+            MapKind::Junction => 1.00,
+            MapKind::Pipeline { .. } => 1.00,
+            MapKind::Poi { .. } => 1.20,
+            MapKind::Landmark => 1.10,
+            MapKind::Boundary => 1.30,
+            MapKind::GraveMarker => 0.95, // pilgrimage priority
         }
     }
 
@@ -183,21 +183,21 @@ impl MapKind {
     pub fn vehicle_accessible(&self) -> bool {
         match self {
             MapKind::Road { class, .. } => class.is_vehicle_accessible(),
-            MapKind::Junction           => true,
-            _                           => false,
+            MapKind::Junction => true,
+            _ => false,
         }
     }
 
     /// True when a pedestrian can traverse this particle kind.
     pub fn pedestrian_accessible(&self) -> bool {
-        match self {
-            MapKind::Road { .. }    => true,
-            MapKind::Junction       => true,
-            MapKind::GraveMarker    => true,
-            MapKind::Poi { .. }     => true,
-            MapKind::Landmark       => true,
-            _                       => false,
-        }
+        matches!(
+            self,
+            MapKind::Road { .. }
+                | MapKind::Junction
+                | MapKind::GraveMarker
+                | MapKind::Poi { .. }
+                | MapKind::Landmark
+        )
     }
 }
 
@@ -208,27 +208,27 @@ impl MapKind {
 pub struct MapParticle {
     pub particle_id: u32,
     /// Immutable sovereign identity — minted once at registration.
-    pub kaki:        Kaki,
-    pub coord:       NaviCoord,
-    pub kind:        MapKind,
-    pub tribe:       TribeId,
+    pub kaki: Kaki,
+    pub coord: NaviCoord,
+    pub kind: MapKind,
+    pub tribe: TribeId,
     /// Minimum HubbleZoom level at which this particle becomes visible.
-    pub zoom_min:    u8,
-    pub eav:         EavStore,
-    pub state:       NaviParticleState,
+    pub zoom_min: u8,
+    pub eav: EavStore,
+    pub state: NaviParticleState,
 }
 
 impl MapParticle {
     /// Construct and mint a new map particle.
     pub fn new(
         particle_id: u32,
-        coord:       NaviCoord,
-        kind:        MapKind,
-        tribe:       TribeId,
-        zoom_min:    u8,
+        coord: NaviCoord,
+        kind: MapKind,
+        tribe: TribeId,
+        zoom_min: u8,
     ) -> Self {
         let minter = KakiMinter::new(tribe);
-        let kaki   = minter.mint_identity(particle_id, KakiRole::Zikru);
+        let kaki = minter.mint_identity(particle_id, KakiRole::Zikru);
         MapParticle {
             particle_id,
             kaki,
@@ -236,21 +236,33 @@ impl MapParticle {
             kind,
             tribe,
             zoom_min,
-            eav:   EavStore::new(),
+            eav: EavStore::new(),
             state: NaviParticleState::Active,
         }
     }
 
-    pub fn with_eav(mut self, eav: EavStore) -> Self { self.eav = eav; self }
-    pub fn with_state(mut self, state: NaviParticleState) -> Self { self.state = state; self }
+    pub fn with_eav(mut self, eav: EavStore) -> Self {
+        self.eav = eav;
+        self
+    }
+    pub fn with_state(mut self, state: NaviParticleState) -> Self {
+        self.state = state;
+        self
+    }
 
     pub fn is_passable(&self) -> bool {
         matches!(self.state, NaviParticleState::Active)
     }
 
-    pub fn is_road(&self)     -> bool { self.kind.is_road() }
-    pub fn is_pipeline(&self) -> bool { self.kind.is_pipeline() }
-    pub fn is_junction(&self) -> bool { self.kind.is_junction() }
+    pub fn is_road(&self) -> bool {
+        self.kind.is_road()
+    }
+    pub fn is_pipeline(&self) -> bool {
+        self.kind.is_pipeline()
+    }
+    pub fn is_junction(&self) -> bool {
+        self.kind.is_junction()
+    }
 
     /// Intrinsic routing cost — structural kind × EAV surface quality.
     pub fn routing_cost(&self) -> f32 {
@@ -258,7 +270,9 @@ impl MapParticle {
     }
 
     /// KAKI hash (first 4 bytes of the KAKI uuid field) — used as map key.
-    pub fn kaki_hash(&self) -> u32 { self.kaki.uuid_hash() }
+    pub fn kaki_hash(&self) -> u32 {
+        self.kaki.uuid_hash()
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -266,14 +280,27 @@ impl MapParticle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bahyway_core::TribeId;
     use crate::particle::NaviCoord;
+    use bahyway_core::TribeId;
 
-    fn tribe() -> TribeId { TribeId::from_u16(0x0001) }
-    fn coord() -> NaviCoord { NaviCoord::new(31.995, 44.320, 0.0) }
+    fn tribe() -> TribeId {
+        TribeId::from_u16(0x0001)
+    }
+    fn coord() -> NaviCoord {
+        NaviCoord::new(31.995, 44.320, 0.0)
+    }
 
     fn road(id: u32, class: RoadClass) -> MapParticle {
-        MapParticle::new(id, coord(), MapKind::Road { class, one_way: false }, tribe(), 2)
+        MapParticle::new(
+            id,
+            coord(),
+            MapKind::Road {
+                class,
+                one_way: false,
+            },
+            tribe(),
+            2,
+        )
     }
 
     fn junction(id: u32) -> MapParticle {
@@ -328,8 +355,14 @@ mod tests {
 
     #[test]
     fn map_kind_predicates() {
-        let road = MapKind::Road { class: RoadClass::Primary, one_way: false };
-        let pipe = MapKind::Pipeline { kind: PipelineKind::WaterSupply, flow: FlowDir::UpStream };
+        let road = MapKind::Road {
+            class: RoadClass::Primary,
+            one_way: false,
+        };
+        let pipe = MapKind::Pipeline {
+            kind: PipelineKind::WaterSupply,
+            flow: FlowDir::UpStream,
+        };
         let junc = MapKind::Junction;
         assert!(road.is_road());
         assert!(!road.is_pipeline());
@@ -340,24 +373,40 @@ mod tests {
 
     #[test]
     fn vehicle_accessible_excludes_footway() {
-        let foot = MapKind::Road { class: RoadClass::Footway, one_way: false };
+        let foot = MapKind::Road {
+            class: RoadClass::Footway,
+            one_way: false,
+        };
         assert!(!foot.vehicle_accessible());
-        let pri = MapKind::Road { class: RoadClass::Primary, one_way: false };
+        let pri = MapKind::Road {
+            class: RoadClass::Primary,
+            one_way: false,
+        };
         assert!(pri.vehicle_accessible());
     }
 
     #[test]
     fn pedestrian_accessible_on_roads_and_graves() {
-        let r = MapKind::Road { class: RoadClass::Footway, one_way: false };
+        let r = MapKind::Road {
+            class: RoadClass::Footway,
+            one_way: false,
+        };
         assert!(r.pedestrian_accessible());
         assert!(MapKind::GraveMarker.pedestrian_accessible());
-        assert!(!MapKind::Pipeline { kind: PipelineKind::Sewage, flow: FlowDir::DownStream }.pedestrian_accessible());
+        assert!(!MapKind::Pipeline {
+            kind: PipelineKind::Sewage,
+            flow: FlowDir::DownStream
+        }
+        .pedestrian_accessible());
     }
 
     #[test]
     fn gravemarker_has_lower_routing_cost_than_tertiary() {
-        let gm      = MapKind::GraveMarker;
-        let tertiary = MapKind::Road { class: RoadClass::Tertiary, one_way: false };
+        let gm = MapKind::GraveMarker;
+        let tertiary = MapKind::Road {
+            class: RoadClass::Tertiary,
+            one_way: false,
+        };
         // GraveMarker 0.95 < Tertiary 1.00
         assert!(gm.routing_multiplier() < tertiary.routing_multiplier());
     }
@@ -371,8 +420,13 @@ mod tests {
     #[test]
     fn pipeline_label_non_empty() {
         for kind in [
-            PipelineKind::WaterSupply, PipelineKind::Sewage, PipelineKind::Drainage,
-            PipelineKind::Gas, PipelineKind::Power, PipelineKind::Irrigation, PipelineKind::Telecoms,
+            PipelineKind::WaterSupply,
+            PipelineKind::Sewage,
+            PipelineKind::Drainage,
+            PipelineKind::Gas,
+            PipelineKind::Power,
+            PipelineKind::Irrigation,
+            PipelineKind::Telecoms,
         ] {
             assert!(!kind.label().is_empty());
         }
@@ -387,7 +441,10 @@ mod tests {
     #[test]
     fn eav_attached_via_builder() {
         let mut eav = EavStore::new();
-        eav.set(crate::eav::EavAttr::optional(crate::eav::ATTR_NAME, crate::eav::AttrValue::Text("Test".into())));
+        eav.set(crate::eav::EavAttr::optional(
+            crate::eav::ATTR_NAME,
+            crate::eav::AttrValue::Text("Test".into()),
+        ));
         let p = junction(10).with_eav(eav);
         assert_eq!(p.eav.get_text(crate::eav::ATTR_NAME), Some("Test"));
     }

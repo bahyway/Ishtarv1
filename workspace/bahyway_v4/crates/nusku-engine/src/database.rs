@@ -5,17 +5,21 @@ use crate::types::KakiPK;
 // No separate crate; lives here as a module inside nusku-engine.
 
 #[derive(Debug, Clone)]
-pub enum DatabaseStatus { Online, Offline, Unauthorized }
+pub enum DatabaseStatus {
+    Online,
+    Offline,
+    Unauthorized,
+}
 
 #[derive(Debug, Clone)]
 pub struct AuthorityLookupResult {
     pub queried_kaki: KakiPK,
-    pub matched:      bool,
-    pub watchlist:    bool,
+    pub matched: bool,
+    pub watchlist: bool,
     /// Encrypted authority reference — None in simulation or unauthorized state
     pub identity_ref: Option<String>,
-    pub match_score:  f32,
-    pub db_status:    DatabaseStatus,
+    pub match_score: f32,
+    pub db_status: DatabaseStatus,
 }
 
 pub struct DatabaseConnector {
@@ -25,7 +29,9 @@ pub struct DatabaseConnector {
 impl DatabaseConnector {
     /// Requires SargonPassport tier-4 token to activate.
     pub fn new(sargon_passport_tier: u8) -> Self {
-        Self { authorized: sargon_passport_tier >= 4 }
+        Self {
+            authorized: sargon_passport_tier >= 4,
+        }
     }
 
     /// Synchronous KAKI lookup against the sovereign Iraqi authority database.
@@ -36,21 +42,21 @@ impl DatabaseConnector {
         if !self.authorized {
             return AuthorityLookupResult {
                 queried_kaki: *face_kaki,
-                matched:      false,
-                watchlist:    false,
+                matched: false,
+                watchlist: false,
                 identity_ref: None,
-                match_score:  0.0,
-                db_status:    DatabaseStatus::Unauthorized,
+                match_score: 0.0,
+                db_status: DatabaseStatus::Unauthorized,
             };
         }
         // Development stub — production: encrypted KAKI lookup against sovereign EnkiDB
         AuthorityLookupResult {
             queried_kaki: *face_kaki,
-            matched:      false,
-            watchlist:    false,
+            matched: false,
+            watchlist: false,
             identity_ref: None,
-            match_score:  0.0,
-            db_status:    DatabaseStatus::Online,
+            match_score: 0.0,
+            db_status: DatabaseStatus::Online,
         }
     }
 }
@@ -78,7 +84,7 @@ mod tests {
     #[test]
     fn queried_kaki_echoed_in_result() {
         let kaki = [42u8; 16];
-        let db   = DatabaseConnector::new(4);
+        let db = DatabaseConnector::new(4);
         let result = db.lookup(&kaki);
         assert_eq!(result.queried_kaki, kaki);
     }

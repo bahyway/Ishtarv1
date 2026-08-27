@@ -9,30 +9,50 @@
 //!   - KUR level 4 added to TIAMAT match (was missing)
 
 #![forbid(unsafe_code)]
-use crate::{ClientTopology, PLIMPTON_322_DIVISOR, GOLDEN_ANGLE_DEG};
+use crate::{ClientTopology, GOLDEN_ANGLE_DEG, PLIMPTON_322_DIVISOR};
 use crate::{
-    ORBITAL_GOLDEN_GEM, ORBITAL_GOLDEN_ALIVE, ORBITAL_FUZZY_AGED,
-    ORBITAL_FUZZY_GRAY, ORBITAL_FUZZY_DECAY,
-    ORBITAL_DEAD_EXPIRED, ORBITAL_DEAD_SEALED,
+    ORBITAL_DEAD_EXPIRED, ORBITAL_DEAD_SEALED, ORBITAL_FUZZY_AGED, ORBITAL_FUZZY_DECAY,
+    ORBITAL_FUZZY_GRAY, ORBITAL_GOLDEN_ALIVE, ORBITAL_GOLDEN_GEM,
 };
 
-pub struct GodotFile { pub name: String, pub content: String }
-pub struct GodotApp  { pub files: Vec<GodotFile> }
+pub struct GodotFile {
+    pub name: String,
+    pub content: String,
+}
+pub struct GodotApp {
+    pub files: Vec<GodotFile>,
+}
 
 pub fn generate_godot_app(topo: &ClientTopology) -> GodotApp {
     GodotApp {
         files: vec![
-            GodotFile { name: "project.godot".into(),         content: gen_project(topo) },
-            GodotFile { name: "orbital_manager.gd".into(),    content: gen_orbital_manager(topo) },
-            GodotFile { name: "particle_node.gd".into(),      content: gen_particle_node() },
-            GodotFile { name: "tribe_config.gd".into(),       content: gen_tribe_config(topo) },
-            GodotFile { name: "enkidb_connector.gd".into(),   content: gen_enkidb_connector() },
+            GodotFile {
+                name: "project.godot".into(),
+                content: gen_project(topo),
+            },
+            GodotFile {
+                name: "orbital_manager.gd".into(),
+                content: gen_orbital_manager(topo),
+            },
+            GodotFile {
+                name: "particle_node.gd".into(),
+                content: gen_particle_node(),
+            },
+            GodotFile {
+                name: "tribe_config.gd".into(),
+                content: gen_tribe_config(topo),
+            },
+            GodotFile {
+                name: "enkidb_connector.gd".into(),
+                content: gen_enkidb_connector(),
+            },
         ],
     }
 }
 
 fn gen_project(topo: &ClientTopology) -> String {
-    format!(r#"; UTNAPISHTIM 𒌓𒍣𒅁𒀭 — Generated Sovereign PDM IDE
+    format!(
+        r#"; UTNAPISHTIM 𒌓𒍣𒅁𒀭 — Generated Sovereign PDM IDE
 ; Client: {} (0x{:04X}) — BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
 [application]
 config/name="{} — DubSar PDM"
@@ -41,19 +61,27 @@ run/main_scene="res://main_scene.tscn"
 [display]
 window/size/viewport_width=1440
 window/size/viewport_height=900
-"#, topo.client_name, topo.client_id, topo.client_name)
+"#,
+        topo.client_name, topo.client_id, topo.client_name
+    )
 }
 
 fn gen_orbital_manager(topo: &ClientTopology) -> String {
-    let tribe_block = topo.tribes.iter().map(|t| {
-        format!(
-            "\t\t{{ \"id\": {}, \"name\": \"{}\"  \
+    let tribe_block = topo
+        .tribes
+        .iter()
+        .map(|t| {
+            format!(
+                "\t\t{{ \"id\": {}, \"name\": \"{}\"  \
              \"ring_radius\": {:.2}, \"colour_hex\": \"{}\" }},",
-            t.tribe_id, t.tribe_name, t.ring_radius, t.colour_hex
-        )
-    }).collect::<Vec<_>>().join("\n");
+                t.tribe_id, t.tribe_name, t.ring_radius, t.colour_hex
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
-    format!(r#"# orbital_manager.gd
+    format!(
+        r#"# orbital_manager.gd
 # UTNAPISHTIM 𒌓𒍣𒅁𒀭 — Orbital Manager
 # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
 #
@@ -142,11 +170,13 @@ func _create_particle_node(pos: Vector3, subtype: int) -> MeshInstance3D:
 func compute_b11(eav_quality: float) -> int:
 	# B11 = round(eav_quality × 240) — Plimpton 322 — NEVER 255
 	return int(round(eav_quality * PLIMPTON_322))
-"#)
+"#
+    )
 }
 
 fn gen_particle_node() -> String {
-    format!(r##"# particle_node.gd
+    format!(
+        r##"# particle_node.gd
 # UTNAPISHTIM 𒌓𒍣𒅁𒀭 — Sovereign Particle Node
 # BahyWay.Ecosystem v4.0 — DUB.SAR 𒁾
 #
@@ -241,18 +271,25 @@ func _update_orbital_radius() -> void:
 	elif eav_quality >= 0.05: orbital_subtype = 5  # DeadExpired
 	else:                      orbital_subtype = 6  # DeadSealed
 	orbital_radius = PARTICLE_RADII[orbital_subtype]
-"##)
+"##
+    )
 }
 
 fn gen_tribe_config(topo: &ClientTopology) -> String {
-    let tribe_lines = topo.tribes.iter().map(|t| {
-        format!(
-            "\t{{ \"tribe_id\": {}, \"name\": \"{}\"  \
+    let tribe_lines = topo
+        .tribes
+        .iter()
+        .map(|t| {
+            format!(
+                "\t{{ \"tribe_id\": {}, \"name\": \"{}\"  \
              \"ring_radius\": {:.2}, \"colour_hex\": \"{}\" }},",
-            t.tribe_id, t.tribe_name, t.ring_radius, t.colour_hex
-        )
-    }).collect::<Vec<_>>().join("\n");
-    format!(r#"# tribe_config.gd
+                t.tribe_id, t.tribe_name, t.ring_radius, t.colour_hex
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"# tribe_config.gd
 # UTNAPISHTIM 𒌓𒍣𒅁𒀭 — Client Tribe Configuration
 # Generated for: {} (0x{:04X})
 # ColourID by PĀŠIRU golden angle:
@@ -267,7 +304,9 @@ func get_tribe(id: int) -> Dictionary:
 	for t in TRIBES:
 		if t["tribe_id"] == id: return t
 	return {{}}
-"#, topo.client_name, topo.client_id, tribe_lines)
+"#,
+        topo.client_name, topo.client_id, tribe_lines
+    )
 }
 
 fn gen_enkidb_connector() -> String {
@@ -290,7 +329,7 @@ signal particles_received(data: Array)
 signal connection_error(msg: String)
 
 var tcp:          StreamPeerTCP = StreamPeerTCP.new()
-var enkidb_host:  String        = "192.168.122.107"
+var enkidb_host:  String        = "192.168.122.112"
 var enkidb_port:  int           = 7001
 var _timer:       float         = 0.0
 const REFRESH_INTERVAL: float   = 30.0
@@ -374,5 +413,6 @@ func _on_data_received(raw: PackedByteArray) -> void:
 	var json  := JSON.new()
 	if json.parse(text) == OK:
 		emit_signal("particles_received", json.data)
-"#.to_string()
+"#
+    .to_string()
 }

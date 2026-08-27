@@ -7,11 +7,11 @@
 //! Particles live here until retired to EnkiDW (cold archive).
 //! State is in-memory; for persistent ODB use enkidb-persist behind OdbStore.
 
-use enkidb_journal::entry::EavTriple;
-use enkidb_kaki::{EventKaki, IdentityKaki, KakiMinter, KakiRole, Kaki};
-use enkidb_journal::{Journal, JournalEntry, EventCause};
-use enkisdb::sdb_store::StagedParticle;
 use enkidb_engine::EnkiDb;
+use enkidb_journal::entry::EavTriple;
+use enkidb_journal::{EventCause, Journal, JournalEntry};
+use enkidb_kaki::{EventKaki, IdentityKaki, Kaki, KakiMinter, KakiRole};
+use enkisdb::sdb_store::StagedParticle;
 use permanent_storage::PermanentStore;
 
 /// Lifecycle status of a particle in the Operational Database.
@@ -26,16 +26,16 @@ pub enum OdbStatus {
 /// One active (or recently-retired) particle in the ODB.
 #[derive(Debug, Clone)]
 pub struct OdbParticle {
-    pub kaki_bytes:    [u8; 16],
-    pub tribe_id:      u16,
-    pub epoch:         u32,
-    pub eav:           Vec<EavTriple>,
-    pub color_rgb:     [u8; 3],
-    pub status:        OdbStatus,
+    pub kaki_bytes: [u8; 16],
+    pub tribe_id: u16,
+    pub epoch: u32,
+    pub eav: Vec<EavTriple>,
+    pub color_rgb: [u8; 3],
+    pub status: OdbStatus,
     /// Tick when this particle was promoted into the ODB.
     pub promoted_tick: u64,
     /// Source path: came from SDB batch or GUI transaction.
-    pub source:        OdbSource,
+    pub source: OdbSource,
 }
 
 /// How this particle entered the ODB.
@@ -56,19 +56,22 @@ pub enum OdbSource {
 #[derive(Debug, Default, Clone)]
 pub struct OdbStats {
     pub total_ingested: usize,
-    pub active_count:   usize,
-    pub retired_count:  usize,
+    pub active_count: usize,
+    pub retired_count: usize,
 }
 
 /// In-memory Operational Database store.
 pub struct OdbStore {
     particles: Vec<OdbParticle>,
-    stats:     OdbStats,
+    stats: OdbStats,
 }
 
 impl OdbStore {
     pub fn new() -> Self {
-        OdbStore { particles: Vec::new(), stats: OdbStats::default() }
+        OdbStore {
+            particles: Vec::new(),
+            stats: OdbStats::default(),
+        }
     }
 
     /// Ingest a promoted `StagedParticle` from the SDB.
@@ -76,9 +79,9 @@ impl OdbStore {
     /// Returns the store index.
     pub fn ingest_from_sdb(
         &mut self,
-        particle:     &StagedParticle,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        particle: &StagedParticle,
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> Option<usize> {
         let target_kaki = reconstruct_identity(&particle.kaki_bytes)?;
@@ -92,28 +95,35 @@ impl OdbStore {
         let _ = journal.append(entry);
 
         Some(self.push(OdbParticle {
-            kaki_bytes:    particle.kaki_bytes,
-            tribe_id:      particle.tribe_id,
-            epoch:         particle.epoch,
-            eav:           particle.eav.clone(),
-            color_rgb:     particle.color_rgb,
-            status:        OdbStatus::Active,
+            kaki_bytes: particle.kaki_bytes,
+            tribe_id: particle.tribe_id,
+            epoch: particle.epoch,
+            eav: particle.eav.clone(),
+            color_rgb: particle.color_rgb,
+            status: OdbStatus::Active,
             promoted_tick: current_tick,
-            source:        OdbSource::SdbPromotion,
+            source: OdbSource::SdbPromotion,
         }))
     }
 
     /// Ingest a GUI-committed particle (EnkiDB → EnkiODB path).
     /// Writes an `EventCause::EnkidbTransactionCommit` Journal entry.
+    // 2026-08-25, found live: clippy::too_many_arguments (9/7). Each
+    // param mirrors one OdbParticle field (kaki_bytes/tribe_id/epoch/
+    // eav/color_rgb) plus two infra deps (journal, minter) and
+    // current_tick -- bundling these into a params struct would change
+    // this fn's public signature and every call site, a real API
+    // design call for the Architect, not a mechanical lint fix.
+    #[allow(clippy::too_many_arguments)]
     pub fn ingest_from_gui(
         &mut self,
-        kaki_bytes:   [u8; 16],
-        tribe_id:     u16,
-        epoch:        u32,
-        eav:          Vec<EavTriple>,
-        color_rgb:    [u8; 3],
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        kaki_bytes: [u8; 16],
+        tribe_id: u16,
+        epoch: u32,
+        eav: Vec<EavTriple>,
+        color_rgb: [u8; 3],
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> Option<usize> {
         let target_kaki = reconstruct_identity(&kaki_bytes)?;
@@ -132,9 +142,9 @@ impl OdbStore {
             epoch,
             eav,
             color_rgb,
-            status:        OdbStatus::Active,
+            status: OdbStatus::Active,
             promoted_tick: current_tick,
-            source:        OdbSource::GuiTransaction,
+            source: OdbSource::GuiTransaction,
         }))
     }
 
@@ -146,15 +156,17 @@ impl OdbStore {
     /// Writes an `EventCause::StewardPromotedToOdb` Journal entry —
     /// distinct from `ingest_from_gui`'s `EnkidbTransactionCommit`,
     /// since this is a Steward decision, not a GUI transaction.
+    // Same clippy::too_many_arguments reasoning as ingest_from_gui above.
+    #[allow(clippy::too_many_arguments)]
     pub fn ingest_from_steward_promotion(
         &mut self,
-        kaki_bytes:   [u8; 16],
-        tribe_id:     u16,
-        epoch:        u32,
-        eav:          Vec<EavTriple>,
-        color_rgb:    [u8; 3],
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        kaki_bytes: [u8; 16],
+        tribe_id: u16,
+        epoch: u32,
+        eav: Vec<EavTriple>,
+        color_rgb: [u8; 3],
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> Option<usize> {
         let target_kaki = reconstruct_identity(&kaki_bytes)?;
@@ -173,9 +185,9 @@ impl OdbStore {
             epoch,
             eav,
             color_rgb,
-            status:        OdbStatus::Active,
+            status: OdbStatus::Active,
             promoted_tick: current_tick,
-            source:        OdbSource::StewardPromotion,
+            source: OdbSource::StewardPromotion,
         }))
     }
 
@@ -184,9 +196,9 @@ impl OdbStore {
     /// Returns how many were newly transferred.
     pub fn drain_from_sdb(
         &mut self,
-        sdb:          &enkisdb::SdbStore,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        sdb: &enkisdb::SdbStore,
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> usize {
         use enkisdb::SdbStatus;
@@ -200,8 +212,13 @@ impl OdbStore {
         let mut count = 0;
         for p in &promoted {
             // Skip if this KAKI is already in the ODB (idempotent drain).
-            if self.contains_kaki(&p.kaki_bytes) { continue; }
-            if self.ingest_from_sdb(p, journal, minter, current_tick).is_some() {
+            if self.contains_kaki(&p.kaki_bytes) {
+                continue;
+            }
+            if self
+                .ingest_from_sdb(p, journal, minter, current_tick)
+                .is_some()
+            {
                 count += 1;
             }
         }
@@ -217,18 +234,18 @@ impl OdbStore {
     /// Writes an `EventCause::ArchiveMove` Journal entry.
     pub fn retire(
         &mut self,
-        idx:          usize,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
+        idx: usize,
+        journal: &mut Journal,
+        minter: &KakiMinter,
         current_tick: u64,
     ) -> bool {
         let _ = current_tick;
         let p = match self.particles.get_mut(idx) {
             Some(p) if p.status == OdbStatus::Active => p,
-            _                                        => return false,
+            _ => return false,
         };
         p.status = OdbStatus::Retired;
-        self.stats.active_count  = self.stats.active_count.saturating_sub(1);
+        self.stats.active_count = self.stats.active_count.saturating_sub(1);
         self.stats.retired_count += 1;
 
         // Journal the archive move
@@ -277,7 +294,10 @@ impl OdbStore {
 
         let commit_event = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru))
             .expect("minter always produces valid event KAKIs");
-        if PermanentStore::new(db).commit(commit_event, identity, epoch, eav).is_err() {
+        if PermanentStore::new(db)
+            .commit(commit_event, identity, epoch, eav)
+            .is_err()
+        {
             return false;
         }
 
@@ -298,41 +318,56 @@ impl OdbStore {
 
     /// Lookup all active particles by tribe_id.
     pub fn active_by_tribe(&self, tribe_id: u16) -> Vec<&OdbParticle> {
-        self.particles.iter()
+        self.particles
+            .iter()
             .filter(|p| p.status == OdbStatus::Active && p.tribe_id == tribe_id)
             .collect()
     }
 
     /// Find an active particle by its KAKI bytes.
     pub fn find_by_kaki(&self, kaki_bytes: &[u8; 16]) -> Option<&OdbParticle> {
-        self.particles.iter()
+        self.particles
+            .iter()
             .find(|p| p.status == OdbStatus::Active && &p.kaki_bytes == kaki_bytes)
     }
 
-    pub fn active(&self)  -> impl Iterator<Item = &OdbParticle> {
-        self.particles.iter().filter(|p| p.status == OdbStatus::Active)
+    pub fn active(&self) -> impl Iterator<Item = &OdbParticle> {
+        self.particles
+            .iter()
+            .filter(|p| p.status == OdbStatus::Active)
     }
 
-    pub fn all(&self)     -> &[OdbParticle]  { &self.particles }
-    pub fn stats(&self)   -> &OdbStats        { &self.stats }
-    pub fn len(&self)     -> usize            { self.particles.len() }
-    pub fn is_empty(&self) -> bool            { self.particles.is_empty() }
+    pub fn all(&self) -> &[OdbParticle] {
+        &self.particles
+    }
+    pub fn stats(&self) -> &OdbStats {
+        &self.stats
+    }
+    pub fn len(&self) -> usize {
+        self.particles.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.particles.is_empty()
+    }
 
     fn push(&mut self, p: OdbParticle) -> usize {
         let idx = self.particles.len();
         self.particles.push(p);
         self.stats.total_ingested += 1;
-        self.stats.active_count   += 1;
+        self.stats.active_count += 1;
         idx
     }
 }
 
 impl Default for OdbStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn reconstruct_identity(bytes: &[u8; 16]) -> Option<IdentityKaki> {
-    Kaki::from_bytes(*bytes).ok()
+    Kaki::from_bytes(*bytes)
+        .ok()
         .and_then(|k| IdentityKaki::try_from_kaki(k).ok())
 }
 
@@ -340,8 +375,8 @@ fn reconstruct_identity(bytes: &[u8; 16]) -> Option<IdentityKaki> {
 mod tests {
     use super::*;
     use bahyway_core::TribeId;
-    use enkidb_kaki::{KakiMinter, KakiRole};
     use enkidb_journal::Journal;
+    use enkidb_kaki::{KakiMinter, KakiRole};
     use enkisdb::sdb_store::{SdbStatus, StagedParticle};
 
     fn make_minter() -> (KakiMinter, TribeId) {
@@ -350,14 +385,15 @@ mod tests {
     }
 
     fn make_staged_promoted(minter: &KakiMinter) -> StagedParticle {
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         StagedParticle {
-            kaki_bytes:   *ik.bytes(),
-            tribe_id:     1,
-            epoch:        5,
-            eav:          Vec::new(),
-            color_rgb:    [80, 200, 120],
-            status:       SdbStatus::Pending,
+            kaki_bytes: *ik.bytes(),
+            tribe_id: 1,
+            epoch: 5,
+            eav: Vec::new(),
+            color_rgb: [80, 200, 120],
+            status: SdbStatus::Pending,
             arrived_tick: 0,
             malware_flag: false,
         }
@@ -366,11 +402,13 @@ mod tests {
     #[test]
     fn ingest_from_sdb_writes_journal_entry() {
         let (minter, _) = make_minter();
-        let mut odb     = OdbStore::new();
-        let mut jnl     = Journal::new(64);
-        let particle    = make_staged_promoted(&minter);
+        let mut odb = OdbStore::new();
+        let mut jnl = Journal::new(64);
+        let particle = make_staged_promoted(&minter);
 
-        let idx = odb.ingest_from_sdb(&particle, &mut jnl, &minter, 900).unwrap();
+        let idx = odb
+            .ingest_from_sdb(&particle, &mut jnl, &minter, 900)
+            .unwrap();
 
         assert_eq!(odb.len(), 1);
         assert_eq!(jnl.entry_count(), 1);
@@ -381,9 +419,9 @@ mod tests {
     #[test]
     fn drain_from_sdb_transfers_promoted() {
         let (minter, _) = make_minter();
-        let mut sdb     = enkisdb::SdbStore::new();
-        let mut odb     = OdbStore::new();
-        let mut jnl     = Journal::new(64);
+        let mut sdb = enkisdb::SdbStore::new();
+        let mut odb = OdbStore::new();
+        let mut jnl = Journal::new(64);
 
         let i0 = sdb.stage(make_staged_promoted(&minter));
         let i1 = sdb.stage(make_staged_promoted(&minter));
@@ -394,7 +432,7 @@ mod tests {
 
         let moved = odb.drain_from_sdb(&sdb, &mut jnl, &minter, 900);
 
-        assert_eq!(moved,   2);
+        assert_eq!(moved, 2);
         assert_eq!(odb.len(), 2);
         assert_eq!(jnl.entry_count(), 2);
         let _ = i2;
@@ -403,16 +441,16 @@ mod tests {
     #[test]
     fn retire_writes_archive_move_event() {
         let (minter, _) = make_minter();
-        let mut odb     = OdbStore::new();
-        let mut jnl     = Journal::new(64);
-        let p           = make_staged_promoted(&minter);
+        let mut odb = OdbStore::new();
+        let mut jnl = Journal::new(64);
+        let p = make_staged_promoted(&minter);
 
         let idx = odb.ingest_from_sdb(&p, &mut jnl, &minter, 0).unwrap();
-        let ok  = odb.retire(idx, &mut jnl, &minter, 900);
+        let ok = odb.retire(idx, &mut jnl, &minter, 900);
 
         assert!(ok);
         assert_eq!(odb.stats().retired_count, 1);
-        assert_eq!(odb.stats().active_count,  0);
+        assert_eq!(odb.stats().active_count, 0);
         assert_eq!(jnl.entry_count(), 2); // ingest + retire
         assert_eq!(odb.all()[idx].status, OdbStatus::Retired);
     }
@@ -420,10 +458,10 @@ mod tests {
     #[test]
     fn find_by_kaki_returns_active_only() {
         let (minter, _) = make_minter();
-        let mut odb     = OdbStore::new();
-        let mut jnl     = Journal::new(64);
-        let p           = make_staged_promoted(&minter);
-        let kb          = p.kaki_bytes;
+        let mut odb = OdbStore::new();
+        let mut jnl = Journal::new(64);
+        let p = make_staged_promoted(&minter);
+        let kb = p.kaki_bytes;
 
         let idx = odb.ingest_from_sdb(&p, &mut jnl, &minter, 0).unwrap();
         assert!(odb.find_by_kaki(&kb).is_some());
@@ -453,13 +491,17 @@ mod tests {
         // registered -- not just an ODB-side status flip.
         let identity = reconstruct_identity(&kaki_bytes).unwrap();
         let projected = db.project(&identity);
-        assert!(projected.events_seen > 0, "EnkiDb must have a real committed event for this particle");
+        assert!(
+            projected.events_seen > 0,
+            "EnkiDb must have a real committed event for this particle"
+        );
 
         // ODB's own journal recorded the correct, distinct marker cause
         // (not ArchiveMove, which retire() uses for a different meaning).
         let hist = jnl.read_particle_history(&identity);
         assert!(
-            hist.iter().any(|e| e.event_cause() == Some(EventCause::OdbPromotedToGolden)),
+            hist.iter()
+                .any(|e| e.event_cause() == Some(EventCause::OdbPromotedToGolden)),
             "expected an OdbPromotedToGolden marker in ODB's own journal"
         );
     }
@@ -492,36 +534,60 @@ mod tests {
     #[test]
     fn steward_promotion_ingest() {
         let (minter, _) = make_minter();
-        let ik = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut odb = OdbStore::new();
         let mut jnl = Journal::new(64);
 
-        let idx = odb.ingest_from_steward_promotion(
-            *ik.bytes(), 1, 10, Vec::new(), [90, 90, 90],
-            &mut jnl, &minter, 0,
-        ).unwrap();
+        let idx = odb
+            .ingest_from_steward_promotion(
+                *ik.bytes(),
+                1,
+                10,
+                Vec::new(),
+                [90, 90, 90],
+                &mut jnl,
+                &minter,
+                0,
+            )
+            .unwrap();
 
         assert_eq!(odb.all()[idx].source, OdbSource::StewardPromotion);
         assert_eq!(jnl.entry_count(), 1);
         let hist = jnl.read_particle_history(&ik);
-        assert_eq!(hist[0].event_cause(), Some(EventCause::StewardPromotedToOdb));
+        assert_eq!(
+            hist[0].event_cause(),
+            Some(EventCause::StewardPromotedToOdb)
+        );
     }
 
     #[test]
     fn gui_transaction_ingest() {
         let (minter, _) = make_minter();
-        let ik   = enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
+        let ik =
+            enkidb_kaki::IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
         let mut odb = OdbStore::new();
         let mut jnl = Journal::new(64);
 
-        let idx = odb.ingest_from_gui(
-            *ik.bytes(), 1, 10, Vec::new(), [120, 180, 255],
-            &mut jnl, &minter, 0,
-        ).unwrap();
+        let idx = odb
+            .ingest_from_gui(
+                *ik.bytes(),
+                1,
+                10,
+                Vec::new(),
+                [120, 180, 255],
+                &mut jnl,
+                &minter,
+                0,
+            )
+            .unwrap();
 
         assert_eq!(odb.all()[idx].source, OdbSource::GuiTransaction);
         assert_eq!(jnl.entry_count(), 1);
         let hist = jnl.read_particle_history(&ik);
-        assert_eq!(hist[0].event_cause(), Some(EventCause::EnkidbTransactionCommit));
+        assert_eq!(
+            hist[0].event_cause(),
+            Some(EventCause::EnkidbTransactionCommit)
+        );
     }
 }

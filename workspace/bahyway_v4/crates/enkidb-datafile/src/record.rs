@@ -58,14 +58,16 @@ pub fn decode_particle(bytes: &[u8]) -> Result<Particle, RecordError> {
 
     let mut pos = 16;
     let attr_len = u16::from_be_bytes(
-        bytes[pos..pos + 2].try_into().map_err(|_| RecordError::Truncated)?,
+        bytes[pos..pos + 2]
+            .try_into()
+            .map_err(|_| RecordError::Truncated)?,
     ) as usize;
     pos += 2;
     if bytes.len() < pos + attr_len {
         return Err(RecordError::Truncated);
     }
-    let attribute =
-        String::from_utf8(bytes[pos..pos + attr_len].to_vec()).map_err(|_| RecordError::InvalidUtf8)?;
+    let attribute = String::from_utf8(bytes[pos..pos + attr_len].to_vec())
+        .map_err(|_| RecordError::InvalidUtf8)?;
     pos += attr_len;
 
     let (value, new_pos) = decode_value(bytes, pos)?;
@@ -82,7 +84,9 @@ pub fn decode_particle(bytes: &[u8]) -> Result<Particle, RecordError> {
     pos += 4;
     let mat_tag = u32::from_be_bytes(bytes[pos..pos + 4].try_into().unwrap());
 
-    Ok(Particle::new(entity, attribute, value, timestamp, shard, proof_ctx, mat_tag))
+    Ok(Particle::new(
+        entity, attribute, value, timestamp, shard, proof_ctx, mat_tag,
+    ))
 }
 
 #[cfg(test)]
@@ -95,7 +99,15 @@ mod tests {
     fn make_particle() -> Particle {
         let m = KakiMinter::new(TribeId::from_u16(0x0001));
         let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-        Particle::new(e, "quality.score", AkkValue::QualityScore(200), 1_700_000_000, 3, 7, 1)
+        Particle::new(
+            e,
+            "quality.score",
+            AkkValue::QualityScore(200),
+            1_700_000_000,
+            3,
+            7,
+            1,
+        )
     }
 
     #[test]

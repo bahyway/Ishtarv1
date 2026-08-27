@@ -15,9 +15,9 @@
 //! Logical tab already established for schema-discovery proposals.
 
 use crate::pb_catalog::RegistryLine;
+use enkidb_kaki::IdentityKaki;
 use enkiddb::concepts::{ConceptKind, ConceptRegistry};
 use enkiddb::{DocumentParser, WriteNode};
-use enkidb_kaki::IdentityKaki;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -89,7 +89,10 @@ pub fn parse_kaki_hex(kaki_hex: &str) -> Option<IdentityKaki> {
 /// assignment log) doesn't already have a recorded gate for, and return a
 /// suggestion per one -- ready for an Architect to review, edit, and
 /// approve. A pure read: writes nothing, mints nothing.
-pub fn scan_gate_suggestions(pb_registry_path: &Path, gate_registry_path: &Path) -> Vec<GateSuggestion> {
+pub fn scan_gate_suggestions(
+    pb_registry_path: &Path,
+    gate_registry_path: &Path,
+) -> Vec<GateSuggestion> {
     let already_tagged: HashSet<String> = std::fs::read_to_string(gate_registry_path)
         .unwrap_or_default()
         .lines()
@@ -107,18 +110,26 @@ pub fn scan_gate_suggestions(pb_registry_path: &Path, gate_registry_path: &Path)
         .filter_map(|r| {
             let path = PathBuf::from(&r.first_seen_path);
             let text = std::fs::read_to_string(&path).ok()?;
-            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
             let title = DocumentParser::parse_playbook_header(&text)
                 .map(|s| s.title)
                 .filter(|t| !t.trim().is_empty())
-                .unwrap_or_else(|| stem);
+                .unwrap_or(stem);
             let suggested_gates = registry
                 .scan_mentions(&text)
                 .into_iter()
                 .filter(|c| c.kind == ConceptKind::Gate)
                 .map(|c| c.name)
                 .collect();
-            Some(GateSuggestion { pb_kaki_hex: r.kaki_hex, title, source_path: r.first_seen_path, suggested_gates })
+            Some(GateSuggestion {
+                pb_kaki_hex: r.kaki_hex,
+                title,
+                source_path: r.first_seen_path,
+                suggested_gates,
+            })
         })
         .collect()
 }
@@ -139,7 +150,11 @@ pub fn apply_gate_approvals(
     if let Some(p) = gate_registry_path.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    let mut registry_file = std::fs::OpenOptions::new().create(true).append(true).open(gate_registry_path).ok();
+    let mut registry_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(gate_registry_path)
+        .ok();
 
     for (kaki, gate_name) in approvals {
         write_node.tag_gate(*kaki, gate_name, epoch);
@@ -193,13 +208,27 @@ mod tests {
 
         let pb_registry = dir.join("chronicle/pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        catalog_playbooks(&[CatalogLocation { name: "loc".into(), root: loc }], &pb_registry, &enkiddb_root);
+        catalog_playbooks(
+            &[CatalogLocation {
+                name: "loc".into(),
+                root: loc,
+            }],
+            &pb_registry,
+            &enkiddb_root,
+        );
 
         let gate_registry = dir.join("chronicle/pb_gate_registry.jsonl");
         let suggestions = scan_gate_suggestions(&pb_registry, &gate_registry);
 
-        assert_eq!(suggestions.len(), 1, "one catalogued playbook, one suggestion: {suggestions:?}");
-        assert!(suggestions[0].suggested_gates.contains(&"ADAD".to_string()), "{suggestions:?}");
+        assert_eq!(
+            suggestions.len(),
+            1,
+            "one catalogued playbook, one suggestion: {suggestions:?}"
+        );
+        assert!(
+            suggestions[0].suggested_gates.contains(&"ADAD".to_string()),
+            "{suggestions:?}"
+        );
     }
 
     #[test]
@@ -212,18 +241,31 @@ mod tests {
 
         let pb_registry = dir.join("chronicle/pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        catalog_playbooks(&[CatalogLocation { name: "loc".into(), root: loc }], &pb_registry, &enkiddb_root);
+        catalog_playbooks(
+            &[CatalogLocation {
+                name: "loc".into(),
+                root: loc,
+            }],
+            &pb_registry,
+            &enkiddb_root,
+        );
 
         let gate_registry = dir.join("chronicle/pb_gate_registry.jsonl");
         let first = scan_gate_suggestions(&pb_registry, &gate_registry);
         assert_eq!(first.len(), 1);
         let kaki = parse_kaki_hex(&first[0].pb_kaki_hex).unwrap();
 
-        let mut wn = WriteNode::new(KakiMinter::new(TribeId::from_u16(enkiddb::PLAYBOOK_CATALOG_TRIBE_ID)), 64);
+        let mut wn = WriteNode::new(
+            KakiMinter::new(TribeId::from_u16(enkiddb::PLAYBOOK_CATALOG_TRIBE_ID)),
+            64,
+        );
         let log = apply_gate_approvals(&mut wn, &[(kaki, "APSU".to_string())], &gate_registry, 1);
         assert!(log.iter().any(|l| l.contains("APSU")), "{log:?}");
 
         let second = scan_gate_suggestions(&pb_registry, &gate_registry);
-        assert!(second.is_empty(), "an approved playbook must not be re-suggested: {second:?}");
+        assert!(
+            second.is_empty(),
+            "an approved playbook must not be re-suggested: {second:?}"
+        );
     }
 }

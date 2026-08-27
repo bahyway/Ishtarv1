@@ -1,0 +1,164 @@
+---
+# ============================================================================
+# PB-335 — REAL BOUNDARY ingest (OSM way 325851897 — Wadi-us-Salaam)
+# BahyWay.Ecosystem v4.0 — SilaEngine
+# ----------------------------------------------------------------------------
+# THIS TABLET REPLACES ALL APPROXIMATION WITH THE REAL SURVEYED GEOMETRY:
+#   * Source of truth: OpenStreetMap way 325851897 (Wikidata Q1909993,
+#     "Wadi-us-Salaam"), the mapped cemetery polygon (~601 ha).
+#   * Fetched on YOUR host (sovereign entry point), archived raw in
+#     imports/, converted to GeoJSON in susa_outbox/ (for QGIS + the
+#     SUSA -> EnkiSDB -> gates -> EnkiODB pipeline), and injected into
+#     the deployed court so the mask fits the REAL yard.
+#   * ODbL LAW: this geometry is (c) OpenStreetMap contributors, ODbL.
+#     Attribution stays displayed; the provenance note records the licence.
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-335-real-boundary-ingest.yml
+# ============================================================================
+
+- name: "PB-335 | Ingest the REAL Wadi-us-Salaam boundary (OSM way 325851897)"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    workshop_root: /opt/bahyway/workshop/najaf_navi
+    shala_dir: "{{ workshop_root }}/shala"
+    court: "{{ shala_dir }}/shala_wadi_us_salaam_heptamask_v2.html"
+    osm_way_id: "325851897"
+    raw_xml: "{{ workshop_root }}/imports/wadi_us_salam_way_{{ osm_way_id }}.xml"
+
+  tasks:
+
+    - name: "1.1 | Assert the court is deployed"
+      ansible.builtin.stat:
+        path: "{{ court }}"
+      register: c
+
+    - name: "1.2 | Halt if the court is missing"
+      ansible.builtin.assert:
+        that: c.stat.exists
+        fail_msg: "REFUSED: run PB-333 (and PB-334) first."
+
+    - name: "2.1 | Fetch the REAL polygon from the OSM API (raw, archived)"
+      ansible.builtin.get_url:
+        url: "https://api.openstreetmap.org/api/0.6/way/{{ osm_way_id }}/full"
+        dest: "{{ raw_xml }}"
+        mode: "0640"
+        force: true
+
+    - name: "3.1 | Write the converter (OSM XML -> GeoJSON + court JS)"
+      ansible.builtin.copy:
+        dest: "{{ workshop_root }}/imports/osm_way_to_yard.py"
+        mode: "0750"
+        content: |
+          #!/usr/bin/env python3
+          # PB-335: OSM way XML -> (a) GeoJSON for SUSA/QGIS,
+          #                        (b) real_yard.js for the Sala court.
+          import json, sys, xml.etree.ElementTree as ET
+
+          xml_path, geojson_path, js_path, way_id = sys.argv[1:5]
+          root = ET.parse(xml_path).getroot()
+          nodes = {n.get('id'): (float(n.get('lat')), float(n.get('lon')))
+                   for n in root.findall('node')}
+          way = None
+          for w in root.findall('way'):
+              if w.get('id') == way_id:
+                  way = w
+                  break
+          if way is None:
+              sys.exit('REFUSED: way %s not found in XML' % way_id)
+          ring = [nodes[nd.get('ref')] for nd in way.findall('nd')]
+          if len(ring) < 4:
+              sys.exit('REFUSED: degenerate ring')
+
+          geo = {
+            "type": "FeatureCollection",
+            "features": [{
+              "type": "Feature",
+              "properties": {
+                "name": "Wadi-us-Salaam",
+                "source": "OpenStreetMap way %s" % way_id,
+                "licence": "ODbL — (c) OpenStreetMap contributors",
+                "role": "yard boundary (REAL, surveyed)"
+              },
+              "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[lon, lat] for (lat, lon) in ring]]
+              }
+            }]
+          }
+          with open(geojson_path, 'w') as f:
+              json.dump(geo, f)
+
+          with open(js_path, 'w') as f:
+              f.write('var REAL_YARD_LL=' +
+                      json.dumps([[round(la, 7), round(lo, 7)]
+                                  for (la, lo) in ring]) + ';\n')
+          print('OK: %d vertices' % len(ring))
+
+    - name: "3.2 | Convert: real GeoJSON to susa_outbox + real_yard.js to shala"
+      ansible.builtin.command:
+        cmd: >
+          python3 {{ workshop_root }}/imports/osm_way_to_yard.py
+          {{ raw_xml }}
+          {{ workshop_root }}/susa_outbox/wadi_us_salam_boundary_REAL.geojson
+          {{ shala_dir }}/real_yard.js
+          {{ osm_way_id }}
+      register: conv
+      changed_when: true
+
+    - name: "4.1 | Inject the real boundary into the court"
+      ansible.builtin.blockinfile:
+        path: "{{ court }}"
+        insertbefore: "</body>"
+        marker: "<!-- {mark} PB-335 REAL YARD -->"
+        block: |
+          <script src="real_yard.js"></script>
+          <script>
+          /* PB-335: the approximation dies here. YARD is rebuilt from the
+             REAL surveyed polygon (OSM way {{ osm_way_id }}, ODbL). */
+          if (window.REAL_YARD_LL && REAL_YARD_LL.length > 3) {
+            YARD.length = 0;
+            for (var i = 0; i < REAL_YARD_LL.length; i++) {
+              YARD.push([m2x(REAL_YARD_LL[i][1]), m2y(REAL_YARD_LL[i][0])]);
+            }
+            AX = 0; AY = 0;
+            for (var a = 0; a < YARD.length; a++) { AX += YARD[a][0]; AY += YARD[a][1]; }
+            AX /= YARD.length; AY /= YARD.length;
+            MASK_R = 0;
+            for (var b = 0; b < YARD.length; b++) {
+              var d = Math.hypot(YARD[b][0] - AX, YARD[b][1] - AY);
+              if (d > MASK_R) MASK_R = d;
+            }
+            MASK_R *= 1.03;
+            cam.cx = AX; cam.cy = AY;
+            document.querySelector('.hud .law').textContent =
+              'REAL boundary: OSM way {{ osm_way_id }} (ODbL, (c) OpenStreetMap ' +
+              'contributors) · ' + REAL_YARD_LL.length + ' surveyed vertices · ' +
+              'index space only, truth = UTM 38N · Palāḫu: exact per cm';
+          }
+          </script>
+
+    - name: "5.1 | NUZI provenance note (source + licence)"
+      ansible.builtin.copy:
+        dest: "{{ workshop_root }}/nuzi_provenance/pb-335-note.md"
+        mode: "0640"
+        content: |
+          PB-335 REAL BOUNDARY ingest.
+          Source: OpenStreetMap way {{ osm_way_id }} (Wikidata Q1909993),
+          fetched raw to imports/ and converted to
+          susa_outbox/wadi_us_salam_boundary_REAL.geojson.
+          Licence: ODbL — (c) OpenStreetMap contributors (attribution kept
+          in the court and in the GeoJSON properties).
+          The workshop-approximate polygon (PB-333) is superseded; the
+          court now renders the surveyed yard. Converter output:
+          {{ conv.stdout | default('') }}
+
+    - name: "6.1 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "{{ conv.stdout | default('converted') }}"
+          - "REAL GeoJSON: {{ workshop_root }}/susa_outbox/wadi_us_salam_boundary_REAL.geojson"
+          - "Court now renders the surveyed Wadi-us-Salaam. No approximation remains."

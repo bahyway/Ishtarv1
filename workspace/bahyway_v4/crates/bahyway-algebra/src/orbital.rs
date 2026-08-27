@@ -29,7 +29,7 @@ use std::f64::consts::TAU; // 2π
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OrbitalPosition {
     /// Distance from tribe centroid — derived from δ = 1 − H(P).
-    pub radius:  f64,
+    pub radius: f64,
     /// Azimuth angle in radians `[0, 2π)` — derived from κ[12].
     pub azimuth: f64,
     /// Altitude above/below equatorial plane — derived from κ[14].
@@ -58,12 +58,7 @@ impl OrbitalPosition {
 ///
 /// # Returns
 /// `OrbitalPosition { radius, azimuth, altitude }`
-pub fn orbital_position(
-    kaki:  &[u8; 16],
-    delta: f64,
-    r_max: f64,
-    h_max: f64,
-) -> OrbitalPosition {
+pub fn orbital_position(kaki: &[u8; 16], delta: f64, r_max: f64, h_max: f64) -> OrbitalPosition {
     // Azimuth: κ[12] byte → angle in [0, 2π)
     let azimuth = TAU * (kaki[12] as f64) / 256.0;
 
@@ -74,7 +69,11 @@ pub fn orbital_position(
     // Radius: inner orbit (low r) = high quality (low delta)
     let radius = r_max * delta.clamp(0.0, 1.0);
 
-    OrbitalPosition { radius, azimuth, altitude }
+    OrbitalPosition {
+        radius,
+        azimuth,
+        altitude,
+    }
 }
 
 /// Secondary azimuth from κ[13] — used for sub-ring differentiation.
@@ -118,11 +117,17 @@ pub fn is_rim_particle(delta: f64) -> bool {
 /// consistent with the sovereign 5-shell decomposition.
 pub fn orbital_ring_layer(delta: f64) -> usize {
     // thresholds match sovereign_5_shells() boundaries from shells.rs
-    if      delta < 0.167 { 0 }
-    else if delta < 0.417 { 1 }
-    else if delta < 0.583 { 2 }
-    else if delta < 0.754 { 3 }
-    else                  { 4 }
+    if delta < 0.167 {
+        0
+    } else if delta < 0.417 {
+        1
+    } else if delta < 0.583 {
+        2
+    } else if delta < 0.754 {
+        3
+    } else {
+        4
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -132,7 +137,9 @@ mod tests {
     use super::*;
     use std::f64::consts::PI;
 
-    fn zero_kaki() -> [u8; 16] { [0u8; 16] }
+    fn zero_kaki() -> [u8; 16] {
+        [0u8; 16]
+    }
 
     fn kaki_with(byte12: u8, byte14: u8) -> [u8; 16] {
         let mut k = [0u8; 16];
@@ -160,8 +167,11 @@ mod tests {
         for byte in [0u8, 64, 128, 192, 255] {
             let k = kaki_with(byte, 0);
             let pos = orbital_position(&k, 0.0, 10.0, 5.0);
-            assert!(pos.azimuth >= 0.0 && pos.azimuth < TAU,
-                "azimuth {} out of [0, 2π)", pos.azimuth);
+            assert!(
+                pos.azimuth >= 0.0 && pos.azimuth < TAU,
+                "azimuth {} out of [0, 2π)",
+                pos.azimuth
+            );
         }
     }
 
@@ -170,7 +180,11 @@ mod tests {
         // κ[14]=0 → 0/256 − 0.5 = −0.5 → altitude = −0.5 × h_max
         let k = kaki_with(0, 0);
         let pos = orbital_position(&k, 0.0, 10.0, 4.0);
-        assert!((pos.altitude - (-2.0)).abs() < 1e-9, "altitude={}", pos.altitude);
+        assert!(
+            (pos.altitude - (-2.0)).abs() < 1e-9,
+            "altitude={}",
+            pos.altitude
+        );
     }
 
     #[test]
@@ -199,12 +213,17 @@ mod tests {
     fn radius_monotone_with_delta() {
         let r_max = 10.0;
         let deltas = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
-        let radii: Vec<f64> = deltas.iter()
+        let radii: Vec<f64> = deltas
+            .iter()
             .map(|&d| orbital_position(&zero_kaki(), d, r_max, 5.0).radius)
             .collect();
         for i in 0..radii.len() - 1 {
-            assert!(radii[i] <= radii[i + 1],
-                "radius not monotone: {:.2} > {:.2}", radii[i], radii[i+1]);
+            assert!(
+                radii[i] <= radii[i + 1],
+                "radius not monotone: {:.2} > {:.2}",
+                radii[i],
+                radii[i + 1]
+            );
         }
     }
 
@@ -213,9 +232,9 @@ mod tests {
         let k = kaki_with(42, 100);
         let p1 = orbital_position(&k, 0.3, 10.0, 5.0);
         let p2 = orbital_position(&k, 0.3, 10.0, 5.0);
-        assert_eq!(p1.azimuth,  p2.azimuth);
+        assert_eq!(p1.azimuth, p2.azimuth);
         assert_eq!(p1.altitude, p2.altitude);
-        assert_eq!(p1.radius,   p2.radius);
+        assert_eq!(p1.radius, p2.radius);
     }
 
     #[test]
@@ -238,13 +257,13 @@ mod tests {
 
     #[test]
     fn orbital_ring_layer_matches_quality_lanes() {
-        assert_eq!(orbital_ring_layer(0.0),  0); // GEM
-        assert_eq!(orbital_ring_layer(0.1),  0); // GEM
-        assert_eq!(orbital_ring_layer(0.2),  1); // TRIBE
-        assert_eq!(orbital_ring_layer(0.5),  2); // ACTIVE
+        assert_eq!(orbital_ring_layer(0.0), 0); // GEM
+        assert_eq!(orbital_ring_layer(0.1), 0); // GEM
+        assert_eq!(orbital_ring_layer(0.2), 1); // TRIBE
+        assert_eq!(orbital_ring_layer(0.5), 2); // ACTIVE
         assert_eq!(orbital_ring_layer(0.65), 3); // FUZZY
-        assert_eq!(orbital_ring_layer(0.8),  4); // DEAD
-        assert_eq!(orbital_ring_layer(1.0),  4); // DEAD
+        assert_eq!(orbital_ring_layer(0.8), 4); // DEAD
+        assert_eq!(orbital_ring_layer(1.0), 4); // DEAD
     }
 
     #[test]

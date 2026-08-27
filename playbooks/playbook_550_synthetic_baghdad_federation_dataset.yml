@@ -1,15 +1,15 @@
 # =====================================================================
-# PB-322 — GulaFederationEngine · Synthetic Baghdad federation dataset
-# Suite: GulaFederation (PB-321..PB-326) · Run FROM Fedora 44 HOST.
+# PB-550 — GulaFederationEngine · Synthetic Baghdad federation dataset
+# Suite: GulaFederation (PB-549..PB-554) · Run FROM Fedora 44 HOST.
 # Produces the synthetic province: 400 public pharmacies, 40 hospital
 # pharmacies, 12 wholesale warehouses, ~8,000 products with batches,
 # expiries, assay ratios, and the three price planes
 # (official / commercial / black-market) for the tau-spread instrument.
-# Output feeds PB-321 (advisory), PB-326 (batch audit) and the Šala
+# Output feeds PB-549 (advisory), PB-554 (batch audit) and the Šala
 # prototype. Deterministic seed => reproducible court exhibits.
 # =====================================================================
 ---
-- name: PB-322 synthetic Baghdad federation dataset
+- name: PB-550 synthetic Baghdad federation dataset
   hosts: localhost
   connection: local
   gather_facts: true
@@ -23,6 +23,7 @@
         path: "{{ item }}"
         state: directory
         mode: "0755"
+      check_mode: false
       loop:
         - "{{ crate_dir }}/src"
         - "{{ data_dir }}"
@@ -37,6 +38,8 @@
           version = "0.1.0"
           edition = "2021"
           description = "Deterministic synthetic Baghdad-province pharmaceutical federation for GulaFederationEngine testing."
+
+          [workspace]  # standalone crate -- not a member of the workspace/bahyway_v4 monorepo
 
           [dependencies]
           serde = { version = "1", features = ["derive"] }
@@ -128,8 +131,14 @@
                                      || f.contains("inj") || f.contains("vial");
                           let expiry = rng.gen_range(-60..720);
                           let assay: f64 = 100.0 + rng.gen_range(-8.0..4.0);
-                          let po = rng.gen_range(0.5..40.0);
-                          let spread = rng.gen_range(1.0..3.2);
+                          // 2026-08-23, found live: E0689 "can't call method `round`
+                          // on ambiguous numeric type `{float}`" -- po and spread had
+                          // no type annotation, and unlike integers, float literals
+                          // have no default fallback type in Rust. Multiplying two
+                          // still-ambiguous values together (po * spread) never
+                          // resolved either one. Explicit f64 fixes it.
+                          let po: f64 = rng.gen_range(0.5..40.0);
+                          let spread: f64 = rng.gen_range(1.0..3.2);
                           batches.push(Batch{
                               batch_id: format!("BGH-{:04}-{:04}", products, b),
                               product: product.clone(),
@@ -155,7 +164,7 @@
               fs::write("nodes.json", serde_json::to_string_pretty(&nodes).unwrap()).unwrap();
               fs::write("batches.json", serde_json::to_string_pretty(&batches).unwrap()).unwrap();
 
-              // Advisory read-model for PB-321: medicine -> stocked anchors
+              // Advisory read-model for PB-549: medicine -> stocked anchors
               use std::collections::BTreeMap;
               let mut rm: BTreeMap<String, Vec<serde_json::Value>> = BTreeMap::new();
               for b in &batches {

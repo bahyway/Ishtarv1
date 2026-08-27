@@ -4,8 +4,8 @@
 //! The beam validates that the incoming EAV set satisfies the template's
 //! required fields, returning the list of missing required attr_hashes.
 
-use template_engine::{AttrTypeRegistry, Template, TypeViolation, validate_required};
 use enkidb_journal::entry::EavTriple;
+use template_engine::{validate_required, AttrTypeRegistry, Template, TypeViolation};
 
 /// Result of VGCA beam validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,10 +13,10 @@ pub struct ValidationResult {
     /// attr_hashes of required fields that are absent from the EAV set.
     pub missing_required: Vec<u32>,
     /// Number of EAV triples that don't appear in the template at all.
-    pub unknown_attrs:    usize,
+    pub unknown_attrs: usize,
     /// AttrType Registry mismatches found by `validate_with_types`. Empty
     /// when `validate` was used instead, or when no violation occurred.
-    pub type_violations:  Vec<TypeViolation>,
+    pub type_violations: Vec<TypeViolation>,
 }
 
 impl ValidationResult {
@@ -26,18 +26,26 @@ impl ValidationResult {
     /// canonical AttrType registered yet is not necessarily an error.
     pub fn is_valid(&self) -> bool {
         self.missing_required.is_empty()
-            && !self.type_violations.iter().any(|v| matches!(v, TypeViolation::WrongByteLength { .. }))
+            && !self
+                .type_violations
+                .iter()
+                .any(|v| matches!(v, TypeViolation::WrongByteLength { .. }))
     }
 }
 
 /// Validate an EAV set against a template (required-field presence only).
 pub fn validate(template: &Template, eav: &[EavTriple]) -> ValidationResult {
     let present: Vec<u32> = eav.iter().map(|t| t.attr_hash).collect();
-    let missing_required  = validate_required(template, &present);
-    let unknown_attrs = eav.iter()
+    let missing_required = validate_required(template, &present);
+    let unknown_attrs = eav
+        .iter()
         .filter(|t| !template.contains_attr(t.attr_hash))
         .count();
-    ValidationResult { missing_required, unknown_attrs, type_violations: Vec::new() }
+    ValidationResult {
+        missing_required,
+        unknown_attrs,
+        type_violations: Vec::new(),
+    }
 }
 
 /// Same as `validate`, plus a second, independent check: each EAV triple's
@@ -69,7 +77,7 @@ mod tests {
             "t.test",
             "Test",
             &[
-                FieldSpec::new(0x1A4B, "state",   true),
+                FieldSpec::new(0x1A4B, "state", true),
                 FieldSpec::new(0x2C5E, "quality", false),
             ],
         )
@@ -77,7 +85,7 @@ mod tests {
 
     #[test]
     fn valid_when_all_required_present() {
-        let t   = make_template();
+        let t = make_template();
         let eav = vec![EavTriple::new(0x1A4B, b"1".to_vec())];
         let res = validate(&t, &eav);
         assert!(res.is_valid());
@@ -86,7 +94,7 @@ mod tests {
 
     #[test]
     fn invalid_when_required_missing() {
-        let t   = make_template();
+        let t = make_template();
         let eav = vec![EavTriple::new(0x2C5E, b"0.9".to_vec())];
         let res = validate(&t, &eav);
         assert!(!res.is_valid());
@@ -95,7 +103,7 @@ mod tests {
 
     #[test]
     fn unknown_attr_counted() {
-        let t   = make_template();
+        let t = make_template();
         let eav = vec![
             EavTriple::new(0x1A4B, b"1".to_vec()),
             EavTriple::new(0xBEEF, b"extra".to_vec()),
@@ -110,12 +118,21 @@ mod tests {
     const PRICE_USD: u32 = 0x1A4B;
 
     fn price_template() -> Template {
-        Template::default_template("t.price", "Price", &[FieldSpec::new(PRICE_USD, "price_usd", true)])
+        Template::default_template(
+            "t.price",
+            "Price",
+            &[FieldSpec::new(PRICE_USD, "price_usd", true)],
+        )
     }
 
     fn price_registry() -> AttrTypeRegistry {
         let mut r = AttrTypeRegistry::new();
-        assert!(r.register(AttrTypeSpec::new(PRICE_USD, "price_usd", AttrType::FixedPointScaledInteger { scale: 2 }, 1)));
+        assert!(r.register(AttrTypeSpec::new(
+            PRICE_USD,
+            "price_usd",
+            AttrType::FixedPointScaledInteger { scale: 2 },
+            1
+        )));
         r
     }
 
@@ -147,7 +164,10 @@ mod tests {
         let r = AttrTypeRegistry::new();
         let eav = vec![EavTriple::new(0x1A4B, b"1".to_vec())];
         let res = validate_with_types(&t, &eav, &r);
-        assert!(res.is_valid(), "an unregistered AttrType alone must not fail validation");
+        assert!(
+            res.is_valid(),
+            "an unregistered AttrType alone must not fail validation"
+        );
         assert_eq!(res.type_violations.len(), 1);
     }
 }

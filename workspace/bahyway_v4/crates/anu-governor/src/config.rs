@@ -88,13 +88,25 @@ pub struct RunCfg {
     pub enkimdb_write_port: u16,
 }
 
-fn default_vault_min_privilege() -> u8 { 5 }
-fn default_enkimdb_write_port() -> u16 { 7201 }
+fn default_vault_min_privilege() -> u8 {
+    5
+}
+fn default_enkimdb_write_port() -> u16 {
+    7201
+}
 
-fn default_fix_dir() -> String { "fixes".into() }
-fn default_report_dir() -> String { "reports".into() }
-fn default_seal_key() -> String { "akkadian_seal.key".into() }
-fn default_chronicle_dir() -> String { "chronicle".into() }
+fn default_fix_dir() -> String {
+    "fixes".into()
+}
+fn default_report_dir() -> String {
+    "reports".into()
+}
+fn default_seal_key() -> String {
+    "akkadian_seal.key".into()
+}
+fn default_chronicle_dir() -> String {
+    "chronicle".into()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Param {

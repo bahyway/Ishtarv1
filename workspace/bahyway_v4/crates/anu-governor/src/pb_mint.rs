@@ -62,7 +62,10 @@ pub fn mint_new_playbooks(
         .map(|r| r.file)
         .collect();
 
-    let new_pbs: Vec<_> = scanned.into_iter().filter(|p| !already.contains(&p.file)).collect();
+    let new_pbs: Vec<_> = scanned
+        .into_iter()
+        .filter(|p| !already.contains(&p.file))
+        .collect();
     if new_pbs.is_empty() {
         return log;
     }
@@ -74,7 +77,11 @@ pub fn mint_new_playbooks(
     if let Some(p) = registry_path.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    let mut registry_file = std::fs::OpenOptions::new().create(true).append(true).open(registry_path).ok();
+    let mut registry_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(registry_path)
+        .ok();
 
     for (i, pb) in new_pbs.iter().enumerate() {
         let kaki = write_node.ingest_pb(pb, i as u32 + 1);
@@ -118,13 +125,20 @@ mod tests {
     #[test]
     fn mints_a_real_new_pb_and_records_it_in_the_registry() {
         let dir = scratch_dir("mint_new");
-        std::fs::write(dir.join("playbooks/playbook_900_test_scratch.yml"), "- hosts: localhost\n").unwrap();
+        std::fs::write(
+            dir.join("playbooks/playbook_900_test_scratch.yml"),
+            "- hosts: localhost\n",
+        )
+        .unwrap();
         let triage = dir.join("docs_triage_missing.md"); // deliberately absent
         let registry = dir.join("chronicle/pb_kaki_registry.jsonl");
         let enkimdb_root = dir.join("enkimdb_data");
 
         let log = mint_new_playbooks(&dir, &triage, &registry, &enkimdb_root);
-        assert!(log.iter().any(|l| l.contains("minted PB-900")), "expected a mint log line, got: {log:?}");
+        assert!(
+            log.iter().any(|l| l.contains("minted PB-900")),
+            "expected a mint log line, got: {log:?}"
+        );
 
         let registry_text = std::fs::read_to_string(&registry).unwrap();
         // PbProfile.file is the file STEM (scan_playbooks strips the
@@ -137,7 +151,11 @@ mod tests {
     #[test]
     fn does_not_re_mint_a_pb_already_in_the_registry() {
         let dir = scratch_dir("no_remint");
-        std::fs::write(dir.join("playbooks/playbook_901_test_scratch.yml"), "- hosts: localhost\n").unwrap();
+        std::fs::write(
+            dir.join("playbooks/playbook_901_test_scratch.yml"),
+            "- hosts: localhost\n",
+        )
+        .unwrap();
         let triage = dir.join("docs_triage_missing.md");
         let registry = dir.join("chronicle/pb_kaki_registry.jsonl");
         let enkimdb_root = dir.join("enkimdb_data");
@@ -146,6 +164,9 @@ mod tests {
         assert!(!first.is_empty(), "first run must mint the new PB");
 
         let second = mint_new_playbooks(&dir, &triage, &registry, &enkimdb_root);
-        assert!(second.is_empty(), "second run must find nothing new to mint: {second:?}");
+        assert!(
+            second.is_empty(),
+            "second run must find nothing new to mint: {second:?}"
+        );
     }
 }

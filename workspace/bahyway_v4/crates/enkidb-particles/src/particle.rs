@@ -1,8 +1,8 @@
 //! Particle — the 7D EAV row type.
 
+use akkvalue::AkkValue;
 use core::fmt;
 use enkidb_kaki::IdentityKaki;
-use akkvalue::AkkValue;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -22,27 +22,27 @@ pub const MATERIALIZATION_BASE: u32 = 0;
 #[derive(Debug, Clone)]
 pub struct Particle {
     /// E — entity this assertion is about.
-    pub entity:    IdentityKaki,
+    pub entity: IdentityKaki,
     /// A — which attribute is being asserted.
     pub attribute: String,
     /// V — the asserted value.
-    pub value:     AkkValue,
+    pub value: AkkValue,
     /// T — time of this assertion (UNIX epoch seconds).
     pub timestamp: u64,
     /// S — shard (0 at MVP).
-    pub shard:     u32,
+    pub shard: u32,
     /// Z — proof context (0 = unverified, non-zero = proof ID at MVP).
     pub proof_ctx: u32,
     /// M — materialization tag (0 = base particle, non-zero = derived view).
-    pub mat_tag:   u32,
+    pub mat_tag: u32,
 }
 
 impl Particle {
     /// Construct a base particle (S=0, Z=0, M=0) — the common MVP path.
     pub fn base(
-        entity:    IdentityKaki,
+        entity: IdentityKaki,
         attribute: impl Into<String>,
-        value:     AkkValue,
+        value: AkkValue,
         timestamp: u64,
     ) -> Self {
         Self {
@@ -50,21 +50,21 @@ impl Particle {
             attribute: attribute.into(),
             value,
             timestamp,
-            shard:     SHARD_DEFAULT,
+            shard: SHARD_DEFAULT,
             proof_ctx: PROOF_CTX_NONE,
-            mat_tag:   MATERIALIZATION_BASE,
+            mat_tag: MATERIALIZATION_BASE,
         }
     }
 
     /// Full constructor — all 7 dimensions explicit.
     pub fn new(
-        entity:    IdentityKaki,
+        entity: IdentityKaki,
         attribute: impl Into<String>,
-        value:     AkkValue,
+        value: AkkValue,
         timestamp: u64,
-        shard:     u32,
+        shard: u32,
         proof_ctx: u32,
-        mat_tag:   u32,
+        mat_tag: u32,
     ) -> Self {
         Self {
             entity,
@@ -79,15 +79,21 @@ impl Particle {
 
     /// Returns `true` if this is a base particle (not materialized).
     #[inline]
-    pub fn is_base(&self) -> bool { self.mat_tag == MATERIALIZATION_BASE }
+    pub fn is_base(&self) -> bool {
+        self.mat_tag == MATERIALIZATION_BASE
+    }
 
     /// Returns `true` if proof context is unverified (Z=0).
     #[inline]
-    pub fn is_unverified(&self) -> bool { self.proof_ctx == PROOF_CTX_NONE }
+    pub fn is_unverified(&self) -> bool {
+        self.proof_ctx == PROOF_CTX_NONE
+    }
 
     /// Returns `true` if this particle holds a null value.
     #[inline]
-    pub fn is_null(&self) -> bool { self.value.is_null() }
+    pub fn is_null(&self) -> bool {
+        self.value.is_null()
+    }
 
     /// Returns the attribute key (E, A) tuple for grouping current-value queries.
     pub fn entity_attr_key(&self) -> (&IdentityKaki, &str) {
@@ -101,9 +107,9 @@ impl fmt::Display for Particle {
             f,
             "P({entity}, {attr}, {value}, t={ts})",
             entity = self.entity,
-            attr   = self.attribute,
-            value  = self.value,
-            ts     = self.timestamp,
+            attr = self.attribute,
+            value = self.value,
+            ts = self.timestamp,
         )
     }
 }
@@ -121,16 +127,20 @@ impl fmt::Display for Particle {
 #[derive(Debug, Clone)]
 pub struct ParticleBirthState {
     /// The entity this birth state belongs to.
-    pub entity:     IdentityKaki,
+    pub entity: IdentityKaki,
     /// Creation epoch (all birth-state particles share this T).
-    pub born_at:    u64,
+    pub born_at: u64,
     /// The birth-state attribute assertions (sealed at born_at).
     pub attributes: Vec<(String, AkkValue)>,
 }
 
 impl ParticleBirthState {
     pub fn new(entity: IdentityKaki, born_at: u64) -> Self {
-        Self { entity, born_at, attributes: Vec::new() }
+        Self {
+            entity,
+            born_at,
+            attributes: Vec::new(),
+        }
     }
 
     /// Add a birth-state attribute. Call only during entity creation.
@@ -143,9 +153,7 @@ impl ParticleBirthState {
     pub fn into_particles(self) -> Vec<Particle> {
         self.attributes
             .into_iter()
-            .map(|(attr, value)| {
-                Particle::base(self.entity, attr, value, self.born_at)
-            })
+            .map(|(attr, value)| Particle::base(self.entity, attr, value, self.born_at))
             .collect()
     }
 }
@@ -155,9 +163,9 @@ impl ParticleBirthState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_kaki::{KakiRole, mint::KakiMinter};
-    use bahyway_core::TribeId;
     use akkvalue::AkkValue;
+    use bahyway_core::TribeId;
+    use enkidb_kaki::{mint::KakiMinter, KakiRole};
 
     fn make_kaki() -> IdentityKaki {
         let m = KakiMinter::new(TribeId::from_u16(0x0001));
@@ -167,7 +175,12 @@ mod tests {
     #[test]
     fn base_particle_defaults() {
         let k = make_kaki();
-        let p = Particle::base(k, "quality.score", AkkValue::QualityScore(200), 1_700_000_000);
+        let p = Particle::base(
+            k,
+            "quality.score",
+            AkkValue::QualityScore(200),
+            1_700_000_000,
+        );
         assert!(p.is_base());
         assert!(p.is_unverified());
         assert!(!p.is_null());
@@ -187,9 +200,9 @@ mod tests {
     fn full_7d_constructor() {
         let k = make_kaki();
         let p = Particle::new(k, "geo.coord", AkkValue::Int(42), 100, 3, 7, 1);
-        assert_eq!(p.shard,     3);
+        assert_eq!(p.shard, 3);
         assert_eq!(p.proof_ctx, 7);
-        assert_eq!(p.mat_tag,   1);
+        assert_eq!(p.mat_tag, 1);
         assert!(!p.is_base());
         assert!(!p.is_unverified());
     }
@@ -214,10 +227,10 @@ mod tests {
 
     #[test]
     fn birth_state_into_particles() {
-        let k   = make_kaki();
+        let k = make_kaki();
         let bst = ParticleBirthState::new(k, 42_000)
             .with("birth.creator", AkkValue::Text("system".into()))
-            .with("birth.tribe",   AkkValue::Int(1));
+            .with("birth.tribe", AkkValue::Int(1));
         let particles = bst.into_particles();
         assert_eq!(particles.len(), 2);
         for p in &particles {
@@ -243,9 +256,9 @@ mod tests {
     #[test]
     fn geo_coordinate_stored_as_akkvalue() {
         use akkvalue::AkkCoordinate;
-        let k   = make_kaki();
+        let k = make_kaki();
         let geo = AkkCoordinate::new(32.0031, 44.3282); // Najaf, Iraq
-        let p   = Particle::base(k, "location.coord", AkkValue::Coordinate(geo), 0);
+        let p = Particle::base(k, "location.coord", AkkValue::Coordinate(geo), 0);
         if let AkkValue::Coordinate(c) = &p.value {
             assert!((c.lat - 32.0031).abs() < 1e-6);
         } else {

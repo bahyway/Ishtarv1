@@ -37,17 +37,17 @@
 #![forbid(unsafe_code)]
 
 pub mod cause;
-pub mod snapshot;
-pub mod probe;
 pub mod journal;
+pub mod probe;
+pub mod snapshot;
 
 pub use cause::DeviationCause;
-pub use snapshot::{OrbitalSnapshot, HYSTERESIS, near_boundary};
+pub use journal::{OrbitalDeviationEntry, OrbitalDeviationJournal};
 pub use probe::{
-    probe, batch_probe, ProbeInput, ProbeResult,
-    MIN_DEVIATION_DISTANCE, FRESHNESS_DECAY_THRESHOLD, NEIGHBOUR_DELTA_THRESHOLD,
+    batch_probe, probe, ProbeInput, ProbeResult, FRESHNESS_DECAY_THRESHOLD, MIN_DEVIATION_DISTANCE,
+    NEIGHBOUR_DELTA_THRESHOLD,
 };
-pub use journal::{OrbitalDeviationJournal, OrbitalDeviationEntry};
+pub use snapshot::{near_boundary, OrbitalSnapshot, HYSTERESIS};
 
 /// High-level convenience: run the probe, and if the result is a genuine trust
 /// violation automatically record it in the journal.
@@ -55,9 +55,9 @@ pub use journal::{OrbitalDeviationJournal, OrbitalDeviationEntry};
 /// Returns the `ProbeResult` in all cases so the caller can read the cause and
 /// trust_penalty regardless of whether a journal entry was written.
 pub fn probe_and_journal(
-    input:       &ProbeInput<'_>,
+    input: &ProbeInput<'_>,
     particle_id: u64,
-    journal:     &mut OrbitalDeviationJournal,
+    journal: &mut OrbitalDeviationJournal,
 ) -> ProbeResult {
     let result = probe(input);
     if result.is_trust_violation() {
@@ -78,14 +78,18 @@ pub fn probe_and_journal(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tribe_orbit_engine::OrbitalAssignment;
     use fuzzy_engine::QualityTier;
+    use tribe_orbit_engine::OrbitalAssignment;
 
     const FP: u64 = 0xBEEF_CAFE_0000_0001;
 
     fn snap(epoch: u64, b11: u8, kaki: [u8; 16]) -> OrbitalSnapshot {
         let assignment = OrbitalAssignment::from_kaki(&kaki, b11);
-        let tier = if b11 >= 200 { QualityTier::Gem } else { QualityTier::NonActive };
+        let tier = if b11 >= 200 {
+            QualityTier::Gem
+        } else {
+            QualityTier::NonActive
+        };
         OrbitalSnapshot::new(epoch, b11, tier, assignment, 3, 200, FP)
     }
 
@@ -94,12 +98,16 @@ mod tests {
         // Deep Gem → deep Dead, different KAKI, no events, stable rules
         let kaki_a = [0u8; 16];
         let kaki_b = [0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 0, 255, 0];
-        let prev   = snap(1, 240, kaki_a);
-        let curr   = snap(2, 20,  kaki_b);
+        let prev = snap(1, 240, kaki_a);
+        let curr = snap(2, 20, kaki_b);
 
         let mut journal = OrbitalDeviationJournal::new();
-        let input   = ProbeInput { previous: &prev, current: &curr, new_eav_events: 0 };
-        let result  = probe_and_journal(&input, 0xDEAD_BEEF, &mut journal);
+        let input = ProbeInput {
+            previous: &prev,
+            current: &curr,
+            new_eav_events: 0,
+        };
+        let result = probe_and_journal(&input, 0xDEAD_BEEF, &mut journal);
 
         assert!(result.is_trust_violation());
         assert_eq!(journal.len(), 1);
@@ -112,11 +120,18 @@ mod tests {
         let curr = snap(2, 155, [0u8; 16]);
 
         let mut journal = OrbitalDeviationJournal::new();
-        let input  = ProbeInput { previous: &prev, current: &curr, new_eav_events: 5 };
+        let input = ProbeInput {
+            previous: &prev,
+            current: &curr,
+            new_eav_events: 5,
+        };
         let result = probe_and_journal(&input, 0xAAAA, &mut journal);
 
         assert!(!result.is_trust_violation());
-        assert!(journal.is_empty(), "legitimate evolution must not be journaled");
+        assert!(
+            journal.is_empty(),
+            "legitimate evolution must not be journaled"
+        );
     }
 
     #[test]
@@ -127,8 +142,12 @@ mod tests {
         // Two distinct unexplained deviations at different epochs
         for obs_epoch in [10u64, 20u64] {
             let prev = snap(obs_epoch - 1, 240, [0u8; 16]);
-            let curr = snap(obs_epoch,     20,  kaki_b);
-            let input = ProbeInput { previous: &prev, current: &curr, new_eav_events: 0 };
+            let curr = snap(obs_epoch, 20, kaki_b);
+            let input = ProbeInput {
+                previous: &prev,
+                current: &curr,
+                new_eav_events: 0,
+            };
             probe_and_journal(&input, 0x1111, &mut journal);
         }
 

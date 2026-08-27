@@ -29,13 +29,13 @@ pub const MAX_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FrameKind {
-    Query         = 0x01,
+    Query = 0x01,
     QueryFragment = 0x02,
-    ResultStream  = 0x03,
-    ResultEnd     = 0x04,
-    Error         = 0x05,
-    Ping          = 0x06,
-    Pong          = 0x07,
+    ResultStream = 0x03,
+    ResultEnd = 0x04,
+    Error = 0x05,
+    Ping = 0x06,
+    Pong = 0x07,
 }
 
 impl FrameKind {
@@ -48,7 +48,7 @@ impl FrameKind {
             0x05 => Some(Self::Error),
             0x06 => Some(Self::Ping),
             0x07 => Some(Self::Pong),
-            _    => None,
+            _ => None,
         }
     }
 }
@@ -56,9 +56,9 @@ impl FrameKind {
 /// A single ENKIDU wire frame (decoded from or to be encoded onto a TCP stream).
 #[derive(Debug, Clone)]
 pub struct EnkiFrame {
-    pub kind:    FrameKind,
+    pub kind: FrameKind,
     /// Frame-level flags (reserved, always 0x00 in v1).
-    pub flags:   u8,
+    pub flags: u8,
     /// Raw payload bytes (≤ MAX_PAYLOAD_BYTES).
     pub payload: Vec<u8>,
 }
@@ -70,12 +70,20 @@ impl EnkiFrame {
         let mut payload = Vec::with_capacity(16 + heptascript.len());
         payload.extend_from_slice(actor_kaki.bytes());
         payload.extend_from_slice(heptascript);
-        Self { kind: FrameKind::Query, flags: 0, payload }
+        Self {
+            kind: FrameKind::Query,
+            flags: 0,
+            payload,
+        }
     }
 
     /// Build a RESULT_STREAM frame carrying a batch of raw particle bytes.
     pub fn result_stream(batch: Vec<u8>) -> Self {
-        Self { kind: FrameKind::ResultStream, flags: 0, payload: batch }
+        Self {
+            kind: FrameKind::ResultStream,
+            flags: 0,
+            payload: batch,
+        }
     }
 
     /// Build a RESULT_END frame.
@@ -84,7 +92,11 @@ impl EnkiFrame {
         let mut payload = Vec::with_capacity(12);
         payload.extend_from_slice(&total_particles.to_le_bytes());
         payload.extend_from_slice(&duration_ms.to_le_bytes());
-        Self { kind: FrameKind::ResultEnd, flags: 0, payload }
+        Self {
+            kind: FrameKind::ResultEnd,
+            flags: 0,
+            payload,
+        }
     }
 
     /// Build an ERROR frame.
@@ -93,11 +105,27 @@ impl EnkiFrame {
         let mut payload = Vec::with_capacity(1 + message.len());
         payload.push(code);
         payload.extend_from_slice(message.as_bytes());
-        Self { kind: FrameKind::Error, flags: 0, payload }
+        Self {
+            kind: FrameKind::Error,
+            flags: 0,
+            payload,
+        }
     }
 
-    pub fn ping() -> Self { Self { kind: FrameKind::Ping, flags: 0, payload: vec![] } }
-    pub fn pong() -> Self { Self { kind: FrameKind::Pong, flags: 0, payload: vec![] } }
+    pub fn ping() -> Self {
+        Self {
+            kind: FrameKind::Ping,
+            flags: 0,
+            payload: vec![],
+        }
+    }
+    pub fn pong() -> Self {
+        Self {
+            kind: FrameKind::Pong,
+            flags: 0,
+            payload: vec![],
+        }
+    }
 }
 
 /// Stateless codec: encode `EnkiFrame` → bytes and decode bytes → `EnkiFrame`.
@@ -132,7 +160,7 @@ impl FrameCodec {
             return Ok(None);
         }
         let kind_byte = src[0];
-        let flags     = src[1];
+        let flags = src[1];
         let payload_len = u32::from_le_bytes([src[2], src[3], src[4], src[5]]) as usize;
 
         if payload_len > MAX_PAYLOAD_BYTES {
@@ -144,11 +172,17 @@ impl FrameCodec {
             return Ok(None); // Incomplete — wait for more bytes.
         }
 
-        let kind = FrameKind::from_byte(kind_byte)
-            .ok_or(DecodeError::UnknownKind(kind_byte))?;
+        let kind = FrameKind::from_byte(kind_byte).ok_or(DecodeError::UnknownKind(kind_byte))?;
 
         let payload = src[Self::HEADER_LEN..total].to_vec();
-        Ok(Some((EnkiFrame { kind, flags, payload }, total)))
+        Ok(Some((
+            EnkiFrame {
+                kind,
+                flags,
+                payload,
+            },
+            total,
+        )))
     }
 }
 
@@ -165,14 +199,20 @@ pub enum DecodeError {
 
 impl std::fmt::Display for EncodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self { Self::PayloadTooLarge(n) => write!(f, "payload {n}B exceeds {MAX_PAYLOAD_BYTES}B limit") }
+        match self {
+            Self::PayloadTooLarge(n) => {
+                write!(f, "payload {n}B exceeds {MAX_PAYLOAD_BYTES}B limit")
+            }
+        }
     }
 }
 impl std::fmt::Display for DecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnknownKind(b)    => write!(f, "unknown frame kind 0x{b:02X}"),
-            Self::PayloadTooLarge(n) => write!(f, "payload {n}B exceeds {MAX_PAYLOAD_BYTES}B limit"),
+            Self::UnknownKind(b) => write!(f, "unknown frame kind 0x{b:02X}"),
+            Self::PayloadTooLarge(n) => {
+                write!(f, "payload {n}B exceeds {MAX_PAYLOAD_BYTES}B limit")
+            }
         }
     }
 }
@@ -185,7 +225,9 @@ mod tests {
     fn dummy_kaki() -> Kaki {
         derive_pattern_kaki(
             PatternType::CrowdFlow,
-            FixedCoord7D { d: [1, 0, 0, 0, 0, 0, 0] },
+            FixedCoord7D {
+                d: [1, 0, 0, 0, 0, 0, 0],
+            },
             [0u8; 32],
             8_500,
             1,
@@ -218,7 +260,7 @@ mod tests {
         let (decoded, _) = FrameCodec::decode(&buf).unwrap().unwrap();
         assert_eq!(decoded.kind, FrameKind::ResultEnd);
         let total = u64::from_le_bytes(decoded.payload[..8].try_into().unwrap());
-        let dur   = u32::from_le_bytes(decoded.payload[8..12].try_into().unwrap());
+        let dur = u32::from_le_bytes(decoded.payload[8..12].try_into().unwrap());
         assert_eq!(total, 1_000_000_000);
         assert_eq!(dur, 487);
     }

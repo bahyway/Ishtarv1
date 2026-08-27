@@ -70,7 +70,7 @@ impl SurvivorAggregator {
         Ok(SurvivorSignal {
             confidence_pct,
             hepta_cell,
-            depth_m: 0.0,   // depth estimated by robot LIDAR in Phase 2
+            depth_m: 0.0, // depth estimated by robot LIDAR in Phase 2
             epoch_s,
             source_count: signals.len() as u8,
         })
@@ -78,5 +78,7 @@ impl SurvivorAggregator {
 }
 
 impl Default for SurvivorAggregator {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

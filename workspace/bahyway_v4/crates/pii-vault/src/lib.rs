@@ -31,7 +31,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use kupru::{AkkadianCipher, fast_hasher};
+use kupru::{fast_hasher, AkkadianCipher};
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
@@ -50,10 +50,10 @@ pub enum PiiError {
 impl core::fmt::Display for PiiError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            PiiError::Erased             => f.write_str("PII erased — GDPR Article 17 erasure applied"),
-            PiiError::CryptoFailure(s)   => write!(f, "PII crypto failure: {s}"),
-            PiiError::InvalidInput(s)    => write!(f, "PII invalid input: {s}"),
-            PiiError::FieldAbsent        => f.write_str("PII field not present in sidecar"),
+            PiiError::Erased => f.write_str("PII erased — GDPR Article 17 erasure applied"),
+            PiiError::CryptoFailure(s) => write!(f, "PII crypto failure: {s}"),
+            PiiError::InvalidInput(s) => write!(f, "PII invalid input: {s}"),
+            PiiError::FieldAbsent => f.write_str("PII field not present in sidecar"),
         }
     }
 }
@@ -63,17 +63,17 @@ pub type PiiResult<T> = Result<T, PiiError>;
 // ── Field tags — domain separators ────────────────────────────────────────────
 
 /// Field tag for the grave owner's Arabic name.
-pub const FIELD_OWNER_NAME:    &[u8] = b"najaf.owner_name_arabic.v4";
+pub const FIELD_OWNER_NAME: &[u8] = b"najaf.owner_name_arabic.v4";
 /// Field tag for the Hijri year of death.
-pub const FIELD_DEATH_YEAR:    &[u8] = b"najaf.death_hijri_year.v4";
+pub const FIELD_DEATH_YEAR: &[u8] = b"najaf.death_hijri_year.v4";
 /// Field tag for extended tribe affiliation (beyond TribeId).
-pub const FIELD_TRIBE_DETAIL:  &[u8] = b"najaf.tribe_affiliation.v4";
+pub const FIELD_TRIBE_DETAIL: &[u8] = b"najaf.tribe_affiliation.v4";
 /// Field tag for family lineage text.
 pub const FIELD_FAMILY_LINEAGE: &[u8] = b"najaf.family_lineage.v4";
 /// Field tag for civil registry reference number.
-pub const FIELD_CIVIL_REF:     &[u8] = b"najaf.civil_registry_ref.v4";
+pub const FIELD_CIVIL_REF: &[u8] = b"najaf.civil_registry_ref.v4";
 /// Generic field tag for WPD operator identity.
-pub const FIELD_WPD_OPERATOR:  &[u8] = b"wpd.operator_identity.v4";
+pub const FIELD_WPD_OPERATOR: &[u8] = b"wpd.operator_identity.v4";
 
 // ── PiiVault ──────────────────────────────────────────────────────────────────
 
@@ -98,7 +98,10 @@ impl PiiVault {
     /// In production, derive `master_key` via `kupru::SargonKdf` (Argon2id)
     /// from an operator passphrase.  For tests, use any 32-byte value.
     pub fn new(master_key: [u8; 32]) -> Self {
-        PiiVault { master_key, erased: HashSet::new() }
+        PiiVault {
+            master_key,
+            erased: HashSet::new(),
+        }
     }
 
     /// Encrypt `plaintext` as the PII field `field_tag` for entity `kaki_hash`.
@@ -118,32 +121,29 @@ impl PiiVault {
         if self.erased.contains(&kaki_hash) {
             return Err(PiiError::Erased);
         }
-        let key    = self.derive_key(kaki_hash, field_tag);
+        let key = self.derive_key(kaki_hash, field_tag);
         let cipher = AkkadianCipher::from_key_bytes(&key)
             .map_err(|e| PiiError::CryptoFailure(e.to_string()))?;
         let aad = kaki_hash.to_le_bytes();
-        cipher.seal(plaintext, &aad)
+        cipher
+            .seal(plaintext, &aad)
             .map_err(|e| PiiError::CryptoFailure(e.to_string()))
     }
 
     /// Decrypt a PII field for entity `kaki_hash`.
-    pub fn decrypt(
-        &self,
-        kaki_hash: u32,
-        field_tag: &[u8],
-        sealed:    &[u8],
-    ) -> PiiResult<Vec<u8>> {
+    pub fn decrypt(&self, kaki_hash: u32, field_tag: &[u8], sealed: &[u8]) -> PiiResult<Vec<u8>> {
         if field_tag.is_empty() {
             return Err(PiiError::InvalidInput("field_tag must not be empty"));
         }
         if self.erased.contains(&kaki_hash) {
             return Err(PiiError::Erased);
         }
-        let key    = self.derive_key(kaki_hash, field_tag);
+        let key = self.derive_key(kaki_hash, field_tag);
         let cipher = AkkadianCipher::from_key_bytes(&key)
             .map_err(|e| PiiError::CryptoFailure(e.to_string()))?;
         let aad = kaki_hash.to_le_bytes();
-        cipher.open(sealed, &aad)
+        cipher
+            .open(sealed, &aad)
             .map_err(|e| PiiError::CryptoFailure(e.to_string()))
     }
 
@@ -174,7 +174,9 @@ impl PiiVault {
     }
 
     /// Number of entities that have been erased.
-    pub fn erased_count(&self) -> usize { self.erased.len() }
+    pub fn erased_count(&self) -> usize {
+        self.erased.len()
+    }
 
     /// Snapshot of the erased-hash set for persistent storage.
     /// The caller is responsible for persisting and restoring this set
@@ -188,7 +190,9 @@ impl PiiVault {
 
     /// Restore the erased-hash set from persistent storage.
     pub fn restore_erased_set(&mut self, hashes: impl IntoIterator<Item = u32>) {
-        for h in hashes { self.erased.insert(h); }
+        for h in hashes {
+            self.erased.insert(h);
+        }
     }
 
     // ── Key derivation ────────────────────────────────────────────────────────
@@ -202,7 +206,9 @@ impl PiiVault {
         m.extend_from_slice(field_tag);
         let digest = h.digest(&m);
         // SHA3-256 produces exactly 32 bytes
-        digest[..32].try_into().expect("SHA3-256 is always 32 bytes")
+        digest[..32]
+            .try_into()
+            .expect("SHA3-256 is always 32 bytes")
     }
 }
 
@@ -212,30 +218,30 @@ impl PiiVault {
 #[derive(Debug, Clone)]
 pub struct PiiSidecarEntry {
     /// The entity's KAKI uuid_hash (lookup key — not the full 16 bytes).
-    pub kaki_hash:       u32,
+    pub kaki_hash: u32,
     /// Encrypted Arabic name (via `PiiVault::encrypt(FIELD_OWNER_NAME, ...)`).
-    pub name_sealed:     Option<Vec<u8>>,
+    pub name_sealed: Option<Vec<u8>>,
     /// Encrypted Hijri year of death.
-    pub year_sealed:     Option<Vec<u8>>,
+    pub year_sealed: Option<Vec<u8>>,
     /// Encrypted extended tribe/family affiliation.
-    pub tribe_sealed:    Option<Vec<u8>>,
+    pub tribe_sealed: Option<Vec<u8>>,
     /// Encrypted family lineage text.
-    pub lineage_sealed:  Option<Vec<u8>>,
+    pub lineage_sealed: Option<Vec<u8>>,
     /// Encrypted civil registry reference.
-    pub civil_sealed:    Option<Vec<u8>>,
+    pub civil_sealed: Option<Vec<u8>>,
     /// Epoch at which this sidecar entry was created.
-    pub created_epoch:   u32,
+    pub created_epoch: u32,
 }
 
 impl PiiSidecarEntry {
     pub fn new(kaki_hash: u32, created_epoch: u32) -> Self {
         PiiSidecarEntry {
             kaki_hash,
-            name_sealed:    None,
-            year_sealed:    None,
-            tribe_sealed:   None,
+            name_sealed: None,
+            year_sealed: None,
+            tribe_sealed: None,
             lineage_sealed: None,
-            civil_sealed:   None,
+            civil_sealed: None,
             created_epoch,
         }
     }
@@ -260,14 +266,14 @@ impl PiiSidecarEntry {
 /// Phase 1: in-memory HashMap.
 /// Phase 2: file-backed append-only store using `.enkwal` format.
 pub struct PiiSidecar {
-    vault:   PiiVault,
+    vault: PiiVault,
     entries: HashMap<u32, PiiSidecarEntry>,
 }
 
 impl PiiSidecar {
     pub fn new(master_key: [u8; 32]) -> Self {
         PiiSidecar {
-            vault:   PiiVault::new(master_key),
+            vault: PiiVault::new(master_key),
             entries: HashMap::new(),
         }
     }
@@ -276,8 +282,12 @@ impl PiiSidecar {
 
     /// Set the owner name for an entity.
     pub fn set_owner_name(&mut self, kaki_hash: u32, name: &str, epoch: u32) -> PiiResult<()> {
-        let sealed = self.vault.encrypt(kaki_hash, FIELD_OWNER_NAME, name.as_bytes())?;
-        let entry  = self.entries.entry(kaki_hash)
+        let sealed = self
+            .vault
+            .encrypt(kaki_hash, FIELD_OWNER_NAME, name.as_bytes())?;
+        let entry = self
+            .entries
+            .entry(kaki_hash)
             .or_insert_with(|| PiiSidecarEntry::new(kaki_hash, epoch));
         entry.name_sealed = Some(sealed);
         Ok(())
@@ -285,18 +295,30 @@ impl PiiSidecar {
 
     /// Set the Hijri year of death for an entity.
     pub fn set_death_year(&mut self, kaki_hash: u32, year: u32, epoch: u32) -> PiiResult<()> {
-        let sealed = self.vault.encrypt(kaki_hash, FIELD_DEATH_YEAR,
-            &year.to_le_bytes())?;
-        let entry  = self.entries.entry(kaki_hash)
+        let sealed = self
+            .vault
+            .encrypt(kaki_hash, FIELD_DEATH_YEAR, &year.to_le_bytes())?;
+        let entry = self
+            .entries
+            .entry(kaki_hash)
             .or_insert_with(|| PiiSidecarEntry::new(kaki_hash, epoch));
         entry.year_sealed = Some(sealed);
         Ok(())
     }
 
     /// Set family lineage text for an entity.
-    pub fn set_family_lineage(&mut self, kaki_hash: u32, lineage: &str, epoch: u32) -> PiiResult<()> {
-        let sealed = self.vault.encrypt(kaki_hash, FIELD_FAMILY_LINEAGE, lineage.as_bytes())?;
-        let entry  = self.entries.entry(kaki_hash)
+    pub fn set_family_lineage(
+        &mut self,
+        kaki_hash: u32,
+        lineage: &str,
+        epoch: u32,
+    ) -> PiiResult<()> {
+        let sealed = self
+            .vault
+            .encrypt(kaki_hash, FIELD_FAMILY_LINEAGE, lineage.as_bytes())?;
+        let entry = self
+            .entries
+            .entry(kaki_hash)
             .or_insert_with(|| PiiSidecarEntry::new(kaki_hash, epoch));
         entry.lineage_sealed = Some(sealed);
         Ok(())
@@ -308,24 +330,31 @@ impl PiiSidecar {
     pub fn owner_name(&self, kaki_hash: u32) -> PiiResult<String> {
         let entry = self.entries.get(&kaki_hash).ok_or(PiiError::FieldAbsent)?;
         let sealed = entry.name_sealed.as_deref().ok_or(PiiError::FieldAbsent)?;
-        let plain  = self.vault.decrypt(kaki_hash, FIELD_OWNER_NAME, sealed)?;
+        let plain = self.vault.decrypt(kaki_hash, FIELD_OWNER_NAME, sealed)?;
         String::from_utf8(plain).map_err(|_| PiiError::CryptoFailure("UTF-8 decode failed".into()))
     }
 
     /// Retrieve the plaintext Hijri death year for an entity.
     pub fn death_year(&self, kaki_hash: u32) -> PiiResult<u32> {
-        let entry  = self.entries.get(&kaki_hash).ok_or(PiiError::FieldAbsent)?;
+        let entry = self.entries.get(&kaki_hash).ok_or(PiiError::FieldAbsent)?;
         let sealed = entry.year_sealed.as_deref().ok_or(PiiError::FieldAbsent)?;
-        let plain  = self.vault.decrypt(kaki_hash, FIELD_DEATH_YEAR, sealed)?;
-        if plain.len() != 4 { return Err(PiiError::CryptoFailure("bad year length".into())); }
+        let plain = self.vault.decrypt(kaki_hash, FIELD_DEATH_YEAR, sealed)?;
+        if plain.len() != 4 {
+            return Err(PiiError::CryptoFailure("bad year length".into()));
+        }
         Ok(u32::from_le_bytes(plain.try_into().unwrap()))
     }
 
     /// Retrieve the plaintext family lineage for an entity.
     pub fn family_lineage(&self, kaki_hash: u32) -> PiiResult<String> {
-        let entry  = self.entries.get(&kaki_hash).ok_or(PiiError::FieldAbsent)?;
-        let sealed = entry.lineage_sealed.as_deref().ok_or(PiiError::FieldAbsent)?;
-        let plain  = self.vault.decrypt(kaki_hash, FIELD_FAMILY_LINEAGE, sealed)?;
+        let entry = self.entries.get(&kaki_hash).ok_or(PiiError::FieldAbsent)?;
+        let sealed = entry
+            .lineage_sealed
+            .as_deref()
+            .ok_or(PiiError::FieldAbsent)?;
+        let plain = self
+            .vault
+            .decrypt(kaki_hash, FIELD_FAMILY_LINEAGE, sealed)?;
         String::from_utf8(plain).map_err(|_| PiiError::CryptoFailure("UTF-8 decode failed".into()))
     }
 
@@ -344,13 +373,23 @@ impl PiiSidecar {
         self.vault.erase(kaki_hash)
     }
 
-    pub fn is_erased(&self, kaki_hash: u32) -> bool  { self.vault.is_erased(kaki_hash) }
-    pub fn erased_count(&self) -> usize              { self.vault.erased_count() }
-    pub fn entry_count(&self) -> usize               { self.entries.len() }
-    pub fn erased_hashes(&self) -> Vec<u32>          { self.vault.erased_hashes() }
+    pub fn is_erased(&self, kaki_hash: u32) -> bool {
+        self.vault.is_erased(kaki_hash)
+    }
+    pub fn erased_count(&self) -> usize {
+        self.vault.erased_count()
+    }
+    pub fn entry_count(&self) -> usize {
+        self.entries.len()
+    }
+    pub fn erased_hashes(&self) -> Vec<u32> {
+        self.vault.erased_hashes()
+    }
 
     /// Access the underlying vault for advanced operations.
-    pub fn vault(&mut self) -> &mut PiiVault { &mut self.vault }
+    pub fn vault(&mut self) -> &mut PiiVault {
+        &mut self.vault
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -372,7 +411,8 @@ mod tests {
     #[test]
     fn encrypt_decrypt_roundtrip() {
         let v = vault();
-        let plain = b"Abdullah al-Husayni \xd8\xb9\xd8\xa8\xd8\xaf \xd8\xa7\xd9\x84\xd9\x84\xd9\x87";
+        let plain =
+            b"Abdullah al-Husayni \xd8\xb9\xd8\xa8\xd8\xaf \xd8\xa7\xd9\x84\xd9\x84\xd9\x87";
         let sealed = v.encrypt(0xDEAD_BEEF, FIELD_OWNER_NAME, plain).unwrap();
         let recovered = v.decrypt(0xDEAD_BEEF, FIELD_OWNER_NAME, &sealed).unwrap();
         assert_eq!(recovered, plain);
@@ -410,9 +450,14 @@ mod tests {
     #[test]
     fn erase_prevents_decrypt() {
         let mut v = vault();
-        let sealed = v.encrypt(0xCCCC_0003, FIELD_OWNER_NAME, "محمد".as_bytes()).unwrap();
+        let sealed = v
+            .encrypt(0xCCCC_0003, FIELD_OWNER_NAME, "محمد".as_bytes())
+            .unwrap();
         v.erase(0xCCCC_0003);
-        assert_eq!(v.decrypt(0xCCCC_0003, FIELD_OWNER_NAME, &sealed), Err(PiiError::Erased));
+        assert_eq!(
+            v.decrypt(0xCCCC_0003, FIELD_OWNER_NAME, &sealed),
+            Err(PiiError::Erased)
+        );
     }
 
     #[test]
@@ -454,7 +499,8 @@ mod tests {
     #[test]
     fn sidecar_set_and_retrieve_name() {
         let mut sc = sidecar();
-        sc.set_owner_name(0x1234, "عبد الله الكاظمي", 1_000).unwrap();
+        sc.set_owner_name(0x1234, "عبد الله الكاظمي", 1_000)
+            .unwrap();
         let name = sc.owner_name(0x1234).unwrap();
         assert_eq!(name, "عبد الله الكاظمي");
     }

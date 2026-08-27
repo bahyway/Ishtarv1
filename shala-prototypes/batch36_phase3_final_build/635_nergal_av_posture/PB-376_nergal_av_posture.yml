@@ -1,0 +1,110 @@
+---
+# PB-376 · Nergal AV · posture sentinel for hosts in the charter
+# Defensive only: enumerates the operator's OWN surface, compares to sealed policy, emits Alert Event KAKIs.
+# GL-SEC-002 §4 two witnesses · §5 own-host only · §7 no silent fix
+- name: PB-376 Nergal AV posture sweep
+  hosts: nas
+  become: true
+  vars:
+    charter: ["nas.local"]          # §5 - probing anything not listed here is itself a finding
+    policy:
+      allow_listen: [5443, 7001, 7002, 7003, 7004, 7005, 7006, 7007]
+      allow_sources: ["192.168.1.0/24", "100.64.0.0/10"]
+      require_2fa: true
+      forbid_upnp: true
+      forbid_vendor_relay: true
+      max_backup_age_days: 8
+    out: /volume1/bahyway/nergal
+  tasks:
+    - name: Gate §5 · every target is in the charter
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname in charter
+        fail_msg: "REFUSED - {{ inventory_hostname }} is outside the Nergal charter; probing it is itself a finding"
+
+    - name: Ensure ledger directory
+      ansible.builtin.file: {path: "{{ out }}", state: directory, mode: "0750"}
+
+    # ---- witness 1 · local enumeration (MEASURED) ----
+    - name: Witness 1 · listening sockets
+      ansible.builtin.shell: "ss -ltnup | tail -n +2"
+      register: w1_sockets
+      changed_when: false
+
+    - name: Witness 1 · UPnP mappings present on the LAN gateway
+      ansible.builtin.shell: "upnpc -l 2>/dev/null | grep -c '^ *[0-9]* *TCP' || true"
+      register: w1_upnp
+      changed_when: false
+
+    - name: Witness 1 · containers that restart themselves
+      ansible.builtin.shell: "docker ps --format '{{'{{'}}.Names{{'}}'}} {{'{{'}}.Ports{{'}}'}}' 2>/dev/null || true"
+      register: w1_docker
+      changed_when: false
+
+    - name: Witness 1 · freshness of the off-site copy
+      ansible.builtin.shell: "find /volume1/bahyway/archive/.offsite_stamp -mtime -{{ policy.max_backup_age_days }} 2>/dev/null | wc -l"
+      register: w1_backup
+      changed_when: false
+
+    # ---- witness 2 · outside-in reachability (independent probe, DERIVED) ----
+    - name: Witness 2 · does anything answer on the public address
+      ansible.builtin.shell: |
+        pub=$(curl -s https://api.ipify.org)
+        open=""
+        for p in {{ policy.allow_listen | join(' ') }} 22 445 2049 5000 5001; do
+          timeout 3 bash -c "</dev/tcp/$pub/$p" 2>/dev/null && open="$open $p"
+        done
+        echo "public=$pub open=${open:-none}"
+      register: w2_public
+      changed_when: false
+
+    - name: Compose the finding ledger (two witnesses required before verdict)
+      ansible.builtin.copy:
+        dest: "{{ out }}/posture_{{ ansible_date_time.date }}.json"
+        mode: "0640"
+        content: |
+          {
+            "host": "{{ inventory_hostname }}",
+            "epoch": "{{ ansible_date_time.iso8601 }}",
+            "policy": {{ policy | to_json }},
+            "witness_1_local": {
+              "sockets": {{ w1_sockets.stdout_lines | to_json }},
+              "upnp_mappings": {{ w1_upnp.stdout | trim | int }},
+              "containers": {{ w1_docker.stdout_lines | to_json }},
+              "offsite_fresh": {{ (w1_backup.stdout | trim | int) >= 1 | to_json }}
+            },
+            "witness_2_outside_in": "{{ w2_public.stdout | trim }}",
+            "rule": "a finding fires only where both witnesses agree within this epoch (GL-SEC-002 §4)"
+          }
+
+    - name: REFUSED · anything answering on the public address
+      ansible.builtin.fail:
+        msg: >
+          REFUSED (EXPOSURE) - {{ w2_public.stdout }} - a service answers on the public address.
+          Remediation is a rite, not a silent fix: run PB-374 to restore overlay-only access,
+          then re-run PB-376. Nothing is changed by this playbook (GL-SEC-002 §7).
+      when: "'open= none' not in (w2_public.stdout | regex_replace('open=', 'open= '))"
+
+    - name: HELD · UPnP mappings exist
+      ansible.builtin.debug:
+        msg: "HELD (EXPOSURE) - {{ w1_upnp.stdout | trim }} UPnP mapping(s) present; policy forbids UPnP"
+      when: (w1_upnp.stdout | trim | int) > 0
+
+    - name: HELD · off-site copy is stale
+      ansible.builtin.debug:
+        msg: "HELD (CUSTODY) - no off-site copy younger than {{ policy.max_backup_age_days }} days; derived data is not re-fetchable"
+      when: (w1_backup.stdout | trim | int) < 1
+
+    - name: Emit signed Alert Event KAKI (Nisaba → Kittu)
+      ansible.builtin.shell: >
+        bahyway-nisaba emit --kind POSTURE --host {{ inventory_hostname }}
+        --ledger {{ out }}/posture_{{ ansible_date_time.date }}.json --sign ed25519
+      register: alert
+      changed_when: "'EMITTED' in alert.stdout"
+      failed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: /volume1/bahyway/court_journal.log
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-376 Nergal AV posture sweep - ledger written, two-witness rule applied"

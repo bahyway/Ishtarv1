@@ -21,28 +21,28 @@ pub struct RawRecord {
     /// Column names in order.
     pub headers: Vec<String>,
     /// Column values in the same order as headers.
-    pub values:  Vec<Vec<u8>>,
+    pub values: Vec<Vec<u8>>,
     /// Sequence number for the row (used as epoch fallback).
-    pub seq:     u32,
+    pub seq: u32,
 }
 
 /// A fully-generated particle ready for `PersistedDb::commit`.
 #[derive(Debug)]
 pub struct GeneratedEntry {
-    pub particle:   IdentityKaki,
+    pub particle: IdentityKaki,
     pub event_kaki: EventKaki,
-    pub epoch:      u32,
-    pub eav:        Vec<EavTriple>,
+    pub epoch: u32,
+    pub eav: Vec<EavTriple>,
 }
 
 /// Generate one particle + event from a raw data row.
 pub fn generate(minter: &KakiMinter, record: &RawRecord) -> GeneratedEntry {
     let mut epoch = record.seq.max(1);
-    let mut eav   = Vec::with_capacity(record.headers.len());
+    let mut eav = Vec::with_capacity(record.headers.len());
 
     // Derive uuid_hash from the first column value (deterministic)
     let seed_value = record.values.first().map(|v| v.as_slice()).unwrap_or(b"");
-    let uuid_hash  = fnv1a_32(seed_value);
+    let uuid_hash = fnv1a_32(seed_value);
 
     for (col_name, val) in record.headers.iter().zip(record.values.iter()) {
         match col_name.to_lowercase().as_str() {
@@ -70,16 +70,23 @@ pub fn generate(minter: &KakiMinter, record: &RawRecord) -> GeneratedEntry {
     // If no state column was present, default to Fuzzy
     let has_state = eav.iter().any(|t| t.attr_hash == ATTR_STATE);
     if !has_state {
-        eav.push(EavTriple::new(ATTR_STATE, encode_state(ParticleState::Fuzzy).to_vec()));
+        eav.push(EavTriple::new(
+            ATTR_STATE,
+            encode_state(ParticleState::Fuzzy).to_vec(),
+        ));
     }
 
-    let particle   = IdentityKaki::try_from_kaki(
-        minter.mint_identity(uuid_hash, KakiRole::Zikru)
-    ).unwrap_or_else(|_| IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap());
+    let particle = IdentityKaki::try_from_kaki(minter.mint_identity(uuid_hash, KakiRole::Zikru))
+        .unwrap_or_else(|_| IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap());
 
     let event_kaki = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
 
-    GeneratedEntry { particle, event_kaki, epoch, eav }
+    GeneratedEntry {
+        particle,
+        event_kaki,
+        epoch,
+        eav,
+    }
 }
 
 /// Parse a TSV byte slice into a list of `RawRecord`s.
@@ -95,20 +102,25 @@ pub fn parse_csv(data: &[u8]) -> Vec<RawRecord> {
 
 fn parse_delimited(data: &[u8], sep: u8) -> Vec<RawRecord> {
     let text = match std::str::from_utf8(data) {
-        Ok(s)  => s,
+        Ok(s) => s,
         Err(_) => return Vec::new(),
     };
     let mut lines = text.lines();
-    let Some(header_line) = lines.next() else { return Vec::new(); };
+    let Some(header_line) = lines.next() else {
+        return Vec::new();
+    };
 
     let headers: Vec<String> = split_bytes(header_line.as_bytes(), sep)
         .into_iter()
         .map(|b| String::from_utf8_lossy(b).trim().to_string())
         .collect();
 
-    if headers.is_empty() { return Vec::new(); }
+    if headers.is_empty() {
+        return Vec::new();
+    }
 
-    lines.enumerate()
+    lines
+        .enumerate()
         .filter(|(_, l)| !l.trim().is_empty())
         .map(|(i, line)| {
             let mut values: Vec<Vec<u8>> = split_bytes(line.as_bytes(), sep)
@@ -120,7 +132,11 @@ fn parse_delimited(data: &[u8], sep: u8) -> Vec<RawRecord> {
                 .collect();
             // Pad or truncate to match header count
             values.resize(headers.len(), Vec::new());
-            RawRecord { headers: headers.clone(), values, seq: (i + 1) as u32 }
+            RawRecord {
+                headers: headers.clone(),
+                values,
+                seq: (i + 1) as u32,
+            }
         })
         .collect()
 }
@@ -129,17 +145,25 @@ fn split_bytes(line: &[u8], sep: u8) -> Vec<&[u8]> {
     let mut parts = Vec::new();
     let mut start = 0;
     for (i, &b) in line.iter().enumerate() {
-        if b == sep { parts.push(&line[start..i]); start = i + 1; }
+        if b == sep {
+            parts.push(&line[start..i]);
+            start = i + 1;
+        }
     }
     parts.push(&line[start..]);
     parts
 }
 
 fn decode_state_str(val: &[u8]) -> ParticleState {
-    match std::str::from_utf8(val).unwrap_or("").trim().to_lowercase().as_str() {
-        "golden" | "1" | "active" | "ok"   => ParticleState::Golden,
-        "dead"   | "0" | "inactive" | "off" => ParticleState::Dead,
-        _                                   => ParticleState::Fuzzy,
+    match std::str::from_utf8(val)
+        .unwrap_or("")
+        .trim()
+        .to_lowercase()
+        .as_str()
+    {
+        "golden" | "1" | "active" | "ok" => ParticleState::Golden,
+        "dead" | "0" | "inactive" | "off" => ParticleState::Dead,
+        _ => ParticleState::Fuzzy,
     }
 }
 
@@ -175,8 +199,8 @@ mod tests {
     fn generate_golden_particle() {
         let data = b"name\tepoch\tstate\nAli_Karim\t5\tGolden\n";
         let rows = parse_tsv(data);
-        let m    = minter();
-        let ge   = generate(&m, &rows[0]);
+        let m = minter();
+        let ge = generate(&m, &rows[0]);
         assert_eq!(ge.epoch, 5);
         let state_eav = ge.eav.iter().find(|e| e.attr_hash == ATTR_STATE).unwrap();
         let state = decode_state_str(&state_eav.value);
@@ -187,10 +211,10 @@ mod tests {
     fn deterministic_uuid_hash_for_same_name() {
         let data = b"name\nAli_Karim\n";
         let rows = parse_tsv(data);
-        let m1   = minter();
-        let m2   = minter();
-        let ge1  = generate(&m1, &rows[0]);
-        let ge2  = generate(&m2, &rows[0]);
+        let m1 = minter();
+        let m2 = minter();
+        let ge1 = generate(&m1, &rows[0]);
+        let ge2 = generate(&m2, &rows[0]);
         assert_eq!(ge1.particle.uuid_hash(), ge2.particle.uuid_hash());
     }
 
@@ -198,8 +222,8 @@ mod tests {
     fn missing_state_defaults_to_fuzzy() {
         let data = b"name\nSomeone\n";
         let rows = parse_tsv(data);
-        let m    = minter();
-        let ge   = generate(&m, &rows[0]);
+        let m = minter();
+        let ge = generate(&m, &rows[0]);
         let state_eav = ge.eav.iter().find(|e| e.attr_hash == ATTR_STATE).unwrap();
         let state = decode_state_str(&state_eav.value);
         assert_eq!(state, ParticleState::Fuzzy);
@@ -209,10 +233,13 @@ mod tests {
     fn extra_columns_become_eav_triples() {
         let data = b"name\tcity\nAli\tBaghdad\n";
         let rows = parse_tsv(data);
-        let m    = minter();
-        let ge   = generate(&m, &rows[0]);
+        let m = minter();
+        let ge = generate(&m, &rows[0]);
         let city_hash = fnv1a_32(b"city");
-        assert!(ge.eav.iter().any(|e| e.attr_hash == city_hash && e.value == b"Baghdad"));
+        assert!(ge
+            .eav
+            .iter()
+            .any(|e| e.attr_hash == city_hash && e.value == b"Baghdad"));
     }
 
     #[test]
@@ -229,8 +256,8 @@ mod tests {
         // If it did, DQ.VALIDITY would flag every record with any blank optional field.
         let data = b"name\tnotes\nAli\t\n";
         let rows = parse_tsv(data);
-        let m    = minter();
-        let ge   = generate(&m, &rows[0]);
+        let m = minter();
+        let ge = generate(&m, &rows[0]);
         let notes_hash = fnv1a_32(b"notes");
         assert!(
             !ge.eav.iter().any(|t| t.attr_hash == notes_hash),

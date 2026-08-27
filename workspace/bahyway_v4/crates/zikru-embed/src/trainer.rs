@@ -7,26 +7,26 @@
 //! Training objective: push same-book chunks together, cross-tribe chunks apart.
 //!   loss = max(0, dist(anchor, positive) − dist(anchor, negative) + margin)
 
-use crate::attention::{tribal_field_attend, euclidean_distance, TokenParticle};
-use crate::pooling::{pool_sectors, SectorEmbedding, DEFAULT_FUSION_WEIGHTS};
+use crate::attention::{euclidean_distance, tribal_field_attend, TokenParticle};
 use crate::model_kaki::ZikruEmbedModel;
+use crate::pooling::{pool_sectors, SectorEmbedding, DEFAULT_FUSION_WEIGHTS};
 
 /// A training sample: (anchor_tokens, positive_tokens, negative_tokens, negative_tribe).
 pub struct TrainingSample {
-    pub anchor_hashes:   Vec<u32>,   // Token uuid_hashes for anchor chunk
-    pub positive_hashes: Vec<u32>,   // Token uuid_hashes from same book (positive)
-    pub negative_hashes: Vec<u32>,   // Token uuid_hashes from different tribe (negative)
-    pub anchor_tribe:    u16,
-    pub negative_tribe:  u16,
+    pub anchor_hashes: Vec<u32>,   // Token uuid_hashes for anchor chunk
+    pub positive_hashes: Vec<u32>, // Token uuid_hashes from same book (positive)
+    pub negative_hashes: Vec<u32>, // Token uuid_hashes from different tribe (negative)
+    pub anchor_tribe: u16,
+    pub negative_tribe: u16,
 }
 
 /// Training metrics for one epoch.
 #[derive(Debug, Clone, Default)]
 pub struct EpochMetrics {
-    pub mean_loss:     f32,
-    pub non_zero_loss: u32,   // Samples where loss > 0 (margin violated)
+    pub mean_loss: f32,
+    pub non_zero_loss: u32, // Samples where loss > 0 (margin violated)
     pub total_samples: u32,
-    pub epoch:         u32,
+    pub epoch: u32,
 }
 
 /// Zikru-Momentum optimizer state — tribe-aware gradient accumulation.
@@ -39,12 +39,20 @@ struct ZikruMomentum {
 
 impl ZikruMomentum {
     fn new(size: usize, lr: f32, momentum: f32) -> Self {
-        Self { velocity: vec![0.0f32; size], learning_rate: lr, base_momentum: momentum }
+        Self {
+            velocity: vec![0.0f32; size],
+            learning_rate: lr,
+            base_momentum: momentum,
+        }
     }
 
     /// Tribe-specific momentum factor: cross-domain tribes use lower momentum (more stable).
     fn tribe_momentum(&self, tribe_id: u16) -> f32 {
-        if tribe_id == 0x1007 { self.base_momentum * 0.89 } else { self.base_momentum }
+        if tribe_id == 0x1007 {
+            self.base_momentum * 0.89
+        } else {
+            self.base_momentum
+        }
     }
 
     fn update(&mut self, gradient: &[f32], tribe_id: u16) -> &[f32] {
@@ -61,11 +69,11 @@ impl ZikruMomentum {
 /// Weights are NOT updated here (model is immutable borrow) — caller applies deltas.
 /// This keeps the trainer composable and avoids &mut aliasing.
 pub fn compute_contrastive_loss(
-    model:    &mut ZikruEmbedModel,
-    sample:   &TrainingSample,
-    margin:   f32,
+    model: &mut ZikruEmbedModel,
+    sample: &TrainingSample,
+    margin: f32,
 ) -> (f32, SectorEmbedding, SectorEmbedding, SectorEmbedding) {
-    let anchor_se   = embed_chunk(model, &sample.anchor_hashes);
+    let anchor_se = embed_chunk(model, &sample.anchor_hashes);
     let positive_se = embed_chunk(model, &sample.positive_hashes);
     let negative_se = embed_chunk(model, &sample.negative_hashes);
 
@@ -81,18 +89,33 @@ fn embed_chunk(model: &mut ZikruEmbedModel, hashes: &[u32]) -> SectorEmbedding {
     if hashes.is_empty() {
         let dim = model.embedding_dim();
         let empty_particle = TokenParticle {
-            position: vec![0.0f32; dim], field_strength: 0.0,
-            tribe_affinity: 1.0, sector: 0,
+            position: vec![0.0f32; dim],
+            field_strength: 0.0,
+            tribe_affinity: 1.0,
+            sector: 0,
         };
-        return pool_sectors(&[empty_particle.clone()], &[vec![0.0f32; dim]], &DEFAULT_FUSION_WEIGHTS);
+        return pool_sectors(
+            std::slice::from_ref(&empty_particle),
+            &[vec![0.0f32; dim]],
+            &DEFAULT_FUSION_WEIGHTS,
+        );
     }
 
-    let particles: Vec<TokenParticle> = hashes.iter().take(512).map(|&h| {
-        let emb = model.embed_token(h);
-        let sector = model.classify_sector(&emb);
-        let fs = model.field_strength((sector % 8) as usize);
-        TokenParticle { position: emb, field_strength: fs, tribe_affinity: 1.0, sector }
-    }).collect();
+    let particles: Vec<TokenParticle> = hashes
+        .iter()
+        .take(512)
+        .map(|&h| {
+            let emb = model.embed_token(h);
+            let sector = model.classify_sector(&emb);
+            let fs = model.field_strength((sector % 8) as usize);
+            TokenParticle {
+                position: emb,
+                field_strength: fs,
+                tribe_affinity: 1.0,
+                sector,
+            }
+        })
+        .collect();
 
     let attended = tribal_field_attend(&particles);
     pool_sectors(&particles, &attended, &DEFAULT_FUSION_WEIGHTS)
@@ -101,10 +124,10 @@ fn embed_chunk(model: &mut ZikruEmbedModel, hashes: &[u32]) -> SectorEmbedding {
 /// Train for one epoch over a set of samples.
 /// Returns per-sample losses and aggregate metrics.
 pub fn train_epoch(
-    model:    &mut ZikruEmbedModel,
-    samples:  &[TrainingSample],
-    margin:   f32,
-    lr:       f32,
+    model: &mut ZikruEmbedModel,
+    samples: &[TrainingSample],
+    margin: f32,
+    lr: f32,
     momentum: f32,
 ) -> EpochMetrics {
     let embed_size = model.orbit.embedding_weights.rows * model.orbit.embedding_weights.cols;
@@ -134,26 +157,25 @@ pub fn train_epoch(
     model.orbit.training_epochs += 1;
 
     EpochMetrics {
-        mean_loss:     total_loss / n,
+        mean_loss: total_loss / n,
         non_zero_loss: non_zero,
         total_samples: samples.len() as u32,
-        epoch:         model.orbit.training_epochs,
+        epoch: model.orbit.training_epochs,
     }
 }
 
 /// Approximate gradient for the embedding table.
 /// Gradient direction: close anchor to positive, push away from negative.
 fn compute_embedding_gradient(
-    anchor:   &SectorEmbedding,
+    anchor: &SectorEmbedding,
     positive: &SectorEmbedding,
     negative: &SectorEmbedding,
 ) -> Vec<f32> {
     let dim = anchor.unified.len();
     let mut grad = vec![0.0f32; dim];
-    for k in 0..dim {
+    for (k, g) in grad.iter_mut().enumerate().take(dim) {
         // Pull toward positive, push from negative (contrastive gradient)
-        grad[k] = (anchor.unified[k] - positive.unified[k])
-                - (anchor.unified[k] - negative.unified[k]);
+        *g = (anchor.unified[k] - positive.unified[k]) - (anchor.unified[k] - negative.unified[k]);
     }
     grad
 }
@@ -188,11 +210,11 @@ mod tests {
 
     fn make_sample() -> TrainingSample {
         TrainingSample {
-            anchor_hashes:   vec![0xA1, 0xA2, 0xA3],
+            anchor_hashes: vec![0xA1, 0xA2, 0xA3],
             positive_hashes: vec![0xA1, 0xA4, 0xA5],
             negative_hashes: vec![0xFF, 0xFE, 0xFD],
-            anchor_tribe:    0x1001,
-            negative_tribe:  0x1007,
+            anchor_tribe: 0x1001,
+            negative_tribe: 0x1007,
         }
     }
 
@@ -246,8 +268,11 @@ mod tests {
     #[test]
     fn zikru_momentum_cross_domain_lower() {
         let optim = ZikruMomentum::new(4, 0.01, 0.9);
-        let m_cross  = optim.tribe_momentum(0x1007);
+        let m_cross = optim.tribe_momentum(0x1007);
         let m_normal = optim.tribe_momentum(0x1001);
-        assert!(m_cross < m_normal, "cross-domain should have lower momentum");
+        assert!(
+            m_cross < m_normal,
+            "cross-domain should have lower momentum"
+        );
     }
 }

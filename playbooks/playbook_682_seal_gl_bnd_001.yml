@@ -1,0 +1,90 @@
+---
+# PB-682 · Seal GL-BND-001 · Tablet of the Band
+# CSR-08: running this playbook IS the confirmation of the seal.
+- name: PB-682 seal GL-BND-001
+  hosts: girsu
+  gather_facts: true
+  vars:
+    law_root: "{{ ansible_env.HOME }}/bahyway/laws"
+    tablet: GL-BND-001_the_band.md
+    tablet_id: GL-BND-001
+    seal_key: "{{ ansible_env.HOME }}/bahyway/keys/akkadian_seal_ed25519"
+  tasks:
+    - name: Ensure law and seal directories
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0750"}
+      loop: ["{{ law_root }}", "{{ law_root }}/sealed", "{{ law_root }}/receipts"]
+
+    - name: Refuse to re-seal an already sealed tablet
+      ansible.builtin.stat: {path: "{{ law_root }}/sealed/{{ tablet }}"}
+      register: existing
+    - name: Gate G0 · no silent overwrite of a sealed tablet
+      ansible.builtin.assert:
+        that: not existing.stat.exists
+        fail_msg: "{{ tablet_id }} is already sealed. Amendments require GL-BND-001-A1 and a fresh CSR-08 rite."
+        success_msg: "G0 green - tablet not yet sealed"
+
+    - name: Place the tablet
+      ansible.builtin.copy: {src: "{{ tablet }}", dest: "{{ law_root }}/sealed/{{ tablet }}", mode: "0440"}
+
+    - name: Gate G1 · all fifteen sections present (§0..§14)
+      # §8 (the Amendment section) appears physically last in the source
+      # document, out of numeric order -- grep only checks presence, not
+      # position, so this still verifies correctly; not silently reordered
+      # to "fix" it, per this repo's own concordance doctrine.
+      ansible.builtin.shell: |
+        set -e
+        for i in $(seq 0 14); do
+          grep -q "## §$i" "{{ law_root }}/sealed/{{ tablet }}" || { echo "missing §$i"; exit 1; }
+        done
+        echo "G1 green - fifteen sections (§0..§14, §8 out of numeric order by design of the source)"
+      changed_when: false
+
+    - name: Gate G2 · no SQL syntax anywhere in the tablet
+      ansible.builtin.shell: |
+        ! grep -Eiq 'SELECT +[A-Za-z*].{0,200}\bFROM\b|INNER JOIN|LEFT JOIN|EXISTS *\(' "{{ law_root }}/sealed/{{ tablet }}"
+      changed_when: false
+
+    - name: Gate G3 · the unamendable clauses are named
+      ansible.builtin.shell: |
+        grep -q "may not be amended" "{{ law_root }}/sealed/{{ tablet }}"
+        grep -q "black-band condition" "{{ law_root }}/sealed/{{ tablet }}"
+        grep -q "distinct-engine rule" "{{ law_root }}/sealed/{{ tablet }}"
+        grep -q "no-back-billing" "{{ law_root }}/sealed/{{ tablet }}"
+        echo "G3 green - a duplicate scores zero, merit at the median, black requires adoption, distinct engines, the floor, no back-billing"
+      changed_when: false
+
+    - name: Compute Ed25519 AkkadianSeal
+      ansible.builtin.shell: |
+        openssl pkeyutl -sign -rawin -inkey "{{ seal_key }}" \
+          -in "{{ law_root }}/sealed/{{ tablet }}" | base64 -w0
+      register: seal
+      changed_when: true
+      no_log: false
+
+    - name: Write the Kanīku receipt
+      ansible.builtin.copy:
+        dest: "{{ law_root }}/receipts/{{ tablet_id }}.kaniku.yml"
+        mode: "0440"
+        content: |
+          tablet: {{ tablet_id }}
+          file: {{ tablet }}
+          sha256: "{{ (lookup('pipe', 'sha256sum ' + law_root + '/sealed/' + tablet)).split()[0] }}"
+          seal_ed25519: "{{ seal.stdout }}"
+          sealed_on: "{{ ansible_date_time.iso8601 }}"
+          sealed_by: "DUB.SAR"
+          rite: CSR-08
+          governs: [rite:watcher_scanner, artifact:band_decree]
+          unamendable: ["§2 a duplicate scores zero", "§3 quantity is not merit", "§4 the black-band condition", "§9 the distinct-engine rule", "§11 the floor", "§12 no back-billing"]
+
+    - name: Register in the law registry
+      ansible.builtin.lineinfile:
+        path: "{{ law_root }}/REGISTRY.log"
+        create: true
+        mode: "0640"
+        line: "{{ ansible_date_time.iso8601 }} SEALED {{ tablet_id }} sha256={{ (lookup('pipe', 'sha256sum ' + law_root + '/sealed/' + tablet)).split()[0] }}"
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-682 {{ tablet_id }} SEALED - a band is a summary of evidence, never a title"

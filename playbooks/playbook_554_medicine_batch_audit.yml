@@ -1,6 +1,6 @@
 # =====================================================================
-# PB-326 — GulaFederationEngine · Medicine batch audit sweep
-# Suite: GulaFederation (PB-321..PB-326) · Run FROM Fedora 44 HOST.
+# PB-554 — GulaFederationEngine · Medicine batch audit sweep
+# Suite: GulaFederation (PB-549..PB-554) · Run FROM Fedora 44 HOST.
 # THE BACKEND OF THE ŠALA INSPECTOR SUB-TAB: sweeps every batch in
 # every warehouse, checks all attributes + metadata, and discovers
 # defect / invalidity / expiry conditions. Four rules, all composed
@@ -13,7 +13,7 @@
 # prune-exempt). Audit report is append-only JSON, one line per run.
 # =====================================================================
 ---
-- name: PB-326 medicine batch audit
+- name: PB-554 medicine batch audit
   hosts: localhost
   connection: local
   gather_facts: true
@@ -27,6 +27,7 @@
         path: "{{ crate_dir }}/src"
         state: directory
         mode: "0755"
+      check_mode: false
 
     - name: Write Cargo.toml
       ansible.builtin.copy:
@@ -39,6 +40,8 @@
           edition = "2021"
           description = "Province-wide batch attribute + metadata audit: expiry, assay, tau price spread, cold-chain slope."
 
+          [workspace]  # standalone crate -- not a member of the workspace/bahyway_v4 monorepo
+
           [dependencies]
           serde = { version = "1", features = ["derive"] }
           serde_json = "1"
@@ -48,7 +51,7 @@
         dest: "{{ crate_dir }}/src/main.rs"
         mode: "0644"
         content: |
-          //! Batch audit sweep. Reads batches.json from PB-322.
+          //! Batch audit sweep. Reads batches.json from PB-550.
           //! State law (GOLDEN/FUZZY/DEAD) lives in EAV-space, never in
           //! KAKI bytes. This audit ASSIGNS state from evidence:
           //!   DEAD  : expired, rejected, or assay < 90%
@@ -117,7 +120,7 @@
           fn main() {
               let path = std::env::var("GULA_BATCHES_JSON")
                   .unwrap_or_else(|_| "batches.json".into());
-              let raw = fs::read_to_string(&path).expect("batches.json from PB-322");
+              let raw = fs::read_to_string(&path).expect("batches.json from PB-550");
               let batches: Vec<Batch> = serde_json::from_str(&raw).expect("parse");
               let findings: Vec<Finding> = batches.iter().map(audit).collect();
 
@@ -169,7 +172,7 @@
       changed_when: true
       failed_when: t.rc != 0
 
-    - name: Run sweep against PB-322 dataset (if present)
+    - name: Run sweep against PB-550 dataset (if present)
       ansible.builtin.command:
         cmd: cargo run --release
         chdir: "{{ crate_dir }}"
@@ -181,4 +184,4 @@
 
     - name: Report
       ansible.builtin.debug:
-        msg: "{{ sweep.stdout | default('Dataset not present yet — run PB-322 first, then re-run PB-326.') }}"
+        msg: "{{ sweep.stdout | default('Dataset not present yet — run PB-550 first, then re-run PB-554.') }}"

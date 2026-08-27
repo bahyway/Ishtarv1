@@ -38,9 +38,15 @@ pub enum HealthClassification {
 }
 
 impl HealthClassification {
-    pub fn is_sovereign(self) -> bool { self == Self::Sovereign }
-    pub fn is_warning(self)  -> bool { self == Self::Warning }
-    pub fn is_critical(self) -> bool { self == Self::Critical }
+    pub fn is_sovereign(self) -> bool {
+        self == Self::Sovereign
+    }
+    pub fn is_warning(self) -> bool {
+        self == Self::Warning
+    }
+    pub fn is_critical(self) -> bool {
+        self == Self::Critical
+    }
 }
 
 // ── MembershipFunction ──────────────────────────────────────────────────────
@@ -54,15 +60,19 @@ impl HealthClassification {
 #[derive(Debug, Clone)]
 pub struct MembershipFunction {
     pub lower_bound: f64,
-    pub peak:        f64,
+    pub peak: f64,
     pub upper_bound: f64,
 }
 
 impl MembershipFunction {
     pub fn new(lower_bound: f64, peak: f64, upper_bound: f64) -> Self {
-        assert!(lower_bound <= peak,   "lower_bound must be <= peak");
-        assert!(peak <= upper_bound,   "peak must be <= upper_bound");
-        Self { lower_bound, peak, upper_bound }
+        assert!(lower_bound <= peak, "lower_bound must be <= peak");
+        assert!(peak <= upper_bound, "peak must be <= upper_bound");
+        Self {
+            lower_bound,
+            peak,
+            upper_bound,
+        }
     }
 
     /// Evaluate membership for a scalar value. Returns a degree in `[0.0, 1.0]`.
@@ -125,17 +135,13 @@ impl MembershipFunction {
 /// | IZI (CPU)   | 0.05 | CPU issues appear after IO is resolved |
 #[derive(Debug, Clone)]
 pub struct FuzzyRule {
-    pub dimension:  HeptaDimension,
+    pub dimension: HeptaDimension,
     pub membership: MembershipFunction,
-    pub weight:     f64,
+    pub weight: f64,
 }
 
 impl FuzzyRule {
-    pub fn new(
-        dimension:  HeptaDimension,
-        membership: MembershipFunction,
-        weight:     f64,
-    ) -> Self {
+    pub fn new(dimension: HeptaDimension, membership: MembershipFunction, weight: f64) -> Self {
         Self {
             dimension,
             membership,
@@ -152,12 +158,12 @@ impl FuzzyRule {
 
     fn dimension_value(&self, particle: &Vec7D) -> f64 {
         match self.dimension {
-            HeptaDimension::ME  => particle.me,
-            HeptaDimension::GU  => particle.gu,
+            HeptaDimension::ME => particle.me,
+            HeptaDimension::GU => particle.gu,
             HeptaDimension::SAG => particle.sag,
-            HeptaDimension::A   => particle.a,
+            HeptaDimension::A => particle.a,
             HeptaDimension::IZI => particle.izi,
-            HeptaDimension::UD  => particle.ud,
+            HeptaDimension::UD => particle.ud,
             HeptaDimension::URU => particle.uru,
         }
     }
@@ -170,14 +176,14 @@ impl FuzzyRule {
 /// Aggregates fuzzy rule activations into a single health score in `[0.0, 1.0]`,
 /// then classifies the particle against the configurable Health Orbit Threshold.
 pub struct ScoringEngine {
-    pub rules:     Vec<FuzzyRule>,
+    pub rules: Vec<FuzzyRule>,
     pub threshold: f64,
 }
 
 impl ScoringEngine {
     pub fn new(threshold: f64) -> Self {
         Self {
-            rules:     Vec::new(),
+            rules: Vec::new(),
             threshold: threshold.clamp(0.0, 1.0),
         }
     }
@@ -235,13 +241,41 @@ impl ScoringEngine {
     /// **DMW Default Engine** — standard SQL optimization thresholds (τ = 0.70).
     pub fn dmw_default() -> Self {
         let mut engine = Self::new(0.70);
-        engine.add_rule(FuzzyRule::new(HeptaDimension::URU, MembershipFunction::sovereign_health(), 0.20));
-        engine.add_rule(FuzzyRule::new(HeptaDimension::A,   MembershipFunction::sovereign_health(), 0.20));
-        engine.add_rule(FuzzyRule::new(HeptaDimension::GU,  MembershipFunction::sovereign_health(), 0.15));
-        engine.add_rule(FuzzyRule::new(HeptaDimension::UD,  MembershipFunction::sovereign_health(), 0.15));
-        engine.add_rule(FuzzyRule::new(HeptaDimension::ME,  MembershipFunction::sovereign_health(), 0.15));
-        engine.add_rule(FuzzyRule::new(HeptaDimension::SAG, MembershipFunction::sovereign_health(), 0.10));
-        engine.add_rule(FuzzyRule::new(HeptaDimension::IZI, MembershipFunction::sovereign_health(), 0.05));
+        engine.add_rule(FuzzyRule::new(
+            HeptaDimension::URU,
+            MembershipFunction::sovereign_health(),
+            0.20,
+        ));
+        engine.add_rule(FuzzyRule::new(
+            HeptaDimension::A,
+            MembershipFunction::sovereign_health(),
+            0.20,
+        ));
+        engine.add_rule(FuzzyRule::new(
+            HeptaDimension::GU,
+            MembershipFunction::sovereign_health(),
+            0.15,
+        ));
+        engine.add_rule(FuzzyRule::new(
+            HeptaDimension::UD,
+            MembershipFunction::sovereign_health(),
+            0.15,
+        ));
+        engine.add_rule(FuzzyRule::new(
+            HeptaDimension::ME,
+            MembershipFunction::sovereign_health(),
+            0.15,
+        ));
+        engine.add_rule(FuzzyRule::new(
+            HeptaDimension::SAG,
+            MembershipFunction::sovereign_health(),
+            0.10,
+        ));
+        engine.add_rule(FuzzyRule::new(
+            HeptaDimension::IZI,
+            MembershipFunction::sovereign_health(),
+            0.05,
+        ));
         engine
     }
 
@@ -326,19 +360,32 @@ mod tests {
             1.0,
         );
         let particle = Vec7D::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-        assert!(rule.evaluate(&particle) > 0.9,
-            "should evaluate URU=1.0 as high: {}", rule.evaluate(&particle));
+        assert!(
+            rule.evaluate(&particle) > 0.9,
+            "should evaluate URU=1.0 as high: {}",
+            rule.evaluate(&particle)
+        );
     }
 
     #[test]
     fn fuzzy_rule_weight_scales_output() {
-        let rule_full = FuzzyRule::new(HeptaDimension::ME, MembershipFunction::new(0.0, 1.0, 1.001), 1.0);
-        let rule_half = FuzzyRule::new(HeptaDimension::ME, MembershipFunction::new(0.0, 1.0, 1.001), 0.5);
-        let particle  = Vec7D::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        let v_full    = rule_full.evaluate(&particle);
-        let v_half    = rule_half.evaluate(&particle);
-        assert!(approx(v_full, v_half * 2.0),
-            "weight=1.0 should be 2× weight=0.5: full={v_full}, half={v_half}");
+        let rule_full = FuzzyRule::new(
+            HeptaDimension::ME,
+            MembershipFunction::new(0.0, 1.0, 1.001),
+            1.0,
+        );
+        let rule_half = FuzzyRule::new(
+            HeptaDimension::ME,
+            MembershipFunction::new(0.0, 1.0, 1.001),
+            0.5,
+        );
+        let particle = Vec7D::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        let v_full = rule_full.evaluate(&particle);
+        let v_half = rule_half.evaluate(&particle);
+        assert!(
+            approx(v_full, v_half * 2.0),
+            "weight=1.0 should be 2× weight=0.5: full={v_full}, half={v_half}"
+        );
     }
 
     #[test]
@@ -350,14 +397,17 @@ mod tests {
     #[test]
     fn scoring_engine_perfect_particle_scores_near_one() {
         let engine = ScoringEngine::dmw_default();
-        let score  = engine.score(&Vec7D::HEALTHY_ORBIT);
-        assert!(score > 0.95, "perfect particle should score near 1.0: {score}");
+        let score = engine.score(&Vec7D::HEALTHY_ORBIT);
+        assert!(
+            score > 0.95,
+            "perfect particle should score near 1.0: {score}"
+        );
     }
 
     #[test]
     fn scoring_engine_zero_particle_scores_near_zero() {
         let engine = ScoringEngine::dmw_default();
-        let score  = engine.score(&Vec7D::ZERO);
+        let score = engine.score(&Vec7D::ZERO);
         assert!(score < 0.05, "zero particle should score near 0.0: {score}");
     }
 
@@ -375,24 +425,32 @@ mod tests {
 
     #[test]
     fn sigma_is_complement_of_score() {
-        let engine   = ScoringEngine::dmw_default();
+        let engine = ScoringEngine::dmw_default();
         let particle = Vec7D::HEALTHY_ORBIT;
-        let score    = engine.score(&particle);
-        let sigma    = engine.sigma(&particle);
-        assert!(approx(score + sigma, 1.0),
-            "score + sigma must equal 1.0: score={score}, sigma={sigma}");
+        let score = engine.score(&particle);
+        let sigma = engine.sigma(&particle);
+        assert!(
+            approx(score + sigma, 1.0),
+            "score + sigma must equal 1.0: score={score}, sigma={sigma}"
+        );
     }
 
     #[test]
     fn classify_sovereign_for_healthy_particle() {
         let engine = ScoringEngine::dmw_default();
-        assert_eq!(engine.classify(&Vec7D::HEALTHY_ORBIT), HealthClassification::Sovereign);
+        assert_eq!(
+            engine.classify(&Vec7D::HEALTHY_ORBIT),
+            HealthClassification::Sovereign
+        );
     }
 
     #[test]
     fn classify_critical_for_zero_particle() {
         let engine = ScoringEngine::dmw_default();
-        assert_eq!(engine.classify(&Vec7D::ZERO), HealthClassification::Critical);
+        assert_eq!(
+            engine.classify(&Vec7D::ZERO),
+            HealthClassification::Critical
+        );
     }
 
     #[test]
@@ -423,24 +481,29 @@ mod tests {
     fn dmw_default_weights_sum_to_one() {
         let engine = ScoringEngine::dmw_default();
         let total: f64 = engine.rules.iter().map(|r| r.weight).sum();
-        assert!(approx(total, 1.0),
-            "DMW default rule weights must sum to 1.0: sum={total}");
+        assert!(
+            approx(total, 1.0),
+            "DMW default rule weights must sum to 1.0: sum={total}"
+        );
     }
 
     #[test]
     fn dominant_failure_identifies_weakest_dimension() {
-        let engine   = ScoringEngine::dmw_default();
+        let engine = ScoringEngine::dmw_default();
         let particle = Vec7D::new(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0);
         let dominant = engine.dominant_failure(&particle);
         assert!(dominant.is_some());
-        assert_eq!(dominant.unwrap(), HeptaDimension::URU,
-            "URU should be dominant failure when URU=0.0 and all others=1.0");
+        assert_eq!(
+            dominant.unwrap(),
+            HeptaDimension::URU,
+            "URU should be dominant failure when URU=0.0 and all others=1.0"
+        );
     }
 
     #[test]
     fn health_classification_methods_are_exclusive() {
         let engine = ScoringEngine::dmw_default();
-        let c      = engine.classify(&Vec7D::HEALTHY_ORBIT);
+        let c = engine.classify(&Vec7D::HEALTHY_ORBIT);
         let exclusive = [c.is_sovereign(), c.is_warning(), c.is_critical()]
             .iter()
             .filter(|&&b| b)

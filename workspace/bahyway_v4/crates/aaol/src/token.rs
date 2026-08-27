@@ -59,22 +59,22 @@ pub enum Token {
     Number(u64),
     Float(f64),
     // ── Comparison operators ──────────────────────────────────────────────
-    Geq,       // >=
-    Leq,       // <=
-    Gt,        // >
-    Lt,        // <
-    EqSign,    // =
+    Geq,    // >=
+    Leq,    // <=
+    Gt,     // >
+    Lt,     // <
+    EqSign, // =
     // ── Punctuation ───────────────────────────────────────────────────────
     LBrace,
     RBrace,
     LParen,
     RParen,
-    LBracket,  // [
-    RBracket,  // ]
+    LBracket, // [
+    RBracket, // ]
     Comma,
     Colon,
     Semicolon,
-    Dot,       // .
+    Dot, // .
     // ── End of input ──────────────────────────────────────────────────────
     Eof,
 }
@@ -90,11 +90,16 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
         let ch = chars[i];
 
         // Skip whitespace
-        if ch.is_whitespace() { i += 1; continue; }
+        if ch.is_whitespace() {
+            i += 1;
+            continue;
+        }
 
         // Skip line comments (#)
         if ch == '#' {
-            while i < chars.len() && chars[i] != '\n' { i += 1; }
+            while i < chars.len() && chars[i] != '\n' {
+                i += 1;
+            }
             continue;
         }
 
@@ -102,7 +107,9 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
         if ch == '"' {
             i += 1;
             let start = i;
-            while i < chars.len() && chars[i] != '"' { i += 1; }
+            while i < chars.len() && chars[i] != '"' {
+                i += 1;
+            }
             if i >= chars.len() {
                 return Err("Unterminated string literal".into());
             }
@@ -115,7 +122,9 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
         // Number — integer or float
         if ch.is_ascii_digit() {
             let start = i;
-            while i < chars.len() && chars[i].is_ascii_digit() { i += 1; }
+            while i < chars.len() && chars[i].is_ascii_digit() {
+                i += 1;
+            }
             // Detect float: digits '.' digits
             if i < chars.len()
                 && chars[i] == '.'
@@ -123,7 +132,9 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
                 && chars[i + 1].is_ascii_digit()
             {
                 i += 1; // consume '.'
-                while i < chars.len() && chars[i].is_ascii_digit() { i += 1; }
+                while i < chars.len() && chars[i].is_ascii_digit() {
+                    i += 1;
+                }
                 let s: String = chars[start..i].iter().collect();
                 let f: f64 = s.parse().map_err(|_| format!("Bad float: {s}"))?;
                 tokens.push(Token::Float(f));
@@ -143,42 +154,42 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
             }
             let word: String = chars[start..i].iter().collect();
             let tok = match word.to_lowercase().as_str() {
-                "tribe"    => Token::Tribe,
-                "actor"    => Token::Actor,
-                "role"     => Token::Role,
-                "when"     => Token::When,
-                "event"    => Token::Event,
-                "then"     => Token::Then,
-                "emit"     => Token::Emit,
+                "tribe" => Token::Tribe,
+                "actor" => Token::Actor,
+                "role" => Token::Role,
+                "when" => Token::When,
+                "event" => Token::Event,
+                "then" => Token::Then,
+                "emit" => Token::Emit,
                 "snapshot" => Token::Snapshot,
-                "route"    => Token::Route,
-                "to"       => Token::To,
+                "route" => Token::Route,
+                "to" => Token::To,
                 "particle" => Token::Particle,
-                "rule"     => Token::Rule,
+                "rule" => Token::Rule,
                 "equation" => Token::Equation,
-                "guard"    => Token::Guard,
-                "flow"     => Token::Flow,
-                "observe"  => Token::Observe,
+                "guard" => Token::Guard,
+                "flow" => Token::Flow,
+                "observe" => Token::Observe,
                 "pipeline" => Token::Pipeline,
-                "weights"  => Token::Weights,
-                "ideal"    => Token::Ideal,
-                "and"      => Token::And,
-                "lane"     => Token::Lane,
-                "orbit"    => Token::Orbit,
-                "from"     => Token::From,
-                "where"    => Token::Where,
-                "sort"     => Token::Sort,
-                "limit"    => Token::Limit,
-                "source"   => Token::Source,
-                "pipe"     => Token::Pipe,
-                "sink"     => Token::Sink,
-                "require"  => Token::Require,
-                "allow"    => Token::Allow,
-                "asc"      => Token::Asc,
-                "desc"     => Token::Desc,
-                "text"     => Token::Text,
-                "kaki"     => Token::KakiType,
-                _          => Token::Ident(word),
+                "weights" => Token::Weights,
+                "ideal" => Token::Ideal,
+                "and" => Token::And,
+                "lane" => Token::Lane,
+                "orbit" => Token::Orbit,
+                "from" => Token::From,
+                "where" => Token::Where,
+                "sort" => Token::Sort,
+                "limit" => Token::Limit,
+                "source" => Token::Source,
+                "pipe" => Token::Pipe,
+                "sink" => Token::Sink,
+                "require" => Token::Require,
+                "allow" => Token::Allow,
+                "asc" => Token::Asc,
+                "desc" => Token::Desc,
+                "text" => Token::Text,
+                "kaki" => Token::KakiType,
+                _ => Token::Ident(word),
             };
             tokens.push(tok);
             continue;
@@ -197,7 +208,11 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
             continue;
         }
 
-        if ch == '=' { tokens.push(Token::EqSign); i += 1; continue; }
+        if ch == '=' {
+            tokens.push(Token::EqSign);
+            i += 1;
+            continue;
+        }
 
         // Punctuation
         let tok = match ch {
@@ -211,7 +226,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
             ':' => Token::Colon,
             ';' => Token::Semicolon,
             '.' => Token::Dot,
-            c   => return Err(format!("Unexpected character: {c:?}")),
+            c => return Err(format!("Unexpected character: {c:?}")),
         };
         tokens.push(tok);
         i += 1;

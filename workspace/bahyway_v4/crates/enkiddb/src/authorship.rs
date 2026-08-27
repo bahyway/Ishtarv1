@@ -130,7 +130,7 @@ pub fn git_author_email(file: &Path) -> Option<String> {
 /// author is never authorized.
 pub fn check_authorship(file: &Path, allowlist: &TeamAllowlist) -> AuthorshipCheck {
     let author = git_author_email(file);
-    let authorized = author.as_deref().map_or(false, |e| allowlist.contains(e));
+    let authorized = author.as_deref().is_some_and(|e| allowlist.contains(e));
     AuthorshipCheck { authorized, author }
 }
 
@@ -141,7 +141,12 @@ mod tests {
     use std::process::Command as Cmd;
 
     fn run(dir: &Path, args: &[&str]) {
-        let status = Cmd::new("git").arg("-C").arg(dir).args(args).status().unwrap();
+        let status = Cmd::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .status()
+            .unwrap();
         assert!(status.success(), "git {args:?} failed");
     }
 
@@ -181,7 +186,11 @@ mod tests {
         let dir = scratch_dir("allowlist_file");
         fs::create_dir_all(&dir).unwrap();
         let list_path = dir.join("team.txt");
-        fs::write(&list_path, "# BahyWay team\n\nAlice@Example.com\nbob@example.com\n").unwrap();
+        fs::write(
+            &list_path,
+            "# BahyWay team\n\nAlice@Example.com\nbob@example.com\n",
+        )
+        .unwrap();
 
         let allow = TeamAllowlist::from_file(&list_path).unwrap();
         assert_eq!(allow.len(), 2);

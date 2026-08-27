@@ -10,9 +10,9 @@ pub enum AgentId {
     /// Quality assessor — confidence, density, constituent count, coherence.
     TamuzAI = 0x01,
     /// Cross-domain consistency — checks against existing canonical patterns.
-    Ninsun  = 0x02,
+    Ninsun = 0x02,
     /// Anomaly detector — identifies adversarial, synthetic-flood, or deceptive patterns.
-    Pazuzu  = 0x03,
+    Pazuzu = 0x03,
 }
 
 impl AgentId {
@@ -23,8 +23,8 @@ impl AgentId {
     pub fn as_str(self) -> &'static str {
         match self {
             AgentId::TamuzAI => "TamuzAI",
-            AgentId::Ninsun  => "NINSUN",
-            AgentId::Pazuzu  => "PAZUZU",
+            AgentId::Ninsun => "NINSUN",
+            AgentId::Pazuzu => "PAZUZU",
         }
     }
 }
@@ -63,7 +63,13 @@ impl AgentEvaluation {
         // Score is clamped to [0.0, 1.0] — values outside this range are
         // a caller bug, not a recoverable error.
         let score = score.clamp(0.0, 1.0);
-        Self { agent, pattern_kaki, score, reason, evaluated_at_orbital }
+        Self {
+            agent,
+            pattern_kaki,
+            score,
+            reason,
+            evaluated_at_orbital,
+        }
     }
 }
 

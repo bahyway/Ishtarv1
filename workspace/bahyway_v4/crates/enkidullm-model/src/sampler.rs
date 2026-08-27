@@ -8,28 +8,28 @@
 #[derive(Debug, Clone)]
 pub struct SamplerConfig {
     /// Temperature — scales logits before sampling. 0.0 = greedy.
-    pub temperature:   f32,
+    pub temperature: f32,
     /// Top-p nucleus sampling threshold (0.0–1.0).
-    pub top_p:         f32,
+    pub top_p: f32,
     /// Top-k — only sample from top-k tokens. 0 = disabled.
-    pub top_k:         usize,
+    pub top_k: usize,
     /// Repetition penalty — penalize recently seen tokens.
     pub repeat_penalty: f32,
     /// Window for repetition penalty.
-    pub repeat_window:  usize,
+    pub repeat_window: usize,
     /// Random seed.
-    pub seed:          u64,
+    pub seed: u64,
 }
 
 impl Default for SamplerConfig {
     fn default() -> Self {
         Self {
-            temperature:    0.7,
-            top_p:          0.9,
-            top_k:          40,
+            temperature: 0.7,
+            top_p: 0.9,
+            top_k: 40,
             repeat_penalty: 1.1,
-            repeat_window:  64,
-            seed:           42,
+            repeat_window: 64,
+            seed: 42,
         }
     }
 }
@@ -37,51 +37,74 @@ impl Default for SamplerConfig {
 impl SamplerConfig {
     /// Greedy decoding (deterministic).
     pub fn greedy() -> Self {
-        Self { temperature: 0.0, top_p: 1.0, top_k: 1, repeat_penalty: 1.0, repeat_window: 0, seed: 0 }
+        Self {
+            temperature: 0.0,
+            top_p: 1.0,
+            top_k: 1,
+            repeat_penalty: 1.0,
+            repeat_window: 0,
+            seed: 0,
+        }
     }
     /// Standard creative sampling.
     pub fn creative() -> Self {
-        Self { temperature: 0.8, top_p: 0.95, top_k: 50, ..Default::default() }
+        Self {
+            temperature: 0.8,
+            top_p: 0.95,
+            top_k: 50,
+            ..Default::default()
+        }
     }
     /// Code generation — lower temperature for precision.
     pub fn code() -> Self {
-        Self { temperature: 0.2, top_p: 0.9, top_k: 20, repeat_penalty: 1.05, ..Default::default() }
+        Self {
+            temperature: 0.2,
+            top_p: 0.9,
+            top_k: 20,
+            repeat_penalty: 1.05,
+            ..Default::default()
+        }
     }
 }
 
 /// Sovereign token sampler.
 pub struct TokenSampler {
     config: SamplerConfig,
-    rng:    LcgRng,
+    rng: LcgRng,
     recent: Vec<u32>,
 }
 
 impl TokenSampler {
     pub fn new(config: SamplerConfig) -> Self {
         let seed = config.seed;
-        Self { config, rng: LcgRng::new(seed), recent: Vec::new() }
+        Self {
+            config,
+            rng: LcgRng::new(seed),
+            recent: Vec::new(),
+        }
     }
 
     /// Sample next token from logits.
     pub fn sample(&mut self, logits: &[f32]) -> u32 {
-        let mut scores: Vec<(usize, f32)> = logits.iter()
-            .cloned()
-            .enumerate()
-            .collect();
+        let mut scores: Vec<(usize, f32)> = logits.iter().cloned().enumerate().collect();
 
         // Apply repetition penalty
         if self.config.repeat_penalty != 1.0 {
             for (tok_id, score) in scores.iter_mut() {
                 if self.recent.contains(&(*tok_id as u32)) {
-                    if *score > 0.0 { *score /= self.config.repeat_penalty; }
-                    else            { *score *= self.config.repeat_penalty; }
+                    if *score > 0.0 {
+                        *score /= self.config.repeat_penalty;
+                    } else {
+                        *score *= self.config.repeat_penalty;
+                    }
                 }
             }
         }
 
         // Greedy
         if self.config.temperature == 0.0 {
-            let tok = scores.iter()
+            let tok = scores
+                .iter()
                 .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
                 .map(|(i, _)| *i as u32)
                 .unwrap_or(0);
@@ -90,7 +113,9 @@ impl TokenSampler {
         }
 
         // Apply temperature
-        for (_, s) in scores.iter_mut() { *s /= self.config.temperature; }
+        for (_, s) in scores.iter_mut() {
+            *s /= self.config.temperature;
+        }
 
         // Top-k filter
         if self.config.top_k > 0 && self.config.top_k < scores.len() {
@@ -99,12 +124,16 @@ impl TokenSampler {
         }
 
         // Softmax
-        let max = scores.iter().map(|(_, s)| *s).fold(f32::NEG_INFINITY, f32::max);
-        let mut probs: Vec<(usize, f32)> = scores.iter()
-            .map(|(i, s)| (*i, (*s - max).exp()))
-            .collect();
+        let max = scores
+            .iter()
+            .map(|(_, s)| *s)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let mut probs: Vec<(usize, f32)> =
+            scores.iter().map(|(i, s)| (*i, (*s - max).exp())).collect();
         let sum: f32 = probs.iter().map(|(_, p)| p).sum();
-        for (_, p) in probs.iter_mut() { *p /= sum; }
+        for (_, p) in probs.iter_mut() {
+            *p /= sum;
+        }
 
         // Top-p nucleus filter
         probs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
@@ -128,24 +157,36 @@ pub fn sample_top_p(probs: &[(usize, f32)], top_p: f32, rand: f32) -> u32 {
     for (i, p) in probs {
         nucleus.push((*i, *p));
         cumsum += p;
-        if cumsum >= top_p { break; }
+        if cumsum >= top_p {
+            break;
+        }
     }
     // Re-normalize
     let total: f32 = nucleus.iter().map(|(_, p)| p).sum();
     let mut r = rand * total;
     for (i, p) in &nucleus {
         r -= p;
-        if r <= 0.0 { return *i as u32; }
+        if r <= 0.0 {
+            return *i as u32;
+        }
     }
     nucleus.last().map(|(i, _)| *i as u32).unwrap_or(0)
 }
 
 /// Sovereign LCG PRNG — no external rand crate.
-struct LcgRng { state: u64 }
+struct LcgRng {
+    state: u64,
+}
 impl LcgRng {
-    fn new(seed: u64) -> Self { Self { state: seed ^ 0xDEADBEEF_CAFEBABE } }
+    fn new(seed: u64) -> Self {
+        Self {
+            state: seed ^ 0xDEADBEEF_CAFEBABE,
+        }
+    }
     fn next_u64(&mut self) -> u64 {
-        self.state = self.state.wrapping_mul(6364136223846793005)
+        self.state = self
+            .state
+            .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         self.state
     }

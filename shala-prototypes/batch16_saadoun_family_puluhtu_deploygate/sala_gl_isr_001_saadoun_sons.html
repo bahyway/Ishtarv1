@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · GL-ISR-001 · The Three Sons of Saadoun</title>
+<style>
+  :root{
+    --basalt:#14120f; --tablet:#1f1b16; --gold:#c9a227; --lapis:#2e5d8c;
+    --copper:#b0642f; --alarm:#c23b2a; --bone:#e8e0cf;
+    --tablet-edge:#3a332a; --dim:#8f8672; --green:#7fbf5f; --violet:#a58cc0;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--basalt); color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif; overflow:hidden;}
+  #crumbs{padding:10px 16px 0; font-size:12px; color:var(--dim); letter-spacing:.08em;}
+  #crumbs b{color:var(--gold); font-weight:normal;}
+  #lede{padding:2px 16px 8px; font-size:14.5px;}
+  #banner{background:var(--alarm); color:var(--bone); text-align:center;
+    font-size:11px; letter-spacing:.35em; padding:3px 0; font-family:monospace;}
+  #grid{display:grid; grid-template-columns:1fr 320px; gap:10px;
+    padding:10px 16px 16px; height:calc(100% - 92px);}
+  .panel{background:var(--tablet); border:1px solid var(--tablet-edge);
+    border-radius:6px; position:relative; overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block; width:100%; height:100%;}
+  #deck{position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:5;}
+  #deck button{width:34px; height:34px; background:var(--basalt); color:var(--gold);
+    border:1px solid var(--tablet-edge); border-radius:4px; font-size:16px; cursor:pointer;}
+  #deck button.on{border-color:var(--gold);}
+  #acts{position:absolute; bottom:44px; left:10px; display:flex; gap:6px; flex-wrap:wrap; z-index:5;}
+  #acts button{background:var(--basalt); color:var(--copper); font-family:inherit;
+    border:1px solid var(--copper); border-radius:4px; padding:6px 11px;
+    font-size:12px; cursor:pointer;}
+  #acts button:hover{color:var(--gold); border-color:var(--gold);}
+  #acts button.done{color:var(--green); border-color:var(--green);}
+  #lawtags{position:absolute; bottom:10px; left:10px; display:flex; gap:6px;
+    flex-wrap:wrap; z-index:5;}
+  .lawtag{font-family:monospace; font-size:10px; color:var(--basalt);
+    background:var(--gold); padding:2px 7px; border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis); color:var(--bone);}
+  #side{display:flex; flex-direction:column;}
+  #side h2{font-size:12px; letter-spacing:.25em; color:var(--gold);
+    padding:10px 12px 6px; border-bottom:1px solid var(--tablet-edge);}
+  #journal{flex:1; overflow-y:auto; padding:10px 12px; font-size:12.5px; line-height:1.5;}
+  .entry{margin-bottom:10px; border-left:2px solid var(--copper); padding-left:8px;}
+  .entry .t{color:var(--dim); font-family:monospace; font-size:10px;}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Saadoun Court ▸ <b>GL-ISR-001 · The Three Sons of Saadoun</b></div>
+<div id="lede">The NINURTA ship Tribe rotates, drifting and haunted by a glint ghost. Call the sons in their family order: <b>SaadounFocus</b> holds the floor, <b>SaadounWitness</b> mints only the twice-witnessed, <b>SaadounOrbit</b> knows the Tribe by its vineyard.</div>
+<div id="banner">ŠALA REHEARSAL ONLY — SAADOUN CALCULUS, OF THE NAPHARU THEOREM — SOVEREIGN RENDER IS EGUI/WGPU</div>
+
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="deck">
+      <button id="bHome" title="Reset camera">⌖</button>
+      <button id="bPan"  title="Pan mode">✛</button>
+      <button id="bOrb"  title="Orbit mode" class="on">⟳</button>
+    </div>
+    <div id="acts">
+      <button id="aFocus">① SAADOUNFOCUS · hold the floor</button>
+      <button id="aWit">② SAADOUNWITNESS · mint the true</button>
+      <button id="aOrb">③ SAADOUNORBIT · name the Tribe</button>
+    </div>
+    <div id="lawtags">
+      <span class="lawtag">GL-ISR-001</span>
+      <span class="lawtag lapis">PB-ISR-001</span>
+      <span class="lawtag">GX-004 ANCESTORS</span>
+      <span class="lawtag lapis">GL-ALG-002 NAPHARU</span>
+      <span class="lawtag lapis">NINURTA-SIM-001</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>STORYENGINE JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+const rnd=mulberry32(0x53414144); /* "SAAD" */
+
+const cv=document.getElementById('cv'), g=cv.getContext('2d');
+const stage=document.getElementById('stage');
+function fit(){cv.width=stage.clientWidth; cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit); fit();
+
+const cam0={yaw:-0.5, pitch:0.5, zoom:1.0, px:0, py:0};
+let cam={...cam0}, mode='orbit', drag=null;
+document.getElementById('bHome').onclick=()=>{cam={...cam0};};
+const bPan=document.getElementById('bPan'), bOrb=document.getElementById('bOrb');
+bPan.onclick=()=>{mode='pan'; bPan.classList.add('on'); bOrb.classList.remove('on');};
+bOrb.onclick=()=>{mode='orbit'; bOrb.classList.add('on'); bPan.classList.remove('on');};
+stage.addEventListener('wheel',e=>{e.preventDefault();
+  cam.zoom=Math.min(3,Math.max(.4,cam.zoom*(e.deltaY<0?1.08:0.92)));},{passive:false});
+stage.addEventListener('mousedown',e=>{if(e.button!==0)return; drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mousemove',e=>{if(!drag)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY};
+  if(mode==='orbit'){cam.yaw+=dx*.005; cam.pitch=Math.min(1.25,Math.max(-.15,cam.pitch+dy*.005));}
+  else{cam.px+=dx; cam.py+=dy;}});
+window.addEventListener('mouseup',()=>drag=null);
+
+function proj(p,cx,cy,sc){
+  const cy2=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  let x=p.x*cy2-p.z*sy, z=p.x*sy+p.z*cy2, y=p.y;
+  let yy=y*cp-z*sp, zz=y*sp+z*cp;
+  const d=4.6, s=sc*cam.zoom*(d/(d+zz));
+  return {x:cx+cam.px+x*s, y:cy+cam.py-yy*s, z:zz};
+}
+const jEl=document.getElementById('journal');
+function journal(t){const d=document.createElement('div'); d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+t;
+  jEl.prepend(d);}
+
+/* NINURTA ship Tribe (matches the dataset silhouette) */
+const scat=[];
+for(let i=0;i<16;i++) scat.push({x:-0.9+i*0.12,z:0,y:0});
+for(let k=0;k<5;k++)  scat.push({x:-0.05,z:0,y:0.12+k*0.12});
+for(let k=0;k<4;k++)  scat.push({x:0.45+k*0.09,z:0.08*((-1)**k),y:0.06});
+scat.forEach(s=>{s.born=true; s.minted=false;});
+const ghost={x:0.2,z:0.3,y:0.3,born:false};
+const OMEGA=0.4;
+let st={focused:false, minted:false, named:false};
+const bF=document.getElementById('aFocus'), bW=document.getElementById('aWit'), bO=document.getElementById('aOrb');
+
+bF.onclick=()=>{
+  st.focused=true; bF.classList.add('done');
+  journal('① <b>SaadounFocus</b> — drift removed on the witness of BOTH range-subsets; entropy 𝒟 falls to the floor ε and stops. Verdict: <b style="color:var(--gold)">WITHHELD-SHARP</b> — the image is delivered at floor sharpness; sharper claims would be fiction. <i>The first son holds the floor his grandfather-theorem decreed.</i>');
+};
+bW.onclick=()=>{
+  if(!st.focused){journal('The family order holds: call SaadounFocus first — minting on a smeared chart births ghosts.'); return;}
+  st.minted=true; bW.classList.add('done');
+  scat.forEach(s=>s.minted=true);
+  journal('② <b>SaadounWitness</b> — the CPI splits into epochs; every hull, mast, and stern scatterer crosses threshold in two independent epochs at one orbital address: <b style="color:var(--gold)">25 KAKIs MINTED</b>. The glint flickered in one epoch only — <span style="color:var(--alarm)">refused</span>, never subtracted, never imaged. <i>The second son mints only the twice-witnessed.</i>');
+};
+bO.onclick=()=>{
+  if(!st.minted){journal('The family order holds: SaadounOrbit reads vineyards of minted scatterers — call SaadounWitness first.'); return;}
+  st.named=true; bO.classList.add('done');
+  journal('③ <b>SaadounOrbit</b> — the bundle of Doppler histories agrees in topology across two epoch windows; distance 𝒟 to the SHIP reference bundle crosses acceptance. Verdict: <b style="color:var(--gold)">TRIBE NAMED: SHIP</b> (had no class matched, the honest verdict UNKNOWN-TRIBE stood ready). <i>The third son knows the Tribe by its orbit, not its picture.</i>');
+  journal('<b style="color:var(--gold)">THE FAMILY HAS TESTIFIED.</b> Saadoun Calculus — سعدون — of the Napharu Theorem: the sons carry the father\'s name into the sky. 𒁾');
+};
+
+let lastT=0;
+function frame(now){
+  const t=now/1000;
+  g.fillStyle='#14120f'; g.fillRect(0,0,cv.width,cv.height);
+  const cx=cv.width*0.32, cy=cv.height*0.52, sc=cv.height*0.34;
+  /* sea membrane */
+  for(let j=0;j<=6;j++){
+    g.beginPath();
+    for(let i=0;i<=30;i++){
+      const u=(i/30-0.5)*2.8, v=(j/6-0.5)*1.5;
+      const p={x:u,y:-0.4+0.05*Math.sin(t+u*3+v*2)-0.1*(u*u/6+v*v/4),z:v};
+      const q=proj(p,cx,cy,sc); i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);
+    }
+    g.strokeStyle='rgba(46,93,140,0.18)'; g.lineWidth=1; g.stroke();
+  }
+  const rot=t*OMEGA, drift=st.focused?0:0.2*Math.sin(t*0.9);
+  const rd=[];
+  scat.forEach(s=>{
+    const xr=s.x*Math.cos(rot)-s.z*Math.sin(rot)+drift;
+    const zr=s.x*Math.sin(rot)+s.z*Math.cos(rot);
+    const q=proj({x:xr,y:s.y,z:zr},cx,cy,sc);
+    g.beginPath(); g.arc(q.x,q.y,3.4,0,Math.PI*2);
+    g.fillStyle=st.minted?'#7fbf5f':'#c9a227'; g.fill();
+    rd.push({dop:OMEGA*xr+(st.focused?0:drift*1.6), rng:zr, real:true});
+    /* vineyard trails when named */
+    if(st.named){
+      g.strokeStyle='rgba(165,140,192,0.35)'; g.beginPath();
+      for(let k=0;k<12;k++){
+        const tt=t-k*0.12, rr=tt*OMEGA;
+        const xk=s.x*Math.cos(rr)-s.z*Math.sin(rr);
+        const zk=s.x*Math.sin(rr)+s.z*Math.cos(rr);
+        const qk=proj({x:xk,y:s.y,z:zk},cx,cy,sc);
+        k?g.lineTo(qk.x,qk.y):g.moveTo(qk.x,qk.y);
+      }
+      g.stroke();
+    }
+  });
+  /* the glint ghost flickers */
+  if(Math.sin(t*7)>0.55){
+    const xr=ghost.x*Math.cos(rot)-ghost.z*Math.sin(rot)+drift;
+    const zr=ghost.x*Math.sin(rot)+ghost.z*Math.cos(rot);
+    const q=proj({x:xr,y:ghost.y,z:zr},cx,cy,sc);
+    g.strokeStyle='#c23b2a'; g.setLineDash([3,3]);
+    g.beginPath(); g.arc(q.x,q.y,4,0,Math.PI*2); g.stroke(); g.setLineDash([]);
+    rd.push({dop:OMEGA*xr+(st.focused?0:drift*1.6), rng:zr, real:false});
+  }
+  /* Range–Doppler chart */
+  const mx=cv.width*0.62, my=cv.height*0.14, mw=cv.width*0.34, mh=cv.height*0.60;
+  g.fillStyle='rgba(20,18,15,0.85)'; g.fillRect(mx,my,mw,mh);
+  g.strokeStyle='#3a332a'; g.strokeRect(mx,my,mw,mh);
+  g.fillStyle='#c9a227'; g.font='11px monospace'; g.textAlign='center';
+  g.fillText('RANGE–DOPPLER — the image the Orbit paints', mx+mw/2, my-6);
+  g.save(); g.translate(mx+mw/2,my+mh/2);
+  rd.forEach(p=>{
+    const px=p.dop*mw*0.85, py=-p.rng*mh*0.5;
+    if(p.real){
+      if(!st.focused){g.fillStyle='rgba(176,100,47,0.5)'; g.fillRect(px-14,py-1.2,28,2.4);}
+      else{g.fillStyle=st.minted?'#7fbf5f':'#c9a227';
+        g.beginPath(); g.arc(px,py,3,0,Math.PI*2); g.fill();}
+    } else if(!st.minted){
+      g.strokeStyle='#c23b2a'; g.setLineDash([2,2]); g.strokeRect(px-3,py-3,6,6); g.setLineDash([]);
+    } /* after minting the ghost never appears in the chart: refused, not subtracted */
+  });
+  g.restore();
+  g.font='11px monospace'; g.textAlign='center';
+  g.fillStyle=st.named?'#a58cc0':(st.minted?'#7fbf5f':(st.focused?'#c9a227':'#b0642f'));
+  g.fillText(st.named?'TRIBE NAMED: SHIP — by vineyard, not by pixels':
+             st.minted?'25 minted · ghost refused (not subtracted)':
+             st.focused?'WITHHELD-SHARP — floor ε held':
+             '𝒟 entropy HIGH — call the first son', mx+mw/2, my+mh-10);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+journal('SAADOUN COURT opens. The ship drifts and a glint haunts it. Call the sons in order — ①②③ — and watch each law of GL-ISR-001 testify. GX-004: ancestors name method lineages.');
+</script>
+</body>
+</html>

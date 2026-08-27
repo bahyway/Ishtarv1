@@ -20,7 +20,7 @@ pub enum Statement {
 /// `tribe Name { actor* }`
 #[derive(Debug, Clone)]
 pub struct TribeDecl {
-    pub name:   String,
+    pub name: String,
     pub actors: Vec<ActorDecl>,
 }
 
@@ -35,7 +35,7 @@ pub struct ActorDecl {
 #[derive(Debug, Clone)]
 pub struct EventRule {
     pub event_name: String,
-    pub action:     Action,
+    pub action: Action,
 }
 
 /// Action in an event rule.
@@ -65,7 +65,7 @@ pub struct RouteDecl {
 ///   action     := EMIT SNAPSHOT | IDENT
 pub struct Parser {
     tokens: Vec<super::token::Token>,
-    pos:    usize,
+    pos: usize,
 }
 
 impl Parser {
@@ -122,9 +122,9 @@ impl Parser {
         use super::token::Token::*;
         match self.peek().clone() {
             Tribe => self.parse_tribe_decl().map(Statement::TribeDecl),
-            When  => self.parse_event_rule().map(Statement::EventRule),
+            When => self.parse_event_rule().map(Statement::EventRule),
             Route => self.parse_route_decl().map(Statement::RouteDecl),
-            t     => Err(format!("Unexpected token at statement level: {t:?}")),
+            t => Err(format!("Unexpected token at statement level: {t:?}")),
         }
     }
 
@@ -150,7 +150,9 @@ impl Parser {
             self.advance(); // consume ROLE
             let r = self.expect_ident()?;
             // optional semicolon
-            if matches!(self.peek(), Semicolon) { self.advance(); }
+            if matches!(self.peek(), Semicolon) {
+                self.advance();
+            }
             Some(r)
         } else {
             None
@@ -166,7 +168,9 @@ impl Parser {
         let event_name = self.expect_string()?;
         self.expect_token(&Then)?;
         let action = self.parse_action()?;
-        if matches!(self.peek(), Semicolon) { self.advance(); }
+        if matches!(self.peek(), Semicolon) {
+            self.advance();
+        }
         Ok(EventRule { event_name, action })
     }
 
@@ -190,8 +194,13 @@ impl Parser {
         let event_name = self.expect_ident()?;
         self.expect_token(&To)?;
         let actor_name = self.expect_ident()?;
-        if matches!(self.peek(), Semicolon) { self.advance(); }
-        Ok(RouteDecl { event_name, actor_name })
+        if matches!(self.peek(), Semicolon) {
+            self.advance();
+        }
+        Ok(RouteDecl {
+            event_name,
+            actor_name,
+        })
     }
 }
 

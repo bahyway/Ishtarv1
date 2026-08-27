@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! ConError — connection engine error variants (no thiserror).
 
+use crate::csr::{OrganAction, OrganKind};
 use crate::roles::SovereignRole;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -8,7 +9,10 @@ pub enum ConError {
     /// CSR-01 Sargon gate: passport not valid.
     Forbidden(&'static str),
     /// CSR-02 insufficient role.
-    InsufficientRole { needed: SovereignRole, got: SovereignRole },
+    InsufficientRole {
+        needed: SovereignRole,
+        got: SovereignRole,
+    },
     /// CSR-03 NĀRU WAL journal is full.
     AuditJournalFull,
     /// CSR-04 credential expired.
@@ -18,11 +22,20 @@ pub enum ConError {
     /// CSR-06 Kibratu event emission failed.
     KibratuEventFailed,
     /// CSR-07 tribe isolation violation.
-    TribeIsolationViolation { caller_tribe: u32, target_tribe: u32 },
+    TribeIsolationViolation {
+        caller_tribe: u32,
+        target_tribe: u32,
+    },
     /// Connection pool exhausted.
     PoolExhausted,
     /// I/O error string.
     Io(String),
+    /// CSR-08 Architect Sovereignty: an organ-affecting append (create,
+    /// supersede, or retire a crate/engine/agent/template/KAKI/tribe/
+    /// session/playbook/configuration -- BahyWay is append-only, so this
+    /// is always a new particle, never an in-place edit or a physical
+    /// removal) was attempted without DUB.SAR's explicit confirmation.
+    ArchitectConfirmationRequired(OrganAction, OrganKind),
 }
 
 impl core::fmt::Display for ConError {
@@ -46,6 +59,8 @@ impl core::fmt::Display for ConError {
                 => write!(f, "connection pool exhausted"),
             Self::Io(msg)
                 => write!(f, "I/O error: {msg}"),
+            Self::ArchitectConfirmationRequired(action, organ)
+                => write!(f, "CSR-08 Architect Sovereignty: {} {} requires DUB.SAR's explicit confirmation", action.as_str(), organ.as_str()),
         }
     }
 }

@@ -28,13 +28,26 @@ impl HardwareHealthReport {
     pub fn from_d7(node_id: u8, d7_integrity: f32) -> Self {
         let b11 = (d7_integrity * 240.0).round().clamp(0.0, 240.0) as u8;
         let imminent_failure = b11 < 60;
-        let warning          = b11 < 100 && !imminent_failure;
-        let label = if b11 >= 200      { "GEM-NODE" }
-                    else if b11 >= 140 { "TRIBE-NODE" }
-                    else if b11 >= 100 { "ACTIVE-NODE" }
-                    else if b11 >= 60  { "FUZZY-NODE" }
-                    else               { "DEAD-NODE" };
-        Self { node_id, b11, d7_integrity, imminent_failure, warning, label }
+        let warning = b11 < 100 && !imminent_failure;
+        let label = if b11 >= 200 {
+            "GEM-NODE"
+        } else if b11 >= 140 {
+            "TRIBE-NODE"
+        } else if b11 >= 100 {
+            "ACTIVE-NODE"
+        } else if b11 >= 60 {
+            "FUZZY-NODE"
+        } else {
+            "DEAD-NODE"
+        };
+        Self {
+            node_id,
+            b11,
+            d7_integrity,
+            imminent_failure,
+            warning,
+            label,
+        }
     }
 
     /// Construct a healthy report (for testing / uninitialised state).
@@ -52,7 +65,11 @@ mod tests {
     #[test]
     fn healthy_node_report() {
         let r = HardwareHealthReport::healthy(0);
-        assert!(r.b11 >= 200, "healthy should be GEM-NODE, got b11={}", r.b11);
+        assert!(
+            r.b11 >= 200,
+            "healthy should be GEM-NODE, got b11={}",
+            r.b11
+        );
         assert!(!r.imminent_failure);
         assert!(!r.warning);
         assert_eq!(r.label, "GEM-NODE");

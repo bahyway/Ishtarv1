@@ -7,9 +7,9 @@
 //! Loaded at startup with BUILTIN_ATTRS (ILKUM core).
 //! Extended at runtime by domain teams via `register_attr()` (SHU-GUR).
 
-use std::collections::HashMap;
 use crate::attribute::DamaAttribute;
 use crate::builtin::BUILTIN_ATTRS;
+use std::collections::HashMap;
 
 /// The TĒMĒNU dictionary — sovereign attribute registry for the EAV Hepta manifold.
 pub struct HeptaDictionary {
@@ -85,8 +85,8 @@ impl Default for HeptaDictionary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builtin::{ATTR_HASH_STATE, ATTR_HASH_QUALITY, ATTR_HASH_MOMENTUM};
     use crate::attribute::AttrDataType;
+    use crate::builtin::{ATTR_HASH_MOMENTUM, ATTR_HASH_QUALITY, ATTR_HASH_STATE};
 
     #[test]
     fn builtin_attrs_are_loaded() {
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn resolve_attr_by_name() {
         let d = HeptaDictionary::new();
-        assert_eq!(d.resolve_attr("state"),   Some(ATTR_HASH_STATE));
+        assert_eq!(d.resolve_attr("state"), Some(ATTR_HASH_STATE));
         assert_eq!(d.resolve_attr("quality"), Some(ATTR_HASH_QUALITY));
         assert_eq!(d.resolve_attr("momentum"), Some(ATTR_HASH_MOMENTUM));
         assert_eq!(d.resolve_attr("nonexistent"), None);
@@ -123,7 +123,10 @@ mod tests {
             "This should be rejected",
         );
         let registered = d.register_attr(duplicate);
-        assert!(!registered, "Pauli Exclusion: same dama_id must be rejected");
+        assert!(
+            !registered,
+            "Pauli Exclusion: same dama_id must be rejected"
+        );
     }
 
     #[test]
@@ -131,7 +134,11 @@ mod tests {
         let mut d = HeptaDictionary::new();
         let before = d.len();
         let custom = DamaAttribute::new(
-            0xBEEF, "domain_score", AttrDataType::Float64, false, "Domain-specific score",
+            0xBEEF,
+            "domain_score",
+            AttrDataType::Float64,
+            false,
+            "Domain-specific score",
         );
         assert!(d.register_attr(custom));
         assert_eq!(d.len(), before + 1);
@@ -142,7 +149,10 @@ mod tests {
     fn momentum_is_non_mandatory_derived() {
         let d = HeptaDictionary::new();
         let meta = d.attr_metadata(ATTR_HASH_MOMENTUM).unwrap();
-        assert!(!meta.mandatory, "PA-13 momentum is derived, not mandatory at birth");
+        assert!(
+            !meta.mandatory,
+            "PA-13 momentum is derived, not mandatory at birth"
+        );
         assert_eq!(meta.data_type, AttrDataType::Float64);
     }
 }

@@ -51,7 +51,10 @@ impl AuthedIdentity {
 /// Decrypts a Sargon-format vault (`salt(32) || sealed`) with
 /// `passphrase` and returns the STRONGEST identity among every entry
 /// whose `SargonPassport::verify_seal()` actually passes.
-pub fn open_vault_and_authenticate(vault_bytes: &[u8], passphrase: &[u8]) -> Result<AuthedIdentity, String> {
+pub fn open_vault_and_authenticate(
+    vault_bytes: &[u8],
+    passphrase: &[u8],
+) -> Result<AuthedIdentity, String> {
     if vault_bytes.len() < SALT_LEN + 1 + 12 + 16 {
         return Err("file too short to contain a salt + sealed blob".to_string());
     }
@@ -72,7 +75,9 @@ pub fn open_vault_and_authenticate(vault_bytes: &[u8], passphrase: &[u8]) -> Res
 
     let mut best: Option<AuthedIdentity> = None;
     for entry in &entries {
-        let Ok(passport) = serde_json::from_str::<SargonPassport>(&entry.passport_json) else { continue };
+        let Ok(passport) = serde_json::from_str::<SargonPassport>(&entry.passport_json) else {
+            continue;
+        };
         if passport.verify_seal().is_err() {
             continue;
         }
@@ -87,7 +92,9 @@ pub fn open_vault_and_authenticate(vault_bytes: &[u8], passphrase: &[u8]) -> Res
             });
         }
     }
-    best.ok_or_else(|| "vault opened, but no passport inside it has a valid, unexpired seal".to_string())
+    best.ok_or_else(|| {
+        "vault opened, but no passport inside it has a valid, unexpired seal".to_string()
+    })
 }
 
 #[cfg(test)]
@@ -123,7 +130,11 @@ mod tests {
             realm: realm.into(),
             mudu_score: 5,
         };
-        let istar = if privilege_level >= 7 { IshtarLayer::architect(realm) } else { IshtarLayer::gardener(realm) };
+        let istar = if privilege_level >= 7 {
+            IshtarLayer::architect(realm)
+        } else {
+            IshtarLayer::gardener(realm)
+        };
         SargonPassport::issue(naru, istar, [1u8; 16], &keypair, &[0x42u8; 32]).unwrap()
     }
 

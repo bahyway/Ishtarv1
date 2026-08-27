@@ -4,13 +4,13 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum BaghdadSector {
-    GreenZone   = 0, // H7-00 SUN
+    GreenZone = 0,   // H7-00 SUN
     AlKadhimiya = 1, // H7-01 MOON
-    SadrCity    = 2, // H7-02 MERCURY — reference density 1.00
-    Karrada     = 3, // H7-03 VENUS
-    Rashid      = 4, // H7-04 MARS
-    AlJadria    = 5, // H7-05 JUPITER
-    AlMansour   = 6, // H7-06 SATURN
+    SadrCity = 2,    // H7-02 MERCURY — reference density 1.00
+    Karrada = 3,     // H7-03 VENUS
+    Rashid = 4,      // H7-04 MARS
+    AlJadria = 5,    // H7-05 JUPITER
+    AlMansour = 6,   // H7-06 SATURN
 }
 
 impl BaghdadSector {
@@ -27,49 +27,49 @@ impl BaghdadSector {
     /// Population density index relative to SadrCity (=1.00).
     pub fn density_index(self) -> f32 {
         match self {
-            BaghdadSector::GreenZone   => 0.30,
+            BaghdadSector::GreenZone => 0.30,
             BaghdadSector::AlKadhimiya => 0.85,
-            BaghdadSector::SadrCity    => 1.00,
-            BaghdadSector::Karrada     => 0.75,
-            BaghdadSector::Rashid      => 0.70,
-            BaghdadSector::AlJadria    => 0.60,
-            BaghdadSector::AlMansour   => 0.80,
+            BaghdadSector::SadrCity => 1.00,
+            BaghdadSector::Karrada => 0.75,
+            BaghdadSector::Rashid => 0.70,
+            BaghdadSector::AlJadria => 0.60,
+            BaghdadSector::AlMansour => 0.80,
         }
     }
 
     pub fn planet_symbol(self) -> &'static str {
         match self {
-            BaghdadSector::GreenZone   => "SUN",
+            BaghdadSector::GreenZone => "SUN",
             BaghdadSector::AlKadhimiya => "MOON",
-            BaghdadSector::SadrCity    => "MERCURY",
-            BaghdadSector::Karrada     => "VENUS",
-            BaghdadSector::Rashid      => "MARS",
-            BaghdadSector::AlJadria    => "JUPITER",
-            BaghdadSector::AlMansour   => "SATURN",
+            BaghdadSector::SadrCity => "MERCURY",
+            BaghdadSector::Karrada => "VENUS",
+            BaghdadSector::Rashid => "MARS",
+            BaghdadSector::AlJadria => "JUPITER",
+            BaghdadSector::AlMansour => "SATURN",
         }
     }
 
     pub fn heptagram_id(self) -> &'static str {
         match self {
-            BaghdadSector::GreenZone   => "H7-00",
+            BaghdadSector::GreenZone => "H7-00",
             BaghdadSector::AlKadhimiya => "H7-01",
-            BaghdadSector::SadrCity    => "H7-02",
-            BaghdadSector::Karrada     => "H7-03",
-            BaghdadSector::Rashid      => "H7-04",
-            BaghdadSector::AlJadria    => "H7-05",
-            BaghdadSector::AlMansour   => "H7-06",
+            BaghdadSector::SadrCity => "H7-02",
+            BaghdadSector::Karrada => "H7-03",
+            BaghdadSector::Rashid => "H7-04",
+            BaghdadSector::AlJadria => "H7-05",
+            BaghdadSector::AlMansour => "H7-06",
         }
     }
 
     pub fn name(self) -> &'static str {
         match self {
-            BaghdadSector::GreenZone   => "Green Zone",
+            BaghdadSector::GreenZone => "Green Zone",
             BaghdadSector::AlKadhimiya => "Al-Kadhimiya",
-            BaghdadSector::SadrCity    => "Sadr City",
-            BaghdadSector::Karrada     => "Karrada",
-            BaghdadSector::Rashid      => "Rashid",
-            BaghdadSector::AlJadria    => "Al-Jadria",
-            BaghdadSector::AlMansour   => "Al-Mansour",
+            BaghdadSector::SadrCity => "Sadr City",
+            BaghdadSector::Karrada => "Karrada",
+            BaghdadSector::Rashid => "Rashid",
+            BaghdadSector::AlJadria => "Al-Jadria",
+            BaghdadSector::AlMansour => "Al-Mansour",
         }
     }
 
@@ -120,7 +120,10 @@ mod tests {
 
     #[test]
     fn heptagram_ids_unique() {
-        let ids: Vec<_> = BaghdadSector::ALL.iter().map(|s| s.heptagram_id()).collect();
+        let ids: Vec<_> = BaghdadSector::ALL
+            .iter()
+            .map(|s| s.heptagram_id())
+            .collect();
         let mut sorted = ids.clone();
         sorted.sort_unstable();
         sorted.dedup();
@@ -131,7 +134,10 @@ mod tests {
     fn tribe_ids_are_unique_and_in_reserved_range() {
         let ids: Vec<u16> = BaghdadSector::ALL.iter().map(|s| s.tribe_id()).collect();
         for id in &ids {
-            assert!((0x3000..=0x3006).contains(id), "tribe_id {id:#06x} outside reserved range");
+            assert!(
+                (0x3000..=0x3006).contains(id),
+                "tribe_id {id:#06x} outside reserved range"
+            );
         }
         let mut sorted = ids.clone();
         sorted.sort_unstable();

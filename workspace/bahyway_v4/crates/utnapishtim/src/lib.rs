@@ -34,20 +34,20 @@ pub const GOLDEN_ANGLE_DEG: f64 = 137.507_764;
 pub const KUR_THRESHOLD: f32 = 0.40;
 
 /// Seven sealed orbital radii (particle property — NOT tribe property)
-pub const ORBITAL_GOLDEN_GEM:   f32 = 0.10;
+pub const ORBITAL_GOLDEN_GEM: f32 = 0.10;
 pub const ORBITAL_GOLDEN_ALIVE: f32 = 0.30;
-pub const ORBITAL_FUZZY_AGED:   f32 = 0.40;
-pub const ORBITAL_FUZZY_GRAY:   f32 = 0.57;
-pub const ORBITAL_FUZZY_DECAY:  f32 = 0.72;
+pub const ORBITAL_FUZZY_AGED: f32 = 0.40;
+pub const ORBITAL_FUZZY_GRAY: f32 = 0.57;
+pub const ORBITAL_FUZZY_DECAY: f32 = 0.72;
 pub const ORBITAL_DEAD_EXPIRED: f32 = 0.85;
-pub const ORBITAL_DEAD_SEALED:  f32 = 0.95;
+pub const ORBITAL_DEAD_SEALED: f32 = 0.95;
 
 /// Sovereign colour constants
-pub const COLOUR_GOLDEN_GEM:   &str = "#FFD700";  // pure gold
-pub const COLOUR_DEAD_EXPIRED: &str = "#404040";  // dark grey
-pub const COLOUR_DEAD_SEALED:  &str = "#282828";  // near-black PUZRU
-pub const COLOUR_KUR:          &str = "#1A0A2E";  // sovereign indigo
-// NOTE: #800000 Maroon = NERGAL AV engine — never used in UTNAPISHTIM
+pub const COLOUR_GOLDEN_GEM: &str = "#FFD700"; // pure gold
+pub const COLOUR_DEAD_EXPIRED: &str = "#404040"; // dark grey
+pub const COLOUR_DEAD_SEALED: &str = "#282828"; // near-black PUZRU
+pub const COLOUR_KUR: &str = "#1A0A2E"; // sovereign indigo
+                                        // NOTE: #800000 Maroon = NERGAL AV engine — never used in UTNAPISHTIM
 
 /// Compute B11 from EAV quality — Plimpton 322
 pub fn compute_b11(eav_quality: f32) -> u8 {
@@ -75,10 +75,10 @@ pub fn orbital_radius(subtype: u8) -> f32 {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TribeDefinition {
-    pub tribe_id:   u16,
+    pub tribe_id: u16,
     pub tribe_name: String,
     /// hue = golden_hue(tribe_id) — PĀŠIRU, never from KAKI
-    pub hue_deg:    f64,
+    pub hue_deg: f64,
     /// RGB hex from PĀŠIRU — never from KAKI bytes
     pub colour_hex: String,
     /// Visual ring radius in Three.js/Godot (decorative only)
@@ -88,10 +88,10 @@ pub struct TribeDefinition {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClientTopology {
-    pub client_id:   u16,
+    pub client_id: u16,
     pub client_name: String,
-    pub tribes:      Vec<TribeDefinition>,
-    pub sealed_at:   i64,
+    pub tribes: Vec<TribeDefinition>,
+    pub sealed_at: i64,
 }
 
 impl ClientTopology {
@@ -108,20 +108,24 @@ impl ClientTopology {
     /// Build tribes with sovereign PĀŠIRU colours
     pub fn build_tribes(client_id: u16, names: &[&str]) -> Vec<TribeDefinition> {
         let _ = client_id;
-        names.iter().enumerate().map(|(i, name)| {
-            let tribe_id  = (i + 1) as u16;
-            let hue       = golden_hue(tribe_id);
-            let colour    = hue_to_hex(hue);
-            TribeDefinition {
-                tribe_id,
-                tribe_name: name.to_string(),
-                hue_deg:    hue,
-                colour_hex: colour,
-                // Decorative ring radius — visual separation only
-                // NOT particle orbital_radius
-                ring_radius: 1.5 + (i as f32 * 1.2),
-            }
-        }).collect()
+        names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let tribe_id = (i + 1) as u16;
+                let hue = golden_hue(tribe_id);
+                let colour = hue_to_hex(hue);
+                TribeDefinition {
+                    tribe_id,
+                    tribe_name: name.to_string(),
+                    hue_deg: hue,
+                    colour_hex: colour,
+                    // Decorative ring radius — visual separation only
+                    // NOT particle orbital_radius
+                    ring_radius: 1.5 + (i as f32 * 1.2),
+                }
+            })
+            .collect()
     }
 }
 
@@ -140,7 +144,8 @@ pub fn hue_to_hex(hue: f64) -> String {
         4 => (x, 0.0, c),
         _ => (c, 0.0, x),
     };
-    format!("#{:02X}{:02X}{:02X}",
+    format!(
+        "#{:02X}{:02X}{:02X}",
         ((r + m) * 255.0) as u8,
         ((g + m) * 255.0) as u8,
         ((b + m) * 255.0) as u8,
@@ -196,10 +201,10 @@ mod tests {
     #[test]
     fn test_topology_validate() {
         let topo = ClientTopology {
-            client_id:   1,
+            client_id: 1,
             client_name: "Najaf Cemetery".into(),
-            tribes:      ClientTopology::build_tribes(1, &["Graves", "Records"]),
-            sealed_at:   0,
+            tribes: ClientTopology::build_tribes(1, &["Graves", "Records"]),
+            sealed_at: 0,
         };
         assert!(topo.validate().is_ok());
     }

@@ -19,17 +19,17 @@ pub enum HealthStatus {
 
 /// The Eridu system supervisor.
 pub struct EriduSupervisor {
-    pub runtime:   EriduRuntime,
+    pub runtime: EriduRuntime,
     pub scheduler: EriduScheduler,
-    running:       bool,
+    running: bool,
 }
 
 impl EriduSupervisor {
     pub fn new() -> Self {
         EriduSupervisor {
-            runtime:   EriduRuntime::new(),
+            runtime: EriduRuntime::new(),
             scheduler: EriduScheduler::new(),
-            running:   false,
+            running: false,
         }
     }
 
@@ -87,7 +87,9 @@ impl EriduSupervisor {
 }
 
 impl Default for EriduSupervisor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -97,8 +99,12 @@ mod tests {
 
     struct NullTask(String);
     impl Task for NullTask {
-        fn name(&self) -> &str { &self.0 }
-        fn run(&mut self) -> TaskResult { TaskResult::Ok }
+        fn name(&self) -> &str {
+            &self.0
+        }
+        fn run(&mut self) -> TaskResult {
+            TaskResult::Ok
+        }
     }
 
     #[test]
@@ -138,8 +144,12 @@ mod tests {
         use eridu_runtime::TaskResult;
         struct FailTask;
         impl Task for FailTask {
-            fn name(&self) -> &str { "fail" }
-            fn run(&mut self) -> TaskResult { TaskResult::Failed("oops".into()) }
+            fn name(&self) -> &str {
+                "fail"
+            }
+            fn run(&mut self) -> TaskResult {
+                TaskResult::Failed("oops".into())
+            }
         }
         let mut sup = EriduSupervisor::new();
         sup.start();

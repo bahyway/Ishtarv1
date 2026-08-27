@@ -2,7 +2,7 @@
 # ============================================================
 # 05_pulse_enkidb.sh
 # 𒁾 DECREE OF UNIFICATION — EnkiDB master → GitHub
-# BahyWay.Ecosystem v4.0 / EriduOS v4.0
+# BahyWay.Ecosystem v4.0 / UrOS v4.0
 #
 # USAGE:
 #   chmod +x 05_pulse_enkidb.sh

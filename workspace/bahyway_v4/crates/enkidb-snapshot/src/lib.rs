@@ -7,13 +7,15 @@
 //!   Snapshot_State     — full projected state at the snapshot moment
 //!   Snapshot_Frequency — VectorId of the governing Snapshot_Job
 
-pub mod snapshot_record;
 pub mod projection;
+pub mod snapshot_record;
 
-pub use snapshot_record::{SnapshotRecord, ATTR_SNAPSHOT_DATE, ATTR_SNAPSHOT_STATE, ATTR_SNAPSHOT_FREQ};
 pub use projection::ProjectionAlgorithm;
+pub use snapshot_record::{
+    SnapshotRecord, ATTR_SNAPSHOT_DATE, ATTR_SNAPSHOT_FREQ, ATTR_SNAPSHOT_STATE,
+};
 
 pub mod prelude {
-    pub use super::snapshot_record::SnapshotRecord;
     pub use super::projection::ProjectionAlgorithm;
+    pub use super::snapshot_record::SnapshotRecord;
 }

@@ -33,8 +33,8 @@ impl AgentClass {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Identity   => "IDENTITY",
-            Self::Event      => "EVENT",
+            Self::Identity => "IDENTITY",
+            Self::Event => "EVENT",
             Self::CrossTribe => "CROSS_TRIBE",
         }
     }
@@ -58,20 +58,26 @@ pub enum AgentState {
 impl AgentState {
     /// Decode from a B11 quality byte.
     pub fn from_b11(b11: u8) -> Self {
-        if      b11 >= 200 { Self::Gem    }
-        else if b11 >= 140 { Self::Tribe  }
-        else if b11 >= 100 { Self::Active }
-        else if b11 >=  60 { Self::Fuzzy  }
-        else               { Self::Dead   }
+        if b11 >= 200 {
+            Self::Gem
+        } else if b11 >= 140 {
+            Self::Tribe
+        } else if b11 >= 100 {
+            Self::Active
+        } else if b11 >= 60 {
+            Self::Fuzzy
+        } else {
+            Self::Dead
+        }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Gem    => "GEM",
-            Self::Tribe  => "TRIBE",
+            Self::Gem => "GEM",
+            Self::Tribe => "TRIBE",
             Self::Active => "ACTIVE",
-            Self::Fuzzy  => "FUZZY",
-            Self::Dead   => "DEAD",
+            Self::Fuzzy => "FUZZY",
+            Self::Dead => "DEAD",
         }
     }
 
@@ -99,8 +105,8 @@ pub struct AgentSnapshot {
 impl AgentSnapshot {
     pub fn new(kaki: [u8; 16], b11: u8, position: [f32; 3]) -> Self {
         Self {
-            class:    AgentClass::from_kaki_byte(kaki[6]),
-            state:    AgentState::from_b11(b11),
+            class: AgentClass::from_kaki_byte(kaki[6]),
+            state: AgentState::from_b11(b11),
             kaki,
             b11,
             position,
@@ -138,14 +144,14 @@ mod tests {
     #[test]
     fn agent_state_active_boundary() {
         assert_eq!(AgentState::from_b11(100), AgentState::Active);
-        assert_eq!(AgentState::from_b11(99),  AgentState::Fuzzy);
+        assert_eq!(AgentState::from_b11(99), AgentState::Fuzzy);
     }
 
     #[test]
     fn agent_state_dead_boundary() {
         assert_eq!(AgentState::from_b11(60), AgentState::Fuzzy);
         assert_eq!(AgentState::from_b11(59), AgentState::Dead);
-        assert_eq!(AgentState::from_b11(0),  AgentState::Dead);
+        assert_eq!(AgentState::from_b11(0), AgentState::Dead);
     }
 
     #[test]

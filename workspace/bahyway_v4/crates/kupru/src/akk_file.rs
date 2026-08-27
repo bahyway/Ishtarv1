@@ -8,31 +8,31 @@
 //!   [3] ŠIPRU    — payload / content body
 //!   [4] ŠIPIR ŠARRI — royal integrity check (BLAKE3 / SHA3-256)
 
-use serde::{Deserialize, Serialize};
 use crate::{KupruError, KupruResult};
+use serde::{Deserialize, Serialize};
 
-pub const AKK_MAGIC:   &[u8; 4] = b"\xACKv4";  // v4.0 sovereign magic
-pub const AKK_VERSION: u8       = 0x04;          // BahyWay v4.0
+pub const AKK_MAGIC: &[u8; 4] = b"\xACKv4"; // v4.0 sovereign magic
+pub const AKK_VERSION: u8 = 0x04; // BahyWay v4.0
 
 // ── RĒŠU — File Header ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResuHeader {
-    pub magic:      [u8; 4],
-    pub version:    u8,
-    pub domain:     u8,      // KAKI B10
-    pub timestamp:  u64,     // sovereign_now()
-    pub flags:      u16,
+    pub magic: [u8; 4],
+    pub version: u8,
+    pub domain: u8,     // KAKI B10
+    pub timestamp: u64, // sovereign_now()
+    pub flags: u16,
 }
 
 impl ResuHeader {
     pub fn new(domain: u8) -> Self {
         Self {
-            magic:     *AKK_MAGIC,
-            version:   AKK_VERSION,
+            magic: *AKK_MAGIC,
+            version: AKK_VERSION,
             domain,
             timestamp: sovereign_now(),
-            flags:     0x0000,
+            flags: 0x0000,
         }
     }
 
@@ -42,7 +42,8 @@ impl ResuHeader {
         }
         if self.version != AKK_VERSION {
             return Err(KupruError::InvalidInput(format!(
-                "LEMNĪ: unsupported .akk version {:#04x}", self.version
+                "LEMNĪ: unsupported .akk version {:#04x}",
+                self.version
             )));
         }
         Ok(())
@@ -53,21 +54,21 @@ impl ResuHeader {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MuduMetadata {
-    pub name:       String,
-    pub quality:    u8,       // KAKI B11 (QUALITY_DIVISOR=240.0)
-    pub creator_id: String,   // SargonPassport ID
-    pub tribe:      Option<String>,
-    pub tags:       Vec<String>,
+    pub name: String,
+    pub quality: u8,        // KAKI B11 (QUALITY_DIVISOR=240.0)
+    pub creator_id: String, // SargonPassport ID
+    pub tribe: Option<String>,
+    pub tags: Vec<String>,
 }
 
 impl MuduMetadata {
     pub fn new(name: impl Into<String>, quality: u8, creator_id: impl Into<String>) -> Self {
         Self {
-            name:       name.into(),
-            quality:    quality.min(240),
+            name: name.into(),
+            quality: quality.min(240),
             creator_id: creator_id.into(),
-            tribe:      None,
-            tags:       Vec::new(),
+            tribe: None,
+            tags: Vec::new(),
         }
     }
 }
@@ -76,17 +77,17 @@ impl MuduMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KanakuSeal {
-    pub algorithm_id: u8,    // 0x01 = Ed25519
+    pub algorithm_id: u8, // 0x01 = Ed25519
     pub verifier_key: Vec<u8>,
-    pub signature:    Vec<u8>,
+    pub signature: Vec<u8>,
 }
 
 // ── ŠIPIR ŠARRI — Royal Integrity Check ──────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShipirSharri {
-    pub digest_algo: u8,     // 0x03 = SHA3-256 (stub: BLAKE3 = 0x04)
-    pub digest:      [u8; 32],
+    pub digest_algo: u8, // 0x03 = SHA3-256 (stub: BLAKE3 = 0x04)
+    pub digest: [u8; 32],
 }
 
 impl ShipirSharri {
@@ -94,7 +95,10 @@ impl ShipirSharri {
         use sha3::{Digest, Sha3_256};
         let mut h = Sha3_256::new();
         h.update(payload);
-        Self { digest_algo: 0x03, digest: h.finalize().into() }
+        Self {
+            digest_algo: 0x03,
+            digest: h.finalize().into(),
+        }
     }
 
     pub fn verify(&self, payload: &[u8]) -> bool {
@@ -111,25 +115,31 @@ impl ShipirSharri {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AkkFile {
-    pub header:   ResuHeader,
+    pub header: ResuHeader,
     pub metadata: MuduMetadata,
-    pub seal:     Option<KanakuSeal>,
-    pub payload:  Vec<u8>,
+    pub seal: Option<KanakuSeal>,
+    pub payload: Vec<u8>,
     pub integrity: ShipirSharri,
 }
 
 impl AkkFile {
     pub fn new(
-        domain:     u8,
-        name:       impl Into<String>,
-        quality:    u8,
+        domain: u8,
+        name: impl Into<String>,
+        quality: u8,
         creator_id: impl Into<String>,
-        payload:    Vec<u8>,
+        payload: Vec<u8>,
     ) -> Self {
-        let header    = ResuHeader::new(domain);
-        let metadata  = MuduMetadata::new(name, quality, creator_id);
+        let header = ResuHeader::new(domain);
+        let metadata = MuduMetadata::new(name, quality, creator_id);
         let integrity = ShipirSharri::compute(&payload);
-        Self { header, metadata, seal: None, payload, integrity }
+        Self {
+            header,
+            metadata,
+            seal: None,
+            payload,
+            integrity,
+        }
     }
 
     /// Seal the file with a signing key (populates KANĀKU layer).
@@ -139,7 +149,7 @@ impl AkkFile {
             self.seal = Some(KanakuSeal {
                 algorithm_id: signer.algorithm_id(),
                 verifier_key: signer.verifier_bytes(),
-                signature:    sig,
+                signature: sig,
             });
         }
     }

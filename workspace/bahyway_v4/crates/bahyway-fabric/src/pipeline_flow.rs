@@ -4,20 +4,25 @@
 /// The seven sovereign databases, in pipeline order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnkiDb {
-    EnkiSDB,  // Stage — ingestion landing
-    EnkiODB,  // Operational — cleansing/enrichment
-    EnkiQDB,  // Quarantine — verification/compliance
-    EnkiDB,   // Golden Records — single source of truth
-    EnkiDW,   // Warehouse — analytics/snapshots
-    EnkiMDB,  // Metadata — internal objects
-    EnkiDDB,  // Documents — files (internal + external)
+    EnkiSDB, // Stage — ingestion landing
+    EnkiODB, // Operational — cleansing/enrichment
+    EnkiQDB, // Quarantine — verification/compliance
+    EnkiDB,  // Golden Records — single source of truth
+    EnkiDW,  // Warehouse — analytics/snapshots
+    EnkiMDB, // Metadata — internal objects
+    EnkiDDB, // Documents — files (internal + external)
 }
 
 impl EnkiDb {
     /// Pipeline order 0..7.
     pub const FLOW: [EnkiDb; 7] = [
-        EnkiDb::EnkiSDB, EnkiDb::EnkiODB, EnkiDb::EnkiQDB, EnkiDb::EnkiDB,
-        EnkiDb::EnkiDW, EnkiDb::EnkiMDB, EnkiDb::EnkiDDB,
+        EnkiDb::EnkiSDB,
+        EnkiDb::EnkiODB,
+        EnkiDb::EnkiQDB,
+        EnkiDb::EnkiDB,
+        EnkiDb::EnkiDW,
+        EnkiDb::EnkiMDB,
+        EnkiDb::EnkiDDB,
     ];
 
     /// The sovereign name — ALWAYS Enki-prefixed.
@@ -52,33 +57,35 @@ impl EnkiDb {
 /// Particle lifecycle state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParticleState {
-    Birth,   // just extracted, KAKI minted at ingest
-    Fuzzy,   // schema conflict, awaiting DataSteward (gray)
-    Active,  // passed, in operation (green + tribe shadow)
-    Golden,  // single source of truth in EnkiDB
-    Aged,    // ARS-marked, moved to aged partition in EnkiDW
+    Birth,  // just extracted, KAKI minted at ingest
+    Fuzzy,  // schema conflict, awaiting DataSteward (gray)
+    Active, // passed, in operation (green + tribe shadow)
+    Golden, // single source of truth in EnkiDB
+    Aged,   // ARS-marked, moved to aged partition in EnkiDW
 }
 
 impl ParticleState {
     /// Canonical ColorID (RGB) for the state's shadow system.
     pub fn color_rgb(&self) -> (u8, u8, u8) {
         match self {
-            ParticleState::Birth => (128, 128, 128),  // gray-born
-            ParticleState::Fuzzy => (128, 128, 128),  // gray (await steward)
-            ParticleState::Active => (68, 255, 136),  // green
-            ParticleState::Golden => (255, 215, 0),   // gold
-            ParticleState::Aged => (90, 90, 120),     // dim
+            ParticleState::Birth => (128, 128, 128), // gray-born
+            ParticleState::Fuzzy => (128, 128, 128), // gray (await steward)
+            ParticleState::Active => (68, 255, 136), // green
+            ParticleState::Golden => (255, 215, 0),  // gold
+            ParticleState::Aged => (90, 90, 120),    // dim
         }
     }
 
     /// Legal transitions (the Architect's sealed flow).
     pub fn can_advance_to(&self, next: ParticleState) -> bool {
         use ParticleState::*;
-        matches!((self, next),
+        matches!(
+            (self, next),
             (Birth, Fuzzy) | (Birth, Active) |
             (Fuzzy, Active) | (Fuzzy, Birth) |     // steward may return to birth
             (Active, Golden) |
-            (Golden, Aged))
+            (Golden, Aged)
+        )
     }
 }
 
@@ -89,7 +96,11 @@ mod tests {
     #[test]
     fn seven_databases_all_enki_prefixed() {
         for db in EnkiDb::FLOW {
-            assert!(db.name().starts_with("Enki"), "{} must be Enki-prefixed", db.name());
+            assert!(
+                db.name().starts_with("Enki"),
+                "{} must be Enki-prefixed",
+                db.name()
+            );
         }
     }
 
@@ -117,8 +128,8 @@ mod tests {
     #[test]
     fn illegal_transitions_rejected() {
         use ParticleState::*;
-        assert!(!Birth.can_advance_to(Golden));   // must pass through gates
-        assert!(!Aged.can_advance_to(Active));    // aged is terminal-ish
+        assert!(!Birth.can_advance_to(Golden)); // must pass through gates
+        assert!(!Aged.can_advance_to(Active)); // aged is terminal-ish
         assert!(!Golden.can_advance_to(Birth));
     }
 

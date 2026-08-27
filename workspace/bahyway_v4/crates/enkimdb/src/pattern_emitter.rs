@@ -41,14 +41,54 @@ impl<'a> PatternEmitter<'a> {
         let p = &profile.pattern;
 
         let particles = vec![
-            Particle::base(kaki, "pattern.pattern_kaki_hex", AkkValue::Text(hex::encode(p.pattern_kaki.bytes())), now),
-            Particle::base(kaki, "pattern.type", AkkValue::Text(format!("{:?}", p.pattern_type)), now),
-            Particle::base(kaki, "pattern.lifecycle", AkkValue::Text(format!("{:?}", p.lifecycle)), now),
-            Particle::base(kaki, "pattern.confidence_millipercent", AkkValue::Int(p.confidence_millipercent as i64), now),
-            Particle::base(kaki, "pattern.constituent_count", AkkValue::Int(p.constituent_count as i64), now),
-            Particle::base(kaki, "pattern.constituent_merkle_root_hex", AkkValue::Text(hex::encode(p.constituent_merkle_root)), now),
-            Particle::base(kaki, "pattern.orbital_formed", AkkValue::Int(p.orbital_formed as i64), now),
-            Particle::base(kaki, "pattern.tier", AkkValue::Text(profile.tier().as_str().to_string()), now),
+            Particle::base(
+                kaki,
+                "pattern.pattern_kaki_hex",
+                AkkValue::Text(hex::encode(p.pattern_kaki.bytes())),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "pattern.type",
+                AkkValue::Text(format!("{:?}", p.pattern_type)),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "pattern.lifecycle",
+                AkkValue::Text(format!("{:?}", p.lifecycle)),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "pattern.confidence_millipercent",
+                AkkValue::Int(p.confidence_millipercent as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "pattern.constituent_count",
+                AkkValue::Int(p.constituent_count as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "pattern.constituent_merkle_root_hex",
+                AkkValue::Text(hex::encode(p.constituent_merkle_root)),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "pattern.orbital_formed",
+                AkkValue::Int(p.orbital_formed as i64),
+                now,
+            ),
+            Particle::base(
+                kaki,
+                "pattern.tier",
+                AkkValue::Text(profile.tier().as_str().to_string()),
+                now,
+            ),
         ];
 
         (kaki, particles)
@@ -76,7 +116,9 @@ mod tests {
 
     fn make_pattern() -> nisaba::discovery::DiscoveredPattern {
         let cluster = GaCluster::new(
-            FixedCoord7D { d: [1_000, 2_000, 500, 1, 2, 3, 0] },
+            FixedCoord7D {
+                d: [1_000, 2_000, 500, 1, 2, 3, 0],
+            },
             vec![],
             0.9,
             0.9,
@@ -108,7 +150,10 @@ mod tests {
         let emitter = PatternEmitter::new(&minter);
 
         let (_, particles) = emitter.emit(&profile);
-        let found = particles.iter().find(|p| p.attribute == "pattern.pattern_kaki_hex").unwrap();
+        let found = particles
+            .iter()
+            .find(|p| p.attribute == "pattern.pattern_kaki_hex")
+            .unwrap();
         assert_eq!(found.value, AkkValue::Text(expected_hex));
     }
 
@@ -120,7 +165,10 @@ mod tests {
         let emitter = PatternEmitter::new(&minter);
 
         let (_, particles) = emitter.emit(&profile);
-        let found = particles.iter().find(|p| p.attribute == "pattern.tier").unwrap();
+        let found = particles
+            .iter()
+            .find(|p| p.attribute == "pattern.tier")
+            .unwrap();
         assert_eq!(found.value, AkkValue::Text("Crystallized".to_string()));
     }
 
@@ -133,7 +181,10 @@ mod tests {
         let minter = make_minter();
         let pattern1 = make_pattern();
         let pattern2 = make_pattern();
-        assert_eq!(pattern1.pattern_kaki, pattern2.pattern_kaki, "same cluster inputs must derive the same Pattern-KAKI");
+        assert_eq!(
+            pattern1.pattern_kaki, pattern2.pattern_kaki,
+            "same cluster inputs must derive the same Pattern-KAKI"
+        );
 
         let emitter = PatternEmitter::new(&minter);
         let (id1, _) = emitter.emit(&PatternProfile::new(pattern1, 0));

@@ -6,8 +6,8 @@
 //! providing actual I/O — the Fabric never changes when you do that.
 
 use crate::connector::{
-    DataBatch, DeliveryReceipt, ExtractionCursor, SourceConnector, SourceId,
-    TargetConnector, TargetId,
+    DataBatch, DeliveryReceipt, ExtractionCursor, SourceConnector, SourceId, TargetConnector,
+    TargetId,
 };
 use crate::contract::{FieldSpec, FieldType, SchemaContract};
 use crate::exception::FabricException;
@@ -19,9 +19,15 @@ macro_rules! declare_source {
         pub struct $name;
 
         impl SourceConnector for $name {
-            fn source_id(&self)    -> SourceId        { SourceId($id) }
-            fn display_name(&self) -> &'static str    { $display }
-            fn schema(&self)       -> SchemaContract  { $contract }
+            fn source_id(&self) -> SourceId {
+                SourceId($id)
+            }
+            fn display_name(&self) -> &'static str {
+                $display
+            }
+            fn schema(&self) -> SchemaContract {
+                $contract
+            }
 
             fn extract(&self, _cursor: &ExtractionCursor) -> Result<DataBatch, FabricException> {
                 // Production: replace with real I/O (HTTP, JDBC, file parse, etc.)
@@ -35,100 +41,136 @@ declare_source!(
     ErpConnector,
     "erp.sovereign",
     "ERP System",
-    SchemaContract::new("erp.invoice", 1, vec![
-        FieldSpec::required("erp_id",       0x1001, FieldType::Integer),
-        FieldSpec::required("amount",        0x1002, FieldType::Decimal),
-        FieldSpec::required("currency",      0x1003, FieldType::Text),
-        FieldSpec::optional("description",   0x1004, FieldType::Text),
-        FieldSpec::optional("created_at",    0x1005, FieldType::Timestamp),
-    ])
+    SchemaContract::new(
+        "erp.invoice",
+        1,
+        vec![
+            FieldSpec::required("erp_id", 0x1001, FieldType::Integer),
+            FieldSpec::required("amount", 0x1002, FieldType::Decimal),
+            FieldSpec::required("currency", 0x1003, FieldType::Text),
+            FieldSpec::optional("description", 0x1004, FieldType::Text),
+            FieldSpec::optional("created_at", 0x1005, FieldType::Timestamp),
+        ]
+    )
 );
 
 declare_source!(
     CrmConnector,
     "crm.sovereign",
     "CRM System",
-    SchemaContract::new("crm.contact", 1, vec![
-        FieldSpec::required("contact_id",    0x2001, FieldType::Integer),
-        FieldSpec::required("full_name",     0x2002, FieldType::Text),
-        FieldSpec::required("email",         0x2003, FieldType::Text),
-        FieldSpec::optional("phone",         0x2004, FieldType::Nullable(Box::new(FieldType::Text))),
-        FieldSpec::optional("segment",       0x2005, FieldType::Text),
-    ])
+    SchemaContract::new(
+        "crm.contact",
+        1,
+        vec![
+            FieldSpec::required("contact_id", 0x2001, FieldType::Integer),
+            FieldSpec::required("full_name", 0x2002, FieldType::Text),
+            FieldSpec::required("email", 0x2003, FieldType::Text),
+            FieldSpec::optional(
+                "phone",
+                0x2004,
+                FieldType::Nullable(Box::new(FieldType::Text))
+            ),
+            FieldSpec::optional("segment", 0x2005, FieldType::Text),
+        ]
+    )
 );
 
 declare_source!(
     HrSystemConnector,
     "hr.sovereign",
     "HR System",
-    SchemaContract::new("hr.employee", 1, vec![
-        FieldSpec::required("employee_id",   0x3001, FieldType::Integer),
-        FieldSpec::required("name",          0x3002, FieldType::Text),
-        FieldSpec::required("department",    0x3003, FieldType::Text),
-        FieldSpec::optional("hire_date",     0x3004, FieldType::Timestamp),
-        FieldSpec::optional("grade",         0x3005, FieldType::Text),
-    ])
+    SchemaContract::new(
+        "hr.employee",
+        1,
+        vec![
+            FieldSpec::required("employee_id", 0x3001, FieldType::Integer),
+            FieldSpec::required("name", 0x3002, FieldType::Text),
+            FieldSpec::required("department", 0x3003, FieldType::Text),
+            FieldSpec::optional("hire_date", 0x3004, FieldType::Timestamp),
+            FieldSpec::optional("grade", 0x3005, FieldType::Text),
+        ]
+    )
 );
 
 declare_source!(
     LegacySystemConnector,
     "legacy.sovereign",
     "Legacy System",
-    SchemaContract::new("legacy.record", 1, vec![
-        FieldSpec::required("rec_id",        0x4001, FieldType::Integer),
-        FieldSpec::required("payload",       0x4002, FieldType::Bytes),
-        FieldSpec::optional("source_code",   0x4003, FieldType::Text),
-    ])
+    SchemaContract::new(
+        "legacy.record",
+        1,
+        vec![
+            FieldSpec::required("rec_id", 0x4001, FieldType::Integer),
+            FieldSpec::required("payload", 0x4002, FieldType::Bytes),
+            FieldSpec::optional("source_code", 0x4003, FieldType::Text),
+        ]
+    )
 );
 
 declare_source!(
     ExternalPartnerConnector,
     "partner.sovereign",
     "External Partner",
-    SchemaContract::new("partner.transaction", 1, vec![
-        FieldSpec::required("txn_id",        0x5001, FieldType::Text),
-        FieldSpec::required("amount",        0x5002, FieldType::Decimal),
-        FieldSpec::required("partner_ref",   0x5003, FieldType::Text),
-        FieldSpec::optional("timestamp",     0x5004, FieldType::Timestamp),
-    ])
+    SchemaContract::new(
+        "partner.transaction",
+        1,
+        vec![
+            FieldSpec::required("txn_id", 0x5001, FieldType::Text),
+            FieldSpec::required("amount", 0x5002, FieldType::Decimal),
+            FieldSpec::required("partner_ref", 0x5003, FieldType::Text),
+            FieldSpec::optional("timestamp", 0x5004, FieldType::Timestamp),
+        ]
+    )
 );
 
 declare_source!(
     ExcelFileConnector,
     "excel.sovereign",
     "Excel Files",
-    SchemaContract::new("excel.row", 1, vec![
-        FieldSpec::required("row_index",     0x6001, FieldType::Integer),
-        FieldSpec::required("raw_columns",   0x6002, FieldType::Bytes),
-        FieldSpec::optional("sheet_name",    0x6003, FieldType::Text),
-        FieldSpec::optional("file_path",     0x6004, FieldType::Text),
-    ])
+    SchemaContract::new(
+        "excel.row",
+        1,
+        vec![
+            FieldSpec::required("row_index", 0x6001, FieldType::Integer),
+            FieldSpec::required("raw_columns", 0x6002, FieldType::Bytes),
+            FieldSpec::optional("sheet_name", 0x6003, FieldType::Text),
+            FieldSpec::optional("file_path", 0x6004, FieldType::Text),
+        ]
+    )
 );
 
 declare_source!(
     EmailInboxConnector,
     "email.sovereign",
     "Email / Inbox",
-    SchemaContract::new("email.message", 1, vec![
-        FieldSpec::required("message_id",    0x7001, FieldType::Text),
-        FieldSpec::required("subject",       0x7002, FieldType::Text),
-        FieldSpec::required("sender",        0x7003, FieldType::Text),
-        FieldSpec::optional("body",          0x7004, FieldType::Text),
-        FieldSpec::optional("received_at",   0x7005, FieldType::Timestamp),
-    ])
+    SchemaContract::new(
+        "email.message",
+        1,
+        vec![
+            FieldSpec::required("message_id", 0x7001, FieldType::Text),
+            FieldSpec::required("subject", 0x7002, FieldType::Text),
+            FieldSpec::required("sender", 0x7003, FieldType::Text),
+            FieldSpec::optional("body", 0x7004, FieldType::Text),
+            FieldSpec::optional("received_at", 0x7005, FieldType::Timestamp),
+        ]
+    )
 );
 
 declare_source!(
     ThirdPartyApiConnector,
     "api.sovereign",
     "Third-Party API",
-    SchemaContract::new("api.event", 1, vec![
-        FieldSpec::required("event_id",      0x8001, FieldType::Text),
-        FieldSpec::required("event_type",    0x8002, FieldType::Text),
-        FieldSpec::required("payload",       0x8003, FieldType::Bytes),
-        FieldSpec::optional("api_version",   0x8004, FieldType::Text),
-        FieldSpec::optional("emitted_at",    0x8005, FieldType::Timestamp),
-    ])
+    SchemaContract::new(
+        "api.event",
+        1,
+        vec![
+            FieldSpec::required("event_id", 0x8001, FieldType::Text),
+            FieldSpec::required("event_type", 0x8002, FieldType::Text),
+            FieldSpec::required("payload", 0x8003, FieldType::Bytes),
+            FieldSpec::optional("api_version", 0x8004, FieldType::Text),
+            FieldSpec::optional("emitted_at", 0x8005, FieldType::Timestamp),
+        ]
+    )
 );
 
 // ── Target Adapters ───────────────────────────────────────────────────────────
@@ -138,9 +180,15 @@ macro_rules! declare_target {
         pub struct $name;
 
         impl TargetConnector for $name {
-            fn target_id(&self)            -> TargetId       { TargetId($id) }
-            fn display_name(&self)         -> &'static str   { $display }
-            fn schema_expectation(&self)   -> SchemaContract { $contract }
+            fn target_id(&self) -> TargetId {
+                TargetId($id)
+            }
+            fn display_name(&self) -> &'static str {
+                $display
+            }
+            fn schema_expectation(&self) -> SchemaContract {
+                $contract
+            }
 
             fn deliver(&self, batch: DataBatch) -> Result<DeliveryReceipt, FabricException> {
                 // Production: replace with real I/O (SQL INSERT, REST POST, file write, etc.)

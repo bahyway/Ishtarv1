@@ -3,24 +3,29 @@
 //! Wraps a reference to a `QuantDbStore` and provides ergonomic windowed
 //! access for quant-engine to build return series, rolling stats, etc.
 
-use crate::tick::TickRecord;
 use crate::ohlc::OhlcBar;
 use crate::store::QuantDbStore;
+use crate::tick::TickRecord;
 
 /// A view over an asset's tick history within an epoch window.
 ///
 /// Used by `quant-engine` to feed `ReturnSeries` and `RollingStats`.
 pub struct TimeSeriesWindow<'a> {
-    store:      &'a QuantDbStore,
+    store: &'a QuantDbStore,
     asset_hash: u32,
     from_epoch: u32,
-    to_epoch:   u32,
+    to_epoch: u32,
 }
 
 impl<'a> TimeSeriesWindow<'a> {
     /// Create a window over `[from_epoch, to_epoch]` inclusive.
     pub fn new(store: &'a QuantDbStore, asset_hash: u32, from_epoch: u32, to_epoch: u32) -> Self {
-        Self { store, asset_hash, from_epoch, to_epoch }
+        Self {
+            store,
+            asset_hash,
+            from_epoch,
+            to_epoch,
+        }
     }
 
     /// Full history window (all ticks for this asset).
@@ -30,7 +35,8 @@ impl<'a> TimeSeriesWindow<'a> {
 
     /// All tick prices as a Vec<i64> in chronological order.
     pub fn prices(&self) -> Vec<i64> {
-        self.store.ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
+        self.store
+            .ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
             .iter()
             .map(|t| t.raw_price)
             .collect()
@@ -38,7 +44,8 @@ impl<'a> TimeSeriesWindow<'a> {
 
     /// All ticks in the window.
     pub fn ticks(&self) -> Vec<&TickRecord> {
-        self.store.ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
+        self.store
+            .ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
     }
 
     /// OHLC bars for this window using the given bar window size.
@@ -54,35 +61,47 @@ impl<'a> TimeSeriesWindow<'a> {
 
     /// Tick count in this window.
     pub fn len(&self) -> usize {
-        self.store.ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch).len()
+        self.store
+            .ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
+            .len()
     }
 
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     /// First price in the window, or None.
     pub fn first_price(&self) -> Option<i64> {
-        self.store.ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
-            .first().map(|t| t.raw_price)
+        self.store
+            .ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
+            .first()
+            .map(|t| t.raw_price)
     }
 
     /// Last price in the window, or None.
     pub fn last_price(&self) -> Option<i64> {
-        self.store.ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
-            .last().map(|t| t.raw_price)
+        self.store
+            .ticks_in_range(self.asset_hash, self.from_epoch, self.to_epoch)
+            .last()
+            .map(|t| t.raw_price)
     }
 
     /// Absolute price change from first to last tick.
     pub fn price_change(&self) -> Option<i64> {
         let first = self.first_price()?;
-        let last  = self.last_price()?;
+        let last = self.last_price()?;
         Some(last - first)
     }
 
     /// Asset hash this window covers.
-    pub fn asset_hash(&self) -> u32 { self.asset_hash }
+    pub fn asset_hash(&self) -> u32 {
+        self.asset_hash
+    }
 
     /// Epoch range [from, to].
-    pub fn epoch_range(&self) -> (u32, u32) { (self.from_epoch, self.to_epoch) }
+    pub fn epoch_range(&self) -> (u32, u32) {
+        (self.from_epoch, self.to_epoch)
+    }
 }
 
 #[cfg(test)]

@@ -4,12 +4,10 @@
 //! The caller embeds the output inside a page template or returns it directly.
 
 use crate::{
-    QUALITY_DIVISOR, GO_LIVE_THRESHOLD,
+    evaluator::{ComplianceStatus, DomainScore, PriorityAction, SlaReport},
     profile::{MaturityLevel, SlaProfile},
-    requirements::{ComplianceDomain, requirements_for_domain},
-    evaluator::{
-        ComplianceStatus, DomainScore, PriorityAction, SlaReport,
-    },
+    requirements::{requirements_for_domain, ComplianceDomain},
+    GO_LIVE_THRESHOLD, QUALITY_DIVISOR,
 };
 
 // ── Shared CSS ────────────────────────────────────────────────────────────────
@@ -85,10 +83,7 @@ impl SlaGuiRenderer {
     /// The form posts to `action_url` via POST with fields:
     /// - `req_{id}_enabled` = "on" if checkbox checked
     /// - `req_{id}_level`   = u8 (MaturityLevel::as_u8())
-    pub fn render_selection_html(
-        profile:    &SlaProfile,
-        action_url: &str,
-    ) -> String {
+    pub fn render_selection_html(profile: &SlaProfile, action_url: &str) -> String {
         let mut out = String::with_capacity(32_768);
 
         out.push_str("<!DOCTYPE html><html lang=\"en\"><head>");
@@ -109,7 +104,9 @@ impl SlaGuiRenderer {
         let all_domains = all_domains_ordered();
         for domain in all_domains {
             let reqs: Vec<_> = requirements_for_domain(domain).collect();
-            if reqs.is_empty() { continue; }
+            if reqs.is_empty() {
+                continue;
+            }
 
             out.push_str("<div class=\"card form-section\">");
             out.push_str("<h2>");
@@ -133,7 +130,9 @@ impl SlaGuiRenderer {
                 out.push_str("_enabled\" id=\"req_");
                 push_u16(&mut out, req.id);
                 out.push('"');
-                if selected { out.push_str(" checked"); }
+                if selected {
+                    out.push_str(" checked");
+                }
                 out.push('>');
 
                 // name + description
@@ -159,7 +158,9 @@ impl SlaGuiRenderer {
                     out.push_str("<option value=\"");
                     push_u8(&mut out, level.as_u8());
                     out.push('"');
-                    if level == MaturityLevel::NotStarted { out.push_str(" selected"); }
+                    if level == MaturityLevel::NotStarted {
+                        out.push_str(" selected");
+                    }
                     out.push('>');
                     html_escape_into(&mut out, level.as_str());
                     out.push_str("</option>");
@@ -311,7 +312,7 @@ impl SlaGuiRenderer {
                 if let Some(action) = check.gap_action {
                     html_escape_into(&mut out, action);
                 } else {
-                    out.push_str("—");
+                    out.push('—');
                 }
                 out.push_str("</td></tr>");
             }
@@ -320,7 +321,9 @@ impl SlaGuiRenderer {
         }
 
         // footer
-        out.push_str("<p style=\"font-size:.75rem;color:var(--sub);margin-top:24px;text-align:center\">");
+        out.push_str(
+            "<p style=\"font-size:.75rem;color:var(--sub);margin-top:24px;text-align:center\">",
+        );
         out.push_str("BahyWay SLA Governance Engine &nbsp;·&nbsp; Generated epoch ");
         push_u32(&mut out, report.generated_epoch);
         out.push_str(" &nbsp;·&nbsp; QUALITY_DIVISOR=240 (ADR-001)");
@@ -369,7 +372,9 @@ fn render_domain_card(out: &mut String, domain: &DomainScore) {
     push_u8(out, domain.b11_score);
     out.push(')');
     if domain.mandatory_gap {
-        out.push_str(" <span style=\"color:var(--mandatory-gap);font-weight:700\">⚠ Mandatory Gap</span>");
+        out.push_str(
+            " <span style=\"color:var(--mandatory-gap);font-weight:700\">⚠ Mandatory Gap</span>",
+        );
     }
     out.push_str("</div>");
 
@@ -377,7 +382,9 @@ fn render_domain_card(out: &mut String, domain: &DomainScore) {
         out.push_str("<div style=\"margin-top:8px;font-size:.78rem\">");
         out.push_str("<strong>Top gaps:</strong> ");
         for (i, action) in domain.top_gap_actions.iter().enumerate() {
-            if i > 0 { out.push_str("; "); }
+            if i > 0 {
+                out.push_str("; ");
+            }
             html_escape_into(out, action);
         }
         out.push_str("</div>");
@@ -409,12 +416,12 @@ fn render_action_row(out: &mut String, action: &PriorityAction) {
 fn html_escape_into(out: &mut String, s: &str) {
     for ch in s.chars() {
         match ch {
-            '&'  => out.push_str("&amp;"),
-            '<'  => out.push_str("&lt;"),
-            '>'  => out.push_str("&gt;"),
-            '"'  => out.push_str("&quot;"),
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&#39;"),
-            c    => out.push(c),
+            c => out.push(c),
         }
     }
 }
@@ -433,35 +440,35 @@ fn push_u32(out: &mut String, v: u32) {
 
 fn domain_icon(domain: ComplianceDomain) -> &'static str {
     match domain {
-        ComplianceDomain::GdprPrivacy          => "🔏",
-        ComplianceDomain::EncryptionAtRest      => "🔐",
-        ComplianceDomain::KeyManagement         => "🗝",
-        ComplianceDomain::NetworkSecurity       => "🌐",
-        ComplianceDomain::OperationalSecurity   => "🛡",
-        ComplianceDomain::NajafPrivacy          => "🕌",
-        ComplianceDomain::WpdInfrastructure     => "🏗",
-        ComplianceDomain::GovernanceAssurance   => "📋",
+        ComplianceDomain::GdprPrivacy => "🔏",
+        ComplianceDomain::EncryptionAtRest => "🔐",
+        ComplianceDomain::KeyManagement => "🗝",
+        ComplianceDomain::NetworkSecurity => "🌐",
+        ComplianceDomain::OperationalSecurity => "🛡",
+        ComplianceDomain::NajafPrivacy => "🕌",
+        ComplianceDomain::WpdInfrastructure => "🏗",
+        ComplianceDomain::GovernanceAssurance => "📋",
     }
 }
 
 fn status_color(status: ComplianceStatus) -> &'static str {
     match status {
-        ComplianceStatus::Sovereign      => "var(--sovereign)",
-        ComplianceStatus::Compliant      => "var(--compliant)",
-        ComplianceStatus::Partial        => "var(--partial)",
+        ComplianceStatus::Sovereign => "var(--sovereign)",
+        ComplianceStatus::Compliant => "var(--compliant)",
+        ComplianceStatus::Partial => "var(--partial)",
         ComplianceStatus::ActionRequired => "var(--action-required)",
-        ComplianceStatus::MandatoryGap   => "var(--mandatory-gap)",
+        ComplianceStatus::MandatoryGap => "var(--mandatory-gap)",
     }
 }
 
 fn maturity_badge_style(level: MaturityLevel) -> &'static str {
     match level {
         MaturityLevel::NotApplicable => "background:#9e9e9e;color:#fff",
-        MaturityLevel::NotStarted    => "background:#757575;color:#fff",
-        MaturityLevel::Planned       => "background:#1565c0;color:#fff",
-        MaturityLevel::InProgress    => "background:#f57f17;color:#fff",
-        MaturityLevel::Implemented   => "background:#2e7d32;color:#fff",
-        MaturityLevel::Verified      => "background:#0a7c43;color:#fff",
+        MaturityLevel::NotStarted => "background:#757575;color:#fff",
+        MaturityLevel::Planned => "background:#1565c0;color:#fff",
+        MaturityLevel::InProgress => "background:#f57f17;color:#fff",
+        MaturityLevel::Implemented => "background:#2e7d32;color:#fff",
+        MaturityLevel::Verified => "background:#0a7c43;color:#fff",
     }
 }
 
@@ -494,13 +501,13 @@ fn all_domains_ordered() -> [ComplianceDomain; 8] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile::{AppTopology, SlaProfile};
     use crate::evaluator::{ComplianceState, SlaEvaluator};
+    use crate::profile::{AppTopology, SlaProfile};
 
     #[test]
     fn selection_form_contains_required_elements() {
         let profile = SlaProfile::for_topology(AppTopology::NajafEngine);
-        let html    = SlaGuiRenderer::render_selection_html(&profile, "/sla/evaluate");
+        let html = SlaGuiRenderer::render_selection_html(&profile, "/sla/evaluate");
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("/sla/evaluate"));
         assert!(html.contains("req_1001_enabled"));
@@ -512,9 +519,9 @@ mod tests {
     #[test]
     fn dashboard_shows_go_live_blocked_for_empty_state() {
         let profile = SlaProfile::for_topology(AppTopology::NajafEngine);
-        let state   = ComplianceState::new();
-        let report  = SlaEvaluator::evaluate(&profile, &state, 999);
-        let html    = SlaGuiRenderer::render_dashboard_html(&report);
+        let state = ComplianceState::new();
+        let report = SlaEvaluator::evaluate(&profile, &state, 999);
+        let html = SlaGuiRenderer::render_dashboard_html(&report);
         assert!(html.contains("NOT GO-LIVE READY"));
         assert!(html.contains("go-live-blocked"));
         assert!(!html.contains("class=\"go-live-ready\""));
@@ -528,7 +535,7 @@ mod tests {
             state.set(id, MaturityLevel::Verified);
         }
         let report = SlaEvaluator::evaluate(&profile, &state, 999);
-        let html   = SlaGuiRenderer::render_dashboard_html(&report);
+        let html = SlaGuiRenderer::render_dashboard_html(&report);
         assert!(html.contains("GO-LIVE READY"));
         assert!(!html.contains("NOT GO-LIVE READY"));
     }
@@ -536,9 +543,9 @@ mod tests {
     #[test]
     fn dashboard_escapes_html_in_strings() {
         let profile = SlaProfile::for_topology(AppTopology::WebGateway);
-        let state   = ComplianceState::new();
-        let report  = SlaEvaluator::evaluate(&profile, &state, 1);
-        let html    = SlaGuiRenderer::render_dashboard_html(&report);
+        let state = ComplianceState::new();
+        let report = SlaEvaluator::evaluate(&profile, &state, 1);
+        let html = SlaGuiRenderer::render_dashboard_html(&report);
         // Should not contain raw unescaped angle brackets in text content
         // (CSS/attributes are fine — check only outside of style/script)
         assert!(html.contains("</body>"));
@@ -547,16 +554,16 @@ mod tests {
     #[test]
     fn enterprise_dashboard_renders_without_panic() {
         let profile = SlaProfile::for_topology(AppTopology::EnterpriseAll);
-        let state   = ComplianceState::new();
-        let report  = SlaEvaluator::evaluate(&profile, &state, 0);
-        let html    = SlaGuiRenderer::render_dashboard_html(&report);
+        let state = ComplianceState::new();
+        let report = SlaEvaluator::evaluate(&profile, &state, 0);
+        let html = SlaGuiRenderer::render_dashboard_html(&report);
         assert!(html.len() > 1000, "dashboard HTML should be substantial");
     }
 
     #[test]
     fn selection_form_marks_mandatory_requirements() {
         let profile = SlaProfile::for_topology(AppTopology::NajafEngine);
-        let html    = SlaGuiRenderer::render_selection_html(&profile, "/");
+        let html = SlaGuiRenderer::render_selection_html(&profile, "/");
         // DPIA (1001) is mandatory — should have the mandatory star
         assert!(html.contains("mandatory-star"));
     }

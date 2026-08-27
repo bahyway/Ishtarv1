@@ -1,0 +1,54 @@
+---
+# PB-367 · Anti-SQL account emitter · GL-FLD-001 §10, §6 · GL-FED-001 §7
+# A stakeholder receives a shape and a ledger. Never a row.
+- name: PB-367 deploy the account emitter
+  hosts: girsu
+  vars:
+    forge: "{{ ansible_env.HOME }}/bahyway/forge"
+  tasks:
+    - name: Write the account schema
+      ansible.builtin.copy:
+        dest: "{{ forge }}/account_v4.toml"
+        mode: "0640"
+        content: |
+          [shape]
+          vertices = ["particle","events","cohorts","column_shells","leaf","ring"]
+          filled_2_simplex_when = "a relation binds three vertices at once"
+          filled_3_simplex_when = "column spans three or more shells"
+          report = ["betti_0","betti_1_raw","betti_1_filled"]
+          hole_meaning = "beta1 > 0 - a relation exists that the ontology cannot name"
+          [ledger]
+          classes = ["MEASURED","DERIVED","ESTIMATED","ADVISED","COHERENT","INCOHERENT","AMBIGUOUS"]
+          tau = "share of the account that is not MEASURED"
+          incoherent_may_not_borrow_ambiguous = true   # §6
+          [statement]
+          language = "HeptaScript"
+          operations = ["ORBIT","EMIT","PROVE","SYNC","WITNESS","PRESENT"]
+          forbidden = ["SELECT","FROM","JOIN","EXISTS","WHERE-as-SQL-clause"]
+
+    - name: Gate A1 · Anti-SQL guard over the whole emitter crate
+      ansible.builtin.shell: |
+        ! grep -REiq '(^|[^A-Za-z_])(SELECT +[A-Za-z*]|FROM +[A-Za-z]|INNER JOIN|LEFT JOIN)' \
+          "{{ forge }}/bahyway_v4/crates/account-emitter/src"
+      changed_when: false
+
+    - name: Build the emitter
+      ansible.builtin.command:
+        cmd: cargo build --release -p account-emitter
+        chdir: "{{ forge }}/bahyway_v4"
+      register: b
+      changed_when: "'Compiling' in b.stderr"
+
+    - name: Gate A2 · a sample account carries every line's epistemic class
+      ansible.builtin.command: "{{ forge }}/bahyway_v4/target/release/account-emitter --gate ledger-complete"
+      changed_when: false
+
+    - name: Gate A3 · beta numbers computed and holes reported, never suppressed
+      ansible.builtin.command: "{{ forge }}/bahyway_v4/target/release/account-emitter --gate betti-reported"
+      changed_when: false
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: "{{ ansible_date_time.iso8601 }} PB-367 account emitter green - shape + ledger + HeptaScript, no SQL"

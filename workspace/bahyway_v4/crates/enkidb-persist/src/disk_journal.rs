@@ -14,8 +14,8 @@ use std::path::Path;
 
 use bahyway_core::Result;
 use bahyway_crc::crc16;
-use enkidb_kaki::{EventKaki, IdentityKaki, Kaki};
 use enkidb_journal::entry::{EavTriple, JournalEntry};
+use enkidb_kaki::{EventKaki, IdentityKaki, Kaki};
 use enkidb_storage::COMMIT_MARKER;
 
 // ── Serialise ─────────────────────────────────────────────────────────────────
@@ -59,15 +59,19 @@ pub fn load_entries(path: &Path) -> Result<Vec<JournalEntry>> {
 /// Try to parse one entry starting at `pos`.  Returns (entry, next_pos) or None.
 fn parse_one(data: &[u8], pos: usize) -> Option<(JournalEntry, usize)> {
     // Need at least the 40-byte header
-    if pos + 40 > data.len() { return None; }
+    if pos + 40 > data.len() {
+        return None;
+    }
 
     let mut header = [0u8; 40];
     header.copy_from_slice(&data[pos..pos + 40]);
 
     // Validate header CRC
-    let stored_cs   = u16::from_be_bytes([header[38], header[39]]);
+    let stored_cs = u16::from_be_bytes([header[38], header[39]]);
     let computed_cs = crc16(&header[0..38]);
-    if stored_cs != computed_cs { return None; }
+    if stored_cs != computed_cs {
+        return None;
+    }
 
     let eav_count = u16::from_be_bytes([header[36], header[37]]) as usize;
     let mut cursor = pos + 40;
@@ -75,51 +79,64 @@ fn parse_one(data: &[u8], pos: usize) -> Option<(JournalEntry, usize)> {
     // Parse EAV triples
     let mut eav = Vec::with_capacity(eav_count);
     for _ in 0..eav_count {
-        if cursor + 5 > data.len() { return None; }
+        if cursor + 5 > data.len() {
+            return None;
+        }
         let attr_hash = u32::from_be_bytes(data[cursor..cursor + 4].try_into().ok()?);
-        let vlen      = data[cursor + 4] as usize;
-        cursor       += 5;
-        if cursor + vlen > data.len() { return None; }
-        let value     = data[cursor..cursor + vlen].to_vec();
-        cursor       += vlen;
+        let vlen = data[cursor + 4] as usize;
+        cursor += 5;
+        if cursor + vlen > data.len() {
+            return None;
+        }
+        let value = data[cursor..cursor + vlen].to_vec();
+        cursor += vlen;
         eav.push(EavTriple::new(attr_hash, value));
     }
 
     // Check commit marker
-    if cursor >= data.len() || data[cursor] != COMMIT_MARKER { return None; }
+    if cursor >= data.len() || data[cursor] != COMMIT_MARKER {
+        return None;
+    }
     cursor += 1;
 
     // Reconstruct KAKIs
-    let event_kaki  = EventKaki::try_from_kaki(
-        Kaki::from_bytes(header[0..16].try_into().ok()?).ok()?
-    ).ok()?;
-    let target_kaki = IdentityKaki::try_from_kaki(
-        Kaki::from_bytes(header[16..32].try_into().ok()?).ok()?
-    ).ok()?;
+    let event_kaki =
+        EventKaki::try_from_kaki(Kaki::from_bytes(header[0..16].try_into().ok()?).ok()?).ok()?;
+    let target_kaki =
+        IdentityKaki::try_from_kaki(Kaki::from_bytes(header[16..32].try_into().ok()?).ok()?)
+            .ok()?;
     let epoch = u32::from_be_bytes(header[32..36].try_into().ok()?);
 
-    Some((JournalEntry::new(event_kaki, target_kaki, epoch, eav), cursor))
+    Some((
+        JournalEntry::new(event_kaki, target_kaki, epoch, eav),
+        cursor,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enkidb_kaki::{KakiRole, KakiMinter};
     use bahyway_core::TribeId;
+    use enkidb_kaki::{KakiMinter, KakiRole};
 
     fn sample_entry() -> JournalEntry {
-        let m  = KakiMinter::new(TribeId::from_u16(0x0001));
+        let m = KakiMinter::new(TribeId::from_u16(0x0001));
         let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
         let ik = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-        JournalEntry::new(ek, ik, 42, vec![
-            EavTriple::new(0x1A4B, b"Golden".to_vec()),
-            EavTriple::new(0x4E89, b"\xFF\xFF".to_vec()),
-        ])
+        JournalEntry::new(
+            ek,
+            ik,
+            42,
+            vec![
+                EavTriple::new(0x1A4B, b"Golden".to_vec()),
+                EavTriple::new(0x4E89, b"\xFF\xFF".to_vec()),
+            ],
+        )
     }
 
     #[test]
     fn round_trip_single_entry() {
-        let entry     = sample_entry();
+        let entry = sample_entry();
         let mut bytes = serialize_entry(&entry);
         bytes.push(COMMIT_MARKER); // simulate AppendWriter
 
@@ -141,7 +158,7 @@ mod tests {
 
     #[test]
     fn corrupted_header_crc_returns_none() {
-        let entry     = sample_entry();
+        let entry = sample_entry();
         let mut bytes = serialize_entry(&entry);
         bytes.push(COMMIT_MARKER);
         bytes[39] ^= 0xFF; // corrupt CRC
@@ -150,10 +167,10 @@ mod tests {
 
     #[test]
     fn empty_eav_round_trips() {
-        let m   = KakiMinter::new(TribeId::from_u16(0x0002));
-        let ek  = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
-        let ik  = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-        let e   = JournalEntry::new(ek, ik, 0, vec![]);
+        let m = KakiMinter::new(TribeId::from_u16(0x0002));
+        let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
+        let ik = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
+        let e = JournalEntry::new(ek, ik, 0, vec![]);
         let mut b = serialize_entry(&e);
         b.push(COMMIT_MARKER);
         let (parsed, _) = parse_one(&b, 0).unwrap();

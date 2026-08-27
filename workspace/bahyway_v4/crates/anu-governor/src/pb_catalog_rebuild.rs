@@ -25,8 +25,8 @@ use crate::gate_review;
 use crate::pb_catalog;
 use crate::pb_dependency_review;
 use bahyway_core::TribeId;
-use enkiddb::{DocumentParser, DocumentStructure, WriteNode};
 use enkidb_kaki::{IdentityKaki, KakiMinter};
+use enkiddb::{DocumentParser, DocumentStructure, WriteNode};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -41,21 +41,37 @@ pub fn rebuild_full_write_node(
     domain_registry_path: &Path,
     dependency_registry_path: &Path,
 ) -> (WriteNode, u32, HashMap<String, (IdentityKaki, String)>) {
-    let mut write_node =
-        WriteNode::new(KakiMinter::new(TribeId::from_u16(enkiddb::PLAYBOOK_CATALOG_TRIBE_ID)), 64);
+    let mut write_node = WriteNode::new(
+        KakiMinter::new(TribeId::from_u16(enkiddb::PLAYBOOK_CATALOG_TRIBE_ID)),
+        64,
+    );
     let mut epoch = 1u32;
     let mut by_kaki_hex: HashMap<String, (IdentityKaki, String)> = HashMap::new();
 
     for pb in pb_catalog::list_cataloged_playbooks(pb_registry_path) {
-        let Some(kaki) = gate_review::parse_kaki_hex(&pb.kaki_hex) else { continue };
-        let stem =
-            Path::new(&pb.source_path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let mut structure = DocumentParser::parse_playbook_header(&pb.full_text)
-            .unwrap_or_else(|| DocumentStructure { title: stem.clone(), ..Default::default() });
+        let Some(kaki) = gate_review::parse_kaki_hex(&pb.kaki_hex) else {
+            continue;
+        };
+        let stem = Path::new(&pb.source_path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let mut structure =
+            DocumentParser::parse_playbook_header(&pb.full_text).unwrap_or_else(|| {
+                DocumentStructure {
+                    title: stem.clone(),
+                    ..Default::default()
+                }
+            });
         if structure.title.trim().is_empty() {
             structure.title = stem.clone();
         }
-        write_node.reingest_document_categorized(kaki, &structure, epoch, "playbook-record-candidate");
+        write_node.reingest_document_categorized(
+            kaki,
+            &structure,
+            epoch,
+            "playbook-record-candidate",
+        );
         epoch += 1;
         by_kaki_hex.insert(pb.kaki_hex.clone(), (kaki, pb.title.clone()));
     }
@@ -78,7 +94,14 @@ pub fn rebuild_full_write_node(
         if let (Some((source_kaki, source_title)), Some((target_kaki, target_title))) =
             (by_kaki_hex.get(&source_hex), by_kaki_hex.get(&target_hex))
         {
-            write_node.mint_link_edge(*source_kaki, source_title, *target_kaki, target_title, "depends-on", epoch);
+            write_node.mint_link_edge(
+                *source_kaki,
+                source_title,
+                *target_kaki,
+                target_title,
+                "depends-on",
+                epoch,
+            );
             epoch += 1;
         }
     }
@@ -125,44 +148,87 @@ mod tests {
 
         let pb_registry = dir.join("pb_catalog_registry.jsonl");
         let enkiddb_root = dir.join("enkiddb_data");
-        catalog_playbooks(&[CatalogLocation { name: "loc".into(), root: loc }], &pb_registry, &enkiddb_root);
+        catalog_playbooks(
+            &[CatalogLocation {
+                name: "loc".into(),
+                root: loc,
+            }],
+            &pb_registry,
+            &enkiddb_root,
+        );
 
         let gate_registry = dir.join("pb_gate_registry.jsonl");
         let domain_registry = dir.join("pb_domain_registry.jsonl");
         let dependency_registry = dir.join("pb_dependency_registry.jsonl");
 
         let catalogued = pb_catalog::list_cataloged_playbooks(&pb_registry);
-        let first = catalogued.iter().find(|p| p.source_path.contains("970")).unwrap();
-        let second = catalogued.iter().find(|p| p.source_path.contains("971")).unwrap();
+        let first = catalogued
+            .iter()
+            .find(|p| p.source_path.contains("970"))
+            .unwrap();
+        let second = catalogued
+            .iter()
+            .find(|p| p.source_path.contains("971"))
+            .unwrap();
         let first_kaki = gate_review::parse_kaki_hex(&first.kaki_hex).unwrap();
         let second_kaki = gate_review::parse_kaki_hex(&second.kaki_hex).unwrap();
 
         // Round 1: approve the FIRST playbook's gate.
-        let (mut wn1, epoch1, _) =
-            rebuild_full_write_node(&pb_registry, &gate_registry, &domain_registry, &dependency_registry);
-        apply_gate_approvals(&mut wn1, &[(first_kaki, "APSU".to_string())], &gate_registry, epoch1);
+        let (mut wn1, epoch1, _) = rebuild_full_write_node(
+            &pb_registry,
+            &gate_registry,
+            &domain_registry,
+            &dependency_registry,
+        );
+        apply_gate_approvals(
+            &mut wn1,
+            &[(first_kaki, "APSU".to_string())],
+            &gate_registry,
+            epoch1,
+        );
 
         // Round 2: approve the SECOND playbook's gate -- a fresh rebuild,
         // same as a real second `approve_gates` call.
-        let (mut wn2, epoch2, by_kaki) =
-            rebuild_full_write_node(&pb_registry, &gate_registry, &domain_registry, &dependency_registry);
-        apply_gate_approvals(&mut wn2, &[(second_kaki, "ADAD".to_string())], &gate_registry, epoch2);
+        let (mut wn2, epoch2, by_kaki) = rebuild_full_write_node(
+            &pb_registry,
+            &gate_registry,
+            &domain_registry,
+            &dependency_registry,
+        );
+        apply_gate_approvals(
+            &mut wn2,
+            &[(second_kaki, "ADAD".to_string())],
+            &gate_registry,
+            epoch2,
+        );
 
-        assert!(by_kaki.contains_key(&first.kaki_hex), "round 2's rebuild must still know about round 1's playbook");
+        assert!(
+            by_kaki.contains_key(&first.kaki_hex),
+            "round 2's rebuild must still know about round 1's playbook"
+        );
         assert_eq!(by_kaki.get(&first.kaki_hex).unwrap().1, first.title);
 
         let root = dir.join("materialized");
         let (generation, _stats) = enkiddb::materialize_version(&wn2, &root, "v2").unwrap();
-        let mut read_node = enkiddb::ReadNode::open(&generation.entities_path, &generation.eav_path).unwrap();
+        let mut read_node =
+            enkiddb::ReadNode::open(&generation.entities_path, &generation.eav_path).unwrap();
 
-        let apsu = read_node.query("WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.gate] = \"APSU\"").unwrap();
+        let apsu = read_node
+            .query("WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.gate] = \"APSU\"")
+            .unwrap();
         assert_eq!(
             apsu.matched.len(),
             1,
             "round 1's APSU tag on the first playbook must survive round 2's rebuild+promote: {apsu:?}"
         );
 
-        let adad = read_node.query("WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.gate] = \"ADAD\"").unwrap();
-        assert_eq!(adad.matched.len(), 1, "round 2's own ADAD tag on the second playbook must also be there: {adad:?}");
+        let adad = read_node
+            .query("WHO T.E\nWHAT E[meta.title]\nWHERE E[meta.gate] = \"ADAD\"")
+            .unwrap();
+        assert_eq!(
+            adad.matched.len(),
+            1,
+            "round 2's own ADAD tag on the second playbook must also be there: {adad:?}"
+        );
     }
 }

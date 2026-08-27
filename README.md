@@ -40,42 +40,51 @@ everything else is working history, this is the accepted result.
 
 | | |
 |---|---|
-| Source repository | [`bahyway/EnkiDB`](https://github.com/bahyway/EnkiDB) |
-| Source commit | `69e5deae478418085922344be0efb8921f2a0e7e` |
-| Source branch | `claude/bahyway-v4-phase2-integration-zswd7o` |
-| Cut date | 2026-08-15 |
+| Source repository | [`bahyway/EnkiDB`](git@github.com:bahyway/EnkiDB.git) |
+| Source commit | `4d1a07f5fa23833c633b0f25aa0033647cef7bbe` |
+| Source branch | `master` |
+| Source tag | [`gudea-v4.0-sealed`](git@github.com:bahyway/EnkiDB.git/releases/tag/gudea-v4.0-sealed) |
+| Cut date | 2026-08-27 |
 | Cut by | DUB.SAR 𒁾 (Bahaa Fadam), via Claude Code |
-| Previous cut | `ed5f0eb7c093fd4e1131b12e9be6d05a481cff42` (2026-08-15, earlier same day) |
+| Previous cut | `69e5deae478418085922344be0efb8921f2a0e7e` (2026-08-15) |
 
-**What changed since the previous cut:** the `docs/` tree was reorganized
-from a flat/mixed layout into the 20-category taxonomy (`00_codex` …
-`99_index`), with all 154 moved files' cross-references fixed across the
-whole repo; the Shakkanakku governor was renamed to **AnuGovernor** (a
-real crate/package rename), and the Anu Index Stack was renamed a second
-time to **Elu** to free the "Anu" name for the governor; three new law
-tablets landed — `GL-GLD-001` (Golden Lifecycle Law), `00_codex_
-government_by_sevens.md` (the "why 7?" census), and `GL-ONT-002` (Phase 0
-Recognizer Law, encoding the Architect's "no external model, pure Rust,
-once-download-use-forever" law). Full workspace build and test suite
-verified clean before this cut (one pre-existing, unrelated flaky
-CPU-throughput benchmark in `buzu-core` aside).
+**What changed since the previous cut:** the build phase of BahyWay.Ecosystem
+v4.0 closed for real. The Palû Crossing (law `GL-PAL-001`, coordinator
+`IsimudEngine`) sealed the **Gudea** reign (v4.0) at `2026-08-27T12:37:44Z`
+across all seven sovereign databases and opened the **Zagesi** reign (v4.1)
+for new work — proof in `palu/COMPLETION-STELE-4.0.tsv` and
+`palu/PALU-STELE-4.0-to-4.1.md`, both carried in this cut. Since the previous
+cut: `enkidb-con-engine` gained **CSR-08 Architect Sovereignty**, the eighth
+Connection Security Rule, append-only-honest by design (`Create`/`Supersede`/
+`Retire`, never a literal modify/delete — see `docs/18_security/CONENGINE_CSR.md`);
+`enkidb-ingest::kispu` landed the four-way atomic commit binding the Event
+KAKI, the NATIRU orbital-range index, the zakāru audit journal, and the
+Orbital position into one all-or-nothing write; `pdm-shape-admission` shipped
+as GL-EAV-001 Layer 2's first real implementation; 17 DRAFT law tablets
+(`GL-NSR-001`, `GL-LBR-001`, `GL-NJF-001`, `GL-DST-004`, `GL-VSL-001`,
+`GL-SHP-001`, `GL-ISM-001`, `HS-EXT-003`, and nine more) were sealed with
+their matching crates built and tested; the E-004/E-005 performance gates
+were closed for real against the production Read Node path; and two real
+bugs found live on bare-metal hardware (`playbook_687`'s stale-store reset,
+`playbook_688`'s SELinux/traversal-permission chain) were diagnosed and
+fixed. The workspace grew from 79 to **261 crates**. Full workspace
+`cargo check --workspace` verified clean before this cut (1m31s, exit 0);
+a full `cargo test --workspace` run across all 261 crates was not re-run
+for this specific cut — the individual crates landed this era each carry
+their own passing `cargo test -p <crate>` counts documented in their own
+tablets and `docs/18_security/CONENGINE_CSR.md`.
 
-**Honest note on the source branch**: this snapshot was cut from the
-Phase 2 integration branch, not from `bahyway/EnkiDB`'s `master`, because
-as of the cut date this is where the accepted Phase 2 work actually
-lives — `master` does not yet contain it (confirmed at cut time: `master`
-is a strict ancestor of this branch, so nothing here conflicts with or
-diverges from it — this branch is simply further ahead). Once this branch
-is merged to `master` in `bahyway/EnkiDB` (or promoted through
-`otap/accept`), this note should be updated to point at `master`/
-`otap/accept` going forward, and future re-cuts should be taken from
-there.
+**Honest note on the source branch**: this cut is taken from `master`
+directly — unlike the previous cut (taken from a Phase 2 integration branch
+because the accepted work hadn't reached `master` yet at that time), the
+Gudea-era build phase is sealed on `master` itself, so this and future
+re-cuts should keep tracking `master` going forward.
 
 To verify this snapshot against its source at any time:
 ```bash
-git clone https://github.com/bahyway/EnkiDB
+git clone git@github.com:bahyway/EnkiDB.git
 cd EnkiDB
-git diff 69e5deae478418085922344be0efb8921f2a0e7e -- . ':(exclude).git'
+git diff 4d1a07f5fa23833c633b0f25aa0033647cef7bbe -- . ':(exclude).git'
 # compare against a checkout of this repo's main branch -- should be empty
 # except for this README.md and ECOSYSTEM_OVERVIEW.md's rename.
 ```

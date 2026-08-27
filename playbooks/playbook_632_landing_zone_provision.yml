@@ -1,0 +1,156 @@
+---
+# PB-372 · Provision the NAS as Landing Zone + Archive
+# Two tiers: LANDING (hot, NVMe, churns) and ARCHIVE (cold, HDD parity, immutable-ish).
+# Runs against a NAS exposing NFS/SMB, or against TrueNAS/UGOS with ZFS datasets.
+#
+# "NAS" here means PRIVATE self-hosted storage the Architect owns and runs at
+# home -- this ecosystem has no public-cloud dependency of any kind (no AWS/
+# Azure/GCP/SaaS anywhere). The plan (2026-08-26, confirmed with the
+# Architect): buy a 200TB NAS eventually to host the whole ecosystem on;
+# until then, this playbook carves a 250GB "Archive Storage Sector" out of
+# the current bare-metal host's 1TB capacity as the interim cold tier for
+# downloaded Copernicus Sentinel hyperspectral products (see PB-631, which
+# lands them into the landing zone this playbook then sweeps into archive
+# after retention_days_landing). See playbook_633/634 for the private-cloud
+# access/services layer on top of whichever of these two is live.
+- name: PB-372 provision landing zone and archive on the NAS
+  hosts: girsu
+  vars:
+    # PB-632/633/634's shared flexibility knob (2026-08-26): no dedicated
+    # NAS is purchased yet, and one is not required to run this playbook --
+    # only more effective once it exists (capacity, its own network path,
+    # snapshot/scrub). Default false runs everything below against local
+    # storage on this box; pass -e nas_dedicated=true once nas_host below
+    # is a real NAS export to mount it for real instead.
+    nas_dedicated: "{{ (lookup('env','NAS_DEDICATED') | default('false', true)) | bool }}"
+    nas_host: "nas.local"
+    nas_export: "/mnt/tank"
+    mount_landing: "{{ ansible_env.HOME }}/bahyway/landing_zone"
+    mount_archive: "{{ ansible_env.HOME }}/bahyway/archive"
+    zfs_pool: tank
+    retention_days_landing: 45
+    # The interim Archive Storage Sector (2026-08-26): 250GB reserved out of
+    # this host's 1TB for archived Copernicus data, until the 200TB NAS
+    # exists. Only meaningful/enforced when nas_dedicated=false -- a real NAS
+    # has its own, much larger capacity and its own quota tooling (ZFS
+    # dataset quotas), so these two gates step aside once nas_dedicated=true.
+    archive_quota_gb: 250
+    # CORRECTED 2026-08-26 (see PB-631's header for the full story): real
+    # writes into the Archive Storage Sector are gated the same way PB-631
+    # gates a real download -- target_env=Production, via the real, already-
+    # existing tasks/require_gilgamesh_for_production.yml gate, not a bare
+    # invented keyfile. demo_mode is derived, not a separate flag.
+    # default() here only covers the nas_dedicated=true path, where the gate
+    # above (and therefore target_env) is skipped entirely and demo_mode is
+    # moot; nas_dedicated=false still hard-requires target_env via that gate.
+    demo_mode: "{{ (target_env | default('Development', true)) != 'Production' }}"
+  tasks:
+    - name: "GATE | target_env-based Production check (real sweep = real infrastructure)"
+      ansible.builtin.import_tasks: tasks/require_gilgamesh_for_production.yml
+      when: not nas_dedicated
+
+    - name: Ensure mount points
+      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0750"}
+      loop: ["{{ mount_landing }}", "{{ mount_archive }}"]
+
+    - name: Mount NAS landing (hot tier)
+      ansible.posix.mount:
+        src: "{{ nas_host }}:{{ nas_export }}/landing"
+        path: "{{ mount_landing }}"
+        fstype: nfs
+        opts: "rw,hard,noatime,vers=4.1"
+        state: mounted
+      when: nas_dedicated
+
+    - name: Mount NAS archive (cold tier)
+      ansible.posix.mount:
+        src: "{{ nas_host }}:{{ nas_export }}/archive"
+        path: "{{ mount_archive }}"
+        fstype: nfs
+        opts: "rw,hard,noatime,vers=4.1"
+        state: mounted
+      when: nas_dedicated
+
+    - name: No dedicated NAS yet -- landing/archive live on local storage
+      ansible.builtin.debug:
+        msg: >-
+          nas_dedicated=false: {{ mount_landing }} and {{ mount_archive }} are plain
+          local directories on this box, not NFS mounts. Functionally fine for now;
+          a real NAS would still be more effective/suitable once purchased (its own
+          capacity and network path instead of sharing this box's disk and NIC, plus
+          ZFS snapshot/scrub). Set -e nas_dedicated=true once nas_host/nas_export
+          above point at one to switch back to the real mount.
+      when: not nas_dedicated
+
+    - name: Gate N0 · the Archive Storage Sector's 250GB is actually there before reserving it
+      ansible.builtin.shell: |
+        free_gb=$(df -BG --output=avail "{{ mount_archive }}" | tail -1 | tr -dc '0-9')
+        [ "$free_gb" -ge {{ archive_quota_gb }} ] || {
+          echo "REFUSED -- only ${free_gb}GB free on the filesystem under {{ mount_archive }}, need {{ archive_quota_gb }}GB for the Archive Storage Sector. Nothing faked.";
+          exit 1;
+        }
+        echo "N0 green - ${free_gb}GB free, {{ archive_quota_gb }}GB Archive Storage Sector fits"
+      changed_when: false
+      when: not nas_dedicated
+
+    - name: Dataset policy note (apply on the NAS itself if it runs ZFS)
+      ansible.builtin.copy:
+        dest: "{{ mount_archive }}/DATASET_POLICY.md"
+        mode: "0640"
+        content: |
+          # BahyWay landing zone policy
+          landing : recordsize=1M  compression=off   # SAFE zips are already compressed
+          archive : recordsize=1M  compression=zstd  # only helps the derived/ tier
+          derived : recordsize=128K compression=zstd-3
+          snapshots: archive hourly:0 daily:14 weekly:8 monthly:12
+          scrub    : monthly
+          rule     : raw/ is never edited in place. Corrections land in derived/ with their own receipts.
+          3-2-1    : NAS is copy 1. Copy 2 = external USB rotated offline. Copy 3 = CDSE itself
+                     (raw Sentinel products are re-fetchable; do NOT pay to archive what Copernicus already archives).
+          interim  : no dedicated NAS yet -- this archive is a 250GB Archive Storage Sector carved out
+                     of the current host's 1TB, not a NAS dataset. Gate N0/N3 in playbook_632 enforce
+                     that reservation. Move to a real NAS dataset (nas_dedicated=true) once one is bought.
+
+    - name: Sweep landing older than retention into archive
+      ansible.builtin.shell: |
+        find "{{ mount_landing }}/raw" -name '*.zip' -mtime +{{ retention_days_landing }} -print0 |
+          xargs -0 -r -I{} mv {} "{{ mount_archive }}/"
+      changed_when: false
+
+    - name: Gate N1 · archive is writable and survives a round trip
+      ansible.builtin.shell: |
+        t="{{ mount_archive }}/.probe"; head -c 1M /dev/urandom > "$t"
+        a=$(sha256sum "$t" | cut -d' ' -f1); sync; b=$(sha256sum "$t" | cut -d' ' -f1)
+        rm -f "$t"; [ "$a" = "$b" ] && echo "N1 green"
+      changed_when: false
+
+    - name: Gate N3 · Archive Storage Sector stays inside its 250GB reservation
+      ansible.builtin.shell: |
+        used_gb=$(du -sBG "{{ mount_archive }}" | cut -f1 | tr -dc '0-9')
+        [ "$used_gb" -le {{ archive_quota_gb }} ] || {
+          echo "REFUSED -- Archive Storage Sector holds ${used_gb}GB, over its {{ archive_quota_gb }}GB reservation on this host. Buy the 200TB NAS (nas_dedicated=true) or free/move archived data before landing more.";
+          exit 1;
+        }
+        echo "N3 green - ${used_gb}GB / {{ archive_quota_gb }}GB Archive Storage Sector"
+      changed_when: false
+      when: not nas_dedicated
+
+    - name: Gate N2 · 10GbE link actually negotiated (else the NAS is a bottleneck, not a landing zone)
+      ansible.builtin.shell: "ethtool $(ip route get {{ nas_host }} | grep -oP 'dev \\K\\S+') | grep -i 'speed'"
+      register: link
+      changed_when: false
+      failed_when: false
+      when: nas_dedicated
+
+    - name: Report link speed
+      ansible.builtin.debug: {msg: "{{ link.stdout | default('ethtool unavailable') }}"}
+      when: nas_dedicated
+
+    - name: Court journal
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_env.HOME }}/bahyway/sala/court_journal.log"
+        create: true
+        line: >-
+          {{ ansible_date_time.iso8601 }} PB-372 landing zone + archive provisioned on
+          {{ nas_host if nas_dedicated else (ansible_env.HOME + ' (local storage, ' + archive_quota_gb|string + 'GB Archive Storage Sector, no dedicated NAS yet)') }}
+          {{ '' if nas_dedicated else ('(DEMO sweep, target_env=' + (target_env | default('Development', true)) + ')' if (demo_mode | bool) else '(REAL -- Gilgamesh Passport-authorized, target_env=Production)') }}

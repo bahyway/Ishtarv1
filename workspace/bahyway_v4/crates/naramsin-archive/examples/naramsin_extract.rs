@@ -2,12 +2,16 @@
 //! Usage: cargo run -p naramsin-archive --example naramsin_extract -- <file>
 
 fn main() {
-    let path = std::env::args().nth(1)
+    let path = std::env::args()
+        .nth(1)
         .expect("usage: naramsin_extract <archive_file>");
 
     let data = match std::fs::read(&path) {
-        Ok(d)  => d,
-        Err(e) => { eprintln!("cannot read '{path}': {e}"); std::process::exit(1); }
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("cannot read '{path}': {e}");
+            std::process::exit(1);
+        }
     };
 
     match naramsin_archive::decompress(&data, 0) {

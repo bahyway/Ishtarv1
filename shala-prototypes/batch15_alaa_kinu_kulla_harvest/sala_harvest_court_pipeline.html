@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · Harvest Court · Zips → BeeMDM → EnkiDB → HeptaScript → NASARU</title>
+<style>
+  :root{
+    --basalt:#14120f; --tablet:#1f1b16; --gold:#c9a227; --lapis:#2e5d8c;
+    --copper:#b0642f; --alarm:#c23b2a; --bone:#e8e0cf;
+    --tablet-edge:#3a332a; --dim:#8f8672; --green:#7fbf5f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; background:var(--basalt); color:var(--bone);
+    font-family:Georgia,'Times New Roman',serif; overflow:hidden;}
+  #crumbs{padding:10px 16px 0; font-size:12px; color:var(--dim); letter-spacing:.08em;}
+  #crumbs b{color:var(--gold); font-weight:normal;}
+  #lede{padding:2px 16px 8px; font-size:14.5px;}
+  #banner{background:var(--alarm); color:var(--bone); text-align:center;
+    font-size:11px; letter-spacing:.35em; padding:3px 0; font-family:monospace;}
+  #grid{display:grid; grid-template-columns:1fr 320px; gap:10px;
+    padding:10px 16px 16px; height:calc(100% - 92px);}
+  .panel{background:var(--tablet); border:1px solid var(--tablet-edge);
+    border-radius:6px; position:relative; overflow:hidden;}
+  #stage{cursor:grab;} #stage:active{cursor:grabbing;}
+  canvas{display:block; width:100%; height:100%;}
+  #deck{position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:5;}
+  #deck button{width:34px; height:34px; background:var(--basalt); color:var(--gold);
+    border:1px solid var(--tablet-edge); border-radius:4px; font-size:16px; cursor:pointer;}
+  #deck button.on{border-color:var(--gold);}
+  #acts{position:absolute; bottom:44px; left:10px; z-index:5;}
+  #acts button{background:var(--basalt); color:var(--copper); font-family:inherit;
+    border:1px solid var(--copper); border-radius:4px; padding:6px 12px;
+    font-size:12px; letter-spacing:.08em; cursor:pointer;}
+  #acts button:hover{color:var(--gold); border-color:var(--gold);}
+  #lawtags{position:absolute; bottom:10px; left:10px; display:flex; gap:6px;
+    flex-wrap:wrap; z-index:5;}
+  .lawtag{font-family:monospace; font-size:10px; color:var(--basalt);
+    background:var(--gold); padding:2px 7px; border-radius:3px;}
+  .lawtag.lapis{background:var(--lapis); color:var(--bone);}
+  #side{display:flex; flex-direction:column;}
+  #side h2{font-size:12px; letter-spacing:.25em; color:var(--gold);
+    padding:10px 12px 6px; border-bottom:1px solid var(--tablet-edge);}
+  #journal{flex:1; overflow-y:auto; padding:10px 12px; font-size:12.5px; line-height:1.5;}
+  .entry{margin-bottom:10px; border-left:2px solid var(--copper); padding-left:8px;}
+  .entry .t{color:var(--dim); font-family:monospace; font-size:10px;}
+  #ctx{position:fixed; display:none; background:var(--tablet);
+    border:1px solid var(--gold); border-radius:5px; z-index:50; min-width:210px;
+    font-size:12.5px; box-shadow:0 6px 20px rgba(0,0,0,.6);}
+  #ctx .hd{padding:7px 10px; color:var(--gold); font-size:11px; letter-spacing:.12em;
+    border-bottom:1px solid var(--tablet-edge);}
+  #ctx .it{padding:7px 10px; cursor:pointer;}
+  #ctx .it:hover{background:var(--basalt); color:var(--gold);}
+  #ctx.refused{border-color:var(--alarm);} #ctx.refused .hd{color:var(--alarm);}
+</style>
+</head>
+<body>
+<div id="crumbs">BahyWay.Ecosystem v4.0 ▸ Šala Hub ▸ Harvest Court ▸ <b>Zips → BeeMDM S0–S8 → EnkiDB → HeptaScript → NASARU</b></div>
+<div id="lede">Three harvests descend to one road: EGMS sky tiles, walled ISAR citadels, and the NINURTA forge. Only receipted archives pass Station S0; Golden Records reach EnkiDB·7004 for HeptaScript to question and NASARU to show.</div>
+<div id="banner">ŠALA REHEARSAL ONLY — PIPELINE REHEARSAL — SOVEREIGN RENDER IS EGUI/WGPU</div>
+
+<div id="grid">
+  <div class="panel" id="stage">
+    <canvas id="cv"></canvas>
+    <div id="deck">
+      <button id="bHome" title="Reset camera">⌖</button>
+      <button id="bPan"  title="Pan mode">✛</button>
+      <button id="bOrb"  title="Orbit mode" class="on">⟳</button>
+    </div>
+    <div id="acts"><button id="aSend">SEND NEXT ARCHIVE DOWN THE ROAD</button></div>
+    <div id="lawtags">
+      <span class="lawtag">PB-DATA-001</span>
+      <span class="lawtag">PB-DATA-002</span>
+      <span class="lawtag lapis">BeeMDM S0–S8</span>
+      <span class="lawtag lapis">GL-VIZ-001 NASARU</span>
+      <span class="lawtag">KANIKU RECEIPTS</span>
+    </div>
+  </div>
+  <div class="panel" id="side">
+    <h2>STORYENGINE JOURNAL</h2>
+    <div id="journal"></div>
+  </div>
+</div>
+
+<div id="ctx"><div class="hd"></div><div class="body"></div></div>
+
+<script>
+"use strict";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;}}
+const rnd=mulberry32(0x48415256); /* "HARV" */
+
+const cv=document.getElementById('cv'), g=cv.getContext('2d');
+const stage=document.getElementById('stage');
+function fit(){cv.width=stage.clientWidth; cv.height=stage.clientHeight;}
+window.addEventListener('resize',fit); fit();
+
+const cam0={yaw:-0.35, pitch:0.5, zoom:0.95, px:0, py:0};
+let cam={...cam0}, mode='orbit', drag=null;
+document.getElementById('bHome').onclick=()=>{cam={...cam0};};
+const bPan=document.getElementById('bPan'), bOrb=document.getElementById('bOrb');
+bPan.onclick=()=>{mode='pan'; bPan.classList.add('on'); bOrb.classList.remove('on');};
+bOrb.onclick=()=>{mode='orbit'; bOrb.classList.add('on'); bPan.classList.remove('on');};
+stage.addEventListener('wheel',e=>{e.preventDefault();
+  cam.zoom=Math.min(3,Math.max(.4,cam.zoom*(e.deltaY<0?1.08:0.92)));},{passive:false});
+stage.addEventListener('mousedown',e=>{if(e.button!==0)return; drag={x:e.clientX,y:e.clientY};});
+window.addEventListener('mousemove',e=>{if(!drag)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY};
+  if(mode==='orbit'){cam.yaw+=dx*.005; cam.pitch=Math.min(1.25,Math.max(-.15,cam.pitch+dy*.005));}
+  else{cam.px+=dx; cam.py+=dy;}});
+window.addEventListener('mouseup',()=>drag=null);
+
+function proj(p){
+  const cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  let x=p.x*cy-p.z*sy, z=p.x*sy+p.z*cy, y=p.y;
+  let y2=y*cp-z*sp, z2=y*sp+z*cp;
+  const d=5.2, s=(cv.height*0.34)*cam.zoom*(d/(d+z2));
+  return {x:cv.width/2+cam.px+x*s, y:cv.height*0.52+cam.py-y2*s, z:z2, s:s};
+}
+
+const jEl=document.getElementById('journal');
+function journal(txt){
+  const d=document.createElement('div'); d.className='entry';
+  d.innerHTML='<div class="t">'+new Date().toISOString().slice(11,19)+' UTC</div>'+txt;
+  jEl.prepend(d);
+}
+
+/* ---- the road: harranu curve from sources through S0..S8 to the three houses ---- */
+const STN=[];
+(function(){
+  /* stations S0..S8 along a curved descending road */
+  for(let k=0;k<=8;k++){
+    const u=k/8;
+    STN.push({id:'S'+k, kind:'station',
+      x:-2.1+u*3.4, y:0.55-0.9*u+0.18*Math.sin(u*Math.PI), z:0.5*Math.sin(u*2.2)-0.2,
+      note:['S0 Gate of Receipts — Kaniku sha256 or no entry',
+            'S1 Unpack & census','S2 Type witness','S3 Hepta mapping',
+            'S4 EAV enrichment','S5 Dedup & lineage (NUZI)',
+            'S6 Quality verdicts (never averaged)','S7 É-DUBBA art (Nisaba)',
+            'S8 Golden Record mint'][k]});
+  }
+})();
+const HOUSES=[
+  {id:'EnkiDB·7004', kind:'house', x:1.9, y:-0.55, z:-0.15, note:'Golden Records dwell here; KAKI 16-byte keys, append-only.'},
+  {id:'HeptaScript', kind:'house', x:2.55, y:-0.25, z:0.45, note:'W5H2 questioning: ORBIT / WITNESS constructs, Anti-SQL forever.'},
+  {id:'NASARU',      kind:'house', x:2.55, y:-0.85, z:0.75, note:'The visualizing instrument: DubSar Theater membrane, bounce, journal.'},
+];
+const SOURCES=[
+  {id:'EGMS SKY',    kind:'src', x:-2.6, y:1.15, z:-0.6, note:'PB-DATA-001 — Amsterdam ASC+DSC tiles: two orbit witnesses in one harvest.'},
+  {id:'WALLED CITADEL', kind:'src', x:-2.9, y:0.75, z:0.4, note:'PB-DATA-002 — MSTAR / Pol-ISARSpaceTarget / RCShip, crossed by the human hand.'},
+  {id:'NINURTA FORGE',  kind:'src', x:-2.3, y:0.45, z:1.0, note:'NINURTA-SIM-001 — seeded ground truth; the chain is proven here first.'},
+];
+/* archives that will travel */
+const ARCH=[
+  {name:'NINURTA-SIM-001.zip', src:2, receipted:true,  col:'#c9a227'},
+  {name:'EGMS_L2b_ASC.zip',    src:0, receipted:true,  col:'#2e5d8c'},
+  {name:'EGMS_L2b_DSC.zip',    src:0, receipted:true,  col:'#2e5d8c'},
+  {name:'MSTAR_chips.zip',     src:1, receipted:true,  col:'#b0642f'},
+  {name:'mystery_noreceipt.zip',src:1, receipted:false, col:'#c23b2a'},
+];
+ARCH.forEach(a=>{a.state='waiting'; a.t=0; a.bounce=0;});
+let nextIdx=0;
+
+function roadPoint(u){ /* u in [0,1] along S0..S8 */
+  const k=Math.min(7.999,u*8), i=Math.floor(k), f=k-i;
+  const a=STN[i], b=STN[i+1];
+  return {x:a.x+(b.x-a.x)*f, y:a.y+(b.y-a.y)*f+0.10*Math.sin(u*14)*(1-u),
+          z:a.z+(b.z-a.z)*f};
+}
+
+document.getElementById('aSend').onclick=()=>{
+  if(nextIdx>=ARCH.length){journal('The inbox is empty — all archives have met the gate.'); return;}
+  const a=ARCH[nextIdx++]; a.state='travel'; a.t=0;
+  journal('DISPATCH — <b>'+a.name+'</b> leaves '+SOURCES[a.src].id+' toward Station S0.');
+};
+
+const jHouse={}; /* golden records counter */
+function step(dt){
+  ARCH.forEach(a=>{
+    if(a.state!=='travel')return;
+    a.t+=dt*0.12;
+    if(a.t>=0 && a.t<0.02 && !a.receipted){}
+    if(a.t>=0.02 && !a.receipted && !a.refusedDone){
+      a.state='refused'; a.refusedDone=true; a.bounce=1;
+      journal('<span style="color:var(--alarm)">REFUSED at S0</span> — '+a.name+' carries no Kaniku receipt in LEDGER-DATA. It rebounds from the gate: no checksum, no road. (PB-DATA-002 doctrine.)');
+    }
+    if(a.t>=1 && a.state==='travel'){
+      a.state='arrived'; a.bounce=1;
+      jHouse[a.name]=true;
+      journal('<b style="color:var(--gold)">GOLDEN RECORDS MINTED</b> — '+a.name+' cleared S0–S8; its particles now dwell in EnkiDB·7004. HeptaScript may ORBIT and WITNESS them; NASARU shows the membrane.');
+    }
+  });
+}
+
+let lastPick=[];
+function draw(t){
+  g.fillStyle='#14120f'; g.fillRect(0,0,cv.width,cv.height);
+  /* curved land membrane */
+  for(let j=0;j<=8;j++){
+    g.beginPath();
+    for(let i=0;i<=36;i++){
+      const u=(i/36-0.5)*6.4, v=(j/8-0.5)*3.2;
+      const p={x:u, y:-1.15+0.05*Math.sin(t*0.5+u*1.5+v)-0.06*(u*u/8+v*v/4), z:v};
+      const q=proj(p); i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);
+    }
+    g.strokeStyle='rgba(46,93,140,0.13)'; g.lineWidth=1; g.stroke();
+  }
+  /* the harranu road */
+  g.beginPath();
+  for(let i=0;i<=80;i++){const q=proj(roadPoint(i/80)); i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);}
+  g.strokeStyle='rgba(201,162,39,0.5)'; g.lineWidth=2; g.stroke();
+  lastPick=[];
+  /* stations */
+  STN.forEach(s=>{
+    const q=proj(s);
+    g.beginPath(); g.arc(q.x,q.y,6,0,Math.PI*2);
+    g.fillStyle=s.id==='S0'?'#c9a227':'#1f1b16'; g.fill();
+    g.strokeStyle='#c9a227'; g.lineWidth=1.4; g.stroke();
+    g.fillStyle='rgba(232,224,207,.8)'; g.font='10px monospace'; g.textAlign='center';
+    g.fillText(s.id,q.x,q.y-10);
+    lastPick.push({q:q,o:s});
+  });
+  /* sources & houses */
+  SOURCES.concat(HOUSES).forEach(h=>{
+    const q=proj(h);
+    g.strokeStyle=h.kind==='src'?'#2e5d8c':'#c9a227'; g.lineWidth=1.6;
+    g.strokeRect(q.x-26,q.y-11,52,22);
+    g.fillStyle='rgba(232,224,207,.85)'; g.font='9px monospace'; g.textAlign='center';
+    g.fillText(h.id,q.x,q.y+3);
+    lastPick.push({q:q,o:h});
+  });
+  /* archives */
+  ARCH.forEach(a=>{
+    let p;
+    if(a.state==='waiting'){const s=SOURCES[a.src];
+      p={x:s.x+0.15,y:s.y-0.22,z:s.z};}
+    else if(a.state==='refused'){const s=STN[0];
+      p={x:s.x-0.28-(a.bounce)*0.25,y:s.y+0.22+(a.bounce>0?Math.sin(a.bounce*Math.PI)*0.25:0),z:s.z};}
+    else if(a.state==='travel'){
+      const u=Math.min(1,Math.max(0,a.t)); p=roadPoint(u); p={x:p.x,y:p.y+0.14,z:p.z};}
+    else {const h=HOUSES[0]; p={x:h.x+0.1,y:h.y+0.22,z:h.z};}
+    const q=proj(p);
+    const r=5+(a.bounce>0?Math.sin(a.bounce*Math.PI)*3:0);
+    g.beginPath(); g.arc(q.x,q.y,r,0,Math.PI*2);
+    if(a.receipted){g.fillStyle=a.col; g.fill();
+      g.strokeStyle='rgba(232,224,207,.5)'; g.lineWidth=1; g.stroke();}
+    else{g.strokeStyle='#c23b2a'; g.setLineDash([3,3]); g.lineWidth=1.5;
+      g.stroke(); g.setLineDash([]);}
+    if(a.bounce>0)a.bounce=Math.max(0,a.bounce-0.02);
+    lastPick.push({q:q,o:a});
+  });
+}
+function pick(mx,my){
+  let best=null,bd=16*16;
+  lastPick.forEach(e=>{const dx=e.q.x-mx,dy=e.q.y-my,d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=e.o;}});
+  return best;
+}
+stage.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(), o=pick(e.clientX-r.left,e.clientY-r.top);
+  if(!o)return;
+  if(o.name){o.bounce=1;
+    journal((o.receipted?'Witness bounce — ':'<span style="color:var(--alarm)">Refused</span> — ')+o.name+
+      (o.receipted?' · receipt sealed in LEDGER-DATA, lawful traveler.':' · no sha256 receipt: a non-particle of the harvest.'));}
+  else journal('<b>'+o.id+'</b> — '+o.note);
+});
+const cm=document.getElementById('ctx');
+stage.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(), o=pick(e.clientX-r.left,e.clientY-r.top);
+  const hd=cm.querySelector('.hd'), body=cm.querySelector('.body');
+  cm.classList.remove('refused');
+  if(!o){hd.textContent='HARVEST COURT';
+    body.innerHTML='<div class="it" data-a="order">Recite the ingest order decree</div>'+
+      '<div class="it" data-a="chain">Recite the whole road</div>';}
+  else if(o.name&&!o.receipted){cm.classList.add('refused');
+    hd.textContent='REFUSED NON-PARTICLE';
+    body.innerHTML='<div class="it" data-a="why">Why refused</div>';}
+  else{hd.textContent=(o.name?'BORN ARCHIVE':'WAYPOINT')+' · '+(o.name||o.id);
+    body.innerHTML='<div class="it" data-a="tell">Testify</div>'; cm._o=o;}
+  cm.style.left=e.clientX+'px'; cm.style.top=e.clientY+'px'; cm.style.display='block';
+});
+window.addEventListener('click',()=>cm.style.display='none');
+cm.addEventListener('click',e=>{
+  const a=e.target.dataset.a; if(!a)return;
+  if(a==='order') journal('Ingest order decree: <b>NINURTA first</b> (ground truth proves the chain), <b>EGMS second</b> (Nimrud sky witness, ASC+DSC = two witnesses), <b>MSTAR/RCShip third</b> (real phase noise against Apsu autofocus).');
+  if(a==='chain') journal('The road: harvested zip → S0 Gate of Receipts (sha256 Kaniku) → S1–S7 rites → S8 Golden Record mint → EnkiDB·7004 dwelling → HeptaScript W5H2 questioning (ORBIT/WITNESS, never SQL) → NASARU showing in DubSar Theater.');
+  if(a==='why') journal('No receipt in LEDGER-DATA means no proven identity: checksum is the Integrity dimension of Hepta itself. S0 refuses without anger and without exception.');
+  if(a==='tell'&&cm._o) journal('<b>'+(cm._o.name||cm._o.id)+'</b> — '+(cm._o.note||'a lawful traveler on the receipted road.'));
+});
+
+journal('HARVEST COURT opens. Three sources stand ready. Press SEND to dispatch archives — watch the unreceipted stranger meet Station S0.');
+let t0=performance.now(), tp=t0;
+function frame(now){
+  const t=(now-t0)/1000; step((now-tp)/1000); tp=now;
+  draw(t); requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

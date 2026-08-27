@@ -101,7 +101,11 @@ pub struct WindowIndicators {
 /// (degenerate/zero-variance) is skipped, not zero-filled -- a skipped
 /// window must never silently read as "lambda = 0," a stable-looking
 /// value that isn't real.
-pub fn sliding_indicators(detrended: &[f64], window_size: usize, step: usize) -> Vec<WindowIndicators> {
+pub fn sliding_indicators(
+    detrended: &[f64],
+    window_size: usize,
+    step: usize,
+) -> Vec<WindowIndicators> {
     let step = step.max(1);
     let mut out = Vec::new();
     if window_size < 3 || detrended.len() < window_size {
@@ -111,7 +115,11 @@ pub fn sliding_indicators(detrended: &[f64], window_size: usize, step: usize) ->
     while start + window_size <= detrended.len() {
         let w = &detrended[start..start + window_size];
         if let (Some(lambda), Some(ac)) = (restoring_rate(w), lag1_autocorrelation(w)) {
-            out.push(WindowIndicators { lambda, variance: variance(w), autocorrelation_lag1: ac });
+            out.push(WindowIndicators {
+                lambda,
+                variance: variance(w),
+                autocorrelation_lag1: ac,
+            });
         }
         start += step;
     }
@@ -131,7 +139,10 @@ mod tests {
             series.push(0.2 * series.last().unwrap());
         }
         let lambda = restoring_rate(&series).unwrap();
-        assert!((lambda - (-0.8)).abs() < 0.05, "expected lambda close to -0.8, got {lambda}");
+        assert!(
+            (lambda - (-0.8)).abs() < 0.05,
+            "expected lambda close to -0.8, got {lambda}"
+        );
     }
 
     #[test]
@@ -149,14 +160,20 @@ mod tests {
     fn lag1_autocorrelation_of_a_strong_ramp_is_close_to_one() {
         let series: Vec<f64> = (0..30).map(|i| i as f64).collect();
         let ac = lag1_autocorrelation(&series).unwrap();
-        assert!(ac > 0.99, "a smooth ramp should be almost perfectly lag-1 autocorrelated, got {ac}");
+        assert!(
+            ac > 0.99,
+            "a smooth ramp should be almost perfectly lag-1 autocorrelated, got {ac}"
+        );
     }
 
     #[test]
     fn trend_slope_detects_a_rising_sequence() {
         let values = vec![-0.9, -0.8, -0.7, -0.6, -0.5];
         let slope = trend_slope(&values).unwrap();
-        assert!((slope - 0.1).abs() < 1e-9, "expected slope 0.1, got {slope}");
+        assert!(
+            (slope - 0.1).abs() < 1e-9,
+            "expected slope 0.1, got {slope}"
+        );
     }
 
     #[test]

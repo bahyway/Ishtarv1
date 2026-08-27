@@ -1,4 +1,36 @@
 # =============================================================================
+# ⚠ STAKEHOLDER WARNING (PB-212.11, 2026-08-21) — READ BEFORE RUNNING ⚠
+#
+# If enkidb_write/enkidb_read (per ansible/inventory.ini) point at freshly
+# created node VMs -- e.g. after a from-scratch playbook_265 bring-up --
+# THIS PLAYBOOK CANNOT COMPLETE UNATTENDED THE FIRST TIME. Each node needs
+# its own dedicated, read-only GitHub Deploy Key before its `git fetch`
+# step (0.31) can succeed, and registering a key on GitHub is a real,
+# security-sensitive action this playbook deliberately does NOT perform
+# on its own -- it needs a human with write access to this repo's own
+# Settings.
+#
+# Confirmed live, twice (once per node): a fresh node has no SSH
+# credential GitHub will accept, and `git@github.com:...` fails
+# `Permission denied (publickey)` -- not a bug, an expected first-run gap.
+#
+# WHAT TO DO, IN ORDER:
+#   1. Run this playbook once. It will generate each node's key (task
+#      0.29, idempotent -- safe to have already run) and PRINT it at
+#      task 0.293, then FAIL at 0.31 on that node. This is expected.
+#   2. For each printed key: go to
+#      https://github.com/bahyway/EnkiDB/settings/keys -> "Add deploy
+#      key" -> paste it, title it after the node (e.g. "uruk-node-write"),
+#      leave "Allow write access" UNCHECKED (read-only).
+#   3. Run this playbook again. Repeat step 2 for any node whose key
+#      wasn't registered yet (each node fails independently, so a
+#      single run may surface one node's missing key at a time).
+#
+# This is a one-time cost PER NODE, not per run -- once a node's key is
+# registered, it never needs re-registering (even across many later runs
+# of this or any other playbook that pulls this repo on that same node),
+# unless that node is destroyed and rebuilt from scratch.
+# =============================================================================
 # PB-212 — Redeploy EnkiDDB + EnkiMDB onto the real 2-VM CQRS split.
 # BahyWay.Ecosystem v4.0 — 2026-07-19
 #
@@ -63,7 +95,7 @@
 # ingestion run against the new topology anyway.
 # =============================================================================
 ---
-- name: "PB-212a | Build + run EnkiDDB/EnkiMDB Write containers on enkidb-node-write"
+- name: "PB-212a | Build + run all 7 EnkiDB-type Write containers on enkidb-node-write"
   hosts: enkidb_write
   become: false
   vars:
@@ -80,7 +112,136 @@
       ansible.builtin.debug:
         msg: "{{ podman_version.stdout }}"
 
+    # PB-212.5 FIX (found live, 2026-08-21, first real run against a
+    # from-scratch node): task 0.3 below silently assumed the repo was
+    # already cloned at enkidb_repo_root_fallback -- true for the
+    # original enkidb-node-write (hand-set-up long before this playbook
+    # existed), but false for any freshly created node (e.g. via
+    # playbook_265's "start clean under new names" path) where nothing
+    # has ever been cloned. Bootstraps it from the control node's own
+    # checkout via rsync (not a fresh `git clone`, to avoid assuming this
+    # node has its own GitHub credentials) -- one-time, only when the
+    # checkout is entirely missing; an existing checkout is left alone
+    # for the normal manual `git pull` flow task 0.4 already documents.
+    # Second real gap in the same run: the base cloud-init image ships
+    # podman (task 0.1 above confirms it) but not git at all -- task 0.3's
+    # `git rev-parse` failed with a plain "No such file or directory:
+    # b'git'" once the checkout itself existed. Installed unconditionally
+    # (not gated on repo_checkout_stat -- a node could conceivably have a
+    # checkout without git ever having been the tool that put it there,
+    # e.g. after a future non-rsync bootstrap path) and idempotently.
+    - name: "0.19 | Ensure git is installed (base image ships podman but not git)"
+      ansible.builtin.dnf:
+        name: git
+        state: present
+      become: true
+
+    - name: "0.21 | Check whether the repo checkout already exists here"
+      ansible.builtin.stat:
+        path: "{{ (enkidb_repo_root | default(enkidb_repo_root_fallback)) + '/.git' }}"
+      register: repo_checkout_stat
+
+    - name: "0.215 | Ensure the destination directory exists before rsync targets it"
+      ansible.builtin.file:
+        path: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+        state: directory
+        mode: "0755"
+      when: not repo_checkout_stat.stat.exists
+
+    - name: "0.22 | Bootstrap the checkout from the control node (first run on a fresh node only)"
+      ansible.builtin.command:
+        cmd: >-
+          rsync -az
+          --exclude=workspace/bahyway_v4/target
+          --exclude=workspace/bahyway_v4/*/target
+          --exclude=Infra/OSImage
+          {{ playbook_dir }}/../
+          {{ ansible_user }}@{{ ansible_host | default(inventory_hostname) }}:{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}/
+      delegate_to: localhost
+      when: not repo_checkout_stat.stat.exists
+
     - name: "0.3 | Confirm the repo checkout exists (needed for image build context + /source mount + allowlist)"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      register: repo_head_before
+      changed_when: false
+
+    # PB-212.10 FIX (found live, 2026-08-21): a checkout EXISTING is not
+    # the same as it being CURRENT -- this playbook's own 0.22 bootstrap
+    # (PB-212.5) only clones it once, on a genuinely fresh node, and
+    # nothing after that ever refreshed it. Confirmed live: this node
+    # stayed frozen at the commit from its original bootstrap through
+    # THREE subsequent real fix commits (PB-212.7/.8/.9) -- rebuilding
+    # the image from that stale checkout every time correctly produced
+    # the same image ID as before, so the recreate-on-image-change logic
+    # (3.1 below) correctly saw nothing to do, and the PB-212.9 logging
+    # fix silently never reached the running container at all. `git pull`
+    # (not just `fetch`) would fail on a checkout with any local diff
+    # from its rsync bootstrap; `fetch` + `reset --hard` guarantees this
+    # node's checkout exactly matches origin/master regardless, since
+    # this checkout only ever exists to be a clean build source, never a
+    # place to make or keep local edits.
+    # PB-212.11 (2026-08-21, Architect's explicit choice): the 0.31 fetch
+    # below needs a real GitHub credential -- confirmed live, this fresh
+    # node's own (nonexistent) SSH key gets "Permission denied
+    # (publickey)" against the repo's `git@github.com:...` origin. Per
+    # the Architect's decision, this node gets its OWN dedicated,
+    # minimal-privilege SSH key registered as a read-only GitHub Deploy
+    # Key on this repo -- never a copy of any human's broader-scoped
+    # personal key. Idempotent: `creates:` skips keygen if the key
+    # already exists. Registering the printed public key on GitHub's
+    # side is a real, one-time manual action (Settings -> Deploy keys)
+    # this playbook cannot and should not perform itself -- that would
+    # need write access to this repo's own settings.
+    - name: "0.28 | Ensure ~/.ssh exists with correct permissions"
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.ssh"
+        state: directory
+        mode: "0700"
+
+    - name: "0.29 | Generate this node's own dedicated GitHub deploy key (idempotent -- no-op if it already exists)"
+      ansible.builtin.command:
+        cmd: >-
+          ssh-keygen -t ed25519 -f {{ ansible_env.HOME }}/.ssh/github_deploy_ed25519
+          -N "" -C "{{ inventory_hostname }}-enkidb-deploy"
+        creates: "{{ ansible_env.HOME }}/.ssh/github_deploy_ed25519"
+
+    - name: "0.291 | Route github.com SSH connections through this node's dedicated key"
+      ansible.builtin.blockinfile:
+        path: "{{ ansible_env.HOME }}/.ssh/config"
+        create: true
+        mode: "0600"
+        marker: "# {mark} PB-212.11 -- dedicated github.com deploy key"
+        block: |
+          Host github.com
+              IdentityFile {{ ansible_env.HOME }}/.ssh/github_deploy_ed25519
+              IdentitiesOnly yes
+              StrictHostKeyChecking accept-new
+
+    - name: "0.292 | Show this node's public deploy key"
+      ansible.builtin.command: cat "{{ ansible_env.HOME }}/.ssh/github_deploy_ed25519.pub"
+      register: deploy_pubkey
+      changed_when: false
+
+    - name: "0.293 | ACTION NEEDED if this key isn't already registered on GitHub"
+      ansible.builtin.debug:
+        msg: >-
+          If this exact key isn't already added at
+          github.com/bahyway/EnkiDB/settings/keys (Deploy keys -> Add
+          deploy key, READ-ONLY, title "{{ inventory_hostname }}"), add
+          it now -- the next task (0.31, git fetch) will fail until you
+          do: {{ deploy_pubkey.stdout }}
+
+    - name: "0.31 | Pull this node's checkout up to date (PB-212.10 -- existing is not the same as current)"
+      ansible.builtin.shell: timeout 30 git fetch origin master && git reset --hard origin/master
+      environment:
+        GIT_TERMINAL_PROMPT: "0"
+      args:
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "0.32 | Confirm the commit after pulling"
       ansible.builtin.command:
         cmd: git rev-parse --short HEAD
         chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
@@ -89,7 +250,7 @@
 
     - name: "0.4 | Show current commit on enkidb-node-write"
       ansible.builtin.debug:
-        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-212's own commit."
+        msg: "HEAD = {{ repo_head.stdout }} (was {{ repo_head_before.stdout }} before this run's pull)."
 
     - name: "0.5 | Check if systemd lingering is already enabled for {{ ansible_user_id }}"
       ansible.builtin.command: "loginctl show-user {{ ansible_user_id }} --property=Linger"
@@ -136,6 +297,33 @@
         chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
       changed_when: true
 
+    # PB-212.5 (2026-08-27): the core EnkiDB/EnkiDW/EnkiSDB types had real
+    # write/read-server binaries in the workspace the whole time (proved by
+    # `cargo build --workspace`) but this playbook never deployed them --
+    # the actual gap was here, not in missing code. EnkiODB/EnkiQDB
+    # deliberately get NO write image of their own: they're fed in-process
+    # by enkisdb-write-server's ValidationSweep (see
+    # deploy/podman/Containerfile.enkisdb-write-server's header) -- adding
+    # separate write servers for them would duplicate that already-designed
+    # pipeline shape, not complete it.
+    - name: "1.3 | Build enkidb-write-server image (core EnkiDB)"
+      ansible.builtin.command:
+        cmd: podman build -t enkidb-write-server:latest -f deploy/podman/Containerfile.enkidb-write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "1.4 | Build enkidw-write-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkidw-write-server:latest -f deploy/podman/Containerfile.enkidw-write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
+    - name: "1.5 | Build enkisdb-write-server image (also feeds EnkiODB/EnkiQDB)"
+      ansible.builtin.command:
+        cmd: podman build -t enkisdb-write-server:latest -f deploy/podman/Containerfile.enkisdb-write-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(enkidb_repo_root_fallback) }}"
+      changed_when: true
+
     # ── 2. Volumes (idempotent) ────────────────────────────────────
     - name: "2.1 | Create Write-side data volumes"
       ansible.builtin.command: "podman volume create {{ item }}"
@@ -145,6 +333,9 @@
       loop:
         - enkiddb-write-data
         - enkimdb-write-data
+        - enkidb-write-data
+        - enkidw-write-data
+        - enkisdb-write-data
 
     # ── 3. Run Write containers ────────────────────────────────────
     # FIXED (2026-07-26, PB-212.3): "check if exists, skip run if it
@@ -239,6 +430,98 @@
       changed_when: false
       failed_when: false
 
+    # PB-212.5: same recreate-only-on-image-change dance as 3.1-3.4b above,
+    # applied to the three newly-deployed types.
+    - name: "3.6 | Check whether enkidb-write needs recreating"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkidb-write --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkidb-write-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkidb_write_status
+      changed_when: false
+
+    - name: "3.6b | Stop + remove enkidb-write ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkidb-write 2>/dev/null; podman rm enkidb-write 2>/dev/null; true
+      when: "'RECREATE' in enkidb_write_status.stdout"
+      changed_when: true
+
+    - name: "3.7 | Run enkidb-write (port 7011) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkidb-write
+        -p 7011:7011
+        -v enkidb-write-data:/data:Z
+        -e TRIBE_ID=0x7001
+        --restart=always
+        enkidb-write-server:latest
+      when: "'RECREATE' in enkidb_write_status.stdout"
+      changed_when: true
+
+    - name: "3.7b | Ensure enkidb-write is actually running"
+      ansible.builtin.command: podman start enkidb-write
+      changed_when: false
+      failed_when: false
+
+    - name: "3.8 | Check whether enkidw-write needs recreating"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkidw-write --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkidw-write-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkidw_write_status
+      changed_when: false
+
+    - name: "3.8b | Stop + remove enkidw-write ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkidw-write 2>/dev/null; podman rm enkidw-write 2>/dev/null; true
+      when: "'RECREATE' in enkidw_write_status.stdout"
+      changed_when: true
+
+    - name: "3.9 | Run enkidw-write (port 7012) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkidw-write
+        -p 7012:7012
+        -v enkidw-write-data:/data:Z
+        -e TRIBE_ID=0x7005
+        --restart=always
+        enkidw-write-server:latest
+      when: "'RECREATE' in enkidw_write_status.stdout"
+      changed_when: true
+
+    - name: "3.9b | Ensure enkidw-write is actually running"
+      ansible.builtin.command: podman start enkidw-write
+      changed_when: false
+      failed_when: false
+
+    - name: "3.10 | Check whether enkisdb-write needs recreating"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkisdb-write --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkisdb-write-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkisdb_write_status
+      changed_when: false
+
+    - name: "3.10b | Stop + remove enkisdb-write ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkisdb-write 2>/dev/null; podman rm enkisdb-write 2>/dev/null; true
+      when: "'RECREATE' in enkisdb_write_status.stdout"
+      changed_when: true
+
+    - name: "3.11 | Run enkisdb-write (port 7013 -- also materializes odb/ and qdb/ trees for EnkiODB/EnkiQDB's Read Nodes) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkisdb-write
+        -p 7013:7013
+        -v enkisdb-write-data:/data:Z
+        -e TRIBE_ID=0x7003
+        --restart=always
+        enkisdb-write-server:latest
+      when: "'RECREATE' in enkisdb_write_status.stdout"
+      changed_when: true
+
+    - name: "3.11b | Ensure enkisdb-write is actually running"
+      ansible.builtin.command: podman start enkisdb-write
+      changed_when: false
+      failed_when: false
+
     # ── 3.5 Open the published ports in the host firewall, if one's active ──
     # PB-212.2, found live: a `wait_for` against 127.0.0.1 (below) always
     # succeeds regardless of firewall state -- loopback traffic isn't
@@ -266,6 +549,9 @@
       loop:
         - 7101
         - 7201
+        - 7011
+        - 7012
+        - 7013
 
     - name: "3.5c | Reload firewalld to apply"
       ansible.builtin.command: firewall-cmd --reload
@@ -273,7 +559,7 @@
       when: firewalld_status.stdout == "active" and (fw_add.changed | default(false))
       changed_when: true
 
-    # ── 4. Prove both are listening ────────────────────────────────
+    # ── 4. Prove all five are listening ────────────────────────────
     - name: "4.1 | Wait for Write ports to accept connections"
       ansible.builtin.wait_for:
         host: 127.0.0.1
@@ -282,9 +568,12 @@
       loop:
         - 7101   # enkiddb-write
         - 7201   # enkimdb-write
+        - 7011   # enkidb-write (core)
+        - 7012   # enkidw-write
+        - 7013   # enkisdb-write (also feeds odb/qdb trees)
 
 
-- name: "PB-212b | Build + run EnkiDDB/EnkiMDB Read containers on enkidb-node-read"
+- name: "PB-212b | Build + run all 7 EnkiDB-type Read containers on enkidb-node-read"
   hosts: enkidb_read
   become: false
 
@@ -309,7 +598,104 @@
       ansible.builtin.debug:
         msg: "{{ podman_version.stdout }}"
 
+    # PB-212.5 FIX -- same root cause and fix as the Write play above:
+    # a freshly created node has no checkout at all, so bootstrap one
+    # from the control node's own checkout via rsync, once, only when
+    # missing. Also installs git itself (base image ships podman but not
+    # git) -- see the Write play's own comment for the live failure this
+    # targets.
+    - name: "0.19 | Ensure git is installed (base image ships podman but not git)"
+      ansible.builtin.dnf:
+        name: git
+        state: present
+      become: true
+
+    - name: "0.21 | Check whether the repo checkout already exists here"
+      ansible.builtin.stat:
+        path: "{{ (enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB')) + '/.git' }}"
+      register: repo_checkout_stat
+
+    - name: "0.215 | Ensure the destination directory exists before rsync targets it"
+      ansible.builtin.file:
+        path: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+        state: directory
+        mode: "0755"
+      when: not repo_checkout_stat.stat.exists
+
+    - name: "0.22 | Bootstrap the checkout from the control node (first run on a fresh node only)"
+      ansible.posix.synchronize:
+        src: "{{ playbook_dir }}/../"
+        dest: "{{ (enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB')) }}/"
+        rsync_opts:
+          - "--exclude=workspace/bahyway_v4/target"
+          - "--exclude=workspace/bahyway_v4/*/target"
+          - "--exclude=Infra/OSImage"
+      when: not repo_checkout_stat.stat.exists
+
     - name: "0.3 | Confirm the repo checkout exists (build context for the two Read images only)"
+      ansible.builtin.command:
+        cmd: git rev-parse --short HEAD
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      register: repo_head_before
+      changed_when: false
+
+    # PB-212.10 FIX -- same root cause and fix as the Write play above:
+    # existing is not the same as current. This node's checkout stayed
+    # frozen at its original bootstrap commit through three subsequent
+    # real fix commits, so every rebuild silently kept producing the
+    # same stale image. See the Write play's own comment for the full
+    # story.
+    #
+    # PB-212.11 -- same credential gap and fix as the Write play above:
+    # this node needs its own dedicated, read-only GitHub deploy key too.
+    - name: "0.28 | Ensure ~/.ssh exists with correct permissions"
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.ssh"
+        state: directory
+        mode: "0700"
+
+    - name: "0.29 | Generate this node's own dedicated GitHub deploy key (idempotent -- no-op if it already exists)"
+      ansible.builtin.command:
+        cmd: >-
+          ssh-keygen -t ed25519 -f {{ ansible_env.HOME }}/.ssh/github_deploy_ed25519
+          -N "" -C "{{ inventory_hostname }}-enkidb-deploy"
+        creates: "{{ ansible_env.HOME }}/.ssh/github_deploy_ed25519"
+
+    - name: "0.291 | Route github.com SSH connections through this node's dedicated key"
+      ansible.builtin.blockinfile:
+        path: "{{ ansible_env.HOME }}/.ssh/config"
+        create: true
+        mode: "0600"
+        marker: "# {mark} PB-212.11 -- dedicated github.com deploy key"
+        block: |
+          Host github.com
+              IdentityFile {{ ansible_env.HOME }}/.ssh/github_deploy_ed25519
+              IdentitiesOnly yes
+              StrictHostKeyChecking accept-new
+
+    - name: "0.292 | Show this node's public deploy key"
+      ansible.builtin.command: cat "{{ ansible_env.HOME }}/.ssh/github_deploy_ed25519.pub"
+      register: deploy_pubkey
+      changed_when: false
+
+    - name: "0.293 | ACTION NEEDED if this key isn't already registered on GitHub"
+      ansible.builtin.debug:
+        msg: >-
+          If this exact key isn't already added at
+          github.com/bahyway/EnkiDB/settings/keys (Deploy keys -> Add
+          deploy key, READ-ONLY, title "{{ inventory_hostname }}"), add
+          it now -- the next task (0.31, git fetch) will fail until you
+          do: {{ deploy_pubkey.stdout }}
+
+    - name: "0.31 | Pull this node's checkout up to date (PB-212.10 -- existing is not the same as current)"
+      ansible.builtin.shell: timeout 30 git fetch origin master && git reset --hard origin/master
+      environment:
+        GIT_TERMINAL_PROMPT: "0"
+      args:
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      changed_when: true
+
+    - name: "0.32 | Confirm the commit after pulling"
       ansible.builtin.command:
         cmd: git rev-parse --short HEAD
         chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
@@ -318,7 +704,7 @@
 
     - name: "0.4 | Show current commit on enkidb-node-read"
       ansible.builtin.debug:
-        msg: "HEAD = {{ repo_head.stdout }} -- pull first if this predates PB-212's own commit."
+        msg: "HEAD = {{ repo_head.stdout }} (was {{ repo_head_before.stdout }} before this run's pull)."
 
     - name: "0.5 | Check if systemd lingering is already enabled for {{ ansible_user_id }}"
       ansible.builtin.command: "loginctl show-user {{ ansible_user_id }} --property=Linger"
@@ -354,6 +740,39 @@
         chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
       changed_when: true
 
+    # PB-212.5 (2026-08-27): see PB-212a's matching 1.3-1.5 comment for
+    # why EnkiODB/EnkiQDB get Read images here but no Write image of
+    # their own anywhere in this playbook.
+    - name: "1.3 | Build enkidb-read-server image (core EnkiDB)"
+      ansible.builtin.command:
+        cmd: podman build -t enkidb-read-server:latest -f deploy/podman/Containerfile.enkidb-read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      changed_when: true
+
+    - name: "1.4 | Build enkidw-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkidw-read-server:latest -f deploy/podman/Containerfile.enkidw-read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      changed_when: true
+
+    - name: "1.5 | Build enkisdb-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkisdb-read-server:latest -f deploy/podman/Containerfile.enkisdb-read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      changed_when: true
+
+    - name: "1.6 | Build enkiodb-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkiodb-read-server:latest -f deploy/podman/Containerfile.enkiodb-read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      changed_when: true
+
+    - name: "1.7 | Build enkiqdb-read-server image"
+      ansible.builtin.command:
+        cmd: podman build -t enkiqdb-read-server:latest -f deploy/podman/Containerfile.enkiqdb-read-server workspace/bahyway_v4
+        chdir: "{{ enkidb_repo_root | default(ansible_env.HOME + '/Forge/EnkiDB') }}"
+      changed_when: true
+
     # ── 2. Volumes (idempotent) ────────────────────────────────────
     - name: "2.1 | Create Read-side data volumes"
       ansible.builtin.command: "podman volume create {{ item }}"
@@ -363,6 +782,11 @@
       loop:
         - enkiddb-read-data
         - enkimdb-read-data
+        - enkidb-read-data
+        - enkidw-read-data
+        - enkisdb-read-data
+        - enkiodb-read-data
+        - enkiqdb-read-data
 
     # ── 3. Run Read containers ─────────────────────────────────────
     # FIXED (2026-07-26, PB-212.3): see the matching Write-side comment
@@ -436,6 +860,158 @@
       changed_when: false
       failed_when: false
 
+    # PB-212.5: same recreate-only-on-image-change dance as 3.1-3.4b above,
+    # applied to the five newly-deployed types.
+    - name: "3.6 | Check whether enkidb-read needs recreating"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkidb-read --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkidb-read-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkidb_read_status
+      changed_when: false
+
+    - name: "3.6b | Stop + remove enkidb-read ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkidb-read 2>/dev/null; podman rm enkidb-read 2>/dev/null; true
+      when: "'RECREATE' in enkidb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.7 | Run enkidb-read (port 7001) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkidb-read
+        -p 7001:7001
+        -v enkidb-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkidb-read-server:latest
+      when: "'RECREATE' in enkidb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.7b | Ensure enkidb-read is actually running"
+      ansible.builtin.command: podman start enkidb-read
+      changed_when: false
+      failed_when: false
+
+    - name: "3.8 | Check whether enkidw-read needs recreating"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkidw-read --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkidw-read-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkidw_read_status
+      changed_when: false
+
+    - name: "3.8b | Stop + remove enkidw-read ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkidw-read 2>/dev/null; podman rm enkidw-read 2>/dev/null; true
+      when: "'RECREATE' in enkidw_read_status.stdout"
+      changed_when: true
+
+    - name: "3.9 | Run enkidw-read (port 7002) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkidw-read
+        -p 7002:7002
+        -v enkidw-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkidw-read-server:latest
+      when: "'RECREATE' in enkidw_read_status.stdout"
+      changed_when: true
+
+    - name: "3.9b | Ensure enkidw-read is actually running"
+      ansible.builtin.command: podman start enkidw-read
+      changed_when: false
+      failed_when: false
+
+    - name: "3.10 | Check whether enkisdb-read needs recreating"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkisdb-read --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkisdb-read-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkisdb_read_status
+      changed_when: false
+
+    - name: "3.10b | Stop + remove enkisdb-read ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkisdb-read 2>/dev/null; podman rm enkisdb-read 2>/dev/null; true
+      when: "'RECREATE' in enkisdb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.11 | Run enkisdb-read (port 7003) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkisdb-read
+        -p 7003:7003
+        -v enkisdb-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkisdb-read-server:latest
+      when: "'RECREATE' in enkisdb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.11b | Ensure enkisdb-read is actually running"
+      ansible.builtin.command: podman start enkisdb-read
+      changed_when: false
+      failed_when: false
+
+    - name: "3.12 | Check whether enkiodb-read needs recreating"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkiodb-read --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkiodb-read-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkiodb_read_status
+      changed_when: false
+
+    - name: "3.12b | Stop + remove enkiodb-read ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkiodb-read 2>/dev/null; podman rm enkiodb-read 2>/dev/null; true
+      when: "'RECREATE' in enkiodb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.13 | Run enkiodb-read (port 7004) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkiodb-read
+        -p 7004:7004
+        -v enkiodb-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkiodb-read-server:latest
+      when: "'RECREATE' in enkiodb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.13b | Ensure enkiodb-read is actually running"
+      ansible.builtin.command: podman start enkiodb-read
+      changed_when: false
+      failed_when: false
+
+    - name: "3.14 | Check whether enkiqdb-read needs recreating"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        RUNNING_IMG=$(podman inspect enkiqdb-read --format '{% raw %}{{.Image}}{% endraw %}' 2>/dev/null || echo "MISSING")
+        BUILT_IMG=$(podman inspect enkiqdb-read-server:latest --format '{% raw %}{{.Id}}{% endraw %}')
+        if [ "$RUNNING_IMG" != "$BUILT_IMG" ]; then echo "RECREATE"; else echo "UP_TO_DATE"; fi
+      register: enkiqdb_read_status
+      changed_when: false
+
+    - name: "3.14b | Stop + remove enkiqdb-read ONLY if it needs recreating"
+      ansible.builtin.shell: podman stop enkiqdb-read 2>/dev/null; podman rm enkiqdb-read 2>/dev/null; true
+      when: "'RECREATE' in enkiqdb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.15 | Run enkiqdb-read (port 7005) if it needed recreating"
+      ansible.builtin.command: >
+        podman run -d --name enkiqdb-read
+        -p 7005:7005
+        -v enkiqdb-read-data:/data:Z
+        -e RELOAD_SECS=30
+        --restart=always
+        enkiqdb-read-server:latest
+      when: "'RECREATE' in enkiqdb_read_status.stdout"
+      changed_when: true
+
+    - name: "3.15b | Ensure enkiqdb-read is actually running"
+      ansible.builtin.command: podman start enkiqdb-read
+      changed_when: false
+      failed_when: false
+
     # ── 3.5 Open the published ports in the host firewall, if one's active ──
     # See PB-212a's own 3.5a/b/c comment for the full rationale (found
     # live: "No route to host" querying across the network despite the
@@ -459,6 +1035,11 @@
       loop:
         - 7102
         - 7202
+        - 7001
+        - 7002
+        - 7003
+        - 7004
+        - 7005
 
     - name: "3.5c | Reload firewalld to apply"
       ansible.builtin.command: firewall-cmd --reload
@@ -466,7 +1047,7 @@
       when: firewalld_status.stdout == "active" and (fw_add.changed | default(false))
       changed_when: true
 
-    # ── 4. Prove both are listening ────────────────────────────────
+    # ── 4. Prove all seven are listening ───────────────────────────
     - name: "4.1 | Wait for Read ports to accept connections"
       ansible.builtin.wait_for:
         host: 127.0.0.1
@@ -475,6 +1056,11 @@
       loop:
         - 7102   # enkiddb-read
         - 7202   # enkimdb-read
+        - 7001   # enkidb-read (core)
+        - 7002   # enkidw-read
+        - 7003   # enkisdb-read
+        - 7004   # enkiodb-read
+        - 7005   # enkiqdb-read
 
 
 - name: "PB-212c | Summary"
@@ -485,13 +1071,23 @@
     - name: "Definition of done"
       ansible.builtin.debug:
         msg:
-          - "enkidb-node-write (192.168.122.101): enkiddb-write:7101, enkimdb-write:7201 up."
-          - "enkidb-node-read  (192.168.122.107): enkiddb-read:7102, enkimdb-read:7202 up."
+          - "enkidb-node-write (192.168.122.101): enkiddb-write:7101, enkimdb-write:7201,"
+          - "  enkidb-write:7011, enkidw-write:7012, enkisdb-write:7013 (also materializes"
+          - "  odb/ and qdb/ trees in-process) up. All 7 EnkiDB types now have a live Write"
+          - "  process (PB-212.5, 2026-08-27) -- EnkiODB/EnkiQDB deliberately have none of"
+          - "  their own, fed by enkisdb-write's ValidationSweep instead."
+          - "enkidb-node-read  (192.168.122.107): enkiddb-read:7102, enkimdb-read:7202,"
+          - "  enkidb-read:7001, enkidw-read:7002, enkisdb-read:7003, enkiodb-read:7004,"
+          - "  enkiqdb-read:7005 up. All 7 Read Nodes now live."
           - "enkiddb-assets stays on eriduous-vdi:7301 -- unchanged, no redeploy needed."
-          - "Next: run PB-208 (full-corpus ingestion) against enkidb-node-write to repopulate"
-          - "real data on the new split, THEN PB-213 (cross-host flush/sync/verify) -- in that"
-          - "order. Running PB-213 first (right after this redeploy, before anything is"
-          - "re-ingested) will legitimately FLUSH:0 and its own safety guard will refuse to"
-          - "sync that empty state over a populated Read Node. See PB-215's own PB-215.1 note."
+          - "Next: run the new scripts/{enkidb,enkidw,enkisdb,enkiodb,enkiqdb}-sync-data.sh"
+          - "(same rsync/scp pattern as the existing enkiddb/enkimdb ones) on enkidb-node-write,"
+          - "pointed at enkidb-node-read, so the five new Read Nodes see real materialized"
+          - "data instead of an empty DATA_DIR/current. Then run PB-208 (full-corpus"
+          - "ingestion) against enkidb-node-write to repopulate real data on the new split,"
+          - "THEN PB-213 (cross-host flush/sync/verify) -- in that order. Running PB-213"
+          - "first (right after this redeploy, before anything is re-ingested) will"
+          - "legitimately FLUSH:0 and its own safety guard will refuse to sync that empty"
+          - "state over a populated Read Node. See PB-215's own PB-215.1 note."
           - "Then update client defaults (TamuzAI/EaAgent !enkiddb, DubSar notebook, akkadi-cli)"
           - "from eriduous-vdi's IP to enkidb-node-read's IP (192.168.122.107) for queries."

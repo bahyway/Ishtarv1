@@ -36,6 +36,6 @@ mod tests {
 
     #[test]
     fn stub_poll_returns_empty() {
-        assert!(poll_pending_alerts("192.168.122.107:7001").is_empty());
+        assert!(poll_pending_alerts("192.168.122.112:7001").is_empty());
     }
 }

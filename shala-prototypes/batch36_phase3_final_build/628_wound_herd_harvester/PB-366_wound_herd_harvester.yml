@@ -1,0 +1,287 @@
+---
+# ============================================================================
+# PB-366 :: THE WOUND & HERD HARVESTER — Bīt Asî, Phase A
+# ----------------------------------------------------------------------------
+# Corpus     : BahyWay.Ecosystem v4.0 — PB-series · law GL-SGG-001 (PROPOSED)
+# Physician  : Asû Engine (deterministic; readable reasoning under scarcity)
+# Purpose    : Run TODAY, before the seven waters flow. Harvest playbook run
+#              records into the Bīt Asî shelf:
+#                (1) WOUNDS  — every failure minted as a Ḫiṭītu row:
+#                    normalized signature, fact-facets, TRUE failure epoch,
+#                    stage (INDEX/LOCALIZED/EPIDEMIC/RESOLVED).
+#                (2) HERD    — the healthy witnesses of the same playbooks
+#                    (L-SGG-1: no wound without its herd).
+#                (3) IMMUNITY— per signature, the discriminating facets:
+#                    present in the healthy herd, absent in the wounded —
+#                    "why has it NOT spread?"
+#                (4) SYNDROMES — signatures grouped into β₀ components of
+#                    the signature↔facet hypergraph.
+#                (5) CRATES  — each run record gzip-sealed, sha-256 Kanīku,
+#                    chmod 0444 (read-only to all stakeholders).
+#                (6) THE GATE — emits asu_preflight.py: given a playbook +
+#                    host facts, answers BULṬU / CHRONIC / FATAL / CLEAN
+#                    (prescribe before refusing, GL-SGG-001 §5).
+#              Phase B (the sail to EnkiDDB·7007) is REFUSED until
+#              EnkiSDB·7001 answers — nothing simulated.
+#
+# INPUT      : runs_dir of *.json run records, one per task-run:
+#              {"playbook","host","task","module","rc","stderr","epoch",
+#               "facts":{"kernel":"6.1.0","distro":"fedora40",...}}
+#              (rc==0 → healthy witness; rc!=0 → wound)
+# Run        : ansible-playbook PB-366_wound_herd_harvester.yml \
+#                [-e runs_dir=$HOME/bit_asi/runs] [-e phase_b=false]
+# ============================================================================
+
+- name: "PB-366 :: Wound & Herd Harvester (Bīt Asî Phase A, GL-SGG-001)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    bit_asi: "{{ lookup('env','HOME') }}/bit_asi"
+    runs_dir: "{{ bit_asi }}/runs"
+    crates_dir: "{{ bit_asi }}/crates"
+    ledger_wounds: "{{ bit_asi }}/HITITU-WOUNDS.tsv"
+    ledger_herd: "{{ bit_asi }}/HEALTHY-HERD.tsv"
+    report_immunity: "{{ bit_asi }}/IMMUNITY-DIFFERENTIAL.tsv"
+    report_syndromes: "{{ bit_asi }}/SYNDROMES.tsv"
+    kaniku_ledger: "{{ bit_asi }}/KANIKU-LEDGER.tsv"
+    preflight_gate: "{{ bit_asi }}/asu_preflight.py"
+    sealed_cures: "{{ bit_asi }}/SEALED-CURES.tsv"      # signature<TAB>cure (CONFIRMED only)
+    sealed_fatal: "{{ bit_asi }}/SEALED-FATAL.tsv"      # signature (forbidden approaches)
+    naru_dir: "{{ bit_asi }}/naru"
+    phase_b: false
+    enkisdb_port: 7001
+
+  tasks:
+
+    - name: "WITNESS :: raise the house of the physician"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ bit_asi }}", "{{ runs_dir }}", "{{ crates_dir }}", "{{ naru_dir }}"]
+
+    - name: "WITNESS :: run records present?"
+      ansible.builtin.find:
+        paths: "{{ runs_dir }}"
+        patterns: "*.json"
+      register: runs
+
+    - name: "JUDGE :: refuse an empty surgery"
+      ansible.builtin.assert:
+        that: runs.matched | int > 0
+        fail_msg: >-
+          REFUSED — no run records in {{ runs_dir }}. Drop your Ansible run
+          JSONs there (or point -e runs_dir=...) and return. Nothing faked.
+
+    - name: "MOVE :: the diagnosis (wounds + herd + immunity + syndromes + crates)"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        python3 << 'PYEOF'
+        import os, re, json, gzip, hashlib, datetime
+
+        RUNS   = "{{ runs_dir }}"
+        CRATES = "{{ crates_dir }}"
+        W_LED  = "{{ ledger_wounds }}"
+        H_LED  = "{{ ledger_herd }}"
+        IMM    = "{{ report_immunity }}"
+        SYN    = "{{ report_syndromes }}"
+        KAN    = "{{ kaniku_ledger }}"
+        GATE   = "{{ preflight_gate }}"
+
+        def normalize(txt):
+            t = txt or ''
+            t = re.sub(r'/[^ \t\n\"]+', '<PATH>', t)
+            t = re.sub(r'0x[0-9a-fA-F]+', '<HEX>', t)
+            t = re.sub(r'\d+', '<N>', t)
+            return re.sub(r'\s+', ' ', t).strip()[:240]
+        def sig_of(rec):
+            base = rec.get('module','?') + '|' + normalize(rec.get('stderr',''))
+            return 'ḫ·' + hashlib.sha1(base.encode()).hexdigest()[:10]
+
+        runs=[]
+        for f in sorted(os.listdir(RUNS)):
+            if not f.endswith('.json'): continue
+            try: rec=json.load(open(os.path.join(RUNS,f),encoding='utf-8'))
+            except Exception: continue
+            rec['_file']=f
+            runs.append(rec)
+        runs.sort(key=lambda r: r.get('epoch',0))
+
+        wounds=[r for r in runs if r.get('rc',0)!=0]
+        herd  =[r for r in runs if r.get('rc',0)==0]
+        stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        # ---- staging per signature (L-SGG-3: epoch is the failure moment) --
+        by_sig={}
+        for w in wounds: by_sig.setdefault(sig_of(w),[]).append(w)
+        healthy_after={}  # (playbook,host) -> last healthy epoch
+        for h in herd:
+            k=(h.get('playbook'),h.get('host'))
+            healthy_after[k]=max(healthy_after.get(k,0),h.get('epoch',0))
+        stage={}
+        for s,ws in by_sig.items():
+            hosts={w.get('host') for w in ws}
+            last=max(w.get('epoch',0) for w in ws)
+            resolved=all(healthy_after.get((w.get('playbook'),w.get('host')),0)>last
+                         for w in ws)
+            if resolved: stage[s]='RESOLVED'
+            elif len(hosts)>1: stage[s]='EPIDEMIC'
+            elif len(ws)>1: stage[s]='LOCALIZED'
+            else: stage[s]='INDEX'
+
+        # ---- ledgers -------------------------------------------------------
+        with open(W_LED,'w') as f:
+            f.write('kaki\tsignature\tstage\tplaybook\ttask\tmodule\thost\tepoch\tfacts\tstamp_epistemic\n')
+            for w in wounds:
+                s=sig_of(w)
+                kaki='0x'+hashlib.sha1((w['_file']).encode()).hexdigest()[:8]
+                f.write('\t'.join([kaki,s,stage[s],
+                    str(w.get('playbook')),str(w.get('task')),str(w.get('module')),
+                    str(w.get('host')),str(w.get('epoch')),
+                    json.dumps(w.get('facts',{}),sort_keys=True),'MEASURED'])+'\n')
+        with open(H_LED,'w') as f:
+            f.write('playbook\thost\tepoch\tfacts\n')
+            for h in herd:
+                f.write('\t'.join([str(h.get('playbook')),str(h.get('host')),
+                    str(h.get('epoch')),json.dumps(h.get('facts',{}),sort_keys=True)])+'\n')
+
+        # ---- IMMUNITY differential (§2.2): healthy-minus-wounded facets ----
+        def facet_set(rec):
+            return {(k,str(v)) for k,v in (rec.get('facts') or {}).items()}
+        with open(IMM,'w') as f:
+            f.write('signature\tdiscriminating_facet\tvalue_in_healthy\tvalue_in_wounded\tepistemic\n')
+            for s,ws in by_sig.items():
+                pbs={w.get('playbook') for w in ws}
+                sick_common=set.intersection(*[facet_set(w) for w in ws]) if ws else set()
+                peers=[h for h in herd if h.get('playbook') in pbs]
+                if not peers: continue
+                healthy_common=set.intersection(*[facet_set(h) for h in peers])
+                sick_keys={k for k,_ in sick_common}
+                for (k,v) in sorted(healthy_common):
+                    if k in sick_keys and (k,v) not in sick_common:
+                        sick_v=[vv for kk,vv in sick_common if kk==k][0]
+                        f.write('\t'.join([s,k,v,sick_v,'DERIVED'])+'\n')
+
+        # ---- SYNDROMES: β₀ of the signature↔facet graph --------------------
+        sigs=list(by_sig)
+        parent={s:s for s in sigs}
+        def find(x):
+            while parent[x]!=x: parent[x]=parent[parent[x]]; x=parent[x]
+            return x
+        def union(a,b):
+            ra,rb=find(a),find(b)
+            if ra!=rb: parent[ra]=rb
+        sick_facets={s:set.intersection(*[facet_set(w) for w in by_sig[s]]) for s in sigs}
+        for i in range(len(sigs)):
+            for j in range(i+1,len(sigs)):
+                if sick_facets[sigs[i]] & sick_facets[sigs[j]]:
+                    union(sigs[i],sigs[j])
+        comp={}
+        for s in sigs: comp.setdefault(find(s),[]).append(s)
+        with open(SYN,'w') as f:
+            f.write('syndrome\tsignatures\tstages\thosts\tb0_note\n')
+            for i,(root,members) in enumerate(sorted(comp.items())):
+                hosts=sorted({w.get('host') for s in members for w in by_sig[s]})
+                f.write('\t'.join(['SYN-%02d'%(i+1),','.join(sorted(members)),
+                    ','.join(stage[s] for s in sorted(members)),
+                    ','.join(hosts),'component %d of %d (b0=%d)'%(i+1,len(comp),len(comp))])+'\n')
+
+        # ---- crates: gzip-sealed, Kanīku, read-only (0444) -----------------
+        with open(KAN,'a') as k:
+            if os.path.getsize(KAN) if os.path.exists(KAN) else 0:
+                pass
+            else:
+                k.write('crate\tkind\tsha256\tsealed_utc\n')
+            for r in runs:
+                name=os.path.splitext(r['_file'])[0]+'.json.gz'
+                path=os.path.join(CRATES,name)
+                if os.path.exists(path): continue
+                gz=gzip.compress(json.dumps(r,sort_keys=True).encode())
+                with open(path,'wb') as cf: cf.write(gz)
+                os.chmod(path,0o444)
+                sha=hashlib.sha256(gz).hexdigest()
+                k.write('\t'.join([name,'wound' if r.get('rc',0)!=0 else 'herd',sha,stamp])+'\n')
+
+        # ---- the Asû pre-flight gate (§5: prescribe before refusing) -------
+        gate_code = "\n".join([
+          "#!/usr/bin/env python3",
+          "# asu_preflight.py — GL-SGG-001 §5 · BULTU/CHRONIC/FATAL/CLEAN",
+          "# usage: asu_preflight.py --playbook X --facts '{\\\"kernel\\\":\\\"6.1.0\\\"}'",
+          "import sys,json,os",
+          "BASE=os.path.dirname(os.path.abspath(__file__))",
+          "def rows(p,skip=1):",
+          "  try: return [l.rstrip('\\n').split('\\t') for l in open(p)][skip:]",
+          "  except OSError: return []",
+          "def main():",
+          "  a=dict(zip(sys.argv[1::2],sys.argv[2::2]))",
+          "  pb=a.get('--playbook',''); facts=json.loads(a.get('--facts','{}'))",
+          "  wounds=rows(os.path.join(BASE,'HITITU-WOUNDS.tsv'))",
+          "  cures={r[0]:r[1] for r in rows(os.path.join(BASE,'SEALED-CURES.tsv'),0) if len(r)>1}",
+          "  fatal={r[0] for r in rows(os.path.join(BASE,'SEALED-FATAL.tsv'),0) if r and r[0]}",
+          "  hits=[]",
+          "  for r in wounds:",
+          "    if r[3]!=pb: continue",
+          "    wf=json.loads(r[8])",
+          "    if all(str(facts.get(k))==str(v) for k,v in wf.items() if k in facts):",
+          "      hits.append(r)",
+          "  if not hits: print('CLEAN — no matching wound; proceed, harvest the run'); return 0",
+          "  sig=hits[0][1]; stage=hits[0][2]",
+          "  if sig in fatal:",
+          "    print('FATAL — sealed forbidden approach '+sig+'; REFUSED (two-lock)'); return 2",
+          "  if sig in cures:",
+          "    print('BULTU — sealed cure exists for '+sig+': '+cures[sig]+' — inject and proceed'); return 0",
+          "  print('CHRONIC — '+str(len(hits))+' matching wound(s), signature '+sig+', stage '+stage+', no sealed cure; PROCEED UNDER WITNESS'); return 1",
+          "if __name__=='__main__': sys.exit(main())",
+        ])
+        with open(GATE,'w') as g: g.write(gate_code+'\n')
+        os.chmod(GATE,0o755)
+
+        print('⚕ %d runs read — %d wounds (%d signatures, stages: %s) · %d healthy witnesses · %d syndrome(s) · immunity differentials written · gate emitted'
+              % (len(runs),len(wounds),len(by_sig),
+                 ','.join(sorted(set(stage.values()))),len(herd),len(comp)))
+        PYEOF
+      args: { executable: /bin/bash }
+      register: dx
+      changed_when: true
+
+    - name: "JUDGE :: L-SGG-1 — no wound without its herd"
+      ansible.builtin.shell: "test -s '{{ ledger_herd }}' || wc -l < '{{ ledger_wounds }}'"
+      register: herd_ok
+      changed_when: false
+      failed_when: false
+
+    - name: "STAGE :: Phase B — the sail to EnkiDDB·7007 (refused until the waters flow)"
+      ansible.builtin.wait_for:
+        port: "{{ enkisdb_port }}"
+        host: "127.0.0.1"
+        timeout: 3
+      register: waters
+      failed_when: false
+      when: phase_b | bool
+
+    - name: "JUDGE :: refuse the sail without EnkiSDB·7001"
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'PHASE B OPEN — EnkiSDB·7001 answers; sail the crates through the chain (timestamps preserved, GOLDEN into EnkiDDB·7007).'
+             if (phase_b | bool and not (waters.failed | default(true)))
+             else 'PHASE B HELD — the wounds WAIT on the Bīt Asî shelf, receipted and read-only, until EnkiSDB·7001 answers. Nothing simulated.' }}
+
+    - name: "NĀRU :: record the act"
+      ansible.builtin.lineinfile:
+        path: "{{ naru_dir }}/playbook_acts.jsonl"
+        create: true
+        mode: "0644"
+        line: >-
+          {"pb":"PB-366","act":"wound-herd-harvest","law":"GL-SGG-001",
+          "shelf":"{{ bit_asi }}","phase":"A",
+          "doctrine":"the unit of diagnosis is the herd; the boundary of the outbreak is the etiology"}
+
+    - name: "Verdict"
+      ansible.builtin.debug:
+        msg:
+          - "{{ dx.stdout_lines | last }}"
+          - "Shelf: {{ bit_asi }} · gate: {{ preflight_gate }} (BULṬU/CHRONIC/FATAL/CLEAN)"
+          - "Seal cures into SEALED-CURES.tsv only when CONFIRMED (two witnesses, L-SGG-2)."
+          - "Šala rehearsal: sala_bit_asi_diagnostic_court.html"

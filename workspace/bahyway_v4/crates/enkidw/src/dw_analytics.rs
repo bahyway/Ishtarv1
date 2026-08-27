@@ -26,22 +26,22 @@ use lamassu_engine::{LamassuEngine, TopologicalSignature, TribeReading};
 /// Per-particle statistics for the top-N report.
 #[derive(Debug, Clone)]
 pub struct ParticleStat {
-    pub uuid_hash:   u32,
+    pub uuid_hash: u32,
     pub event_count: usize,
-    pub state:       ParticleState,
+    pub state: ParticleState,
 }
 
 /// Full DW analytics report.
 #[derive(Debug, Clone)]
 pub struct DwReport {
     pub total_particles: usize,
-    pub golden_count:    usize,
-    pub fuzzy_count:     usize,
-    pub dead_count:      usize,
-    pub total_events:    usize,
-    pub epoch_min:       u32,
-    pub epoch_max:       u32,
-    pub top_particles:   Vec<ParticleStat>,
+    pub golden_count: usize,
+    pub fuzzy_count: usize,
+    pub dead_count: usize,
+    pub total_events: usize,
+    pub epoch_min: u32,
+    pub epoch_max: u32,
+    pub top_particles: Vec<ParticleStat>,
     /// Real persistent-homology reading of this Tribe's particle cloud —
     /// `None` unless produced via [`DwAnalytics::report_with_shape`]
     /// (`report` never populates this; it costs O(n^3) in particle
@@ -56,14 +56,16 @@ impl DwReport {
     pub fn by_state(&self) -> [(ParticleState, usize); 3] {
         [
             (ParticleState::Golden, self.golden_count),
-            (ParticleState::Fuzzy,  self.fuzzy_count),
-            (ParticleState::Dead,   self.dead_count),
+            (ParticleState::Fuzzy, self.fuzzy_count),
+            (ParticleState::Dead, self.dead_count),
         ]
     }
 
     /// Health ratio: golden particles / total (0.0 if no particles).
     pub fn golden_ratio(&self) -> f32 {
-        if self.total_particles == 0 { return 0.0; }
+        if self.total_particles == 0 {
+            return 0.0;
+        }
         self.golden_count as f32 / self.total_particles as f32
     }
 }
@@ -79,8 +81,8 @@ impl DwReport {
 fn state_to_delta(state: ParticleState) -> f64 {
     match state {
         ParticleState::Golden => 0.15, // inner orbit: high quality
-        ParticleState::Fuzzy  => 0.50, // mid orbit: ambiguous
-        ParticleState::Dead   => 0.90, // outer orbit: decayed
+        ParticleState::Fuzzy => 0.50,  // mid orbit: ambiguous
+        ParticleState::Dead => 0.90,   // outer orbit: decayed
     }
 }
 
@@ -89,8 +91,8 @@ fn state_to_delta(state: ParticleState) -> f64 {
 /// remains the sole source of the signature itself.
 fn signature_rank(sig: TopologicalSignature) -> u8 {
     match sig {
-        TopologicalSignature::Dead   => 0,
-        TopologicalSignature::Fuzzy  => 1,
+        TopologicalSignature::Dead => 0,
+        TopologicalSignature::Fuzzy => 1,
         TopologicalSignature::Golden => 2,
     }
 }
@@ -157,49 +159,63 @@ impl<'a> DwAnalytics<'a> {
     ///
     /// `top_n` controls how many particles appear in `top_particles`.
     pub fn report(&self, top_n: usize) -> DwReport {
-        let db        = self.pdb.db();
+        let db = self.pdb.db();
         let particles = db.journal().all_particles();
         let total_events = db.journal().entry_count();
 
         let mut epoch_min = u32::MAX;
         let mut epoch_max = 0u32;
-        let mut golden    = 0usize;
-        let mut fuzzy     = 0usize;
-        let mut dead      = 0usize;
+        let mut golden = 0usize;
+        let mut fuzzy = 0usize;
+        let mut dead = 0usize;
 
-        let mut stats: Vec<ParticleStat> = particles.iter().map(|p| {
-            let proj = db.project(p);
-            let hist = db.journal().read_particle_history(p);
-            let evs  = hist.len();
+        let mut stats: Vec<ParticleStat> = particles
+            .iter()
+            .map(|p| {
+                let proj = db.project(p);
+                let hist = db.journal().read_particle_history(p);
+                let evs = hist.len();
 
-            // Track epoch range across all particle histories
-            for entry in &hist {
-                if entry.epoch < epoch_min { epoch_min = entry.epoch; }
-                if entry.epoch > epoch_max { epoch_max = entry.epoch; }
-            }
+                // Track epoch range across all particle histories
+                for entry in &hist {
+                    if entry.epoch < epoch_min {
+                        epoch_min = entry.epoch;
+                    }
+                    if entry.epoch > epoch_max {
+                        epoch_max = entry.epoch;
+                    }
+                }
 
-            match proj.state {
-                ParticleState::Golden => golden += 1,
-                ParticleState::Fuzzy  => fuzzy  += 1,
-                ParticleState::Dead   => dead   += 1,
-            }
-            ParticleStat { uuid_hash: p.uuid_hash(), event_count: evs, state: proj.state }
-        }).collect();
+                match proj.state {
+                    ParticleState::Golden => golden += 1,
+                    ParticleState::Fuzzy => fuzzy += 1,
+                    ParticleState::Dead => dead += 1,
+                }
+                ParticleStat {
+                    uuid_hash: p.uuid_hash(),
+                    event_count: evs,
+                    state: proj.state,
+                }
+            })
+            .collect();
 
-        if epoch_min == u32::MAX { epoch_min = 0; }
+        if epoch_min == u32::MAX {
+            epoch_min = 0;
+        }
 
         // Sort by event_count descending, then uuid_hash for determinism
         stats.sort_by(|a, b| {
-            b.event_count.cmp(&a.event_count)
+            b.event_count
+                .cmp(&a.event_count)
                 .then_with(|| a.uuid_hash.cmp(&b.uuid_hash))
         });
         let top_particles = stats.into_iter().take(top_n).collect();
 
         DwReport {
             total_particles: particles.len(),
-            golden_count:    golden,
-            fuzzy_count:     fuzzy,
-            dead_count:      dead,
+            golden_count: golden,
+            fuzzy_count: fuzzy,
+            dead_count: dead,
             total_events,
             epoch_min,
             epoch_max,
@@ -237,7 +253,11 @@ impl<'a> DwAnalytics<'a> {
     /// is a genuine "shape trajectory," not just repeated present-day
     /// snapshots. See [`ShapeTrajectory::trend`] for the EMERGING/
     /// STABLE/DISSOLVING classification.
-    pub fn shape_trajectory(&self, epoch_windows: &[(u64, u64)], lamassu: &LamassuEngine) -> ShapeTrajectory {
+    pub fn shape_trajectory(
+        &self,
+        epoch_windows: &[(u64, u64)],
+        lamassu: &LamassuEngine,
+    ) -> ShapeTrajectory {
         let db = self.pdb.db();
         let all_particles = db.journal().all_particles();
         let tribe_id = self.pdb.tribe_id().as_u16();
@@ -268,9 +288,10 @@ impl<'a> DwAnalytics<'a> {
 
     /// Count events committed within `[from, to]` epoch range (inclusive).
     pub fn count_in_epoch_range(&self, from: u32, to: u32) -> usize {
-        let db        = self.pdb.db();
+        let db = self.pdb.db();
         let particles = db.journal().all_particles();
-        particles.iter()
+        particles
+            .iter()
             .flat_map(|p| db.journal().read_particle_history(p))
             .filter(|e| e.epoch >= from && e.epoch <= to)
             .count()
@@ -279,7 +300,9 @@ impl<'a> DwAnalytics<'a> {
     /// Count particles whose current state matches `state`.
     pub fn count_by_state(&self, state: ParticleState) -> usize {
         let db = self.pdb.db();
-        db.journal().all_particles().iter()
+        db.journal()
+            .all_particles()
+            .iter()
             .filter(|p| db.project(p).state == state)
             .count()
     }
@@ -288,14 +311,14 @@ impl<'a> DwAnalytics<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bahyway_core::TribeId;
+    use enkidb_journal::entry::EavTriple;
+    use enkidb_kaki::{EventKaki, IdentityKaki, KakiMinter, KakiRole};
     use enkidb_persist::PersistedDb;
     use enkidb_storage::FsyncPolicy;
-    use enkidb_kaki::{KakiMinter, KakiRole, EventKaki, IdentityKaki};
-    use enkidb_journal::entry::EavTriple;
-    use bahyway_core::TribeId;
-    use story_engine::projection::{encode_state, ATTR_STATE};
-    use std::path::PathBuf;
     use std::fs;
+    use std::path::PathBuf;
+    use story_engine::projection::{encode_state, ATTR_STATE};
 
     fn tmp_dir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("enkidw_anal_{}", tag));
@@ -305,19 +328,25 @@ mod tests {
 
     fn populated_pdb(dir: &PathBuf) -> PersistedDb {
         let tid = TribeId::from_u16(0x0001);
-        let m   = KakiMinter::new(tid);
+        let m = KakiMinter::new(tid);
         let mut pdb = PersistedDb::open(dir, tid, FsyncPolicy::Never).unwrap();
         let states = [
             (ParticleState::Golden, 1u32),
             (ParticleState::Golden, 2),
-            (ParticleState::Fuzzy,  3),
-            (ParticleState::Dead,   4),
+            (ParticleState::Fuzzy, 3),
+            (ParticleState::Dead, 4),
         ];
         for (state, ep) in states {
-            let p  = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
+            let p = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
             let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
             pdb.register_particle(&p).unwrap();
-            pdb.commit(ek, p, ep, vec![EavTriple::new(ATTR_STATE, encode_state(state).to_vec())]).unwrap();
+            pdb.commit(
+                ek,
+                p,
+                ep,
+                vec![EavTriple::new(ATTR_STATE, encode_state(state).to_vec())],
+            )
+            .unwrap();
         }
         pdb
     }
@@ -326,12 +355,12 @@ mod tests {
     fn report_counts_by_state() {
         let dir = tmp_dir("counts");
         let pdb = populated_pdb(&dir);
-        let a   = DwAnalytics::new(&pdb);
-        let r   = a.report(10);
+        let a = DwAnalytics::new(&pdb);
+        let r = a.report(10);
         assert_eq!(r.total_particles, 4);
         assert_eq!(r.golden_count, 2);
-        assert_eq!(r.fuzzy_count,  1);
-        assert_eq!(r.dead_count,   1);
+        assert_eq!(r.fuzzy_count, 1);
+        assert_eq!(r.dead_count, 1);
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -339,8 +368,8 @@ mod tests {
     fn report_epoch_range() {
         let dir = tmp_dir("epoch");
         let pdb = populated_pdb(&dir);
-        let a   = DwAnalytics::new(&pdb);
-        let r   = a.report(10);
+        let a = DwAnalytics::new(&pdb);
+        let r = a.report(10);
         assert_eq!(r.epoch_min, 1);
         assert_eq!(r.epoch_max, 4);
         let _ = fs::remove_dir_all(&dir);
@@ -350,7 +379,7 @@ mod tests {
     fn count_in_epoch_range() {
         let dir = tmp_dir("range");
         let pdb = populated_pdb(&dir);
-        let a   = DwAnalytics::new(&pdb);
+        let a = DwAnalytics::new(&pdb);
         assert_eq!(a.count_in_epoch_range(1, 2), 2);
         assert_eq!(a.count_in_epoch_range(1, 4), 4);
         assert_eq!(a.count_in_epoch_range(5, 9), 0);
@@ -361,8 +390,8 @@ mod tests {
     fn golden_ratio() {
         let dir = tmp_dir("ratio");
         let pdb = populated_pdb(&dir);
-        let a   = DwAnalytics::new(&pdb);
-        let r   = a.report(10);
+        let a = DwAnalytics::new(&pdb);
+        let r = a.report(10);
         assert!((r.golden_ratio() - 0.5).abs() < f32::EPSILON);
         let _ = fs::remove_dir_all(&dir);
     }
@@ -371,7 +400,7 @@ mod tests {
     fn report_never_populates_shape_signature() {
         let dir = tmp_dir("no_shape");
         let pdb = populated_pdb(&dir);
-        let a   = DwAnalytics::new(&pdb);
+        let a = DwAnalytics::new(&pdb);
         assert!(a.report(10).shape_signature.is_none());
         let _ = fs::remove_dir_all(&dir);
     }
@@ -380,10 +409,12 @@ mod tests {
     fn report_with_shape_populates_a_real_reading_sized_to_the_particle_count() {
         let dir = tmp_dir("with_shape");
         let pdb = populated_pdb(&dir);
-        let a   = DwAnalytics::new(&pdb);
+        let a = DwAnalytics::new(&pdb);
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
         let r = a.report_with_shape(10, &lamassu);
-        let shape = r.shape_signature.expect("report_with_shape must populate a reading");
+        let shape = r
+            .shape_signature
+            .expect("report_with_shape must populate a reading");
         assert_eq!(shape.sample_size, r.total_particles);
         assert_eq!(shape.tribe_id, 0x0001);
         let _ = fs::remove_dir_all(&dir);
@@ -393,11 +424,15 @@ mod tests {
     fn shape_trajectory_windows_only_see_particles_that_already_existed() {
         let dir = tmp_dir("trajectory_growth");
         let pdb = populated_pdb(&dir); // 4 particles, at epochs 1,2,3,4
-        let a   = DwAnalytics::new(&pdb);
+        let a = DwAnalytics::new(&pdb);
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
 
         let trajectory = a.shape_trajectory(&[(0, 1), (0, 2), (0, 4), (0, 100)], &lamassu);
-        let sizes: Vec<usize> = trajectory.readings.iter().map(|(_, r)| r.sample_size).collect();
+        let sizes: Vec<usize> = trajectory
+            .readings
+            .iter()
+            .map(|(_, r)| r.sample_size)
+            .collect();
         // Monotonically non-decreasing as later windows' end-epoch admits
         // more of the 4 particles minted at epochs 1..4.
         assert_eq!(sizes, vec![1, 2, 4, 4], "sizes: {sizes:?}");
@@ -408,7 +443,7 @@ mod tests {
     fn shape_trajectory_before_any_particle_existed_is_empty_not_dead() {
         let dir = tmp_dir("trajectory_before");
         let pdb = populated_pdb(&dir); // earliest epoch is 1
-        let a   = DwAnalytics::new(&pdb);
+        let a = DwAnalytics::new(&pdb);
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
 
         let trajectory = a.shape_trajectory(&[(0, 0)], &lamassu);
@@ -448,7 +483,9 @@ mod tests {
     fn trend_is_insufficient_with_fewer_than_two_non_empty_readings() {
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
         let reading = lamassu.scan_tribe(1, &ring_points(16));
-        let trajectory = ShapeTrajectory { readings: vec![((0, 1), reading)] };
+        let trajectory = ShapeTrajectory {
+            readings: vec![((0, 1), reading)],
+        };
         assert_eq!(trajectory.trend(), ShapeTrend::Insufficient);
     }
 
@@ -459,7 +496,9 @@ mod tests {
         let golden = lamassu.scan_tribe(1, &ring_points(16));
         assert_eq!(dead.signature, TopologicalSignature::Dead);
         assert_eq!(golden.signature, TopologicalSignature::Golden);
-        let trajectory = ShapeTrajectory { readings: vec![((0, 1), dead), ((2, 3), golden)] };
+        let trajectory = ShapeTrajectory {
+            readings: vec![((0, 1), dead), ((2, 3), golden)],
+        };
         assert_eq!(trajectory.trend(), ShapeTrend::Emerging);
     }
 
@@ -468,7 +507,9 @@ mod tests {
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
         let golden = lamassu.scan_tribe(1, &ring_points(16));
         let dead = lamassu.scan_tribe(1, &arc_points(5));
-        let trajectory = ShapeTrajectory { readings: vec![((0, 1), golden), ((2, 3), dead)] };
+        let trajectory = ShapeTrajectory {
+            readings: vec![((0, 1), golden), ((2, 3), dead)],
+        };
         assert_eq!(trajectory.trend(), ShapeTrend::Dissolving);
     }
 
@@ -477,7 +518,9 @@ mod tests {
         let lamassu = LamassuEngine::new(1.2, 10.0, 5.0);
         let a = lamassu.scan_tribe(1, &ring_points(16));
         let b = lamassu.scan_tribe(1, &ring_points(16));
-        let trajectory = ShapeTrajectory { readings: vec![((0, 1), a), ((2, 3), b)] };
+        let trajectory = ShapeTrajectory {
+            readings: vec![((0, 1), a), ((2, 3), b)],
+        };
         assert_eq!(trajectory.trend(), ShapeTrend::Stable);
     }
 

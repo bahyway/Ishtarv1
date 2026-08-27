@@ -9,8 +9,8 @@
 pub mod akk_firewall;
 
 pub use akk_firewall::{
-    AkkContext, AkkFirewall, AkkOperation, AkkResource, AkkRule, AkkSubject,
-    FirewallVerdict, gates, meta_rules,
+    gates, meta_rules, AkkContext, AkkFirewall, AkkOperation, AkkResource, AkkRule, AkkSubject,
+    FirewallVerdict,
 };
 
 // ── IstarError / IstarResult ──────────────────────────────────────────────
@@ -26,10 +26,10 @@ pub enum IstarError {
 impl std::fmt::Display for IstarError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::AccessDenied(m)        => write!(f, "NAKRU (access denied): {m}"),
-            Self::RuleMissing(m)         => write!(f, "ISTAR rule missing: {m}"),
-            Self::ContextInvalid(m)      => write!(f, "ISTAR context invalid: {m}"),
-            Self::EscalationRequired(m)  => write!(f, "ISTAR escalation required: {m}"),
+            Self::AccessDenied(m) => write!(f, "NAKRU (access denied): {m}"),
+            Self::RuleMissing(m) => write!(f, "ISTAR rule missing: {m}"),
+            Self::ContextInvalid(m) => write!(f, "ISTAR context invalid: {m}"),
+            Self::EscalationRequired(m) => write!(f, "ISTAR escalation required: {m}"),
         }
     }
 }

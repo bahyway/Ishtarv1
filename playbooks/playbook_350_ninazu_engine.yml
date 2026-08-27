@@ -1,0 +1,105 @@
+# =============================================================================
+# PB-350 — Ninazu Engine, verified (GL-NAV-003)
+# BahyWay.Ecosystem v4.0 — sovereign offline navigation, Wadi-us-Salam (Najaf)
+#
+# CHANGED during landing (2026-08-21), same reasoning already applied
+# throughout this integration — see docs/mon20260817-incoming/README.md
+# and playbook_322's own header for precedent:
+#   - Original draft targeted `hosts: bahyway_host` and assumed the repo
+#     lives at /home/bahaa/BahyWay.Ecosystem/v4.0 — neither is real; the
+#     actual repo resolves via playbook_dir, and the real host alias is
+#     `uruk` (ansible/inventory.ini).
+#   - Original draft scaffolded the crate under services/nav/ningiszida
+#     and deposited the tablet into a tablets/ directory — neither
+#     convention exists elsewhere in this repo. Landed instead at
+#     workspace/bahyway_v4/crates/ningiszida (workspace member) and
+#     docs/09_observatory/GL-NAV-003-ningiszida-engine.md. The tablet's
+#     own ID collided with the already-sealed GL-NAV-001 and GL-NAV-002 —
+#     renumbered to GL-NAV-003 on landing.
+#   - One real fixture bug found and fixed: the L70b test asked for a
+#     route between two corner grave cells, (0,0) and (4,4), that have no
+#     road-adjacent neighbour at all in the 5x5 test snapshot — they are
+#     graph-disconnected from the road network by construction, so
+#     `navigate` correctly returned `None` and the test's own
+#     `is_some()` assertion was unsatisfiable. Fixed by routing between
+#     (1,1) and (3,3), graves that do each border the road cross.
+#   - Since the crate now exists as real, committed, compiling, tested
+#     source under version control, this playbook does NOT re-materialize
+#     it from embedded YAML text on every run. It verifies instead. The
+#     daily offline tile-store directory is still ensured here, since it
+#     is a runtime data path, not source.
+#
+# RENAMED (2026-08-21, later same day): Ningišzida -> Ninazu, per the
+# Architect's Tus20260818 Master Glossary correction (Ninazu = oldest
+# Sumerian underworld god, Nergal's predecessor, "custodian of the earth /
+# steward of the underworld," father of Ningišzida — easier to pronounce
+# than Ningišzida, which is now reserved as a future child sub-engine
+# name, e.g. a path-tracer). Crate directory, package name, and this
+# playbook's file/task names were updated to match; GL-NAV-003 keeps its
+# number (still the correction for the GL-NAV-001/002 collision — nothing
+# about the ID changes, only the engine's name). See
+# docs/13_changelog/TUS20260818_NINAZU_RENAME_2026-08-21.md.
+#
+# Running this playbook = CSR-08 confirmation that the Ninazu Engine
+# is landed and its law tests pass — not a rubber-stamped deploy.
+# =============================================================================
+---
+- name: "PB-350 | Verify — Ninazu Engine (GL-NAV-003) landed and passing"
+  hosts: uruk
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+    ws: "{{ repo_root }}/workspace/bahyway_v4"
+    crate_dir: "{{ ws }}/crates/ninazu"
+    tiles_dir: "{{ repo_root }}/nuzi/najaf-tiles"
+
+  tasks:
+
+    - name: "VERIFY | crate files present"
+      ansible.builtin.stat:
+        path: "{{ crate_dir }}/{{ item }}"
+      register: file_check
+      loop:
+        - Cargo.toml
+        - src/lib.rs
+        - tests/law_tests.rs
+      loop_control: { label: "{{ item }}" }
+
+    - name: "FAIL | a crate file is missing"
+      ansible.builtin.fail:
+        msg: "{{ item.item }} not found at {{ crate_dir }} -- crate incomplete."
+      loop: "{{ file_check.results }}"
+      loop_control: { label: "{{ item.item }}" }
+      when: not item.stat.exists
+
+    - name: "VERIFY | crate is a real workspace member"
+      ansible.builtin.command: grep -q '"crates/ninazu"' {{ ws }}/Cargo.toml
+      register: member_check
+      changed_when: false
+      failed_when: member_check.rc != 0
+
+    - name: "VERIFY | cargo test -p ninazu passes"
+      ansible.builtin.command: cargo test -p ninazu
+      args:
+        chdir: "{{ ws }}"
+      register: test_run
+      changed_when: false
+
+    - name: "FAIL | law tests did not pass"
+      ansible.builtin.fail:
+        msg: "cargo test -p ninazu failed (rc={{ test_run.rc }}): {{ test_run.stdout }}"
+      when: test_run.rc != 0
+
+    - name: "Ensure offline tile-store directory"
+      ansible.builtin.file: { path: "{{ tiles_dir }}", state: directory, mode: "0755" }
+
+    - name: "DONE | PB-350 complete"
+      ansible.builtin.debug:
+        msg: >-
+          Ninazu Engine verified: {{ crate_dir }}, a real member of
+          the bahyway_v4 workspace, cargo test -p ninazu passing (4
+          law tests: L69 offline-signature, L70 route-uses-only-roads,
+          L70b no-route-through-solid-graves, L71 each-grave-one-cell).
+          Daily tile snapshot store: {{ tiles_dir }} (separate once-daily
+          ingest job, not run by this playbook). GL-NAV-003 is committed
+          at docs/09_observatory/GL-NAV-003-ninazu-engine.md.

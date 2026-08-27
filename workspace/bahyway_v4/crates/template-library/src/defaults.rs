@@ -10,23 +10,23 @@
 use template_engine::{FieldSpec, Template, TemplateRegistry};
 
 // ── Hepta attribute hashes (§7.5 — must stay in sync with story-engine) ──────
-pub const ATTR_STATE:              u32 = 0x1A4B;
-pub const ATTR_QUALITY:            u32 = 0x2C5E;
-pub const ATTR_COLOR_RGB:          u32 = 0x3D7F;
-pub const ATTR_FRESHNESS:          u32 = 0x4E89;
-pub const ATTR_SNAPSHOT_DATE:      u32 = 0x9A1D;
-pub const ATTR_SNAPSHOT_STATE:     u32 = 0x7E32;
+pub const ATTR_STATE: u32 = 0x1A4B;
+pub const ATTR_QUALITY: u32 = 0x2C5E;
+pub const ATTR_COLOR_RGB: u32 = 0x3D7F;
+pub const ATTR_FRESHNESS: u32 = 0x4E89;
+pub const ATTR_SNAPSHOT_DATE: u32 = 0x9A1D;
+pub const ATTR_SNAPSHOT_STATE: u32 = 0x7E32;
 pub const ATTR_SNAPSHOT_FREQUENCY: u32 = 0x4B0F;
 
 // ── civil.registry ─────────────────────────────────────────────────────────
 
 static CIVIL_FIELDS: &[FieldSpec] = &[
-    FieldSpec::new(ATTR_STATE,              "state",              true),
-    FieldSpec::new(ATTR_QUALITY,            "quality",            false),
-    FieldSpec::new(ATTR_COLOR_RGB,          "color_rgb",          false),
-    FieldSpec::new(ATTR_FRESHNESS,          "freshness",          false),
-    FieldSpec::new(ATTR_SNAPSHOT_DATE,      "snapshot_date",      false),
-    FieldSpec::new(ATTR_SNAPSHOT_STATE,     "snapshot_state",     false),
+    FieldSpec::new(ATTR_STATE, "state", true),
+    FieldSpec::new(ATTR_QUALITY, "quality", false),
+    FieldSpec::new(ATTR_COLOR_RGB, "color_rgb", false),
+    FieldSpec::new(ATTR_FRESHNESS, "freshness", false),
+    FieldSpec::new(ATTR_SNAPSHOT_DATE, "snapshot_date", false),
+    FieldSpec::new(ATTR_SNAPSHOT_STATE, "snapshot_state", false),
     FieldSpec::new(ATTR_SNAPSHOT_FREQUENCY, "snapshot_frequency", false),
 ];
 
@@ -41,7 +41,7 @@ pub fn civil_registry_template() -> Template {
 // ── operational ────────────────────────────────────────────────────────────
 
 static OPERATIONAL_FIELDS: &[FieldSpec] = &[
-    FieldSpec::new(ATTR_STATE,   "state",   true),
+    FieldSpec::new(ATTR_STATE, "state", true),
     FieldSpec::new(ATTR_QUALITY, "quality", true),
     FieldSpec::new(ATTR_FRESHNESS, "freshness", true),
 ];
@@ -57,7 +57,7 @@ pub fn operational_template() -> Template {
 // ── sensor.stream ──────────────────────────────────────────────────────────
 
 static SENSOR_FIELDS: &[FieldSpec] = &[
-    FieldSpec::new(ATTR_STATE,     "state",     true),
+    FieldSpec::new(ATTR_STATE, "state", true),
     FieldSpec::new(ATTR_FRESHNESS, "freshness", true),
     FieldSpec::new(ATTR_COLOR_RGB, "color_rgb", false),
 ];
@@ -96,9 +96,13 @@ mod tests {
     fn civil_registry_has_all_hepta_attrs() {
         let t = civil_registry_template();
         for attr in [
-            ATTR_STATE, ATTR_QUALITY, ATTR_COLOR_RGB,
-            ATTR_FRESHNESS, ATTR_SNAPSHOT_DATE,
-            ATTR_SNAPSHOT_STATE, ATTR_SNAPSHOT_FREQUENCY,
+            ATTR_STATE,
+            ATTR_QUALITY,
+            ATTR_COLOR_RGB,
+            ATTR_FRESHNESS,
+            ATTR_SNAPSHOT_DATE,
+            ATTR_SNAPSHOT_STATE,
+            ATTR_SNAPSHOT_FREQUENCY,
         ] {
             assert!(t.contains_attr(attr), "missing attr {attr:#010x}");
         }

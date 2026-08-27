@@ -41,19 +41,25 @@ impl TileBounds {
     const EPS: f32 = 1e-5;
 
     pub fn contains(&self, lat: f32, lon: f32) -> bool {
-        lat >= self.lat_min - Self::EPS && lat < self.lat_max + Self::EPS
-            && lon >= self.lon_min - Self::EPS && lon < self.lon_max + Self::EPS
+        lat >= self.lat_min - Self::EPS
+            && lat < self.lat_max + Self::EPS
+            && lon >= self.lon_min - Self::EPS
+            && lon < self.lon_max + Self::EPS
     }
 
     pub fn overlaps(&self, other: &TileBounds) -> bool {
-        self.lat_min < other.lat_max && self.lat_max > other.lat_min
-            && self.lon_min < other.lon_max && self.lon_max > other.lon_min
+        self.lat_min < other.lat_max
+            && self.lat_max > other.lat_min
+            && self.lon_min < other.lon_max
+            && self.lon_max > other.lon_min
     }
 
     /// Centre of the tile.
     pub fn centre(&self) -> (f32, f32) {
-        ((self.lat_min + self.lat_max) / 2.0,
-         (self.lon_min + self.lon_max) / 2.0)
+        (
+            (self.lat_min + self.lat_max) / 2.0,
+            (self.lon_min + self.lon_max) / 2.0,
+        )
     }
 }
 
@@ -63,13 +69,17 @@ impl TileBounds {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HubbleTileId {
     pub zoom: u8,
-    pub x:    u32,  // longitude grid index
-    pub y:    u32,  // latitude grid index
+    pub x: u32, // longitude grid index
+    pub y: u32, // latitude grid index
 }
 
 impl HubbleTileId {
     pub fn new(zoom: u8, x: u32, y: u32) -> Self {
-        HubbleTileId { zoom: zoom.min(HUBBLE_ZOOM_MAX), x, y }
+        HubbleTileId {
+            zoom: zoom.min(HUBBLE_ZOOM_MAX),
+            x,
+            y,
+        }
     }
 
     /// Tile size in degrees at this zoom level.
@@ -84,7 +94,7 @@ impl HubbleTileId {
     pub fn from_coord(lat: f32, lon: f32, zoom: u8) -> Self {
         let zoom = zoom.min(HUBBLE_ZOOM_MAX);
         let size = TILE_SIZES_DEG[zoom as usize] as f64;
-        let y = ((lat as f64 + 90.0)  / size).floor() as u32;
+        let y = ((lat as f64 + 90.0) / size).floor() as u32;
         let x = ((lon as f64 + 180.0) / size).floor() as u32;
         HubbleTileId { zoom, x, y }
     }
@@ -92,8 +102,8 @@ impl HubbleTileId {
     /// Bounding box of this tile.
     /// Internal f64 arithmetic for precision; bounds stored as f32.
     pub fn bounds(&self) -> TileBounds {
-        let size    = TILE_SIZES_DEG[self.zoom as usize] as f64;
-        let lat_min = (self.y as f64 * size - 90.0)  as f32;
+        let size = TILE_SIZES_DEG[self.zoom as usize] as f64;
+        let lat_min = (self.y as f64 * size - 90.0) as f32;
         let lon_min = (self.x as f64 * size - 180.0) as f32;
         TileBounds {
             lat_min,
@@ -105,7 +115,9 @@ impl HubbleTileId {
 
     /// Parent tile (one zoom level coarser).  Returns `None` at Z0.
     pub fn parent(&self) -> Option<HubbleTileId> {
-        if self.zoom == 0 { return None; }
+        if self.zoom == 0 {
+            return None;
+        }
         Some(HubbleTileId::from_coord(
             self.bounds().centre().0,
             self.bounds().centre().1,
@@ -118,14 +130,16 @@ impl HubbleTileId {
     /// Tile sizes do not follow 2:1 ratios (e.g. Z3 0.1° → Z4 0.02° = 5×5 = 25 children).
     /// Returns empty at Z6.
     pub fn children(&self) -> Vec<HubbleTileId> {
-        if self.zoom >= HUBBLE_ZOOM_MAX { return Vec::new(); }
-        let next       = self.zoom + 1;
-        let parent_sz  = TILE_SIZES_DEG[self.zoom as usize] as f64;
-        let child_sz   = TILE_SIZES_DEG[next as usize] as f64;
-        let count      = (parent_sz / child_sz).round() as u32;
-        let b          = self.bounds();
-        let lat0       = b.lat_min as f64;
-        let lon0       = b.lon_min as f64;
+        if self.zoom >= HUBBLE_ZOOM_MAX {
+            return Vec::new();
+        }
+        let next = self.zoom + 1;
+        let parent_sz = TILE_SIZES_DEG[self.zoom as usize] as f64;
+        let child_sz = TILE_SIZES_DEG[next as usize] as f64;
+        let count = (parent_sz / child_sz).round() as u32;
+        let b = self.bounds();
+        let lat0 = b.lat_min as f64;
+        let lon0 = b.lon_min as f64;
         let mut result = Vec::with_capacity((count * count) as usize);
         for r in 0..count {
             for c in 0..count {
@@ -139,7 +153,9 @@ impl HubbleTileId {
 
     /// Number of children per dimension (tile-size ratio to next zoom level).
     pub fn children_per_dim(&self) -> u32 {
-        if self.zoom >= HUBBLE_ZOOM_MAX { return 0; }
+        if self.zoom >= HUBBLE_ZOOM_MAX {
+            return 0;
+        }
         let p = TILE_SIZES_DEG[self.zoom as usize] as f64;
         let c = TILE_SIZES_DEG[(self.zoom + 1) as usize] as f64;
         (p / c).round() as u32
@@ -150,14 +166,17 @@ impl HubbleTileId {
 
 /// A zoom tile with a list of `MapParticle` IDs visible at this zoom level.
 pub struct HubbleTile {
-    pub id:           HubbleTileId,
+    pub id: HubbleTileId,
     /// Particle IDs (from `ParticleMap`) visible within this tile at its zoom level.
     pub particle_ids: Vec<u32>,
 }
 
 impl HubbleTile {
     pub fn new(id: HubbleTileId) -> Self {
-        HubbleTile { id, particle_ids: Vec::new() }
+        HubbleTile {
+            id,
+            particle_ids: Vec::new(),
+        }
     }
 
     pub fn add_particle(&mut self, particle_id: u32) {
@@ -166,9 +185,15 @@ impl HubbleTile {
         }
     }
 
-    pub fn particle_count(&self) -> usize { self.particle_ids.len() }
-    pub fn is_empty(&self)       -> bool  { self.particle_ids.is_empty() }
-    pub fn bounds(&self)         -> TileBounds { self.id.bounds() }
+    pub fn particle_count(&self) -> usize {
+        self.particle_ids.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.particle_ids.is_empty()
+    }
+    pub fn bounds(&self) -> TileBounds {
+        self.id.bounds()
+    }
 
     /// True if the particle's `zoom_min` ≤ this tile's zoom level.
     pub fn contains_particle(&self, particle_zoom_min: u8) -> bool {
@@ -185,24 +210,28 @@ pub fn zoom_for_radius_m(radius_m: f32) -> u8 {
     // 1 degree ≈ 111,320 m at equator
     let radius_deg = radius_m / 111_320.0;
     for zoom in (0..=HUBBLE_ZOOM_MAX).rev() {
-        if TILE_SIZES_DEG[zoom as usize] >= radius_deg { return zoom; }
+        if TILE_SIZES_DEG[zoom as usize] >= radius_deg {
+            return zoom;
+        }
     }
     0
 }
 
 /// Return all tile IDs that intersect the bounding box at `zoom`.
 pub fn tiles_in_bbox(
-    lat_min: f32, lat_max: f32,
-    lon_min: f32, lon_max: f32,
-    zoom:    u8,
+    lat_min: f32,
+    lat_max: f32,
+    lon_min: f32,
+    lon_max: f32,
+    zoom: u8,
 ) -> Vec<HubbleTileId> {
     let size = TILE_SIZES_DEG[zoom.min(HUBBLE_ZOOM_MAX) as usize];
     let origin_lat = -90.0f32;
     let origin_lon = -180.0f32;
     let y0 = ((lat_min - origin_lat) / size).floor() as u32;
-    let y1 = ((lat_max - origin_lat) / size).ceil()  as u32;
+    let y1 = ((lat_max - origin_lat) / size).ceil() as u32;
     let x0 = ((lon_min - origin_lon) / size).floor() as u32;
-    let x1 = ((lon_max - origin_lon) / size).ceil()  as u32;
+    let x1 = ((lon_max - origin_lon) / size).ceil() as u32;
     let mut ids = Vec::new();
     for y in y0..=y1 {
         for x in x0..=x1 {
@@ -227,17 +256,20 @@ mod tests {
     fn tile_contains_its_own_coord() {
         for zoom in 0..=HUBBLE_ZOOM_MAX {
             let t = najaf_tile(zoom);
-            assert!(t.bounds().contains(31.995, 44.320),
-                "z{zoom}: tile {:?} must contain Najaf coord", t);
+            assert!(
+                t.bounds().contains(31.995, 44.320),
+                "z{zoom}: tile {:?} must contain Najaf coord",
+                t
+            );
         }
     }
 
     #[test]
     fn tile_size_decreases_with_zoom() {
         for zoom in 0..(HUBBLE_ZOOM_MAX) {
-            let cur  = TILE_SIZES_DEG[zoom as usize];
+            let cur = TILE_SIZES_DEG[zoom as usize];
             let next = TILE_SIZES_DEG[(zoom + 1) as usize];
-            assert!(cur > next, "z{zoom}: {cur} must be > z{}: {next}", zoom+1);
+            assert!(cur > next, "z{zoom}: {cur} must be > z{}: {next}", zoom + 1);
         }
     }
 
@@ -246,8 +278,10 @@ mod tests {
         let t = najaf_tile(4);
         let p = t.parent().unwrap();
         let children = p.children();
-        assert!(children.iter().any(|c| c == &t),
-            "tile must be among its parent's children");
+        assert!(
+            children.iter().any(|c| c == &t),
+            "tile must be among its parent's children"
+        );
     }
 
     #[test]
@@ -265,11 +299,18 @@ mod tests {
         // Tile size ratios: Z0→Z1=5, Z1→Z2=4, Z2→Z3=5, Z3→Z4=5, Z4→Z5=4, Z5→Z6=5
         let expected_per_dim: [u32; 6] = [5, 4, 5, 5, 4, 5];
         for zoom in 0..HUBBLE_ZOOM_MAX {
-            let t    = najaf_tile(zoom);
-            let n    = expected_per_dim[zoom as usize];
+            let t = najaf_tile(zoom);
+            let n = expected_per_dim[zoom as usize];
             let kids = t.children();
-            assert_eq!(kids.len() as u32, n * n,
-                "z{zoom}: expected {}×{}={} children, got {}", n, n, n*n, kids.len());
+            assert_eq!(
+                kids.len() as u32,
+                n * n,
+                "z{zoom}: expected {}×{}={} children, got {}",
+                n,
+                n,
+                n * n,
+                kids.len()
+            );
         }
     }
 
@@ -278,8 +319,11 @@ mod tests {
         for zoom in 0..=HUBBLE_ZOOM_MAX {
             let b = najaf_tile(zoom).bounds();
             let width = b.lon_max - b.lon_min;
-            let size  = TILE_SIZES_DEG[zoom as usize];
-            assert!((width - size).abs() < 0.0001, "z{zoom}: width {width} ≠ size {size}");
+            let size = TILE_SIZES_DEG[zoom as usize];
+            assert!(
+                (width - size).abs() < 0.0001,
+                "z{zoom}: width {width} ≠ size {size}"
+            );
         }
     }
 
@@ -316,7 +360,7 @@ mod tests {
 
     #[test]
     fn zoom_for_radius_coarser_for_larger_radius() {
-        let z_50m   = zoom_for_radius_m(50.0);
+        let z_50m = zoom_for_radius_m(50.0);
         let z_5000m = zoom_for_radius_m(5000.0);
         assert!(z_50m >= z_5000m, "larger radius → coarser zoom");
     }

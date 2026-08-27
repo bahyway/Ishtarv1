@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //! GA cluster — the intermediate result of grouping trajectory segments by 7D centroid proximity.
 
-use enkidb_kaki::{Kaki, FixedCoord7D};
+use enkidb_kaki::{FixedCoord7D, Kaki};
 
 /// Hard fanout limit from E7 Viazovska kissing number constraint.
 pub const MAX_CONSTITUENTS: usize = 126;
@@ -25,7 +25,7 @@ impl ClusterMetrics {
     /// `density` = constituent_count / expected_capacity (caller provides).
     pub fn compute(constituent_count: u32, density: f64, coherence: f64) -> Self {
         let coherence = coherence.clamp(0.0, 1.0);
-        let density   = density.clamp(0.0, 1.0);
+        let density = density.clamp(0.0, 1.0);
         let confidence = (density * coherence).sqrt().clamp(0.0, 1.0);
         Self {
             constituent_count,
@@ -36,10 +36,14 @@ impl ClusterMetrics {
     }
 
     /// True if this cluster has reached Emerging lifecycle status.
-    pub fn is_emerging(&self) -> bool { self.confidence >= 0.60 }
+    pub fn is_emerging(&self) -> bool {
+        self.confidence >= 0.60
+    }
 
     /// True if this cluster has reached Stable lifecycle status.
-    pub fn is_stable(&self) -> bool { self.confidence >= 0.85 }
+    pub fn is_stable(&self) -> bool {
+        self.confidence >= 0.85
+    }
 }
 
 /// A GA-produced cluster ready for Pattern-KAKI derivation.
@@ -69,7 +73,13 @@ impl GaCluster {
         constituents.truncate(MAX_CONSTITUENTS);
         let metrics = ClusterMetrics::compute(constituents.len() as u32, density, coherence);
         let merkle_root = Self::compute_merkle(&constituents);
-        Self { centroid, constituents, merkle_root, metrics, orbital_formed }
+        Self {
+            centroid,
+            constituents,
+            merkle_root,
+            metrics,
+            orbital_formed,
+        }
     }
 
     /// Deterministic Merkle root over sorted constituent KAKI bytes (FNV-1a chain).
@@ -81,7 +91,7 @@ impl GaCluster {
         // FNV-1a chain over concatenated sorted bytes, folded into 32 bytes
         // by XOR-ing into alternating halves.
         const FNV_OFFSET: u64 = 14_695_981_039_346_656_037;
-        const FNV_PRIME:  u64 = 1_099_511_628_211;
+        const FNV_PRIME: u64 = 1_099_511_628_211;
         let mut h = FNV_OFFSET;
         let mut root = [0u8; 32];
         for (idx, raw) in sorted.iter().enumerate() {
@@ -108,8 +118,12 @@ mod tests {
     fn kaki(n: u16) -> Kaki {
         derive_pattern_kaki(
             PatternType::CrowdFlow,
-            FixedCoord7D { d: [n as i32, 0, 0, 0, 0, 0, 0] },
-            [0u8; 32], 8_000, n as u64,
+            FixedCoord7D {
+                d: [n as i32, 0, 0, 0, 0, 0, 0],
+            },
+            [0u8; 32],
+            8_000,
+            n as u64,
         )
     }
 
@@ -127,7 +141,10 @@ mod tests {
         let mut shuffled = kakis.clone();
         shuffled.swap(0, 5);
         let c2 = GaCluster::new(FixedCoord7D::zero(), shuffled, 0.8, 0.9, 1);
-        assert_eq!(c1.merkle_root, c2.merkle_root, "merkle root must be order-independent");
+        assert_eq!(
+            c1.merkle_root, c2.merkle_root,
+            "merkle root must be order-independent"
+        );
     }
 
     #[test]

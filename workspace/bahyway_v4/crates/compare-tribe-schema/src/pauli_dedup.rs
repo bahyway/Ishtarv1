@@ -78,7 +78,10 @@ pub fn dedup_tribes(previous: &[QuantumCoord], current: &[QuantumCoord]) -> Paul
             // own O(N) scan over the full `previous` slice would have
             // found, without paying for the full scan.
             let verdict = pauli_check(c, std::slice::from_ref(existing));
-            duplicates.push(PauliDuplicate { coord: c.clone(), verdict });
+            duplicates.push(PauliDuplicate {
+                coord: c.clone(),
+                verdict,
+            });
         }
     }
 
@@ -95,7 +98,11 @@ mod tests {
     use bahyway_algebra::QuantumState;
 
     fn coord(prefix: u8, pos: u32, state: QuantumState) -> QuantumCoord {
-        QuantumCoord { kaki_prefix: [prefix; 8], orbit_position: pos, state }
+        QuantumCoord {
+            kaki_prefix: [prefix; 8],
+            orbit_position: pos,
+            state,
+        }
     }
 
     #[test]
@@ -183,7 +190,11 @@ mod tests {
                 current.push(previous[i as usize].clone());
                 expected_collisions += 1;
             } else {
-                current.push(coord(((i + 1000) % 256) as u8, i + 100_000, QuantumState::Active));
+                current.push(coord(
+                    ((i + 1000) % 256) as u8,
+                    i + 100_000,
+                    QuantumState::Active,
+                ));
             }
         }
         let report = dedup_tribes(&previous, &current);

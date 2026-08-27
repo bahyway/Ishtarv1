@@ -1,0 +1,115 @@
+# playbooks/tasks/run_manifest_one.yml
+# One step of PB-609's automated walk. Included per manifest entry with
+# `item` set to {pb, file, group, what}. 2026-08-23: rewritten for
+# unattended automation per the Architect's explicit instruction --
+# no per-item prompts. Runs --check (diagnostic only, see below), then
+# always attempts a real LIVE run, automatically, with zero pauses.
+# Behavior on a real (LIVE) failure is controlled by `stop_on_error`
+# (see playbook_609's own header):
+#   stop_on_error=false (default) -- journal the failure, move to the
+#     next item. This is what makes "run them all and tell me what I
+#     have vs. don't have" possible: most of this backlog has
+#     pre-existing bugs unrelated to orchestration (undefined vars,
+#     wrong assumed paths, missing crates) -- a hard stop on the first
+#     one halts at item 1 and defeats the point of a full inventory.
+#   stop_on_error=true -- halts the whole walk the moment any item's
+#     LIVE run fails, so you can fix and re-run immediately rather than
+#     accumulating a long failure list.
+#
+# FIXED 2026-08-26 (found live, running PB-672 against the real Phase-3
+# corpus): --check used to GATE the LIVE run (`when: dryrun.rc == 0`),
+# on the assumption that a clean --check predicts a clean LIVE run. For
+# a chunk of this real corpus that assumption is false: any playbook
+# whose Gate/receipt step uses `lookup('pipe', ...)` (e.g. every
+# `playbook_6{18,19,20,54}_seal_*.yml`'s `sha256sum` of the tablet it
+# just copied) fails --check even though it works perfectly live --
+# Ansible's check mode *simulates* the preceding `copy`/`template`
+# (never actually writes the file) while a `lookup('pipe', ...)`
+# ALWAYS executes for real, hashing a file check mode never created.
+# Verified live: PB-618/619/620/654 all ran clean (failed=0) live,
+# every time, despite a permanently rc=2 --check. Under the old gating
+# they could never reach LIVE through this unattended walk at all --
+# a structural false negative, not a playbook bug. --check now stays
+# purely diagnostic (still run first, still shown in the journal/debug
+# output for triage value) and LIVE always gets a real attempt; a
+# playbook whose --check failure reflects a genuine problem simply
+# fails LIVE too, for the same real reason, and gets journaled as such
+# -- no protection is lost, only the false negative is removed.
+
+- name: "{{ item.pb }} — check if already walked successfully (resume support)"
+  ansible.builtin.shell: >-
+    grep -F '"file": "{{ item.file }}"' {{ manifest_log }} 2>/dev/null
+    | grep -qE '"live_rc": 0|"skipped": true'
+  args:
+    executable: /bin/bash
+  register: already_done
+  changed_when: false
+  failed_when: false
+
+- name: "{{ item.pb }} — already walked successfully in a prior run, skipping"
+  ansible.builtin.debug:
+    msg: "{{ item.pb }} already succeeded in a prior run — delete its line from {{ manifest_log }} to re-walk it"
+  when: already_done.rc == 0
+
+- name: "{{ item.pb }} — dry run (--check)"
+  ansible.builtin.command: "ansible-playbook {{ repo_root }}/playbooks/{{ item.file }} --check"
+  args:
+    chdir: "{{ repo_root }}"
+  register: dryrun
+  changed_when: false
+  failed_when: false
+  when: already_done.rc != 0
+
+- name: "{{ item.pb }} — dry-run result"
+  ansible.builtin.debug:
+    msg: "{{ item.pb }} --check rc={{ dryrun.rc | default('n/a') }}{{ (' — tail: ' + (dryrun.stdout[-800:] if dryrun.stdout else '(empty stdout — see stderr)')) if (dryrun is defined and dryrun.rc is defined and dryrun.rc != 0) else '' }}"
+  when: already_done.rc != 0
+
+- name: "{{ item.pb }} — dry-run stderr (only shown when stdout tail didn't explain it)"
+  ansible.builtin.debug:
+    msg: "{{ item.pb }} --check stderr tail: {{ dryrun.stderr[-500:] }}"
+  when:
+    - already_done.rc != 0
+    - dryrun is defined and dryrun.rc is defined and dryrun.rc != 0
+    - dryrun.stderr is defined and dryrun.stderr | length > 0
+
+- name: "{{ item.pb }} — LIVE run (automatic — --check is diagnostic only, not a gate)"
+  ansible.builtin.command: "ansible-playbook {{ repo_root }}/playbooks/{{ item.file }}"
+  args:
+    chdir: "{{ repo_root }}"
+  register: liverun
+  failed_when: false
+  when: already_done.rc != 0
+
+- name: "{{ item.pb }} — live-run result"
+  ansible.builtin.debug:
+    msg: "{{ item.pb }} LIVE rc={{ liverun.rc | default('NOT RUN') }}{{ (' — tail: ' + (liverun.stdout[-800:] if liverun.stdout else '(empty stdout — see stderr)')) if (liverun is defined and liverun.rc is defined and liverun.rc != 0) else '' }}"
+  when: liverun is defined and liverun.rc is defined
+
+- name: "{{ item.pb }} — LIVE run failed"
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.pb }} failed live (rc={{ liverun.rc }}). Journaled below.
+      {{ 'Walk stopping now (stop_on_error=true).' if (stop_on_error | default(false) | bool) else 'Walk continues to the next item — re-run playbook_609 later, it will skip everything that already succeeded and re-offer only this one.' }}
+  when: liverun is defined and liverun.rc is defined and liverun.rc != 0
+
+- name: "{{ item.pb }} — STOP requested (stop_on_error=true) after a LIVE failure"
+  ansible.builtin.meta: end_play
+  when:
+    - stop_on_error | default(false) | bool
+    - liverun is defined and liverun.rc is defined and liverun.rc != 0
+
+- name: "{{ item.pb }} — journal this step"
+  ansible.builtin.lineinfile:
+    path: "{{ manifest_log }}"
+    create: true
+    mode: "0644"
+    line: >-
+      {{ {
+        'pb': item.pb, 'file': item.file, 'group': item.group,
+        'ts': lookup('pipe', 'date -Is'),
+        'dry_rc': (dryrun.rc | default(None)),
+        'live_rc': (liverun.rc | default(None)),
+        'skipped': false
+      } | to_json }}
+  when: already_done.rc != 0

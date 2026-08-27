@@ -12,12 +12,12 @@
 #![forbid(unsafe_code)]
 
 pub mod book_kaki;
-pub mod orbit;
 pub mod eav_store;
+pub mod orbit;
 
-pub use book_kaki::{BookKaki, BookDomainTribe, book_uuid_hash};
+pub use book_kaki::{book_uuid_hash, BookDomainTribe, BookKaki};
+pub use eav_store::{OrbitValue, VerticalEavStore};
 pub use orbit::{
-    BookOrbit, CoreShell, ClassificationShell, ReputationShell, ContentShell,
-    IduState, BookArchetype, KnowledgeTriple,
+    BookArchetype, BookOrbit, ClassificationShell, ContentShell, CoreShell, IduState,
+    KnowledgeTriple, ReputationShell,
 };
-pub use eav_store::{VerticalEavStore, OrbitValue};

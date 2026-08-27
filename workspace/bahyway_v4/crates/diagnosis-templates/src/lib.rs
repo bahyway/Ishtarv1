@@ -2,4 +2,4 @@
 
 pub mod diagnosis;
 
-pub use diagnosis::{DiagnosisKind, Diagnosis, classify, diagnose};
+pub use diagnosis::{classify, diagnose, Diagnosis, DiagnosisKind};

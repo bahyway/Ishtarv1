@@ -16,11 +16,11 @@ use crate::inflate::inflate_zlib;
 /// Extracted text and metadata from a PDF document.
 #[derive(Debug, Default, Clone)]
 pub struct PdfExtract {
-    pub title:     Option<String>,
-    pub author:    Option<String>,
-    pub subject:   Option<String>,
-    pub pages:     Vec<String>,   // One entry per page (best-effort)
-    pub full_text: String,        // Concatenated text from all content streams
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub subject: Option<String>,
+    pub pages: Vec<String>, // One entry per page (best-effort)
+    pub full_text: String,  // Concatenated text from all content streams
 }
 
 /// Extract text and metadata from a PDF byte slice.
@@ -57,7 +57,9 @@ pub fn extract_pdf(data: &[u8]) -> PdfExtract {
 
         let text = extract_text_operators(&decoded);
         if !text.is_empty() {
-            if !result.full_text.is_empty() { result.full_text.push('\n'); }
+            if !result.full_text.is_empty() {
+                result.full_text.push('\n');
+            }
             result.full_text.push_str(&text);
             result.pages.push(text);
         }
@@ -79,7 +81,10 @@ fn extract_text_operators(stream: &[u8]) -> String {
 
     while i < stream.len() {
         // Skip whitespace
-        if stream[i].is_ascii_whitespace() { i += 1; continue; }
+        if stream[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
 
         // String literal: (...)
         if stream[i] == b'(' {
@@ -96,7 +101,9 @@ fn extract_text_operators(stream: &[u8]) -> String {
         if stream[i] == b'[' {
             let (strings, end) = parse_pdf_array_strings(stream, i);
             if in_text {
-                for s in strings { out.push_str(&s); }
+                for s in strings {
+                    out.push_str(&s);
+                }
                 out.push(' ');
             }
             i = end;
@@ -117,10 +124,19 @@ fn extract_text_operators(stream: &[u8]) -> String {
         // Keyword / operator
         let (kw, end) = read_keyword(stream, i);
         match kw {
-            b"BT" => { in_text = true; out.push('\n'); }
-            b"ET" => { in_text = false; }
-            b"T*" => { if in_text { out.push('\n'); } }
-            b"Tj" | b"TJ" | b"'" => {}  // operands already captured above
+            b"BT" => {
+                in_text = true;
+                out.push('\n');
+            }
+            b"ET" => {
+                in_text = false;
+            }
+            b"T*" => {
+                if in_text {
+                    out.push('\n');
+                }
+            }
+            b"Tj" | b"TJ" | b"'" => {} // operands already captured above
             _ => {}
         }
         // Always advance: read_keyword returns start position when the character
@@ -131,11 +147,15 @@ fn extract_text_operators(stream: &[u8]) -> String {
     out.trim().to_string()
 }
 
-fn read_keyword<'a>(data: &'a [u8], start: usize) -> (&'a [u8], usize) {
+fn read_keyword(data: &[u8], start: usize) -> (&[u8], usize) {
     let mut i = start;
-    while i < data.len() && !data[i].is_ascii_whitespace()
-                          && data[i] != b'(' && data[i] != b'['
-                          && data[i] != b'<' && data[i] != b'/' {
+    while i < data.len()
+        && !data[i].is_ascii_whitespace()
+        && data[i] != b'('
+        && data[i] != b'['
+        && data[i] != b'<'
+        && data[i] != b'/'
+    {
         i += 1;
     }
     (&data[start..i], i)
@@ -150,22 +170,47 @@ fn parse_pdf_string(data: &[u8], start: usize) -> (String, usize) {
     let mut i = start;
     while i < data.len() {
         match data[i] {
-            b'(' => { depth += 1; i += 1; }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
             b')' => {
                 depth -= 1;
                 i += 1;
-                if depth == 0 { break; }
+                if depth == 0 {
+                    break;
+                }
             }
             b'\\' if i + 1 < data.len() => {
                 i += 1;
                 match data[i] {
-                    b'n'  => { s.push('\n'); i += 1; }
-                    b'r'  => { s.push('\r'); i += 1; }
-                    b't'  => { s.push('\t'); i += 1; }
-                    b'('  => { s.push('(');  i += 1; }
-                    b')'  => { s.push(')');  i += 1; }
-                    b'\\' => { s.push('\\'); i += 1; }
-                    _ => { i += 1; }
+                    b'n' => {
+                        s.push('\n');
+                        i += 1;
+                    }
+                    b'r' => {
+                        s.push('\r');
+                        i += 1;
+                    }
+                    b't' => {
+                        s.push('\t');
+                        i += 1;
+                    }
+                    b'(' => {
+                        s.push('(');
+                        i += 1;
+                    }
+                    b')' => {
+                        s.push(')');
+                        i += 1;
+                    }
+                    b'\\' => {
+                        s.push('\\');
+                        i += 1;
+                    }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
             b => {
@@ -188,7 +233,9 @@ fn parse_hex_string(data: &[u8], start: usize) -> (String, usize) {
             let hi = hex_val(data[i]);
             let lo = hex_val(data[i + 1]);
             let byte = (hi << 4) | lo;
-            if byte >= 0x20 && byte < 0x7F { s.push(byte as char); }
+            if (0x20..0x7F).contains(&byte) {
+                s.push(byte as char);
+            }
             i += 2;
         } else {
             i += 1;
@@ -231,8 +278,7 @@ fn parse_pdf_array_strings(data: &[u8], start: usize) -> (Vec<String>, usize) {
 
 fn dict_has_flat(data: &[u8], dict_start: usize, stream_pos: usize) -> bool {
     let region = &data[dict_start..stream_pos.min(data.len())];
-    find_seq(region, b"/FlateDecode").is_some()
-        || find_seq(region, b"/Fl ").is_some()
+    find_seq(region, b"/FlateDecode").is_some() || find_seq(region, b"/Fl ").is_some()
 }
 
 fn last_dict_start(data: &[u8], before: usize) -> usize {
@@ -242,10 +288,14 @@ fn last_dict_start(data: &[u8], before: usize) -> usize {
     let mut depth = 0i32;
     while i > 0 {
         if i + 1 < chunk.len() && chunk[i] == b'>' && chunk[i + 1] == b'>' {
-            depth += 1; i = i.saturating_sub(2);
+            depth += 1;
+            i = i.saturating_sub(2);
         } else if i + 1 < chunk.len() && chunk[i] == b'<' && chunk[i + 1] == b'<' {
-            if depth == 0 { return i; }
-            depth -= 1; i = i.saturating_sub(2);
+            if depth == 0 {
+                return i;
+            }
+            depth -= 1;
+            i = i.saturating_sub(2);
         } else {
             i = i.saturating_sub(1);
         }
@@ -272,7 +322,9 @@ fn extract_dict_string(data: &[u8], key: &[u8]) -> Option<String> {
     let after = skip_whitespace(data, after);
     if data.get(after).copied() == Some(b'(') {
         let (s, _) = parse_pdf_string(data, after);
-        if !s.is_empty() { return Some(s); }
+        if !s.is_empty() {
+            return Some(s);
+        }
     }
     None
 }
@@ -284,21 +336,31 @@ fn find_seq(data: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 fn find_seq_from(data: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    if needle.is_empty() || data.len() < needle.len() { return None; }
+    if needle.is_empty() || data.len() < needle.len() {
+        return None;
+    }
     for i in from..=(data.len() - needle.len()) {
-        if &data[i..i + needle.len()] == needle { return Some(i); }
+        if &data[i..i + needle.len()] == needle {
+            return Some(i);
+        }
     }
     None
 }
 
 fn skip_eol(data: &[u8], mut pos: usize) -> usize {
-    if data.get(pos).copied() == Some(b'\r') { pos += 1; }
-    if data.get(pos).copied() == Some(b'\n') { pos += 1; }
+    if data.get(pos).copied() == Some(b'\r') {
+        pos += 1;
+    }
+    if data.get(pos).copied() == Some(b'\n') {
+        pos += 1;
+    }
     pos
 }
 
 fn skip_whitespace(data: &[u8], mut pos: usize) -> usize {
-    while pos < data.len() && data[pos].is_ascii_whitespace() { pos += 1; }
+    while pos < data.len() && data[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
     pos
 }
 
@@ -357,8 +419,11 @@ mod tests {
                     BT /F1 12 Tf 72 720 Td (Hello PDF) Tj ET\n\
                     endstream\nendobj\n";
         let extracted = extract_pdf(pdf);
-        assert!(extracted.full_text.contains("Hello PDF"),
-                "got: '{}'", extracted.full_text);
+        assert!(
+            extracted.full_text.contains("Hello PDF"),
+            "got: '{}'",
+            extracted.full_text
+        );
     }
 
     #[test]

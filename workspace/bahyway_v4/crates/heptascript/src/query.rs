@@ -24,7 +24,12 @@
 /// Comparison operator used in WHERE, WHY, NASH, and PATTERN conditions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
-    Eq, Neq, Gt, Lt, Gte, Lte,
+    Eq,
+    Neq,
+    Gt,
+    Lt,
+    Gte,
+    Lte,
 }
 
 /// A literal value used in a condition comparison.
@@ -91,31 +96,31 @@ pub struct HeptaQuery {
     pub verb: QueryVerb,
 
     // v2.0 routing clauses (optional, parsed before WHO)
-    pub node:     Option<NodeClause>,
-    pub across:   Option<AcrossClause>,
+    pub node: Option<NodeClause>,
+    pub across: Option<AcrossClause>,
 
     // v1 core clauses
-    pub who:      WhoClause,
-    pub what:     Option<WhatClause>,
-    pub r#where:  Vec<WhereCondition>,
-    pub when:     Option<WhenClause>,
-    pub why:      Vec<WhyCondition>,
-    pub how:      Option<HowClause>,
+    pub who: WhoClause,
+    pub what: Option<WhatClause>,
+    pub r#where: Vec<WhereCondition>,
+    pub when: Option<WhenClause>,
+    pub why: Vec<WhyCondition>,
+    pub how: Option<HowClause>,
     pub how_much: Option<HowMuchClause>,
 
     // v2.0 filter / intelligence clauses (optional, parsed after WHY)
-    pub tier:     Option<TierClause>,
-    pub state:    Option<StateClause>,
-    pub nash:     Option<NashClause>,
-    pub pattern:  Vec<PatternCondition>,
-    pub lineage:  Option<LineageClause>,
-    pub gate:     Option<GateClause>,
-    pub satamu:   Option<SatamuClause>,
-    pub orbital:  Option<OrbitalClause>,
+    pub tier: Option<TierClause>,
+    pub state: Option<StateClause>,
+    pub nash: Option<NashClause>,
+    pub pattern: Vec<PatternCondition>,
+    pub lineage: Option<LineageClause>,
+    pub gate: Option<GateClause>,
+    pub satamu: Option<SatamuClause>,
+    pub orbital: Option<OrbitalClause>,
 
     // v2.1 aggregate clauses (optional, parsed after HOW_MUCH)
-    pub measure:  Option<MeasureClause>,
-    pub gravity:  Option<GravityClause>,
+    pub measure: Option<MeasureClause>,
+    pub gravity: Option<GravityClause>,
 
     // ── ŠUMU-UKIN routing ────────────────────────────────────────────────────
     /// Tribe IDs for ŠUMU-UKIN fan-out routing. Empty = all tribes.
@@ -123,15 +128,15 @@ pub struct HeptaQuery {
 
     // ── Production execution hints ────────────────────────────────────────────
     /// ANCHOR — which index drives primary candidate generation.
-    pub anchor:         AnchorStrategy,
+    pub anchor: AnchorStrategy,
     /// STREAM — emit results via callback instead of collecting into a Vec.
-    pub stream:         bool,
+    pub stream: bool,
     /// DERIVE_STATION — station name to derive from journal at query time (no index).
     pub derive_station: Option<String>,
     /// ABORT_SCAN — safety valve: stop after evaluating this many candidates.
-    pub abort_scan:     Option<u64>,
+    pub abort_scan: Option<u64>,
     /// FILTER_ORDER — explicit predicate pipeline; empty = use engine default order.
-    pub filter_order:   Vec<FilterStage>,
+    pub filter_order: Vec<FilterStage>,
 }
 
 // ── v2.0: NODE clause ─────────────────────────────────────────────────────────
@@ -147,31 +152,31 @@ pub struct NodeClause {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DbTarget {
     All,
-    EnkiDb,       // 7001 — operational OLTP
-    EnkiDw,       // 7002 — data warehouse
-    EnkiSdb,      // 7003 — security
-    EnkiOdb,      // 7004 — operational between-gate
-    EnkiQdb,      // 7005 — quantum probability
-    EnkiMdb,      // 7006 — master data
-    EnkiDdb,      // 7007 — client documentation
-    Narudu,       // pattern event bus
-    EnkiPattern,  // ENKI-PATTERN registry
+    EnkiDb,      // 7001 — operational OLTP
+    EnkiDw,      // 7002 — data warehouse
+    EnkiSdb,     // 7003 — security
+    EnkiOdb,     // 7004 — operational between-gate
+    EnkiQdb,     // 7005 — quantum probability
+    EnkiMdb,     // 7006 — master data
+    EnkiDdb,     // 7007 — client documentation
+    Narudu,      // pattern event bus
+    EnkiPattern, // ENKI-PATTERN registry
 }
 
 impl DbTarget {
     /// Well-known TCP port for this database type (0 = event bus / registry, no fixed port).
     pub fn port(&self) -> Option<u16> {
         match self {
-            Self::EnkiDb      => Some(7001),
-            Self::EnkiDw      => Some(7002),
-            Self::EnkiSdb     => Some(7003),
-            Self::EnkiOdb     => Some(7004),
-            Self::EnkiQdb     => Some(7005),
-            Self::EnkiMdb     => Some(7006),
-            Self::EnkiDdb     => Some(7007),
-            Self::Narudu      => None,
+            Self::EnkiDb => Some(7001),
+            Self::EnkiDw => Some(7002),
+            Self::EnkiSdb => Some(7003),
+            Self::EnkiOdb => Some(7004),
+            Self::EnkiQdb => Some(7005),
+            Self::EnkiMdb => Some(7006),
+            Self::EnkiDdb => Some(7007),
+            Self::Narudu => None,
             Self::EnkiPattern => None,
-            Self::All         => None,
+            Self::All => None,
         }
     }
 }
@@ -313,7 +318,7 @@ pub enum OrbitalClause {
 /// WHO clause — defines the entity variable scope.
 #[derive(Debug, Clone)]
 pub struct WhoClause {
-    pub primary:  EntityBinding,
+    pub primary: EntityBinding,
     pub bound_to: Vec<EntityBinding>,
 }
 
@@ -321,7 +326,7 @@ pub struct WhoClause {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntityBinding {
     pub tribe: String,
-    pub var:   String,
+    pub var: String,
 }
 
 /// WHAT clause — attribute projection.
@@ -333,7 +338,7 @@ pub struct WhatClause {
 /// One projection: `VarName[attr1, attr2]` or `VarName[*]` (empty = all).
 #[derive(Debug, Clone)]
 pub struct Projection {
-    pub var:   String,
+    pub var: String,
     pub attrs: Vec<String>,
 }
 
@@ -341,7 +346,7 @@ pub struct Projection {
 #[derive(Debug, Clone)]
 pub struct WhereCondition {
     pub combinator: Combinator,
-    pub var:  String,
+    pub var: String,
     pub attr: String,
     pub test: ConditionTest,
 }
@@ -372,10 +377,26 @@ pub enum EpochRef {
 /// WHY clause — lane, quality, or existence constraints.
 #[derive(Debug, Clone)]
 pub enum WhyCondition {
-    Lane          { combinator: Combinator, op: Op, val: LaneValue },
-    QualityByte   { combinator: Combinator, op: Op, val: u8 },
-    AttrExists    { combinator: Combinator, var: String, attr: String },
-    AttrNotExists { combinator: Combinator, var: String, attr: String },
+    Lane {
+        combinator: Combinator,
+        op: Op,
+        val: LaneValue,
+    },
+    QualityByte {
+        combinator: Combinator,
+        op: Op,
+        val: u8,
+    },
+    AttrExists {
+        combinator: Combinator,
+        var: String,
+        attr: String,
+    },
+    AttrNotExists {
+        combinator: Combinator,
+        var: String,
+        attr: String,
+    },
 }
 
 /// Sovereign lane classification value.
@@ -392,9 +413,9 @@ pub enum LaneValue {
 /// HOW clause — result ordering.
 #[derive(Debug, Clone)]
 pub struct HowClause {
-    pub var:  String,
+    pub var: String,
     pub attr: String,
-    pub dir:  SortDir,
+    pub dir: SortDir,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -407,7 +428,12 @@ pub enum SortDir {
 #[derive(Debug, Clone, PartialEq)]
 pub enum HowMuchClause {
     Limit(usize),
-    Top { n: usize, var: String, attr: String, dir: SortDir },
+    Top {
+        n: usize,
+        var: String,
+        attr: String,
+        dir: SortDir,
+    },
 }
 
 // ── v2.1: MEASURE / GRAVITY (Anti-SQL aggregate clauses) ─────────────────────
@@ -453,7 +479,7 @@ pub enum MeasureClause {
 /// GRAVITY clause — partition the matched set into groups.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GravityClause {
-    pub var:  String,
+    pub var: String,
     pub attr: String,
     pub mode: GravityMode,
 }

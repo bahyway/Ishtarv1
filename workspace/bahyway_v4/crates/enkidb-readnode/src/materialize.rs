@@ -64,8 +64,14 @@ const TRIBE_SUMMARY_UUID_HASH: u32 = 0x5452_4942; // ASCII "TRIB"
 /// tribe summaries are still real, ordinary HeptaScript-queryable
 /// entities -- just via their own `CachedReadNode`/`ReadNode::open`
 /// pointed at `tribe_summary_paths()`, not the main one.
-pub fn tribe_summary_paths(entities_base: impl AsRef<Path>, eav_index_base: impl AsRef<Path>) -> (PathBuf, PathBuf) {
-    (sibling_with_suffix(entities_base.as_ref(), "_tribes"), sibling_with_suffix(eav_index_base.as_ref(), "_tribes"))
+pub fn tribe_summary_paths(
+    entities_base: impl AsRef<Path>,
+    eav_index_base: impl AsRef<Path>,
+) -> (PathBuf, PathBuf) {
+    (
+        sibling_with_suffix(entities_base.as_ref(), "_tribes"),
+        sibling_with_suffix(eav_index_base.as_ref(), "_tribes"),
+    )
 }
 
 fn sibling_with_suffix(base: &Path, suffix: &str) -> PathBuf {
@@ -108,8 +114,25 @@ pub fn materialize(
 ) -> io::Result<MaterializeStats> {
     let mut by_target: HashMap<[u8; 16], Vec<&JournalEntry>> = HashMap::new();
     for entry in journal.all_entries() {
-        by_target.entry(*entry.target_kaki.bytes()).or_default().push(entry);
+        by_target
+            .entry(*entry.target_kaki.bytes())
+            .or_default()
+            .push(entry);
     }
+
+    // `materialize()` recomputes the FULL current state from `journal` on
+    // every call (not an incremental delta) -- but `DataFileWriter::open`
+    // always appends. Without resetting first, a second (or Nth) call
+    // against the same on-disk files -- e.g. a later `FLUSH` against a
+    // Podman volume that survived a container rebuild -- keeps every
+    // record any earlier pass ever wrote, merged into the same `.idx` via
+    // `compact_index`'s `read_all_records(&self.idx_path)`. A reader that
+    // then iterates the whole index (`iter_all_raw`) hits stale records
+    // from an earlier, possibly incompatible encoding and fails to decode
+    // them -- surfacing as `CachedReadNodeError::CorruptRecord` on the Read
+    // Node side, even though this pass's own `by_target.len()` is correct.
+    reset_data_file(entities_base.as_ref())?;
+    reset_data_file(eav_index_base.as_ref())?;
 
     let mut entities_writer = DataFileWriter::open(entities_base.as_ref())?;
     let mut postings: HashMap<[u8; 16], Vec<u8>> = HashMap::new();
@@ -127,7 +150,10 @@ pub fn materialize(
         for (attr_hash, value_bytes) in last_write_wins(history) {
             let vfp = EavExactIndex::val_fingerprint(&value_bytes);
             let key = pack_eav_key(attr_hash, vfp);
-            postings.entry(key).or_default().extend_from_slice(target_bytes);
+            postings
+                .entry(key)
+                .or_default()
+                .extend_from_slice(target_bytes);
         }
 
         let tribe_id = u16::from_be_bytes([target_bytes[4], target_bytes[5]]);
@@ -147,7 +173,11 @@ pub fn materialize(
     let tribes = tribe_counts.len();
     materialize_tribe_summaries(&tribe_counts, entities_base, eav_index_base)?;
 
-    Ok(MaterializeStats { entities: by_target.len(), distinct_eav_keys, tribes })
+    Ok(MaterializeStats {
+        entities: by_target.len(),
+        distinct_eav_keys,
+        tribes,
+    })
 }
 
 /// Registers the real total particle count per tribe as real, ordinary
@@ -169,17 +199,24 @@ fn materialize_tribe_summaries(
     entities_base: impl AsRef<Path>,
     eav_index_base: impl AsRef<Path>,
 ) -> io::Result<()> {
-    let (tribes_entities_path, tribes_eav_path) = tribe_summary_paths(entities_base, eav_index_base);
+    let (tribes_entities_path, tribes_eav_path) =
+        tribe_summary_paths(entities_base, eav_index_base);
+    // Same full-recompute-not-delta reasoning as the real particle corpus
+    // above -- see that call site's comment.
+    reset_data_file(&tribes_entities_path)?;
+    reset_data_file(&tribes_eav_path)?;
     let mut entities_writer = DataFileWriter::open(&tribes_entities_path)?;
     let mut postings: HashMap<[u8; 16], Vec<u8>> = HashMap::new();
 
     for (tribe_id, count) in tribe_counts {
         let minter = KakiMinter::new(TribeId::from_u16(*tribe_id));
-        let summary_identity =
-            IdentityKaki::try_from_kaki(minter.mint_identity(TRIBE_SUMMARY_UUID_HASH, KakiRole::Zikru))
-                .expect("mint_identity always produces a valid IdentityKaki");
-        let summary_event = EventKaki::try_from_kaki(minter.mint_event(TRIBE_SUMMARY_UUID_HASH, KakiRole::Zikru))
-            .expect("mint_event always produces a valid IdentityKaki");
+        let summary_identity = IdentityKaki::try_from_kaki(
+            minter.mint_identity(TRIBE_SUMMARY_UUID_HASH, KakiRole::Zikru),
+        )
+        .expect("mint_identity always produces a valid IdentityKaki");
+        let summary_event =
+            EventKaki::try_from_kaki(minter.mint_event(TRIBE_SUMMARY_UUID_HASH, KakiRole::Zikru))
+                .expect("mint_event always produces a valid IdentityKaki");
 
         let eav = vec![
             EavTriple::new(
@@ -204,7 +241,10 @@ fn materialize_tribe_summaries(
         for triple in &eav {
             let vfp = EavExactIndex::val_fingerprint(&triple.value);
             let key = pack_eav_key(triple.attr_hash, vfp);
-            postings.entry(key).or_default().extend_from_slice(&target_bytes);
+            postings
+                .entry(key)
+                .or_default()
+                .extend_from_slice(&target_bytes);
         }
     }
     entities_writer.sync()?;
@@ -217,6 +257,22 @@ fn materialize_tribe_summaries(
     eav_writer.sync()?;
     eav_writer.compact_index()?;
 
+    Ok(())
+}
+
+/// Removes a Data File's three on-disk siblings (`{base}.data`,
+/// `{base}.idx`, `{base}.idx.staging`) if present, so a full materialize
+/// pass starts from a clean slate instead of appending onto whatever an
+/// earlier pass left behind. Missing files are not an error (first-ever
+/// materialize against a fresh volume).
+fn reset_data_file(base: &Path) -> io::Result<()> {
+    for ext in ["data", "idx", "idx.staging"] {
+        match std::fs::remove_file(base.with_extension(ext)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+    }
     Ok(())
 }
 
@@ -235,7 +291,10 @@ pub fn pack_eav_key(attr_hash: u32, val_fp: u32) -> [u8; 16] {
 pub fn decode_posting_list(bytes: &[u8]) -> Vec<[u8; 16]> {
     bytes
         .chunks_exact(16)
-        .map(|c| c.try_into().expect("chunks_exact(16) always yields 16 bytes"))
+        .map(|c| {
+            c.try_into()
+                .expect("chunks_exact(16) always yields 16 bytes")
+        })
         .collect()
 }
 
@@ -279,7 +338,18 @@ fn encode_history(history: &[&JournalEntry]) -> Vec<u8> {
         buf.extend_from_slice(&(entry.eav.len() as u16).to_be_bytes());
         for triple in &entry.eav {
             buf.extend_from_slice(&triple.attr_hash.to_be_bytes());
-            buf.extend_from_slice(&(triple.value.len() as u16).to_be_bytes());
+            // u32, not u16: `triple.value` is already a self-describing
+            // `akkvalue::codec`-encoded blob (real incident, 2026-08-21: a
+            // full document's "full text" EAV value routinely exceeds
+            // 64KB in this corpus). A u16 here silently truncates the
+            // length prefix while the full value bytes are still written,
+            // desyncing every field decoded after it in this entity's
+            // history -- surfacing as `CachedReadNodeError::CorruptRecord`
+            // on the Read Node for that entity, and only that entity
+            // (each entity's history blob has its own outer offset+len
+            // in the Data File's index, so this does not cascade to
+            // other entities).
+            buf.extend_from_slice(&(triple.value.len() as u32).to_be_bytes());
             buf.extend_from_slice(&triple.value);
         }
     }
@@ -309,14 +379,14 @@ pub fn decode_history(target: &IdentityKaki, bytes: &[u8]) -> Option<Vec<Journal
         for _ in 0..eav_count {
             let attr_hash = u32::from_be_bytes(bytes.get(pos..pos + 4)?.try_into().ok()?);
             pos += 4;
-            let val_len = u16::from_be_bytes(bytes.get(pos..pos + 2)?.try_into().ok()?) as usize;
-            pos += 2;
+            let val_len = u32::from_be_bytes(bytes.get(pos..pos + 4)?.try_into().ok()?) as usize;
+            pos += 4;
             let value = bytes.get(pos..pos + val_len)?.to_vec();
             pos += val_len;
             eav.push(EavTriple::new(attr_hash, value));
         }
 
-        entries.push(JournalEntry::new(event_kaki, target.clone(), epoch, eav));
+        entries.push(JournalEntry::new(event_kaki, *target, epoch, eav));
     }
     Some(entries)
 }
@@ -324,9 +394,9 @@ pub fn decode_history(target: &IdentityKaki, bytes: &[u8]) -> Option<Vec<Journal
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CachedReadNode;
     use akkvalue::{codec, AkkValue};
     use bahyway_core::TribeId;
-    use crate::CachedReadNode;
     use enkidb_datafile::DataFileReader;
     use enkidb_kaki::{mint::KakiMinter, KakiRole};
     use std::fs;
@@ -349,9 +419,15 @@ mod tests {
         let ek = EventKaki::try_from_kaki(m.event(KakiRole::Zikru)).unwrap();
         let eav: Vec<EavTriple> = attrs
             .iter()
-            .map(|(name, val)| EavTriple::new(bahyway_crc::crc16(name.as_bytes()) as u32, codec::encode(val)))
+            .map(|(name, val)| {
+                EavTriple::new(
+                    bahyway_crc::crc16(name.as_bytes()) as u32,
+                    codec::encode(val),
+                )
+            })
             .collect();
-        jnl.append(JournalEntry::new(ek, target.clone(), epoch, eav)).unwrap();
+        jnl.append(JournalEntry::new(ek, target.clone(), epoch, eav))
+            .unwrap();
     }
 
     #[test]
@@ -361,8 +437,20 @@ mod tests {
         let m = KakiMinter::new(tribe);
         let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
 
-        push_eav(&mut jnl, &m, &e, 1, &[("status", AkkValue::Text("active".into()))]);
-        push_eav(&mut jnl, &m, &e, 2, &[("status", AkkValue::Text("archived".into()))]);
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            1,
+            &[("status", AkkValue::Text("active".into()))],
+        );
+        push_eav(
+            &mut jnl,
+            &m,
+            &e,
+            2,
+            &[("status", AkkValue::Text("archived".into()))],
+        );
 
         let history = jnl.read_particle_history(&e);
         let blob = encode_history(&history);
@@ -384,11 +472,23 @@ mod tests {
             .map(|_| IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap())
             .collect();
         for e in &najaf {
-            push_eav(&mut jnl, &m, e, 1, &[("city.name", AkkValue::Text("Najaf".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                e,
+                1,
+                &[("city.name", AkkValue::Text("Najaf".into()))],
+            );
         }
         for _ in 0..7 {
             let e = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m, &e, 1, &[("city.name", AkkValue::Text("Baghdad".into()))]);
+            push_eav(
+                &mut jnl,
+                &m,
+                &e,
+                1,
+                &[("city.name", AkkValue::Text("Baghdad".into()))],
+            );
         }
 
         let base = tmp_base("basic");
@@ -402,7 +502,10 @@ mod tests {
         let key = pack_eav_key(attr_hash, vfp);
 
         let mut eav_reader = DataFileReader::open(&eav_base).unwrap();
-        let posting = eav_reader.get_raw(&key).unwrap().expect("posting list must exist");
+        let posting = eav_reader
+            .get_raw(&key)
+            .unwrap()
+            .expect("posting list must exist");
         let kakis = decode_posting_list(&posting);
         assert_eq!(kakis.len(), 3);
 
@@ -414,7 +517,10 @@ mod tests {
 
         let mut entities_reader = DataFileReader::open(&entities_base).unwrap();
         for e in &najaf {
-            let blob = entities_reader.get_raw(e.bytes()).unwrap().expect("entity history must exist");
+            let blob = entities_reader
+                .get_raw(e.bytes())
+                .unwrap()
+                .expect("entity history must exist");
             let history = decode_history(e, &blob).unwrap();
             assert_eq!(history.len(), 1);
         }
@@ -434,13 +540,25 @@ mod tests {
         let m_a = KakiMinter::new(tribe_a);
         for _ in 0..5 {
             let e = IdentityKaki::try_from_kaki(m_a.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m_a, &e, 1, &[("kind", AkkValue::Text("alpha".into()))]);
+            push_eav(
+                &mut jnl,
+                &m_a,
+                &e,
+                1,
+                &[("kind", AkkValue::Text("alpha".into()))],
+            );
         }
 
         let m_b = KakiMinter::new(tribe_b);
         for _ in 0..12 {
             let e = IdentityKaki::try_from_kaki(m_b.identity(KakiRole::Zikru)).unwrap();
-            push_eav(&mut jnl, &m_b, &e, 1, &[("kind", AkkValue::Text("beta".into()))]);
+            push_eav(
+                &mut jnl,
+                &m_b,
+                &e,
+                1,
+                &[("kind", AkkValue::Text("beta".into()))],
+            );
         }
 
         let base = tmp_base("tribe_pu");
@@ -456,34 +574,63 @@ mod tests {
         assert_eq!(stats.tribes, 2);
 
         let real_crn = CachedReadNode::open(&entities_base, &eav_base).unwrap();
-        assert_eq!(real_crn.entity_count(), 17, "tribe summaries must not appear in the real particle corpus");
+        assert_eq!(
+            real_crn.entity_count(),
+            17,
+            "tribe summaries must not appear in the real particle corpus"
+        );
         let all_real = real_crn.query("WHO T.E").unwrap();
-        assert_eq!(all_real.matched.len(), 17, "a plain full scan must never see tribe_summary rows");
+        assert_eq!(
+            all_real.matched.len(),
+            17,
+            "a plain full scan must never see tribe_summary rows"
+        );
 
-        let (tribes_entities_base, tribes_eav_base) = tribe_summary_paths(&entities_base, &eav_base);
+        let (tribes_entities_base, tribes_eav_base) =
+            tribe_summary_paths(&entities_base, &eav_base);
         let mut eav_reader = DataFileReader::open(&tribes_eav_base).unwrap();
         let mut entities_reader = DataFileReader::open(&tribes_entities_base).unwrap();
 
         for (tribe_id, expected_count) in [(tribe_a.as_u16(), 5i64), (tribe_b.as_u16(), 12i64)] {
             let attr_hash = bahyway_crc::crc16("tribe.id".as_bytes()) as u32;
-            let vfp = EavExactIndex::val_fingerprint(&codec::encode(&AkkValue::Int(tribe_id as i64)));
+            let vfp =
+                EavExactIndex::val_fingerprint(&codec::encode(&AkkValue::Int(tribe_id as i64)));
             let key = pack_eav_key(attr_hash, vfp);
-            let posting = eav_reader.get_raw(&key).unwrap().expect("tribe.id posting must exist");
+            let posting = eav_reader
+                .get_raw(&key)
+                .unwrap()
+                .expect("tribe.id posting must exist");
             let kakis = decode_posting_list(&posting);
-            assert_eq!(kakis.len(), 1, "exactly one tribe_summary entity per tribe.id");
+            assert_eq!(
+                kakis.len(),
+                1,
+                "exactly one tribe_summary entity per tribe.id"
+            );
 
-            let summary_kaki = IdentityKaki::try_from_kaki(Kaki::from_bytes(kakis[0]).unwrap()).unwrap();
-            let blob = entities_reader.get_raw(&kakis[0]).unwrap().expect("summary entity must exist");
+            let summary_kaki =
+                IdentityKaki::try_from_kaki(Kaki::from_bytes(kakis[0]).unwrap()).unwrap();
+            let blob = entities_reader
+                .get_raw(&kakis[0])
+                .unwrap()
+                .expect("summary entity must exist");
             let history = decode_history(&summary_kaki, &blob).unwrap();
             assert_eq!(history.len(), 1);
 
             let count_hash = bahyway_crc::crc16("tribe.particle_count".as_bytes()) as u32;
-            let count_triple = history[0].eav.iter().find(|t| t.attr_hash == count_hash).unwrap();
+            let count_triple = history[0]
+                .eav
+                .iter()
+                .find(|t| t.attr_hash == count_hash)
+                .unwrap();
             let (decoded_count, _) = codec::decode(&count_triple.value, 0).unwrap();
             assert_eq!(decoded_count, AkkValue::Int(expected_count));
 
             let kind_hash = bahyway_crc::crc16("meta.kind".as_bytes()) as u32;
-            let kind_triple = history[0].eav.iter().find(|t| t.attr_hash == kind_hash).unwrap();
+            let kind_triple = history[0]
+                .eav
+                .iter()
+                .find(|t| t.attr_hash == kind_hash)
+                .unwrap();
             let (decoded_kind, _) = codec::decode(&kind_triple.value, 0).unwrap();
             assert_eq!(decoded_kind, AkkValue::Text(TRIBE_SUMMARY_KIND.into()));
         }
@@ -493,8 +640,137 @@ mod tests {
         // corpus would answer.
         let tribes_crn = CachedReadNode::open(&tribes_entities_base, &tribes_eav_base).unwrap();
         let result = tribes_crn
-            .query(&format!("WHO T.E\nWHAT E[tribe.particle_count]\nWHERE E[tribe.id] = {}", tribe_b.as_u16()))
+            .query(&format!(
+                "WHO T.E\nWHAT E[tribe.particle_count]\nWHERE E[tribe.id] = {}",
+                tribe_b.as_u16()
+            ))
             .unwrap();
         assert_eq!(result.matched.len(), 1);
+    }
+
+    // Regression test for the real bare-metal incident (2026-08-21): a
+    // Write Node's on-disk volume survives across container rebuilds, so
+    // `materialize()` (via repeated real `FLUSH` commands) gets called
+    // more than once against the SAME `entities_base`/`eav_index_base`
+    // files over that volume's lifetime. Before this fix, `DataFileWriter`
+    // always appended, so a second full pass left the first pass's records
+    // sitting in the `.data`/`.idx` files right alongside the new ones --
+    // and `CachedReadNode::open`'s `iter_all_raw` scan hit them too,
+    // failing outright the moment any of them didn't decode cleanly
+    // (`CachedReadNodeError::CorruptRecord`, surfaced by a real
+    // `enkiddb-read-server` reload). A second `materialize()` pass over a
+    // SHRUNK journal (entity that existed in pass 1 removed from what
+    // pass 2 would produce) must leave the Data Files reflecting ONLY
+    // pass 2's state -- not pass 1's leftovers layered underneath it.
+    #[test]
+    fn second_materialize_pass_does_not_leave_stale_records_from_the_first() {
+        let tribe = TribeId::from_u16(0x2001);
+        let base = tmp_base("repeated_flush");
+        let entities_base = base.with_file_name("entities");
+        let eav_base = base.with_file_name("eav");
+
+        let mut jnl_a = Journal::new(64);
+        let m = KakiMinter::new(tribe);
+        let gone = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
+        let stays = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
+        push_eav(
+            &mut jnl_a,
+            &m,
+            &gone,
+            1,
+            &[("city.name", AkkValue::Text("Uruk".into()))],
+        );
+        push_eav(
+            &mut jnl_a,
+            &m,
+            &stays,
+            1,
+            &[("city.name", AkkValue::Text("Eridu".into()))],
+        );
+
+        let stats_a = materialize(&jnl_a, &entities_base, &eav_base).unwrap();
+        assert_eq!(
+            stats_a.entities, 2,
+            "first FLUSH materializes both entities"
+        );
+
+        // Simulate the container-rebuild-preserves-the-volume scenario: a
+        // second real FLUSH, against a journal that no longer contains
+        // `gone` (e.g. a fresh Write Node process whose in-memory journal
+        // was rebuilt from a smaller/different real corpus than whatever
+        // produced the first pass on this same persistent volume).
+        let mut jnl_b = Journal::new(64);
+        push_eav(
+            &mut jnl_b,
+            &m,
+            &stays,
+            1,
+            &[("city.name", AkkValue::Text("Eridu".into()))],
+        );
+
+        let stats_b = materialize(&jnl_b, &entities_base, &eav_base).unwrap();
+        assert_eq!(
+            stats_b.entities, 1,
+            "second FLUSH materializes only what's in THIS pass's journal"
+        );
+
+        let crn = CachedReadNode::open(&entities_base, &eav_base).expect(
+            "a real Read Node must be able to open Data Files written by a second materialize pass",
+        );
+        assert_eq!(
+            crn.entity_count(),
+            1,
+            "the first pass's leftover record must not survive a second full pass"
+        );
+
+        let all = crn.query("WHO T.E").unwrap();
+        assert_eq!(
+            all.matched.len(),
+            1,
+            "a full scan must see only the current pass's real entities"
+        );
+    }
+
+    // Regression test for the real bare-metal incident (2026-08-21, second
+    // half): even after the append-vs-replace fix above, a real 527-document
+    // ingestion still hit `CachedReadNodeError::CorruptRecord` on the Read
+    // Node. Root cause: `encode_history` wrote each EAV value's length as a
+    // `u16`, silently truncating for any value over 64KB while still
+    // writing the FULL value bytes -- desyncing `decode_history`'s cursor
+    // for every field after it. A real document's full-text EAV value
+    // routinely exceeds 64KB. This entity's value is deliberately >64KB to
+    // prove the u32 length prefix round-trips it correctly.
+    #[test]
+    fn history_value_over_64kb_round_trips_without_corrupting_the_record() {
+        let tribe = TribeId::from_u16(0x2002);
+        let base = tmp_base("oversized_value");
+        let entities_base = base.with_file_name("entities");
+        let eav_base = base.with_file_name("eav");
+
+        let mut jnl = Journal::new(64);
+        let m = KakiMinter::new(tribe);
+        let target = IdentityKaki::try_from_kaki(m.identity(KakiRole::Zikru)).unwrap();
+        let big_text = "x".repeat(70_000);
+        push_eav(
+            &mut jnl,
+            &m,
+            &target,
+            1,
+            &[("meta.full_text", AkkValue::Text(big_text.clone()))],
+        );
+
+        let stats = materialize(&jnl, &entities_base, &eav_base).unwrap();
+        assert_eq!(stats.entities, 1);
+
+        let crn = CachedReadNode::open(&entities_base, &eav_base)
+            .expect("a >64KB EAV value must not corrupt the record it belongs to");
+        assert_eq!(crn.entity_count(), 1);
+
+        let all = crn.query("WHO T.E").unwrap();
+        assert_eq!(
+            all.matched.len(),
+            1,
+            "the oversized-value entity must still be found, not silently lost"
+        );
     }
 }

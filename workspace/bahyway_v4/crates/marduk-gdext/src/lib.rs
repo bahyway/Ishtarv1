@@ -39,7 +39,10 @@ fn to_seven(a: &PackedFloat64Array, label: &str) -> Option<[f64; 7]> {
     match to_seven_slice(a.as_slice()) {
         Some(x) => Some(x),
         None => {
-            godot_error!("MardukBridge: {label} must be exactly 7 elements, got {}", a.len());
+            godot_error!(
+                "MardukBridge: {label} must be exactly 7 elements, got {}",
+                a.len()
+            );
             None
         }
     }
@@ -53,9 +56,13 @@ impl MardukBridge {
     /// Returns -1.0 (impossible for a real H(P) value) and logs an
     /// error if p/t/w aren't each exactly 7 elements.
     #[func]
-    fn template_score(&self, p: PackedFloat64Array, t: PackedFloat64Array, w: PackedFloat64Array) -> f64 {
-        let (Some(p), Some(t), Some(w)) =
-            (to_seven(&p, "p"), to_seven(&t, "t"), to_seven(&w, "w"))
+    fn template_score(
+        &self,
+        p: PackedFloat64Array,
+        t: PackedFloat64Array,
+        w: PackedFloat64Array,
+    ) -> f64 {
+        let (Some(p), Some(t), Some(w)) = (to_seven(&p, "p"), to_seven(&t, "t"), to_seven(&w, "w"))
         else {
             return -1.0;
         };
@@ -66,9 +73,13 @@ impl MardukBridge {
     /// template under the flat metric g = diag(w)). Returns -1.0 (an
     /// impossible distance) and logs an error on malformed input.
     #[func]
-    fn radial_coordinate(&self, p: PackedFloat64Array, t: PackedFloat64Array, w: PackedFloat64Array) -> f64 {
-        let (Some(p), Some(t), Some(w)) =
-            (to_seven(&p, "p"), to_seven(&t, "t"), to_seven(&w, "w"))
+    fn radial_coordinate(
+        &self,
+        p: PackedFloat64Array,
+        t: PackedFloat64Array,
+        w: PackedFloat64Array,
+    ) -> f64 {
+        let (Some(p), Some(t), Some(w)) = (to_seven(&p, "p"), to_seven(&t, "t"), to_seven(&w, "w"))
         else {
             return -1.0;
         };
@@ -84,8 +95,10 @@ impl MardukBridge {
     ///   -2.0    -> malformed input (odd length, or fewer than 2 samples)
     #[func]
     fn golden_horizon_days(&self, history_interleaved: PackedFloat64Array) -> f64 {
-        if history_interleaved.len() % 2 != 0 {
-            godot_error!("MardukBridge.golden_horizon_days: interleaved history must have an even length");
+        if !history_interleaved.len().is_multiple_of(2) {
+            godot_error!(
+                "MardukBridge.golden_horizon_days: interleaved history must have an even length"
+            );
             return -2.0;
         }
         let slice = history_interleaved.as_slice();
@@ -107,8 +120,10 @@ impl MardukBridge {
     /// array, or a node index >= node_count).
     #[func]
     fn betti_numbers(&self, node_count: i64, edges_interleaved: PackedInt64Array) -> Vector2i {
-        if edges_interleaved.len() % 2 != 0 {
-            godot_error!("MardukBridge.betti_numbers: interleaved edge array must have an even length");
+        if !edges_interleaved.len().is_multiple_of(2) {
+            godot_error!(
+                "MardukBridge.betti_numbers: interleaved edge array must have an even length"
+            );
             return Vector2i::new(-1, -1);
         }
         if node_count < 0 {
@@ -126,8 +141,14 @@ impl MardukBridge {
             }
             edges.push((a as usize, b as usize));
         }
-        let g = RelationGraph { node_count: n, edges };
-        Vector2i::new(marduk_engine::betti_0(&g) as i32, marduk_engine::betti_1(&g) as i32)
+        let g = RelationGraph {
+            node_count: n,
+            edges,
+        };
+        Vector2i::new(
+            marduk_engine::betti_0(&g) as i32,
+            marduk_engine::betti_1(&g) as i32,
+        )
     }
 }
 
@@ -138,7 +159,10 @@ mod tests {
     #[test]
     fn to_seven_slice_accepts_exactly_seven_elements() {
         let s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
-        assert_eq!(to_seven_slice(&s), Some([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]));
+        assert_eq!(
+            to_seven_slice(&s),
+            Some([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        );
     }
 
     #[test]

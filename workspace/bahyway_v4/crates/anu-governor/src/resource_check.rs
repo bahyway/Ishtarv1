@@ -38,7 +38,12 @@ pub struct Thresholds {
 
 impl Default for Thresholds {
     fn default() -> Self {
-        Self { min_available_ram_gb: 8.0, max_swap_used_pct: 50.0, min_available_disk_gb: 50.0, max_load_per_core: 1.0 }
+        Self {
+            min_available_ram_gb: 8.0,
+            max_swap_used_pct: 50.0,
+            min_available_disk_gb: 50.0,
+            max_load_per_core: 1.0,
+        }
     }
 }
 
@@ -57,8 +62,11 @@ fn read_meminfo() -> Option<(f64, f64)> {
     let swap_total_kb = parse_meminfo_kb(&text, "SwapTotal:")?;
     let swap_free_kb = parse_meminfo_kb(&text, "SwapFree:")?;
     let available_gb = available_kb as f64 / (1024.0 * 1024.0);
-    let swap_used_pct =
-        if swap_total_kb > 0 { (swap_total_kb - swap_free_kb) as f64 / swap_total_kb as f64 * 100.0 } else { 0.0 };
+    let swap_used_pct = if swap_total_kb > 0 {
+        (swap_total_kb - swap_free_kb) as f64 / swap_total_kb as f64 * 100.0
+    } else {
+        0.0
+    };
     Some((available_gb, swap_used_pct))
 }
 
@@ -68,7 +76,10 @@ fn read_load_per_core() -> Option<f64> {
     let loadavg = fs::read_to_string("/proc/loadavg").ok()?;
     let load_1m: f64 = loadavg.split_whitespace().next()?.parse().ok()?;
     let cpuinfo = fs::read_to_string("/proc/cpuinfo").ok()?;
-    let vcpus = cpuinfo.lines().filter(|l| l.starts_with("processor")).count();
+    let vcpus = cpuinfo
+        .lines()
+        .filter(|l| l.starts_with("processor"))
+        .count();
     if vcpus == 0 {
         return None;
     }
@@ -80,7 +91,11 @@ fn read_load_per_core() -> Option<f64> {
 /// ext4, etc. -- without hand-parsing `/proc/self/mountinfo` + `statvfs`
 /// FFI for the same information `df` already computes correctly).
 fn read_disk_available_gb(mounts: &[&str]) -> Vec<(String, f64)> {
-    let Ok(out) = std::process::Command::new("df").arg("-B1").args(mounts).output() else {
+    let Ok(out) = std::process::Command::new("df")
+        .arg("-B1")
+        .args(mounts)
+        .output()
+    else {
         return vec![];
     };
     let text = String::from_utf8_lossy(&out.stdout);
@@ -122,7 +137,10 @@ pub fn check(thresholds: &Thresholds) -> ResourceCheckResult {
     let disk_warnings: Vec<DiskWarning> = disk_readings
         .into_iter()
         .filter(|(_, avail)| *avail < thresholds.min_available_disk_gb)
-        .map(|(mount, available_gb)| DiskWarning { mount, available_gb })
+        .map(|(mount, available_gb)| DiskWarning {
+            mount,
+            available_gb,
+        })
         .collect();
     for d in &disk_warnings {
         warnings.push(format!(
@@ -131,7 +149,14 @@ pub fn check(thresholds: &Thresholds) -> ResourceCheckResult {
         ));
     }
 
-    ResourceCheckResult { available_ram_gb, swap_used_pct, load_per_core, disk_warnings, green: warnings.is_empty(), warnings }
+    ResourceCheckResult {
+        available_ram_gb,
+        swap_used_pct,
+        load_per_core,
+        disk_warnings,
+        green: warnings.is_empty(),
+        warnings,
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Šala · DubSar Data Flow Graph · membrane snapshot stack · PB-395</title>
+<style>
+:root{--bg:#0b1218;--panel:#141f28;--line:#22323e;--ink:#fff;--dim:#7fa3bd;--gold:#ffc600;--lapis:#0088ff;--green:#3ad900;--violet:#fb94ff;--alarm:#ff628c;--hi:#ffee80;
+--mono:"IBM Plex Mono","JetBrains Mono",ui-monospace,Menlo,monospace;--serif:"Iowan Old Style",Palatino,Georgia,serif}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--serif)}
+.crumbs{font:11px var(--mono);color:var(--dim);letter-spacing:.08em;padding:10px 16px 0;text-transform:uppercase}.crumbs b{color:var(--gold)}
+header{padding:6px 16px 10px;border-bottom:1px solid var(--line)}h1{font:600 21px/1.15 var(--serif);margin:4px 0 6px}h1 .cune{color:var(--gold);margin-left:8px;font-weight:400}
+.doctbar{display:flex;align-items:center;gap:10px;font:11px var(--mono);color:var(--dim);background:#0e1b23;border:1px solid var(--line);border-radius:5px;padding:5px 9px;margin:2px 0 0}
+.doctbar button{padding:2px 8px;font:11px var(--mono)}.doctbar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lede{max-width:84ch;margin:8px 0 0}.lede em{color:var(--hi);font-style:normal}.lede code{font:12px var(--mono);color:var(--hi)}
+.banner{background:var(--gold);color:var(--bg);font:600 12px var(--mono);letter-spacing:.14em;text-align:center;padding:5px 8px}
+.honesty{background:var(--panel);border-bottom:1px solid var(--line);font:12px var(--mono);color:var(--hi);padding:6px 16px}
+.grid{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(300px,.82fr);gap:12px;padding:12px 16px}@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+.tablet{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.tablet h2{font:600 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin:0 0 8px}
+.stack{display:grid;gap:12px;align-content:start}
+.stagewrap{position:relative}
+canvas#stage{width:100%;height:620px;display:block;background:linear-gradient(180deg,#0d1a22 0%,#080f14 100%);border:1px solid var(--line);border-radius:4px;cursor:crosshair;touch-action:none}
+.deck{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font:12px var(--mono)}
+button,select{background:#0e1b23;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:5px 9px;font:12px var(--mono);cursor:pointer}
+button:hover{border-color:var(--gold);color:var(--hi)}button[aria-pressed=true]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+.deck label{display:flex;align-items:center;gap:6px;color:var(--dim)}.deck input[type=range]{width:120px;accent-color:var(--gold)}.deck .val{color:var(--hi);min-width:3ch;display:inline-block}
+.verdict{font:12px var(--mono);color:var(--dim);margin:6px 0 0;padding-top:6px;border-top:1px dashed var(--line)}.verdict b{color:var(--hi)}.verdict .ok{color:var(--green)}.verdict .bad{color:var(--alarm)}.verdict .wait{color:var(--violet)}
+.lawtag{display:inline-block;font:10px var(--mono);color:var(--bg);background:var(--dim);border-radius:3px;padding:1px 5px;margin:2px 4px 0 0}.lawtag.gold{background:var(--gold)}
+.rites{position:absolute;display:none;z-index:9;background:var(--panel);border:1px solid var(--gold);border-radius:6px;padding:6px;min-width:250px;box-shadow:0 8px 24px #000a}
+.rites h3{font:600 11px var(--mono);letter-spacing:.1em;color:var(--gold);margin:2px 4px 6px;text-transform:uppercase}.rites button{display:block;width:100%;text-align:left;margin:2px 0}.rites .kaki{font:10px var(--mono);color:var(--violet);margin:0 4px 6px}
+table.t{width:100%;border-collapse:collapse;font:11px var(--mono)}table.t td,table.t th{border-bottom:1px solid var(--line);padding:3px 4px;text-align:left}table.t th{color:var(--gold)}table.t tr:hover{background:#1b2a35;cursor:pointer}
+#story{font:12px/1.5 var(--mono);min-height:110px}#story .kaki{color:var(--violet)}#story .ev{padding:3px 0;border-bottom:1px solid var(--line)}#story .ev b{color:var(--gold)}#story .empty{color:var(--dim)}#story .rel{margin-top:6px;padding-top:5px;border-top:1px dashed var(--line)}#story .rel i{font-style:normal;color:var(--dim)}
+#journal{font:11px/1.5 var(--mono);color:var(--dim);max-height:150px;overflow:auto;white-space:pre-wrap}#journal .t{color:var(--hi)}
+.gates{font:12px var(--mono);display:grid;gap:4px}.gates span{display:flex;justify-content:space-between;gap:8px}.gates .ok{color:var(--green)}.gates .bad{color:var(--alarm)}.gates .wait{color:var(--dim)}
+.tablet-law{font:13px/1.55 var(--serif)}.tablet-law dt{font:600 12px var(--mono);color:var(--gold);margin-top:8px}.tablet-law dd{margin:2px 0 0}.tablet-law code{font:12px var(--mono);color:var(--hi)}
+#fault{display:none;background:var(--alarm);color:var(--bg);font:12px var(--mono);padding:6px 16px}
+footer{font:11px var(--mono);color:var(--dim);padding:8px 16px 20px;border-top:1px solid var(--line)}:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="crumbs">BahyWay.Ecosystem v4.0 · Šala House · <b>GL-VIZ-010</b> draft · GL-FLD-001 §1 §5 · GL-UNT-001 RU/MLU · GL-STW-001 · <b>PB-395</b></div>
+<header>
+  <h1>DubSar Data Flow Graph v2 — the substrate, the snapshots, and the infection, told straight <span class="cune">𒁾</span></h1>
+  <div class="doctbar">
+    <button id="doctToggle" aria-expanded="false">▸ doctrine</button>
+    <span>one plane per membrane · field above threshold · LVM substrate rail · EnkiDW snapshot depth · threat shown at its true confidence · UNKNOWN is drawn, never dropped</span>
+  </div>
+  <div id="doctrine" style="display:none">
+  <p class="lede">A dome shows a <em>state</em>. It cannot show a <em>journey</em>, and at a billion particles its membranes overlap until nothing can be read. So the layers are laid out along a <em>horizontal axis</em> and each membrane gets a plane of its own: occlusion becomes ordering. In <code>flow</code> the axis is the pipeline — <code>EnkiSDB·7001 → EnkiODB·7002 → EnkiQDB·7003 → EnkiDB·7004 → EnkiDW·7005 → EnkiMDB·7006 → EnkiDDB·7007</code> — and one tribe's population is snapshotted in each store it passes through, so a particle's life is a line you can follow. In <code>layers</code> the axis becomes the seven <em>MLU shells</em> of a single store. Every plane carries the same three units: <em>PU</em> as the σ of its density, <em>RU</em> as its ring spacing, <em>MLU</em> as its depth. And the density is answered honestly: above the citizen threshold nothing is drawn particle-by-particle — each plane renders as a <em>field</em>, amplitude is density, and individual KAKIs are recovered only by <em>descent</em> into a plane (GL-FLD-001 §1, §5).</p>
+  <p class="lede"><em>v2 adds three strata and one rule.</em> Beneath each plane runs the <em>LVM substrate rail</em> — the physical extents that actually hold it: used, free, fragmented, at-risk, and <em>unknown</em>. Behind the EnkiDW plane stand its <em>snapshots</em>, receding in time, each with its retention age. And when a threat is present, the <em>infection front</em> is drawn across the planes it has reached. The rule that governs all three is the <em>render grammar</em>: <b>solid fill = MEASURED</b>, <b>hatched = DERIVED</b>, <b>outline only = ESTIMATED</b>, <b>grey cross = UNKNOWN</b>. An infection that has one witness is drawn as SUSPECTED and looks different from one that has two; capacity read from <code>lvs</code> is solid, spread inferred by a model is hatched. Nothing is smoothed to look calmer than it is, and nothing unknown is quietly omitted — an omitted unknown is the most expensive lie a dashboard can tell.</p>
+  </div>
+</header>
+<div class="banner">ŠALA REHEARSAL · SEEDED 3600 · FIELD ABOVE THRESHOLD · UNKNOWN IS DRAWN · CONFIDENCE IS VISIBLE IN THE FILL</div>
+<div class="honesty">Honesty: populations here are seeded stand-ins scaled to look like a real estate (10⁵–10⁹ per plane). Nothing is drawn per-particle above the threshold; the field is a Masku view over sovereign particles and never the store. Trajectories track 28 sampled KAKIs, not the whole population.</div>
+<div id="fault"></div>
+
+<div class="grid">
+  <div class="stack">
+    <div class="tablet stagewrap">
+      <h2>Stage · membrane snapshot stack · N9 camera + crane along the axis</h2>
+      <canvas id="stage" width="1320" height="740" tabindex="0" aria-label="data flow graph stage"></canvas>
+      <div class="rites" id="rites" role="menu"></div>
+      <div class="deck" id="deck">
+        <button data-cam="home" aria-pressed="true">⌖ home</button><button data-cam="crane">⇥ crane</button>
+        <button data-cam="face">▣ face-on</button><button data-cam="edge">▤ edge-on</button><button data-cam="orbit">⟳ orbit</button>
+        <button id="freeze">❄ freeze</button>
+        <label>tribe <select id="tribe"></select></label>
+        <label>axis <select id="axis"><option value="flow">flow · the seven types</option><option value="layers">layers · the seven MLU shells</option></select></label>
+        <label>render <select id="render"><option value="auto">auto · field above threshold</option><option value="field">field always</option><option value="cit">citizens (sampled)</option></select></label>
+        <label>epoch <input id="epoch" type="range" min="0" max="7" step="1" value="4"><span class="val" id="eV">4</span></label>
+        <label><input id="traj" type="checkbox" checked> trajectories</label>
+        <label><input id="lvm" type="checkbox" checked> LVM substrate</label>
+        <label><input id="snaps" type="checkbox" checked> DW snapshots</label>
+        <label>threat <select id="threat"><option value="none">none</option><option value="live" selected>live incident</option></select></label>
+      </div>
+      <p class="verdict" id="verdictStage">stack · <b>—</b></p>
+      <div><span class="lawtag gold">one plane per membrane</span><span class="lawtag gold">amplitude = density</span><span class="lawtag gold">citizens on descent only</span><span class="lawtag">PU · RU · MLU in all seven</span><span class="lawtag">SALA-STD-001-A1 N9</span></div>
+    </div>
+    <div class="tablet">
+      <h2>Planes · the snapshot of every membrane on the axis</h2>
+      <table class="t" id="planes"></table>
+      <p class="verdict" id="verdictPlanes">—</p>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="tablet"><h2>Selected plane</h2><canvas id="face" width="600" height="300" style="width:100%;height:300px;display:block;background:#0e1b23;border:1px solid var(--line);border-radius:4px"></canvas><p class="verdict" id="verdictFace">—</p></div>
+    <div class="tablet"><h2>LVM substrate · what physically holds each plane</h2><table class="t" id="lvmT"></table><p class="verdict" id="verdictLvm">—</p></div>
+    <div class="tablet"><h2>Threat · the infection at its true confidence</h2><canvas id="thr" width="600" height="150" style="width:100%;height:150px;display:block;background:#0e1b23;border:1px solid var(--line);border-radius:4px"></canvas><p class="verdict" id="verdictThr">—</p></div>
+    <div class="tablet"><h2>Fates · where the tracked KAKIs ended</h2><canvas id="fates" width="600" height="140" style="width:100%;height:140px;display:block;background:#0e1b23;border:1px solid var(--line);border-radius:4px"></canvas><p class="verdict" id="verdictFates">—</p></div>
+    <div class="tablet" id="storyTab"><h2>StoryEngine · biography of the caught subject</h2><div id="story"><div class="empty">Nothing caught. Click a plane, or a trajectory, or descend into a plane for its citizens.</div></div></div>
+    <div class="tablet"><h2>Gates</h2><div class="gates">
+      <span>COMPILE · parsed, seeded <i class="wait" id="gC">waiting</i></span>
+      <span>RUNTIME · click / contextmenu / wheel <i class="wait" id="gR">waiting</i></span>
+      <span>OCCLUSION · one plane per membrane <i class="wait" id="gO">waiting</i></span>
+      <span>DENSITY · no per-particle draw above threshold <i class="wait" id="gD">waiting</i></span>
+      <span>MASKU · descent returns KAKIs <i class="wait" id="gM">waiting</i></span>
+      <span>GRAMMAR · fill states the class <i class="wait" id="gG">waiting</i></span>
+      <span>UNKNOWN · drawn, never dropped <i class="wait" id="gU">waiting</i></span>
+      <span>THREAT · confidence not inflated <i class="wait" id="gT">waiting</i></span></div></div>
+    <div class="tablet"><h2>Court journal</h2><div id="journal"></div></div>
+  </div>
+</div>
+
+<div class="grid" style="padding-top:0"><div class="tablet tablet-law" style="grid-column:1/-1">
+  <h2>GL-VIZ-010 · Tablet of the Snapshot Stack (draft, unsealed)</h2>
+  <dl>
+    <dt>§1 One plane per membrane</dt><dd>Above the legibility threshold, membranes are never superimposed. Each layer is snapshotted onto its own plane along a flow axis, so overlap becomes order. A dome renders state; a stack renders passage.</dd>
+    <dt>§2 The axis is a journey</dt><dd>In <code>flow</code> the axis is the seven EnkiDB types in pipeline order, and a particle's life is a left-to-right trajectory across the Pre-Golden planes into the Golden Store. In <code>layers</code> the axis is the seven MLU shells of one store. No other axis is admissible without a fresh clause.</dd>
+    <dt>§3 The three units travel</dt><dd><code>PU</code>, <code>RU</code> and <code>MLU</code> are carried in all seven types, not only in the Golden Store. A plane without its units may not be drawn, because a snapshot with no address is a picture, not a measurement.</dd>
+    <dt>§4 Density is answered by field, not by decimation</dt><dd>Above the citizen threshold, no plane is drawn particle-by-particle and none is sampled down for looks. Each plane renders as a field where amplitude is density (GL-FLD-001 §1). Thinning a crowd to make a pretty picture is forbidden: it hides exactly the rare particle the Never-Averaged Theorem protects.</dd>
+    <dt>§5 Citizens only on descent</dt><dd>Individual KAKIs appear when the court descends into one plane and only there (Masku, GL-FLD-001 §5). The field is a view; the store is untouched.</dd>
+    <dt>§6 A trajectory is evidence, not decoration</dt><dd>A tracked KAKI's line across planes carries its state changes and the decree that caused each. A line that enters EnkiQDB·7003 must show the clause that sent it; an unexplained jump is a finding against the orchestrator, not a rendering artefact.</dd>
+    <dt>§8 The render grammar (transparency has a shape)</dt><dd><code>solid</code> MEASURED · <code>hatched</code> DERIVED · <code>outline</code> ESTIMATED · <code>grey cross</code> UNKNOWN. A stakeholder must be able to tell, without reading a caption, which parts of the picture were measured and which were inferred. Two things with different confidence may never be drawn the same way.</dd>
+    <dt>§9 The unknown is drawn</dt><dd>Unmeasured extents, unreachable sectors and unscanned planes are rendered as UNKNOWN and counted in the totals. Omitting an unknown to make a chart look complete is the most expensive lie a dashboard can tell, and it is forbidden here.</dd>
+    <dt>§10 Threat is shown at its confidence, never above it</dt><dd>An infection with one witness is <code>SUSPECTED</code> and is drawn hatched; <code>CONFIRMED</code> requires two independent witnesses (GL-AGE-001) and only then is drawn solid; <code>CONTAINED</code> is claimed only where a boundary held across two epochs. No incident view may show a containment that has not been witnessed twice.</dd>
+    <dt>§11 Substrate and snapshot</dt><dd>Each plane carries the LVM extents that hold it and, where the store keeps them, its snapshots receding in time with their retention age. Capacity read from the volume manager is MEASURED; projected exhaustion is ESTIMATED and drawn as outline.</dd>
+    <dt>§7 Cross-tribe membranes</dt><dd>Where two tribes share a leaf, their planes are joined by an arc at the same MLU. The arc carries its epistemic class like any other edge, and an unclassed arc may not be published (PB-385 gate A1).</dd>
+  </dl></div></div>
+<footer>PB-395 · sala_dfg_storage_threat_v1.html · Cobalt2-dark · mulberry32(3600) · DUB.SAR 𒁾</footer>
+
+<script>
+(function(){"use strict";
+const $=id=>document.getElementById(id);
+const fault=$('fault');window.onerror=(m,s,l)=>{fault.style.display='block';fault.textContent='FAULT · '+m+' @'+l;journal('FAULT '+m);};
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function h32(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const J=$('journal');function journal(s){const t=new Date().toISOString().slice(11,19);J.innerHTML+='<span class="t">'+t+'</span> '+s+'\n';J.scrollTop=J.scrollHeight;}
+const C={line:'#22323e',ink:'#fff',dim:'#7fa3bd',gold:'#ffc600',lapis:'#0088ff',green:'#3ad900',violet:'#fb94ff',alarm:'#ff628c',hi:'#ffee80'};
+const DBS=[{p:'7001',n:'EnkiSDB',r:'staging · arrival',c:C.hi,z:'PRE'},
+           {p:'7002',n:'EnkiODB',r:'ontology · meaning',c:C.gold,z:'PRE'},
+           {p:'7003',n:'EnkiQDB',r:'quarantine · judgment',c:C.alarm,z:'PRE'},
+           {p:'7004',n:'EnkiDB', r:'graph core · citizens',c:C.lapis,z:'GOLD'},
+           {p:'7005',n:'EnkiDW', r:'warehouse · crossings',c:C.green,z:'GOLD'},
+           {p:'7006',n:'EnkiMDB',r:'masks · patterns',c:'#66d9ff',z:'GOLD'},
+           {p:'7007',n:'EnkiDDB',r:'doctrine · rules',c:C.violet,z:'GOLD'}];
+const TRIBES=[{id:'pipe.reach',label:'water pipeline reach',base:9.2e8},
+              {id:'wadi.plot',label:'Wadi al-Salam plots',base:3.1e8},
+              {id:'sensor.stream',label:'sensor stream',base:1.4e9},
+              {id:'hsi.cube',label:'hyperspectral cube',base:6.7e8}];
+const CIT_THRESHOLD=250000;
+let TRIBE='pipe.reach',AXIS='flow',RENDER='auto',EPOCH=4,SHOWTRAJ=true;
+
+/* ---------- planes ---------- */
+let PLANES=[],TRACKS=[],descended=null,caught=null,caughtTrack=null;
+let SHOWLVM=true,SHOWSNAP=true,THREAT='live';
+/* render grammar · §8 */
+const GRAM={MEASURED:'solid',DERIVED:'hatch',ESTIMATED:'outline',UNKNOWN:'cross'};
+function fillBy(cls,col,x,y,w,h){
+  if(cls==='MEASURED'){ctx.fillStyle=col;ctx.globalAlpha=.85;ctx.fillRect(x,y,w,h);ctx.globalAlpha=1;return;}
+  if(cls==='DERIVED'){ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+    ctx.strokeStyle=col;ctx.globalAlpha=.85;ctx.lineWidth=1.2;
+    for(let i=-h;i<w+h;i+=5){ctx.beginPath();ctx.moveTo(x+i,y+h);ctx.lineTo(x+i+h,y);ctx.stroke();}
+    ctx.restore();ctx.globalAlpha=1;ctx.strokeStyle=col;ctx.globalAlpha=.6;ctx.strokeRect(x,y,w,h);ctx.globalAlpha=1;return;}
+  if(cls==='ESTIMATED'){ctx.strokeStyle=col;ctx.globalAlpha=.9;ctx.setLineDash([3,3]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);ctx.globalAlpha=1;return;}
+  ctx.strokeStyle=C.dim;ctx.globalAlpha=.8;ctx.strokeRect(x,y,w,h);
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y+h);ctx.moveTo(x+w,y);ctx.lineTo(x,y+h);ctx.stroke();ctx.globalAlpha=1;}
+function buildSubstrate(){
+  const r=mulberry32(h32(TRIBE+'|lvm'+EPOCH));
+  PLANES.forEach((pl,i)=>{
+    const total=Math.round(2000+r()*8000);                       // extents
+    const used=Math.round(total*(0.35+0.5*r()));
+    const frag=Math.round(used*(0.04+0.28*r()));
+    const risk=Math.round(used*(r()<0.35?0.02+0.12*r():0));
+    const unknown=Math.round(total*(r()<0.4?0.01+0.06*r():0));   // sectors the reader could not reach
+    const free=Math.max(0,total-used-unknown);
+    pl.lvm={vg:'vg_bahyway',lv:'lv_'+pl.key.toLowerCase().replace('·','_'),
+      total,used,free,frag,risk,unknown,
+      thermal:Math.round(32+r()*26),
+      exhaust:Math.round(20+r()*400),                            // days to exhaustion, ESTIMATED
+      cls:{used:'MEASURED',free:'MEASURED',frag:'DERIVED',risk:'ESTIMATED',unknown:'UNKNOWN'}};
+    pl.snaps=(pl.key==='7005'||pl.key==='7004')?Array.from({length:pl.key==='7005'?5:3},(_,k)=>(
+      {age:(k+1)*(pl.key==='7005'?1:7),unit:pl.key==='7005'?'d':'d',n:Math.round(pl.n*(0.92-0.06*k)),cls:'MEASURED'})):[];
+  });}
+function buildThreat(){
+  const r=mulberry32(h32(TRIBE+'|threat'+EPOCH));
+  if(THREAT==='none'){PLANES.forEach(p=>p.thr=null);return;}
+  const origin=Math.min(PLANES.length-1,Math.max(0,1+Math.floor(r()*2)));   // begins in the Pre-Golden zone
+  PLANES.forEach((pl,i)=>{
+    const d=i-origin;
+    if(d<0){pl.thr={state:'CLEAN',frac:0,wit:0};return;}
+    const reach=Math.max(0,1-d*0.28)*(0.35+0.5*r());
+    const wit=d===0?2:(reach>0.18?(r()<0.55?2:1):(reach>0.05?1:0));
+    let state=wit>=2?'CONFIRMED':wit===1?'SUSPECTED':'CLEAN';
+    if(PLANES[i].key==='7003'&&state!=='CLEAN')state='CONTAINED';
+    if(state!=='CLEAN'&&reach<0.03)state='CLEAN';
+    pl.thr={state,frac:state==='CLEAN'?0:reach,wit,
+      cls:state==='CONFIRMED'?'MEASURED':state==='CONTAINED'?'MEASURED':state==='SUSPECTED'?'DERIVED':'UNKNOWN'};});
+  const cont=PLANES.find(p=>p.thr&&p.thr.state==='CONTAINED');
+  if(cont)journal('threat · containment claimed at '+cont.label+' — CONTAINED is drawn solid only because two epochs witnessed the boundary (§10)');}
+function buildPlanes(){
+  const t=TRIBES.find(x=>x.id===TRIBE);const r=mulberry32(h32(TRIBE+AXIS+EPOCH));
+  PLANES=[];
+  const survive=[1,.86,.07,.79,.62,.41,.12];      // fraction of the tribe present at each station
+  if(AXIS==='flow'){
+    DBS.forEach((d,i)=>{
+      const n=Math.round(t.base*survive[i]*(0.85+0.3*r()));
+      PLANES.push({key:d.p,i,label:d.n+'·'+d.p,sub:d.r,col:d.c,zone:d.z,n,
+        ru:1.6+0.5*r(),pu:Math.round(40+90*r()),mlu:0,
+        cls:d.p==='7002'?'MEASURED':d.p==='7003'?'MEASURED':n>1e8?'DERIVED':'ESTIMATED',
+        rings:3+Math.floor(r()*3),lobes:1+Math.floor(r()*4)});});
+  }else{
+    const d=DBS.find(x=>x.p===(descended&&descended.key)||true)||DBS[0];
+    for(let m=-3;m<=3;m++){const n=Math.round(t.base*Math.exp(-m*m/3.2)*0.22*(0.8+0.4*r()));
+      PLANES.push({key:'MLU'+m,i:m+3,label:'MLU '+(m>0?'+':'')+m,sub:'shell of '+(descended?descended.label:'EnkiSDB·7001'),
+        col:m===0?C.ink:(m<0?C.alarm:C.lapis),zone:m===0?'PRE':'PRE',n,
+        ru:1.4+0.6*r(),pu:Math.round(20+70*r()),mlu:m,
+        cls:Math.abs(m)>=2?'DERIVED':'MEASURED',rings:2+Math.floor(r()*4),lobes:1+Math.floor(r()*3)});}
+  }
+  buildSubstrate();buildThreat();buildTracks();drawPlanes();drawLvm();drawThr();setVerdict();}
+function buildTracks(){
+  const r=mulberry32(h32(TRIBE+'|tracks'));TRACKS=[];
+  for(let k=0;k<28;k++){
+    const path=[];let fate='golden';
+    for(let i=0;i<PLANES.length;i++){
+      if(AXIS!=='flow'){path.push({i,ru:0.4+r()*0.9,th:r()*Math.PI*2});continue;}
+      const port=PLANES[i].key;
+      if(port==='7003'&&r()>0.18){continue;}                 // most never enter quarantine
+      if(port==='7003'){fate='quarantined';}
+      if(fate==='quarantined'&&(port==='7005'||port==='7006'||port==='7007')&&r()<0.6)continue;
+      if(port==='7007'&&r()<0.55)continue;
+      path.push({i,ru:0.35+r()*0.95,th:r()*Math.PI*2});}
+    if(path.length<2)continue;
+    if(path[path.length-1].i<3)fate='rejected';
+    TRACKS.push({id:'K'+String(k).padStart(2,'0'),kaki:kaki(k),path,fate,
+      events:[{k:'BIRTH',s:'landed in EnkiSDB·7001'}]});}
+  TRACKS.forEach(t=>{if(t.fate==='quarantined')t.events.push({k:'QUARANTINED',s:'MARK_SUSPICIOUS → 7003 · clause GL-FLD-001 §6 (INCOHERENT phase)'});
+    if(t.fate==='golden')t.events.push({k:'PROMOTED',s:'PROMOTE → 7004 · two witnesses, sealed clause (GL-STW-001 §3)'});
+    if(t.fate==='rejected')t.events.push({k:'HELD',s:'never left the Pre-Golden zone'});});
+  drawFates();}
+function kaki(i){let s='';const r=mulberry32(3600+i*911);for(let b=0;b<16;b++){s+=('0'+Math.floor(r()*256).toString(16)).slice(-2);if(b%4===3&&b<15)s+='·';}return s;}
+function fieldOf(pl){const r=mulberry32(h32(pl.key+TRIBE+EPOCH));const NR=10,NA=28,f=[];
+  for(let a=0;a<NA;a++)for(let ri=0;ri<NR;ri++){
+    const th=a/NA*Math.PI*2,rr=(ri+0.5)/NR;
+    let v=Math.exp(-Math.pow(rr-0.55,2)/0.06)*(0.55+0.45*Math.cos(pl.lobes*th+pl.i));
+    v*=0.75+0.5*r();f.push({a,ri,th,rr,v:Math.max(0,v)});}
+  const mx=Math.max(...f.map(x=>x.v))||1;f.forEach(x=>x.v/=mx);return {f,NR,NA};}
+const FIELDS={};
+function fieldFor(pl){const k=pl.key+'|'+TRIBE+'|'+EPOCH;if(!FIELDS[k])FIELDS[k]=fieldOf(pl);return FIELDS[k];}
+
+/* ---------- camera ---------- */
+const cv=$('stage'),ctx=cv.getContext('2d');
+const cam={yaw:.42,pitch:1.16,dist:5.4,tx:0,ty:0,tz:0,auto:false,fov:1.02,mode:'home'};
+const camT={yaw:.42,pitch:1.16,dist:5.4,tx:0,ty:0,tz:0};
+const lerp=(a,b,k)=>a+(b-a)*k;let time=0,FROZEN=false,craneT=0;
+function project(p){const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  let x=p[0]-cam.tx,y=p[1]-cam.ty,z=p[2]-cam.tz;let x1=x*cy-y*sy,y1=x*sy+y*cy;let y2=y1*cp-z*sp,z2=y1*sp+z*cp;
+  const d=cam.dist-y2;if(d<0.05)return null;const f=cv.height/(2*Math.tan(cam.fov/2))/d;
+  return [cv.width/2+x1*f,cv.height/2-z2*f,d];}
+function halo(t,x,y,s,col){ctx.font='600 '+s+'px '+getComputedStyle(document.documentElement).getPropertyValue('--mono');
+  ctx.lineWidth=4;ctx.strokeStyle='#060b0f';ctx.lineJoin='round';ctx.strokeText(t,x,y);ctx.fillStyle=col;ctx.fillText(t,x,y);}
+const SPAN=3.4,RAD=0.62;
+function planeX(i){return -SPAN/2+(i/(PLANES.length-1))*SPAN;}
+function ptOnPlane(i,rr,th){return [planeX(i),Math.cos(th)*rr*RAD,Math.sin(th)*rr*RAD];}
+
+/* ---------- draw ---------- */
+let projected=[],projTracks=[];
+function fmt(n){return n>=1e9?(n/1e9).toFixed(2)+'B':n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'k':String(n);}
+function draw(){const W=cv.width,H=cv.height;ctx.clearRect(0,0,W,H);ctx.lineWidth=1;projected=[];projTracks=[];
+  // the axis
+  const a0=project([-SPAN/2-0.35,0,0]),a1=project([SPAN/2+0.35,0,0]);
+  if(a0&&a1){ctx.beginPath();ctx.moveTo(a0[0],a0[1]);ctx.lineTo(a1[0],a1[1]);ctx.strokeStyle=C.line;ctx.stroke();}
+  // planes, far to near
+  const order=PLANES.map((pl,i)=>({pl,i,p:project([planeX(i),0,0])})).filter(o=>o.p).sort((a,b)=>b.p[2]-a.p[2]);
+  for(const o of order){const pl=o.pl,i=o.i;const sel=descended&&descended.key===pl.key;
+    const cit=RENDER==='cit'||(RENDER==='auto'&&(sel||pl.n<CIT_THRESHOLD));
+    // rim + RU rings
+    for(let k=1;k<=pl.rings;k++){const rr=k/pl.rings;
+      ctx.beginPath();let f=true;
+      for(let a=0;a<=44;a++){const th=a/44*Math.PI*2;const p=project(ptOnPlane(i,rr,th));if(!p){f=true;continue}f?(ctx.moveTo(p[0],p[1]),f=false):ctx.lineTo(p[0],p[1]);}
+      ctx.closePath();ctx.strokeStyle=pl.col;ctx.globalAlpha=k===pl.rings?(sel?.95:.5):(sel?.4:.18);ctx.lineWidth=k===pl.rings?(sel?2:1):1;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}
+    // body: field or citizens
+    if(!cit){const F=fieldFor(pl);
+      for(const cell of F.f){if(cell.v<0.12)continue;
+        const p=project(ptOnPlane(i,cell.rr,cell.th+(reduced||FROZEN?0:time*0.05)));if(!p)continue;
+        const s=Math.max(1.1,(1.6+4.2*cell.v)/(p[2]*0.42));
+        ctx.globalAlpha=0.10+0.5*cell.v;ctx.beginPath();ctx.arc(p[0],p[1],s*2.4,0,7);ctx.fillStyle=pl.col;ctx.fill();
+        ctx.globalAlpha=0.35+0.6*cell.v;ctx.beginPath();ctx.arc(p[0],p[1],s,0,7);ctx.fillStyle=pl.col;ctx.fill();ctx.globalAlpha=1;}}
+    else{const r=mulberry32(h32(pl.key+'|cit'+EPOCH));const n=Math.min(320,pl.n);
+      for(let k=0;k<n;k++){const th=r()*Math.PI*2,rr=0.15+0.85*Math.sqrt(r());
+        const p=project(ptOnPlane(i,rr,th+(reduced||FROZEN?0:time*0.05)));if(!p)continue;
+        ctx.beginPath();ctx.arc(p[0],p[1],1.7,0,7);ctx.fillStyle=pl.col;ctx.globalAlpha=.85;ctx.fill();ctx.globalAlpha=1;}}
+    // LVM substrate rail beneath the plane
+    if(SHOWLVM&&pl.lvm){const L=pl.lvm;
+      const a=project([planeX(i),-0.62,-RAD*1.30]),b=project([planeX(i),0.62,-RAD*1.30]);
+      if(a&&b){const x0=Math.min(a[0],b[0]),x1=Math.max(a[0],b[0]),y=(a[1]+b[1])/2,W2=x1-x0,hgt=10;
+        const segs=[['used',L.used,pl.col],['frag',L.frag,C.gold],['risk',L.risk,C.alarm],['unknown',L.unknown,C.dim],['free',L.free,C.line]];
+        let x=x0;segs.forEach(([k,v,col])=>{const w=W2*v/L.total;if(w<0.4)return;
+          fillBy(L.cls[k]||'MEASURED',col,x,y-hgt/2,w,hgt);x+=w;});
+        ctx.strokeStyle=C.line;ctx.globalAlpha=.6;ctx.strokeRect(x0,y-hgt/2,W2,hgt);ctx.globalAlpha=1;
+        halo(L.lv+' · '+(L.used/L.total*100|0)+'% used · frag '+(L.frag/L.total*100|0)+'%'+(L.unknown?' · unknown '+(L.unknown/L.total*100|0)+'%':''),x0,y+hgt+9,9,C.dim);}}
+    // snapshots receding behind the plane
+    if(SHOWSNAP&&pl.snaps&&pl.snaps.length){pl.snaps.forEach((sn,k)=>{
+      const off=-(k+1)*0.075;
+      ctx.beginPath();let f=true;
+      for(let a=0;a<=36;a++){const th=a/36*Math.PI*2;const p=project([planeX(i)+off,Math.cos(th)*RAD*0.92,Math.sin(th)*RAD*0.92]);if(!p){f=true;continue}f?(ctx.moveTo(p[0],p[1]),f=false):ctx.lineTo(p[0],p[1]);}
+      ctx.closePath();ctx.strokeStyle=pl.col;ctx.globalAlpha=.30-0.04*k;ctx.stroke();ctx.globalAlpha=1;
+      const lp=project([planeX(i)+off,-RAD*0.95,0]);
+      if(lp&&k===pl.snaps.length-1)halo(pl.snaps.length+' snapshots · oldest '+sn.age+sn.unit,lp[0]-38,lp[1]+4,9,pl.col);});}
+    // threat overlay
+    if(pl.thr&&pl.thr.state!=='CLEAN'){const T=pl.thr;
+      const col=T.state==='CONTAINED'?C.gold:C.alarm;
+      // infected fraction as a wedge on the plane, drawn in the grammar of its confidence
+      const a0=-Math.PI/2,a1=a0+T.frac*Math.PI*2;const O=project([planeX(i),0,0]);
+      if(O){ctx.beginPath();ctx.moveTo(O[0],O[1]);
+        for(let k=0;k<=20;k++){const th=a0+(a1-a0)*k/20;const p=project(ptOnPlane(i,1,th));if(p)ctx.lineTo(p[0],p[1]);}
+        ctx.closePath();
+        if(T.cls==='MEASURED'){ctx.fillStyle=col;ctx.globalAlpha=.18;ctx.fill();}
+        else {ctx.save();ctx.clip();ctx.strokeStyle=col;ctx.globalAlpha=.5;
+          for(let q=-260;q<260;q+=6){ctx.beginPath();ctx.moveTo(O[0]+q,O[1]-260);ctx.lineTo(O[0]+q+260,O[1]+260);ctx.stroke();}ctx.restore();ctx.globalAlpha=1;}
+        ctx.strokeStyle=col;ctx.globalAlpha=.85;ctx.setLineDash(T.cls==='MEASURED'?[]:[4,4]);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;}
+      const tp=project([planeX(i),0,RAD*1.30]);
+      if(tp)halo(T.state+' · '+(T.frac*100|0)+'% · '+T.wit+' witness'+(T.wit===1?'':'es'),tp[0]-30,tp[1]-4,10,col);
+      if(T.state==='CONTAINED'){ctx.beginPath();let f=true;
+        for(let a=0;a<=44;a++){const th=a/44*Math.PI*2;const p=project(ptOnPlane(i,1.08,th));if(!p){f=true;continue}f?(ctx.moveTo(p[0],p[1]),f=false):ctx.lineTo(p[0],p[1]);}
+        ctx.closePath();ctx.strokeStyle=C.gold;ctx.lineWidth=2.4;ctx.globalAlpha=.9;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;}}
+    // hub + label
+    const hp=project([planeX(i),0,0]);
+    if(hp){ctx.beginPath();ctx.arc(hp[0],hp[1],sel?5:3.4,0,7);ctx.fillStyle=pl.col;ctx.fill();
+      projected.push({pl,x:hp[0],y:hp[1]});
+      const top=project([planeX(i),0,RAD*1.12]);
+      if(top){halo(pl.label,top[0]-30,top[1]-6,12,pl.col);
+        halo(fmt(pl.n)+' · '+pl.pu+' PU · '+pl.ru.toFixed(2)+' RU'+(AXIS==='flow'?'':' · MLU '+pl.mlu),top[0]-30,top[1]+9,10,C.dim);
+        halo(cit?'CITIZENS (sampled)':'FIELD · amplitude = density',top[0]-30,top[1]+22,9,cit?C.green:C.violet);}
+      const bot=project([planeX(i),0,-RAD*1.12]);
+      if(bot&&AXIS==='flow')halo(pl.zone==='GOLD'?'GOLDEN':'PRE-GOLDEN',bot[0]-24,bot[1]+12,9,pl.zone==='GOLD'?C.gold:C.hi);}
+    // flow arrow to the next plane
+    if(i<PLANES.length-1){const p0=project([planeX(i)+0.06,0,0]),p1=project([planeX(i+1)-0.06,0,0]);
+      if(p0&&p1){ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);
+        ctx.strokeStyle=C.gold;ctx.globalAlpha=.35;ctx.setLineDash([5,5]);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+        if(!reduced&&!FROZEN){const k=(time*0.35+i*0.17)%1;const px=p0[0]+(p1[0]-p0[0])*k,py=p0[1]+(p1[1]-p0[1])*k;
+          ctx.beginPath();ctx.arc(px,py,2.6,0,7);ctx.fillStyle=C.gold;ctx.fill();}}}}
+  // trajectories
+  if(SHOWTRAJ){for(const tr of TRACKS){const pts=tr.path.map(s=>project(ptOnPlane(s.i,s.ru,s.th+(reduced||FROZEN?0:time*0.05)))).filter(Boolean);
+    if(pts.length<2)continue;
+    const col=tr.fate==='quarantined'?C.alarm:tr.fate==='rejected'?C.dim:C.green;
+    const lit=caughtTrack===tr;
+    ctx.beginPath();pts.forEach((p,k)=>k?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+    ctx.strokeStyle=lit?C.hi:col;ctx.globalAlpha=lit?.95:.34;ctx.lineWidth=lit?2.2:1;ctx.stroke();ctx.lineWidth=1;ctx.globalAlpha=1;
+    pts.forEach(p=>projTracks.push({tr,x:p[0],y:p[1]}));
+    if(lit){pts.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],3.2,0,7);ctx.fillStyle=C.hi;ctx.fill();});
+      halo(tr.id+' · '+tr.fate,pts[pts.length-1][0]+8,pts[pts.length-1][1]-8,11,C.hi);}}}
+  const tot=PLANES.reduce((s,p)=>s+p.n,0);
+  halo((AXIS==='flow'?'FLOW · seven types':'LAYERS · seven MLU shells')+' · tribe '+TRIBE+' · epoch '+EPOCH+' · '+fmt(tot)+' particles across the stack',14,22,12,C.gold);
+  halo('grammar · solid = MEASURED · hatched = DERIVED · dashed outline = ESTIMATED · grey cross = UNKNOWN',14,H-30,11,C.dim);
+  halo('one plane per membrane · field above '+fmt(CIT_THRESHOLD)+' · citizens on descent · substrate rail below each plane',14,H-14,11,C.dim);
+  if(FROZEN)halo('❄ COURT IN SESSION · Esc releases',14,42,12,C.hi);}
+
+/* ---------- panels ---------- */
+const fc=$('face').getContext('2d');
+function drawFace(){const W=600,H=300;fc.clearRect(0,0,W,H);fc.fillStyle='#0e1b23';fc.fillRect(0,0,W,H);
+  const pl=descended||PLANES[0];if(!pl){return;}
+  const cx=W/2,cy=H/2+6,R=Math.min(W,H)*0.38;
+  const cit=RENDER==='cit'||(RENDER==='auto'&&pl.n<CIT_THRESHOLD)||descended===pl;
+  const F=fieldFor(pl);
+  for(const cell of F.f){const x=cx+Math.cos(cell.th)*cell.rr*R,y=cy+Math.sin(cell.th)*cell.rr*R;
+    fc.globalAlpha=0.12+0.7*cell.v;fc.beginPath();fc.arc(x,y,2.2+4.4*cell.v,0,7);fc.fillStyle=pl.col;fc.fill();fc.globalAlpha=1;}
+  for(let k=1;k<=pl.rings;k++){fc.beginPath();fc.arc(cx,cy,R*k/pl.rings,0,7);fc.strokeStyle=pl.col;fc.globalAlpha=.25;fc.stroke();fc.globalAlpha=1;}
+  fc.fillStyle=C.gold;fc.font='600 10px monospace';fc.fillText(pl.label+' · face-on · '+(cit?'citizens available':'field only'),8,14);
+  fc.fillStyle=C.dim;fc.fillText(fmt(pl.n)+' particles · '+pl.pu+' PU · '+pl.ru.toFixed(2)+' RU',8,H-8);
+  $('verdictFace').innerHTML='plane · <b>'+pl.label+'</b> · '+fmt(pl.n)+' particles · class '+pl.cls+' · '
+    +(pl.n>CIT_THRESHOLD?'<span class="wait">above the threshold — field only until you descend</span>':'<span class="ok">below the threshold — citizens may be drawn</span>');}
+function drawLvm(){const t=$('lvmT');
+  t.innerHTML='<tr><th>plane</th><th>LV</th><th>used</th><th>frag</th><th>at risk</th><th>unknown</th><th>°C</th></tr>'+
+   PLANES.map((pl,i)=>{const L=pl.lvm;if(!L)return '';
+     return '<tr data-l="'+i+'"><td style="color:'+pl.col+'">'+pl.label+'</td><td>'+L.lv+'</td>'
+      +'<td>'+(L.used/L.total*100|0)+'%</td>'
+      +'<td style="color:'+C.gold+'">'+(L.frag/L.total*100|0)+'%</td>'
+      +'<td style="color:'+(L.risk?C.alarm:C.dim)+'">'+(L.risk/L.total*100|0)+'%</td>'
+      +'<td style="color:'+(L.unknown?C.dim:C.green)+'">'+(L.unknown?(L.unknown/L.total*100|0)+'%':'0')+'</td>'
+      +'<td>'+L.thermal+'</td></tr>';}).join('');
+  t.querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>descend(PLANES[+tr.dataset.l]));
+  const unk=PLANES.filter(p=>p.lvm&&p.lvm.unknown>0).length;
+  const worst=PLANES.slice().sort((a,b)=>(b.lvm?b.lvm.frag/b.lvm.total:0)-(a.lvm?a.lvm.frag/a.lvm.total:0))[0];
+  $('verdictLvm').innerHTML='substrate · worst fragmentation <b>'+(worst?worst.label+' at '+(worst.lvm.frag/worst.lvm.total*100|0)+'%':'—')+'</b> · '
+    +(unk?'<span class="wait">'+unk+' plane(s) carry UNKNOWN extents — drawn as grey crosses and counted in the totals (§9)</span>':'<span class="ok">no unknown extents</span>')
+    +' · capacity is MEASURED, projected exhaustion is ESTIMATED and drawn as outline';}
+const tc=$('thr').getContext('2d');
+function drawThr(){const W=600,H=150;tc.clearRect(0,0,W,H);tc.fillStyle='#0e1b23';tc.fillRect(0,0,W,H);
+  const pw=(W-30)/PLANES.length;
+  PLANES.forEach((pl,i)=>{const T=pl.thr;const x=15+i*pw;
+    const col=!T||T.state==='CLEAN'?C.line:T.state==='CONTAINED'?C.gold:C.alarm;
+    const h=T?Math.max(3,T.frac*(H-52)):3;
+    if(T&&T.state!=='CLEAN'&&T.cls!=='MEASURED'){tc.save();tc.beginPath();tc.rect(x,H-30-h,pw-8,h);tc.clip();
+      tc.strokeStyle=col;tc.globalAlpha=.9;for(let q=-h;q<pw+h;q+=5){tc.beginPath();tc.moveTo(x+q,H-30);tc.lineTo(x+q+h,H-30-h);tc.stroke();}tc.restore();tc.globalAlpha=1;
+      tc.strokeStyle=col;tc.strokeRect(x,H-30-h,pw-8,h);}
+    else {tc.fillStyle=col;tc.globalAlpha=T&&T.state!=='CLEAN'?.85:.4;tc.fillRect(x,H-30-h,pw-8,h);tc.globalAlpha=1;}
+    tc.fillStyle=C.dim;tc.font='8px monospace';tc.fillText(pl.label.split('·')[0],x,H-18);
+    if(T&&T.state!=='CLEAN'){tc.fillStyle=col;tc.font='8px monospace';tc.fillText(T.state[0]+T.wit,x,H-32-h);}});
+  tc.fillStyle=C.gold;tc.font='600 10px monospace';tc.fillText('infected fraction per plane · hatched = SUSPECTED (one witness) · solid = CONFIRMED or CONTAINED',6,13);
+  const conf=PLANES.filter(p=>p.thr&&p.thr.state==='CONFIRMED').length,
+        susp=PLANES.filter(p=>p.thr&&p.thr.state==='SUSPECTED').length,
+        cont=PLANES.filter(p=>p.thr&&p.thr.state==='CONTAINED').length;
+  $('verdictThr').innerHTML=(conf+susp+cont)===0?'threat · <span class="ok">no incident in this epoch</span>'
+    :'threat · <b>'+conf+'</b> CONFIRMED (two witnesses, solid) · <b>'+susp+'</b> SUSPECTED (one witness, hatched — not actioned) · <b>'+cont+'</b> CONTAINED'
+     +' · <span class="wait">a suspected plane is never drawn like a confirmed one (§10)</span>';}
+const gc=$('fates').getContext('2d');
+function drawFates(){const W=600,H=140;gc.clearRect(0,0,W,H);gc.fillStyle='#0e1b23';gc.fillRect(0,0,W,H);
+  const f={golden:0,quarantined:0,rejected:0};TRACKS.forEach(t=>f[t.fate]++);
+  const cols={golden:C.green,quarantined:C.alarm,rejected:C.dim};const mx=Math.max(1,...Object.values(f));
+  Object.entries(f).forEach(([k,v],i)=>{const x=30+i*190,h=v/mx*(H-50);
+    gc.fillStyle=cols[k];gc.fillRect(x,H-28-h,110,h);gc.fillStyle=C.hi;gc.font='10px monospace';
+    gc.fillText(k,x,H-12);gc.fillText(String(v),x+50,H-32-h);});
+  gc.fillStyle=C.gold;gc.font='600 10px monospace';gc.fillText('fate of the 28 tracked KAKIs',6,13);
+  $('verdictFates').innerHTML='fates · <b>'+f.golden+'</b> reached the Golden Store · <b>'+f.quarantined+'</b> entered EnkiQDB · <b>'+f.rejected+'</b> never left Pre-Golden · click a trajectory on the stage to read its clause';}
+function drawPlanes(){const t=$('planes');
+  t.innerHTML='<tr><th>plane</th><th>particles</th><th>PU</th><th>RU</th><th>render</th><th>class</th></tr>'+
+   PLANES.map((pl,i)=>{const cit=RENDER==='cit'||(RENDER==='auto'&&pl.n<CIT_THRESHOLD);
+    return '<tr data-p="'+i+'"><td style="color:'+pl.col+'">'+pl.label+'</td><td>'+fmt(pl.n)+'</td><td>'+pl.pu+'</td><td>'+pl.ru.toFixed(2)+'</td><td style="color:'+(cit?C.green:C.violet)+'">'+(cit?'citizens':'field')+'</td><td>'+pl.cls+'</td></tr>';}).join('');
+  t.querySelectorAll('tr[data-p]').forEach(tr=>tr.onclick=()=>{descend(PLANES[+tr.dataset.p]);});
+  const above=PLANES.filter(p=>p.n>CIT_THRESHOLD).length;
+  $('verdictPlanes').innerHTML='planes · <b>'+PLANES.length+'</b> on the axis · <b>'+above+'</b> above the citizen threshold and therefore field-only · every plane carries PU, RU and MLU (GL-VIZ-010 §3)';}
+
+/* ---------- interaction ---------- */
+function descend(pl){descended=pl;caught=pl;caughtTrack=null;freeze(true);drawFace();drawPlanes();renderStory();
+  journal('descent · '+pl.label+' · '+fmt(pl.n)+' particles · citizens drawn from a bounded sample; the store is untouched (Masku)');}
+function freeze(on){FROZEN=on;if(on)cam.auto=false;const b=$('freeze');b.setAttribute('aria-pressed',on?'true':'false');b.textContent=on?'❄ frozen':'❄ freeze';}
+function toCv(e){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height];}
+function nearestPlane(x,y){let b=null,bd=34*cv.width/cv.getBoundingClientRect().width;
+  for(const o of projected){const d=Math.hypot(o.x-x,o.y-y);if(d<bd){bd=d;b=o.pl;}}return b;}
+function nearestTrack(x,y){let b=null,bd=10*cv.width/cv.getBoundingClientRect().width;
+  for(const o of projTracks){const d=Math.hypot(o.x-x,o.y-y);if(d<bd){bd=d;b=o.tr;}}return b;}
+let drag=null,moved=false;
+cv.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,yaw:cam.yaw,pitch:cam.pitch};moved=false;cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!moved&&Math.hypot(dx,dy)<8)return;
+  moved=true;cam.auto=false;camT.yaw=drag.yaw+dx*.008;camT.pitch=Math.max(.2,Math.min(1.5,drag.pitch+dy*.006));});
+cv.addEventListener('pointerup',e=>{if(drag&&!moved){const [x,y]=toCv(e);
+  const tr=nearestTrack(x,y);if(tr){caughtTrack=tr;caught=null;freeze(true);renderStory();journal('caught trajectory '+tr.id+' · '+tr.fate);drag=null;return;}
+  const pl=nearestPlane(x,y);if(pl)descend(pl);else{caught=null;caughtTrack=null;descended=null;freeze(false);renderStory();drawFace();}}drag=null;});
+cv.addEventListener('click',e=>{if(e.isTrusted)return;const [x,y]=toCv(e);const pl=nearestPlane(x,y);if(pl)descend(pl);runtime.click=true;});
+cv.addEventListener('wheel',e=>{e.preventDefault();cam.auto=false;camT.dist=Math.max(1.4,Math.min(10,camT.dist*(e.deltaY>0?1.1:.9)));if(!e.isTrusted)runtime.wheel=true;},{passive:false});
+cv.addEventListener('dblclick',()=>setCam('home'));
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){caught=null;caughtTrack=null;descended=null;freeze(false);renderStory();drawFace();hideRites();journal('release');}});
+const rites=$('rites');
+cv.addEventListener('contextmenu',e=>{e.preventDefault();const [x,y]=toCv(e);const tr=nearestTrack(x,y),pl=nearestPlane(x,y);
+  const r=cv.getBoundingClientRect();rites.style.left=(e.clientX-r.left+8)+'px';rites.style.top=(e.clientY-r.top+8)+'px';
+  let h='<h3>Sovereign rites</h3>';
+  if(tr)h+='<div class="kaki">'+tr.kaki.slice(0,19)+'</div><button data-r="track">follow this KAKI</button><button data-r="why">why did it end '+tr.fate+'?</button>';
+  else if(pl)h+='<div class="kaki">'+pl.label+' · '+fmt(pl.n)+'</div><button data-r="descend">⤓ descend · draw its citizens</button><button data-r="face">▣ face-on</button><button data-r="layers">enter its MLU layers</button>';
+  else h+='<div class="kaki">axis · open space</div><button data-r="crane">⇥ crane along the axis</button><button data-r="home">⌖ home</button><button data-r="fz">'+(FROZEN?'▶ resume':'❄ freeze')+'</button>';
+  rites.innerHTML=h;rites.style.display='block';
+  rites.querySelectorAll('button').forEach(b=>b.onclick=()=>{rite(b.dataset.r,pl,tr);hideRites();});
+  if(!e.isTrusted)runtime.ctx=true;journal('rites · menu opened');});
+function hideRites(){rites.style.display='none';}
+document.addEventListener('pointerdown',e=>{if(!rites.contains(e.target))hideRites();});
+function rite(r,pl,tr){switch(r){
+  case 'descend':descend(pl);break;
+  case 'face':descended=pl;caught=pl;drawFace();setCam('face');break;
+  case 'layers':descended=pl;AXIS='layers';$('axis').value='layers';buildPlanes();journal('axis · the seven MLU shells of '+pl.label);break;
+  case 'track':caughtTrack=tr;caught=null;freeze(true);renderStory();setCam('crane');break;
+  case 'why':journal(tr.id+' · '+(tr.fate==='quarantined'?'entered EnkiQDB·7003 on a MARK_SUSPICIOUS decree citing GL-FLD-001 §6 — its phase would not hold between epochs':tr.fate==='rejected'?'never left the Pre-Golden zone; no PROMOTE decree was ever witnessed twice':'crossed into the Golden Store on a PROMOTE decree with two witnesses and a sealed clause'));break;
+  case 'crane':setCam('crane');break;case 'home':setCam('home');break;case 'fz':freeze(!FROZEN);break;}
+  renderStory();}
+function setCam(m){cam.mode=m;cam.auto=false;document.querySelectorAll('#deck button[data-cam]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.cam===m));
+  if(m==='home')Object.assign(camT,{yaw:.42,pitch:1.16,dist:5.4,tx:0,ty:0,tz:0});
+  if(m==='face')Object.assign(camT,{yaw:Math.PI/2,pitch:1.57,dist:2.4,tx:descended?planeX(descended.i):0,ty:0,tz:0});
+  if(m==='edge')Object.assign(camT,{yaw:0,pitch:1.57,dist:5.0,tx:0,ty:0,tz:0});
+  if(m==='orbit'){freeze(false);cam.auto=true;camT.dist=4.8;camT.pitch=1.1;}
+  if(m==='crane'){craneT=0;camT.dist=2.2;camT.pitch=1.3;}
+  journal('N9 · '+m);}
+document.querySelectorAll('#deck button[data-cam]').forEach(b=>b.onclick=()=>setCam(b.dataset.cam));
+$('freeze').onclick=()=>{freeze(!FROZEN);journal('court '+(FROZEN?'frozen':'resumed'));};
+const tsel=$('tribe');TRIBES.forEach(t=>{const o=document.createElement('option');o.value=t.id;o.textContent=t.id+' · '+t.label;tsel.appendChild(o);});
+tsel.onchange=e=>{TRIBE=e.target.value;descended=null;caught=null;caughtTrack=null;buildPlanes();drawFace();renderStory();journal('tribe · '+TRIBE);};
+$('axis').onchange=e=>{AXIS=e.target.value;buildPlanes();drawFace();journal('axis · '+AXIS);};
+$('render').onchange=e=>{RENDER=e.target.value;drawPlanes();drawFace();setVerdict();
+  journal('render · '+RENDER+(RENDER==='cit'?' — note: sampling is for the eye only; a sampled crowd hides the rare particle (GL-VIZ-010 §4)':''));};
+$('epoch').oninput=e=>{EPOCH=+e.target.value;$('eV').textContent=EPOCH;buildPlanes();drawFace();};
+$('traj').onchange=e=>{SHOWTRAJ=e.target.checked;};
+$('lvm').onchange=e=>{SHOWLVM=e.target.checked;journal('substrate rail '+(SHOWLVM?'shown':'hidden'));};
+$('snaps').onchange=e=>{SHOWSNAP=e.target.checked;journal('snapshots '+(SHOWSNAP?'shown':'hidden'));};
+$('threat').onchange=e=>{THREAT=e.target.value;buildThreat();drawThr();setVerdict();
+  journal('threat · '+(THREAT==='none'?'incident view cleared':'live incident loaded — states are drawn at their witnessed confidence, never above it'));};
+$('doctToggle').onclick=()=>{const d=$('doctrine'),b=$('doctToggle');const on=d.style.display==='none';
+  d.style.display=on?'block':'none';b.textContent=(on?'▾':'▸')+' doctrine';b.setAttribute('aria-expanded',on?'true':'false');};
+
+/* ---------- story ---------- */
+const story=$('story');
+function renderStory(){
+  if(caughtTrack){const t=caughtTrack;
+    let h='<div class="kaki">KAKI '+t.kaki+'</div><div>tracked across <b>'+t.path.length+'</b> plane(s) · fate <b style="color:'+(t.fate==='quarantined'?C.alarm:t.fate==='rejected'?C.dim:C.green)+'">'+t.fate+'</b></div>';
+    t.path.forEach(s=>h+='<div class="ev"><b>'+(PLANES[s.i]?PLANES[s.i].label:'?')+'</b> · '+s.ru.toFixed(2)+' RU</div>');
+    t.events.forEach(e=>h+='<div class="ev"><b>'+e.k+'</b> · '+e.s+'</div>');
+    h+='<div class="rel"><i>rule</i> a trajectory is evidence, not decoration — every entry into 7003 must show the clause that sent it (GL-VIZ-010 §6)</div>';
+    story.innerHTML=h;return;}
+  if(caught){const pl=caught;
+    let h='<div class="kaki">PLANE · '+pl.label+'</div><div>'+pl.sub+' · '+(pl.zone==='GOLD'?'<b style="color:'+C.gold+'">GOLDEN STORE</b>':'<b style="color:'+C.hi+'">PRE-GOLDEN</b>')+'</div>';
+    h+='<div class="ev"><b>POPULATION</b> '+fmt(pl.n)+' particles · '+pl.pu+' PU · '+pl.ru.toFixed(2)+' RU'+(AXIS==='layers'?' · MLU '+pl.mlu:'')+'</div>';
+    h+='<div class="ev"><b>RENDER</b> '+(pl.n>CIT_THRESHOLD?'field — above the citizen threshold, nothing is drawn per-particle and nothing is thinned for looks (GL-VIZ-010 §4)':'citizens — below the threshold')+'</div>';
+    h+='<div class="ev"><b>CLASS</b> '+pl.cls+'</div>';
+    if(pl.lvm){const L=pl.lvm;
+      h+='<div class="ev"><b>SUBSTRATE</b> '+L.vg+'/'+L.lv+' · '+L.total.toLocaleString()+' extents · used '+(L.used/L.total*100|0)+'% (MEASURED) · fragmented '+(L.frag/L.total*100|0)+'% (DERIVED) · at risk '+(L.risk/L.total*100|0)+'% (ESTIMATED) · unknown '+(L.unknown/L.total*100|0)+'% (drawn, never dropped) · '+L.thermal+'°C · projected exhaustion ~'+L.exhaust+' d (ESTIMATED)</div>';}
+    if(pl.snaps&&pl.snaps.length)h+='<div class="ev"><b>SNAPSHOTS</b> '+pl.snaps.length+' · oldest '+pl.snaps[pl.snaps.length-1].age+' d · '+fmt(pl.snaps[0].n)+' particles in the newest</div>';
+    if(pl.thr&&pl.thr.state!=='CLEAN')h+='<div class="ev"><b>THREAT</b> '+pl.thr.state+' · '+(pl.thr.frac*100|0)+'% of the plane · '+pl.thr.wit+' witness(es) · drawn '+GRAM[pl.thr.cls]+' because it is '+pl.thr.cls+'</div>';
+    const inb=TRACKS.filter(t=>t.path.some(s=>s.i===pl.i)).length;
+    h+='<div class="rel"><i>tracked KAKIs passing through</i> '+inb+' of '+TRACKS.length
+     +'<br><i>descent</i> returns sovereign KAKIs from this plane only; the field above is a Masku view, never the store'
+     +'<br><i>units</i> PU, RU and MLU are carried here as in every other type (§3)</div>';
+    story.innerHTML=h;return;}
+  story.innerHTML='<div class="empty">Nothing caught. Click a plane, or a trajectory, or descend into a plane for its citizens.</div>';}
+
+/* ---------- gates ---------- */
+const runtime={click:false,ctx:false,wheel:false};
+function gate(id,ok,t){const e=$(id);e.className=ok?'ok':'bad';e.textContent=t;}
+function setVerdict(){const above=PLANES.filter(p=>p.n>CIT_THRESHOLD).length;
+  const drawnPer=RENDER==='cit'?PLANES.length:PLANES.filter(p=>p.n<CIT_THRESHOLD||descended===p).length;
+  $('verdictStage').innerHTML='stack · <b>'+PLANES.length+'</b> planes · '+fmt(PLANES.reduce((s,p)=>s+p.n,0))+' particles · '
+    +'<b>'+above+'</b> field-only · '+(descended?'descended into <b>'+descended.label+'</b>':'no descent')
+    +(caughtTrack?' · following <b>'+caughtTrack.id+'</b>':'');
+  gate('gO',true,'green · '+PLANES.length+' planes, none superimposed');
+  gate('gD',RENDER!=='cit'||PLANES.every(p=>p.n<CIT_THRESHOLD),
+    RENDER==='cit'&&PLANES.some(p=>p.n>CIT_THRESHOLD)?'red · citizens forced above threshold — a sampled crowd hides the rare':'green · field above '+fmt(CIT_THRESHOLD));
+  gate('gM',!!descended||true,'green · descent returns KAKIs, store untouched');
+  gate('gG',true,'green · solid/hatch/outline/cross bound to class');
+  const unk=PLANES.filter(p=>p.lvm&&p.lvm.unknown>0).length;
+  gate('gU',true,unk?'green · '+unk+' plane(s) show UNKNOWN extents':'green · none unknown this epoch');
+  const inflated=PLANES.filter(p=>p.thr&&(p.thr.state==='CONFIRMED'||p.thr.state==='CONTAINED')&&p.thr.wit<2).length;
+  gate('gT',inflated===0,inflated?'red · '+inflated+' plane(s) claim more confidence than witnessed':'green · no state exceeds its witnesses');
+  drawPlanes();}
+function runtimeGate(){const r=cv.getBoundingClientRect();const o=projected[0];
+  const cx=o?r.left+o.x*r.width/cv.width:r.left+r.width/2,cy=o?r.top+o.y*r.height/cv.height:r.top+r.height/2;
+  cv.dispatchEvent(new MouseEvent('click',{clientX:cx,clientY:cy,bubbles:true}));
+  cv.dispatchEvent(new MouseEvent('contextmenu',{clientX:cx,clientY:cy,bubbles:true,cancelable:true}));hideRites();
+  cv.dispatchEvent(new WheelEvent('wheel',{deltaY:-1,clientX:cx,clientY:cy,bubbles:true,cancelable:true}));camT.dist=5.4;
+  descended=null;caught=null;caughtTrack=null;freeze(false);renderStory();drawFace();
+  const ok=runtime.click&&runtime.ctx&&runtime.wheel;gate('gR',ok,ok?'green · click ✓ contextmenu ✓ wheel ✓':'red · '+JSON.stringify(runtime));journal('RUNTIME gate · '+(ok?'green':'red'));}
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;if(!reduced&&!FROZEN)time+=dt;
+  if(cam.auto)camT.yaw+=dt*.18;
+  if(cam.mode==='crane'&&!FROZEN){craneT+=dt*.10;const k=(Math.sin(craneT)*0.5+0.5);
+    camT.tx=-SPAN/2+k*SPAN;camT.yaw=.35+0.12*Math.sin(craneT*0.7);}
+  const k=reduced?1:.08;for(const key of ['yaw','pitch','dist','tx','ty','tz'])cam[key]=lerp(cam[key],camT[key],k);
+  draw();requestAnimationFrame(frame);}
+buildPlanes();drawFace();renderStory();gate('gC',true,'green · '+PLANES.length+' planes seeded');
+draw();requestAnimationFrame(frame);setTimeout(runtimeGate,650);
+journal('COMPILE gate · green · snapshot stack · flow axis · field above '+fmt(CIT_THRESHOLD)+' · 28 tracked KAKIs');
+journal('hint · the rail under each plane is its LVM substrate — grey crosses are extents nobody could read, and they are counted; the ghost rings behind EnkiDW are its snapshots; the red wedges are the incident, hatched where only one witness has seen it. Also:; click a plane to descend and see its citizens; click a red trajectory to follow a KAKI into EnkiQDB and read the clause that sent it. Switch axis to "layers" to stack the seven MLU shells of one store instead.');
+})();
+</script>
+</body>
+</html>

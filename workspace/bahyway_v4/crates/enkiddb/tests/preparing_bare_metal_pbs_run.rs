@@ -12,25 +12,35 @@
 use std::fs;
 use std::path::Path;
 
+use akkvalue::AkkValue;
 use bahyway_core::TribeId;
 use enkidb_ingest::bridge::{attr_hash, eav_triple_to_value};
 use enkidb_kaki::KakiMinter;
 use enkiddb::parser::DocumentParser;
 use enkiddb::WriteNode;
-use akkvalue::AkkValue;
 
 const COLLECTION: &str = "Preparing_bare_metal_PBs_Run";
 
 fn repo_root() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap()
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
 }
 
 #[test]
 fn all_three_architect_documents_mint_as_real_enkiddb_particles_under_the_schema() {
     let docs = [
         ("docs/20_meta_engine/ALL_PBS_ROADMAP.md", "All PBs Roadmap"),
-        ("docs/20_meta_engine/BAHYWAY_ECOSYSTEM_MANUAL_V4.md", "BahyWay.Ecosystem v4.0 Manual"),
-        ("docs/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md", "BahyWay.Ecosystem v4 Full Glossary"),
+        (
+            "docs/20_meta_engine/BAHYWAY_ECOSYSTEM_MANUAL_V4.md",
+            "BahyWay.Ecosystem v4.0 Manual",
+        ),
+        (
+            "docs/BAHYWAY_ECOSYSTEM_V4_GLOSSARY.md",
+            "BahyWay.Ecosystem v4 Full Glossary",
+        ),
     ];
 
     let minter = KakiMinter::new(TribeId::from_u16(enkiddb::PB_DOCS_TRIBE_ID));
@@ -39,24 +49,40 @@ fn all_three_architect_documents_mint_as_real_enkiddb_particles_under_the_schema
 
     for (i, (rel, label)) in docs.iter().enumerate() {
         let full = repo_root().join(rel);
-        let text = fs::read_to_string(&full)
-            .unwrap_or_else(|e| panic!("{label} must be a real, readable file at {}: {e}", full.display()));
+        let text = fs::read_to_string(&full).unwrap_or_else(|e| {
+            panic!(
+                "{label} must be a real, readable file at {}: {e}",
+                full.display()
+            )
+        });
         assert!(!text.trim().is_empty(), "{label} must not be empty");
 
         let structure = DocumentParser::parse_markdown(&text);
-        let doc_kaki = write_node.ingest_document_categorized(&structure, i as u32 + 1, COLLECTION);
+        let (doc_kaki, _particle_count) =
+            write_node.ingest_document_categorized(&structure, i as u32 + 1, COLLECTION);
         minted.push((doc_kaki, *label));
     }
 
-    assert_eq!(minted.len(), 3, "all 3 Architect-requested documents must mint");
+    assert_eq!(
+        minted.len(),
+        3,
+        "all 3 Architect-requested documents must mint"
+    );
 
     let collection_hash = attr_hash("meta.collection");
     for (kaki, label) in &minted {
         let history = write_node.journal().read_particle_history(kaki);
-        assert!(!history.is_empty(), "{label}'s Identity-Kaki must have real journal history");
+        assert!(
+            !history.is_empty(),
+            "{label}'s Identity-Kaki must have real journal history"
+        );
 
-        let tagged = history.iter().flat_map(|e| e.eav.iter()).find(|t| t.attr_hash == collection_hash);
-        let tagged = tagged.unwrap_or_else(|| panic!("{label} must carry a real meta.collection particle"));
+        let tagged = history
+            .iter()
+            .flat_map(|e| e.eav.iter())
+            .find(|t| t.attr_hash == collection_hash);
+        let tagged =
+            tagged.unwrap_or_else(|| panic!("{label} must carry a real meta.collection particle"));
         let value = eav_triple_to_value(tagged);
         assert_eq!(
             value,
@@ -70,7 +96,11 @@ fn all_three_architect_documents_mint_as_real_enkiddb_particles_under_the_schema
     let mut kakis: Vec<_> = minted.iter().map(|(k, _)| k.bytes()).collect();
     kakis.sort();
     kakis.dedup();
-    assert_eq!(kakis.len(), 3, "each document must mint its own distinct Identity-Kaki");
+    assert_eq!(
+        kakis.len(),
+        3,
+        "each document must mint its own distinct Identity-Kaki"
+    );
 
     // Materialize as a real, queryable EnkiDDB Tigris generation on disk --
     // the same call docpulse.rs's stage 4 makes, so this is a real mint,
@@ -82,9 +112,17 @@ fn all_three_architect_documents_mint_as_real_enkiddb_particles_under_the_schema
     // `entities` counts the 3 parent documents PLUS every child section
     // `ingest_document_categorized` mints per DocumentStructure::sections()
     // boundary -- so it must be at least 3, not exactly 3.
-    assert!(stats.entities >= 3, "the materialized generation must contain at least the 3 minted documents, got {}", stats.entities);
+    assert!(
+        stats.entities >= 3,
+        "the materialized generation must contain at least the 3 minted documents, got {}",
+        stats.entities
+    );
     // `entities_path` is DataFileWriter's `base` -- the real file on disk
     // is `{base}.data` (see enkidb-datafile::writer::DataFileWriter::open).
     let real_data_file = generation.entities_path.with_extension("data");
-    assert!(real_data_file.exists(), "the entities Tigris .data file must be real and on disk at {}", real_data_file.display());
+    assert!(
+        real_data_file.exists(),
+        "the entities Tigris .data file must be real and on disk at {}",
+        real_data_file.display()
+    );
 }

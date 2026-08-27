@@ -1,6 +1,8 @@
 //! acoustic-leak-engine sovereign test suite (deterministic, no external data).
 
-use acoustic_leak_engine::calibration::{localize_two_sensor, piecewise_travel_time_s, SegmentCalibration};
+use acoustic_leak_engine::calibration::{
+    localize_two_sensor, piecewise_travel_time_s, SegmentCalibration,
+};
 use acoustic_leak_engine::crlb::{error_budget, ErrorBudgetInput};
 use acoustic_leak_engine::material::{PipeMaterial, SolverClass};
 use acoustic_leak_engine::solver::gcc_phat::gcc_phat_delay;
@@ -27,9 +29,17 @@ fn deming_recovers_true_slope_with_noise_on_both_axes() {
     }
     let fit = deming_fit(&xs, &ys, 1.0).expect("fit");
     assert!((fit.slope - 1.2).abs() < 0.03, "slope {}", fit.slope);
-    assert!((fit.intercept - 5.0).abs() < 1.5, "intercept {}", fit.intercept);
+    assert!(
+        (fit.intercept - 5.0).abs() < 1.5,
+        "intercept {}",
+        fit.intercept
+    );
     // n-2 dof: resid_sd near the injected noise scale, not biased low.
-    assert!(fit.resid_sd > 0.15 && fit.resid_sd < 0.8, "sd {}", fit.resid_sd);
+    assert!(
+        fit.resid_sd > 0.15 && fit.resid_sd < 0.8,
+        "sd {}",
+        fit.resid_sd
+    );
 }
 
 #[test]
@@ -44,8 +54,14 @@ fn stage1_flags_systematic_leak_deviation() {
     }
     let fit = deming_fit(&xs, &ys, 1.0).expect("fit");
     // Healthy point passes; leak-sagged point flags.
-    assert_eq!(judge_point(&fit, 55.0, 1.2 * 55.0 + 5.0, 3.0), Stage1Judgement::GridIntegrityHolds);
-    assert_eq!(judge_point(&fit, 85.0, 1.2 * 85.0 + 5.0 - 12.0, 3.0), Stage1Judgement::SegmentFlagged);
+    assert_eq!(
+        judge_point(&fit, 55.0, 1.2 * 55.0 + 5.0, 3.0),
+        Stage1Judgement::GridIntegrityHolds
+    );
+    assert_eq!(
+        judge_point(&fit, 85.0, 1.2 * 85.0 + 5.0 - 12.0, 3.0),
+        Stage1Judgement::SegmentFlagged
+    );
 }
 
 #[test]
@@ -53,13 +69,20 @@ fn gcc_phat_recovers_known_delay() {
     let fs = 8000.0;
     let n = 4096;
     let delay_samples = 37usize; // y lags x by 37 samples = 4.625 ms
-    // Broadband leak-like source.
-    let src: Vec<f64> = (0..n + delay_samples).map(|i| pseudo_noise(i, 1.0)).collect();
+                                 // Broadband leak-like source.
+    let src: Vec<f64> = (0..n + delay_samples)
+        .map(|i| pseudo_noise(i, 1.0))
+        .collect();
     let x: Vec<f64> = src[delay_samples..delay_samples + n].to_vec();
     let y: Vec<f64> = src[..n].to_vec(); // y is x delayed by delay_samples
     let est = gcc_phat_delay(&x, &y, fs).expect("delay");
     let true_delay = delay_samples as f64 / fs;
-    assert!((est.delay_s - true_delay).abs() < 1.5 / fs, "est {} vs true {}", est.delay_s, true_delay);
+    assert!(
+        (est.delay_s - true_delay).abs() < 1.5 / fs,
+        "est {} vs true {}",
+        est.delay_s,
+        true_delay
+    );
 }
 
 #[test]
@@ -83,21 +106,48 @@ fn two_sensor_localization_from_recovered_delay() {
 
 #[test]
 fn piecewise_travel_time_for_mixed_material_path() {
-    let iron =
-        SegmentCalibration::from_reference_tap(PipeMaterial::DuctileIron, 60.0, 60.0, 0.05, 0.0001, 14.0).unwrap();
-    let pe = SegmentCalibration::from_reference_tap(PipeMaterial::Pe, 30.0, 30.0, 0.1, 0.0005, 14.0).unwrap();
+    let iron = SegmentCalibration::from_reference_tap(
+        PipeMaterial::DuctileIron,
+        60.0,
+        60.0,
+        0.05,
+        0.0001,
+        14.0,
+    )
+    .unwrap();
+    let pe =
+        SegmentCalibration::from_reference_tap(PipeMaterial::Pe, 30.0, 30.0, 0.1, 0.0005, 14.0)
+            .unwrap();
     let t = piecewise_travel_time_s(&[iron, pe]);
     assert!((t - 0.15).abs() < 1e-12);
 }
 
 #[test]
 fn material_selects_solver_lawfully() {
-    assert_eq!(PipeMaterial::DuctileIron.solver_class(), SolverClass::PlainGccPhat);
-    assert_eq!(PipeMaterial::Copper.solver_class(), SolverClass::PlainGccPhat);
-    assert_eq!(PipeMaterial::Pe.solver_class(), SolverClass::DispersionCompensated);
-    assert_eq!(PipeMaterial::Pvc.solver_class(), SolverClass::DispersionCompensated);
-    assert_eq!(PipeMaterial::VitrifiedClay.solver_class(), SolverClass::JointIndexed);
-    assert_eq!(PipeMaterial::Concrete.solver_class(), SolverClass::JointIndexed);
+    assert_eq!(
+        PipeMaterial::DuctileIron.solver_class(),
+        SolverClass::PlainGccPhat
+    );
+    assert_eq!(
+        PipeMaterial::Copper.solver_class(),
+        SolverClass::PlainGccPhat
+    );
+    assert_eq!(
+        PipeMaterial::Pe.solver_class(),
+        SolverClass::DispersionCompensated
+    );
+    assert_eq!(
+        PipeMaterial::Pvc.solver_class(),
+        SolverClass::DispersionCompensated
+    );
+    assert_eq!(
+        PipeMaterial::VitrifiedClay.solver_class(),
+        SolverClass::JointIndexed
+    );
+    assert_eq!(
+        PipeMaterial::Concrete.solver_class(),
+        SolverClass::JointIndexed
+    );
 }
 
 #[test]
@@ -154,7 +204,10 @@ fn verdict_gate_refuses_unproven_claims() {
         segment_length_m: 120.0,
         site: LeakSite::PipeBody,
     };
-    assert_eq!(judge(&s2_junction).unwrap_err(), Escalation::RunStage3Pinpoint);
+    assert_eq!(
+        judge(&s2_junction).unwrap_err(),
+        Escalation::RunStage3Pinpoint
+    );
 
     // Stage 3 with proven sigma_d <= 0.10 m -> signed.
     let s3 = PositionClaim {
@@ -172,13 +225,18 @@ fn verdict_gate_refuses_unproven_claims() {
 #[test]
 fn overlapping_pairs_double_claim_forces_recalibration() {
     use acoustic_leak_engine::verdict::cross_check_overlap;
-    assert_eq!(cross_check_overlap(true, true), Some(Escalation::RecalibrateVelocity));
+    assert_eq!(
+        cross_check_overlap(true, true),
+        Some(Escalation::RecalibrateVelocity)
+    );
     assert_eq!(cross_check_overlap(true, false), None);
 }
 
 #[test]
 fn joint_snap_quantizes_ceramic_verdict() {
-    let map = JointMap { positions_m: vec![2.0, 4.5, 7.0, 9.5, 12.0] };
+    let map = JointMap {
+        positions_m: vec![2.0, 4.5, 7.0, 9.5, 12.0],
+    };
     let c = snap_to_joint(&map, 7.21).expect("snap");
     assert_eq!(c.joint_index, 2);
     assert!((c.position_m - 7.0).abs() < 1e-9);

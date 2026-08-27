@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · The Mask of Nanshe — Tribes Born from Light (GL-HSI-001-A1)</title>
+<style>
+  :root{
+    --basalt:#0b0e13; --tablet:#141922; --line:#232b38;
+    --gold:#d9a441; --gold-dim:#8a6a2c; --lapis:#4d7fb8; --copper:#4fae8a;
+    --alarm:#d4553f; --maroon:#7a2230; --ash:#8b93a3; --bone:#e8e2d4;
+    --fuzzy:#c88b3a;
+    --mono:"Iosevka","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--basalt);color:var(--ash);font:15px/1.65 var(--serif)}
+  ::selection{background:var(--gold-dim);color:var(--basalt)}
+  header{border-bottom:1px solid var(--line);padding:30px 5vw 22px;text-align:center;
+    background:radial-gradient(1100px 300px at 50% -50%, rgba(217,164,65,.08), transparent 65%)}
+  .crumbs{font-family:var(--mono);font-size:11.5px;letter-spacing:.35em;color:var(--gold-dim)}
+  h1{font-size:clamp(24px,3.2vw,38px);color:var(--bone);font-weight:600;margin:10px 0 8px}
+  .lede{max-width:84ch;margin:0 auto;color:var(--ash)}
+  .lede b{color:var(--gold);font-weight:600}
+  .lede i{color:var(--bone)}
+  .rehearsal{margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--basalt);
+      background:var(--gold);display:inline-block;padding:4px 12px;border-radius:2px;letter-spacing:.05em}
+  main{padding:24px 4vw 70px;max-width:1460px;margin:0 auto}
+  .stage{display:grid;grid-template-columns:1fr 400px;gap:16px}
+  .panel{background:var(--tablet);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      border-bottom:1px solid var(--line);padding:10px 14px;font-family:var(--mono);font-size:12px}
+  .bar .tag{color:var(--gold)}
+  canvas{display:block;width:100%;height:auto;background:#0d1119;touch-action:none;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  input[type=range]{accent-color:var(--gold);width:100px;vertical-align:middle}
+  output{color:var(--bone);min-width:40px;display:inline-block}
+  .cam{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11px;padding:4px 9px;cursor:pointer;border-radius:2px}
+  .cam.on,.cam:hover{border-color:var(--gold);color:var(--gold)}
+  .camdeck{display:flex;gap:6px;margin-left:auto}
+  .act{appearance:none;border:1px solid var(--line);background:#0d1119;color:var(--ash);
+      font-family:var(--mono);font-size:11.5px;padding:6px 12px;cursor:pointer;border-radius:2px}
+  .act:hover{color:var(--bone);border-color:var(--ash)}
+  .act.on{border-color:var(--copper);color:var(--copper)}
+  .act.gold{border-color:var(--gold-dim);color:var(--gold)}
+  .act.warn{border-color:var(--maroon);color:var(--alarm)}
+  .side{display:flex;flex-direction:column;gap:16px}
+  .side h3{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.12em;
+      padding:10px 14px;border-bottom:1px solid var(--line)}
+  .verdict{font-family:var(--mono);font-size:12px;padding:10px 14px;border-top:1px solid var(--line);min-height:40px}
+  .verdict .ok{color:var(--copper)} .verdict .bad{color:var(--alarm)}
+  .verdict .gold{color:var(--gold)} .verdict .fz{color:var(--fuzzy)} .verdict .lp{color:var(--lapis)}
+  .gauge{font-family:var(--mono);font-size:12px;padding:12px 14px;line-height:2.0;border-top:1px solid var(--line)}
+  .gauge b{color:var(--gold)} .gauge .k{color:var(--lapis)}
+  .badge{padding:1px 10px;border-radius:2px;font-weight:600}
+  .badge.el{background:#4fae8a22;color:var(--copper);border:1px solid var(--copper)}
+  .badge.pl{background:#c88b3a22;color:var(--fuzzy);border:1px solid var(--fuzzy)}
+  .badge.ru{background:#d4553f22;color:var(--alarm);border:1px solid var(--alarm)}
+  .lawtag{font-family:var(--mono);font-size:10.5px;color:var(--lapis);padding:0 14px 12px}
+  #hepta{font-family:var(--mono);font-size:11.5px;line-height:1.8;padding:10px 14px;color:var(--ash);white-space:pre}
+  #hepta .v{color:var(--gold)} #hepta .n{color:var(--copper)} #hepta .val{color:var(--bone)}
+  #hepta .sat{color:var(--copper)} #hepta .unsat{color:#555}
+  #naru{max-height:180px;overflow-y:auto;font-family:var(--mono);font-size:11.5px;padding:8px 14px}
+  #naru .e{border-top:1px dotted var(--line);padding:5px 0}
+  #naru .w{color:var(--gold)}
+  #ctx{display:none;position:fixed;z-index:50;background:#0d1119;
+    border:1px solid var(--ash);border-radius:2px;min-width:230px;overflow:hidden;
+    font-family:var(--mono);font-size:12px}
+  #ctx .h{padding:6px 12px;color:var(--lapis);background:var(--tablet);border-bottom:1px solid var(--line);font-size:10.5px}
+  #ctx .i{padding:8px 12px;cursor:pointer;color:var(--ash)}
+  #ctx .i:hover{background:var(--tablet);color:var(--bone)}
+  @media(max-width:1020px){.stage{grid-template-columns:1fr}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="crumbs">Š A L A&nbsp;&nbsp;H U B&nbsp;&nbsp;·&nbsp;&nbsp;M E M B R A N E&nbsp;&nbsp;C O U R T S&nbsp;&nbsp;·&nbsp;&nbsp;T H E&nbsp;&nbsp;M A S K&nbsp;&nbsp;O F&nbsp;&nbsp;N A N S H E</div>
+  <h1>TRIBES BORN FROM LIGHT 𒀭𒀏</h1>
+  <p class="lede">The conversion is a <b>MASK laid over the origin, never a replacement</b> — lift it and the raw
+    cube is still there, hash-sealed in <b>NUZI</b>. Under the mask, pixels become particles, spectral signatures
+    become <b>tribes</b>, centroids become <b>nuclei</b>, and every particle keeps an <b>orbit radius</b> around its
+    nucleus. The gem: that radius <i>is</i> the first witness — <b>r² ≡ T²</b>. When aging pressure restructures
+    the pipe's inner membrane, the tribe's <b>girth</b> G(t) dilates; two sustained epochs plus a second witness
+    prove <b>DILATION</b>, and when the girth <i>accelerates</i>, the quadratic names <b>T_girth</b> —
+    the leak foretold from widening orbits alone.</p>
+  <div class="rehearsal">ŠALA REHEARSAL ONLY — PRODUCTION SURFACE IS DUBSAR egui/WGPU (WoW rule 4–5)</div>
+</header>
+
+<main>
+<div class="stage">
+
+  <!-- ═══ STAGE ═══ -->
+  <div class="panel">
+    <div class="bar">
+      <span class="tag">PIPE INTERIOR · J2 corridor</span>
+      <button class="act gold on" id="maskBtn">𒌆 MASK ON</button>
+      <label>aging a <input type="range" id="ag" min="0" max="1.2" value="0.5" step="0.05"></label><output id="agOut">0.50</output>
+      <label>τ <input type="range" id="tau" min="2" max="24" value="10" step="1"></label><output id="tauOut">10</output>
+      <button class="act on" id="qwBtn">Q witness: PRESENT</button>
+      <span class="camdeck">
+        <button class="cam" id="birdBtn">⌖</button>
+        <button class="cam" id="gndBtn">✛</button>
+        <button class="cam" id="talBtn">⟳</button>
+      </span>
+    </div>
+    <div class="bar">
+      <button class="act on" id="runBtn">◈ BREATHE</button>
+      <button class="act" id="stepBtn">STEP EPOCH</button>
+      <button class="act gold" id="liftBtn">𒁾 LIFT MASK (Kīma Labīrīšu)</button>
+      <button class="act" id="replayBtn">⟲ REPLAY</button>
+      <span style="margin-left:auto" id="clock">epoch = 0 · origin hash cited</span>
+    </div>
+    <canvas id="cv" width="1020" height="600" aria-label="Pipe interior: origin pixel field or masked tribes with widening orbits"></canvas>
+    <div class="verdict" id="stageVerdict"></div>
+    <div class="lawtag">GL-HSI-001-A1 §1 — the mask is a view · GL-VIZ-001 — left-click bounce + NĀRU · right-click court menu by birth-status</div>
+  </div>
+
+  <!-- ═══ FLAT INSTRUMENTS ═══ -->
+  <div class="side">
+    <div class="panel">
+      <h3>G(t) vs G_limit — THE GIRTH INSTRUMENT</h3>
+      <canvas id="hcv" width="400" height="210" aria-label="Girth trajectory, quadratic fit, T_girth intercept, tau window"></canvas>
+      <div class="verdict" id="hVerdict"></div>
+      <div class="lawtag">GL-HSI-001-A1 §3 · T_girth joins the countdown grammar (T*, T_leak, T_j, T_θ, T_shape) · GL-DST-001 — the chart never bends</div>
+    </div>
+    <div class="panel">
+      <h3>HEPTASCRIPT — HS-EXT-003 MIRROR</h3>
+      <div id="hepta"></div>
+      <div class="verdict" id="hsVerdict"></div>
+      <div class="lawtag">sovereign nouns RADIUS · NUCLEUS · GIRTH · DILATION · no SQL exists here · WHERE/WHEN are W5H2 clause words</div>
+    </div>
+    <div class="panel">
+      <h3>THE RADIUS IDENTITY</h3>
+      <div class="gauge" id="gauge"></div>
+      <div class="lawtag">GL-HSI-001-A1 §2 — r² ≡ T² · L-HSI-8 proven live each frame · GL-AGE-001 two-witness discipline</div>
+    </div>
+    <div class="panel">
+      <h3>NĀRU · STORYENGINE JOURNAL</h3>
+      <div id="naru"></div>
+    </div>
+  </div>
+
+</div>
+</main>
+<div id="ctx"></div>
+
+<script>
+"use strict";
+const REDUCED=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rng=mulberry32(347);
+
+/* ═══ constants (mirror nanshe::dilation) ═══ */
+const G0=6.0, GLIM=26, EPS_Y=0.35;
+let AG=0.5, TAU=10, QW=true, MASK=true;
+let EP=0, G_SERIES=[G0], RUN=!REDUCED, RANG=false;
+
+/* ═══ tribes on the pipe ring ═══ */
+const RING=170;
+const TRIBES=[
+ {id:"J2",ang:0.4,col:"#d9a441",aging:true, lore:"the aging joint — pressure restructures the inner membrane; orbits widen"},
+ {id:"K5",ang:2.5,col:"#4fae8a",aging:false,lore:"healthy corridor tribe — orbits hold their law"},
+ {id:"W",ang:4.5,col:"#4d7fb8",aging:false,lore:"weather tribe — jitters with the sky, never dilates"}];
+TRIBES.forEach(tr=>{tr.x=Math.cos(tr.ang)*RING;tr.z=Math.sin(tr.ang)*RING;
+  tr.b=0;tr.bv=0;tr.born=true;
+  tr.parts=[];for(let i=0;i<26;i++){const a=rng()*6.283,r0=(0.55+rng()*0.9);
+    tr.parts.push({a,r0,ph:rng()*7})}});
+const NONP={id:"NON-P",born:false,x:0,z:-RING-46,b:0,bv:0,col:"#5a5348",
+  lore:"specular-glare pixel refused at the SUSA gate — never born, no KAKI, no story"};
+/* origin pixel field (NUZI mock, deterministic) */
+const PIX=[];for(let i=0;i<26;i++)for(let j=0;j<16;j++)
+  PIX.push({i,j,v:rng()});
+
+function girthNow(){return RESOLVEDLESS()?G0+AG*EP*EP*0.32+rng()*0.15:G0}
+function RESOLVEDLESS(){return true}
+function fitQuad(ys){const n=ys.length;if(n<3)return null;
+  let s0=0,s1=0,s2=0,s3=0,s4=0,sy=0,sty=0,st2y=0;
+  ys.forEach((y,i)=>{const t=i;s0++;s1+=t;s2+=t*t;s3+=t**3;s4+=t**4;sy+=y;sty+=t*y;st2y+=t*t*y});
+  const M=[[s4,s3,s2],[s3,s2,s1],[s2,s1,s0]],R=[st2y,sty,sy];
+  const det=m=>m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])-m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])+m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
+  const D=det(M);if(Math.abs(D)<1e-9)return null;const out=[];
+  for(let c=0;c<3;c++){const Mc=M.map(r=>r.slice());for(let r=0;r<3;r++)Mc[r][c]=R[r];out.push(det(Mc)/D)}
+  return{a:out[0],b:out[1],c:out[2]}}
+function tGirth(){const f=fitQuad(G_SERIES);if(!f||2*f.a<=0)return{f,tl:null};
+  const tn=G_SERIES.length-1,c2=f.c-GLIM,disc=f.b*f.b-4*f.a*c2;
+  if(disc<0)return{f,tl:null};
+  return{f,tl:Math.max(0,(-f.b+Math.sqrt(disc))/(2*f.a)-tn)}}
+function verdict(){const n=G_SERIES.length;
+  if(n<3)return"WEATHER";
+  const d1=G_SERIES[n-1]-G_SERIES[n-2],d0=G_SERIES[n-2]-G_SERIES[n-3];
+  if(!(d1>0.05&&d0>0.05)||!QW)return"WEATHER";
+  const{tl}=tGirth();return tl!==null?"OMEN":"DILATION"}
+
+/* ═══ NĀRU ═══ */
+const naru=document.getElementById("naru");
+function J(w,t){const d=document.createElement("div");d.className="e";
+  d.innerHTML=`<span class="w">${w}</span> — ${t}`;naru.prepend(d);
+  while(naru.children.length>26)naru.lastChild.remove()}
+J("COURT","The Mask Court convenes. Origin hash sealed in NUZI; the mask is cut under subspace epoch 42.");
+
+/* ═══ camera (Abūbu die) ═══ */
+const cv=document.getElementById("cv"),ctx=cv.getContext("2d");
+const CAM={yaw:0.55,pitch:0.5,zoom:1};let tal=!REDUCED;
+function memY(x,z,t){return 10*Math.sin(x*.011+t*.0007)+8*Math.cos(z*.013-t*.0005)}
+function pt3(x,y,z){
+  const cy=Math.cos(CAM.yaw),sy=Math.sin(CAM.yaw);
+  let X=x*cy+z*sy, Z=-x*sy+z*cy, Y=y;
+  const cp=Math.cos(CAM.pitch),sp=Math.sin(CAM.pitch);
+  const Y2=Y*cp-Z*sp, Z2=Y*sp+Z*cp;
+  const f=1500,den=Math.max(140,f-Z2*CAM.zoom);
+  const pers=Math.min(9,f/den);
+  return{x:510+X*0.62*CAM.zoom*pers,y:330+Y2*0.62*CAM.zoom*pers,z:Z2,pers}}
+
+/* ═══ stage ═══ */
+let PTS=[];
+function dilFactor(tr){return tr.aging?1+ (girthNow()-G0)/G0*0.9:1}
+function draw(t){
+  ctx.clearRect(0,0,1020,600);
+  if(!MASK){ /* NUZI origin view */
+    PIX.forEach(p=>{const x=(p.i-12.5)*26,z=(p.j-7.5)*26;
+      const q=pt3(x,-memY(x,z,t),z);
+      const hue=p.v;const r=Math.max(1,9*q.pers*CAM.zoom*.8);
+      ctx.fillStyle=`rgba(${(60+hue*160)|0},${(90+hue*90)|0},${(180-hue*80)|0},${q.z<80?0.85:0.3})`;
+      ctx.fillRect(q.x-r/2,q.y-r/2,r,r)});
+    ctx.fillStyle="#8b93a3";ctx.font="12px monospace";
+    ctx.fillText("NUZI ORIGIN — raw cube, hash-sealed, untouched. Cut the mask to see the tribes.",250,570);
+    PTS=[];return}
+  /* pipe membrane ring */
+  ctx.beginPath();
+  for(let a=0;a<=72;a++){const th=a/72*6.283,x=Math.cos(th)*(RING+34),z=Math.sin(th)*(RING+34);
+    const p=pt3(x,-memY(x,z,t),z);a===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)}
+  ctx.strokeStyle="rgba(139,147,163,.3)";ctx.lineWidth=1.4;ctx.stroke();
+  ctx.beginPath();
+  for(let a=0;a<=72;a++){const th=a/72*6.283,x=Math.cos(th)*(RING-34),z=Math.sin(th)*(RING-34);
+    const p=pt3(x,-memY(x,z,t),z);a===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)}
+  ctx.strokeStyle="rgba(139,147,163,.3)";ctx.stroke();ctx.lineWidth=1;
+  PTS=[];
+  const reg=verdict();
+  TRIBES.forEach(tr=>{
+    tr.bv+=1.1;tr.b=Math.max(0,tr.b-tr.bv*.28);if(tr.b===0&&tr.bv>0)tr.bv=0;if(tr.bv<0)tr.b-=tr.bv;
+    const df=dilFactor(tr);
+    const ny=-memY(tr.x,tr.z,t)-8-tr.b, np=pt3(tr.x,ny,tr.z);
+    /* healthy girth ring (copper dashed) + current girth ring */
+    const gr0=34, gr=gr0*df;
+    ctx.setLineDash([3,4]);ctx.beginPath();
+    for(let a=0;a<=40;a++){const th=a/40*6.283;
+      const p=pt3(tr.x+Math.cos(th)*gr0,ny,tr.z+Math.sin(th)*gr0);
+      a===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)}
+    ctx.strokeStyle="rgba(79,174,138,.5)";ctx.stroke();ctx.setLineDash([]);
+    if(tr.aging){ctx.beginPath();
+      for(let a=0;a<=40;a++){const th=a/40*6.283;
+        const p=pt3(tr.x+Math.cos(th)*gr,ny,tr.z+Math.sin(th)*gr);
+        a===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)}
+      ctx.strokeStyle=reg==="OMEN"?"rgba(212,85,63,.85)":reg==="DILATION"?"rgba(200,139,58,.8)":"rgba(217,164,65,.6)";
+      ctx.lineWidth=1.8;ctx.stroke();ctx.lineWidth=1}
+    /* orbiting particles */
+    tr.parts.forEach(pp=>{
+      const wob=tr.id==="W"?0.16*Math.sin(t*.002+pp.ph):0;
+      const rr=(pp.r0*(tr.aging?df:1)+wob)*30;
+      const px=tr.x+Math.cos(pp.a+t*.0004+pp.ph)*rr;
+      const pz=tr.z+Math.sin(pp.a+t*.0004+pp.ph)*rr;
+      const q=pt3(px,ny,pz);
+      ctx.globalAlpha=q.z<80?0.9:0.3;
+      ctx.fillStyle=tr.aging&&pp.r0*df>1.15?"#d4553f":tr.col;
+      ctx.beginPath();ctx.arc(q.x,q.y,Math.max(.5,2.4*q.pers*CAM.zoom*.85),0,7);ctx.fill()});
+    ctx.globalAlpha=1;
+    /* nucleus */
+    if(tr.b>0.5){const b=pt3(tr.x,-memY(tr.x,tr.z,t),tr.z);
+      ctx.strokeStyle="rgba(232,226,212,.5)";ctx.beginPath();
+      ctx.moveTo(b.x,b.y);ctx.lineTo(np.x,np.y);ctx.stroke()}
+    const nr=Math.max(1.5,5*np.pers*CAM.zoom*.9);
+    ctx.beginPath();ctx.arc(np.x,np.y,nr,0,7);
+    ctx.fillStyle=tr.col;ctx.fill();
+    ctx.fillStyle="#e8e2d4";ctx.font="11px monospace";ctx.textAlign="center";
+    ctx.fillText(tr.id,np.x,np.y-nr-6);ctx.textAlign="left";
+    PTS.push({x:np.x,y:np.y,r:nr+5,g:tr})});
+  /* refused non-particle */
+  const nq=pt3(NONP.x,-memY(NONP.x,NONP.z,t)-6,NONP.z);
+  const rr=Math.max(1,3.6*nq.pers*CAM.zoom*.9);
+  ctx.globalAlpha=.55;ctx.fillStyle=NONP.col;
+  ctx.beginPath();ctx.arc(nq.x,nq.y,rr,0,7);ctx.fill();ctx.globalAlpha=1;
+  ctx.strokeStyle="#8a6a2c";ctx.beginPath();
+  ctx.moveTo(nq.x-rr*.7,nq.y-rr*.7);ctx.lineTo(nq.x+rr*.7,nq.y+rr*.7);
+  ctx.moveTo(nq.x+rr*.7,nq.y-rr*.7);ctx.lineTo(nq.x-rr*.7,nq.y+rr*.7);ctx.stroke();
+  ctx.fillStyle="#e8e2d4";ctx.font="11px monospace";ctx.textAlign="center";
+  ctx.fillText("NON-P",nq.x,nq.y-rr-6);ctx.textAlign="left";
+  PTS.push({x:nq.x,y:nq.y,r:rr+5,g:NONP});
+  ctx.fillStyle="#4d7fb8";ctx.font="12px monospace";
+  ctx.fillText(`cam yaw ${(CAM.yaw%6.283).toFixed(2)} · pitch ${CAM.pitch.toFixed(2)} · ×${CAM.zoom.toFixed(1)}`,16,22);
+}
+
+/* ═══ girth instrument ═══ */
+const hcv=document.getElementById("hcv"),hx=hcv.getContext("2d");
+function drawH(){
+  hx.fillStyle="#0d1119";hx.fillRect(0,0,400,210);
+  const x0=44,y0=178,w=340,h=136,tmax=Math.max(18,G_SERIES.length+8);
+  const{f,tl}=tGirth();
+  const gmax=Math.max(GLIM*1.35,...G_SERIES)*1.1;
+  hx.strokeStyle="#232b38";hx.beginPath();
+  hx.moveTo(x0,y0-h);hx.lineTo(x0,y0);hx.lineTo(x0+w,y0);hx.stroke();
+  const Xnow=x0+w*EP/tmax, Xtau=x0+w*Math.min(EP+TAU,tmax)/tmax;
+  hx.fillStyle="rgba(77,127,184,.10)";hx.fillRect(Xnow,y0-h,Math.max(0,Xtau-Xnow),h);
+  const Yl=y0-h*GLIM/gmax;
+  hx.strokeStyle="rgba(212,85,63,.8)";hx.setLineDash([5,4]);
+  hx.beginPath();hx.moveTo(x0,Yl);hx.lineTo(x0+w,Yl);hx.stroke();hx.setLineDash([]);
+  hx.fillStyle="#d4553f";hx.font="10.5px monospace";hx.fillText("G_limit",x0+w-46,Yl-4);
+  const Ye=y0-h*(G0*(1+EPS_Y))/gmax;
+  hx.strokeStyle="rgba(200,139,58,.5)";hx.setLineDash([2,4]);
+  hx.beginPath();hx.moveTo(x0,Ye);hx.lineTo(x0+w,Ye);hx.stroke();hx.setLineDash([]);
+  hx.fillStyle="#c88b3a";hx.fillText("ε_y",x0+w-24,Ye-4);
+  if(f){hx.strokeStyle="rgba(217,164,65,.6)";hx.beginPath();
+    for(let t=0;t<=tmax;t+=.4){const v=f.a*t*t+f.b*t+f.c;
+      const X=x0+w*t/tmax,Y=y0-h*Math.min(Math.max(v,0),gmax)/gmax;
+      t===0?hx.moveTo(X,Y):hx.lineTo(X,Y)}hx.stroke()}
+  if(tl!==null){const X=x0+w*Math.min(EP+tl,tmax)/tmax;
+    hx.strokeStyle="#d4553f";hx.beginPath();hx.moveTo(X,y0-h);hx.lineTo(X,y0);hx.stroke();
+    hx.fillStyle="#d9a441";hx.fillText("T_girth",X+3,y0-h+12)}
+  hx.strokeStyle="#4d7fb8";hx.lineWidth=1.6;hx.beginPath();
+  G_SERIES.forEach((v,i)=>{const X=x0+w*i/tmax,Y=y0-h*Math.min(v,gmax)/gmax;
+    i===0?hx.moveTo(X,Y):hx.lineTo(X,Y)});hx.stroke();hx.lineWidth=1;
+  hx.fillStyle="#e8e2d4";
+  G_SERIES.forEach((v,i)=>{const X=x0+w*i/tmax,Y=y0-h*Math.min(v,gmax)/gmax;
+    hx.beginPath();hx.arc(X,Y,2.2,0,7);hx.fill()});
+  hx.fillStyle="#8b93a3";hx.font="10.5px monospace";
+  hx.fillText("G",x0-16,y0-h+6);hx.fillText("epoch →",x0+w-48,y0+16);
+  const v=document.getElementById("hVerdict"),reg=verdict();
+  if(reg==="OMEN"&&tl!==null)v.innerHTML=tl<=TAU
+    ?`<span class="bad">ALARM — T_girth = ${tl.toFixed(1)} ≤ τ = ${TAU}</span> · the membrane opens inside the horizon`
+    :`<span class="gold">Watch:</span> T_girth = ${tl.toFixed(1)} beyond τ = ${TAU} · dilation accelerating, not yet named`;
+  else if(reg==="DILATION")v.innerHTML=`<span class="fz">DILATION PROVEN</span> — sustained ×2 + second witness · the set is permanent (drift)`;
+  else v.innerHTML=`<span class="ok">Weather:</span> girth breathes without sustained growth${QW?"":" — and the second witness is ABSENT (§3)"}`;
+}
+
+/* ═══ HeptaScript mirror ═══ */
+function drawHS(){const g=G_SERIES[G_SERIES.length-1],{tl}=tGirth(),reg=verdict();
+  const n=G_SERIES.length;
+  const d1=n>1?G_SERIES[n-1]-G_SERIES[n-2]:0,d0=n>2?G_SERIES[n-2]-G_SERIES[n-3]:0;
+  const sus=d1>0.05&&d0>0.05;
+  document.getElementById("hepta").innerHTML=
+`<span class="v">ORBIT</span> <span class="n">WATER.J2</span>
+  <span class="v">WHERE</span> tribe = WATER <span class="v">AND</span> joint = J2
+  <span class="v">WITNESS</span> <span class="n">RADIUS</span> r <span class="v">AGAINST</span> <span class="n">NUCLEUS</span>
+  <span class="v">WITNESS</span> <span class="n">GIRTH</span> G = <span class="val">${g.toFixed(2)}</span> <span class="v">OVER EPOCHS</span> 2
+
+<span class="v">PROVE</span> <span class="n">DILATION</span> <span class="${sus?"sat":"unsat"}">ΔG&gt;0 SUSTAINED 2 ${sus?"✓":"✗"}</span>
+  <span class="${QW?"sat":"unsat"}">SECOND WITNESS ${QW?"PRESENT ✓":"ABSENT ✗"}</span>
+
+<span class="v">EMIT</span> <span class="n">OMEN</span> <span class="${reg==="OMEN"?"sat":"unsat"}">WHEN GIRTH ACCELERATES ${reg==="OMEN"?"✓":"✗"}</span>
+  <span class="v">NAMING HORIZON</span> T_girth = <span class="val">${tl!==null?tl.toFixed(1):"—"}</span>
+  <span class="v">CITING SUBSPACE EPOCH</span> <span class="val">42</span>`;
+  const hv=document.getElementById("hsVerdict");
+  hv.innerHTML=reg==="OMEN"?`<span class="bad">EMIT fires</span> — the sovereign court reads widening orbits as prophecy`
+   :reg==="DILATION"?`<span class="fz">PROVE satisfied, EMIT withheld</span> — proven drift, no acceleration yet`
+   :`<span class="ok">Clauses unsatisfied</span> — the language refuses what the geometry has not earned`;
+}
+
+/* ═══ gauges ═══ */
+function drawG(){const g=G_SERIES[G_SERIES.length-1],reg=verdict();
+  const rel=(g-G0)/G0;
+  const band=reg==="OMEN"?"ru":rel>=EPS_Y?"pl":"el";
+  const lbl=reg==="OMEN"?"OMEN":rel>=EPS_Y?"PLASTIC":"ELASTIC";
+  document.getElementById("gauge").innerHTML=
+   `<span class="k">r̄² (whitened)</span> ${ (g*g/ (G0*G0)).toFixed(2)} · <span class="k">T²</span> ${(g*g/(G0*G0)).toFixed(2)}
+    <span class="badge el">r² ≡ T² ✓</span><br>
+    <span class="k">G</span> ${g.toFixed(2)} · <span class="k">G₀</span> ${G0.toFixed(1)} ·
+    <span class="k">ΔG/G₀</span> ${(rel*100).toFixed(0)}%<br>
+    regime <span class="badge ${band}">${lbl}</span> ·
+    <span class="k">2nd witness</span> ${QW?"<span class='ok'>Q PRESENT</span>":"<span class='bad'>ABSENT</span>"}`;
+  const sv=document.getElementById("stageVerdict");
+  if(!MASK)sv.innerHTML=`<span class="lp">MASK LIFTED (Kīma Labīrīšu):</span> the origin confronts its particles — raw cube untouched, hash cited, re-masking always lawful`;
+  else if(reg==="OMEN")sv.innerHTML=`<span class="bad">NANSHE-OMEN from orbits alone</span> — J2's girth accelerates; pressure is restructuring the membrane · Nisaba declares, Kittu delivers`;
+  else if(reg==="DILATION")sv.innerHTML=`<span class="fz">The set is permanent:</span> J2's orbits hold their new width — drift, eligible for re-estimation decree`;
+  else sv.innerHTML=`the tribes breathe: <span class="gold">J2</span> under watch, <span class="ok">K5</span> lawful, <span class="lp">W</span> jitters with the sky — one wide epoch is weather`;
+}
+
+/* ═══ epoch machine ═══ */
+function stepEpoch(){EP++;
+  G_SERIES.push(G0+AG*EP*EP*0.32+rng()*0.15);
+  document.getElementById("clock").textContent=`epoch = ${EP} · origin hash cited`;
+  const g=G_SERIES[G_SERIES.length-1];
+  J("EPOCH",`epoch ${EP}: J2 girth G=${g.toFixed(2)}${EP>2?" — sustained, accelerating":""}.`);
+  const reg=verdict();
+  if(reg==="OMEN"&&!RANG){RANG=true;const{tl}=tGirth();
+    J("NANSHE",`OMEN from widening orbits — T_girth ${tl.toFixed(1)} epochs. Signed Alert KAKI → Nisaba declares, Kittu delivers.`)}}
+let acc=0,last=null;
+function frame(now){if(last===null)last=now;const dt=(now-last)/1000;last=now;
+  if(RUN&&!REDUCED){acc+=dt;if(acc>2.0){acc=0;stepEpoch()}}
+  if(tal)CAM.yaw+=0.004;
+  draw(now);drawH();drawHS();drawG();
+  requestAnimationFrame(frame)}
+
+/* ═══ controls ═══ */
+const bind=(id,out,fn,fx)=>{document.getElementById(id).addEventListener("input",e=>{
+  const v=+e.target.value;document.getElementById(out).textContent=fx?String(v):v.toFixed(2);fn(v)})};
+bind("ag","agOut",v=>AG=v);
+bind("tau","tauOut",v=>TAU=v,true);
+document.getElementById("maskBtn").onclick=e=>{MASK=!MASK;
+  e.target.classList.toggle("on",MASK);
+  e.target.textContent=MASK?"𒌆 MASK ON":"𒌆 MASK OFF";
+  J("MASK",MASK?"mask cut — tribes, nuclei, orbits born as a view.":"mask lifted — the NUZI origin shows, untouched.")};
+document.getElementById("liftBtn").onclick=()=>{MASK=false;
+  document.getElementById("maskBtn").classList.remove("on");
+  document.getElementById("maskBtn").textContent="𒌆 MASK OFF";
+  J("RITE","Kīma Labīrīšu — living particles confronted against the write-once origin. CONCORD expected; SILENT DRIFT would be a finding.")};
+document.getElementById("qwBtn").onclick=e=>{QW=!QW;
+  e.target.classList.toggle("on",QW);
+  e.target.textContent=QW?"Q witness: PRESENT":"Q witness: ABSENT";
+  J("WITNESS",QW?"second witness restored — dilation may be proven.":"second witness withdrawn — girth alone can never convict (§3).")};
+document.getElementById("runBtn").onclick=e=>{RUN=!RUN;
+  e.target.classList.toggle("on",RUN);e.target.textContent=RUN?"◈ BREATHE":"‖ HELD"};
+document.getElementById("stepBtn").onclick=()=>stepEpoch();
+document.getElementById("replayBtn").onclick=()=>{EP=0;G_SERIES=[G0];RANG=false;
+  document.getElementById("clock").textContent="epoch = 0 · origin hash cited";
+  J("COURT","⟲ replay — epoch 0, girth restored, same laws: age the membrane again.")};
+
+/* camera (Abūbu die) */
+cv.addEventListener("wheel",e=>{e.preventDefault();stopTal();
+  CAM.zoom=Math.min(6,Math.max(0.55,CAM.zoom*Math.exp(-e.deltaY*0.0014)))},{passive:false});
+let drag=null,moved=0;
+const px=e=>{const r=cv.getBoundingClientRect();
+  return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height}};
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);
+  drag=px(e);moved=0;cv.classList.add("dragging")});
+cv.addEventListener("pointermove",e=>{if(!drag)return;const p=px(e);
+  moved+=Math.abs(p.x-drag.x)+Math.abs(p.y-drag.y);
+  CAM.yaw+=(p.x-drag.x)*0.005;
+  CAM.pitch=Math.min(1.45,Math.max(-0.2,CAM.pitch+(p.y-drag.y)*0.004));
+  drag=p;if(moved>3)stopTal()});
+cv.addEventListener("pointerup",e=>{if(drag&&moved<3){const p=px(e);pick(p.x,p.y)}
+  drag=null;cv.classList.remove("dragging")});
+cv.addEventListener("pointercancel",()=>{drag=null;cv.classList.remove("dragging")});
+cv.addEventListener("dblclick",()=>{stopTal();CAM.yaw=0.55;CAM.pitch=0.5;CAM.zoom=1});
+function stopTal(){if(tal){tal=false;document.getElementById("talBtn").classList.remove("on")}}
+document.getElementById("birdBtn").onclick=()=>{stopTal();CAM.yaw=0;CAM.pitch=1.35;CAM.zoom=0.85};
+document.getElementById("gndBtn").onclick=()=>{stopTal();CAM.yaw=-0.25;CAM.pitch=0.10;CAM.zoom=2.4};
+document.getElementById("talBtn").onclick=e=>{
+  if(REDUCED){CAM.pitch=0.55;CAM.zoom=1.5;return}
+  tal=!tal;e.target.classList.toggle("on",tal)};
+if(tal)document.getElementById("talBtn").classList.add("on");
+
+/* ═══ NASARU: bounce + birth-status menu ═══ */
+function pick(mx,my){for(const p of PTS){
+  if(Math.hypot(mx-p.x,my-p.y)<p.r+4){const g=p.g;
+    if(g.born){g.bv=-7;J(g.id,`bounced on its stem — ${g.lore}.`)}
+    else J(g.id,`refused non-particle: no bounce, no story — only a Refusal Record.`);
+    return}}}
+const ctxM=document.getElementById("ctx");
+cv.addEventListener("contextmenu",e=>{e.preventDefault();
+  const r=cv.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*cv.width/r.width,my=(e.clientY-r.top)*cv.height/r.height;
+  for(const p of PTS){if(Math.hypot(mx-p.x,my-p.y)<p.r+4){const g=p.g;
+    ctxM.style.display="block";ctxM.style.left=e.clientX+"px";ctxM.style.top=e.clientY+"px";
+    ctxM.innerHTML=g.born
+     ?`<div class="h">${g.id} · born tribe nucleus (KAKI minted)</div>
+       <div class="i" data-a="j">Open StoryEngine journal</div>
+       <div class="i" data-a="c">Add to cohort</div>`
+     :`<div class="h">${g.id} · refused non-particle</div>
+       <div class="i" data-a="r">Show Refusal Record</div>`;
+    ctxM.querySelectorAll(".i").forEach(it=>it.onclick=()=>{ctxM.style.display="none";
+      if(it.dataset.a==="j")J(g.id,`journal: ${g.lore}.`);
+      if(it.dataset.a==="c")J("COHORT",`${g.id} added to the dilation cohort.`);
+      if(it.dataset.a==="r")J("REFUSAL",`${g.id}: refused at the SUSA gate (specular glare). Never born — no KAKI, no orbit, no journal.`)});
+    return}}
+  ctxM.style.display="none"});
+addEventListener("click",()=>ctxM.style.display="none");
+
+/* boot */
+if(REDUCED){RUN=false;const rb=document.getElementById("runBtn");
+  rb.classList.remove("on");rb.textContent="‖ HELD"}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

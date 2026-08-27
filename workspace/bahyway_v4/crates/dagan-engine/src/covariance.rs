@@ -20,7 +20,11 @@ pub struct StreamingCovariance {
 
 impl Default for StreamingCovariance {
     fn default() -> Self {
-        StreamingCovariance { count: 0, mean: [0.0; D], c: [[0.0; D]; D] }
+        StreamingCovariance {
+            count: 0,
+            mean: [0.0; D],
+            c: [[0.0; D]; D],
+        }
     }
 }
 
@@ -45,9 +49,9 @@ impl StreamingCovariance {
         for j in 0..D {
             delta2[j] = x[j] - self.mean[j];
         }
-        for i in 0..D {
-            for j in 0..D {
-                self.c[i][j] += delta[i] * delta2[j];
+        for (i, row) in self.c.iter_mut().enumerate() {
+            for (j, cell) in row.iter_mut().enumerate() {
+                *cell += delta[i] * delta2[j];
             }
         }
     }
@@ -63,9 +67,9 @@ impl StreamingCovariance {
             return out;
         }
         let denom = (self.count - 1) as f64;
-        for i in 0..D {
-            for j in 0..D {
-                out[i][j] = self.c[i][j] / denom;
+        for (i, out_row) in out.iter_mut().enumerate() {
+            for (j, cell) in out_row.iter_mut().enumerate() {
+                *cell = self.c[i][j] / denom;
             }
         }
         out
@@ -150,9 +154,17 @@ pub fn pca_top3(cov: &Mat7, iters: usize) -> PcaResult {
     let m3 = deflate(&m2, &v2, l2);
     let (v3, l3) = power_iteration(&m3, iters);
 
-    let explained = if trace.abs() > 1e-12 { (l1 + l2 + l3) / trace } else { 0.0 };
+    let explained = if trace.abs() > 1e-12 {
+        (l1 + l2 + l3) / trace
+    } else {
+        0.0
+    };
 
-    PcaResult { components: [v1, v2, v3], eigenvalues: [l1, l2, l3], explained_variance_ratio: explained }
+    PcaResult {
+        components: [v1, v2, v3],
+        eigenvalues: [l1, l2, l3],
+        explained_variance_ratio: explained,
+    }
 }
 
 /// Project a 7D point (relative to the fitted mean) onto the top-3
@@ -162,7 +174,11 @@ pub fn project_3d(point: &Vec7, mean: &Vec7, pca: &PcaResult) -> [f64; 3] {
     for i in 0..D {
         centered[i] = point[i] - mean[i];
     }
-    [dot(&centered, &pca.components[0]), dot(&centered, &pca.components[1]), dot(&centered, &pca.components[2])]
+    [
+        dot(&centered, &pca.components[0]),
+        dot(&centered, &pca.components[1]),
+        dot(&centered, &pca.components[2]),
+    ]
 }
 
 #[cfg(test)]
@@ -184,7 +200,8 @@ mod tests {
         let n = xs.len() as f64;
         let mx = xs.iter().sum::<f64>() / n;
         let my = xs.iter().map(|x| 2.0 * x).sum::<f64>() / n;
-        let cov01_direct: f64 = xs.iter().map(|x| (x - mx) * (2.0 * x - my)).sum::<f64>() / (n - 1.0);
+        let cov01_direct: f64 =
+            xs.iter().map(|x| (x - mx) * (2.0 * x - my)).sum::<f64>() / (n - 1.0);
         assert!((cov[0][1] - cov01_direct).abs() < 1e-9);
         // Symmetric by construction.
         assert!((cov[0][1] - cov[1][0]).abs() < 1e-12);
@@ -201,7 +218,11 @@ mod tests {
         }
         let pca = pca_top3(&cov, 50);
         // Dominant component should be (approximately) e0, up to sign.
-        assert!(pca.components[0][0].abs() > 0.99, "v1={:?}", pca.components[0]);
+        assert!(
+            pca.components[0][0].abs() > 0.99,
+            "v1={:?}",
+            pca.components[0]
+        );
         assert!((pca.eigenvalues[0] - 100.0).abs() < 1e-6);
         // Nearly all variance is explained by 3 components when only one
         // dimension actually carries meaningful variance.

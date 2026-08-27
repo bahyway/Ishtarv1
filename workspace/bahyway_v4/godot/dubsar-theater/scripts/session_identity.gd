@@ -8,10 +8,14 @@ class_name SessionIdentity
 # SessionIdentity.privilege_level etc. after login without needing to be
 # handed a reference.
 #
-# HONEST LIMIT: this is a session-scoped RECORD of what was verified at
-# login time -- nothing in DubSar Theater yet READS privilege_level to
-# gate or restrict any feature. That's real, separate future work; this
-# only stops the login gate itself from being a pure formality.
+# HONEST LIMIT (narrowed 2026-08-21): this is a session-scoped RECORD of
+# what was verified at login time. theater_controller.gd's
+# open_enkidb_wizard() now reads privilege_level to gate the EnkiDB
+# Connector Wizard specifically (Architect-only) -- the first real
+# feature-level gate, not just the login formality this comment used to
+# describe. Every OTHER panel (HeptaScript editor, Grid & Orbit, Graph
+# Explorer, Dashboards, Document Explorer) still reads nothing here --
+# gating those, if ever wanted, is real, separate future work.
 # =============================================================================
 
 static var valid: bool = false

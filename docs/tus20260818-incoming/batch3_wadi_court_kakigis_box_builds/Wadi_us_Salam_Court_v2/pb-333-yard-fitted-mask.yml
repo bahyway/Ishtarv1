@@ -1,0 +1,80 @@
+---
+# ============================================================================
+# PB-333 — YARD-FITTED MASK fix (Wadi-us-Salaam Court v2)
+# BahyWay.Ecosystem v4.0 — SilaEngine
+# ----------------------------------------------------------------------------
+# CORRECTION SEALED BY THIS TABLET:
+#   * The v1 mask (PB-332) was a hard-anchored circle: it covered only part
+#     of the yard and spilled onto the living city. Wrong on both counts.
+#   * v2: the mask PICKS THE GRAVEYARD AREA —
+#       1. Anchor = centroid of the cemetery boundary polygon.
+#       2. Radius = covering radius computed FROM the polygon (never guessed).
+#       3. The mask is CLIPPED to the boundary: no gold outside the yard.
+#       4. Generation deepened (~420 cells, finer minimum) so the chart's
+#          rim refinement lands on the boundary alleys — narrow small roads
+#          appear covered at alley scale.
+#   * The embedded boundary is WORKSHOP-APPROXIMATE and labelled so; the
+#     sealed boundary arrives from the QGIS export via SUSA in production.
+#   * All prior laws unchanged: Palahu veil, Nasaru grammar, OSM attribution.
+#
+# FILE LAYOUT EXPECTED BESIDE THIS PLAYBOOK:
+#   files/shala_wadi_us_salaam_heptamask_v2.html
+#
+# RUN (from the Fedora host — running this is your CSR-08 confirmation):
+#   ansible-playbook pb-333-yard-fitted-mask.yml
+# ============================================================================
+
+- name: "PB-333 | Yard-fitted, clipped {7,3} mask (court v2)"
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    workshop_root: /opt/bahyway/workshop/najaf_navi
+    shala_dir: "{{ workshop_root }}/shala"
+
+  tasks:
+
+    - name: "1.1 | Ensure deprecated dir"
+      ansible.builtin.file:
+        path: "{{ shala_dir }}/deprecated"
+        state: directory
+        mode: "0750"
+
+    - name: "1.2 | Check for v1 court"
+      ansible.builtin.stat:
+        path: "{{ shala_dir }}/shala_wadi_us_salaam_heptamask.html"
+      register: v1
+
+    - name: "1.3 | Deprecate v1 (circle mask — not yard-fitted)"
+      ansible.builtin.command:
+        cmd: >
+          mv {{ shala_dir }}/shala_wadi_us_salaam_heptamask.html
+             {{ shala_dir }}/deprecated/shala_wadi_us_salaam_heptamask_v1_CIRCLE_DEPRECATED.html
+      when: v1.stat.exists
+      changed_when: true
+
+    - name: "2.1 | Deploy v2 — yard-fitted, clipped mask"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/shala_wadi_us_salaam_heptamask_v2.html"
+        dest: "{{ shala_dir }}/shala_wadi_us_salaam_heptamask_v2.html"
+        mode: "0640"
+
+    - name: "3.1 | NUZI provenance note"
+      ansible.builtin.copy:
+        dest: "{{ workshop_root }}/nuzi_provenance/pb-333-note.md"
+        mode: "0640"
+        content: |
+          PB-333 YARD-FITTED MASK. v1 circle mask deprecated (partial
+          coverage + spill onto the city). v2: anchor and covering radius
+          computed from the cemetery boundary polygon; mask clipped to the
+          yard; generation deepened (~420 cells) so rim refinement covers
+          the narrow boundary alleys. Boundary embedded as
+          workshop-approximate; sealed boundary comes from the QGIS export
+          via SUSA in production.
+
+    - name: "4.1 | Report"
+      ansible.builtin.debug:
+        msg:
+          - "v1 deprecated -> {{ shala_dir }}/deprecated/"
+          - "v2 deployed: mask belongs to the yard now — nothing spills."

@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Šala · KG Atlas · The Ḫarrānu & Sūqu Transit Map</title>
+<style>
+  :root{--clay-deep:#17110c;--clay:#241a12;--panel:#2d2118;--reed:#c9b28a;
+    --reed-dim:#8a7a5e;--lapis:#3d6b9e;--lapisb:#6fa8dc;--gold:#e8b23a;
+    --golds:#c99a2e;--seal:#7a5c3a;--ink:#0d0a07;--uruk:#5aa07a;--kin:#9a6ab8;--wound:#b8442c;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--clay-deep);color:var(--reed);
+    font-family:Georgia,serif;overflow:hidden;}
+  header{padding:10px 16px 8px;border-bottom:1px solid var(--seal);
+    background:linear-gradient(180deg,var(--clay),var(--clay-deep));}
+  .crumbs{font-size:11px;letter-spacing:.14em;color:var(--reed-dim);
+    text-transform:uppercase;font-family:'Courier New',monospace;}
+  .crumbs b{color:var(--gold);}
+  h1{font-size:20px;font-weight:normal;margin-top:4px;}
+  h1 .cun{color:var(--gold);margin-right:6px;}
+  .lede{font-size:12.5px;color:var(--reed-dim);font-style:italic;margin-top:2px;}
+  .banner{padding:5px 16px;font-size:11px;letter-spacing:.1em;
+    font-family:'Courier New',monospace;text-transform:uppercase;
+    background:#3a2c14;color:var(--gold);border-bottom:1px solid var(--golds);}
+  #fault{display:none;background:#4a1c12;color:#f0a08a;padding:5px 16px;
+    font-family:'Courier New',monospace;font-size:11px;}
+  .gates{float:right;}
+  .gate{display:inline-block;margin-left:10px;}
+  .gate .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:#555;margin-right:4px;vertical-align:middle;}
+  .gate.green .dot{background:var(--uruk);box-shadow:0 0 6px var(--uruk);}
+  .gate.red .dot{background:var(--wound);box-shadow:0 0 6px var(--wound);}
+  main{display:flex;height:calc(100% - 118px);}
+  #map{flex:1;position:relative;min-width:0;overflow:hidden;cursor:grab;}
+  #map svg{display:block;}
+  #legend{position:absolute;left:12px;top:12px;width:216px;z-index:5;
+    background:linear-gradient(180deg,var(--panel),var(--clay));
+    border:1px solid var(--seal);border-radius:3px;padding:10px;
+    box-shadow:0 4px 18px rgba(0,0,0,.55);}
+  #legend h3{font-size:10px;letter-spacing:.18em;color:var(--gold);
+    text-transform:uppercase;font-family:'Courier New',monospace;
+    border-bottom:1px solid var(--seal);padding-bottom:5px;margin-bottom:7px;}
+  .reg{display:flex;align-items:center;gap:7px;font-size:11.5px;
+    padding:3px 0;cursor:pointer;user-select:none;}
+  .reg:hover{color:#e8dcc0;}
+  .reg.off{opacity:.35;}
+  .sw{width:14px;height:5px;border-radius:2px;flex:0 0 14px;}
+  .nodesw{width:11px;height:11px;border-radius:50%;flex:0 0 11px;border:1px solid var(--seal);}
+  .reg small{margin-left:auto;color:var(--reed-dim);font-family:'Courier New',monospace;font-size:9px;}
+  #search{width:100%;margin-top:8px;background:var(--ink);border:1px solid var(--seal);
+    color:var(--reed);font-family:'Courier New',monospace;font-size:11px;padding:5px 7px;border-radius:2px;}
+  #seedline{margin-top:7px;padding-top:6px;border-top:1px solid var(--seal);
+    font-size:9.5px;color:var(--reed-dim);font-family:'Courier New',monospace;}
+  aside{width:330px;flex:0 0 330px;background:var(--clay);border-left:1px solid var(--seal);
+    display:flex;flex-direction:column;overflow:hidden;}
+  .panelhead{font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--gold);font-family:'Courier New',monospace;padding:8px 12px 5px;
+    border-bottom:1px solid var(--seal);}
+  #station{padding:10px 12px;border-bottom:1px solid var(--seal);min-height:150px;
+    max-height:320px;overflow-y:auto;font-size:12px;line-height:1.55;}
+  #station .cun{font-size:22px;color:var(--gold);}
+  #station .type{font-family:'Courier New',monospace;font-size:10px;color:var(--reed-dim);
+    letter-spacing:.12em;text-transform:uppercase;}
+  #station .gloss{font-style:italic;color:var(--reed);}
+  #station .conn{margin-top:8px;padding-left:9px;border-left:2px solid var(--seal);
+    font-size:11px;color:var(--reed-dim);cursor:pointer;}
+  #station .conn:hover{color:var(--gold);}
+  #station .conn.h{border-left-color:var(--gold);}
+  #station .conn.s{border-left-color:var(--lapis);}
+  #station .conn.k{border-left-color:var(--kin);}
+  #station .muted{color:var(--reed-dim);font-style:italic;}
+  #journal{flex:1;overflow-y:auto;padding:6px 12px;font-family:'Courier New',monospace;
+    font-size:9.8px;line-height:1.6;color:var(--reed-dim);}
+  #journal .ok{color:var(--uruk);}
+  #dl{display:inline-block;margin:8px 12px;font-family:'Courier New',monospace;
+    font-size:10px;color:var(--gold);border:1px solid var(--golds);
+    padding:4px 9px;border-radius:2px;text-decoration:none;}
+</style>
+</head>
+<body>
+<header>
+  <div class="crumbs">BahyWay.Ecosystem v4.+ · Šala Hub · <b>KG ATLAS</b> · the highway and the subway</div>
+  <h1><span class="cun">𒆜</span>The Ḫarrānu &amp; Sūqu Map — Theorem to Code and Back</h1>
+  <div class="lede">Gold ḫarrānu roads carry meaning down from the Unified Algebra. Lapis sūqu streets carry implementation up from the crates. Click any station.</div>
+</header>
+<div class="banner">⚠ COMPILED FROM SESSION CORPUS · HOST RECONCILIATION PENDING · CUNEIFORM CLASSES A/B/C PER OFFICIAL DOCS · SEED 3600
+  <span class="gates">
+    <span class="gate" id="gate-compile"><span class="dot"></span>COMPILE</span>
+    <span class="gate" id="gate-runtime"><span class="dot"></span>INTEGRITY</span>
+  </span>
+</div>
+<div id="fault"></div>
+<main>
+  <div id="map"><div id="legend">
+    <h3>Šurinnu · Lines &amp; Rings</h3>
+    <div class="reg" data-line="harranu"><span class="sw" style="background:var(--gold)"></span>ḫarrānu · highway <small>𒆜</small></div>
+    <div class="reg" data-line="suqu"><span class="sw" style="background:var(--lapis)"></span>sūqu · subway <small>code</small></div>
+    <div class="reg" data-line="kin"><span class="sw" style="background:var(--kin)"></span>kinship <small>dashed</small></div>
+    <div class="reg" data-ntype="THEOREM"><span class="nodesw" style="background:var(--gold)"></span>Theorem core <small>r0</small></div>
+    <div class="reg" data-ntype="LAW"><span class="nodesw" style="background:var(--golds)"></span>Laws <small>r1</small></div>
+    <div class="reg" data-ntype="TERM"><span class="nodesw" style="background:#e8d8a0"></span>Akkadian terms <small>r2</small></div>
+    <div class="reg" data-ntype="CRATE"><span class="nodesw" style="background:var(--lapisb)"></span>Crates · modules <small>r3</small></div>
+    <div class="reg" data-ntype="APP"><span class="nodesw" style="background:var(--uruk)"></span>Apps · services <small>r4</small></div>
+    <input id="search" placeholder="find a station… (e.g. huburu)">
+    <div id="seedline">drag to pan · wheel to zoom<br>79 stations · 106 lines</div>
+  </div></div>
+  <aside>
+    <div class="panelhead">Station · StoryEngine</div>
+    <div id="station"><span class="muted">Click a station on the map. Its roads and streets will light; everything else dims.</span></div>
+    <a id="dl" href="#" download="bahyway_kg.json">⤓ download KG (JSON · for EnkiDB ingest)</a>
+    <div class="panelhead">Integrity Journal</div>
+    <div id="journal"></div>
+  </aside>
+</main>
+<script>
+'use strict';
+const KG = {
+ "meta": {
+  "title": "BahyWay.Ecosystem v4.0 · Knowledge Graph",
+  "compiled": "2026-08-23 · session corpus · host reconciliation pending",
+  "lines": {
+   "harranu": "HIGHWAY — meaning flows down from the Theorem (gold)",
+   "suqu": "SUBWAY — implementation flows up from the code (lapis)",
+   "kin": "kinship — complements & siblings (dashed)"
+  },
+  "philology": "cuneiform classes A attested / B syllabic ⟨verify⟩ / C pending"
+ },
+ "nodes": [
+  {
+   "id": "ALG",
+   "type": "THEOREM",
+   "label": "GL-ALG-002 · Unified Algebra",
+   "cuneiform": "",
+   "gloss": "triality τ+ε ≥ ε(Θ) on Particle·Orbit·Tribe",
+   "cls": ""
+  },
+  {
+   "id": "FFC",
+   "type": "THEOREM",
+   "label": "Fadam Field Condition",
+   "cuneiform": "",
+   "gloss": "φ₇→v ⇔ ρ≤ε(Θ) ∧ h=0 ∧ ∂₇c⊆A ∧ depth∈W* (candidate)",
+   "cls": ""
+  },
+  {
+   "id": "L_LSN",
+   "type": "LAW",
+   "label": "GL-LSN-001 · Lišānu Law",
+   "cuneiform": "",
+   "gloss": "the grammar court: wounds, grafts, Uruk-only",
+   "cls": ""
+  },
+  {
+   "id": "L_NAM",
+   "type": "LAW",
+   "label": "GL-NAM-002 · Ḫubullu Law",
+   "cuneiform": "",
+   "gloss": "plain-language gloss mandatory at sealing",
+   "cls": ""
+  },
+  {
+   "id": "L_RU",
+   "type": "LAW",
+   "label": "GL-RU-001 · Puluḫtu Law",
+   "cuneiform": "",
+   "gloss": "unified risk unit",
+   "cls": ""
+  },
+  {
+   "id": "L_AGE",
+   "type": "LAW",
+   "label": "GL-AGE-001 · Šību Law",
+   "cuneiform": "",
+   "gloss": "aging unit, two-witness trigger",
+   "cls": ""
+  },
+  {
+   "id": "L_MAP",
+   "type": "LAW",
+   "label": "GL-MAP-001 · HeptaSpaceMap",
+   "cuneiform": "",
+   "gloss": "{7,3} gapless tiling, border-witness",
+   "cls": ""
+  },
+  {
+   "id": "L_OPS",
+   "type": "LAW",
+   "label": "GL-OPS-002 · URUK–KISH",
+   "cuneiform": "",
+   "gloss": "experimental vs sealed streams",
+   "cls": ""
+  },
+  {
+   "id": "L_NIM",
+   "type": "LAW",
+   "label": "GL-NIM-003 · Bārûtu Law",
+   "cuneiform": "",
+   "gloss": "pipe wall as Masku organ, 4 channels",
+   "cls": ""
+  },
+  {
+   "id": "L_HSI",
+   "type": "LAW",
+   "label": "GL-HSI-001 · Nanshe Court",
+   "cuneiform": "",
+   "gloss": "hyperspectral core + A1–A5",
+   "cls": ""
+  },
+  {
+   "id": "L_VIZ",
+   "type": "LAW",
+   "label": "GL-VIZ-001 · Naṣāru",
+   "cuneiform": "",
+   "gloss": "visualization instrument suite",
+   "cls": ""
+  },
+  {
+   "id": "L_MDB",
+   "type": "LAW",
+   "label": "EN-MDB-001 · Masku Law",
+   "cuneiform": "",
+   "gloss": "pattern membrane in EnkiMDB·7006",
+   "cls": ""
+  },
+  {
+   "id": "L_DDB",
+   "type": "LAW",
+   "label": "EN-DDB-004 · Eṭemmu Law",
+   "cuneiform": "",
+   "gloss": "ghost detection, Ghost Logarithm",
+   "cls": ""
+  },
+  {
+   "id": "L_STK",
+   "type": "LAW",
+   "label": "GL-STK-001 · Nimrud Stack",
+   "cuneiform": "",
+   "gloss": "WITNESS→JUDGE→MOVE→STAGE arc",
+   "cls": ""
+  },
+  {
+   "id": "L_CIV",
+   "type": "LAW",
+   "label": "Civil Protection Calculus",
+   "cuneiform": "",
+   "gloss": "Never-Averaged, Refuge Directive",
+   "cls": ""
+  },
+  {
+   "id": "L_NL",
+   "type": "LAW",
+   "label": "NL-001 · Naming Law",
+   "cuneiform": "",
+   "gloss": "gods/engines · cities/structures · kings/eras",
+   "cls": ""
+  },
+  {
+   "id": "L_STD",
+   "type": "LAW",
+   "label": "SALA-STD-001-A1 · N9",
+   "cuneiform": "",
+   "gloss": "cinematic camera standard",
+   "cls": ""
+  },
+  {
+   "id": "lisanu",
+   "type": "TERM",
+   "label": "lišānu",
+   "cuneiform": "𒅴",
+   "gloss": "tongue — the grammar court",
+   "cls": "A"
+  },
+  {
+   "id": "hubullu",
+   "type": "TERM",
+   "label": "ḫubullu",
+   "cuneiform": "𒄯𒊏",
+   "gloss": "gloss law; echoes urra=ḫubullu",
+   "cls": "A"
+  },
+  {
+   "id": "puluhtu",
+   "type": "TERM",
+   "label": "puluḫtu",
+   "cuneiform": "𒁍𒈛𒌅",
+   "gloss": "awe/fear — the risk unit",
+   "cls": "B"
+  },
+  {
+   "id": "sibu",
+   "type": "TERM",
+   "label": "šību",
+   "cuneiform": "𒅆𒁍",
+   "gloss": "elder/witness — aging unit šb",
+   "cls": "B"
+  },
+  {
+   "id": "huburu",
+   "type": "TERM",
+   "label": "huburu",
+   "cuneiform": "𒄷𒁍𒊒",
+   "gloss": "din/noise — noise-as-witness unit",
+   "cls": "B"
+  },
+  {
+   "id": "zaqiqu",
+   "type": "TERM",
+   "label": "zaqīqu",
+   "cuneiform": "𒍝𒆠𒆪",
+   "gloss": "dream-phantom — patterns not yet",
+   "cls": "B"
+  },
+  {
+   "id": "apsu",
+   "type": "TERM",
+   "label": "apsû",
+   "cuneiform": "𒇉",
+   "gloss": "the deep — underside/praxis",
+   "cls": "A"
+  },
+  {
+   "id": "uttu",
+   "type": "TERM",
+   "label": "Uttu",
+   "cuneiform": "𒀭𒌓𒌅",
+   "gloss": "the weaver — tissue loom",
+   "cls": "B"
+  },
+  {
+   "id": "usurtu",
+   "type": "TERM",
+   "label": "uṣurtu",
+   "cuneiform": "𒄑𒄯",
+   "gloss": "drawing/plan — the printed map",
+   "cls": "A"
+  },
+  {
+   "id": "agu",
+   "type": "TERM",
+   "label": "agû",
+   "cuneiform": "𒀀𒄖𒌑",
+   "gloss": "wave AND crown — dashboard die",
+   "cls": "B"
+  },
+  {
+   "id": "libbu",
+   "type": "TERM",
+   "label": "libbu",
+   "cuneiform": "𒊮",
+   "gloss": "heart — pulse of the Agû",
+   "cls": "A"
+  },
+  {
+   "id": "kaniku",
+   "type": "TERM",
+   "label": "kanīku",
+   "cuneiform": "𒅗𒉌𒆪",
+   "gloss": "sealed receipt — evidence chains",
+   "cls": "B"
+  },
+  {
+   "id": "kittu",
+   "type": "TERM",
+   "label": "kittu",
+   "cuneiform": "𒃻𒄀𒈾",
+   "gloss": "truth — notification of verdicts",
+   "cls": "A"
+  },
+  {
+   "id": "masku",
+   "type": "TERM",
+   "label": "mašku",
+   "cuneiform": "𒋢",
+   "gloss": "skin — pattern membrane",
+   "cls": "A"
+  },
+  {
+   "id": "etemmu",
+   "type": "TERM",
+   "label": "eṭemmu",
+   "cuneiform": "𒄇",
+   "gloss": "ghost of what was",
+   "cls": "A"
+  },
+  {
+   "id": "surinnu",
+   "type": "TERM",
+   "label": "šurinnu",
+   "cuneiform": "𒋗𒉪",
+   "gloss": "emblem — the legend stele",
+   "cls": "A"
+  },
+  {
+   "id": "harranu",
+   "type": "TERM",
+   "label": "ḫarrānu",
+   "cuneiform": "𒆜",
+   "gloss": "road — routing; the HIGHWAY lines",
+   "cls": "A"
+  },
+  {
+   "id": "naru",
+   "type": "TERM",
+   "label": "nāru/narû",
+   "cuneiform": "𒈾𒊒𒌑",
+   "gloss": "stele — the append-only journal",
+   "cls": "B"
+  },
+  {
+   "id": "abubu",
+   "type": "TERM",
+   "label": "abūbu",
+   "cuneiform": "𒀀𒁍𒁍",
+   "gloss": "flood — the Šala court die",
+   "cls": "B"
+  },
+  {
+   "id": "barutu",
+   "type": "TERM",
+   "label": "bārûtu",
+   "cuneiform": "𒁀𒊒𒌅",
+   "gloss": "diviner's craft — pipe-wall organs",
+   "cls": "B"
+  },
+  {
+   "id": "gula",
+   "type": "TERM",
+   "label": "Gula",
+   "cuneiform": "𒀭𒄖𒆷",
+   "gloss": "healer — the grammar-minting agent",
+   "cls": "A"
+  },
+  {
+   "id": "nalbanu",
+   "type": "TERM",
+   "label": "nalbanu",
+   "cuneiform": "",
+   "gloss": "brick mold — deterministic casting",
+   "cls": "C"
+  },
+  {
+   "id": "kudurru",
+   "type": "TERM",
+   "label": "kudurru",
+   "cuneiform": "",
+   "gloss": "boundary stone — KAKIGIS beacons",
+   "cls": "C"
+  },
+  {
+   "id": "suqu",
+   "type": "TERM",
+   "label": "sūqu",
+   "cuneiform": "",
+   "gloss": "street — the SUBWAY lines",
+   "cls": "C"
+  },
+  {
+   "id": "tuppu",
+   "type": "TERM",
+   "label": "ṭuppu",
+   "cuneiform": "𒁾",
+   "gloss": "tablet — sovereign homes; every seal",
+   "cls": "A"
+  },
+  {
+   "id": "dubsar",
+   "type": "TERM",
+   "label": "ṭupšarru",
+   "cuneiform": "𒁾𒊬",
+   "gloss": "the scribe — Bahaa's title",
+   "cls": "A"
+  },
+  {
+   "id": "kinu",
+   "type": "TERM",
+   "label": "kīnu",
+   "cuneiform": "",
+   "gloss": "witness-independence discipline",
+   "cls": "C"
+  },
+  {
+   "id": "temu",
+   "type": "TERM",
+   "label": "ṭēmu",
+   "cuneiform": "",
+   "gloss": "decree/report — PIV amendment",
+   "cls": "C"
+  },
+  {
+   "id": "g_wound",
+   "type": "CRATE",
+   "label": "gula::wound",
+   "cuneiform": "",
+   "gloss": "three-gloss/two-witness registry",
+   "cls": ""
+  },
+  {
+   "id": "g_graft",
+   "type": "CRATE",
+   "label": "gula::graft",
+   "cuneiform": "",
+   "gloss": "one graft per wound, sealed ancestry",
+   "cls": ""
+  },
+  {
+   "id": "g_court",
+   "type": "CRATE",
+   "label": "gula::court",
+   "cuneiform": "",
+   "gloss": "immune clause + triality gate",
+   "cls": ""
+  },
+  {
+   "id": "g_naru",
+   "type": "CRATE",
+   "label": "gula::naru",
+   "cuneiform": "",
+   "gloss": "append-only JSONL journal",
+   "cls": ""
+  },
+  {
+   "id": "g_uruk",
+   "type": "CRATE",
+   "label": "gula::uruk",
+   "cuneiform": "",
+   "gloss": "Uruk-only staging, no kish path",
+   "cls": ""
+  },
+  {
+   "id": "g_harv",
+   "type": "CRATE",
+   "label": "gula::harvest",
+   "cuneiform": "",
+   "gloss": "ḪUBULLU witness-line miner",
+   "cls": ""
+  },
+  {
+   "id": "g_zaq",
+   "type": "CRATE",
+   "label": "gula::zaqiqu",
+   "cuneiform": "",
+   "gloss": "Mendeleev gaps + VOID-HINT + recovery",
+   "cls": ""
+  },
+  {
+   "id": "g_apsu",
+   "type": "CRATE",
+   "label": "gula::apsu",
+   "cuneiform": "",
+   "gloss": "domain derivative + certify_absence",
+   "cls": ""
+  },
+  {
+   "id": "g_tis",
+   "type": "CRATE",
+   "label": "gula::tissue",
+   "cuneiform": "",
+   "gloss": "maturation ladder + utility gate",
+   "cls": ""
+  },
+  {
+   "id": "g_res",
+   "type": "CRATE",
+   "label": "gula::residual",
+   "cuneiform": "",
+   "gloss": "Clearance Confidence + two locks",
+   "cls": ""
+  },
+  {
+   "id": "g_fld",
+   "type": "CRATE",
+   "label": "gula::field",
+   "cuneiform": "",
+   "gloss": "Higgs border law + typed W*",
+   "cls": ""
+  },
+  {
+   "id": "g_noi",
+   "type": "CRATE",
+   "label": "gula::noise",
+   "cuneiform": "",
+   "gloss": "huburu forensics r₁/κ",
+   "cls": ""
+  },
+  {
+   "id": "g_usu",
+   "type": "CRATE",
+   "label": "gula::usurtu",
+   "cuneiform": "",
+   "gloss": "streaming analyzer + SVG press",
+   "cls": ""
+  },
+  {
+   "id": "wpd",
+   "type": "CRATE",
+   "label": "WPDEngine",
+   "cuneiform": "",
+   "gloss": "σ_d≤0.10 m, FAVAD, night-flow triad",
+   "cls": ""
+  },
+  {
+   "id": "sila",
+   "type": "CRATE",
+   "label": "SilaEngine::suqu",
+   "cuneiform": "",
+   "gloss": "profiled A* streets of KAKIGIS",
+   "cls": ""
+  },
+  {
+   "id": "nas",
+   "type": "CRATE",
+   "label": "Naṣāru::sibu",
+   "cuneiform": "",
+   "gloss": "aging witnesses instrument",
+   "cls": ""
+  },
+  {
+   "id": "nan",
+   "type": "CRATE",
+   "label": "NansheEngine",
+   "cuneiform": "",
+   "gloss": "hyperspectral courts A1–A5",
+   "cls": ""
+  },
+  {
+   "id": "igi",
+   "type": "CRATE",
+   "label": "IgigiWatch",
+   "cuneiform": "",
+   "gloss": "Three Bells; alarm on acceleration",
+   "cls": ""
+  },
+  {
+   "id": "kit",
+   "type": "CRATE",
+   "label": "KittuEngine",
+   "cuneiform": "",
+   "gloss": "verdict notification delivery",
+   "cls": ""
+  },
+  {
+   "id": "mdb",
+   "type": "CRATE",
+   "label": "EnkiMDB·7006",
+   "cuneiform": "",
+   "gloss": "pattern membrane store",
+   "cls": ""
+  },
+  {
+   "id": "ddb",
+   "type": "CRATE",
+   "label": "EnkiDDB·7007",
+   "cuneiform": "",
+   "gloss": "ghost detection store",
+   "cls": ""
+  },
+  {
+   "id": "kak",
+   "type": "CRATE",
+   "label": "KAKIGIS",
+   "cuneiform": "",
+   "gloss": "Wadi Al-Salam cemetery court",
+   "cls": ""
+  },
+  {
+   "id": "a357",
+   "type": "APP",
+   "label": "Šala · Lišānu Court (PB-357)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "a358",
+   "type": "APP",
+   "label": "Šala · Zaqīqu Veil (PB-358)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "a359",
+   "type": "APP",
+   "label": "Šala · Apsû Mirror (PB-359)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "a360",
+   "type": "APP",
+   "label": "Šala · Uttu Loom (PB-360)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "a361",
+   "type": "APP",
+   "label": "Šala · Puluḫtu Gate (PB-361)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "a362",
+   "type": "APP",
+   "label": "Šala · Agû Crown (PB-362)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "a363",
+   "type": "APP",
+   "label": "Šala · Uṣurtu Press (PB-363)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "adash",
+   "type": "APP",
+   "label": "Agû Dashboards",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "agold",
+   "type": "APP",
+   "label": "Golden Store v11 (investor demo)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "adub",
+   "type": "APP",
+   "label": "DubSar Theater",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "adocs",
+   "type": "APP",
+   "label": "Official Documentation (.docx)",
+   "cuneiform": "",
+   "gloss": "exhibit / service",
+   "cls": ""
+  },
+  {
+   "id": "gcr",
+   "type": "CRATE",
+   "label": "gula (crate root)",
+   "cuneiform": "",
+   "gloss": "the agent's body — 13 modules, zero deps",
+   "cls": ""
+  }
+ ],
+ "edges": [
+  {
+   "from": "FFC",
+   "to": "ALG",
+   "rel": "capstone_of",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_LSN",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_NAM",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_RU",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_AGE",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_MAP",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_OPS",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_NIM",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_HSI",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_VIZ",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_MDB",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_DDB",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_STK",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_CIV",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_NL",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "ALG",
+   "to": "L_STD",
+   "rel": "governs",
+   "line": "harranu"
+  },
+  {
+   "from": "L_LSN",
+   "to": "lisanu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_NAM",
+   "to": "hubullu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_RU",
+   "to": "puluhtu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_AGE",
+   "to": "sibu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_AGE",
+   "to": "huburu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_LSN",
+   "to": "zaqiqu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_LSN",
+   "to": "apsu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_LSN",
+   "to": "uttu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_LSN",
+   "to": "usurtu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_VIZ",
+   "to": "agu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_VIZ",
+   "to": "libbu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_CIV",
+   "to": "kaniku",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_NL",
+   "to": "kittu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_MDB",
+   "to": "masku",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_DDB",
+   "to": "etemmu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_VIZ",
+   "to": "surinnu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_MAP",
+   "to": "harranu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_LSN",
+   "to": "naru",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_VIZ",
+   "to": "abubu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_NIM",
+   "to": "barutu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_LSN",
+   "to": "gula",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_HSI",
+   "to": "nalbanu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_MAP",
+   "to": "kudurru",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_MAP",
+   "to": "suqu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_MAP",
+   "to": "tuppu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_NL",
+   "to": "dubsar",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_HSI",
+   "to": "kinu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "L_HSI",
+   "to": "temu",
+   "rel": "names",
+   "line": "harranu"
+  },
+  {
+   "from": "etemmu",
+   "to": "zaqiqu",
+   "rel": "complements",
+   "line": "kin"
+  },
+  {
+   "from": "sibu",
+   "to": "huburu",
+   "rel": "sibling",
+   "line": "kin"
+  },
+  {
+   "from": "FFC",
+   "to": "puluhtu",
+   "rel": "denominated_in",
+   "line": "harranu"
+  },
+  {
+   "from": "FFC",
+   "to": "huburu",
+   "rel": "conjunct",
+   "line": "harranu"
+  },
+  {
+   "from": "FFC",
+   "to": "harranu",
+   "rel": "aggregates_on_{7,3}",
+   "line": "harranu"
+  },
+  {
+   "from": "lisanu",
+   "to": "g_wound",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "lisanu",
+   "to": "g_graft",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "lisanu",
+   "to": "g_court",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "naru",
+   "to": "g_naru",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "lisanu",
+   "to": "g_uruk",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "hubullu",
+   "to": "g_harv",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "zaqiqu",
+   "to": "g_zaq",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "apsu",
+   "to": "g_apsu",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "kaniku",
+   "to": "g_apsu",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "uttu",
+   "to": "g_tis",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "barutu",
+   "to": "g_tis",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "puluhtu",
+   "to": "g_res",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "harranu",
+   "to": "g_fld",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "tuppu",
+   "to": "g_fld",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "huburu",
+   "to": "g_noi",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "usurtu",
+   "to": "g_usu",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "kaniku",
+   "to": "g_usu",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "barutu",
+   "to": "wpd",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "kinu",
+   "to": "wpd",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "suqu",
+   "to": "sila",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "harranu",
+   "to": "sila",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "kudurru",
+   "to": "sila",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "sibu",
+   "to": "nas",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "nalbanu",
+   "to": "nan",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "kinu",
+   "to": "nan",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "temu",
+   "to": "nan",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "libbu",
+   "to": "igi",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "kittu",
+   "to": "kit",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "masku",
+   "to": "mdb",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "etemmu",
+   "to": "ddb",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "kudurru",
+   "to": "kak",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "tuppu",
+   "to": "kak",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "kaniku",
+   "to": "kak",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_wound",
+   "to": "a357",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_graft",
+   "to": "a357",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_court",
+   "to": "a357",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_uruk",
+   "to": "a357",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_naru",
+   "to": "a357",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_zaq",
+   "to": "a358",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_harv",
+   "to": "a358",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_apsu",
+   "to": "a359",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_tis",
+   "to": "a360",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_res",
+   "to": "a361",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_fld",
+   "to": "a362",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_noi",
+   "to": "a362",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_usu",
+   "to": "a363",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "igi",
+   "to": "adash",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "mdb",
+   "to": "agold",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "ddb",
+   "to": "agold",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "nas",
+   "to": "adub",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "g_court",
+   "to": "adocs",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  },
+  {
+   "from": "agu",
+   "to": "adash",
+   "rel": "die_of",
+   "line": "suqu"
+  },
+  {
+   "from": "abubu",
+   "to": "a357",
+   "rel": "die_of",
+   "line": "suqu"
+  },
+  {
+   "from": "surinnu",
+   "to": "a362",
+   "rel": "controller_of",
+   "line": "suqu"
+  },
+  {
+   "from": "dubsar",
+   "to": "adub",
+   "rel": "named_for",
+   "line": "suqu"
+  },
+  {
+   "from": "gula",
+   "to": "gcr",
+   "rel": "implemented_in",
+   "line": "suqu"
+  },
+  {
+   "from": "gcr",
+   "to": "a357",
+   "rel": "exhibited_in",
+   "line": "suqu"
+  }
+ ]
+};
+const faultEl=document.getElementById('fault');
+window.onerror=function(m,s,l){faultEl.style.display='block';
+  faultEl.textContent='⚑ FAULT · '+m+' · line '+l; setGate('gate-runtime',false); return false;};
+function setGate(id,ok){const g=document.getElementById(id);
+  g.classList.remove('green','red');g.classList.add(ok?'green':'red');}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296;}}
+const rng=mulberry32(3600);
+
+/* ---- layout: radial transit rings, families kept adjacent ---- */
+const RING={THEOREM:70,LAW:200,TERM:345,CRATE:495,APP:625};
+const nodes=KG.nodes, edges=KG.edges;
+const byId={}; nodes.forEach(n=>byId[n.id]=n);
+const adj={}; nodes.forEach(n=>adj[n.id]=[]);
+edges.forEach(e=>{adj[e.from].push(e);adj[e.to].push(e);});
+/* angle assignment: order laws around the circle; children inherit parent angle */
+const lawOrder=nodes.filter(n=>n.type==='LAW').map(n=>n.id);
+const lawAng={}; lawOrder.forEach((id,i)=>lawAng[id]=i/lawOrder.length*Math.PI*2 - Math.PI/2);
+function parentAngle(id, seen){
+  seen=seen||new Set(); if(seen.has(id))return null; seen.add(id);
+  for(const e of adj[id]){
+    const other=e.from===id?e.to:e.from;
+    const o=byId[other];
+    if(o.type==='LAW')return lawAng[other];
+    if(o.type==='THEOREM')return 0;
+  }
+  for(const e of adj[id]){
+    const other=e.from===id?e.to:e.from;
+    const a=parentAngle(other,seen); if(a!==null)return a;
+  }
+  return rng()*Math.PI*2;
+}
+const groups={}; // per-ring angle buckets to spread siblings
+nodes.forEach(n=>{
+  let a;
+  if(n.type==='THEOREM')a=(n.id==='ALG')?0:Math.PI;
+  else if(n.type==='LAW')a=lawAng[n.id];
+  else a=parentAngle(n.id);
+  n._a0=a;
+});
+['TERM','CRATE','APP'].forEach(t=>{
+  const g=nodes.filter(n=>n.type===t).sort((x,y)=>x._a0-y._a0);
+  g.forEach((n,i)=>{n._a=n._a0 + ( (i%3)-1 )*0.05; });
+});
+nodes.forEach(n=>{if(n._a===undefined)n._a=n._a0;
+  const r=n.type==='THEOREM'?(n.id==='ALG'?0:RING.THEOREM):RING[n.type];
+  n.x=r*Math.cos(n._a); n.y=r*Math.sin(n._a);});
+/* de-overlap within rings: simple angular relaxation */
+for(let it=0;it<220;it++){
+  ['LAW','TERM','CRATE','APP'].forEach(t=>{
+    const g=nodes.filter(n=>n.type===t).sort((a,b)=>Math.atan2(a.y,a.x)-Math.atan2(b.y,b.x));
+    for(let i=0;i<g.length;i++){
+      const a=g[i],b=g[(i+1)%g.length];
+      let da=Math.atan2(b.y,b.x)-Math.atan2(a.y,a.x);
+      if(da<0)da+=Math.PI*2;
+      const min=Math.PI*2/g.length*0.72;
+      if(da<min){const push=(min-da)/2, r=RING[t];
+        const aa=Math.atan2(a.y,a.x)-push, ab=Math.atan2(b.y,b.x)+push;
+        a.x=r*Math.cos(aa);a.y=r*Math.sin(aa);
+        b.x=r*Math.cos(ab);b.y=r*Math.sin(ab);}
+    }});
+}
+
+/* ---- SVG build ---- */
+const map=document.getElementById('map');
+const NS='http://www.w3.org/2000/svg';
+const svg=document.createElementNS(NS,'svg');
+map.appendChild(svg);
+const world=document.createElementNS(NS,'g'); svg.appendChild(world);
+const COL={harranu:'#e8b23a',suqu:'#3d6b9e',kin:'#9a6ab8'};
+const NODECOL={THEOREM:'#e8b23a',LAW:'#c99a2e',TERM:'#e8d8a0',CRATE:'#6fa8dc',APP:'#5aa07a'};
+/* ring guides */
+Object.values(RING).forEach(r=>{
+  const c=document.createElementNS(NS,'circle');
+  c.setAttribute('cx',0);c.setAttribute('cy',0);c.setAttribute('r',r);
+  c.setAttribute('fill','none');c.setAttribute('stroke','#3a2f22');
+  c.setAttribute('stroke-width','1');world.appendChild(c);});
+/* edges as metro curves */
+const edgeEls=[];
+edges.forEach(e=>{
+  const A=byId[e.from],B=byId[e.to];
+  const mx=(A.x+B.x)/2, my=(A.y+B.y)/2;
+  const pull=e.line==='harranu'?0.55:e.line==='kin'?1.0:1.25;
+  const cx=mx*pull, cy=my*pull;
+  const p=document.createElementNS(NS,'path');
+  p.setAttribute('d','M '+A.x+' '+A.y+' Q '+cx+' '+cy+' '+B.x+' '+B.y);
+  p.setAttribute('fill','none');
+  p.setAttribute('stroke',COL[e.line]);
+  p.setAttribute('stroke-width',e.line==='harranu'?2.6:1.5);
+  p.setAttribute('opacity',e.line==='harranu'?0.75:0.55);
+  if(e.line==='kin')p.setAttribute('stroke-dasharray','5 5');
+  world.appendChild(p); edgeEls.push({e,el:p});
+});
+/* nodes as stations */
+const nodeEls=[];
+nodes.forEach(n=>{
+  const g=document.createElementNS(NS,'g');
+  g.setAttribute('transform','translate('+n.x+','+n.y+')');
+  g.style.cursor='pointer';
+  const c=document.createElementNS(NS,'circle');
+  const r=n.type==='THEOREM'?13:n.type==='LAW'?8:n.type==='TERM'?7:6;
+  c.setAttribute('r',r); c.setAttribute('fill',NODECOL[n.type]);
+  c.setAttribute('stroke','#17110c'); c.setAttribute('stroke-width','2');
+  g.appendChild(c);
+  const t=document.createElementNS(NS,'text');
+  const out=Math.hypot(n.x,n.y)||1;
+  const lx=(n.x/out)*(r+5), ly=(n.y/out)*(r+5);
+  t.setAttribute('x',lx); t.setAttribute('y',ly);
+  t.setAttribute('font-size', n.type==='THEOREM'?'13':n.type==='LAW'?'10':'9.5');
+  t.setAttribute('fill', n.type==='TERM'?'#e8d8a0':'#c9b28a');
+  t.setAttribute('font-family','Georgia, serif');
+  t.setAttribute('text-anchor', n.x<-20?'end':'start');
+  t.setAttribute('dominant-baseline', n.y<0?'auto':'hanging');
+  t.textContent=n.label.split(' · ')[0].split(' (')[0];
+  g.appendChild(t);
+  world.appendChild(g); nodeEls.push({n,el:g,circle:c,label:t});
+  g.addEventListener('click',ev=>{ev.stopPropagation();select(n.id);});
+});
+
+/* ---- pan/zoom ---- */
+let vx=0,vy=0,scale=1;
+function apply(){world.setAttribute('transform','translate('+(map.clientWidth/2+vx)+','+((map.clientHeight)/2+vy)+') scale('+scale+')');}
+function resize(){svg.setAttribute('width',map.clientWidth);svg.setAttribute('height',map.clientHeight);apply();}
+window.addEventListener('resize',resize);
+let drag=false,lx=0,ly=0,moved=0;
+map.addEventListener('pointerdown',e=>{drag=true;moved=0;lx=e.clientX;ly=e.clientY;map.style.cursor='grabbing';});
+window.addEventListener('pointermove',e=>{if(!drag)return;
+  vx+=e.clientX-lx; vy+=e.clientY-ly; moved+=Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly);
+  lx=e.clientX;ly=e.clientY;apply();});
+window.addEventListener('pointerup',()=>{drag=false;map.style.cursor='grab';});
+map.addEventListener('wheel',e=>{e.preventDefault();
+  scale=Math.max(0.35,Math.min(3,scale*(e.deltaY<0?1.1:0.9)));apply();},{passive:false});
+
+/* ---- selection & story ---- */
+const station=document.getElementById('station');
+let sel=null;
+function select(id){
+  sel=id; const n=byId[id];
+  const con=adj[id];
+  const seen=new Set([id]); con.forEach(e=>{seen.add(e.from);seen.add(e.to);});
+  nodeEls.forEach(o=>{o.el.setAttribute('opacity',seen.has(o.n.id)?1:0.15);});
+  edgeEls.forEach(o=>{const on=o.e.from===id||o.e.to===id;
+    o.el.setAttribute('opacity',on?0.95:0.06);
+    o.el.setAttribute('stroke-width',on?(o.e.line==='harranu'?3.6:2.4):(o.e.line==='harranu'?2.6:1.5));});
+  let h='<div class="type">'+n.type+(n.cls?' · class '+n.cls:'')+'</div>';
+  h+='<div style="font-size:16px;color:var(--gold)"><b>'+n.label+'</b>';
+  if(n.cuneiform)h+=' <span class="cun">'+n.cuneiform+'</span>';
+  h+='</div>';
+  if(n.gloss)h+='<div class="gloss">'+n.gloss+'</div>';
+  const groupsR={harranu:[],suqu:[],kin:[]};
+  con.forEach(e=>{const other=e.from===id?e.to:e.from;
+    const dir=e.from===id?'→':'←';
+    groupsR[e.line].push({other,txt:dir+' '+e.rel.replace(/_/g,' ')+' '+byId[other].label});});
+  const cls={harranu:'h',suqu:'s',kin:'k'};
+  const names={harranu:'ḫarrānu · highway',suqu:'sūqu · subway',kin:'kinship'};
+  for(const line of ['harranu','suqu','kin']){
+    if(!groupsR[line].length)continue;
+    h+='<div class="type" style="margin-top:8px">'+names[line]+'</div>';
+    groupsR[line].forEach(c=>{h+='<div class="conn '+cls[line]+'" data-go="'+c.other+'">'+c.txt+'</div>';});
+  }
+  station.innerHTML=h;
+  station.querySelectorAll('[data-go]').forEach(el=>
+    el.addEventListener('click',()=>select(el.dataset.go)));
+}
+svg.addEventListener('click',()=>{sel=null;
+  nodeEls.forEach(o=>o.el.setAttribute('opacity',1));
+  edgeEls.forEach(o=>{o.el.setAttribute('opacity',o.e.line==='harranu'?0.75:0.55);
+    o.el.setAttribute('stroke-width',o.e.line==='harranu'?2.6:1.5);});
+  station.innerHTML='<span class="muted">Click a station on the map.</span>';});
+
+/* ---- legend toggles + search ---- */
+const lineOn={harranu:true,suqu:true,kin:true};
+const typeOn={THEOREM:true,LAW:true,TERM:true,CRATE:true,APP:true};
+function refreshVis(){
+  edgeEls.forEach(o=>{const vis=lineOn[o.e.line]&&typeOn[byId[o.e.from].type]&&typeOn[byId[o.e.to].type];
+    o.el.style.display=vis?'':'none';});
+  nodeEls.forEach(o=>{o.el.style.display=typeOn[o.n.type]?'':'none';});
+}
+document.querySelectorAll('.reg').forEach(r=>{
+  r.addEventListener('click',()=>{
+    if(r.dataset.line){lineOn[r.dataset.line]=!lineOn[r.dataset.line];r.classList.toggle('off');}
+    if(r.dataset.ntype){typeOn[r.dataset.ntype]=!typeOn[r.dataset.ntype];r.classList.toggle('off');}
+    refreshVis();});});
+document.getElementById('search').addEventListener('input',e=>{
+  const q=e.target.value.trim().toLowerCase();
+  if(!q){nodeEls.forEach(o=>o.circle.setAttribute('stroke','#17110c'));return;}
+  let first=null;
+  nodeEls.forEach(o=>{const hit=o.n.label.toLowerCase().includes(q)||o.n.id.includes(q);
+    o.circle.setAttribute('stroke',hit?'#e8b23a':'#17110c');
+    o.circle.setAttribute('stroke-width',hit?'3':'2');
+    if(hit&&!first)first=o.n;});
+  if(first)select(first.id);});
+
+/* ---- download ---- */
+document.getElementById('dl').href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(KG,null,1));
+
+/* ---- integrity gate (RUNTIME) ---- */
+const journal=document.getElementById('journal');
+function jlog(t,ok){const d=document.createElement('div');
+  if(ok)d.className='ok';d.textContent=t;journal.appendChild(d);}
+function integrity(){
+  const ids=new Set(nodes.map(n=>n.id));
+  const badE=edges.filter(e=>!ids.has(e.from)||!ids.has(e.to));
+  jlog('[CHECK] edge endpoints resolve: '+(badE.length===0?'PASS':'FAIL '+badE.length),badE.length===0);
+  const terms=nodes.filter(n=>n.type==='TERM');
+  const orphanT=terms.filter(t=>!edges.some(e=>e.from===t.id&&e.line==='suqu'));
+  jlog('[CHECK] every TERM rides a sūqu street: '+(orphanT.length===0?'PASS':'FAIL '+orphanT.map(t=>t.id)),orphanT.length===0);
+  const laws=nodes.filter(n=>n.type==='LAW');
+  const orphanL=laws.filter(l=>!edges.some(e=>e.from==='ALG'&&e.to===l.id));
+  jlog('[CHECK] every LAW rides a ḫarrānu from the Theorem: '+(orphanL.length===0?'PASS':'FAIL'),orphanL.length===0);
+  const dup=new Set(); let dups=0;
+  edges.forEach(e=>{const k=e.from+'>'+e.to+'>'+e.rel;if(dup.has(k))dups++;dup.add(k);});
+  jlog('[CHECK] no duplicate lines: '+(dups===0?'PASS':'FAIL '+dups),dups===0);
+  jlog('[ATLAS] '+nodes.length+' stations · '+edges.length+' lines · compiled seed 3600',true);
+  return badE.length===0&&orphanT.length===0&&orphanL.length===0&&dups===0;
+}
+resize(); apply();
+setGate('gate-compile',true);
+setGate('gate-runtime',integrity());
+select('FFC');
+</script>
+</body>
+</html>

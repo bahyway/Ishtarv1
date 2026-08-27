@@ -51,12 +51,7 @@ impl Vec7DKey {
     }
 
     /// Generate with explicit stretching rounds (tests use fewer).
-    pub fn generate_with_rounds<S1, S2, S3>(
-        p1: &S1,
-        p2: &S2,
-        p3: &S3,
-        rounds: u32,
-    ) -> Vec7DKey
+    pub fn generate_with_rounds<S1, S2, S3>(p1: &S1, p2: &S2, p3: &S3, rounds: u32) -> Vec7DKey
     where
         S1: SovereignSign,
         S2: SovereignSign,
@@ -69,12 +64,7 @@ impl Vec7DKey {
 
         // Stage 2 — mix with the exact Plimpton anchor spreads.
         let anchors = PlimptonAnchors::sovereign().as_array();
-        let mut state: [u64; 4] = [
-            s1,
-            s2,
-            s3,
-            s1 ^ s2.rotate_left(21) ^ s3.rotate_left(42),
-        ];
+        let mut state: [u64; 4] = [s1, s2, s3, s1 ^ s2.rotate_left(21) ^ s3.rotate_left(42)];
         for (i, spread) in anchors.iter().enumerate() {
             let q = (spread * KEY_QUANTIZER).round() as u64;
             state[i % 4] = state[i % 4]
@@ -103,9 +93,7 @@ impl Vec7DKey {
         // Profiles.
         let traditions = [p1.tradition(), p2.tradition(), p3.tradition()];
         let all_meszl = traditions.iter().all(|t| *t == SignTradition::MesZL);
-        let all_wah = traditions
-            .iter()
-            .all(|t| *t == SignTradition::IbnWahshiyya);
+        let all_wah = traditions.iter().all(|t| *t == SignTradition::IbnWahshiyya);
         let profile = if all_meszl {
             TraditionProfile::PureMesZL
         } else if all_wah {
@@ -125,7 +113,11 @@ impl Vec7DKey {
             dimensions[d.index()] = true;
         }
 
-        Vec7DKey { bytes, profile, dimensions }
+        Vec7DKey {
+            bytes,
+            profile,
+            dimensions,
+        }
     }
 
     /// Regenerate and compare — same signs must reproduce the key.
@@ -138,13 +130,7 @@ impl Vec7DKey {
         Vec7DKey::generate(p1, p2, p3).bytes == self.bytes
     }
 
-    pub fn verify_with_rounds<S1, S2, S3>(
-        &self,
-        p1: &S1,
-        p2: &S2,
-        p3: &S3,
-        rounds: u32,
-    ) -> bool
+    pub fn verify_with_rounds<S1, S2, S3>(&self, p1: &S1, p2: &S2, p3: &S3, rounds: u32) -> bool
     where
         S1: SovereignSign,
         S2: SovereignSign,
@@ -170,7 +156,9 @@ trait AsArray {
 
 impl AsArray for PlimptonAnchors {
     fn as_array(&self) -> [f64; 7] {
-        [self.me, self.gu, self.sag, self.a, self.izi, self.ud, self.uru]
+        [
+            self.me, self.gu, self.sag, self.a, self.izi, self.ud, self.uru,
+        ]
     }
 }
 

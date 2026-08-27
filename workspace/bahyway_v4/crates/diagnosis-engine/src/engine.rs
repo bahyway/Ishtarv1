@@ -12,25 +12,29 @@
 
 use std::collections::HashMap;
 
+use crate::color_drift::{drift_axis, rgb_drift, DriftAxis};
 use bahyway_core::TribeId;
+use enkidb_journal::{EventCause, Journal, JournalEntry};
 use enkidb_kaki::{EventKaki, IdentityKaki, KakiMinter, KakiRole};
-use enkidb_journal::{Journal, JournalEntry, EventCause};
-use crate::color_drift::{rgb_drift, drift_axis, DriftAxis};
 
 /// Sovereign drift thresholds (Euclidean distance in RGB space).
 #[derive(Debug, Clone)]
 pub struct DriftThresholds {
     /// Drift at or above this level → DiagnosisWatch.
-    pub watch:    f32,
+    pub watch: f32,
     /// Drift at or above this level → DiagnosisWarning.
-    pub warning:  f32,
+    pub warning: f32,
     /// Drift at or above this level → DiagnosisCritical.
     pub critical: f32,
 }
 
 impl Default for DriftThresholds {
     fn default() -> Self {
-        DriftThresholds { watch: 30.0, warning: 60.0, critical: 100.0 }
+        DriftThresholds {
+            watch: 30.0,
+            warning: 60.0,
+            critical: 100.0,
+        }
     }
 }
 
@@ -38,11 +42,11 @@ impl Default for DriftThresholds {
 #[derive(Debug, Default, Clone)]
 pub struct DiagnosisResult {
     pub particles_examined: usize,
-    pub watch_events:       usize,
-    pub warning_events:     usize,
-    pub critical_events:    usize,
+    pub watch_events: usize,
+    pub warning_events: usize,
+    pub critical_events: usize,
     /// Particles with no color snapshot in the Journal (cannot diagnose).
-    pub no_snapshot_count:  usize,
+    pub no_snapshot_count: usize,
 }
 
 impl DiagnosisResult {
@@ -56,7 +60,7 @@ impl DiagnosisResult {
 pub struct DiagnosisEngine {
     /// Tribe root RGB colors: tribe_id → [R, G, B].
     tribe_root_colors: HashMap<u16, [u8; 3]>,
-    pub thresholds:    DriftThresholds,
+    pub thresholds: DriftThresholds,
 }
 
 impl DiagnosisEngine {
@@ -74,7 +78,10 @@ impl DiagnosisEngine {
 
     /// Return the root color for a tribe (white = [255,255,255] if unknown).
     pub fn tribe_root_color(&self, tribe_id: u16) -> [u8; 3] {
-        self.tribe_root_colors.get(&tribe_id).copied().unwrap_or([255, 255, 255])
+        self.tribe_root_colors
+            .get(&tribe_id)
+            .copied()
+            .unwrap_or([255, 255, 255])
     }
 
     /// Examine all particles in the journal.  For each one, read the most
@@ -84,9 +91,9 @@ impl DiagnosisEngine {
     /// `minter` must belong to the same tribe as the journal.
     pub fn run(
         &mut self,
-        journal:      &mut Journal,
-        minter:       &KakiMinter,
-        tribe_id:     TribeId,
+        journal: &mut Journal,
+        minter: &KakiMinter,
+        tribe_id: TribeId,
         current_tick: u64,
     ) -> DiagnosisResult {
         let _ = current_tick;
@@ -94,26 +101,36 @@ impl DiagnosisEngine {
 
         // Collect work without borrowing journal mutably
         struct Work {
-            target:  IdentityKaki,
-            snap:    [u8; 3],
-            epoch:   u32,
+            target: IdentityKaki,
+            snap: [u8; 3],
+            epoch: u32,
         }
 
         let mut work_items: Vec<Work> = Vec::new();
 
         let particles = journal.all_particles();
-        let mut result = DiagnosisResult { particles_examined: particles.len(), ..Default::default() };
+        let mut result = DiagnosisResult {
+            particles_examined: particles.len(),
+            ..Default::default()
+        };
 
         for target in &particles {
             let history = journal.read_particle_history(target);
             // Most recent color snapshot = last entry in history with ATTR_COLOR_ID_SNAPSHOT
-            let snap_opt: Option<([u8; 3], u32)> = history.iter().rev().find_map(|e| {
-                e.color_id_snapshot().map(|s| (s, e.epoch))
-            });
+            let snap_opt: Option<([u8; 3], u32)> = history
+                .iter()
+                .rev()
+                .find_map(|e| e.color_id_snapshot().map(|s| (s, e.epoch)));
             match snap_opt {
-                None => { result.no_snapshot_count += 1; }
+                None => {
+                    result.no_snapshot_count += 1;
+                }
                 Some((snap, epoch)) => {
-                    work_items.push(Work { target: target.clone(), snap, epoch });
+                    work_items.push(Work {
+                        target: *target,
+                        snap,
+                        epoch,
+                    });
                 }
             }
         }
@@ -124,8 +141,8 @@ impl DiagnosisEngine {
             let cause = self.classify_drift(drift);
             if let Some(cause) = cause {
                 match cause {
-                    EventCause::DiagnosisWatch    => result.watch_events    += 1,
-                    EventCause::DiagnosisWarning  => result.warning_events  += 1,
+                    EventCause::DiagnosisWatch => result.watch_events += 1,
+                    EventCause::DiagnosisWarning => result.warning_events += 1,
                     EventCause::DiagnosisCritical => result.critical_events += 1,
                     _ => {}
                 }
@@ -133,7 +150,7 @@ impl DiagnosisEngine {
                     .expect("minter always produces valid event KAKIs");
 
                 // Encode drift and axis into the color snapshot for HeptaScript queries.
-                let axis  = drift_axis(w.snap, root_color);
+                let axis = drift_axis(w.snap, root_color);
                 let drift_rgb = axis_to_rgb(axis, drift);
 
                 let entry = JournalEntry::new(event_kaki, w.target, w.epoch, Vec::new())
@@ -147,15 +164,22 @@ impl DiagnosisEngine {
     }
 
     fn classify_drift(&self, drift: f32) -> Option<EventCause> {
-        if      drift >= self.thresholds.critical { Some(EventCause::DiagnosisCritical) }
-        else if drift >= self.thresholds.warning  { Some(EventCause::DiagnosisWarning)  }
-        else if drift >= self.thresholds.watch    { Some(EventCause::DiagnosisWatch)    }
-        else                                      { None }
+        if drift >= self.thresholds.critical {
+            Some(EventCause::DiagnosisCritical)
+        } else if drift >= self.thresholds.warning {
+            Some(EventCause::DiagnosisWarning)
+        } else if drift >= self.thresholds.watch {
+            Some(EventCause::DiagnosisWatch)
+        } else {
+            None
+        }
     }
 }
 
 impl Default for DiagnosisEngine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Encode a DriftAxis into a diagnostic RGB snapshot stored in the Journal.
@@ -163,10 +187,10 @@ impl Default for DiagnosisEngine {
 fn axis_to_rgb(axis: DriftAxis, drift: f32) -> [u8; 3] {
     let level = drift.min(255.0) as u8;
     match axis {
-        DriftAxis::Severity  => [level, 0, 0],  // R dominant → alert
-        DriftAxis::Quality   => [0, level, 0],  // G dominant → quality
-        DriftAxis::Freshness => [0, 0, level],  // B dominant → freshness
-        DriftAxis::Balanced  => [level, level, level],
+        DriftAxis::Severity => [level, 0, 0],  // R dominant → alert
+        DriftAxis::Quality => [0, level, 0],   // G dominant → quality
+        DriftAxis::Freshness => [0, 0, level], // B dominant → freshness
+        DriftAxis::Balanced => [level, level, level],
     }
 }
 
@@ -174,8 +198,8 @@ fn axis_to_rgb(axis: DriftAxis, drift: f32) -> [u8; 3] {
 mod tests {
     use super::*;
     use bahyway_core::TribeId;
-    use enkidb_kaki::{KakiMinter, KakiRole, EventKaki, IdentityKaki};
-    use enkidb_journal::{Journal, JournalEntry, EventCause};
+    use enkidb_journal::{EventCause, Journal, JournalEntry};
+    use enkidb_kaki::{EventKaki, IdentityKaki, KakiMinter, KakiRole};
 
     fn setup(tid: TribeId) -> (DiagnosisEngine, KakiMinter, Journal) {
         let mut eng = DiagnosisEngine::new();
@@ -186,11 +210,14 @@ mod tests {
     }
 
     fn seed_particle_with_color(
-        minter: &KakiMinter, journal: &mut Journal, rgb: [u8; 3], cause: EventCause,
+        minter: &KakiMinter,
+        journal: &mut Journal,
+        rgb: [u8; 3],
+        cause: EventCause,
     ) -> IdentityKaki {
         let target = IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
-        let ek     = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
-        let entry  = JournalEntry::new(ek, target.clone(), 1, Vec::new())
+        let ek = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
+        let entry = JournalEntry::new(ek, target.clone(), 1, Vec::new())
             .with_color_snapshot(rgb, 0.0)
             .with_event_cause(cause);
         journal.append(entry).unwrap();
@@ -234,8 +261,10 @@ mod tests {
 
         let res = eng.run(&mut jnl, &minter, tid, 0);
 
-        assert!(res.warning_events > 0 || res.critical_events > 0,
-            "expected at least warning or critical for large drift");
+        assert!(
+            res.warning_events > 0 || res.critical_events > 0,
+            "expected at least warning or critical for large drift"
+        );
     }
 
     #[test]
@@ -257,16 +286,16 @@ mod tests {
 
         // Particle with NO color_id_snapshot EAV
         let target = IdentityKaki::try_from_kaki(minter.identity(KakiRole::Zikru)).unwrap();
-        let ek     = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
-        let entry  = JournalEntry::new(ek, target, 1, Vec::new())
-            .with_event_cause(EventCause::KakiBorn); // no color snapshot
+        let ek = EventKaki::try_from_kaki(minter.event(KakiRole::Zikru)).unwrap();
+        let entry =
+            JournalEntry::new(ek, target, 1, Vec::new()).with_event_cause(EventCause::KakiBorn); // no color snapshot
         jnl.append(entry).unwrap();
 
         let res = eng.run(&mut jnl, &minter, tid, 0);
 
         assert_eq!(res.particles_examined, 1);
-        assert_eq!(res.no_snapshot_count,  1);
-        assert_eq!(res.total_events(),     0);
+        assert_eq!(res.no_snapshot_count, 1);
+        assert_eq!(res.total_events(), 0);
     }
 
     #[test]
@@ -276,12 +305,12 @@ mod tests {
 
         // One healthy, one critical
         seed_particle_with_color(&minter, &mut jnl, [130, 202, 253], EventCause::KakiBorn);
-        seed_particle_with_color(&minter, &mut jnl, [0, 0, 0],       EventCause::KakiBorn);
+        seed_particle_with_color(&minter, &mut jnl, [0, 0, 0], EventCause::KakiBorn);
 
         let res = eng.run(&mut jnl, &minter, tid, 0);
 
         assert_eq!(res.particles_examined, 2);
         assert_eq!(res.critical_events, 1);
-        assert_eq!(res.total_events(),   1);
+        assert_eq!(res.total_events(), 1);
     }
 }
