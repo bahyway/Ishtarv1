@@ -40,10 +40,10 @@ everything else is working history, this is the accepted result.
 
 | | |
 |---|---|
-| Source repository | [`bahyway/EnkiDB`](git@github.com:bahyway/EnkiDB.git) |
+| Source repository | [`bahyway/EnkiDB`](https://github.com/bahyway/EnkiDB) |
 | Source commit | `4d1a07f5fa23833c633b0f25aa0033647cef7bbe` |
 | Source branch | `master` |
-| Source tag | [`gudea-v4.0-sealed`](git@github.com:bahyway/EnkiDB.git/releases/tag/gudea-v4.0-sealed) |
+| Source tag | [`gudea-v4.0-sealed`](https://github.com/bahyway/EnkiDB/releases/tag/gudea-v4.0-sealed) |
 | Cut date | 2026-08-27 |
 | Cut by | DUB.SAR 𒁾 (Bahaa Fadam), via Claude Code |
 | Previous cut | `69e5deae478418085922344be0efb8921f2a0e7e` (2026-08-15) |
@@ -82,7 +82,7 @@ re-cuts should keep tracking `master` going forward.
 
 To verify this snapshot against its source at any time:
 ```bash
-git clone git@github.com:bahyway/EnkiDB.git
+git clone https://github.com/bahyway/EnkiDB
 cd EnkiDB
 git diff 4d1a07f5fa23833c633b0f25aa0033647cef7bbe -- . ':(exclude).git'
 # compare against a checkout of this repo's main branch -- should be empty
@@ -100,7 +100,6 @@ git diff 4d1a07f5fa23833c633b0f25aa0033647cef7bbe -- . ':(exclude).git'
 
 *Pure Rust · Zero External Runtime Dependencies · Orbits-Oriented Ontology*
 
-[![Branch](https://img.shields.io/badge/branch-claude%2Ffocused--pascal--Do6ld-blue)](https://github.com/bahyway/EnkiDB)
 [![Language](https://img.shields.io/badge/language-Rust-orange)](https://www.rust-lang.org/)
 [![Tests](https://img.shields.io/badge/tests-1%2C804%20passing-brightgreen)](#build--test)
 [![Crates](https://img.shields.io/badge/crates-261-blueviolet)](#architecture)
@@ -111,17 +110,6 @@ git diff 4d1a07f5fa23833c633b0f25aa0033647cef7bbe -- . ':(exclude).git'
 > © Bahaa Fadam — BahyWay Sovereign Ecosystem
 
 </div>
-
----
-
-**This is the working development repository.** For the official,
-final-build snapshot of BahyWay.Ecosystem v4.0 — the one to trust among
-the many `bahyway_v4`-related repositories that have accumulated over
-time — see **[bahyway/Ishtarv1](https://github.com/bahyway/Ishtarv1)**.
-Its initial cut was taken from this repo's commit
-`ed5f0eb7c093fd4e1131b12e9be6d05a481cff42` (2026-08-15).
-
----
 
 ## KAKI — Sovereign Declaration
 
